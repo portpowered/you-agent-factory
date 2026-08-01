@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -109,11 +110,25 @@ type Root struct {
 	Operations Service
 }
 
+func rootOperationsAvailable(operations Service) bool {
+	if operations == nil {
+		return false
+	}
+
+	value := reflect.ValueOf(operations)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+		return !value.IsNil()
+	default:
+		return true
+	}
+}
+
 func (r Root) Reconcile(
 	ctx context.Context,
 	request ReconcileRequest,
 ) (ReconcileResult, error) {
-	if r.Operations == nil {
+	if !rootOperationsAvailable(r.Operations) {
 		return ReconcileResult{}, unavailableRootError("Reconcile")
 	}
 	return r.Operations.Reconcile(ctx, request)
@@ -123,7 +138,7 @@ func (r Root) StartSource(
 	ctx context.Context,
 	request StartSourceRequest,
 ) (StartSourceResult, error) {
-	if r.Operations == nil {
+	if !rootOperationsAvailable(r.Operations) {
 		return StartSourceResult{}, unavailableRootError("StartSource")
 	}
 	return r.Operations.StartSource(ctx, request)
@@ -133,7 +148,7 @@ func (r Root) StopSource(
 	ctx context.Context,
 	request StopSourceRequest,
 ) (StopSourceResult, error) {
-	if r.Operations == nil {
+	if !rootOperationsAvailable(r.Operations) {
 		return StopSourceResult{}, unavailableRootError("StopSource")
 	}
 	return r.Operations.StopSource(ctx, request)
@@ -143,7 +158,7 @@ func (r Root) WaitSource(
 	ctx context.Context,
 	request WaitSourceRequest,
 ) (WaitSourceResult, error) {
-	if r.Operations == nil {
+	if !rootOperationsAvailable(r.Operations) {
 		return WaitSourceResult{}, unavailableRootError("WaitSource")
 	}
 	return r.Operations.WaitSource(ctx, request)
@@ -153,7 +168,7 @@ func (r Root) SourceStatus(
 	ctx context.Context,
 	request SourceStatusRequest,
 ) (SourceStatusResult, error) {
-	if r.Operations == nil {
+	if !rootOperationsAvailable(r.Operations) {
 		return SourceStatusResult{}, unavailableRootError("SourceStatus")
 	}
 	return r.Operations.SourceStatus(ctx, request)
@@ -163,7 +178,7 @@ func (r Root) GetStatus(
 	ctx context.Context,
 	request GetStatusRequest,
 ) (GetStatusResult, error) {
-	if r.Operations == nil {
+	if !rootOperationsAvailable(r.Operations) {
 		return GetStatusResult{}, unavailableRootError("GetStatus")
 	}
 	return r.Operations.GetStatus(ctx, request)
@@ -173,7 +188,7 @@ func (r Root) GetCursor(
 	ctx context.Context,
 	request GetCursorRequest,
 ) (GetCursorResult, error) {
-	if r.Operations == nil {
+	if !rootOperationsAvailable(r.Operations) {
 		return GetCursorResult{}, unavailableRootError("GetCursor")
 	}
 	return r.Operations.GetCursor(ctx, request)

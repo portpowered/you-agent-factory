@@ -71,7 +71,7 @@ func (a *Adapter) invokeReconcile(
 	ctx context.Context,
 	request automations.ReconcileRequest,
 ) (automations.ReconcileResult, error) {
-	if a == nil || a.root.Operations == nil {
+	if a == nil || !rootAvailable(a.root) {
 		return automations.ReconcileResult{}, errors.New("automations root is required")
 	}
 	return a.root.Reconcile(ctx, request)
@@ -81,7 +81,7 @@ func (a *Adapter) invokeGetStatus(
 	ctx context.Context,
 	request automations.GetStatusRequest,
 ) (automations.GetStatusResult, error) {
-	if a == nil || a.root.Operations == nil {
+	if a == nil || !rootAvailable(a.root) {
 		return automations.GetStatusResult{}, errors.New("automations root is required")
 	}
 	return a.root.GetStatus(ctx, request)
@@ -91,7 +91,7 @@ func (a *Adapter) invokeGetCursor(
 	ctx context.Context,
 	request automations.GetCursorRequest,
 ) (automations.GetCursorResult, error) {
-	if a == nil || a.root.Operations == nil {
+	if a == nil || !rootAvailable(a.root) {
 		return automations.GetCursorResult{}, errors.New("automations root is required")
 	}
 	return a.root.GetCursor(ctx, request)
