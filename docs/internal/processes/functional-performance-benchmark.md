@@ -50,3 +50,14 @@ collisions, but keep this result separate from the independent baseline.
 Always record the UTC timestamp, revision, operating system, architecture,
 logical processor count, Go version, `GOMOD`, `GOCACHE`, exact commands, and
 whether the run was independent, diagnostic, or contended.
+
+## Scenario setup reuse
+
+When one functional scenario needs setup commands followed by a hosted server,
+construct one process through `root.BuildProcess` and reuse it for the sequential
+public `Process.Execute` calls. Share only immutable fixture payloads, returning
+copies to callers. Keep each scenario's Factory roots, HOME/USERPROFILE,
+working directory, streams, external edges, and process cleanup isolated; do
+not share a process or mutable canonical state across scenarios. A server
+harness may expose a setup callback that runs after its invocation-local
+environment is prepared and before the daemon command starts.

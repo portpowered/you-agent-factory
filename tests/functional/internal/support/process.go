@@ -85,13 +85,15 @@ func CreateNamedFactoryAtRoot(
 	factoryConfigPath string,
 ) string {
 	t.Helper()
-	return createNamedFactoryAtRoot(
+	return createNamedFactoryAtRootWithProcess(
 		t,
+		BuildProcess(t, serviceedges.Edges{}),
 		os.Environ(),
 		workingDirectory,
 		namedFactoriesRoot,
 		name,
 		factoryConfigPath,
+		false,
 	)
 }
 
@@ -105,9 +107,60 @@ func CreateAndActivateNamedFactoryAtRoot(
 	factoryConfigPath string,
 ) string {
 	t.Helper()
-	return createNamedFactoryAtRootWithActivation(
+	return createNamedFactoryAtRootWithProcess(
 		t,
+		BuildProcess(t, serviceedges.Edges{}),
 		os.Environ(),
+		workingDirectory,
+		namedFactoriesRoot,
+		name,
+		factoryConfigPath,
+		true,
+	)
+}
+
+// CreateNamedFactoryAtRootWithProcess executes the public Factory create
+// command on a caller-owned reusable process. The process is immutable wiring;
+// the environment, working directory, streams, and Factory root remain local
+// to this invocation.
+func CreateNamedFactoryAtRootWithProcess(
+	t testing.TB,
+	process Process,
+	env []string,
+	workingDirectory string,
+	namedFactoriesRoot string,
+	name string,
+	factoryConfigPath string,
+) string {
+	t.Helper()
+	return createNamedFactoryAtRootWithProcess(
+		t,
+		process,
+		env,
+		workingDirectory,
+		namedFactoriesRoot,
+		name,
+		factoryConfigPath,
+		false,
+	)
+}
+
+// CreateAndActivateNamedFactoryAtRootWithProcess executes the public Factory
+// create-and-activate command on a caller-owned reusable process.
+func CreateAndActivateNamedFactoryAtRootWithProcess(
+	t testing.TB,
+	process Process,
+	env []string,
+	workingDirectory string,
+	namedFactoriesRoot string,
+	name string,
+	factoryConfigPath string,
+) string {
+	t.Helper()
+	return createNamedFactoryAtRootWithProcess(
+		t,
+		process,
+		env,
 		workingDirectory,
 		namedFactoriesRoot,
 		name,
@@ -124,8 +177,9 @@ func createNamedFactoryAtRoot(
 	name string,
 	factoryConfigPath string,
 ) string {
-	return createNamedFactoryAtRootWithActivation(
+	return createNamedFactoryAtRootWithProcess(
 		t,
+		BuildProcess(t, serviceedges.Edges{}),
 		env,
 		workingDirectory,
 		namedFactoriesRoot,
@@ -135,8 +189,9 @@ func createNamedFactoryAtRoot(
 	)
 }
 
-func createNamedFactoryAtRootWithActivation(
+func createNamedFactoryAtRootWithProcess(
 	t testing.TB,
+	process Process,
 	env []string,
 	workingDirectory string,
 	namedFactoriesRoot string,
@@ -145,6 +200,9 @@ func createNamedFactoryAtRootWithActivation(
 	setCurrent bool,
 ) string {
 	t.Helper()
+	if process == nil {
+		t.Fatal("CreateNamedFactoryAtRootWithProcess requires a process")
+	}
 
 	args := []string{
 		"you",
@@ -164,9 +222,9 @@ func createNamedFactoryAtRootWithActivation(
 		t.Context(),
 		args,
 	)
-	inputs.Input.Env = env
+	inputs.Input.Env = append([]string(nil), env...)
 	inputs.Input.WorkingDirectory = workingDirectory
-	if err := BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(factory create %q) error = %v\nstdout:\n%s\nstderr:\n%s",
 			name,
