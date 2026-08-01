@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { failureAnalysisTimelineEvents } from "./failure-analysis-events";
 import {
