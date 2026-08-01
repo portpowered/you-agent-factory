@@ -3819,6 +3819,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_sessions/transports/scopedlisting",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_sessions/wire",
       "disposition": "retain",
       "destination": "factory_sessions",
