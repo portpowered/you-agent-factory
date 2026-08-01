@@ -188,6 +188,49 @@ func TestNewWatcherWithResume_RejectsInvalidResumeWithoutWatcher(t *testing.T) {
 	}
 }
 
+func TestNewWatcherWithResume_RejectsMalformedAuthoritativeFacts(t *testing.T) {
+	dir := setupWatchDir(t)
+	svc := testFilesystemWatcherService()
+	identity := watchIdentityForDir(dir)
+
+	tests := []struct {
+		name  string
+		facts filesystemwatchers.WatcherFacts
+	}{
+		{
+			name: "nonnumeric cursor",
+			facts: filesystemwatchers.WatcherFacts{
+				Identity:   identity,
+				Cursor:     filesystemwatchers.Cursor("opaque-cursor"),
+				Checkpoint: `{"handled":[]}`,
+			},
+		},
+		{
+			name: "cursor without checkpoint",
+			facts: filesystemwatchers.WatcherFacts{
+				Identity: identity,
+				Cursor:   filesystemwatchers.Cursor("2"),
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &memoryCursorStore{}
+			submitter := &recordingSubmitter{}
+			_, _, err := svc.NewWatcherWithResume(
+				restartRequest(dir, submitter, store, &tc.facts, nil),
+			)
+			if err == nil || !errors.Is(err, filesystemwatchers.ErrInvalidResumeFacts) {
+				t.Fatalf("NewWatcherWithResume error = %v, want %v", err, filesystemwatchers.ErrInvalidResumeFacts)
+			}
+			if got := submitter.submitCallCount(); got != 0 {
+				t.Fatalf("submit call count = %d, want 0 on malformed authoritative facts", got)
+			}
+		})
+	}
+}
+
 func TestNewWatcherWithResume_EquivalentPreseedMatchesAfterRestart(t *testing.T) {
 	dir := setupWatchDir(t)
 	path := filepath.Join(dir, "request", "default", "equivalent.md")

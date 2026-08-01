@@ -35,6 +35,9 @@ func parseScriptPollerStdout(stdout []byte) (scriptPollerStdout, error) {
 	}
 
 	recovery := scriptPollerRecoveryFromEnvelope(envelope)
+	if err := validateScriptPollerRecovery(recovery); err != nil {
+		return scriptPollerStdout{hasRequest: true}, err
+	}
 	if len(envelope.Request) > 0 {
 		request, err := work.ParseCanonicalWorkRequestJSON(envelope.Request)
 		if err != nil {
@@ -88,6 +91,13 @@ func scriptPollerRecoveryFromEnvelope(envelope scriptPollerOutputEnvelope) scrip
 		checkpoint:       checkpoint,
 		advancesPosition: cursor != "" || checkpoint != "",
 	}
+}
+
+func validateScriptPollerRecovery(recovery scriptPollerStdout) error {
+	if recovery.checkpoint != "" && recovery.advancedCursor == "" {
+		return fmt.Errorf("script poller emitted malformed stdout: checkpoint requires cursor")
+	}
+	return nil
 }
 
 func mergeScriptPollerStdout(parsed, recovery scriptPollerStdout) scriptPollerStdout {

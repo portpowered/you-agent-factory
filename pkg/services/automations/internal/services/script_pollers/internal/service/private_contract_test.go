@@ -86,6 +86,12 @@ func TestParseScriptPollerStdoutRejectsMalformedShapes(t *testing.T) {
 			wantHasRequest:   true,
 			wantErrSubstring: "requestId",
 		},
+		{
+			name:             "checkpoint without cursor",
+			stdout:           []byte(`{"requestId":"checkpoint-only","type":"FACTORY_REQUEST_BATCH","works":[],"checkpoint":"checkpoint-only"}`),
+			wantHasRequest:   true,
+			wantErrSubstring: "checkpoint requires cursor",
+		},
 	}
 
 	for _, tc := range tests {

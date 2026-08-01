@@ -168,7 +168,7 @@ func TestHandleFile_NoSubmitWhenResumeRejectedBeforeWatch(t *testing.T) {
 	}
 
 	stale := authoritative
-	stale.Cursor = filesystemwatchers.Cursor("stale")
+	stale.Cursor = filesystemwatchers.Cursor("0")
 	_, err = svc.ResumeWatcherFacts(identity, &got, &stale)
 	if err == nil || !errors.Is(err, filesystemwatchers.ErrStaleResumeFacts) {
 		t.Fatalf("stale resume error = %v, want %v", err, filesystemwatchers.ErrStaleResumeFacts)

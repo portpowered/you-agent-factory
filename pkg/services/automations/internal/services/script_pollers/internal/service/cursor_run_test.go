@@ -227,6 +227,43 @@ func TestRunScriptPoller_CursorPersistFailureDoesNotReportSuccess(t *testing.T) 
 	}
 }
 
+func TestRunScriptPoller_RejectsCheckpointOnlyRecoveryBeforeSubmit(t *testing.T) {
+	t.Parallel()
+
+	runner := &sequenceCommandRunner{
+		outcomes: []runOutcome{{result: workers.CommandResult{Stdout: []byte(`{
+			"requestId":"checkpoint-only-run",
+			"type":"FACTORY_REQUEST_BATCH",
+			"works":[{"name":"checkpoint-only","workTypeName":"task"}],
+			"checkpoint":"checkpoint-only"
+		}`)}}},
+	}
+	submitted := &recordingSubmitter{}
+	svc := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{
+		runner:         runner,
+		cursorRecorder: newMemoryCursorRecorder(),
+	})
+	poller := newCanonicalScriptPollerWorkstation()
+	worker := newCanonicalScriptPollerWorker()
+	runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, t.TempDir(), poller, worker)
+
+	err := svc.runScriptPoller(
+		context.Background(),
+		runner,
+		runtimeCfg,
+		poller,
+		worker,
+		scriptPollerSupervision{automationID: "workflow-checkpoint-only", instanceID: "instance-checkpoint-only"},
+		submitted.submit,
+	)
+	if err == nil || !strings.Contains(err.Error(), "checkpoint requires cursor") {
+		t.Fatalf("RunScriptPoller error = %v, want checkpoint/cursor validation failure", err)
+	}
+	if submitted.calls != 0 {
+		t.Fatalf("submit calls = %d, want 0 for invalid recovery facts", submitted.calls)
+	}
+}
+
 type failingCursorRecorder struct {
 	commitErr error
 }

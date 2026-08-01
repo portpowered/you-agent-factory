@@ -34,6 +34,9 @@ func (s *service) ResumeWatcherFacts(
 				filesystemwatchers.ErrStaleResumeFacts,
 			)
 		}
+		if err := validateWatcherResumeFacts(identity, *authoritative); err != nil {
+			return filesystemwatchers.WatcherFacts{}, err
+		}
 		return normalizeWatcherFacts(*authoritative)
 	case authoritative == nil:
 		if err := validateWatcherResumeFacts(identity, *resume); err != nil {
@@ -46,6 +49,9 @@ func (s *service) ResumeWatcherFacts(
 				"%w: authoritative identity mismatch",
 				filesystemwatchers.ErrStaleResumeFacts,
 			)
+		}
+		if err := validateWatcherResumeFacts(identity, *authoritative); err != nil {
+			return filesystemwatchers.WatcherFacts{}, err
 		}
 		if err := validateWatcherResumeFacts(identity, *resume); err != nil {
 			return filesystemwatchers.WatcherFacts{}, err
@@ -185,6 +191,15 @@ func validateWatcherResumeFacts(
 			return err
 		}
 	}
+	if cursor := strings.TrimSpace(string(resume.Cursor)); cursor != "" {
+		if _, err := strconv.ParseUint(cursor, 10, 64); err != nil {
+			return fmt.Errorf(
+				"%w: cursor %q is not a valid version token",
+				filesystemwatchers.ErrInvalidResumeFacts,
+				resume.Cursor,
+			)
+		}
+	}
 	if strings.TrimSpace(string(resume.Cursor)) != "" && strings.TrimSpace(resume.Checkpoint) == "" {
 		return fmt.Errorf(
 			"%w: cursor requires checkpoint",
@@ -200,6 +215,7 @@ func normalizeWatcherFacts(
 	normalized := facts
 	normalized.Identity.AutomationID = strings.TrimSpace(facts.Identity.AutomationID)
 	normalized.Identity.WatchRoot = filepathSlash(strings.TrimSpace(facts.Identity.WatchRoot))
+	normalized.Cursor = filesystemwatchers.Cursor(strings.TrimSpace(string(facts.Cursor)))
 	normalized.Checkpoint = strings.TrimSpace(facts.Checkpoint)
 	if normalized.Checkpoint != "" {
 		if _, err := decodeHandledIdentities(normalized.Checkpoint); err != nil {
