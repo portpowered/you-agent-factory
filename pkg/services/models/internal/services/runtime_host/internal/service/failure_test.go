@@ -11,6 +11,7 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
 )
 
@@ -27,7 +28,7 @@ func TestEnsureModelHostReadinessTimeoutReturnsTypedFailure(t *testing.T) {
 	scopes := newScopes(t, "readiness-timeout")
 	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
 	launcher := &fakeProcessLauncher{
-		newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+		newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
 			return newFakeManagedProcess(healthServer.URL, nil)
 		},
 	}
@@ -82,7 +83,7 @@ func TestEnsureModelHostPostStartCrashSurfacesFailedReadinessOnInspect(t *testin
 	scopes := newScopes(t, "post-start-crash")
 	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
 	launcher := &fakeProcessLauncher{
-		newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+		newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
 			return newFakeManagedProcess(healthServer.URL, exitCh)
 		},
 	}
@@ -133,7 +134,7 @@ func TestEnsureModelHostCancellationStopsManagedProcess(t *testing.T) {
 	scopes := newScopes(t, "cancellation")
 	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
 	launcher := &fakeProcessLauncher{
-		newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+		newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
 			process := newFakeManagedProcess(healthServer.URL, nil)
 			process.stopFn = func() error {
 				stopCount.Add(1)
@@ -195,7 +196,7 @@ func TestEnsureModelHostDiagnosticsReadinessTimeoutEmitsFailureLogAndMetric(t *t
 	scopes := newScopes(t, "timeout-diagnostics")
 	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
 	launcher := &fakeProcessLauncher{
-		newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+		newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
 			return newFakeManagedProcess(healthServer.URL, nil)
 		},
 	}
@@ -261,7 +262,7 @@ func TestEnsureModelHostDiagnosticsProcessCrashEmitsFailureLogAndMetric(t *testi
 	scopes := newScopes(t, "crash-diagnostics")
 	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
 	launcher := &fakeProcessLauncher{
-		newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+		newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
 			return newFakeManagedProcess("http://127.0.0.1:1", exitCh)
 		},
 	}

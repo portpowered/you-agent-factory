@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 )

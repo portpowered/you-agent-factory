@@ -37,26 +37,26 @@ var reviewedTransportRootProcessTests = map[string]struct{}{
 }
 
 const (
-	factoryDefinitionsImportPath = repositoryImportPrefix + "pkg/services/factory_definitions"
+	factoryDefinitionsImportPath                  = repositoryImportPrefix + "pkg/services/factory_definitions"
 	factoryDefinitionsInternalContractsImportPath = repositoryImportPrefix + "pkg/services/factory_definitions/internal/contracts"
-	factoryNamedPathsImportPath  = repositoryImportPrefix + "pkg/services/factory_definitions/internal/services/catalog/namedpaths"
-	operatorSettingsImportPath   = repositoryImportPrefix + "pkg/services/operator_settings"
-	workersImportPath            = repositoryImportPrefix + "pkg/services/workers"
-	factorySessionsImportPath    = repositoryImportPrefix + "pkg/services/factory_sessions"
-	providerSessionsImportPath   = repositoryImportPrefix + "pkg/services/provider_sessions"
-	providerSessionServicePath   = repositoryImportPrefix + "pkg/services/provider_sessions/service"
-	providerSessionCursorPath    = repositoryImportPrefix + "pkg/services/provider_sessions/cursor"
-	modelsImportPath             = repositoryImportPrefix + "pkg/services/models"
-	workImportPath               = repositoryImportPrefix + "pkg/services/work"
-	factoryRuntimeRootImportPath = repositoryImportPrefix + "pkg/services/factory_runtime"
-	transportMappingImportPath   = repositoryImportPrefix + "pkg/transports/mapping"
-	rootImportPath               = repositoryImportPrefix + "pkg/root"
-	builtCLIHarnessImportPath    = repositoryImportPrefix + "internal/builtcliacceptance"
-	cliHTTPImportPath            = repositoryImportPrefix + "pkg/transports/cli/clihttp"
-	cliSubmitImportPath          = repositoryImportPrefix + "pkg/transports/cli/submit"
-	transportImportRoot          = repositoryImportPrefix + "pkg/transports/"
-	generatedHTTPImportPath      = repositoryImportPrefix + "pkg/transports/http/generated"
-	generatedHTTPClientPath      = repositoryImportPrefix + "pkg/transports/http/client"
+	factoryNamedPathsImportPath                   = repositoryImportPrefix + "pkg/services/factory_definitions/internal/services/catalog/namedpaths"
+	operatorSettingsImportPath                    = repositoryImportPrefix + "pkg/services/operator_settings"
+	workersImportPath                             = repositoryImportPrefix + "pkg/services/workers"
+	factorySessionsImportPath                     = repositoryImportPrefix + "pkg/services/factory_sessions"
+	providerSessionsImportPath                    = repositoryImportPrefix + "pkg/services/provider_sessions"
+	providerSessionServicePath                    = repositoryImportPrefix + "pkg/services/provider_sessions/service"
+	providerSessionCursorPath                     = repositoryImportPrefix + "pkg/services/provider_sessions/cursor"
+	modelsImportPath                              = repositoryImportPrefix + "pkg/services/models"
+	workImportPath                                = repositoryImportPrefix + "pkg/services/work"
+	factoryRuntimeRootImportPath                  = repositoryImportPrefix + "pkg/services/factory_runtime"
+	transportMappingImportPath                    = repositoryImportPrefix + "pkg/transports/mapping"
+	rootImportPath                                = repositoryImportPrefix + "pkg/root"
+	builtCLIHarnessImportPath                     = repositoryImportPrefix + "internal/builtcliacceptance"
+	cliHTTPImportPath                             = repositoryImportPrefix + "pkg/transports/cli/clihttp"
+	cliSubmitImportPath                           = repositoryImportPrefix + "pkg/transports/cli/submit"
+	transportImportRoot                           = repositoryImportPrefix + "pkg/transports/"
+	generatedHTTPImportPath                       = repositoryImportPrefix + "pkg/transports/http/generated"
+	generatedHTTPClientPath                       = repositoryImportPrefix + "pkg/transports/http/client"
 )
 
 type testBehaviorOperation struct {
@@ -197,13 +197,10 @@ func scanTestBehaviorBoundaries(repoRoot string) ([]testBehaviorFinding, error) 
 		if walkErr != nil {
 			return walkErr
 		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
+		}
 		if entry.IsDir() {
-			switch entry.Name() {
-			case ".git", "node_modules", "vendor":
-				if path != repoRoot {
-					return filepath.SkipDir
-				}
-			}
 			return nil
 		}
 		if filepath.Ext(path) != ".go" {

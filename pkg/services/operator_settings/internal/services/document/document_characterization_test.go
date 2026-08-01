@@ -39,7 +39,7 @@ func (fake *documentPeerFake) LoadDocument(
 			}
 		}
 		return operatorsettings.LoadDocumentResult{
-			Document: operatorsettings.EmptyDocument(),
+			Document: operatorsettings.EmptyDocument,
 			Path:     path,
 			Found:    false,
 		}, nil
@@ -60,7 +60,7 @@ func (fake *documentPeerFake) ApplyDocumentUpdate(
 	path := strings.TrimSpace(request.Path)
 	document, found := fake.documents[path]
 	if !found {
-		document = operatorsettings.EmptyDocument()
+		document = operatorsettings.EmptyDocument
 	}
 	expected := strings.TrimSpace(request.ExpectedBackendScope)
 	if expected != "" && document.BackendScopeID != expected {
@@ -118,7 +118,7 @@ func TestDocumentContract_Characterization_LoadAndUpdateSuccess(t *testing.T) {
 			WorkerModelProvider: "codex",
 			WorkerModel:         "gpt-5",
 		},
-		Runtime: operatorsettings.EmptyDocument().Runtime,
+		Runtime: operatorsettings.EmptyDocument.Runtime,
 		WorkerPresets: []operatorsettings.DocumentWorkerPreset{{
 			ID:            "reviewer",
 			ModelProvider: "codex",
@@ -194,7 +194,7 @@ func TestDocumentContract_Characterization_TypedFailures(t *testing.T) {
 	fake = newDocumentPeerFake(map[string]operatorsettings.Document{
 		"/home/operator/.you-agent-factory/config.json": {
 			BackendScopeID: scopeID,
-			Runtime:        operatorsettings.EmptyDocument().Runtime,
+			Runtime:        operatorsettings.EmptyDocument.Runtime,
 		},
 	})
 	model := "gpt-5"

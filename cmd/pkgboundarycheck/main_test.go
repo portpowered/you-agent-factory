@@ -133,6 +133,29 @@ func selectValue() { _ = work.ListOptions{WorkTypeName: "story"} }
 	}
 }
 
+func TestRunIgnoresFactoryWorktreeCheckouts(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	for _, worktreeRoot := range []string{
+		".worktrees",
+		"worktrees",
+		filepath.Join(".claude", "worktrees"),
+	} {
+		writeGoSourceFile(t, repoRoot, filepath.Join(worktreeRoot, "task-a", "pkg", "transports", "http", "staging.go"), `package http
+
+import runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/shared/moved"
+
+func build() { runtime.New() }
+`)
+	}
+
+	stderr := &bytes.Buffer{}
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
+		t.Fatalf("run() error = %v, want factory worktree checkouts ignored; stderr=%q", err, stderr.String())
+	}
+}
+
 func TestRunRejectsProductServiceConstructionFromTransportInitializerAndExternalTest(t *testing.T) {
 	t.Parallel()
 

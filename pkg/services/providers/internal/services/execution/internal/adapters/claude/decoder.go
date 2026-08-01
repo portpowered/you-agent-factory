@@ -158,19 +158,22 @@ func (decoder *decoder) final() (string, *providers.SessionRef, error) {
 	if !decoder.hasResult || decoder.finalContent == "" {
 		return "", nil, errors.New("claude stream did not contain a terminal result")
 	}
+	return decoder.finalContent, decoder.sessionRef(), nil
+}
+
+func (decoder *decoder) sessionRef() *providers.SessionRef {
 	sessionID := strings.TrimSpace(decoder.finalSessionID)
 	if sessionID == "" {
 		sessionID = strings.TrimSpace(decoder.sessionID)
 	}
-	var session *providers.SessionRef
-	if sessionID != "" {
-		session = &providers.SessionRef{
-			Provider: providers.IDClaude,
-			Kind:     providers.SessionIDKind,
-			ID:       sessionID,
-		}
+	if sessionID == "" {
+		return nil
 	}
-	return decoder.finalContent, session, nil
+	return &providers.SessionRef{
+		Provider: providers.IDClaude,
+		Kind:     providers.SessionIDKind,
+		ID:       sessionID,
+	}
 }
 
 func (decoder *decoder) progressFacts() []providers.ExecuteProgress {

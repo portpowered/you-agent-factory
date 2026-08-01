@@ -1,6 +1,7 @@
 package internal_test
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -36,7 +37,7 @@ func (fake *documentPeerFake) LoadDocument(
 			}
 		}
 		return operatorsettings.LoadDocumentResult{
-			Document: operatorsettings.EmptyDocument(),
+			Document: operatorsettings.EmptyDocument,
 			Path:     path,
 			Found:    false,
 		}, nil
@@ -57,7 +58,7 @@ func (fake *documentPeerFake) ApplyDocumentUpdate(
 	path := strings.TrimSpace(request.Path)
 	document, found := fake.documents[path]
 	if !found {
-		document = operatorsettings.EmptyDocument()
+		document = operatorsettings.EmptyDocument
 	}
 	expected := strings.TrimSpace(request.ExpectedBackendScope)
 	if expected != "" && document.BackendScopeID != expected {
@@ -286,6 +287,56 @@ func (fake *servicePeerFake) ResolveEffective(
 	return fake.resolution.ResolveEffective(request)
 }
 
+func (fake *servicePeerFake) DefaultConfigPath(string) string { return "" }
+
+func (fake *servicePeerFake) LoadFileConfig(string) (operatorsettings.Config, error) {
+	return operatorsettings.Config{}, errors.New("characterization fake does not implement file config")
+}
+
+func (fake *servicePeerFake) ResolveFromHomeWithEnvironment(
+	string,
+	operatorsettings.Defaults,
+	operatorsettings.FlagOverrides,
+) (operatorsettings.ResolvedDefaults, error) {
+	return operatorsettings.ResolvedDefaults{}, errors.New("characterization fake does not implement defaults")
+}
+
+func (fake *servicePeerFake) EnsureLocalBackendScope(string) (operatorsettings.ResolvedBackendScope, error) {
+	return operatorsettings.ResolvedBackendScope{}, errors.New("characterization fake does not implement identity")
+}
+
+func (fake *servicePeerFake) ProjectInputInventory() operatorsettings.InputInventory {
+	return operatorsettings.InputInventory{}
+}
+
+func (fake *servicePeerFake) DeriveProviderBackendScopeID(string, string, string) string { return "" }
+
+func (fake *servicePeerFake) IsLocalBackendScopeID(string) bool { return false }
+
+func (fake *servicePeerFake) ConfigureACPIntegrationAdd(
+	context.Context,
+	string,
+	operatorsettings.ACPIntegration,
+) (operatorsettings.Document, error) {
+	return operatorsettings.Document{}, errors.New("characterization fake does not implement ACP")
+}
+
+func (fake *servicePeerFake) ConfigureACPIntegrationDelete(
+	context.Context,
+	string,
+	string,
+) (operatorsettings.Document, error) {
+	return operatorsettings.Document{}, errors.New("characterization fake does not implement ACP")
+}
+
+func (fake *servicePeerFake) EnsurePackagedACPIntegrations(
+	context.Context,
+	string,
+	[]operatorsettings.ACPIntegration,
+) (operatorsettings.Document, error) {
+	return operatorsettings.Document{}, errors.New("characterization fake does not implement ACP")
+}
+
 func TestService_Characterization_FakeImplementsSingularSeam(t *testing.T) {
 	t.Parallel()
 
@@ -297,7 +348,7 @@ func TestService_Characterization_FakeImplementsSingularSeam(t *testing.T) {
 			WorkerModelProvider: "codex",
 			WorkerModel:         "gpt-5",
 		},
-		Runtime: operatorsettings.EmptyDocument().Runtime,
+		Runtime: operatorsettings.EmptyDocument.Runtime,
 	}
 	fake := newServicePeerFake(map[string]operatorsettings.Document{
 		configPath: initial,

@@ -29,21 +29,13 @@ func TestRecordingsThinRootContractFiles(t *testing.T) {
 	want := []string{
 		"contracts.go",
 		"contracts_test.go",
-		"del_rec_proof_gate_test.go",
-		"metadata.go",
-		"packaged_root_shape_test.go",
-		"portable_recording.go",
-		"portable_recording_build.go",
-		"portable_recording_validate.go",
-		"runtime_import_boundary_test.go",
+		"root_surface_test.go",
 		"runtime_request_boundary_test.go",
-		"service_import_boundary_test.go",
 		"service_root_contract_fake_test.go",
 		"service_root_contract_invariants_test.go",
 		"service_root_contract_lifecycle_test.go",
 		"service_root_contract_replay_test.go",
 		"service_root_contract_seam_test.go",
-		"wire_peer_import_boundary_test.go",
 		"workers_root_boundary_test.go",
 	}
 	if !slices.Equal(ownershipinventory.RecordingsThinRootContractFiles, want) {

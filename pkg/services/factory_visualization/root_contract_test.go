@@ -386,9 +386,9 @@ func TestRootLifecycleActivateSuccessAndTypedFailures(t *testing.T) {
 func TestConcreteServiceImplementsRoot(t *testing.T) {
 	t.Parallel()
 
-	// Compile-time reachability: existing lifecycle Service remains the Root
-	// implementer so activation stays on the singular peer-facing seam.
-	var _ factoryvisualization.Root = (*factoryvisualization.Service)(nil)
+	// Compile-time reachability: the test peer remains assignable to the
+	// singular Service seam without importing implementation types.
+	var _ factoryvisualization.Service = (*fakeRootPeer)(nil)
 }
 
 func TestRootLiveProjectionSuccessAndTypedFailures(t *testing.T) {
@@ -588,9 +588,9 @@ func TestRootContractInvariants_AllSlicesThroughSingularRoot(t *testing.T) {
 		t.Fatal("StopDrain must clear subscription ownership on the peer")
 	}
 
-	// Compile-time singular-authority proof: concrete Service remains the one
-	// production Root implementer for the sealed slices.
-	var _ factoryvisualization.Root = (*factoryvisualization.Service)(nil)
+	// Compile-time singular-authority proof: the peer contract remains the one
+	// published root authority; implementation types stay private to wire.
+	var _ factoryvisualization.Service = (*fakeRootPeer)(nil)
 }
 
 func assertSealedLifecycleSlice(

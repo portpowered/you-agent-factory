@@ -7,11 +7,11 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
-	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -27,15 +27,16 @@ type runtimeWorkstationService = workers.WorkstationExecutionService
 
 // RuntimeFactory constructs hosted runtime bundles. It is stateless.
 type RuntimeFactory struct {
-	quorumPolicy         interfaces.QuorumPolicyService
-	outputShaping        interfaces.InvocationOutputShapingService
-	workPropagation      interfaces.WorkPropagationPolicyService
-	decisionEnvelopes    interfaces.DecisionEnvelopeService
-	loggerFactory        factory.RuntimeLoggerFactory
-	runtimeLogs          factory.RuntimeLogSinkFactory
-	runtimeMetrics       factory.RuntimeMetricsSinkFactory
-	newID                factory.IDGenerator
-	workRequestIDs       work.RequestIDGenerator
+	quorumPolicy             interfaces.QuorumPolicyService
+	outputShaping            interfaces.InvocationOutputShapingService
+	workPropagation          interfaces.WorkPropagationPolicyService
+	workService              work.Service
+	decisionEnvelopes        interfaces.DecisionEnvelopeService
+	loggerFactory            factory.RuntimeLoggerFactory
+	runtimeLogs              factory.RuntimeLogSinkFactory
+	runtimeMetrics           factory.RuntimeMetricsSinkFactory
+	newID                    factory.IDGenerator
+	workRequestIDs           work.RequestIDGenerator
 	runtimeDirs              factory.RuntimeDirectoryFileSystem
 	inputFiles               factory.InputFileSystem
 	inputDirectoryWalker     factory.InputDirectoryWalker
@@ -46,6 +47,7 @@ func NewRuntimeFactory(
 	quorumPolicy interfaces.QuorumPolicyService,
 	outputShaping interfaces.InvocationOutputShapingService,
 	workPropagation interfaces.WorkPropagationPolicyService,
+	workService work.Service,
 	decisionEnvelopes interfaces.DecisionEnvelopeService,
 	loggerFactory factory.RuntimeLoggerFactory,
 	runtimeLogs factory.RuntimeLogSinkFactory,
@@ -58,15 +60,16 @@ func NewRuntimeFactory(
 	orchestrationCompilation factory.OrchestrationCompilation,
 ) *RuntimeFactory {
 	return &RuntimeFactory{
-		quorumPolicy:         quorumPolicy,
-		outputShaping:        outputShaping,
-		workPropagation:      workPropagation,
-		decisionEnvelopes:    decisionEnvelopes,
-		loggerFactory:        loggerFactory,
-		runtimeLogs:          runtimeLogs,
-		runtimeMetrics:       runtimeMetrics,
-		newID:                newID,
-		workRequestIDs:       workRequestIDs,
+		quorumPolicy:             quorumPolicy,
+		outputShaping:            outputShaping,
+		workPropagation:          workPropagation,
+		workService:              workService,
+		decisionEnvelopes:        decisionEnvelopes,
+		loggerFactory:            loggerFactory,
+		runtimeLogs:              runtimeLogs,
+		runtimeMetrics:           runtimeMetrics,
+		newID:                    newID,
+		workRequestIDs:           workRequestIDs,
 		runtimeDirs:              runtimeDirs,
 		inputFiles:               inputFiles,
 		inputDirectoryWalker:     inputDirectoryWalker,
@@ -216,6 +219,7 @@ func (f *RuntimeFactory) Build(
 		dispatchCompleted, logger, structuredLogger, logSink, metricsSink, net, eventHistory,
 		workerExecutors,
 		workerService,
+		f.workService,
 		f.quorumPolicy,
 		f.outputShaping,
 		f.workPropagation,
@@ -261,6 +265,7 @@ func assembleRuntimeBundle(
 	eventHistory recordings.RuntimeLedger,
 	workerExecutors map[string]workers.WorkerExecutor,
 	workerService runtimeWorkstationService,
+	workService work.Service,
 	quorumPolicy interfaces.QuorumPolicyService,
 	outputShaping interfaces.InvocationOutputShapingService,
 	workPropagation interfaces.WorkPropagationPolicyService,
@@ -320,6 +325,7 @@ func assembleRuntimeBundle(
 		quorumPolicy,
 		outputShaping,
 		workPropagation,
+		workService,
 		workRequestIDs,
 		newID,
 		decisionEnvelopes,

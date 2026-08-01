@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 )
@@ -115,9 +116,9 @@ func defaultServerStartBuilder(
 	identity supervisedIdentity,
 	inspection cacheInspection,
 	worker *models.RuntimeWorker,
-) (models.HostProcessStartSpec, error) {
+) (modelseffects.HostProcessStartSpec, error) {
 	if worker == nil {
-		return models.HostProcessStartSpec{}, fmt.Errorf(
+		return modelseffects.HostProcessStartSpec{}, fmt.Errorf(
 			"local model worker is required for supervised backend %q",
 			identity.Backend,
 		)
@@ -128,10 +129,10 @@ func defaultServerStartBuilder(
 	}
 	healthEndpoint, args, err := supervisedHealthEndpointAndArgs(worker.Args)
 	if err != nil {
-		return models.HostProcessStartSpec{}, err
+		return modelseffects.HostProcessStartSpec{}, err
 	}
 	if strings.TrimSpace(inspection.CachePath) == "" {
-		return models.HostProcessStartSpec{}, fmt.Errorf(
+		return modelseffects.HostProcessStartSpec{}, fmt.Errorf(
 			"%w: cache path is required for supervised runtime %q",
 			models.ErrHostMissingAssets,
 			identity.Name,
@@ -139,7 +140,7 @@ func defaultServerStartBuilder(
 	}
 	args = append([]string{"serve"}, args...)
 	args = append(args, "--cache-path", inspection.CachePath)
-	return models.HostProcessStartSpec{
+	return modelseffects.HostProcessStartSpec{
 		Command:        command,
 		Args:           args,
 		HealthEndpoint: healthEndpoint,

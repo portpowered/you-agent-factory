@@ -9,7 +9,8 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
@@ -37,7 +38,7 @@ type Root struct {
 	runtimeMu       sync.RWMutex
 	runtimeByScope  map[models.RuntimeScopeRef]models.Service
 	catalog         modelcatalog.Service
-	process         models.ProcessDependencies
+	process         modelseffects.ProcessDependencies
 }
 
 var _ models.Service = (*Root)(nil)
@@ -57,7 +58,7 @@ func NewRoot(
 	assetService scopedassets.Service,
 	runtimeHostService runtimehost.Service,
 	inferenceService modelinference.Service,
-	processDependencies ...models.ProcessDependencies,
+	processDependencies ...modelseffects.ProcessDependencies,
 ) (*Root, error) {
 	if processLauncher == nil {
 		return nil, missingDependencyError("model host process launcher")
@@ -98,7 +99,7 @@ func NewRoot(
 	if inferenceService == nil {
 		return nil, missingDependencyError("Models Inference service")
 	}
-	process := models.ProcessDependencies{}
+	process := modelseffects.ProcessDependencies{}
 	if len(processDependencies) > 0 {
 		process = processDependencies[0]
 	}
@@ -285,7 +286,13 @@ func (o *Root) PullModelForScope(
 	if err != nil {
 		return models.PullResult{}, err
 	}
-	return runtime.PullModel(ctx, request.Name)
+	puller, ok := runtime.(interface {
+		PullModel(context.Context, string) (models.PullResult, error)
+	})
+	if !ok {
+		return models.PullResult{}, models.ErrUnsupportedOperation
+	}
+	return puller.PullModel(ctx, request.Name)
 }
 
 func (o *Root) InspectModelAssets(
@@ -473,10 +480,10 @@ func newRuntimeWithHostEdges(
 	runtimeConfig models.RuntimeConfigLoader,
 	logger *zap.Logger,
 	now func() time.Time,
-	pullMetrics models.PullMetricsRecorder,
-	hostLogger models.HostDiagnosticLogger,
-	hostMetrics models.HostMetricsRecorder,
-	hooks models.LocalRuntimeHooks,
+	pullMetrics modelseffects.PullMetricsRecorder,
+	hostLogger modelseffects.HostDiagnosticLogger,
+	hostMetrics modelseffects.HostMetricsRecorder,
+	hooks modelseffects.LocalRuntimeHooks,
 	assetPuller localmodels.AssetPuller,
 	localRuntime localmodels.Runtime,
 	runtimeHost runtimehost.Service,

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -124,28 +123,6 @@ type Metadata struct {
 	Provider string `json:"provider,omitempty"`
 	Kind     string `json:"kind,omitempty"`
 	ID       string `json:"id,omitempty"`
-}
-
-// CanonicalProvider normalizes provider aliases onto their stable session
-// identity.
-func CanonicalProvider(provider string) string {
-	trimmed := strings.TrimSpace(provider)
-	switch trimmed {
-	case "", "cursor":
-		return trimmed
-	case "agent", "cursor-agent", "cursor-cli":
-		return "cursor"
-	default:
-		return trimmed
-	}
-}
-
-func CloneMetadata(session *Metadata) *Metadata {
-	if session == nil {
-		return nil
-	}
-	clone := *session
-	return &clone
 }
 
 type SourceMetadata struct {

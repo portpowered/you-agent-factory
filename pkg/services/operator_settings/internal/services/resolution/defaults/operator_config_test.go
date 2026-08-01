@@ -10,15 +10,18 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
+	settingsresolution "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/defaults"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestDefaultRuntimeSettingsMatchProductionArtifactPolicies(t *testing.T) {
-	cfg, err := operatorsettings.LoadFileConfig(testFiles, decodeTestConfig, filepath.Join(t.TempDir(), "missing-config.json"))
+	cfg, err := settingsresolution.LoadFileConfig(testFiles, decodeTestConfig, filepath.Join(t.TempDir(), "missing-config.json"))
 	if err != nil {
 		t.Fatalf("LoadFileConfig() error = %v", err)
 	}
@@ -140,11 +143,25 @@ func encodeTestConfig(config operatorsettings.Config) ([]byte, error) {
 }
 
 func testConfigDocumentService() operatorsettings.ConfigDocumentService {
-	return operatorsettings.ConfigDocumentService{Decoder: decodeTestConfig, Encoder: encodeTestConfig}
+	return operatorsettings.ConfigDocumentService{
+		Files:           testFiles,
+		CreateTemp:      testCreateTemp,
+		Providers:       controlledProviderCatalog,
+		Decoder:         decodeTestConfig,
+		Encoder:         encodeTestConfig,
+		PersistenceLock: &sync.Mutex{},
+		DocumentOwner: settingswire.NewDocumentOwner(
+			testFiles,
+			testCreateTemp,
+			decodeTestConfig,
+			encodeTestConfig,
+			controlledProviderCatalog,
+		),
+	}
 }
 
 func TestLoadFileDefaults_MissingFileReturnsEmptyDefaults(t *testing.T) {
-	defaults, err := operatorsettings.LoadFileDefaults(testFiles, decodeTestConfig, filepath.Join(t.TempDir(), "missing-config.json"))
+	defaults, err := settingsresolution.LoadFileDefaults(testFiles, decodeTestConfig, filepath.Join(t.TempDir(), "missing-config.json"))
 	if err != nil {
 		t.Fatalf("operatorsettings.LoadFileDefaults() error = %v", err)
 	}
@@ -388,7 +405,7 @@ func TestLoadFileDefaults_MalformedFileNamesPath(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	_, err := operatorsettings.LoadFileDefaults(testFiles, decodeTestConfig, path)
+	_, err := settingsresolution.LoadFileDefaults(testFiles, decodeTestConfig, path)
 	if err == nil {
 		t.Fatal("expected malformed config error")
 	}
@@ -429,7 +446,7 @@ func TestLoadFileDefaults_AcceptsBackendScopeIDAlongsideDefaults(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	defaults, err := operatorsettings.LoadFileDefaults(testFiles, decodeTestConfig, path)
+	defaults, err := settingsresolution.LoadFileDefaults(testFiles, decodeTestConfig, path)
 	if err != nil {
 		t.Fatalf("operatorsettings.LoadFileDefaults() error = %v", err)
 	}
@@ -521,7 +538,7 @@ func TestLoadFileDefaults_RejectsMalformedWorkerPresets(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"workerPresets":[{"id":"bad","modelProvider":"Unknown_Provider"}]}`), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	if _, err := operatorsettings.LoadFileDefaults(testFiles, decodeTestConfig, path); err == nil || !strings.Contains(err.Error(), path) {
+	if _, err := settingsresolution.LoadFileDefaults(testFiles, decodeTestConfig, path); err == nil || !strings.Contains(err.Error(), path) {
 		t.Fatalf("operatorsettings.LoadFileDefaults() error = %v, want validation error naming %q", err, path)
 	}
 }
@@ -537,7 +554,7 @@ func TestDefaultConfigPathUsesCanonicalDefaultPathsPolicy(t *testing.T) {
 }
 
 func TestResolve_FileEnvFlagPrecedenceIsIndependentPerField(t *testing.T) {
-	resolved, err := operatorsettings.Resolve(operatorsettings.ResolveInput{
+	resolved, err := settingsresolution.Resolve(operatorsettings.ResolveInput{
 		File: operatorsettings.Defaults{
 			WorkerModelProvider: "claude",
 			WorkerModel:         "file-model",
@@ -569,7 +586,7 @@ func TestResolve_FileEnvFlagPrecedenceIsIndependentPerField(t *testing.T) {
 }
 
 func TestResolve_EnvOverridesFileWhenFlagsUnset(t *testing.T) {
-	resolved, err := operatorsettings.Resolve(operatorsettings.ResolveInput{
+	resolved, err := settingsresolution.Resolve(operatorsettings.ResolveInput{
 		File: operatorsettings.Defaults{
 			WorkerModelProvider: "claude",
 			WorkerModel:         "file-model",
@@ -608,7 +625,7 @@ func TestResolve_CanonicalizesProviderAliases(t *testing.T) {
 	} {
 		test := test
 		t.Run(test.alias, func(t *testing.T) {
-			resolved, err := operatorsettings.Resolve(operatorsettings.ResolveInput{
+			resolved, err := settingsresolution.Resolve(operatorsettings.ResolveInput{
 				File: operatorsettings.Defaults{WorkerModelProvider: test.alias},
 			}, "/tmp/config.json")
 			if err != nil {
@@ -622,7 +639,7 @@ func TestResolve_CanonicalizesProviderAliases(t *testing.T) {
 }
 
 func TestResolve_SymbolicDefaultResolvesThroughLowerPrecedenceConcreteProvider(t *testing.T) {
-	resolved, err := operatorsettings.Resolve(operatorsettings.ResolveInput{
+	resolved, err := settingsresolution.Resolve(operatorsettings.ResolveInput{
 		File: operatorsettings.Defaults{WorkerModelProvider: "codex"},
 		Flag: operatorsettings.Defaults{WorkerModelProvider: "DEFAULT"},
 	}, "/tmp/config.json")
@@ -638,7 +655,7 @@ func TestResolve_SymbolicDefaultResolvesThroughLowerPrecedenceConcreteProvider(t
 }
 
 func TestResolve_SymbolicDefaultWithoutConcreteProviderFails(t *testing.T) {
-	_, err := operatorsettings.Resolve(operatorsettings.ResolveInput{
+	_, err := settingsresolution.Resolve(operatorsettings.ResolveInput{
 		Flag: operatorsettings.Defaults{WorkerModelProvider: "DEFAULT"},
 	}, "/tmp/config.json")
 	if err == nil {
@@ -653,7 +670,7 @@ func TestResolve_PreservesExplicitConfigPathOverride(t *testing.T) {
 	t.Parallel()
 
 	overridePath := filepath.Join(string(filepath.Separator), "tmp", "custom", "operator-config.json")
-	resolved, err := operatorsettings.Resolve(operatorsettings.ResolveInput{
+	resolved, err := settingsresolution.Resolve(operatorsettings.ResolveInput{
 		File: operatorsettings.Defaults{
 			WorkerModelProvider: "codex",
 			WorkerModel:         "file-model",
@@ -668,7 +685,7 @@ func TestResolve_PreservesExplicitConfigPathOverride(t *testing.T) {
 }
 
 func TestResolve_MalformedProviderFailsWithIdentitySyntax(t *testing.T) {
-	_, err := operatorsettings.Resolve(operatorsettings.ResolveInput{
+	_, err := settingsresolution.Resolve(operatorsettings.ResolveInput{
 		File: operatorsettings.Defaults{WorkerModelProvider: "Not_A_Provider"},
 	}, "/tmp/config.json")
 	if err == nil {
@@ -684,7 +701,7 @@ func TestResolve_MalformedProviderFailsWithIdentitySyntax(t *testing.T) {
 
 func TestResolve_PreservesExtensionProviderFromCLIOverride(t *testing.T) {
 	const identity = "customer.provider-v2"
-	resolved, err := operatorsettings.Resolve(operatorsettings.ResolveInput{
+	resolved, err := settingsresolution.Resolve(operatorsettings.ResolveInput{
 		Flag: operatorsettings.Defaults{WorkerModelProvider: identity},
 	}, "/tmp/config.json")
 	if err != nil {
@@ -712,7 +729,7 @@ func TestResolveFromHome_LoadsFileAndEnvironment(t *testing.T) {
 	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "codex")
 	t.Setenv(operatorsettings.EnvDefaultWorkerModel, "env-model")
 
-	resolved, err := operatorsettings.ResolveFromHomeWithEnvironment(testFiles, decodeTestConfig, homeDir, operatorsettings.Defaults{
+	resolved, err := settingsresolution.ResolveFromHomeWithEnvironment(testFiles, decodeTestConfig, homeDir, operatorsettings.Defaults{
 		WorkerModelProvider: os.Getenv(operatorsettings.EnvDefaultWorkerModelProvider),
 		WorkerModel:         os.Getenv(operatorsettings.EnvDefaultWorkerModel),
 	}, operatorsettings.FlagOverrides{})
@@ -747,7 +764,7 @@ func TestResolveFromHome_FlagsOverrideEnvironmentAndFile(t *testing.T) {
 	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "codex")
 	t.Setenv(operatorsettings.EnvDefaultWorkerModel, "env-model")
 
-	resolved, err := operatorsettings.ResolveFromHomeWithEnvironment(testFiles, decodeTestConfig, homeDir, operatorsettings.Defaults{
+	resolved, err := settingsresolution.ResolveFromHomeWithEnvironment(testFiles, decodeTestConfig, homeDir, operatorsettings.Defaults{
 		WorkerModelProvider: os.Getenv(operatorsettings.EnvDefaultWorkerModelProvider),
 		WorkerModel:         os.Getenv(operatorsettings.EnvDefaultWorkerModel),
 	}, operatorsettings.FlagOverrides{

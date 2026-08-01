@@ -32,10 +32,38 @@ func TestExecutionContractsPreserveJSONAndCloneIsolation(t *testing.T) {
 
 func TestCanonicalProviderSessionProviderPreservesAliasesAndUnknowns(t *testing.T) {
 	t.Parallel()
-	for input, want := range map[string]string{"agent": "cursor", "cursor-agent": "cursor", "cursor": "cursor", "acme": "acme"} {
-		if got := CanonicalProviderSessionProvider(input); got != want {
-			t.Fatalf("CanonicalProviderSessionProvider(%q) = %q, want %q", input, got, want)
+	for _, tc := range []struct {
+		input string
+		want  string
+	}{
+		{input: "", want: ""},
+		{input: " cursor ", want: "cursor"},
+		{input: "agent", want: "cursor"},
+		{input: "cursor-agent", want: "cursor"},
+		{input: "cursor-cli", want: "cursor"},
+		{input: "acme", want: "acme"},
+	} {
+		if got := CanonicalProviderSessionProvider(tc.input); got != tc.want {
+			t.Fatalf("CanonicalProviderSessionProvider(%q) = %q, want %q", tc.input, got, tc.want)
 		}
+	}
+}
+
+func TestCloneProviderSessionMetadataDetachesAndAcceptsNil(t *testing.T) {
+	t.Parallel()
+
+	original := &ProviderSessionMetadata{Provider: "cursor", Kind: "session_id", ID: "session-1"}
+	clone := CloneProviderSessionMetadata(original)
+	if clone == nil || clone == original {
+		t.Fatalf("CloneProviderSessionMetadata() = %#v, want a detached non-nil value", clone)
+	}
+	clone.Provider = "mutated"
+	clone.ID = "mutated"
+	if original.Provider != "cursor" || original.ID != "session-1" {
+		t.Fatalf("clone mutation changed original metadata: original = %#v", original)
+	}
+	if got := CloneProviderSessionMetadata(nil); got != nil {
+		t.Fatalf("CloneProviderSessionMetadata(nil) = %#v, want nil", got)
 	}
 }
 

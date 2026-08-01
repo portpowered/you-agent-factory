@@ -326,7 +326,7 @@ func NewMockCommandRunner(
 
 // LocalRuntimeHooks returns the Workers-owned recording hooks consumed by the
 // Models runtime.
-func LocalRuntimeHooks() models.LocalRuntimeHooks {
+func LocalRuntimeHooks() workers.LocalRuntimeHooks {
 	return modelrecording.Hooks()
 }
 

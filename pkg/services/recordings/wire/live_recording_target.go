@@ -2,7 +2,7 @@ package wire
 
 import (
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
+	recordinglifecyclewire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/wire"
 )
 
 // NewLiveRecordingTargetPlanner constructs the Recordings-owned live target
@@ -12,5 +12,5 @@ func NewLiveRecordingTargetPlanner(
 	newID recordings.RecordingIdentityGenerator,
 	join recordings.RecordingPathJoiner,
 ) recordings.LiveRecordingTargetPlanner {
-	return recordinglifecycle.NewLiveRecordingTargetPlanner(clock, newID, join)
+	return recordinglifecyclewire.NewTargetPlanner(clock, newID, join)
 }

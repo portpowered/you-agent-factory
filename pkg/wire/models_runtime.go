@@ -19,6 +19,7 @@ import (
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"go.uber.org/zap"
 )
@@ -116,40 +117,40 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 	}
 	runtimeTempFile := edges.ModelRuntimeCreateTempFile
 	if runtimeTempFile == nil {
-		runtimeTempFile = func(dir, pattern string) (models.RuntimeTempFile, error) {
+		runtimeTempFile = func(dir, pattern string) (modelswire.RuntimeTempFile, error) {
 			return os.CreateTemp(dir, pattern)
 		}
 	}
 
 	return modelswire.NewService(
 		assetPlatform,
-		assetHTTP,
+		modelswire.AssetHTTPDoer(assetHTTP),
 		assetEndpoints,
-		assetMkdirAll,
-		assetStat,
-		assetHome,
-		assetWriteFile,
-		assetRename,
-		assetRemove,
-		assetReadFile,
-		assetReadDir,
-		assetCreate,
-		assetOpen,
+		modelswire.AssetMakeDirectories(assetMkdirAll),
+		modelswire.AssetInspectPath(assetStat),
+		modelswire.AssetResolveHomeDirectory(assetHome),
+		modelswire.AssetWriteFile(assetWriteFile),
+		modelswire.AssetRenamePath(assetRename),
+		modelswire.AssetRemovePath(assetRemove),
+		modelswire.AssetReadFile(assetReadFile),
+		modelswire.AssetReadDirectory(assetReadDir),
+		modelswire.AssetCreateFile(assetCreate),
+		modelswire.AssetOpenFile(assetOpen),
 		launcher,
 		hostHTTP,
 		hostClock,
 		runtimeRunner,
-		runtimeHTTP,
-		runtimeInspect,
-		runtimeTempDir,
+		modelswire.RuntimeHTTPDoer(runtimeHTTP),
+		modelswire.RuntimeInspectFile(runtimeInspect),
+		modelswire.RuntimeTempDirectory(runtimeTempDir),
 		runtimeTempFile,
 		zap.NewNop(),
 		time.Now,
 		platformrandom.CryptoSource{},
 		edges.ModelPullMetricsRecorder,
-		factorysessionwire.ModelHostDiagnosticLogger(zap.NewNop()),
-		factorysessionwire.ModelHostDiagnosticMetrics(edges.InvocationMetricsRecorder),
-		workerswire.LocalRuntimeHooks(),
+		modelswire.HostDiagnosticLogger(factorysessionwire.ModelHostDiagnosticLogger(zap.NewNop())),
+		modelswire.HostMetricsRecorder(factorysessionwire.ModelHostDiagnosticMetrics(edges.InvocationMetricsRecorder)),
+		modelLocalRuntimeHooks(workerswire.LocalRuntimeHooks()),
 	)
 }
 
@@ -184,7 +185,7 @@ type modelsClock struct{}
 
 func (modelsClock) Now() time.Time { return time.Now() }
 
-func (modelsClock) NewTimer(duration time.Duration) models.HostTimer {
+func (modelsClock) NewTimer(duration time.Duration) modelswire.HostTimer {
 	return modelsTimer{Timer: time.NewTimer(duration)}
 }
 
@@ -194,7 +195,7 @@ func (timer modelsTimer) C() <-chan time.Time { return timer.Timer.C }
 
 type modelsProcessLauncher struct{}
 
-func (modelsProcessLauncher) Start(ctx context.Context, spec models.HostProcessStartSpec) (models.HostManagedProcess, error) {
+func (modelsProcessLauncher) Start(ctx context.Context, spec modelswire.HostProcessStartSpec) (modelswire.HostManagedProcess, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -219,6 +220,16 @@ func (modelsProcessLauncher) Start(ctx context.Context, spec models.HostProcessS
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 	return &modelsManagedProcess{cmd: cmd, healthEndpoint: endpoint, done: done}, nil
+}
+
+func modelLocalRuntimeHooks(hooks workers.LocalRuntimeHooks) modelswire.LocalRuntimeHooks {
+	return modelswire.LocalRuntimeHooks{
+		MarkResourceWaitStarted:  hooks.MarkResourceWaitStarted,
+		MarkResourceWaitFinished: hooks.MarkResourceWaitFinished,
+		MarkLoadRequested:        hooks.MarkLoadRequested,
+		MarkLoadFinished:         hooks.MarkLoadFinished,
+		MarkLoadReused:           hooks.MarkLoadReused,
+	}
 }
 
 type modelsManagedProcess struct {

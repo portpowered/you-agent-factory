@@ -33,10 +33,19 @@ func (query providersRootQuery) CanonicalizeConcreteProvider(raw string) (string
 	if trimmed == "" {
 		return "", nil
 	}
+	lookupID := trimmed
+	if canonical, ok := interfaces.CanonicalizeOperatorWorkerModelProviderInput(trimmed); ok {
+		switch canonical {
+		case "ANTIGRAVITY", "CLAUDE", "CODEX":
+			// Providers publishes canonical runtime IDs while Operator Settings
+			// accepts the legacy public aliases OPENAI and ANTHROPIC.
+			lookupID = strings.ToLower(canonical)
+		}
+	}
 
 	result, err := query.providers.GetProvider(
 		context.Background(),
-		providers.GetProviderRequest{ID: providers.ID(trimmed)},
+		providers.GetProviderRequest{ID: providers.ID(lookupID)},
 	)
 	if err != nil {
 		return "", mapProviderCatalogError(err, trimmed)

@@ -19,6 +19,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -214,7 +215,7 @@ func provideInvocationOperation(
 	edges serviceedges.Edges,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
-	artifactExporter models.InvocationArtifactExporter,
+	artifactExporter modelswire.InvocationArtifactExporter,
 	modelTimeout factorysessions.ModelInvocationTimeout,
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
 	generateSessionID factorysessions.SessionIDGenerator,
@@ -249,7 +250,7 @@ func projectRuntimeOpeningExternalEffects(edges serviceedges.Edges) factorysessi
 	return factorysessionwire.RuntimeOpeningExternalEffects{
 		Clock:                            edges.Clock,
 		ProviderOverride:                 edges.ProviderOverride,
-		ModelPullMetricsRecorder:         edges.ModelPullMetricsRecorder,
+		ModelPullMetricsRecorder:         adaptModelPullMetricsRecorder(edges.ModelPullMetricsRecorder),
 		InvocationMetricsRecorder:        edges.InvocationMetricsRecorder,
 		ProviderCommandRunner:            providerRunner,
 		ScriptCommandRunner:              scriptRunner,
@@ -263,6 +264,35 @@ func projectRuntimeOpeningExternalEffects(edges serviceedges.Edges) factorysessi
 		HostedSecretResolver:             edges.HostedSecretResolver,
 		HostedLinearEndpoint:             edges.HostedLinearEndpoint,
 	}
+}
+
+type factorySessionModelPullMetricsAdapter struct {
+	next modelswire.PullMetricsRecorder
+}
+
+func (adapter factorySessionModelPullMetricsAdapter) RecordModelPullMetric(
+	metric factorysessions.InvocationMetric,
+) {
+	if adapter.next == nil {
+		return
+	}
+	labels := make(map[string]string, len(metric.Labels))
+	for key, value := range metric.Labels {
+		labels[key] = value
+	}
+	adapter.next.RecordModelPullMetric(modelswire.PullMetric{
+		Name:   metric.Name,
+		Labels: labels,
+	})
+}
+
+func adaptModelPullMetricsRecorder(
+	recorder modelswire.PullMetricsRecorder,
+) factorysessionwire.ModelPullMetricsRecorder {
+	if recorder == nil {
+		return nil
+	}
+	return factorySessionModelPullMetricsAdapter{next: recorder}
 }
 
 func withStandaloneWorkerProductionEdges(overrides serviceedges.Edges) (serviceedges.Edges, error) {
@@ -335,4 +365,14 @@ func provideWorkFactory(
 	return func(runtimes work.RuntimeResolver) work.Service {
 		return workwire.NewRuntimeService(runtimes, readFile, contentStaging, contentMaterializer)
 	}
+}
+
+// provideWorkMaterializationService supplies Runtime's canonical Worker-output
+// materialization seam without introducing a Runtime→Work implementation
+// import. Session-scoped admission/state access receives its own resolver-bound
+// Work root; this root is intentionally policy-only.
+func provideWorkMaterializationService(
+	contentMaterializer work.ContentMaterializer,
+) work.Service {
+	return workwire.NewRuntimeService(nil, nil, nil, contentMaterializer)
 }

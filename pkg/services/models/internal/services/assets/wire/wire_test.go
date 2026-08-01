@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 )
@@ -16,10 +17,10 @@ func TestNewServiceRequiresScopedCacheInspectionDependencies(t *testing.T) {
 
 	scopes := testRuntimeScopes(t)
 	platform := models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"}
-	inspect := models.AssetInspectPath(os.Stat)
-	home := models.AssetResolveHomeDirectory(os.UserHomeDir)
-	readFile := models.AssetReadFile(os.ReadFile)
-	readDirectory := models.AssetReadDirectory(os.ReadDir)
+	inspect := modelseffects.AssetInspectPath(os.Stat)
+	home := modelseffects.AssetResolveHomeDirectory(os.UserHomeDir)
+	readFile := modelseffects.AssetReadFile(os.ReadFile)
+	readDirectory := modelseffects.AssetReadDirectory(os.ReadDir)
 	endpoints := models.RuntimeAssetEndpoints{
 		BaseURL: "https://assets.example.test", APIBaseURL: "https://api.example.test",
 	}
@@ -28,18 +29,18 @@ func TestNewServiceRequiresScopedCacheInspectionDependencies(t *testing.T) {
 		name      string
 		scopes    runtimescopes.Service
 		platform  models.AssetHostPlatform
-		client    models.AssetHTTPDoer
+		client    modelseffects.AssetHTTPDoer
 		endpoints models.RuntimeAssetEndpoints
-		mkdir     models.AssetMakeDirectories
-		inspect   models.AssetInspectPath
-		home      models.AssetResolveHomeDirectory
-		write     models.AssetWriteFile
-		rename    models.AssetRenamePath
-		remove    models.AssetRemovePath
-		readFile  models.AssetReadFile
-		readDir   models.AssetReadDirectory
-		create    models.AssetCreateFile
-		open      models.AssetOpenFile
+		mkdir     modelseffects.AssetMakeDirectories
+		inspect   modelseffects.AssetInspectPath
+		home      modelseffects.AssetResolveHomeDirectory
+		write     modelseffects.AssetWriteFile
+		rename    modelseffects.AssetRenamePath
+		remove    modelseffects.AssetRemovePath
+		readFile  modelseffects.AssetReadFile
+		readDir   modelseffects.AssetReadDirectory
+		create    modelseffects.AssetCreateFile
+		open      modelseffects.AssetOpenFile
 		wantError bool
 	}{
 		validAssetDependencies("valid", scopes, platform, endpoints),
@@ -109,36 +110,36 @@ func validAssetDependencies(
 	name      string
 	scopes    runtimescopes.Service
 	platform  models.AssetHostPlatform
-	client    models.AssetHTTPDoer
+	client    modelseffects.AssetHTTPDoer
 	endpoints models.RuntimeAssetEndpoints
-	mkdir     models.AssetMakeDirectories
-	inspect   models.AssetInspectPath
-	home      models.AssetResolveHomeDirectory
-	write     models.AssetWriteFile
-	rename    models.AssetRenamePath
-	remove    models.AssetRemovePath
-	readFile  models.AssetReadFile
-	readDir   models.AssetReadDirectory
-	create    models.AssetCreateFile
-	open      models.AssetOpenFile
+	mkdir     modelseffects.AssetMakeDirectories
+	inspect   modelseffects.AssetInspectPath
+	home      modelseffects.AssetResolveHomeDirectory
+	write     modelseffects.AssetWriteFile
+	rename    modelseffects.AssetRenamePath
+	remove    modelseffects.AssetRemovePath
+	readFile  modelseffects.AssetReadFile
+	readDir   modelseffects.AssetReadDirectory
+	create    modelseffects.AssetCreateFile
+	open      modelseffects.AssetOpenFile
 	wantError bool
 } {
 	return struct {
 		name      string
 		scopes    runtimescopes.Service
 		platform  models.AssetHostPlatform
-		client    models.AssetHTTPDoer
+		client    modelseffects.AssetHTTPDoer
 		endpoints models.RuntimeAssetEndpoints
-		mkdir     models.AssetMakeDirectories
-		inspect   models.AssetInspectPath
-		home      models.AssetResolveHomeDirectory
-		write     models.AssetWriteFile
-		rename    models.AssetRenamePath
-		remove    models.AssetRemovePath
-		readFile  models.AssetReadFile
-		readDir   models.AssetReadDirectory
-		create    models.AssetCreateFile
-		open      models.AssetOpenFile
+		mkdir     modelseffects.AssetMakeDirectories
+		inspect   modelseffects.AssetInspectPath
+		home      modelseffects.AssetResolveHomeDirectory
+		write     modelseffects.AssetWriteFile
+		rename    modelseffects.AssetRenamePath
+		remove    modelseffects.AssetRemovePath
+		readFile  modelseffects.AssetReadFile
+		readDir   modelseffects.AssetReadDirectory
+		create    modelseffects.AssetCreateFile
+		open      modelseffects.AssetOpenFile
 		wantError bool
 	}{
 		name: name, scopes: scopes, platform: platform, client: http.DefaultClient, endpoints: endpoints,

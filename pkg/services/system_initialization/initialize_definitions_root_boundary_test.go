@@ -111,7 +111,7 @@ func (installer *failingDefinitionsInstaller) EnsurePackagedFactories(
 
 func newDefinitionsRootService(
 	t *testing.T,
-	settings systeminitialization.OperatorSettings,
+	settings systeminitializationwire.OperatorSettings,
 	catalog factorydefinitions.PackagedFactoryCatalogOperations,
 	installer factorydefinitions.PackagedFactoryInstaller,
 ) systeminitialization.Service {

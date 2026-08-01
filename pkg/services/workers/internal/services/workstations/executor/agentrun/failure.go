@@ -203,7 +203,10 @@ func managedRuntimeInvocationFailureClass(err error) (string, bool) {
 }
 
 func managedRuntimeReadinessState(err error) (models.ReadinessState, bool) {
-	var readinessErr models.InvocationReadinessError
+	var readinessErr interface {
+		error
+		ManagedRuntimeReadinessState() models.ReadinessState
+	}
 	if errors.As(err, &readinessErr) {
 		return readinessErr.ManagedRuntimeReadinessState(), true
 	}

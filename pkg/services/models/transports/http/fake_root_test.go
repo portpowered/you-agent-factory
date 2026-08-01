@@ -54,6 +54,10 @@ func (fake *rootFake) ListCatalog(
 	if fake.listCatalog != nil {
 		return fake.listCatalog(ctx, request)
 	}
+	if fake.list != nil {
+		listed, err := fake.list(ctx)
+		return models.ListModelsResult{Models: listed.Results}, err
+	}
 	return models.ListModelsResult{}, models.ErrUnsupportedOperation
 }
 
@@ -63,6 +67,10 @@ func (fake *rootFake) GetCatalogModel(
 ) (models.GetModelResult, error) {
 	if fake.getCatalog != nil {
 		return fake.getCatalog(ctx, request)
+	}
+	if fake.get != nil {
+		detail, err := fake.get(ctx, request.Name)
+		return models.GetModelResult{Model: detail}, err
 	}
 	return models.GetModelResult{}, models.ErrUnsupportedOperation
 }
@@ -74,7 +82,18 @@ func (fake *rootFake) PullModelForScope(
 	if fake.pullForScope != nil {
 		return fake.pullForScope(ctx, request)
 	}
+	if fake.pull != nil {
+		return fake.pull(ctx, request.Name)
+	}
 	return models.PullResult{}, models.ErrUnsupportedOperation
+}
+
+func testRootBinding(root *rootFake) RootBinding {
+	scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:http-test")
+	if err != nil {
+		panic(err)
+	}
+	return RootBinding{Models: root, Scope: scope}
 }
 
 func (fake *rootFake) OpenRuntimeScope(

@@ -10,10 +10,9 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	identityinventory "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/identityinputinventory"
 	internaltestlink "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testlink"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
-
-	_ "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/identityinputinventory"
 )
 
 const fixturesRelativeDir = "pkg/services/operator_settings/testdata/fixtures"
@@ -24,7 +23,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestIndexedInputCases_MatchProductionLoaders(t *testing.T) {
-	inventory := operatorconfig.ProjectInputInventory()
+	inventory := identityinventory.ProjectInputInventory()
 	seen := make(map[string]struct{}, len(inventory.Cases))
 	for _, inputCase := range inventory.Cases {
 		if inputCase.ID == "" {

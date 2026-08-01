@@ -42,7 +42,7 @@ func TestCatalogRootErrorResponse_MapsUnavailableCatalogFailures(t *testing.T) {
 func TestCatalogRootErrorResponse_LeavesUnmappedInternalFailures(t *testing.T) {
 	t.Parallel()
 
-	err := errors.New("pkg/services/models/internal/catalog: boom")
+	err := errors.New("Models catalog: boom")
 	if _, _, ok := CatalogRootErrorResponse(err); ok {
 		t.Fatalf("CatalogRootErrorResponse(%v) = handled, want unmapped internal failure", err)
 	}

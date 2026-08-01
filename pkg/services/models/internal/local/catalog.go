@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/catalog"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
+	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 )
 
 type CatalogEntry = modelcatalog.Entry

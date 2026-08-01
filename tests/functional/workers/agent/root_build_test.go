@@ -4,26 +4,29 @@ import (
 	"context"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestAgentRunnerDeliveryRemainsInertThroughRootBuildProcessConstruction proves
-// root.BuildProcess stays inert while the published Providers root and Agent
-// Runner delivery slice are available for composition.
+// root.BuildProcess stays inert while its public provider identity capability is
+// available for composition.
 func TestAgentRunnerDeliveryRemainsInertThroughRootBuildProcessConstruction(t *testing.T) {
 	t.Parallel()
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	providersRoot, err := providerswire.NewService()
+	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
 	if err != nil {
-		t.Fatalf("providerswire.NewService() error = %v", err)
+		t.Fatalf("root.BuildProcess() error = %v", err)
 	}
-	if process == nil || providersRoot == nil {
-		t.Fatal("root-built process or Providers root = nil, want inert composition")
+	if process == nil || process.ProviderRegistry() == nil {
+		t.Fatal("root-built process or provider registry = nil, want inert composition")
 	}
-	if _, err := providersRoot.ListProviders(context.Background(), struct{}{}); err != nil {
-		t.Fatalf("ListProviders() error = %v", err)
+	for _, providerID := range []string{"claude", "codex"} {
+		if got, err := process.ProviderRegistry().CanonicalIdentity(providerID); err != nil || got != providerID {
+			t.Fatalf("CanonicalIdentity(%q) = (%q, %v), want (%q, nil)", providerID, got, err, providerID)
+		}
+	}
+	if _, err := process.ProviderRegistry().CanonicalIdentity("missing.provider"); err == nil {
+		t.Fatal("CanonicalIdentity(missing.provider) error = nil, want unknown-provider failure")
 	}
 }

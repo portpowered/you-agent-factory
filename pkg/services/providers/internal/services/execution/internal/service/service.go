@@ -84,7 +84,7 @@ func (s *service) Execute(
 ) (result providers.ExecuteResult, executeErr error) {
 	detached := request.Clone()
 	defer func() {
-		if contextErr := normalizeContextFailure(ctx, detached); contextErr != nil {
+		if contextErr := normalizeContextFailureWithExisting(ctx, detached, executeErr); contextErr != nil {
 			result = providers.ExecuteResult{}
 			executeErr = contextErr
 		}
@@ -118,6 +118,28 @@ func (s *service) Execute(
 		return providers.ExecuteResult{}, normalizeAttemptFailure(ctx, err, detached)
 	}
 	return normalizeSuccess(result, resolved.Provider.ID, detached)
+}
+
+func normalizeContextFailureWithExisting(
+	ctx context.Context,
+	request providers.ExecuteRequest,
+	existing error,
+) error {
+	contextFailure := normalizeContextFailure(ctx, request)
+	if contextFailure == nil {
+		return nil
+	}
+	existingFailure, existingOK := executeFailureAs(existing)
+	if !existingOK {
+		return contextFailure
+	}
+	normalized, normalizedOK := executeFailureAs(contextFailure)
+	if !normalizedOK {
+		return contextFailure
+	}
+	normalized.SessionRef = existingFailure.SessionRef
+	normalized.Diagnostics = existingFailure.Diagnostics
+	return normalizeDeclaredFailure(normalized, request)
 }
 
 func sameRegistrationFacts(

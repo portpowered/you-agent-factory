@@ -38,8 +38,16 @@ func StandardCatalog() providers.Service {
 }
 
 func selectable(id providers.ID) providers.Descriptor {
+	var aliases []string
+	switch id {
+	case providers.IDCodex:
+		aliases = []string{"openai"}
+	case providers.IDClaude:
+		aliases = []string{"anthropic"}
+	}
 	return providers.Descriptor{
 		ID:           id,
+		Aliases:      aliases,
 		Availability: providers.AvailabilitySelectable,
 		Readiness:    providers.ReadinessReady,
 	}

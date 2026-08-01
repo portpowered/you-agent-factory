@@ -13,8 +13,6 @@ import (
 	operator_settings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 	"github.com/santhosh-tekuri/jsonschema/v6"
-
-	_ "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
 
 type schemaParityKind string
@@ -139,9 +137,13 @@ func TestYouConfigSchemaAndLoaderRejectUnicodeWhitespaceOnlyPresetID(t *testing.
 
 func TestYouConfigSchemaLoaderParityMatrix(t *testing.T) {
 	schema := youConfigSchema(t)
+	operatorInventory := readCommittedOperatorInventory[operator_settings.InputInventory](
+		t,
+		operator_settings.InputIndexBaselineRelativePath,
+	)
 
 	t.Run("operator_settings", func(t *testing.T) {
-		for _, inputCase := range operator_settings.ProjectInputInventory().Cases {
+		for _, inputCase := range operatorInventory.Cases {
 			t.Run(inputCase.ID, func(t *testing.T) {
 				runOperatorConfigSchemaParityCase(t, schema, inputCase)
 			})

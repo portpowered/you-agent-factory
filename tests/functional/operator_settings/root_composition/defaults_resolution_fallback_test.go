@@ -8,6 +8,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
@@ -15,7 +16,6 @@ import (
 // resolution through the published Operator Settings root contract preserves
 // accepted environment-over-file semantics when adapter ownership is unset.
 func TestResolveFromHomeFallbackPreservesAcceptedSemantics(t *testing.T) {
-	operatorsettings.ConfigureDefaultsResolutionFromHome(nil)
 	t.Cleanup(settingswire.RegisterDefaultsResolutionFromHome)
 
 	homeDir := t.TempDir()
@@ -34,9 +34,19 @@ func TestResolveFromHomeFallbackPreservesAcceptedSemantics(t *testing.T) {
 	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "codex")
 	t.Setenv(operatorsettings.EnvDefaultWorkerModel, "env-model")
 
-	resolved, err := operatorsettings.ResolveFromHomeWithEnvironment(
+	providersRoot, err := providerswire.NewService()
+	if err != nil {
+		t.Fatalf("providerswire.NewService() error = %v", err)
+	}
+	settingsRoot, err := settingswire.NewServiceFromHomePorts(
 		platformfilesystem.Local{},
 		globalconfigmapping.Decode,
+		providersRoot,
+	)
+	if err != nil {
+		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
+	}
+	resolved, err := settingsRoot.ResolveFromHomeWithEnvironment(
 		homeDir,
 		operatorsettings.Defaults{
 			WorkerModelProvider: os.Getenv(operatorsettings.EnvDefaultWorkerModelProvider),

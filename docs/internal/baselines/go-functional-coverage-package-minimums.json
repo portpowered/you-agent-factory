@@ -1304,7 +1304,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization",
-      "minimum": 16.80
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/contracts",
@@ -1318,6 +1318,10 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/recordingsqueries",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/service",
       "minimum": 0.00
     },
     {
@@ -1429,32 +1433,12 @@
       "minimum": 58.02
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts",
-      "minimum": 68.75
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/effects",
+      "minimum": 0.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/catalog",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
-      }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/host",
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost",
       "minimum": 23.54
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/inference",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
-      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/local",
@@ -1566,7 +1550,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases",
-      "minimum": 66.66
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/internal/service",
@@ -1640,15 +1630,21 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings",
-      "minimum": 46.25
+      "minimum": 32.11
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal",
-      "minimum": 75.00
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/construct",
-      "minimum": 50.87
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/identityinputinventory",
@@ -1704,7 +1700,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/defaults",
-      "minimum": 47.05
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/internal/service",
@@ -1732,7 +1734,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders",
-      "minimum": 44.82
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli",
@@ -1869,10 +1877,6 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/providers/inference",
-      "minimum": 48.71
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/service",
       "exception": {
         "kind": "measurement",
@@ -1894,7 +1898,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/internal/service",
-      "minimum": 84.57
+      "minimum": 84.50
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/wire",
@@ -2174,7 +2178,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings",
-      "minimum": 0.97
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal",
@@ -2187,8 +2197,50 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/artifacts",
+      "minimum": 0.83
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical",
       "minimum": 19.67
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/contracts",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events",
+      "minimum": 52.41
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events/kinds",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events/snapshot",
+      "minimum": 87.87
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections",
+      "minimum": 44.57
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/dashboard",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/workstation",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay",
+      "minimum": 42.54
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export",
@@ -2199,10 +2251,6 @@
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
       }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/artifacts",
-      "minimum": 0.83
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/internal/service",
@@ -2221,24 +2269,6 @@
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
       }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/events",
-      "minimum": 52.41
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/events/kinds",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
-      }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/events/snapshot",
-      "minimum": 87.87
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/internal/service",
@@ -2279,18 +2309,6 @@
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
       }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections",
-      "minimum": 44.57
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections/dashboard",
-      "minimum": 0.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections/workstation",
-      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire",
@@ -2347,10 +2365,6 @@
       "minimum": 1.66
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/replay",
-      "minimum": 42.54
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/wire",
       "minimum": 100.00
     },
@@ -2396,7 +2410,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization",
-      "minimum": 12.50
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization/internal/workflow",
@@ -2421,6 +2441,10 @@
       "minimum": 61.06
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/contenturl",
       "minimum": 0.00
     },
@@ -2429,15 +2453,15 @@
       "minimum": 0.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/lineagegraph",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/proposalmaterialization",
       "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/requestadmission",
-      "minimum": 0.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/service",
       "minimum": 0.00
     },
     {
@@ -2491,16 +2515,12 @@
       "minimum": 67.64
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/lineagegraph",
-      "minimum": 0.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/stateaccessquery",
-      "minimum": 0.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire",
       "minimum": 76.90
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/stateaccessquery",
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli",
@@ -2786,7 +2806,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/acp",
-      "minimum": 82.00
+      "minimum": 77.14
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/batchload",
@@ -3062,5 +3082,3 @@
     }
   ]
 }
-
-

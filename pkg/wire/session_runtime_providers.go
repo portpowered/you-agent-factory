@@ -193,7 +193,7 @@ func provideProviderSessions(edges serviceedges.Edges) (providersessions.Service
 	}
 	operatingSystem := edges.ProviderSessionOperatingSystem
 	if operatingSystem == "" {
-		operatingSystem = providersessionswire.OperatingSystem(runtime.GOOS)
+		operatingSystem = runtime.GOOS
 	}
 	return providersessionswire.NewService(
 		files,
@@ -203,7 +203,7 @@ func provideProviderSessions(edges serviceedges.Edges) (providersessions.Service
 		cursorWalkDirectory,
 		cursorResolveSymlinks,
 		cursorOpenDatabase,
-		operatingSystem,
+		providersessionswire.OperatingSystem(operatingSystem),
 	)
 }
 

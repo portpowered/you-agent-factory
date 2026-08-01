@@ -12,7 +12,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/inference"
+	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"

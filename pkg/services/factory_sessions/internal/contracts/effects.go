@@ -46,3 +46,25 @@ type RuntimePersistenceFileSystem interface {
 type InvocationMetricsRecorder interface {
 	RecordInvocationMetric(InvocationMetric)
 }
+
+type ModelPullMetricsRecorder interface {
+	RecordModelPullMetric(InvocationMetric)
+}
+
+type ModelHostDiagnosticLogger interface {
+	Info(string, map[string]string)
+	Warn(string, map[string]string)
+}
+
+type ModelHostMetricsRecorder interface {
+	RecordMetric(string, map[string]string)
+}
+
+type InvocationArtifactFileSystem interface {
+	Open(string) (io.ReadCloser, error)
+	Create(string) (io.WriteCloser, error)
+}
+
+type InvocationArtifactExporter interface {
+	ExportInvocationArtifact(sourcePath, destinationPath string) error
+}

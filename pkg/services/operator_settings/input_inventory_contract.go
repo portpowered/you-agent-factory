@@ -68,12 +68,3 @@ type ResolvedExpectation struct {
 	WorkerModelProvider string `json:"workerModelProvider,omitempty"`
 	WorkerModel         string `json:"workerModel,omitempty"`
 }
-
-// ProjectInputInventory builds the deterministic operator-config input inventory
-// from committed fixtures and documented loader outcomes.
-func ProjectInputInventory() InputInventory {
-	if identityInputInventoryOperations.ProjectInputInventory == nil {
-		panic("operator settings identity input inventory operations are required")
-	}
-	return identityInputInventoryOperations.ProjectInputInventory()
-}

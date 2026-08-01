@@ -12,7 +12,7 @@ import (
 	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	inference "github.com/portpowered/infinite-you/pkg/services/providers/inference"
+	inference "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 

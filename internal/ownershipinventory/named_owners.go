@@ -94,12 +94,6 @@ func committedNamedOwnerConfirmations() []NamedOwnerConfirmation {
 					Note:          "Agy/PTY adapter packages move into Providers native adapters under the singular Providers root.",
 				},
 				{
-					PackagePrefix: "pkg/services/workers/cliprovider",
-					Destination:   "providers",
-					Disposition:   DispositionMove,
-					Note:          "CLI provider registry/enumeration packages move into Providers Catalog; no CLI-specific competing registry remains.",
-				},
-				{
 					PackagePrefix: "pkg/services/providers/internal/services/execution/internal/provider",
 					Destination:   "providers",
 					Disposition:   DispositionMove,
@@ -140,5 +134,3 @@ func compareNamedOwnerConfirmations(a, b NamedOwnerConfirmation) int {
 func packageMatchesResidualPrefix(packagePath, prefix string) bool {
 	return packagePath == prefix || strings.HasPrefix(packagePath, prefix+"/")
 }
-
-

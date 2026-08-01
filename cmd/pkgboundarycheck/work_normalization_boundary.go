@@ -30,11 +30,10 @@ func scanTestWorkNormalization(repoRoot string) ([]testWorkNormalizationFinding,
 		if walkErr != nil {
 			return walkErr
 		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
+		}
 		if entry.IsDir() {
-			name := entry.Name()
-			if name == ".git" || name == "node_modules" || name == "vendor" {
-				return filepath.SkipDir
-			}
 			return nil
 		}
 		if filepath.Ext(path) != ".go" {

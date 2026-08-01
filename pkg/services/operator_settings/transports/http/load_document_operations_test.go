@@ -31,7 +31,7 @@ func TestAdapter_LoadDocumentInvokesFakeRootAndEncodesSuccess(t *testing.T) {
 						WorkerModelProvider: "codex",
 						WorkerModel:         "gpt-5",
 					},
-					Runtime: operatorsettings.EmptyDocument().Runtime,
+					Runtime: operatorsettings.EmptyDocument.Runtime,
 				},
 			}, nil
 		},

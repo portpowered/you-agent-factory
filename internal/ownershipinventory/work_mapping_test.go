@@ -32,14 +32,41 @@ func TestMapPackageWorkMoveDestinations(t *testing.T) {
 			retainOwner: "work",
 		},
 		{
+			path:        "pkg/services/work/internal",
+			wantRetain:  true,
+			retainOwner: "work",
+		},
+		{
 			path:        "pkg/services/work/internal/services/state_access/wire",
 			wantRetain:  true,
 			retainOwner: "work",
 		},
 		{
-			path: "pkg/services/work/testdata/primary_result_regression",
+			path: "pkg/services/work/internal/lineagegraph",
 			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/work/testdata/primary_result_regression",
+				PackagePath:       "pkg/services/work/internal/lineagegraph",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "work",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/work/internal",
+				DeletionCondition: "delete transitional top-level package after CLN-WORK-FOLD-TOPLEVEL cutover proof",
+			},
+		},
+		{
+			path: "pkg/services/work/internal/proposalmaterialization",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/work/internal/proposalmaterialization",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "work",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/work/internal",
+				DeletionCondition: "delete transitional top-level package after CLN-WORK-FOLD-TOPLEVEL cutover proof",
+			},
+		},
+		{
+			path: "pkg/services/work/internal/stateaccessquery",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/work/internal/stateaccessquery",
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "work",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
@@ -85,74 +112,20 @@ func TestWorkTopLevelUnexpectedMoveDestinationsMatchInventory(t *testing.T) {
 		t.Fatal("OwnerTopLevelSpecFor(work) missing")
 	}
 
-	wantSuccessor := map[string]string{
-		"testdata": "pkg/services/work/internal",
-	}
-	if len(spec.Unexpected) != len(wantSuccessor) {
-		t.Fatalf("unexpected inventory drift: got %v, want keys %v", spec.Unexpected, wantSuccessor)
-	}
-
-	for _, child := range spec.Unexpected {
-		child := child
-		t.Run(child, func(t *testing.T) {
-			t.Parallel()
-
-			want, ok := wantSuccessor[child]
-			if !ok {
-				t.Fatalf("unexpected sibling %q missing from confirmed inventory destinations", child)
-			}
-			got, err := ownershipinventory.MapPackage("pkg/services/work/" + child)
-			if err != nil {
-				t.Fatalf("MapPackage() error = %v", err)
-			}
-			if got.Disposition != ownershipinventory.DispositionMove {
-				t.Fatalf("disposition = %q, want move", got.Disposition)
-			}
-			if got.Successor != want {
-				t.Fatalf("successor = %q, want %q", got.Successor, want)
-			}
-			if got.DeletionCondition == "" {
-				t.Fatal("expected deletion condition on move row")
-			}
-		})
+	if len(spec.Unexpected) != 0 {
+		t.Fatalf("unexpected inventory drift: got %v, want no unexpected siblings", spec.Unexpected)
 	}
 }
 
 func TestWorkUnexpectedSiblingMoveDestinationsLocked(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		path          string
-		wantSuccessor string
-	}{
-		{
-			path:          "pkg/services/work/testdata",
-			wantSuccessor: "pkg/services/work/internal",
-		},
+	spec, ok := ownershipinventory.OwnerTopLevelSpecFor("work")
+	if !ok {
+		t.Fatal("OwnerTopLevelSpecFor(work) missing")
 	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.path, func(t *testing.T) {
-			t.Parallel()
-
-			got, err := ownershipinventory.MapPackage(tc.path)
-			if err != nil {
-				t.Fatalf("MapPackage(%q) error = %v", tc.path, err)
-			}
-			if got.Disposition == ownershipinventory.DispositionRetain && got.Destination == "work" {
-				t.Fatalf("MapPackage(%q) regressed to retain→work", tc.path)
-			}
-			if got.Disposition != ownershipinventory.DispositionMove {
-				t.Fatalf("MapPackage(%q) disposition = %q, want move", tc.path, got.Disposition)
-			}
-			if got.Successor != tc.wantSuccessor {
-				t.Fatalf("MapPackage(%q) successor = %q, want %q", tc.path, got.Successor, tc.wantSuccessor)
-			}
-			if got.DeletionCondition == "" {
-				t.Fatalf("MapPackage(%q) missing deletionCondition", tc.path)
-			}
-		})
+	if len(spec.Unexpected) != 0 {
+		t.Fatalf("unexpected inventory drift: got %v, want no unexpected siblings", spec.Unexpected)
 	}
 }
 
@@ -196,6 +169,8 @@ func TestWorkInventoryRejectsRetainToOwnerRoot(t *testing.T) {
 
 func workCanonicalRetainRest(rest string) bool {
 	switch {
+	case rest == "internal":
+		return true
 	case rest == "wire" || strings.HasPrefix(rest, "wire/"):
 		return true
 	case rest == "transports" || strings.HasPrefix(rest, "transports/"):
@@ -207,12 +182,6 @@ func workCanonicalRetainRest(rest string) bool {
 	case strings.HasPrefix(rest, "internal/services/content_materialization"):
 		return true
 	case strings.HasPrefix(rest, "internal/services/state_access"):
-		return true
-	case rest == "internal/contenturl" || strings.HasPrefix(rest, "internal/contenturl/"):
-		return true
-	case rest == "internal/invocationreturnpolicy" || strings.HasPrefix(rest, "internal/invocationreturnpolicy/"):
-		return true
-	case rest == "internal/requestadmission" || strings.HasPrefix(rest, "internal/requestadmission/"):
 		return true
 	default:
 		return false

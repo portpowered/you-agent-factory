@@ -76,13 +76,10 @@ func scanPetriPublicSurface(repoRoot string) ([]petriPublicSurfaceFinding, error
 		if walkErr != nil {
 			return walkErr
 		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
+		}
 		if entry.IsDir() {
-			switch entry.Name() {
-			case ".git", "node_modules", "vendor":
-				if path != repoRoot {
-					return filepath.SkipDir
-				}
-			}
 			return nil
 		}
 		if filepath.Ext(path) != ".go" {

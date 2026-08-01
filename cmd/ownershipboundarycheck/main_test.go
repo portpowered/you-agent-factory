@@ -60,15 +60,16 @@ type Config struct { Runtime runtime.Service }`,
 import inference "github.com/portpowered/infinite-you/pkg/services/providers/execution/inferencecontract"
 type Adapter struct { Invoke inference.Invoker }`,
 		"pkg/platform/http/migration_debt.go": `package http
-import debt "github.com/portpowered/infinite-you/pkg/services/providers/inference"
+import debt "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 type DebtAdapter struct { Invoke debt.Invoker }`,
 	})
 
 	findings := scanFixture(t, root)
-	if len(findings) != 1 {
-		t.Fatalf("platform findings = %#v, want one domain import", findings)
+	if len(findings) != 2 {
+		t.Fatalf("platform findings = %#v, want provider/wire and factory runtime domain imports", findings)
 	}
 	assertFinding(t, findings, rulePlatformDomainImport, "/factory_runtime")
+	assertFinding(t, findings, rulePlatformDomainImport, "/providers/wire")
 }
 
 func TestScanAllowsOnlyContentStagingAdapterToImportWorkRootPort(t *testing.T) {
@@ -297,4 +298,3 @@ func baselineEntryFor(rule, filePath, target string) baselineEntry {
 		Stage: baselineStage, DeletionGate: deletionGates[rule],
 	}
 }
-

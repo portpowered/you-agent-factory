@@ -17,9 +17,10 @@ type Service interface {
 // It deliberately carries no retry, fallback, scheduling, or throttle policy.
 type Attempt func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error)
 
-// AttemptFailure carries the competing lifecycle facts from one private
-// adapter attempt. Execution applies one deterministic precedence rule and
-// never exposes these native errors to peers.
+// AttemptFailure carries the competing lifecycle facts and optional detached
+// session identity from one private adapter attempt. Execution applies one
+// deterministic precedence rule and never exposes these native errors to
+// peers.
 type AttemptFailure struct {
 	Declared        *providers.ExecuteFailure
 	SessionRef      *providers.SessionRef

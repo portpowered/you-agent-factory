@@ -145,7 +145,9 @@ func TestExecuteFailurePreservesSessionRefAndBoundsMessages(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	result, err := runner.Execute(t.Context(), baseAgentRequest())
+	request := baseAgentRequest()
+	request.SessionID = "resume-session-1"
+	result, err := runner.Execute(t.Context(), request)
 	if err == nil {
 		t.Fatal("Execute() error = nil, want provider failure")
 	}
@@ -169,6 +171,9 @@ func TestExecuteFailurePreservesSessionRefAndBoundsMessages(t *testing.T) {
 	}
 	if len([]rune(providerErr.Message)) != failureMessageRuneLimit {
 		t.Fatalf("ProviderError.Message length = %d, want %d runes", len([]rune(providerErr.Message)), failureMessageRuneLimit)
+	}
+	if !reflect.DeepEqual(providerErr.ProviderSession, wantSession) {
+		t.Fatalf("ProviderError.ProviderSession = %#v, want failure session %#v", providerErr.ProviderSession, wantSession)
 	}
 }
 

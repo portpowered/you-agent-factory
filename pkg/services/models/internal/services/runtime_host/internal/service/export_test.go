@@ -5,11 +5,12 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
+	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
 	leaseswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/wire"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
-	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 )
 
 // SupervisorTestConfig overrides supervisor timing and health probing for tests.
@@ -29,11 +30,11 @@ type HostPolicyTestConfig struct {
 func NewWithSupervisorTestConfig(
 	scopes runtimescopes.Service,
 	assets scopedassets.Service,
-	processLauncher models.HostProcessLauncher,
-	hostHTTP models.HostHTTPDoer,
-	hostClock models.HostClock,
-	hostLogger models.HostDiagnosticLogger,
-	hostMetrics models.HostMetricsRecorder,
+	processLauncher modelseffects.HostProcessLauncher,
+	hostHTTP modelseffects.HostHTTPDoer,
+	hostClock modelseffects.HostClock,
+	hostLogger modelseffects.HostDiagnosticLogger,
+	hostMetrics modelseffects.HostMetricsRecorder,
 	cfg SupervisorTestConfig,
 ) runtimehost.Service {
 	return NewWithHostTestConfig(
@@ -53,11 +54,11 @@ func NewWithSupervisorTestConfig(
 func NewWithHostTestConfig(
 	scopes runtimescopes.Service,
 	assets scopedassets.Service,
-	processLauncher models.HostProcessLauncher,
-	hostHTTP models.HostHTTPDoer,
-	hostClock models.HostClock,
-	hostLogger models.HostDiagnosticLogger,
-	hostMetrics models.HostMetricsRecorder,
+	processLauncher modelseffects.HostProcessLauncher,
+	hostHTTP modelseffects.HostHTTPDoer,
+	hostClock modelseffects.HostClock,
+	hostLogger modelseffects.HostDiagnosticLogger,
+	hostMetrics modelseffects.HostMetricsRecorder,
 	supervisorCfg SupervisorTestConfig,
 	policyCfg HostPolicyTestConfig,
 ) runtimehost.Service {
@@ -97,12 +98,12 @@ func LeasesService(s runtimehost.Service) hostleases.Service {
 func NewWithLeasesFacts(
 	scopes runtimescopes.Service,
 	assets scopedassets.Service,
-	processLauncher models.HostProcessLauncher,
-	hostHTTP models.HostHTTPDoer,
-	hostClock models.HostClock,
-	hostLogger models.HostDiagnosticLogger,
-	hostMetrics models.HostMetricsRecorder,
-	slotFacts hostleases.SlotFactsProvider,
+	processLauncher modelseffects.HostProcessLauncher,
+	hostHTTP modelseffects.HostHTTPDoer,
+	hostClock modelseffects.HostClock,
+	hostLogger modelseffects.HostDiagnosticLogger,
+	hostMetrics modelseffects.HostMetricsRecorder,
+	slotFacts modelseffects.SlotFactsProvider,
 	policyCfg HostPolicyTestConfig,
 ) runtimehost.Service {
 	leases, err := leaseswire.NewService(hostClock, slotFacts)
@@ -151,8 +152,8 @@ func ShutdownHost(ctx context.Context, s runtimehost.Service) error {
 	return s.(*service).Shutdown(ctx)
 }
 
-func mustLeasesService(hostClock models.HostClock) hostleases.Service {
-	leases, err := leaseswire.NewService(hostClock, hostleases.UnconfiguredSlotFacts{})
+func mustLeasesService(hostClock modelseffects.HostClock) hostleases.Service {
+	leases, err := leaseswire.NewService(hostClock, modelseffects.UnconfiguredSlotFacts{})
 	if err != nil {
 		panic(err)
 	}

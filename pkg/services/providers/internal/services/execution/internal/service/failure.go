@@ -37,14 +37,14 @@ func normalizeAttemptFailure(
 	request providers.ExecuteRequest,
 ) (normalized error) {
 	lifecycle, hasLifecycle := attemptFailureAs(attemptErr)
+	failureSession := sessionRefFromAttemptFailure(attemptErr, lifecycle, hasLifecycle)
 	defer func() {
-		if !hasLifecycle || lifecycle.SessionRef == nil || normalized == nil {
+		if failureSession == nil || normalized == nil {
 			return
 		}
 		if failure, ok := executeFailureAs(normalized); ok {
-			session := lifecycle.SessionRef.Clone()
-			failure.SessionRef = &session
-			normalized = failure
+			failure.SessionRef = failureSession
+			normalized = normalizeDeclaredFailure(failure, request)
 		}
 	}()
 	signals := []error{ctx.Err()}
@@ -100,11 +100,33 @@ func normalizeAttemptFailure(
 	}, request)
 }
 
+func sessionRefFromAttemptFailure(
+	attemptErr error,
+	lifecycle execution.AttemptFailure,
+	hasLifecycle bool,
+) *providers.SessionRef {
+	if hasLifecycle {
+		if lifecycle.SessionRef != nil {
+			return lifecycle.SessionRef
+		}
+		if lifecycle.Declared != nil && lifecycle.Declared.SessionRef != nil {
+			return lifecycle.Declared.SessionRef
+		}
+	}
+	if failure, ok := executeFailureAs(attemptErr); ok {
+		return failure.SessionRef
+	}
+	return nil
+}
+
 func normalizeDeclaredFailure(
 	failure providers.ExecuteFailure,
 	request providers.ExecuteRequest,
-) providers.ExecuteFailure {
+) error {
 	failure = failure.Clone()
+	if err := validateSessionRef(failure.SessionRef, request.Provider); err != nil {
+		return err
+	}
 	if !knownFailureKind(failure.Kind) {
 		failure.Kind = providers.ExecuteFailureKindUnknown
 	}

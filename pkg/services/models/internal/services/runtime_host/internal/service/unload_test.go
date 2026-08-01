@@ -11,10 +11,10 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
-	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
-	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
+	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
+	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
 func TestStopModelHostStopsReadySupervisedProcess(t *testing.T) {
@@ -31,7 +31,7 @@ func TestStopModelHostStopsReadySupervisedProcess(t *testing.T) {
 	scopes := newScopes(t, "explicit-unload")
 	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
 	launcher := &fakeProcessLauncher{
-		newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+		newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
 			process := newFakeManagedProcess(healthServer.URL, nil)
 			process.stopFn = func() error {
 				stopCount.Add(1)
@@ -88,7 +88,7 @@ func TestStopModelHostRejectsLoadingRuntime(t *testing.T) {
 		scopes,
 		mustAssetsService(t, scopes),
 		&fakeProcessLauncher{
-			newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+			newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
 				return newFakeManagedProcess(spec.HealthEndpoint, nil)
 			},
 		},
@@ -146,7 +146,7 @@ func TestStopModelHostRejectsActiveCapacityHolder(t *testing.T) {
 	scopes := newScopes(t, "unload-active-holder")
 	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
 	service := newTestRuntimeHostWithScopesAndClock(t, scopes, &fakeProcessLauncher{
-		newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+		newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
 			return newFakeManagedProcess(healthServer.URL, nil)
 		},
 	}, realHostClock{})
@@ -196,7 +196,7 @@ func TestIdleUnloadStopsRuntimeAfterLastCapacityReleased(t *testing.T) {
 		t,
 		scopes,
 		&fakeProcessLauncher{
-			newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+			newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
 				process := newFakeManagedProcess(healthServer.URL, nil)
 				process.stopFn = func() error {
 					stopCount.Add(1)
@@ -245,7 +245,7 @@ func TestIdleUnloadDoesNotStopActiveCapacityHolder(t *testing.T) {
 		t,
 		scopes,
 		&fakeProcessLauncher{
-			newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+			newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
 				process := newFakeManagedProcess(healthServer.URL, nil)
 				process.stopFn = func() error {
 					stopCount.Add(1)
@@ -303,7 +303,7 @@ func TestResourcePressureEvictsIdleRuntime(t *testing.T) {
 		t,
 		scopes,
 		&fakeProcessLauncher{
-			newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+			newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
 				process := newFakeManagedProcess(healthServer.URL, nil)
 				process.stopFn = func() error {
 					stopCount.Add(1)
@@ -352,7 +352,7 @@ func TestShutdownStopsSupervisedRuntimesAndCancelsIdleTimers(t *testing.T) {
 		t,
 		scopes,
 		&fakeProcessLauncher{
-			newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+			newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
 				process := newFakeManagedProcess(healthServer.URL, nil)
 				process.stopFn = func() error {
 					stopCount.Add(1)
@@ -397,7 +397,7 @@ func TestIdleUnloadStopsRuntimeAfterLeaseRelease(t *testing.T) {
 		scopes,
 		mustAssetsService(t, scopes),
 		&fakeProcessLauncher{
-			newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+			newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
 				process := newFakeManagedProcess(healthServer.URL, nil)
 				process.stopFn = func() error {
 					stopCount.Add(1)
@@ -464,7 +464,7 @@ func TestIdleUnloadDoesNotStopActiveLeaseHolder(t *testing.T) {
 		scopes,
 		mustAssetsService(t, scopes),
 		&fakeProcessLauncher{
-			newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+			newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
 				process := newFakeManagedProcess(healthServer.URL, nil)
 				process.stopFn = func() error {
 					stopCount.Add(1)
@@ -515,8 +515,8 @@ func (facts leaseReadySlotFacts) SlotFacts(
 	context.Context,
 	models.RuntimeScopeRef,
 	string,
-) (hostleases.SlotFacts, error) {
-	return hostleases.SlotFacts{
+) (modelseffects.SlotFacts, error) {
+	return modelseffects.SlotFacts{
 		Readiness: models.ReadinessStateReady,
 		Capacity:  facts.capacity,
 	}, nil
@@ -525,7 +525,7 @@ func (facts leaseReadySlotFacts) SlotFacts(
 func newRuntimeHostWithPolicy(
 	t *testing.T,
 	scopes runtimescopes.Service,
-	launcher models.HostProcessLauncher,
+	launcher modelseffects.HostProcessLauncher,
 	policy internalservice.HostPolicyTestConfig,
 ) runtimehost.Service {
 	t.Helper()

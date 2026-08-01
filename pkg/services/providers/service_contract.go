@@ -22,6 +22,7 @@ type Service interface {
 	// identity fails with ErrInvalidID. Attempt failures return typed
 	// Providers-owned errors such as ErrExecuteCancelled, ErrExecuteTimeout, and
 	// ErrExecuteFailed that peers can branch on with errors.Is / errors.As.
-	// Successful results may carry an optional detached SessionRef.
+	// Successful results and typed failures may carry an optional detached
+	// SessionRef for the provider session observed during the attempt.
 	Execute(context.Context, ExecuteRequest) (ExecuteResult, error)
 }

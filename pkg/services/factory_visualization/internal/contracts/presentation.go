@@ -12,8 +12,8 @@ const (
 )
 
 var (
-	ErrOutputClosed  = errors.New("response presentation output is closed")
-	ErrBacklogFull   = errors.New("response presentation output backlog is full")
+	ErrOutputClosed = errors.New("response presentation output is closed")
+	ErrBacklogFull  = errors.New("response presentation output backlog is full")
 )
 
 // Output serializes encoded presentation records onto one transport writer.
@@ -36,8 +36,9 @@ type FactoryEventEncoder func(factorydefinitions.FactoryEvent) ([]byte, bool)
 type FinalResponseWriter func(io.Writer, bool) error
 
 // FactoryEventStream presents accepted Factory Events then finalizes one
-// terminal payload after drain.
-type FactoryEventStream interface {
+// terminal payload after drain. It is an alias so response-presentation
+// adapters can retain the root's historical anonymous-interface method shape.
+type FactoryEventStream = interface {
 	PresentFactoryEvents([]factorydefinitions.FactoryEvent)
 	Finalize(FinalResponseWriter) (bool, error)
 	CloseAndDrain() error

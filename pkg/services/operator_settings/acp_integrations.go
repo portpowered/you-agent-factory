@@ -18,7 +18,7 @@ func (service ConfigDocumentService) AddACPIntegration(document ConfigDocument, 
 	if err != nil {
 		return ConfigDocument{}, err
 	}
-	return ConfigDocumentFromConfig(normalized), nil
+	return ConfigDocument{config: normalized}, nil
 }
 
 // DeleteACPIntegration removes one integration by canonical provider name.
@@ -42,7 +42,7 @@ func (service ConfigDocumentService) DeleteACPIntegration(document ConfigDocumen
 	if err != nil {
 		return ConfigDocument{}, err
 	}
-	return ConfigDocumentFromConfig(normalized), nil
+	return ConfigDocument{config: normalized}, nil
 }
 
 // ConfigureACPIntegrationAdd loads, updates, and persists one ACP integration.
@@ -73,7 +73,7 @@ func (service ConfigDocumentService) EnsurePackagedACPIntegrations(ctx context.C
 		if err != nil {
 			return ConfigDocument{}, err
 		}
-		return ConfigDocumentFromConfig(normalized), nil
+		return ConfigDocument{config: normalized}, nil
 	})
 }
 
@@ -82,6 +82,9 @@ func (service ConfigDocumentService) configureACPIntegrations(
 	path string,
 	update func(ConfigDocument) (ConfigDocument, error),
 ) (ConfigDocument, error) {
+	if err := operationContextError(ctx); err != nil {
+		return ConfigDocument{}, err
+	}
 	if err := ctx.Err(); err != nil {
 		return ConfigDocument{}, err
 	}

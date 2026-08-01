@@ -249,7 +249,11 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 	modelConfig, err := applyAdvertisedModel(ctx, connection, session, request.Model)
 	if err != nil {
 		daemon.invalidateDisconnected(ctx)
-		return providers.ExecuteResult{}, rpcFailure(ctx, "session/set_config_option", id, err, daemon.stderr.String(), request)
+		return providers.ExecuteResult{}, withSessionRef(
+			rpcFailure(ctx, "session/set_config_option", id, err, daemon.stderr.String(), request),
+			id,
+			string(session.SessionId),
+		)
 	}
 	if _, err := connection.Prompt(ctx, acpsdk.PromptRequest{SessionId: session.SessionId, Prompt: prompt}); err != nil {
 		if ctx.Err() != nil {
@@ -258,7 +262,7 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 			cancel()
 		}
 		daemon.invalidateDisconnected(context.Background())
-		return providers.ExecuteResult{}, withPartial(rpcFailure(ctx, "session/prompt", id, err, daemon.stderr.String(), request), client)
+		return providers.ExecuteResult{}, withPartial(rpcFailure(ctx, "session/prompt", id, err, daemon.stderr.String(), request), client, id)
 	}
 	return providers.ExecuteResult{Content: client.content(), SessionRef: &providers.SessionRef{Provider: id, Kind: providers.SessionIDKind, ID: string(session.SessionId)}, Diagnostics: &providers.ExecuteDiagnostics{Progress: completedPromptProgress(client.progressFacts()), Metadata: map[string]string{"execution_kind": "acp", "protocol_version": fmt.Sprint(initialized.ProtocolVersion), "model_config": modelConfig}}}, nil
 }
@@ -690,9 +694,29 @@ func nativeFailure(err error) error {
 	}
 	return providers.ExecuteFailure{Kind: kind, Message: err.Error()}
 }
-func withPartial(err error, c *client) error {
+func withSessionRef(err error, provider providers.ID, sessionID string) error {
+	if strings.TrimSpace(sessionID) == "" {
+		return err
+	}
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) {
+		return err
+	}
+	failure = failure.Clone()
+	if failure.SessionRef == nil {
+		failure.SessionRef = &providers.SessionRef{
+			Provider: provider,
+			Kind:     providers.SessionIDKind,
+			ID:       sessionID,
+		}
+	}
+	return failure
+}
+
+func withPartial(err error, c *client, provider providers.ID) error {
 	var f providers.ExecuteFailure
 	if errors.As(err, &f) {
+		f = f.Clone()
 		var failureProgress []providers.ExecuteProgress
 		if f.Diagnostics != nil {
 			for _, progress := range f.Diagnostics.Progress {
@@ -702,6 +726,9 @@ func withPartial(err error, c *client) error {
 		progress := failedPromptProgress(c.progressFacts())
 		progress = append(progress, failureProgress...)
 		f.Diagnostics = &providers.ExecuteDiagnostics{Progress: progress, Metadata: map[string]string{"partial_content": c.content()}}
+		if f.SessionRef == nil {
+			f.SessionRef = c.sessionRef(provider)
+		}
 		return f
 	}
 	return err
@@ -771,6 +798,14 @@ func (c *client) SessionUpdate(_ context.Context, n acpsdk.SessionNotification) 
 }
 func (c *client) setSessionID(v string) { c.mu.Lock(); c.sessionID = v; c.mu.Unlock() }
 func (c *client) content() string       { c.mu.Lock(); defer c.mu.Unlock(); return c.text.String() }
+func (c *client) sessionRef(provider providers.ID) *providers.SessionRef {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if strings.TrimSpace(c.sessionID) == "" {
+		return nil
+	}
+	return &providers.SessionRef{Provider: provider, Kind: providers.SessionIDKind, ID: c.sessionID}
+}
 func (c *client) progressFacts() []providers.ExecuteProgress {
 	c.mu.Lock()
 	defer c.mu.Unlock()

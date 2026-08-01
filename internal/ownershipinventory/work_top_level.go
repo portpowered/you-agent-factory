@@ -66,8 +66,8 @@ func VerifyWorkUnexpectedPublicSiblingRemaps(root string) error {
 }
 
 // VerifyWorkPostDelTransitionalDebtBurnDown proves DEL-WORK deleted transitional
-// paths are absent from the committed owner top-level inventory and only
-// legitimate unexpected siblings (testdata) remain recorded.
+// paths are absent from the committed owner top-level inventory and no
+// unexpected public siblings remain recorded.
 func VerifyWorkPostDelTransitionalDebtBurnDown(root string) error {
 	if err := VerifyWorkDeletedTransitionalPublicPathsAbsent(root); err != nil {
 		return err
@@ -81,7 +81,7 @@ func VerifyWorkPostDelTransitionalDebtBurnDown(root string) error {
 			return fmt.Errorf("deleted transitional directory %q still listed in work top-level inventory", deleted)
 		}
 	}
-	wantUnexpected := []string{"testdata"}
+	wantUnexpected := []string{}
 	if !slices.Equal(spec.Unexpected, wantUnexpected) {
 		return fmt.Errorf("work unexpected top-level siblings = %v, want %v after DEL-WORK", spec.Unexpected, wantUnexpected)
 	}

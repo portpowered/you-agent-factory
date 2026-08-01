@@ -26,7 +26,7 @@ func TestAdapter_PullModelInvokesFakeRootWithDecodedName(t *testing.T) {
 			}, nil
 		},
 	}
-	handler := NewHandlerFromRoot(RootBinding{Models: root}, zap.NewNop())
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.PullModel(recorder, httptest.NewRequest(http.MethodPost, "/models/voice/pull", nil), "voice")
@@ -55,7 +55,7 @@ func TestAdapter_PullModelRejectsEmptyNameBeforeFakeRoot(t *testing.T) {
 			return models.PullResult{}, nil
 		},
 	}
-	handler := NewHandlerFromRoot(RootBinding{Models: root}, zap.NewNop())
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.PullModel(recorder, httptest.NewRequest(http.MethodPost, "/models//pull", nil), "   ")
@@ -76,7 +76,7 @@ func TestAdapter_PullModelEncodesPullErrorOutcome(t *testing.T) {
 			return models.PullResult{}, &models.PullError{Result: failure, Cause: errors.New("deadline exceeded")}
 		},
 	}
-	handler := NewHandlerFromRoot(RootBinding{Models: root}, zap.NewNop())
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.PullModel(recorder, httptest.NewRequest(http.MethodPost, "/models/voice/pull", nil), "voice")

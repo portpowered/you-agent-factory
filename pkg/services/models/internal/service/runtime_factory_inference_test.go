@@ -8,10 +8,11 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
-	inferencewire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/wire"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
+	inferencewire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/wire"
 	runtimehostwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/wire"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 )
@@ -160,8 +161,8 @@ type inferenceRecordingProcessLauncher struct {
 
 func (launcher *inferenceRecordingProcessLauncher) Start(
 	context.Context,
-	models.HostProcessStartSpec,
-) (models.HostManagedProcess, error) {
+	modelseffects.HostProcessStartSpec,
+) (modelseffects.HostManagedProcess, error) {
 	launcher.starts++
 	panic("process launcher called during inert inference composition")
 }
@@ -174,7 +175,7 @@ func (clock *inferenceTestClock) Now() time.Time {
 	return time.Unix(0, 0)
 }
 
-func (clock *inferenceTestClock) NewTimer(time.Duration) models.HostTimer {
+func (clock *inferenceTestClock) NewTimer(time.Duration) modelseffects.HostTimer {
 	clock.timerCalls++
 	panic("host timer created during inert inference composition")
 }

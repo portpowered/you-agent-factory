@@ -99,6 +99,7 @@ type runtimeConfig struct {
 	quorumPolicy              interfaces.QuorumPolicyService
 	outputShaping             interfaces.InvocationOutputShapingService
 	workPropagation           interfaces.WorkPropagationPolicyService
+	workService               work.Service
 	decisionEnvelopes         interfaces.DecisionEnvelopeService
 }
 
@@ -133,6 +134,7 @@ func New(
 	quorumPolicy interfaces.QuorumPolicyService,
 	outputShaping interfaces.InvocationOutputShapingService,
 	workPropagation interfaces.WorkPropagationPolicyService,
+	workService work.Service,
 	workRequestIDs work.RequestIDGenerator,
 	newID factory.IDGenerator,
 	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
@@ -182,6 +184,7 @@ func New(
 		quorumPolicy:              quorumPolicy,
 		outputShaping:             outputShaping,
 		workPropagation:           workPropagation,
+		workService:               workService,
 		decisionEnvelopes:         firstDecisionEnvelopeService(decisionEnvelopes),
 	}
 
@@ -433,6 +436,7 @@ func configureRuntimeDispatch(
 		cfg.net,
 		resultBuffer,
 		cfg.completionDeliveryPlanner,
+		cfg.workService,
 		cfg.workRequestIDs,
 		sessionIDFromFactoryConfig(cfg),
 	)

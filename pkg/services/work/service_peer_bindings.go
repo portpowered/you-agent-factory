@@ -87,10 +87,10 @@ func (s materializationService) MaterializeContentURL(
 }
 
 func (materializationService) MaterializeWorkerOutput(
-	ctx context.Context,
-	request MaterializeWorkerOutputRequest,
+	context.Context,
+	MaterializeWorkerOutputRequest,
 ) (MaterializeWorkerOutputResult, error) {
-	return MaterializeWorkerOutput(ctx, request)
+	return MaterializeWorkerOutputResult{}, fmt.Errorf("Work materialization service does not support worker-output materialization")
 }
 
 func (materializationService) PrepareInvocationInput(

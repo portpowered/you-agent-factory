@@ -155,7 +155,6 @@ func splitServicesOwnerPath(packagePath string) (owner, rest string, ok bool) {
 func mapProvidersExtraction(packagePath string) (PackageMapping, bool) {
 	switch {
 	case packagePath == "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
-		packagePath == "pkg/services/workers/cliprovider",
 		packagePath == "pkg/services/providers/internal/services/execution/internal/provider",
 		strings.HasPrefix(packagePath, "pkg/services/providers/internal/services/execution/internal/provider/"),
 		packagePath == "pkg/services/providers/internal/services/execution/internal/provider_test",
@@ -185,6 +184,12 @@ func mapKnownNestedOwnerPackage(owner, packagePath, rest string) (PackageMapping
 
 	if owner == "factory_definitions" && rest == "internal" {
 		return moveOrRetainMapping(packagePath, owner+"/internal", DispositionRetain), true
+	}
+	if owner == "work" && rest == "internal" {
+		return moveOrRetainMapping(packagePath, owner, DispositionRetain), true
+	}
+	if owner == "workers" && rest == "internal/service" {
+		return moveOrRetainMapping(packagePath, owner+"/internal", DispositionMove), true
 	}
 	if owner == "factory_definitions" && strings.HasPrefix(rest, "internal/lifecycle") {
 		return moveOrRetainMapping(packagePath, owner+"/internal", DispositionRetain), true
@@ -315,10 +320,11 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 	"work": {
 		{exact: "internal/contenturl", prefix: "internal/contenturl/", dest: "work/internal"},
 		{exact: "internal/invocationreturnpolicy", prefix: "internal/invocationreturnpolicy/", dest: "work/internal"},
+		{exact: "internal/lineagegraph", prefix: "internal/lineagegraph/", dest: "work/internal"},
+		{exact: "internal/proposalmaterialization", prefix: "internal/proposalmaterialization/", dest: "work/internal"},
 		{exact: "internal/requestadmission", prefix: "internal/requestadmission/", dest: "work/internal"},
-		{exact: "internal/service", prefix: "internal/service/", dest: "work/internal"},
+		{exact: "internal/stateaccessquery", prefix: "internal/stateaccessquery/", dest: "work/internal"},
 		{exact: "materialize", prefix: "materialize/", dest: "work/internal/services/content_materialization"},
-		{exact: "testdata", prefix: "testdata/", dest: "work/internal"},
 	},
 	"operator_settings": {
 		{exact: "testdata", prefix: "testdata/", dest: "operator_settings/internal"},
@@ -366,6 +372,10 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "internal/inference", prefix: "internal/inference/", dest: "models/internal/services/inference"},
 	},
 	"recordings": {
+		{exact: "internal/artifacts", prefix: "internal/artifacts/", dest: "recordings/internal/services/artifacts_export"},
+		{exact: "internal/events", prefix: "internal/events/", dest: "recordings/internal/services/canonical_ledger"},
+		{exact: "internal/projections", prefix: "internal/projections/", dest: "recordings/internal/services/projection_query"},
+		{exact: "internal/replay", prefix: "internal/replay/", dest: "recordings/internal/services/replay"},
 		{exact: "events", prefix: "events/", dest: "recordings/internal/services/canonical_ledger"},
 		{exact: "projections", prefix: "projections/", dest: "recordings/internal/services/projection_query"},
 		{exact: "replay", prefix: "replay/", dest: "recordings/internal/services/replay"},
@@ -471,5 +481,3 @@ func mergeOwnerPackageRows(existing []PackageMapping, ownerRows []PackageMapping
 	})
 	return merged
 }
-
-

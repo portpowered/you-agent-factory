@@ -68,7 +68,7 @@ var allowedServiceValueConstructionSymbols = map[string]map[string]struct{}{
 		"NewEmptyMockWorkersConfig": {},
 		"NewProviderError":          {},
 	},
-	"github.com/portpowered/infinite-you/pkg/services/providers/inference": {
+	"github.com/portpowered/infinite-you/pkg/services/providers/wire": {
 		"NewCapabilitySet": {},
 	},
 }
@@ -101,7 +101,7 @@ var transportPrivateServiceSubpackages = []string{
 	"pkg/services/factory_sessions/internal/runtimebinding",
 	"pkg/services/factory_sessions/internal/sessionservice",
 	"pkg/services/recordings/events",
-	"pkg/services/recordings/internal/services/canonical_ledger/events",
+	"pkg/services/recordings/internal/events",
 	"pkg/services/providers/internal/services/execution/internal/provider",
 	"pkg/services/workers/runner",
 	"pkg/services/workers/service",
@@ -165,11 +165,11 @@ var convergedServiceSubpackageRoots = map[string]string{
 	"pkg/services/factory_definitions/scaffold":                                                     "factory_definitions",
 	"pkg/services/factory_definitions/service":                                                      "factory_definitions",
 	"pkg/services/recordings/events":                                                                "recordings",
-	"pkg/services/recordings/internal/services/canonical_ledger/events":                             "recordings",
-	"pkg/services/recordings/internal/services/projection_query/projections":                        "recordings",
-	"pkg/services/recordings/internal/services/projection_query/projections/dashboard":              "recordings",
-	"pkg/services/recordings/internal/services/artifacts_export/artifacts":                          "recordings",
-	"pkg/services/recordings/internal/services/replay/replay":                                       "recordings",
+	"pkg/services/recordings/internal/events":                                                       "recordings",
+	"pkg/services/recordings/internal/projections":                                                  "recordings",
+	"pkg/services/recordings/internal/projections/dashboard":                                        "recordings",
+	"pkg/services/recordings/internal/artifacts":                                                    "recordings",
+	"pkg/services/recordings/internal/replay":                                                       "recordings",
 	"pkg/services/recordings/artifacts":                                                             "recordings",
 	"pkg/services/recordings/replay":                                                                "recordings",
 	"pkg/services/recordings/service":                                                               "recordings",
@@ -250,17 +250,17 @@ var approvedApplicationGraphImporters = []string{
 // provider/inferencecontract entries remain only as migration debt until later
 // Providers packets land; they are not the durable normative owner.
 var approvedPeerServiceContractImports = map[string]struct{}{
-	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":    {},
-	"pkg/platform/pty\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":      {},
-	"pkg/services/edges\x00" + providersLeafEffectContractImport:                                                                                   {},
-	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":                                                   {},
-	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/automations":                                                           {},
-	"pkg/wire\x00github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire":                               {},
-	"pkg/services/factory_runtime\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":                                         {},
-	"pkg/services/factory_runtime/internal/services/instance_host/build\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":   {},
-	"pkg/services/recordings\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":                                              {},
-	"pkg/services/recordings/internal/services/artifacts_export/artifacts\x00github.com/portpowered/infinite-you/pkg/services/providers/inference": {},
-	"pkg/services/recordings/internal/services/replay/replay\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":              {},
+	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty": {},
+	"pkg/platform/pty\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":   {},
+	"pkg/services/edges\x00" + providersLeafEffectContractImport:                                                                                {},
+	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                     {},
+	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/automations":                                                        {},
+	"pkg/wire\x00github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire":                            {},
+	"pkg/services/factory_runtime\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                           {},
+	"pkg/services/factory_runtime/internal/services/instance_host/build\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":     {},
+	"pkg/services/recordings\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                {},
+	"pkg/services/recordings/internal/artifacts\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                             {},
+	"pkg/services/recordings/internal/replay\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                {},
 }
 
 // publicExternalEffectContractImports are intentionally declared beside the
@@ -272,7 +272,7 @@ var approvedPeerServiceContractImports = map[string]struct{}{
 var publicExternalEffectContractImports = map[string]struct{}{
 	providersLeafEffectContractImport: {},
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty": {},
-	"github.com/portpowered/infinite-you/pkg/services/providers/inference":                                                {},
+	"github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                     {},
 	"github.com/portpowered/infinite-you/pkg/services/automations":                                                        {},
 }
 
@@ -1066,13 +1066,10 @@ func scanTestServiceSubpackageImports(repoRoot string) ([]testServiceImportFindi
 		if walkErr != nil {
 			return walkErr
 		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
+		}
 		if entry.IsDir() {
-			switch entry.Name() {
-			case ".git", "node_modules", "vendor":
-				if path != repoRoot {
-					return filepath.SkipDir
-				}
-			}
 			return nil
 		}
 		if !strings.HasSuffix(entry.Name(), "_test.go") {
@@ -1326,6 +1323,26 @@ func testServiceImportKey(filePath, importPath string) string {
 	return filepath.ToSlash(filePath) + "\x00" + importPath
 }
 
+func shouldSkipRepositoryWalkDirectory(repoRoot, path string, entry os.DirEntry) bool {
+	if !entry.IsDir() || path == repoRoot {
+		return false
+	}
+	switch entry.Name() {
+	case ".git", "node_modules", "vendor":
+		return true
+	}
+	relativePath, err := filepath.Rel(repoRoot, path)
+	if err != nil {
+		return false
+	}
+	switch filepath.ToSlash(relativePath) {
+	case ".worktrees", "worktrees", ".claude/worktrees":
+		return true
+	default:
+		return false
+	}
+}
+
 func scanProductServiceConstruction(repoRoot string) ([]serviceConstructionFinding, error) {
 	findingsByKey := map[string]serviceConstructionFinding{}
 	type packageNameResolution struct {
@@ -1345,13 +1362,10 @@ func scanProductServiceConstruction(repoRoot string) ([]serviceConstructionFindi
 		if walkErr != nil {
 			return walkErr
 		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
+		}
 		if entry.IsDir() {
-			switch entry.Name() {
-			case ".git", "node_modules", "vendor":
-				if path != repoRoot {
-					return filepath.SkipDir
-				}
-			}
 			return nil
 		}
 		if filepath.Ext(entry.Name()) != ".go" {
@@ -2188,13 +2202,10 @@ func scanApplicationGraphImports(repoRoot string, scanRoot string, packageRoot s
 		if walkErr != nil {
 			return walkErr
 		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
+		}
 		if entry.IsDir() {
-			switch entry.Name() {
-			case ".git", "node_modules", "vendor":
-				if path != repoRoot {
-					return filepath.SkipDir
-				}
-			}
 			return nil
 		}
 		if filepath.Ext(entry.Name()) != ".go" {

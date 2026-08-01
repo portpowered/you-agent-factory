@@ -51,7 +51,7 @@ func (peerModelsService) InvokeLocal(context.Context, models.LocalInvocationRequ
 func TestRootServiceAuthority_FakePeerGetModelNotFound(t *testing.T) {
 	t.Parallel()
 
-	var service models.Service = peerModelsService{}
+	service := peerModelsService{}
 	_, err := service.GetModel(context.Background(), "missing-model")
 	if err == nil {
 		t.Fatal("GetModel error = nil, want ErrNotFound")
@@ -64,7 +64,7 @@ func TestRootServiceAuthority_FakePeerGetModelNotFound(t *testing.T) {
 func TestRootServiceAuthority_AggregateSurfaceRemainsOnSingularService(t *testing.T) {
 	t.Parallel()
 
-	var service models.Service = peerModelsService{}
+	service := peerModelsService{}
 
 	bound, err := service.ForRuntime(models.RuntimeBinding{CacheDirectory: "cache"})
 	if err != nil {

@@ -8,7 +8,8 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 )
 
@@ -21,7 +22,7 @@ type localExecutor struct {
 	runtime       localmodels.Runtime
 	manager       *localmodels.Manager
 	resources     *localmodels.ResourceLimiter
-	hooks         models.LocalRuntimeHooks
+	hooks         modelseffects.LocalRuntimeHooks
 	now           func() time.Time
 
 	mu      sync.Mutex
@@ -40,7 +41,7 @@ func newLocalExecutor(
 	runtime localmodels.Runtime,
 	manager *localmodels.Manager,
 	resources *localmodels.ResourceLimiter,
-	hooks models.LocalRuntimeHooks,
+	hooks modelseffects.LocalRuntimeHooks,
 	now func() time.Time,
 ) (*localExecutor, error) {
 	if runtimeConfig == nil {
