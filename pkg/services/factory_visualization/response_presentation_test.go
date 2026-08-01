@@ -1,4 +1,4 @@
-package factory_visualization
+package factory_visualization_test
 
 import (
 	"bytes"
@@ -8,13 +8,15 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	. "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 )
 
 func TestNewResponsePresentationIsInert(t *testing.T) {
 	t.Parallel()
 
 	before := runtime.NumGoroutine()
-	presentation := NewResponsePresentation()
+	presentation := factoryvisualizationwire.NewResponsePresentation()
 	if presentation == nil {
 		t.Fatal("NewResponsePresentation() returned nil")
 	}
@@ -27,7 +29,7 @@ func TestNewResponsePresentationIsInert(t *testing.T) {
 func TestResponsePresentation_FacadeOpensUsableOutputs(t *testing.T) {
 	t.Parallel()
 
-	presentation := NewResponsePresentation()
+	presentation := factoryvisualizationwire.NewResponsePresentation()
 	for _, mode := range []struct {
 		name string
 		open func(ResponsePresentation, io.Writer) Output
@@ -64,7 +66,7 @@ func TestResponsePresentation_FacadeOpensUsableOutputs(t *testing.T) {
 func TestResponsePresentation_FacadeOpensUsableFactoryEventStreams(t *testing.T) {
 	t.Parallel()
 
-	presentation := NewResponsePresentation()
+	presentation := factoryvisualizationwire.NewResponsePresentation()
 	var output bytes.Buffer
 	stream := presentation.OpenLosslessFactoryEventStream(&output, func(event factorydefinitions.FactoryEvent) ([]byte, bool) {
 		return []byte(event.Id), true

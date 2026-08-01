@@ -1584,46 +1584,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_visualization/assemble_root.go",
-      "target": "ActivationEventSource"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_visualization/assemble_root.go",
-      "target": "ActivationViewSink"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_visualization/assemble_root.go",
-      "target": "AssembleRoot"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_visualization/assemble_root.go",
-      "target": "ProjectionSink"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_visualization/recordings_peer.go",
-      "target": "RecordingsPeerFromProjectionService"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_visualization/response_presentation.go",
-      "target": "NewResponsePresentation"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_visualization/runtime_source.go",
-      "target": "NewCurrentRuntimeSource"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_visualization/service.go",
-      "target": "New"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/models/assets_contract.go",
       "target": "ValidatePullModelRequest"
     },
@@ -2391,11 +2351,6 @@
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_sessions",
       "target": "pkg/services/factory_sessions/activation_contract.go:DefinitionActivationGatewayProvider,pkg/services/factory_sessions/execution_contract.go:ExecutionService,pkg/services/factory_sessions/models_cli_collaboration.go:ModelsCLIPresentationCollaborator,pkg/services/factory_sessions/service_contracts.go:Service"
-    },
-    {
-      "rule": "service-root-interface-count",
-      "filePath": "pkg/services/factory_visualization",
-      "target": "pkg/services/factory_visualization/response_presentation.go:ResponsePresentation,pkg/services/factory_visualization/response_presentation.go:responsePresentationOwner,pkg/services/factory_visualization/root_contract.go:Root,pkg/services/factory_visualization/service.go:Sink"
     },
     {
       "rule": "service-root-interface-count",

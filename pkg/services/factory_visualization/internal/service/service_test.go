@@ -1,4 +1,4 @@
-package factory_visualization
+package service
 
 import (
 	"context"
@@ -8,7 +8,12 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
+	activationlifecyclewire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/wire"
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
+	liveviewprojectionwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection/wire"
+	responseeventpresentation "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation"
+	responseeventpresentationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
@@ -21,25 +26,37 @@ func TestNewRejectsMissingDependencies(t *testing.T) {
 
 	clock := fixedClock{now: time.Unix(1, 0)}
 	sink := SinkFunc(func(View) {})
-	projections := &recordingsstub.Service{}
+	recordingsPeer := &recordingsstub.Service{}
 	source := &sourceStub{}
+	activation := activationOwnerStub{}
+	projection := projectionOwnerStub{}
+	presentation := newPresentationOwner()
 	tests := []struct {
 		name string
 		new  func() (*Service, error)
 		want string
 	}{
 		{"source", func() (*Service, error) {
-			return New(nil, projections, clock, sink, nil)
+			return New(activation, projection, presentation, nil, recordingsPeer, clock, sink, nil)
 		}, "event source"},
-		{"projections", func() (*Service, error) {
-			return New(source, nil, clock, sink, nil)
-		}, "projection service"},
+		{"recordings", func() (*Service, error) {
+			return New(activation, projection, presentation, source, nil, clock, sink, nil)
+		}, "recordings service"},
 		{"clock", func() (*Service, error) {
-			return New(source, projections, nil, sink, nil)
+			return New(activation, projection, presentation, source, recordingsPeer, nil, sink, nil)
 		}, "clock"},
 		{"sink", func() (*Service, error) {
-			return New(source, projections, clock, nil, nil)
+			return New(activation, projection, presentation, source, recordingsPeer, clock, nil, nil)
 		}, "presentation sink"},
+		{"presentation", func() (*Service, error) {
+			return New(activation, projection, nil, source, recordingsPeer, clock, sink, nil)
+		}, "response event presentation service"},
+		{"activation", func() (*Service, error) {
+			return New(nil, projection, presentation, source, recordingsPeer, clock, sink, nil)
+		}, "activation lifecycle owner"},
+		{"projection", func() (*Service, error) {
+			return New(activation, nil, presentation, source, recordingsPeer, clock, sink, nil)
+		}, "live view projection owner"},
 	}
 	for _, test := range tests {
 		test := test
@@ -51,6 +68,88 @@ func TestNewRejectsMissingDependencies(t *testing.T) {
 			}
 		})
 	}
+}
+
+func newPresentationOwner() responseeventpresentation.Service {
+	return responseeventpresentationwire.NewService()
+}
+
+func newComposedService(
+	source Source,
+	peer recordings.ProjectionService,
+	clock Clock,
+	sink Sink,
+	presentation responseeventpresentation.Service,
+	reportError ErrorReporter,
+) (*Service, error) {
+	if peer == nil {
+		return nil, errors.New("test composition: projection service is required")
+	}
+	recordingsPeer, ok := peer.(recordings.Service)
+	if !ok {
+		return nil, errors.New("test composition: recordings.Service is required")
+	}
+	activation, err := activationlifecyclewire.NewService(
+		ActivationEventSourceAdapter{Source: source},
+		recordingsPeer,
+		clock,
+		ActivationViewSinkAdapter{Sink: sink},
+		activationlifecycle.ErrorReporter(reportError),
+	)
+	if err != nil {
+		return nil, err
+	}
+	projection, err := liveviewprojectionwire.NewService(
+		source,
+		recordingsPeer,
+		clock,
+		sink,
+		reportError,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return New(
+		activation,
+		projection,
+		presentation,
+		source,
+		recordingsPeer,
+		clock,
+		sink,
+		reportError,
+	)
+}
+
+type activationOwnerStub struct{}
+
+func (activationOwnerStub) Start(context.Context) error { return nil }
+func (activationOwnerStub) Stop(context.Context) error  { return nil }
+func (activationOwnerStub) Wait(context.Context) error  { return nil }
+func (activationOwnerStub) Activate(context.Context, activationlifecycle.ActivateRequest) (activationlifecycle.ActivateResult, error) {
+	return activationlifecycle.ActivateResult{}, nil
+}
+func (activationOwnerStub) Join(context.Context, activationlifecycle.JoinRequest) (activationlifecycle.JoinResult, error) {
+	return activationlifecycle.JoinResult{}, nil
+}
+func (activationOwnerStub) StopDrain(context.Context, activationlifecycle.StopDrainRequest) (activationlifecycle.StopDrainResult, error) {
+	return activationlifecycle.StopDrainResult{}, nil
+}
+func (activationOwnerStub) RetainedEvents() []factorydefinitions.FactoryEvent { return nil }
+func (activationOwnerStub) ReconnectCursor() *factorydefinitions.FactoryEventReconnectCursor {
+	return nil
+}
+
+type projectionOwnerStub struct{}
+
+func (projectionOwnerStub) Start(context.Context) error { return nil }
+func (projectionOwnerStub) Stop(context.Context) error  { return nil }
+func (projectionOwnerStub) Wait(context.Context) error  { return nil }
+func (projectionOwnerStub) Observe(context.Context, liveviewprojection.ObserveRequest) (liveviewprojection.ObserveResult, error) {
+	return liveviewprojection.ObserveResult{}, nil
+}
+func (projectionOwnerStub) ReconnectCursor() *factorydefinitions.FactoryEventReconnectCursor {
+	return nil
 }
 
 // FND-12 captured visualization-activation success baseline: Start against a
@@ -94,11 +193,12 @@ func TestServiceProjectsRetainedAndLiveFactoryEvents(t *testing.T) {
 		},
 	}
 	rendered := make(chan View, 2)
-	service, err := New(
+	service, err := newComposedService(
 		source,
 		projections,
 		fixedClock{now: now},
 		SinkFunc(func(view View) { rendered <- view }),
+		newPresentationOwner(),
 		nil,
 	)
 	if err != nil {
@@ -143,7 +243,7 @@ func TestServiceReportsProjectionReadFailureWithoutStoppingSubscription(t *testi
 	live := make(chan factorydefinitions.FactoryEvent)
 	readFailure := errors.New("snapshot unavailable")
 	reported := make(chan error, 1)
-	service, err := New(
+	service, err := newComposedService(
 		&sourceStub{
 			stream:      &factorydefinitions.FactoryEventStream{Events: live},
 			snapshotErr: readFailure,
@@ -151,6 +251,7 @@ func TestServiceReportsProjectionReadFailureWithoutStoppingSubscription(t *testi
 		&recordingsstub.Service{},
 		fixedClock{},
 		SinkFunc(func(View) { t.Fatal("sink called after snapshot failure") }),
+		newPresentationOwner(),
 		func(err error) { reported <- err },
 	)
 	if err != nil {
@@ -188,11 +289,12 @@ func TestServiceRootLifecycleInertConstructionAndTypedActivate(t *testing.T) {
 	}
 	source.subscribeHook = func() { subscribeCalls++ }
 	presentCalls := 0
-	service, err := New(
+	service, err := newComposedService(
 		source,
 		&recordingsstub.Service{},
 		fixedClock{now: time.Unix(1, 0)},
 		SinkFunc(func(View) { presentCalls++ }),
+		newPresentationOwner(),
 		nil,
 	)
 	if err != nil {
@@ -256,11 +358,12 @@ func TestServiceRootObserveDetachedViewAndTypedFailures(t *testing.T) {
 		},
 		snapshot: visualizationSnapshotFacts(9),
 	}
-	service, err := New(
+	service, err := newComposedService(
 		source,
 		&recordingsstub.Service{},
 		fixedClock{now: now},
 		SinkFunc(func(View) {}),
+		newPresentationOwner(),
 		nil,
 	)
 	if err != nil {
@@ -281,7 +384,7 @@ func TestServiceRootObserveDetachedViewAndTypedFailures(t *testing.T) {
 	}
 
 	source.snapshot = visualizationSnapshotFacts(9)
-	service, err = New(
+	service, err = newComposedService(
 		source,
 		&recordingsstub.Service{
 			ReconstructWorldStateFn: func(recordings.ReconstructWorldStateRequest) (recordings.ReconstructWorldStateResult, error) {
@@ -290,6 +393,7 @@ func TestServiceRootObserveDetachedViewAndTypedFailures(t *testing.T) {
 		},
 		fixedClock{now: now},
 		SinkFunc(func(View) {}),
+		newPresentationOwner(),
 		nil,
 	)
 	if err != nil {
@@ -301,11 +405,12 @@ func TestServiceRootObserveDetachedViewAndTypedFailures(t *testing.T) {
 		t.Fatalf("Observe reconstruction failure: error = %v, want ReconstructionFailed", err)
 	}
 
-	service, err = New(
+	service, err = newComposedService(
 		source,
 		&recordingsstub.Service{},
 		fixedClock{now: now},
 		SinkFunc(func(View) {}),
+		newPresentationOwner(),
 		nil,
 	)
 	if err != nil {
@@ -357,7 +462,7 @@ func TestServiceRootPresentationDrainSuccessAndTypedFailures(t *testing.T) {
 func mustNewRootPresentationService(t *testing.T) *Service {
 	t.Helper()
 	live := make(chan factorydefinitions.FactoryEvent)
-	service, err := New(
+	service, err := newComposedService(
 		&sourceStub{
 			stream:   &factorydefinitions.FactoryEventStream{Events: live},
 			snapshot: visualizationSnapshotFacts(1),
@@ -365,6 +470,7 @@ func mustNewRootPresentationService(t *testing.T) *Service {
 		&recordingsstub.Service{},
 		fixedClock{now: time.Unix(1, 0)},
 		SinkFunc(func(View) {}),
+		newPresentationOwner(),
 		nil,
 	)
 	if err != nil {
@@ -444,7 +550,7 @@ func assertServicePresentationTypedFailures(t *testing.T, root Root, service *Se
 	writer := newGatedPresentationWriter()
 	blockedSession.mu.Lock()
 	_ = blockedSession.output.CloseAndDrain()
-	blockedSession.output = openBestEffortOutput(writer)
+	blockedSession.output = service.presentationOwner.OpenBestEffortOutput(writer)
 	blockedSession.closed = false
 	blockedSession.finalized = false
 	blockedSession.mu.Unlock()

@@ -465,17 +465,17 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	responsePresentation := provideResponsePresentation()
-	v78 := provideDirectJavaScriptSyncRunner()
+	v78 := provideResponsePresentation()
+	v79 := provideDirectJavaScriptSyncRunner()
 	directJavaScriptHostAdapter, err := provideDirectJavaScriptHostAdapter(handler, starter, runnerFactory)
 	if err != nil {
 		return nil, err
 	}
-	v79, err := wire2.NewDirectJavaScriptRunOperation(v66, v78, v19, directJavaScriptHostAdapter)
+	v80, err := wire2.NewDirectJavaScriptRunOperation(v66, v79, v19, directJavaScriptHostAdapter)
 	if err != nil {
 		return nil, err
 	}
-	selectionFactory, err := provideRunSelectionFactory(runOpener, runRuntimeRunnerBuilder, v67, responsePresentation, v79, runtimeRunnerBuilder)
+	selectionFactory, err := provideRunSelectionFactory(runOpener, runRuntimeRunnerBuilder, v67, v78, v80, runtimeRunnerBuilder)
 	if err != nil {
 		return nil, err
 	}
@@ -530,23 +530,23 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	stdioOpener := stdio.NewOpener()
-	v80 := provideFixtureStdioApplicationBuilder(stdioRunnerBuilder, runnerFactory, stdioOpener, v68, workflowPreviewOperation)
+	v81 := provideFixtureStdioApplicationBuilder(stdioRunnerBuilder, runnerFactory, stdioOpener, v68, workflowPreviewOperation)
 	openedStdioRunnerBuilder, err := application.NewOpenedStdioRunnerBuilder(managedRunnerFactory)
 	if err != nil {
 		return nil, err
 	}
-	v81 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, v68)
-	v82, err := wire2.NewStdioOpeningService(v65, v80, v81)
+	v82 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, v68)
+	v83, err := wire2.NewStdioOpeningService(v65, v81, v82)
 	if err != nil {
 		return nil, err
 	}
-	processStdioApplicationOpener, err := provideStdioApplicationOpener(v82)
+	processStdioApplicationOpener, err := provideStdioApplicationOpener(v83)
 	if err != nil {
 		return nil, err
 	}
-	v83 := provideSystemInitializationInspectPath(edges2)
-	v84 := provideSystemInitializationLegacyFactoryMigrationFileSystem(edges2)
-	systeminitializationService, err := provideSystemInitializationService(v47, packagedInstallationFileSystem, packagedFactoryCatalogOperations, configLoader, backendScopeEnsurer, v83, v84)
+	v84 := provideSystemInitializationInspectPath(edges2)
+	v85 := provideSystemInitializationLegacyFactoryMigrationFileSystem(edges2)
+	systeminitializationService, err := provideSystemInitializationService(v47, packagedInstallationFileSystem, packagedFactoryCatalogOperations, configLoader, backendScopeEnsurer, v84, v85)
 	if err != nil {
 		return nil, err
 	}

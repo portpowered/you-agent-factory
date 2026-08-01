@@ -1,10 +1,9 @@
-package factory_visualization_test
+package wire
 
 import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
@@ -13,9 +12,9 @@ func TestRecordingsPeerFromProjectionServiceAdaptsLegacyProjectionPeer(t *testin
 	t.Parallel()
 
 	peer := recordingswire.NewProjectionService()
-	service, err := factoryvisualization.RecordingsPeerFromProjectionService(peer)
+	service, err := recordingsPeerFromProjectionService(peer)
 	if err != nil {
-		t.Fatalf("RecordingsPeerFromProjectionService: %v", err)
+		t.Fatalf("recordingsPeerFromProjectionService: %v", err)
 	}
 	if service == nil {
 		t.Fatal("expected adapted recordings.Service, got nil")
@@ -64,9 +63,9 @@ func (projectionOnlyPeer) ValidateReconnectReplay(
 func TestRecordingsPeerFromProjectionServiceWrapsProjectionOnlyPeer(t *testing.T) {
 	t.Parallel()
 
-	service, err := factoryvisualization.RecordingsPeerFromProjectionService(projectionOnlyPeer{})
+	service, err := recordingsPeerFromProjectionService(projectionOnlyPeer{})
 	if err != nil {
-		t.Fatalf("RecordingsPeerFromProjectionService: %v", err)
+		t.Fatalf("recordingsPeerFromProjectionService: %v", err)
 	}
 	result, err := service.QuerySimpleDashboard(recordings.SimpleDashboardQueryRequest{
 		WorldState: recordings.WorldStateView{

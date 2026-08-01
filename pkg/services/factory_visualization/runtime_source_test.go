@@ -1,4 +1,4 @@
-package factory_visualization
+package factory_visualization_test
 
 import (
 	"context"
@@ -9,7 +9,9 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	. "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
+	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -32,7 +34,7 @@ func TestCurrentRuntimeSourceBindsThroughSessionRuntimeReader(t *testing.T) {
 			})
 		},
 	}
-	source := NewCurrentRuntimeSource(reader)
+	source := factoryvisualizationwire.NewCurrentRuntimeSource(reader)
 
 	stream, err := source.SubscribeFactoryEvents(
 		context.Background(),
@@ -69,7 +71,7 @@ func TestCurrentRuntimeSourceUnavailableRuntimeDoesNotSubscribe(t *testing.T) {
 			return factorysessions.ErrRuntimeNotAvailable
 		},
 	}
-	source := NewCurrentRuntimeSource(reader)
+	source := factoryvisualizationwire.NewCurrentRuntimeSource(reader)
 
 	_, err := source.SubscribeFactoryEvents(
 		context.Background(),
@@ -100,8 +102,8 @@ func TestActivateThroughSessionBoundSourceReachesStarted(t *testing.T) {
 			})
 		},
 	}
-	service, err := New(
-		NewCurrentRuntimeSource(reader),
+	service, err := factoryvisualizationwire.NewRoot(
+		factoryvisualizationwire.NewCurrentRuntimeSource(reader),
 		&recordingsstub.Service{},
 		fixedClock{now: time.Unix(1, 0)},
 		SinkFunc(func(View) {}),
@@ -137,8 +139,8 @@ func TestActivateWithUnavailableSessionRuntimeDoesNotSubscribe(t *testing.T) {
 			return factorysessions.ErrRuntimeNotAvailable
 		},
 	}
-	service, err := New(
-		NewCurrentRuntimeSource(reader),
+	service, err := factoryvisualizationwire.NewRoot(
+		factoryvisualizationwire.NewCurrentRuntimeSource(reader),
 		&recordingsstub.Service{},
 		fixedClock{now: time.Unix(1, 0)},
 		SinkFunc(func(View) {}),

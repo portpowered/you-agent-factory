@@ -1124,7 +1124,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization",
-      "minimum": 59.11
+      "minimum": 4.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/contracts",
@@ -1139,6 +1139,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/recordingsqueries",
       "minimum": 35.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/service",
+      "minimum": 52.10
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle",

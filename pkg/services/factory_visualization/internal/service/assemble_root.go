@@ -1,22 +1,22 @@
-package factory_visualization
+package service
 
 import (
 	"errors"
-	"io"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
 	liveviewprojectionwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection/wire"
+	responseeventpresentation "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
-// AssembleRoot constructs an inert Factory Visualization root from parent-private
-// owner services already wired by the service-local Wire packet.
-func AssembleRoot(
+// assembleRoot constructs an inert Factory Visualization root from parent-private
+// owner services already wired by the owning wire package.
+func assembleRoot(
 	activation activationlifecycle.Service,
 	projection liveviewprojection.Service,
-	presentation responsePresentationOwner,
+	presentation responseeventpresentation.Service,
 	source Source,
 	recordingsPeer recordings.Service,
 	clock Clock,
@@ -29,7 +29,7 @@ func AssembleRoot(
 	case projection == nil:
 		return nil, errors.New("assemble Factory visualization root: live view projection owner is required")
 	case presentation == nil:
-		return nil, errors.New("assemble Factory visualization root: response event presentation owner is required")
+		return nil, errors.New("assemble Factory visualization root: response event presentation service is required")
 	case source == nil:
 		return nil, errors.New("assemble Factory visualization root: event source is required")
 	case recordingsPeer == nil:
@@ -52,37 +52,4 @@ func AssembleRoot(
 		sink:              sink,
 		reportError:       reportError,
 	}, nil
-}
-
-// ActivationEventSource adapts the root construction Source to the activation
-// lifecycle owner EventSource port.
-func ActivationEventSource(source Source) activationlifecycle.EventSource {
-	return activationSourceAdapter{source: source}
-}
-
-// ActivationViewSink adapts the root construction Sink to the activation
-// lifecycle owner ViewSink port.
-func ActivationViewSink(sink Sink) activationlifecycle.ViewSink {
-	return activationSinkAdapter{sink: sink}
-}
-
-// ProjectionSink adapts the root construction Sink to the live view projection
-// owner Sink port.
-func ProjectionSink(sink Sink) liveviewprojection.Sink {
-	return adaptSink(sink)
-}
-
-func (s *Service) responsePresentationOwner() responsePresentationOwner {
-	if s == nil || s.presentationOwner == nil {
-		return defaultResponsePresentationOwner()
-	}
-	return s.presentationOwner
-}
-
-func (s *Service) openBestEffortOutput(writer io.Writer) Output {
-	return s.responsePresentationOwner().OpenBestEffortOutput(writer)
-}
-
-func (s *Service) openLosslessOutput(writer io.Writer) Output {
-	return s.responsePresentationOwner().OpenLosslessOutput(writer)
 }

@@ -14,6 +14,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
+	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -398,11 +399,11 @@ func canonicalAdapterFactoryEventWithPayload(
 type drainFailingPresentation struct{}
 
 func (drainFailingPresentation) OpenBestEffortOutput(writer io.Writer) factoryvisualization.Output {
-	return factoryvisualization.NewResponsePresentation().OpenBestEffortOutput(writer)
+	return factoryvisualizationwire.NewResponsePresentation().OpenBestEffortOutput(writer)
 }
 
 func (drainFailingPresentation) OpenLosslessOutput(writer io.Writer) factoryvisualization.Output {
-	return factoryvisualization.NewResponsePresentation().OpenLosslessOutput(writer)
+	return factoryvisualizationwire.NewResponsePresentation().OpenLosslessOutput(writer)
 }
 
 func (drainFailingPresentation) OpenBestEffortFactoryEventStream(
@@ -414,7 +415,7 @@ func (drainFailingPresentation) OpenBestEffortFactoryEventStream(
 	CloseAndDrain() error
 } {
 	return &drainFailingFactoryEventStream{
-		inner: factoryvisualization.NewResponsePresentation().OpenBestEffortFactoryEventStream(writer, encode),
+		inner: factoryvisualizationwire.NewResponsePresentation().OpenBestEffortFactoryEventStream(writer, encode),
 	}
 }
 
@@ -427,7 +428,7 @@ func (drainFailingPresentation) OpenLosslessFactoryEventStream(
 	CloseAndDrain() error
 } {
 	return &drainFailingFactoryEventStream{
-		inner: factoryvisualization.NewResponsePresentation().OpenLosslessFactoryEventStream(writer, encode),
+		inner: factoryvisualizationwire.NewResponsePresentation().OpenLosslessFactoryEventStream(writer, encode),
 	}
 }
 
