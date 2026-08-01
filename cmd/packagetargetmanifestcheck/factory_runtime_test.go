@@ -79,6 +79,38 @@ func TestMapCommittedOwnerPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			},
 		},
 		{
+			path: "pkg/services/factory_runtime/internal/services/orchestration/javascript/preview",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/javascript/preview",
+				Disposition: DispositionRetain,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime",
+				Disposition: DispositionRetain,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/internal/services/orchestration/javascript/source",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/javascript/source",
+				Disposition: DispositionRetain,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/internal/services/orchestration/javascript/validation",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/javascript/validation",
+				Disposition: DispositionRetain,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
 			path: "pkg/services/factory_runtime/internal/orchestrators/petri",
 			want: PackageMapping{
 				PackagePath: "pkg/services/factory_runtime/internal/orchestrators/petri",

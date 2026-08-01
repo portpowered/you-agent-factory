@@ -49,6 +49,20 @@ type RuntimeBinding struct {
 	Clock factoryruntime.Clock
 }
 
+// StartResult is the Sessions-owned envelope returned by Service.Start. Only
+// one of Live, Async, or Sync is populated for a successful request; the
+// stable SessionID and Status are copied to the top-level result when the
+// selected start path produces them; validate-only live opens intentionally
+// return empty identity/status values.
+type StartResult struct {
+	SessionID string
+	Status    LifecycleStatus
+	Mode      StartMode
+	Live      *OpenResult
+	Async     *AsyncStartResult
+	Sync      *SyncStartResult
+}
+
 // Service is the singular Factory Sessions root contract and the only
 // cross-service session authority. Identity, live control, durable execution,
 // invocation, response stream, and opening operations already owned by
@@ -92,6 +106,18 @@ type RuntimeBinding struct {
 type Service interface {
 	ExecutionService
 	ForRuntime(OpeningBindingRequest) (Service, error)
+	// Start is the root start adapter. It selects the existing live or durable
+	// start path from the request mode while keeping the caller on the singular
+	// Sessions authority.
+	Start(context.Context, StartRequest) (StartResult, error)
+	// InvokeFactorySession keeps session invocation and its result vocabulary on
+	// the singular root. Transport mapping may translate the root result to a
+	// generated representation, but it does not receive a separately injected
+	// invoker.
+	InvokeFactorySession(context.Context, string, InvocationRequest) (InvocationResult, error)
+	// ActivateNamedFactory serializes named-factory activation through the
+	// current Factory Session runtime.
+	ActivateNamedFactory(context.Context, string) error
 	OpenFactorySession(context.Context, OpenRequest) (*OpenResult, error)
 	OpenFactorySessionFromFolder(context.Context, string, *TargetRef, bool, bool) (*OpenResult, error)
 	ListFactorySessions(context.Context) ([]ReadProjection, error)

@@ -7,11 +7,14 @@
 package http
 
 import (
+	"net/http"
+
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 )
@@ -19,6 +22,8 @@ import (
 // Handler owns the generated HTTP operation implementations for Factory
 // Sessions and their session-scoped Factory and Work resources.
 type Adapter struct {
+	WorkHTTP
+
 	sessionsRoot       factorysessions.Service
 	runtime            apisurface.RuntimeAPI
 	factoryStatus      apisurface.FactoryStatusAPI
@@ -36,11 +41,46 @@ type Adapter struct {
 	durableLister      DurableExecutionSessionLister
 	liveSessionLister  LiveSessionListReader
 	workerPrompts      workers.PromptTemplates
-	invocationWorkType factorydefinitions.InvocationWorkTypeService
 	workService        work.Service
+	workRoot           work.Service
+	workHTTPFactory    WorkHTTPFactory
 	sessionRequests    RequestPreparation
 	logger             *zap.Logger
 }
+
+// WorkHTTP is the generated protocol surface implemented by Work HTTP. The
+// Factory Sessions adapter accepts this surface so the top-level transport can
+// compose the Work implementation without a peer transport import here.
+type WorkHTTP interface {
+	ListWorkBySessionId(http.ResponseWriter, *http.Request, factoryapi.SessionID, factoryapi.ListWorkBySessionIdParams)
+	SubmitWorkBySessionId(http.ResponseWriter, *http.Request, factoryapi.SessionID)
+	UpsertWorkRequestBySessionId(http.ResponseWriter, *http.Request, factoryapi.SessionID, string)
+	StageSubmitWorkFileBySessionId(http.ResponseWriter, *http.Request, factoryapi.SessionID)
+	GetWorkBySessionId(http.ResponseWriter, *http.Request, factoryapi.SessionID, factoryapi.WorkOrTokenID)
+	MoveWorkBySessionId(http.ResponseWriter, *http.Request, factoryapi.SessionID, factoryapi.WorkOrTokenID)
+}
+
+// WorkHTTPFactory is an optional compatibility seam for focused transport
+// tests that replace only the Work admission/content role. Production
+// composition should inject a completed WorkHTTP instead.
+type WorkHTTPFactory func(
+	primary work.Service,
+	admission work.Service,
+	submission apisurface.WorkAPI,
+	read apisurface.WorkReadAPI,
+) WorkHTTP
+
+const (
+	submitWorkItemTypeMetadataKey = "submissionItemType"
+	submitWorkFileNameMetadataKey = "fileName"
+)
+
+const (
+	// SubmitWorkItemTypeMetadataKey records the structured submission item kind.
+	SubmitWorkItemTypeMetadataKey = submitWorkItemTypeMetadataKey
+	// SubmitWorkFileNameMetadataKey records the original structured file name.
+	SubmitWorkFileNameMetadataKey = submitWorkFileNameMetadataKey
+)
 
 // Dependencies are the exact injected roles used by the Factory Sessions HTTP
 // adapter. They are supplied by the already-opened runtime composition.
@@ -62,9 +102,15 @@ type Dependencies struct {
 	DurableLister      DurableExecutionSessionLister
 	LiveSessionLister  LiveSessionListReader
 	WorkerPrompts      workers.PromptTemplates
-	InvocationWorkType factorydefinitions.InvocationWorkTypeService
+	WorkHTTP           WorkHTTP
+	WorkHTTPFactory    WorkHTTPFactory
 	WorkService        work.Service
-	SessionRequests    RequestPreparation
+	// WorkRoot is the complete Work root used by the Work-owned HTTP adapter
+	// when the process composition can provide it. WorkService remains the
+	// compatibility admission/content role used by focused transport tests and
+	// standalone durable bindings.
+	WorkRoot        work.Service
+	SessionRequests RequestPreparation
 }
 
 type RequestPreparation interface {
@@ -83,9 +129,9 @@ func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	return &Adapter{
+	handler := &Adapter{
 		sessionsRoot: deps.SessionsRoot,
-		runtime: deps.Runtime, factoryStatus: deps.FactoryStatus,
+		runtime:      deps.Runtime, factoryStatus: deps.FactoryStatus,
 		sessions: deps.Sessions, work: deps.Work, workRead: deps.WorkRead,
 		invocation:         deps.Invocation,
 		factoryDefinitions: deps.FactoryDefinitions, factoryValidation: deps.FactoryValidation,
@@ -93,11 +139,17 @@ func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
 		durableExecution: deps.DurableExecution, durableLifecycle: deps.DurableLifecycle,
 		durableListing: deps.DurableListing, durableProjection: deps.DurableProjection,
 		durableLister: deps.DurableLister, liveSessionLister: deps.LiveSessionLister,
-		workerPrompts: deps.WorkerPrompts, invocationWorkType: deps.InvocationWorkType,
-		workService: deps.WorkService,
+		workerPrompts:   deps.WorkerPrompts,
+		WorkHTTP:        deps.WorkHTTP,
+		workHTTPFactory: deps.WorkHTTPFactory,
+		workService:     deps.WorkService, workRoot: deps.WorkRoot,
 		sessionRequests: deps.SessionRequests,
-		logger: logger,
+		logger:          logger,
 	}
+	if handler.WorkHTTP == nil {
+		handler.bindWorkHTTP()
+	}
+	return handler
 }
 
 // WithWorkService returns a copy bound to the supplied Work root for admission
@@ -108,10 +160,31 @@ func (h *Adapter) WithWorkService(service work.Service) *Adapter {
 	}
 	bound := *h
 	bound.workService = service
+	bound.workRoot = nil
+	bound.bindWorkHTTP()
 	return &bound
 }
 
-// Server is retained as a private receiver alias while the moved handler files
-// are kept mechanically identical to the established public behavior.
+// WithWorkHTTP returns a copy bound to a completed Work HTTP protocol adapter.
+// It is used by composition and focused transport tests that already own the
+// Work adapter construction.
+func (h *Adapter) WithWorkHTTP(adapter WorkHTTP) *Adapter {
+	if h == nil {
+		return nil
+	}
+	bound := *h
+	bound.WorkHTTP = adapter
+	return &bound
+}
+
+func (h *Adapter) bindWorkHTTP() {
+	if h == nil || h.workHTTPFactory == nil {
+		return
+	}
+	h.WorkHTTP = h.workHTTPFactory(h.workRoot, h.workService, h.work, h.workRead)
+}
+
+// Handler and Server aliases retain the generated transport's established
+// receiver names while the injected Work routes are promoted below them.
 type Handler = Adapter
 type Server = Adapter

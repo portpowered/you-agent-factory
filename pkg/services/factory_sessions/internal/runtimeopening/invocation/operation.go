@@ -148,7 +148,7 @@ func (o *operation) invokeFactoryOnHostedLiveRuntime(
 	consume factorysessions.FactoryEventConsumer,
 ) (outcome roles.FactoryInvocationOutcome, resultErr error) {
 	hosted := target.HostedLiveInvocation
-	if hosted == nil || hosted.Sessions == nil || hosted.Invoker == nil {
+	if hosted == nil || hosted.Sessions == nil {
 		return outcome, errors.New("hosted live invocation runtime is incomplete")
 	}
 	projection, projectionErr := hosted.Sessions.GetFactorySession(
@@ -163,9 +163,10 @@ func (o *operation) invokeFactoryOnHostedLiveRuntime(
 	if err != nil {
 		return outcome, err
 	}
-	outcome.Result, resultErr = hosted.Invoker.InvokeFactorySession(
+	rootResult, resultErr := hosted.Sessions.InvokeFactorySession(
 		ctx, factorysessions.DefaultSessionID, request,
 	)
+	outcome.Result = factoryInvocationResultFromRoot(rootResult)
 	if liveEvents != nil {
 		resultErr = errors.Join(
 			resultErr,
@@ -173,6 +174,21 @@ func (o *operation) invokeFactoryOnHostedLiveRuntime(
 		)
 	}
 	return outcome, resultErr
+}
+
+func factoryInvocationResultFromRoot(result factorysessions.InvocationResult) factorydefinitions.FactoryInvocationResult {
+	return factorydefinitions.FactoryInvocationResult{
+		RequestID:     result.RequestID,
+		TraceID:       result.TraceID,
+		Status:        factorydefinitions.InvocationTerminalStatus(result.Status),
+		PrimaryResult: result.PrimaryResult,
+		ErrorCode:     result.ErrorCode,
+		Message:       result.Message,
+		SessionID:     result.SessionID,
+		WorkID:        result.WorkID,
+		WorkName:      result.WorkName,
+		WorkState:     result.WorkState,
+	}
 }
 
 func (o *operation) invokeFactoryOnEphemeralRuntime(

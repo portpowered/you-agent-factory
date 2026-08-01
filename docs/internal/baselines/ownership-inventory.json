@@ -3108,38 +3108,6 @@
       "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/runtime",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/source",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/validation",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
       "packagePath": "pkg/services/factory_runtime/internal/orchestrators/petri",
       "disposition": "move",
       "destination": "factory_runtime",
@@ -3279,6 +3247,30 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/javascript",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/javascript/preview",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/javascript/source",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/javascript/validation",
       "disposition": "retain",
       "destination": "factory_runtime",
       "destinationKind": "owner"
@@ -3429,6 +3421,42 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/transports/http",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/checkpoint",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/control",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/dispatch",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/internal/common",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/internal/errors",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/observation",
       "disposition": "retain",
       "destination": "factory_runtime",
       "destinationKind": "owner"
@@ -3818,6 +3846,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_sessions/transports/scopedlisting",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_sessions/wire",
       "disposition": "retain",
       "destination": "factory_sessions",
@@ -3921,6 +3955,42 @@
     },
     {
       "packagePath": "pkg/services/factory_visualization/transports/http",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/http/binding",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/http/common",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/http/errors",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/http/lifecycle",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/http/observe",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/http/presentation",
       "disposition": "retain",
       "destination": "factory_visualization",
       "destinationKind": "owner"

@@ -371,7 +371,11 @@ func openRuntime(
 	if factoryDefinitionsFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions factory is required")
 	}
-	activationGatewayProvider, ok := sessionRuntime.(factorysessions.DefinitionActivationGatewayProvider)
+	// The activated gateway is attached to the singular Sessions root during
+	// Complete. Definitions is still constructed with its narrow activation
+	// port, but runtime opening no longer reaches through the application
+	// runtime bundle to discover it.
+	activationGatewayProvider, ok := service4.(factorysessions.DefinitionActivationGatewayProvider)
 	if !ok {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Session runtime must expose DefinitionActivationGateway")
 	}

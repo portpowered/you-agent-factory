@@ -633,7 +633,23 @@ type StartRequest struct {
 	Runtime         *RuntimeOptions
 	Wait            *WaitOptions
 	EventConsumer   FactoryEventConsumer `json:"-"`
+	// Mode and Live are consumed by Service.Start. The existing StartAsync and
+	// StartSync operations intentionally ignore these fields so their durable
+	// transport behavior remains unchanged during the root migration.
+	Mode StartMode
+	Live *OpenRequest
 }
+
+// StartMode selects which existing Factory Session start path the singular
+// Service.Start adapter enters.
+type StartMode string
+
+const (
+	StartModeAutomatic    StartMode = "AUTOMATIC"
+	StartModeLive         StartMode = "LIVE"
+	StartModeDurableAsync StartMode = "DURABLE_ASYNC"
+	StartModeDurableSync  StartMode = "DURABLE_SYNC"
+)
 
 // SyncOutcome reports how a sync start wait ended.
 type SyncOutcome string

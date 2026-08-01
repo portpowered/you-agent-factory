@@ -166,10 +166,6 @@
     "pkg/services/factory_runtime/internal/factorystatus",
     "pkg/services/factory_runtime/internal/host",
     "pkg/services/factory_runtime/internal/legacysnapshot",
-    "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
-    "pkg/services/factory_runtime/internal/orchestrators/javascript/runtime",
-    "pkg/services/factory_runtime/internal/orchestrators/javascript/source",
-    "pkg/services/factory_runtime/internal/orchestrators/javascript/validation",
     "pkg/services/factory_runtime/internal/orchestrators/petri",
     "pkg/services/factory_runtime/internal/rootobservation",
     "pkg/services/factory_runtime/internal/service",
@@ -192,6 +188,10 @@
     "pkg/services/factory_runtime/internal/services/orchestration/engine",
     "pkg/services/factory_runtime/internal/services/orchestration/internal/service",
     "pkg/services/factory_runtime/internal/services/orchestration/javascript",
+    "pkg/services/factory_runtime/internal/services/orchestration/javascript/preview",
+    "pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime",
+    "pkg/services/factory_runtime/internal/services/orchestration/javascript/source",
+    "pkg/services/factory_runtime/internal/services/orchestration/javascript/validation",
     "pkg/services/factory_runtime/internal/services/orchestration/metrics",
     "pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner",
     "pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract",
@@ -213,6 +213,12 @@
     "pkg/services/factory_runtime/internal/testkit",
     "pkg/services/factory_runtime/transports/cli",
     "pkg/services/factory_runtime/transports/http",
+    "pkg/services/factory_runtime/transports/http/checkpoint",
+    "pkg/services/factory_runtime/transports/http/control",
+    "pkg/services/factory_runtime/transports/http/dispatch",
+    "pkg/services/factory_runtime/transports/http/internal/common",
+    "pkg/services/factory_runtime/transports/http/internal/errors",
+    "pkg/services/factory_runtime/transports/http/observation",
     "pkg/services/factory_runtime/transports/mcp",
     "pkg/services/factory_runtime/wire",
     "pkg/services/factory_sessions",
@@ -276,6 +282,7 @@
     "pkg/services/factory_sessions/transports/http",
     "pkg/services/factory_sessions/transports/mcp",
     "pkg/services/factory_sessions/transports/mcp/catalog",
+    "pkg/services/factory_sessions/transports/scopedlisting",
     "pkg/services/factory_sessions/wire",
     "pkg/services/factory_sessions/wire/contracts",
     "pkg/services/factory_visualization",
@@ -294,6 +301,12 @@
     "pkg/services/factory_visualization/internal/testing/recordingsstub",
     "pkg/services/factory_visualization/transports/cli",
     "pkg/services/factory_visualization/transports/http",
+    "pkg/services/factory_visualization/transports/http/binding",
+    "pkg/services/factory_visualization/transports/http/common",
+    "pkg/services/factory_visualization/transports/http/errors",
+    "pkg/services/factory_visualization/transports/http/lifecycle",
+    "pkg/services/factory_visualization/transports/http/observe",
+    "pkg/services/factory_visualization/transports/http/presentation",
     "pkg/services/factory_visualization/transports/mcp",
     "pkg/services/factory_visualization/wire",
     "pkg/services/models",
@@ -1191,26 +1204,6 @@
       "destination": "factory_runtime/internal"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/runtime",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/source",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/validation",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
       "packagePath": "pkg/services/factory_runtime/internal/orchestrators/petri",
       "disposition": "move",
       "destination": "factory_runtime/internal/services/orchestration"
@@ -1321,6 +1314,26 @@
       "destination": "factory_runtime/internal/services/orchestration"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/javascript/preview",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/javascript/source",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/javascript/validation",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/metrics",
       "disposition": "retain",
       "destination": "factory_runtime/internal/services/orchestration"
@@ -1422,6 +1435,36 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/transports/http",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/checkpoint",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/control",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/dispatch",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/internal/common",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/internal/errors",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/observation",
       "disposition": "retain",
       "destination": "factory_runtime"
     },
@@ -1741,6 +1784,11 @@
       "destination": "factory_sessions"
     },
     {
+      "packagePath": "pkg/services/factory_sessions/transports/scopedlisting",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
       "packagePath": "pkg/services/factory_sessions/wire",
       "disposition": "retain",
       "destination": "factory_sessions"
@@ -1827,6 +1875,36 @@
     },
     {
       "packagePath": "pkg/services/factory_visualization/transports/http",
+      "disposition": "retain",
+      "destination": "factory_visualization"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/http/binding",
+      "disposition": "retain",
+      "destination": "factory_visualization"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/http/common",
+      "disposition": "retain",
+      "destination": "factory_visualization"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/http/errors",
+      "disposition": "retain",
+      "destination": "factory_visualization"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/http/lifecycle",
+      "disposition": "retain",
+      "destination": "factory_visualization"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/http/observe",
+      "disposition": "retain",
+      "destination": "factory_visualization"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/http/presentation",
       "disposition": "retain",
       "destination": "factory_visualization"
     },

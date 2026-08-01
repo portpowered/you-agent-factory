@@ -11,6 +11,15 @@ import (
 // errors.Is on MoveWorkForSession / MoveWorkAndRead.
 var ErrMoveWorkRequestAlreadyApplied = errors.New("operator move request was already applied")
 
+// Move failures are owned by Work so transports and peer services do not need
+// to import the Factory Runtime implementation package to classify them.
+var (
+	ErrMoveWorkNotFound         = errors.New("work not found")
+	ErrMoveWorkInvalidState     = errors.New("invalid target state for work type")
+	ErrMoveWorkInFlightDispatch = errors.New("work is in an active dispatch")
+	ErrMoveWorkEngineTerminated = errors.New("engine has terminated")
+)
+
 // InvocationReturnConfig selects the Work result returned by one Factory
 // invocation.
 type InvocationReturnConfig struct {

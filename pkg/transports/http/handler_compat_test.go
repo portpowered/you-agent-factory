@@ -8,6 +8,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -42,7 +43,7 @@ func reconnectCursorFromParams(
 }
 
 func workReadModelToGenerated(item work.ReadModel) factoryapi.Work {
-	return factorysessionshttp.WorkReadModelToGenerated(item)
+	return workhttp.WorkReadModelToAPI(item)
 }
 
 func decodeStrictJSON[T any](body io.Reader) (T, error) {
@@ -54,7 +55,7 @@ func requestFieldValidationMessage(err error) (string, bool) {
 }
 
 func submitWorkResponseFromResult(result work.WorkRequestSubmitResult, sessionID string) factoryapi.SubmitWorkResponse {
-	return factorysessionshttp.SubmitWorkResponseFromResult(result, sessionID)
+	return workhttp.SubmitWorkResponseToAPI(result, sessionID)
 }
 
 func (s *Server) getEvents(

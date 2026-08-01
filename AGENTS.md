@@ -130,7 +130,7 @@ the standards.
 - `pkg/services/factory_runtime/internal/orchestrators/petri/` contains internal
   Petri-net primitives. External packages consume Factory Runtime root
   contracts instead.
-- `pkg/services/factory_runtime/internal/orchestrators/javascript/` contains
+- `pkg/services/factory_runtime/internal/services/orchestration/javascript/` contains
   JavaScript workflow runtime, preview, source lookup, storage, and validation
   implementations. Public orchestration contracts are exposed at
   `pkg/services/factory_runtime`.

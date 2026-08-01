@@ -7,6 +7,7 @@ import (
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
@@ -39,6 +40,7 @@ func newServerFromRoles(
 	sessionRequests factorysessionshttp.RequestPreparation,
 	logger *zap.Logger,
 ) *Server {
+	workService := work.AdmissionContentService(contentStaging, requestPreparation)
 	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
 		Runtime: runtime, FactoryStatus: factoryStatus,
 		Sessions: sessions, Work: workAPI, WorkRead: workRead, Invocation: invocation,
@@ -48,7 +50,16 @@ func newServerFromRoles(
 		DurableListing: durableListing, DurableProjection: durableProjection,
 		DurableLister: durableLister, LiveSessionLister: liveSessionLister,
 		WorkerPrompts: workerPrompts,
-		WorkService: work.AdmissionContentService(contentStaging, requestPreparation),
+		WorkHTTP:      workhttp.NewAdapterFromRoles(nil, workService, workAPI, workRead, nil),
+		WorkHTTPFactory: func(
+			primary work.Service,
+			admission work.Service,
+			submission apisurface.WorkAPI,
+			read apisurface.WorkReadAPI,
+		) factorysessionshttp.WorkHTTP {
+			return workhttp.NewAdapterFromRoles(primary, admission, submission, read, nil)
+		},
+		WorkService:     workService,
 		SessionRequests: sessionRequests,
 	}, logger)
 	return NewServer(handler, modelsHTTP, providerSessions, logger)
