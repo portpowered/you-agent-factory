@@ -49,7 +49,9 @@ collisions, but keep this result separate from the independent baseline.
 
 Always record the UTC timestamp, revision, operating system, architecture,
 logical processor count, Go version, `GOMOD`, `GOCACHE`, exact commands, and
-whether the run was independent, diagnostic, or contended.
+whether the run was independent, diagnostic, or contended. Retain failed or
+contended samples in the evidence report instead of silently dropping them;
+only independent idle-host samples enter the timing median.
 
 ## Scenario setup reuse
 
