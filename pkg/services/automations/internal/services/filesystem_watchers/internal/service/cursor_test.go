@@ -3,8 +3,10 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
@@ -206,6 +208,60 @@ func TestRecord_DoesNotReportSuccessWhenCursorPersistFails(t *testing.T) {
 	}
 	if store.Contains(filesystemwatchers.ObservationIdentity("request/default/fail.md")) {
 		t.Fatal("identity recorded despite persist failure")
+	}
+}
+
+func TestCursorBackedHandledIdentities_ConcurrentRecordsPreserveFacts(t *testing.T) {
+	svc := testFilesystemWatcherService()
+	identity := watchIdentityForDir("/inputs")
+	var persistMu sync.Mutex
+	var committed []filesystemwatchers.WatcherFacts
+	store, err := svc.newHandledIdentities(
+		filesystemwatchers.WatcherFacts{Identity: identity},
+		func(facts filesystemwatchers.WatcherFacts) error {
+			persistMu.Lock()
+			defer persistMu.Unlock()
+			committed = append(committed, facts)
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewHandledIdentities: %v", err)
+	}
+
+	const recordCount = 16
+	var wg sync.WaitGroup
+	for i := 0; i < recordCount; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			observation := filesystemwatchers.ObservationIdentity(
+				fmt.Sprintf("request/default/concurrent-%d.md", i),
+			)
+			if err := store.Record(observation); err != nil {
+				t.Errorf("Record(%q): %v", observation, err)
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	if len(committed) != recordCount {
+		t.Fatalf("committed facts = %d, want %d", len(committed), recordCount)
+	}
+	persisted, err := decodeHandledIdentities(committed[len(committed)-1].Checkpoint)
+	if err != nil {
+		t.Fatalf("decode final committed checkpoint: %v", err)
+	}
+	if len(persisted) != recordCount {
+		t.Fatalf("persisted handled identities = %d, want %d", len(persisted), recordCount)
+	}
+	for i := 0; i < recordCount; i++ {
+		observation := filesystemwatchers.ObservationIdentity(
+			fmt.Sprintf("request/default/concurrent-%d.md", i),
+		)
+		if !store.Contains(observation) {
+			t.Fatalf("handled identities missing %q after concurrent records", observation)
+		}
 	}
 }
 
