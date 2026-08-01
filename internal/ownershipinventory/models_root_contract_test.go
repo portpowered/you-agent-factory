@@ -33,11 +33,8 @@ func TestModelsThinRootContractFiles(t *testing.T) {
 		"invocation_artifacts.go",
 		"local_execution_contract.go",
 		"managed_runtime_contract.go",
-		"models_root_contract_seal_test.go",
-		"packaged_root_shape_test.go",
 		"root_authority_seal_characterization_test.go",
 		"root_slice_characterization_test.go",
-		"root_wire_behavioral_boundary_test.go",
 		"runtime_config_contract.go",
 		"runtime_construction_contract.go",
 		"service_contract.go",
@@ -53,6 +50,41 @@ func TestModelsThinRootContractFiles(t *testing.T) {
 		}
 		if kind != "thin_root_retain" {
 			t.Fatalf("ClassifyModelsRootContractFile(%q) = %q, want thin_root_retain", fileName, kind)
+		}
+	}
+}
+
+func TestModelsRootUsesCanonicalServiceChildren(t *testing.T) {
+	t.Parallel()
+
+	root := repositoryRoot(t)
+	serviceRoot := filepath.Join(root, filepath.FromSlash(ownershipinventory.ModelsOwnerPackagePath))
+	entries, err := os.ReadDir(serviceRoot)
+	if err != nil {
+		t.Fatalf("ReadDir(%q) = %v", serviceRoot, err)
+	}
+
+	var gotRootDirs []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			gotRootDirs = append(gotRootDirs, entry.Name())
+		}
+	}
+	slices.Sort(gotRootDirs)
+	wantRootDirs := []string{"internal", "transports", "wire"}
+	if !slices.Equal(gotRootDirs, wantRootDirs) {
+		t.Fatalf("Models root directories = %v, want %v", gotRootDirs, wantRootDirs)
+	}
+
+	for _, forbidden := range []string{
+		"artifacts", "assets", "catalog", "host", "inference", "local",
+		"managedruntime", "service", "servicewire",
+	} {
+		path := filepath.Join(serviceRoot, forbidden)
+		if _, err := os.Stat(path); err == nil {
+			t.Fatalf("pkg/services/models/%s must not exist as a public sibling", forbidden)
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("stat %s/ = %v", forbidden, err)
 		}
 	}
 }

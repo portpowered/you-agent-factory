@@ -26,28 +26,25 @@ host_scope_characterization_test.go
 invocation_artifacts.go
 local_execution_contract.go
 managed_runtime_contract.go
-models_root_contract_seal_test.go
-packaged_root_shape_test.go
 root_authority_seal_characterization_test.go
 root_slice_characterization_test.go
-root_wire_behavioral_boundary_test.go
 runtime_config_contract.go
 runtime_construction_contract.go
 service_contract.go
 ```
 
-**Totals:** 18 root-level `.go` files — 18 thin committed root contract
+**Totals:** 15 root-level `.go` files — 15 thin committed root contract
 files, 0 excess fold clusters in this packet.
 
 The inventory is mirrored by:
 
 - `internal/ownershipinventory/models_root_contract.go`;
 - `cmd/packagetargetmanifestcheck/models_root_contract.go`; and
-- `pkg/services/models/packaged_root_shape_test.go` for the immediate child
-  directory boundary.
+- `internal/ownershipinventory/models_root_contract_test.go` for the immediate
+  child directory boundary.
 
 The root wire boundary is exercised by
-`pkg/services/models/root_wire_behavioral_boundary_test.go`, while the broader
+`pkg/services/models/wire/root_wire_behavioral_boundary_test.go`, while the broader
 asset, catalog, host, lease, and inference parity suite remains in the existing
 Models root and Wire tests.
 
