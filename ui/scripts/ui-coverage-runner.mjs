@@ -3,6 +3,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 
+import { mergeLcovFiles } from "./merge-lcov-coverage.mjs";
 import {
   defaultCapturedStdoutMaxBuffer,
   defaultSlowFileSummaryLimit,
@@ -15,15 +16,18 @@ import {
 
 export const phaseLogPrefix = "[ui-coverage]";
 export const mainCoveredPhaseName = "Main covered Vitest pass";
+export const bunUnitCoveragePhaseName = "Bun unit coverage pass";
 export const defaultMainCoveredMaxWorkers = "4";
 export { defaultCapturedStdoutMaxBuffer, defaultSlowFileSummaryLimit };
 export const uiPerformanceTestPattern = "**/performance/*.test.ts";
+export const bunUnitCoverageDirectory = "coverage/bun-unit";
 
 export function getMainCoveredMaxWorkers(env = process.env) {
   return env.UI_COVERAGE_MAIN_MAX_WORKERS ?? defaultMainCoveredMaxWorkers;
 }
 
 const mainCoveredPassKind = "main-covered";
+const bunUnitCoveragePassKind = "bun-unit-covered";
 
 export function buildMainCoveredVitestArgs(options = {}) {
   const mainCoveredMaxWorkers =
@@ -56,6 +60,12 @@ export function buildUiCoveragePhases(options = {}) {
       args: buildMainCoveredVitestArgs(options),
     },
     {
+      kind: bunUnitCoveragePassKind,
+      name: bunUnitCoveragePhaseName,
+      command: "bun",
+      args: ["run", "test:unit:bun:coverage"],
+    },
+    {
       name: "Standalone script-style test",
       command: "vitest",
       args: [
@@ -68,6 +78,18 @@ export function buildUiCoveragePhases(options = {}) {
 }
 
 export const uiCoveragePhases = buildUiCoveragePhases();
+
+export function mergeBunUnitCoverage(rootDirectory = ".") {
+  mergeLcovFiles({
+    basePath: join(rootDirectory, "coverage", "lcov.info"),
+    outputPath: join(rootDirectory, "coverage", "lcov.info"),
+    supplementalPath: join(
+      rootDirectory,
+      bunUnitCoverageDirectory,
+      "lcov.info",
+    ),
+  });
+}
 
 export {
   formatElapsedMs,
@@ -134,7 +156,9 @@ export function logSlowFileSummary(capturedStdout, summaryTitle) {
 
 export function runUiCoverage(phases = uiCoveragePhases, options = {}) {
   const spawn = options.spawn ?? spawnSync;
-  cleanCoverageArtifacts(options.rootDirectory ?? ".");
+  const rootDirectory = options.rootDirectory ?? ".";
+  const mergeCoverage = options.mergeCoverage ?? mergeBunUnitCoverage;
+  cleanCoverageArtifacts(rootDirectory);
 
   for (const phase of phases) {
     const captureStdout = phase.kind === mainCoveredPassKind;
@@ -144,6 +168,10 @@ export function runUiCoverage(phases = uiCoveragePhases, options = {}) {
 
     if (status !== 0) {
       process.exit(status);
+    }
+
+    if (phase.kind === bunUnitCoveragePassKind) {
+      mergeCoverage(rootDirectory);
     }
 
     if (captureStdout) {
