@@ -1,4 +1,4 @@
-package service_test
+package service
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
-	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -27,7 +26,7 @@ func TestRunScriptPoller_CommitsCursorAfterSuccessfulAdvance(t *testing.T) {
 		outcomes: []runOutcome{{result: workers.CommandResult{Stdout: stdout}}},
 	}
 	submitted := &recordingSubmitter{}
-	recorder := scriptpollers.NewMemoryCursorRecorder()
+	recorder := newMemoryCursorRecorder()
 	svc := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{
 		runner:         runner,
 		cursorRecorder: recorder,
@@ -35,13 +34,13 @@ func TestRunScriptPoller_CommitsCursorAfterSuccessfulAdvance(t *testing.T) {
 	poller := newCanonicalScriptPollerWorkstation()
 	worker := newCanonicalScriptPollerWorker()
 	runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, factoryDir, poller, worker)
-	supervision := scriptpollers.ScriptPollerSupervision{
-		AutomationID: "workflow-cursor",
-		SourceID:     "source-cursor",
-		InstanceID:   "instance-cursor-1",
+	supervision := scriptPollerSupervision{
+		automationID: "workflow-cursor",
+		sourceID:     "source-cursor",
+		instanceID:   "instance-cursor-1",
 	}
 
-	err := svc.RunScriptPoller(
+	err := svc.runScriptPoller(
 		context.Background(),
 		runner,
 		runtimeCfg,
@@ -58,13 +57,13 @@ func TestRunScriptPoller_CommitsCursorAfterSuccessfulAdvance(t *testing.T) {
 	}
 
 	cursor, err := svc.GetCursor(context.Background(), automations.GetCursorRequest{
-		InstanceID: supervision.InstanceID,
+		InstanceID: supervision.instanceID,
 	})
 	if err != nil {
 		t.Fatalf("GetCursor() error = %v", err)
 	}
-	if cursor.AutomationID != supervision.AutomationID ||
-		cursor.InstanceID != supervision.InstanceID ||
+	if cursor.AutomationID != supervision.automationID ||
+		cursor.InstanceID != supervision.instanceID ||
 		cursor.Cursor != "opaque-cursor-2" ||
 		cursor.Checkpoint != "checkpoint-2" {
 		t.Fatalf("GetCursor() = %+v, want committed opaque recovery facts", cursor)
@@ -75,14 +74,14 @@ func TestRunScriptPoller_ResumesWithCompatibleCursorInCommandEnv(t *testing.T) {
 	t.Parallel()
 
 	factoryDir := t.TempDir()
-	recorder := scriptpollers.NewMemoryCursorRecorder()
+	recorder := newMemoryCursorRecorder()
 	ctx := context.Background()
 	const instanceID = "instance-resume"
-	if err := recorder.CommitCursor(ctx, scriptpollers.CommitCursorRequest{
-		AutomationID: "workflow-resume",
-		InstanceID:   instanceID,
-		Cursor:       "opaque-cursor-resume",
-		Checkpoint:   "checkpoint-resume",
+	if err := recorder.CommitCursor(ctx, commitCursorRequest{
+		automationID: "workflow-resume",
+		instanceID:   instanceID,
+		cursor:       "opaque-cursor-resume",
+		checkpoint:   "checkpoint-resume",
 	}); err != nil {
 		t.Fatalf("CommitCursor() error = %v", err)
 	}
@@ -97,14 +96,14 @@ func TestRunScriptPoller_ResumesWithCompatibleCursorInCommandEnv(t *testing.T) {
 	poller := newCanonicalScriptPollerWorkstation()
 	worker := newCanonicalScriptPollerWorker()
 	runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, factoryDir, poller, worker)
-	supervision := scriptpollers.ScriptPollerSupervision{
-		AutomationID:   "workflow-resume",
-		SourceID:       "source-resume",
-		InstanceID:     instanceID,
-		ExpectedCursor: "opaque-cursor-resume",
+	supervision := scriptPollerSupervision{
+		automationID:   "workflow-resume",
+		sourceID:       "source-resume",
+		instanceID:     instanceID,
+		expectedCursor: "opaque-cursor-resume",
 	}
 
-	err := svc.RunScriptPoller(
+	err := svc.runScriptPoller(
 		ctx,
 		runner,
 		runtimeCfg,
@@ -122,8 +121,8 @@ func TestRunScriptPoller_ResumesWithCompatibleCursorInCommandEnv(t *testing.T) {
 	runner.mu.Lock()
 	req := runner.reqs[0]
 	runner.mu.Unlock()
-	if !containsEnv(req.Env, scriptpollers.ScriptPollerCursorEnvVar+"=opaque-cursor-resume") ||
-		!containsEnv(req.Env, scriptpollers.ScriptPollerCheckpointEnvVar+"=checkpoint-resume") {
+	if !containsEnv(req.Env, scriptPollerCursorEnvVar+"=opaque-cursor-resume") ||
+		!containsEnv(req.Env, scriptPollerCheckpointEnvVar+"=checkpoint-resume") {
 		t.Fatalf("command env = %#v, want resume cursor/checkpoint injected", req.Env)
 	}
 }
@@ -131,13 +130,13 @@ func TestRunScriptPoller_ResumesWithCompatibleCursorInCommandEnv(t *testing.T) {
 func TestRunScriptPoller_RejectsStaleCursorWithoutSubmit(t *testing.T) {
 	t.Parallel()
 
-	recorder := scriptpollers.NewMemoryCursorRecorder()
+	recorder := newMemoryCursorRecorder()
 	ctx := context.Background()
 	const instanceID = "instance-stale-run"
-	if err := recorder.CommitCursor(ctx, scriptpollers.CommitCursorRequest{
-		AutomationID: "workflow-stale-run",
-		InstanceID:   instanceID,
-		Cursor:       "cursor-current",
+	if err := recorder.CommitCursor(ctx, commitCursorRequest{
+		automationID: "workflow-stale-run",
+		instanceID:   instanceID,
+		cursor:       "cursor-current",
 	}); err != nil {
 		t.Fatalf("CommitCursor() error = %v", err)
 	}
@@ -154,20 +153,20 @@ func TestRunScriptPoller_RejectsStaleCursorWithoutSubmit(t *testing.T) {
 	worker := newCanonicalScriptPollerWorker()
 	runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, t.TempDir(), poller, worker)
 
-	err := svc.RunScriptPoller(
+	err := svc.runScriptPoller(
 		ctx,
 		runner,
 		runtimeCfg,
 		poller,
 		worker,
-		scriptpollers.ScriptPollerSupervision{
-			AutomationID:   "workflow-stale-run",
-			InstanceID:     instanceID,
-			ExpectedCursor: "cursor-stale",
+		scriptPollerSupervision{
+			automationID:   "workflow-stale-run",
+			instanceID:     instanceID,
+			expectedCursor: "cursor-stale",
 		},
 		submitted.submit,
 	)
-	assertAutomationsConflict(t, err, scriptpollers.GetCursorOperation)
+	assertAutomationsConflict(t, err, getCursorOperation)
 	if submitted.calls != 0 {
 		t.Fatalf("submit calls = %d, want 0 on stale cursor conflict", submitted.calls)
 	}
@@ -208,15 +207,15 @@ func TestRunScriptPoller_CursorPersistFailureDoesNotReportSuccess(t *testing.T) 
 	worker := newCanonicalScriptPollerWorker()
 	runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, t.TempDir(), poller, worker)
 
-	err := svc.RunScriptPoller(
+	err := svc.runScriptPoller(
 		context.Background(),
 		runner,
 		runtimeCfg,
 		poller,
 		worker,
-		scriptpollers.ScriptPollerSupervision{
-			AutomationID: "workflow-persist-fail",
-			InstanceID:   "instance-persist-fail",
+		scriptPollerSupervision{
+			automationID: "workflow-persist-fail",
+			instanceID:   "instance-persist-fail",
 		},
 		submitted.submit,
 	)
@@ -236,10 +235,10 @@ func (f failingCursorRecorder) GetCursor(
 	_ context.Context,
 	request automations.GetCursorRequest,
 ) (automations.GetCursorResult, error) {
-	return scriptpollers.NewMemoryCursorRecorder().GetCursor(context.Background(), request)
+	return newMemoryCursorRecorder().GetCursor(context.Background(), request)
 }
 
-func (f failingCursorRecorder) CommitCursor(context.Context, scriptpollers.CommitCursorRequest) error {
+func (f failingCursorRecorder) CommitCursor(context.Context, commitCursorRequest) error {
 	return f.commitErr
 }
 

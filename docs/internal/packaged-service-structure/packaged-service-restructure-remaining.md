@@ -16,7 +16,7 @@ These are live counts from production `.go` files, not just the stale baseline:
 
 | Service | Root interfaces | Root exported functions | Noncanonical root directories | Status |
 |---|---:|---:|---|---|
-| `automations` | 1 | 0 | — | Root contract sealed; nested subservice debt remains |
+| `automations` | 1 | 0 | — | Root and nested service contracts sealed |
 | `factory_definitions` | 31 | 19 | `clonetests`, `definition`, `systeminitializationtests` | Major decomposition remaining |
 | `factory_runtime` | 36 | 50 | `testdata` | Major decomposition remaining |
 | `factory_sessions` | 4 | 13 | — | Contract/transport consolidation remaining |
@@ -217,9 +217,9 @@ The old public directories recorded in the baseline have mostly been deleted; th
 
 ### Automations and Visualization
 
-These do not have significant top-level directory migration debt, but they are not contract-complete:
+These do not have significant top-level directory migration debt:
 
-- Automations subservices `filesystem_watchers` and `script_pollers` expose multiple interfaces; `script_pollers` also exports substantial implementation behavior.
+- Automations nested service contracts are sealed. `cron`, `filesystem_watchers`, `hosted_sources`, `reconciliation`, and `script_pollers` keep their boundary contracts under `internal/services`, while implementation behavior and constructors remain private or in the corresponding `wire` packages.
 - Visualization’s two projection/lifecycle subservices each expose four interfaces.
 
 ## 3. Broken dependency and test contracts

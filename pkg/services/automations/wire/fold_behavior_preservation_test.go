@@ -2,11 +2,15 @@ package wire_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -385,6 +389,100 @@ func hostedLinearWorkerForFoldTest() *factorydefinitions.FactoryWorkerConfig {
 			},
 		},
 	}
+}
+
+func TestWireFoldPreservesScriptPollerCursorRecoveryThroughPublishedRoot(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := t.TempDir()
+	poller := scriptPollerWorkstationForFoldTest()
+	worker := scriptPollerWorkerForFoldTest()
+	factoryConfig := &factorydefinitions.FactoryConfig{
+		WorkTypes:    []factorydefinitions.WorkTypeConfig{{Name: "task"}},
+		Workers:      []factorydefinitions.FactoryWorkerConfig{*worker},
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{poller},
+	}
+	loaded, err := factorydefinitioncomposition.NewLoadedSource(
+		factoryDir,
+		factoryConfig,
+		runtimefixtures.RuntimeDefinitionLookupFixture{
+			Workers:      map[string]*factorydefinitions.FactoryWorkerConfig{worker.Name: worker},
+			Workstations: map[string]*factorydefinitions.FactoryWorkstationConfig{poller.Name: &poller},
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewLoadedSource() = %v", err)
+	}
+
+	runner := &foldPollerCommandRunner{outcomes: []foldPollerOutcome{{
+		result: workers.CommandResult{Stdout: []byte(`{
+			"requestId":"script-recovery-fold",
+			"type":"FACTORY_REQUEST_BATCH",
+			"works":[{"name":"issue-recovery","workTypeName":"task"}],
+			"cursor":"cursor-fold-2",
+			"checkpoint":"checkpoint-fold-2"
+		}`)},
+	}}}
+	submitted := &foldRecordingSubmitter{}
+	ports := validConstructionPorts(t)
+	ports.commandRunner = runner
+	service := ports.newService(t)
+
+	err = service.RunScriptPoller(
+		context.Background(),
+		runner,
+		loaded,
+		poller,
+		worker,
+		submitted.submit,
+	)
+	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
+		t.Fatalf("RunScriptPoller() = %v, want unexpected exit after committed recovery", err)
+	}
+	if calls, _ := submitted.snapshot(); calls != 1 {
+		t.Fatalf("script poller submissions = %d, want 1", calls)
+	}
+
+	instanceID := foldScriptPollerInstanceID("automations-wire", poller.Name)
+	root := service.Root()
+	cursor, err := root.GetCursor(context.Background(), automations.GetCursorRequest{
+		InstanceID: instanceID,
+	})
+	if err != nil {
+		t.Fatalf("published Root().GetCursor() = %v", err)
+	}
+	if cursor.AutomationID != "automations-wire" ||
+		cursor.InstanceID != instanceID ||
+		cursor.Cursor != "cursor-fold-2" ||
+		cursor.Checkpoint != "checkpoint-fold-2" {
+		t.Fatalf("published Root().GetCursor() = %+v, want committed recovery facts", cursor)
+	}
+
+	_, err = root.GetCursor(context.Background(), automations.GetCursorRequest{
+		InstanceID:     instanceID,
+		ExpectedCursor: "stale-cursor",
+	})
+	var typed *automations.Error
+	if !errors.As(err, &typed) || typed.Code != automations.ErrorCodeConflict {
+		t.Fatalf("published Root().GetCursor(stale) = %v, want typed conflict", err)
+	}
+	if !errors.Is(err, automations.ErrConflict) {
+		t.Fatalf("published Root().GetCursor(stale) = %v, want ErrConflict", err)
+	}
+}
+
+func foldScriptPollerInstanceID(automationID, workstationName string) string {
+	sourceID := "script-poller:" + strings.TrimSpace(workstationName)
+	identity := fmt.Sprintf(
+		"%d:%s:%d:%s",
+		len(automationID),
+		automationID,
+		len(sourceID),
+		sourceID,
+	)
+	sum := sha256.Sum256([]byte("automations-script-poller-instance:" + identity))
+	return "script-poller-instance:" + hex.EncodeToString(sum[:16])
 }
 
 type foldRecordingSubmitter struct {

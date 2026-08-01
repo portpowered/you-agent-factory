@@ -12,6 +12,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/jonboulle/clockwork"
+	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -30,20 +31,20 @@ import (
 // request items so downstream guards can correlate generated work with the
 // parent execution.
 type watcher struct {
-	dir     string
-	submit  filesystemwatchers.WorkRequestSubmitter
-	logger  *zap.Logger
+	dir    string
+	submit automations.WorkRequestSubmitter
+	logger *zap.Logger
 	// knownWorkTypes restricts submissions to known work types.
 	// If nil, all subdirectories are accepted.
 	knownWorkTypes      map[string]bool
 	knownWorkStates     map[string]map[string]bool
-	files               filesystemwatchers.InputFileSystem
-	walkDirectory       filesystemwatchers.DirectoryWalker
+	files               inputFileSystem
+	walkDirectory       directoryWalker
 	workRequestIDs      work.RequestIDGenerator
 	newWatcher          fileEventWatcherFactory
 	clock               clockwork.Clock
 	debounceWindow      time.Duration
-	handledIdentities   filesystemwatchers.HandledIdentities
+	handledIdentities   handledIdentities
 	lazyHandledIdentity *memoryHandledIdentities
 }
 
@@ -75,7 +76,36 @@ func newFSNotifyEventWatcher() (fileEventWatcher, error) {
 
 const batchInputDirectoryName = "BATCH"
 
+type inputFileSystem interface {
+	ReadDir(string) ([]fs.DirEntry, error)
+	ReadFile(string) ([]byte, error)
+	Stat(string) (fs.FileInfo, error)
+}
+
+type directoryWalker func(string, fs.WalkDirFunc) error
+
+type handledIdentities interface {
+	Contains(filesystemwatchers.ObservationIdentity) bool
+	Record(filesystemwatchers.ObservationIdentity) error
+}
+
 func newWatcher(config filesystemwatchers.Config) *watcher {
+	return newWatcherWithClockAndHandled(config, clockwork.NewRealClock(), newMemoryHandledIdentities())
+}
+
+func newWatcherWithClock(config filesystemwatchers.Config, clock clockwork.Clock) *watcher {
+	return newWatcherWithClockAndHandled(config, clock, newMemoryHandledIdentities())
+}
+
+func newWatcherWithHandled(config filesystemwatchers.Config, handled handledIdentities) *watcher {
+	return newWatcherWithClockAndHandled(config, clockwork.NewRealClock(), handled)
+}
+
+func newWatcherWithClockAndHandled(
+	config filesystemwatchers.Config,
+	clock clockwork.Clock,
+	handled handledIdentities,
+) *watcher {
 	if config.Files == nil {
 		panic("filesystem watcher input filesystem is required")
 	}
@@ -95,7 +125,6 @@ func newWatcher(config filesystemwatchers.Config) *watcher {
 			knownWorkTypes[workType] = true
 		}
 	}
-	clock := config.Clock
 	if clock == nil {
 		clock = clockwork.NewRealClock()
 	}
@@ -110,12 +139,12 @@ func newWatcher(config filesystemwatchers.Config) *watcher {
 		knownWorkTypes:    knownWorkTypes,
 		knownWorkStates:   config.ValidStatesByType,
 		files:             config.Files,
-		walkDirectory:     config.WalkDirectory,
+		walkDirectory:     directoryWalker(config.WalkDirectory),
 		workRequestIDs:    config.WorkRequestIDs,
 		newWatcher:        newFSNotifyEventWatcher,
 		clock:             clock,
 		debounceWindow:    debounceWindow,
-		handledIdentities: config.HandledIdentities,
+		handledIdentities: handled,
 	}
 }
 
@@ -188,7 +217,7 @@ func (fw *watcher) Watch(ctx context.Context) error {
 	}
 }
 
-func (fw *watcher) handledIdentityStore() filesystemwatchers.HandledIdentities {
+func (fw *watcher) handledIdentityStore() handledIdentities {
 	if fw.handledIdentities != nil {
 		return fw.handledIdentities
 	}

@@ -1,21 +1,27 @@
-package script_pollers
+package service
 
 import (
 	"fmt"
 	"path/filepath"
 	"strings"
 
+	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+type resumeCursor struct {
+	cursor     automations.Cursor
+	checkpoint string
+}
 
 func scriptPollerCommandRequest(
 	runtimeCfg factorydefinitions.RuntimeConfigLookup,
 	workstation factorydefinitions.FactoryWorkstationConfig,
 	workerDef *factorydefinitions.FactoryWorkerConfig,
 	resolveTemplates workers.TemplateFieldResolver,
-	resume ResumeCursor,
+	resume resumeCursor,
 ) (workers.CommandRequest, error) {
 	if runtimeCfg == nil {
 		return workers.CommandRequest{}, fmt.Errorf("runtime config is required")
@@ -70,16 +76,16 @@ func scriptPollerCommandRequest(
 	return req, nil
 }
 
-func commandEnvWithResolvedVars(vars map[string]string, resume ResumeCursor) []string {
+func commandEnvWithResolvedVars(vars map[string]string, resume resumeCursor) []string {
 	env := make([]string, 0, len(vars)+2)
 	for key, value := range vars {
 		env = append(env, key+"="+value)
 	}
-	if cursor := strings.TrimSpace(string(resume.Cursor)); cursor != "" {
-		env = append(env, ScriptPollerCursorEnvVar+"="+cursor)
+	if cursor := strings.TrimSpace(string(resume.cursor)); cursor != "" {
+		env = append(env, scriptPollerCursorEnvVar+"="+cursor)
 	}
-	if checkpoint := strings.TrimSpace(resume.Checkpoint); checkpoint != "" {
-		env = append(env, ScriptPollerCheckpointEnvVar+"="+checkpoint)
+	if checkpoint := strings.TrimSpace(resume.checkpoint); checkpoint != "" {
+		env = append(env, scriptPollerCheckpointEnvVar+"="+checkpoint)
 	}
 	if len(env) == 0 {
 		return nil

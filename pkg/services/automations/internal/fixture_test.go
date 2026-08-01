@@ -6,9 +6,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
+	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
+	filesystemwatcherswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
+	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
+	reconciliationwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation/wire"
+	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -26,7 +32,23 @@ type automationFixture struct {
 }
 
 func newAutomationService(fixture automationFixture) *automationinternal.Service {
-	return automationinternal.New(
+	var service *automationinternal.Service
+	reconciler := reconciliationwire.NewService(reconciliation.Effects{
+		Start: func(ctx context.Context, effect reconciliation.StartEffect) error {
+			return service.StartSchedulerSourceEffect(ctx, effect)
+		},
+		Stop: func(ctx context.Context, effect reconciliation.StopEffect) error {
+			return service.StopSchedulerSourceEffect(ctx, effect)
+		},
+		Wait: func(ctx context.Context, effect reconciliation.WaitEffect) (automations.SourceObservation, error) {
+			return service.WaitSchedulerSourceEffect(ctx, effect)
+		},
+	})
+	logger := fixture.Logger
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	service = automationinternal.New(
 		fixture.Logger,
 		fixture.Clock,
 		fixture.CommandRunner,
@@ -35,7 +57,30 @@ func newAutomationService(fixture automationFixture) *automationinternal.Service
 		fixture.HostedPollers,
 		fixture.ResolveTemplates,
 		automationWorkstationExecutionPolicy(),
+		reconciler,
+		scriptpollerswire.NewService(
+			func(workstationName, workerName string) *zap.Logger {
+				return logger.With(zap.String("workstation", workstationName), zap.String("worker", workerName))
+			},
+			func() clockwork.Clock {
+				if typed, ok := fixture.Clock.(clockwork.Clock); ok && typed != nil {
+					return typed
+				}
+				return clockwork.NewRealClock()
+			},
+			func() workers.CommandRunner { return fixture.CommandRunner },
+			fixture.ResolveTemplates,
+			automationWorkstationExecutionPolicy(),
+		),
+		cronwire.NewService(),
+		filesystemwatcherswire.NewService(func() clockwork.Clock {
+			if typed, ok := fixture.Clock.(clockwork.Clock); ok && typed != nil {
+				return typed
+			}
+			return clockwork.NewRealClock()
+		}),
 	)
+	return service
 }
 
 type programmableHostedPollers struct {
