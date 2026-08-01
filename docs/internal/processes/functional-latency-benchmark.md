@@ -1,0 +1,136 @@
+# Functional latency benchmark protocol
+
+This protocol measures the functional hotspots owned by
+`LTV-FUN-02-runtime-cli-events`. It is intentionally package-scoped so a
+future before/after run cannot hide a regression in one named group behind a
+faster unrelated lane.
+
+## Scope
+
+Run these seven package commands in this order for every sequential sample:
+
+| Group | Package |
+| --- | --- |
+| Automations | `./tests/functional/automations` |
+| CLI factory-run output | `./tests/functional/cli/factory_run/output` |
+| CLI MCP resume | `./tests/functional/cli/mcp_resume` |
+| CLI root discovery | `./tests/functional/cli/root_discovery` |
+| CLI session resume | `./tests/functional/cli/session_resume` |
+| Factory Events | `./tests/functional/events/factory_events` |
+| Response Events | `./tests/functional/events/response_events` |
+
+The package paths and test selection must stay unchanged between the before
+and after measurements.
+
+## Sequential protocol
+
+Run from the repository root on a clean worktree. Record the UTC timestamp,
+commit, OS, Go version, processor count, and any other concurrent build or
+test workload. Do not run another repository-wide Go command during a sample.
+
+`-count=1` disables the Go test result cache. `go clean -testcache` is run at
+the start of each sample as an explicit guard against an accidental cached
+result; it does not clear the build cache. The repository functional lane
+uses `-short`, so the benchmark uses the same mode and the repository's
+standard five-minute timeout:
+
+```powershell
+$packages = [ordered]@{
+  "automations" = "./tests/functional/automations"
+  "cli-factory-run-output" = "./tests/functional/cli/factory_run/output"
+  "cli-mcp-resume" = "./tests/functional/cli/mcp_resume"
+  "cli-root-discovery" = "./tests/functional/cli/root_discovery"
+  "cli-session-resume" = "./tests/functional/cli/session_resume"
+  "factory-events" = "./tests/functional/events/factory_events"
+  "response-events" = "./tests/functional/events/response_events"
+}
+
+for ($sample = 1; $sample -le 3; $sample++) {
+  go clean -testcache
+  $rows = foreach ($entry in $packages.GetEnumerator()) {
+    $timer = [Diagnostics.Stopwatch]::StartNew()
+    & go test -short $entry.Value -count=1 -timeout=5m
+    $exitCode = $LASTEXITCODE
+    $timer.Stop()
+    [pscustomobject]@{
+      Sample = $sample
+      Group = $entry.Key
+      ExitCode = $exitCode
+      WallSeconds = [math]::Round($timer.Elapsed.TotalSeconds, 3)
+    }
+    if ($exitCode -ne 0) { throw "failed: $($entry.Value)" }
+  }
+  $rows | Format-Table -AutoSize
+  "CombinedWallSeconds=$([math]::Round((($rows | Measure-Object WallSeconds -Sum).Sum), 3))"
+}
+```
+
+Record both the outer wall time and the `ok` duration printed by `go test`.
+The difference is command/build/process overhead and is useful evidence when
+the test body itself is not the dominant phase. Report the median for each
+group and the median of the seven per-sample combined sums. Do not substitute
+the fastest sample for a median, and do not compare a sequential sum with a
+concurrent maximum as if they were the same metric.
+
+## Concurrent isolation diagnostic
+
+After the sequential samples, launch the same seven commands concurrently as
+independent child processes. Keep each process's stdout/stderr in a unique
+temporary file, wait for every process, collect every exit code and wall time,
+then remove only that diagnostic directory after all children have exited.
+The diagnostic is a pass only when all seven exit codes are zero and the
+parent has no benchmark-owned child process left. Inspect the output for file
+or executable locks, port collisions, cross-test directories, session/event
+identity leaks, and cleanup failures. A successful concurrent run is
+isolation evidence; it is not a replacement for the sequential median.
+
+Before declaring cleanup clean, inspect process state for commands launched by
+the benchmark and distinguish them from unrelated processes already running
+on the machine. Never terminate a process that the benchmark did not launch.
+
+## Baseline captured for LTV-FUN-02-runtime-cli-events
+
+The initial Windows/amd64 measurement used Go 1.25.0 on Windows 11, with
+24 logical processors. All seven packages passed in each sequential sample
+and in three concurrent diagnostics. The sequential sample commands used the
+same `-short -count=1` package selection; the first measurement pass used a
+ten-minute safety timeout, with no test approaching that limit. The five-minute
+form above is the canonical protocol for future evidence.
+
+Captured on 2026-08-01 (UTC) at commit `08ae95c0e`.
+
+### Sequential wall seconds
+
+| Group | Sample 1 | Sample 2 | Sample 3 | Median |
+| --- | ---: | ---: | ---: | ---: |
+| Automations | 38.520 | 5.640 | 7.990 | 7.990 |
+| CLI factory-run output | 15.790 | 6.160 | 24.460 | 15.790 |
+| CLI MCP resume | 19.910 | 5.460 | 6.200 | 6.200 |
+| CLI root discovery | 23.040 | 7.330 | 9.220 | 9.220 |
+| CLI session resume | 5.690 | 6.610 | 5.940 | 5.940 |
+| Factory Events | 8.520 | 8.680 | 9.500 | 8.680 |
+| Response Events | 5.760 | 6.320 | 5.530 | 5.760 |
+| **Combined sequential wall time** | **117.218** | **46.191** | **68.850** | **68.850** |
+
+The package-median sum is 68.120 seconds; the reported combined median is the
+median of the three per-sample sums (68.850 seconds), as required by the
+protocol. The first sample also showed the largest gap between outer wall time
+and the `go test` `ok` duration: Automations was 38.520 seconds wall versus
+15.082 seconds of test execution, and root discovery was 23.040 seconds wall
+versus 17.363 seconds of test execution. This attributes a material part of
+the variance to command/build/process setup and host load rather than to a
+single shared production lifecycle phase.
+
+### Concurrent wall seconds
+
+The three concurrent diagnostics passed all seven packages. Their maximum
+per-package wall times were 16.210, 20.930, and 37.200 seconds respectively;
+no file-lock, port, environment, session, subprocess, recording, cursor, or
+event-state collision was observed in these runs. The benchmark-owned Go
+processes exited after each diagnostic. A separate repository-wide Go
+verification workload was active during the later measurements, so its load
+is recorded as a caveat rather than treated as product latency.
+
+These numbers are a baseline for later stories, not a performance claim. Any
+after measurement must repeat this protocol on the same machine with the same
+package order and report the same per-group and combined statistics.
