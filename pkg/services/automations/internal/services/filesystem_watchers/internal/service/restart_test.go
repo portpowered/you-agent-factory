@@ -212,6 +212,13 @@ func TestNewWatcherWithResume_RejectsMalformedAuthoritativeFacts(t *testing.T) {
 				Cursor:   filesystemwatchers.Cursor("2"),
 			},
 		},
+		{
+			name: "checkpoint without cursor",
+			facts: filesystemwatchers.WatcherFacts{
+				Identity:   identity,
+				Checkpoint: `{"handled":["request/default/already-handled.md"]}`,
+			},
+		},
 	}
 
 	for _, tc := range tests {

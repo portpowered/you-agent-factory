@@ -206,6 +206,12 @@ func validateWatcherResumeFacts(
 			filesystemwatchers.ErrInvalidResumeFacts,
 		)
 	}
+	if strings.TrimSpace(string(resume.Cursor)) == "" && strings.TrimSpace(resume.Checkpoint) != "" {
+		return fmt.Errorf(
+			"%w: checkpoint requires cursor",
+			filesystemwatchers.ErrInvalidResumeFacts,
+		)
+	}
 	return nil
 }
 
