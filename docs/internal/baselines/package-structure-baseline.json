@@ -1164,71 +1164,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/automations/internal/services/hosted_sources/service.go",
-      "target": "NewCheckpointStore"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/automations/internal/services/hosted_sources/service.go",
-      "target": "NewSecretResolver"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/automations/internal/services/script_pollers/cursor.go",
-      "target": "CursorConflictError"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/automations/internal/services/script_pollers/cursor.go",
-      "target": "CursorPersistError"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/automations/internal/services/script_pollers/cursor.go",
-      "target": "NewMemoryCursorRecorder"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/automations/internal/services/script_pollers/errors.go",
-      "target": "SubmitFailedError"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/automations/internal/services/script_pollers/identity.go",
-      "target": "IsScriptPollerInstanceID"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/automations/internal/services/script_pollers/identity.go",
-      "target": "SourceIDForWorkstation"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/automations/internal/services/script_pollers/identity.go",
-      "target": "StableInstanceID"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/automations/internal/services/script_pollers/identity.go",
-      "target": "SupervisionFor"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/automations/internal/services/script_pollers/service.go",
-      "target": "ParseScriptPollerOutput"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/automations/internal/services/script_pollers/service.go",
-      "target": "ParseScriptPollerStdout"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/automations/internal/services/script_pollers/service.go",
-      "target": "ScriptPollerCommandRequest"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/edges/definition.go",
       "target": "Merge"
     },
@@ -2251,16 +2186,6 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/workers/workstation_pool_boundary_impl.go",
       "target": "NewWorkstationPoolBoundary"
-    },
-    {
-      "rule": "service-root-interface-count",
-      "filePath": "pkg/services/automations/internal/services/filesystem_watchers",
-      "target": "pkg/services/automations/internal/services/filesystem_watchers/service.go:HandledIdentities,pkg/services/automations/internal/services/filesystem_watchers/service.go:InputFileSystem,pkg/services/automations/internal/services/filesystem_watchers/service.go:Service,pkg/services/automations/internal/services/filesystem_watchers/service.go:Watcher"
-    },
-    {
-      "rule": "service-root-interface-count",
-      "filePath": "pkg/services/automations/internal/services/script_pollers",
-      "target": "pkg/services/automations/internal/services/script_pollers/cursor.go:CursorRecorder,pkg/services/automations/internal/services/script_pollers/service.go:Service"
     },
     {
       "rule": "service-root-interface-count",

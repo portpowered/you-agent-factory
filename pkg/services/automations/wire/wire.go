@@ -8,10 +8,17 @@
 package wire
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/jonboulle/clockwork"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
+	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
+	filesystemwatcherswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
+	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
+	reconciliationwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation/wire"
+	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -64,8 +71,39 @@ func NewService(
 	if hostedPollers == nil {
 		return nil, fmt.Errorf("construct Automations: hosted-sources factory returned nil HostedPollers")
 	}
+	pollerClock := resolvePollerClock(clock)
 
-	service := automationinternal.NewService(
+	var service *automationinternal.Service
+	reconciler := reconciliationwire.NewService(reconciliation.Effects{
+		Start: func(ctx context.Context, effect reconciliation.StartEffect) error {
+			if service == nil {
+				return fmt.Errorf("Automations scheduler service is not initialized")
+			}
+			return service.StartSchedulerSourceEffect(ctx, effect)
+		},
+		Stop: func(ctx context.Context, effect reconciliation.StopEffect) error {
+			if service == nil {
+				return fmt.Errorf("Automations scheduler service is not initialized")
+			}
+			return service.StopSchedulerSourceEffect(ctx, effect)
+		},
+		Wait: func(ctx context.Context, effect reconciliation.WaitEffect) (automations.SourceObservation, error) {
+			if service == nil {
+				return automations.SourceObservation{}, fmt.Errorf("Automations scheduler service is not initialized")
+			}
+			return service.WaitSchedulerSourceEffect(ctx, effect)
+		},
+	})
+	childScriptPollers := scriptpollerswire.NewService(
+		logger,
+		pollerClock,
+		commandRunner,
+		resolveTemplates,
+		executionPolicy,
+	)
+	childCron := cronwire.NewService()
+	childFilesystemWatchers := filesystemwatcherswire.NewService(pollerClock)
+	service = automationinternal.New(
 		logger,
 		clock,
 		commandRunner,
@@ -74,11 +112,22 @@ func NewService(
 		hostedPollers,
 		resolveTemplates,
 		executionPolicy,
+		reconciler,
+		childScriptPollers,
+		childCron,
+		childFilesystemWatchers,
 	)
 	if service == nil {
 		return nil, fmt.Errorf("construct Automations: implementation rejected its dependencies")
 	}
 	return service, nil
+}
+
+func resolvePollerClock(clock automations.Clock) clockwork.Clock {
+	if typed, ok := clock.(clockwork.Clock); ok && typed != nil {
+		return typed
+	}
+	return clockwork.NewRealClock()
 }
 
 func validateDependencies(

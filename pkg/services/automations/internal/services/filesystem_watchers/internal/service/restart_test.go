@@ -108,7 +108,7 @@ func TestNewWatcherWithResume_PreseedSkipsRecordedIdentity(t *testing.T) {
 }
 
 func containsHandledIdentity(checkpoint string, identity filesystemwatchers.ObservationIdentity) bool {
-	store, err := testFilesystemWatcherService().NewHandledIdentities(
+	store, err := testFilesystemWatcherService().newHandledIdentities(
 		filesystemwatchers.WatcherFacts{Checkpoint: checkpoint},
 		func(filesystemwatchers.WatcherFacts) error { return nil },
 	)

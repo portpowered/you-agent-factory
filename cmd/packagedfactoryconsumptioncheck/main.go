@@ -1,7 +1,6 @@
 // Command packagedfactoryconsumptioncheck enforces that shipped first-party
-// Factory definition bytes are consumed only through the Factory Definitions
-// catalog/materialization boundary. Package publication and catalog-builder
-// implementations are the only code allowed to open the embedded sources.
+// Factory definition bytes are consumed only through the packaged publication
+// and Factory Definitions catalog/materialization and loader surfaces.
 package main
 
 import (
@@ -22,10 +21,12 @@ const (
 	packagedFactoriesImport             = modulePath + "/packages/packaged-factories"
 	packagedFactoryCatalogImport        = modulePath + "/internal/packagedfactorycatalog"
 	diagnosticPrefix                    = "[agent-factory:packaged-factory-consumption]"
+	catalogLoaderSymbol                 = "LoadPublishedDefinitionCatalog"
 	packagedFactoriesPublicationSurface = "packages/packaged-factories"
 )
 
 var excludedDirectoryNames = map[string]struct{}{
+	".claude":      {},
 	".git":         {},
 	".artifacts":   {},
 	"coverage":     {},
@@ -34,6 +35,7 @@ var excludedDirectoryNames = map[string]struct{}{
 	"fixtures":     {},
 	"node_modules": {},
 	"testdata":     {},
+	"tests":        {},
 	"vendor":       {},
 }
 
@@ -48,6 +50,13 @@ var allowedCatalogImporters = map[string]struct{}{
 	"cmd/packagedfactorysourcecheck":                                                  {},
 	"internal/packagedfactorycatalog":                                                 {},
 	"pkg/services/factory_definitions/internal/services/distribution/packagedcatalog": {},
+}
+
+var allowedCatalogLoaderFiles = map[string]struct{}{
+	"internal/migrationledgercheck/packaged_factory_matrix.go": {},
+	"pkg/wire/profiles.go":                   {},
+	"pkg/transports/http/handlers_models.go": {},
+	"pkg/services/factory_definitions/internal/services/distribution/goal/prompt_drift.go": {},
 }
 
 type config struct {
@@ -102,7 +111,7 @@ func inspectConsumptionBoundary(repoRoot string) ([]string, error) {
 			return err
 		}
 		relative = filepath.ToSlash(relative)
-		if !isGoFile(relative) {
+		if !isProductionGoFile(relative) {
 			return nil
 		}
 		fileViolations, err := inspectGoFile(path, relative)
@@ -140,12 +149,40 @@ func inspectGoFile(path, relative string) ([]string, error) {
 				violations = append(violations, directEmbedImportViolation(relative, importPath))
 			}
 		case packagedFactoryCatalogImport:
-			if _, allowed := allowedCatalogImporters[packagePath]; !allowed {
+			if usesCatalogLoader(file) {
+				if _, allowed := allowedCatalogLoaderFiles[relative]; !allowed {
+					if _, allowed := allowedCatalogImporters[packagePath]; allowed {
+						continue
+					}
+					violations = append(violations, directCatalogLoaderViolation(relative))
+				}
+			} else if _, allowed := allowedCatalogImporters[packagePath]; !allowed {
 				violations = append(violations, directCatalogImportViolation(relative))
 			}
 		}
 	}
 	return violations, nil
+}
+
+func usesCatalogLoader(file *ast.File) bool {
+	found := false
+	ast.Inspect(file, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		selector, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || selector.Sel == nil || selector.Sel.Name != catalogLoaderSymbol {
+			return true
+		}
+		ident, ok := selector.X.(*ast.Ident)
+		if !ok || ident.Name != "packagedfactorycatalog" {
+			return true
+		}
+		found = true
+		return false
+	})
+	return found
 }
 
 func directEmbedImportViolation(relative, importPath string) string {
@@ -165,9 +202,17 @@ func directCatalogImportViolation(relative string) string {
 	)
 }
 
-func isGoFile(relative string) bool {
+func directCatalogLoaderViolation(relative string) string {
+	return fmt.Sprintf(
+		"%s calls packagedfactorycatalog.%s outside the approved catalog-consumption surface; route built-in packaged Factory list/resolve/install through Factory Definitions catalog operations",
+		relative,
+		catalogLoaderSymbol,
+	)
+}
+
+func isProductionGoFile(relative string) bool {
 	lowerName := strings.ToLower(filepath.Base(relative))
-	return strings.HasSuffix(lowerName, ".go")
+	return strings.HasSuffix(lowerName, ".go") && !strings.HasSuffix(lowerName, "_test.go")
 }
 
 func excludedDirectory(path, name, repoRoot string) bool {

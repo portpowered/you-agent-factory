@@ -50,7 +50,7 @@ func TestRunRejectsDirectCatalogLoaderOutsideApprovedFiles(t *testing.T) {
 	writeFixture(
 		t,
 		root,
-		"pkg/services/work/bypass_test.go",
+		"pkg/services/work/bypass_loader.go",
 		`package factorydefinitions
 
 import "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
@@ -66,7 +66,7 @@ func bypass() error {
 	assertErrorContains(
 		t,
 		err,
-		"pkg/services/work/bypass_test.go imports github.com/portpowered/infinite-you/internal/packagedfactorycatalog",
+		"pkg/services/work/bypass_loader.go calls packagedfactorycatalog.LoadPublishedDefinitionCatalog",
 	)
 }
 
@@ -75,7 +75,7 @@ func TestRunRejectsDirectCatalogDiscoveryOutsideMaterializationBoundary(t *testi
 	writeFixture(
 		t,
 		root,
-		"tests/functional/catalog/bypass_test.go",
+		"pkg/services/work/bypass_discovery.go",
 		`package catalog
 
 import "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
@@ -91,7 +91,7 @@ func bypass() error {
 	assertErrorContains(
 		t,
 		err,
-		"tests/functional/catalog/bypass_test.go imports github.com/portpowered/infinite-you/internal/packagedfactorycatalog",
+		"pkg/services/work/bypass_discovery.go imports github.com/portpowered/infinite-you/internal/packagedfactorycatalog",
 	)
 }
 
@@ -100,7 +100,7 @@ func TestRunRejectsDirectPackagedFactoriesImportFromTest(t *testing.T) {
 	writeFixture(
 		t,
 		root,
-		"pkg/services/work/bypass_test.go",
+		"pkg/services/work/bypass_embed.go",
 		`package work
 
 import packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
@@ -115,9 +115,30 @@ func bypass() string {
 	assertErrorContains(
 		t,
 		err,
-		"pkg/services/work/bypass_test.go imports",
+		"pkg/services/work/bypass_embed.go imports",
 		"packages/packaged-factories",
 	)
+}
+
+func TestRunIgnoresConsumptionCopiesInClaudeWorktrees(t *testing.T) {
+	root := fixtureRepository(t)
+	writeFixture(
+		t,
+		root,
+		".claude/worktrees/other-task/pkg/services/factory_definitions/bypass.go",
+		`package factorydefinitions
+
+import packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
+
+func bypass() packagedfactories.Source {
+	return packagedfactories.Source()
+}
+`,
+	)
+
+	if err := run(config{root: root}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
 }
 
 func fixtureRepository(t *testing.T) string {
@@ -127,6 +148,10 @@ func fixtureRepository(t *testing.T) string {
 		"cmd/packagedfactorycatalogcheck",
 		"cmd/packagedfactorycataloggenerate",
 		"cmd/packagedfactorysourcecheck",
+		"pkg/wire",
+		"pkg/transports/http",
+		"pkg/services/factory_definitions/internal/services/distribution/goal",
+		"internal/migrationledgercheck",
 		"internal/packagedfactorycatalog",
 		"pkg/services/factory_definitions/internal/services/distribution/packagedcatalog",
 		"packages/packaged-factories",
@@ -140,6 +165,42 @@ func fixtureRepository(t *testing.T) string {
 import "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 
 func promptDrift() error {
+	_, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	return err
+}
+`)
+	writeFixture(t, root, "pkg/wire/profiles.go", `package wire
+
+import "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
+
+func profiles() error {
+	_, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	return err
+}
+`)
+	writeFixture(t, root, "pkg/transports/http/handlers_models.go", `package http
+
+import "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
+
+func handlers() error {
+	_, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	return err
+}
+`)
+	writeFixture(t, root, "pkg/services/factory_definitions/internal/services/distribution/goal/prompt_drift.go", `package goal
+
+import "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
+
+func promptDrift() error {
+	_, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	return err
+}
+`)
+	writeFixture(t, root, "internal/migrationledgercheck/packaged_factory_matrix.go", `package migrationledgercheck
+
+import "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
+
+func matrix() error {
 	_, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
 	return err
 }

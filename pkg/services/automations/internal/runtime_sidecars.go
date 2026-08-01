@@ -8,7 +8,6 @@ import (
 
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
-	reconciliationwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation/wire"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"go.uber.org/zap"
 )
@@ -80,12 +79,29 @@ func (s *Service) StartSchedulerSidecarsForRuntime(
 	return err
 }
 
-func (s *Service) newSchedulerReconciler() reconciliation.Service {
-	return reconciliationwire.NewService(reconciliation.Effects{
-		Start: s.startSchedulerSource,
-		Stop:  s.stopSchedulerSource,
-		Wait:  s.waitSchedulerSource,
-	})
+// StartSchedulerSourceEffect adapts the Automations-owned scheduler lifecycle
+// to the reconciliation service assembled by Automations wire.
+func (s *Service) StartSchedulerSourceEffect(
+	ctx context.Context,
+	effect reconciliation.StartEffect,
+) error {
+	return s.startSchedulerSource(ctx, effect)
+}
+
+// StopSchedulerSourceEffect adapts scheduler shutdown to reconciliation.
+func (s *Service) StopSchedulerSourceEffect(
+	ctx context.Context,
+	effect reconciliation.StopEffect,
+) error {
+	return s.stopSchedulerSource(ctx, effect)
+}
+
+// WaitSchedulerSourceEffect adapts scheduler observation to reconciliation.
+func (s *Service) WaitSchedulerSourceEffect(
+	ctx context.Context,
+	effect reconciliation.WaitEffect,
+) (automations.SourceObservation, error) {
+	return s.waitSchedulerSource(ctx, effect)
 }
 
 func (s *Service) schedulerSourceIdentity(factoryDir string) automations.SourceIdentity {

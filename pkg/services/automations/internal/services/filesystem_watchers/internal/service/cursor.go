@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
 )
@@ -96,10 +97,10 @@ func (s *service) WatcherFactsFromCursor(
 	return normalizeWatcherFacts(facts)
 }
 
-func (s *service) NewHandledIdentities(
+func (s *service) newHandledIdentities(
 	facts filesystemwatchers.WatcherFacts,
 	persist filesystemwatchers.CursorFactsPersist,
-) (filesystemwatchers.HandledIdentities, error) {
+) (handledIdentities, error) {
 	if persist == nil {
 		return nil, fmt.Errorf("filesystem watcher cursor persist collaborator is required")
 	}
@@ -119,17 +120,23 @@ func (s *service) NewHandledIdentities(
 }
 
 type cursorBackedHandledIdentities struct {
+	mu      sync.Mutex
 	facts   filesystemwatchers.WatcherFacts
 	handled map[filesystemwatchers.ObservationIdentity]struct{}
 	persist filesystemwatchers.CursorFactsPersist
 }
 
 func (s *cursorBackedHandledIdentities) Contains(identity filesystemwatchers.ObservationIdentity) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	_, ok := s.handled[identity]
 	return ok
 }
 
 func (s *cursorBackedHandledIdentities) Record(identity filesystemwatchers.ObservationIdentity) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if _, ok := s.handled[identity]; ok {
 		return nil
 	}

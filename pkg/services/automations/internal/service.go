@@ -7,13 +7,10 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
-	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
-	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
 	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
-	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
+	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
-	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -26,20 +23,20 @@ type Clock = automations.Clock
 
 // Service supervises cron, poller, and watcher automation using injected collaborators.
 type Service struct {
-	loggerValue       *zap.Logger
-	clock             Clock
-	commandRunnerEdge workers.CommandRunner
-	workflowID        string
-	defaultFactoryDir string
-	hostedPollers     automations.HostedPollers
-	resolveTemplates  workers.TemplateFieldResolver
-	executionPolicy   factorydefinitions.WorkstationExecutionPolicyService
-	reconciler        reconciliation.Service
-	scriptPollers     scriptpollers.Service
-	cron              cron.Service
+	loggerValue        *zap.Logger
+	clock              Clock
+	commandRunnerEdge  workers.CommandRunner
+	workflowID         string
+	defaultFactoryDir  string
+	hostedPollers      automations.HostedPollers
+	resolveTemplates   workers.TemplateFieldResolver
+	executionPolicy    factorydefinitions.WorkstationExecutionPolicyService
+	reconciler         reconciliation.Service
+	scriptPollers      scriptpollers.Service
+	cron               cron.Service
 	filesystemWatchers filesystemwatchers.Service
-	schedulerMu       sync.Mutex
-	schedulerSources  map[automations.SourceIdentity]*schedulerSource
+	schedulerMu        sync.Mutex
+	schedulerSources   map[automations.SourceIdentity]*schedulerSource
 }
 
 // New constructs the automation service from explicit worker-sidecar
@@ -53,34 +50,26 @@ func New(
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	reconciler reconciliation.Service,
+	scriptPollers scriptpollers.Service,
+	cronService cron.Service,
+	filesystemWatchers filesystemwatchers.Service,
 ) *Service {
-	service := &Service{
-		loggerValue:       logger,
-		clock:             clock,
-		commandRunnerEdge: commandRunner,
-		workflowID:        workflowID,
-		defaultFactoryDir: defaultFactoryDir,
-		hostedPollers:     hostedPollers,
-		resolveTemplates:  resolveTemplates,
-		executionPolicy:   executionPolicy,
-		schedulerSources:  make(map[automations.SourceIdentity]*schedulerSource),
+	return &Service{
+		loggerValue:        logger,
+		clock:              clock,
+		commandRunnerEdge:  commandRunner,
+		workflowID:         workflowID,
+		defaultFactoryDir:  defaultFactoryDir,
+		hostedPollers:      hostedPollers,
+		resolveTemplates:   resolveTemplates,
+		executionPolicy:    executionPolicy,
+		reconciler:         reconciler,
+		scriptPollers:      scriptPollers,
+		cron:               cronService,
+		filesystemWatchers: filesystemWatchers,
+		schedulerSources:   make(map[automations.SourceIdentity]*schedulerSource),
 	}
-	service.reconciler = service.newSchedulerReconciler()
-	service.scriptPollers = service.newScriptPollers()
-	service.cron = cronwire.NewService()
-	service.filesystemWatchers = fswire.NewService()
-	return service
-}
-
-func (s *Service) newScriptPollers() scriptpollers.Service {
-	return scriptpollerswire.NewService(scriptpollers.Dependencies{
-		Logger:           s.pollerLogger,
-		Clock:            s.supervisorClock,
-		CommandRunner:    s.commandRunner,
-		ResolveTemplates: s.resolveTemplates,
-		ExecutionPolicy:  s.executionPolicy,
-		CursorRecorder:   scriptpollers.NewMemoryCursorRecorder(),
-	})
 }
 
 // NewService constructs the Automations root contract for composition.
@@ -93,6 +82,10 @@ func NewService(
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	reconciler reconciliation.Service,
+	scriptPollers scriptpollers.Service,
+	cronService cron.Service,
+	filesystemWatchers filesystemwatchers.Service,
 ) *Service {
 	return New(
 		logger,
@@ -103,6 +96,10 @@ func NewService(
 		hostedPollers,
 		resolveTemplates,
 		executionPolicy,
+		reconciler,
+		scriptPollers,
+		cronService,
+		filesystemWatchers,
 	)
 }
 
@@ -161,8 +158,11 @@ func (s *Service) GetCursor(
 	ctx context.Context,
 	request automations.GetCursorRequest,
 ) (automations.GetCursorResult, error) {
-	if s != nil && s.scriptPollers != nil && scriptpollers.IsScriptPollerInstanceID(request.InstanceID) {
-		return s.scriptPollers.GetCursor(ctx, request)
+	if s != nil && s.scriptPollers != nil {
+		result, err := s.scriptPollers.GetCursor(ctx, request)
+		if err == nil || !errors.Is(err, automations.ErrNotFound) {
+			return result, err
+		}
 	}
 	return s.reconciler.GetCursor(ctx, request)
 }

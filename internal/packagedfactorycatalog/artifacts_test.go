@@ -57,7 +57,7 @@ func TestGenerateArtifactsProducesEquivalentSelfContainedPairsForCompleteInvento
 	if !strings.Contains(string(bySlug["fusion"].JSON), `"modelProvider": "${firstProvider}"`) {
 		t.Fatal("fusion artifact did not preserve invocation-interpolated provider")
 	}
-	assertInlineAsset(t, bySlug["goal"].JSON, "workers", "goal-executor", "body", "You are executing persistent goal work")
+	assertInlineAsset(t, bySlug["goal"].JSON, "workstations", "execute-goal", "body", "You are executing persistent goal work")
 	if !strings.Contains(string(bySlug["deep-research"].JSON), `"inlineSource"`) ||
 		!strings.Contains(string(bySlug["deep-research"].JSON), `@you-factory-meta`) {
 		t.Fatal("deep-research artifact did not inline its standalone factory.js source")
@@ -68,6 +68,181 @@ func TestGenerateArtifactsProducesEquivalentSelfContainedPairsForCompleteInvento
 	assertPlanParallelExecutorsReturnSubstantiveResults(t, bySlug["plan-parallel"])
 	assertPlanParallelMergerPrimaryResultContract(t, bySlug["plan-parallel"])
 	assertMetaPlannerContract(t, bySlug["full-flow"], "full-flow-planner")
+}
+
+type packagedFactoryPromptWorker struct {
+	Name       string `yaml:"name"`
+	PromptFile string `yaml:"promptFile"`
+}
+
+type packagedFactoryPromptWorkstation struct {
+	Worker     string `yaml:"worker"`
+	PromptFile string `yaml:"promptFile"`
+}
+
+type packagedFactoryPromptFactory struct {
+	Workers      []packagedFactoryPromptWorker      `yaml:"workers"`
+	Workstations []packagedFactoryPromptWorkstation `yaml:"workstations"`
+}
+
+func TestPackagedFactoryPromptFilesRemainWorkstationOwned(t *testing.T) {
+	t.Parallel()
+
+	want := map[string]map[string]string{
+		"goal": {
+			"goal-executor": "prompts/executor.md",
+		},
+		"plan-execute": {
+			"prd-planner":  "prompts/planner.md",
+			"prd-executor": "prompts/executor.md",
+		},
+		"review": {
+			"review-work-executor": "prompts/executor.md",
+			"review-work-reviewer": "prompts/reviewer.md",
+		},
+		"full-flow": {
+			"full-flow-planner":  "prompts/planner.md",
+			"full-flow-executor": "prompts/executor.md",
+			"full-flow-reviewer": "prompts/reviewer.md",
+			"full-flow-ci":       "prompts/ci.md",
+			"full-flow-merger":   "prompts/merger.md",
+		},
+		"subagent": {
+			"subagent-worker": "prompts/run-subagent.md",
+		},
+	}
+
+	artifacts, err := packagedfactorycatalog.GenerateArtifacts(
+		context.Background(),
+		packagedfactories.Source(),
+		"factories",
+		testSchemaPath,
+	)
+	if err != nil {
+		t.Fatalf("GenerateArtifacts: %v", err)
+	}
+	bySlug := make(map[string]packagedfactorycatalog.ArtifactPair, len(artifacts))
+	for _, artifact := range artifacts {
+		bySlug[artifact.Slug] = artifact
+	}
+
+	for slug, wantPromptFiles := range want {
+		slug := slug
+		wantPromptFiles := wantPromptFiles
+		t.Run(slug, func(t *testing.T) {
+			assertPackagedFactoryPromptFiles(t, slug, wantPromptFiles, bySlug)
+		})
+	}
+}
+
+func assertPackagedFactoryPromptFiles(
+	t *testing.T,
+	slug string,
+	wantPromptFiles map[string]string,
+	bySlug map[string]packagedfactorycatalog.ArtifactPair,
+) {
+	t.Helper()
+	sourcePath := "factories/" + slug + "/factory.yaml"
+	payload, err := fs.ReadFile(packagedfactories.Source(), sourcePath)
+	if err != nil {
+		t.Fatalf("read authored Factory %s: %v", sourcePath, err)
+	}
+	var authored packagedFactoryPromptFactory
+	if err := yaml.Unmarshal(payload, &authored); err != nil {
+		t.Fatalf("decode authored Factory %s: %v", sourcePath, err)
+	}
+
+	for _, worker := range authored.Workers {
+		if worker.PromptFile != "" {
+			t.Fatalf("worker %q owns promptFile %q; prompt files belong to workstations", worker.Name, worker.PromptFile)
+		}
+	}
+	authoredPromptFiles := make(map[string]string, len(authored.Workstations))
+	for _, workstation := range authored.Workstations {
+		if workstation.PromptFile != "" {
+			authoredPromptFiles[workstation.Worker] = workstation.PromptFile
+		}
+	}
+	if !reflect.DeepEqual(authoredPromptFiles, wantPromptFiles) {
+		t.Fatalf("authored workstation prompt files = %#v, want %#v", authoredPromptFiles, wantPromptFiles)
+	}
+
+	artifact, ok := bySlug[slug]
+	if !ok {
+		t.Fatalf("missing generated artifact %q", slug)
+	}
+	materializedPromptFiles := make(map[string]string, len(artifact.Factory.Workstations))
+	for _, workstation := range artifact.Factory.Workstations {
+		if workstation.PromptFile != "" {
+			materializedPromptFiles[workstation.WorkerTypeName] = workstation.PromptFile
+		}
+	}
+	if !reflect.DeepEqual(materializedPromptFiles, wantPromptFiles) {
+		t.Fatalf("materialized workstation prompt files = %#v, want %#v", materializedPromptFiles, wantPromptFiles)
+	}
+
+	root := decodeArtifactObject(t, artifact.JSON)
+	for _, value := range root["workers"].([]any) {
+		worker := value.(map[string]any)
+		if _, ok := worker["promptFile"]; ok {
+			t.Fatalf("materialized worker %q still contains promptFile", worker["name"])
+		}
+	}
+}
+
+func TestPackagedFactorySchemaRejectsWorkerPromptFileAndAcceptsWorkstationPromptFile(t *testing.T) {
+	t.Parallel()
+
+	schemaPayload, err := fs.ReadFile(packagedfactories.Source(), testSchemaPath)
+	if err != nil {
+		t.Fatalf("read packaged Factory schema: %v", err)
+	}
+	var schemaDocument any
+	if err := json.Unmarshal(schemaPayload, &schemaDocument); err != nil {
+		t.Fatalf("decode packaged Factory schema: %v", err)
+	}
+	compiler := jsonschema.NewCompiler()
+	compiler.DefaultDraft(jsonschema.Draft2020)
+	if err := compiler.AddResource(testSchemaPath, schemaDocument); err != nil {
+		t.Fatalf("register packaged Factory schema: %v", err)
+	}
+	schema, err := compiler.Compile(testSchemaPath)
+	if err != nil {
+		t.Fatalf("compile packaged Factory schema: %v", err)
+	}
+
+	worker := map[string]any{"name": "worker", "type": "AGENT_WORKER"}
+	invalidWorker := map[string]any{
+		"name":    "prompt-owner",
+		"workers": []any{withPromptFile(worker, "prompts/worker.md")},
+	}
+	if err := schema.Validate(invalidWorker); err == nil {
+		t.Fatal("schema accepted worker-level promptFile")
+	}
+
+	validWorkstation := map[string]any{
+		"name":    "prompt-owner",
+		"workers": []any{worker},
+		"workstations": []any{map[string]any{
+			"name":       "run-worker",
+			"type":       "AGENT_RUN",
+			"worker":     "worker",
+			"inputs":     []any{},
+			"promptFile": "prompts/worker.md",
+		}},
+	}
+	if err := schema.Validate(validWorkstation); err != nil {
+		t.Fatalf("schema rejected workstation-level promptFile: %v", err)
+	}
+}
+
+func withPromptFile(fields map[string]any, promptFile string) map[string]any {
+	withPrompt := make(map[string]any, len(fields)+1)
+	for key, value := range fields {
+		withPrompt[key] = value
+	}
+	withPrompt["promptFile"] = promptFile
+	return withPrompt
 }
 
 func assertPlanParallelExecutorsReturnSubstantiveResults(t *testing.T, artifact packagedfactorycatalog.ArtifactPair) {
@@ -202,25 +377,39 @@ func renderPlanParallelMergerPrompt(body string, inputs any) (string, error) {
 
 func assertMetaPlannerContract(t *testing.T, artifact packagedfactorycatalog.ArtifactPair, workerName string) {
 	t.Helper()
+	var promptBody string
+	foundWorker := false
 	for _, worker := range artifact.Factory.Workers {
 		if worker.Name != workerName {
 			continue
 		}
-		for _, required := range []string{
-			"you docs agents",
-			"Never run bare `you`",
-			`{"request":{"type":"FACTORY_REQUEST_BATCH"`,
-			"sourceWorkName",
-			"targetWorkName",
-			"requiredState",
-		} {
-			if !strings.Contains(worker.Body, required) {
-				t.Fatalf("packaged Factory %q planner %q body does not contain %q", artifact.PublicName, workerName, required)
+		foundWorker = true
+		promptBody = worker.Body
+		break
+	}
+	if strings.TrimSpace(promptBody) == "" {
+		for _, workstation := range artifact.Factory.Workstations {
+			if workstation.WorkerTypeName == workerName {
+				promptBody = workstation.Body
+				break
 			}
 		}
-		return
 	}
-	t.Fatalf("packaged Factory %q does not contain planner worker %q", artifact.PublicName, workerName)
+	if !foundWorker {
+		t.Fatalf("packaged Factory %q does not contain planner worker %q", artifact.PublicName, workerName)
+	}
+	for _, required := range []string{
+		"you docs agents",
+		"Never run bare `you`",
+		`{"request":{"type":"FACTORY_REQUEST_BATCH"`,
+		"sourceWorkName",
+		"targetWorkName",
+		"requiredState",
+	} {
+		if !strings.Contains(promptBody, required) {
+			t.Fatalf("packaged Factory %q planner %q prompt body does not contain %q", artifact.PublicName, workerName, required)
+		}
+	}
 }
 
 func TestGenerateArtifactsEmbedsDocumentsInputsAndPreservesMetadataExactly(t *testing.T) {

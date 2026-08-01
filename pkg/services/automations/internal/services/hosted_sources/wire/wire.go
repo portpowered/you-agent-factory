@@ -6,10 +6,26 @@ import (
 	"sync"
 
 	hostedsources "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources"
+	hostedlinear "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/linear"
 	hostedservice "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/service"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"go.uber.org/zap"
 )
+
+// NewCheckpointStore constructs atomic checkpoint persistence from an exact
+// filesystem effect at the hosted_sources composition boundary.
+func NewCheckpointStore(files hostedsources.CheckpointFileSystem) (hostedsources.CheckpointStore, error) {
+	return hostedlinear.NewCheckpointStore(files)
+}
+
+// NewSecretResolver binds the exact environment and filesystem effects used to
+// resolve hosted-source credentials at the hosted_sources composition boundary.
+func NewSecretResolver(
+	getenv func(string) string,
+	readFile func(string) ([]byte, error),
+) hostedsources.SecretResolver {
+	return hostedlinear.NewSecretResolver(getenv, readFile)
+}
 
 type hostedPollers struct {
 	inner *hostedservice.Service

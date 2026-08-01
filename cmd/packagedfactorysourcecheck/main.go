@@ -3,7 +3,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -33,6 +35,7 @@ var rootDocumentNames = map[string]struct{}{
 }
 
 var excludedDirectoryNames = map[string]struct{}{
+	".claude":      {},
 	".git":         {},
 	".artifacts":   {},
 	"coverage":     {},
@@ -50,7 +53,7 @@ type config struct {
 }
 
 type factoryIdentity struct {
-	Name string `yaml:"name"`
+	Name string `json:"name" yaml:"name"`
 }
 
 func main() {
@@ -139,6 +142,13 @@ func firstPartyIdentities(path, name string) ([]factoryIdentity, error) {
 		return nil, nil
 	}
 	lowerName := strings.ToLower(name)
+	if lowerName == "factory.js" {
+		identity, err := readJavaScriptFactoryIdentity(path)
+		if err == nil && strings.HasPrefix(identity.Name, "@you/") {
+			return []factoryIdentity{identity}, nil
+		}
+		return nil, nil
+	}
 	if !strings.HasSuffix(lowerName, ".go") || strings.HasSuffix(lowerName, "_test.go") {
 		return nil, nil
 	}
@@ -206,6 +216,47 @@ func readFactoryIdentity(path string) (factoryIdentity, error) {
 		return factoryIdentity{}, err
 	}
 	return decodeFactoryIdentity(data)
+}
+
+func readJavaScriptFactoryIdentity(path string) (factoryIdentity, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return factoryIdentity{}, err
+	}
+	return decodeJavaScriptFactoryIdentity(data)
+}
+
+func decodeJavaScriptFactoryIdentity(data []byte) (factoryIdentity, error) {
+	const (
+		prefix = "/* @you-factory-meta\n"
+		suffix = "\n*/"
+	)
+	trimmed := bytes.TrimSpace(data)
+	if !bytes.HasPrefix(trimmed, []byte(prefix)) {
+		return factoryIdentity{}, errors.New("standalone packaged JavaScript source must begin with an @you-factory-meta JSON comment")
+	}
+	metadata := trimmed[len(prefix):]
+	end := bytes.Index(metadata, []byte(suffix))
+	if end < 0 {
+		return factoryIdentity{}, errors.New("@you-factory-meta JSON comment must end with */ on its own line")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(metadata[:end]))
+	var identity factoryIdentity
+	if err := decoder.Decode(&identity); err != nil {
+		return factoryIdentity{}, err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return factoryIdentity{}, errors.New("@you-factory-meta JSON comment must contain exactly one JSON object")
+		}
+		return factoryIdentity{}, err
+	}
+	identity.Name = strings.TrimSpace(identity.Name)
+	if identity.Name == "" {
+		return factoryIdentity{}, errors.New("missing non-empty name")
+	}
+	return identity, nil
 }
 
 func decodeFactoryIdentity(data []byte) (factoryIdentity, error) {

@@ -17,18 +17,63 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-const scriptPollerRestartBackoffMax = 250 * time.Millisecond
+const (
+	scriptPollerRestartBackoffMin = 25 * time.Millisecond
+	scriptPollerRestartBackoffMax = 250 * time.Millisecond
+)
 
 type service struct {
-	dependencies scriptpollers.Dependencies
+	logger           *zap.Logger
+	clock            clockwork.Clock
+	commandRunner    workers.CommandRunner
+	templateResolver workers.TemplateFieldResolver
+	executionPolicy  factorydefinitions.WorkstationExecutionPolicyService
+	cursors          cursorRecorder
 }
 
 var _ scriptpollers.Service = (*service)(nil)
 
-// New constructs an inert script-poller service with injected runtime
-// dependencies. Construction never invokes the supplied functions.
-func New(dependencies scriptpollers.Dependencies) scriptpollers.Service {
-	return &service{dependencies: dependencies}
+// New constructs an inert script-poller service from direct collaborators. It
+// creates its private in-memory cursor authority without invoking any effect.
+func New(
+	logger *zap.Logger,
+	clock clockwork.Clock,
+	commandRunner workers.CommandRunner,
+	resolveTemplates workers.TemplateFieldResolver,
+	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+) scriptpollers.Service {
+	return newWithCursorRecorder(
+		logger,
+		clock,
+		commandRunner,
+		resolveTemplates,
+		executionPolicy,
+		newMemoryCursorRecorder(),
+	)
+}
+
+func newWithCursorRecorder(
+	logger *zap.Logger,
+	clock clockwork.Clock,
+	commandRunner workers.CommandRunner,
+	resolveTemplates workers.TemplateFieldResolver,
+	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	recorder cursorRecorder,
+) scriptpollers.Service {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	if commandRunner == nil {
+		commandRunner = unavailableCommandRunner{}
+	}
+	return &service{
+		logger:           logger,
+		clock:            clock,
+		commandRunner:    commandRunner,
+		templateResolver: resolveTemplates,
+		executionPolicy:  executionPolicy,
+		cursors:          recorder,
+	}
 }
 
 func (s *service) GetCursor(
@@ -48,13 +93,14 @@ func (s *service) StartScriptPoller(
 	runtimeCfg factorydefinitions.RuntimeConfigLookup,
 	workstation factorydefinitions.FactoryWorkstationConfig,
 	workerDef *factorydefinitions.FactoryWorkerConfig,
-	supervision scriptpollers.ScriptPollerSupervision,
+	workflowID string,
 	submitter automations.WorkRequestSubmitter,
 ) {
 	if sidecars == nil || submitter == nil {
 		return
 	}
 	sidecars.Add(1)
+	supervision := supervisionFor(workflowID, workstation.Name)
 	go func() {
 		defer sidecars.Done()
 		s.superviseScriptPoller(ctx, runtimeCfg, workstation, workerDef, supervision, submitter)
@@ -66,12 +112,12 @@ func (s *service) superviseScriptPoller(
 	runtimeCfg factorydefinitions.RuntimeConfigLookup,
 	workstation factorydefinitions.FactoryWorkstationConfig,
 	workerDef *factorydefinitions.FactoryWorkerConfig,
-	supervision scriptpollers.ScriptPollerSupervision,
+	supervision scriptPollerSupervision,
 	submitter automations.WorkRequestSubmitter,
 ) {
-	logger := s.pollerLogger(workstation.Name, workerDef.Name)
-	runner := s.commandRunner()
-	backoffClock := s.supervisorClock()
+	logger := s.pollerLogger(workstation.Name, workerDefName(workerDef))
+	runner := s.commandRunner
+	backoffClock := s.clock
 	attempt := 0
 	logger.Info("script poller started")
 	defer func() {
@@ -84,7 +130,7 @@ func (s *service) superviseScriptPoller(
 		}
 
 		attempt++
-		runErr := s.RunScriptPoller(ctx, runner, runtimeCfg, workstation, workerDef, supervision, submitter)
+		runErr := s.runScriptPoller(ctx, runner, runtimeCfg, workstation, workerDef, supervision, submitter)
 		if ctx.Err() != nil {
 			return
 		}
@@ -110,7 +156,27 @@ func (s *service) RunScriptPoller(
 	runtimeCfg factorydefinitions.RuntimeConfigLookup,
 	workstation factorydefinitions.FactoryWorkstationConfig,
 	workerDef *factorydefinitions.FactoryWorkerConfig,
-	supervision scriptpollers.ScriptPollerSupervision,
+	workflowID string,
+	submitter automations.WorkRequestSubmitter,
+) error {
+	return s.runScriptPoller(
+		ctx,
+		runner,
+		runtimeCfg,
+		workstation,
+		workerDef,
+		supervisionFor(workflowID, workstation.Name),
+		submitter,
+	)
+}
+
+func (s *service) runScriptPoller(
+	ctx context.Context,
+	runner workers.CommandRunner,
+	runtimeCfg factorydefinitions.RuntimeConfigLookup,
+	workstation factorydefinitions.FactoryWorkstationConfig,
+	workerDef *factorydefinitions.FactoryWorkerConfig,
+	supervision scriptPollerSupervision,
 	submitter automations.WorkRequestSubmitter,
 ) error {
 	resume, err := s.resolveScriptPollerResume(ctx, supervision)
@@ -118,11 +184,11 @@ func (s *service) RunScriptPoller(
 		return err
 	}
 
-	commandReq, err := scriptpollers.ScriptPollerCommandRequest(
+	commandReq, err := scriptPollerCommandRequest(
 		runtimeCfg,
 		workstation,
 		workerDef,
-		s.dependencies.ResolveTemplates,
+		s.templateResolver,
 		resume,
 	)
 	if err != nil {
@@ -140,6 +206,9 @@ func (s *service) RunScriptPoller(
 		defer cancel()
 	}
 
+	if runner == nil {
+		runner = s.commandRunner
+	}
 	result, runErr := runner.Run(execCtx, commandReq)
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -154,18 +223,18 @@ func (s *service) RunScriptPoller(
 		return fmt.Errorf("script poller exited with code %d", result.ExitCode)
 	}
 
-	parsed, err := scriptpollers.ParseScriptPollerStdout(result.Stdout)
+	parsed, err := parseScriptPollerStdout(result.Stdout)
 	if err != nil {
 		return err
 	}
-	if parsed.HasRequest {
+	if parsed.hasRequest {
 		if submitter == nil {
 			return fmt.Errorf("script poller submitter is not available")
 		}
-		if err := submitter(ctx, parsed.Request); err != nil {
-			return scriptpollers.SubmitFailedError(err)
+		if err := submitter(ctx, parsed.request); err != nil {
+			return submitFailedError(err)
 		}
-		if parsed.AdvancesPosition {
+		if parsed.advancesPosition {
 			if err := s.commitScriptPollerRecovery(ctx, supervision, resume, parsed); err != nil {
 				return err
 			}
@@ -176,50 +245,50 @@ func (s *service) RunScriptPoller(
 
 func (s *service) resolveScriptPollerResume(
 	ctx context.Context,
-	supervision scriptpollers.ScriptPollerSupervision,
-) (scriptpollers.ResumeCursor, error) {
-	instanceID := strings.TrimSpace(supervision.InstanceID)
+	supervision scriptPollerSupervision,
+) (resumeCursor, error) {
+	instanceID := strings.TrimSpace(supervision.instanceID)
 	if instanceID == "" {
-		return scriptpollers.ResumeCursor{}, nil
+		return resumeCursor{}, nil
 	}
 
 	recorder := s.cursorRecorder()
 	if recorder == nil {
-		return scriptpollers.ResumeCursor{}, unavailableCursorRecorderError()
+		return resumeCursor{}, unavailableCursorRecorderError()
 	}
 
 	request := automations.GetCursorRequest{InstanceID: instanceID}
-	if supervision.ExpectedCursor != "" {
-		request.ExpectedCursor = supervision.ExpectedCursor
+	if supervision.expectedCursor != "" {
+		request.ExpectedCursor = supervision.expectedCursor
 	}
 	current, err := recorder.GetCursor(ctx, request)
 	if err != nil {
 		var typed *automations.Error
 		if errors.As(err, &typed) && typed.Code == automations.ErrorCodeNotFound {
-			if supervision.ExpectedCursor != "" {
-				return scriptpollers.ResumeCursor{}, scriptpollers.CursorConflictError(scriptpollers.GetCursorOperation)
+			if supervision.expectedCursor != "" {
+				return resumeCursor{}, cursorConflictError(getCursorOperation)
 			}
-			return scriptpollers.ResumeCursor{}, nil
+			return resumeCursor{}, nil
 		}
-		return scriptpollers.ResumeCursor{}, err
+		return resumeCursor{}, err
 	}
-	if supervision.AutomationID != "" &&
-		strings.TrimSpace(current.AutomationID) != strings.TrimSpace(supervision.AutomationID) {
-		return scriptpollers.ResumeCursor{}, scriptpollers.CursorConflictError(scriptpollers.GetCursorOperation)
+	if supervision.automationID != "" &&
+		strings.TrimSpace(current.AutomationID) != strings.TrimSpace(supervision.automationID) {
+		return resumeCursor{}, cursorConflictError(getCursorOperation)
 	}
-	return scriptpollers.ResumeCursor{
-		Cursor:     current.Cursor,
-		Checkpoint: current.Checkpoint,
+	return resumeCursor{
+		cursor:     current.Cursor,
+		checkpoint: current.Checkpoint,
 	}, nil
 }
 
 func (s *service) commitScriptPollerRecovery(
 	ctx context.Context,
-	supervision scriptpollers.ScriptPollerSupervision,
-	resume scriptpollers.ResumeCursor,
-	parsed scriptpollers.ScriptPollerStdout,
+	supervision scriptPollerSupervision,
+	resume resumeCursor,
+	parsed scriptPollerStdout,
 ) error {
-	instanceID := strings.TrimSpace(supervision.InstanceID)
+	instanceID := strings.TrimSpace(supervision.instanceID)
 	if instanceID == "" {
 		return nil
 	}
@@ -227,20 +296,20 @@ func (s *service) commitScriptPollerRecovery(
 	if recorder == nil {
 		return unavailableCursorRecorderError()
 	}
-	return scriptpollers.CursorPersistError(recorder.CommitCursor(ctx, scriptpollers.CommitCursorRequest{
-		AutomationID:   supervision.AutomationID,
-		InstanceID:     instanceID,
-		ExpectedCursor: resume.Cursor,
-		Cursor:         automations.Cursor(parsed.AdvancedCursor),
-		Checkpoint:     parsed.Checkpoint,
+	return cursorPersistError(recorder.CommitCursor(ctx, commitCursorRequest{
+		automationID:   supervision.automationID,
+		instanceID:     instanceID,
+		expectedCursor: resume.cursor,
+		cursor:         automations.Cursor(parsed.advancedCursor),
+		checkpoint:     parsed.checkpoint,
 	}))
 }
 
 func scriptPollerRestartBackoff(attempt int) time.Duration {
 	if attempt <= 1 {
-		return scriptpollers.ScriptPollerRestartBackoffMin
+		return scriptPollerRestartBackoffMin
 	}
-	backoff := scriptpollers.ScriptPollerRestartBackoffMin
+	backoff := scriptPollerRestartBackoffMin
 	for i := 1; i < attempt && backoff < scriptPollerRestartBackoffMax; i++ {
 		backoff *= 2
 		if backoff >= scriptPollerRestartBackoffMax {
@@ -267,10 +336,10 @@ func (s *service) scriptPollerExecutionTimeout(
 	workstation factorydefinitions.FactoryWorkstationConfig,
 	workerDef *factorydefinitions.FactoryWorkerConfig,
 ) (time.Duration, error) {
-	if s.dependencies.ExecutionPolicy == nil {
+	if s.executionPolicy == nil {
 		return 0, fmt.Errorf("Factory Definition Workstation execution policy service is required")
 	}
-	timeout, err := s.dependencies.ExecutionPolicy.ExecutionTimeout(&workstation)
+	timeout, err := s.executionPolicy.ExecutionTimeout(&workstation)
 	if err != nil {
 		return 0, err
 	}
@@ -290,21 +359,10 @@ func (s *service) scriptPollerExecutionTimeout(
 }
 
 func (s *service) pollerLogger(workstationName, workerName string) *zap.Logger {
-	if s.dependencies.Logger != nil {
-		if logger := s.dependencies.Logger(workstationName, workerName); logger != nil {
-			return logger
-		}
-	}
-	return zap.NewNop()
-}
-
-func (s *service) commandRunner() workers.CommandRunner {
-	if s.dependencies.CommandRunner != nil {
-		if runner := s.dependencies.CommandRunner(); runner != nil {
-			return runner
-		}
-	}
-	return unavailableCommandRunner{}
+	return s.logger.With(
+		zap.String("workstation", workstationName),
+		zap.String("worker", workerName),
+	)
 }
 
 type unavailableCommandRunner struct{}
@@ -313,23 +371,21 @@ func (unavailableCommandRunner) Run(context.Context, workers.CommandRequest) (wo
 	return workers.CommandResult{}, errors.New("automation command runner is required")
 }
 
-func (s *service) supervisorClock() clockwork.Clock {
-	if s.dependencies.Clock != nil {
-		if clock := s.dependencies.Clock(); clock != nil {
-			return clock
-		}
-	}
-	return clockwork.NewRealClock()
-}
-
-func (s *service) cursorRecorder() scriptpollers.CursorRecorder {
-	return s.dependencies.CursorRecorder
+func (s *service) cursorRecorder() cursorRecorder {
+	return s.cursors
 }
 
 func unavailableCursorRecorderError() error {
 	return &automations.Error{
-		Op:   scriptpollers.GetCursorOperation,
+		Op:   getCursorOperation,
 		Code: automations.ErrorCodeNotReady,
 		Err:  automations.ErrNotReady,
 	}
+}
+
+func workerDefName(workerDef *factorydefinitions.FactoryWorkerConfig) string {
+	if workerDef == nil {
+		return ""
+	}
+	return workerDef.Name
 }
