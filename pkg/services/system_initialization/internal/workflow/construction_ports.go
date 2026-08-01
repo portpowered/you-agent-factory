@@ -3,7 +3,7 @@ package workflow
 import (
 	"io/fs"
 
-	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
 // InspectPath is the workflow-local filesystem port used to inspect paths
@@ -20,24 +20,12 @@ type LegacyFactoryMigrationFileSystem interface {
 	Rename(string, string) error
 }
 
-// OperatorSettings is the workflow-local adapter port used to load and
-// initialize the operator configuration.
-type OperatorSettings interface {
-	LoadFileConfig(string) (operatorconfig.Config, error)
-	EnsureLocalBackendScope(string) (operatorconfig.ResolvedBackendScope, error)
-}
+// OperatorSettings is an alias for the complete unary root retained only for
+// the existing service-local wire composition alias. System Initialization
+// does not define a narrowed Settings adapter contract.
+type OperatorSettings = operatorsettings.Service
 
-// OperatorSettingsFunctions adapts function values to OperatorSettings at the
-// service-owned construction boundary.
-type OperatorSettingsFunctions struct {
-	Load   func(string) (operatorconfig.Config, error)
-	Ensure func(string) (operatorconfig.ResolvedBackendScope, error)
-}
-
-func (functions OperatorSettingsFunctions) LoadFileConfig(path string) (operatorconfig.Config, error) {
-	return functions.Load(path)
-}
-
-func (functions OperatorSettingsFunctions) EnsureLocalBackendScope(path string) (operatorconfig.ResolvedBackendScope, error) {
-	return functions.Ensure(path)
-}
+// OperatorSettingsFunctions remains a source-compatible type alias for old
+// service-local composition callers; it is the complete Settings root and no
+// longer adapts individual function ports.
+type OperatorSettingsFunctions = operatorsettings.Service

@@ -4,11 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	_ "modernc.org/sqlite"
 )
@@ -89,6 +91,21 @@ func TestLoadDetails_NotFoundIsDistinguishable(t *testing.T) {
 	_, err := LoadDetails(context.Background(), testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(t.TempDir()), "missing-session")
 	if !errors.Is(err, providersessions.ErrSessionNotFound) {
 		t.Fatalf("err = %v, want ErrSessionNotFound", err)
+	}
+}
+
+func TestLoadDetails_PropagatesCancellationBeforeProjection(t *testing.T) {
+	root, sessionID := writeReadableCursorAgentStorageFixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	files := &cancelOnFinalStat{cancel: cancel}
+
+	_, err := LoadDetails(ctx, files, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(root), sessionID)
+	if !errors.Is(err, providersessions.ErrOperationCanceled) {
+		t.Fatalf("LoadDetails error = %v, want ErrOperationCanceled", err)
+	}
+	if files.statCalls != 4 {
+		t.Fatalf("filesystem Stat calls = %d, want final projection stat to cancel", files.statCalls)
 	}
 }
 
@@ -255,4 +272,19 @@ func writeUnavailableCursorAgentStorageFixture(t *testing.T) (root string, sessi
 		t.Fatalf("insert encrypted blob: %v", err)
 	}
 	return root, sessionID
+}
+
+type cancelOnFinalStat struct {
+	platformfilesystem.Local
+	cancel    context.CancelFunc
+	statCalls int
+}
+
+func (f *cancelOnFinalStat) Stat(path string) (fs.FileInfo, error) {
+	f.statCalls++
+	info, err := f.Local.Stat(path)
+	if f.statCalls == 4 {
+		f.cancel()
+	}
+	return info, err
 }

@@ -38,31 +38,10 @@ type RuntimeSnapshotFacts struct {
 	ActiveThrottlePauses []factorydefinitions.ActiveThrottlePause
 }
 
-// Sink presents one projected Factory view at an external boundary.
-type Sink interface {
-	PresentFactoryView(View)
-}
-
 // SinkFunc adapts a presentation function to Sink.
 type SinkFunc func(View)
 
 func (f SinkFunc) PresentFactoryView(view View) { f(view) }
-
-// Clock supplies observation timestamps without hiding process-global time.
-type Clock interface {
-	Now() time.Time
-}
-
-// Source supplies retained-then-live canonical events and the corresponding
-// runtime snapshot.
-type Source interface {
-	SubscribeFactoryEvents(
-		context.Context,
-		*factorydefinitions.FactoryEventReconnectCursor,
-		factorydefinitions.FactoryEventReconnectScope,
-	) (*factorydefinitions.FactoryEventStream, error)
-	GetRuntimeSnapshotFacts(context.Context) (*RuntimeSnapshotFacts, error)
-}
 
 // ErrorReporter receives non-fatal projection or presentation-read failures.
 type ErrorReporter func(error)

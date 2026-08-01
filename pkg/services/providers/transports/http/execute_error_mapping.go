@@ -14,11 +14,13 @@ const (
 	executeFailedMessage           = "provider execution failed"
 	executeCanceledMessage         = "provider execution canceled"
 	executeTimeoutMessage          = "provider execution timed out"
+	executeMisconfiguredMessage    = "provider execution is misconfigured"
 	executeErrorCodeCanceled       = "PROVIDER_EXECUTION_CANCELED"
 	executeErrorCodeTimeout        = "PROVIDER_EXECUTION_TIMEOUT"
 	executeErrorCodeAuthentication = "PROVIDER_EXECUTION_AUTHENTICATION"
 	executeErrorCodeThrottled      = "PROVIDER_EXECUTION_THROTTLED"
 	executeErrorCodeDependency     = "PROVIDER_EXECUTION_DEPENDENCY"
+	executeErrorCodeMisconfigured  = "PROVIDER_EXECUTION_MISCONFIGURED"
 	executeErrorCodeFailed         = "PROVIDER_EXECUTION_FAILED"
 )
 
@@ -45,6 +47,8 @@ func ExecuteRootErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 		return badRequestErrorResponse(catalogInvalidProviderIDMessage)
 	case errors.Is(err, providers.ErrUnknownProvider):
 		return notFoundErrorResponse(catalogProviderNotFoundMessage)
+	case errors.Is(err, providers.ErrProviderUnavailable):
+		return providerUnavailableErrorResponse(strings.TrimSpace(err.Error()))
 	case errors.Is(err, providers.ErrInvalidSessionRef):
 		return badRequestErrorResponse(executeInvalidRequestMessage)
 	}
@@ -112,6 +116,11 @@ func executeFailureErrorResponse(failure providers.ExecuteFailure) (int, factory
 			message = executeInvalidRequestMessage
 		}
 		return badRequestErrorResponse(message)
+	case providers.ExecuteFailureKindMisconfigured:
+		if message == "" {
+			message = executeMisconfiguredMessage
+		}
+		return internalErrorResponseWithCode(message, executeErrorCodeMisconfigured)
 	case providers.ExecuteFailureKindThrottled:
 		if message == "" {
 			message = "provider execution throttled"

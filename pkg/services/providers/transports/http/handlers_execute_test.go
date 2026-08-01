@@ -125,6 +125,26 @@ func TestAdapter_ExecuteHTTPMapsUnknownProviderFromFakeRoot(t *testing.T) {
 	assertExecuteHTTPError(t, recorder, http.StatusNotFound, "NOT_FOUND", "provider not found")
 }
 
+func TestAdapter_ExecuteHTTPMapsUnavailableProviderFromFakeRoot(t *testing.T) {
+	t.Parallel()
+
+	fake := &rootFake{
+		execute: func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+			return providers.ExecuteResult{}, providers.ErrProviderUnavailable
+		},
+	}
+	adapter := NewAdapter(fake)
+	recorder := httptest.NewRecorder()
+
+	adapter.ExecuteHTTP(
+		recorder,
+		httptest.NewRequest(http.MethodPost, "/providers/cursor/execute", strings.NewReader(`{"attemptId":"attempt-1"}`)),
+		"cursor",
+	)
+
+	assertExecuteHTTPError(t, recorder, http.StatusNotFound, "PROVIDER_UNAVAILABLE", providers.ErrProviderUnavailable.Error())
+}
+
 func TestAdapter_ExecuteHTTPMapsExecuteFailureFromFakeRoot(t *testing.T) {
 	t.Parallel()
 
@@ -146,6 +166,34 @@ func TestAdapter_ExecuteHTTPMapsExecuteFailureFromFakeRoot(t *testing.T) {
 	)
 
 	assertExecuteHTTPError(t, recorder, http.StatusBadRequest, "BAD_REQUEST", "missing user message")
+}
+
+func TestAdapter_ExecuteHTTPMapsMisconfiguredFailureFromFakeRoot(t *testing.T) {
+	t.Parallel()
+
+	fake := &rootFake{
+		execute: func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+			return providers.ExecuteResult{}, providers.ExecuteFailure{
+				Kind: providers.ExecuteFailureKindMisconfigured,
+			}
+		},
+	}
+	adapter := NewAdapter(fake)
+	recorder := httptest.NewRecorder()
+
+	adapter.ExecuteHTTP(
+		recorder,
+		httptest.NewRequest(http.MethodPost, "/providers/codex/execute", strings.NewReader(`{"attemptId":"attempt-1"}`)),
+		"codex",
+	)
+
+	assertExecuteHTTPError(
+		t,
+		recorder,
+		http.StatusInternalServerError,
+		"PROVIDER_EXECUTION_MISCONFIGURED",
+		"provider execution is misconfigured",
+	)
 }
 
 func TestAdapter_ExecuteHTTPMapsExecuteFailedFromFakeRoot(t *testing.T) {

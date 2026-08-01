@@ -13,8 +13,13 @@ import (
 )
 
 type recordingOperatorSettings struct {
+	operatorsettings.Service
 	loadCalls   int
 	ensureCalls int
+}
+
+func (*recordingOperatorSettings) DefaultConfigPath(homeDir string) string {
+	return filepath.Join(homeDir, "settings-owned", "config.json")
 }
 
 func (settings *recordingOperatorSettings) LoadFileConfig(string) (operatorsettings.Config, error) {
@@ -165,7 +170,13 @@ func TestNewServiceConstructionIsInert(t *testing.T) {
 	}
 }
 
-type wireOperatorSettings struct{}
+type wireOperatorSettings struct {
+	operatorsettings.Service
+}
+
+func (wireOperatorSettings) DefaultConfigPath(homeDir string) string {
+	return filepath.Join(homeDir, "settings-owned", "config.json")
+}
 
 func (wireOperatorSettings) LoadFileConfig(string) (operatorsettings.Config, error) {
 	return operatorsettings.Config{}, nil
@@ -287,7 +298,12 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 }
 
 type routingOperatorSettings struct {
+	operatorsettings.Service
 	ensureCalls []string
+}
+
+func (routingOperatorSettings) DefaultConfigPath(homeDir string) string {
+	return filepath.Join(homeDir, "settings-owned", "config.json")
 }
 
 func (settings *routingOperatorSettings) LoadFileConfig(string) (operatorsettings.Config, error) {

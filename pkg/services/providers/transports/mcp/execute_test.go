@@ -251,6 +251,16 @@ func TestBind_ExecuteFailuresReturnTypedErrorEnvelopes(t *testing.T) {
 			wantKind:      "invalid_request",
 		},
 		{
+			name: "execute failure misconfigured",
+			rootErr: providers.ExecuteFailure{
+				Kind: providers.ExecuteFailureKindMisconfigured,
+			},
+			wantCode:      "provider.execution.misconfigured",
+			wantMessage:   "provider execution is misconfigured",
+			wantRetryable: false,
+			wantKind:      "misconfigured",
+		},
+		{
 			name: "execute failure throttled",
 			rootErr: providers.ExecuteFailure{
 				Kind:    providers.ExecuteFailureKindThrottled,

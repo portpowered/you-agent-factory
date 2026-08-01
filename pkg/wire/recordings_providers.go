@@ -3,6 +3,7 @@ package wire
 import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
@@ -14,6 +15,7 @@ func provideRecordingsCLIAdapter() recordingscli.Adapter {
 }
 
 func provideRecordingsFactory(
+	edges serviceedges.Edges,
 	targets recordings.LiveRecordingTargetPlanner,
 	storage platformreplay.Storage,
 ) factorysessionwire.RecordingsFactory {
@@ -21,11 +23,17 @@ func provideRecordingsFactory(
 		ledger recordings.Ledger,
 		projection recordings.ProjectionService,
 	) recordings.Service {
-		service, err := recordingswire.NewServiceWithProjection(
+		makeDirectories, createTemporaryFile, removePath, renamePath, readFile := provideRecordingFilesystemEffects(edges)
+		service, err := recordingswire.NewServiceWithProjectionAndEffects(
 			ledger,
 			projection,
 			targets,
 			storage.WriteFile,
+			makeDirectories,
+			createTemporaryFile,
+			removePath,
+			renamePath,
+			readFile,
 			platformclock.Real{},
 		)
 		if err != nil {

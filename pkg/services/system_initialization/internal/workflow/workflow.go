@@ -19,7 +19,7 @@ import (
 // satisfies the singular peer-facing Service contract without exposing
 // additional Bootstrap authority interfaces to peers.
 type Initializer struct {
-	operatorSettings  OperatorSettings
+	operatorSettings  operatorsettings.Service
 	packagedCatalog   factorydefinitions.PackagedFactoryCatalogOperations
 	packagedInstaller factorydefinitions.PackagedFactoryInstaller
 	inspectPath       InspectPath
@@ -30,7 +30,7 @@ var _ systeminitialization.Service = (*Initializer)(nil)
 
 // New constructs the canonical workflow from already-selected collaborators.
 func New(
-	operatorSettings OperatorSettings,
+	operatorSettings operatorsettings.Service,
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
 	packagedInstaller factorydefinitions.PackagedFactoryInstaller,
 	inspectPath InspectPath,
@@ -102,7 +102,7 @@ func (initializer *Initializer) Initialize(
 		return systeminitialization.Result{}, err
 	}
 
-	configPath := operatorsettings.DefaultConfigPath(homeDir)
+	configPath := initializer.operatorSettings.DefaultConfigPath(homeDir)
 	namedFactoriesRoot := factorydefinitions.NamedFactoriesRoot(homeDir)
 	if err := migrateLegacyNamedFactories(homeDir, namedFactoriesRoot, initializer.migrationFiles); err != nil {
 		return systeminitialization.Result{}, err

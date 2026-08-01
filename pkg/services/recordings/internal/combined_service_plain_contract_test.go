@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -49,6 +50,39 @@ func (ledger *stubLedger) AppendRecordedEvent(event factorydefinitions.FactoryEv
 	ledger.events = append(ledger.events, event)
 }
 
+func newTestPublication(t *testing.T) PortableArtifactPublication {
+	t.Helper()
+	publication, err := NewPortableArtifactPublication(
+		os.MkdirAll,
+		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		os.Remove,
+		os.Rename,
+		os.ReadFile,
+	)
+	if err != nil {
+		t.Fatalf("NewPublication: %v", err)
+	}
+	return publication
+}
+
+func TestNewLifecycleRuntimeRecorderRejectsMissingClockWhenRecordingEnabled(t *testing.T) {
+	t.Parallel()
+	recorder, err := NewLifecycleRuntimeRecorder(0, nil, nil, "recording.json", nil)
+	if recorder != nil || err == nil || !strings.Contains(err.Error(), "clock is required") {
+		t.Fatalf("NewLifecycleRuntimeRecorder = (%#v, %v), want required clock error", recorder, err)
+	}
+}
+
+func TestNewLifecycleRuntimeRecorderAllowsDisabledRecordingWithoutClock(t *testing.T) {
+	t.Parallel()
+	recorder, err := NewLifecycleRuntimeRecorder(time.Second, nil, nil, "", nil)
+	if recorder != nil || err != nil {
+		t.Fatalf("NewLifecycleRuntimeRecorder disabled = (%#v, %v), want nil, nil", recorder, err)
+	}
+}
+
 func TestNewServiceRejectsNilDependencies(t *testing.T) {
 	t.Parallel()
 	if got := NewService(nil, NewProjectionService()); got != nil {
@@ -62,10 +96,7 @@ func TestNewServiceRejectsNilDependencies(t *testing.T) {
 func TestNewServiceWithLifecycleEffectsUsesProvidedPublicationAndPlanner(t *testing.T) {
 	t.Parallel()
 
-	publication, err := NewPortableArtifactPublication()
-	if err != nil {
-		t.Fatalf("NewPortableArtifactPublication: %v", err)
-	}
+	publication := newTestPublication(t)
 	planner := recordings.LiveRecordingTargetPlannerFunc(
 		func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
 			return recordings.LiveRecordingTarget{ServicePath: "service/path"}, nil
@@ -90,7 +121,14 @@ func TestCombinedServicePlainSlices_SuccessAndTypedFailures(t *testing.T) {
 	t.Parallel()
 
 	ledger := &stubLedger{}
-	svc := NewService(ledger, NewProjectionService())
+	svc := NewServiceWithLifecycleEffects(
+		ledger,
+		NewProjectionService(),
+		nil,
+		nil,
+		nil,
+		newTestPublication(t),
+	)
 	if svc == nil {
 		t.Fatal("NewService returned nil")
 	}
@@ -933,7 +971,14 @@ func TestCombinedServicePortableExportAndReadDelegates(t *testing.T) {
 		t.Fatalf("Mkdir: %v", err)
 	}
 	ledger := &stubLedger{}
-	svc := NewService(ledger, NewProjectionService())
+	svc := NewServiceWithLifecycleEffects(
+		ledger,
+		NewProjectionService(),
+		nil,
+		nil,
+		nil,
+		newTestPublication(t),
+	)
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-export-delegate"}
 	bound, err := svc.BindRecording(recordings.BindRecordingRequest{
 		RecordingID: "recording-export-delegate",

@@ -53,6 +53,32 @@ func TestReadDiscoversOnlyCanonicalContainedSession(t *testing.T) {
 	}
 }
 
+func TestReadTrimsSessionIDBeforeStorageDiscovery(t *testing.T) {
+	root, sessionID := writeSessionFixture(t)
+	reader, err := New(
+		platformfilesystem.Local{},
+		filepath.WalkDir,
+		filepath.EvalSymlinks,
+		sql.Open,
+		root,
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	detail, err := reader.Read(context.Background(), providers.SessionRef{
+		Provider: providers.IDCursor,
+		Kind:     providers.SessionIDKind,
+		ID:       "  " + sessionID + "  ",
+	})
+	if err != nil {
+		t.Fatalf("Read with surrounding whitespace: %v", err)
+	}
+	if detail.ProviderSession.ID != sessionID {
+		t.Fatalf("ProviderSession.ID = %q, want canonical %q", detail.ProviderSession.ID, sessionID)
+	}
+}
+
 func TestReadReconstructsDeterministicDetachedNormalizedDetail(t *testing.T) {
 	root, sessionID := writeNormalizedSessionFixture(t)
 	reader, err := New(

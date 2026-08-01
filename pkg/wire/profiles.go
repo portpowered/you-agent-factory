@@ -316,16 +316,12 @@ func provideSystemInitializationService(
 	persistence factorydefinitions.Persistence,
 	packagedInstallationFileSystem factorydefinitions.PackagedInstallationFileSystem,
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
-	loadOperatorConfig operatorsettings.ConfigLoader,
-	ensureOperatorBackendScope operatorsettings.BackendScopeEnsurer,
+	operatorSettings operatorsettings.Service,
 	inspectPath systeminitializationwire.InspectPath,
 	migrationFiles systeminitializationwire.LegacyFactoryMigrationFileSystem,
 ) (systeminitialization.Service, error) {
 	return systeminitializationwire.NewService(
-		systeminitializationwire.OperatorSettingsFunctions{
-			Load:   loadOperatorConfig,
-			Ensure: ensureOperatorBackendScope,
-		},
+		operatorSettings,
 		packagedCatalog,
 		factorydefinitionswire.NewPackagedFactoryInstaller(persistence, packagedInstallationFileSystem),
 		inspectPath,

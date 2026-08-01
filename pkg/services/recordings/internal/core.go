@@ -22,6 +22,31 @@ import (
 	replaywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/wire"
 )
 
+// PortableArtifactPublication is the private publication capability selected
+// by the application graph for completed artifact bytes.
+type PortableArtifactPublication interface {
+	Publish(context.Context, string, []byte) error
+	Read(context.Context, string) ([]byte, error)
+}
+
+// NewPortableArtifactPublication constructs the private publication capability
+// from exact filesystem effects supplied by the application graph.
+func NewPortableArtifactPublication(
+	makeDirectories recordings.RecordingMakeDirectories,
+	createTemporaryFile recordings.RecordingCreateTemporaryFile,
+	removePath recordings.RecordingRemovePath,
+	renamePath recordings.RecordingRenamePath,
+	readFile recordings.RecordingReadFile,
+) (PortableArtifactPublication, error) {
+	return artifactsexportwire.NewPublication(
+		makeDirectories,
+		createTemporaryFile,
+		removePath,
+		renamePath,
+		readFile,
+	)
+}
+
 func NewProjectionService() recordings.ProjectionService {
 	return projectionquerywire.NewService()
 }
@@ -227,7 +252,7 @@ func NewServiceWithLifecycleEffects(
 	targetPlanner recordings.LiveRecordingTargetPlanner,
 	writer recordings.RecordingSnapshotWriter,
 	tickers recordings.RecordingFlushTickerFactory,
-	publication portableArtifactPublication,
+	publication PortableArtifactPublication,
 	clocks ...recordings.RecordingClock,
 ) recordings.Service {
 	if ledger == nil || projection == nil {
@@ -239,13 +264,6 @@ func NewServiceWithLifecycleEffects(
 		tickers,
 		clocks...,
 	)
-	if publication == nil {
-		var err error
-		publication, err = NewPortableArtifactPublication()
-		if err != nil {
-			return nil
-		}
-	}
 	return &combinedService{
 		Ledger:            ledger,
 		ProjectionService: projection,
@@ -264,4 +282,48 @@ func NewRuntimeLedger(
 	definitions factorydefinitions.RuntimeDefinitionLookup,
 ) recordings.RuntimeEventLedger {
 	return recordingevents.NewRuntimeLedger(topology, now, streamGenerationID, definitions)
+}
+
+func (service *combinedService) BuildPortableArtifact(
+	request recordings.BuildPortableArtifactRequest,
+) (recordings.BuildPortableArtifactResult, error) {
+	return service.artifactsExport.BuildPortableArtifact(request)
+}
+
+func (service *combinedService) ValidatePortableArtifact(
+	request recordings.ValidatePortableArtifactRequest,
+) (recordings.ValidatePortableArtifactResult, error) {
+	return service.artifactsExport.ValidatePortableArtifact(request)
+}
+
+func (service *combinedService) EncodePortableArtifact(
+	request recordings.EncodePortableArtifactRequest,
+) (recordings.EncodePortableArtifactResult, error) {
+	return service.artifactsExport.EncodePortableArtifact(request)
+}
+
+func (service *combinedService) DecodePortableArtifact(
+	request recordings.DecodePortableArtifactRequest,
+) (recordings.DecodePortableArtifactResult, error) {
+	return service.artifactsExport.DecodePortableArtifact(request)
+}
+
+func (service *combinedService) SummarizePortableArtifact(
+	request recordings.SummarizePortableArtifactRequest,
+) (recordings.SummarizePortableArtifactResult, error) {
+	return service.artifactsExport.SummarizePortableArtifact(request)
+}
+
+func (service *combinedService) ExportPortableArtifact(
+	ctx context.Context,
+	request recordings.ExportPortableArtifactRequest,
+) (recordings.ExportPortableArtifactResult, error) {
+	return service.artifactsExport.ExportPortableArtifact(ctx, request)
+}
+
+func (service *combinedService) ReadPortableArtifact(
+	ctx context.Context,
+	request recordings.ReadPortableArtifactRequest,
+) (recordings.ReadPortableArtifactResult, error) {
+	return service.artifactsExport.ReadPortableArtifact(ctx, request)
 }

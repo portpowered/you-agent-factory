@@ -29,6 +29,7 @@ func TestWireLegacyPackagesFoldPreservesExistingBackendScopeIdentity(t *testing.
 	root, err := settingswire.NewServiceFromConfigDocument(
 		testConfigDocumentService(),
 		internaltestproviders.StandardCatalog(),
+		testIDGenerator(),
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
@@ -104,6 +105,7 @@ func TestWireLegacyPackagesFoldPreservesRootBehaviorWithRelocatedTestHelpers(t *
 		globalconfigmapping.Encode,
 		preservationProviderCatalog,
 		providersRoot,
+		testIDGenerator(),
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)

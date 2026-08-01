@@ -19,6 +19,7 @@ const (
 	errorCodeExecutionTimedOut          = "provider.execution.timed_out"
 	errorCodeExecutionAuthentication    = "provider.execution.authentication"
 	errorCodeExecutionInvalidRequest    = "provider.execution.invalid_request"
+	errorCodeExecutionMisconfigured     = "provider.execution.misconfigured"
 	errorCodeExecutionThrottled         = "provider.execution.throttled"
 	errorCodeExecutionDependency        = "provider.execution.dependency"
 	errorCodeExecutionUnknown           = "provider.execution.unknown"
@@ -32,6 +33,7 @@ const (
 	errorMessageExecutionTimedOut       = "provider execution timed out"
 	errorMessageExecutionAuthentication = "provider authentication failed"
 	errorMessageExecutionInvalidRequest = "provider execution request is invalid"
+	errorMessageExecutionMisconfigured  = "provider execution is misconfigured"
 	errorMessageExecutionThrottled      = "provider execution was throttled"
 	errorMessageExecutionDependency     = "provider execution dependency failed"
 	errorMessageExecutionUnknown        = "provider execution failed"
@@ -197,6 +199,8 @@ func executeFailurePresentation(failure providers.ExecuteFailure) (code string, 
 		return errorCodeExecutionAuthentication, errorMessageExecutionAuthentication, false
 	case providers.ExecuteFailureKindInvalidRequest:
 		return errorCodeExecutionInvalidRequest, errorMessageExecutionInvalidRequest, false
+	case providers.ExecuteFailureKindMisconfigured:
+		return errorCodeExecutionMisconfigured, errorMessageExecutionMisconfigured, false
 	case providers.ExecuteFailureKindThrottled:
 		return errorCodeExecutionThrottled, errorMessageExecutionThrottled, true
 	case providers.ExecuteFailureKindDependency:

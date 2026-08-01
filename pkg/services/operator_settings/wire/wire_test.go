@@ -14,6 +14,10 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
+func testIDGenerator() operatorsettings.IDGenerator {
+	return func() string { return "00000000-0000-4000-8000-000000000001" }
+}
+
 func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	t.Parallel()
 
@@ -26,6 +30,7 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 		stubConfigEncoder,
 		stubProviderCatalog,
 		providersRoot,
+		testIDGenerator(),
 	)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
@@ -52,6 +57,7 @@ func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
 		stubConfigEncoder,
 		stubProviderCatalog,
 		providersRoot,
+		testIDGenerator(),
 	)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
@@ -124,6 +130,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		encoder.fn,
 		providersCatalog.fn,
 		providersRoot,
+		testIDGenerator(),
 	)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
@@ -200,6 +207,7 @@ func TestNewServiceRejectsMissingRequiredPorts(t *testing.T) {
 					stubConfigEncoder,
 					stubProviderCatalog,
 					providersRoot,
+					testIDGenerator(),
 				)
 			},
 			want: "construct Operator Settings: filesystem is required",
@@ -214,6 +222,7 @@ func TestNewServiceRejectsMissingRequiredPorts(t *testing.T) {
 					stubConfigEncoder,
 					stubProviderCatalog,
 					providersRoot,
+					testIDGenerator(),
 				)
 			},
 			want: "construct Operator Settings: create temporary file is required",
@@ -228,6 +237,7 @@ func TestNewServiceRejectsMissingRequiredPorts(t *testing.T) {
 					stubConfigEncoder,
 					stubProviderCatalog,
 					providersRoot,
+					testIDGenerator(),
 				)
 			},
 			want: "construct Operator Settings: config decoder is required",
@@ -242,6 +252,7 @@ func TestNewServiceRejectsMissingRequiredPorts(t *testing.T) {
 					nil,
 					stubProviderCatalog,
 					providersRoot,
+					testIDGenerator(),
 				)
 			},
 			want: "construct Operator Settings: config encoder is required",
@@ -256,6 +267,7 @@ func TestNewServiceRejectsMissingRequiredPorts(t *testing.T) {
 					stubConfigEncoder,
 					nil,
 					providersRoot,
+					testIDGenerator(),
 				)
 			},
 			want: "construct Operator Settings: provider catalog is required",
@@ -270,9 +282,25 @@ func TestNewServiceRejectsMissingRequiredPorts(t *testing.T) {
 					stubConfigEncoder,
 					stubProviderCatalog,
 					nil,
+					testIDGenerator(),
 				)
 			},
 			want: "construct Operator Settings: providers root is required",
+		},
+		{
+			name: "ID generator",
+			call: func() (operatorsettings.Service, error) {
+				return settingswire.NewService(
+					&stubFileSystem{},
+					stubCreateTemporaryFile,
+					stubConfigDecoder,
+					stubConfigEncoder,
+					stubProviderCatalog,
+					providersRoot,
+					nil,
+				)
+			},
+			want: "construct Operator Settings: ID generator is required",
 		},
 	}
 

@@ -110,6 +110,7 @@ func TestRootWireBehavioralBoundary_PublishedServicePreservesObservables(t *test
 		root, err := settingswire.NewServiceFromConfigDocument(
 			rootWireConfigDocumentService(),
 			internaltestproviders.StandardCatalog(),
+			func() string { return "00000000-0000-4000-8000-000000000001" },
 		)
 		if err != nil {
 			t.Fatalf("NewServiceFromConfigDocument() = %v", err)
@@ -246,6 +247,7 @@ func newRootWireBehavioralService(t *testing.T) operatorsettings.Service {
 		globalconfigmapping.Encode,
 		rootWireProviderCatalog,
 		providersRoot,
+		func() string { return "00000000-0000-4000-8000-000000000001" },
 	)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)

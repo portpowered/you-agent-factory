@@ -27,6 +27,7 @@ func TestInjectBundleComposesRecordingsArtifactExportThroughWireFactory(t *testi
 	}
 
 	factory := provideRecordingsFactory(
+		serviceedges.Edges{},
 		provideLiveRecordingTargetPlanner(),
 		platformreplay.Local{},
 	)

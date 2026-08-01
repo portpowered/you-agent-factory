@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 )
 
@@ -31,7 +30,7 @@ func TestInitializePreservesIdempotentRepeatFactsThroughRootCollaborator(t *test
 		t.Fatalf("first SystemConfigOutcome = %q, want created", first.SystemConfigOutcome)
 	}
 
-	wantConfigPath := operatorsettings.DefaultConfigPath(homeDir)
+	wantConfigPath := settings.DefaultConfigPath(homeDir)
 	customerConfig := []byte(`{"customer":"owned"}`)
 	if err := os.WriteFile(wantConfigPath, customerConfig, 0o600); err != nil {
 		t.Fatal(err)
@@ -99,8 +98,8 @@ func TestInitializeSettingsFailurePreservesPartialFailureRollbackFactsThroughRoo
 			settings: &settingsCommandRecorder{
 				loadErr: errors.New("load denied"),
 			},
-			wantCause:  "read existing operator config",
-			wantLoad:   1,
+			wantCause: "read existing operator config",
+			wantLoad:  1,
 		},
 	}
 
@@ -110,7 +109,7 @@ func TestInitializeSettingsFailurePreservesPartialFailureRollbackFactsThroughRoo
 			t.Parallel()
 
 			homeDir := t.TempDir()
-			configPath := operatorsettings.DefaultConfigPath(homeDir)
+			configPath := test.settings.DefaultConfigPath(homeDir)
 			if test.prepare != nil {
 				test.prepare(t, homeDir, configPath)
 			}

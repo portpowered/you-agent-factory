@@ -3,8 +3,6 @@ package wire
 import (
 	"fmt"
 
-	"github.com/google/uuid"
-
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	operatorservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service"
 	settingsdocument "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document"
@@ -17,7 +15,7 @@ import (
 func NewServiceFromConfigDocument(
 	service operatorsettings.ConfigDocumentService,
 	providersRoot providers.Service,
-	idGenerators ...operatorsettings.IDGenerator,
+	idGenerator operatorsettings.IDGenerator,
 ) (operatorsettings.Service, error) {
 	if providersRoot == nil {
 		return nil, fmt.Errorf("operator settings providers root is required")
@@ -34,13 +32,12 @@ func NewServiceFromConfigDocument(
 	if !ok {
 		return nil, fmt.Errorf("operator settings document owner must implement the private document service")
 	}
+	if idGenerator == nil {
+		return nil, fmt.Errorf("operator settings ID generator is required")
+	}
 	resolution, err := resolutionwire.NewService(providersRoot)
 	if err != nil {
 		return nil, err
-	}
-	idGenerator := operatorsettings.IDGenerator(uuid.NewString)
-	if len(idGenerators) > 0 && idGenerators[0] != nil {
-		idGenerator = idGenerators[0]
 	}
 	return operatorservice.New(
 		document,

@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -40,6 +41,26 @@ func TestGetEventsBySessionId_EndsWithoutErrorWhenContextCanceledBeforeSubscribe
 	}
 	if strings.Contains(recorder.Body.String(), `"code":"INTERNAL_ERROR"`) {
 		t.Fatalf("response must not map cancellation to INTERNAL_ERROR: %s", recorder.Body.String())
+	}
+}
+
+func TestShouldEndOnRequestContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if !shouldEndOnRequestContext(ctx, nil) {
+		t.Fatal("canceled request context should end the handler")
+	}
+	if !shouldEndOnRequestContext(context.Background(), context.Canceled) {
+		t.Fatal("context.Canceled error should end the handler")
+	}
+	if !shouldEndOnRequestContext(context.Background(), context.DeadlineExceeded) {
+		t.Fatal("context.DeadlineExceeded error should end the handler")
+	}
+	if shouldEndOnRequestContext(context.Background(), errors.New("boom")) {
+		t.Fatal("unrelated errors must not end the handler")
 	}
 }
 

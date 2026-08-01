@@ -7,18 +7,19 @@ import (
 	"sync"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
+	visualizationcontracts "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/recordingsqueries"
+	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 // Service owns retained event projection, reconnect cursor, and live
 // subscription lifecycle for one Factory visualization.
 type Service struct {
-	source      liveviewprojection.Source
+	source      visualizationcontracts.LiveViewSource
 	recordings  recordings.Service
-	clock       liveviewprojection.Clock
-	sink        liveviewprojection.Sink
+	clock       visualizationcontracts.LiveViewClock
+	sink        visualizationcontracts.LiveViewSink
 	reportError liveviewprojection.ErrorReporter
 
 	mu       sync.Mutex
@@ -43,10 +44,10 @@ var (
 
 // New constructs the private live_view_projection implementation.
 func New(
-	source liveviewprojection.Source,
+	source visualizationcontracts.LiveViewSource,
 	recordingsPeer recordings.Service,
-	clock liveviewprojection.Clock,
-	sink liveviewprojection.Sink,
+	clock visualizationcontracts.LiveViewClock,
+	sink visualizationcontracts.LiveViewSink,
 	reportError liveviewprojection.ErrorReporter,
 ) (*Service, error) {
 	switch {

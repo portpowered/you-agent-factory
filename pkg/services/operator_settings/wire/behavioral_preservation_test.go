@@ -42,6 +42,7 @@ func TestWireFoldPreservesDocumentIdentityResolutionAndConfigBehavior(t *testing
 	root, err := settingswire.NewServiceFromConfigDocument(
 		testConfigDocumentService(),
 		internaltestproviders.StandardCatalog(),
+		testIDGenerator(),
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
@@ -141,6 +142,7 @@ func TestWireFoldPreservesDefaultsResolutionFromHomeOwnershipPath(t *testing.T) 
 		platformfilesystem.Local{},
 		globalconfigmapping.Decode,
 		internaltestproviders.StandardCatalog(),
+		testIDGenerator(),
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
@@ -171,6 +173,7 @@ func TestWireFoldDefaultsResolutionFromHomeRejectsMissingFilesystemPorts(t *test
 		nil,
 		globalconfigmapping.Decode,
 		internaltestproviders.StandardCatalog(),
+		testIDGenerator(),
 	)
 	if err == nil || !strings.Contains(err.Error(), "filesystem is required") {
 		t.Fatalf("NewServiceFromHomePorts() error = %v, want home-port construction failure", err)

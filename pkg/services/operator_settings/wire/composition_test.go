@@ -21,6 +21,7 @@ func TestNewServiceFromConfigDocumentRequiresDocumentPorts(t *testing.T) {
 	_, err := settingswire.NewServiceFromConfigDocument(
 		operatorsettings.ConfigDocumentService{},
 		internaltestproviders.StandardCatalog(),
+		testIDGenerator(),
 	)
 	if err == nil || !strings.Contains(err.Error(), "operator settings document ports are required") {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v, want document ports required", err)
@@ -33,6 +34,7 @@ func TestNewServiceFromConfigDocumentConstructsFromPorts(t *testing.T) {
 	root, err := settingswire.NewServiceFromConfigDocument(
 		testConfigDocumentService(),
 		internaltestproviders.StandardCatalog(),
+		testIDGenerator(),
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
@@ -57,6 +59,7 @@ func TestNewServiceFromConfigDocumentUsesInjectedDocumentOwner(t *testing.T) {
 	root, err := settingswire.NewServiceFromConfigDocument(
 		service,
 		internaltestproviders.StandardCatalog(),
+		testIDGenerator(),
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
@@ -104,6 +107,7 @@ func TestWireCompositionDelegatesDocumentAndResolutionOperations(t *testing.T) {
 	root, err := settingswire.NewServiceFromConfigDocument(
 		testConfigDocumentService(),
 		internaltestproviders.StandardCatalog(),
+		testIDGenerator(),
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)

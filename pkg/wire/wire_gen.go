@@ -205,7 +205,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v31 := provideFactorySessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, v23, v25, v26, v19, responseEventIDGenerator, responseEventRetentionLimits, v27, ptyAllocator, v28, providerRegistry, v29, workersMockCommandRunnerFactory, v30, edges2)
 	v32 := provideRecordingsProjectionFactory()
 	storage := provideReplayArtifactStorage()
-	v33 := provideRecordingsFactory(v5, storage)
+	v33 := provideRecordingsFactory(edges2, v5, storage)
 	v34 := provideRuntimeLedgerFactory()
 	v35 := provideLoadedFactorySnapshotCapturer()
 	v36 := provideRuntimeRecorderFactory(v35)
@@ -546,7 +546,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	v85 := provideSystemInitializationInspectPath(edges2)
 	v86 := provideSystemInitializationLegacyFactoryMigrationFileSystem(edges2)
-	systeminitializationService, err := provideSystemInitializationService(v47, packagedInstallationFileSystem, packagedFactoryCatalogOperations, configLoader, backendScopeEnsurer, v85, v86)
+	systeminitializationService, err := provideSystemInitializationService(v47, packagedInstallationFileSystem, packagedFactoryCatalogOperations, operatorsettingsService, v85, v86)
 	if err != nil {
 		return nil, err
 	}

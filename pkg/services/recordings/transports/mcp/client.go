@@ -124,3 +124,110 @@ func CallTool(
 	}
 	return handler(ctx, service, input)
 }
+
+// LoadReplayInput is the MCP request shape for you.recording.load_replay.
+type LoadReplayInput struct {
+	RecordingID string `json:"recordingId"`
+}
+
+// LoadReplay loads finalized canonical replay facts through the
+// you.recording.load_replay MCP tool.
+func LoadReplay(
+	ctx context.Context,
+	service recordings.Service,
+	input LoadReplayInput,
+) ToolResponse[recordings.LoadReplayRecordingResult] {
+	if ctx == nil {
+		envelope := executionErrorEnvelope(input.RecordingID, errMissingRequestContext)
+		return ToolResponse[recordings.LoadReplayRecordingResult]{Error: &envelope}
+	}
+	if response, done := requestContextErrorResponse[recordings.LoadReplayRecordingResult](ctx); done {
+		return response
+	}
+	if service == nil {
+		envelope := unavailableServiceErrorEnvelope()
+		return ToolResponse[recordings.LoadReplayRecordingResult]{Error: &envelope}
+	}
+
+	recordingID := recordings.RecordingID(input.RecordingID)
+	result, err := service.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
+		RecordingID: recordingID,
+	})
+	if err != nil {
+		envelope := loadReplayErrorEnvelope(input.RecordingID, err)
+		return ToolResponse[recordings.LoadReplayRecordingResult]{Error: &envelope}
+	}
+	return ToolResponse[recordings.LoadReplayRecordingResult]{Result: &result}
+}
+
+// QueryStatusInput is the MCP request shape for you.recording.query_status.
+type QueryStatusInput struct {
+	RecordingID string `json:"recordingId"`
+}
+
+// QueryStatus returns detached recording lifecycle status through the
+// you.recording.query_status MCP tool.
+func QueryStatus(
+	ctx context.Context,
+	service recordings.Service,
+	input QueryStatusInput,
+) ToolResponse[recordings.RecordingStatusResult] {
+	if ctx == nil {
+		envelope := executionErrorEnvelope(input.RecordingID, errMissingRequestContext)
+		return ToolResponse[recordings.RecordingStatusResult]{Error: &envelope}
+	}
+	if response, done := requestContextErrorResponse[recordings.RecordingStatusResult](ctx); done {
+		return response
+	}
+	if service == nil {
+		envelope := unavailableServiceErrorEnvelope()
+		return ToolResponse[recordings.RecordingStatusResult]{Error: &envelope}
+	}
+
+	recordingID := recordings.RecordingID(input.RecordingID)
+	result, err := service.QueryRecordingStatus(recordings.RecordingStatusRequest{
+		RecordingID: recordingID,
+	})
+	if err != nil {
+		envelope := statusQueryErrorEnvelope(input.RecordingID, err)
+		return ToolResponse[recordings.RecordingStatusResult]{Error: &envelope}
+	}
+	return ToolResponse[recordings.RecordingStatusResult]{Result: &result}
+}
+
+// ReadPortableArtifactInput is the MCP request shape for
+// you.recording.read_portable_artifact.
+type ReadPortableArtifactInput struct {
+	RecordingID string `json:"recordingId"`
+	Reference   string `json:"reference"`
+}
+
+// ReadPortableArtifact reads and validates one published portable artifact
+// through the you.recording.read_portable_artifact MCP tool.
+func ReadPortableArtifact(
+	ctx context.Context,
+	service recordings.Service,
+	input ReadPortableArtifactInput,
+) ToolResponse[recordings.ReadPortableArtifactResult] {
+	if ctx == nil {
+		envelope := executionErrorEnvelope(input.RecordingID, errMissingRequestContext)
+		return ToolResponse[recordings.ReadPortableArtifactResult]{Error: &envelope}
+	}
+	if response, done := requestContextErrorResponse[recordings.ReadPortableArtifactResult](ctx); done {
+		return response
+	}
+	if service == nil {
+		envelope := unavailableServiceErrorEnvelope()
+		return ToolResponse[recordings.ReadPortableArtifactResult]{Error: &envelope}
+	}
+
+	result, err := service.ReadPortableArtifact(ctx, recordings.ReadPortableArtifactRequest{
+		RecordingID: recordings.RecordingID(input.RecordingID),
+		Reference:   recordings.RecordingArtifactReference(input.Reference),
+	})
+	if err != nil {
+		envelope := readPortableArtifactErrorEnvelope(input.RecordingID, err)
+		return ToolResponse[recordings.ReadPortableArtifactResult]{Error: &envelope}
+	}
+	return ToolResponse[recordings.ReadPortableArtifactResult]{Result: &result}
+}

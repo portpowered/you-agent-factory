@@ -400,6 +400,7 @@ func paritySettingsRoot(t *testing.T) operatorsettings.Service {
 	root, err := settingswire.NewServiceFromConfigDocument(
 		parityTestConfigService(),
 		internaltestproviders.StandardCatalog(),
+		func() string { return "00000000-0000-4000-8000-000000000001" },
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
