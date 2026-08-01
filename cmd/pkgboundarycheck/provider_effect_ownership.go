@@ -26,7 +26,9 @@ const (
 	// providersCanonicalEffectPackagePrefix covers the Providers-owned
 	// execution construction and native adapter paths. The application
 	// composition root may translate a Workers effect into this seam, but these
-	// packages must never import Workers contracts themselves.
+	// packages must never import Workers contracts themselves. The explicitly
+	// absorbed provider migration-debt subtree is excluded below until its
+	// separately leased migration lands.
 	providersCanonicalWirePackage          = "pkg/services/providers/wire"
 	providersCanonicalExecutionPackage     = "pkg/services/providers/internal/services/execution"
 	providersCanonicalExecutionWirePackage = "pkg/services/providers/internal/services/execution/wire"
@@ -177,10 +179,14 @@ func providerEffectOwnershipFindingsForFile(
 }
 
 func isProvidersCanonicalEffectPackage(packagePath string) bool {
-	return packagePath == providersCanonicalWirePackage ||
+	if packagePath == providersCanonicalWirePackage ||
 		packagePath == providersCanonicalExecutionPackage ||
 		packagePath == providersCanonicalExecutionWirePackage ||
-		strings.HasPrefix(packagePath, providersCanonicalAdapterPackagePrefix)
+		strings.HasPrefix(packagePath, providersCanonicalAdapterPackagePrefix) {
+		return true
+	}
+	return strings.HasPrefix(packagePath, providersCanonicalExecutionPackage+"/") &&
+		!isAbsorbedWorkersProviderSurface(packagePath)
 }
 
 func importsWorkersService(file *ast.File) bool {

@@ -67,6 +67,37 @@ type Effect struct {
 	}
 }
 
+func TestRunRejectsWorkersImportFromNestedProvidersExecutionPackage(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	packagePath := providersCanonicalExecutionPackage + "/internal/service"
+	writeGoSourceFile(t, repoRoot, packagePath+"/service.go", `package service
+
+import workers "github.com/portpowered/infinite-you/pkg/services/workers"
+
+type Effect struct {
+	Runner workers.CommandRunner
+}
+`)
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want nested Providers execution Workers edge rejected")
+	}
+	got := stderr.String()
+	for _, want := range []string{
+		"prohibited Providers-to-Workers effect edge",
+		packagePath,
+		"Providers owns provider execution",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("run() stderr = %q, want substring %q", got, want)
+		}
+	}
+}
+
 func TestRunAllowsWorkersImportFromAbsorbedProvidersMigrationDebt(t *testing.T) {
 	t.Parallel()
 
