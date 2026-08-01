@@ -9,10 +9,13 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
+	"go.uber.org/zap"
 )
 
 func TestInspectModelAssetsReturnsDetachedConfiguredSourceAndCacheFacts(t *testing.T) {
@@ -387,6 +390,7 @@ func newTestService(scopes runtimescopes.Service, cacheReads *int) *service {
 		os.WriteFile,
 		os.Rename,
 		os.Remove,
+		platformfilesystem.Local{}.RemoveTree,
 		func(path string) ([]byte, error) {
 			record()
 			return os.ReadFile(path)
@@ -397,6 +401,8 @@ func newTestService(scopes runtimescopes.Service, cacheReads *int) *service {
 		},
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },
 		func(path string) (io.ReadCloser, error) { return os.Open(path) },
+		zap.NewNop(),
+		time.Now,
 	).(*service)
 }
 

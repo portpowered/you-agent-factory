@@ -5,9 +5,13 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestRemoveModelAssetsRemovesExistingCacheAndIsIdempotent(t *testing.T) {
@@ -23,38 +27,56 @@ func TestRemoveModelAssetsRemovesExistingCacheAndIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RemoveModelAssets: %v", err)
 	}
-	assertRemovedResult(t, result, AssetRemovalExpectation{
-		modelName: "OMNIVOICE_Q4_K_M",
-		outcome:   models.AssetRemovalRemoved,
-	})
+	assertRemovedResult(t, result, "OMNIVOICE_Q4_K_M", models.AssetRemovalRemoved)
 	assertPathAbsent(t, filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M"))
 
 	repeated, err := service.RemoveModelAssets(context.Background(), modelsRemoveRequest(ref))
 	if err != nil {
 		t.Fatalf("RemoveModelAssets repeated: %v", err)
 	}
-	assertRemovedResult(t, repeated, AssetRemovalExpectation{
-		modelName: "OMNIVOICE_Q4_K_M",
-		outcome:   models.AssetRemovalAlreadyAbsent,
-	})
+	assertRemovedResult(t, repeated, "OMNIVOICE_Q4_K_M", models.AssetRemovalAlreadyAbsent)
 }
 
-func TestRemoveModelAssetsReportsConfiguredModelWithoutCacheAsAlreadyAbsent(t *testing.T) {
+func TestRemoveModelAssetsDoesNotRequireSourceOrPlatformReadiness(t *testing.T) {
 	t.Parallel()
 
 	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "remove-stale-cache")
+	ref := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
+	var cacheReads int
+	service := newTestService(scopes, &cacheReads)
+	service.platform = models.AssetHostPlatform{}
+	service.client = nil
+	service.endpoints = models.RuntimeAssetEndpoints{}
+
+	result, err := service.RemoveModelAssets(context.Background(), modelsRemoveRequest(ref))
+	if err != nil {
+		t.Fatalf("RemoveModelAssets stale cache: %v", err)
+	}
+	assertRemovedResult(t, result, "OMNIVOICE_Q4_K_M", models.AssetRemovalRemoved)
+	assertPathAbsent(t, filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M"))
+	if cacheReads != 0 {
+		t.Fatalf("removal consulted source/cache inspection effects %d times, want zero", cacheReads)
+	}
+}
+
+func TestRemoveModelAssetsReportsAbsentCacheWithoutCreatingParent(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := filepath.Join(t.TempDir(), "not-created")
 	scopes := newScopes(t, "remove-absent")
-	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
+	ref := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
 	service := newTestService(scopes, nil)
 
 	result, err := service.RemoveModelAssets(context.Background(), modelsRemoveRequest(ref))
 	if err != nil {
 		t.Fatalf("RemoveModelAssets absent: %v", err)
 	}
-	assertRemovedResult(t, result, AssetRemovalExpectation{
-		modelName: "OMNIVOICE_Q4_K_M",
-		outcome:   models.AssetRemovalAlreadyAbsent,
-	})
+	assertRemovedResult(t, result, "OMNIVOICE_Q4_K_M", models.AssetRemovalAlreadyAbsent)
+	if _, err := os.Stat(cacheDirectory); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("cache parent = %v, want it to remain absent", err)
+	}
 }
 
 func TestRemoveModelAssetsRejectsInvalidScopesAndIdentitiesBeforeFilesystemEffects(t *testing.T) {
@@ -66,9 +88,9 @@ func TestRemoveModelAssetsRejectsInvalidScopesAndIdentitiesBeforeFilesystemEffec
 		t.Fatalf("write outside marker: %v", err)
 	}
 	scopes := newScopes(t, "remove-validation")
-	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
+	ref := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
 	foreignScopes := newScopes(t, "remove-foreign")
-	foreign := openScope(t, foreignScopes, cacheDirectory, runtimeConfig(""))
+	foreign := openScope(t, foreignScopes, cacheDirectory, models.RuntimeConfig{})
 	service := newTestService(scopes, nil)
 
 	tests := []struct {
@@ -100,116 +122,35 @@ func TestRemoveModelAssetsRejectsInvalidScopesAndIdentitiesBeforeFilesystemEffec
 	assertPathPresent(t, outsidePath)
 }
 
-func TestRemoveModelAssetsRejectsMissingSourceAndMalformedCacheRoot(t *testing.T) {
-	t.Parallel()
-
-	cacheDirectory := t.TempDir()
-	scopes := newScopes(t, "remove-shape")
-	missingSource := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
-	service := newTestService(scopes, nil)
-	if _, err := service.RemoveModelAssets(context.Background(), modelsRemoveRequest(missingSource)); !errors.Is(err, models.ErrAssetSourceMissing) {
-		t.Fatalf("missing source error = %v, want ErrAssetSourceMissing", err)
-	}
-
-	cachePath := filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M")
-	if err := os.WriteFile(cachePath, []byte("not a directory"), 0o644); err != nil {
-		t.Fatalf("write malformed cache root: %v", err)
-	}
-	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
-	if _, err := service.RemoveModelAssets(context.Background(), modelsRemoveRequest(ref)); !errors.Is(err, models.ErrAssetUnavailable) {
-		t.Fatalf("malformed cache root error = %v, want ErrAssetUnavailable", err)
-	}
-	assertPathPresent(t, cachePath)
-}
-
-func TestRemoveModelAssetsRejectsDirectoryEntriesOutsideModelRoot(t *testing.T) {
+func TestRemoveModelAssetsPreservesMalformedCacheAndTypedFilesystemFailure(t *testing.T) {
 	t.Parallel()
 
 	cacheDirectory := t.TempDir()
 	modelRoot := filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M")
-	if err := os.MkdirAll(modelRoot, 0o755); err != nil {
-		t.Fatalf("create model root: %v", err)
+	if err := os.WriteFile(modelRoot, []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("write malformed cache root: %v", err)
 	}
-	outsidePath := filepath.Join(cacheDirectory, "outside-marker")
-	if err := os.WriteFile(outsidePath, []byte("preserve"), 0o644); err != nil {
-		t.Fatalf("write outside marker: %v", err)
-	}
-	scopes := newScopes(t, "remove-path-boundary")
-	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
+	scopes := newScopes(t, "remove-malformed")
+	ref := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
 	service := newTestService(scopes, nil)
-	originalReadDirectory := service.readDirectory
-	service.readDirectory = func(path string) ([]os.DirEntry, error) {
-		if filepath.Clean(path) == filepath.Clean(modelRoot) {
-			return []os.DirEntry{unsafeAssetDirEntry{name: filepath.Join("..", "outside-marker")}}, nil
-		}
-		return originalReadDirectory(path)
-	}
 
 	_, err := service.RemoveModelAssets(context.Background(), modelsRemoveRequest(ref))
-	if !errors.Is(err, errAssetCachePathOutsideRoot) || !errors.Is(err, models.ErrAssetUnavailable) {
-		t.Fatalf("path-boundary error = %v, want boundary and unavailable classifications", err)
+	if !errors.Is(err, models.ErrAssetUnavailable) {
+		t.Fatalf("malformed cache error = %v, want ErrAssetUnavailable", err)
 	}
-	assertPathPresent(t, outsidePath)
-}
+	assertPathPresent(t, modelRoot)
 
-func TestRemoveModelAssetsPropagatesFilesystemFailures(t *testing.T) {
-	t.Parallel()
-
-	for _, test := range []struct {
-		name  string
-		setup func(*service, string, error)
-	}{
-		{
-			name: "inspect",
-			setup: func(service *service, modelRoot string, failure error) {
-				original := service.inspectPath
-				service.inspectPath = func(path string) (os.FileInfo, error) {
-					if filepath.Clean(path) == filepath.Clean(modelRoot) {
-						return nil, failure
-					}
-					return original(path)
-				}
-			},
-		},
-		{
-			name: "read directory",
-			setup: func(service *service, modelRoot string, failure error) {
-				original := service.readDirectory
-				service.readDirectory = func(path string) ([]os.DirEntry, error) {
-					if filepath.Clean(path) == filepath.Clean(modelRoot) {
-						return nil, failure
-					}
-					return original(path)
-				}
-			},
-		},
-		{
-			name: "remove path",
-			setup: func(service *service, _ string, failure error) {
-				original := service.removePath
-				service.removePath = func(path string) error {
-					if filepath.Base(path) == "omnivoice-base-Q4_K_M.gguf" {
-						return failure
-					}
-					return original(path)
-				}
-			},
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			cacheDirectory := t.TempDir()
-			writeCacheFixture(t, cacheDirectory, true)
-			scopes := newScopes(t, "remove-failure-"+test.name)
-			ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
-			service := newTestService(scopes, nil)
-			failure := errors.New(test.name + " denied")
-			test.setup(service, filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M"), failure)
-
-			_, err := service.RemoveModelAssets(context.Background(), modelsRemoveRequest(ref))
-			if !errors.Is(err, failure) {
-				t.Fatalf("filesystem error = %v, want injected failure %v", err, failure)
-			}
-		})
+	failure := errors.New("injected remove failure")
+	var calls int
+	service.removeTree = func(context.Context, string, string) (bool, error) {
+		calls++
+		return true, failure
+	}
+	if _, err := service.RemoveModelAssets(context.Background(), modelsRemoveRequest(ref)); !errors.Is(err, models.ErrAssetUnavailable) || !errors.Is(err, failure) {
+		t.Fatalf("typed removal failure = %v, want unavailable and injected failure", err)
+	}
+	if calls != 1 {
+		t.Fatalf("removal effect calls = %d, want exactly once", calls)
 	}
 }
 
@@ -220,14 +161,22 @@ func TestRemoveModelAssetsHonorsPreCancelledAndInFlightCancellation(t *testing.T
 		cacheDirectory := t.TempDir()
 		writeCacheFixture(t, cacheDirectory, true)
 		scopes := newScopes(t, "remove-pre-cancelled")
-		ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
+		ref := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
 		service := newTestService(scopes, nil)
+		var calls int
+		service.removeTree = func(context.Context, string, string) (bool, error) {
+			calls++
+			return false, nil
+		}
 		cause := errors.New("operator stopped removal")
 		ctx, cancel := context.WithCancelCause(context.Background())
 		cancel(cause)
 
 		_, err := service.RemoveModelAssets(ctx, modelsRemoveRequest(ref))
 		assertAssetCancellation(t, err, cause)
+		if calls != 0 {
+			t.Fatalf("pre-cancelled removal effect calls = %d, want zero", calls)
+		}
 		assertPathPresent(t, filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M"))
 	})
 
@@ -235,38 +184,153 @@ func TestRemoveModelAssetsHonorsPreCancelledAndInFlightCancellation(t *testing.T
 		cacheDirectory := t.TempDir()
 		writeCacheFixture(t, cacheDirectory, true)
 		scopes := newScopes(t, "remove-in-flight")
-		ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
+		ref := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
 		service := newTestService(scopes, nil)
 		cause := errors.New("scope closed during removal")
 		ctx, cancel := context.WithCancelCause(context.Background())
-		var removals int
-		originalRemovePath := service.removePath
-		service.removePath = func(path string) error {
-			removals++
-			err := originalRemovePath(path)
-			if removals == 1 {
-				cancel(cause)
-			}
-			return err
+		var calls int
+		service.removeTree = func(context.Context, string, string) (bool, error) {
+			calls++
+			cancel(cause)
+			return true, context.Canceled
 		}
 
 		_, err := service.RemoveModelAssets(ctx, modelsRemoveRequest(ref))
 		assertAssetCancellation(t, err, cause)
-		if removals != 1 {
-			t.Fatalf("removal effects = %d, want cancellation to stop after first effect", removals)
+		if calls != 1 {
+			t.Fatalf("in-flight removal effect calls = %d, want exactly once", calls)
 		}
 	})
 }
 
-type AssetRemovalExpectation struct {
-	modelName string
-	outcome   models.AssetRemovalOutcome
+func TestRemoveModelAssetsLogsSafeStartAndTerminalOutcome(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	scopes := newScopes(t, "remove-logging")
+	ref := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
+	service := newTestService(scopes, nil)
+	core, logs := observer.New(zap.InfoLevel)
+	service.logger = zap.New(core)
+	times := []time.Time{
+		time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, time.January, 1, 0, 0, 0, int(125*time.Millisecond), time.UTC),
+	}
+	service.now = func() time.Time {
+		value := times[0]
+		times = times[1:]
+		return value
+	}
+
+	result, err := service.RemoveModelAssets(context.Background(), modelsRemoveRequest(ref))
+	if err != nil {
+		t.Fatalf("RemoveModelAssets: %v", err)
+	}
+	assertRemovedResult(t, result, "OMNIVOICE_Q4_K_M", models.AssetRemovalAlreadyAbsent)
+	observed := logs.All()
+	if len(observed) != 2 {
+		t.Fatalf("log count = %d, want start and terminal", len(observed))
+	}
+	startFields := observed[0].ContextMap()
+	if startFields["operation"] != assetRemovalOperation ||
+		startFields["phase"] != "start" || startFields["model"] != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("start fields = %#v", startFields)
+	}
+	terminalFields := observed[1].ContextMap()
+	if terminalFields["operation"] != assetRemovalOperation ||
+		terminalFields["phase"] != "terminal" ||
+		terminalFields["model"] != "OMNIVOICE_Q4_K_M" ||
+		terminalFields["outcome"] != string(models.AssetRemovalAlreadyAbsent) ||
+		terminalFields["error_classification"] != "none" ||
+		terminalFields["duration_ms"] != int64(125) {
+		t.Fatalf("terminal fields = %#v", terminalFields)
+	}
+	for _, log := range observed {
+		if strings.Contains(log.Message, cacheDirectory) {
+			t.Fatalf("log message leaked cache path: %q", log.Message)
+		}
+		fields := log.ContextMap()
+		if _, ok := fields["path"]; ok {
+			t.Fatalf("log fields leaked path: %#v", fields)
+		}
+	}
 }
 
-func assertRemovedResult(t *testing.T, result models.RemoveModelAssetsResult, want AssetRemovalExpectation) {
+func TestRemoveModelAssetsLogsCancellationClassificationWithoutErrorText(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	scopes := newScopes(t, "remove-cancel-logging")
+	ref := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
+	service := newTestService(scopes, nil)
+	core, logs := observer.New(zap.InfoLevel)
+	service.logger = zap.New(core)
+	service.removeTree = func(ctx context.Context, _ string, _ string) (bool, error) {
+		return false, ctx.Err()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := service.RemoveModelAssets(ctx, modelsRemoveRequest(ref))
+	if !errors.Is(err, models.ErrAssetCancelled) {
+		t.Fatalf("cancellation error = %v, want ErrAssetCancelled", err)
+	}
+	observed := logs.All()
+	if len(observed) != 2 {
+		t.Fatalf("log count = %d, want start and terminal", len(observed))
+	}
+	terminalFields := observed[1].ContextMap()
+	if terminalFields["error_classification"] != "cancelled" || terminalFields["outcome"] != "ERROR" {
+		t.Fatalf("cancellation terminal fields = %#v", terminalFields)
+	}
+	if _, ok := terminalFields["error"]; ok {
+		t.Fatalf("terminal log included raw error: %#v", terminalFields)
+	}
+}
+
+func TestRemoveModelAssetsLogsFilesystemClassificationWithoutPath(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	scopes := newScopes(t, "remove-error-logging")
+	ref := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
+	service := newTestService(scopes, nil)
+	core, logs := observer.New(zap.InfoLevel)
+	service.logger = zap.New(core)
+	failure := errors.New("permission denied for " + cacheDirectory)
+	service.removeTree = func(context.Context, string, string) (bool, error) {
+		return false, failure
+	}
+
+	_, err := service.RemoveModelAssets(context.Background(), modelsRemoveRequest(ref))
+	if !errors.Is(err, models.ErrAssetUnavailable) || !errors.Is(err, failure) {
+		t.Fatalf("filesystem error = %v, want unavailable and injected failure", err)
+	}
+	observed := logs.All()
+	if len(observed) != 2 {
+		t.Fatalf("log count = %d, want start and terminal", len(observed))
+	}
+	terminalFields := observed[1].ContextMap()
+	if terminalFields["error_classification"] != "filesystem" || terminalFields["outcome"] != "ERROR" {
+		t.Fatalf("filesystem terminal fields = %#v", terminalFields)
+	}
+	for _, log := range observed {
+		if strings.Contains(log.Message, cacheDirectory) {
+			t.Fatalf("filesystem path leaked into log message: %q", log.Message)
+		}
+		if errorType, ok := log.ContextMap()["error_type"].(string); ok &&
+			strings.Contains(errorType, cacheDirectory) {
+			t.Fatalf("filesystem path leaked into log fields: %#v", log.ContextMap())
+		}
+	}
+}
+
+func assertRemovedResult(t *testing.T, result models.RemoveModelAssetsResult, modelName string, outcome models.AssetRemovalOutcome) {
 	t.Helper()
-	if result.ModelName != want.modelName || result.Readiness != models.AssetReadinessMissing || result.Outcome != want.outcome {
-		t.Fatalf("RemoveModelAssets = %#v, want model=%q readiness=%q outcome=%q", result, want.modelName, models.AssetReadinessMissing, want.outcome)
+	if result.ModelName != modelName ||
+		result.Readiness != models.AssetReadinessMissing ||
+		result.Outcome != outcome {
+		t.Fatalf("RemoveModelAssets = %#v, want model=%q readiness=%q outcome=%q", result, modelName, models.AssetReadinessMissing, outcome)
 	}
 }
 
@@ -279,14 +343,14 @@ func assertAssetCancellation(t *testing.T, err error, cause error) {
 
 func assertPathPresent(t *testing.T, path string) {
 	t.Helper()
-	if _, err := os.Stat(path); err != nil {
+	if _, err := os.Lstat(path); err != nil {
 		t.Fatalf("path %q is not present: %v", path, err)
 	}
 }
 
 func assertPathAbsent(t *testing.T, path string) {
 	t.Helper()
-	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("path %q = %v, want absent", path, err)
 	}
 }
@@ -294,10 +358,3 @@ func assertPathAbsent(t *testing.T, path string) {
 func modelsRemoveRequest(scope models.RuntimeScopeRef) models.RemoveModelAssetsRequest {
 	return models.RemoveModelAssetsRequest{Scope: scope, Name: "OMNIVOICE_Q4_K_M"}
 }
-
-type unsafeAssetDirEntry struct{ name string }
-
-func (entry unsafeAssetDirEntry) Name() string         { return entry.name }
-func (unsafeAssetDirEntry) IsDir() bool                { return false }
-func (unsafeAssetDirEntry) Type() os.FileMode          { return 0 }
-func (unsafeAssetDirEntry) Info() (os.FileInfo, error) { return nil, errors.New("unsafe test entry") }

@@ -15,10 +15,12 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
+	"go.uber.org/zap"
 )
 
 func TestPrepareModelAssetsReusesVerifiedCacheWithoutSourceOrMutation(t *testing.T) {
@@ -572,6 +574,7 @@ func newPreparationTestService(
 			record()
 			return os.Remove(path)
 		},
+		func(context.Context, string, string) (bool, error) { return false, nil },
 		os.ReadFile,
 		os.ReadDir,
 		func(path string) (io.WriteCloser, error) {
@@ -579,6 +582,8 @@ func newPreparationTestService(
 			return os.Create(path)
 		},
 		func(path string) (io.ReadCloser, error) { return os.Open(path) },
+		zap.NewNop(),
+		time.Now,
 	).(*service)
 }
 

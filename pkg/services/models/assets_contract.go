@@ -142,6 +142,8 @@ type InspectModelAssetsResult struct {
 }
 
 // RemoveModelAssetsRequest asks Models to remove one scoped model's assets.
+// Removal needs only the scoped identity and cache location; it does not
+// require a configured source or current host/platform readiness.
 type RemoveModelAssetsRequest struct {
 	Scope RuntimeScopeRef
 	Name  string
@@ -154,7 +156,9 @@ func (request RemoveModelAssetsRequest) Validate() error {
 }
 
 // RemoveModelAssetsResult reports the resulting readiness and whether assets
-// were removed or were already absent.
+// were removed or were already absent. A non-nil error means the result is not
+// authoritative: deletion stops at the first filesystem or cancellation
+// failure, and effects already applied remain applied for a later retry.
 type RemoveModelAssetsResult struct {
 	ModelName string
 	Readiness AssetReadinessState

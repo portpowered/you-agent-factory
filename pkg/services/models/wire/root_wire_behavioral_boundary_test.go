@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
@@ -83,6 +84,7 @@ func newModelsRootWireService(t *testing.T) models.Service {
 		os.WriteFile,
 		os.Rename,
 		os.Remove,
+		platformfilesystem.Local{}.RemoveTree,
 		os.ReadFile,
 		os.ReadDir,
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },

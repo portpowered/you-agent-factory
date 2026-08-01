@@ -9,11 +9,13 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
+	"go.uber.org/zap"
 )
 
 const metadataFileName = ".managed-cache.json"
@@ -29,10 +31,13 @@ type service struct {
 	writeFile     modelseffects.AssetWriteFile
 	renamePath    modelseffects.AssetRenamePath
 	removePath    modelseffects.AssetRemovePath
+	removeTree    modelseffects.AssetRemoveTree
 	readFile      modelseffects.AssetReadFile
 	readDirectory modelseffects.AssetReadDirectory
 	createFile    modelseffects.AssetCreateFile
 	openFile      modelseffects.AssetOpenFile
+	logger        *zap.Logger
+	now           func() time.Time
 }
 
 type assetSpec struct {
@@ -68,10 +73,13 @@ func New(
 	writeFile modelseffects.AssetWriteFile,
 	renamePath modelseffects.AssetRenamePath,
 	removePath modelseffects.AssetRemovePath,
+	removeTree modelseffects.AssetRemoveTree,
 	readFile modelseffects.AssetReadFile,
 	readDirectory modelseffects.AssetReadDirectory,
 	createFile modelseffects.AssetCreateFile,
 	openFile modelseffects.AssetOpenFile,
+	logger *zap.Logger,
+	now func() time.Time,
 ) assets.Service {
 	return &service{
 		scopes:        scopes,
@@ -84,10 +92,13 @@ func New(
 		writeFile:     writeFile,
 		renamePath:    renamePath,
 		removePath:    removePath,
+		removeTree:    removeTree,
 		readFile:      readFile,
 		readDirectory: readDirectory,
 		createFile:    createFile,
 		openFile:      openFile,
+		logger:        logger,
+		now:           now,
 	}
 }
 

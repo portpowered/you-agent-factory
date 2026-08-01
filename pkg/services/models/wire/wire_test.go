@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
@@ -95,6 +96,13 @@ func TestNewServiceRejectsMissingConstructionPorts(t *testing.T) {
 				edges.assetRemove = nil
 			},
 			want: "asset remove-path effect is required",
+		},
+		{
+			name: "asset remove-tree effect",
+			mutate: func(edges *constructionEdges) {
+				edges.assetRemoveTree = nil
+			},
+			want: "asset remove-tree effect is required",
 		},
 		{
 			name: "asset read-file effect",
@@ -296,6 +304,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		assetWriteFile.write,
 		assetRename.rename,
 		assetRemove.remove,
+		platformfilesystem.Local{}.RemoveTree,
 		assetReadFile.read,
 		assetReadDir.readDir,
 		assetCreate.create,
@@ -375,6 +384,7 @@ type constructionEdges struct {
 	assetWriteFile  modelseffects.AssetWriteFile
 	assetRename     modelseffects.AssetRenamePath
 	assetRemove     modelseffects.AssetRemovePath
+	assetRemoveTree modelseffects.AssetRemoveTree
 	assetReadFile   modelseffects.AssetReadFile
 	assetReadDir    modelseffects.AssetReadDirectory
 	assetCreate     modelseffects.AssetCreateFile
@@ -404,6 +414,7 @@ func validConstructionEdges() constructionEdges {
 		assetWriteFile:  os.WriteFile,
 		assetRename:     os.Rename,
 		assetRemove:     os.Remove,
+		assetRemoveTree: platformfilesystem.Local{}.RemoveTree,
 		assetReadFile:   os.ReadFile,
 		assetReadDir:    os.ReadDir,
 		assetCreate:     func(path string) (io.WriteCloser, error) { return os.Create(path) },
@@ -434,6 +445,7 @@ func (edges constructionEdges) newService() (models.Service, error) {
 		edges.assetWriteFile,
 		edges.assetRename,
 		edges.assetRemove,
+		edges.assetRemoveTree,
 		edges.assetReadFile,
 		edges.assetReadDir,
 		edges.assetCreate,
@@ -1035,6 +1047,7 @@ func newProductionTestServiceWithAssetEdges(
 		os.WriteFile,
 		os.Rename,
 		os.Remove,
+		platformfilesystem.Local{}.RemoveTree,
 		os.ReadFile,
 		os.ReadDir,
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },

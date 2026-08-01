@@ -100,6 +100,11 @@ type AssetResolveHomeDirectory func() (string, error)
 type AssetWriteFile func(string, []byte, os.FileMode) error
 type AssetRenamePath func(string, string) error
 type AssetRemovePath func(string) error
+
+// AssetRemoveTree removes one model-cache directory beneath a selected cache
+// parent through a platform-owned path-security boundary. The bool reports
+// whether any deletion effect was applied before an error or cancellation.
+type AssetRemoveTree func(context.Context, string, string) (bool, error)
 type AssetReadFile func(string) ([]byte, error)
 type AssetReadDirectory func(string) ([]os.DirEntry, error)
 type AssetCreateFile func(string) (io.WriteCloser, error)

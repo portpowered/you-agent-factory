@@ -67,6 +67,7 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 	if assetRemove == nil {
 		assetRemove = os.Remove
 	}
+	assetRemoveTree := modelswire.AssetRemoveTree(platformfilesystem.Local{}.RemoveTree)
 	assetReadFile := edges.ModelAssetReadFile
 	if assetReadFile == nil {
 		assetReadFile = os.ReadFile
@@ -133,6 +134,7 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		modelswire.AssetWriteFile(assetWriteFile),
 		modelswire.AssetRenamePath(assetRename),
 		modelswire.AssetRemovePath(assetRemove),
+		assetRemoveTree,
 		modelswire.AssetReadFile(assetReadFile),
 		modelswire.AssetReadDirectory(assetReadDir),
 		modelswire.AssetCreateFile(assetCreate),

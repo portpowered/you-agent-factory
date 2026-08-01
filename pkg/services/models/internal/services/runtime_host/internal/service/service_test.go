@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
@@ -23,6 +24,7 @@ import (
 	leaseswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/wire"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
+	"go.uber.org/zap"
 )
 
 func TestConstructionAllocatesHostStateWithoutLaunchingProcess(t *testing.T) {
@@ -355,10 +357,13 @@ func mustAssetsService(t *testing.T, scopes runtimescopes.Service) scopedassets.
 		os.WriteFile,
 		os.Rename,
 		os.Remove,
+		platformfilesystem.Local{}.RemoveTree,
 		os.ReadFile,
 		os.ReadDir,
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },
 		func(path string) (io.ReadCloser, error) { return os.Open(path) },
+		zap.NewNop(),
+		time.Now,
 	)
 	if err != nil {
 		t.Fatalf("construct assets: %v", err)

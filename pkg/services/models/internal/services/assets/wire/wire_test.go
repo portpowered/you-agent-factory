@@ -1,15 +1,18 @@
 package wire
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
+	"go.uber.org/zap"
 )
 
 func TestNewServiceRequiresScopedCacheInspectionDependencies(t *testing.T) {
@@ -26,22 +29,23 @@ func TestNewServiceRequiresScopedCacheInspectionDependencies(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		scopes    runtimescopes.Service
-		platform  models.AssetHostPlatform
-		client    modelseffects.AssetHTTPDoer
-		endpoints models.RuntimeAssetEndpoints
-		mkdir     modelseffects.AssetMakeDirectories
-		inspect   modelseffects.AssetInspectPath
-		home      modelseffects.AssetResolveHomeDirectory
-		write     modelseffects.AssetWriteFile
-		rename    modelseffects.AssetRenamePath
-		remove    modelseffects.AssetRemovePath
-		readFile  modelseffects.AssetReadFile
-		readDir   modelseffects.AssetReadDirectory
-		create    modelseffects.AssetCreateFile
-		open      modelseffects.AssetOpenFile
-		wantError bool
+		name       string
+		scopes     runtimescopes.Service
+		platform   models.AssetHostPlatform
+		client     modelseffects.AssetHTTPDoer
+		endpoints  models.RuntimeAssetEndpoints
+		mkdir      modelseffects.AssetMakeDirectories
+		inspect    modelseffects.AssetInspectPath
+		home       modelseffects.AssetResolveHomeDirectory
+		write      modelseffects.AssetWriteFile
+		rename     modelseffects.AssetRenamePath
+		remove     modelseffects.AssetRemovePath
+		removeTree modelseffects.AssetRemoveTree
+		readFile   modelseffects.AssetReadFile
+		readDir    modelseffects.AssetReadDirectory
+		create     modelseffects.AssetCreateFile
+		open       modelseffects.AssetOpenFile
+		wantError  bool
 	}{
 		validAssetDependencies("valid", scopes, platform, endpoints),
 		{
@@ -83,10 +87,13 @@ func TestNewServiceRequiresScopedCacheInspectionDependencies(t *testing.T) {
 				test.write,
 				test.rename,
 				test.remove,
+				test.removeTree,
 				test.readFile,
 				test.readDir,
 				test.create,
 				test.open,
+				zap.NewNop(),
+				time.Now,
 			)
 			if test.wantError {
 				if service != nil || err == nil {
@@ -107,44 +114,48 @@ func validAssetDependencies(
 	platform models.AssetHostPlatform,
 	endpoints models.RuntimeAssetEndpoints,
 ) struct {
-	name      string
-	scopes    runtimescopes.Service
-	platform  models.AssetHostPlatform
-	client    modelseffects.AssetHTTPDoer
-	endpoints models.RuntimeAssetEndpoints
-	mkdir     modelseffects.AssetMakeDirectories
-	inspect   modelseffects.AssetInspectPath
-	home      modelseffects.AssetResolveHomeDirectory
-	write     modelseffects.AssetWriteFile
-	rename    modelseffects.AssetRenamePath
-	remove    modelseffects.AssetRemovePath
-	readFile  modelseffects.AssetReadFile
-	readDir   modelseffects.AssetReadDirectory
-	create    modelseffects.AssetCreateFile
-	open      modelseffects.AssetOpenFile
-	wantError bool
+	name       string
+	scopes     runtimescopes.Service
+	platform   models.AssetHostPlatform
+	client     modelseffects.AssetHTTPDoer
+	endpoints  models.RuntimeAssetEndpoints
+	mkdir      modelseffects.AssetMakeDirectories
+	inspect    modelseffects.AssetInspectPath
+	home       modelseffects.AssetResolveHomeDirectory
+	write      modelseffects.AssetWriteFile
+	rename     modelseffects.AssetRenamePath
+	remove     modelseffects.AssetRemovePath
+	removeTree modelseffects.AssetRemoveTree
+	readFile   modelseffects.AssetReadFile
+	readDir    modelseffects.AssetReadDirectory
+	create     modelseffects.AssetCreateFile
+	open       modelseffects.AssetOpenFile
+	wantError  bool
 } {
 	return struct {
-		name      string
-		scopes    runtimescopes.Service
-		platform  models.AssetHostPlatform
-		client    modelseffects.AssetHTTPDoer
-		endpoints models.RuntimeAssetEndpoints
-		mkdir     modelseffects.AssetMakeDirectories
-		inspect   modelseffects.AssetInspectPath
-		home      modelseffects.AssetResolveHomeDirectory
-		write     modelseffects.AssetWriteFile
-		rename    modelseffects.AssetRenamePath
-		remove    modelseffects.AssetRemovePath
-		readFile  modelseffects.AssetReadFile
-		readDir   modelseffects.AssetReadDirectory
-		create    modelseffects.AssetCreateFile
-		open      modelseffects.AssetOpenFile
-		wantError bool
+		name       string
+		scopes     runtimescopes.Service
+		platform   models.AssetHostPlatform
+		client     modelseffects.AssetHTTPDoer
+		endpoints  models.RuntimeAssetEndpoints
+		mkdir      modelseffects.AssetMakeDirectories
+		inspect    modelseffects.AssetInspectPath
+		home       modelseffects.AssetResolveHomeDirectory
+		write      modelseffects.AssetWriteFile
+		rename     modelseffects.AssetRenamePath
+		remove     modelseffects.AssetRemovePath
+		removeTree modelseffects.AssetRemoveTree
+		readFile   modelseffects.AssetReadFile
+		readDir    modelseffects.AssetReadDirectory
+		create     modelseffects.AssetCreateFile
+		open       modelseffects.AssetOpenFile
+		wantError  bool
 	}{
 		name: name, scopes: scopes, platform: platform, client: http.DefaultClient, endpoints: endpoints,
 		mkdir: os.MkdirAll, inspect: os.Stat, home: os.UserHomeDir, write: os.WriteFile,
-		rename: os.Rename, remove: os.Remove, readFile: os.ReadFile, readDir: os.ReadDir,
+		rename: os.Rename, remove: os.Remove,
+		removeTree: func(context.Context, string, string) (bool, error) { return false, nil },
+		readFile:   os.ReadFile, readDir: os.ReadDir,
 		create: func(path string) (io.WriteCloser, error) { return os.Create(path) },
 		open:   func(path string) (io.ReadCloser, error) { return os.Open(path) },
 	}

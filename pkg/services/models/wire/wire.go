@@ -53,6 +53,7 @@ func NewService(
 	assetWriteFile AssetWriteFile,
 	assetRename AssetRenamePath,
 	assetRemove AssetRemovePath,
+	assetRemoveTree AssetRemoveTree,
 	assetReadFile AssetReadFile,
 	assetReadDir AssetReadDirectory,
 	assetCreate AssetCreateFile,
@@ -82,6 +83,7 @@ func NewService(
 		assetWriteFile,
 		assetRename,
 		assetRemove,
+		assetRemoveTree,
 		assetReadFile,
 		assetReadDir,
 		assetCreate,
@@ -134,7 +136,8 @@ func NewService(
 			BaseURL: defaultEndpoints.BaseURL, APIBaseURL: defaultEndpoints.APIBaseURL,
 		},
 		assetMkdirAll, assetStat, assetHome, assetWriteFile, assetRename,
-		assetRemove, assetReadFile, assetReadDir, assetCreate, assetOpen,
+		assetRemove, assetRemoveTree, assetReadFile, assetReadDir, assetCreate, assetOpen,
+		logger, now,
 	)
 	if err != nil {
 		return nil, err
@@ -216,6 +219,7 @@ func validateConstructionInputs(
 	assetWriteFile modelseffects.AssetWriteFile,
 	assetRename modelseffects.AssetRenamePath,
 	assetRemove modelseffects.AssetRemovePath,
+	assetRemoveTree modelseffects.AssetRemoveTree,
 	assetReadFile modelseffects.AssetReadFile,
 	assetReadDirectory modelseffects.AssetReadDirectory,
 	assetCreate modelseffects.AssetCreateFile,
@@ -250,6 +254,8 @@ func validateConstructionInputs(
 		return fmt.Errorf("construct Models: asset rename-path effect is required")
 	case isNilDependency(assetRemove):
 		return fmt.Errorf("construct Models: asset remove-path effect is required")
+	case isNilDependency(assetRemoveTree):
+		return fmt.Errorf("construct Models: asset remove-tree effect is required")
 	case isNilDependency(assetReadFile):
 		return fmt.Errorf("construct Models: asset read-file effect is required")
 	case isNilDependency(assetReadDirectory):

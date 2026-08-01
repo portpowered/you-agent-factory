@@ -2,21 +2,29 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 )
 
-var errAssetCachePathOutsideRoot = errors.New("model asset cache path is outside its model root")
-
+// RemoveModelAssets validates the scoped identity and delegates the entire
+// filesystem mutation to the injected handle-relative platform effect. It
+// intentionally does not resolve a source, inspect readiness, or consult the
+// host platform: an old cache remains removable after those settings change.
 func (s *service) RemoveModelAssets(
 	ctx context.Context,
 	request models.RemoveModelAssetsRequest,
-) (models.RemoveModelAssetsResult, error) {
+) (result models.RemoveModelAssetsResult, resultErr error) {
+	modelIdentity := safeRemovalModelIdentity(request.Name)
+	start := s.operationNow()
+	s.logAssetRemovalStart(modelIdentity)
+	defer func() {
+		s.logAssetRemovalTerminal(modelIdentity, start, result, resultErr)
+	}()
+
 	if err := request.Validate(); err != nil {
 		return models.RemoveModelAssetsResult{}, err
 	}
@@ -24,150 +32,81 @@ func (s *service) RemoveModelAssets(
 	if err != nil {
 		return models.RemoveModelAssetsResult{}, err
 	}
-	spec, _, err := s.resolveSource(scope.Runtime, request.Name)
+	spec, err := removalAssetSpec(request.Name)
 	if err != nil {
 		return models.RemoveModelAssetsResult{}, err
 	}
 	if err := assetContextError(ctx); err != nil {
 		return models.RemoveModelAssetsResult{}, err
 	}
-	root, err := s.modelCacheRoot(scope.CacheDirectory, spec.modelName)
+	parent, err := s.modelCacheParent(scope.CacheDirectory)
 	if err != nil {
 		return models.RemoveModelAssetsResult{}, err
 	}
-	info, err := s.inspectPath(root)
-	if errors.Is(err, os.ErrNotExist) {
-		return removedAssetResult(spec.modelName, models.AssetRemovalAlreadyAbsent), nil
-	}
+	changed, err := s.removeTree(ctx, parent, spec.modelName)
 	if err != nil {
 		if contextErr := assetContextError(ctx); contextErr != nil {
 			return models.RemoveModelAssetsResult{}, contextErr
 		}
 		return models.RemoveModelAssetsResult{}, fmt.Errorf(
-			"inspect managed model cache for removal: %w", err,
+			"%w: remove managed model assets: %w", models.ErrAssetUnavailable, err,
 		)
 	}
-	if err := assetContextError(ctx); err != nil {
-		return models.RemoveModelAssetsResult{}, err
+	if changed {
+		return removedAssetResult(spec.modelName, models.AssetRemovalRemoved), nil
 	}
-	if info == nil || !info.IsDir() {
-		return models.RemoveModelAssetsResult{}, fmt.Errorf(
-			"%w: managed model cache root is not a directory",
-			models.ErrAssetUnavailable,
+	return removedAssetResult(spec.modelName, models.AssetRemovalAlreadyAbsent), nil
+}
+
+func (s *service) modelCacheParent(cacheDirectory string) (string, error) {
+	parent := strings.TrimSpace(cacheDirectory)
+	if parent != "" {
+		return parent, nil
+	}
+	home, err := s.resolveHome()
+	if err != nil {
+		return "", fmt.Errorf("resolve managed model cache directory: %w", err)
+	}
+	if strings.TrimSpace(home) == "" {
+		return "", fmt.Errorf("resolve managed model cache directory: empty home directory")
+	}
+	return filepath.Join(home, ".agent-factory", "models"), nil
+}
+
+func removalAssetSpec(modelName string) (assetSpec, error) {
+	spec, ok := supportedAssetSpecs()[canonicalModelName(modelName)]
+	if !ok {
+		return assetSpec{}, fmt.Errorf(
+			"%w: %s", models.ErrAssetSourceUnsupported, modelName,
 		)
 	}
-
-	removed, err := s.removeAssetDirectory(ctx, root)
-	if err != nil {
-		return models.RemoveModelAssetsResult{}, err
-	}
-	outcome := models.AssetRemovalAlreadyAbsent
-	if removed {
-		outcome = models.AssetRemovalRemoved
-	}
-	return removedAssetResult(spec.modelName, outcome), nil
+	return spec, nil
 }
 
-func (s *service) removeAssetDirectory(ctx context.Context, root string) (bool, error) {
-	if err := assetContextError(ctx); err != nil {
-		return false, err
-	}
-	entries, err := s.readDirectory(root)
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	if err != nil {
-		if contextErr := assetContextError(ctx); contextErr != nil {
-			return false, contextErr
-		}
-		return false, fmt.Errorf(
-			"read managed model cache for removal: %w",
-			err,
-		)
-	}
-
-	removed := false
-	for _, entry := range entries {
-		if err := assetContextError(ctx); err != nil {
-			return removed, err
-		}
-		if entry == nil {
-			return removed, fmt.Errorf(
-				"%w: %w: cache directory returned an empty entry",
-				models.ErrAssetUnavailable, errAssetCachePathOutsideRoot,
-			)
-		}
-		path, err := assetPathWithinRoot(root, entry.Name())
-		if err != nil {
-			return removed, err
-		}
-		var childRemoved bool
-		if entry.IsDir() {
-			childRemoved, err = s.removeAssetDirectory(ctx, path)
-		} else {
-			childRemoved, err = s.removeAssetPath(ctx, path)
-		}
-		if err != nil {
-			return removed || childRemoved, err
-		}
-		removed = removed || childRemoved
-	}
-
-	childRemoved, err := s.removeAssetPath(ctx, root)
-	if err != nil {
-		return removed || childRemoved, err
-	}
-	return removed || childRemoved, nil
-}
-
-func (s *service) removeAssetPath(ctx context.Context, path string) (bool, error) {
-	if err := assetContextError(ctx); err != nil {
-		return false, err
-	}
-	if err := s.removePath(path); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
-		if contextErr := assetContextError(ctx); contextErr != nil {
-			return false, contextErr
-		}
-		return false, fmt.Errorf("remove managed model cache path %q: %w", filepath.Base(path), err)
-	}
-	if err := assetContextError(ctx); err != nil {
-		return true, err
-	}
-	return true, nil
-}
-
-func assetPathWithinRoot(root, name string) (string, error) {
-	if strings.TrimSpace(name) == "" || name == "." || name == ".." ||
-		filepath.IsAbs(name) || filepath.VolumeName(name) != "" || filepath.Base(name) != name {
-		return "", assetCachePathError(name)
-	}
-	cleanRoot := filepath.Clean(root)
-	path := filepath.Clean(filepath.Join(cleanRoot, name))
-	relative, err := filepath.Rel(cleanRoot, path)
-	if err != nil {
-		return "", assetCachePathError(name)
-	}
-	if relative == "." || relative == ".." ||
-		strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
-		return "", assetCachePathError(name)
-	}
-	return path, nil
-}
-
-func assetCachePathError(name string) error {
-	return fmt.Errorf(
-		"%w: %w: %q",
-		models.ErrAssetUnavailable, errAssetCachePathOutsideRoot, name,
-	)
-}
-
-func removedAssetResult(modelName string, outcome models.AssetRemovalOutcome) models.RemoveModelAssetsResult {
+func removedAssetResult(
+	modelName string,
+	outcome models.AssetRemovalOutcome,
+) models.RemoveModelAssetsResult {
 	return models.RemoveModelAssetsResult{
 		ModelName: modelName,
 		Readiness: models.AssetReadinessMissing,
 		Outcome:   outcome,
 	}
+}
+
+func (s *service) operationNow() time.Time {
+	if s == nil || s.now == nil {
+		return time.Time{}
+	}
+	return s.now()
+}
+
+func safeRemovalModelIdentity(name string) string {
+	if spec, err := removalAssetSpec(name); err == nil {
+		return spec.modelName
+	}
+	if strings.TrimSpace(name) == "" {
+		return "<empty>"
+	}
+	return "<invalid>"
 }

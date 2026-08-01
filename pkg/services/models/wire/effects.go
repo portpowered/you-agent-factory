@@ -18,6 +18,7 @@ type AssetResolveHomeDirectory = effects.AssetResolveHomeDirectory
 type AssetWriteFile = effects.AssetWriteFile
 type AssetRenamePath = effects.AssetRenamePath
 type AssetRemovePath = effects.AssetRemovePath
+type AssetRemoveTree = effects.AssetRemoveTree
 type AssetReadFile = effects.AssetReadFile
 type AssetReadDirectory = effects.AssetReadDirectory
 type AssetCreateFile = effects.AssetCreateFile

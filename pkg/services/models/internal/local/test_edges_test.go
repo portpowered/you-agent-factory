@@ -6,10 +6,13 @@ import (
 	"os"
 	"runtime"
 	"testing"
+	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	assetswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/wire"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
+	"go.uber.org/zap"
 )
 
 func mustNewAssetPuller(t *testing.T, cacheDir string) AssetPuller {
@@ -56,10 +59,13 @@ func newAssetPullerForTest(
 		os.WriteFile,
 		os.Rename,
 		os.Remove,
+		platformfilesystem.Local{}.RemoveTree,
 		os.ReadFile,
 		os.ReadDir,
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },
 		func(path string) (io.ReadCloser, error) { return os.Open(path) },
+		zap.NewNop(),
+		time.Now,
 	)
 	if err != nil {
 		return nil, err

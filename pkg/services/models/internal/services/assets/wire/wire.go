@@ -3,12 +3,14 @@ package wire
 
 import (
 	"fmt"
+	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/internal/service"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
+	"go.uber.org/zap"
 )
 
 // NewService constructs an inert scoped asset inspector.
@@ -23,10 +25,13 @@ func NewService(
 	writeFile modelseffects.AssetWriteFile,
 	renamePath modelseffects.AssetRenamePath,
 	removePath modelseffects.AssetRemovePath,
+	removeTree modelseffects.AssetRemoveTree,
 	readFile modelseffects.AssetReadFile,
 	readDirectory modelseffects.AssetReadDirectory,
 	createFile modelseffects.AssetCreateFile,
 	openFile modelseffects.AssetOpenFile,
+	logger *zap.Logger,
+	now func() time.Time,
 ) (assets.Service, error) {
 	if scopes == nil {
 		return nil, fmt.Errorf("Models Assets runtime scopes service is required")
@@ -43,6 +48,15 @@ func NewService(
 	); err != nil {
 		return nil, err
 	}
+	if removeTree == nil {
+		return nil, fmt.Errorf("Models Assets secure removal effect is required")
+	}
+	if logger == nil {
+		return nil, fmt.Errorf("Models Assets logger is required")
+	}
+	if now == nil {
+		return nil, fmt.Errorf("Models Assets clock is required")
+	}
 	return internalservice.New(
 		scopes,
 		platform,
@@ -54,10 +68,13 @@ func NewService(
 		writeFile,
 		renamePath,
 		removePath,
+		removeTree,
 		readFile,
 		readDirectory,
 		createFile,
 		openFile,
+		logger,
+		now,
 	), nil
 }
 
