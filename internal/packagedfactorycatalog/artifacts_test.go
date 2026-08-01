@@ -57,7 +57,7 @@ func TestGenerateArtifactsProducesEquivalentSelfContainedPairsForCompleteInvento
 	if !strings.Contains(string(bySlug["fusion"].JSON), `"modelProvider": "${firstProvider}"`) {
 		t.Fatal("fusion artifact did not preserve invocation-interpolated provider")
 	}
-	assertInlineAsset(t, bySlug["goal"].JSON, "workers", "goal-executor", "body", "You are executing goal work")
+	assertInlineAsset(t, bySlug["goal"].JSON, "workers", "goal-executor", "body", "You are executing persistent goal work")
 	if !strings.Contains(string(bySlug["deep-research"].JSON), `"inlineSource"`) ||
 		!strings.Contains(string(bySlug["deep-research"].JSON), `@you-factory-meta`) {
 		t.Fatal("deep-research artifact did not inline its standalone factory.js source")
