@@ -1,9 +1,12 @@
-package http
+package lifecycle
 
 import (
 	"context"
 	"io"
 	"net/http"
+
+	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http/common"
+	transporterrors "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http/errors"
 )
 
 // ActivateLifecycleHTTP decodes an owned Activate HTTP request, invokes the
@@ -16,10 +19,14 @@ func (a *Adapter) ActivateLifecycleHTTP(
 	if err != nil {
 		return LifecycleHTTPResponse{}, err
 	}
-	if err := visualizationContextBeforeRoot(ctx); err != nil {
+	if err := common.ContextBeforeRoot(ctx); err != nil {
 		return LifecycleHTTPResponse{}, err
 	}
-	result, err := a.Activate(ctx, req)
+	root, err := a.root()
+	if err != nil {
+		return LifecycleHTTPResponse{}, err
+	}
+	result, err := root.Activate(ctx, req)
 	if err != nil {
 		return LifecycleHTTPResponse{}, err
 	}
@@ -36,10 +43,14 @@ func (a *Adapter) JoinLifecycleHTTP(
 	if err != nil {
 		return LifecycleHTTPResponse{}, err
 	}
-	if err := visualizationContextBeforeRoot(ctx); err != nil {
+	if err := common.ContextBeforeRoot(ctx); err != nil {
 		return LifecycleHTTPResponse{}, err
 	}
-	result, err := a.Join(ctx, req)
+	root, err := a.root()
+	if err != nil {
+		return LifecycleHTTPResponse{}, err
+	}
+	result, err := root.Join(ctx, req)
 	if err != nil {
 		return LifecycleHTTPResponse{}, err
 	}
@@ -56,10 +67,14 @@ func (a *Adapter) StopDrainLifecycleHTTP(
 	if err != nil {
 		return LifecycleHTTPResponse{}, err
 	}
-	if err := visualizationContextBeforeRoot(ctx); err != nil {
+	if err := common.ContextBeforeRoot(ctx); err != nil {
 		return LifecycleHTTPResponse{}, err
 	}
-	result, err := a.StopDrain(ctx, req)
+	root, err := a.root()
+	if err != nil {
+		return LifecycleHTTPResponse{}, err
+	}
+	result, err := root.StopDrain(ctx, req)
 	if err != nil {
 		return LifecycleHTTPResponse{}, err
 	}
@@ -73,7 +88,7 @@ func (a *Adapter) HandleActivateLifecycle(w http.ResponseWriter, r *http.Request
 		a.writeLifecycleRequestError(w, err)
 		return
 	}
-	a.writeJSON(w, http.StatusOK, response)
+	common.WriteJSON(w, http.StatusOK, response, a.logger)
 }
 
 // HandleJoinLifecycle serves POST /factory-visualization/lifecycle/join.
@@ -83,7 +98,7 @@ func (a *Adapter) HandleJoinLifecycle(w http.ResponseWriter, r *http.Request) {
 		a.writeLifecycleRequestError(w, err)
 		return
 	}
-	a.writeJSON(w, http.StatusOK, response)
+	common.WriteJSON(w, http.StatusOK, response, a.logger)
 }
 
 // HandleStopDrainLifecycle serves POST /factory-visualization/lifecycle/stop-drain.
@@ -93,9 +108,9 @@ func (a *Adapter) HandleStopDrainLifecycle(w http.ResponseWriter, r *http.Reques
 		a.writeLifecycleRequestError(w, err)
 		return
 	}
-	a.writeJSON(w, http.StatusOK, response)
+	common.WriteJSON(w, http.StatusOK, response, a.logger)
 }
 
 func (a *Adapter) writeLifecycleRequestError(w http.ResponseWriter, err error) {
-	a.writeVisualizationRequestError(w, err, "factory visualization lifecycle request failed")
+	transporterrors.WriteRequestError(w, a.logger, err, "factory visualization lifecycle request failed")
 }

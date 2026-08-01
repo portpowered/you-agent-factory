@@ -1,29 +1,18 @@
-package http
+package presentation
 
 import (
 	"io"
 
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http/common"
 )
-
-type presentationHTTPDecodeError struct {
-	cause error
-}
-
-func (e presentationHTTPDecodeError) Error() string {
-	return e.cause.Error()
-}
-
-func (e presentationHTTPDecodeError) Unwrap() error {
-	return e.cause
-}
 
 func decodeOpenPresentationHTTPRequest(
 	body io.Reader,
 ) (factoryvisualization.OpenPresentationRequest, error) {
-	req, err := decodeStrictJSON[OpenPresentationHTTPRequest](body)
+	req, err := common.DecodeStrictJSON[OpenPresentationHTTPRequest](body)
 	if err != nil {
-		return factoryvisualization.OpenPresentationRequest{}, presentationHTTPDecodeError{cause: err}
+		return factoryvisualization.OpenPresentationRequest{}, err
 	}
 	return factoryvisualization.OpenPresentationRequest{
 		Mode: factoryvisualization.PresentationDeliveryMode(req.Mode),
@@ -33,9 +22,9 @@ func decodeOpenPresentationHTTPRequest(
 func decodePresentProgressHTTPRequest(
 	body io.Reader,
 ) (factoryvisualization.PresentProgressRequest, error) {
-	req, err := decodeStrictJSON[PresentProgressHTTPRequest](body)
+	req, err := common.DecodeStrictJSON[PresentProgressHTTPRequest](body)
 	if err != nil {
-		return factoryvisualization.PresentProgressRequest{}, presentationHTTPDecodeError{cause: err}
+		return factoryvisualization.PresentProgressRequest{}, err
 	}
 	records := make([]factoryvisualization.ProgressRecord, 0, len(req.Records))
 	for _, record := range req.Records {
@@ -52,9 +41,9 @@ func decodePresentProgressHTTPRequest(
 func decodeFinalizePresentationHTTPRequest(
 	body io.Reader,
 ) (factoryvisualization.FinalizePresentationRequest, error) {
-	req, err := decodeStrictJSON[FinalizePresentationHTTPRequest](body)
+	req, err := common.DecodeStrictJSON[FinalizePresentationHTTPRequest](body)
 	if err != nil {
-		return factoryvisualization.FinalizePresentationRequest{}, presentationHTTPDecodeError{cause: err}
+		return factoryvisualization.FinalizePresentationRequest{}, err
 	}
 	rootReq := factoryvisualization.FinalizePresentationRequest{
 		SessionID: factoryvisualization.PresentationSessionID(req.SessionID),
@@ -70,9 +59,9 @@ func decodeFinalizePresentationHTTPRequest(
 func decodeClosePresentationHTTPRequest(
 	body io.Reader,
 ) (factoryvisualization.ClosePresentationRequest, error) {
-	req, err := decodeStrictJSON[ClosePresentationHTTPRequest](body)
+	req, err := common.DecodeStrictJSON[ClosePresentationHTTPRequest](body)
 	if err != nil {
-		return factoryvisualization.ClosePresentationRequest{}, presentationHTTPDecodeError{cause: err}
+		return factoryvisualization.ClosePresentationRequest{}, err
 	}
 	return factoryvisualization.ClosePresentationRequest{
 		SessionID: factoryvisualization.PresentationSessionID(req.SessionID),
