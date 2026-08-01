@@ -208,7 +208,15 @@ func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *test
 func TestOperatorSettingsHomePortCompositionUsesProcessProviderRoot(t *testing.T) {
 	t.Parallel()
 
-	service, err := settingswire.NewServiceFromHomePorts(platformfilesystem.Local{}, globalconfigmapping.Decode)
+	providersRoot, err := provideProvidersService(serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("provideProvidersService() error = %v", err)
+	}
+	service, err := settingswire.NewServiceFromHomePorts(
+		platformfilesystem.Local{},
+		globalconfigmapping.Decode,
+		providersRoot,
+	)
 	if err != nil {
 		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
 	}

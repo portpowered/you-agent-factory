@@ -12,7 +12,7 @@ import (
 )
 
 type Service struct {
-	Settings   operatorsettings.ConfigDocumentService
+	Settings   operatorsettings.Service
 	Providers  providers.Service
 	GenerateID operatorsettings.IDGenerator
 }
@@ -27,11 +27,16 @@ func (service Service) ListWorkers(ctx context.Context, home string) (WorkerCata
 	if service.Providers == nil {
 		return WorkerCatalog{}, fmt.Errorf("Providers service is required")
 	}
-	document, err := service.Settings.Load(operatorsettings.DefaultConfigPath(home))
+	if service.Settings == nil {
+		return WorkerCatalog{}, fmt.Errorf("Operator Settings service is required")
+	}
+	document, err := service.Settings.LoadDocument(operatorsettings.LoadDocumentRequest{
+		Path: service.Settings.DefaultConfigPath(home),
+	})
 	if err != nil {
 		return WorkerCatalog{}, err
 	}
-	if err := service.configure(ctx, document); err != nil {
+	if err := service.configure(ctx, document.Document); err != nil {
 		return WorkerCatalog{}, err
 	}
 	listed, err := service.Providers.ListProviders(ctx, providers.ListProvidersRequest{})
@@ -40,10 +45,10 @@ func (service Service) ListWorkers(ctx context.Context, home string) (WorkerCata
 	}
 	acpProviders := make(map[providers.ID]bool)
 	customProviders := make(map[providers.ID]bool)
-	for _, integration := range document.FileConfig().Workers.ACP.Integrations {
+	for _, integration := range document.Document.Workers.ACP.Integrations {
 		customProviders[providers.ID(integration.Name)] = true
 	}
-	for _, descriptor := range filterACPProviders(listed, document.FileConfig().Workers.ACP.Integrations).Providers {
+	for _, descriptor := range filterACPProviders(listed, document.Document.Workers.ACP.Integrations).Providers {
 		acpProviders[descriptor.ID] = true
 	}
 	return WorkerCatalog{Providers: listed.Providers, ACP: acpProviders, Custom: customProviders}, nil
@@ -62,7 +67,13 @@ func (service Service) Add(ctx context.Context, home, name, transport, command s
 	if service.GenerateID == nil {
 		return fmt.Errorf("ACP integration ID generator is required")
 	}
-	document, err := service.Settings.ConfigureACPIntegrationAdd(ctx, operatorsettings.DefaultConfigPath(home), operatorsettings.ACPIntegration{
+	if err := canceledContextError(ctx); err != nil {
+		return err
+	}
+	if service.Settings == nil {
+		return fmt.Errorf("Operator Settings service is required")
+	}
+	document, err := service.Settings.ConfigureACPIntegrationAdd(ctx, service.Settings.DefaultConfigPath(home), operatorsettings.ACPIntegration{
 		ID: service.GenerateID(), Name: name, Transport: transport, Command: command,
 	})
 	if err != nil {
@@ -72,15 +83,28 @@ func (service Service) Add(ctx context.Context, home, name, transport, command s
 }
 
 func (service Service) Delete(ctx context.Context, home, name string) error {
-	document, err := service.Settings.ConfigureACPIntegrationDelete(ctx, operatorsettings.DefaultConfigPath(home), name)
+	if err := canceledContextError(ctx); err != nil {
+		return err
+	}
+	if service.Settings == nil {
+		return fmt.Errorf("Operator Settings service is required")
+	}
+	document, err := service.Settings.ConfigureACPIntegrationDelete(ctx, service.Settings.DefaultConfigPath(home), name)
 	if err != nil {
 		return err
 	}
 	return service.configure(ctx, document)
 }
 
-func (service Service) configure(ctx context.Context, document operatorsettings.ConfigDocument) error {
-	return service.configureIntegrations(ctx, document.FileConfig().Workers.ACP.Integrations)
+func canceledContextError(ctx context.Context) error {
+	if ctx == nil {
+		return nil
+	}
+	return ctx.Err()
+}
+
+func (service Service) configure(ctx context.Context, document operatorsettings.Document) error {
+	return service.configureIntegrations(ctx, document.Workers.ACP.Integrations)
 }
 
 func (service Service) configureIntegrations(ctx context.Context, configured []operatorsettings.ACPIntegration) error {

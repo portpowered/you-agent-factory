@@ -10,6 +10,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
@@ -34,6 +35,10 @@ func TestWireCompositionServesDocumentAndResolutionOperations(t *testing.T) {
 		t.Fatalf("WriteFile(config): %v", err)
 	}
 
+	providersRoot, err := providerswire.NewService()
+	if err != nil {
+		t.Fatalf("providerswire.NewService() error = %v", err)
+	}
 	root, err := settingswire.NewServiceFromConfigDocument(
 		settingswire.NewConfigDocumentService(
 			platformfilesystem.Local{},
@@ -45,6 +50,7 @@ func TestWireCompositionServesDocumentAndResolutionOperations(t *testing.T) {
 			wireCompositionProviderCatalog,
 			&sync.Mutex{},
 		),
+		providersRoot,
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
@@ -93,7 +99,15 @@ func TestWireCompositionServesDocumentAndResolutionOperations(t *testing.T) {
 func TestWireCompositionFromHomePortsConstructsSettingsRoot(t *testing.T) {
 	t.Parallel()
 
-	root, err := settingswire.NewServiceFromHomePorts(platformfilesystem.Local{}, globalconfigmapping.Decode)
+	providersRoot, err := providerswire.NewService()
+	if err != nil {
+		t.Fatalf("providerswire.NewService() error = %v", err)
+	}
+	root, err := settingswire.NewServiceFromHomePorts(
+		platformfilesystem.Local{},
+		globalconfigmapping.Decode,
+		providersRoot,
+	)
 	if err != nil {
 		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
 	}
@@ -105,12 +119,16 @@ func TestWireCompositionFromHomePortsConstructsSettingsRoot(t *testing.T) {
 func TestWireCompositionFromHomePortsRejectsMissingPorts(t *testing.T) {
 	t.Parallel()
 
-	_, err := settingswire.NewServiceFromHomePorts(nil, globalconfigmapping.Decode)
+	providersRoot, err := providerswire.NewService()
+	if err != nil {
+		t.Fatalf("providerswire.NewService() error = %v", err)
+	}
+	_, err = settingswire.NewServiceFromHomePorts(nil, globalconfigmapping.Decode, providersRoot)
 	if err == nil || !strings.Contains(err.Error(), "filesystem is required") {
 		t.Fatalf("NewServiceFromHomePorts(nil, decode) error = %v, want filesystem required", err)
 	}
 
-	_, err = settingswire.NewServiceFromHomePorts(platformfilesystem.Local{}, nil)
+	_, err = settingswire.NewServiceFromHomePorts(platformfilesystem.Local{}, nil, providersRoot)
 	if err == nil || !strings.Contains(err.Error(), "decoder is required") {
 		t.Fatalf("NewServiceFromHomePorts(files, nil) error = %v, want decoder required", err)
 	}
@@ -119,22 +137,23 @@ func TestWireCompositionFromHomePortsRejectsMissingPorts(t *testing.T) {
 func TestWireCompositionRegisterDefaultsResolutionFromHomeRestoresAdapterOwnership(t *testing.T) {
 	t.Parallel()
 
-	operatorsettings.ConfigureDefaultsResolutionFromHome(nil)
 	settingswire.RegisterDefaultsResolutionFromHome()
 }
 
 func TestResolveFromHomeRejectsMissingFilesystemPorts(t *testing.T) {
 	t.Parallel()
 
-	_, err := operatorsettings.ResolveFromHomeWithEnvironment(
+	providersRoot, err := providerswire.NewService()
+	if err != nil {
+		t.Fatalf("providerswire.NewService() error = %v", err)
+	}
+	_, err = settingswire.NewServiceFromHomePorts(
 		nil,
 		globalconfigmapping.Decode,
-		t.TempDir(),
-		operatorsettings.Defaults{},
-		operatorsettings.FlagOverrides{},
+		providersRoot,
 	)
-	if err == nil || !strings.Contains(err.Error(), "resolve operator defaults") {
-		t.Fatalf("ResolveFromHomeWithEnvironment() error = %v, want home-port construction failure", err)
+	if err == nil || !strings.Contains(err.Error(), "operator settings filesystem is required") {
+		t.Fatalf("NewServiceFromHomePorts() error = %v, want home-port construction failure", err)
 	}
 }
 
@@ -155,9 +174,19 @@ func TestResolveFromHomeUsesSettingsAdapterOwnershipPath(t *testing.T) {
 		t.Fatalf("WriteFile(config): %v", err)
 	}
 
-	resolved, err := operatorsettings.ResolveFromHomeWithEnvironment(
+	providersRoot, err := providerswire.NewService()
+	if err != nil {
+		t.Fatalf("providerswire.NewService() error = %v", err)
+	}
+	settingsRoot, err := settingswire.NewServiceFromHomePorts(
 		platformfilesystem.Local{},
 		globalconfigmapping.Decode,
+		providersRoot,
+	)
+	if err != nil {
+		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
+	}
+	resolved, err := settingsRoot.ResolveFromHomeWithEnvironment(
 		homeDir,
 		operatorsettings.Defaults{},
 		operatorsettings.FlagOverrides{},
@@ -173,6 +202,10 @@ func TestResolveFromHomeUsesSettingsAdapterOwnershipPath(t *testing.T) {
 func TestWireCompositionFromConfigDocumentConstructsFromDocumentPorts(t *testing.T) {
 	t.Parallel()
 
+	providersRoot, err := providerswire.NewService()
+	if err != nil {
+		t.Fatalf("providerswire.NewService() error = %v", err)
+	}
 	root, err := settingswire.NewServiceFromConfigDocument(operatorsettings.ConfigDocumentService{
 		Files:     platformfilesystem.Local{},
 		Decoder:   globalconfigmapping.Decode,
@@ -181,7 +214,7 @@ func TestWireCompositionFromConfigDocumentConstructsFromDocumentPorts(t *testing
 		CreateTemp: func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
 			return os.CreateTemp(dir, pattern)
 		},
-	})
+	}, providersRoot)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
 	}
@@ -193,7 +226,11 @@ func TestWireCompositionFromConfigDocumentConstructsFromDocumentPorts(t *testing
 func TestWireCompositionFromConfigDocumentRejectsMissingDocumentPorts(t *testing.T) {
 	t.Parallel()
 
-	_, err := settingswire.NewServiceFromConfigDocument(operatorsettings.ConfigDocumentService{})
+	providersRoot, err := providerswire.NewService()
+	if err != nil {
+		t.Fatalf("providerswire.NewService() error = %v", err)
+	}
+	_, err = settingswire.NewServiceFromConfigDocument(operatorsettings.ConfigDocumentService{}, providersRoot)
 	if err == nil || !strings.Contains(err.Error(), "operator settings document ports are required") {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v, want document ports required", err)
 	}

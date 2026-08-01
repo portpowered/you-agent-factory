@@ -28,5 +28,13 @@ func NewServiceFromConfigDocument(
 	if err != nil {
 		return nil, err
 	}
-	return newServiceRoot(documentOwner, resolutionService)
+	return newServiceRoot(
+		documentOwner,
+		resolutionService,
+		service.Files,
+		service.CreateTemp,
+		service.Decoder,
+		service.Encoder,
+		nil,
+	)
 }

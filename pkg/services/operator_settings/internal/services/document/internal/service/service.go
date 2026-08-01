@@ -41,6 +41,20 @@ func New(
 	}
 }
 
+// RebindDocumentOwner returns a new owner over the current compatibility
+// adapter ports. ConfigDocumentService exposes those ports for legacy callers;
+// rebinding keeps mutations to that adapter view from bypassing the nested
+// owner while preserving custom owners that do not implement this hook.
+func (service *Service) RebindDocumentOwner(
+	files operatorsettings.FileSystem,
+	createTemp operatorsettings.CreateTemporaryFile,
+	decoder operatorsettings.ConfigDecoder,
+	encoder operatorsettings.ConfigEncoder,
+	providers operatorsettings.ProviderCatalog,
+) operatorsettings.DocumentOwner {
+	return New(files, createTemp, decoder, encoder, providers)
+}
+
 func (service *Service) LoadDocument(
 	request operatorsettings.LoadDocumentRequest,
 ) (operatorsettings.LoadDocumentResult, error) {

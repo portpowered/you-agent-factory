@@ -8,6 +8,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
@@ -15,7 +16,7 @@ import (
 func TestNewServiceFromHomePortsRequiresFilesystem(t *testing.T) {
 	t.Parallel()
 
-	_, err := settingswire.NewServiceFromHomePorts(nil, globalconfigmapping.Decode)
+	_, err := settingswire.NewServiceFromHomePorts(nil, globalconfigmapping.Decode, internaltestproviders.StandardCatalog())
 	if err == nil || !strings.Contains(err.Error(), "filesystem is required") {
 		t.Fatalf("NewServiceFromHomePorts(nil, decode) error = %v, want filesystem required", err)
 	}
@@ -24,7 +25,7 @@ func TestNewServiceFromHomePortsRequiresFilesystem(t *testing.T) {
 func TestNewServiceFromHomePortsRequiresDecoder(t *testing.T) {
 	t.Parallel()
 
-	_, err := settingswire.NewServiceFromHomePorts(platformfilesystem.Local{}, nil)
+	_, err := settingswire.NewServiceFromHomePorts(platformfilesystem.Local{}, nil, internaltestproviders.StandardCatalog())
 	if err == nil || !strings.Contains(err.Error(), "decoder is required") {
 		t.Fatalf("NewServiceFromHomePorts(files, nil) error = %v, want decoder required", err)
 	}
@@ -33,7 +34,11 @@ func TestNewServiceFromHomePortsRequiresDecoder(t *testing.T) {
 func TestNewServiceFromHomePortsConstructsAcceptedSettingsRoot(t *testing.T) {
 	t.Parallel()
 
-	root, err := settingswire.NewServiceFromHomePorts(platformfilesystem.Local{}, globalconfigmapping.Decode)
+	root, err := settingswire.NewServiceFromHomePorts(
+		platformfilesystem.Local{},
+		globalconfigmapping.Decode,
+		internaltestproviders.StandardCatalog(),
+	)
 	if err != nil {
 		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
 	}
@@ -59,9 +64,15 @@ func TestResolveFromHomeViaSettingsCLIAdapterOwnershipPath(t *testing.T) {
 		t.Fatalf("WriteFile(config): %v", err)
 	}
 
-	resolved, err := operatorsettings.ResolveFromHomeWithEnvironment(
+	root, err := settingswire.NewServiceFromHomePorts(
 		platformfilesystem.Local{},
 		globalconfigmapping.Decode,
+		internaltestproviders.StandardCatalog(),
+	)
+	if err != nil {
+		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
+	}
+	resolved, err := root.ResolveFromHomeWithEnvironment(
 		homeDir,
 		operatorsettings.Defaults{},
 		operatorsettings.FlagOverrides{},
@@ -80,14 +91,12 @@ func TestResolveFromHomeViaSettingsCLIAdapterOwnershipPath(t *testing.T) {
 func TestResolveFromHomeViaSettingsCLIRejectsMissingFilesystemPorts(t *testing.T) {
 	t.Parallel()
 
-	_, err := operatorsettings.ResolveFromHomeWithEnvironment(
+	_, err := settingswire.NewServiceFromHomePorts(
 		nil,
 		globalconfigmapping.Decode,
-		t.TempDir(),
-		operatorsettings.Defaults{},
-		operatorsettings.FlagOverrides{},
+		internaltestproviders.StandardCatalog(),
 	)
-	if err == nil || !strings.Contains(err.Error(), "resolve operator defaults") {
-		t.Fatalf("ResolveFromHomeWithEnvironment() error = %v, want home-port construction failure", err)
+	if err == nil || !strings.Contains(err.Error(), "filesystem is required") {
+		t.Fatalf("NewServiceFromHomePorts() error = %v, want home-port construction failure", err)
 	}
 }

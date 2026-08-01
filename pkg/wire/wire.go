@@ -56,7 +56,7 @@ var servicesSet = wire.NewSet(
 	provideOperatorSettingsFileSystem,
 	provideOperatorSettingsCreateTemporaryFile,
 	provideOperatorSettingsProviderCatalog,
-	provideOperatorConfigDocumentService,
+	provideOperatorSettingsService,
 	provideOperatorSettingsIDGenerator,
 	provideOperatorConfigDecoder,
 	provideOperatorConfigEncoder,

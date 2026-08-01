@@ -105,16 +105,30 @@ func TestProvideSystemInitializationServiceComposedInitializeCreatesThenSkipsPac
 
 	edges := serviceedges.Edges{}
 	files := provideOperatorSettingsFileSystem(edges)
+	providersRoot, err := provideProvidersService(edges)
+	if err != nil {
+		t.Fatalf("provideProvidersService() error = %v", err)
+	}
+	providerRegistry, err := provideProviderRegistry(edges, providersRoot)
+	if err != nil {
+		t.Fatalf("provideProviderRegistry() error = %v", err)
+	}
 	decoder := provideOperatorConfigDecoder()
 	encoder := provideOperatorConfigEncoder()
-	loadOperatorConfig := provideOperatorConfigLoader(files, decoder)
-	ensureOperatorBackendScope := provideOperatorBackendScopeEnsurer(
+	settings, err := provideOperatorSettingsService(
 		files,
 		provideOperatorSettingsCreateTemporaryFile(edges),
-		provideOperatorSettingsIDGenerator(edges),
+		provideOperatorSettingsProviderCatalog(providerRegistry),
 		decoder,
 		encoder,
+		provideOperatorSettingsIDGenerator(edges),
+		providersRoot,
 	)
+	if err != nil {
+		t.Fatalf("provideOperatorSettingsService() error = %v", err)
+	}
+	loadOperatorConfig := provideOperatorConfigLoader(settings)
+	ensureOperatorBackendScope := provideOperatorBackendScopeEnsurer(settings)
 
 	service, err := provideSystemInitializationService(
 		bootstrapCompositionTestPersistence(t),

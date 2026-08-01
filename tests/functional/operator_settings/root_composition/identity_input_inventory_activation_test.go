@@ -9,9 +9,12 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -81,7 +84,19 @@ func TestOperatorInputInventoryActivatesThroughRootBuildProcessAfterLifecycle(t 
 
 	runOperatorSettingsLifecycleInitialization(t, process, homeDir)
 
-	inventory := operatorsettings.ProjectInputInventory()
+	providersRoot, err := providerswire.NewService()
+	if err != nil {
+		t.Fatalf("providerswire.NewService() error = %v", err)
+	}
+	settingsRoot, err := settingswire.NewServiceFromHomePorts(
+		platformfilesystem.Local{},
+		globalconfigmapping.Decode,
+		providersRoot,
+	)
+	if err != nil {
+		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
+	}
+	inventory := settingsRoot.ProjectInputInventory()
 	if inventory.FormatVersion != operatorsettings.InputInventoryFormatVersion {
 		t.Fatalf("inventory formatVersion = %q, want %q", inventory.FormatVersion, operatorsettings.InputInventoryFormatVersion)
 	}

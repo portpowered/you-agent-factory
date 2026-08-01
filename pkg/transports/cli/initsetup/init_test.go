@@ -9,19 +9,19 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
 func TestConfigurerRequiresSuppliedProviderBeforePersistence(t *testing.T) {
 	var output bytes.Buffer
-	err := initsetup.NewConfigurer(operatorsettings.ConfigDocumentService{}, testLineReaderFactory)(
+	err := initsetup.NewConfigurer(nil, testLineReaderFactory)(
 		initsetup.Config{
 			Context: context.Background(),
 			HomeDir: t.TempDir(),
@@ -38,7 +38,7 @@ func TestConfigurerRequiresSuppliedProviderBeforePersistence(t *testing.T) {
 
 func TestConfigurerRejectsEmptySuppliedModelBeforePersistence(t *testing.T) {
 	model := "  "
-	err := initsetup.NewConfigurer(operatorsettings.ConfigDocumentService{}, testLineReaderFactory)(
+	err := initsetup.NewConfigurer(nil, testLineReaderFactory)(
 		initsetup.Config{
 			Context:  context.Background(),
 			HomeDir:  t.TempDir(),
@@ -193,8 +193,12 @@ func TestConfigurerRejectsPromptedInvalidProviderWithoutPersisting(t *testing.T)
 	}
 }
 
-func testConfigService() operatorsettings.ConfigDocumentService {
-	return settingswire.NewConfigDocumentService(
+func testConfigService() operatorsettings.Service {
+	providersRoot, err := providerswire.NewService()
+	if err != nil {
+		panic(err)
+	}
+	service, err := settingswire.NewService(
 		platformfilesystem.Local{},
 		func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
 			return os.CreateTemp(dir, pattern)
@@ -202,8 +206,12 @@ func testConfigService() operatorsettings.ConfigDocumentService {
 		globalconfigmapping.Decode,
 		globalconfigmapping.Encode,
 		testProviderCatalog,
-		&sync.Mutex{},
+		providersRoot,
 	)
+	if err != nil {
+		panic(err)
+	}
+	return service
 }
 
 type testLineReader struct {

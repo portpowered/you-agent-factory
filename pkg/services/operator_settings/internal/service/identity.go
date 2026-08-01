@@ -1,29 +1,32 @@
-package identityinputinventory
+package service
 
 import (
 	"fmt"
+	"io"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
-// EnsureLocalBackendScope loads backendScopeID from configPath, generates
-// local-<uuid> when missing, and persists a newly generated value before returning.
-func EnsureLocalBackendScope(
-	files operatorsettings.FileSystem,
-	createTemp operatorsettings.CreateTemporaryFile,
-	generateID operatorsettings.IDGenerator,
-	decode operatorsettings.ConfigDecoder,
-	encode operatorsettings.ConfigEncoder,
-	configPath string,
-) (operatorsettings.ResolvedBackendScope, error) {
+var localBackendScopePattern = regexp.MustCompile(
+	`^local-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`,
+)
+
+func isLocalBackendScopeID(value string) bool {
+	return localBackendScopePattern.MatchString(strings.TrimSpace(value))
+}
+
+func (s *Service) ensureLocalBackendScope(configPath string) (operatorsettings.ResolvedBackendScope, error) {
 	configPath = strings.TrimSpace(configPath)
 	if configPath == "" {
 		return operatorsettings.ResolvedBackendScope{}, fmt.Errorf("system config path is required to resolve backend scope")
 	}
-
-	config, err := operatorsettings.LoadFileConfig(files, decode, configPath)
+	if s.files == nil {
+		return operatorsettings.ResolvedBackendScope{}, fmt.Errorf("operator settings filesystem is required")
+	}
+	config, err := s.LoadFileConfig(configPath)
 	if err != nil {
 		return operatorsettings.ResolvedBackendScope{}, err
 	}
@@ -34,14 +37,15 @@ func EnsureLocalBackendScope(
 			ConfigPath:     configPath,
 		}, nil
 	}
-
-	generated := operatorsettings.GenerateLocalBackendScopeID(generateID)
+	if s.idGenerator == nil {
+		return operatorsettings.ResolvedBackendScope{}, fmt.Errorf("operator settings ID generator is required")
+	}
+	generated := operatorsettings.LocalBackendScopePrefix + s.idGenerator()
 	config.BackendScopeID = generated
-	if err := persistBackendScopeID(files, createTemp, encode, configPath, config); err != nil {
+	if err := s.persistBackendScopeID(configPath, config); err != nil {
 		return operatorsettings.ResolvedBackendScope{}, fmt.Errorf(
 			"persist generated backend scope ID to system config %q: %w; local backends require a stable backendScopeID before exposing session identity",
-			configPath,
-			err,
+			configPath, err,
 		)
 	}
 	return operatorsettings.ResolvedBackendScope{
@@ -51,57 +55,44 @@ func EnsureLocalBackendScope(
 	}, nil
 }
 
-func persistBackendScopeID(
-	files operatorsettings.FileSystem,
-	createTemp operatorsettings.CreateTemporaryFile,
-	encode operatorsettings.ConfigEncoder,
-	configPath string,
-	config operatorsettings.Config,
-) error {
-	backendScopeID := strings.TrimSpace(config.BackendScopeID)
-	if backendScopeID == "" {
+func (s *Service) persistBackendScopeID(configPath string, config operatorsettings.Config) error {
+	if strings.TrimSpace(config.BackendScopeID) == "" {
 		return fmt.Errorf("backend scope ID is required")
 	}
-	if !operatorsettings.IsLocalBackendScopeID(backendScopeID) {
-		return fmt.Errorf("backend scope ID %q is not a valid local backend scope", backendScopeID)
+	if !isLocalBackendScopeID(config.BackendScopeID) {
+		return fmt.Errorf("backend scope ID %q is not a valid local backend scope", config.BackendScopeID)
 	}
-
-	if encode == nil {
+	if s.encoder == nil {
 		return fmt.Errorf("global config encoder is required")
 	}
-	data, err := encode(config)
+	if s.createTemp == nil {
+		return fmt.Errorf("operator settings temporary-file creator is required")
+	}
+	data, err := s.encoder(config)
 	if err != nil {
 		return err
 	}
-	return writeConfig(files, createTemp, configPath, data)
-}
-
-func writeConfig(
-	files operatorsettings.FileSystem,
-	createTemp operatorsettings.CreateTemporaryFile,
-	configPath string,
-	data []byte,
-) error {
 	dir := filepath.Dir(configPath)
-	if err := files.MkdirAll(dir, 0o755); err != nil {
+	if err := s.files.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create system config directory %q: %w", dir, err)
 	}
-
-	tmp, err := createTemp(dir, filepath.Base(configPath)+".*.tmp")
+	tmp, err := s.createTemp(dir, filepath.Base(configPath)+".*.tmp")
 	if err != nil {
 		return fmt.Errorf("create system config temp file: %w", err)
 	}
 	tmpPath := tmp.Name()
-	cleanupTemp := true
+	cleanup := true
 	defer func() {
-		if cleanupTemp {
-			_ = files.Remove(tmpPath)
+		if cleanup {
+			_ = s.files.Remove(tmpPath)
 		}
 	}()
-
-	if _, err := tmp.Write(data); err != nil {
+	if written, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("write system config temp file: %w", err)
+	} else if written != len(data) {
+		_ = tmp.Close()
+		return fmt.Errorf("write system config temp file: %w", io.ErrShortWrite)
 	}
 	if err := tmp.Sync(); err != nil {
 		_ = tmp.Close()
@@ -110,12 +101,12 @@ func writeConfig(
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("close system config temp file: %w", err)
 	}
-	if err := files.Chmod(tmpPath, 0o600); err != nil {
+	if err := s.files.Chmod(tmpPath, 0o600); err != nil {
 		return fmt.Errorf("set system config temp file permissions: %w", err)
 	}
-	if err := files.Rename(tmpPath, configPath); err != nil {
+	if err := s.files.Rename(tmpPath, configPath); err != nil {
 		return fmt.Errorf("replace system config with temp file: %w", err)
 	}
-	cleanupTemp = false
+	cleanup = false
 	return nil
 }

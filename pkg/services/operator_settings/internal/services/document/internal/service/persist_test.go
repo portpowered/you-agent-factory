@@ -160,7 +160,7 @@ func TestPersistDocument_RejectsBeforeFilesystemSideEffects(t *testing.T) {
 		t.Fatalf("filesystem calls = %d, want zero", files.calls)
 	}
 
-	document := operatorsettings.EmptyDocument()
+	document := operatorsettings.EmptyDocument
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
 	if err := service.PersistDocument(cancelled, operatorsettings.PersistDocumentRequest{
@@ -399,7 +399,7 @@ func documentFromConfigForTest(config operatorsettings.Config) operatorsettings.
 			WorkerModelProvider: config.Defaults.WorkerModelProvider,
 			WorkerModel:         config.Defaults.WorkerModel,
 		},
-		Runtime: operatorsettings.EmptyDocument().Runtime,
+		Runtime: operatorsettings.EmptyDocument.Runtime,
 	}
 	if config.WorkerPresets != nil {
 		document.WorkerPresets = make([]operatorsettings.DocumentWorkerPreset, len(config.WorkerPresets))

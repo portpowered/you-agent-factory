@@ -9,6 +9,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
@@ -38,7 +39,10 @@ func TestWireFoldPreservesDocumentIdentityResolutionAndConfigBehavior(t *testing
 		t.Fatalf("WriteFile(config): %v", err)
 	}
 
-	root, err := settingswire.NewServiceFromConfigDocument(testConfigDocumentService())
+	root, err := settingswire.NewServiceFromConfigDocument(
+		testConfigDocumentService(),
+		internaltestproviders.StandardCatalog(),
+	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
 	}
@@ -133,9 +137,15 @@ func TestWireFoldPreservesDefaultsResolutionFromHomeOwnershipPath(t *testing.T) 
 		t.Fatalf("WriteFile(config): %v", err)
 	}
 
-	resolved, err := operatorsettings.ResolveFromHomeWithEnvironment(
+	root, err := settingswire.NewServiceFromHomePorts(
 		platformfilesystem.Local{},
 		globalconfigmapping.Decode,
+		internaltestproviders.StandardCatalog(),
+	)
+	if err != nil {
+		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
+	}
+	resolved, err := root.ResolveFromHomeWithEnvironment(
 		homeDir,
 		operatorsettings.Defaults{},
 		operatorsettings.FlagOverrides{},
@@ -157,14 +167,12 @@ func TestWireFoldPreservesDefaultsResolutionFromHomeOwnershipPath(t *testing.T) 
 func TestWireFoldDefaultsResolutionFromHomeRejectsMissingFilesystemPorts(t *testing.T) {
 	t.Parallel()
 
-	_, err := operatorsettings.ResolveFromHomeWithEnvironment(
+	_, err := settingswire.NewServiceFromHomePorts(
 		nil,
 		globalconfigmapping.Decode,
-		t.TempDir(),
-		operatorsettings.Defaults{},
-		operatorsettings.FlagOverrides{},
+		internaltestproviders.StandardCatalog(),
 	)
-	if err == nil || !strings.Contains(err.Error(), "resolve operator defaults") {
-		t.Fatalf("ResolveFromHomeWithEnvironment() error = %v, want home-port construction failure", err)
+	if err == nil || !strings.Contains(err.Error(), "filesystem is required") {
+		t.Fatalf("NewServiceFromHomePorts() error = %v, want home-port construction failure", err)
 	}
 }

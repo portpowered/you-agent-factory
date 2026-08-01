@@ -168,11 +168,9 @@ func (settings DocumentRuntimeArtifactSettings) Clone() DocumentRuntimeArtifactS
 	return settings
 }
 
-// EmptyDocument returns a valid empty operator document with production-default
-// runtime artifact settings.
-func EmptyDocument() Document {
-	return Document{Runtime: defaultDocumentRuntimeSettings()}
-}
+// EmptyDocument is a valid empty operator document with production-default
+// runtime artifact settings. It is a detached value, not a construction hook.
+var EmptyDocument = Document{Runtime: defaultDocumentRuntimeSettings()}
 
 func defaultDocumentRuntimeSettings() DocumentRuntimeSettings {
 	defaults := defaultRuntimeArtifactSettings()
@@ -256,8 +254,9 @@ type PersistDocumentRequest struct {
 	Document Document
 }
 
-// DocumentOwner is the parent-private document capability consumed by
-// ConfigDocumentService. Wire injects the nested document owner implementation.
+// DocumentOwner is the parent-private document capability consumed by the
+// compatibility ConfigDocumentService. Wire injects the nested document owner
+// implementation; peer packages use Service instead.
 type DocumentOwner interface {
 	LoadDocument(LoadDocumentRequest) (LoadDocumentResult, error)
 	MergeDocumentProviderModel(Document, DocumentProviderModelUpdate) (Document, error)

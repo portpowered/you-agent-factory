@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,6 +41,7 @@ import (
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
@@ -247,20 +247,23 @@ func provideOperatorSettingsProviderCatalog(
 	}
 }
 
-func provideOperatorConfigDocumentService(
+func provideOperatorSettingsService(
 	files operatorsettings.FileSystem,
 	createTemp operatorsettings.CreateTemporaryFile,
-	providers operatorsettings.ProviderCatalog,
+	providerCatalog operatorsettings.ProviderCatalog,
 	decode operatorsettings.ConfigDecoder,
 	encode operatorsettings.ConfigEncoder,
-) operatorsettings.ConfigDocumentService {
-	return settingswire.NewConfigDocumentService(
+	idGenerator operatorsettings.IDGenerator,
+	providersRoot providers.Service,
+) (operatorsettings.Service, error) {
+	return settingswire.NewService(
 		files,
 		createTemp,
 		decode,
 		encode,
-		providers,
-		&sync.Mutex{},
+		providerCatalog,
+		providersRoot,
+		idGenerator,
 	)
 }
 
@@ -289,21 +292,15 @@ func provideSystemInitializationLegacyFactoryMigrationFileSystem(
 	return platformfilesystem.Local{}
 }
 
-func provideOperatorConfigLoader(files operatorsettings.FileSystem, decode operatorsettings.ConfigDecoder) operatorsettings.ConfigLoader {
+func provideOperatorConfigLoader(settings operatorsettings.Service) operatorsettings.ConfigLoader {
 	return func(path string) (operatorsettings.Config, error) {
-		return operatorsettings.LoadFileConfig(files, decode, path)
+		return settings.LoadFileConfig(path)
 	}
 }
 
-func provideOperatorBackendScopeEnsurer(
-	files operatorsettings.FileSystem,
-	createTemp operatorsettings.CreateTemporaryFile,
-	generateID operatorsettings.IDGenerator,
-	decode operatorsettings.ConfigDecoder,
-	encode operatorsettings.ConfigEncoder,
-) operatorsettings.BackendScopeEnsurer {
+func provideOperatorBackendScopeEnsurer(settings operatorsettings.Service) operatorsettings.BackendScopeEnsurer {
 	return func(path string) (operatorsettings.ResolvedBackendScope, error) {
-		return operatorsettings.EnsureLocalBackendScope(files, createTemp, generateID, decode, encode, path)
+		return settings.EnsureLocalBackendScope(path)
 	}
 }
 
