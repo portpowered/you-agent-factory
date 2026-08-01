@@ -227,13 +227,21 @@ The live checks found these concrete violations:
 
 2. Petri implementation leakage:
 
-   - `pkg-boundary` rejects a Petri public-surface baseline entry covering  
-     `factory_runtime/internal/services/orchestration/definitionmapping/maptests/config_mapper_equivalence_test.go`.
+   - Repaired in the boundary-repair pass. The config-mapper equivalence
+     fixture now uses Runtime-internal Petri/state types, and the Runtime CLI
+     transport test constructs its marking fixture from the owning internal
+     Petri/token packages. Their exact public-surface baseline entries were
+     removed after the scanner confirmed no new or stale Petri findings.
+   - The remaining Petri edges are still tracked by the exact deletion-only
+     baseline for the broader IMP-RUN-01 retirement; this item no longer has an
+     unbaselined `pkg-boundary` violation.
 
 3. Functional test bypass:
 
-   - `tests/functional/providers/acp/daemon_concurrency_test.go` imports `providers/wire`.
-   - It should construct through `root.BuildProcess` and substitute effects through `edges.Edges`.
+   - Repaired in this pass; `tests/functional/workers/agent/root_build_test.go`
+     now constructs through `root.BuildProcess` and exercises only the public
+     process provider-identity capability. No functional test imports
+     `providers/wire` directly.
 
 4. Package-target inventory drift:
 
