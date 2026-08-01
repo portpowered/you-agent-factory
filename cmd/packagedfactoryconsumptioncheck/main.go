@@ -26,6 +26,7 @@ const (
 )
 
 var excludedDirectoryNames = map[string]struct{}{
+	".claude":      {},
 	".git":         {},
 	".artifacts":   {},
 	"coverage":     {},
