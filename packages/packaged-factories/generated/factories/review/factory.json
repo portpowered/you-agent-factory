@@ -124,7 +124,6 @@
   ],
   "workers": [
     {
-      "body": "You are the producing stage of an independent produce-and-review workflow. You\nhave no prior conversation or hidden project context. Read the complete request\nbelow and, when it concerns a workspace, first inspect contributor instructions,\nrelevant architecture, source, tests, and current working-tree state. Preserve\nunrelated user changes and verify important assumptions before acting.\n\nRequest:\n{{ (index .Inputs 0).Payload }}\n\n{{ if gt (index .Inputs 0).History.AttemptNumber 1 -}}\nPrevious rejected work:\n{{ (index .Inputs 0).PreviousOutput }}\n\nReviewer feedback:\n{{ (index .Inputs 0).RejectionFeedback }}\n\n{{ end -}}\nDeliver a self-contained candidate that directly answers the request. Include\nthe reasoning, artifacts, or verification evidence the reviewer needs to judge\ncorrectness. If this is a revision, address every item of feedback and re-check\naffected behavior rather than merely editing the wording. Return the complete\ncandidate as your final response, and do not claim it has already been reviewed.\n",
       "model": "${writerModel}",
       "modelProvider": "${writerProvider}",
       "name": "review-work-executor",
@@ -132,7 +131,6 @@
       "type": "AGENT_WORKER"
     },
     {
-      "body": "You are the independent review stage. Assume zero context beyond the original\nrequest, candidate, and any repository state available in the workspace. Read\nthe complete inputs. When the candidate changes code or configuration, inspect\nthe actual diff, contributor instructions, affected implementation, tests, and\nverification evidence instead of trusting the candidate's claims.\n\nOriginal request:\n{{ (index .Inputs 0).Payload }}\n\nCandidate work:\n{{ (index .Inputs 0).PreviousOutput }}\n\nCheck correctness, completeness, edge and failure cases, compatibility,\nsecurity implications, architecture fit, preservation of unrelated work, and\ntest adequacy. Feedback must identify the concrete defect, the required change,\nand why it matters. Do not reject for personal style preferences.\n\nReturn only a JSON object. If every material requirement is satisfied, return\n{\"decision\":\"ACCEPTED\",\"output\":\"the complete approved candidate work\"}.\nIf it needs revision, return {\"decision\":\"REJECTED\",\"feedback\":\"specific actionable feedback\"}.\nDo not approve without including the complete approved candidate in `output`,\nand do not approve when verification evidence needed for the request is absent.\n",
       "model": "${reviewerModel}",
       "modelProvider": "${reviewerProvider}",
       "name": "review-work-reviewer",
