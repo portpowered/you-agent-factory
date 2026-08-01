@@ -161,3 +161,44 @@ post-change median is 55.4% lower. The prior serialized local run was 24.666
 seconds; it is retained as a host-local diagnostic only because it was not a
 three-sample protocol run. All three post-change samples passed every
 automation test.
+
+## CLI output and root discovery after story 003
+
+The factory-run output and root-discovery cells now schedule independent
+top-level and table-driven subtests in parallel. Each cell still constructs a
+fresh root-built Process, owns its temporary HOME/USERPROFILE, working
+directory, captured streams, Factory files, injected server/provider edges,
+and cancellation lifecycle. No process, writable root, environment map,
+stream, listener, or runtime/session state is shared between cells.
+
+Three uncached samples were captured on 2026-08-01 (UTC) on the same Windows
+11/amd64 machine, with Go 1.25.0 and the same `-short -count=1` mode. The
+sample selected the two unchanged package paths from the protocol in the same
+order, and `go clean -testcache` ran before each sample. The outer wall time
+includes command/build setup; the `ok` duration is Go test execution time.
+
+| Sample | CLI factory-run output wall | CLI factory-run output `ok` | CLI root discovery wall | CLI root discovery `ok` |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 10.70 | 6.05 | 12.41 | 4.42 |
+| 2 | 7.81 | 2.49 | 4.37 | 1.34 |
+| 3 | 4.02 | 1.32 | 8.16 | 3.67 |
+| **Median** | **7.807** | **2.494** | **8.162** | **3.674** |
+
+The two-package outer-wall combined sums were 23.103, 12.180, and 12.181
+seconds, with a 12.181-second median. Against the same two package groups'
+baseline sample sums of 38.830, 13.490, and 33.680 seconds (33.680-second
+median), the combined median is 63.8% lower. The package-median sum is 15.969
+seconds versus the 25.010-second baseline package-median sum, a 36.1% lower
+measurement. Factory-run output's median outer wall time is 50.5% lower;
+root discovery's median outer wall time is 11.5% lower, while its test-body
+median is 78.8% lower than the only baseline body-duration observation. The
+remaining outer-time variance is command/build setup rather than a shared
+runtime cache.
+
+Three concurrent two-package diagnostics also passed. Each wave launched the
+same two uncached package commands as separate child processes with unique
+stdout/stderr files; all six exit codes were zero and every launched process
+was joined before the diagnostic directory was removed. Maximum per-wave wall
+times were 7.786, 9.498, and 7.436 seconds. No executable or file-lock,
+working-directory, environment, port, child-process, or assertion collision
+was observed.
