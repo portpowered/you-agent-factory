@@ -265,6 +265,9 @@ func (s *Adapter) InvokeFactorySessionBySessionId(
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
+	if s.guardSessionsRequestContext(w, r) {
+		return
+	}
 	if s.invocation == nil {
 		s.writeError(w, http.StatusInternalServerError, "session invocation API is unavailable", "INTERNAL_ERROR")
 		return
@@ -272,6 +275,9 @@ func (s *Adapter) InvokeFactorySessionBySessionId(
 
 	result, err := s.invocation.InvokeFactorySession(r.Context(), string(sessionID), req)
 	if err != nil {
+		if s.writeSessionsRequestContextOutcome(w, err) {
+			return
+		}
 		switch typed := err.(type) {
 		case *work.InputError:
 			s.writeError(w, http.StatusBadRequest, typed.Message, string(typed.Code))
@@ -308,11 +314,17 @@ func (s *Adapter) StageSubmitWorkFileBySessionId(
 	r *http.Request,
 	sessionID factoryapi.SessionID,
 ) {
+	if s.guardSessionsRequestContext(w, r) {
+		return
+	}
 	definitions, ok := s.requireFactoryDefinitionAPI(w)
 	if !ok {
 		return
 	}
 	if _, err := definitions.GetCurrentFactoryForSession(r.Context(), string(sessionID)); err != nil {
+		if s.writeSessionsRequestContextOutcome(w, err) {
+			return
+		}
 		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
 			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
 			return
