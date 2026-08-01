@@ -134,3 +134,30 @@ is recorded as a caveat rather than treated as product latency.
 These numbers are a baseline for later stories, not a performance claim. Any
 after measurement must repeat this protocol on the same machine with the same
 package order and report the same per-group and combined statistics.
+
+## Automations after story 002
+
+The automation lifecycle proofs now run as independent Go parallel test cells.
+Each cell still constructs its own root process and owns its Factory directory,
+environment, HTTP server, clock, watcher or poller, command edge, and
+observation channel. The two reconciliation proofs no longer construct and
+discard a second process before creating their explicitly invoked Automations
+Root; their dedicated inert proof remains separate.
+
+Three uncached samples were captured on 2026-08-01 (UTC) on the same Windows
+11/amd64 machine, with Go 1.25.0 and the same `-short -count=1` command used by
+the baseline. `go clean -testcache` ran before each sample. The outer wall time
+includes command/build setup; the `ok` duration is the Go test execution time.
+
+| Sample | Started (UTC) | Exit code | Outer wall seconds | Go `ok` seconds |
+| ---: | --- | ---: | ---: | ---: |
+| 1 | 2026-08-01T09:50:37.692Z | 0 | 3.240 | 0.915 |
+| 2 | 2026-08-01T09:50:41.115Z | 0 | 3.560 | 0.950 |
+| 3 | 2026-08-01T09:50:44.979Z | 0 | 5.250 | 1.125 |
+| **Median** |  |  | **3.560** | **0.950** |
+
+Against the baseline Automations median of 7.990 outer wall seconds, the
+post-change median is 55.4% lower. The prior serialized local run was 24.666
+seconds; it is retained as a host-local diagnostic only because it was not a
+three-sample protocol run. All three post-change samples passed every
+automation test.
