@@ -258,7 +258,7 @@ repository-wide speedup claim.
 ### Changed-line budget
 
 Against the merge-base with `origin/main`, the rename-aware cohort patch is
-**5 files / ~127 insertions / ~6 deletions** (baseline evidence + after-state
+**5 files / ~270 insertions / ~6 deletions** (baseline evidence + after-state
 report + four leased rename/import migrations). Well within the ~1,000
 changed-line budget; no unsafe-coupling split required. No production-code
 edits.
