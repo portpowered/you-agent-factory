@@ -175,13 +175,16 @@ type Delivery struct {
 // caller can never observe an impossible combination such as DeliveryGap
 // with a nil or malformed Gap, DeliveryRecord with an unset Record/Cursor or
 // a Cursor naming a different topic than the delivered Record, or a
-// terminal/gap Delivery carrying a leftover Record or Cursor.
+// terminal/gap Delivery carrying a leftover Record or Cursor. A Record with
+// only some fields set (for example a stray Payload on a gap or terminal
+// delivery) is rejected the same as a fully-set one: Record.IsZero checks
+// every field, not just ID.
 func (d Delivery) Validate() error {
-	recordSet := d.Record.ID != (RecordID{})
+	recordZero := d.Record.IsZero()
 	cursorSet := d.Cursor != (Cursor{})
 	switch d.Kind {
 	case DeliveryRecord:
-		if !recordSet || !cursorSet || d.Gap != nil {
+		if recordZero || !cursorSet || d.Gap != nil {
 			return ErrInconsistentDelivery
 		}
 		if err := d.Record.Validate(); err != nil {
@@ -194,14 +197,14 @@ func (d Delivery) Validate() error {
 			return ErrCursorTopicMismatch
 		}
 	case DeliveryGap:
-		if recordSet || cursorSet || d.Gap == nil {
+		if !recordZero || cursorSet || d.Gap == nil {
 			return ErrInconsistentDelivery
 		}
 		if err := d.Gap.Validate(); err != nil {
 			return err
 		}
 	case DeliveryClosed, DeliveryCanceled, DeliveryBackpressure:
-		if recordSet || cursorSet || d.Gap != nil {
+		if !recordZero || cursorSet || d.Gap != nil {
 			return ErrInconsistentDelivery
 		}
 	default:
