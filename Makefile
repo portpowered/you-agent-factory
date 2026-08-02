@@ -414,6 +414,7 @@ functional-boundary-check:
 # gocoveragecheck writes -json-output after a completed measurement even when a
 # floor fails; Make then stops before Markdown so the failure stays non-zero.
 functional-test-viz:
+	$(MAKE) functional-boundary-check
 	$(call ensure_directory,$(FUNCTIONAL_TEST_VIZ_DIR))
 	$(MAKE) test-functional-coverage \
 		GO_FUNCTIONAL_COVERAGE_PROFILE=$(FUNCTIONAL_TEST_VIZ_PROFILE) \
