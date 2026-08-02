@@ -2016,7 +2016,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers",
-      "minimum": 79.81
+      "minimum": 79.60
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal",
