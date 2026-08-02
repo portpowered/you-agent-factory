@@ -11,6 +11,17 @@ import (
 // caller-supplied opaque token.
 var transportUUIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
+// jsonNumberTokenPattern matches a JSON-RPC id's numeric wire token exactly
+// as JSON itself defines a number (RFC 8259 §6): an optional leading "-", an
+// integer part with no superfluous leading zero, an optional fractional
+// part, and an optional exponent. This is the same lexical grammar
+// encoding/json's decoder enforces when decoding into a json.Number, which
+// is how the ACP transport boundary already accepts JSON-RPC numeric ids
+// (pkg/transports/acp/internal/identity), so a fractional id such as "1.5"
+// or an integer outside int64's range is representable here without
+// truncation or collision.
+var jsonNumberTokenPattern = regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?$`)
+
 // ChatTargetKind names the class of destination a Chat Session can select.
 type ChatTargetKind string
 
@@ -52,42 +63,126 @@ func (t ChatTargetRef) Validate() error {
 	return nil
 }
 
-// RequestIdentity is a caller-supplied request identity expressed in one of
-// the two final-proposal forms: a per-connection JSON-RPC id (JSONRPCID)
-// paired with the connection it was minted on (ConnectionID), or a
-// process-unique id a transport mints itself (TransportUUID) that needs no
-// connection pairing. A bare per-connection id without its ConnectionID is
-// never sufficient on its own.
-type RequestIdentity struct {
-	ConnectionID  string
-	JSONRPCID     string
-	TransportUUID string
+// RequestIdentityKind is the closed discriminator naming which of
+// RequestIdentity's mutually exclusive forms is active. It has exactly three
+// legal members; the zero value and any other value are invalid.
+type RequestIdentityKind string
+
+const (
+	// RequestIdentityKindJSONRPCString marks a connection-scoped JSON-RPC id
+	// whose wire value was a string.
+	RequestIdentityKindJSONRPCString RequestIdentityKind = "JSONRPC_STRING"
+	// RequestIdentityKindJSONRPCNumber marks a connection-scoped JSON-RPC id
+	// whose wire value was numeric, including zero.
+	RequestIdentityKindJSONRPCNumber RequestIdentityKind = "JSONRPC_NUMBER"
+	// RequestIdentityKindTransportUUID marks a process-unique id a transport
+	// mints itself, which needs no connection pairing.
+	RequestIdentityKindTransportUUID RequestIdentityKind = "TRANSPORT_UUID"
+)
+
+// Validate reports whether k is one of the declared RequestIdentityKind
+// members.
+func (k RequestIdentityKind) Validate() error {
+	switch k {
+	case RequestIdentityKindJSONRPCString, RequestIdentityKindJSONRPCNumber, RequestIdentityKindTransportUUID:
+		return nil
+	default:
+		return newValidationError("RequestIdentityKind", "", ErrUnknownEnumValue)
+	}
 }
 
-// Validate reports whether the RequestIdentity expresses exactly one of its
-// two legal forms: a well-formed TransportUUID with no ConnectionID or
-// JSONRPCID present, or a JSONRPCID paired with a non-blank ConnectionID and
-// no TransportUUID present. A JSONRPCID without a paired ConnectionID, an
-// identity with neither form present, a malformed TransportUUID, and a
-// TransportUUID mixed with either connection-scoped field are all rejected
-// so the two forms never overlap.
+// RequestIdentity is a caller-supplied request identity expressed in exactly
+// one of its three closed kinds: a connection-scoped JSON-RPC string id
+// (JSONRPCStringID paired with ConnectionID), a connection-scoped JSON-RPC
+// numeric id (JSONRPCNumberID paired with ConnectionID), or a process-unique
+// id a transport mints itself (TransportUUID) that needs no connection
+// pairing. JSONRPCNumberID is the numeric id's exact JSON wire token (for
+// example "0", "1", "1.5", or an integer outside int64's range), preserved
+// exactly as received rather than parsed into a Go numeric type, so every
+// JSON-RPC number the ACP boundary accepts remains representable without
+// truncation, rounding, or collision. Kind names which field is active;
+// every other field must be its zero value. Retaining Kind as an explicit
+// discriminator (rather than inferring the active form from which fields
+// are non-zero) is what lets numeric token "0" and string id "" each remain
+// distinguishable, valid values in their own kind. Every field is a plain
+// comparable type, so two RequestIdentity values naming the same
+// connection, kind, and active id compare equal with ==, and a JSON-RPC id
+// 1 (numeric token "1") never collides with the same connection's JSON-RPC
+// id "1" (string), since Kind differs.
+type RequestIdentity struct {
+	Kind            RequestIdentityKind
+	ConnectionID    string
+	JSONRPCStringID string
+	JSONRPCNumberID string
+	TransportUUID   string
+}
+
+// Validate reports whether the RequestIdentity declares one of its three
+// legal kinds and carries exactly that kind's active field with every other
+// field at its zero value. It rejects a zero or unknown Kind, a missing
+// ConnectionID on either JSON-RPC kind, a missing or lexically malformed
+// JSONRPCNumberID on the number kind, a missing or malformed TransportUUID
+// on the UUID kind, a ConnectionID present on the UUID kind, and any
+// JSON-RPC or UUID field populated outside its own kind -- so the three
+// forms never overlap. Kind alone marks a JSON-RPC id as the active payload,
+// so a blank JSONRPCStringID is a legal, present empty-string wire id, not a
+// missing one; JSONRPCNumberID has no equivalent legal blank spelling (the
+// empty string is not a valid JSON number token), so an empty
+// JSONRPCNumberID on the number kind is unambiguously a genuinely missing
+// id, reported as ErrRequiredValue rather than ErrMalformedValue.
 func (r RequestIdentity) Validate() error {
-	if r.TransportUUID != "" {
-		if r.ConnectionID != "" || r.JSONRPCID != "" {
+	if err := r.Kind.Validate(); err != nil {
+		return newValidationError("RequestIdentity", "Kind", err)
+	}
+	switch r.Kind {
+	case RequestIdentityKindJSONRPCString:
+		if r.TransportUUID != "" {
 			return newValidationError("RequestIdentity", "TransportUUID", ErrInconsistentValue)
+		}
+		if r.JSONRPCNumberID != "" {
+			return newValidationError("RequestIdentity", "JSONRPCNumberID", ErrInconsistentValue)
+		}
+		if r.ConnectionID == "" {
+			return newValidationError("RequestIdentity", "ConnectionID", ErrRequiredValue)
+		}
+		return nil
+	case RequestIdentityKindJSONRPCNumber:
+		if r.TransportUUID != "" {
+			return newValidationError("RequestIdentity", "TransportUUID", ErrInconsistentValue)
+		}
+		if r.JSONRPCStringID != "" {
+			return newValidationError("RequestIdentity", "JSONRPCStringID", ErrInconsistentValue)
+		}
+		if r.ConnectionID == "" {
+			return newValidationError("RequestIdentity", "ConnectionID", ErrRequiredValue)
+		}
+		if r.JSONRPCNumberID == "" {
+			return newValidationError("RequestIdentity", "JSONRPCNumberID", ErrRequiredValue)
+		}
+		if !jsonNumberTokenPattern.MatchString(r.JSONRPCNumberID) {
+			return newValidationError("RequestIdentity", "JSONRPCNumberID", ErrMalformedValue)
+		}
+		return nil
+	case RequestIdentityKindTransportUUID:
+		if r.ConnectionID != "" {
+			return newValidationError("RequestIdentity", "ConnectionID", ErrInconsistentValue)
+		}
+		if r.JSONRPCStringID != "" {
+			return newValidationError("RequestIdentity", "JSONRPCStringID", ErrInconsistentValue)
+		}
+		if r.JSONRPCNumberID != "" {
+			return newValidationError("RequestIdentity", "JSONRPCNumberID", ErrInconsistentValue)
+		}
+		if r.TransportUUID == "" {
+			return newValidationError("RequestIdentity", "TransportUUID", ErrRequiredValue)
 		}
 		if !transportUUIDPattern.MatchString(r.TransportUUID) {
 			return newValidationError("RequestIdentity", "TransportUUID", ErrMalformedValue)
 		}
 		return nil
+	default:
+		return newValidationError("RequestIdentity", "Kind", ErrUnknownEnumValue)
 	}
-	if r.JSONRPCID == "" {
-		return newValidationError("RequestIdentity", "JSONRPCID", ErrRequiredValue)
-	}
-	if r.ConnectionID == "" {
-		return newValidationError("RequestIdentity", "ConnectionID", ErrRequiredValue)
-	}
-	return nil
 }
 
 // SessionState is the Chat Session lifecycle state.
