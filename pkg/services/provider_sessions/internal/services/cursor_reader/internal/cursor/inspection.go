@@ -11,19 +11,19 @@ import (
 var errInspectionCanceled = providersessions.ErrOperationCanceled
 
 type inspection struct {
-	ctx              context.Context
-	bytesRead        int64
-	walkEntries      int
-	candidates       int
-	rowsQueried      int
-	transcriptFacts  int
-	malformedBlobs   int
-	malformedMeta    int
-	unknownRecords   int
-	protobufWork     int
-	exhaustedLimit   string
-	diagnostics      []providersessions.LineError
-	stopReconstruct  bool
+	ctx             context.Context
+	bytesRead       int64
+	walkEntries     int
+	candidates      int
+	rowsQueried     int
+	transcriptFacts int
+	malformedBlobs  int
+	malformedMeta   int
+	unknownRecords  int
+	protobufWork    int
+	exhaustedLimit  string
+	diagnostics     []providersessions.LineError
+	stopReconstruct bool
 }
 
 func newInspection(ctx context.Context) *inspection {
@@ -37,12 +37,23 @@ func (ins *inspection) checkCanceled() error {
 	if ins == nil {
 		return nil
 	}
-	select {
-	case <-ins.ctx.Done():
-		return errInspectionCanceled
-	default:
+	if ins.ctx == nil {
 		return nil
 	}
+	if err := ins.ctx.Err(); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return context.DeadlineExceeded
+		}
+		return errInspectionCanceled
+	}
+	return nil
+}
+
+func (ins *inspection) context() context.Context {
+	if ins == nil || ins.ctx == nil {
+		return context.Background()
+	}
+	return ins.ctx
 }
 
 func (ins *inspection) recordWalkEntry() error {
@@ -196,6 +207,13 @@ func (ins *inspection) limitError(limit string) error {
 
 func (ins *inspection) canceled() bool {
 	return ins != nil && errors.Is(ins.checkCanceled(), errInspectionCanceled)
+}
+
+func normalizeInspectionContextError(err error) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return context.DeadlineExceeded
+	}
+	return providersessions.ErrOperationCanceled
 }
 
 func (ins *inspection) mergeStats(stats *SessionParseStats) {

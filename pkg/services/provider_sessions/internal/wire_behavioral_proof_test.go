@@ -1,6 +1,7 @@
 package internal_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -22,7 +23,7 @@ func TestWireBehavioralProof_PublishedRootPreservesCodexObservables(t *testing.T
 		ID:       "wire-behavioral-codex",
 	}
 
-	detail, err := svc.Details("codex", providers.SessionIDKind, ref.ID)
+	detail, err := svc.Details(context.Background(), "codex", providers.SessionIDKind, ref.ID)
 	if err != nil {
 		t.Fatalf("Details: %v", err)
 	}
@@ -71,7 +72,7 @@ func TestWireBehavioralProof_PublishedRootPreservesCursorObservables(t *testing.
 		ID:       sessionID,
 	}
 
-	detail, err := svc.Details("cursor", providers.SessionIDKind, sessionID)
+	detail, err := svc.Details(context.Background(), "cursor", providers.SessionIDKind, sessionID)
 	if err != nil {
 		t.Fatalf("Details: %v", err)
 	}
@@ -121,7 +122,7 @@ func TestWireBehavioralProof_PublishedRootPreservesTypedLookupFailures(t *testin
 		ID:       cursorSessionID,
 	}
 
-	if _, err := svc.Details("openai", providers.SessionIDKind, "session-1"); !errors.Is(err, providersessions.ErrUnsupportedProvider) {
+	if _, err := svc.Details(context.Background(), "openai", providers.SessionIDKind, "session-1"); !errors.Is(err, providersessions.ErrUnsupportedProvider) {
 		t.Fatalf("Details unsupported provider = %v, want ErrUnsupportedProvider", err)
 	}
 	if _, err := svc.Inspect(providersessions.InspectRequest{Session: providers.SessionRef{
@@ -138,7 +139,7 @@ func TestWireBehavioralProof_PublishedRootPreservesTypedLookupFailures(t *testin
 	}}); !errors.Is(err, providersessions.ErrInvalidIdentifier) {
 		t.Fatalf("Project invalid identifier = %v, want ErrInvalidIdentifier", err)
 	}
-	if _, err := svc.Details("codex", providers.SessionIDKind, "missing-session"); !errors.Is(err, providersessions.ErrSessionNotFound) {
+	if _, err := svc.Details(context.Background(), "codex", providers.SessionIDKind, "missing-session"); !errors.Is(err, providersessions.ErrSessionNotFound) {
 		t.Fatalf("Details missing codex session = %v, want ErrSessionNotFound", err)
 	}
 	if _, err := svc.Inspect(providersessions.InspectRequest{Session: providers.SessionRef{
@@ -151,7 +152,7 @@ func TestWireBehavioralProof_PublishedRootPreservesTypedLookupFailures(t *testin
 	if _, err := svc.Project(providersessions.ProjectRequest{Session: codexRef}); err != nil {
 		t.Fatalf("Project codex success sanity = %v", err)
 	}
-	if _, err := svc.Details("cursor", providers.SessionIDKind, "missing-cursor-session"); !errors.Is(err, providersessions.ErrSessionNotFound) {
+	if _, err := svc.Details(context.Background(), "cursor", providers.SessionIDKind, "missing-cursor-session"); !errors.Is(err, providersessions.ErrSessionNotFound) {
 		t.Fatalf("Details missing cursor session = %v, want ErrSessionNotFound", err)
 	}
 	if _, err := svc.Inspect(providersessions.InspectRequest{Session: providers.SessionRef{

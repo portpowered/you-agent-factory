@@ -17,7 +17,7 @@ import (
 func LoadDetails(ctx context.Context, files providersessionsinternal.FileSystem, walkDirectory providersessionsinternal.CursorWalkDirectory, resolveSymlinks providersessionsinternal.CursorResolveSymlinks, openSQLDatabase providersessionsinternal.CursorOpenSQLDatabase, root AgentStorageRoot, id string) (providersessions.Detail, error) {
 	ins := newInspection(ctx)
 	if err := ins.checkCanceled(); err != nil {
-		return providersessions.Detail{}, providersessions.ErrOperationCanceled
+		return providersessions.Detail{}, normalizeInspectionContextError(err)
 	}
 	if err := ValidateSessionID(id); err != nil {
 		return providersessions.Detail{}, providersessions.ErrInvalidIdentifier
@@ -28,6 +28,8 @@ func LoadDetails(ctx context.Context, files providersessionsinternal.FileSystem,
 		switch {
 		case errors.Is(err, providersessions.ErrOperationCanceled), errors.Is(err, context.Canceled):
 			return providersessions.Detail{}, providersessions.ErrOperationCanceled
+		case errors.Is(err, context.DeadlineExceeded):
+			return providersessions.Detail{}, context.DeadlineExceeded
 		case errors.Is(err, providersessions.ErrResourceLimitExceeded):
 			return providersessions.Detail{}, limitLookupError(root, err)
 		case errors.Is(err, ErrInvalidSessionID):
@@ -46,28 +48,54 @@ func LoadDetails(ctx context.Context, files providersessionsinternal.FileSystem,
 		switch {
 		case errors.Is(err, providersessions.ErrOperationCanceled), errors.Is(err, context.Canceled):
 			return providersessions.Detail{}, providersessions.ErrOperationCanceled
+		case errors.Is(err, context.DeadlineExceeded):
+			return providersessions.Detail{}, context.DeadlineExceeded
 		case errors.Is(err, providersessions.ErrResourceLimitExceeded):
 			if session != nil {
+				if contextErr := ins.checkCanceled(); contextErr != nil {
+					return providersessions.Detail{}, normalizeInspectionContextError(contextErr)
+				}
 				info, statErr := files.Stat(resolved.AbsolutePath)
 				if statErr == nil {
+					if contextErr := ins.checkCanceled(); contextErr != nil {
+						return providersessions.Detail{}, normalizeInspectionContextError(contextErr)
+					}
 					modifiedAt := info.ModTime().UTC()
-					return mapSessionToProviderSessionDetail(ins, id, resolved.RelativePath, info.Size(), &modifiedAt, session), nil
+					detail := mapSessionToProviderSessionDetail(ins, id, resolved.RelativePath, info.Size(), &modifiedAt, session)
+					if contextErr := ins.checkCanceled(); contextErr != nil {
+						return providersessions.Detail{}, normalizeInspectionContextError(contextErr)
+					}
+					return detail, nil
 				}
-				return mapSessionToProviderSessionDetail(ins, id, resolved.RelativePath, 0, nil, session), nil
+				detail := mapSessionToProviderSessionDetail(ins, id, resolved.RelativePath, 0, nil, session)
+				if contextErr := ins.checkCanceled(); contextErr != nil {
+					return providersessions.Detail{}, normalizeInspectionContextError(contextErr)
+				}
+				return detail, nil
 			}
 			return providersessions.Detail{}, limitLookupError(root, err)
 		default:
 			return providersessions.Detail{}, fmt.Errorf("load cursor session data: %s", sanitizeStructuralError(err.Error()))
 		}
 	}
+	if err := ins.checkCanceled(); err != nil {
+		return providersessions.Detail{}, normalizeInspectionContextError(err)
+	}
 
 	info, err := files.Stat(resolved.AbsolutePath)
 	if err != nil {
 		return providersessions.Detail{}, fmt.Errorf("stat cursor session store: %s", sanitizeStructuralError(err.Error()))
 	}
+	if err := ins.checkCanceled(); err != nil {
+		return providersessions.Detail{}, normalizeInspectionContextError(err)
+	}
 	modifiedAt := info.ModTime().UTC()
 
-	return mapSessionToProviderSessionDetail(ins, id, resolved.RelativePath, info.Size(), &modifiedAt, session), nil
+	detail := mapSessionToProviderSessionDetail(ins, id, resolved.RelativePath, info.Size(), &modifiedAt, session)
+	if err := ins.checkCanceled(); err != nil {
+		return providersessions.Detail{}, normalizeInspectionContextError(err)
+	}
+	return detail, nil
 }
 
 func limitLookupError(root AgentStorageRoot, err error) error {

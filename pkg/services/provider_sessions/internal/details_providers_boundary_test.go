@@ -1,6 +1,7 @@
 package internal_test
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"path/filepath"
@@ -22,7 +23,7 @@ func TestDetails_ProvidersRootBoundary_Success(t *testing.T) {
 		root := writeCodexSessionFixture(t, "boundary-details-codex")
 		svc := newServiceForRoots(t, root, "")
 
-		detail, err := svc.Details("codex", providers.SessionIDKind, "boundary-details-codex")
+		detail, err := svc.Details(context.Background(), "codex", providers.SessionIDKind, "boundary-details-codex")
 		if err != nil {
 			t.Fatalf("Details: %v", err)
 		}
@@ -39,7 +40,7 @@ func TestDetails_ProvidersRootBoundary_Success(t *testing.T) {
 		root, sessionID := writeCursorSessionFixture(t)
 		svc := newServiceForRoots(t, t.TempDir(), root)
 
-		detail, err := svc.Details("cursor", providers.SessionIDKind, sessionID)
+		detail, err := svc.Details(context.Background(), "cursor", providers.SessionIDKind, sessionID)
 		if err != nil {
 			t.Fatalf("Details: %v", err)
 		}
@@ -58,7 +59,7 @@ func TestDetails_ProvidersRootBoundary_UsesCanonicalCursorIdentity(t *testing.T)
 
 	for _, provider := range []string{"cursor"} {
 		t.Run(provider, func(t *testing.T) {
-			_, err := svc.Details(provider, providers.SessionIDKind, "missing-session")
+			_, err := svc.Details(context.Background(), provider, providers.SessionIDKind, "missing-session")
 			if !errors.Is(err, providersessions.ErrSessionNotFound) {
 				t.Fatalf("Details error = %v, want ErrSessionNotFound", err)
 			}
@@ -72,7 +73,7 @@ func TestDetails_ProvidersRootBoundary_UsesCanonicalCursorIdentity(t *testing.T)
 		})
 	}
 	for _, provider := range []string{"agent", "cursor-agent"} {
-		if _, err := svc.Details(provider, providers.SessionIDKind, "missing-session"); !errors.Is(err, providersessions.ErrUnsupportedProvider) {
+		if _, err := svc.Details(context.Background(), provider, providers.SessionIDKind, "missing-session"); !errors.Is(err, providersessions.ErrUnsupportedProvider) {
 			t.Fatalf("Details(%q) error = %v, want ErrUnsupportedProvider", provider, err)
 		}
 	}
@@ -135,7 +136,7 @@ func TestDetails_ProvidersRootBoundary_TypedErrors(t *testing.T) {
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			_, detailsErr := svc.Details(test.provider, test.kind, test.id)
+			_, detailsErr := svc.Details(context.Background(), test.provider, test.kind, test.id)
 			if !errors.Is(detailsErr, test.want) {
 				t.Fatalf("Details error = %v, want %v", detailsErr, test.want)
 			}
@@ -158,7 +159,7 @@ func TestDetails_ProvidersRootBoundary_MatchesInspectOutcome(t *testing.T) {
 		ID:       "boundary-details-equivalence",
 	}
 
-	detail, err := svc.Details("codex", providers.SessionIDKind, ref.ID)
+	detail, err := svc.Details(context.Background(), "codex", providers.SessionIDKind, ref.ID)
 	if err != nil {
 		t.Fatalf("Details: %v", err)
 	}

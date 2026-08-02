@@ -145,6 +145,45 @@ func TestReaderDetailsCancellationDuringSymlinkResolutionStopsStatAndOpen(t *tes
 	}
 }
 
+func TestReaderDetailsCancellationTerminatesBlockedDiscovery(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan struct{})
+	done := make(chan error, 1)
+	reader := newTestReader(
+		t,
+		&trackingFileSystem{base: platformfilesystem.Local{}},
+		func(string, fs.WalkDirFunc) error {
+			close(started)
+			<-ctx.Done()
+			return ctx.Err()
+		},
+		filepath.EvalSymlinks,
+		t.TempDir(),
+	)
+
+	go func() {
+		_, err := reader.Details(ctx, codexSessionRef("canceled"))
+		done <- err
+	}()
+
+	select {
+	case <-started:
+		cancel()
+	case <-time.After(time.Second):
+		t.Fatal("discovery did not start before cancellation")
+	}
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Details error = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("reader did not terminate after cancellation")
+	}
+}
+
 func TestDiscoveryRejectsNonRegularCandidate(t *testing.T) {
 	root := t.TempDir()
 	if err := os.Mkdir(filepath.Join(root, "rollout-directory.jsonl"), 0o755); err != nil {

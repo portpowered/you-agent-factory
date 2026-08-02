@@ -73,6 +73,21 @@ func TestAPIProviderSessionDetailsUseGoldenExpectedMetadata(t *testing.T) {
 		t.Fatal("provider session detail transcript is empty, want readable success-session content")
 	}
 
+	// Surrounding whitespace remains part of the raw lookup input at the HTTP
+	// boundary. The Provider Sessions root owns its established normalization
+	// and must still resolve the same stored session.
+	rawIDDetail := support.GetJSON[factoryapi.ProviderSessionDetailResponse](
+		t,
+		codexProviderSessionDetailURL(server.URL(), "  "+request.SessionID+"  "),
+	)
+	assertProviderSessionDetailIdentity(
+		t,
+		rawIDDetail,
+		request.SessionID,
+		factoryapi.Codex,
+		factoryapi.LoadableProviderSessionKindSessionID,
+	)
+
 	observed := observeCodexProviderSessionDetailGolden(detail)
 	if err := compareOrUpdateCodexProviderSessionDetailGolden(loaded, observed); err != nil {
 		var updated *support.ProviderSessionGoldensUpdatedError

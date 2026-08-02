@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -451,6 +452,11 @@ func TestReadHonorsCancellationAndRedactsLookupFailures(t *testing.T) {
 	cancel()
 	if _, err := reader.Read(ctx, ref); !errors.Is(err, providersessions.ErrOperationCanceled) {
 		t.Fatalf("canceled Read error = %v, want ErrOperationCanceled", err)
+	}
+	deadlineCtx, deadlineCancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer deadlineCancel()
+	if _, err := reader.Read(deadlineCtx, ref); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("deadline Read error = %v, want context.DeadlineExceeded", err)
 	}
 
 	_, err = reader.Read(context.Background(), providers.SessionRef{

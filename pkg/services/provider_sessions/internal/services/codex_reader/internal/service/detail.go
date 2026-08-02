@@ -72,6 +72,9 @@ func loadDetails(ctx context.Context, files providersessionsinternal.FileSystem,
 	if err != nil {
 		return providersessions.Detail{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return providersessions.Detail{}, err
+	}
 
 	return detachDetail(providersessions.Detail{
 		ProviderSession: providersessions.Ref{
@@ -383,6 +386,9 @@ func parseCodexSessionDetails(ctx context.Context, reader io.Reader) (ParsedDeta
 			return ParsedDetails{}, err
 		}
 		lineBytes, readErr := bufferedReader.ReadBytes('\n')
+		if err := ctx.Err(); err != nil {
+			return ParsedDetails{}, err
+		}
 		if readErr != nil && !errors.Is(readErr, io.EOF) {
 			return ParsedDetails{}, providersessions.ErrSessionStorageUnavailable
 		}

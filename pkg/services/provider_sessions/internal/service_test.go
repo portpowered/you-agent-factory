@@ -1,6 +1,7 @@
 package internal_test
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 
@@ -22,7 +24,7 @@ import (
 func TestDetailsLoadsCodexSessionThroughService(t *testing.T) {
 	root := writeCodexSessionFixture(t, "session-123")
 
-	detail, err := newServiceForRoots(t, root, "").Details("codex", "session_id", "session-123")
+	detail, err := newServiceForRoots(t, root, "").Details(context.Background(), "codex", "session_id", "session-123")
 	if err != nil {
 		t.Fatalf("Details: %v", err)
 	}
@@ -32,15 +34,94 @@ func TestDetailsLoadsCodexSessionThroughService(t *testing.T) {
 	}
 }
 
+func TestDetailsCancellationTerminatesBlockedReader(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan struct{})
+	done := make(chan error, 1)
+	service, err := providersessionswire.NewForRoots(
+		platformfilesystem.Local{},
+		func(string, fs.WalkDirFunc) error {
+			close(started)
+			<-ctx.Done()
+			return ctx.Err()
+		},
+		filepath.EvalSymlinks,
+		filepath.WalkDir,
+		filepath.EvalSymlinks,
+		sql.Open,
+		t.TempDir(),
+		t.TempDir(),
+	)
+	if err != nil {
+		t.Fatalf("NewForRoots: %v", err)
+	}
+
+	go func() {
+		_, err := service.Details(ctx, "codex", providersessions.SessionIDKind, "canceled")
+		done <- err
+	}()
+
+	select {
+	case <-started:
+		cancel()
+	case <-time.After(time.Second):
+		t.Fatal("service reader did not start before cancellation")
+	}
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, providersessions.ErrOperationCanceled) {
+			t.Fatalf("Details error = %v, want ErrOperationCanceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("service Details did not terminate after cancellation")
+	}
+}
+
+func TestDetailsContextErrorsPrecedeProviderValidation(t *testing.T) {
+	service := newServiceForRoots(t, t.TempDir(), "")
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	deadlineCtx, deadlineCancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer deadlineCancel()
+
+	for _, test := range []struct {
+		name string
+		ctx  context.Context
+		want error
+	}{
+		{name: "canceled", ctx: canceledCtx, want: providersessions.ErrOperationCanceled},
+		{name: "deadline", ctx: deadlineCtx, want: context.DeadlineExceeded},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := service.Details(test.ctx, "unsupported", providers.SessionIDKind, "session")
+			if !errors.Is(err, test.want) {
+				t.Fatalf("Details error = %v, want %v", err, test.want)
+			}
+		})
+	}
+
+	if _, err := service.Details(nil, "unsupported", providers.SessionIDKind, "session"); !errors.Is(err, providersessions.ErrUnsupportedProvider) {
+		t.Fatalf("Details with nil context error = %v, want ErrUnsupportedProvider", err)
+	}
+	if _, err := service.Inspect(providersessions.InspectRequest{
+		Context: canceledCtx,
+		Session: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "session"},
+	}); !errors.Is(err, providersessions.ErrOperationCanceled) {
+		t.Fatalf("Inspect canceled error = %v, want ErrOperationCanceled", err)
+	}
+}
+
 func TestDetailsReconstructsNormalizedCodexJSONLThroughRoot(t *testing.T) {
 	root := writeRichCodexSessionFixture(t, "session-reconstruct-root")
 	svc := newServiceForRoots(t, root, "")
 
-	first, err := svc.Details("codex", providersessions.SessionIDKind, "session-reconstruct-root")
+	first, err := svc.Details(context.Background(), "codex", providersessions.SessionIDKind, "session-reconstruct-root")
 	if err != nil {
 		t.Fatalf("Details: %v", err)
 	}
-	second, err := svc.Details("codex", providersessions.SessionIDKind, "session-reconstruct-root")
+	second, err := svc.Details(context.Background(), "codex", providersessions.SessionIDKind, "session-reconstruct-root")
 	if err != nil {
 		t.Fatalf("Details repeat: %v", err)
 	}
@@ -288,7 +369,7 @@ func TestDetailsUsesCanonicalCursorAndWrapsLookupContext(t *testing.T) {
 	root := t.TempDir()
 	for _, provider := range []string{"cursor"} {
 		t.Run(provider, func(t *testing.T) {
-			_, err := newServiceForRoots(t, t.TempDir(), string(root)).Details(provider, "session_id", "missing-session")
+			_, err := newServiceForRoots(t, t.TempDir(), string(root)).Details(context.Background(), provider, "session_id", "missing-session")
 			if !errors.Is(err, providersessions.ErrSessionNotFound) {
 				t.Fatalf("err = %v, want ErrSessionNotFound", err)
 			}
@@ -302,7 +383,7 @@ func TestDetailsUsesCanonicalCursorAndWrapsLookupContext(t *testing.T) {
 		})
 	}
 	for _, provider := range []string{"agent", "cursor-agent"} {
-		if _, err := newServiceForRoots(t, t.TempDir(), string(root)).Details(provider, "session_id", "missing-session"); !errors.Is(err, providersessions.ErrUnsupportedProvider) {
+		if _, err := newServiceForRoots(t, t.TempDir(), string(root)).Details(context.Background(), provider, "session_id", "missing-session"); !errors.Is(err, providersessions.ErrUnsupportedProvider) {
 			t.Fatalf("Details(%q) error = %v, want ErrUnsupportedProvider", provider, err)
 		}
 	}
@@ -310,17 +391,17 @@ func TestDetailsUsesCanonicalCursorAndWrapsLookupContext(t *testing.T) {
 
 func TestDetailsRejectsUnsupportedProviderAndKind(t *testing.T) {
 	svc := newServiceForRoots(t, t.TempDir(), "")
-	if _, err := svc.Details("openai", "session_id", "session-123"); !errors.Is(err, providersessions.ErrUnsupportedProvider) {
+	if _, err := svc.Details(context.Background(), "openai", "session_id", "session-123"); !errors.Is(err, providersessions.ErrUnsupportedProvider) {
 		t.Fatalf("provider err = %v, want ErrUnsupportedProvider", err)
 	}
-	if _, err := svc.Details("codex", "path", "session-123"); !errors.Is(err, providersessions.ErrUnsupportedKind) {
+	if _, err := svc.Details(context.Background(), "codex", "path", "session-123"); !errors.Is(err, providersessions.ErrUnsupportedKind) {
 		t.Fatalf("kind err = %v, want ErrUnsupportedKind", err)
 	}
 }
 
 func TestGetProviderSessionDetails_LegacyAgentCursorNotFoundIsDistinguishable(t *testing.T) {
 	root := t.TempDir()
-	_, err := newServiceForRoots(t, t.TempDir(), root).Details("agent", "session_id", "missing-session")
+	_, err := newServiceForRoots(t, t.TempDir(), root).Details(context.Background(), "agent", "session_id", "missing-session")
 	if !errors.Is(err, providersessions.ErrUnsupportedProvider) {
 		t.Fatalf("error = %v, want ErrUnsupportedProvider", err)
 	}
@@ -328,17 +409,17 @@ func TestGetProviderSessionDetails_LegacyAgentCursorNotFoundIsDistinguishable(t 
 
 func TestGetProviderSessionDetails_RejectsUnsupportedProviderOrKindByContract(t *testing.T) {
 	service := newServiceForRoots(t, t.TempDir(), t.TempDir())
-	if _, err := service.Details("openai", "session_id", "session-123"); !errors.Is(err, providersessions.ErrUnsupportedProvider) {
+	if _, err := service.Details(context.Background(), "openai", "session_id", "session-123"); !errors.Is(err, providersessions.ErrUnsupportedProvider) {
 		t.Fatalf("provider error = %v, want ErrUnsupportedProvider", err)
 	}
-	if _, err := service.Details("codex", "path", "session-123"); !errors.Is(err, providersessions.ErrUnsupportedKind) {
+	if _, err := service.Details(context.Background(), "codex", "path", "session-123"); !errors.Is(err, providersessions.ErrUnsupportedKind) {
 		t.Fatalf("kind error = %v, want ErrUnsupportedKind", err)
 	}
 }
 
 func TestGetProviderSessionDetails_LoadsLegacyAgentCursorSessionFromConfiguredRoot(t *testing.T) {
 	root := t.TempDir()
-	_, err := newServiceForRoots(t, t.TempDir(), root).Details("agent", "session_id", "missing-session")
+	_, err := newServiceForRoots(t, t.TempDir(), root).Details(context.Background(), "agent", "session_id", "missing-session")
 	if !errors.Is(err, providersessions.ErrUnsupportedProvider) {
 		t.Fatalf("error = %v, want ErrUnsupportedProvider", err)
 	}
@@ -347,9 +428,9 @@ func TestGetProviderSessionDetails_LoadsLegacyAgentCursorSessionFromConfiguredRo
 func TestGetProviderSessionDetails_RegressionLoadsCodexAndCursorFromConfiguredRoots(t *testing.T) {
 	codexRoot, cursorRoot := t.TempDir(), t.TempDir()
 	service := newServiceForRoots(t, codexRoot, cursorRoot)
-	_, codexErr := service.Details("codex", "session_id", "missing-session")
+	_, codexErr := service.Details(context.Background(), "codex", "session_id", "missing-session")
 	assertLookupContext(t, codexErr, providersessions.ProviderCodex, "")
-	_, cursorErr := service.Details("cursor", "session_id", "missing-session")
+	_, cursorErr := service.Details(context.Background(), "cursor", "session_id", "missing-session")
 	assertCursorLookupContext(t, cursorErr, cursorRoot)
 }
 
@@ -364,19 +445,19 @@ func TestGetProviderSessionDetails_EventRefRoundTripLoadsCursorAndCodex(t *testi
 		{"codex", providersessions.ProviderCodex, ""},
 		{"cursor", providersessions.ProviderCursor, cursorRoot},
 	} {
-		_, err := service.Details(test.provider, "session_id", "missing-session")
+		_, err := service.Details(context.Background(), test.provider, "session_id", "missing-session")
 		assertLookupContext(t, err, test.want, test.root)
 	}
 }
 
 func TestGetProviderSessionDetails_CursorNotFoundLogsDiagnostic(t *testing.T) {
 	root := t.TempDir()
-	_, err := newServiceForRoots(t, t.TempDir(), root).Details("cursor", "session_id", "missing-session")
+	_, err := newServiceForRoots(t, t.TempDir(), root).Details(context.Background(), "cursor", "session_id", "missing-session")
 	assertCursorLookupContext(t, err, root)
 }
 
 func TestGetProviderSessionDetails_CursorNotFoundLogsDiagnosticWhenRootUnconfigured(t *testing.T) {
-	_, err := newServiceForRoots(t, t.TempDir(), "").Details("cursor", "session_id", "missing-session")
+	_, err := newServiceForRoots(t, t.TempDir(), "").Details(context.Background(), "cursor", "session_id", "missing-session")
 	assertCursorLookupContext(t, err, "")
 }
 

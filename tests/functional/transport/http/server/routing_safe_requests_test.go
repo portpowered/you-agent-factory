@@ -162,7 +162,7 @@ func (ctx *routingReachabilityContext) safeRequest(operation contractinventory.O
 	case "getProviderSessionDetails":
 		return http.NewRequest(
 			http.MethodGet,
-			strings.TrimSuffix(ctx.baseURL, "/")+"/provider-sessions/detail?provider=openai&kind=session_id&id=routing-reachability",
+			strings.TrimSuffix(ctx.baseURL, "/")+"/provider-sessions/detail?provider=codex&kind=session_id&id=routing-reachability",
 			nil,
 		)
 	case "getEventsBySessionId", "getFactoryResponseEventsBySessionId":

@@ -2,15 +2,20 @@ package http
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionswire "github.com/portpowered/infinite-you/pkg/services/provider_sessions/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -74,17 +79,16 @@ func TestProviderSessionDetailToAPIPreservesIdentitySourceParseAndTranscript(t *
 	}
 }
 
-func TestDecodeDetailsParamsRejectsBlankIdentifierBeforeRoot(t *testing.T) {
-	for _, id := range []string{"", "   ", "\t"} {
+func TestDecodeDetailsParamsPreservesRawIdentifier(t *testing.T) {
+	for _, id := range []string{"", "   ", "\tcursor_sess_01  "} {
 		t.Run(id, func(t *testing.T) {
-			_, _, _, err := decodeDetailsParams(factoryapi.GetProviderSessionDetailsParams{
+			_, _, gotID := decodeDetailsParams(factoryapi.GetProviderSessionDetailsParams{
 				Provider: factoryapi.Codex,
 				Kind:     factoryapi.LoadableProviderSessionKindSessionID,
 				Id:       id,
 			})
-			var validationErr requestValidationError
-			if !errors.As(err, &validationErr) {
-				t.Fatalf("err = %v, want requestValidationError", err)
+			if gotID != id {
+				t.Fatalf("decoded id = %q, want raw id %q", gotID, id)
 			}
 		})
 	}
@@ -125,7 +129,7 @@ func TestAdapterGetProviderSessionDetailsDecodesAndMapsSuccess(t *testing.T) {
 	}
 	if fake.lastProvider != string(factoryapi.Cursor) ||
 		fake.lastKind != string(factoryapi.LoadableProviderSessionKindSessionID) ||
-		fake.lastID != "cursor_sess_01" {
+		fake.lastID != "  cursor_sess_01  " {
 		t.Fatalf("fake recorded identity = (%q, %q, %q)", fake.lastProvider, fake.lastKind, fake.lastID)
 	}
 	if response.ProviderSession.Id != "cursor_sess_01" || len(response.Transcript) != 1 {
@@ -133,9 +137,12 @@ func TestAdapterGetProviderSessionDetailsDecodesAndMapsSuccess(t *testing.T) {
 	}
 }
 
-func TestAdapterGetProviderSessionDetailsRejectsBlankIdentifierBeforeRoot(t *testing.T) {
+func TestAdapterGetProviderSessionDetailsPreservesBlankIdentifierForRootValidation(t *testing.T) {
 	fake := &rootServiceFake{
-		detailErr: errors.New("root must not be called"),
+		detailErr: &providersessions.LookupError{
+			Provider: providersessions.ProviderCodex,
+			Err:      providersessions.ErrInvalidIdentifier,
+		},
 	}
 	adapter := NewAdapter(fake)
 
@@ -144,12 +151,11 @@ func TestAdapterGetProviderSessionDetailsRejectsBlankIdentifierBeforeRoot(t *tes
 		Kind:     factoryapi.LoadableProviderSessionKindSessionID,
 		Id:       "   ",
 	})
-	var validationErr requestValidationError
-	if !errors.As(err, &validationErr) {
-		t.Fatalf("err = %v, want requestValidationError before root call", err)
+	if !errors.Is(err, providersessions.ErrInvalidIdentifier) {
+		t.Fatalf("err = %v, want ErrInvalidIdentifier from root", err)
 	}
-	if fake.lastID != "" {
-		t.Fatalf("fake.lastID = %q, want root not invoked", fake.lastID)
+	if fake.lastID != "   " {
+		t.Fatalf("fake.lastID = %q, want raw blank identifier", fake.lastID)
 	}
 }
 
@@ -209,9 +215,12 @@ func TestHandlerGetProviderSessionDetailsEncodesFakeRootSuccess(t *testing.T) {
 	}
 }
 
-func TestHandlerGetProviderSessionDetailsRejectsBlankIdentifierBeforeRoot(t *testing.T) {
+func TestHandlerGetProviderSessionDetailsPreservesBlankIdentifierErrorSemantics(t *testing.T) {
 	fake := &rootServiceFake{
-		detailErr: errors.New("root must not be called"),
+		detailErr: &providersessions.LookupError{
+			Provider: providersessions.ProviderCodex,
+			Err:      providersessions.ErrInvalidIdentifier,
+		},
 	}
 	handler := NewHandler(NewAdapter(fake), zap.NewNop())
 	recorder := httptest.NewRecorder()
@@ -225,11 +234,12 @@ func TestHandlerGetProviderSessionDetailsRejectsBlankIdentifierBeforeRoot(t *tes
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400: %s", recorder.Code, recorder.Body.String())
 	}
-	if !strings.Contains(recorder.Body.String(), `"code":"BAD_REQUEST"`) {
+	if !strings.Contains(recorder.Body.String(), `"code":"BAD_REQUEST"`) ||
+		!strings.Contains(recorder.Body.String(), "codex session_id identifier") {
 		t.Fatalf("body = %s, want BAD_REQUEST error response", recorder.Body.String())
 	}
-	if fake.lastID != "" {
-		t.Fatalf("fake.lastID = %q, want root not invoked", fake.lastID)
+	if fake.lastID != " " {
+		t.Fatalf("fake.lastID = %q, want raw blank identifier", fake.lastID)
 	}
 }
 
@@ -487,6 +497,57 @@ func TestHandlerGetProviderSessionDetailsMapsCanceledRequestContextDuringRoot(t 
 	assertHandlerJSONError(t, recorder, http.StatusInternalServerError, "INTERNAL_ERROR", "provider session inspection canceled")
 }
 
+func TestHandlerGetProviderSessionDetailsRealServiceCancellationTerminatesReader(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan struct{})
+	service, err := providersessionswire.NewForRoots(
+		platformfilesystem.Local{},
+		func(string, fs.WalkDirFunc) error {
+			close(started)
+			<-ctx.Done()
+			return ctx.Err()
+		},
+		filepath.EvalSymlinks,
+		filepath.WalkDir,
+		filepath.EvalSymlinks,
+		sql.Open,
+		t.TempDir(),
+		t.TempDir(),
+	)
+	if err != nil {
+		t.Fatalf("NewForRoots: %v", err)
+	}
+	handler := NewHandler(NewAdapter(service), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/provider-sessions/detail", nil).WithContext(ctx)
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		handler.GetProviderSessionDetails(recorder, req, factoryapi.GetProviderSessionDetailsParams{
+			Provider: factoryapi.Codex,
+			Kind:     factoryapi.LoadableProviderSessionKindSessionID,
+			Id:       "real-http-cancellation",
+		})
+	}()
+
+	select {
+	case <-started:
+		cancel()
+	case <-time.After(time.Second):
+		t.Fatal("real reader did not start before cancellation")
+	}
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("HTTP handler did not terminate after reader cancellation")
+	}
+
+	assertHandlerJSONError(t, recorder, http.StatusInternalServerError, "INTERNAL_ERROR", "provider session inspection canceled")
+}
+
 func TestHandlerGetProviderSessionDetailsMapsDeadlineExceededRequestContextDuringRoot(t *testing.T) {
 	fake := newBlockingRootServiceFake()
 	handler := NewHandler(NewAdapter(fake), zap.NewNop())
@@ -521,8 +582,8 @@ func TestHandlerGetProviderSessionDetailsMapsDeadlineExceededRequestContextDurin
 	assertHandlerJSONError(
 		t,
 		recorder,
-		http.StatusGatewayTimeout,
-		"PROVIDER_SESSION_INSPECTION_TIMEOUT",
+		http.StatusInternalServerError,
+		"INTERNAL_ERROR",
 		"provider session inspection timed out",
 	)
 }

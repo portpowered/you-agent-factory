@@ -1,6 +1,7 @@
 package cursor
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -11,6 +12,16 @@ import (
 
 // OpenDatabase opens a SQLite database in read-only mode
 func OpenDatabase(files providersessionsinternal.FileSystem, openSQLDatabase providersessionsinternal.CursorOpenSQLDatabase, path string) (*sql.DB, error) {
+	return openDatabase(context.Background(), files, openSQLDatabase, path)
+}
+
+func openDatabase(ctx context.Context, files providersessionsinternal.FileSystem, openSQLDatabase providersessionsinternal.CursorOpenSQLDatabase, path string) (*sql.DB, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if openSQLDatabase == nil {
 		return nil, fmt.Errorf("cursor SQL database opener is required")
 	}
@@ -18,15 +29,25 @@ func OpenDatabase(files providersessionsinternal.FileSystem, openSQLDatabase pro
 	if _, err := files.Stat(path); err != nil {
 		return nil, fmt.Errorf("cursor session store could not be opened: %w", err)
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	db, err := openSQLDatabase("sqlite", path+"?mode=ro")
 	if err != nil {
 		return nil, fmt.Errorf("cursor session store could not be opened")
 	}
+	if err := ctx.Err(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 
 	// Test connection
-	if err := db.Ping(); err != nil {
+	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
 		return nil, fmt.Errorf("cursor session store could not be opened")
 	}
 

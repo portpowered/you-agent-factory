@@ -1,6 +1,7 @@
 package internal_test
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"path/filepath"
@@ -135,7 +136,7 @@ func TestProject_ProvidersRootBoundary_MatchesDetailsOutcome(t *testing.T) {
 		ID:       "boundary-project-equivalence",
 	}
 
-	detail, err := svc.Details("codex", providers.SessionIDKind, ref.ID)
+	detail, err := svc.Details(context.Background(), "codex", providers.SessionIDKind, ref.ID)
 	if err != nil {
 		t.Fatalf("Details: %v", err)
 	}

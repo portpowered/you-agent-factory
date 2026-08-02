@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/contractinventory"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -38,6 +39,10 @@ func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
 			}
 			defer response.Body.Close()
 
+			if operation.OperationID == "getProviderSessionDetails" {
+				assertStructuredNotFoundHTTPResponse(t, response)
+				return
+			}
 			if response.StatusCode == http.StatusNotFound {
 				t.Fatalf(
 					"%s %s (%s) status = %d, want any non-404 handler response",
@@ -62,8 +67,8 @@ func TestAPIUnknownRouteReturnsStructuredNotFound(t *testing.T) {
 	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: support.NewRecordingCommandRunner("routing")},
 	})
 	defer server.Stop(t)
 
@@ -81,8 +86,8 @@ func TestAPIDashboardRoutesServeEmbeddedShellAssetAndFallback(t *testing.T) {
 	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: support.NewRecordingCommandRunner("routing")},
 	})
 	defer server.Stop(t)
 
@@ -136,14 +141,26 @@ func TestAPIDashboardRoutesServeEmbeddedShellAssetAndFallback(t *testing.T) {
 		t.Fatalf("dashboard fallback response = status %d body %q", fallbackResponse.StatusCode, string(fallbackBody))
 	}
 
-	invalidParamsResponse, err := http.Get(server.URL() + "/provider-sessions/detail?kind=session_id&id=routing-reachability")
+	providerSessionResponse, err := http.Get(server.URL() + "/provider-sessions/detail?provider=codex&kind=session_id&id=routing-reachability")
+	if err != nil {
+		t.Fatalf("GET provider session detail through owner handler: %v", err)
+	}
+	defer providerSessionResponse.Body.Close()
+	assertStructuredNotFoundHTTPResponse(t, providerSessionResponse)
+
+	unsupportedProviderResponse, err := http.Get(server.URL() + "/provider-sessions/detail?provider=openai&kind=session_id&id=routing-reachability")
+	if err != nil {
+		t.Fatalf("GET provider session detail with unsupported provider: %v", err)
+	}
+	defer unsupportedProviderResponse.Body.Close()
+	assertStructuredBadRequestHTTPResponse(t, unsupportedProviderResponse)
+
+	missingProviderResponse, err := http.Get(server.URL() + "/provider-sessions/detail?kind=session_id&id=routing-reachability")
 	if err != nil {
 		t.Fatalf("GET provider session detail with missing provider: %v", err)
 	}
-	defer invalidParamsResponse.Body.Close()
-	if invalidParamsResponse.StatusCode != http.StatusBadRequest {
-		t.Fatalf("invalid provider session detail status = %d, want %d", invalidParamsResponse.StatusCode, http.StatusBadRequest)
-	}
+	defer missingProviderResponse.Body.Close()
+	assertStructuredBadRequestHTTPResponse(t, missingProviderResponse)
 }
 
 // TestAPIWrongMethodReturnsDocumentedMethodError proves wrong HTTP methods on known
@@ -153,8 +170,8 @@ func TestAPIWrongMethodReturnsDocumentedMethodError(t *testing.T) {
 	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: support.NewRecordingCommandRunner("routing")},
 	})
 	defer server.Stop(t)
 
@@ -200,6 +217,34 @@ func assertStructuredNotFoundHTTPResponse(t *testing.T, response *http.Response)
 	}
 	if strings.TrimSpace(errResp.Message) == "" {
 		t.Fatal("error message is empty, want a customer-readable not-found message")
+	}
+}
+
+func assertStructuredBadRequestHTTPResponse(t *testing.T, response *http.Response) {
+	t.Helper()
+
+	if response.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("status = %d, want %d: %s", response.StatusCode, http.StatusBadRequest, strings.TrimSpace(string(body)))
+	}
+	if contentType := response.Header.Get("Content-Type"); !strings.Contains(contentType, "application/json") {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("Content-Type = %q, want application/json structured error body: %s", contentType, strings.TrimSpace(string(body)))
+	}
+
+	var errResp factoryapi.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&errResp); err != nil {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("decode structured bad-request response: %v\nbody: %s", err, strings.TrimSpace(string(body)))
+	}
+	if errResp.Family != factoryapi.ErrorFamilyBadRequest {
+		t.Fatalf("error family = %q, want %q", errResp.Family, factoryapi.ErrorFamilyBadRequest)
+	}
+	if errResp.Code != factoryapi.ErrorResponseCodeBADREQUEST {
+		t.Fatalf("error code = %q, want %q", errResp.Code, factoryapi.ErrorResponseCodeBADREQUEST)
+	}
+	if strings.TrimSpace(errResp.Message) == "" {
+		t.Fatal("error message is empty, want a customer-readable bad-request message")
 	}
 }
 
@@ -271,8 +316,8 @@ func newRoutingReachabilityContext(t *testing.T) *routingReachabilityContext {
 	liveJavaScriptFactoryDir := scaffoldRoutingLiveJavaScriptFactory(t)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{ProviderOverride: support.MockInferenceProvider("routing result COMPLETE")},
 	})
 	ctx := &routingReachabilityContext{
 		t:                        t,

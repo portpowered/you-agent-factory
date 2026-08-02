@@ -234,8 +234,11 @@ type strictProviderSessionRole struct {
 	next  int
 }
 
-func (role *strictProviderSessionRole) Details(provider, kind, id string) (providersessions.Detail, error) {
+func (role *strictProviderSessionRole) Details(ctx context.Context, provider, kind, id string) (providersessions.Detail, error) {
 	role.t.Helper()
+	if err := ctx.Err(); err != nil {
+		return providersessions.Detail{}, err
+	}
 	if role.next >= len(role.calls) {
 		role.t.Fatalf("unexpected Provider Sessions Details(%q, %q, %q)", provider, kind, id)
 	}

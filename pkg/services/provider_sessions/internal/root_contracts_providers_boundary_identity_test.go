@@ -1,6 +1,7 @@
 package internal_test
 
 import (
+	"context"
 	"testing"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -36,7 +37,7 @@ func TestRootContracts_ProvidersRootBoundary_IdentityConstruction(t *testing.T) 
 			"boundary-root-contract-codex",
 		)
 
-		detail, err := svc.Details("codex", providers.SessionIDKind, ref.ID)
+		detail, err := svc.Details(context.Background(), "codex", providers.SessionIDKind, ref.ID)
 		if err != nil {
 			t.Fatalf("Details: %v", err)
 		}
@@ -75,7 +76,7 @@ func TestRootContracts_ProvidersRootBoundary_IdentityConstruction(t *testing.T) 
 			sessionID,
 		)
 
-		detail, err := svc.Details("cursor", providers.SessionIDKind, sessionID)
+		detail, err := svc.Details(context.Background(), "cursor", providers.SessionIDKind, sessionID)
 		if err != nil {
 			t.Fatalf("Details: %v", err)
 		}

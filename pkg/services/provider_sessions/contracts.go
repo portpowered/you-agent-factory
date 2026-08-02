@@ -28,9 +28,11 @@ type Service interface {
 	// ErrSessionSourceNotRegularFile, ErrSessionStorageUnavailable, and/or
 	// LookupError. Callers do
 	// not supply filesystem/SQL/OS effect ports or Codex/Cursor reader types to
-	// invoke this peer API. Additive typed SessionRef slices (Inspect, Project)
-	// share this singular root without replacing Details.
-	Details(provider, kind, id string) (Detail, error)
+	// invoke this peer API. The caller supplies the operation context so
+	// cancellation and deadlines reach provider storage inspection. Additive
+	// typed SessionRef slices (Inspect, Project) share this singular root
+	// without replacing Details.
+	Details(ctx context.Context, provider, kind, id string) (Detail, error)
 
 	// Inspect validates and inspects a detached typed SessionRef identity in the
 	// providers.SessionRef vocabulary (provider + kind + id). Peers receive a

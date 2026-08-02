@@ -2,7 +2,6 @@ package http
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -32,11 +31,6 @@ func (h *Handler) GetProviderSessionDetails(
 ) {
 	response, err := h.adapter.GetProviderSessionDetails(r.Context(), params)
 	if err != nil {
-		var validationErr requestValidationError
-		if errors.As(err, &validationErr) {
-			h.writeError(w, http.StatusBadRequest, validationErr.message, "BAD_REQUEST")
-			return
-		}
 		h.writeProviderSessionError(w, params, err)
 		return
 	}

@@ -33,12 +33,18 @@ type SessionParseStats struct {
 
 // LoadSessionData opens a resolved store.db and parses bubbles, composers, and contexts in-process.
 func LoadSessionData(ins *inspection, files providersessionsinternal.FileSystem, openSQLDatabase providersessionsinternal.CursorOpenSQLDatabase, resolved ResolvedStoreDB) (*SessionData, error) {
+	if err := ins.checkCanceled(); err != nil {
+		return nil, err
+	}
 	if resolved.AbsolutePath == "" {
 		return nil, fmt.Errorf("cursor session path is empty")
 	}
 	info, err := files.Stat(resolved.AbsolutePath)
 	if err != nil {
 		return nil, fmt.Errorf("stat cursor session store: %w", err)
+	}
+	if err := ins.checkCanceled(); err != nil {
+		return nil, err
 	}
 	_ = info
 
@@ -115,7 +121,7 @@ func (s *SessionData) OrderedBubbles() []*RawBubble {
 }
 
 func loadSessionFromStoreDBWithStats(ins *inspection, files providersessionsinternal.FileSystem, openSQLDatabase providersessionsinternal.CursorOpenSQLDatabase, dbPath string) (map[string]*RawBubble, []*RawComposer, map[string][]*MessageContext, SessionParseStats, SessionTokenUsage, error) {
-	db, err := OpenDatabase(files, openSQLDatabase, dbPath)
+	db, err := openDatabase(ins.context(), files, openSQLDatabase, dbPath)
 	if err != nil {
 		return nil, nil, nil, SessionParseStats{}, SessionTokenUsage{}, err
 	}

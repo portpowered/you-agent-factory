@@ -3,6 +3,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -125,12 +126,18 @@ func validateStorageDependencies(files providersessionsinternal.FileSystem, code
 
 // Details loads one provider session and returns provider-independent
 // inspection data.
-func (s *inspectionService) Details(provider, kind, id string) (providersessions.Detail, error) {
+func (s *inspectionService) Details(ctx context.Context, provider, kind, id string) (providersessions.Detail, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return providersessions.Detail{}, normalizeContextError(err)
+	}
 	providerID, err := normalizeProvider(provider)
 	if err != nil {
 		return providersessions.Detail{}, err
 	}
-	return s.detailsForRef(context.Background(), providers.SessionRef{Provider: providerID, Kind: kind, ID: id})
+	return s.detailsForRef(ctx, providers.SessionRef{Provider: providerID, Kind: kind, ID: id})
 }
 
 // Inspect validates and inspects a detached typed SessionRef through the same
@@ -163,6 +170,9 @@ func (s *inspectionService) detailsForRef(ctx context.Context, ref providers.Ses
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if err := ctx.Err(); err != nil {
+		return providersessions.Detail{}, normalizeContextError(err)
+	}
 	if err := validateSessionRef(ref); err != nil {
 		return providersessions.Detail{}, err
 	}
@@ -174,12 +184,26 @@ func (s *inspectionService) detailsForRef(ctx context.Context, ref providers.Ses
 		if err == nil {
 			return detail, nil
 		}
+		if contextErr := normalizeContextError(err); contextErr != nil {
+			return providersessions.Detail{}, contextErr
+		}
 		return providersessions.Detail{}, &providersessions.LookupError{
 			Provider: providersessions.ProviderCodex,
 			Err:      err,
 		}
 	default:
 		return providersessions.Detail{}, providersessions.ErrUnsupportedProvider
+	}
+}
+
+func normalizeContextError(err error) error {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return providersessions.ErrOperationCanceled
+	case errors.Is(err, context.DeadlineExceeded):
+		return context.DeadlineExceeded
+	default:
+		return nil
 	}
 }
 

@@ -10,7 +10,7 @@ import (
 
 // QueryBlobsTable queries the blobs table from a store.db file
 func QueryBlobsTable(ins *inspection, db *sql.DB) ([]BlobEntry, error) {
-	exists, err := sqliteTableExists(db, "blobs")
+	exists, err := sqliteTableExists(ins, db, "blobs")
 	if err != nil {
 		return nil, fmt.Errorf("failed to check for blobs table: %w", err)
 	}
@@ -18,7 +18,7 @@ func QueryBlobsTable(ins *inspection, db *sql.DB) ([]BlobEntry, error) {
 		return []BlobEntry{}, nil
 	}
 
-	columns, err := readSQLiteTableColumns(db, "blobs")
+	columns, err := readSQLiteTableColumns(ins, db, "blobs")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get blobs table info: %w", err)
 	}
@@ -31,7 +31,7 @@ func QueryBlobsTable(ins *inspection, db *sql.DB) ([]BlobEntry, error) {
 		return []BlobEntry{}, nil
 	}
 
-	rows, err := db.Query(query)
+	rows, err := db.QueryContext(ins.context(), query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query blobs table: %w", err)
 	}
@@ -45,7 +45,7 @@ func QueryBlobsTable(ins *inspection, db *sql.DB) ([]BlobEntry, error) {
 func QueryMetaTable(ins *inspection, db *sql.DB) ([]MetaEntry, error) {
 	// Check if meta table exists
 	var tableExists bool
-	err := db.QueryRow(`
+	err := db.QueryRowContext(ins.context(), `
 		SELECT EXISTS (
 			SELECT name FROM sqlite_master
 			WHERE type='table' AND name='meta'
@@ -60,24 +60,9 @@ func QueryMetaTable(ins *inspection, db *sql.DB) ([]MetaEntry, error) {
 	}
 
 	// Query meta table - similar flexible approach
-	rows, err := db.Query("PRAGMA table_info(meta)")
+	columns, err := readSQLiteTableColumns(ins, db, "meta")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get meta table info: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var columns []string
-	for rows.Next() {
-		var cid int
-		var name, dataType string
-		var notNull int
-		var defaultValue sql.NullString
-		var pk int
-
-		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &pk); err != nil {
-			continue
-		}
-		columns = append(columns, name)
 	}
 
 	if len(columns) == 0 {
@@ -95,7 +80,7 @@ func QueryMetaTable(ins *inspection, db *sql.DB) ([]MetaEntry, error) {
 		return []MetaEntry{}, nil
 	}
 
-	rows, err = db.Query(query)
+	rows, err := db.QueryContext(ins.context(), query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query meta table: %w", err)
 	}
@@ -154,9 +139,9 @@ type MetaEntry struct {
 	Value string
 }
 
-func sqliteTableExists(db *sql.DB, table string) (bool, error) {
+func sqliteTableExists(ins *inspection, db *sql.DB, table string) (bool, error) {
 	var exists bool
-	err := db.QueryRow(`
+	err := db.QueryRowContext(ins.context(), `
 		SELECT EXISTS (
 			SELECT name FROM sqlite_master
 			WHERE type='table' AND name=?
@@ -165,8 +150,8 @@ func sqliteTableExists(db *sql.DB, table string) (bool, error) {
 	return exists, err
 }
 
-func readSQLiteTableColumns(db *sql.DB, table string) ([]string, error) {
-	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
+func readSQLiteTableColumns(ins *inspection, db *sql.DB, table string) ([]string, error) {
+	rows, err := db.QueryContext(ins.context(), fmt.Sprintf("PRAGMA table_info(%s)", table))
 	if err != nil {
 		return nil, err
 	}
@@ -174,6 +159,9 @@ func readSQLiteTableColumns(db *sql.DB, table string) ([]string, error) {
 
 	var columns []string
 	for rows.Next() {
+		if err := ins.checkCanceled(); err != nil {
+			return nil, err
+		}
 		var cid int
 		var name, dataType string
 		var notNull int

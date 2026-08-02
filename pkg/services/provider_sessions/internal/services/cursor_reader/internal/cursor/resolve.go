@@ -47,11 +47,14 @@ func ResolveStoreDB(ins *inspection, files providersessionsinternal.FileSystem, 
 	if err := ValidateSessionID(sessionID); err != nil {
 		return ResolvedStoreDB{}, err
 	}
+	if err := ins.checkCanceled(); err != nil {
+		return ResolvedStoreDB{}, err
+	}
 	if string(root) == "" {
 		return ResolvedStoreDB{}, ErrSessionNotFound
 	}
 
-	cleanRoot, resolvedRoot, err := resolveAgentStorageRoot(files, resolveSymlinks, string(root))
+	cleanRoot, resolvedRoot, err := resolveAgentStorageRoot(ins, files, resolveSymlinks, string(root))
 	if err != nil {
 		return ResolvedStoreDB{}, err
 	}
@@ -64,6 +67,9 @@ func ResolveStoreDB(ins *inspection, files providersessionsinternal.FileSystem, 
 	if len(matches) == 0 {
 		return ResolvedStoreDB{}, ErrSessionNotFound
 	}
+	if err := ins.checkCanceled(); err != nil {
+		return ResolvedStoreDB{}, err
+	}
 	sort.Strings(matches)
 
 	candidates := make([]ResolvedStoreDB, 0, len(matches))
@@ -71,7 +77,7 @@ func ResolveStoreDB(ins *inspection, files providersessionsinternal.FileSystem, 
 		if err := ins.recordCandidate(); err != nil {
 			return ResolvedStoreDB{}, err
 		}
-		candidate, candidateErr := resolvedStoreDBCandidate(resolveSymlinks, cleanRoot, resolvedRoot, match, sessionID)
+		candidate, candidateErr := resolvedStoreDBCandidate(ins, resolveSymlinks, cleanRoot, resolvedRoot, match, sessionID)
 		if candidateErr != nil {
 			return ResolvedStoreDB{}, candidateErr
 		}
@@ -86,7 +92,10 @@ func ResolveStoreDB(ins *inspection, files providersessionsinternal.FileSystem, 
 	return ResolvedStoreDB{}, ErrSessionNotFound
 }
 
-func resolveAgentStorageRoot(files providersessionsinternal.FileSystem, resolveSymlinks providersessionsinternal.CursorResolveSymlinks, root string) (string, string, error) {
+func resolveAgentStorageRoot(ins *inspection, files providersessionsinternal.FileSystem, resolveSymlinks providersessionsinternal.CursorResolveSymlinks, root string) (string, string, error) {
+	if err := ins.checkCanceled(); err != nil {
+		return "", "", err
+	}
 	cleanRoot, err := filepath.Abs(filepath.Clean(root))
 	if err != nil {
 		return "", "", fmt.Errorf("resolve cursor storage root: %w", err)
@@ -101,9 +110,15 @@ func resolveAgentStorageRoot(files providersessionsinternal.FileSystem, resolveS
 	if !rootInfo.IsDir() {
 		return "", "", fmt.Errorf("cursor storage root is not a directory: %s", cleanRoot)
 	}
+	if err := ins.checkCanceled(); err != nil {
+		return "", "", err
+	}
 	resolvedRoot, err := resolveSymlinks(cleanRoot)
 	if err != nil {
 		return "", "", fmt.Errorf("resolve cursor storage root symlinks: %w", err)
+	}
+	if err := ins.checkCanceled(); err != nil {
+		return "", "", err
 	}
 	return cleanRoot, resolvedRoot, nil
 }
@@ -132,16 +147,25 @@ func collectStoreDBMatches(ins *inspection, walkDirectory providersessionsintern
 	if err != nil {
 		return nil, fmt.Errorf("walk cursor storage root: %w", err)
 	}
+	if err := ins.checkCanceled(); err != nil {
+		return nil, err
+	}
 	return matches, nil
 }
 
-func resolvedStoreDBCandidate(resolveSymlinks providersessionsinternal.CursorResolveSymlinks, cleanRoot, resolvedRoot, match, sessionID string) (ResolvedStoreDB, error) {
+func resolvedStoreDBCandidate(ins *inspection, resolveSymlinks providersessionsinternal.CursorResolveSymlinks, cleanRoot, resolvedRoot, match, sessionID string) (ResolvedStoreDB, error) {
+	if err := ins.checkCanceled(); err != nil {
+		return ResolvedStoreDB{}, err
+	}
 	resolvedMatch, err := resolveSymlinks(match)
 	if err != nil {
 		return ResolvedStoreDB{}, fmt.Errorf("resolve cursor session symlink: %w", err)
 	}
 	if !pathInsideRoot(resolvedRoot, resolvedMatch) {
 		return ResolvedStoreDB{}, ErrInvalidSessionID
+	}
+	if err := ins.checkCanceled(); err != nil {
+		return ResolvedStoreDB{}, err
 	}
 	rel, err := filepath.Rel(cleanRoot, match)
 	if err != nil {

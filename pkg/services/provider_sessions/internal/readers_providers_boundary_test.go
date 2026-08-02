@@ -193,7 +193,7 @@ func TestReaders_ProvidersRootBoundary_ServiceHandoff(t *testing.T) {
 			ID:       "boundary-handoff-codex",
 		}
 
-		detail, err := svc.Details("codex", providers.SessionIDKind, ref.ID)
+		detail, err := svc.Details(context.Background(), "codex", providers.SessionIDKind, ref.ID)
 		if err != nil {
 			t.Fatalf("Details: %v", err)
 		}
@@ -215,7 +215,7 @@ func TestReaders_ProvidersRootBoundary_ServiceHandoff(t *testing.T) {
 			ID:       sessionID,
 		}
 
-		detail, err := svc.Details("cursor", providers.SessionIDKind, sessionID)
+		detail, err := svc.Details(context.Background(), "cursor", providers.SessionIDKind, sessionID)
 		if err != nil {
 			t.Fatalf("Details: %v", err)
 		}

@@ -11,7 +11,7 @@ import (
 
 // LoadSessionFromStoreDB loads session data from a single store.db file.
 func LoadSessionFromStoreDB(ins *inspection, files providersessionsinternal.FileSystem, openSQLDatabase providersessionsinternal.CursorOpenSQLDatabase, dbPath string) (map[string]*RawBubble, []*RawComposer, map[string][]*MessageContext, SessionTokenUsage, error) {
-	db, err := OpenDatabase(files, openSQLDatabase, dbPath)
+	db, err := openDatabase(ins.context(), files, openSQLDatabase, dbPath)
 	if err != nil {
 		return nil, nil, nil, SessionTokenUsage{}, err
 	}
@@ -39,7 +39,7 @@ func parseSessionRecords(ins *inspection, blobs []BlobEntry, meta []MetaEntry, d
 
 	jsonParseFailures := loadSessionBlobs(ins, blobs, sessionID, bubbles, &composers, &sessionTokenUsage)
 	if err := ins.checkCanceled(); err != nil {
-		return bubbles, composers, contexts, sessionTokenUsage, providersessions.ErrOperationCanceled
+		return bubbles, composers, contexts, sessionTokenUsage, normalizeInspectionContextError(err)
 	}
 	if jsonParseFailures > 0 {
 		LogWarn("Failed to parse %d/%d blobs as JSON", jsonParseFailures, len(blobs))
@@ -48,7 +48,7 @@ func parseSessionRecords(ins *inspection, blobs []BlobEntry, meta []MetaEntry, d
 	var sessionMeta sessionMetaFields
 	metaParseFailures := loadSessionMeta(ins, meta, contexts, &sessionTokenUsage, &sessionMeta)
 	if err := ins.checkCanceled(); err != nil {
-		return bubbles, composers, contexts, sessionTokenUsage, providersessions.ErrOperationCanceled
+		return bubbles, composers, contexts, sessionTokenUsage, normalizeInspectionContextError(err)
 	}
 	if metaParseFailures > 0 {
 		LogWarn("Failed to parse %d/%d meta entries as JSON", metaParseFailures, len(meta))

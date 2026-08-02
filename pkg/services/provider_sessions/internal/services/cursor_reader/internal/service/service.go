@@ -8,8 +8,8 @@ import (
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
-	"github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor"
 	cursorreader "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader"
+	"github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
@@ -92,6 +92,8 @@ func (r *reader) Read(ctx context.Context, ref providers.SessionRef) (providerse
 	switch {
 	case errors.Is(err, providersessions.ErrOperationCanceled):
 		return providersessions.Detail{}, providersessions.ErrOperationCanceled
+	case errors.Is(err, context.DeadlineExceeded):
+		return providersessions.Detail{}, context.DeadlineExceeded
 	case errors.Is(err, providersessions.ErrResourceLimitExceeded):
 		return providersessions.Detail{}, &providersessions.LookupError{
 			Provider: providersessions.ProviderCursor,

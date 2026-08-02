@@ -35,6 +35,9 @@ func (r *reader) Details(
 	ctx context.Context,
 	session providers.SessionRef,
 ) (providersessions.Detail, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if err := ctx.Err(); err != nil {
 		return providersessions.Detail{}, err
 	}

@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -24,7 +25,10 @@ type rootServiceFake struct {
 
 var _ providersessions.Service = (*rootServiceFake)(nil)
 
-func (f *rootServiceFake) Details(provider, kind, id string) (providersessions.Detail, error) {
+func (f *rootServiceFake) Details(ctx context.Context, provider, kind, id string) (providersessions.Detail, error) {
+	if err := ctx.Err(); err != nil {
+		return providersessions.Detail{}, err
+	}
 	f.lastProvider = provider
 	f.lastKind = kind
 	f.lastID = id
@@ -45,23 +49,21 @@ func (f *rootServiceFake) Project(providersessions.ProjectRequest) (providersess
 type blockingRootServiceFake struct {
 	rootServiceFake
 	started chan struct{}
-	release chan struct{}
 }
 
 func newBlockingRootServiceFake() *blockingRootServiceFake {
 	return &blockingRootServiceFake{
 		started: make(chan struct{}),
-		release: make(chan struct{}),
 	}
 }
 
-func (f *blockingRootServiceFake) Details(provider, kind, id string) (providersessions.Detail, error) {
+func (f *blockingRootServiceFake) Details(ctx context.Context, provider, kind, id string) (providersessions.Detail, error) {
 	f.lastProvider = provider
 	f.lastKind = kind
 	f.lastID = id
 	close(f.started)
-	<-f.release
-	return f.rootServiceFake.Details(provider, kind, id)
+	<-ctx.Done()
+	return providersessions.Detail{}, ctx.Err()
 }
 
 func TestNewAdapterRequiresInjectedRoot(t *testing.T) {
@@ -100,7 +102,7 @@ func TestAdapterDetailsInvokesInjectedRoot(t *testing.T) {
 	}
 	adapter := NewAdapter(fake)
 
-	detail, err := adapter.Details("codex", providersessions.SessionIDKind, "session-http-1")
+	detail, err := adapter.Details(context.Background(), "codex", providersessions.SessionIDKind, "session-http-1")
 	if err != nil {
 		t.Fatalf("Details: %v", err)
 	}
@@ -119,7 +121,7 @@ func TestAdapterDetailsPropagatesTypedRootFailures(t *testing.T) {
 	fake := &rootServiceFake{detailErr: providersessions.ErrSessionNotFound}
 	adapter := NewAdapter(fake)
 
-	_, err := adapter.Details("cursor", providersessions.SessionIDKind, "missing")
+	_, err := adapter.Details(context.Background(), "cursor", providersessions.SessionIDKind, "missing")
 	if !errors.Is(err, providersessions.ErrSessionNotFound) {
 		t.Fatalf("err = %v, want ErrSessionNotFound", err)
 	}
@@ -128,7 +130,7 @@ func TestAdapterDetailsPropagatesTypedRootFailures(t *testing.T) {
 func TestAdapterDetailsRequiresInjectedRoot(t *testing.T) {
 	var adapter *Adapter
 
-	_, err := adapter.Details("codex", providersessions.SessionIDKind, "session-http-1")
+	_, err := adapter.Details(context.Background(), "codex", providersessions.SessionIDKind, "session-http-1")
 	if err == nil {
 		t.Fatal("Details on nil adapter = nil, want error")
 	}

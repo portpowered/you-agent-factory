@@ -33,12 +33,12 @@ func NewAdapter(sessions providersessions.Service) *Adapter {
 }
 
 // Details invokes the Provider Sessions root Details slice for one session
-// identity.
-func (a *Adapter) Details(provider, kind, id string) (providersessions.Detail, error) {
+// identity while preserving the caller's cancellation and deadline.
+func (a *Adapter) Details(ctx context.Context, provider, kind, id string) (providersessions.Detail, error) {
 	if a == nil || a.sessions == nil {
 		return providersessions.Detail{}, errors.New("Provider Sessions service is required")
 	}
-	return a.sessions.Details(provider, kind, id)
+	return a.sessions.Details(ctx, provider, kind, id)
 }
 
 // GetProviderSessionDetails decodes owned detail HTTP inputs, invokes the root
@@ -47,49 +47,10 @@ func (a *Adapter) GetProviderSessionDetails(
 	ctx context.Context,
 	params factoryapi.GetProviderSessionDetailsParams,
 ) (factoryapi.ProviderSessionDetailResponse, error) {
-	provider, kind, id, err := decodeDetailsParams(params)
-	if err != nil {
-		return factoryapi.ProviderSessionDetailResponse{}, err
-	}
-	detail, err := a.detailsWithContext(ctx, provider, kind, id)
+	provider, kind, id := decodeDetailsParams(params)
+	detail, err := a.Details(ctx, provider, kind, id)
 	if err != nil {
 		return factoryapi.ProviderSessionDetailResponse{}, err
 	}
 	return providerSessionDetailToAPI(detail), nil
-}
-
-func (a *Adapter) detailsWithContext(
-	ctx context.Context,
-	provider, kind, id string,
-) (providersessions.Detail, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if err := ctx.Err(); err != nil {
-		return providersessions.Detail{}, normalizeContextFailure(err)
-	}
-
-	type detailsResult struct {
-		detail providersessions.Detail
-		err    error
-	}
-	resultCh := make(chan detailsResult, 1)
-	go func() {
-		detail, err := a.Details(provider, kind, id)
-		resultCh <- detailsResult{detail: detail, err: err}
-	}()
-
-	select {
-	case <-ctx.Done():
-		return providersessions.Detail{}, normalizeContextFailure(ctx.Err())
-	case result := <-resultCh:
-		return result.detail, result.err
-	}
-}
-
-func normalizeContextFailure(err error) error {
-	if errors.Is(err, context.Canceled) {
-		return providersessions.ErrOperationCanceled
-	}
-	return err
 }

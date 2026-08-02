@@ -1,25 +1,12 @@
 package http
 
-import (
-	"strings"
-
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-)
-
-type requestValidationError struct {
-	message string
-}
-
-func (e requestValidationError) Error() string {
-	return e.message
-}
+import factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 func decodeDetailsParams(
 	params factoryapi.GetProviderSessionDetailsParams,
-) (provider string, kind string, id string, err error) {
-	id = strings.TrimSpace(params.Id)
-	if id == "" {
-		return "", "", "", requestValidationError{message: "provider session id is required"}
-	}
-	return string(params.Provider), string(params.Kind), id, nil
+) (provider string, kind string, id string) {
+	// Keep the identifier byte-for-byte identical to the generated request. The
+	// Provider Sessions root owns the established validation and lookup
+	// semantics, including whitespace and blank-identifier errors.
+	return string(params.Provider), string(params.Kind), params.Id
 }
