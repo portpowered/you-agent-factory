@@ -3108,38 +3108,6 @@
       "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/runtime",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/source",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/validation",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
       "packagePath": "pkg/services/factory_runtime/internal/orchestrators/petri",
       "disposition": "move",
       "destination": "factory_runtime",
@@ -3279,6 +3247,30 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/javascript",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/javascript/preview",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/javascript/source",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/javascript/validation",
       "disposition": "retain",
       "destination": "factory_runtime",
       "destinationKind": "owner"
