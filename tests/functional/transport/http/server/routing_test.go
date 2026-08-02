@@ -135,6 +135,15 @@ func TestAPIDashboardRoutesServeEmbeddedShellAssetAndFallback(t *testing.T) {
 	if fallbackResponse.StatusCode != http.StatusOK || !strings.Contains(string(fallbackBody), "<div id=\"root\"></div>") {
 		t.Fatalf("dashboard fallback response = status %d body %q", fallbackResponse.StatusCode, string(fallbackBody))
 	}
+
+	invalidParamsResponse, err := http.Get(server.URL() + "/provider-sessions/detail?kind=session_id&id=routing-reachability")
+	if err != nil {
+		t.Fatalf("GET provider session detail with missing provider: %v", err)
+	}
+	defer invalidParamsResponse.Body.Close()
+	if invalidParamsResponse.StatusCode != http.StatusBadRequest {
+		t.Fatalf("invalid provider session detail status = %d, want %d", invalidParamsResponse.StatusCode, http.StatusBadRequest)
+	}
 }
 
 // TestAPIWrongMethodReturnsDocumentedMethodError proves wrong HTTP methods on known
