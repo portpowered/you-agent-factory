@@ -63,7 +63,7 @@ func workersRootBoundaryFactorySnapshotDecoder(data []byte) (*factorydefinitions
 
 func workersRootBoundaryRuntimeConfigDecoder(
 	snapshot *factorydefinitions.FactorySnapshot,
-) (factorydefinitions.ReplayRuntimeConfig, error) {
+) (replayimpl.ReplayRuntimeConfig, error) {
 	var generated factoryapi.Factory
 	if err := snapshot.Decode(&generated); err != nil {
 		return nil, err

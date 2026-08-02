@@ -566,7 +566,7 @@ func roundTripGeneratedFactoryThroughReplayArtifact(
 	t *testing.T,
 	factoryDir string,
 	generated factoryapi.Factory,
-) interfaces.ReplayRuntimeConfig {
+) replay.ReplayRuntimeConfig {
 	t.Helper()
 	artifactPath := filepath.Join(t.TempDir(), "guarded-loop-breaker.replay.json")
 	artifact, err := replay.NewEventLogArtifact(time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC), mustFactorySnapshot(t, generated), nil, interfaces.ReplayDiagnostics{})

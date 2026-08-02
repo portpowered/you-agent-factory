@@ -8,6 +8,7 @@ import (
 	"time"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/decisionenvelope"
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -17,14 +18,13 @@ import (
 
 // AgentRunExecutor executes AGENT_RUN workstations through a go-agent-harness adapter.
 type AgentRunExecutor struct {
-	runtimeConfig     interfaces.RuntimeDefinitionLookup
-	decisionEnvelopes interfaces.DecisionEnvelopeService
-	runner            runnerContract
-	harness           HarnessAdapter
-	logger            logging.Logger
-	recorder          AgentRunEventRecorder
-	progress          workerexecution.ProgressPublisher
-	now               func() time.Time
+	runtimeConfig interfaces.RuntimeDefinitionLookup
+	runner        runnerContract
+	harness       HarnessAdapter
+	logger        logging.Logger
+	recorder      AgentRunEventRecorder
+	progress      workerexecution.ProgressPublisher
+	now           func() time.Time
 }
 
 // WithProgressPublisher publishes the authoritative final agent message after
@@ -70,16 +70,14 @@ func NewAgentRunExecutorWithDependencies(
 	harness HarnessAdapter,
 	recorder AgentRunEventRecorder,
 	now func() time.Time,
-	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
 ) *AgentRunExecutor {
 	return &AgentRunExecutor{
-		runtimeConfig:     runtimeConfig,
-		decisionEnvelopes: firstDecisionEnvelopeService(decisionEnvelopes),
-		runner:            runner,
-		harness:           harness,
-		logger:            logging.EnsureLogger(logger),
-		recorder:          recorder,
-		now:               now,
+		runtimeConfig: runtimeConfig,
+		runner:        runner,
+		harness:       harness,
+		logger:        logging.EnsureLogger(logger),
+		recorder:      recorder,
+		now:           now,
 	}
 }
 
@@ -120,14 +118,13 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request workerexe
 	toolMetadata := toolDiagnosticsMetadata(toolPolicy, toolRecorder)
 
 	workstationDef, _ := executor.runtimeConfig.Workstation(request.Dispatch.WorkstationName)
-	if executor.decisionEnvelopes != nil &&
-		executor.decisionEnvelopes.UsesGoalRoutingDecisionEnvelope(workstationDef) {
-		result := executor.decisionEnvelopes.
-			WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed(
-				request.Dispatch.DispatchID,
-				request.Dispatch.TransitionID,
-				harnessResult.FinalText,
-			)
+	if decisionenvelope.UsesGoalRoutingDecisionEnvelope(workstationDef) {
+		result := decisionenvelope.WorkResult(
+			request.Dispatch.DispatchID,
+			request.Dispatch.TransitionID,
+			harnessResult.FinalText,
+			true,
+		)
 		result.Diagnostics = agentRunDiagnostics(toolMetadata)
 		duration := executor.clockNow().Sub(start)
 		result.Metrics = workerexecution.WorkMetrics{Duration: duration}
@@ -135,14 +132,13 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request workerexe
 		executor.publishFinalMessage(request.Dispatch.DispatchID, result.Output)
 		return result, nil
 	}
-	if executor.decisionEnvelopes != nil &&
-		executor.decisionEnvelopes.UsesDecisionEnvelopeOutcome(workstationDef) {
-		result := executor.decisionEnvelopes.
-			WorkResultFromDecisionEnvelopeJSONOrFailed(
-				request.Dispatch.DispatchID,
-				request.Dispatch.TransitionID,
-				harnessResult.FinalText,
-			)
+	if decisionenvelope.UsesDecisionEnvelopeOutcome(workstationDef) {
+		result := decisionenvelope.WorkResult(
+			request.Dispatch.DispatchID,
+			request.Dispatch.TransitionID,
+			harnessResult.FinalText,
+			false,
+		)
 		result.Diagnostics = agentRunDiagnostics(toolMetadata)
 		duration := executor.clockNow().Sub(start)
 		result.Metrics = workerexecution.WorkMetrics{Duration: duration}
@@ -194,15 +190,6 @@ func (executor *AgentRunExecutor) publishFinalMessage(dispatchID string, content
 		Payload: payload,
 	}
 	executor.progress(workerexecution.CanonicalDraftFragment(dispatchID, draft))
-}
-
-func firstDecisionEnvelopeService(
-	services []interfaces.DecisionEnvelopeService,
-) interfaces.DecisionEnvelopeService {
-	if len(services) == 0 {
-		return nil
-	}
-	return services[0]
 }
 
 func effectiveAgentRunWorkerDefinition(request workerexecution.WorkstationExecutionRequest, workerDef *interfaces.FactoryWorkerConfig) *interfaces.FactoryWorkerConfig {

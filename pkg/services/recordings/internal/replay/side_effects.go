@@ -104,8 +104,8 @@ type sideEffectRecord struct {
 
 // NewSideEffects builds replay-aware side-effect substitutes from an artifact.
 func NewSideEffects(
-	decodeFactorySnapshot interfaces.FactorySnapshotJSONDecoder,
-	decodeRuntimeConfig interfaces.ReplayRuntimeConfigDecoder,
+	decodeFactorySnapshot SnapshotDecoder,
+	decodeRuntimeConfig RuntimeConfigDecoder,
 	artifact *interfaces.ReplayArtifact,
 ) (*SideEffects, error) {
 	eventLog, err := reduceReplayEvents(

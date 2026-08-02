@@ -41,7 +41,7 @@ func reviewAgentExecutor(provider *agentMockProvider) *executorpkg.AgentExecutor
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"review": {OutcomeFormat: interfaces.DecisionEnvelopeOutcomeFormat},
 		},
-	}, provider, nil, time.Now, agentDecisionEnvelopeFake{})
+	}, provider, nil, time.Now)
 
 }
 

@@ -42,13 +42,25 @@ type routingPackagedInstaller struct {
 	called bool
 }
 
-func (installer *routingPackagedInstaller) EnsurePackagedFactories(
+func (installer *routingPackagedInstaller) install(
 	context.Context,
-	string,
-	[]factorydefinitions.PackagedDefinition,
-) ([]factorydefinitions.PackagedFactoryInstallResult, error) {
+	factorydefinitions.InstallPackagedFactoryRequest,
+) (factorydefinitions.InstallPackagedFactoryResult, error) {
 	installer.called = true
-	return nil, nil
+	return factorydefinitions.InstallPackagedFactoryResult{}, nil
+}
+
+func routingDefinitionsService(installer *routingPackagedInstaller) factorydefinitions.Service {
+	definition := factorydefinitions.PackagedDefinition{Name: "@you/goal"}
+	return &definitionsService{
+		listFn: func(context.Context, factorydefinitions.ListBuiltInPackagedFactoriesRequest) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
+			return factorydefinitions.ListBuiltInPackagedFactoriesResult{Entries: []factorydefinitions.BuiltInPackagedFactoryEntry{{Name: definition.Name}}}, nil
+		},
+		resolveFn: func(context.Context, factorydefinitions.ResolveBuiltInPackagedFactoryRequest) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
+			return factorydefinitions.ResolveBuiltInPackagedFactoryResult{Definition: definition}, nil
+		},
+		installFn: installer.install,
+	}
 }
 
 type localMigrationFileSystem struct{}
@@ -73,21 +85,7 @@ func TestRootService_InitializeRoutesThroughInternalWorkflow(t *testing.T) {
 	installer := &routingPackagedInstaller{}
 	service, err := systeminitializationwire.NewService(
 		settings,
-		factorydefinitions.PackagedFactoryCatalogOperations{
-			List: func(
-				context.Context,
-				factorydefinitions.ListBuiltInPackagedFactoriesRequest,
-			) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
-				return factorydefinitions.ListBuiltInPackagedFactoriesResult{}, nil
-			},
-			Resolve: func(
-				context.Context,
-				factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
-			) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
-				return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, nil
-			},
-		},
-		installer,
+		routingDefinitionsService(installer),
 		os.Stat,
 		localMigrationFileSystem{},
 	)
@@ -138,21 +136,7 @@ func TestRootService_InitializeSkipPathConstructsSettingsLoadCommandThroughRootC
 	installer := &routingPackagedInstaller{}
 	service, err := systeminitializationwire.NewService(
 		settings,
-		factorydefinitions.PackagedFactoryCatalogOperations{
-			List: func(
-				context.Context,
-				factorydefinitions.ListBuiltInPackagedFactoriesRequest,
-			) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
-				return factorydefinitions.ListBuiltInPackagedFactoriesResult{}, nil
-			},
-			Resolve: func(
-				context.Context,
-				factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
-			) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
-				return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, nil
-			},
-		},
-		installer,
+		routingDefinitionsService(installer),
 		os.Stat,
 		localMigrationFileSystem{},
 	)

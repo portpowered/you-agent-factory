@@ -3,7 +3,6 @@ package internal
 import (
 	"fmt"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -18,8 +17,8 @@ func NewReplayClock(artifact *recordings.ReplayArtifact) recordings.Clock {
 
 func NewReplayExecution(
 	artifact *recordings.ReplayArtifact,
-	decodeFactorySnapshot factorydefinitions.FactorySnapshotJSONDecoder,
-	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	decodeFactorySnapshot replayimpl.SnapshotDecoder,
+	decodeRuntimeConfig replayimpl.RuntimeConfigDecoder,
 ) (
 	workers.Runner,
 	workers.CommandRunner,

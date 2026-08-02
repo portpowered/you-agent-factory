@@ -120,9 +120,6 @@ func executeBuiltInGoalRepeaterResult(
 		runtimefixtures.RuntimeWorkstationLookupFixture{
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{workstation.Name: workstation},
 		},
-		nil,
-		nil,
-		repeaterWorkPropagationPolicy{},
 	)
 	result, err := transitioner.Execute(context.Background(), builtInGoalRepeaterSnapshot(now, transition.ID, inputPlace, outcome))
 	if err != nil {
@@ -198,10 +195,4 @@ func assertTransitionConsumesPlace(t *testing.T, transition *petri.Transition, p
 		}
 	}
 	t.Fatalf("transition %q does not consume routed place %q", transition.Name, placeID)
-}
-
-type repeaterWorkPropagationPolicy struct{}
-
-func (repeaterWorkPropagationPolicy) Mode(*interfaces.FactoryWorkstationConfig) interfaces.WorkPropagationMode {
-	return interfaces.WorkPropagationModeOutputAsPayload
 }

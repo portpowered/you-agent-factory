@@ -16,11 +16,7 @@ type Assembly = factoryruntimeinternal.Assembly
 
 // NewRuntimeFactory constructs a hosted runtime bundle factory.
 func NewRuntimeFactory(
-	quorumPolicy factorydefinitions.QuorumPolicyService,
-	outputShaping factorydefinitions.InvocationOutputShapingService,
-	workPropagation factorydefinitions.WorkPropagationPolicyService,
 	workService work.Service,
-	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 	loggerFactory factoryruntime.RuntimeLoggerFactory,
 	runtimeLogs factoryruntime.RuntimeLogSinkFactory,
 	runtimeMetrics factoryruntime.RuntimeMetricsSinkFactory,
@@ -32,11 +28,7 @@ func NewRuntimeFactory(
 	orchestrationCompilation factoryruntime.OrchestrationCompilation,
 ) *RuntimeFactory {
 	return factoryruntimeinternal.NewRuntimeFactory(
-		quorumPolicy,
-		outputShaping,
-		workPropagation,
 		workService,
-		decisionEnvelopes,
 		loggerFactory,
 		runtimeLogs,
 		runtimeMetrics,

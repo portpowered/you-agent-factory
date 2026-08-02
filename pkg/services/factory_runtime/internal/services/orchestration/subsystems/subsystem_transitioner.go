@@ -27,15 +27,11 @@ import (
 // to submit. The subsystem reconstructs token history from raw dispatch
 // records on demand instead of reading cached history snapshots.
 type TransitionerSubsystem struct {
-	netDefinition     *state.Net
-	runtimeConfig     interfaces.RuntimeWorkstationLookup
-	logger            logging.Logger
-	now               func() time.Time
-	transformer       *token_transformer.Transformer
-	quorumPolicy      interfaces.QuorumPolicyService
-	outputShaping     interfaces.InvocationOutputShapingService
-	workPropagation   interfaces.WorkPropagationPolicyService
-	decisionEnvelopes interfaces.DecisionEnvelopeService
+	netDefinition *state.Net
+	runtimeConfig interfaces.RuntimeWorkstationLookup
+	logger        logging.Logger
+	now           func() time.Time
+	transformer   *token_transformer.Transformer
 }
 
 var _ Subsystem = (*TransitionerSubsystem)(nil)
@@ -59,19 +55,16 @@ type generatedBatchWork struct {
 }
 
 type mutationCalculationInput struct {
-	transition      *petri.Transition
-	workstation     *interfaces.FactoryWorkstationConfig
-	arcs            []petri.Arc
-	consumed        []factorytoken.Token
-	result          resolvedWorkResult
-	now             time.Time
-	history         factorytoken.History
-	inputColors     []factorytoken.Color
-	transformer     *token_transformer.Transformer
-	runtimeConfig   interfaces.RuntimeWorkstationLookup
-	quorumPolicy    interfaces.QuorumPolicyService
-	outputShaping   interfaces.InvocationOutputShapingService
-	workPropagation interfaces.WorkPropagationPolicyService
+	transition    *petri.Transition
+	workstation   *interfaces.FactoryWorkstationConfig
+	arcs          []petri.Arc
+	consumed      []factorytoken.Token
+	result        resolvedWorkResult
+	now           time.Time
+	history       factorytoken.History
+	inputColors   []factorytoken.Color
+	transformer   *token_transformer.Transformer
+	runtimeConfig interfaces.RuntimeWorkstationLookup
 }
 
 // NewTransitioner creates a TransitionerSubsystem that reads results and raw
@@ -82,10 +75,6 @@ func NewTransitioner(
 	now func() time.Time,
 	transformer *token_transformer.Transformer,
 	runtimeConfig interfaces.RuntimeWorkstationLookup,
-	quorumPolicy interfaces.QuorumPolicyService,
-	outputShaping interfaces.InvocationOutputShapingService,
-	workPropagation interfaces.WorkPropagationPolicyService,
-	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
 ) *TransitionerSubsystem {
 	if now == nil {
 		panic("Factory Runtime transitioner clock is required")
@@ -94,15 +83,11 @@ func NewTransitioner(
 		panic("Factory Runtime token transformer is required")
 	}
 	tr := &TransitionerSubsystem{
-		netDefinition:     n,
-		logger:            logging.EnsureLogger(logger),
-		now:               now,
-		transformer:       transformer,
-		runtimeConfig:     runtimeConfig,
-		quorumPolicy:      quorumPolicy,
-		outputShaping:     outputShaping,
-		workPropagation:   workPropagation,
-		decisionEnvelopes: firstDecisionEnvelopeService(decisionEnvelopes),
+		netDefinition: n,
+		logger:        logging.EnsureLogger(logger),
+		now:           now,
+		transformer:   transformer,
+		runtimeConfig: runtimeConfig,
 	}
 	return tr
 }
@@ -216,19 +201,16 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *inter
 	}
 
 	mutations, err := calculateMutations(mutationCalculationInput{
-		transition:      currentTransition,
-		workstation:     workstationDef,
-		arcs:            arcs,
-		consumed:        consumedTokens,
-		result:          resolved,
-		now:             now,
-		history:         history,
-		inputColors:     inputColors,
-		transformer:     t.transformer,
-		runtimeConfig:   t.runtimeConfig,
-		quorumPolicy:    t.quorumPolicy,
-		outputShaping:   t.outputShaping,
-		workPropagation: t.workPropagation,
+		transition:    currentTransition,
+		workstation:   workstationDef,
+		arcs:          arcs,
+		consumed:      consumedTokens,
+		result:        resolved,
+		now:           now,
+		history:       history,
+		inputColors:   inputColors,
+		transformer:   t.transformer,
+		runtimeConfig: t.runtimeConfig,
 	})
 	if err != nil {
 		return nil, interfaces.CompletedDispatch{}, nil, err
@@ -329,8 +311,7 @@ func (t *TransitionerSubsystem) calculateArcsForResolvedResult(currentTransition
 	workstation, ok := runtimeWorkstation(currentTransition.Name, t.runtimeConfig)
 	if ok &&
 		workstation != nil &&
-		t.decisionEnvelopes != nil &&
-		t.decisionEnvelopes.UsesGoalRoutingDecisionEnvelope(workstation) {
+		usesGoalRoutingDecisionEnvelope(workstation) {
 		if resolved.outcome == workerexecution.OutcomeAccepted {
 			return matchClassificationLabelArcs(currentTransition, resolved.selectedClassificationLabel, resolved, "decision %q did not match any authored routing route")
 		}
@@ -343,15 +324,6 @@ func (t *TransitionerSubsystem) calculateArcsForResolvedResult(currentTransition
 	}
 
 	return matchClassificationLabelArcs(currentTransition, resolved.output, resolved, "classifier label %q did not match any authored classification route")
-}
-
-func firstDecisionEnvelopeService(
-	services []interfaces.DecisionEnvelopeService,
-) interfaces.DecisionEnvelopeService {
-	if len(services) == 0 {
-		return nil
-	}
-	return services[0]
 }
 
 func matchClassificationLabelArcs(currentTransition *petri.Transition, label string, resolved resolvedWorkResult, unknownLabelFmt string) ([]petri.Arc, resolvedWorkResult, error) {
@@ -728,10 +700,7 @@ func (t *TransitionerSubsystem) createFanoutGuardToken(inputColors []factorytoke
 func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutation, error) {
 	mutations := make([]interfaces.MarkingMutation, 0)
 	workOutputIndex := 0
-	if in.workPropagation == nil {
-		return nil, fmt.Errorf("Factory Definition Work propagation policy service is required")
-	}
-	workPropagationMode := in.workPropagation.Mode(in.workstation)
+	workPropagationMode := workstationPropagationMode(in.workstation)
 	workstationName := ""
 	if in.workstation != nil {
 		workstationName = in.workstation.Name
@@ -761,18 +730,18 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 			if err != nil {
 				return nil, err
 			}
-			if err := applyPackagedTTSInvocationMetadata(in.outputShaping, newToken, in.workstation, in.result.output, in.inputColors, in.runtimeConfig); err != nil {
+			if err := applyPackagedTTSInvocationMetadata(newToken, in.workstation, in.result.output, in.inputColors, in.runtimeConfig); err != nil {
 				return nil, err
 			}
 			if in.result.outcome == workerexecution.OutcomeAccepted {
-				if err := applyPackagedGoalInvocationSummary(in.outputShaping, newToken, in.workstation, in.result.output, in.runtimeConfig); err != nil {
+				if err := applyPackagedGoalInvocationSummary(newToken, in.workstation, in.result.output, in.runtimeConfig); err != nil {
 					return nil, err
 				}
 			}
-			if err := applyPackagedSubagentInvocationResponse(in.outputShaping, newToken, in.workstation, in.result.output, in.runtimeConfig); err != nil {
+			if err := applyPackagedSubagentInvocationResponse(newToken, in.workstation, in.result.output, in.runtimeConfig); err != nil {
 				return nil, err
 			}
-			applyPackagedQuorumWorkRelations(in.quorumPolicy, newToken, in.workstation, in.inputColors, in.runtimeConfig)
+			applyPackagedQuorumWorkRelations(newToken, in.workstation, in.inputColors, in.runtimeConfig)
 			if newToken.Color.DataType != factorytoken.DataTypeResource {
 				if workOutputIndex < len(in.result.recordedOutputWork) {
 					applyRecordedOutputWorkIdentity(newToken, in.result.recordedOutputWork[workOutputIndex])
@@ -795,26 +764,25 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 // topology to the shipped package. Customer factories own their relations,
 // even if they independently choose the same workstation or Work type names.
 func applyPackagedQuorumWorkRelations(
-	quorumPolicy interfaces.QuorumPolicyService,
 	output *factorytoken.Token,
 	workstation *interfaces.FactoryWorkstationConfig,
 	inputs []factorytoken.Color,
 	runtimeConfig interfaces.RuntimeWorkstationLookup,
 ) {
-	if quorumPolicy == nil || output == nil || workstation == nil {
+	if output == nil || workstation == nil {
 		return
 	}
 	factoryConfigLookup, ok := runtimeConfig.(interfaces.RuntimeFactoryConfigLookup)
-	if !ok || !quorumPolicy.IsPackagedQuorumFactory(factoryConfigLookup.FactoryConfig()) {
+	if !ok || !isPackagedQuorumFactory(factoryConfigLookup.FactoryConfig()) {
 		return
 	}
-	lineage := make([]interfaces.QuorumLineageInput, len(inputs))
+	lineage := make([]quorumLineageInput, len(inputs))
 	for index, input := range inputs {
-		lineage[index] = interfaces.QuorumLineageInput{
+		lineage[index] = quorumLineageInput{
 			WorkID: input.WorkID, WorkTypeID: input.WorkTypeID,
 		}
 	}
-	output.Color.Relations = quorumPolicy.WorkRelations(
+	output.Color.Relations = packagedQuorumRelations(
 		workstation.Name,
 		output.Color.ParentID,
 		output.Color.WorkTypeID,

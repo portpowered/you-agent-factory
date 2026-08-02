@@ -302,7 +302,6 @@ func TestWireFoldPreservesHostedSourcesFactoryComposition(t *testing.T) {
 		nil,
 		"",
 		ports.resolveTemplates,
-		ports.executionPolicy,
 	)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)

@@ -16,8 +16,14 @@ type legacyFactoryMigration struct {
 	targetDir string
 }
 
+const legacyNamedFactoriesDirName = "you-agent-factories"
+
+func legacyNamedFactoriesRoot(homeDir string) string {
+	return filepath.Join(homeDir, ".you-agent-factory", legacyNamedFactoriesDirName)
+}
+
 func migrateLegacyNamedFactories(homeDir, canonicalRoot string, files LegacyFactoryMigrationFileSystem) error {
-	legacyRoot := factorydefinitions.LegacyNamedFactoriesRoot(homeDir)
+	legacyRoot := legacyNamedFactoriesRoot(homeDir)
 	info, err := files.Stat(legacyRoot)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil

@@ -163,7 +163,7 @@ func TestSaveArtifactFromEventStreamFile_HydratesAdjacentFactoryAndRewritesEmbed
 func scriptedHydratedFactorySnapshotDirectoryLoader(
 	t *testing.T,
 	wantFactoryDir string,
-) interfaces.FactorySnapshotDirectoryLoader {
+) FactorySnapshotDirectoryLoader {
 	t.Helper()
 	return func(factoryDir string) (*interfaces.FactorySnapshot, error) {
 		if factoryDir != wantFactoryDir {

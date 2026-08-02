@@ -68,9 +68,6 @@ type Result struct {
 type Service struct {
 	providers                         providers.Service
 	scriptFactory                     *workerexecutor.ScriptFactory
-	interpolation                     interfaces.InvocationInterpolationService
-	executionPolicy                   interfaces.WorkstationExecutionPolicyService
-	decisionEnvelopes                 interfaces.DecisionEnvelopeService
 	factoryDocs                       workers.FactoryDocsLoader
 	worktreePreparer                  workers.FactoryWorktreePreparer
 	runWorktree                       string
@@ -87,30 +84,20 @@ type Service struct {
 func New(
 	providerFactory providers.Service,
 	scriptFactory *workerexecutor.ScriptFactory,
-	interpolation interfaces.InvocationInterpolationService,
-	executionPolicy interfaces.WorkstationExecutionPolicyService,
 	factoryDocs workers.FactoryDocsLoader,
 	worktreePreparer workers.FactoryWorktreePreparer,
 	agentRunHarness workeragentrun.HarnessAdapter,
 	retryRandom platformrandom.Source,
 	workstationFiles platformfilesystem.ReadFileInspector,
-	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
 ) *Service {
-	var selected interfaces.DecisionEnvelopeService
-	if len(decisionEnvelopes) > 0 {
-		selected = decisionEnvelopes[0]
-	}
 	return &Service{
-		providers:         providerFactory,
-		scriptFactory:     scriptFactory,
-		interpolation:     interpolation,
-		executionPolicy:   executionPolicy,
-		factoryDocs:       factoryDocs,
-		worktreePreparer:  worktreePreparer,
-		agentRunHarness:   agentRunHarness,
-		retryRandom:       retryRandom,
-		workstationFiles:  workstationFiles,
-		decisionEnvelopes: selected,
+		providers:        providerFactory,
+		scriptFactory:    scriptFactory,
+		factoryDocs:      factoryDocs,
+		worktreePreparer: worktreePreparer,
+		agentRunHarness:  agentRunHarness,
+		retryRandom:      retryRandom,
+		workstationFiles: workstationFiles,
 	}
 }
 
@@ -242,7 +229,6 @@ func (s *Service) Build(
 			runner,
 			logger,
 			clock,
-			s.decisionEnvelopes,
 		)
 		agentRun := workeragentrun.NewAgentRunExecutorWithDependencies(
 			runtimeConfig,
@@ -251,21 +237,20 @@ func (s *Service) Build(
 			s.agentRunHarness,
 			agentRunRecorder,
 			clock,
-			s.decisionEnvelopes,
 		).WithProgressPublisher(inferenceProgressPublisher)
 		direct := &workerexecutor.WorkstationBehaviorRouter{
 			RuntimeConfig: runtimeConfig, InferenceExecutor: inference, AgentRunExecutor: agentRun,
 		}
 		return workstationResult(
-			runtimeConfig, factoryRunnerID, workflowContext, logger, direct, s.interpolation,
-			s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.runWorktree, s.workstationFiles,
+			runtimeConfig, factoryRunnerID, workflowContext, logger, direct,
+			clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.runWorktree, s.workstationFiles,
 			s.resolveRunner,
 			s.resolveProvider,
 		), nil
 	case interfaces.WorkstationTypeLogical:
 		return workstationResult(
 			runtimeConfig, factoryRunnerID, workflowContext, logger, nil,
-			s.interpolation, s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.runWorktree, s.workstationFiles,
+			clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.runWorktree, s.workstationFiles,
 			s.resolveRunner,
 			s.resolveProvider,
 		), nil
@@ -281,8 +266,8 @@ func (s *Service) Build(
 			return Result{}, err
 		}
 		return workstationResult(
-			runtimeConfig, factoryRunnerID, workflowContext, logger, direct, s.interpolation,
-			s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.runWorktree, s.workstationFiles,
+			runtimeConfig, factoryRunnerID, workflowContext, logger, direct,
+			clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.runWorktree, s.workstationFiles,
 			s.resolveRunner,
 			s.resolveProvider,
 		), nil
@@ -311,8 +296,6 @@ func (s *Service) BuildLogical(
 		workflowContext,
 		logger,
 		nil,
-		s.interpolation,
-		s.executionPolicy,
 		clock,
 		processEnvironment,
 		currentWorkingDirectory,
@@ -442,8 +425,6 @@ func workstationResult(
 	workflowContext *workerexecution.Context,
 	logger logging.Logger,
 	direct workers.WorkstationRequestExecutor,
-	interpolation interfaces.InvocationInterpolationService,
-	executionPolicy interfaces.WorkstationExecutionPolicyService,
 	clock func() time.Time,
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),
@@ -465,9 +446,7 @@ func workstationResult(
 			ResolveRunnerSelection:  resolveRunner,
 			ResolveProviderIdentity: resolveProvider,
 			WorkflowContext:         workflowContext, Executor: direct,
-			Interpolation:   interpolation,
-			ExecutionPolicy: executionPolicy,
-			Renderer:        renderer, Logger: logger,
+			Renderer: renderer, Logger: logger,
 			WorktreePreparer: worktreePreparer,
 			RunWorktree:      runWorktree,
 			FileSystem:       workstationFiles,

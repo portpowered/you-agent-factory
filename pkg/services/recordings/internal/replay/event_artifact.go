@@ -153,7 +153,7 @@ func hydrateArtifactFromEvents(artifact *interfaces.ReplayArtifact) error {
 
 func hydrateArtifactFromEventsAtBoundary(
 	artifact *interfaces.ReplayArtifact,
-	decode interfaces.FactorySnapshotJSONDecoder,
+	decode SnapshotDecoder,
 ) error {
 	if decode == nil {
 		return fmt.Errorf("Factory snapshot decoder is required")
@@ -206,7 +206,7 @@ func runStartedPayloadFromEvent(event interfaces.FactoryEvent) (interfaces.RunRe
 
 func runStartedPayloadFromEventAtBoundary(
 	event interfaces.FactoryEvent,
-	decode interfaces.FactorySnapshotJSONDecoder,
+	decode SnapshotDecoder,
 ) (interfaces.RunRequestEventPayload, error) {
 	if decode == nil {
 		return interfaces.RunRequestEventPayload{}, fmt.Errorf("Factory snapshot decoder is required")

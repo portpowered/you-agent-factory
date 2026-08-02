@@ -73,13 +73,6 @@ func newTestFactory(opts ...testFactoryOption) (factory.Factory, error) {
 		cfg.dispatchRecorder, cfg.completionRecorder, cfg.petriMutationRecorder,
 		cfg.completionDeliveryPlanner,
 		nil,
-		nil,
-		interfaces.WorkPropagationPolicyFunc(func(
-			*interfaces.FactoryWorkstationConfig,
-		) interfaces.WorkPropagationMode {
-			return interfaces.WorkPropagationModeOutputAsPayload
-		}),
-		nil,
 		func() string { return fmt.Sprintf("work-request-test-id-%d", identity.Add(1)) },
 		func() string { return fmt.Sprintf("runtime-test-id-%d", identity.Add(1)) },
 	)

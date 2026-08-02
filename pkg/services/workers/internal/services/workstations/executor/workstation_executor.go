@@ -59,8 +59,6 @@ type WorkstationExecutor struct {
 	ResolveProviderIdentity workerexecution.ProviderIdentityResolver
 	WorkflowContext         *workerexecution.Context
 	Executor                WorkstationRequestExecutor
-	Interpolation           factorydefinitions.InvocationInterpolationService
-	ExecutionPolicy         factorydefinitions.WorkstationExecutionPolicyService
 	Renderer                workerprompting.PromptRenderer
 	Parser                  OutputParser
 	Logger                  logging.Logger // optional; nil → noop
@@ -139,34 +137,6 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 	logger := logging.EnsureLogger(we.Logger)
 	invocationArgs := invocationArgumentsFromDispatch(dispatch)
 	invocationDiagnostics := invocationDiagnosticsForDispatch(we.RuntimeConfig, invocationArgs)
-	if we.Interpolation == nil && invocationArgs != nil {
-		return workerexecution.WorkResult{
-			DispatchID:   dispatch.DispatchID,
-			TransitionID: dispatch.TransitionID,
-			Outcome:      workerexecution.OutcomeFailed,
-			Error:        "Factory Definition invocation interpolation service is unavailable",
-			Diagnostics:  invocationDiagnostics,
-			Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
-		}, nil
-	}
-	var readFile factorydefinitions.FileReader
-	if we.FileSystem != nil {
-		readFile = we.FileSystem.ReadFile
-	}
-	if we.Interpolation != nil {
-		interpolatedWorkstation, err := we.Interpolation.InterpolateWorkstationConfig(*workstationDef, invocationArgs, readFile)
-		if err != nil {
-			return workerexecution.WorkResult{
-				DispatchID:   dispatch.DispatchID,
-				TransitionID: dispatch.TransitionID,
-				Outcome:      workerexecution.OutcomeFailed,
-				Error:        err.Error(),
-				Diagnostics:  invocationDiagnostics,
-				Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
-			}, nil
-		}
-		workstationDef = &interpolatedWorkstation
-	}
 	workerName := workstationWorkerName(workstationDef, dispatch)
 	workerDef, ok := we.RuntimeConfig.Worker(workerName)
 	if !ok {
@@ -178,33 +148,21 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 			Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
 		}, nil
 	}
-	if we.Interpolation != nil {
-		interpolatedWorker, err := we.Interpolation.InterpolateWorkerConfig(*workerDef, invocationArgs, readFile)
-		if err != nil {
-			return workerexecution.WorkResult{
-				DispatchID:   dispatch.DispatchID,
-				TransitionID: dispatch.TransitionID,
-				Outcome:      workerexecution.OutcomeFailed,
-				Error:        err.Error(),
-				Diagnostics:  invocationDiagnostics,
-				Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
-			}, nil
-		}
-		workerDef = &interpolatedWorker
-		if strings.TrimSpace(workerDef.ModelProvider) == "" {
-			workerDef.ModelProvider = workerDef.RuntimeDefaultModelProvider
-		}
-		if strings.TrimSpace(workerDef.Model) == "" {
-			workerDef.Model = workerDef.RuntimeDefaultModel
-		}
-		if failed := we.resolveInvocationProvider(
-			dispatch,
-			workerDef,
-			invocationDiagnostics,
-			start,
-		); failed != nil {
-			return *failed, nil
-		}
+	effectiveWorker := *workerDef
+	workerDef = &effectiveWorker
+	if strings.TrimSpace(workerDef.ModelProvider) == "" {
+		workerDef.ModelProvider = workerDef.RuntimeDefaultModelProvider
+	}
+	if strings.TrimSpace(workerDef.Model) == "" {
+		workerDef.Model = workerDef.RuntimeDefaultModel
+	}
+	if failed := we.resolveInvocationProvider(
+		dispatch,
+		workerDef,
+		invocationDiagnostics,
+		start,
+	); failed != nil {
+		return *failed, nil
 	}
 	effort, effortOK := factorydefinitions.CanonicalizeReasoningEffort(workerDef.ReasoningEffort)
 	if !effortOK {
@@ -705,7 +663,6 @@ func processEnvironment(read func() []string) []string {
 func (we *WorkstationExecutor) executeInnerWorker(ctx context.Context, request workerexecution.WorkstationExecutionRequest, workerDef *factorydefinitions.FactoryWorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time, logger logging.Logger) (workerexecution.WorkResult, error) {
 	executorCtx := ctx
 	executionTimeout, err := resolveExecutionTimeout(
-		we.ExecutionPolicy,
 		workerDef,
 		workstationDef,
 	)
@@ -876,17 +833,22 @@ func workstationLookupKey(dispatch work.WorkDispatch) string {
 }
 
 func resolveExecutionTimeout(
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 	workerDef *factorydefinitions.FactoryWorkerConfig,
 	workstationDef *interfaces.FactoryWorkstationConfig,
 ) (time.Duration, error) {
-	if executionPolicy != nil && workstationDef != nil {
-		timeout, err := executionPolicy.ExecutionTimeout(workstationDef)
-		if err != nil {
-			return 0, err
+	if workstationDef != nil {
+		authoredTimeout := strings.TrimSpace(workstationDef.Limits.MaxExecutionTime)
+		if authoredTimeout == "" {
+			authoredTimeout = strings.TrimSpace(workstationDef.Timeout)
 		}
-		if timeout > 0 {
-			return timeout, nil
+		if authoredTimeout != "" {
+			timeout, err := time.ParseDuration(authoredTimeout)
+			if err != nil {
+				return 0, fmt.Errorf("invalid workstation limits.maxExecutionTime %q: %w", authoredTimeout, err)
+			}
+			if timeout > 0 {
+				return timeout, nil
+			}
 		}
 	}
 

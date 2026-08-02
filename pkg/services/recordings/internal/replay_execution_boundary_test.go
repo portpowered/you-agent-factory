@@ -94,7 +94,7 @@ func loadReplayExecutionBoundaryArtifact(t *testing.T) *recordings.ReplayArtifac
 	return artifact
 }
 
-var replayExecutionFactorySnapshotDecoder factorydefinitions.FactorySnapshotJSONDecoder = func(
+var replayExecutionFactorySnapshotDecoder replayimpl.SnapshotDecoder = func(
 	data []byte,
 ) (*factorydefinitions.FactorySnapshot, error) {
 	generated, err := factorymapping.GeneratedFactoryFromOpenAPIJSON(data)
@@ -106,7 +106,7 @@ var replayExecutionFactorySnapshotDecoder factorydefinitions.FactorySnapshotJSON
 
 func replayExecutionRuntimeConfigDecoder(
 	snapshot *factorydefinitions.FactorySnapshot,
-) (factorydefinitions.ReplayRuntimeConfig, error) {
+) (replayimpl.ReplayRuntimeConfig, error) {
 	var generated factoryapi.Factory
 	if err := snapshot.Decode(&generated); err != nil {
 		return nil, err

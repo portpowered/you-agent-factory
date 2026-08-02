@@ -154,7 +154,7 @@ func MarshalArtifact(artifact *interfaces.ReplayArtifact) ([]byte, error) {
 func Load(
 	storage platformreplay.Storage,
 	path string,
-	decodeFactorySnapshot interfaces.FactorySnapshotJSONDecoder,
+	decodeFactorySnapshot SnapshotDecoder,
 ) (*interfaces.ReplayArtifact, error) {
 	if storage == nil {
 		return nil, fmt.Errorf("replay artifact storage is required")

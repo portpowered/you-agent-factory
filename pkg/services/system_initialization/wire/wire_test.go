@@ -36,13 +36,49 @@ type recordingPackagedInstaller struct {
 	calls int
 }
 
-func (installer *recordingPackagedInstaller) EnsurePackagedFactories(
+func (installer *recordingPackagedInstaller) installPackagedFactory(
 	context.Context,
-	string,
-	[]factorydefinitions.PackagedDefinition,
-) ([]factorydefinitions.PackagedFactoryInstallResult, error) {
+	factorydefinitions.InstallPackagedFactoryRequest,
+) (factorydefinitions.InstallPackagedFactoryResult, error) {
 	installer.calls++
 	panic("packaged install during inert construction")
+}
+
+type testDefinitionsService struct {
+	factorydefinitions.Service
+	listFn    func(context.Context, factorydefinitions.ListBuiltInPackagedFactoriesRequest) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error)
+	resolveFn func(context.Context, factorydefinitions.ResolveBuiltInPackagedFactoryRequest) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error)
+	installFn func(context.Context, factorydefinitions.InstallPackagedFactoryRequest) (factorydefinitions.InstallPackagedFactoryResult, error)
+}
+
+func (service *testDefinitionsService) ListBuiltInPackagedFactories(
+	ctx context.Context,
+	request factorydefinitions.ListBuiltInPackagedFactoriesRequest,
+) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
+	if service.listFn == nil {
+		return factorydefinitions.ListBuiltInPackagedFactoriesResult{}, nil
+	}
+	return service.listFn(ctx, request)
+}
+
+func (service *testDefinitionsService) ResolveBuiltInPackagedFactory(
+	ctx context.Context,
+	request factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
+) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
+	if service.resolveFn == nil {
+		return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, nil
+	}
+	return service.resolveFn(ctx, request)
+}
+
+func (service *testDefinitionsService) InstallPackagedFactory(
+	ctx context.Context,
+	request factorydefinitions.InstallPackagedFactoryRequest,
+) (factorydefinitions.InstallPackagedFactoryResult, error) {
+	if service.installFn == nil {
+		return factorydefinitions.InstallPackagedFactoryResult{}, nil
+	}
+	return service.installFn(ctx, request)
 }
 
 type recordingMigrationFileSystem struct {
@@ -70,15 +106,15 @@ func (filesystem *recordingMigrationFileSystem) Rename(string, string) error {
 	panic("migration filesystem rename during inert construction")
 }
 
-func validPackagedCatalog() factorydefinitions.PackagedFactoryCatalogOperations {
-	return factorydefinitions.PackagedFactoryCatalogOperations{
-		List: func(
+func validDefinitionsService() factorydefinitions.Service {
+	return &testDefinitionsService{
+		listFn: func(
 			context.Context,
 			factorydefinitions.ListBuiltInPackagedFactoriesRequest,
 		) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
 			panic("packaged catalog list during inert construction")
 		},
-		Resolve: func(
+		resolveFn: func(
 			context.Context,
 			factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
 		) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
@@ -92,8 +128,7 @@ func TestNewServiceReturnsPublishedServiceRoot(t *testing.T) {
 
 	service, err := NewService(
 		&recordingOperatorSettings{},
-		validPackagedCatalog(),
-		&recordingPackagedInstaller{},
+		validDefinitionsService(),
 		func(string) (fs.FileInfo, error) {
 			panic("inspect path during inert construction")
 		},
@@ -121,15 +156,15 @@ func TestNewServiceConstructionIsInert(t *testing.T) {
 	listCalls := 0
 	resolveCalls := 0
 	inspectCalls := 0
-	catalog := factorydefinitions.PackagedFactoryCatalogOperations{
-		List: func(
+	definitions := &testDefinitionsService{
+		listFn: func(
 			context.Context,
 			factorydefinitions.ListBuiltInPackagedFactoriesRequest,
 		) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
 			listCalls++
 			panic("packaged catalog list during inert construction")
 		},
-		Resolve: func(
+		resolveFn: func(
 			context.Context,
 			factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
 		) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
@@ -140,8 +175,7 @@ func TestNewServiceConstructionIsInert(t *testing.T) {
 
 	service, err := NewService(
 		settings,
-		catalog,
-		installer,
+		definitions,
 		func(string) (fs.FileInfo, error) {
 			inspectCalls++
 			panic("inspect path during inert construction")
@@ -188,89 +222,73 @@ func (wireOperatorSettings) EnsureLocalBackendScope(string) (operatorsettings.Re
 
 type wirePackagedInstaller struct{}
 
-func (wirePackagedInstaller) EnsurePackagedFactories(
+func (wirePackagedInstaller) installPackagedFactory(
 	context.Context,
-	string,
-	[]factorydefinitions.PackagedDefinition,
-) ([]factorydefinitions.PackagedFactoryInstallResult, error) {
-	return nil, nil
+	factorydefinitions.InstallPackagedFactoryRequest,
+) (factorydefinitions.InstallPackagedFactoryResult, error) {
+	return factorydefinitions.InstallPackagedFactoryResult{}, nil
 }
 
 func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 	t.Parallel()
 
 	validSettings := wireOperatorSettings{}
-	validCatalog := factorydefinitions.PackagedFactoryCatalogOperations{
-		List: func(
+	validDefinitions := &testDefinitionsService{
+		listFn: func(
 			context.Context,
 			factorydefinitions.ListBuiltInPackagedFactoriesRequest,
 		) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
 			return factorydefinitions.ListBuiltInPackagedFactoriesResult{}, nil
 		},
-		Resolve: func(
+		resolveFn: func(
 			context.Context,
 			factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
 		) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
 			return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, nil
 		},
 	}
-	validInstaller := wirePackagedInstaller{}
 	validInspectPath := os.Stat
 	validMigrationFiles := localMigrationFileSystem{}
 
 	tests := []struct {
-		name              string
-		operatorSettings  OperatorSettings
-		packagedCatalog   factorydefinitions.PackagedFactoryCatalogOperations
-		packagedInstaller factorydefinitions.PackagedFactoryInstaller
-		inspectPath       InspectPath
-		migrationFiles    LegacyFactoryMigrationFileSystem
-		wantErr           string
+		name             string
+		operatorSettings OperatorSettings
+		definitions      factorydefinitions.Service
+		inspectPath      InspectPath
+		migrationFiles   LegacyFactoryMigrationFileSystem
+		wantErr          string
 	}{
 		{
-			name:              "operator settings",
-			operatorSettings:  nil,
-			packagedCatalog:   validCatalog,
-			packagedInstaller: validInstaller,
-			inspectPath:       validInspectPath,
-			migrationFiles:    validMigrationFiles,
-			wantErr:           "construct system initialization: Operator Settings service is required",
+			name:             "operator settings",
+			operatorSettings: nil,
+			definitions:      validDefinitions,
+			inspectPath:      validInspectPath,
+			migrationFiles:   validMigrationFiles,
+			wantErr:          "construct system initialization: Operator Settings service is required",
 		},
 		{
-			name:              "packaged installer",
-			operatorSettings:  validSettings,
-			packagedCatalog:   validCatalog,
-			packagedInstaller: nil,
-			inspectPath:       validInspectPath,
-			migrationFiles:    validMigrationFiles,
-			wantErr:           "construct system initialization: Factory Definitions packaged installer is required",
+			name:             "Definitions service",
+			operatorSettings: validSettings,
+			definitions:      nil,
+			inspectPath:      validInspectPath,
+			migrationFiles:   validMigrationFiles,
+			wantErr:          "construct system initialization: Factory Definitions service is required",
 		},
 		{
-			name:              "packaged catalog",
-			operatorSettings:  validSettings,
-			packagedCatalog:   factorydefinitions.PackagedFactoryCatalogOperations{},
-			packagedInstaller: validInstaller,
-			inspectPath:       validInspectPath,
-			migrationFiles:    validMigrationFiles,
-			wantErr:           "construct system initialization: Factory Definitions packaged catalog is required",
+			name:             "inspect path edge",
+			operatorSettings: validSettings,
+			definitions:      validDefinitions,
+			inspectPath:      nil,
+			migrationFiles:   validMigrationFiles,
+			wantErr:          "construct system initialization: inspect path edge is required",
 		},
 		{
-			name:              "inspect path edge",
-			operatorSettings:  validSettings,
-			packagedCatalog:   validCatalog,
-			packagedInstaller: validInstaller,
-			inspectPath:       nil,
-			migrationFiles:    validMigrationFiles,
-			wantErr:           "construct system initialization: inspect path edge is required",
-		},
-		{
-			name:              "legacy migration filesystem",
-			operatorSettings:  validSettings,
-			packagedCatalog:   validCatalog,
-			packagedInstaller: validInstaller,
-			inspectPath:       validInspectPath,
-			migrationFiles:    nil,
-			wantErr:           "construct system initialization: legacy Factory migration filesystem is required",
+			name:             "legacy migration filesystem",
+			operatorSettings: validSettings,
+			definitions:      validDefinitions,
+			inspectPath:      validInspectPath,
+			migrationFiles:   nil,
+			wantErr:          "construct system initialization: legacy Factory migration filesystem is required",
 		},
 	}
 	for _, test := range tests {
@@ -279,8 +297,7 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 
 			service, err := NewService(
 				test.operatorSettings,
-				test.packagedCatalog,
-				test.packagedInstaller,
+				test.definitions,
 				test.inspectPath,
 				test.migrationFiles,
 			)
@@ -325,13 +342,12 @@ type routingPackagedInstaller struct {
 	called bool
 }
 
-func (installer *routingPackagedInstaller) EnsurePackagedFactories(
+func (installer *routingPackagedInstaller) installPackagedFactory(
 	context.Context,
-	string,
-	[]factorydefinitions.PackagedDefinition,
-) ([]factorydefinitions.PackagedFactoryInstallResult, error) {
+	factorydefinitions.InstallPackagedFactoryRequest,
+) (factorydefinitions.InstallPackagedFactoryResult, error) {
 	installer.called = true
-	return nil, nil
+	return factorydefinitions.InstallPackagedFactoryResult{}, nil
 }
 
 func TestNewServiceInitializeAfterInertConstruction(t *testing.T) {
@@ -342,27 +358,27 @@ func TestNewServiceInitializeAfterInertConstruction(t *testing.T) {
 	listCalls := 0
 	resolveCalls := 0
 	inspectCalls := 0
-	catalog := factorydefinitions.PackagedFactoryCatalogOperations{
-		List: func(
+	definitions := &testDefinitionsService{
+		listFn: func(
 			context.Context,
 			factorydefinitions.ListBuiltInPackagedFactoriesRequest,
 		) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
 			listCalls++
 			return factorydefinitions.ListBuiltInPackagedFactoriesResult{}, nil
 		},
-		Resolve: func(
+		resolveFn: func(
 			context.Context,
 			factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
 		) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
 			resolveCalls++
 			return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, nil
 		},
+		installFn: installer.installPackagedFactory,
 	}
 
 	service, err := NewService(
 		settings,
-		catalog,
-		installer,
+		definitions,
 		func(string) (fs.FileInfo, error) {
 			inspectCalls++
 			return os.Stat("")
@@ -406,21 +422,7 @@ func TestNewServiceConstructsBootstrapService(t *testing.T) {
 
 	service, err := NewService(
 		wireOperatorSettings{},
-		factorydefinitions.PackagedFactoryCatalogOperations{
-			List: func(
-				context.Context,
-				factorydefinitions.ListBuiltInPackagedFactoriesRequest,
-			) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
-				return factorydefinitions.ListBuiltInPackagedFactoriesResult{}, nil
-			},
-			Resolve: func(
-				context.Context,
-				factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
-			) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
-				return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, nil
-			},
-		},
-		wirePackagedInstaller{},
+		&testDefinitionsService{},
 		os.Stat,
 		localMigrationFileSystem{},
 	)

@@ -7,19 +7,26 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
+type FileReader func(string) ([]byte, error)
+
+type QuorumLineageInput struct {
+	WorkID     string
+	WorkTypeID string
+}
+
 // InvocationInterpolation is a programmable Factory Definitions root fake.
 // Consumer tests script the owning service's result without importing or
 // reproducing its interpolation implementation.
 type InvocationInterpolation struct {
-	Validate               func(*factorydefinitions.FactoryConfig, *work.InvocationArguments, factorydefinitions.FileReader) error
-	InterpolateWorker      func(factorydefinitions.FactoryWorkerConfig, *work.InvocationArguments, factorydefinitions.FileReader) (factorydefinitions.FactoryWorkerConfig, error)
-	InterpolateWorkstation func(factorydefinitions.FactoryWorkstationConfig, *work.InvocationArguments, factorydefinitions.FileReader) (factorydefinitions.FactoryWorkstationConfig, error)
+	Validate               func(*factorydefinitions.FactoryConfig, *work.InvocationArguments, FileReader) error
+	InterpolateWorker      func(factorydefinitions.FactoryWorkerConfig, *work.InvocationArguments, FileReader) (factorydefinitions.FactoryWorkerConfig, error)
+	InterpolateWorkstation func(factorydefinitions.FactoryWorkstationConfig, *work.InvocationArguments, FileReader) (factorydefinitions.FactoryWorkstationConfig, error)
 }
 
 func (i InvocationInterpolation) ValidateInvocationInterpolation(
 	cfg *factorydefinitions.FactoryConfig,
 	arguments *work.InvocationArguments,
-	readFile factorydefinitions.FileReader,
+	readFile FileReader,
 ) error {
 	if i.Validate == nil {
 		return nil
@@ -30,7 +37,7 @@ func (i InvocationInterpolation) ValidateInvocationInterpolation(
 func (i InvocationInterpolation) InterpolateWorkerConfig(
 	worker factorydefinitions.FactoryWorkerConfig,
 	arguments *work.InvocationArguments,
-	readFile factorydefinitions.FileReader,
+	readFile FileReader,
 ) (factorydefinitions.FactoryWorkerConfig, error) {
 	if i.InterpolateWorker == nil {
 		return worker, nil
@@ -41,7 +48,7 @@ func (i InvocationInterpolation) InterpolateWorkerConfig(
 func (i InvocationInterpolation) InterpolateWorkstationConfig(
 	workstation factorydefinitions.FactoryWorkstationConfig,
 	arguments *work.InvocationArguments,
-	readFile factorydefinitions.FileReader,
+	readFile FileReader,
 ) (factorydefinitions.FactoryWorkstationConfig, error) {
 	if i.InterpolateWorkstation == nil {
 		return workstation, nil
@@ -140,7 +147,7 @@ func (s InvocationOutputShaping) TTSMetadataContentFromWorkerOutput(
 // QuorumPolicy is a programmable Factory Definitions root fake.
 type QuorumPolicy struct {
 	IsPackaged func(*factorydefinitions.FactoryConfig) bool
-	Relations  func(string, string, string, []factorydefinitions.QuorumLineageInput) []work.Relation
+	Relations  func(string, string, string, []QuorumLineageInput) []work.Relation
 }
 
 func (p QuorumPolicy) IsPackagedQuorumFactory(
@@ -153,7 +160,7 @@ func (p QuorumPolicy) WorkRelations(
 	workstationName string,
 	outputParentID string,
 	outputWorkTypeID string,
-	inputs []factorydefinitions.QuorumLineageInput,
+	inputs []QuorumLineageInput,
 ) []work.Relation {
 	if p.Relations == nil {
 		return nil

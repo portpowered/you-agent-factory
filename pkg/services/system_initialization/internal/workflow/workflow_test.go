@@ -60,22 +60,69 @@ type fakePackagedInstaller struct {
 	err     error
 }
 
-type failingPackagedCatalog struct {
-	err error
+type testPackagedInstaller interface {
+	installPackagedFactory(context.Context, factorydefinitions.InstallPackagedFactoryRequest) (factorydefinitions.InstallPackagedFactoryResult, error)
 }
 
-func (catalog failingPackagedCatalog) ListBuiltInPackagedFactories(
+type testDefinitionsService struct {
+	factorydefinitions.Service
+	definitions []factorydefinitions.PackagedDefinition
+	listErr     error
+	resolveErr  error
+	installer   testPackagedInstaller
+}
+
+func (service *testDefinitionsService) ListBuiltInPackagedFactories(
 	context.Context,
 	factorydefinitions.ListBuiltInPackagedFactoriesRequest,
 ) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
-	return factorydefinitions.ListBuiltInPackagedFactoriesResult{}, catalog.err
+	if service.listErr != nil {
+		return factorydefinitions.ListBuiltInPackagedFactoriesResult{}, service.listErr
+	}
+	entries := make([]factorydefinitions.BuiltInPackagedFactoryEntry, len(service.definitions))
+	for index, definition := range service.definitions {
+		entries[index] = factorydefinitions.BuiltInPackagedFactoryEntry{
+			Name: definition.Name, Project: definition.Project,
+			Formats: append([]factorydefinitions.PackagedFactoryFormat(nil), definition.Formats...),
+		}
+	}
+	return factorydefinitions.ListBuiltInPackagedFactoriesResult{Entries: entries}, nil
 }
 
-func (failingPackagedCatalog) ResolveBuiltInPackagedFactory(
-	context.Context,
-	factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
+func (service *testDefinitionsService) ResolveBuiltInPackagedFactory(
+	_ context.Context,
+	request factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
 ) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
-	return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, errors.New("unexpected resolve")
+	if service.resolveErr != nil {
+		return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, service.resolveErr
+	}
+	for _, definition := range service.definitions {
+		if definition.Name == request.Name {
+			return factorydefinitions.ResolveBuiltInPackagedFactoryResult{
+				Definition: definition,
+				Formats:    append([]factorydefinitions.PackagedFactoryFormat(nil), definition.Formats...),
+			}, nil
+		}
+	}
+	return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, factorydefinitions.ErrUnknownPackagedFactoryIdentity
+}
+
+func (service *testDefinitionsService) InstallPackagedFactory(
+	ctx context.Context,
+	request factorydefinitions.InstallPackagedFactoryRequest,
+) (factorydefinitions.InstallPackagedFactoryResult, error) {
+	if service.installer != nil {
+		return service.installer.installPackagedFactory(ctx, request)
+	}
+	return factorydefinitions.InstallPackagedFactoryResult{
+		Definition: factorydefinitions.DistributedFactoryDefinitionFacts{
+			Name: request.Name,
+			FactoryDir: filepath.Join(request.RootDir,
+				strings.TrimPrefix(request.Name, "@you/")),
+		},
+		Outcome: factorydefinitions.PackagedFactoryInstallCreated,
+		Format:  request.Format,
+	}, nil
 }
 
 type packagedInstallCall struct {
@@ -86,12 +133,13 @@ type packagedInstallCall struct {
 func newTestInitializer(
 	t *testing.T,
 	settings operatorsettings.Service,
-	installer factorydefinitions.PackagedFactoryInstaller,
+	installer testPackagedInstaller,
 	definitions []factorydefinitions.PackagedDefinition,
 ) *Initializer {
 	t.Helper()
-	catalog := newTestPackagedCatalog(definitions)
-	initializer, err := New(settings, catalog, installer, os.Stat, localMigrationFileSystem{})
+	definitionsService := newTestPackagedCatalog(definitions)
+	definitionsService.installer = installer
+	initializer, err := New(settings, definitionsService, os.Stat, localMigrationFileSystem{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -100,51 +148,40 @@ func newTestInitializer(
 
 func newTestPackagedCatalog(
 	definitions []factorydefinitions.PackagedDefinition,
-) factorydefinitions.PackagedFactoryCatalogOperations {
+) *testDefinitionsService {
 	cloned := append([]factorydefinitions.PackagedDefinition(nil), definitions...)
 	sort.Slice(cloned, func(i, j int) bool { return cloned[i].Name < cloned[j].Name })
-	return factorydefinitions.PackagedFactoryCatalogOperations{
-		List: func(
-			context.Context,
-			factorydefinitions.ListBuiltInPackagedFactoriesRequest,
-		) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
-			entries := make([]factorydefinitions.BuiltInPackagedFactoryEntry, len(cloned))
-			for index, definition := range cloned {
-				entries[index] = factorydefinitions.BuiltInPackagedFactoryEntry{
-					Name: definition.Name, Project: definition.Project,
-					Formats: append([]factorydefinitions.PackagedFactoryFormat(nil), definition.Formats...),
-				}
-			}
-			return factorydefinitions.ListBuiltInPackagedFactoriesResult{Entries: entries}, nil
-		},
-		Resolve: func(
-			_ context.Context,
-			request factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
-		) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
-			for _, definition := range cloned {
-				if definition.Name == request.Name {
-					return factorydefinitions.ResolveBuiltInPackagedFactoryResult{
-						Definition: definition,
-						Formats:    append([]factorydefinitions.PackagedFactoryFormat(nil), definition.Formats...),
-					}, nil
-				}
-			}
-			return factorydefinitions.ResolveBuiltInPackagedFactoryResult{},
-				factorydefinitions.ErrUnknownPackagedFactoryIdentity
-		},
-	}
+	return &testDefinitionsService{definitions: cloned}
 }
 
-func (fake *fakePackagedInstaller) EnsurePackagedFactories(
+func (fake *fakePackagedInstaller) installPackagedFactory(
 	_ context.Context,
-	root string,
-	definitions []factorydefinitions.PackagedDefinition,
-) ([]factorydefinitions.PackagedFactoryInstallResult, error) {
+	request factorydefinitions.InstallPackagedFactoryRequest,
+) (factorydefinitions.InstallPackagedFactoryResult, error) {
 	fake.calls = append(fake.calls, packagedInstallCall{
-		root:        root,
-		definitions: append([]factorydefinitions.PackagedDefinition(nil), definitions...),
+		root:        request.RootDir,
+		definitions: []factorydefinitions.PackagedDefinition{{Name: request.Name}},
 	})
-	return append([]factorydefinitions.PackagedFactoryInstallResult(nil), fake.results...), fake.err
+	if fake.err != nil {
+		return factorydefinitions.InstallPackagedFactoryResult{}, fake.err
+	}
+	if len(fake.results) > 0 {
+		result := fake.results[0]
+		return factorydefinitions.InstallPackagedFactoryResult{
+			Definition: factorydefinitions.DistributedFactoryDefinitionFacts{Name: result.Name, FactoryDir: result.FactoryDir},
+			Outcome:    result.Outcome,
+			Format:     request.Format,
+		}, nil
+	}
+	return factorydefinitions.InstallPackagedFactoryResult{
+		Definition: factorydefinitions.DistributedFactoryDefinitionFacts{
+			Name: request.Name,
+			FactoryDir: filepath.Join(request.RootDir,
+				strings.TrimPrefix(request.Name, "@you/")),
+		},
+		Outcome: factorydefinitions.PackagedFactoryInstallCreated,
+		Format:  request.Format,
+	}, nil
 }
 
 func TestInitializeFreshHomeReturnsTypedCreatedResultsThroughPeerRoots(t *testing.T) {
@@ -261,33 +298,32 @@ type repeatAwarePackagedInstaller struct {
 	calls int
 }
 
-func (installer *repeatAwarePackagedInstaller) EnsurePackagedFactories(
+func (installer *repeatAwarePackagedInstaller) installPackagedFactory(
 	_ context.Context,
-	root string,
-	definitions []factorydefinitions.PackagedDefinition,
-) ([]factorydefinitions.PackagedFactoryInstallResult, error) {
+	request factorydefinitions.InstallPackagedFactoryRequest,
+) (factorydefinitions.InstallPackagedFactoryResult, error) {
 	installer.calls++
 	outcome := factorydefinitions.PackagedFactoryInstallCreated
 	if installer.calls > 1 {
 		outcome = factorydefinitions.PackagedFactoryInstallSkipped
 	}
-	results := make([]factorydefinitions.PackagedFactoryInstallResult, 0, len(definitions))
-	for _, definition := range definitions {
-		results = append(results, factorydefinitions.PackagedFactoryInstallResult{
-			Name:       definition.Name,
-			FactoryDir: strings.TrimPrefix(definition.Name, "@you/"),
-			Outcome:    outcome,
-		})
-	}
-	_ = root
-	return results, nil
+	return factorydefinitions.InstallPackagedFactoryResult{
+		Definition: factorydefinitions.DistributedFactoryDefinitionFacts{
+			Name: request.Name,
+			FactoryDir: filepath.Join(request.RootDir,
+				strings.TrimPrefix(request.Name, "@you/")),
+		},
+		Outcome: outcome,
+		Format:  request.Format,
+	}, nil
 }
 
 func TestInit_FreshHomeCreatesOperatorSystemConfig(t *testing.T) {
 	settings := &fakeOperatorSettings{}
 	installer := &fakePackagedInstaller{}
+	definitions := []factorydefinitions.PackagedDefinition{{Name: "@you/goal"}}
 	homeDir := t.TempDir()
-	result, err := newTestInitializer(t, settings, installer, nil).Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
+	result, err := newTestInitializer(t, settings, installer, definitions).Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
 	if err != nil {
 		t.Fatalf("Initialize() error = %v", err)
 	}
@@ -301,7 +337,7 @@ func TestInit_FreshHomeCreatesOperatorSystemConfig(t *testing.T) {
 
 func TestInitializeMigratesLegacyFactoriesBeforePackagedInstallation(t *testing.T) {
 	homeDir := t.TempDir()
-	legacyDir := filepath.Join(factorydefinitions.LegacyNamedFactoriesRoot(homeDir), "@you", "goal")
+	legacyDir := filepath.Join(legacyNamedFactoriesRoot(homeDir), "@you", "goal")
 	if err := os.MkdirAll(legacyDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -326,7 +362,7 @@ func TestInitializeMigratesLegacyFactoriesBeforePackagedInstallation(t *testing.
 
 func TestInitializeLegacyFactoryConflictPreservesBothCopies(t *testing.T) {
 	homeDir := t.TempDir()
-	legacyDir := filepath.Join(factorydefinitions.LegacyNamedFactoriesRoot(homeDir), "customer")
+	legacyDir := filepath.Join(legacyNamedFactoriesRoot(homeDir), "customer")
 	canonicalDir := filepath.Join(homeDir, ".you-agent-factory", "factories", "customer")
 	for _, dir := range []string{legacyDir, canonicalDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -347,7 +383,7 @@ func TestInitializeLegacyFactoryConflictPreservesBothCopies(t *testing.T) {
 
 func TestInitializeRejectsInvalidLegacyCurrentFactoryPointer(t *testing.T) {
 	homeDir := t.TempDir()
-	legacyRoot := factorydefinitions.LegacyNamedFactoriesRoot(homeDir)
+	legacyRoot := legacyNamedFactoriesRoot(homeDir)
 	if err := os.MkdirAll(legacyRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -399,7 +435,7 @@ func TestInit_RejectsSystemConfigParentThatIsAFile(t *testing.T) {
 	}
 	inspect := func(string) (os.FileInfo, error) { return occupied, nil }
 	catalog := newTestPackagedCatalog(nil)
-	initializer, err := New(&fakeOperatorSettings{}, catalog, &fakePackagedInstaller{}, inspect, localMigrationFileSystem{})
+	initializer, err := New(&fakeOperatorSettings{}, catalog, inspect, localMigrationFileSystem{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -427,7 +463,7 @@ func TestInit_PropagatesInjectedConfigInspectionFailure(t *testing.T) {
 	}
 
 	catalog := newTestPackagedCatalog(nil)
-	initializer, constructionErr := New(&fakeOperatorSettings{}, catalog, &fakePackagedInstaller{}, inspect, localMigrationFileSystem{})
+	initializer, constructionErr := New(&fakeOperatorSettings{}, catalog, inspect, localMigrationFileSystem{})
 	if constructionErr != nil {
 		t.Fatalf("New() error = %v", constructionErr)
 	}
@@ -480,11 +516,12 @@ func TestInit_DoubleRunIsSuccessfulNoOp(t *testing.T) {
 	homeDir := t.TempDir()
 	settings := &fakeOperatorSettings{}
 	installer := &fakePackagedInstaller{}
-	first, err := newTestInitializer(t, settings, installer, nil).Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
+	definitions := []factorydefinitions.PackagedDefinition{{Name: "@you/goal"}}
+	first, err := newTestInitializer(t, settings, installer, definitions).Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := newTestInitializer(t, settings, installer, nil).Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
+	second, err := newTestInitializer(t, settings, installer, definitions).Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -523,7 +560,8 @@ func TestInit_ConfigCreationFailureReportsActionableError(t *testing.T) {
 func TestInit_FactoryMaterializationFailureReportsActionableError(t *testing.T) {
 	installErr := errors.New("invalid packaged layout")
 	installer := &fakePackagedInstaller{err: installErr}
-	_, err := newTestInitializer(t, &fakeOperatorSettings{}, installer, nil).Initialize(t.Context(), systeminitialization.Request{HomeDir: t.TempDir()})
+	definitions := []factorydefinitions.PackagedDefinition{{Name: "@you/goal"}}
+	_, err := newTestInitializer(t, &fakeOperatorSettings{}, installer, definitions).Initialize(t.Context(), systeminitialization.Request{HomeDir: t.TempDir()})
 	if err == nil {
 		t.Fatalf("Initialize() error = nil")
 	}
@@ -566,7 +604,7 @@ func TestInitializePackagedFactoryFailureAfterSkippedSystemConfigReportsRollback
 		t,
 		settings,
 		&fakePackagedInstaller{err: installErr},
-		nil,
+		[]factorydefinitions.PackagedDefinition{{Name: "@you/goal"}},
 	).Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
 	if !errors.Is(err, systeminitialization.ErrInitializePartialFailure) {
 		t.Fatalf("Initialize() error = %v, want ErrInitializePartialFailure", err)
@@ -615,13 +653,11 @@ func TestInitializeCatalogFailureReturnsBeforeInstallationOrConfigMutation(t *te
 	settings := &fakeOperatorSettings{}
 	installer := &fakePackagedInstaller{}
 	catalogErr := errors.New("embedded manifest invalid")
+	catalog := newTestPackagedCatalog(nil)
+	catalog.listErr = catalogErr
 	initializer, err := New(
 		settings,
-		factorydefinitions.PackagedFactoryCatalogOperations{
-			List:    failingPackagedCatalog{err: catalogErr}.ListBuiltInPackagedFactories,
-			Resolve: failingPackagedCatalog{}.ResolveBuiltInPackagedFactory,
-		},
-		installer,
+		catalog,
 		os.Stat,
 		localMigrationFileSystem{},
 	)
@@ -645,16 +681,16 @@ func TestInitializeCatalogFailureReturnsBeforeInstallationOrConfigMutation(t *te
 
 func TestNewRequiresInjectedServices(t *testing.T) {
 	catalog := newTestPackagedCatalog(nil)
-	if initializer, err := New(nil, catalog, &fakePackagedInstaller{}, os.Stat, localMigrationFileSystem{}); err == nil || initializer != nil {
+	if initializer, err := New(nil, catalog, os.Stat, localMigrationFileSystem{}); err == nil || initializer != nil {
 		t.Fatalf("New(nil Operator Settings) = (%#v, %v), want nil and error", initializer, err)
 	}
-	if initializer, err := New(&fakeOperatorSettings{}, catalog, nil, os.Stat, localMigrationFileSystem{}); err == nil || initializer != nil {
-		t.Fatalf("New(nil packaged installer) = (%#v, %v), want nil and error", initializer, err)
+	if initializer, err := New(&fakeOperatorSettings{}, nil, os.Stat, localMigrationFileSystem{}); err == nil || initializer != nil {
+		t.Fatalf("New(nil Definitions service) = (%#v, %v), want nil and error", initializer, err)
 	}
-	if initializer, err := New(&fakeOperatorSettings{}, factorydefinitions.PackagedFactoryCatalogOperations{}, &fakePackagedInstaller{}, os.Stat, localMigrationFileSystem{}); err == nil || initializer != nil {
-		t.Fatalf("New(nil packaged catalog) = (%#v, %v), want nil and error", initializer, err)
-	}
-	if initializer, err := New(&fakeOperatorSettings{}, catalog, &fakePackagedInstaller{}, nil, localMigrationFileSystem{}); err == nil || initializer != nil || !strings.Contains(err.Error(), "inspect path edge is required") {
+	if initializer, err := New(&fakeOperatorSettings{}, catalog, nil, localMigrationFileSystem{}); err == nil || initializer != nil || !strings.Contains(err.Error(), "inspect path edge is required") {
 		t.Fatalf("New(nil inspect path) = (%#v, %v), want nil and inspect-path error", initializer, err)
+	}
+	if initializer, err := New(&fakeOperatorSettings{}, catalog, os.Stat, nil); err == nil || initializer != nil || !strings.Contains(err.Error(), "legacy Factory migration filesystem is required") {
+		t.Fatalf("New(nil migration filesystem) = (%#v, %v), want nil and migration-filesystem error", initializer, err)
 	}
 }

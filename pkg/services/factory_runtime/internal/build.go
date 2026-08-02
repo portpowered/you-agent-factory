@@ -27,11 +27,7 @@ type runtimeWorkstationService = workers.WorkstationExecutionService
 
 // RuntimeFactory constructs hosted runtime bundles. It is stateless.
 type RuntimeFactory struct {
-	quorumPolicy             interfaces.QuorumPolicyService
-	outputShaping            interfaces.InvocationOutputShapingService
-	workPropagation          interfaces.WorkPropagationPolicyService
 	workService              work.Service
-	decisionEnvelopes        interfaces.DecisionEnvelopeService
 	loggerFactory            factory.RuntimeLoggerFactory
 	runtimeLogs              factory.RuntimeLogSinkFactory
 	runtimeMetrics           factory.RuntimeMetricsSinkFactory
@@ -44,11 +40,7 @@ type RuntimeFactory struct {
 }
 
 func NewRuntimeFactory(
-	quorumPolicy interfaces.QuorumPolicyService,
-	outputShaping interfaces.InvocationOutputShapingService,
-	workPropagation interfaces.WorkPropagationPolicyService,
 	workService work.Service,
-	decisionEnvelopes interfaces.DecisionEnvelopeService,
 	loggerFactory factory.RuntimeLoggerFactory,
 	runtimeLogs factory.RuntimeLogSinkFactory,
 	runtimeMetrics factory.RuntimeMetricsSinkFactory,
@@ -60,11 +52,7 @@ func NewRuntimeFactory(
 	orchestrationCompilation factory.OrchestrationCompilation,
 ) *RuntimeFactory {
 	return &RuntimeFactory{
-		quorumPolicy:             quorumPolicy,
-		outputShaping:            outputShaping,
-		workPropagation:          workPropagation,
 		workService:              workService,
-		decisionEnvelopes:        decisionEnvelopes,
 		loggerFactory:            loggerFactory,
 		runtimeLogs:              runtimeLogs,
 		runtimeMetrics:           runtimeMetrics,
@@ -220,15 +208,11 @@ func (f *RuntimeFactory) Build(
 		workerExecutors,
 		workerService,
 		f.workService,
-		f.quorumPolicy,
-		f.outputShaping,
-		f.workPropagation,
 		f.workRequestIDs,
 		f.newID,
 		f.runtimeDirs,
 		f.inputFiles,
 		f.inputDirectoryWalker,
-		f.decisionEnvelopes,
 	)
 }
 
@@ -266,15 +250,11 @@ func assembleRuntimeBundle(
 	workerExecutors map[string]workers.WorkerExecutor,
 	workerService runtimeWorkstationService,
 	workService work.Service,
-	quorumPolicy interfaces.QuorumPolicyService,
-	outputShaping interfaces.InvocationOutputShapingService,
-	workPropagation interfaces.WorkPropagationPolicyService,
 	workRequestIDs work.RequestIDGenerator,
 	newID factory.IDGenerator,
 	runtimeDirs factory.RuntimeDirectoryFileSystem,
 	inputFiles factory.InputFileSystem,
 	inputDirectoryWalker factory.InputDirectoryWalker,
-	decisionEnvelopes interfaces.DecisionEnvelopeService,
 ) (*factoryhost.Bundle, error) {
 	bundle := factoryhost.NewBundle(
 		dir, folderPath, runtimeInstanceID, strings.TrimSpace(backendScopeID),
@@ -322,13 +302,9 @@ func assembleRuntimeBundle(
 		bundle.RecordCompletionMetrics,
 		petriMutationRecorder,
 		completionPlanner,
-		quorumPolicy,
-		outputShaping,
-		workPropagation,
 		workService,
 		workRequestIDs,
 		newID,
-		decisionEnvelopes,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create factory: %w", err)

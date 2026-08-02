@@ -8,7 +8,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction"
@@ -88,14 +87,11 @@ func (s *Service) WithCommandRunners(providerRunner, scriptRunner workers.Comman
 		s.executorBuilder,
 		clone.providers,
 		clone.scriptFactory,
-		clone.interpolation,
-		clone.executionPolicy,
 		clone.factoryDocs,
 		clone.worktreePreparer,
 		clone.agentRunHarness,
 		clone.retryRandom,
 		clone.workstationFiles,
-		clone.decisionEnvelopes,
 	)
 	return &clone, nil
 }
@@ -113,14 +109,11 @@ func rebuildExecutorBuilder(
 	current workerconstruction.Builder,
 	providersService providers.Service,
 	scriptFactory *workerexecutor.ScriptFactory,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 	factoryDocs workers.FactoryDocsLoader,
 	worktreePreparer workers.FactoryWorktreePreparer,
 	agentRunHarness workeragentrun.HarnessAdapter,
 	retryRandom platformrandom.Source,
 	workstationFiles platformfilesystem.ReadFileInspector,
-	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 ) workerconstruction.Builder {
 	if existing, ok := current.(*workerconstruction.Service); ok {
 		return existing.WithExecutionFactories(providersService, scriptFactory)
@@ -128,14 +121,11 @@ func rebuildExecutorBuilder(
 	return workerconstruction.New(
 		providersService,
 		scriptFactory,
-		interpolation,
-		executionPolicy,
 		factoryDocs,
 		worktreePreparer,
 		agentRunHarness,
 		retryRandom,
 		workstationFiles,
-		decisionEnvelopes,
 	)
 }
 

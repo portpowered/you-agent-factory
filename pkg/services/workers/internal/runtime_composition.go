@@ -46,8 +46,6 @@ func NewRuntime(
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),
 	contentMaterializer work.ContentMaterializer,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 	factoryDocs workers.FactoryDocsLoader,
 	resolveSymlinks workers.ResolveExecutableSymlinks,
 	executableLocator platformprocess.ExecutableLocator,
@@ -59,7 +57,6 @@ func NewRuntime(
 	retryRandom platformrandom.Source,
 	workstationFiles platformfilesystem.ReadFileInspector,
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
-	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 ) (workers.RuntimeService, error) {
 	runtimeService, err := New(
 		sessions,
@@ -79,8 +76,6 @@ func NewRuntime(
 		currentWorkingDirectory,
 		nil,
 		contentMaterializer,
-		interpolation,
-		executionPolicy,
 		factoryDocs,
 		resolveSymlinks,
 		executableLocator,
@@ -92,7 +87,6 @@ func NewRuntime(
 		retryRandom,
 		workstationFiles,
 		temporaryFiles,
-		decisionEnvelopes,
 	)
 	if err != nil {
 		return nil, err
@@ -127,8 +121,6 @@ func NewRuntimeWithSelection(
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),
 	contentMaterializer work.ContentMaterializer,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 	factoryDocs workers.FactoryDocsLoader,
 	resolveSymlinks workers.ResolveExecutableSymlinks,
 	executableLocator platformprocess.ExecutableLocator,
@@ -140,7 +132,6 @@ func NewRuntimeWithSelection(
 	retryRandom platformrandom.Source,
 	workstationFiles platformfilesystem.ReadFileInspector,
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
-	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 	providerCommandInjected bool,
 	scriptCommandInjected bool,
 	providersLifecycleOwned bool,
@@ -150,9 +141,9 @@ func NewRuntimeWithSelection(
 	runtimeService, err := NewRuntime(
 		sessions, modelService, providersService, modelsScope, providerCommandRunner, scriptCommandRunner,
 		allocator, logger, verbose, factoryRunnerID, runWorktree, invocationSkipPermissionsOverride,
-		providerOverride, now, processEnvironment, currentWorkingDirectory, contentMaterializer, interpolation, executionPolicy,
+		providerOverride, now, processEnvironment, currentWorkingDirectory, contentMaterializer,
 		factoryDocs, resolveSymlinks, executableLocator, executableInspector, executableFiles, operatingSystem,
-		worktreePreparer, agentRunHarness, retryRandom, workstationFiles, temporaryFiles, decisionEnvelopes,
+		worktreePreparer, agentRunHarness, retryRandom, workstationFiles, temporaryFiles,
 	)
 	if err != nil {
 		return nil, err

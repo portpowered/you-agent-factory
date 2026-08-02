@@ -14,7 +14,7 @@ import (
 )
 
 type replayEventLog struct {
-	RuntimeConfig    interfaces.ReplayRuntimeConfig
+	RuntimeConfig    ReplayRuntimeConfig
 	Submissions      []replaySubmission
 	Dispatches       []replayDispatch
 	Completions      []replayCompletion
@@ -60,8 +60,8 @@ type replayInferenceAttempt struct {
 
 func reduceReplayEvents(
 	artifact *interfaces.ReplayArtifact,
-	decodeFactorySnapshot interfaces.FactorySnapshotJSONDecoder,
-	decodeRuntimeConfig interfaces.ReplayRuntimeConfigDecoder,
+	decodeFactorySnapshot SnapshotDecoder,
+	decodeRuntimeConfig RuntimeConfigDecoder,
 ) (*replayEventLog, error) {
 	if err := validateReplayEventEnvelope(artifact); err != nil {
 		return nil, err
@@ -98,8 +98,8 @@ func reduceReplayEvent(
 	event interfaces.FactoryEvent,
 	workByID map[string]work.Work,
 	inferenceAttemptsByDispatchID map[string]replayInferenceAttempt,
-	decodeFactorySnapshot interfaces.FactorySnapshotJSONDecoder,
-	decodeRuntimeConfig interfaces.ReplayRuntimeConfigDecoder,
+	decodeFactorySnapshot SnapshotDecoder,
+	decodeRuntimeConfig RuntimeConfigDecoder,
 ) error {
 	switch event.Type {
 	case interfaces.FactoryEventTypeRunRequest:
@@ -178,8 +178,8 @@ func replayWorkStateChangeFromEvent(event interfaces.FactoryEvent) (*replayWorkS
 func applyReplayRunRequest(
 	reduced *replayEventLog,
 	event interfaces.FactoryEvent,
-	decodeFactorySnapshot interfaces.FactorySnapshotJSONDecoder,
-	decodeRuntimeConfig interfaces.ReplayRuntimeConfigDecoder,
+	decodeFactorySnapshot SnapshotDecoder,
+	decodeRuntimeConfig RuntimeConfigDecoder,
 ) error {
 	payload, err := runStartedPayloadFromEventAtBoundary(
 		event,
@@ -425,7 +425,7 @@ func replayWorkRequestRelations(works []work.WorkRequestEventWork, relations []w
 	return out
 }
 
-func replayDispatchFromEvent(runtimeConfig interfaces.ReplayRuntimeConfig, event interfaces.FactoryEvent, workByID map[string]work.Work) (replayDispatch, error) {
+func replayDispatchFromEvent(runtimeConfig ReplayRuntimeConfig, event interfaces.FactoryEvent, workByID map[string]work.Work) (replayDispatch, error) {
 	var payload interfaces.DispatchRequestEventPayload
 	if err := event.DecodePayload(&payload); err != nil {
 		return replayDispatch{}, fmt.Errorf("decode dispatch created event %q: %w", event.Id, err)
@@ -665,7 +665,7 @@ func replayDispatchPreviousChainingTraceIDs(
 	return workerexecution.PreviousChainingTraceIDs(inputTokens)
 }
 
-func replayWorkstation(runtimeConfig interfaces.ReplayRuntimeConfig, transitionID string) *interfaces.FactoryWorkstationConfig {
+func replayWorkstation(runtimeConfig ReplayRuntimeConfig, transitionID string) *interfaces.FactoryWorkstationConfig {
 	if runtimeConfig == nil {
 		return nil
 	}

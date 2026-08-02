@@ -9,6 +9,7 @@ import (
 	factorydefinitionfixtures "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
@@ -133,7 +134,7 @@ func generatedFactoryFromRootConfig(
 	return *generated, nil
 }
 
-func runtimeConfigFromGeneratedFactory(generated factoryapi.Factory) (interfaces.ReplayRuntimeConfig, error) {
+func runtimeConfigFromGeneratedFactory(generated factoryapi.Factory) (replay.ReplayRuntimeConfig, error) {
 	payload, err := json.Marshal(generated)
 	if err != nil {
 		return nil, err
@@ -149,7 +150,7 @@ func runtimeConfigFromGeneratedFactory(generated factoryapi.Factory) (interfaces
 	return runtimefixtures.ReplayRuntimeConfigValue(config, factoryDir), nil
 }
 
-func runtimeConfigFromFactorySnapshot(snapshot *interfaces.FactorySnapshot) (interfaces.ReplayRuntimeConfig, error) {
+func runtimeConfigFromFactorySnapshot(snapshot *interfaces.FactorySnapshot) (replay.ReplayRuntimeConfig, error) {
 	var generated factoryapi.Factory
 	if err := snapshot.Decode(&generated); err != nil {
 		return nil, err
@@ -157,7 +158,7 @@ func runtimeConfigFromFactorySnapshot(snapshot *interfaces.FactorySnapshot) (int
 	return runtimeConfigFromGeneratedFactory(generated)
 }
 
-var configTestFactorySnapshotDecoder interfaces.FactorySnapshotJSONDecoder = func(
+var configTestFactorySnapshotDecoder replay.SnapshotDecoder = func(
 	data []byte,
 ) (*interfaces.FactorySnapshot, error) {
 	generated, err := factorymapping.GeneratedFactoryFromOpenAPIJSON(data)

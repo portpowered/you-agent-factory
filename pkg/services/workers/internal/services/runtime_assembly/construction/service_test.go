@@ -24,7 +24,7 @@ func TestServiceBuildProviderBackedExposesDispatchAndDirectBoundaries(t *testing
 		"model": {Name: "model", Type: interfaces.WorkerTypeModel},
 	}}
 	decorated := false
-	result, err := New(nil, nil, nil, nil, testFactoryDocs, nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}), testRetryRandom, platformfilesystem.Local{}).Build(
+	result, err := New(nil, nil, testFactoryDocs, nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}), testRetryRandom, platformfilesystem.Local{}).Build(
 		runtimeConfig, "model", "", nil, logging.NoopLogger{}, nil,
 		providerStub{}, nil, nil, nil, nil, testClock, os.Environ, os.Getwd,
 		[]RunnerDecorator{func(runner workers.Runner, _ *interfaces.FactoryWorkerConfig) workers.Runner {
@@ -65,7 +65,7 @@ func TestServiceBuildLogicalWorkerHasDispatchOnly(t *testing.T) {
 	runtimeConfig := runtimefixtures.RuntimeConfigLookupFixture{Workers: map[string]*interfaces.FactoryWorkerConfig{
 		"logical": {Name: "logical", Type: interfaces.WorkstationTypeLogical},
 	}}
-	result, err := New(nil, nil, nil, nil, testFactoryDocs, nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}), testRetryRandom, platformfilesystem.Local{}).Build(
+	result, err := New(nil, nil, testFactoryDocs, nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}), testRetryRandom, platformfilesystem.Local{}).Build(
 		runtimeConfig, "logical", "", nil, logging.NoopLogger{}, nil,
 		nil, nil, nil, nil, nil, testClock, os.Environ, os.Getwd, nil,
 	)
@@ -88,7 +88,7 @@ func TestServiceBuildScriptExposesDispatchAndDirectBoundaries(t *testing.T) {
 	runtimeConfig := runtimefixtures.RuntimeConfigLookupFixture{Workers: map[string]*interfaces.FactoryWorkerConfig{
 		"script": {Name: "script", Type: interfaces.WorkerTypeScript, Command: "script-tool"},
 	}}
-	result, err := New(nil, scriptFactory, nil, nil, testFactoryDocs, nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}), testRetryRandom, platformfilesystem.Local{}).Build(
+	result, err := New(nil, scriptFactory, testFactoryDocs, nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}), testRetryRandom, platformfilesystem.Local{}).Build(
 		runtimeConfig, "script", "", nil, logging.NoopLogger{}, nil,
 		nil, nil, nil, nil, nil, testClock, os.Environ, os.Getwd, nil,
 	)
@@ -101,7 +101,7 @@ func TestServiceBuildScriptExposesDispatchAndDirectBoundaries(t *testing.T) {
 }
 
 func TestServiceBuildUnknownWorkerReturnsEmptyResult(t *testing.T) {
-	result, err := New(nil, nil, nil, nil, testFactoryDocs, nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}), testRetryRandom, platformfilesystem.Local{}).Build(
+	result, err := New(nil, nil, testFactoryDocs, nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}), testRetryRandom, platformfilesystem.Local{}).Build(
 		runtimefixtures.RuntimeConfigLookupFixture{}, "missing", "", nil,
 		logging.NoopLogger{}, nil, nil, nil, nil, nil, nil, testClock, os.Environ, os.Getwd, nil,
 	)
@@ -114,7 +114,7 @@ func TestServiceBuildUnknownWorkerReturnsEmptyResult(t *testing.T) {
 }
 
 func TestServiceBuildRequiresRuntimeConfig(t *testing.T) {
-	if _, err := New(nil, nil, nil, nil, testFactoryDocs, nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}), testRetryRandom, platformfilesystem.Local{}).Build(
+	if _, err := New(nil, nil, testFactoryDocs, nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}), testRetryRandom, platformfilesystem.Local{}).Build(
 		nil, "", "", nil, logging.NoopLogger{}, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil,
 	); err == nil {
@@ -130,7 +130,7 @@ func TestServiceWithRunnerSelectionReturnsConfiguredCopy(t *testing.T) {
 	}
 
 	service := New(
-		nil, nil, nil, nil, testFactoryDocs, nil,
+		nil, nil, testFactoryDocs, nil,
 		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		testRetryRandom,
 		platformfilesystem.Local{},
@@ -165,7 +165,7 @@ func TestServiceWithExecutionFactoriesPreservesRunnerAndProviderWiring(t *testin
 	}
 
 	service := New(
-		nil, nil, nil, nil, testFactoryDocs, nil,
+		nil, nil, testFactoryDocs, nil,
 		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		testRetryRandom,
 		platformfilesystem.Local{},

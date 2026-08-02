@@ -17,7 +17,6 @@ func TestNewServiceIsInert(t *testing.T) {
 		clockwork.NewFakeClock(),
 		nil,
 		nil,
-		nil,
 	)
 	if service == nil {
 		t.Fatal("expected inert script pollers service")

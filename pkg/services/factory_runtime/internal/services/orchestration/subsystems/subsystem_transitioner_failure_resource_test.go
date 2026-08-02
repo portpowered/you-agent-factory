@@ -52,7 +52,7 @@ func TestReleaseResourceTokensOnFailure_PreservesConsumedTokenIdentityRegardless
 		},
 	}),
 
-		nil, nil, nil, testWorkPropagationPolicy())
+		nil)
 
 	orderings := []struct {
 		name     string
@@ -229,15 +229,14 @@ func TestCalculateMutations_AcceptedMixedWorkResource_ReleasesConsumedResourceRe
 	for _, ordering := range orderings {
 		t.Run(ordering.name, func(t *testing.T) {
 			mutations, err := calculateMutations(mutationCalculationInput{
-				workPropagation: testWorkPropagationPolicy(),
-				transition:      &petri.Transition{ID: "review-story"},
-				arcs:            fixture.arcs,
-				consumed:        ordering.consumed,
-				result:          fixture.result,
-				now:             fixture.now,
-				history:         fixture.work.History,
-				inputColors:     tokenColorsFromTokens(ordering.consumed),
-				transformer:     fixture.transformer,
+				transition:  &petri.Transition{ID: "review-story"},
+				arcs:        fixture.arcs,
+				consumed:    ordering.consumed,
+				result:      fixture.result,
+				now:         fixture.now,
+				history:     fixture.work.History,
+				inputColors: tokenColorsFromTokens(ordering.consumed),
+				transformer: fixture.transformer,
 			})
 			if err != nil {
 				t.Fatalf("calculateMutations() error = %v", err)

@@ -7,7 +7,6 @@ import (
 
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	scriptpollersservice "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/internal/service"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -18,13 +17,11 @@ func NewService(
 	clock clockwork.Clock,
 	commandRunner workers.CommandRunner,
 	resolveTemplates workers.TemplateFieldResolver,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 ) scriptpollers.Service {
 	return scriptpollersservice.New(
 		logger,
 		clock,
 		commandRunner,
 		resolveTemplates,
-		executionPolicy,
 	)
 }

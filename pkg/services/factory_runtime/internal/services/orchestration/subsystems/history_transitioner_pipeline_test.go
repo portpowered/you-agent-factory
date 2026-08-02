@@ -23,7 +23,7 @@ func newTestPipeline(n *state.Net, now func() time.Time) *testPipeline {
 		now = testSubsystemNow
 	}
 	return &testPipeline{
-		transitioner: NewTransitioner(n, nil, now, testTokenTransformer(n), nil, nil, nil, testWorkPropagationPolicy()),
+		transitioner: NewTransitioner(n, nil, now, testTokenTransformer(n), nil),
 		results:      buffers.NewTypedBuffer[workerexecution.WorkResult](16),
 	}
 }
@@ -870,7 +870,7 @@ func assertAcceptedMixedWorkResourceRelease(t *testing.T, result *interfaces.Tic
 
 func TestTransitioner_CalculateMutations_PreservesCreatedAtForSameTypeTransitions(t *testing.T) {
 	n := buildPipelineNet()
-	transitioner := NewTransitioner(n, nil, testSubsystemNow, testTokenTransformer(n), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner := NewTransitioner(n, nil, testSubsystemNow, testTokenTransformer(n), nil)
 	now := time.Date(2026, time.April, 6, 12, 0, 0, 0, time.UTC)
 	createdAt := now.Add(-2 * time.Hour)
 	consumed := []factorytoken.Token{{
@@ -891,15 +891,14 @@ func TestTransitioner_CalculateMutations_PreservesCreatedAtForSameTypeTransition
 
 	mutations, err := calculateMutations(
 		mutationCalculationInput{
-			workPropagation: testWorkPropagationPolicy(),
-			transition:      n.Transitions["t1"],
-			arcs:            n.Transitions["t1"].OutputArcs,
-			consumed:        consumed,
-			result:          resolvedWorkResult{dispatchID: "d-1", transitionID: "t1", outcome: workerexecution.OutcomeAccepted},
-			now:             now,
-			history:         factorytoken.History{TotalVisits: map[string]int{}, ConsecutiveFailures: map[string]int{}, PlaceVisits: map[string]int{}},
-			inputColors:     tokenColorsFromTokens(consumed),
-			transformer:     transitioner.transformer,
+			transition:  n.Transitions["t1"],
+			arcs:        n.Transitions["t1"].OutputArcs,
+			consumed:    consumed,
+			result:      resolvedWorkResult{dispatchID: "d-1", transitionID: "t1", outcome: workerexecution.OutcomeAccepted},
+			now:         now,
+			history:     factorytoken.History{TotalVisits: map[string]int{}, ConsecutiveFailures: map[string]int{}, PlaceVisits: map[string]int{}},
+			inputColors: tokenColorsFromTokens(consumed),
+			transformer: transitioner.transformer,
 		},
 	)
 	if err != nil {

@@ -13,6 +13,7 @@ import (
 	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/decisionenvelope"
 	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -27,12 +28,11 @@ import (
 // WorkResult. The Runner performs one attempt per call; the executor may retry
 // retryable provider outcomes with caller-owned backoff before returning.
 type AgentExecutor struct {
-	providerExecutor  workerexecution.InvocationExecutor
-	runtimeConfig     interfaces.RuntimeDefinitionLookup
-	decisionEnvelopes interfaces.DecisionEnvelopeService
-	logger            logging.Logger
-	retryConfig       providerRetryConfig
-	clock             func() time.Time
+	providerExecutor workerexecution.InvocationExecutor
+	runtimeConfig    interfaces.RuntimeDefinitionLookup
+	logger           logging.Logger
+	retryConfig      providerRetryConfig
+	clock            func() time.Time
 }
 
 var _ WorkstationRequestExecutor = (*AgentExecutor)(nil)
@@ -44,14 +44,12 @@ func NewAgentExecutor(
 	runner workerexecution.Runner,
 	logger logging.Logger,
 	clock func() time.Time,
-	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
 ) *AgentExecutor {
 	return NewAgentExecutorWithRunner(
 		runtimeConfig,
 		runner,
 		logger,
 		clock,
-		decisionEnvelopes...,
 	)
 }
 
@@ -62,14 +60,12 @@ func NewAgentExecutorWithRunner(
 	runner workerexecution.Runner,
 	logger logging.Logger,
 	clock func() time.Time,
-	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
 ) *AgentExecutor {
 	return newAgentExecutor(
 		runtimeConfig,
 		workerinvocation.NewRunnerExecutor(runner),
 		logger,
 		clock,
-		firstDecisionEnvelopeService(decisionEnvelopes),
 	)
 }
 
@@ -78,15 +74,13 @@ func newAgentExecutor(
 	executor workerexecution.InvocationExecutor,
 	logger logging.Logger,
 	clock func() time.Time,
-	decisionEnvelopes interfaces.DecisionEnvelopeService,
 ) *AgentExecutor {
 	return &AgentExecutor{
-		providerExecutor:  executor,
-		runtimeConfig:     runtimeConfig,
-		decisionEnvelopes: decisionEnvelopes,
-		logger:            logging.EnsureLogger(logger),
-		retryConfig:       newProviderRetryConfig(platformrandom.CryptoSource{}),
-		clock:             clock,
+		providerExecutor: executor,
+		runtimeConfig:    runtimeConfig,
+		logger:           logging.EnsureLogger(logger),
+		retryConfig:      newProviderRetryConfig(platformrandom.CryptoSource{}),
+		clock:            clock,
 	}
 }
 
@@ -111,10 +105,8 @@ func (ae *AgentExecutor) Execute(ctx context.Context, request workerexecution.Wo
 	}
 	diagnostics = withInferenceResponseDiagnostics(diagnostics, resp, retryCount)
 
-	if ae.decisionEnvelopes != nil &&
-		ae.decisionEnvelopes.UsesGoalRoutingDecisionEnvelope(workstationDef) {
+	if decisionenvelope.UsesGoalRoutingDecisionEnvelope(workstationDef) {
 		return goalRoutingEnvelopeWorkResult(
-			ae.decisionEnvelopes,
 			request,
 			resp,
 			diagnostics,
@@ -123,10 +115,8 @@ func (ae *AgentExecutor) Execute(ctx context.Context, request workerexecution.Wo
 			ae.clock,
 		), nil
 	}
-	if ae.decisionEnvelopes != nil &&
-		ae.decisionEnvelopes.UsesDecisionEnvelopeOutcome(workstationDef) {
+	if decisionenvelope.UsesDecisionEnvelopeOutcome(workstationDef) {
 		return decisionEnvelopeWorkResult(
-			ae.decisionEnvelopes,
 			request,
 			resp,
 			diagnostics,
@@ -220,7 +210,6 @@ func (ae *AgentExecutor) canonicalInferenceOutput(raw string, workerDef *interfa
 }
 
 func decisionEnvelopeWorkResult(
-	decisionEnvelopes interfaces.DecisionEnvelopeService,
 	request workerexecution.WorkstationExecutionRequest,
 	resp workerexecution.InferenceResponse,
 	diagnostics *workerexecution.WorkDiagnostics,
@@ -228,10 +217,11 @@ func decisionEnvelopeWorkResult(
 	start time.Time,
 	clock func() time.Time,
 ) workerexecution.WorkResult {
-	result := decisionEnvelopes.WorkResultFromDecisionEnvelopeJSONOrFailed(
+	result := decisionenvelope.WorkResult(
 		request.Dispatch.DispatchID,
 		request.Dispatch.TransitionID,
 		resp.Content,
+		false,
 	)
 	result.ProviderSession = workerexecution.CloneProviderSessionMetadata(resp.ProviderSession)
 	result.Diagnostics = diagnostics
@@ -240,7 +230,6 @@ func decisionEnvelopeWorkResult(
 }
 
 func goalRoutingEnvelopeWorkResult(
-	decisionEnvelopes interfaces.DecisionEnvelopeService,
 	request workerexecution.WorkstationExecutionRequest,
 	resp workerexecution.InferenceResponse,
 	diagnostics *workerexecution.WorkDiagnostics,
@@ -248,25 +237,16 @@ func goalRoutingEnvelopeWorkResult(
 	start time.Time,
 	clock func() time.Time,
 ) workerexecution.WorkResult {
-	result := decisionEnvelopes.
-		WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed(
-			request.Dispatch.DispatchID,
-			request.Dispatch.TransitionID,
-			resp.Content,
-		)
+	result := decisionenvelope.WorkResult(
+		request.Dispatch.DispatchID,
+		request.Dispatch.TransitionID,
+		resp.Content,
+		true,
+	)
 	result.ProviderSession = workerexecution.CloneProviderSessionMetadata(resp.ProviderSession)
 	result.Diagnostics = diagnostics
 	result.Metrics = agentWorkMetrics(start, retryCount, clock)
 	return result
-}
-
-func firstDecisionEnvelopeService(
-	services []interfaces.DecisionEnvelopeService,
-) interfaces.DecisionEnvelopeService {
-	if len(services) == 0 {
-		return nil
-	}
-	return services[0]
 }
 
 func workerTypeForExecutionRequest(request workerexecution.WorkstationExecutionRequest) string {

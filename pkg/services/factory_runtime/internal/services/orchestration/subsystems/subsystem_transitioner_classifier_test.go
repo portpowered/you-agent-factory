@@ -178,9 +178,7 @@ func newClassifierTransitionerFromNet(now time.Time, net *state.Net) *Transition
 				"classifier": {Name: "classifier", Type: interfaces.WorkstationTypeClassify},
 			},
 		},
-		nil,
-		nil,
-		testWorkPropagationPolicy())
+	)
 
 }
 

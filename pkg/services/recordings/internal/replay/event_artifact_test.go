@@ -38,7 +38,7 @@ func generatedFactoryHasConfig(generated factoryapi.Factory) bool {
 	return err == nil && factorySnapshotHasConfig(snapshot)
 }
 
-func RuntimeConfigFromGeneratedFactory(generated factoryapi.Factory) (interfaces.ReplayRuntimeConfig, error) {
+func RuntimeConfigFromGeneratedFactory(generated factoryapi.Factory) (ReplayRuntimeConfig, error) {
 	snapshot, err := interfaces.NewFactorySnapshot(generated)
 	if err != nil {
 		return nil, err

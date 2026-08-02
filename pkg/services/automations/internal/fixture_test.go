@@ -2,12 +2,9 @@ package internal_test
 
 import (
 	"context"
-	"errors"
 	"sync"
-	"time"
 
 	"github.com/jonboulle/clockwork"
-	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
@@ -56,14 +53,12 @@ func newAutomationService(fixture automationFixture) *automationinternal.Service
 		fixture.DefaultFactoryDir,
 		fixture.HostedPollers,
 		fixture.ResolveTemplates,
-		automationWorkstationExecutionPolicy(),
 		reconciler,
 		scriptpollerswire.NewService(
 			logger,
 			fixturePollerClock(fixture.Clock),
 			fixture.CommandRunner,
 			fixture.ResolveTemplates,
-			automationWorkstationExecutionPolicy(),
 		),
 		cronwire.NewService(),
 		filesystemwatcherswire.NewService(fixturePollerClock(fixture.Clock)),
@@ -119,26 +114,4 @@ func (p programmableHostedPollers) ValidateLinearPoller(
 		return nil
 	}
 	return p.Validate(runtimeConfig, workstation, worker, submitter)
-}
-
-func automationWorkstationExecutionPolicy() factorydefinitions.WorkstationExecutionPolicyService {
-	return factorydefinitionfixtures.WorkstationExecutionPolicy{
-		Resolve: func(workstation *factorydefinitions.FactoryWorkstationConfig) (time.Duration, error) {
-			if workstation == nil {
-				return 0, nil
-			}
-			switch workstation.Limits.MaxExecutionTime {
-			case "", "0s":
-				return 0, nil
-			case "1ms":
-				return time.Millisecond, nil
-			case "75ms":
-				return 75 * time.Millisecond, nil
-			case "not-a-duration":
-				return 0, errors.New(`invalid workstation limits.maxExecutionTime "not-a-duration": time: invalid duration "not-a-duration"`)
-			default:
-				return 0, errors.New("unscripted workstation execution limit")
-			}
-		},
-	}
 }
