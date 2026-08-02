@@ -1341,6 +1341,18 @@ func TestGetProviderSessionDetails_NotFoundIsDistinguishable(t *testing.T) {
 	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "provider session not found")
 }
 
+func TestGetProviderSessionDetails_ForwardsCanceledRequestContextToOwnerHandler(t *testing.T) {
+	srv := newTestServerWithProviderSessionCalls(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=session-123", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusInternalServerError, "INTERNAL_ERROR", "provider session inspection canceled")
+}
+
 func TestGetProviderSessionDetails_CursorNotFoundIsDistinguishable(t *testing.T) {
 	srv := newTestServerWithProviderSessionCalls(t, providerSessionFailure("cursor", "session_id", "missing-session", providersessions.ErrSessionNotFound))
 	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id=missing-session", nil)

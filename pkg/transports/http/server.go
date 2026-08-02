@@ -14,7 +14,7 @@ import (
 	"github.com/gorilla/mux"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	dashboardui "github.com/portpowered/infinite-you/ui"
@@ -29,10 +29,10 @@ var _ factoryapi.ServerInterface = (*Server)(nil)
 type Server struct {
 	*factorySessionsAdapter
 	*workAdapter
-	modelsHTTP       *modelshttp.Handler
-	providerSessions providersessions.Service
-	logger           *zap.Logger
-	router           *mux.Router
+	modelsHTTP           *modelshttp.Handler
+	providerSessionsHTTP *providersessionshttp.Handler
+	logger               *zap.Logger
+	router               *mux.Router
 }
 
 type factorySessionsAdapter struct{ *factorysessionshttp.Adapter }
@@ -45,7 +45,7 @@ func NewServer(
 	factorySessionsHTTP *factorysessionshttp.Handler,
 	workHTTP *workhttp.Adapter,
 	modelsHTTP *modelshttp.Handler,
-	providerSessions providersessions.Service,
+	providerSessionsHTTP *providersessionshttp.Handler,
 	logger *zap.Logger,
 ) *Server {
 	if logger == nil {
@@ -54,7 +54,7 @@ func NewServer(
 	srv := &Server{
 		factorySessionsAdapter: &factorySessionsAdapter{Adapter: factorySessionsHTTP},
 		workAdapter:            &workAdapter{Adapter: workHTTP},
-		modelsHTTP:             modelsHTTP, providerSessions: providerSessions, logger: logger,
+		modelsHTTP:             modelsHTTP, providerSessionsHTTP: providerSessionsHTTP, logger: logger,
 	}
 	srv.router = srv.buildRouter()
 	return srv
@@ -65,6 +65,16 @@ var noModTime = time.Time{}
 // Handler returns the http.Handler for testing and composition.
 func (s *Server) Handler() http.Handler {
 	return s.router
+}
+
+// GetProviderSessionDetails forwards the generated operation to the Provider
+// Sessions owner handler without changing its request or response values.
+func (s *Server) GetProviderSessionDetails(
+	w http.ResponseWriter,
+	r *http.Request,
+	params factoryapi.GetProviderSessionDetailsParams,
+) {
+	s.providerSessionsHTTP.GetProviderSessionDetails(w, r, params)
 }
 
 func (s *Server) buildRouter() *mux.Router {

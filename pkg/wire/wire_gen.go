@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	wire2 "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
+	"github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
@@ -442,17 +443,19 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
+	httpAdapter := http.NewAdapter(providersessionsService)
+	handler := http.NewHandler(httpAdapter, logger)
 	requestPreparationService, err := work.NewRequestPreparationService(contentPreparation)
 	if err != nil {
 		return nil, err
 	}
 	requestPreparation := provideFactorySessionHTTPRequestPreparation(v69)
-	handler, err := application2.NewHandler(httpBinder, contentPreparation, v71, invocationWorkTypeService, contentStagingService, requestPreparationService, requestPreparation)
+	applicationHandler, err := application2.NewHandler(httpBinder, handler, contentPreparation, v71, invocationWorkTypeService, contentStagingService, requestPreparationService, requestPreparation)
 	if err != nil {
 		return nil, err
 	}
 	runnerFactory := provideLifecycleRunnerFactory()
-	v76, err := provideApplicationRuntimeAdapter(runtimeFactory, handler, runnerFactory)
+	v76, err := provideApplicationRuntimeAdapter(runtimeFactory, applicationHandler, runnerFactory)
 	if err != nil {
 		return nil, err
 	}
@@ -467,7 +470,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	v79 := provideResponsePresentation()
 	v80 := provideDirectJavaScriptSyncRunner()
-	directJavaScriptHostAdapter, err := provideDirectJavaScriptHostAdapter(handler, starter, runnerFactory)
+	directJavaScriptHostAdapter, err := provideDirectJavaScriptHostAdapter(applicationHandler, starter, runnerFactory)
 	if err != nil {
 		return nil, err
 	}
@@ -570,7 +573,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 
 var platformSet = wire3.NewSet(logging.NewDefaultLogger)
 
-var apiSet = wire3.NewSet(composition.NewHTTPBinder, apisurface.NewRuntimeAPI, composition.NewLiveSessionAPI, factorydefinition.NewAPI, factorysession.NewDurableAPI, factorysession.NewLiveAPI, factorysession.NewInvocationAPI, stdio.NewOpener, application2.NewHandler)
+var apiSet = wire3.NewSet(http.NewAdapter, http.NewHandler, composition.NewHTTPBinder, apisurface.NewRuntimeAPI, composition.NewLiveSessionAPI, factorydefinition.NewAPI, factorysession.NewDurableAPI, factorysession.NewLiveAPI, factorysession.NewInvocationAPI, stdio.NewOpener, application2.NewHandler)
 
 var servicesSet = wire3.NewSet(
 	provideProvidersService,
