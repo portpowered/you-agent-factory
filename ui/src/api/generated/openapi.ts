@@ -5555,9 +5555,16 @@ export interface components {
       /** @description Operator-authored ACP launch command preserved as one settings value. It contains no permission or timeout policy. */
       command: string;
     };
+    GlobalConfigACPAgentProfile: {
+      /** @description Unversioned namespaced Factory target reference, such as factory:@you/factory-builder. Factory Definitions owns enumeration and canonical reference resolution. */
+      defaultTarget: string;
+      /** @description Ordered allowlist of unversioned namespaced Factory target references. Order is authored and preserved. */
+      allowedTargets: string[];
+    };
     GlobalConfigACPSettings: {
       /** @description Operator-selected ACP provider integrations. Availability is derived by the Providers catalog and is never persisted here. */
       integrations?: components["schemas"]["GlobalConfigACPIntegration"][];
+      agentProfile?: components["schemas"]["GlobalConfigACPAgentProfile"];
     };
     GlobalConfigWorkers: {
       acp?: components["schemas"]["GlobalConfigACPSettings"];

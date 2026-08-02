@@ -5,6 +5,16 @@
   "clusters": [],
   "files": [
     {
+      "file": "acp_agent_profile.go",
+      "classification": "thin_root_contract",
+      "note": "Peer-facing detached ACPAgentProfile value with normalization and validation for the L1 ACP default Factory target and allowlist."
+    },
+    {
+      "file": "acp_agent_profile_test.go",
+      "classification": "thin_root_contract_test",
+      "note": "Root-contract tests for ACPAgentProfile normalization, validation, and copy-isolation."
+    },
+    {
       "file": "acp_integrations.go",
       "classification": "thin_root_contract",
       "note": "Peer-facing ACP integration projection and validation helpers retained at the thin Operator Settings root."

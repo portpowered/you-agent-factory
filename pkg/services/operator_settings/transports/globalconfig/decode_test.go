@@ -116,6 +116,109 @@ func TestEncode_RoundTripsCanonicalIdentityAndSiblingSettings(t *testing.T) {
 	}
 }
 
+func TestDecode_AbsentACPAgentProfileDecodesWithoutMigration(t *testing.T) {
+	config, err := globalconfig.Decode([]byte(`{
+		"defaults": {"workerModelProvider": "codex"},
+		"workers": {"acp": {"integrations": [{"id":"entry-1","name":"cursor-acp","transport":"stdio","command":"cursor-agent acp"}]}}
+	}`))
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	if config.Workers.ACP.AgentProfile != nil {
+		t.Fatalf("AgentProfile = %#v, want nil for a document with no authored profile", config.Workers.ACP.AgentProfile)
+	}
+	if len(config.Workers.ACP.Integrations) != 1 {
+		t.Fatalf("Integrations = %#v, want one entry preserved alongside an absent profile", config.Workers.ACP.Integrations)
+	}
+}
+
+func TestEncode_RoundTripsACPAgentProfilePreservingOrderAndNamespace(t *testing.T) {
+	want := operatorsettings.Config{
+		Workers: operatorsettings.WorkerSettings{ACP: operatorsettings.ACPSettings{
+			AgentProfile: &operatorsettings.ACPAgentProfile{
+				DefaultTarget: "factory:@you/review",
+				AllowedTargets: []string{
+					"factory:@you/review",
+					"factory:@you/factory-builder",
+					"factory:local/software-auto",
+				},
+			},
+		}},
+	}
+
+	payload, err := globalconfig.Encode(want)
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+	if strings.Contains(string(payload), `"version"`) || strings.Contains(string(payload), `"digest"`) {
+		t.Fatalf("Encode() payload = %s, want no version or digest field", payload)
+	}
+	got, err := globalconfig.Decode(payload)
+	if err != nil {
+		t.Fatalf("Decode(Encode()) error = %v", err)
+	}
+	if got.Workers.ACP.AgentProfile == nil {
+		t.Fatal("round trip AgentProfile = nil, want authored profile preserved")
+	}
+	if !reflect.DeepEqual(*got.Workers.ACP.AgentProfile, *want.Workers.ACP.AgentProfile) {
+		t.Fatalf("round trip AgentProfile = %#v, want %#v", *got.Workers.ACP.AgentProfile, *want.Workers.ACP.AgentProfile)
+	}
+}
+
+func TestEncode_OmitsAgentProfileWhenAbsent(t *testing.T) {
+	payload, err := globalconfig.Encode(operatorsettings.Config{
+		Defaults: operatorsettings.Defaults{WorkerModelProvider: "CODEX"},
+	})
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+	if strings.Contains(string(payload), `"agentProfile"`) {
+		t.Fatalf("Encode() payload = %s, want agentProfile omitted when absent", payload)
+	}
+	got, err := globalconfig.Decode(payload)
+	if err != nil {
+		t.Fatalf("Decode(Encode()) error = %v", err)
+	}
+	if got.Workers.ACP.AgentProfile != nil {
+		t.Fatalf("AgentProfile = %#v, want nil after an absent-profile round trip", got.Workers.ACP.AgentProfile)
+	}
+}
+
+func TestDecode_RejectsMalformedStoredACPAgentProfile(t *testing.T) {
+	tests := []struct {
+		name string
+		json string
+		want string
+	}{
+		{
+			name: "empty allowlist",
+			json: `{"workers":{"acp":{"agentProfile":{"defaultTarget":"factory:@you/factory-builder","allowedTargets":[]}}}}`,
+			want: "allowedTargets must not be empty",
+		},
+		{
+			name: "default outside factory namespace",
+			json: `{"workers":{"acp":{"agentProfile":{"defaultTarget":"worker:@you/factory-builder","allowedTargets":["worker:@you/factory-builder"]}}}}`,
+			want: "must use the factory: namespace",
+		},
+		{
+			name: "default absent from allowlist",
+			json: `{"workers":{"acp":{"agentProfile":{"defaultTarget":"factory:@you/review","allowedTargets":["factory:@you/factory-builder"]}}}}`,
+			want: "must be present in allowedTargets",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := globalconfig.Decode([]byte(tt.json))
+			if err == nil {
+				t.Fatal("Decode() error = nil, want rejection")
+			}
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Decode() error = %q, want fragment %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestEncode_EmitsCanonicalJSONBytes(t *testing.T) {
 	payload, err := globalconfig.Encode(operatorsettings.Config{
 		BackendScopeID: "local-11111111-1111-4111-8111-111111111111",

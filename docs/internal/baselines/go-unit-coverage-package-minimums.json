@@ -228,7 +228,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/events",
-      "minimum": 94.55
+      "minimum": 95.97
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
@@ -2227,6 +2227,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/wire",
       "minimum": 82.14
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp",
+      "minimum": 89.55
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli",

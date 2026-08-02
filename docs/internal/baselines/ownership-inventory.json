@@ -1429,7 +1429,7 @@
       "fromOwner": "operator_settings",
       "toOwner": "transports",
       "class": "command",
-      "evidence": "pkg/services/operator_settings/transports/http -\u003e pkg/transports/http/generated"
+      "evidence": "pkg/services/operator_settings/transports/globalconfig -\u003e pkg/transports/http/generated"
     },
     {
       "fromOwner": "platform",
@@ -1616,7 +1616,7 @@
       "fromOwner": "transports",
       "toOwner": "provider_sessions",
       "class": "protocol_composition",
-      "evidence": "pkg/transports/http -\u003e pkg/services/provider_sessions"
+      "evidence": "pkg/transports/http/application -\u003e pkg/services/provider_sessions/transports/http"
     },
     {
       "fromOwner": "transports",
