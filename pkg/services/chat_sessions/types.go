@@ -104,10 +104,14 @@ type RequestIdentity struct {
 // Validate reports whether the RequestIdentity declares one of its three
 // legal kinds and carries exactly that kind's active field with every other
 // field at its zero value. It rejects a zero or unknown Kind, a missing
-// ConnectionID or active id on either JSON-RPC kind, a missing or malformed
-// TransportUUID on the UUID kind, a ConnectionID present on the UUID kind,
-// and any JSON-RPC or UUID field populated outside its own kind -- so the
-// three forms never overlap.
+// ConnectionID on either JSON-RPC kind, a missing or malformed TransportUUID
+// on the UUID kind, a ConnectionID present on the UUID kind, and any
+// JSON-RPC or UUID field populated outside its own kind -- so the three
+// forms never overlap. Kind alone marks a JSON-RPC id as the active payload,
+// so a blank JSONRPCStringID is a legal, present empty-string wire id (the
+// JSON-RPC string counterpart to JSONRPCNumberID's legal zero), not a
+// missing one; the only genuinely required field for either JSON-RPC kind is
+// ConnectionID.
 func (r RequestIdentity) Validate() error {
 	if err := r.Kind.Validate(); err != nil {
 		return newValidationError("RequestIdentity", "Kind", err)
@@ -122,9 +126,6 @@ func (r RequestIdentity) Validate() error {
 		}
 		if r.ConnectionID == "" {
 			return newValidationError("RequestIdentity", "ConnectionID", ErrRequiredValue)
-		}
-		if r.JSONRPCStringID == "" {
-			return newValidationError("RequestIdentity", "JSONRPCStringID", ErrRequiredValue)
 		}
 		return nil
 	case RequestIdentityKindJSONRPCNumber:

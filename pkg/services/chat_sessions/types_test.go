@@ -56,17 +56,21 @@ func TestRequestIdentity_Validate(t *testing.T) {
 	}{
 		// Valid forms, one per closed kind.
 		{"valid JSON-RPC string", RequestIdentity{Kind: RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-1"}, nil},
+		{"valid JSON-RPC string empty", RequestIdentity{Kind: RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: ""}, nil},
 		{"valid JSON-RPC number", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: 1}, nil},
 		{"valid JSON-RPC number zero", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: 0}, nil},
 		{"valid transport UUID", RequestIdentity{Kind: RequestIdentityKindTransportUUID, TransportUUID: validUUID}, nil},
 
-		// Zero and unknown kind.
+		// Zero and unknown kind. A fully zero-value identity is rejected by
+		// its zero Kind alone, not by an active-field presence check -- this
+		// is the "genuinely absent" case, distinct from an explicit, present
+		// empty-string active id under a declared Kind (see "valid JSON-RPC
+		// string empty" above).
 		{"zero value", RequestIdentity{}, ErrUnknownEnumValue},
 		{"unknown kind", RequestIdentity{Kind: "BOGUS", ConnectionID: "conn-1", JSONRPCStringID: "req-1"}, ErrUnknownEnumValue},
 
 		// Bare / incomplete JSON-RPC forms.
 		{"string id without connection", RequestIdentity{Kind: RequestIdentityKindJSONRPCString, JSONRPCStringID: "req-1"}, ErrRequiredValue},
-		{"connection without string id", RequestIdentity{Kind: RequestIdentityKindJSONRPCString, ConnectionID: "conn-1"}, ErrRequiredValue},
 		{"number id without connection", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, JSONRPCNumberID: 1}, ErrRequiredValue},
 
 		// Missing / malformed UUID.
@@ -129,6 +133,38 @@ func TestRequestIdentity_TypedNonCollisionAndEquality(t *testing.T) {
 	}
 }
 
+// TestRequestIdentity_EmptyStringIDIsPresentNotMissing proves that a
+// connection-scoped JSON-RPC string id of "" (the wire shape a JSON-RPC
+// request with id: "" decodes to) is a valid, present active id -- the
+// string counterpart to JSONRPCNumberID's valid zero -- and remains
+// structurally distinct from a genuinely absent identity, where "absent" is
+// signaled by the zero Kind rather than by the string field's own zero
+// value.
+func TestRequestIdentity_EmptyStringIDIsPresentNotMissing(t *testing.T) {
+	present := RequestIdentity{Kind: RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: ""}
+	if err := present.Validate(); err != nil {
+		t.Fatalf("a declared JSON-RPC string kind with an empty active id must validate as present, not missing: %v", err)
+	}
+
+	absent := RequestIdentity{}
+	if err := absent.Validate(); !errors.Is(err, ErrUnknownEnumValue) {
+		t.Fatalf("a genuinely absent identity (zero Kind) must be rejected via Kind, got %v", err)
+	}
+	if present == absent {
+		t.Fatalf("a present empty-string id must remain distinct from a genuinely absent identity, got equal identities %+v", present)
+	}
+
+	presentAgain := RequestIdentity{Kind: RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: ""}
+	if present != presentAgain {
+		t.Fatalf("two identically constructed empty-string identities must compare equal, got %+v != %+v", present, presentAgain)
+	}
+
+	nonEmptyOnSameConnection := RequestIdentity{Kind: RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "1"}
+	if present == nonEmptyOnSameConnection {
+		t.Fatalf("empty string id and non-empty string id %q on the same connection must remain distinct, got equal identities %+v", "1", present)
+	}
+}
+
 // TestRequestIdentity_ErrorsDoNotLeakSuppliedValues proves that
 // RequestIdentity validation failures never echo the caller-supplied
 // connection id, JSON-RPC id, or UUID text in their error message or
@@ -141,7 +177,7 @@ func TestRequestIdentity_ErrorsDoNotLeakSuppliedValues(t *testing.T) {
 
 	cases := []RequestIdentity{
 		{Kind: RequestIdentityKindJSONRPCString, JSONRPCStringID: secretStringID},
-		{Kind: RequestIdentityKindJSONRPCString, ConnectionID: secretConnection},
+		{Kind: RequestIdentityKindJSONRPCString, ConnectionID: secretConnection, JSONRPCNumberID: 1},
 		{Kind: RequestIdentityKindTransportUUID, TransportUUID: secretUUID, ConnectionID: secretConnection},
 		{Kind: RequestIdentityKindTransportUUID, TransportUUID: secretUUID},
 	}
