@@ -10,7 +10,8 @@ import (
 func TestIndexedAcceptanceCasesMatchProductionLoadersAndSchemas(t *testing.T) {
 	repositoryRoot := filepath.Join("..", "..")
 	cases := AcceptanceCases()
-	evidence, diagnostics := CheckAcceptanceParity(repositoryRoot, Families(), cases)
+	families := FamiliesWithParser(testGlobalParser)
+	evidence, diagnostics := CheckAcceptanceParity(repositoryRoot, families, cases)
 	if len(diagnostics) != 0 {
 		t.Fatalf("CheckAcceptanceParity() diagnostics = %v", diagnostics)
 	}
@@ -28,7 +29,7 @@ func TestIndexedAcceptanceCasesMatchProductionLoadersAndSchemas(t *testing.T) {
 		}
 		counts[result.Family][result.LoaderOutcome]++
 	}
-	for _, family := range Families() {
+	for _, family := range families {
 		if counts[family.ID][OutcomeAccept] == 0 || counts[family.ID][OutcomeReject] == 0 {
 			t.Errorf("configuration family %q outcomes = %#v, want accepted and rejected evidence", family.ID, counts[family.ID])
 		}

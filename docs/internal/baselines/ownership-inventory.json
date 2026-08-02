@@ -4248,6 +4248,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/operator_settings/transports/globalconfig",
+      "disposition": "retain",
+      "destination": "operator_settings",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/operator_settings/transports/http",
       "disposition": "retain",
       "destination": "operator_settings",
@@ -5613,12 +5619,6 @@
     },
     {
       "packagePath": "pkg/transports/mapping/factorysnapshot",
-      "disposition": "retain",
-      "destination": "transports",
-      "destinationKind": "family"
-    },
-    {
-      "packagePath": "pkg/transports/mapping/globalconfig",
       "disposition": "retain",
       "destination": "transports",
       "destinationKind": "family"

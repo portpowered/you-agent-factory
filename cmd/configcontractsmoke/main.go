@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/portpowered/infinite-you/internal/configcontractsmoke"
+	globalconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 )
 
 const successMessage = "[agent-factory:config-contract-smoke] global, mock-worker, and Factory configuration contracts are aligned"
@@ -20,7 +21,12 @@ func main() {
 }
 
 func run(root string, stdout, stderr io.Writer) int {
-	return runWithChecker(root, stdout, stderr, configcontractsmoke.Check)
+	return runWithChecker(root, stdout, stderr, func(repositoryRoot string) ([]configcontractsmoke.Diagnostic, error) {
+		return configcontractsmoke.Check(repositoryRoot, func(payload []byte) error {
+			_, err := globalconfig.Decode(payload)
+			return err
+		})
+	})
 }
 
 func runWithChecker(root string, stdout, stderr io.Writer, check checker) int {

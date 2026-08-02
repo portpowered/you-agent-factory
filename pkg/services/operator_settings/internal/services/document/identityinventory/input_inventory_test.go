@@ -12,7 +12,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	identityinventory "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/identityinventory"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
+	"github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 )
 
 const fixturesRelativeDir = "pkg/services/operator_settings/internal/services/document/identityinventory/testdata/fixtures"

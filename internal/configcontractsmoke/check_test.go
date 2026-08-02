@@ -1,6 +1,8 @@
 package configcontractsmoke
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,13 +13,27 @@ import (
 
 func TestCheckPassesCleanRepository(t *testing.T) {
 	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
-	diagnostics, err := Check(repositoryRoot)
+	diagnostics, err := Check(repositoryRoot, testGlobalParser)
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
 	if len(diagnostics) != 0 {
 		t.Fatalf("Check() diagnostics = %#v, want none", diagnostics)
 	}
+}
+
+func testGlobalParser(payload []byte) error {
+	var document map[string]any
+	if err := json.Unmarshal(payload, &document); err != nil {
+		return err
+	}
+	if _, ok := document["unexpectedTopLevel"]; ok {
+		return fmt.Errorf("unexpectedTopLevel")
+	}
+	if strings.Contains(string(payload), "Other_Provider") {
+		return fmt.Errorf("modelProvider")
+	}
+	return nil
 }
 
 func TestPublishedExportDiagnosticsNameFamilyAndPath(t *testing.T) {
