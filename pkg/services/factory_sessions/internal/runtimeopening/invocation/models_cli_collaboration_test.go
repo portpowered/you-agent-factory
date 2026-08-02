@@ -14,6 +14,21 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 )
 
+func TestResolvedOperatorDefaultsFromPresentationPreservesModelDefaults(t *testing.T) {
+	t.Parallel()
+
+	defaults := resolvedOperatorDefaultsFromPresentation(models.PresentationOperatorDefaults{
+		WorkerModelProvider: "codex",
+		WorkerModel:         "gpt-5.6",
+	})
+	if defaults.WorkerModelProvider != "codex" {
+		t.Fatalf("provider = %q, want codex", defaults.WorkerModelProvider)
+	}
+	if defaults.WorkerModel != "gpt-5.6" {
+		t.Fatalf("model = %q, want gpt-5.6", defaults.WorkerModel)
+	}
+}
+
 func TestOpenModelsCatalogScope_RequiresOperation(t *testing.T) {
 	t.Parallel()
 

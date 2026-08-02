@@ -17,3 +17,4 @@ type PresentationCollaborator interface {
 
 type PresentationScopeRequest = modelservice.PresentationScopeRequest
 type PresentationScope = modelservice.PresentationScope
+type PresentationOperatorDefaults = modelservice.PresentationOperatorDefaults

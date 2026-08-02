@@ -4,6 +4,7 @@ import (
 	"context"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
+	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
 type compositionCollaboratorInvocation struct {
@@ -61,8 +62,17 @@ func presentationScopeRequestFromInvoke(cfg InvokeConfig) PresentationScopeReque
 	return PresentationScopeRequest{
 		FactoryDir:       cfg.FactoryDir,
 		HomeDir:          cfg.HomeDir,
-		OperatorDefaults: cfg.OperatorDefaults,
+		OperatorDefaults: presentationOperatorDefaultsFromResolved(cfg.OperatorDefaults),
 		Logger:           cfg.Logger,
 		Verbose:          cfg.Verbose,
+	}
+}
+
+func presentationOperatorDefaultsFromResolved(
+	defaults operatorconfig.ResolvedDefaults,
+) modelinference.PresentationOperatorDefaults {
+	return modelinference.PresentationOperatorDefaults{
+		WorkerModelProvider: defaults.WorkerModelProvider,
+		WorkerModel:         defaults.WorkerModel,
 	}
 }

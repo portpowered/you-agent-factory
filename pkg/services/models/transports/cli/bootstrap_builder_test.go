@@ -32,6 +32,24 @@ type InvocationRunner interface {
 }
 
 type testModelRunner = InvocationRunner
+
+func TestPresentationScopeRequestFromInvokePreservesModelDefaults(t *testing.T) {
+	t.Parallel()
+
+	request := presentationScopeRequestFromInvoke(InvokeConfig{
+		OperatorDefaults: operatorconfig.ResolvedDefaults{
+			WorkerModelProvider: "codex",
+			WorkerModel:         "gpt-5.6",
+		},
+	})
+	if request.OperatorDefaults.WorkerModelProvider != "codex" {
+		t.Fatalf("provider = %q, want codex", request.OperatorDefaults.WorkerModelProvider)
+	}
+	if request.OperatorDefaults.WorkerModel != "gpt-5.6" {
+		t.Fatalf("model = %q, want gpt-5.6", request.OperatorDefaults.WorkerModel)
+	}
+}
+
 type testModelRuntimeSelections struct {
 	Dir                  string
 	SystemConfigHomeDir  string
