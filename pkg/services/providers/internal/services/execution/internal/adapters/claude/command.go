@@ -82,6 +82,7 @@ func buildCommand(request providers.ExecuteRequest) (workers.CommandRequest, err
 	}
 	args = append(
 		args,
+		"--verbose",
 		"--output-format",
 		outputFormatStreamJSON,
 		"--include-partial-messages",
