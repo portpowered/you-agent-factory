@@ -231,6 +231,10 @@
       "minimum": 66.14
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/events",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
       "minimum": 44.60
     },
