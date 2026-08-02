@@ -69,7 +69,7 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 	}
 	mapped, err := handler.mappings.Bind(
 		opened.FactoryRuntime, opened.FactoryDefinitions, opened.FactorySessions,
-		opened.SessionInvocation, opened.SessionExecution, opened.Work,
+		opened.SessionInvocation, opened.SessionExecution,
 	)
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
 		SessionsRoot: opened.FactorySessions,
 		Runtime:      mapped.Runtime, FactoryStatus: mapped.FactoryStatus,
-		Sessions: mapped.Sessions, Work: mapped.Work, WorkRead: mapped.WorkRead,
+		Sessions: mapped.Sessions, SessionEvents: opened.FactorySessions,
 		Invocation: mapped.Invocation, FactoryDefinitions: mapped.FactoryDefinitions,
 		FactoryValidation: handler.validation, WorkflowPreview: opened.WorkflowPreview,
 		DurableExecution: mapped.Durable, DurableLifecycle: mapped.Durable,

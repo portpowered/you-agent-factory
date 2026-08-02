@@ -90,22 +90,6 @@ func (s *Server) requireSessionRuntime(w http.ResponseWriter) (apisurface.LiveSe
 	return s.sessions, true
 }
 
-func (s *Server) requireWorkAPI(w http.ResponseWriter) (apisurface.WorkAPI, bool) {
-	if s.work == nil {
-		s.writeError(w, http.StatusInternalServerError, "session work API is unavailable", "INTERNAL_ERROR")
-		return nil, false
-	}
-	return s.work, true
-}
-
-func (s *Server) requireWorkReadAPI(w http.ResponseWriter) (apisurface.WorkReadAPI, bool) {
-	if s.workRead == nil {
-		s.writeError(w, http.StatusInternalServerError, "Work read API is unavailable", "INTERNAL_ERROR")
-		return nil, false
-	}
-	return s.workRead, true
-}
-
 func (s *Server) requireFactoryDefinitionAPI(w http.ResponseWriter) (apisurface.FactorySaveAPI, bool) {
 	if s.factoryDefinitions == nil {
 		s.writeError(w, http.StatusInternalServerError, "factory definition API is unavailable", "INTERNAL_ERROR")

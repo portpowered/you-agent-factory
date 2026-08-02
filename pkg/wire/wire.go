@@ -30,7 +30,6 @@ var platformSet = wire.NewSet(
 )
 
 var apiSet = wire.NewSet(
-	composition.NewWorkAPI,
 	composition.NewHTTPBinder,
 	apisurface.NewRuntimeAPI,
 	composition.NewLiveSessionAPI,

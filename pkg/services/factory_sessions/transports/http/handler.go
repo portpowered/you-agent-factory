@@ -19,11 +19,10 @@ import (
 // Sessions and their session-scoped Factory and Work resources.
 type Adapter struct {
 	sessionsRoot       factorysessions.Service
+	sessionEvents      factorysessions.Service
 	runtime            apisurface.RuntimeAPI
 	factoryStatus      apisurface.FactoryStatusAPI
 	sessions           apisurface.LiveSessionAPI
-	work               apisurface.WorkAPI
-	workRead           apisurface.WorkReadAPI
 	invocation         apisurface.InvocationAPI
 	factoryDefinitions apisurface.FactorySaveAPI
 	factoryValidation  factorydefinitions.SubmittedDefinitionValidationOperation
@@ -44,11 +43,10 @@ type Adapter struct {
 // adapter. They are supplied by the already-opened runtime composition.
 type Dependencies struct {
 	SessionsRoot       factorysessions.Service
+	SessionEvents      factorysessions.Service
 	Runtime            apisurface.RuntimeAPI
 	FactoryStatus      apisurface.FactoryStatusAPI
 	Sessions           apisurface.LiveSessionAPI
-	Work               apisurface.WorkAPI
-	WorkRead           apisurface.WorkReadAPI
 	Invocation         apisurface.InvocationAPI
 	FactoryDefinitions apisurface.FactorySaveAPI
 	FactoryValidation  factorydefinitions.SubmittedDefinitionValidationOperation
@@ -81,9 +79,9 @@ func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
 		logger = zap.NewNop()
 	}
 	return &Adapter{
-		sessionsRoot: deps.SessionsRoot,
-		runtime:      deps.Runtime, factoryStatus: deps.FactoryStatus,
-		sessions: deps.Sessions, work: deps.Work, workRead: deps.WorkRead,
+		sessionsRoot: deps.SessionsRoot, sessionEvents: deps.SessionEvents,
+		runtime: deps.Runtime, factoryStatus: deps.FactoryStatus,
+		sessions:           deps.Sessions,
 		invocation:         deps.Invocation,
 		factoryDefinitions: deps.FactoryDefinitions, factoryValidation: deps.FactoryValidation,
 		workflowPreview:  deps.WorkflowPreview,
