@@ -107,6 +107,39 @@ secondary-injection retirement are L2 tasks. L1 and L4 carry none of it.
 changed or been uninstalled is a runtime error, not a historical-fidelity
 problem. Accepted as-is.
 
+### D7 — `pkg-file-count` / `pkg-boundary` are evaluated diff-scoped, not repo-wide-zero
+
+`make pkg-file-count` and `make pkg-boundary` already exit non-zero on `main`
+itself, independent of any lane's change. Confirmed on `origin/main` at
+`b9c081e34` (2026-08-02): `pkg-file-count` reports 42 baseline violations
+(`pkg/services/factory_definitions`, `pkg/services/factory_runtime`,
+`pkg/services/factory_sessions`, `pkg/wire`, and others growing past their
+`docs/internal/baselines/backend-package-file-count.json` entries, plus
+several never-baselined oversized transport/internal packages), and
+`pkg-boundary` reports 100 prohibited-import findings (mostly
+`pkg/services/factory_definitions` consuming `pkg/transports/mapping/...`
+directly). Neither list contains a lane's own package the first time that
+lane's contract-only slice lands.
+
+Both gates are pre-existing, deletion-only debt trackers scoped to packages
+other lanes own (see `docs/internal/baselines/README.md`); they are not part
+of the required merge-blocking CI umbrella (`.github/workflows/ci.yml`'s
+`Verification Policy` job dependencies do not include `make lint` or either
+check). A lane satisfies its own slice of these two gates by contributing
+**zero new findings against packages it owns**, verified by running the
+checker and grepping its output for the lane's own package path(s). Bringing
+either gate to a literal repo-wide zero exit code is out of scope for any
+single lane's feature work per D5; it requires a dedicated cleanup lane (or
+scoping the Makefile/CI invocation to changed packages) and is not something
+one lane's PR can deliver or should attempt, since the flagged packages
+belong to other lanes/services and touching their debt out-of-band risks
+colliding with concurrent work on those same packages.
+
+Lanes citing this decision in review: link to this section instead of
+re-deriving the evidence; re-run both checkers and re-confirm zero findings
+against your own package(s) if a reviewer disputes it, since violation counts
+drift as other lanes land unrelated changes.
+
 ## 3. Cross-lane contracts
 
 Published on day 0 so all four lanes code against them with fakes immediately.

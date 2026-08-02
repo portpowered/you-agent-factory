@@ -274,6 +274,34 @@ func committedRecordingsRationales() []OwnerRationaleCard {
 		),
 	}
 }
+func committedChatSessionsRationales() []OwnerRationaleCard {
+	return []OwnerRationaleCard{
+		topLevel(
+			"chat_sessions",
+			"pkg/services/chat_sessions",
+			"L1 V0 Chat Sessions contract owner: detached session/target/turn/attachment/control-intent values, enum validation, and lifecycle transition tables; no implementation of the public Service interface in this slice. Retains a private internal/factorysessionsshim adapter over the published factory_sessions root for the narrow start/invoke/cancel/close Factory-target dependency, registered for deletion at L3 Factory Sessions sealing.",
+			"No state store for the public contract; publishes value types and pure validation/transition functions only. The internal shim holds no independent state store either — session state lives for the process duration in the factory_sessions target it adapts.",
+			"Public values are stateless; the Service interface documents session/turn/control lifecycle for a later implementation to satisfy. The internal shim is session-scoped and discarded on process exit, same as the factory_sessions target it adapts.",
+			"Future ACP transport and Chat Sessions implementation slices; no current consumer imports this package's public Service interface yet. The internal shim is consumed only within this package.",
+			"None in this slice for the public contract; no persistence or mutation is performed. The internal shim delegates 1:1 to factory_sessions.Service and owns no separate transaction boundary.",
+			"Typed validation/transition/not-found/busy/conflict/unsupported errors are contract-only; no runtime recovery behavior exists in this slice. The internal shim's failures normalize at the factory_sessions public root it adapts.",
+		),
+	}
+}
+func committedEventsRationales() []OwnerRationaleCard {
+	return []OwnerRationaleCard{
+		topLevel(
+			"events",
+			"pkg/services/events",
+			"L1 V0 Events contract owner: detached identity, position, envelope, and outcome contracts for a process-local, in-memory event stream; ordering, cursors, retention, gaps, and backpressure (D2 in docs/internal/projects/acp-program/README.md).",
+			"No durable journal in this slice; Recordings remains the canonical durable Factory Event ledger.",
+			"Append, source attachment, retained reads, and subscriptions are documented contract operations for a later implementation to satisfy.",
+			"Future ACP Core and Worker Events consumers via the events.Service cross-lane contract; no current consumer imports this package yet.",
+			"None in this slice; no persistence or mutation is performed.",
+			"Typed contract errors only; no runtime recovery behavior exists in this slice.",
+		),
+	}
+}
 func committedSystemInitializationRationales() []OwnerRationaleCard {
 	return []OwnerRationaleCard{
 		topLevel(
@@ -445,36 +473,6 @@ func committedWorkersRationales() []OwnerRationaleCard {
 			"Runner registry and Factory Runtime dispatch consumers via Workers root.",
 			"Workstation execution shares Workers dispatch transaction.",
 			"Routing/dispatch failures are Workstation Execution facts.",
-		),
-	}
-}
-
-func committedChatSessionsRationales() []OwnerRationaleCard {
-	return []OwnerRationaleCard{
-		topLevel(
-			"chat_sessions",
-			"pkg/services/chat_sessions",
-			"Session, target, turn, control, and attachment for ACP Core chat; the narrow start/invoke/cancel/close Factory-target dependency in the published factory_sessions root vocabulary.",
-			"No independent state store; session state lives for the process duration in the sole factorysessionsshim implementation.",
-			"Session-scoped; discarded on process exit, same as the factory_sessions target it adapts.",
-			"ACP Core (L1) and ACP Worker Events (L4) via the chat_sessions.Service cross-lane contract.",
-			"Delegates 1:1 to factory_sessions.Service; owns no separate transaction boundary.",
-			"Failures normalize at the factory_sessions public root the shim adapts.",
-		),
-	}
-}
-
-func committedEventsRationales() []OwnerRationaleCard {
-	return []OwnerRationaleCard{
-		topLevel(
-			"events",
-			"pkg/services/events",
-			"Append, source attachment, retained reads, and subscriptions for the in-memory ACP event stream; ordering, cursors, retention, gaps, and backpressure (D2 in docs/internal/projects/acp-program/README.md).",
-			"No persistence and no internal/store package; process-local, session-scoped stream state only.",
-			"Session-scoped; discarded on process exit. Recordings remains the durable canonical ledger.",
-			"ACP Core (L1) and ACP Worker Events (L4) via the events.Service cross-lane contract.",
-			"Stream operations are session-scoped; no cross-service transaction absorption.",
-			"Gap/backpressure facts surface at the Events root without a durable retry log.",
 		),
 	}
 }

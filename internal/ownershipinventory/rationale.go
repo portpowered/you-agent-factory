@@ -110,6 +110,8 @@ func BuildResponsibilityClusters() []ResponsibilityCluster {
 func committedOwnerRationales() []OwnerRationaleCard {
 	out := make([]OwnerRationaleCard, 0, 65)
 	out = append(out, committedAutomationsRationales()...)
+	out = append(out, committedChatSessionsRationales()...)
+	out = append(out, committedEventsRationales()...)
 	out = append(out, committedFactoryDefinitionsRationales()...)
 	out = append(out, committedFactoryRuntimeRationales()...)
 	out = append(out, committedFactorySessionsRationales()...)
@@ -122,8 +124,6 @@ func committedOwnerRationales() []OwnerRationaleCard {
 	out = append(out, committedSystemInitializationRationales()...)
 	out = append(out, committedWorkRationales()...)
 	out = append(out, committedWorkersRationales()...)
-	out = append(out, committedChatSessionsRationales()...)
-	out = append(out, committedEventsRationales()...)
 	return out
 }
 
