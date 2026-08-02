@@ -2905,7 +2905,7 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/fixtures",
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope",
       "exception": {
         "kind": "measurement",
         "justification": "The active functional coverage profile contains no measurable statements for this package.",

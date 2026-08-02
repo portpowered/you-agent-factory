@@ -1,48 +1,37 @@
 package acp_test
 
 import (
-	"embed"
 	"encoding/json"
 	"errors"
-	"io/fs"
 	"reflect"
 	"testing"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
+	"github.com/portpowered/infinite-you/internal/testutil/acpfixtures"
 	"github.com/portpowered/infinite-you/pkg/transports/acp"
-	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/fixtures"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/protocol"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
 )
 
-//go:embed testdata/fixtures/*.json
-var acpFixtureFiles embed.FS
-
 // TestACPConformanceFixtures decodes every committed sanitized fixture
-// corpus and asserts each case's declared semantic behavior against the L1
-// V0 compatibility functions those cases exercise. It proves behavior only
-// through parsed protocol outcomes: it never scans the testdata directory's
-// file inventory beyond the embed glob go:embed itself requires, and it
-// never asserts anything about which files exist.
+// corpus from the shared internal/testutil/acpfixtures corpus and asserts
+// each case's declared semantic behavior against the L1 V0 compatibility
+// functions those cases exercise. It proves behavior only through parsed
+// protocol outcomes: it never scans the testdata directory's file
+// inventory, and it never asserts anything about which files exist. The
+// same committed corpus is independently consumed by the inbound
+// Providers-owned ACP mapper (see
+// pkg/services/providers/internal/services/acp/internal/service), so both
+// protocol directions are checked against the same semantic inputs without
+// either importing the other's production package.
 func TestACPConformanceFixtures(t *testing.T) {
-	entries, err := fs.Glob(acpFixtureFiles, "testdata/fixtures/*.json")
+	corpora, err := acpfixtures.LoadAll()
 	if err != nil {
-		t.Fatalf("glob fixture corpora: %v", err)
-	}
-	if len(entries) == 0 {
-		t.Fatal("no fixture corpora found under testdata/fixtures")
+		t.Fatalf("LoadAll() error = %v", err)
 	}
 
-	for _, path := range entries {
-		data, err := acpFixtureFiles.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read fixture corpus %q: %v", path, err)
-		}
-		corpus, err := fixtures.Parse(data)
-		if err != nil {
-			t.Fatalf("parse fixture corpus %q: %v", path, err)
-		}
+	for _, corpus := range corpora {
 		for _, c := range corpus.Cases {
 			t.Run(string(c.Role)+"/"+c.Name, func(t *testing.T) {
 				assertCaseSemantics(t, c)
@@ -55,62 +44,62 @@ func TestACPConformanceFixtures(t *testing.T) {
 // parser used by TestACPConformanceFixtures fails clearly, rather than
 // silently accepting a structurally invalid corpus.
 func TestACPConformanceFixtureShapeRejectsInvalidCorpus(t *testing.T) {
-	_, err := fixtures.Parse([]byte(`{"cases":[{"name":"missing role fields","input":{},"expected":{}}]}`))
+	_, err := acpfixtures.Parse([]byte(`{"cases":[{"name":"missing role fields","input":{},"expected":{}}]}`))
 	if err == nil {
 		t.Fatal("Parse() error = nil, want a clear error for a missing role/direction/classification")
 	}
 }
 
-func assertCaseSemantics(t *testing.T, c fixtures.Case) {
+func assertCaseSemantics(t *testing.T, c acpfixtures.Case) {
 	t.Helper()
 	switch c.Role {
-	case fixtures.RoleInitialize:
+	case acpfixtures.RoleInitialize:
 		var req acpsdk.InitializeRequest
 		mustUnmarshal(t, c.Input, &req)
 		resp, err := acp.NegotiateInitialization(req)
 		assertOutcome(t, c, resp, err)
 
-	case fixtures.RoleSessionNew:
+	case acpfixtures.RoleSessionNew:
 		got, err := session.ValidateNewSession(c.Input)
 		assertOutcome(t, c, got, rejectionOf(err))
 
-	case fixtures.RoleSessionLoad:
+	case acpfixtures.RoleSessionLoad:
 		got, err := session.ValidateLoadSession(c.Input)
 		assertOutcome(t, c, got, rejectionOf(err))
 
-	case fixtures.RoleSessionResume:
+	case acpfixtures.RoleSessionResume:
 		got, err := session.ValidateResumeSession(c.Input)
 		assertOutcome(t, c, got, rejectionOf(err))
 
-	case fixtures.RoleSessionCancel:
+	case acpfixtures.RoleSessionCancel:
 		var req acpsdk.CancelNotification
 		mustUnmarshal(t, c.Input, &req)
 		got, err := session.ValidateCancel(req)
 		assertOutcome(t, c, got, rejectionOf(err))
 
-	case fixtures.RoleSessionSetConfigOption:
+	case acpfixtures.RoleSessionSetConfigOption:
 		got, err := session.ValidateSetConfigOption(c.Input)
 		assertOutcome(t, c, got, rejectionOf(err))
 
-	case fixtures.RoleSessionPrompt:
+	case acpfixtures.RoleSessionPrompt:
 		var req acpsdk.PromptRequest
 		mustUnmarshal(t, c.Input, &req)
 		got, err := session.ValidatePrompt(req)
 		assertOutcome(t, c, got, rejectionOf(err))
 
-	case fixtures.RoleSessionUpdate:
+	case acpfixtures.RoleSessionUpdate:
 		var upd acpsdk.SessionUpdate
 		mustUnmarshal(t, c.Input, &upd)
 		got, err := session.ValidateSessionUpdate(upd)
 		assertOutcome(t, c, got, rejectionOf(err))
 
-	case fixtures.RoleSessionRequestPermission:
+	case acpfixtures.RoleSessionRequestPermission:
 		var req acpsdk.RequestPermissionRequest
 		mustUnmarshal(t, c.Input, &req)
 		got, err := session.ValidatePermissionCorrelation(req)
 		assertOutcome(t, c, got, rejectionOf(err))
 
-	case fixtures.RoleStopReason:
+	case acpfixtures.RoleStopReason:
 		var in struct {
 			Outcome string `json:"outcome"`
 		}
@@ -119,7 +108,7 @@ func assertCaseSemantics(t *testing.T, c fixtures.Case) {
 		result := protocol.MapStopReason(protocol.TerminalOutcome(in.Outcome), cause)
 		assertOutcome(t, c, result, nil)
 
-	case fixtures.RoleUnsupportedMethod:
+	case acpfixtures.RoleUnsupportedMethod:
 		var in struct {
 			Method string `json:"method"`
 		}
@@ -148,15 +137,15 @@ func rejectionOf(cause error) error {
 // compatibility function under test actually produced: an accepted case
 // must succeed and match Expected against its semantic value; a rejected
 // case must fail and match Expected against its safe protocol error.
-func assertOutcome(t *testing.T, c fixtures.Case, value any, err error) {
+func assertOutcome(t *testing.T, c acpfixtures.Case, value any, err error) {
 	t.Helper()
 	switch c.Classification {
-	case fixtures.ClassificationAccepted:
+	case acpfixtures.ClassificationAccepted:
 		if err != nil {
 			t.Fatalf("%s: unexpected rejection: %v", c.Name, err)
 		}
 		assertJSONEqual(t, c.Name, c.Expected, value)
-	case fixtures.ClassificationRejected:
+	case acpfixtures.ClassificationRejected:
 		if err == nil {
 			t.Fatalf("%s: expected a rejection, got none", c.Name)
 		}

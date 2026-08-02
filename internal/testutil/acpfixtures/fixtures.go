@@ -1,14 +1,22 @@
-// Package fixtures defines the sanitized L1 V0 ACP conformance-fixture
-// shape: a closed corpus of named Cases, each recording the compatibility
-// surface (Role) and interaction Direction it exercises, the expected
-// Classification, a raw input protocol value, and the raw expected semantic
-// output or safe error. The shape carries no acp-go-sdk or transport-package
-// types — only strings and encoding/json.RawMessage — so a fixture corpus is
-// a plain, portable JSON document: any independent consumer (this package's
-// own compatibility tests, or a future provider-side counterpart) can decode
-// a Case without importing this package tree's internal implementation, as
-// long as it interprets Role/Direction/Classification the same way this file
-// documents.
+// Package acpfixtures defines the sanitized L1 V0 ACP conformance-fixture
+// shape and its committed corpus: a closed set of named Cases, each
+// recording the compatibility surface (Role) and interaction Direction it
+// exercises, the expected Classification, a raw input protocol value, and
+// the raw expected semantic output or safe error. The shape carries no
+// acp-go-sdk or transport-package types — only strings and
+// encoding/json.RawMessage — so a fixture corpus is a plain, portable JSON
+// document.
+//
+// This package lives under the repo-root internal/testutil tree, not under
+// pkg/transports/acp/internal, specifically so both the outbound
+// pkg/transports/acp compatibility boundary and the inbound
+// pkg/services/providers ACP mapper can import it directly: Go's
+// internal/ visibility rule only allows a package rooted at
+// pkg/transports/acp/internal to be imported from within the
+// pkg/transports/acp tree, which would make a fixture corpus placed there
+// unreachable from pkg/services/providers. Both directions decode the same
+// committed Cases and independently assert their own semantics against the
+// same Input; neither imports the other's production package.
 //
 // Role is a closed, documented set matching the L1 V0 JSON-RPC method
 // surface plus the two derived, non-request compatibility checks this
@@ -30,12 +38,62 @@
 // JSON-marshaled semantic value the owning Validate/Negotiate function
 // returns; Classification "rejected" means Expected is the JSON-marshaled
 // *acpsdk.RequestError the owning compatibility boundary returns instead.
-package fixtures
+package acpfixtures
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 )
+
+//go:embed testdata/*.json
+var embeddedCorpora embed.FS
+
+// LoadAll parses every committed fixture corpus under testdata/. It fails
+// clearly if no corpus is found or any committed corpus does not match the
+// Case shape; it never asserts anything about which files exist beyond the
+// embed glob itself.
+func LoadAll() ([]Corpus, error) {
+	entries, err := fs.Glob(embeddedCorpora, "testdata/*.json")
+	if err != nil {
+		return nil, fmt.Errorf("acpfixtures: glob embedded corpora: %w", err)
+	}
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("acpfixtures: no fixture corpora found under testdata")
+	}
+	corpora := make([]Corpus, 0, len(entries))
+	for _, path := range entries {
+		data, err := embeddedCorpora.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("acpfixtures: read %s: %w", path, err)
+		}
+		corpus, err := Parse(data)
+		if err != nil {
+			return nil, fmt.Errorf("acpfixtures: parse %s: %w", path, err)
+		}
+		corpora = append(corpora, corpus)
+	}
+	return corpora, nil
+}
+
+// CasesByRole returns every committed Case across every corpus whose Role
+// matches role, preserving corpus order.
+func CasesByRole(role Role) ([]Case, error) {
+	corpora, err := LoadAll()
+	if err != nil {
+		return nil, err
+	}
+	var out []Case
+	for _, corpus := range corpora {
+		for _, c := range corpus.Cases {
+			if c.Role == role {
+				out = append(out, c)
+			}
+		}
+	}
+	return out, nil
+}
 
 // Direction records which side of the boundary a Case exercises: an inbound
 // case is a request this transport receives and validates; an outbound case

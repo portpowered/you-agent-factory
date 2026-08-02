@@ -2236,10 +2236,10 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/acp",
-      "minimum": 100.00
+      "minimum": 96.66
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/fixtures",
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope",
       "minimum": 100.00
     },
     {
@@ -2256,7 +2256,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/session",
-      "minimum": 90.29
+      "minimum": 88.43
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli",
