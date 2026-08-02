@@ -2217,6 +2217,30 @@
       "minimum": 82.14
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp",
+      "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/fixtures",
+      "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity",
+      "minimum": 73.97
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/negotiation",
+      "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/protocol",
+      "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/session",
+      "minimum": 90.29
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli",
       "minimum": 71.22
     },
