@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	authoringlayoutcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/contracts"
 )
 
 // FactoryLayout materializes one flattened or split Factory path into a usable
@@ -15,7 +16,7 @@ import (
 func FactoryLayout(
 	ctx context.Context,
 	path string,
-	expand factorydefinitions.FactoryLayoutExpander,
+	expand authoringlayoutcontracts.LayoutExpander,
 ) (string, factorydefinitions.LayoutExpansionReport, error) {
 	if expand == nil {
 		return "", factorydefinitions.LayoutExpansionReport{},

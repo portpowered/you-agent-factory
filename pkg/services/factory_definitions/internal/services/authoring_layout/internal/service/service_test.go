@@ -18,6 +18,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
+	authoringlayoutcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/contracts"
 	authoringlayoutwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/wire"
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
@@ -48,9 +49,11 @@ func newAuthoringLayoutService(t *testing.T) authoringlayout.Service {
 	t.Helper()
 
 	mapper := factorymapping.NewFactoryConfigMapper()
-	svc, err := authoringlayoutwire.NewService(authoringlayout.Dependencies{
-		Validator: factoryvalidation.New(nil),
-		MapInput: func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
+	validator := factoryvalidation.New(nil)
+	svc, err := authoringlayoutwire.NewService(
+		validator,
+		validator,
+		func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
 			return validationentry.MapFactoryJSONForPersistence(payload, func(
 				payload []byte,
 				_ factorydefinitions.WorkstationLoader,
@@ -62,19 +65,19 @@ func newAuthoringLayoutService(t *testing.T) authoringlayout.Service {
 				return stubLoadedSource{cfg: cfg}, nil
 			})
 		},
-		DecodeFactory:     mapper.Expand,
-		NormalizeAuthored: authoredmapping.AuthoredFactoryConfigForExpandedLayout,
-		EncodeFactory:     mapper.Flatten,
-		Write:             func(string, *factorydefinitions.PreparedFactoryLayoutPayload, string) error { return nil },
-		Validate:          func(string) error { return nil },
-		Flatten:           func(path string) ([]byte, error) { return []byte("flattened:" + path), nil },
-		Expand: func(path string) (string, factorydefinitions.LayoutExpansionReport, error) {
+		mapper.Expand,
+		authoredmapping.AuthoredFactoryConfigForExpandedLayout,
+		mapper.Flatten,
+		func(string, *factorydefinitions.PreparedFactoryLayoutPayload, string) error { return nil },
+		func(string) error { return nil },
+		func(path string) ([]byte, error) { return []byte("flattened:" + path), nil },
+		func(path string) (string, factorydefinitions.LayoutExpansionReport, error) {
 			return path + "-expanded", factorydefinitions.LayoutExpansionReport{FactoryConfigPaths: 1}, nil
 		},
-		FileSystem:           stubPersistenceFileSystem{},
-		RequireDefinitionDir: func(string) error { return nil },
-		Directories:          stubDirectoryReplacementStore{},
-	})
+		stubPersistenceFileSystem{},
+		func(string) error { return nil },
+		stubDirectoryReplacementStore{},
+	)
 	if err != nil {
 		t.Fatalf("construct authoring_layout: %v", err)
 	}
@@ -217,7 +220,7 @@ func TestFlattenExpandFactoryLayout_PreservesFactoryIdentityAcrossRoundTrip(t *t
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}
 
-	svc := newAuthoringLayoutServiceFromComposition(t, composition, validator)
+	svc := newAuthoringLayoutServiceFromComposition(t, composition, validator, validator)
 	flattened, err := svc.FlattenFactoryLayout(
 		context.Background(),
 		factorydefinitions.FlattenFactoryLayoutRequest{Path: factoryDir},
@@ -320,7 +323,8 @@ func mustAuthoringLayoutRequiredToolChecker() factorydefinitions.RequiredToolChe
 func newAuthoringLayoutServiceFromComposition(
 	t *testing.T,
 	composition factorydefinitiontestcomposition.Composition,
-	validator factorydefinitions.Validator,
+	validator authoringlayoutcontracts.LayoutValidator,
+	validateDefinition authoringlayoutcontracts.DefinitionValidationOperation,
 ) authoringlayout.Service {
 	t.Helper()
 
@@ -344,24 +348,25 @@ func newAuthoringLayoutServiceFromComposition(
 	validateWrites := func(targetDir string, config *factorydefinitions.FactoryConfig) error {
 		return internalportableconfig.ValidateWrites(fileSystem, targetDir, config)
 	}
-	svc, err := authoringlayoutwire.NewService(authoringlayout.Dependencies{
-		Validator:         validator,
-		MapInput:          composition.MapFactoryJSONForPersistence,
-		DecodeFactory:     factorymapping.NewFactoryConfigMapper().Expand,
-		NormalizeAuthored: authoredmapping.AuthoredFactoryConfigForExpandedLayout,
-		EncodeFactory:     factorymapping.MarshalCanonicalFactoryConfig,
-		Write: func(targetDir string, prepared *factorydefinitions.PreparedFactoryLayoutPayload, sourcePath string) error {
+	svc, err := authoringlayoutwire.NewService(
+		validator,
+		validateDefinition,
+		composition.MapFactoryJSONForPersistence,
+		factorymapping.NewFactoryConfigMapper().Expand,
+		authoredmapping.AuthoredFactoryConfigForExpandedLayout,
+		factorymapping.MarshalCanonicalFactoryConfig,
+		func(targetDir string, prepared *factorydefinitions.PreparedFactoryLayoutPayload, sourcePath string) error {
 			return writer.WritePrepared(targetDir, prepared, sourcePath, materializeFiles, pruneRemovedDocs)
 		},
-		Validate: func(targetDir string) error {
+		func(targetDir string) error {
 			return loader.ValidateFactoryDirReadOnly(targetDir, nil, validateWrites)
 		},
-		Flatten:              composition.FactoryLayoutFlattener(),
-		Expand:               persistence.ExpandFactoryLayout,
-		FileSystem:           fileSystem,
-		RequireDefinitionDir: composition.NamedPaths().RequireDefinitionDir,
-		Directories:          directoryreplace.Local{},
-	})
+		composition.FactoryLayoutFlattener(),
+		persistence.ExpandFactoryLayout,
+		fileSystem,
+		composition.NamedPaths().RequireDefinitionDir,
+		directoryreplace.Local{},
+	)
 	if err != nil {
 		t.Fatalf("construct authoring_layout from composition: %v", err)
 	}
@@ -373,7 +378,7 @@ func TestCreateNamedFactory_CreatesDurableNamedFactoryLayout(t *testing.T) {
 
 	composition := newAuthoringLayoutTestComposition(t)
 	validator := factoryvalidation.New(nil)
-	svc := newAuthoringLayoutServiceFromComposition(t, composition, validator)
+	svc := newAuthoringLayoutServiceFromComposition(t, composition, validator, validator)
 	rootDir := t.TempDir()
 	payload := validAlphaPayload(t)
 
@@ -409,7 +414,7 @@ func TestReplaceNamedFactory_ReplacesExistingLayoutAtomically(t *testing.T) {
 
 	composition := newAuthoringLayoutTestComposition(t)
 	validator := factoryvalidation.New(nil)
-	svc := newAuthoringLayoutServiceFromComposition(t, composition, validator)
+	svc := newAuthoringLayoutServiceFromComposition(t, composition, validator, validator)
 	rootDir := t.TempDir()
 	payload := validAlphaPayload(t)
 
@@ -456,7 +461,7 @@ func TestCreateNamedFactory_RejectsStagingValidationWithoutPartialTarget(t *test
 
 	composition := newAuthoringLayoutTestComposition(t)
 	validator := factoryvalidation.New(nil)
-	svc := newAuthoringLayoutServiceWithCorruptingWrite(t, composition, validator)
+	svc := newAuthoringLayoutServiceWithCorruptingWrite(t, composition, validator, validator)
 	rootDir := t.TempDir()
 	payload := validAlphaPayload(t)
 	prepared, err := svc.PrepareFactoryLayout(
@@ -503,7 +508,7 @@ func TestReplaceNamedFactory_PreservesExistingLayoutOnRejectedWrite(t *testing.T
 
 	composition := newAuthoringLayoutTestComposition(t)
 	validator := factoryvalidation.New(nil)
-	svc := newAuthoringLayoutServiceFromComposition(t, composition, validator)
+	svc := newAuthoringLayoutServiceFromComposition(t, composition, validator, validator)
 	rootDir := t.TempDir()
 	validPayload := validAlphaPayload(t)
 
@@ -530,7 +535,7 @@ func TestReplaceNamedFactory_PreservesExistingLayoutOnRejectedWrite(t *testing.T
 		t.Fatalf("ReadFile(factory.json before): %v", err)
 	}
 
-	corruptingSvc := newAuthoringLayoutServiceWithCorruptingWrite(t, composition, validator)
+	corruptingSvc := newAuthoringLayoutServiceWithCorruptingWrite(t, composition, validator, validator)
 	brokenPrepared, err := corruptingSvc.PrepareFactoryLayout(
 		context.Background(),
 		factorydefinitions.PrepareFactoryLayoutRequest{Name: "alpha", Payload: validPayload},
@@ -566,7 +571,8 @@ func TestReplaceNamedFactory_PreservesExistingLayoutOnRejectedWrite(t *testing.T
 func newAuthoringLayoutServiceWithCorruptingWrite(
 	t *testing.T,
 	composition factorydefinitiontestcomposition.Composition,
-	validator factorydefinitions.Validator,
+	validator authoringlayoutcontracts.LayoutValidator,
+	validateDefinition authoringlayoutcontracts.DefinitionValidationOperation,
 ) authoringlayout.Service {
 	t.Helper()
 
@@ -605,22 +611,23 @@ func newAuthoringLayoutServiceWithCorruptingWrite(
 		}
 		return os.WriteFile(brokenAgentsPath, []byte("---\ntype: [\n"), 0o644)
 	}
-	svc, err := authoringlayoutwire.NewService(authoringlayout.Dependencies{
-		Validator:         validator,
-		MapInput:          composition.MapFactoryJSONForPersistence,
-		DecodeFactory:     factorymapping.NewFactoryConfigMapper().Expand,
-		NormalizeAuthored: authoredmapping.AuthoredFactoryConfigForExpandedLayout,
-		EncodeFactory:     factorymapping.MarshalCanonicalFactoryConfig,
-		Write:             writePrepared,
-		Validate: func(targetDir string) error {
+	svc, err := authoringlayoutwire.NewService(
+		validator,
+		validateDefinition,
+		composition.MapFactoryJSONForPersistence,
+		factorymapping.NewFactoryConfigMapper().Expand,
+		authoredmapping.AuthoredFactoryConfigForExpandedLayout,
+		factorymapping.MarshalCanonicalFactoryConfig,
+		writePrepared,
+		func(targetDir string) error {
 			return loader.ValidateFactoryDirReadOnly(targetDir, nil, validateWrites)
 		},
-		Flatten:              composition.FactoryLayoutFlattener(),
-		Expand:               persistence.ExpandFactoryLayout,
-		FileSystem:           fileSystem,
-		RequireDefinitionDir: composition.NamedPaths().RequireDefinitionDir,
-		Directories:          directoryreplace.Local{},
-	})
+		composition.FactoryLayoutFlattener(),
+		persistence.ExpandFactoryLayout,
+		fileSystem,
+		composition.NamedPaths().RequireDefinitionDir,
+		directoryreplace.Local{},
+	)
 	if err != nil {
 		t.Fatalf("construct corrupting authoring_layout: %v", err)
 	}

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	authoringlayoutcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/contracts"
 )
 
 func TestWriteAgentsFileCreatesDirectoryAndWritesContent(t *testing.T) {
@@ -31,7 +32,7 @@ func TestWriteAgentsFileCreatesDirectoryAndWritesContent(t *testing.T) {
 }
 
 func TestWriterFailsClosedWithoutFileSystemOrInboxEnsurer(t *testing.T) {
-	newWriter := func(fileSystem factorydefinitions.AuthoredLayoutWriterFileSystem, ensureInbox factorydefinitions.InputInboxSentinelEnsurer) *Writer {
+	newWriter := func(fileSystem authoringlayoutcontracts.WriterFileSystem, ensureInbox authoringlayoutcontracts.InputInboxSentinelEnsurer) *Writer {
 		return NewWriter(
 			func(factorydefinitions.FactoryWorkerConfig) ([]byte, error) { return nil, nil },
 			func(factorydefinitions.FactoryWorkstationConfig) ([]byte, error) { return nil, nil },
