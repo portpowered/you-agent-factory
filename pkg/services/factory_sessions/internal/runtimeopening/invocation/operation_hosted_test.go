@@ -14,7 +14,9 @@ import (
 
 type hostedLiveSessionsFake struct {
 	executionMethodsStub
-	sessions map[string]factorysessions.SessionProjection
+	sessions     map[string]factorysessions.SessionProjection
+	invokeResult factorysessions.InvocationResult
+	invokeErr    error
 }
 
 func newHostedLiveSessionsFake(projection factorysessions.SessionProjection) *hostedLiveSessionsFake {
@@ -29,6 +31,22 @@ var _ factorysessions.Service = (*hostedLiveSessionsFake)(nil)
 
 func (fake *hostedLiveSessionsFake) ForRuntime(factorysessions.OpeningBindingRequest) (factorysessions.Service, error) {
 	return fake, nil
+}
+
+func (fake *hostedLiveSessionsFake) Start(context.Context, factorysessions.StartRequest) (factorysessions.StartResult, error) {
+	return factorysessions.StartResult{}, factorysessions.ErrSessionNotFound
+}
+
+func (fake *hostedLiveSessionsFake) InvokeFactorySession(
+	context.Context,
+	string,
+	factorysessions.InvocationRequest,
+) (factorysessions.InvocationResult, error) {
+	return fake.invokeResult, fake.invokeErr
+}
+
+func (fake *hostedLiveSessionsFake) ActivateNamedFactory(context.Context, string) error {
+	return factorysessions.ErrSessionNotFound
 }
 
 func (fake *hostedLiveSessionsFake) OpenFactorySession(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error) {
@@ -204,22 +222,6 @@ func (executionMethodsStub) ListSessions(context.Context, factorysessions.ListSe
 	return factorysessions.ListSessionsResult{}, nil
 }
 
-type hostedInvokerFake struct {
-	result factorydefinitions.FactoryInvocationResult
-	err    error
-}
-
-func (fake *hostedInvokerFake) InvokeFactorySession(
-	_ context.Context,
-	sessionID string,
-	_ factorysessions.InvocationRequest,
-) (factorydefinitions.FactoryInvocationResult, error) {
-	if sessionID != factorysessions.DefaultSessionID {
-		return factorydefinitions.FactoryInvocationResult{}, factorysessions.ErrSessionNotFound
-	}
-	return fake.result, fake.err
-}
-
 func TestInvokeFactoryRejectsIncompleteHostedLiveInvocation(t *testing.T) {
 	t.Parallel()
 
@@ -227,9 +229,7 @@ func TestInvokeFactoryRejectsIncompleteHostedLiveInvocation(t *testing.T) {
 	_, err := op.InvokeFactory(
 		context.Background(),
 		roles.InvocationTarget{
-			HostedLiveInvocation: &factorysessions.HostedLiveInvocation{
-				Sessions: newHostedLiveSessionsFake(factorysessions.SessionProjection{}),
-			},
+			HostedLiveInvocation: &factorysessions.HostedLiveInvocation{},
 		},
 		factorysessions.InvocationRequest{},
 		nil,
@@ -251,11 +251,11 @@ func TestInvokeFactoryUsesHostedLiveRuntimeForPetriFactory(t *testing.T) {
 			},
 		},
 	}
-	wantResult := factorydefinitions.FactoryInvocationResult{
-		Status: factorydefinitions.InvocationTerminalStatusCompleted,
+	wantResult := factorysessions.InvocationResult{
+		Status: factorysessions.InvocationTerminalStatusCompleted,
 	}
 	sessions := newHostedLiveSessionsFake(petriProjection)
-	invoker := &hostedInvokerFake{result: wantResult}
+	sessions.invokeResult = wantResult
 
 	op := &operation{}
 	outcome, err := op.InvokeFactory(
@@ -263,7 +263,6 @@ func TestInvokeFactoryUsesHostedLiveRuntimeForPetriFactory(t *testing.T) {
 		roles.InvocationTarget{
 			HostedLiveInvocation: &factorysessions.HostedLiveInvocation{
 				Sessions: sessions,
-				Invoker:  invoker,
 			},
 		},
 		factorysessions.InvocationRequest{},
@@ -272,7 +271,7 @@ func TestInvokeFactoryUsesHostedLiveRuntimeForPetriFactory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InvokeFactory() error = %v", err)
 	}
-	if outcome.Result.Status != wantResult.Status {
+	if factorysessions.InvocationTerminalStatus(outcome.Result.Status) != wantResult.Status {
 		t.Fatalf("result status = %q, want %q", outcome.Result.Status, wantResult.Status)
 	}
 }
@@ -290,15 +289,15 @@ func TestInvokeFactoryHostedLiveRuntimePropagatesInvokerError(t *testing.T) {
 		},
 	}
 	invokerErr := errors.New("invoke failed")
-	invoker := &hostedInvokerFake{err: invokerErr}
+	sessions := newHostedLiveSessionsFake(petriProjection)
+	sessions.invokeErr = invokerErr
 
 	op := &operation{}
 	_, err := op.InvokeFactory(
 		context.Background(),
 		roles.InvocationTarget{
 			HostedLiveInvocation: &factorysessions.HostedLiveInvocation{
-				Sessions: newHostedLiveSessionsFake(petriProjection),
-				Invoker:  invoker,
+				Sessions: sessions,
 			},
 		},
 		factorysessions.InvocationRequest{},

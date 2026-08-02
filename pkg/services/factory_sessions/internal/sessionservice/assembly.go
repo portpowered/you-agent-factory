@@ -278,6 +278,10 @@ func (a *Assembly) Complete(
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
+	// The opened gateway is the singular peer-facing Sessions root. Attach the
+	// runtime-specific capabilities before returning it so HTTP/CLI peers do
+	// not need a parallel invocation or activation collaborator.
+	gateway.bindRootCapabilities(invoker, runtime.ActivateNamedFactory, runtime.DefinitionActivationGateway())
 	return runtime, gateway, invoker, definitionHost{runtime: runtime}, nil
 }
 

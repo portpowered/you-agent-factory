@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -232,7 +231,7 @@ func TestMoveWorkBySessionId_MapsRuntimeMoveWorkNotFound(t *testing.T) {
 
 	adapter := NewAdapter(&rootFake{
 		moveWorkAndRead: func(context.Context, string, string, string, string) (work.ReadModel, error) {
-			return work.ReadModel{}, state.ErrMoveWorkNotFound
+			return work.ReadModel{}, work.ErrMoveWorkNotFound
 		},
 	})
 	recorder := httptest.NewRecorder()
@@ -319,9 +318,9 @@ func TestMoveWorkBySessionId_MapsMoveValidationFailures(t *testing.T) {
 		err     error
 		message string
 	}{
-		{name: "invalid state", err: state.ErrMoveWorkInvalidState, message: "invalid target state for work type"},
-		{name: "in flight dispatch", err: state.ErrMoveWorkInFlightDispatch, message: "work is in an active dispatch"},
-		{name: "engine terminated", err: state.ErrMoveWorkEngineTerminated, message: "engine has terminated"},
+		{name: "invalid state", err: work.ErrMoveWorkInvalidState, message: "invalid target state for work type"},
+		{name: "in flight dispatch", err: work.ErrMoveWorkInFlightDispatch, message: "work is in an active dispatch"},
+		{name: "engine terminated", err: work.ErrMoveWorkEngineTerminated, message: "engine has terminated"},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {

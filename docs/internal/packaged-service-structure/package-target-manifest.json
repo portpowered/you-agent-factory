@@ -282,6 +282,7 @@
     "pkg/services/factory_sessions/transports/http",
     "pkg/services/factory_sessions/transports/mcp",
     "pkg/services/factory_sessions/transports/mcp/catalog",
+    "pkg/services/factory_sessions/transports/scopedlisting",
     "pkg/services/factory_sessions/wire",
     "pkg/services/factory_sessions/wire/contracts",
     "pkg/services/factory_visualization",
@@ -1773,6 +1774,11 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions/transports/mcp/catalog",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/transports/scopedlisting",
       "disposition": "retain",
       "destination": "factory_sessions"
     },

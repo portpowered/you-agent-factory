@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -23,7 +22,7 @@ func TestRootErrorResponse_MapsNotFoundFailures(t *testing.T) {
 	}{
 		{name: "factory session", err: apisurface.ErrFactorySessionNotFound},
 		{name: "work", err: work.ErrWorkNotFound},
-		{name: "runtime move work", err: state.ErrMoveWorkNotFound},
+		{name: "move work", err: work.ErrMoveWorkNotFound},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -63,9 +62,9 @@ func TestRootErrorResponse_MapsMoveValidationFailures(t *testing.T) {
 		err     error
 		message string
 	}{
-		{err: state.ErrMoveWorkInvalidState, message: "invalid target state for work type"},
-		{err: state.ErrMoveWorkInFlightDispatch, message: "work is in an active dispatch"},
-		{err: state.ErrMoveWorkEngineTerminated, message: "engine has terminated"},
+		{err: work.ErrMoveWorkInvalidState, message: "invalid target state for work type"},
+		{err: work.ErrMoveWorkInFlightDispatch, message: "work is in an active dispatch"},
+		{err: work.ErrMoveWorkEngineTerminated, message: "engine has terminated"},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.err.Error(), func(t *testing.T) {
@@ -184,7 +183,7 @@ func TestTypedRootFailuresDoNotCollapseToInternalError(t *testing.T) {
 		work.ErrInvalidWorkRequest,
 		work.ErrWorkRequestConflict,
 		work.ErrWorkRequestRejected,
-		state.ErrMoveWorkInvalidState,
+		work.ErrMoveWorkInvalidState,
 		&work.ValidationError{Message: "invalid query"},
 		&work.ContentStagingError{Message: "staging failed"},
 	}

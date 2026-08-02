@@ -14,10 +14,11 @@ type rootFake struct {
 	listWork func(context.Context, string, work.ListOptions) (work.ListResult, error)
 	getWork  func(context.Context, string, string) (work.ReadModel, error)
 
-	stageContent func(context.Context, work.StageContentRequest) (work.StageContentResult, error)
-	prepareContent func(context.Context, []work.StagedSubmissionItem) ([]work.WorkContentPart, error)
+	stageContent                func(context.Context, work.StageContentRequest) (work.StageContentResult, error)
+	prepareContent              func(context.Context, []work.StagedSubmissionItem) ([]work.WorkContentPart, error)
+	prepareWorkRequest          func(context.Context, work.WorkRequestPreparation) (work.WorkRequest, error)
 	submitWorkRequestForSession func(context.Context, string, work.WorkRequest) (work.WorkRequestSubmitResult, error)
-	moveWorkAndRead func(context.Context, string, string, string, string) (work.ReadModel, error)
+	moveWorkAndRead             func(context.Context, string, string, string, string) (work.ReadModel, error)
 }
 
 func (fake *rootFake) ListWork(
@@ -60,6 +61,16 @@ func (fake *rootFake) PrepareContent(
 		return fake.prepareContent(ctx, items)
 	}
 	return nil, &work.ContentStagingError{Message: "prepare content unavailable"}
+}
+
+func (fake *rootFake) PrepareWorkRequest(
+	ctx context.Context,
+	input work.WorkRequestPreparation,
+) (work.WorkRequest, error) {
+	if fake.prepareWorkRequest != nil {
+		return fake.prepareWorkRequest(ctx, input)
+	}
+	return input.Request, nil
 }
 
 func (fake *rootFake) SubmitWorkRequestForSession(

@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strings"
 
-	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -35,18 +34,18 @@ func RootErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 	switch {
 	case errors.Is(err, apisurface.ErrFactorySessionNotFound):
 		return notFoundErrorResponse("factory session not found")
-	case errors.Is(err, work.ErrWorkNotFound), errors.Is(err, state.ErrMoveWorkNotFound):
+	case errors.Is(err, work.ErrWorkNotFound), errors.Is(err, work.ErrMoveWorkNotFound):
 		return notFoundErrorResponse("work not found")
 	case errors.Is(err, work.ErrMoveWorkRequestAlreadyApplied):
 		return conflictErrorResponse(
 			"Operator move request was already applied.",
 			factoryapi.ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED,
 		)
-	case errors.Is(err, state.ErrMoveWorkInvalidState):
+	case errors.Is(err, work.ErrMoveWorkInvalidState):
 		return badRequestErrorResponse("invalid target state for work type")
-	case errors.Is(err, state.ErrMoveWorkInFlightDispatch):
+	case errors.Is(err, work.ErrMoveWorkInFlightDispatch):
 		return badRequestErrorResponse("work is in an active dispatch")
-	case errors.Is(err, state.ErrMoveWorkEngineTerminated):
+	case errors.Is(err, work.ErrMoveWorkEngineTerminated):
 		return badRequestErrorResponse("engine has terminated")
 	case errors.Is(err, work.ErrWorkRequestConflict):
 		return conflictErrorResponse("Work Request admission conflict", workErrorCodeConflict)
@@ -59,6 +58,11 @@ func RootErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 	var stagingErr *work.ContentStagingError
 	if errors.As(err, &stagingErr) {
 		return badRequestErrorResponse(stagingErr.Message)
+	}
+
+	var preparationErr *work.RequestPreparationError
+	if errors.As(err, &preparationErr) {
+		return badRequestErrorResponse(preparationErr.Message)
 	}
 
 	var validation *work.ValidationError
