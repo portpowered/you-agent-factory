@@ -104,3 +104,49 @@ type TargetEpisodeNotClosedError struct {
 func (e *TargetEpisodeNotClosedError) Error() string {
 	return fmt.Sprintf("target episode %d is not closed: state %q", e.Number, string(e.State))
 }
+
+// InvalidTurnStateError reports a TurnState outside the exact declared value
+// set (ADMITTED, RUNNING, COMPLETED, FAILED, CANCELED).
+type InvalidTurnStateError struct {
+	State TurnState
+}
+
+func (e *InvalidTurnStateError) Error() string {
+	return fmt.Sprintf("invalid turn state: %q", string(e.State))
+}
+
+// InvalidTurnStateTransitionError reports a TurnState transition outside the
+// declared legal transition table.
+type InvalidTurnStateTransitionError struct {
+	From TurnState
+	To   TurnState
+}
+
+func (e *InvalidTurnStateTransitionError) Error() string {
+	return fmt.Sprintf("invalid turn state transition: %q to %q", string(e.From), string(e.To))
+}
+
+// TurnBusyError reports that turn admission was rejected because the session
+// already has a non-terminal active turn. It carries only safe identity
+// facts: the session ID and the active turn's ID and state.
+type TurnBusyError struct {
+	SessionID       string
+	ActiveTurnID    string
+	ActiveTurnState TurnState
+}
+
+func (e *TurnBusyError) Error() string {
+	return fmt.Sprintf("chat session %q busy: active turn %q in state %q", e.SessionID, e.ActiveTurnID, string(e.ActiveTurnState))
+}
+
+// VersionConflictError reports that a version-checked mutation's expected
+// version did not match the actual version. It carries only the two version
+// numbers; the mutation it guarded is left unchanged.
+type VersionConflictError struct {
+	Expected uint64
+	Actual   uint64
+}
+
+func (e *VersionConflictError) Error() string {
+	return fmt.Sprintf("version conflict: expected %d, actual %d", e.Expected, e.Actual)
+}
