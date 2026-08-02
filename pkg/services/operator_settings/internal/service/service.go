@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	identityinventory "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/identityinputinventory"
 	settingsdocument "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document"
@@ -26,13 +27,16 @@ type Service struct {
 	decoder     operatorsettings.ConfigDecoder
 	encoder     operatorsettings.ConfigEncoder
 	idGenerator operatorsettings.IDGenerator
+	logger      logging.Logger
 	writeMu     sync.Mutex
 }
 
 var _ operatorsettings.Service = (*Service)(nil)
 
 // New constructs an inert Operator Settings root facade over the private
-// document and resolution capabilities.
+// document and resolution capabilities. logger is the repository-injected
+// operation-logging abstraction; a nil logger resolves to a safe no-op so
+// construction never fails or discovers its own logger.
 func New(
 	documentService settingsdocument.Service,
 	resolutionService resolution.Service,
@@ -41,6 +45,7 @@ func New(
 	decoder operatorsettings.ConfigDecoder,
 	encoder operatorsettings.ConfigEncoder,
 	idGenerator operatorsettings.IDGenerator,
+	logger logging.Logger,
 ) (operatorsettings.Service, error) {
 	if documentService == nil {
 		return nil, fmt.Errorf("construct Operator Settings: document is required")
@@ -56,6 +61,7 @@ func New(
 		decoder:     decoder,
 		encoder:     encoder,
 		idGenerator: idGenerator,
+		logger:      logging.EnsureLogger(logger),
 	}, nil
 }
 
@@ -254,6 +260,23 @@ func (s *Service) ResolveACPAgentProfile(path string) (operatorsettings.ACPAgent
 	if s == nil || s.document == nil {
 		return operatorsettings.ACPAgentProfile{}, fmt.Errorf("operator settings document service is required")
 	}
+	s.logger.Info("operator_settings.resolve_acp_agent_profile.started")
+	profile, err := s.resolveACPAgentProfile(path)
+	if err != nil {
+		s.logger.Warn(
+			"operator_settings.resolve_acp_agent_profile.failed",
+			"reason", classifyACPAgentProfileFailure(err),
+		)
+		return operatorsettings.ACPAgentProfile{}, err
+	}
+	s.logger.Info(
+		"operator_settings.resolve_acp_agent_profile.finished",
+		"allowed_target_count", len(profile.AllowedTargets),
+	)
+	return profile, nil
+}
+
+func (s *Service) resolveACPAgentProfile(path string) (operatorsettings.ACPAgentProfile, error) {
 	loaded, err := s.document.LoadDocument(operatorsettings.LoadDocumentRequest{Path: path})
 	if err != nil {
 		return operatorsettings.ACPAgentProfile{}, err
@@ -269,6 +292,27 @@ func (s *Service) ResolveACPAgentProfile(path string) (operatorsettings.ACPAgent
 // persistence side effect, then atomically stores the normalized profile
 // while preserving every other operator setting.
 func (s *Service) UpdateACPAgentProfile(
+	ctx context.Context,
+	path string,
+	profile operatorsettings.ACPAgentProfile,
+) (operatorsettings.ACPAgentProfile, error) {
+	s.logger.Info("operator_settings.update_acp_agent_profile.started")
+	updated, err := s.updateACPAgentProfile(ctx, path, profile)
+	if err != nil {
+		s.logger.Warn(
+			"operator_settings.update_acp_agent_profile.failed",
+			"reason", classifyACPAgentProfileFailure(err),
+		)
+		return operatorsettings.ACPAgentProfile{}, err
+	}
+	s.logger.Info(
+		"operator_settings.update_acp_agent_profile.finished",
+		"allowed_target_count", len(updated.AllowedTargets),
+	)
+	return updated, nil
+}
+
+func (s *Service) updateACPAgentProfile(
 	ctx context.Context,
 	path string,
 	profile operatorsettings.ACPAgentProfile,
@@ -290,6 +334,25 @@ func (s *Service) UpdateACPAgentProfile(
 		return operatorsettings.ACPAgentProfile{}, fmt.Errorf("operator settings: update ACP Agent profile: persisted document is missing the profile")
 	}
 	return updated.Workers.ACP.AgentProfile.Clone(), nil
+}
+
+// classifyACPAgentProfileFailure reports a safe, actionable failure category
+// for operation logs without leaking the config path, profile contents, or
+// allowlist values that may appear inside the underlying error message.
+func classifyACPAgentProfileFailure(err error) string {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return "context_canceled"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "context_deadline_exceeded"
+	case errors.Is(err, operatorsettings.ErrACPAgentProfileInvalid):
+		return "profile_invalid"
+	}
+	var documentFailure operatorsettings.DocumentFailure
+	if errors.As(err, &documentFailure) {
+		return "document_" + string(documentFailure.Kind)
+	}
+	return "operation_failed"
 }
 
 func (s *Service) mutateDocument(

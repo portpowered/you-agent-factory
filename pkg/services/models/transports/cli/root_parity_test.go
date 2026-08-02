@@ -304,6 +304,67 @@ func TestRootAdapter_InvokeClosesRuntimeScopeAfterSuccess(t *testing.T) {
 	}
 }
 
+func TestRootAdapter_PullThroughAlreadyClosedScopeReturnsPublicClosedScopeErrorWithoutInvokingModelsRoot(t *testing.T) {
+	t.Parallel()
+
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			pullModel: func(context.Context, string) (modelinference.PullResult, error) {
+				t.Fatal("PullModelForScope() called through an already-closed Models runtime scope")
+				return modelinference.PullResult{}, nil
+			},
+		},
+		OpenCatalogScope: func(context.Context) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{}, modelinference.ErrRuntimeScopeClosed
+		},
+	})
+
+	var out bytes.Buffer
+	err := service.Pull(modelscli.PullConfig{
+		Context: context.Background(), ModelName: "OMNIVOICE_Q4_K_M", Output: &out,
+	})
+	if !errors.Is(err, modelinference.ErrRuntimeScopeClosed) {
+		t.Fatalf("Pull() through a closed scope error = %v, want errors.Is match for ErrRuntimeScopeClosed", err)
+	}
+}
+
+func TestRootAdapter_InvokeThroughAlreadyClosedScopeReturnsPublicClosedScopeErrorWithoutInvokingModelsRoot(t *testing.T) {
+	t.Parallel()
+
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				t.Fatal("GetCatalogModel() called through an already-closed Models runtime scope")
+				return modelinference.GetModelResult{}, nil
+			},
+			acquireModelLease: func(context.Context, modelinference.AcquireModelLeaseRequest) (modelinference.AcquireModelLeaseResult, error) {
+				t.Fatal("AcquireModelLease() called through an already-closed Models runtime scope")
+				return modelinference.AcquireModelLeaseResult{}, nil
+			},
+			invokeModelWithLease: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				t.Fatal("InvokeModelWithLease() called through an already-closed Models runtime scope")
+				return modelinference.InvokeModelResult{}, nil
+			},
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{}, modelinference.ErrRuntimeScopeClosed
+		},
+	})
+
+	var out bytes.Buffer
+	err := service.Invoke(modelscli.InvokeConfig{
+		Context:   context.Background(),
+		ModelName: "OMNIVOICE_Q4_K_M",
+		Operation: "TTS",
+		Text:      "hello world",
+		JSON:      true,
+		Output:    &out,
+	})
+	if !errors.Is(err, modelinference.ErrRuntimeScopeClosed) {
+		t.Fatalf("Invoke() through a closed scope error = %v, want errors.Is match for ErrRuntimeScopeClosed", err)
+	}
+}
+
 func TestRootAdapter_InvokeJSONResolvesThroughModelsRootCatalogAndInference(t *testing.T) {
 	t.Parallel()
 

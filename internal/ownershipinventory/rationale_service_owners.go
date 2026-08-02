@@ -448,3 +448,33 @@ func committedWorkersRationales() []OwnerRationaleCard {
 		),
 	}
 }
+
+func committedChatSessionsRationales() []OwnerRationaleCard {
+	return []OwnerRationaleCard{
+		topLevel(
+			"chat_sessions",
+			"pkg/services/chat_sessions",
+			"Session, target, turn, control, and attachment for ACP Core chat; the narrow start/invoke/cancel/close Factory-target dependency in the published factory_sessions root vocabulary.",
+			"No independent state store; session state lives for the process duration in the sole factorysessionsshim implementation.",
+			"Session-scoped; discarded on process exit, same as the factory_sessions target it adapts.",
+			"ACP Core (L1) and ACP Worker Events (L4) via the chat_sessions.Service cross-lane contract.",
+			"Delegates 1:1 to factory_sessions.Service; owns no separate transaction boundary.",
+			"Failures normalize at the factory_sessions public root the shim adapts.",
+		),
+	}
+}
+
+func committedEventsRationales() []OwnerRationaleCard {
+	return []OwnerRationaleCard{
+		topLevel(
+			"events",
+			"pkg/services/events",
+			"Append, source attachment, retained reads, and subscriptions for the in-memory ACP event stream; ordering, cursors, retention, gaps, and backpressure (D2 in docs/internal/projects/acp-program/README.md).",
+			"No persistence and no internal/store package; process-local, session-scoped stream state only.",
+			"Session-scoped; discarded on process exit. Recordings remains the durable canonical ledger.",
+			"ACP Core (L1) and ACP Worker Events (L4) via the events.Service cross-lane contract.",
+			"Stream operations are session-scoped; no cross-service transaction absorption.",
+			"Gap/backpressure facts surface at the Events root without a durable retry log.",
+		),
+	}
+}

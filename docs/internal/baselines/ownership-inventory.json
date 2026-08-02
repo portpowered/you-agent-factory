@@ -17,7 +17,9 @@
       "recordings",
       "factory_visualization",
       "operator_settings",
-      "system_initialization"
+      "system_initialization",
+      "chat_sessions",
+      "events"
     ],
     "families": [
       "initializer",
@@ -172,6 +174,30 @@
       "consumers": "Automations root and Work Admission.",
       "transactionBoundary": "Cursor and poller status are Automations-local; emitted Work crosses owners by command.",
       "failureRecovery": "Timeout and parse failures remain Automations poller recovery facts."
+    },
+    {
+      "serviceId": "chat_sessions",
+      "owner": "chat_sessions",
+      "kind": "top_level",
+      "targetPath": "pkg/services/chat_sessions",
+      "authority": "Session, target, turn, control, and attachment for ACP Core chat; the narrow start/invoke/cancel/close Factory-target dependency in the published factory_sessions root vocabulary.",
+      "stateStore": "No independent state store; session state lives for the process duration in the sole factorysessionsshim implementation.",
+      "lifecycle": "Session-scoped; discarded on process exit, same as the factory_sessions target it adapts.",
+      "consumers": "ACP Core (L1) and ACP Worker Events (L4) via the chat_sessions.Service cross-lane contract.",
+      "transactionBoundary": "Delegates 1:1 to factory_sessions.Service; owns no separate transaction boundary.",
+      "failureRecovery": "Failures normalize at the factory_sessions public root the shim adapts."
+    },
+    {
+      "serviceId": "events",
+      "owner": "events",
+      "kind": "top_level",
+      "targetPath": "pkg/services/events",
+      "authority": "Append, source attachment, retained reads, and subscriptions for the in-memory ACP event stream; ordering, cursors, retention, gaps, and backpressure (D2 in docs/internal/projects/acp-program/README.md).",
+      "stateStore": "No persistence and no internal/store package; process-local, session-scoped stream state only.",
+      "lifecycle": "Session-scoped; discarded on process exit. Recordings remains the durable canonical ledger.",
+      "consumers": "ACP Core (L1) and ACP Worker Events (L4) via the events.Service cross-lane contract.",
+      "transactionBoundary": "Stream operations are session-scoped; no cross-service transaction absorption.",
+      "failureRecovery": "Gap/backpressure facts surface at the Events root without a durable retry log."
     },
     {
       "serviceId": "factory_definitions",
@@ -1072,6 +1098,12 @@
       "evidence": "pkg/services/automations/internal -\u003e pkg/services/workers"
     },
     {
+      "fromOwner": "chat_sessions",
+      "toOwner": "factory_sessions",
+      "class": "command",
+      "evidence": "pkg/services/chat_sessions -\u003e pkg/services/factory_sessions"
+    },
+    {
       "fromOwner": "edges",
       "toOwner": "automations",
       "class": "external_effect",
@@ -1418,6 +1450,12 @@
       "toOwner": "factory_definitions",
       "class": "query",
       "evidence": "pkg/services/operator_settings -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "operator_settings",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "evidence": "pkg/services/operator_settings/internal/service -\u003e pkg/platform/logging"
     },
     {
       "fromOwner": "operator_settings",
@@ -2538,10 +2576,28 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/chat_sessions",
+      "disposition": "retain",
+      "destination": "chat_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/chat_sessions/internal/factorysessionsshim",
+      "disposition": "retain",
+      "destination": "chat_sessions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/edges",
       "disposition": "retain",
       "destination": "edges",
       "destinationKind": "architecture_exception"
+    },
+    {
+      "packagePath": "pkg/services/events",
+      "disposition": "retain",
+      "destination": "events",
+      "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/factory_definitions",
@@ -5274,6 +5330,12 @@
       "disposition": "retain",
       "destination": "workers",
       "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/transports/acp",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
     },
     {
       "packagePath": "pkg/transports/cli",

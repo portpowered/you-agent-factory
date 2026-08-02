@@ -15,7 +15,9 @@
       "recordings",
       "factory_visualization",
       "operator_settings",
-      "system_initialization"
+      "system_initialization",
+      "chat_sessions",
+      "events"
     ],
     "nonServiceFamilies": [
       "initializer",
@@ -83,7 +85,10 @@
     "pkg/services/automations/internal/services/script_pollers/wire",
     "pkg/services/automations/transports/http",
     "pkg/services/automations/wire",
+    "pkg/services/chat_sessions",
+    "pkg/services/chat_sessions/internal/factorysessionsshim",
     "pkg/services/edges",
+    "pkg/services/events",
     "pkg/services/factory_definitions",
     "pkg/services/factory_definitions/definition",
     "pkg/services/factory_definitions/internal",
@@ -496,6 +501,7 @@
     "pkg/services/workers/internal/services/workstations/worktree",
     "pkg/services/workers/internal/testhelpers",
     "pkg/services/workers/wire",
+    "pkg/transports/acp",
     "pkg/transports/cli",
     "pkg/transports/cli/acp",
     "pkg/transports/cli/baseline",
@@ -782,9 +788,24 @@
       "destination": "automations"
     },
     {
+      "packagePath": "pkg/services/chat_sessions",
+      "disposition": "retain",
+      "destination": "chat_sessions"
+    },
+    {
+      "packagePath": "pkg/services/chat_sessions/internal/factorysessionsshim",
+      "disposition": "retain",
+      "destination": "chat_sessions"
+    },
+    {
       "packagePath": "pkg/services/edges",
       "disposition": "retain",
       "destination": "edges"
+    },
+    {
+      "packagePath": "pkg/services/events",
+      "disposition": "retain",
+      "destination": "events"
     },
     {
       "packagePath": "pkg/services/factory_definitions",
@@ -2845,6 +2866,11 @@
       "packagePath": "pkg/services/workers/wire",
       "disposition": "retain",
       "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/transports/acp",
+      "disposition": "retain",
+      "destination": "transports"
     },
     {
       "packagePath": "pkg/transports/cli",

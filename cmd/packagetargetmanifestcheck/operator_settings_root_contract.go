@@ -14,6 +14,8 @@ const operatorSettingsRootRelative = "pkg/services/operator_settings"
 // that remain at pkg/services/operator_settings/ during CLN-SET-CONTRACT-ROOTS.
 // Mirrors internal/ownershipinventory OperatorSettingsThinRootContractFiles.
 var operatorSettingsThinRootContractFiles = []string{
+	"acp_agent_profile.go",
+	"acp_agent_profile_test.go",
 	"acp_integrations.go",
 	"acp_integrations_test.go",
 	"backend_scope.go",

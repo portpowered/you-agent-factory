@@ -13,7 +13,9 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"strings"
 	"testing"
@@ -198,6 +200,9 @@ func ParseCorpus(data []byte) (Corpus, error) {
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&corpus); err != nil {
 		return Corpus{}, fmt.Errorf("acpconformance: invalid corpus JSON: %w", err)
+	}
+	if err := dec.Decode(new(json.RawMessage)); !errors.Is(err, io.EOF) {
+		return Corpus{}, fmt.Errorf("acpconformance: invalid corpus JSON: trailing content after top-level value")
 	}
 	if corpus.SchemaVersion != supportedSchemaVersion {
 		return Corpus{}, fmt.Errorf("acpconformance: unsupported corpus schema_version %d", corpus.SchemaVersion)

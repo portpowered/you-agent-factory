@@ -9,6 +9,7 @@ package wire
 import (
 	"fmt"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	operatorservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service"
 	documentwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/wire"
@@ -16,10 +17,22 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
+// firstLogger returns the first optional logger supplied to a Settings wire
+// constructor, or nil when omitted. operatorservice.New resolves a nil logger
+// to a safe no-op, so this keeps every Settings wire constructor's logger
+// parameter optional without duplicating that fallback at each call site.
+func firstLogger(logger []logging.Logger) logging.Logger {
+	if len(logger) == 0 {
+		return nil
+	}
+	return logger[0]
+}
+
 // NewService constructs an inert Operator Settings root from construction and
 // process-edge ports. It composes the accepted root through parent-private
 // document and resolution owners without publishing owner types on the returned
-// peer surface.
+// peer surface. logger is an optional trailing operation-logging abstraction;
+// omitting it (or passing nil) resolves to a safe no-op.
 func NewService(
 	files operatorsettings.FileSystem,
 	createTemp operatorsettings.CreateTemporaryFile,
@@ -28,6 +41,7 @@ func NewService(
 	providersCatalog operatorsettings.ProviderCatalog,
 	providersRoot providers.Service,
 	idGenerator operatorsettings.IDGenerator,
+	logger ...logging.Logger,
 ) (operatorsettings.Service, error) {
 	if err := validateNewServiceInputs(
 		files,
@@ -62,6 +76,7 @@ func NewService(
 		decoder,
 		encoder,
 		idGenerator,
+		firstLogger(logger),
 	)
 }
 
