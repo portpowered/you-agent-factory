@@ -1,0 +1,64 @@
+{
+  "cases": [
+    {
+      "name": "fs/read_text_file is rejected as an unsupported method",
+      "role": "unsupported_method",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {"method": "fs/read_text_file"},
+      "expected": {
+        "code": -32601,
+        "message": "Method not found",
+        "data": {"method": "fs/read_text_file"}
+      }
+    },
+    {
+      "name": "terminal/create is rejected as an unsupported method",
+      "role": "unsupported_method",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {"method": "terminal/create"},
+      "expected": {
+        "code": -32601,
+        "message": "Method not found",
+        "data": {"method": "terminal/create"}
+      }
+    },
+    {
+      "name": "session/set_mode is rejected as an unsupported method",
+      "role": "unsupported_method",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {"method": "session/set_mode"},
+      "expected": {
+        "code": -32601,
+        "message": "Method not found",
+        "data": {"method": "session/set_mode"}
+      }
+    },
+    {
+      "name": "authenticate is rejected as an unsupported method",
+      "role": "unsupported_method",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {"method": "authenticate"},
+      "expected": {
+        "code": -32601,
+        "message": "Method not found",
+        "data": {"method": "authenticate"}
+      }
+    },
+    {
+      "name": "_fork is rejected as an unsupported method",
+      "role": "unsupported_method",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {"method": "_fork"},
+      "expected": {
+        "code": -32601,
+        "message": "Method not found",
+        "data": {"method": "_fork"}
+      }
+    }
+  ]
+}

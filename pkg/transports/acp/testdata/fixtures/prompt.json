@@ -1,0 +1,83 @@
+{
+  "cases": [
+    {
+      "name": "session/prompt accepts a single text block",
+      "role": "session/prompt",
+      "direction": "inbound",
+      "classification": "accepted",
+      "input": {
+        "sessionId": "sess_synthetic_0001",
+        "prompt": [{"type": "text", "text": "Summarize the open work items."}]
+      },
+      "expected": {
+        "SessionID": "sess_synthetic_0001",
+        "MessageID": "",
+        "Content": [{"Text": "Summarize the open work items."}]
+      }
+    },
+    {
+      "name": "session/prompt accepts multiple text blocks and a client message id",
+      "role": "session/prompt",
+      "direction": "inbound",
+      "classification": "accepted",
+      "input": {
+        "sessionId": "sess_synthetic_0001",
+        "messageId": "msg_synthetic_0001",
+        "prompt": [
+          {"type": "text", "text": "First block."},
+          {"type": "text", "text": "Second block."}
+        ]
+      },
+      "expected": {
+        "SessionID": "sess_synthetic_0001",
+        "MessageID": "msg_synthetic_0001",
+        "Content": [{"Text": "First block."}, {"Text": "Second block."}]
+      }
+    },
+    {
+      "name": "session/prompt rejects an empty prompt",
+      "role": "session/prompt",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {"sessionId": "sess_synthetic_0001", "prompt": []},
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
+      }
+    },
+    {
+      "name": "session/prompt rejects image content as unsupported in L1 V0",
+      "role": "session/prompt",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {
+        "sessionId": "sess_synthetic_0001",
+        "prompt": [{"type": "image", "data": "c3ludGhldGlj", "mimeType": "image/png"}]
+      },
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "unsupported_content"}
+      }
+    },
+    {
+      "name": "session/prompt rejects a mix of text and non-text content",
+      "role": "session/prompt",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {
+        "sessionId": "sess_synthetic_0001",
+        "prompt": [
+          {"type": "text", "text": "See attached."},
+          {"type": "audio", "data": "c3ludGhldGlj", "mimeType": "audio/wav"}
+        ]
+      },
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "unsupported_content"}
+      }
+    }
+  ]
+}

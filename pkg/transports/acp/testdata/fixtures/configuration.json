@@ -1,0 +1,70 @@
+{
+  "cases": [
+    {
+      "name": "session/set_config_option accepts a boolean value",
+      "role": "session/set_config_option",
+      "direction": "inbound",
+      "classification": "accepted",
+      "input": {
+        "type": "boolean",
+        "sessionId": "sess_synthetic_0001",
+        "configId": "verbose_output",
+        "value": true
+      },
+      "expected": {
+        "SessionID": "sess_synthetic_0001",
+        "ConfigID": "verbose_output",
+        "Boolean": true,
+        "ValueID": null
+      }
+    },
+    {
+      "name": "session/set_config_option accepts a select value id",
+      "role": "session/set_config_option",
+      "direction": "inbound",
+      "classification": "accepted",
+      "input": {
+        "sessionId": "sess_synthetic_0001",
+        "configId": "target_factory",
+        "value": "factory-builder"
+      },
+      "expected": {
+        "SessionID": "sess_synthetic_0001",
+        "ConfigID": "target_factory",
+        "Boolean": null,
+        "ValueID": "factory-builder"
+      }
+    },
+    {
+      "name": "session/set_config_option rejects a boolean value missing configId",
+      "role": "session/set_config_option",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {
+        "type": "boolean",
+        "sessionId": "sess_synthetic_0001",
+        "value": true
+      },
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
+      }
+    },
+    {
+      "name": "session/set_config_option rejects a select value missing the session id",
+      "role": "session/set_config_option",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {
+        "configId": "target_factory",
+        "value": "factory-builder"
+      },
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
+      }
+    }
+  ]
+}

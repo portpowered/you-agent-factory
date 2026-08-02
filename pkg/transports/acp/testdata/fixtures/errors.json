@@ -1,0 +1,59 @@
+{
+  "cases": [
+    {
+      "name": "initialize with a missing protocol version is rejected, not silently defaulted",
+      "role": "initialize",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {},
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {
+          "reason": "unsupported_protocol_version",
+          "requestedVersion": 0,
+          "supportedVersion": 1
+        }
+      }
+    },
+    {
+      "name": "session/new with a missing cwd is a bounded malformed_request error",
+      "role": "session/new",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {},
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
+      }
+    },
+    {
+      "name": "session/prompt with resource content is a bounded unsupported_content error",
+      "role": "session/prompt",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {
+        "sessionId": "sess_synthetic_0001",
+        "prompt": [{"type": "resource_link", "uri": "file:///workspace/example-factory/README.md", "name": "README.md"}]
+      },
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "unsupported_content"}
+      }
+    },
+    {
+      "name": "session/update with a tool_call_update is a bounded unsupported_update error",
+      "role": "session/update",
+      "direction": "outbound",
+      "classification": "rejected",
+      "input": {"sessionUpdate": "tool_call_update", "toolCallId": "tool_synthetic_0001"},
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "unsupported_update"}
+      }
+    }
+  ]
+}

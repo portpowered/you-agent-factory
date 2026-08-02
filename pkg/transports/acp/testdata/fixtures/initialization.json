@@ -1,0 +1,44 @@
+{
+  "cases": [
+    {
+      "name": "initialize/supported version negotiates the honest P0 profile",
+      "role": "initialize",
+      "direction": "inbound",
+      "classification": "accepted",
+      "input": {
+        "protocolVersion": 1,
+        "clientCapabilities": {
+          "fs": {"readTextFile": true, "writeTextFile": true},
+          "terminal": true
+        }
+      },
+      "expected": {
+        "protocolVersion": 1,
+        "authMethods": [],
+        "agentCapabilities": {
+          "auth": {},
+          "loadSession": true,
+          "mcpCapabilities": {},
+          "promptCapabilities": {},
+          "sessionCapabilities": {"close": {}, "resume": {}}
+        }
+      }
+    },
+    {
+      "name": "initialize/unsupported version is rejected before capability negotiation",
+      "role": "initialize",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {"protocolVersion": 999},
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {
+          "reason": "unsupported_protocol_version",
+          "requestedVersion": 999,
+          "supportedVersion": 1
+        }
+      }
+    }
+  ]
+}

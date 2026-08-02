@@ -1,0 +1,110 @@
+{
+  "cases": [
+    {
+      "name": "session/update accepts a user message chunk",
+      "role": "session/update",
+      "direction": "outbound",
+      "classification": "accepted",
+      "input": {
+        "sessionUpdate": "user_message_chunk",
+        "content": {"type": "text", "text": "hello"},
+        "messageId": "msg_synthetic_0001"
+      },
+      "expected": {
+        "Kind": "user_message_chunk",
+        "Content": {"Text": "hello"},
+        "MessageID": "msg_synthetic_0001"
+      }
+    },
+    {
+      "name": "session/update accepts an agent message chunk",
+      "role": "session/update",
+      "direction": "outbound",
+      "classification": "accepted",
+      "input": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": {"type": "text", "text": "working on it"}
+      },
+      "expected": {
+        "Kind": "agent_message_chunk",
+        "Content": {"Text": "working on it"},
+        "MessageID": ""
+      }
+    },
+    {
+      "name": "session/update accepts an agent thought chunk",
+      "role": "session/update",
+      "direction": "outbound",
+      "classification": "accepted",
+      "input": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {"type": "text", "text": "considering options"}
+      },
+      "expected": {
+        "Kind": "agent_thought_chunk",
+        "Content": {"Text": "considering options"},
+        "MessageID": ""
+      }
+    },
+    {
+      "name": "session/update accepts a usage update as a bare marker",
+      "role": "session/update",
+      "direction": "outbound",
+      "classification": "accepted",
+      "input": {"sessionUpdate": "usage_update", "size": 4096, "used": 512},
+      "expected": {"Kind": "usage_update", "Content": null, "MessageID": ""}
+    },
+    {
+      "name": "session/update accepts a session info update as a bare marker",
+      "role": "session/update",
+      "direction": "outbound",
+      "classification": "accepted",
+      "input": {"sessionUpdate": "session_info_update", "title": "Renamed session"},
+      "expected": {"Kind": "session_info_update", "Content": null, "MessageID": ""}
+    },
+    {
+      "name": "session/update accepts a config option update as a bare marker",
+      "role": "session/update",
+      "direction": "outbound",
+      "classification": "accepted",
+      "input": {"sessionUpdate": "config_option_update", "configOptions": []},
+      "expected": {"Kind": "config_option_update", "Content": null, "MessageID": ""}
+    },
+    {
+      "name": "session/update rejects a tool call as a declared no-output scope cut",
+      "role": "session/update",
+      "direction": "outbound",
+      "classification": "rejected",
+      "input": {"sessionUpdate": "tool_call", "toolCallId": "tool_synthetic_0001", "title": "Synthetic tool"},
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "unsupported_update"}
+      }
+    },
+    {
+      "name": "session/update rejects a plan as a declared no-output scope cut",
+      "role": "session/update",
+      "direction": "outbound",
+      "classification": "rejected",
+      "input": {"sessionUpdate": "plan", "entries": []},
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "unsupported_update"}
+      }
+    },
+    {
+      "name": "session/update rejects a current mode update as a declared no-output scope cut",
+      "role": "session/update",
+      "direction": "outbound",
+      "classification": "rejected",
+      "input": {"sessionUpdate": "current_mode_update", "currentModeId": "synthetic-mode"},
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "unsupported_update"}
+      }
+    }
+  ]
+}

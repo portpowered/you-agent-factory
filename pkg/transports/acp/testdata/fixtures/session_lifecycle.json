@@ -1,0 +1,119 @@
+{
+  "cases": [
+    {
+      "name": "session/new accepts an absolute cwd with additional directories",
+      "role": "session/new",
+      "direction": "inbound",
+      "classification": "accepted",
+      "input": {
+        "cwd": "/workspace/example-factory",
+        "additionalDirectories": ["/workspace/example-factory/vendor"]
+      },
+      "expected": {
+        "Cwd": "/workspace/example-factory",
+        "AdditionalDirectories": ["/workspace/example-factory/vendor"]
+      }
+    },
+    {
+      "name": "session/new rejects a client-supplied MCP server",
+      "role": "session/new",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {
+        "cwd": "/workspace/example-factory",
+        "mcpServers": [{"type": "stdio", "name": "synthetic-mcp", "command": "synthetic-mcp-server", "args": [], "env": []}]
+      },
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
+      }
+    },
+    {
+      "name": "session/new rejects a relative cwd",
+      "role": "session/new",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {"cwd": "relative/path"},
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
+      }
+    },
+    {
+      "name": "session/load accepts a synthetic session id and absolute cwd",
+      "role": "session/load",
+      "direction": "inbound",
+      "classification": "accepted",
+      "input": {
+        "sessionId": "sess_synthetic_0001",
+        "cwd": "/workspace/example-factory"
+      },
+      "expected": {
+        "SessionID": "sess_synthetic_0001",
+        "Cwd": "/workspace/example-factory",
+        "AdditionalDirectories": null
+      }
+    },
+    {
+      "name": "session/load rejects a missing session id",
+      "role": "session/load",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {"cwd": "/workspace/example-factory"},
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
+      }
+    },
+    {
+      "name": "session/resume accepts a synthetic session id and absolute cwd",
+      "role": "session/resume",
+      "direction": "inbound",
+      "classification": "accepted",
+      "input": {
+        "sessionId": "sess_synthetic_0002",
+        "cwd": "/workspace/example-factory"
+      },
+      "expected": {
+        "SessionID": "sess_synthetic_0002",
+        "Cwd": "/workspace/example-factory",
+        "AdditionalDirectories": null
+      }
+    },
+    {
+      "name": "session/resume rejects a missing cwd",
+      "role": "session/resume",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {"sessionId": "sess_synthetic_0002"},
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
+      }
+    },
+    {
+      "name": "session/cancel accepts a synthetic session id",
+      "role": "session/cancel",
+      "direction": "inbound",
+      "classification": "accepted",
+      "input": {"sessionId": "sess_synthetic_0003"},
+      "expected": {"SessionID": "sess_synthetic_0003"}
+    },
+    {
+      "name": "session/cancel rejects a missing session id",
+      "role": "session/cancel",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {},
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
+      }
+    }
+  ]
+}

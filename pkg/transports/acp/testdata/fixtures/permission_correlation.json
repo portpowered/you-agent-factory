@@ -1,0 +1,55 @@
+{
+  "cases": [
+    {
+      "name": "session/request_permission correlates session, tool call, and option ids",
+      "role": "session/request_permission",
+      "direction": "outbound",
+      "classification": "accepted",
+      "input": {
+        "sessionId": "sess_synthetic_0001",
+        "toolCall": {"toolCallId": "tool_synthetic_0001"},
+        "options": [
+          {"optionId": "allow_once", "kind": "allow_once", "name": "Allow once"},
+          {"optionId": "reject_once", "kind": "reject_once", "name": "Reject once"}
+        ]
+      },
+      "expected": {
+        "SessionID": "sess_synthetic_0001",
+        "ToolCallID": "tool_synthetic_0001",
+        "OptionIDs": ["allow_once", "reject_once"]
+      }
+    },
+    {
+      "name": "session/request_permission rejects an empty options list",
+      "role": "session/request_permission",
+      "direction": "outbound",
+      "classification": "rejected",
+      "input": {
+        "sessionId": "sess_synthetic_0001",
+        "toolCall": {"toolCallId": "tool_synthetic_0001"},
+        "options": []
+      },
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
+      }
+    },
+    {
+      "name": "session/request_permission rejects a missing tool call id",
+      "role": "session/request_permission",
+      "direction": "outbound",
+      "classification": "rejected",
+      "input": {
+        "sessionId": "sess_synthetic_0001",
+        "toolCall": {},
+        "options": [{"optionId": "allow_once", "kind": "allow_once", "name": "Allow once"}]
+      },
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
+      }
+    }
+  ]
+}
