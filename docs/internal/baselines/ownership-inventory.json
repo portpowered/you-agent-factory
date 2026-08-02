@@ -1453,6 +1453,12 @@
     },
     {
       "fromOwner": "operator_settings",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "evidence": "pkg/services/operator_settings/internal/service -\u003e pkg/platform/logging"
+    },
+    {
+      "fromOwner": "operator_settings",
       "toOwner": "providers",
       "class": "command",
       "evidence": "pkg/services/operator_settings -\u003e pkg/services/providers"

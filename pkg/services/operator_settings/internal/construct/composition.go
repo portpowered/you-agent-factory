@@ -39,5 +39,6 @@ func newServiceRoot(
 		decoder,
 		encoder,
 		idGenerator,
+		nil,
 	)
 }
