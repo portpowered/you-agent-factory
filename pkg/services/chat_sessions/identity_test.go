@@ -100,6 +100,40 @@ func TestRequestIdentityValidate(t *testing.T) {
 			wantErr:    true,
 			wantReason: RequestIdentityInvalidJSONRPCIDKind,
 		},
+		{
+			name:       "opaque id with stray unselected json-rpc string field is invalid",
+			identity:   RequestIdentity{OpaqueID: "opaque-1", JSONRPCIDString: "wire"},
+			wantErr:    true,
+			wantReason: RequestIdentityInvalidStrayField,
+		},
+		{
+			name:       "opaque id with stray unselected json-rpc number field is invalid",
+			identity:   RequestIdentity{OpaqueID: "opaque-1", JSONRPCIDNumber: 7},
+			wantErr:    true,
+			wantReason: RequestIdentityInvalidStrayField,
+		},
+		{
+			name: "numeric json-rpc id with stray string field is invalid",
+			identity: RequestIdentity{
+				ConnectionID:    "conn-1",
+				JSONRPCIDKind:   JSONRPCIDKindNumber,
+				JSONRPCIDNumber: 1,
+				JSONRPCIDString: "stray",
+			},
+			wantErr:    true,
+			wantReason: RequestIdentityInvalidStrayField,
+		},
+		{
+			name: "string json-rpc id with stray number field is invalid",
+			identity: RequestIdentity{
+				ConnectionID:    "conn-1",
+				JSONRPCIDKind:   JSONRPCIDKindString,
+				JSONRPCIDString: "1",
+				JSONRPCIDNumber: 7,
+			},
+			wantErr:    true,
+			wantReason: RequestIdentityInvalidStrayField,
+		},
 	}
 
 	for _, test := range tests {

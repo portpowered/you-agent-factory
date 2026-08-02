@@ -22,6 +22,13 @@ const (
 	// RequestIdentityInvalidJSONRPCIDKind reports a JSONRPCIDKind outside the
 	// declared JSONRPCIDKindString/JSONRPCIDKindNumber value set.
 	RequestIdentityInvalidJSONRPCIDKind RequestIdentityInvalidReason = "INVALID_JSONRPC_ID_KIND"
+	// RequestIdentityInvalidStrayField reports a populated identity field that
+	// is not part of the active identity shape: an OpaqueID, JSONRPCIDString,
+	// or JSONRPCIDNumber value left set even though the selected mode or
+	// JSONRPCIDKind does not use it. Left unrejected, a stray field would
+	// either be silently ignored or make two identities that should compare
+	// equal under their active shape compare unequal.
+	RequestIdentityInvalidStrayField RequestIdentityInvalidReason = "STRAY_FIELD"
 )
 
 // InvalidRequestIdentityError reports a RequestIdentity that matches neither

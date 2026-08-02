@@ -223,4 +223,40 @@ func TestOpenNextTargetEpisode(t *testing.T) {
 			t.Fatalf("error = %v (%T), want *InvalidChatTargetRefError", err, err)
 		}
 	})
+
+	t.Run("zero prior state is invalid state not not-closed", func(t *testing.T) {
+		t.Parallel()
+
+		zero := TargetEpisode{Number: 1, Target: original}
+		_, err := OpenNextTargetEpisode(zero, nextTarget, "factory-session-2", nextStarted)
+		if err == nil {
+			t.Fatalf("OpenNextTargetEpisode() error = nil, want error")
+		}
+		var invalid *InvalidTargetEpisodeStateError
+		if !errors.As(err, &invalid) {
+			t.Fatalf("error = %v (%T), want *InvalidTargetEpisodeStateError", err, err)
+		}
+		var notClosed *TargetEpisodeNotClosedError
+		if errors.As(err, &notClosed) {
+			t.Fatalf("error = %v (%T), zero prior state must not classify as *TargetEpisodeNotClosedError", err, err)
+		}
+	})
+
+	t.Run("unknown prior state is invalid state not not-closed", func(t *testing.T) {
+		t.Parallel()
+
+		unknown := TargetEpisode{Number: 1, State: TargetEpisodeState("PENDING"), Target: original}
+		_, err := OpenNextTargetEpisode(unknown, nextTarget, "factory-session-2", nextStarted)
+		if err == nil {
+			t.Fatalf("OpenNextTargetEpisode() error = nil, want error")
+		}
+		var invalid *InvalidTargetEpisodeStateError
+		if !errors.As(err, &invalid) {
+			t.Fatalf("error = %v (%T), want *InvalidTargetEpisodeStateError", err, err)
+		}
+		var notClosed *TargetEpisodeNotClosedError
+		if errors.As(err, &notClosed) {
+			t.Fatalf("error = %v (%T), unknown prior state must not classify as *TargetEpisodeNotClosedError", err, err)
+		}
+	})
 }

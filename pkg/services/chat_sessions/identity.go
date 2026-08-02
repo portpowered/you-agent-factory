@@ -55,12 +55,32 @@ func (identity RequestIdentity) hasJSONRPCID() bool {
 }
 
 // Validate reports whether identity matches exactly one legal identity mode.
-// Bare JSON-RPC ids, bare connection ids, mixed identity modes, an
-// unrecognized JSONRPCIDKind, and empty identities are rejected. The
-// returned error never carries the supplied identity values.
+// Bare JSON-RPC ids, bare connection ids, mixed identity modes, a populated
+// field outside the active identity shape (a stray OpaqueID alongside a
+// connection-qualified id, or a stray JSONRPCIDString/JSONRPCIDNumber that
+// does not match the selected JSONRPCIDKind), an unrecognized JSONRPCIDKind,
+// and empty identities are rejected. The returned error never carries the
+// supplied identity values.
 func (identity RequestIdentity) Validate() error {
 	if identity.JSONRPCIDKind != "" && identity.JSONRPCIDKind != JSONRPCIDKindString && identity.JSONRPCIDKind != JSONRPCIDKindNumber {
 		return &InvalidRequestIdentityError{Reason: RequestIdentityInvalidJSONRPCIDKind}
+	}
+
+	stringPopulated := strings.TrimSpace(identity.JSONRPCIDString) != ""
+	numberPopulated := identity.JSONRPCIDNumber != 0
+	switch identity.JSONRPCIDKind {
+	case JSONRPCIDKindString:
+		if numberPopulated {
+			return &InvalidRequestIdentityError{Reason: RequestIdentityInvalidStrayField}
+		}
+	case JSONRPCIDKindNumber:
+		if stringPopulated {
+			return &InvalidRequestIdentityError{Reason: RequestIdentityInvalidStrayField}
+		}
+	default:
+		if stringPopulated || numberPopulated {
+			return &InvalidRequestIdentityError{Reason: RequestIdentityInvalidStrayField}
+		}
 	}
 
 	hasConnection := strings.TrimSpace(identity.ConnectionID) != ""

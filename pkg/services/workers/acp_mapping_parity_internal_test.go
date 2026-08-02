@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	workstationdraftvalidation "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/draftvalidation"
 )
 
 // This file is contract-test-only evidence, deliberately not part of the
@@ -16,6 +18,42 @@ import (
 // by other packages -- it exists only to prove, at test time, that the
 // existing Kind/Phase vocabulary this story hardens has an exhaustively
 // declared future ACP mapping outcome for every legal pair.
+//
+// legalPairs is sourced directly from the internal draftvalidation package's
+// exported KnownKinds()/AllowedPhases() (not a workers-root wrapper): those
+// two functions have no production caller anywhere in the repository, so
+// publishing them as workers.KnownKinds()/workers.AllowedPhasesForKind()
+// would be speculative production API that exists only to support this test.
+// Importing workstationdraftvalidation directly here keeps that inventory
+// test-only while still reusing the single existing allow-list rather than
+// re-deriving it.
+
+// knownKindsFromInternal returns every declared response draft Kind exactly
+// as workstationdraftvalidation.KnownKinds() declares them, converted to the
+// workers-root Kind type.
+func knownKindsFromInternal() []Kind {
+	internalKinds := workstationdraftvalidation.KnownKinds()
+	out := make([]Kind, len(internalKinds))
+	for i, kind := range internalKinds {
+		out[i] = Kind(kind)
+	}
+	return out
+}
+
+// allowedPhasesForKind returns the declared legal phases for kind and whether
+// kind is a declared response draft kind, converted from
+// workstationdraftvalidation.AllowedPhases().
+func allowedPhasesForKind(kind Kind) ([]Phase, bool) {
+	internalPhases, ok := workstationdraftvalidation.AllowedPhases(workstationdraftvalidation.Kind(kind))
+	if !ok {
+		return nil, false
+	}
+	out := make([]Phase, len(internalPhases))
+	for i, phase := range internalPhases {
+		out[i] = Phase(phase)
+	}
+	return out, true
+}
 
 // acpMappingOutcome names the declared future ACP session-update projection
 // outcome for one (Kind, Phase) response draft pair. This test declares the
@@ -164,16 +202,16 @@ func (d workerDraftACPMappingParityDrift) Error() string {
 }
 
 // legalWorkerDraftACPMappingPairs expands declaredDraftKinds (the
-// independently authored inventory, not KnownKinds()) across every phase
-// AllowedPhasesForKind declares legal for that kind.
+// independently authored inventory, not knownKindsFromInternal()) across
+// every phase allowedPhasesForKind declares legal for that kind.
 func legalWorkerDraftACPMappingPairs(t *testing.T) []workerDraftACPMappingPair {
 	t.Helper()
 
 	var pairs []workerDraftACPMappingPair
 	for _, kind := range declaredDraftKinds {
-		phases, ok := AllowedPhasesForKind(kind)
+		phases, ok := allowedPhasesForKind(kind)
 		if !ok {
-			t.Fatalf("AllowedPhasesForKind(%q) reported kind unknown for a declaredDraftKinds entry", kind)
+			t.Fatalf("allowedPhasesForKind(%q) reported kind unknown for a declaredDraftKinds entry", kind)
 		}
 		for _, phase := range phases {
 			pairs = append(pairs, workerDraftACPMappingPair{Kind: kind, Phase: phase})
@@ -231,12 +269,56 @@ func compareWorkerDraftACPMappingParity(input workerDraftACPMappingParityInput) 
 	return workerDraftACPMappingParityDrift{UndeclaredPairs: undeclared}
 }
 
+// TestKnownKindsFromInternalMatchesDeclaredKindSet proves
+// knownKindsFromInternal() returns exactly the twelve declared response
+// draft kinds, each individually valid.
+func TestKnownKindsFromInternalMatchesDeclaredKindSet(t *testing.T) {
+	t.Parallel()
+
+	kinds := knownKindsFromInternal()
+	if len(kinds) != 12 {
+		t.Fatalf("knownKindsFromInternal() returned %d kinds, want 12", len(kinds))
+	}
+	for _, kind := range kinds {
+		if err := kind.Validate(); err != nil {
+			t.Fatalf("knownKindsFromInternal() returned %q which fails Validate(): %v", kind, err)
+		}
+	}
+}
+
+// TestAllowedPhasesForKindInternalReportsUnknownKind proves
+// allowedPhasesForKind() reports an unknown kind and returns a non-empty,
+// individually valid phase set for every declared kind.
+func TestAllowedPhasesForKindInternalReportsUnknownKind(t *testing.T) {
+	t.Parallel()
+
+	if _, ok := allowedPhasesForKind("NOT_A_KIND"); ok {
+		t.Fatalf("allowedPhasesForKind(unknown) ok = true, want false")
+	}
+
+	for _, kind := range knownKindsFromInternal() {
+		phases, ok := allowedPhasesForKind(kind)
+		if !ok {
+			t.Fatalf("allowedPhasesForKind(%q) ok = false, want true", kind)
+		}
+		if len(phases) == 0 {
+			t.Fatalf("allowedPhasesForKind(%q) returned no phases", kind)
+		}
+		for _, phase := range phases {
+			if err := phase.Validate(); err != nil {
+				t.Fatalf("allowedPhasesForKind(%q) returned invalid phase %q: %v", kind, phase, err)
+			}
+		}
+	}
+}
+
 // TestDeclaredDraftKindsMatchesKnownKinds proves the independently
-// hand-authored declaredDraftKinds inventory and the production
-// KnownKinds()/draftvalidation allow-list agree on the exact same Kind set.
-// If a Kind is ever added to one and not the other, this test -- not the ACP
-// mapping parity check -- is what catches it, so the mapping check below can
-// safely trust declaredDraftKinds as authoritative.
+// hand-authored declaredDraftKinds inventory and the internal
+// draftvalidation allow-list (via knownKindsFromInternal()) agree on the
+// exact same Kind set. If a Kind is ever added to one and not the other,
+// this test -- not the ACP mapping parity check -- is what catches it, so
+// the mapping check below can safely trust declaredDraftKinds as
+// authoritative.
 func TestDeclaredDraftKindsMatchesKnownKinds(t *testing.T) {
 	t.Parallel()
 
@@ -249,18 +331,18 @@ func TestDeclaredDraftKindsMatchesKnownKinds(t *testing.T) {
 	}
 
 	got := make(map[Kind]struct{})
-	for _, kind := range KnownKinds() {
+	for _, kind := range knownKindsFromInternal() {
 		got[kind] = struct{}{}
 	}
 
 	for kind := range want {
 		if _, ok := got[kind]; !ok {
-			t.Errorf("declaredDraftKinds contains %q but KnownKinds() does not", kind)
+			t.Errorf("declaredDraftKinds contains %q but knownKindsFromInternal() does not", kind)
 		}
 	}
 	for kind := range got {
 		if _, ok := want[kind]; !ok {
-			t.Errorf("KnownKinds() contains %q but declaredDraftKinds does not", kind)
+			t.Errorf("knownKindsFromInternal() contains %q but declaredDraftKinds does not", kind)
 		}
 	}
 }
@@ -304,9 +386,9 @@ func TestCompareWorkerDraftACPMappingParityDetectsAnUndeclaredPair(t *testing.T)
 		t.Fatalf("compareWorkerDraftACPMappingParity() UndeclaredPairs is empty, want drift for every legal TOOL phase")
 	}
 
-	toolPhases, ok := AllowedPhasesForKind(KindTool)
+	toolPhases, ok := allowedPhasesForKind(KindTool)
 	if !ok || len(toolPhases) == 0 {
-		t.Fatalf("AllowedPhasesForKind(KindTool) returned no phases")
+		t.Fatalf("allowedPhasesForKind(KindTool) returned no phases")
 	}
 	gotToolPairs := 0
 	for _, pair := range drift.UndeclaredPairs {

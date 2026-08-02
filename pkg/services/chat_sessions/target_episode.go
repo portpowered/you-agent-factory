@@ -80,6 +80,9 @@ func CloseTargetEpisode(ep TargetEpisode, closedAt time.Time) (TargetEpisode, er
 // Number is exactly prior.Number+1; prior is never mutated and its Target is
 // never rewritten.
 func OpenNextTargetEpisode(prior TargetEpisode, target ChatTargetRef, factorySessionID string, startedAt time.Time) (TargetEpisode, error) {
+	if err := prior.State.Validate(); err != nil {
+		return TargetEpisode{}, err
+	}
 	if prior.State != TargetEpisodeStateClosed {
 		return TargetEpisode{}, &TargetEpisodeNotClosedError{Number: prior.Number, State: prior.State}
 	}
