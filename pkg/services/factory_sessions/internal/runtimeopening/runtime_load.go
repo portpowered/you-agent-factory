@@ -33,7 +33,7 @@ func LoadRuntime(
 	root RuntimeRoot,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
-	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	decodeReplayConfig ReplayRuntimeConfigDecoder,
 	loadReplay recording.ReplayArtifactLoader,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	newSessionLogger factoryruntime.SessionLoggerFactory,
@@ -136,7 +136,7 @@ func loadRuntimeConfig(
 	workstationLoader factorydefinitions.WorkstationLoader,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
-	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	decodeReplayConfig ReplayRuntimeConfigDecoder,
 	loadReplay recording.ReplayArtifactLoader,
 ) (factorydefinitions.MutableLoadedFactorySource, *factorydefinitions.ReplayArtifact, error) {
 	if replayPath == "" {

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	legacyinvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
@@ -50,8 +49,7 @@ func TestWorkRequestBoundary_InvocationSubmitConstructsDetachedWorkRequest(t *te
 		nil,
 		nil,
 		nil,
-		factorydefinitionfixtures.InvocationInterpolation{},
-		staticInvocationWorkType("task"),
+		definitionResolverForTest("task"),
 		func(string) ([]byte, error) { return nil, nil },
 		newRecordingInvocationWorkService(),
 	)
@@ -93,8 +91,7 @@ func TestWorkRequestBoundary_InvocationSubmitRejectsTypedAdmissionFailure(t *tes
 		nil,
 		nil,
 		nil,
-		factorydefinitionfixtures.InvocationInterpolation{},
-		staticInvocationWorkType("task"),
+		definitionResolverForTest("task"),
 		func(string) ([]byte, error) { return nil, nil },
 		newRecordingInvocationWorkService(),
 	)
@@ -109,5 +106,21 @@ func TestWorkRequestBoundary_InvocationSubmitRejectsTypedAdmissionFailure(t *tes
 	}
 	if !errors.Is(err, work.ErrInvalidWorkRequest) {
 		t.Fatalf("InvokeFactorySession error = %v, want ErrInvalidWorkRequest", err)
+	}
+}
+
+func definitionResolverForTest(defaultWorkType string) legacyinvocation.DefinitionResolver {
+	return func(
+		_ context.Context,
+		_ string,
+		cfg *factorydefinitions.FactoryConfig,
+		_ *work.InvocationArguments,
+		_ map[string][]byte,
+	) (factorydefinitions.ResolveInvocationDefinitionResult, error) {
+		result := factorydefinitions.ResolveInvocationDefinitionResult{DefaultWorkType: defaultWorkType}
+		if cfg != nil {
+			result.Factory = *cfg
+		}
+		return result, nil
 	}
 }

@@ -53,12 +53,12 @@ type Factory struct {
 	workService                      work.Service
 	providerSessions                 providersessions.Service
 	factoryDefinitionValidator       factorydefinitions.Validator
-	namedPaths                       factorydefinitions.NamedPathResolver
+	namedPaths                       roles.NamedPathResolver
 	factoryWorkflows                 factoryruntime.JavaScriptWorkflowDefinitions
 	workflowPreview                  factoryruntime.WorkflowPreviewOperation
 	loadFactory                      factorydefinitions.LoadedFactoryLoader
 	newLoadedFactory                 factorydefinitions.LoadedFactorySourceFactory
-	decodeReplayConfig               factorydefinitions.ReplayRuntimeConfigDecoder
+	decodeReplayConfig               ReplayRuntimeConfigDecoder
 	loadReplay                       recordings.ReplayArtifactLoader
 	captureLoadedFactorySnapshot     factorydefinitions.LoadedFactorySnapshotCapturer
 	resolveClock                     factoryruntime.ClockResolver
@@ -80,7 +80,7 @@ func NewFactory(
 	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	factoryDefinitionValidator factorydefinitions.Validator,
-	namedPaths factorydefinitions.NamedPathResolver,
+	namedPaths roles.NamedPathResolver,
 	durableExecutionFactory DurableExecutionFactory,
 	workerExecutionFactory WorkerExecutionFactory,
 	modelService models.Service,
@@ -107,7 +107,7 @@ func NewFactory(
 	workService work.Service,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
-	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	decodeReplayConfig ReplayRuntimeConfigDecoder,
 	loadReplay recordings.ReplayArtifactLoader,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	resolveClock factoryruntime.ClockResolver,

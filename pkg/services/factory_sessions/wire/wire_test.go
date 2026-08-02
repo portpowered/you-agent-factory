@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
@@ -204,15 +203,15 @@ func (resultProjector) ProjectSessionResults(factoryruntime.SessionResultInput) 
 type newServiceInputs struct {
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
 	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
-	interpolation                factorydefinitions.InvocationInterpolationService
-	invocationWorkTypes          factorydefinitions.InvocationWorkTypeService
-	ttsObservability             factorydefinitions.TTSObservabilityService
+	interpolation                any
+	invocationWorkTypes          any
+	ttsObservability             any
 	eventIDs                     factorysessions.ResponseEventIDGenerator
 	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits
 	sessionIDs                   factorysessions.SessionIDGenerator
 	resolveHome                  factorysessions.HomeDirectoryResolver
 	directoryInspection          DirectoryInspection
-	namedPaths                   factorydefinitions.NamedPathResolver
+	namedPaths                   NamedPathResolver
 	invocationInputFiles         fileeffects.InvocationInputReader
 	initialWorkFiles             fileeffects.InitialWorkReader
 	resolveSymlinks              factorysessions.LogicalTargetResolveSymlinks
@@ -272,9 +271,6 @@ func (d *recordingDirectoryInspection) ReadDir(string) ([]fs.DirEntry, error) {
 
 type namedPathResolver struct{}
 
-func (namedPathResolver) ResolveCandidatePaths(string, string, string) (factorydefinitions.NamedFactoryCandidatePaths, error) {
-	return factorydefinitions.NamedFactoryCandidatePaths{}, nil
-}
 func (namedPathResolver) ResolveExistingDir(string, string) (string, error) { return "", nil }
 func (namedPathResolver) RequireDefinitionDir(string) error                 { return nil }
 func (namedPathResolver) ResolveCurrentDir(string) (string, error)          { return "", nil }

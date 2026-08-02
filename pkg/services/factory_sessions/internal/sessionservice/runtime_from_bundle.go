@@ -43,7 +43,7 @@ func NewSessionRuntime(
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directoryInspection roles.DirectoryInspection,
-	namedPaths interfaces.NamedPathResolver,
+	namedPaths roles.NamedPathResolver,
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,
 ) *SessionRuntime {

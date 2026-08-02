@@ -106,6 +106,16 @@ type StartResult struct {
 type Service interface {
 	ExecutionService
 	ForRuntime(OpeningBindingRequest) (Service, error)
+	// ReadCurrentFactoryForSession reads detached editable definition facts for
+	// one live session. Sessions owns runtime selection, version lookup, and
+	// all current-Factory lifecycle policy.
+	ReadCurrentFactoryForSession(context.Context, string) (factorydefinitions.EditableFactory, error)
+	// SaveFactoryForSession owns optimistic concurrency, persistence rollback,
+	// idle checks, and activation for one session-scoped definition save.
+	SaveFactoryForSession(context.Context, string, factorydefinitions.SaveMode, factorydefinitions.EditableFactory) (factorydefinitions.EditableFactory, error)
+	// ActivateFactory resolves a persisted named definition through the unary
+	// Definitions root and swaps it only after the addressed runtime is idle.
+	ActivateFactory(context.Context, string) error
 	// Start is the root start adapter. It selects the existing live or durable
 	// start path from the request mode while keeping the caller on the singular
 	// Sessions authority.

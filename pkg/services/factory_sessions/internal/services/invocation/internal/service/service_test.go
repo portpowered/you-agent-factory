@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	legacyinvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
@@ -25,8 +24,7 @@ func TestNewRejectsMissingRequiredDependencies(t *testing.T) {
 		{name: "Factory config", drop: func(deps *invocationservice.Dependencies) { deps.FactoryConfig = nil }, want: "Factory config reader"},
 		{name: "Work submitter", drop: func(deps *invocationservice.Dependencies) { deps.SubmitWork = nil }, want: "Work submitter"},
 		{name: "result observer", drop: func(deps *invocationservice.Dependencies) { deps.Observe = nil }, want: "result observer"},
-		{name: "interpolation", drop: func(deps *invocationservice.Dependencies) { deps.Interpolation = nil }, want: "interpolation service"},
-		{name: "Work Type", drop: func(deps *invocationservice.Dependencies) { deps.WorkTypes = nil }, want: "Work Type service"},
+		{name: "Definitions resolver", drop: func(deps *invocationservice.Dependencies) { deps.ResolveDefinition = nil }, want: "Definitions resolver"},
 		{name: "input reader", drop: func(deps *invocationservice.Dependencies) { deps.InputFiles = nil }, want: "input file reader"},
 		{name: "Work service", drop: func(deps *invocationservice.Dependencies) { deps.Work = nil }, want: "Work service"},
 	}
@@ -233,20 +231,25 @@ func validDependencies(calls *int) invocationservice.Dependencies {
 			count()
 			return completedObservation("request-1", "trace-1", "done"), nil
 		},
-		Interpolation: factorydefinitionfixtures.InvocationInterpolation{},
-		WorkTypes:     staticWorkType("task"),
+		ResolveDefinition: func(
+			_ context.Context,
+			_ string,
+			cfg *factorydefinitions.FactoryConfig,
+			_ *work.InvocationArguments,
+			_ map[string][]byte,
+		) (factorydefinitions.ResolveInvocationDefinitionResult, error) {
+			result := factorydefinitions.ResolveInvocationDefinitionResult{DefaultWorkType: "task"}
+			if cfg != nil {
+				result.Factory = *cfg
+			}
+			return result, nil
+		},
 		InputFiles: func(string) ([]byte, error) {
 			count()
 			return nil, nil
 		},
 		Work: work.NewInvocationPolicyService(),
 	}
-}
-
-type staticWorkType string
-
-func (workType staticWorkType) DefaultWorkType(*factorydefinitions.FactoryConfig) (string, error) {
-	return string(workType), nil
 }
 
 func completedObservation(requestID, traceID, text string) legacyinvocation.SessionInvocationObservation {

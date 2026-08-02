@@ -107,8 +107,8 @@ type AutomationHostedSourcesFactory = automations.HostedSourcesFactory
 type WorkersLocalRuntimeHooksFactory = func() workers.LocalRuntimeHooks
 
 type FactoryDefinitionsFactory = func(
-	factorysessions.DefinitionHost,
-	factorydefinitions.DefinitionActivationGateway,
+	any,
+	any,
 	factorydefinitions.Validator,
 ) factorydefinitions.Service
 

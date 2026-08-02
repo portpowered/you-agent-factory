@@ -118,6 +118,18 @@ func (fake *httpSessionsRootFake) ActivateNamedFactory(context.Context, string) 
 	return factorysessions.ErrSessionNotFound
 }
 
+func (fake *httpSessionsRootFake) ActivateFactory(context.Context, string) error {
+	return factorysessions.ErrSessionNotFound
+}
+
+func (fake *httpSessionsRootFake) ReadCurrentFactoryForSession(context.Context, string) (factorydefinitions.EditableFactory, error) {
+	return factorydefinitions.EditableFactory{}, factorysessions.ErrSessionNotFound
+}
+
+func (fake *httpSessionsRootFake) SaveFactoryForSession(context.Context, string, factorydefinitions.SaveMode, factorydefinitions.EditableFactory) (factorydefinitions.EditableFactory, error) {
+	return factorydefinitions.EditableFactory{}, factorysessions.ErrSessionNotFound
+}
+
 func (fake *httpSessionsRootFake) ListFactorySessions(ctx context.Context) ([]factorysessions.ReadProjection, error) {
 	if fake.listReads == nil {
 		return nil, nil

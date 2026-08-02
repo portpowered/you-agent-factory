@@ -85,6 +85,16 @@ type RuntimeReader interface {
 
 type DirectoryInspection = factorysessions.DirectoryInspection
 
+// NamedPathResolver is the Sessions-owned path capability needed while a
+// Factory Session selects and activates a persisted named Factory. The
+// implementation is supplied by composition; Definitions policy stays behind
+// the unary Definitions root.
+type NamedPathResolver interface {
+	ResolveExistingDir(string, string) (string, error)
+	ResolveCurrentDir(string) (string, error)
+	WriteCurrentPointer(string, string) error
+}
+
 type CursorPersistenceFileSystem = factorysessions.CursorPersistenceFileSystem
 
 type CursorPersistenceTemporaryFile = factorysessions.CursorPersistenceTemporaryFile
@@ -292,5 +302,5 @@ type RuntimeAssembly interface {
 		reconnectCursorValidator factorysessions.ReconnectCursorValidator,
 		worldStateProjector factoryruntime.WorldStateProjector,
 		invocationMetricsRecorder InvocationMetricsRecorder,
-	) (ApplicationRuntime, factorysessions.Service, SessionInvoker, factorydefinitions.SessionHost, error)
+	) (ApplicationRuntime, factorysessions.Service, SessionInvoker, any, error)
 }

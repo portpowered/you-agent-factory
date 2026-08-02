@@ -13,14 +13,22 @@ type definitionActivationGateway struct {
 	runtime *SessionRuntime
 }
 
-// NewDefinitionActivationGateway publishes the narrow Sessions-root activation
-// edge for definition save/activate/swap without the attach-capable SessionHost
-// bundle.
+// NewDefinitionActivationGateway is retained only for the serialized
+// construction bridge. Current-Factory operations use the private concrete
+// coordinator returned by activationCoordinator instead of publishing this
+// capability to Definitions.
 func NewDefinitionActivationGateway(runtime *SessionRuntime) factorysessions.DefinitionActivationGateway {
 	if runtime == nil {
 		return nil
 	}
 	return definitionActivationGateway{runtime: runtime}
+}
+
+func (fs *SessionRuntime) activationCoordinator() *definitionActivationGateway {
+	if fs == nil {
+		return nil
+	}
+	return &definitionActivationGateway{runtime: fs}
 }
 
 // DefinitionActivationGateway returns the activation gateway owned by this

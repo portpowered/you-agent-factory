@@ -99,11 +99,7 @@ func DefinitionCallbacks(runtime *SessionRuntime) DefinitionHostCallbacks {
 		return runtime.editableFactoryValidator(ctx, snapshot, dependencies.WorkstationLoader())
 	}
 	dependencies.GetCurrentFactorySnapshotForSession = func(ctx context.Context, sessionID string) (*interfaces.FactorySnapshot, error) {
-		definitions := runtime.requireDefinitions()
-		if definitions == nil {
-			return nil, fmt.Errorf("factory definition service is required")
-		}
-		current, err := definitions.GetCurrentFactoryForSession(ctx, sessionID)
+		current, err := runtime.ReadCurrentFactoryForSession(ctx, sessionID)
 		if err != nil {
 			return nil, err
 		}
@@ -150,6 +146,19 @@ func DefinitionCallbacks(runtime *SessionRuntime) DefinitionHostCallbacks {
 		if err != nil {
 			return fmt.Errorf("%w: build replacement factory %q: %w", interfaces.ErrInvalidNamedFactory, name, err)
 		}
+		writeCurrent := func(rootDir, factoryName string) error {
+			if runtime.definitions != nil {
+				_, pointerErr := runtime.definitions.SetCurrentFactoryPointer(ctx, interfaces.SetCurrentFactoryPointerRequest{
+					RootDir: rootDir,
+					Name:    factoryName,
+				})
+				return pointerErr
+			}
+			if runtime.namedPaths == nil {
+				return fmt.Errorf("current Factory pointer writer is required")
+			}
+			return runtime.namedPaths.WriteCurrentPointer(rootDir, factoryName)
+		}
 		return ApplyNamedReplacement(
 			ctx,
 			sessionID,
@@ -164,10 +173,10 @@ func DefinitionCallbacks(runtime *SessionRuntime) DefinitionHostCallbacks {
 			func(rootDir, name string, replacement factory.HostedInstance) error {
 				return ActivateStartupRuntime(
 					rootDir, name, replacement, &runtime.runtimeState, runtime.syncActiveSessionDir,
-					runtime.namedPaths.WriteCurrentPointer,
+					writeCurrent,
 				)
 			},
-			runtime.namedPaths.WriteCurrentPointer,
+			writeCurrent,
 		)
 	}
 	return dependencies

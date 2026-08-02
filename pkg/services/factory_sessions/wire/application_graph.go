@@ -30,6 +30,7 @@ import (
 type (
 	ApplicationRuntime                   = roles.ApplicationRuntime
 	DirectoryInspection                  = roles.DirectoryInspection
+	NamedPathResolver                    = roles.NamedPathResolver
 	CursorPersistenceFileSystem          = roles.CursorPersistenceFileSystem
 	CursorPersistenceTemporaryFile       = roles.CursorPersistenceTemporaryFile
 	CursorPersistenceCreateTemporaryFile = roles.CursorPersistenceCreateTemporaryFile
@@ -114,6 +115,7 @@ type (
 	FactoryRuntimeAssembler                = runtimeopening.FactoryRuntimeAssembler
 	RuntimeOpeningFactory                  = runtimeopening.Factory
 	RuntimeRoot                            = runtimeopening.RuntimeRoot
+	ReplayRuntimeConfigDecoder             = runtimeopening.ReplayRuntimeConfigDecoder
 	ModelPullMetricsRecorder               = factorysessioncontracts.ModelPullMetricsRecorder
 	InvocationArtifactFileSystem           = factorysessioncontracts.InvocationArtifactFileSystem
 	InvocationArtifactExporter             = factorysessioncontracts.InvocationArtifactExporter
@@ -143,7 +145,7 @@ type RuntimeOpeningDependencies struct {
 	FactoryWorkflows                 factoryruntime.JavaScriptWorkflowDefinitions
 	WorkflowPreview                  factoryruntime.WorkflowPreviewOperation
 	FactoryDefinitionValidator       factorydefinitions.Validator
-	NamedPaths                       factorydefinitions.NamedPathResolver
+	NamedPaths                       NamedPathResolver
 	DurableExecutionFactory          DurableExecutionFactory
 	WorkerExecutionFactory           WorkerExecutionFactory
 	ModelService                     models.Service
@@ -170,7 +172,7 @@ type RuntimeOpeningDependencies struct {
 	ContentMaterializer              work.ContentMaterializer
 	LoadFactory                      factorydefinitions.LoadedFactoryLoader
 	NewLoadedFactory                 factorydefinitions.LoadedFactorySourceFactory
-	DecodeReplayConfig               factorydefinitions.ReplayRuntimeConfigDecoder
+	DecodeReplayConfig               ReplayRuntimeConfigDecoder
 	LoadReplay                       recordings.ReplayArtifactLoader
 	CaptureLoadedFactorySnapshot     factorydefinitions.LoadedFactorySnapshotCapturer
 	ResolveClock                     factoryruntime.ClockResolver

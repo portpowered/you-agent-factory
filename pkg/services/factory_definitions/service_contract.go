@@ -30,6 +30,10 @@ type Service interface {
 	ExpandFactoryLayout(context.Context, ExpandFactoryLayoutRequest) (ExpandFactoryLayoutResult, error)
 	CreateNamedFactory(context.Context, CreateNamedFactoryRequest) (CreateNamedFactoryResult, error)
 	ReplaceNamedFactory(context.Context, ReplaceNamedFactoryRequest) (ReplaceNamedFactoryResult, error)
+	// ReplaceFactoryLayoutAtDir performs an atomic replacement at an already
+	// resolved current-Factory directory. Sessions retains the returned
+	// transaction until runtime activation succeeds.
+	ReplaceFactoryLayoutAtDir(context.Context, ReplaceFactoryLayoutAtDirRequest) (ReplaceFactoryLayoutAtDirResult, error)
 
 	// Compile slice: authored/canonical source into one normalized effective source.
 	CompileEffectiveFactorySource(context.Context, CompileEffectiveFactorySourceRequest) (CompileEffectiveFactorySourceResult, error)
@@ -305,6 +309,20 @@ type ReplaceNamedFactoryRequest struct {
 type ReplaceNamedFactoryResult struct {
 	Name       string
 	FactoryDir string
+}
+
+// ReplaceFactoryLayoutAtDirRequest selects an already-resolved Factory
+// directory for an atomic layout replacement.
+type ReplaceFactoryLayoutAtDirRequest struct {
+	TargetDir string
+	Prepared  PreparedFactoryLayoutPayload
+}
+
+// ReplaceFactoryLayoutAtDirResult carries the rollback handle for an atomic
+// current-layout replacement. Sessions consumes this effect within its
+// activation transaction.
+type ReplaceFactoryLayoutAtDirResult struct {
+	Replacement *FactorySplitLayoutReplaceResult
 }
 
 // ErrInvalidAuthoredFactorySource reports that authored/canonical bytes could

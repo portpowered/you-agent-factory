@@ -133,6 +133,18 @@ func (UnimplementedService) ReplaceNamedFactory(
 	}
 }
 
+// ReplaceFactoryLayoutAtDir returns a collaborator-required failure until
+// the owner-private layout writer is wired.
+func (UnimplementedService) ReplaceFactoryLayoutAtDir(
+	context.Context,
+	ReplaceFactoryLayoutAtDirRequest,
+) (ReplaceFactoryLayoutAtDirResult, error) {
+	return ReplaceFactoryLayoutAtDirResult{}, &AtomicFactoryWriteFailure{
+		PreviousPreserved: true,
+		Cause:             fmt.Errorf("factory layout collaborator is required"),
+	}
+}
+
 // CompileEffectiveFactorySource returns ErrInvalidAuthoredFactorySource until
 // nested loading wiring lands.
 func (UnimplementedService) CompileEffectiveFactorySource(

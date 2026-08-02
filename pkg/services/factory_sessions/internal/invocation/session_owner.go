@@ -63,17 +63,28 @@ type SessionInvocationTelemetry interface {
 // SessionOwner coordinates the complete session invocation lifecycle through
 // narrow, explicit collaborators.
 type SessionOwner struct {
-	factoryConfig func(string) (*factorydefinitions.FactoryConfig, error)
-	submitWork    func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
-	observe       func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error)
-	waitNextFn    func(context.Context) error
-	telemetry     SessionInvocationTelemetry
-	specialCase   SessionInvocationSpecialCase
-	interpolation factorydefinitions.InvocationInterpolationService
-	workTypes     factorydefinitions.InvocationWorkTypeService
-	inputFiles    fileeffects.InvocationInputReader
-	workService   work.Service
+	factoryConfig     func(string) (*factorydefinitions.FactoryConfig, error)
+	submitWork        func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
+	observe           func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error)
+	waitNextFn        func(context.Context) error
+	telemetry         SessionInvocationTelemetry
+	specialCase       SessionInvocationSpecialCase
+	resolveDefinition DefinitionResolver
+	inputFiles        fileeffects.InvocationInputReader
+	workService       work.Service
 }
+
+// DefinitionResolver resolves one normalized invocation against a detached
+// effective Factory source. The caller supplies copied FILE_CONTENTS bytes;
+// the Definitions root performs interpolation and returns immutable policy
+// facts without receiving a filesystem reader or Sessions runtime handle.
+type DefinitionResolver func(
+	context.Context,
+	string,
+	*factorydefinitions.FactoryConfig,
+	*work.InvocationArguments,
+	map[string][]byte,
+) (factorydefinitions.ResolveInvocationDefinitionResult, error)
 
 // NewSessionOwner constructs the canonical Factory Session invocation owner.
 func NewSessionOwner(
@@ -83,15 +94,14 @@ func NewSessionOwner(
 	waitNext func(context.Context) error,
 	telemetry SessionInvocationTelemetry,
 	specialCase SessionInvocationSpecialCase,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	workTypes factorydefinitions.InvocationWorkTypeService,
+	resolveDefinition DefinitionResolver,
 	inputFiles fileeffects.InvocationInputReader,
 	workService work.Service,
 ) *SessionOwner {
 	return &SessionOwner{
 		factoryConfig: factoryConfig, submitWork: submitWork, observe: observe,
 		waitNextFn: waitNext, telemetry: telemetry, specialCase: specialCase,
-		interpolation: interpolation, workTypes: workTypes, inputFiles: inputFiles,
+		resolveDefinition: resolveDefinition, inputFiles: inputFiles,
 		workService: workService,
 	}
 }
@@ -123,34 +133,48 @@ func (o *SessionOwner) InvokeFactorySession(
 		return FactoryInvocationResult{}, qualifySessionInvocationError(factoryCfg, err)
 	}
 	o.normalizationSuccess(factoryCfg, resolved.Source)
-	if o.interpolation == nil {
-		return FactoryInvocationResult{}, fmt.Errorf("Factory Definition invocation interpolation service is unavailable")
-	}
 	if o.inputFiles == nil {
 		return FactoryInvocationResult{}, fmt.Errorf("Factory Session invocation input file reader is unavailable")
 	}
-	if err := o.interpolation.ValidateInvocationInterpolation(factoryCfg, work.RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments), factorydefinitions.FileReader(o.inputFiles)); err != nil {
+	if o.resolveDefinition == nil {
+		return FactoryInvocationResult{}, fmt.Errorf("Factory Definitions invocation resolver is unavailable")
+	}
+	runtimeArgs := work.RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments)
+	fileInputs, err := o.resolveInvocationFileInputs(runtimeArgs)
+	if err != nil {
 		o.interpolationFailure(sessionID, factoryCfg, resolved, err)
 		return FactoryInvocationResult{}, qualifySessionInvocationError(factoryCfg, err)
 	}
-
-	if o.workTypes == nil {
-		return FactoryInvocationResult{}, fmt.Errorf("Factory Definition invocation Work Type service is unavailable")
-	}
-	workTypeName, err := o.workTypes.DefaultWorkType(factoryCfg)
+	definition, err := o.resolveDefinition(ctx, sessionID, factoryCfg, runtimeArgs, fileInputs)
 	if err != nil {
-		err = fmt.Errorf("resolve invocation work type: %w", err)
+		if isDefaultWorkTypeResolutionError(err) {
+			err = fmt.Errorf("resolve invocation work type: %w", err)
+			if o.telemetry != nil {
+				o.telemetry.SubmissionFailure(factoryCfg, resolved.Source, err)
+				o.telemetry.LogSubmissionFailure(sessionID, resolved.Source, factoryCfg, err)
+			}
+			return FactoryInvocationResult{}, err
+		}
+		o.interpolationFailure(sessionID, factoryCfg, resolved, err)
+		return FactoryInvocationResult{}, qualifySessionInvocationError(factoryCfg, err)
+	}
+	resolvedFactory := definition.Factory
+	workTypeName := strings.TrimSpace(definition.DefaultWorkType)
+	if workTypeName == "" {
+		err = fmt.Errorf("resolve invocation work type: Factory Definitions returned an empty default Work type")
 		if o.telemetry != nil {
 			o.telemetry.SubmissionFailure(factoryCfg, resolved.Source, err)
 			o.telemetry.LogSubmissionFailure(sessionID, resolved.Source, factoryCfg, err)
 		}
 		return FactoryInvocationResult{}, err
 	}
+	resolvedArgs := work.RuntimeInvocationArguments(resolvedFactory.InvocationSignature, resolved.NormalizedArguments)
+	resolvedFactoryForWait := &resolvedFactory
 	submitResult, err := o.submitWork(ctx, sessionID, work.SubmitRequest{
 		RequestID:           trimmedStringValue(request.RequestID),
 		WorkTypeID:          workTypeName,
 		Content:             resolved.Content,
-		InvocationArguments: work.RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments),
+		InvocationArguments: resolvedArgs,
 	})
 	if err != nil {
 		if o.telemetry != nil {
@@ -167,10 +191,47 @@ func (o *SessionOwner) InvokeFactorySession(
 		RequestID:        submitResult.RequestID,
 		TraceID:          submitResult.TraceID,
 		InputSource:      resolved.Source,
-		InvocationReturn: factoryCfg.InvocationReturn,
-		FactoryConfig:    factoryCfg,
+		InvocationReturn: resolvedFactoryForWait.InvocationReturn,
+		FactoryConfig:    resolvedFactoryForWait,
 		TimeoutMillis:    request.TimeoutMillis,
 	})
+}
+
+func isDefaultWorkTypeResolutionError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "resolve default Work type")
+}
+
+func (o *SessionOwner) resolveInvocationFileInputs(args *work.InvocationArguments) (map[string][]byte, error) {
+	if args == nil || len(args.Arguments) == 0 {
+		return nil, nil
+	}
+	var inputs map[string][]byte
+	for parameterName, argument := range args.Arguments {
+		if argument.ValueMode != work.InvocationParameterValueModeFileContents {
+			continue
+		}
+		if len(argument.Values) != 1 {
+			return nil, &work.ArgumentError{
+				Code:      work.ArgumentErrorCodeInvalidInterpolation,
+				Message:   fmt.Sprintf("invocation parameter %q requires exactly one FILE_CONTENTS path", parameterName),
+				Parameter: parameterName,
+			}
+		}
+		path := argument.Values[0]
+		data, err := o.inputFiles(path)
+		if err != nil {
+			return nil, &work.ArgumentError{
+				Code:      work.ArgumentErrorCodeInvalidInterpolation,
+				Message:   fmt.Sprintf("invocation parameter %q could not read FILE_CONTENTS path %q: %v", parameterName, path, err),
+				Parameter: parameterName,
+			}
+		}
+		if inputs == nil {
+			inputs = make(map[string][]byte)
+		}
+		inputs[path] = append([]byte(nil), data...)
+	}
+	return inputs, nil
 }
 
 // ResolvedSessionInvocationInput is the normalized input carried into Work submission.

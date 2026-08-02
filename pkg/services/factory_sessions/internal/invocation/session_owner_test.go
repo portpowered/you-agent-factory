@@ -329,7 +329,7 @@ func TestSessionOwner_RejectsInterpolationFailureBeforeSubmittingWork(t *testing
 		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 			return SessionInvocationObservation{}, nil
 		},
-		Interpolation: rejectingInvocationInterpolation("missing"),
+		ResolveDefinition: rejectingInvocationInterpolation("missing"),
 	})
 
 	_, err := owner.InvokeFactorySession(context.Background(), "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{Args: &map[string]any{"input": "hello"}}))
