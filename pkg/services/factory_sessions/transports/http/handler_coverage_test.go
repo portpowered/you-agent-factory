@@ -110,3 +110,38 @@ func TestGetEventsBySessionIdMapsSessionEventReconnectFailure(t *testing.T) {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
 	}
 }
+
+func TestGetEventsBySessionIdStreamsSessionEvents(t *testing.T) {
+	t.Parallel()
+
+	events := make(chan factorydefinitions.FactoryEvent)
+	close(events)
+	handler := NewHandler(Dependencies{
+		SessionEvents: sessionEventAPIFake{
+			subscribe: func(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error) {
+				return &factorydefinitions.FactoryEventStream{
+					BackendScopeID:      "backend-scope",
+					LogicalSessionKeyID: "logical-session",
+					FactorySessionID:    "session-alpha",
+					StreamGenerationID:  "generation-1",
+					Events:              events,
+				}, nil
+			},
+		},
+	}, zap.NewNop())
+	recorder := httptest.NewRecorder()
+
+	handler.GetEventsBySessionId(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-alpha/events", nil),
+		factoryapi.SessionID("session-alpha"),
+		factoryapi.GetEventsBySessionIdParams{},
+	)
+
+	if recorder.Code != http.StatusOK || recorder.Header().Get("Content-Type") != "text/event-stream" {
+		t.Fatalf("response = %d %q, want event stream", recorder.Code, recorder.Header().Get("Content-Type"))
+	}
+	if recorder.Header().Get(SessionEventStreamGenerationHeader) != "generation-1" {
+		t.Fatalf("generation header = %q, want generation-1", recorder.Header().Get(SessionEventStreamGenerationHeader))
+	}
+}
