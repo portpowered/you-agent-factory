@@ -43,23 +43,31 @@ func (t ChatTargetRef) Validate() error {
 	return nil
 }
 
-// RequestIdentity is a caller-supplied request identity that is unique only
-// for the connection it was minted on. Transports must pair a per-connection
-// id (such as a JSON-RPC id) with ConnectionID, or mint a process-unique
-// RequestToken, before the identity crosses the Chat Sessions boundary; the
-// bare per-connection id is never sufficient on its own.
+// RequestIdentity is a caller-supplied request identity expressed in one of
+// the two final-proposal forms: a per-connection JSON-RPC id (JSONRPCID)
+// paired with the connection it was minted on (ConnectionID), or a
+// process-unique id a transport mints itself (TransportUUID) that needs no
+// connection pairing. A bare per-connection id without its ConnectionID is
+// never sufficient on its own.
 type RequestIdentity struct {
-	ConnectionID string
-	RequestToken string
+	ConnectionID  string
+	JSONRPCID     string
+	TransportUUID string
 }
 
-// Validate reports whether both identity components are present.
+// Validate reports whether the RequestIdentity expresses one of its two
+// legal forms: a non-blank TransportUUID, or a JSONRPCID paired with a
+// non-blank ConnectionID. A JSONRPCID without a paired ConnectionID, and an
+// identity with neither form present, are both rejected.
 func (r RequestIdentity) Validate() error {
+	if r.TransportUUID != "" {
+		return nil
+	}
+	if r.JSONRPCID == "" {
+		return newValidationError("RequestIdentity", "JSONRPCID", ErrRequiredValue)
+	}
 	if r.ConnectionID == "" {
 		return newValidationError("RequestIdentity", "ConnectionID", ErrRequiredValue)
-	}
-	if r.RequestToken == "" {
-		return newValidationError("RequestIdentity", "RequestToken", ErrRequiredValue)
 	}
 	return nil
 }

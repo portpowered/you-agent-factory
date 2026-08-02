@@ -66,7 +66,7 @@ func TestConsumer_ConstructsAndValidatesRepresentativeValues(t *testing.T) {
 
 	turn := chatsessions.Turn{
 		ID: "turn-1", Episode: 1, State: chatsessions.TurnStateAdmitted,
-		RequestID: chatsessions.RequestIdentity{ConnectionID: "conn-1", RequestToken: "req-1"},
+		RequestID: chatsessions.RequestIdentity{ConnectionID: "conn-1", JSONRPCID: "req-1"},
 	}
 	if err := turn.Validate(); err != nil {
 		t.Fatalf("valid Turn: %v", err)
@@ -86,7 +86,7 @@ func TestConsumer_ConstructsAndValidatesRepresentativeValues(t *testing.T) {
 	}
 
 	intent := chatsessions.ControlIntent{
-		RequestID:     chatsessions.RequestIdentity{ConnectionID: "conn-1", RequestToken: "req-2"},
+		RequestID:     chatsessions.RequestIdentity{ConnectionID: "conn-1", JSONRPCID: "req-2"},
 		SessionID:     session.ID,
 		TurnID:        turn.ID,
 		TargetEpisode: episode.Number,

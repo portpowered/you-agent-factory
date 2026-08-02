@@ -51,9 +51,11 @@ func TestRequestIdentity_Validate(t *testing.T) {
 		id      RequestIdentity
 		wantErr error
 	}{
-		{"valid", RequestIdentity{ConnectionID: "conn-1", RequestToken: "req-1"}, nil},
-		{"blank connection", RequestIdentity{RequestToken: "req-1"}, ErrRequiredValue},
-		{"blank token", RequestIdentity{ConnectionID: "conn-1"}, ErrRequiredValue},
+		{"valid connection-scoped", RequestIdentity{ConnectionID: "conn-1", JSONRPCID: "req-1"}, nil},
+		{"valid transport-minted UUID", RequestIdentity{TransportUUID: "550e8400-e29b-41d4-a716-446655440000"}, nil},
+		{"transport UUID ignores blank connection", RequestIdentity{ConnectionID: "", TransportUUID: "req-uuid-1"}, nil},
+		{"bare JSON-RPC id without connection", RequestIdentity{JSONRPCID: "req-1"}, ErrRequiredValue},
+		{"blank JSON-RPC id", RequestIdentity{ConnectionID: "conn-1"}, ErrRequiredValue},
 		{"zero value", RequestIdentity{}, ErrRequiredValue},
 	}
 	for _, tt := range tests {
@@ -254,7 +256,7 @@ func validTurn() Turn {
 		ID:               "turn-1",
 		Episode:          1,
 		State:            TurnStateAdmitted,
-		RequestID:        RequestIdentity{ConnectionID: "conn-1", RequestToken: "req-1"},
+		RequestID:        RequestIdentity{ConnectionID: "conn-1", JSONRPCID: "req-1"},
 		StartSequence:    0,
 		TerminalSequence: 0,
 	}
@@ -395,7 +397,7 @@ func TestControlIntentState_Validate(t *testing.T) {
 
 func validControlIntent() ControlIntent {
 	return ControlIntent{
-		RequestID:       RequestIdentity{ConnectionID: "conn-1", RequestToken: "req-1"},
+		RequestID:       RequestIdentity{ConnectionID: "conn-1", JSONRPCID: "req-1"},
 		SessionID:       "session-1",
 		TurnID:          "turn-1",
 		TargetEpisode:   1,
