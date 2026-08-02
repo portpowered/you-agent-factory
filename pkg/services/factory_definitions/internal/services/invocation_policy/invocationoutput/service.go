@@ -17,49 +17,6 @@ const (
 	defaultAudioContentType            = "audio/wav"
 )
 
-// Service implements packaged invocation-output shaping policy.
-type Service struct{}
-
-var _ factorydefinitions.InvocationOutputShapingService = Service{}
-
-// NewService returns the canonical packaged invocation-output shaper.
-func NewService() factorydefinitions.InvocationOutputShapingService {
-	return Service{}
-}
-
-func (Service) ShouldFormatInvocationSummary(workstation *factorydefinitions.FactoryWorkstationConfig) bool {
-	return ShouldFormatInvocationSummary(workstation)
-}
-
-func (Service) SummaryContentFromWorkerOutput(output, stopToken string) ([]work.WorkContentPart, error) {
-	return SummaryContentFromWorkerOutput(output, stopToken)
-}
-
-func (Service) ShouldFormatInvocationResponse(workstation *factorydefinitions.FactoryWorkstationConfig) bool {
-	return ShouldFormatInvocationResponse(workstation)
-}
-
-func (Service) ResponseContentFromWorkerOutput(output, stopToken string) ([]work.WorkContentPart, error) {
-	return ResponseContentFromWorkerOutput(output, stopToken)
-}
-
-func (Service) ShouldFormatTTSInvocationMetadata(workstation *factorydefinitions.FactoryWorkstationConfig) bool {
-	return ShouldFormatTTSInvocationMetadata(workstation)
-}
-
-func (Service) TTSBackendLabelFromWorker(worker *factorydefinitions.FactoryWorkerConfig) string {
-	return TTSBackendLabelFromWorker(worker)
-}
-
-func (Service) TTSMetadataContentFromWorkerOutput(
-	output string,
-	traceID string,
-	sessionID string,
-	backendLabel string,
-) ([]work.WorkContentPart, error) {
-	return TTSMetadataContentFromWorkerOutput(output, traceID, sessionID, backendLabel)
-}
-
 // ShouldFormatInvocationSummary reports whether workstation output should be
 // shaped into packaged Goal summary content.
 func ShouldFormatInvocationSummary(workstation *factorydefinitions.FactoryWorkstationConfig) bool {

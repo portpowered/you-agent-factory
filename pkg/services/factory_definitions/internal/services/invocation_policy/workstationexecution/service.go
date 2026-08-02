@@ -10,15 +10,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
-// Service owns Workstation execution-limit normalization and resolution.
-type Service struct{}
-
-var _ factorydefinitions.WorkstationExecutionPolicyService = Service{}
-
-func NewService() factorydefinitions.WorkstationExecutionPolicyService {
-	return Service{}
-}
-
 // NormalizeExecutionLimit rewrites legacy Workstation timeout authoring into
 // the canonical limits.maxExecutionTime field.
 func NormalizeExecutionLimit(cfg *factorydefinitions.FactoryWorkstationConfig) {
@@ -33,7 +24,7 @@ func NormalizeExecutionLimit(cfg *factorydefinitions.FactoryWorkstationConfig) {
 }
 
 // ExecutionTimeout resolves the canonical Workstation execution limit.
-func (Service) ExecutionTimeout(
+func ExecutionTimeout(
 	cfg *factorydefinitions.FactoryWorkstationConfig,
 ) (time.Duration, error) {
 	if cfg == nil || strings.TrimSpace(cfg.Limits.MaxExecutionTime) == "" {

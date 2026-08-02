@@ -9,50 +9,21 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	invocationpolicycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/contracts"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 var invocationInterpolationPattern = regexp.MustCompile(`\$\{([A-Za-z0-9_.-]+)\}`)
 
-// Service implements Factory invocation interpolation policy.
-type Service struct{}
-
-var _ factorydefinitions.InvocationInterpolationService = Service{}
-
-// NewService returns the canonical Factory invocation interpolator.
-func NewService() factorydefinitions.InvocationInterpolationService {
-	return Service{}
-}
-
-func (Service) ValidateInvocationInterpolation(
-	cfg *factorydefinitions.FactoryConfig,
-	args *work.InvocationArguments,
-	readFile factorydefinitions.FileReader,
-) error {
-	return ValidateInvocationInterpolation(cfg, args, readFile)
-}
-
-func (Service) InterpolateWorkerConfig(
-	worker factorydefinitions.FactoryWorkerConfig,
-	args *work.InvocationArguments,
-	readFile factorydefinitions.FileReader,
-) (factorydefinitions.FactoryWorkerConfig, error) {
-	return InterpolateWorkerConfig(worker, args, readFile)
-}
-
-func (Service) InterpolateWorkstationConfig(
-	workstation factorydefinitions.FactoryWorkstationConfig,
-	args *work.InvocationArguments,
-	readFile factorydefinitions.FileReader,
-) (factorydefinitions.FactoryWorkstationConfig, error) {
-	return InterpolateWorkstationConfig(workstation, args, readFile)
-}
+// FileReader is the private invocation input seam. It is intentionally not a
+// public Definitions effect or callback contract.
+type FileReader = invocationpolicycontracts.FileReader
 
 // ValidateInvocationInterpolation verifies that runtime-supported invocation
 // interpolation can resolve the authored worker and workstation fields for the
 // supplied normalized argument set without mutating the canonical runtime config.
-func ValidateInvocationInterpolation(cfg *factorydefinitions.FactoryConfig, args *work.InvocationArguments, readFile factorydefinitions.FileReader) error {
+func ValidateInvocationInterpolation(cfg *factorydefinitions.FactoryConfig, args *work.InvocationArguments, readFile FileReader) error {
 	if cfg == nil || args == nil {
 		return nil
 	}
@@ -76,7 +47,7 @@ func ValidateInvocationInterpolation(cfg *factorydefinitions.FactoryConfig, args
 
 // InterpolateWorkerConfig resolves supported `${parameter}` placeholders on one
 // effective worker definition using runtime invocation arguments.
-func InterpolateWorkerConfig(worker workerconfig.Config, args *work.InvocationArguments, readFile factorydefinitions.FileReader) (workerconfig.Config, error) {
+func InterpolateWorkerConfig(worker workerconfig.Config, args *work.InvocationArguments, readFile FileReader) (workerconfig.Config, error) {
 	next := cloneWorkerForInterpolation(worker)
 	var err error
 	if next.Provider, err = interpolateInvocationField(next.Provider, args, "worker.provider", false, readFile); err != nil {
@@ -116,7 +87,7 @@ func InterpolateWorkerConfig(worker workerconfig.Config, args *work.InvocationAr
 
 // InterpolateWorkstationConfig resolves supported `${parameter}` placeholders on
 // one effective workstation definition using runtime invocation arguments.
-func InterpolateWorkstationConfig(workstation factorydefinitions.FactoryWorkstationConfig, args *work.InvocationArguments, readFile factorydefinitions.FileReader) (factorydefinitions.FactoryWorkstationConfig, error) {
+func InterpolateWorkstationConfig(workstation factorydefinitions.FactoryWorkstationConfig, args *work.InvocationArguments, readFile FileReader) (factorydefinitions.FactoryWorkstationConfig, error) {
 	next := cloneWorkstationForInterpolation(workstation)
 	var err error
 	if next.WorkerTypeName, err = interpolateInvocationField(next.WorkerTypeName, args, "workstation.worker", false, readFile); err != nil {
@@ -176,7 +147,7 @@ func InterpolateWorkstationConfig(workstation factorydefinitions.FactoryWorkstat
 func interpolateModelOperationBindings(
 	bindings []factorydefinitions.ModelOperationBinding,
 	args *work.InvocationArguments,
-	readFile factorydefinitions.FileReader,
+	readFile FileReader,
 ) ([]factorydefinitions.ModelOperationBinding, error) {
 	if len(bindings) == 0 {
 		return bindings, nil
@@ -202,7 +173,7 @@ func interpolateWorkContentParts(
 	parts []work.WorkContentPart,
 	args *work.InvocationArguments,
 	fieldDescriptor string,
-	readFile factorydefinitions.FileReader,
+	readFile FileReader,
 ) ([]work.WorkContentPart, error) {
 	if len(parts) == 0 {
 		return parts, nil
@@ -222,7 +193,7 @@ func interpolateWorkContentPart(
 	part work.WorkContentPart,
 	args *work.InvocationArguments,
 	fieldDescriptor string,
-	readFile factorydefinitions.FileReader,
+	readFile FileReader,
 ) (work.WorkContentPart, error) {
 	next := part
 	var err error
@@ -257,7 +228,7 @@ func interpolateWorkContentPart(
 	return next, nil
 }
 
-func validateInvocationOutputContract(output *work.InvocationOutputContractConfig, args *work.InvocationArguments, readFile factorydefinitions.FileReader) error {
+func validateInvocationOutputContract(output *work.InvocationOutputContractConfig, args *work.InvocationArguments, readFile FileReader) error {
 	if output == nil {
 		return nil
 	}
@@ -287,7 +258,7 @@ func interpolateInvocationField(
 	args *work.InvocationArguments,
 	fieldDescriptor string,
 	allowsRepeated bool,
-	readFile factorydefinitions.FileReader,
+	readFile FileReader,
 ) (string, error) {
 	if !strings.Contains(authored, "${") {
 		return authored, nil
@@ -339,7 +310,7 @@ func invocationArgumentByName(args *work.InvocationArguments, name string) (work
 	return argument, ok
 }
 
-func invocationArgumentScalar(argument work.InvocationArgument, parameterName, fieldDescriptor string, readFile factorydefinitions.FileReader) (string, error) {
+func invocationArgumentScalar(argument work.InvocationArgument, parameterName, fieldDescriptor string, readFile FileReader) (string, error) {
 	if len(argument.Values) != 1 {
 		return "", &work.ArgumentError{
 			Code:      factorydefinitions.ArgumentErrorCodeInvalidInterpolation,

@@ -1,77 +1,179 @@
 package service
 
 import (
+	"context"
+	"fmt"
+	"strings"
+
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	invocationpolicyservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy"
+	invocationpolicy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy"
 	invocationpolicydecisionenvelope "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope"
 	invocationpolicyinterpolation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation"
 	invocationpolicyoutput "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput"
 	invocationpolicyworktype "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype"
-	invocationpolicyquorum "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy"
-	invocationpolicytts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability"
 	invocationpolicyworkpropagation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation"
 	invocationpolicyworkstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
-// Service is the private nested invocation_policy implementation behind the
-// published Definitions root policy contracts.
-type Service struct {
-	decisionEnvelope        factorydefinitions.DecisionEnvelopeService
-	invocationInterpolation factorydefinitions.InvocationInterpolationService
-	invocationOutput        factorydefinitions.InvocationOutputShapingService
-	invocationWorkType      factorydefinitions.InvocationWorkTypeService
-	quorumPolicy            factorydefinitions.QuorumPolicyService
-	workPropagation         factorydefinitions.WorkPropagationPolicyService
-	workstationExecution    factorydefinitions.WorkstationExecutionPolicyService
-	ttsObservability        factorydefinitions.TTSObservabilityService
-}
+// Service is the private, stateless invocation resolver. It owns no runtime,
+// Work, worker, persistence, or filesystem effects.
+type Service struct{}
 
-var _ invocationpolicyservice.Service = (*Service)(nil)
+var _ invocationpolicy.Service = (*Service)(nil)
 
-// New constructs the invocation_policy implementation from the current
-// transitional policy packages. Later fold stories relocate those
-// implementations under this owner without changing the published root surface.
 func New() *Service {
-	return &Service{
-		decisionEnvelope:        invocationpolicydecisionenvelope.NewService(),
-		invocationInterpolation: invocationpolicyinterpolation.NewService(),
-		invocationOutput:        invocationpolicyoutput.NewService(),
-		invocationWorkType:      invocationpolicyworktype.NewService(),
-		quorumPolicy:            invocationpolicyquorum.NewService(),
-		workPropagation:         invocationpolicyworkpropagation.NewService(),
-		workstationExecution:    invocationpolicyworkstationexecution.NewService(),
-		ttsObservability:        invocationpolicytts.NewService(),
+	return &Service{}
+}
+
+func (s *Service) ResolveInvocationDefinition(
+	ctx context.Context,
+	request factorydefinitions.ResolveInvocationDefinitionRequest,
+) (factorydefinitions.ResolveInvocationDefinitionResult, error) {
+	if s == nil {
+		return factorydefinitions.ResolveInvocationDefinitionResult{}, invalidInvocation("resolver is required")
 	}
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return factorydefinitions.ResolveInvocationDefinitionResult{}, err
+		}
+	}
+	if request.Definition.Factory == nil {
+		return factorydefinitions.ResolveInvocationDefinitionResult{}, invalidInvocation("effective Factory is required")
+	}
+
+	resolved, err := factorydefinitions.CloneFactoryConfig(request.Definition.Factory)
+	if err != nil {
+		return factorydefinitions.ResolveInvocationDefinitionResult{}, invalidInvocation("clone effective Factory: %v", err)
+	}
+	if resolved == nil {
+		return factorydefinitions.ResolveInvocationDefinitionResult{}, invalidInvocation("effective Factory is required")
+	}
+
+	fileInputs := cloneFileInputs(request.ResolvedFileInput)
+	arguments := cloneInvocationArguments(request.Arguments)
+	readFile := func(path string) ([]byte, error) {
+		data, ok := fileInputs[path]
+		if !ok {
+			return nil, fmt.Errorf("file input %q is not supplied", path)
+		}
+		return append([]byte(nil), data...), nil
+	}
+
+	if err := invocationpolicyinterpolation.ValidateInvocationInterpolation(
+		resolved,
+		&arguments,
+		invocationpolicyinterpolation.FileReader(readFile),
+	); err != nil {
+		return factorydefinitions.ResolveInvocationDefinitionResult{}, invalidInvocation("interpolate effective Factory: %v", err)
+	}
+	for index := range resolved.Workers {
+		worker, err := invocationpolicyinterpolation.InterpolateWorkerConfig(
+			resolved.Workers[index],
+			&arguments,
+			invocationpolicyinterpolation.FileReader(readFile),
+		)
+		if err != nil {
+			return factorydefinitions.ResolveInvocationDefinitionResult{}, invalidInvocation("interpolate worker %q: %v", resolved.Workers[index].Name, err)
+		}
+		resolved.Workers[index] = worker
+	}
+	for index := range resolved.Workstations {
+		workstation, err := invocationpolicyinterpolation.InterpolateWorkstationConfig(
+			resolved.Workstations[index],
+			&arguments,
+			invocationpolicyinterpolation.FileReader(readFile),
+		)
+		if err != nil {
+			return factorydefinitions.ResolveInvocationDefinitionResult{}, invalidInvocation("interpolate workstation %q: %v", resolved.Workstations[index].Name, err)
+		}
+		invocationpolicyworkstationexecution.NormalizeExecutionLimit(&workstation)
+		resolved.Workstations[index] = workstation
+	}
+
+	defaultWorkType, err := invocationpolicyworktype.DefaultWorkType(resolved)
+	if err != nil {
+		return factorydefinitions.ResolveInvocationDefinitionResult{}, invalidInvocation("resolve default Work type: %v", err)
+	}
+
+	policies := make(map[string]factorydefinitions.ResolvedWorkstationPolicy, len(resolved.Workstations))
+	for index := range resolved.Workstations {
+		workstation := &resolved.Workstations[index]
+		name := strings.TrimSpace(workstation.Name)
+		if name == "" {
+			return factorydefinitions.ResolveInvocationDefinitionResult{}, invalidInvocation("workstation name is required")
+		}
+		if _, exists := policies[name]; exists {
+			return factorydefinitions.ResolveInvocationDefinitionResult{}, invalidInvocation("workstation %q is duplicated", name)
+		}
+		timeout, err := invocationpolicyworkstationexecution.ExecutionTimeout(workstation)
+		if err != nil {
+			return factorydefinitions.ResolveInvocationDefinitionResult{}, invalidInvocation("resolve workstation %q timeout: %v", name, err)
+		}
+		outputMode := factorydefinitions.InvocationOutputModeDefault
+		switch {
+		case invocationpolicyoutput.ShouldFormatInvocationSummary(workstation):
+			outputMode = factorydefinitions.InvocationOutputModeSummary
+		case invocationpolicyoutput.ShouldFormatInvocationResponse(workstation):
+			outputMode = factorydefinitions.InvocationOutputModeResponse
+		case invocationpolicyoutput.ShouldFormatTTSInvocationMetadata(workstation):
+			outputMode = factorydefinitions.InvocationOutputModeTTS
+		}
+		decisionMode := factorydefinitions.DecisionEnvelopeModeNone
+		if invocationpolicydecisionenvelope.UsesDecisionEnvelopeOutcome(workstation) {
+			decisionMode = factorydefinitions.DecisionEnvelopeModeEnvelope
+			if invocationpolicydecisionenvelope.UsesGoalRoutingDecisionEnvelope(workstation) {
+				decisionMode = factorydefinitions.DecisionEnvelopeModeGoalRouting
+			}
+		}
+		policies[name] = factorydefinitions.ResolvedWorkstationPolicy{
+			ExecutionTimeout: timeout,
+			PropagationMode:  invocationpolicyworkpropagation.Mode(workstation),
+			OutputMode:       outputMode,
+			DecisionMode:     decisionMode,
+		}
+	}
+
+	return factorydefinitions.ResolveInvocationDefinitionResult{
+		Factory:             *resolved,
+		DefaultWorkType:     defaultWorkType,
+		WorkstationPolicies: policies,
+		FactoryKind:         factoryKind(resolved),
+	}, nil
 }
 
-func (s *Service) DecisionEnvelope() factorydefinitions.DecisionEnvelopeService {
-	return s.decisionEnvelope
+func invalidInvocation(format string, args ...any) error {
+	return fmt.Errorf("%w: %s", factorydefinitions.ErrInvalidInvocationDefinition, fmt.Sprintf(format, args...))
 }
 
-func (s *Service) InvocationInterpolation() factorydefinitions.InvocationInterpolationService {
-	return s.invocationInterpolation
+func cloneFileInputs(inputs map[string][]byte) map[string][]byte {
+	if len(inputs) == 0 {
+		return nil
+	}
+	cloned := make(map[string][]byte, len(inputs))
+	for name, data := range inputs {
+		cloned[name] = append([]byte(nil), data...)
+	}
+	return cloned
 }
 
-func (s *Service) InvocationOutput() factorydefinitions.InvocationOutputShapingService {
-	return s.invocationOutput
+func cloneInvocationArguments(arguments factorydefinitions.InvocationArguments) factorydefinitions.InvocationArguments {
+	if len(arguments.Arguments) == 0 {
+		return factorydefinitions.InvocationArguments{}
+	}
+	cloned := factorydefinitions.InvocationArguments{Arguments: make(map[string]factorydefinitions.InvocationArgument, len(arguments.Arguments))}
+	for name, argument := range arguments.Arguments {
+		clonedArgument := argument
+		clonedArgument.Values = append([]string(nil), argument.Values...)
+		clonedArgument.Sources = append([]work.InvocationArgumentSource(nil), argument.Sources...)
+		cloned.Arguments[name] = clonedArgument
+	}
+	return cloned
 }
 
-func (s *Service) InvocationWorkType() factorydefinitions.InvocationWorkTypeService {
-	return s.invocationWorkType
-}
-
-func (s *Service) QuorumPolicy() factorydefinitions.QuorumPolicyService {
-	return s.quorumPolicy
-}
-
-func (s *Service) WorkPropagation() factorydefinitions.WorkPropagationPolicyService {
-	return s.workPropagation
-}
-
-func (s *Service) WorkstationExecution() factorydefinitions.WorkstationExecutionPolicyService {
-	return s.workstationExecution
-}
-
-func (s *Service) TTSObservability() factorydefinitions.TTSObservabilityService {
-	return s.ttsObservability
+func factoryKind(cfg *factorydefinitions.FactoryConfig) factorydefinitions.FactoryBehaviorKind {
+	if cfg != nil && (strings.HasPrefix(strings.TrimSpace(cfg.Name), "@you/") || strings.HasPrefix(strings.TrimSpace(cfg.Project), "builtin-")) {
+		return factorydefinitions.FactoryBehaviorKindPackaged
+	}
+	return factorydefinitions.FactoryBehaviorKindStandard
 }

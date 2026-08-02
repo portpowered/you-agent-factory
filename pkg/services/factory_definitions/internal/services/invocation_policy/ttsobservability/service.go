@@ -6,37 +6,8 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	invocationpolicycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/contracts"
 )
-
-// Service implements packaged TTS observability and failure-classification policy.
-type Service struct{}
-
-var _ factorydefinitions.TTSObservabilityService = Service{}
-
-// NewService returns the canonical packaged TTS observability service.
-func NewService() factorydefinitions.TTSObservabilityService {
-	return Service{}
-}
-
-func (Service) IsPackagedTTSFactory(cfg *factorydefinitions.FactoryConfig) bool {
-	return IsPackagedTTSFactory(cfg)
-}
-
-func (Service) TTSBackendRuntimeLabel() string {
-	return TTSBackendRuntimeLabel()
-}
-
-func (Service) ClassifyTTSInvocationWait(
-	worldState factorydefinitions.FactoryWorldState,
-	requestID string,
-	hasActiveWork bool,
-) (factorydefinitions.TTSInvocationWaitOutcome, *factorydefinitions.TTSInvocationFailure) {
-	return ClassifyTTSInvocationWait(worldState, requestID, hasActiveWork)
-}
-
-func (Service) IsTTSModelNotReadyFailure(message string) bool {
-	return IsTTSModelNotReadyFailure(message)
-}
 
 func IsPackagedTTSFactory(cfg *factorydefinitions.FactoryConfig) bool {
 	if cfg == nil {
@@ -56,20 +27,20 @@ func ClassifyTTSInvocationWait(
 	worldState factorydefinitions.FactoryWorldState,
 	requestID string,
 	hasActiveWork bool,
-) (factorydefinitions.TTSInvocationWaitOutcome, *factorydefinitions.TTSInvocationFailure) {
+) (invocationpolicycontracts.TTSInvocationWaitOutcome, *invocationpolicycontracts.TTSInvocationFailure) {
 	if hasActiveWork {
-		return factorydefinitions.TTSInvocationWaitOutcomeLoading, nil
+		return invocationpolicycontracts.TTSInvocationWaitOutcomeLoading, nil
 	}
 	if failure, ok := classifyPackagedTTSFailure(worldState, requestID); ok {
 		return failure.Outcome, failure
 	}
-	return factorydefinitions.TTSInvocationWaitOutcomeUnresolvedFailure, nil
+	return invocationpolicycontracts.TTSInvocationWaitOutcomeUnresolvedFailure, nil
 }
 
 func classifyPackagedTTSFailure(
 	worldState factorydefinitions.FactoryWorldState,
 	requestID string,
-) (*factorydefinitions.TTSInvocationFailure, bool) {
+) (*invocationpolicycontracts.TTSInvocationFailure, bool) {
 	request, ok := worldState.WorkRequestsByID[requestID]
 	if !ok || len(request.WorkItems) == 0 {
 		return nil, false
@@ -87,15 +58,15 @@ func classifyPackagedTTSFailure(
 
 		message := failureEvidence(detail, hasDetail)
 		if IsTTSModelNotReadyFailure(message) {
-			return &factorydefinitions.TTSInvocationFailure{
-				Outcome:      factorydefinitions.TTSInvocationWaitOutcomeModelNotReady,
+			return &invocationpolicycontracts.TTSInvocationFailure{
+				Outcome:      invocationpolicycontracts.TTSInvocationWaitOutcomeModelNotReady,
 				ErrorCode:    factorydefinitions.TTSInvocationErrorCodeModelNotReady,
 				FailureClass: factorydefinitions.TTSFailureClassModelNotReady,
 				Message:      boundedFailureSummary(message, "packaged tts model is not ready"),
 			}, true
 		}
-		return &factorydefinitions.TTSInvocationFailure{
-			Outcome:      factorydefinitions.TTSInvocationWaitOutcomeGenerationFailed,
+		return &invocationpolicycontracts.TTSInvocationFailure{
+			Outcome:      invocationpolicycontracts.TTSInvocationWaitOutcomeGenerationFailed,
 			ErrorCode:    factorydefinitions.TTSInvocationErrorCodeGenerationFailed,
 			FailureClass: factorydefinitions.TTSFailureClassGenerationFailed,
 			Message:      boundedFailureSummary(message, "packaged tts generation failed"),

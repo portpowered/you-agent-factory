@@ -8,15 +8,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
-type Service struct{}
-
-var _ factorydefinitions.InvocationWorkTypeService = Service{}
-
-func NewService() factorydefinitions.InvocationWorkTypeService {
-	return Service{}
-}
-
-func (Service) DefaultWorkType(cfg *factorydefinitions.FactoryConfig) (string, error) {
+func DefaultWorkType(cfg *factorydefinitions.FactoryConfig) (string, error) {
 	if cfg == nil {
 		return "", fmt.Errorf("factory config is required")
 	}
