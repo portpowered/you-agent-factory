@@ -1,12 +1,26 @@
+// Package events defines the dependency-free L1 V0 public contract for the
+// session-scoped, single-process Events stream: Append, AttachSource, Read,
+// and Subscribe over validated delivery envelopes.
+//
+// Events owns no persistence, filesystem, database, or storage-engine
+// responsibility. Recordings remains the canonical JSONL Factory Event
+// ledger; process exit ends all Events state. Events also owns no
+// second event-kind taxonomy: source-native payloads pass through this
+// contract opaque and uninterpreted.
+//
+// This package is contract-only for its V0 iteration. It publishes detached
+// request, result, record, and typed-error values plus the singular Service
+// interface later in-memory implementations and independent callers depend
+// on; it does not construct, wire, or migrate any concrete implementation.
 package events
 
 import "context"
 
 // Service is the singular Events root contract for the session-scoped,
-// single-process, dependency-free L1 V0 event stream. Append and
-// AttachSource are the operations this contract-only iteration publishes;
-// Read and Subscribe are published as additive methods on this same Service
-// by later contract-only stories.
+// single-process, dependency-free L1 V0 event stream. Append, AttachSource,
+// and Read are the operations this contract-only iteration publishes;
+// Subscribe is published as an additive method on this same Service by a
+// later contract-only story.
 type Service interface {
 	// Append commits one source-native delivery envelope to a destination
 	// Topic in commit order and returns the assigned Record identity,
@@ -28,4 +42,17 @@ type Service interface {
 	// its own: an attachment exists only for the lifetime of the owning
 	// process.
 	AttachSource(ctx context.Context, req AttachSourceRequest) (AttachSourceResult, error)
+
+	// Read returns a bounded, ordered slice of committed Records for
+	// req.Topic strictly after req.After, up to req.Limit Records.
+	//
+	// Read returns a *ValidationError when req fails Validate, including
+	// when req.After names a different Topic than req.Topic. It returns
+	// ErrCursorStaleGeneration when req.After names a StreamGeneration other
+	// than the Topic's current one, and ErrTopicNotFound when req.Topic is
+	// unknown to the Service; both are runtime classifications Validate
+	// cannot make on req's shape alone. A requested range bounded retention
+	// has evicted is reported as a ReadResult with ReadOutcomeGap, never as
+	// an error and never as silent loss.
+	Read(ctx context.Context, req ReadRequest) (ReadResult, error)
 }
