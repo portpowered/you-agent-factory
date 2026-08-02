@@ -10,15 +10,15 @@ import (
 )
 
 // Compile-time seal: durable_execution exposes only the published durable
-// ExecutionService facet. Identity, live-runtime, invocation, response-stream,
+// durable execution facet. Identity, live-runtime, invocation, response-stream,
 // and runtime-opening ownership stay outside this public surface.
-var _ factorysessions.ExecutionService = (durableexecution.Service)(nil)
+var _ durableexecution.Service = (durableexecution.Service)(nil)
 
 // surfaceExecutionCollaborator is an injected execution backend stand-in. Wire
 // construction must bind this collaborator without selecting sibling Session
 // subservices or application Wire/root types at the durable_execution boundary.
 type surfaceExecutionCollaborator struct {
-	factorysessions.ExecutionService
+	durableexecution.Service
 	startCalls int
 }
 
@@ -42,9 +42,9 @@ func TestDurableExecutionPublicSurfaceAcceptsOnlyInjectedExecutionCollaborator(t
 		t.Fatal("wire.NewService returned nil service")
 	}
 
-	var execution factorysessions.ExecutionService = service
+	var execution durableexecution.Service = service
 	if execution == nil {
-		t.Fatal("owner Service must remain assignable to published ExecutionService")
+		t.Fatal("owner Service must remain assignable to the durable execution contract")
 	}
 	if collaborator.startCalls != 0 {
 		t.Fatalf("construction invoked execution %d times, want inert bind", collaborator.startCalls)

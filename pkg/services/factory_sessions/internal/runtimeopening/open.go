@@ -371,7 +371,9 @@ func openRuntime(
 	if factoryDefinitionsFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions factory is required")
 	}
-	activationGatewayProvider, ok := sessionRuntime.(factorysessions.DefinitionActivationGatewayProvider)
+	activationGatewayProvider, ok := sessionRuntime.(interface {
+		DefinitionActivationGateway() factorydefinitions.DefinitionActivationGateway
+	})
 	if !ok {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Session runtime must expose DefinitionActivationGateway")
 	}

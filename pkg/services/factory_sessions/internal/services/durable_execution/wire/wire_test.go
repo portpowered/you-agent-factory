@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	durableexecutionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/wire"
 )
 
@@ -200,7 +201,7 @@ func TestNewServiceRoutesDurableStartThroughOwner(t *testing.T) {
 }
 
 type executionSpy struct {
-	factorysessions.ExecutionService
+	durableexecution.Service
 	calls           int
 	startAsyncCalls int
 	startSyncCalls  int
@@ -233,7 +234,7 @@ func (s *executionSpy) GetSession(context.Context, string) (factorysessions.Sess
 }
 
 type resumeSpy struct {
-	factorysessions.ExecutionService
+	durableexecution.Service
 	resumeCalls int
 }
 
@@ -250,7 +251,7 @@ func (s *resumeSpy) ResumeInterruptedSession(
 }
 
 type controlSpy struct {
-	factorysessions.ExecutionService
+	durableexecution.Service
 	pauseCalls int
 }
 
@@ -265,11 +266,11 @@ func (s *controlSpy) Pause(_ context.Context, sessionID string, _ factorysession
 }
 
 type restartReadSpy struct {
-	factorysessions.ExecutionService
-	inspectCalls   int
-	resultCalls    int
-	dispatchCalls  int
-	eventCalls     int
+	durableexecution.Service
+	inspectCalls  int
+	resultCalls   int
+	dispatchCalls int
+	eventCalls    int
 }
 
 func (s *restartReadSpy) GetSession(_ context.Context, sessionID string) (factorysessions.SessionReadResult, error) {
@@ -308,7 +309,7 @@ func (s *restartReadSpy) ReadEvents(_ context.Context, sessionID string, _ facto
 }
 
 type inspectSpy struct {
-	factorysessions.ExecutionService
+	durableexecution.Service
 	inspectCalls int
 }
 
@@ -321,7 +322,7 @@ func (s *inspectSpy) GetSession(_ context.Context, sessionID string) (factoryses
 }
 
 type idempotencySpy struct {
-	factorysessions.ExecutionService
+	durableexecution.Service
 	recorded map[string]factorysessions.StartRequest
 }
 

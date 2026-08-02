@@ -21,7 +21,7 @@ import (
 // the Factory Sessions gateway. Protocol tests route it to their programmed
 // public ExecutionService without constructing a product implementation.
 type apiExecutionLifecycleRoute struct {
-	execution factorysessions.ExecutionService
+	execution factorysessionmapping.DurableExecution
 }
 
 // apiRequestPreparation is a strict public-role transport fake. Durable API
@@ -219,11 +219,11 @@ func (route apiExecutionLifecycleRoute) ProbeDurableFactorySessionEvents(ctx con
 	return err
 }
 
-func newDurableAPITestServer(execution factorysessions.ExecutionService) *api.Server {
+func newDurableAPITestServer(execution factorysessionmapping.DurableExecution) *api.Server {
 	return newDurableAndLiveAPITestServer(execution, nil)
 }
 
-func newDurableAndLiveAPITestServer(execution factorysessions.ExecutionService, live apisurface.LiveSessionAPI) *api.Server {
+func newDurableAndLiveAPITestServer(execution factorysessionmapping.DurableExecution, live apisurface.LiveSessionAPI) *api.Server {
 	preparation := canonicalAPIRequestPreparation()
 	var durable *factorysessionmapping.DurableAPI
 	if execution != nil {
@@ -247,7 +247,7 @@ func newWorkAPITestServer(work apisurface.WorkAPI) *api.Server {
 	)
 }
 
-func durableRoleHTTPServer(t *testing.T, execution factorysessions.ExecutionService) string {
+func durableRoleHTTPServer(t *testing.T, execution factorysessionmapping.DurableExecution) string {
 	t.Helper()
 	server := httptest.NewServer(newDurableAPITestServer(execution).Handler())
 	t.Cleanup(server.Close)
@@ -258,7 +258,7 @@ func durableRoleHTTPServer(t *testing.T, execution factorysessions.ExecutionServ
 // execution contract. Tests must install every callback they exercise; it has
 // no storage, reduction, lifecycle, replay, or execution behavior of its own.
 type apiExecutionScript struct {
-	factorysessions.ExecutionService
+	factorysessionmapping.DurableExecution
 	startAsync               func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error)
 	startSync                func(context.Context, factorysessions.StartRequest) (factorysessions.SyncStartResult, error)
 	resumeInterruptedSession func(context.Context, string, factorysessions.ResumeSessionRequest) (factorysessions.AsyncStartResult, error)

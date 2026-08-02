@@ -3,13 +3,12 @@ package cli
 import (
 	"context"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 )
 
 type compositionCollaboratorInvocation struct {
 	InvocationOperation
-	collaborator factorysessions.ModelsCLIPresentationCollaborator
+	collaborator PresentationCollaborator
 }
 
 func (inv compositionCollaboratorInvocation) CompositionModelsRoot() modelinference.Service {
@@ -44,7 +43,7 @@ func adaptCompositionInvocation(invocation InvocationOperation) InvocationOperat
 	if _, ok := invocation.(CompositionModelsRoot); ok {
 		return invocation
 	}
-	if collaborator, ok := invocation.(factorysessions.ModelsCLIPresentationCollaborator); ok {
+	if collaborator, ok := invocation.(PresentationCollaborator); ok {
 		return compositionCollaboratorInvocation{
 			InvocationOperation: invocation,
 			collaborator:        collaborator,
@@ -58,8 +57,8 @@ func AdaptCompositionInvocationForTest(invocation InvocationOperation) Invocatio
 	return adaptCompositionInvocation(invocation)
 }
 
-func presentationScopeRequestFromInvoke(cfg InvokeConfig) factorysessions.ModelsPresentationScopeRequest {
-	return factorysessions.ModelsPresentationScopeRequest{
+func presentationScopeRequestFromInvoke(cfg InvokeConfig) PresentationScopeRequest {
+	return PresentationScopeRequest{
 		FactoryDir:       cfg.FactoryDir,
 		HomeDir:          cfg.HomeDir,
 		OperatorDefaults: cfg.OperatorDefaults,

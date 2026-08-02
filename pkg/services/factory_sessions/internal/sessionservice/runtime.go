@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 
 	"go.uber.org/zap"
@@ -73,7 +74,7 @@ type SessionRuntime struct {
 	startTime                    time.Time
 	clock                        factory.Clock
 	definitions                  interfaces.Service
-	durableExecution             factorysessions.ExecutionService
+	durableExecution             durableexecution.Service
 	newJavaScriptCheckpointStore factory.JavaScriptCheckpointStoreFactory
 	sessionResultProjection      factory.SessionResultProjectionOperation
 	directoryInspection          roles.DirectoryInspection

@@ -23,8 +23,8 @@ type InvocationMetric = internalcontracts.InvocationMetric
 type SessionIDGenerator = internalcontracts.SessionIDGenerator
 
 // Effect-port contracts are published from the Sessions root as aliases so
-// peers and Wire bind through factorysessions names while pkg-structure keeps
-// the root InterfaceType count limited to Service + ExecutionService.
+// peers and Wire bind through factorysessions names without adding service
+// authorities to the root.
 type (
 	ExecutionOpeningFileSystem           = internalcontracts.ExecutionOpeningFileSystem
 	DirectoryInspection                  = internalcontracts.DirectoryInspection
@@ -110,17 +110,13 @@ type RuntimeHTTPServices struct {
 	FactoryDefinitions interfaces.Service
 	WorkflowPreview    factoryruntime.WorkflowPreviewOperation
 	FactorySessions    Service
-	SessionInvocation  interface {
-		InvokeFactorySession(context.Context, string, InvocationRequest) (interfaces.FactoryInvocationResult, error)
-	}
-	SessionExecution ExecutionService
-	Work             work.Service
-	Models           models.Service
-	ModelsScope      models.RuntimeScopeRef
-	Workers          workers.Service
-	ProviderSessions providersessions.Service
-	WorkerPrompts    workers.PromptTemplates
-	Logger           *zap.Logger
+	Work               work.Service
+	Models             models.Service
+	ModelsScope        models.RuntimeScopeRef
+	Workers            workers.Service
+	ProviderSessions   providersessions.Service
+	WorkerPrompts      workers.PromptTemplates
+	Logger             *zap.Logger
 }
 
 // FactoryScaffoldInitializer initializes a newly selected Factory directory.

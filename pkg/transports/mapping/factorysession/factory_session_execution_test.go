@@ -478,7 +478,7 @@ func TestExecutionErrorResponse_ReturnsFalseForUnknownErrors(t *testing.T) {
 }
 
 type durableResponseEventsExecutionFake struct {
-	factorysessionexecution.ExecutionService
+	factorysession.DurableExecution
 	subscribeDurable func(context.Context, factorysessionexecution.ResponseEventSubscriptionRequest) (*factorysessionexecution.ResponseEventCursor, error)
 	subscribeDirect  func(context.Context, string, factorysessionexecution.ResponseEventSubscriptionRequest) (*factorysessionexecution.ResponseEventCursor, error)
 }
@@ -541,7 +541,7 @@ func TestDurableAPIResponseEvents_SubscriberDelegatesToExecution(t *testing.T) {
 }
 
 type directResponseEventsExecutionFake struct {
-	factorysessionexecution.ExecutionService
+	factorysession.DurableExecution
 	subscribeDirect func(context.Context, string, factorysessionexecution.ResponseEventSubscriptionRequest) (*factorysessionexecution.ResponseEventCursor, error)
 }
 

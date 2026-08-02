@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
 	"go.uber.org/zap"
@@ -123,7 +124,7 @@ func (fs *SessionRuntime) inferenceProgressPublisher(
 	return factory(sessionID)
 }
 
-func (fs *SessionRuntime) durableExecutionService() factorysessions.ExecutionService {
+func (fs *SessionRuntime) durableExecutionService() durableexecution.Service {
 	if fs == nil {
 		return nil
 	}

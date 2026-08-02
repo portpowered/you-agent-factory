@@ -6,6 +6,7 @@ import (
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 )
 
 // PauseDurableFactorySession applies durable pause control through the control plane.
@@ -120,10 +121,10 @@ func (s *Service) applyDurableLifecycleControl(
 }
 
 type durableLifecycleHost struct {
-	execution factorysessions.ExecutionService
+	execution durableexecution.Service
 }
 
-func (h durableLifecycleHost) DurableExecution() factorysessions.ExecutionService {
+func (h durableLifecycleHost) DurableExecution() durableexecution.Service {
 	return h.execution
 }
 

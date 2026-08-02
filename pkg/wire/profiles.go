@@ -671,7 +671,7 @@ func provideFixtureStdioApplicationBuilder(
 ) factorysessionwire.FixtureStdioApplicationBuilder {
 	return func(
 		ctx context.Context,
-		execution factorysessions.ExecutionService,
+		execution factorysessionwire.DurableExecutionService,
 		input io.Reader,
 		output io.Writer,
 	) (factorysessionwire.StdioApplication, error) {

@@ -7,6 +7,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workflowsource "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"strings"
 	"time"
@@ -363,7 +364,7 @@ type (
 	ResumeSessionRequest         = factorysessions.ResumeSessionRequest
 	RetryDispatchRequest         = factorysessions.RetryDispatchRequest
 	RuntimeOptions               = factorysessions.RuntimeOptions
-	Service                      = factorysessions.ExecutionService
+	Service                      = durableexecution.Service
 	SessionActionAvailability    = factorysessions.SessionActionAvailability
 	SessionBudgets               = factorysessions.SessionBudgets
 	SessionListFilters           = factorysessions.SessionListFilters

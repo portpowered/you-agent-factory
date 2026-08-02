@@ -8,6 +8,7 @@ import (
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 )
 
 func TestRunNormalizedSyncPresentsActiveDirectJavaScriptResult(t *testing.T) {
@@ -32,7 +33,7 @@ func TestRunNormalizedSyncPresentsActiveDirectJavaScriptResult(t *testing.T) {
 }
 
 type syncPresentationService struct {
-	factorysessions.ExecutionService
+	factorysessionwire.DurableExecutionService
 	request factorysessions.StartRequest
 	result  factorysessions.SyncStartResult
 }

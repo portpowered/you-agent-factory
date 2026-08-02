@@ -13,6 +13,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -59,14 +60,14 @@ type OpenedInvocationRuntime struct {
 	Sessions       factorysessions.Service
 	Invoker        SessionInvoker
 	InputResolver  InvocationInputResolver
-	Execution      factorysessions.ExecutionService
+	Execution      durableexecution.Service
 	Lifecycle      LifecycleRuntime
 	ModelsScope    models.RuntimeScopeRef
 	CloseArtifacts func() error
 }
 
 type OpenedExecutionRuntime struct {
-	Execution       factorysessions.ExecutionService
+	Execution       durableexecution.Service
 	WorkflowPreview factoryruntime.WorkflowPreviewOperation
 	Resources       RuntimeResources
 }
@@ -96,7 +97,7 @@ type CursorStoreFactory func(string) (factorysessions.CursorStore, error)
 type ExecutionOpeningFileSystem = factorysessions.ExecutionOpeningFileSystem
 
 type OwnedExecutionService interface {
-	factorysessions.ExecutionService
+	durableexecution.Service
 	Close() error
 }
 
@@ -114,7 +115,7 @@ type StdioApplication interface {
 
 type FixtureStdioApplicationBuilder func(
 	context.Context,
-	factorysessions.ExecutionService,
+	durableexecution.Service,
 	io.Reader,
 	io.Writer,
 ) (StdioApplication, error)
@@ -161,7 +162,7 @@ type DirectJavaScriptLifecycle interface {
 
 type DirectJavaScriptSyncRunner func(
 	context.Context,
-	factorysessions.ExecutionService,
+	durableexecution.Service,
 	factorysessions.StartRequest,
 	bool,
 	io.Writer,
@@ -278,7 +279,7 @@ type RuntimeAssembly interface {
 		startupSpec factoryruntime.SessionBuildSpec,
 		runtimeLifecycle factoryruntime.Lifecycle,
 		runtimeSidecars factorysessions.RuntimeSidecars,
-		durableExecution factorysessions.ExecutionService,
+		durableExecution durableexecution.Service,
 		dir string,
 		executionBaseDir string,
 		runtimeMode factorydefinitions.RuntimeMode,

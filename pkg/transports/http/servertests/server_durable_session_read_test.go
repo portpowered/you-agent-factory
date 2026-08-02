@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 func TestListFactorySessions_RuntimeBackedIncludesLiveAndPersistedScopes(t *testing.T) {
@@ -315,7 +316,7 @@ func readBody(t *testing.T, resp *http.Response) string {
 	return string(body)
 }
 
-func serverURLForLifecycle(t *testing.T, service factorysessionexecution.ExecutionService) string {
+func serverURLForLifecycle(t *testing.T, service factorysessionmapping.DurableExecution) string {
 	t.Helper()
 	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())

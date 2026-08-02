@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 )
 
@@ -43,7 +44,7 @@ type dependencyHost struct {
 	sessionFactory                func(string) (factory.Service, error)
 	stopLiveSession               func(string) error
 	observeLiveLifecycleControl   func(string, factorysessions.LifecycleControlKind, factorysessions.ControlRequest, factorysessions.LifecycleControlOutcome, factorysessions.LifecycleStatus, error)
-	durableExecution              func() factorysessions.ExecutionService
+	durableExecution              func() durableexecution.Service
 	javaScriptCheckpointStore     func(*livesession.LiveSession) factory.JavaScriptCheckpointStore
 	directoryInspection           roles.DirectoryInspection
 	resolveSessionFolder          func(string) (string, error)
@@ -182,7 +183,7 @@ func (h dependencyHost) ObserveLiveLifecycleControl(
 	}
 }
 
-func (h dependencyHost) DurableExecution() factorysessions.ExecutionService {
+func (h dependencyHost) DurableExecution() durableexecution.Service {
 	if h.durableExecution == nil {
 		return nil
 	}

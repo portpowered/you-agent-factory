@@ -51,12 +51,6 @@ func (*sessionRole) GetFactorySession(context.Context, string) (factorysessions.
 	}, nil
 }
 
-type invocationRole struct {
-	factorysessionmapping.SessionInvoker
-}
-type executionRole struct {
-	factorysessions.ExecutionService
-}
 type durableLifecycleRole struct {
 	factorysessionmapping.DurableLifecycleAPI
 }
@@ -101,8 +95,7 @@ func TestHandlerBindsOpenedRolesWithoutReconstructingStableGraph(t *testing.T) {
 	}
 	opened := factorysessions.RuntimeHTTPServices{
 		FactoryRuntime: &runtimeRole{}, FactoryDefinitions: &definitionRole{},
-		FactorySessions: &sessionRole{}, SessionInvocation: &invocationRole{},
-		SessionExecution: &executionRole{}, Work: &workRole{}, Models: &modelRole{},
+		FactorySessions: &sessionRole{}, Work: &workRole{}, Models: &modelRole{},
 		Workers: &workerRole{}, ProviderSessions: &providerSessionRole{},
 	}
 	opened.Logger = zap.NewNop()
@@ -140,8 +133,7 @@ func TestHandlerBindsSessionsRootAtApplicationEdge(t *testing.T) {
 	}
 	opened := factorysessions.RuntimeHTTPServices{
 		FactoryRuntime: &runtimeRole{}, FactoryDefinitions: &definitionRole{},
-		FactorySessions: &sessionRole{}, SessionInvocation: &invocationRole{},
-		SessionExecution: &executionRole{}, Work: &workRole{}, Models: &modelRole{},
+		FactorySessions: &sessionRole{}, Work: &workRole{}, Models: &modelRole{},
 		Workers: &workerRole{}, ProviderSessions: &providerSessionRole{},
 		Logger: zap.NewNop(),
 	}
@@ -244,7 +236,7 @@ func TestHandlerBindsStandaloneDurableExecution(t *testing.T) {
 		t.Fatalf("NewHandler: %v", err)
 	}
 	bound, err := handler.BindDurableExecution(
-		&executionRole{},
+		&sessionRole{},
 		&durableLifecycleRole{},
 		zap.NewNop(),
 	)
@@ -257,7 +249,7 @@ func TestHandlerRejectsIncompleteDurableExecutionBinding(t *testing.T) {
 	t.Parallel()
 
 	valid := &Handler{sessionRequests: &requestPreparationRole{}}
-	execution := &executionRole{}
+	execution := &sessionRole{}
 	lifecycle := &durableLifecycleRole{}
 	for name, bind := range map[string]func() (http.Handler, error){
 		"handler": func() (http.Handler, error) {

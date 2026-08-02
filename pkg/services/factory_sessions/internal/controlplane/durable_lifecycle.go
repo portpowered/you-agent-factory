@@ -7,11 +7,12 @@ import (
 	"strings"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 )
 
 // DurableLifecycleHost exposes durable execution backend access for control-plane routing.
 type DurableLifecycleHost interface {
-	DurableExecution() factorysessions.ExecutionService
+	DurableExecution() durableexecution.Service
 }
 
 // ErrDurableSessionLifecycleRouting reports that session identity does not route to durable execution.
@@ -29,7 +30,7 @@ func requireDurableSessionID(host DurableLifecycleHost, sessionID string) error 
 	return nil
 }
 
-func durableExecutionService(host DurableLifecycleHost) (factorysessions.ExecutionService, error) {
+func durableExecutionService(host DurableLifecycleHost) (durableexecution.Service, error) {
 	if host == nil || host.DurableExecution() == nil {
 		return nil, fmt.Errorf("durable session execution is required")
 	}

@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	durableexecutionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/wire"
 	liveruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime"
@@ -20,13 +22,16 @@ import (
 
 // Service is the canonical Factory Session application gateway for open, read, and lifecycle behavior.
 type Service struct {
-	host           Host
-	liveRuntime    liveruntime.Service
-	streams        *stream.Manager
-	reconnects     factorysessions.ReconnectCursorValidator
-	results        factoryruntime.SessionResultProjectionOperation
-	responseEvents responsestreamservice.Service
-	durable        durableexecution.Service
+	host              Host
+	liveRuntime       liveruntime.Service
+	streams           *stream.Manager
+	reconnects        factorysessions.ReconnectCursorValidator
+	results           factoryruntime.SessionResultProjectionOperation
+	responseEvents    responsestreamservice.Service
+	durable           durableexecution.Service
+	invoker           roles.SessionInvoker
+	activate          func(context.Context, string) error
+	activationGateway factorydefinitions.DefinitionActivationGateway
 }
 
 // ForRuntime keeps an already-bound Factory Sessions gateway stable.

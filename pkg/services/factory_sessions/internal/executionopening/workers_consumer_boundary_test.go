@@ -6,6 +6,7 @@ import (
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -66,7 +67,7 @@ func TestBuildWithWorkerEffectsForwardsWorkersRootInvocationBindings(t *testing.
 			_ string,
 			executor workers.InvocationExecutor,
 			_ factory.Clock,
-		) (factorysessions.ExecutionService, error) {
+		) (durableexecution.Service, error) {
 			if executor == nil {
 				t.Fatal("worker invocation executor is required for live child execution")
 			}

@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimehosting"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	invocationwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -41,6 +42,7 @@ type (
 	RuntimeReader                        = roles.RuntimeReader
 	OwnedExecutionService                = roles.OwnedExecutionService
 	ExecutionServiceBuilder              = roles.ExecutionServiceBuilder
+	DurableExecutionService              = durableexecution.Service
 	StdioApplication                     = roles.StdioApplication
 	FixtureStdioApplicationBuilder       = roles.FixtureStdioApplicationBuilder
 	RuntimeStdioApplicationBuilder       = roles.RuntimeStdioApplicationBuilder

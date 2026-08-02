@@ -20,7 +20,7 @@ type ListDispatchesInput struct {
 // through the you.factory_session.list_dispatches MCP tool.
 func ListDispatches(
 	ctx context.Context,
-	service factorysessionexecution.ExecutionService,
+	service DurableExecution,
 	input ListDispatchesInput,
 ) ToolResponse[factoryapi.ListFactorySessionDispatchesResponse] {
 	if ctx == nil {
@@ -59,7 +59,7 @@ type ListArtifactsInput struct {
 // Session through the you.factory_session.list_artifacts MCP tool.
 func ListArtifacts(
 	ctx context.Context,
-	service factorysessionexecution.ExecutionService,
+	service DurableExecution,
 	input ListArtifactsInput,
 ) ToolResponse[factoryapi.ListFactorySessionArtifactsResponse] {
 	if ctx == nil {
@@ -100,7 +100,7 @@ type ReadEventsResult struct {
 
 // ReadEvents returns ordered Factory Session event facts for reconnect and
 // inspection through the you.factory_session.read_events MCP tool.
-func ReadEvents(ctx context.Context, service factorysessionexecution.ExecutionService, prepare RequestPreparation, input ReadEventsInput) ToolResponse[ReadEventsResult] {
+func ReadEvents(ctx context.Context, service DurableExecution, prepare RequestPreparation, input ReadEventsInput) ToolResponse[ReadEventsResult] {
 	if ctx == nil {
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[ReadEventsResult]{Error: &envelope}
@@ -160,7 +160,7 @@ type ControlInput struct {
 // you.factory_session.control MCP tool.
 func Control(
 	ctx context.Context,
-	service factorysessionexecution.ExecutionService,
+	service DurableExecution,
 	prepare RequestPreparation,
 	input ControlInput,
 ) ToolResponse[factoryapi.FactorySessionLifecycleControlResponse] {
@@ -195,7 +195,7 @@ func Control(
 // pkgmaintcheck:ignore-cyclomatic-complexity this MCP control router keeps lifecycle kind dispatch on one seam.
 func invokeLifecycleControl(
 	ctx context.Context,
-	service factorysessionexecution.ExecutionService,
+	service DurableExecution,
 	prepare RequestPreparation,
 	input ControlInput,
 ) (factorysessionexecution.LifecycleControlResult, error) {

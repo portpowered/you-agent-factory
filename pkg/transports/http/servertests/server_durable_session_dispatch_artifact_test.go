@@ -9,6 +9,7 @@ import (
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 const (
@@ -323,7 +324,7 @@ func apiArtifactDetail() factorysessions.ArtifactDetail {
 	}
 }
 
-func durableHTTPServer(t *testing.T, service factorysessions.ExecutionService) string {
+func durableHTTPServer(t *testing.T, service factorysessionmapping.DurableExecution) string {
 	t.Helper()
 	return durableRoleHTTPServer(t, service)
 }

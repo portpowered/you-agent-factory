@@ -7,6 +7,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 )
 
 func TestNewRequiresExecutionAndStaysInert(t *testing.T) {
@@ -70,7 +71,7 @@ func TestServiceDelegatesDurableExecutionContract(t *testing.T) {
 }
 
 type executionStub struct {
-	factorysessions.ExecutionService
+	durableexecution.Service
 	calls  int
 	replay bool
 }
@@ -121,5 +122,5 @@ func TestRecordPetriTokenMutationsRejectsUnsupportedExecution(t *testing.T) {
 }
 
 type executionWithoutMutation struct {
-	factorysessions.ExecutionService
+	durableexecution.Service
 }

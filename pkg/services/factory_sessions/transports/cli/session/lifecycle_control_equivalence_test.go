@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -282,7 +283,7 @@ func TestLifecycleControlResume_NamedLiveSessionCLIJSONMatchesAPIResponse(t *tes
 }
 
 type lifecycleEquivalenceScript struct {
-	factorysessionexecution.ExecutionService
+	factorysessionwire.DurableExecutionService
 	pause  func(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
 	resume func(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
 }
@@ -355,19 +356,19 @@ func lifecycleEquivalenceResult(
 	}
 }
 
-func serverURLForLifecycleEquivalence(t *testing.T, service factorysessionexecution.ExecutionService) string {
+func serverURLForLifecycleEquivalence(t *testing.T, service factorysessionwire.DurableExecutionService) string {
 	t.Helper()
 	server := httptest.NewServer(lifecycleEquivalenceHTTPHandler(service))
 	t.Cleanup(server.Close)
 	return server.URL
 }
 
-func liveLifecycleEquivalenceServerURL(t *testing.T, service factorysessionexecution.ExecutionService) string {
+func liveLifecycleEquivalenceServerURL(t *testing.T, service factorysessionwire.DurableExecutionService) string {
 	t.Helper()
 	return serverURLForLifecycleEquivalence(t, service)
 }
 
-func lifecycleEquivalenceHTTPHandler(service factorysessionexecution.ExecutionService) http.Handler {
+func lifecycleEquivalenceHTTPHandler(service factorysessionwire.DurableExecutionService) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 		if r.Method != http.MethodPost || len(parts) != 3 || parts[0] != "factory-sessions" {

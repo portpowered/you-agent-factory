@@ -12,6 +12,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -176,7 +177,7 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 		settings factoryruntime.JavaScriptWorkerSettings,
 		_ *workers.MockWorkersConfig,
 		_ []operatorconfig.ACPIntegration,
-	) (factorysessions.ExecutionService, error) {
+	) (durableexecution.Service, error) {
 		got = settings
 		return nil, nil
 	}

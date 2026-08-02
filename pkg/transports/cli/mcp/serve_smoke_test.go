@@ -48,7 +48,7 @@ func TestRunServe_InstallSmoke_DiscoveryValidateAsyncPoll(t *testing.T) {
 
 func startRunServeSmokeServer(
 	t *testing.T,
-	service factorysessions.ExecutionService,
+	service mcpfactorysession.DurableExecution,
 ) (*stdioMCPClient, *os.File, <-chan error) {
 	t.Helper()
 	stdinRead, stdinWrite, err := os.Pipe()
@@ -78,7 +78,7 @@ func startRunServeSmokeServer(
 
 func executeGeneratedMCPServe(
 	ctx context.Context,
-	service factorysessions.ExecutionService,
+	service mcpfactorysession.DurableExecution,
 	stdin io.Reader,
 	stdout io.Writer,
 	wantRuntime bool,
@@ -445,7 +445,7 @@ func decodeToolResponse[T any](t *testing.T, response mcpJSONRPCResponse) mcpfac
 }
 
 type installSmokeExecutionScript struct {
-	factorysessions.ExecutionService
+	mcpfactorysession.DurableExecution
 }
 
 func (installSmokeExecutionScript) StartAsync(

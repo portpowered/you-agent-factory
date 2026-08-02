@@ -772,7 +772,7 @@ func (fake *peerRootServiceFake) InterruptDurableFactorySessionDispatch(context.
 	return LifecycleControlResult{}, ErrDurableSessionNotFound
 }
 
-// peerExecutionStub satisfies the durable ExecutionService methods embedded in
+// peerExecutionStub satisfies the durable execution methods exposed by
 // the singular root Service so a peer can compile against one aggregate authority.
 type peerExecutionStub struct {
 	Service

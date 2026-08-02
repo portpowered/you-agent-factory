@@ -323,8 +323,8 @@ type SyncPreflightResult struct {
 // --- merged from execution_owned_helpers.go ---
 
 // Root-owned lifecycle helpers are published as function values so the Sessions
-// service root keeps exactly the Service/ExecutionService InterfaceType surface
-// required by pkg-structure (no package-level FuncDecl exports).
+// service root keeps exactly the Service InterfaceType surface required by
+// pkg-structure (no package-level FuncDecl exports).
 var (
 	IsTerminalLifecycleStatus              = isTerminalLifecycleStatus
 	AllowsRetryDispatchOnTerminal          = allowsRetryDispatchOnTerminal
@@ -340,7 +340,6 @@ var (
 	MaterializeEventReadStream             = materializeEventReadStream
 	NewValidationError                     = newValidationError
 )
-
 
 // IsTerminalLifecycleStatus reports whether status is terminal and therefore
 // immutable except for explicitly allowed inspection or retry behaviors.
