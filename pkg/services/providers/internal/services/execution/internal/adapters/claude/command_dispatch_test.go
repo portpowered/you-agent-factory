@@ -37,6 +37,7 @@ func TestCommandEffectRendersProviderNeutralReasoningEffort(t *testing.T) {
 		"-p",
 		"--model", "claude-model",
 		"--effort", "xhigh",
+		"--verbose",
 		"--output-format", "stream-json",
 		"--include-partial-messages",
 		"perform work",
