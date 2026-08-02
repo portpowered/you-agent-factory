@@ -196,6 +196,13 @@ func (p fakeDefinitionsPeer) ReplaceNamedFactory(
 	}, nil
 }
 
+func (fakeDefinitionsPeer) ReplaceFactoryLayoutAtDir(
+	context.Context,
+	factorydefinitions.ReplaceFactoryLayoutAtDirRequest,
+) (factorydefinitions.ReplaceFactoryLayoutAtDirResult, error) {
+	return factorydefinitions.ReplaceFactoryLayoutAtDirResult{}, nil
+}
+
 func (p fakeDefinitionsPeer) CompileEffectiveFactorySource(
 	_ context.Context,
 	request factorydefinitions.CompileEffectiveFactorySourceRequest,

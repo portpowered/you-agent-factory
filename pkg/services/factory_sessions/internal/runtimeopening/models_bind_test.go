@@ -508,7 +508,7 @@ type openingCoordinatorValidator struct {
 }
 
 type openingCoordinatorNamedPaths struct {
-	factorydefinitions.NamedPathResolver
+	roles.NamedPathResolver
 }
 
 func (openingCoordinatorNamedPaths) ResolveCurrentDir(rootDir string) (string, error) {

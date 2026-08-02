@@ -103,8 +103,8 @@ func TestSessionOwnerTelemetry_RedactsSensitiveArgumentFailure(t *testing.T) {
 		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 			return SessionInvocationObservation{}, nil
 		},
-		Telemetry:     recording.telemetry(),
-		Interpolation: rejectingInvocationInterpolation("apiKey"),
+		Telemetry:         recording.telemetry(),
+		ResolveDefinition: rejectingInvocationInterpolation("apiKey"),
 	})
 
 	_, err := owner.InvokeFactorySession(context.Background(), "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{
@@ -143,9 +143,9 @@ func TestSessionOwnerTelemetry_DefaultWorkTypeFailureIsReportedOnce(t *testing.T
 			return SessionInvocationObservation{}, nil
 		},
 		Telemetry: recording.telemetry(),
-		WorkTypes: rejectingInvocationWorkType{
+		ResolveDefinition: rejectingInvocationWorkType{
 			err: errors.New("expected exactly one default Work type"),
-		},
+		}.ResolveDefinition,
 	})
 
 	source := factoryapi.InvocationInputSourceKindText

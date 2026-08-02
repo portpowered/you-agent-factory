@@ -21,9 +21,6 @@ import (
 // session runtime's flat public callbacks.
 func NewInvocationOwner(
 	fs *SessionRuntime,
-	interpolation interfaces.InvocationInterpolationService,
-	invocationWorkTypes interfaces.InvocationWorkTypeService,
-	ttsObservability interfaces.TTSObservabilityService,
 	inputFiles fileeffects.InvocationInputReader,
 ) (invocationservice.Service, error) {
 	if fs == nil {
@@ -42,7 +39,6 @@ func NewInvocationOwner(
 			return invocationruntime.Observe(ctx, fs.sessionState, sessionID, input, fs.worldStateProjector)
 		},
 		Telemetry: packagedtts.NewTelemetry(
-			ttsObservability,
 			func(metric sessioninvocation.SessionInvocationMetric) {
 				fs.recordInvocationMetric(metric.Name, metric.Labels)
 			},
@@ -50,11 +46,44 @@ func NewInvocationOwner(
 				invocationruntime.WriteLogRecord(fs.logger, record)
 			},
 		),
-		SpecialCase:   packagedtts.NewSpecialCase(ttsObservability),
-		Interpolation: interpolation,
-		WorkTypes:     invocationWorkTypes,
-		InputFiles:    inputFiles,
-		Work:          work.NewInvocationPolicyService(),
+		SpecialCase: packagedtts.NewSpecialCase(),
+		ResolveDefinition: func(
+			ctx context.Context,
+			sessionID string,
+			cfg *interfaces.FactoryConfig,
+			args *interfaces.InvocationArguments,
+			fileInputs map[string][]byte,
+		) (interfaces.ResolveInvocationDefinitionResult, error) {
+			if fs.definitions == nil {
+				return interfaces.ResolveInvocationDefinitionResult{}, fmt.Errorf("Factory Definitions service is required")
+			}
+			runtimeConfig, err := runtimebinding.RuntimeConfigForSession(fs.sessionState, sessionID)
+			if err != nil {
+				return interfaces.ResolveInvocationDefinitionResult{}, err
+			}
+			if runtimeConfig == nil {
+				return interfaces.ResolveInvocationDefinitionResult{}, fmt.Errorf("Factory Session runtime definition is unavailable")
+			}
+			definition := runtimeConfig.FactoryConfig()
+			if definition == nil {
+				definition = cfg
+			}
+			var invocationArgs interfaces.InvocationArguments
+			if args != nil {
+				invocationArgs = *args
+			}
+			return fs.definitions.ResolveInvocationDefinition(ctx, interfaces.ResolveInvocationDefinitionRequest{
+				Definition: interfaces.EffectiveFactorySource{
+					Factory:        definition,
+					FactoryDir:     runtimeConfig.FactoryDir(),
+					RuntimeBaseDir: runtimeConfig.RuntimeBaseDir(),
+				},
+				Arguments:         invocationArgs,
+				ResolvedFileInput: fileInputs,
+			})
+		},
+		InputFiles: inputFiles,
+		Work:       work.NewInvocationPolicyService(),
 	})
 }
 

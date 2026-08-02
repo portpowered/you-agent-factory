@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	legacyinvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
@@ -64,8 +63,7 @@ func TestWorkInvocationBoundary_PreparesInputThroughWorkService(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		factorydefinitionfixtures.InvocationInterpolation{},
-		staticInvocationWorkType("task"),
+		definitionResolverForTest("task"),
 		func(string) ([]byte, error) { return nil, nil },
 		recording,
 	)
@@ -112,8 +110,7 @@ func TestWorkInvocationBoundary_ResolvesPrimaryResultThroughWorkService(t *testi
 		nil,
 		nil,
 		nil,
-		factorydefinitionfixtures.InvocationInterpolation{},
-		staticInvocationWorkType("task"),
+		definitionResolverForTest("task"),
 		func(string) ([]byte, error) { return nil, nil },
 		recording,
 	)
@@ -142,12 +139,6 @@ func TestWorkInvocationBoundary_ResolvesPrimaryResultThroughWorkService(t *testi
 	if len(result.PrimaryResult) != 1 || result.PrimaryResult[0].Text != "done" {
 		t.Fatalf("primary result = %#v, want done", result.PrimaryResult)
 	}
-}
-
-type staticInvocationWorkType string
-
-func (workType staticInvocationWorkType) DefaultWorkType(*factorydefinitions.FactoryConfig) (string, error) {
-	return string(workType), nil
 }
 
 func sessionOwnerFactoryConfig() *factorydefinitions.FactoryConfig {

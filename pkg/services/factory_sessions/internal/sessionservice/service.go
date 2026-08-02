@@ -21,14 +21,15 @@ import (
 
 // Service is the canonical Factory Session application gateway for open, read, and lifecycle behavior.
 type Service struct {
-	host           Host
-	liveRuntime    liveruntime.Service
-	streams        *stream.Manager
-	reconnects     factorysessions.ReconnectCursorValidator
-	results        factoryruntime.SessionResultProjectionOperation
-	responseEvents responsestreamservice.Service
-	durable        durableexecution.Service
-	invoker        interface {
+	host              Host
+	definitionRuntime *SessionRuntime
+	liveRuntime       liveruntime.Service
+	streams           *stream.Manager
+	reconnects        factorysessions.ReconnectCursorValidator
+	results           factoryruntime.SessionResultProjectionOperation
+	responseEvents    responsestreamservice.Service
+	durable           durableexecution.Service
+	invoker           interface {
 		InvokeFactorySession(context.Context, string, factorysessions.InvocationRequest) (factorydefinitions.FactoryInvocationResult, error)
 	}
 	activate          func(context.Context, string) error
@@ -41,6 +42,51 @@ func (s *Service) ForRuntime(factorysessions.RuntimeBinding) (factorysessions.Se
 		return nil, fmt.Errorf("Factory Sessions gateway is required")
 	}
 	return s, nil
+}
+
+// AttachDefinitionRuntime binds the already-constructed Session runtime to the
+// root gateway. The binding is one-way: current-Factory lifecycle policy stays
+// in Sessions and the Definitions root is consumed only as a unary capability.
+func (s *Service) AttachDefinitionRuntime(runtime *SessionRuntime) *Service {
+	if s != nil && runtime != nil {
+		s.definitionRuntime = runtime
+	}
+	return s
+}
+
+// ReadCurrentFactoryForSession routes current-Factory reads through the
+// Session-owned lifecycle implementation.
+func (s *Service) ReadCurrentFactoryForSession(
+	ctx context.Context,
+	sessionID string,
+) (factorydefinitions.EditableFactory, error) {
+	if s == nil || s.definitionRuntime == nil {
+		return factorydefinitions.EditableFactory{}, fmt.Errorf("Factory Session definition runtime is required")
+	}
+	return s.definitionRuntime.ReadCurrentFactoryForSession(ctx, sessionID)
+}
+
+// SaveFactoryForSession routes current-Factory persistence through the
+// Session-owned lifecycle implementation.
+func (s *Service) SaveFactoryForSession(
+	ctx context.Context,
+	sessionID string,
+	mode factorydefinitions.SaveMode,
+	request factorydefinitions.EditableFactory,
+) (factorydefinitions.EditableFactory, error) {
+	if s == nil || s.definitionRuntime == nil {
+		return factorydefinitions.EditableFactory{}, fmt.Errorf("Factory Session definition runtime is required")
+	}
+	return s.definitionRuntime.SaveFactoryForSession(ctx, sessionID, mode, request)
+}
+
+// ActivateFactory routes named-Factory activation through Sessions-owned
+// locking, idle checks, runtime replacement, and rollback.
+func (s *Service) ActivateFactory(ctx context.Context, name string) error {
+	if s == nil || s.definitionRuntime == nil {
+		return fmt.Errorf("Factory Session definition runtime is required")
+	}
+	return s.definitionRuntime.ActivateFactory(ctx, name)
 }
 
 // InvokeFactorySession routes invocation through the root-owned invocation
@@ -76,6 +122,9 @@ func (s *Service) InvokeFactorySession(
 // runtime callback. Definition policy remains in Factory Definitions; this
 // method only exposes the Sessions-owned serialization boundary.
 func (s *Service) ActivateNamedFactory(ctx context.Context, name string) error {
+	if s != nil && s.definitionRuntime != nil {
+		return s.definitionRuntime.ActivateFactory(ctx, name)
+	}
 	if s == nil || s.activate == nil {
 		return fmt.Errorf("Factory Session activation service is required")
 	}

@@ -79,7 +79,7 @@ type SessionRuntime struct {
 	directoryInspection          roles.DirectoryInspection
 	sessionIDs                   factorysessions.SessionIDGenerator
 	resolveHome                  factorysessions.HomeDirectoryResolver
-	namedPaths                   interfaces.NamedPathResolver
+	namedPaths                   roles.NamedPathResolver
 	initialWorkFiles             fileeffects.InitialWorkReader
 	identity                     identity.Service
 }
@@ -87,14 +87,7 @@ type SessionRuntime struct {
 // ActivateNamedFactory builds a replacement runtime from a persisted named
 // factory directory and swaps it in only after the current runtime is idle.
 func (fs *SessionRuntime) ActivateNamedFactory(ctx context.Context, name string) error {
-	if fs == nil {
-		return fmt.Errorf("factory service is required")
-	}
-	svc := fs.requireDefinitions()
-	if svc == nil {
-		return fmt.Errorf("factory definition service is required")
-	}
-	return svc.ActivateNamedFactory(ctx, name)
+	return fs.ActivateFactory(ctx, name)
 }
 
 func (fs *SessionRuntime) buildReplacementFactoryRuntime(

@@ -33,11 +33,8 @@ func New(deps invocationservice.Dependencies) (*Service, error) {
 	if deps.Observe == nil {
 		return nil, fmt.Errorf("construct Factory Session invocation: result observer is required")
 	}
-	if deps.Interpolation == nil {
-		return nil, fmt.Errorf("construct Factory Session invocation: interpolation service is required")
-	}
-	if deps.WorkTypes == nil {
-		return nil, fmt.Errorf("construct Factory Session invocation: Work Type service is required")
+	if deps.ResolveDefinition == nil {
+		return nil, fmt.Errorf("construct Factory Session invocation: Definitions resolver is required")
 	}
 	if deps.InputFiles == nil {
 		return nil, fmt.Errorf("construct Factory Session invocation: input file reader is required")
@@ -52,8 +49,7 @@ func New(deps invocationservice.Dependencies) (*Service, error) {
 		deps.WaitNext,
 		deps.Telemetry,
 		deps.SpecialCase,
-		deps.Interpolation,
-		deps.WorkTypes,
+		deps.ResolveDefinition,
 		deps.InputFiles,
 		deps.Work,
 	)}, nil

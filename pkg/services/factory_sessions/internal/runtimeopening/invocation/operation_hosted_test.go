@@ -49,6 +49,18 @@ func (fake *hostedLiveSessionsFake) ActivateNamedFactory(context.Context, string
 	return factorysessions.ErrSessionNotFound
 }
 
+func (fake *hostedLiveSessionsFake) ActivateFactory(context.Context, string) error {
+	return factorysessions.ErrSessionNotFound
+}
+
+func (fake *hostedLiveSessionsFake) ReadCurrentFactoryForSession(context.Context, string) (factorydefinitions.EditableFactory, error) {
+	return factorydefinitions.EditableFactory{}, factorysessions.ErrSessionNotFound
+}
+
+func (fake *hostedLiveSessionsFake) SaveFactoryForSession(context.Context, string, factorydefinitions.SaveMode, factorydefinitions.EditableFactory) (factorydefinitions.EditableFactory, error) {
+	return factorydefinitions.EditableFactory{}, factorysessions.ErrSessionNotFound
+}
+
 func (fake *hostedLiveSessionsFake) OpenFactorySession(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error) {
 	return &factorysessions.OpenResult{SessionID: factorysessions.DefaultSessionID}, nil
 }

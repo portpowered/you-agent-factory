@@ -3,7 +3,6 @@ package service
 import (
 	"fmt"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
@@ -19,14 +18,14 @@ type Root struct {
 	factorysessions.Service
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
 	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
-	interpolation                factorydefinitions.InvocationInterpolationService
-	invocationWorkTypes          factorydefinitions.InvocationWorkTypeService
-	ttsObservability             factorydefinitions.TTSObservabilityService
+	interpolation                any
+	invocationWorkTypes          any
+	ttsObservability             any
 	eventIDs                     factorysessions.ResponseEventIDGenerator
 	sessionIDs                   factorysessions.SessionIDGenerator
 	resolveHome                  factorysessions.HomeDirectoryResolver
 	directoryInspection          roles.DirectoryInspection
-	namedPaths                   factorydefinitions.NamedPathResolver
+	namedPaths                   roles.NamedPathResolver
 	invocationInputFiles         fileeffects.InvocationInputReader
 	initialWorkFiles             fileeffects.InitialWorkReader
 	identity                     identity.Service
@@ -38,14 +37,14 @@ type Root struct {
 func NewRoot(
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
-	ttsObservability factorydefinitions.TTSObservabilityService,
+	interpolation any,
+	invocationWorkTypes any,
+	ttsObservability any,
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directoryInspection roles.DirectoryInspection,
-	namedPaths factorydefinitions.NamedPathResolver,
+	namedPaths roles.NamedPathResolver,
 	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,

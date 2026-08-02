@@ -29,14 +29,14 @@ type Assembly struct {
 	streams                      streamManager
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
 	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
-	interpolation                factorydefinitions.InvocationInterpolationService
-	invocationWorkTypes          factorydefinitions.InvocationWorkTypeService
-	ttsObservability             factorydefinitions.TTSObservabilityService
+	interpolation                any
+	invocationWorkTypes          any
+	ttsObservability             any
 	eventIDs                     factorysessions.ResponseEventIDGenerator
 	sessionIDs                   factorysessions.SessionIDGenerator
 	resolveHome                  factorysessions.HomeDirectoryResolver
 	directoryInspection          roles.DirectoryInspection
-	namedPaths                   factorydefinitions.NamedPathResolver
+	namedPaths                   roles.NamedPathResolver
 	invocationInputFiles         fileeffects.InvocationInputReader
 	initialWorkFiles             fileeffects.InitialWorkReader
 	identity                     identity.Service
@@ -52,15 +52,15 @@ type streamManager interface {
 func NewAssembly(
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
-	ttsObservability factorydefinitions.TTSObservabilityService,
+	interpolation any,
+	invocationWorkTypes any,
+	ttsObservability any,
 	clock factoryruntime.Clock,
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directoryInspection roles.DirectoryInspection,
-	namedPaths factorydefinitions.NamedPathResolver,
+	namedPaths roles.NamedPathResolver,
 	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,
@@ -273,8 +273,9 @@ func (a *Assembly) Complete(
 		a.responseStreams,
 	)
 	gateway = runtime.AttachSessionGateway(gateway)
+	gateway.AttachDefinitionRuntime(runtime)
 	a.Service = gateway
-	invoker, err := NewInvocationOwner(runtime, a.interpolation, a.invocationWorkTypes, a.ttsObservability, a.invocationInputFiles)
+	invoker, err := NewInvocationOwner(runtime, a.invocationInputFiles)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

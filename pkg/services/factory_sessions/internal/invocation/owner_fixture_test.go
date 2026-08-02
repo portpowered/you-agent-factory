@@ -2,34 +2,40 @@ package invocation
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 type sessionOwnerFixture struct {
-	FactoryConfig func(string) (*interfaces.FactoryConfig, error)
-	SubmitWork    func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
-	Observe       func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error)
-	WaitNext      func(context.Context) error
-	Telemetry     SessionInvocationTelemetry
-	SpecialCase   SessionInvocationSpecialCase
-	Interpolation interfaces.InvocationInterpolationService
-	WorkTypes     interfaces.InvocationWorkTypeService
-	InputFiles    fileeffects.InvocationInputReader
-	Work          work.Service
+	FactoryConfig     func(string) (*interfaces.FactoryConfig, error)
+	SubmitWork        func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
+	Observe           func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error)
+	WaitNext          func(context.Context) error
+	Telemetry         SessionInvocationTelemetry
+	SpecialCase       SessionInvocationSpecialCase
+	ResolveDefinition DefinitionResolver
+	InputFiles        fileeffects.InvocationInputReader
+	Work              work.Service
 }
 
 func newTestSessionOwner(fixture sessionOwnerFixture) *SessionOwner {
-	interpolation := fixture.Interpolation
-	if interpolation == nil {
-		interpolation = factorydefinitionfixtures.InvocationInterpolation{}
-	}
-	workTypes := fixture.WorkTypes
-	if workTypes == nil {
-		workTypes = staticInvocationWorkType("task")
+	resolveDefinition := fixture.ResolveDefinition
+	if resolveDefinition == nil {
+		resolveDefinition = func(
+			_ context.Context,
+			_ string,
+			cfg *interfaces.FactoryConfig,
+			_ *work.InvocationArguments,
+			_ map[string][]byte,
+		) (interfaces.ResolveInvocationDefinitionResult, error) {
+			if cfg == nil {
+				return interfaces.ResolveInvocationDefinitionResult{}, fmt.Errorf("Factory Definitions returned no Factory")
+			}
+			return interfaces.ResolveInvocationDefinitionResult{Factory: *cfg, DefaultWorkType: "task"}, nil
+		}
 	}
 	inputFiles := fixture.InputFiles
 	if inputFiles == nil {
@@ -46,34 +52,37 @@ func newTestSessionOwner(fixture sessionOwnerFixture) *SessionOwner {
 		fixture.WaitNext,
 		fixture.Telemetry,
 		fixture.SpecialCase,
-		interpolation,
-		workTypes,
+		resolveDefinition,
 		inputFiles,
 		workService,
 	)
 }
 
-type staticInvocationWorkType string
-
-func (workType staticInvocationWorkType) DefaultWorkType(*interfaces.FactoryConfig) (string, error) {
-	return string(workType), nil
-}
-
 type rejectingInvocationWorkType struct{ err error }
 
-func (workType rejectingInvocationWorkType) DefaultWorkType(*interfaces.FactoryConfig) (string, error) {
-	return "", workType.err
+func (workType rejectingInvocationWorkType) ResolveDefinition(
+	context.Context,
+	string,
+	*interfaces.FactoryConfig,
+	*work.InvocationArguments,
+	map[string][]byte,
+) (interfaces.ResolveInvocationDefinitionResult, error) {
+	return interfaces.ResolveInvocationDefinitionResult{}, fmt.Errorf("resolve default Work type: %w", workType.err)
 }
 
-func rejectingInvocationInterpolation(parameter string) interfaces.InvocationInterpolationService {
-	return factorydefinitionfixtures.InvocationInterpolation{
-		Validate: func(*interfaces.FactoryConfig, *work.InvocationArguments, interfaces.FileReader) error {
-			return &work.ArgumentError{
-				Code:      work.ArgumentErrorCodeInvalidInterpolation,
-				Message:   "scripted invalid invocation interpolation",
-				Parameter: parameter,
-			}
-		},
+func rejectingInvocationInterpolation(parameter string) DefinitionResolver {
+	return func(
+		context.Context,
+		string,
+		*interfaces.FactoryConfig,
+		*work.InvocationArguments,
+		map[string][]byte,
+	) (interfaces.ResolveInvocationDefinitionResult, error) {
+		return interfaces.ResolveInvocationDefinitionResult{}, &work.ArgumentError{
+			Code:      work.ArgumentErrorCodeInvalidInterpolation,
+			Message:   "scripted invalid invocation interpolation",
+			Parameter: parameter,
+		}
 	}
 }
 

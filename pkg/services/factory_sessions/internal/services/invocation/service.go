@@ -23,14 +23,13 @@ type Service interface {
 // They contain no process-wide service bag and are safe to bind independently
 // for each opened Factory Sessions runtime.
 type Dependencies struct {
-	FactoryConfig func(string) (*factorydefinitions.FactoryConfig, error)
-	SubmitWork    func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
-	Observe       func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error)
-	WaitNext      func(context.Context) error
-	Telemetry     legacyinvocation.SessionInvocationTelemetry
-	SpecialCase   legacyinvocation.SessionInvocationSpecialCase
-	Interpolation factorydefinitions.InvocationInterpolationService
-	WorkTypes     factorydefinitions.InvocationWorkTypeService
-	InputFiles    fileeffects.InvocationInputReader
-	Work          work.Service
+	FactoryConfig     func(string) (*factorydefinitions.FactoryConfig, error)
+	SubmitWork        func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
+	Observe           func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error)
+	WaitNext          func(context.Context) error
+	Telemetry         legacyinvocation.SessionInvocationTelemetry
+	SpecialCase       legacyinvocation.SessionInvocationSpecialCase
+	ResolveDefinition legacyinvocation.DefinitionResolver
+	InputFiles        fileeffects.InvocationInputReader
+	Work              work.Service
 }
