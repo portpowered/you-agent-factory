@@ -107,10 +107,16 @@ func (settings DocumentWorkerSettings) Clone() DocumentWorkerSettings {
 
 type DocumentACPSettings struct {
 	Integrations []ACPIntegration
+	AgentProfile *ACPAgentProfile
 }
 
 func (settings DocumentACPSettings) Clone() DocumentACPSettings {
-	return DocumentACPSettings{Integrations: append([]ACPIntegration(nil), settings.Integrations...)}
+	cloned := DocumentACPSettings{Integrations: append([]ACPIntegration(nil), settings.Integrations...)}
+	if settings.AgentProfile != nil {
+		profile := settings.AgentProfile.Clone()
+		cloned.AgentProfile = &profile
+	}
+	return cloned
 }
 
 // DocumentDefaults holds operator default values as a detached peer value.

@@ -88,6 +88,13 @@ func mapConfig(generated factoryapi.GlobalConfig) (operatorsettings.Config, erro
 			}
 		}
 	}
+	if generated.Workers != nil && generated.Workers.Acp != nil && generated.Workers.Acp.AgentProfile != nil {
+		profile := operatorsettings.ACPAgentProfile{
+			DefaultTarget:  generated.Workers.Acp.AgentProfile.DefaultTarget,
+			AllowedTargets: append([]string(nil), generated.Workers.Acp.AgentProfile.AllowedTargets...),
+		}
+		config.Workers.ACP.AgentProfile = &profile
+	}
 	if generated.WorkerPresets == nil {
 		return config, nil
 	}
@@ -174,17 +181,25 @@ func Encode(config operatorsettings.Config) ([]byte, error) {
 		Logging: mapRuntimeArtifactSettingsToAPI(config.Runtime.Logging),
 		Metrics: mapRuntimeArtifactSettingsToAPI(config.Runtime.Metrics),
 	}
-	if config.Workers.ACP.Integrations != nil {
-		integrations := make([]factoryapi.GlobalConfigACPIntegration, len(config.Workers.ACP.Integrations))
-		for index, integration := range config.Workers.ACP.Integrations {
-			integrations[index] = factoryapi.GlobalConfigACPIntegration{
-				Id: integration.ID, Name: integration.Name, Command: integration.Command,
-				Transport: factoryapi.GlobalConfigACPIntegrationTransport(integration.Transport),
+	if config.Workers.ACP.Integrations != nil || config.Workers.ACP.AgentProfile != nil {
+		acp := &factoryapi.GlobalConfigACPSettings{}
+		if config.Workers.ACP.Integrations != nil {
+			integrations := make([]factoryapi.GlobalConfigACPIntegration, len(config.Workers.ACP.Integrations))
+			for index, integration := range config.Workers.ACP.Integrations {
+				integrations[index] = factoryapi.GlobalConfigACPIntegration{
+					Id: integration.ID, Name: integration.Name, Command: integration.Command,
+					Transport: factoryapi.GlobalConfigACPIntegrationTransport(integration.Transport),
+				}
+			}
+			acp.Integrations = &integrations
+		}
+		if config.Workers.ACP.AgentProfile != nil {
+			acp.AgentProfile = &factoryapi.GlobalConfigACPAgentProfile{
+				DefaultTarget:  config.Workers.ACP.AgentProfile.DefaultTarget,
+				AllowedTargets: append([]string(nil), config.Workers.ACP.AgentProfile.AllowedTargets...),
 			}
 		}
-		generated.Workers = &factoryapi.GlobalConfigWorkers{
-			Acp: &factoryapi.GlobalConfigACPSettings{Integrations: &integrations},
-		}
+		generated.Workers = &factoryapi.GlobalConfigWorkers{Acp: acp}
 	}
 	if config.WorkerPresets != nil {
 		presets := make([]factoryapi.GlobalConfigWorkerPreset, len(config.WorkerPresets))

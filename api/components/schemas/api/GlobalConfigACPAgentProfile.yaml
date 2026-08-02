@@ -1,0 +1,17 @@
+type: object
+additionalProperties: false
+required:
+  - defaultTarget
+  - allowedTargets
+properties:
+  defaultTarget:
+    type: string
+    minLength: 1
+    description: Unversioned namespaced Factory target reference, such as factory:@you/factory-builder. Factory Definitions owns enumeration and canonical reference resolution.
+  allowedTargets:
+    type: array
+    minItems: 1
+    description: Ordered allowlist of unversioned namespaced Factory target references. Order is authored and preserved.
+    items:
+      type: string
+      minLength: 1
