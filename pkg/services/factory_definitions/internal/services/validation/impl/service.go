@@ -6,19 +6,20 @@ import (
 	"fmt"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	validationcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/contracts"
 )
 
 // Service implements the public Factory Definition validation boundary.
 type Service struct {
-	orchestrators factorydefinitions.OrchestratorDefinitionValidator
-	loadCanonical factorydefinitions.CanonicalFactoryJSONLoader
+	orchestrators validationcontracts.OrchestratorDefinitionValidator
+	loadCanonical validationcontracts.CanonicalFactoryLoader
 }
 
 // New constructs Factory Definition validation with the runtime-owned
 // orchestrator semantic validator supplied explicitly.
 func New(
-	orchestrators factorydefinitions.OrchestratorDefinitionValidator,
-	loadCanonical ...factorydefinitions.CanonicalFactoryJSONLoader,
+	orchestrators validationcontracts.OrchestratorDefinitionValidator,
+	loadCanonical ...validationcontracts.CanonicalFactoryLoader,
 ) *Service {
 	service := &Service{orchestrators: orchestrators}
 	if len(loadCanonical) > 0 {
@@ -122,7 +123,7 @@ func (s *Service) ValidateEffectiveDefinition(
 func (s *Service) Validate(
 	ctx context.Context,
 	cfg *factorydefinitions.FactoryConfig,
-	workflowSourceReader factorydefinitions.WorkflowSourceReader,
+	workflowSourceReader validationcontracts.WorkflowSourceReader,
 ) factorydefinitions.ValidationResult {
 	result := Validate(cfg)
 	if s == nil || s.orchestrators == nil || cfg == nil ||
@@ -163,7 +164,7 @@ func (s *Service) ValidateBlockingLoad(
 func (s *Service) ValidateTopology(
 	ctx context.Context,
 	cfg *factorydefinitions.FactoryConfig,
-	requiredToolChecker factorydefinitions.RequiredToolChecker,
+	requiredToolChecker validationcontracts.RequiredToolChecker,
 ) factorydefinitions.TopologyValidationResult {
 	result := NewConfigValidator(requiredToolChecker).Validate(cfg)
 	result.Findings = append(
@@ -197,8 +198,3 @@ func (*Service) PruneLayout(
 ) factorydefinitions.ValidationResult {
 	return PruneLayout(cfg, topology)
 }
-
-var _ factorydefinitions.Validator = (*Service)(nil)
-var _ factorydefinitions.DefinitionValidationOperation = (*Service)(nil)
-var _ factorydefinitions.SubmittedDefinitionValidationOperation = (*Service)(nil)
-var _ factorydefinitions.EffectiveDefinitionValidationOperation = (*Service)(nil)

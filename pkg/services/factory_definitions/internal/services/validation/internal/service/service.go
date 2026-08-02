@@ -8,6 +8,7 @@ import (
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
+	validationcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/orchestrator"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/requiredtools"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/structural"
@@ -17,22 +18,22 @@ import (
 // Service is the private nested validation implementation behind the CTR-DEF
 // root validate slice.
 type Service struct {
-	operations            factoryroot.DefinitionValidationOperation
-	effective             factoryroot.EffectiveDefinitionValidationOperation
-	loadCanonical         factoryroot.CanonicalFactoryJSONLoader
-	requiredToolChecker   factoryroot.RequiredToolChecker
-	orchestratorValidator factoryroot.OrchestratorDefinitionValidator
+	operations            validationcontracts.DefinitionValidationOperation
+	effective             validationcontracts.EffectiveDefinitionValidationOperation
+	loadCanonical         validationcontracts.CanonicalFactoryLoader
+	requiredToolChecker   validationcontracts.RequiredToolChecker
+	orchestratorValidator validationcontracts.OrchestratorDefinitionValidator
 }
 
 var _ validationservice.Service = (*Service)(nil)
 
 // New constructs the validation implementation from exact injected ports.
 func New(
-	operations factoryroot.DefinitionValidationOperation,
-	effective factoryroot.EffectiveDefinitionValidationOperation,
-	loadCanonical factoryroot.CanonicalFactoryJSONLoader,
-	requiredToolChecker factoryroot.RequiredToolChecker,
-	orchestratorValidator factoryroot.OrchestratorDefinitionValidator,
+	operations validationcontracts.DefinitionValidationOperation,
+	effective validationcontracts.EffectiveDefinitionValidationOperation,
+	loadCanonical validationcontracts.CanonicalFactoryLoader,
+	requiredToolChecker validationcontracts.RequiredToolChecker,
+	orchestratorValidator validationcontracts.OrchestratorDefinitionValidator,
 ) *Service {
 	if operations == nil || effective == nil || loadCanonical == nil {
 		return nil

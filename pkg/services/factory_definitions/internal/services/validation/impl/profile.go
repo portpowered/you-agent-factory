@@ -1,6 +1,9 @@
 package impl
 
-import factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+import (
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	validationcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/contracts"
+)
 
 // Profile selects which validation rules run for one OpenAPI factory payload.
 type Profile = factorydefinitions.ValidationProfile
@@ -20,5 +23,5 @@ const (
 	ProfilePrePersist = factorydefinitions.ValidationProfilePrePersist
 )
 
-type WorkflowSourceReader = factorydefinitions.WorkflowSourceReader
-type WorkstationLoader = factorydefinitions.WorkstationLoader
+type WorkflowSourceReader = validationcontracts.WorkflowSourceReader
+type WorkstationLoader = validationcontracts.WorkstationLoader

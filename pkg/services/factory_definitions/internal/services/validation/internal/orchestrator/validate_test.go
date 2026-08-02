@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	validationcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/orchestrator"
 )
@@ -16,7 +17,7 @@ type stubOrchestratorValidator struct {
 func (s stubOrchestratorValidator) ValidateJavaScriptFactoryDefinition(
 	_ context.Context,
 	_ *factorydefinitions.FactoryOrchestratorJavaScriptConfig,
-	_ factorydefinitions.WorkflowSourceReader,
+	_ validationcontracts.WorkflowSourceReader,
 ) []factorydefinitions.ValidationTarget {
 	return append([]factorydefinitions.ValidationTarget(nil), s.targets...)
 }

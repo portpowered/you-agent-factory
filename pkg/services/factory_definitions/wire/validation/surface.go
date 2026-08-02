@@ -5,16 +5,50 @@
 package validation
 
 import (
+	"context"
+
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	validationcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/contracts"
 	validationimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 )
+
+// validationOperations is the private validation implementation surface
+// needed by owner composition. It is intentionally not re-exported through
+// factory_definitions.
+type validationOperations interface {
+	Validate(
+		context.Context,
+		*factorydefinitions.FactoryConfig,
+		validationcontracts.WorkflowSourceReader,
+	) factorydefinitions.ValidationResult
+	ValidateBlockingLoad(context.Context, *factorydefinitions.FactoryConfig) factorydefinitions.ValidationResult
+	ValidateTopology(
+		context.Context,
+		*factorydefinitions.FactoryConfig,
+		validationcontracts.RequiredToolChecker,
+	) factorydefinitions.TopologyValidationResult
+	WorkerWorkstationBehaviorCompatibility(
+		context.Context,
+		*factorydefinitions.FactoryConfig,
+	) []factorydefinitions.ValidationTarget
+	WorkTypeHandlingBehavior(
+		context.Context,
+		*factorydefinitions.FactoryConfig,
+		bool,
+	) []factorydefinitions.ValidationTarget
+	PruneLayout(
+		context.Context,
+		*factorydefinitions.FactoryConfig,
+		factorydefinitions.PendingFactoryGraphTopology,
+	) factorydefinitions.ValidationResult
+}
 
 // NewValidationOperations constructs the owner validation implementation from
 // injected orchestrator and canonical-load ports.
 func NewValidationOperations(
-	orchestrators factorydefinitions.OrchestratorDefinitionValidator,
-	loadCanonical ...factorydefinitions.CanonicalFactoryJSONLoader,
-) factorydefinitions.ValidationOperations {
+	orchestrators validationcontracts.OrchestratorDefinitionValidator,
+	loadCanonical ...validationcontracts.CanonicalFactoryLoader,
+) validationOperations {
 	return validationimpl.New(orchestrators, loadCanonical...)
 }
 
