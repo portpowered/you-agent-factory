@@ -223,7 +223,19 @@ func TestConformanceMalformedInputCasesProduceTypedOutcomes(t *testing.T) {
 				if err := json.Unmarshal(c.Payload, &envelope); err != nil {
 					t.Fatalf("payload does not parse: %v", err)
 				}
-				_, decodeErr := acp.DecodeMethodParams[map[string]any](envelope.Params)
+				var decodeErr *acpsdk.RequestError
+				if c.Facts.Metadata["reason"] == "semantically_invalid_params" {
+					// A syntactically valid params object that fails the real
+					// acp-go-sdk request type's own Validate() (e.g. a
+					// session/prompt request missing the required prompt
+					// field) must decode through the actual supported
+					// request type, not a generic map, to prove
+					// DecodeMethodParams enforces semantic validity and not
+					// only JSON structure.
+					_, decodeErr = acp.DecodeMethodParams[acpsdk.PromptRequest](envelope.Params)
+				} else {
+					_, decodeErr = acp.DecodeMethodParams[map[string]any](envelope.Params)
+				}
 				if decodeErr == nil {
 					t.Fatal("DecodeMethodParams() expected an invalid-params error, got nil")
 				}
