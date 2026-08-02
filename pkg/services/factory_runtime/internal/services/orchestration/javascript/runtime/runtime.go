@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/dop251/goja"
-	workflowvalidation "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/validation"
+	workflowvalidation "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/validation"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtimecontract"
 )
@@ -83,6 +83,7 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 				Code:    CodeUnresolvedFinal,
 				Message: "workflow completed without a returned or final value",
 			},
+			Records: records.list(),
 		}, nil
 	}
 
@@ -247,6 +248,26 @@ func scriptErrorOutcome(vm *goja.Runtime, err error) Outcome {
 		Failure: Failure{
 			Code:    CodeScriptError,
 			Message: message,
+		},
+	}
+}
+
+func invalidResultFailure(validation workflowresult.ResultValidation) Outcome {
+	issue := validation.Issues[0]
+	var b strings.Builder
+	b.WriteString("[")
+	b.WriteString(issue.Code)
+	b.WriteString("] ")
+	b.WriteString(strings.TrimSpace(issue.Message))
+	if path := strings.TrimSpace(issue.Path); path != "" && path != "$" {
+		b.WriteString(" at ")
+		b.WriteString(path)
+	}
+	return Outcome{
+		OK: false,
+		Failure: Failure{
+			Code:    CodeInvalidResult,
+			Message: b.String(),
 		},
 	}
 }

@@ -38,8 +38,23 @@ func TestInvocationFailureOutputContracts(t *testing.T) {
 		if err := json.Unmarshal([]byte(lines[len(lines)-1]), &terminal); err != nil {
 			t.Fatalf("decode terminal stdout record: %v\nstdout:\n%s", err, result.stdout)
 		}
+		invocationResultCount := 0
+		for _, line := range lines {
+			var record struct {
+				RecordType string `json:"recordType"`
+			}
+			if err := json.Unmarshal([]byte(line), &record); err != nil {
+				t.Fatalf("decode stdout record: %v\nstdout:\n%s", err, result.stdout)
+			}
+			if record.RecordType == "invocation_result" {
+				invocationResultCount++
+			}
+		}
 		if terminal.RecordType != "invocation_result" || terminal.Response.Status != factoryapi.InvocationTerminalStatusFailed {
 			t.Fatalf("terminal record = %#v, want failed invocation_result", terminal)
+		}
+		if invocationResultCount != 1 {
+			t.Fatalf("invocation_result records = %d, want exactly one\nstdout:\n%s", invocationResultCount, result.stdout)
 		}
 		if terminal.Response.ErrorCode == nil || terminal.Response.Message == nil {
 			t.Fatalf("failed InvocationResponse lacks error detail: %#v", terminal.Response)

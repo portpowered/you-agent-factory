@@ -13,7 +13,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	workflowruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/runtime"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 )
 
@@ -76,7 +76,7 @@ func TestRun_DocumentedCheckpointResumeWorkflow(t *testing.T) {
 
 func runDocumentedExample(t *testing.T, name string, args map[string]any, resume *factory.JavaScriptResumeContext) factory.JavaScriptRuntimeOutcome {
 	t.Helper()
-	path := filepath.Join("..", "..", "..", "..", "..", "..", "..", "docs", "examples", "javascript-workflows", name)
+	path := filepath.Join("..", "..", "..", "..", "..", "..", "..", "..", "docs", "examples", "javascript-workflows", name)
 	source, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read documented workflow %s: %v", name, err)

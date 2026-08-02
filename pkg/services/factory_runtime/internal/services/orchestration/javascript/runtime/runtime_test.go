@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	workflowruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/runtime"
-	workflowvalidation "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/validation"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime"
+	workflowvalidation "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/validation"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 	factoryruntimetestkit "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/testkit"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -287,6 +287,26 @@ func TestRun_UnresolvedFinal_ReturnsStableFailure(t *testing.T) {
 		t.Fatalf("failure message = %q, want unresolved-final diagnostic", outcome.Failure.Message)
 	}
 	assertFailureDoesNotProjectPrimaryResult(t, req.SessionID, outcome)
+}
+
+func TestRun_UnresolvedFinal_PreservesRuntimeRecords(t *testing.T) {
+	req := factory.JavaScriptRuntimeRequest{
+		Source:    `phase("execute");`,
+		SourceRef: "unresolved-final-with-record.workflow.js",
+		SessionID: "session-unresolved-final-records",
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}
+
+	outcome, err := runtimeWorkflows.Run(t.Context(), req, factory.JavaScriptRuntimeHooks{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if outcome.OK || outcome.Failure.Code != factory.JavaScriptRuntimeCodeUnresolvedFinal {
+		t.Fatalf("outcome = %#v, want unresolved-final failure", outcome)
+	}
+	if len(outcome.Records) != 1 || outcome.Records[0].Kind != factory.JavaScriptRecordKindPhase {
+		t.Fatalf("runtime records = %#v, want one phase record", outcome.Records)
+	}
 }
 
 func TestRun_InvalidTerminalValue_ReturnsStableInvalidResultFailure(t *testing.T) {
@@ -670,7 +690,7 @@ func assertTimeoutFailure(t *testing.T, sessionID string, outcome factory.JavaSc
 
 func readFixture(t *testing.T, name string) string {
 	t.Helper()
-	path := filepath.Join("..", "..", "..", "..", "..", "..", "..", "tests", "fixtures", "javascript_runtime", name)
+	path := filepath.Join("..", "..", "..", "..", "..", "..", "..", "..", "tests", "fixtures", "javascript_runtime", name)
 	content, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read fixture %s: %v", name, err)
