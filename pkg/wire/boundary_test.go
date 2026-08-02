@@ -174,7 +174,7 @@ func TestLegacyRuntimeBuilderAndRuntimeBundleCannotReturn(t *testing.T) {
 			return walkErr
 		}
 		if entry.IsDir() {
-			if entry.Name() == ".git" || entry.Name() == "vendor" || entry.Name() == "node_modules" {
+			if entry.Name() == ".git" || entry.Name() == ".claude" || entry.Name() == "vendor" || entry.Name() == "node_modules" {
 				return filepath.SkipDir
 			}
 			return nil
@@ -213,7 +213,7 @@ func TestFactoryRuntimeAssemblyCallbackCannotReturn(t *testing.T) {
 		}
 		if entry.IsDir() {
 			switch entry.Name() {
-			case ".git", "node_modules", "vendor":
+			case ".git", ".claude", "node_modules", "vendor":
 				return filepath.SkipDir
 			default:
 				return nil
