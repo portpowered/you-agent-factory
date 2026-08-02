@@ -128,6 +128,39 @@ func TestPoolLogsStartAcceptedAndTerminalDispatchOutcomes(t *testing.T) {
 	}
 }
 
+func TestPoolLogsFailedTerminalDispatchOutcome(t *testing.T) {
+	t.Parallel()
+
+	logger := &recordingLogger{}
+	executeErr := errors.New("executor failed")
+	executor := &recordingExecutor{err: executeErr}
+	pool := New(logger)
+	if _, err := pool.start(context.Background(), []workstations.Route{
+		{WorkstationName: "review", Executor: executor},
+	}); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	result, err := pool.Dispatch(
+		context.Background(),
+		dispatchRequest("dispatch-failed", "transition-failed", "review"),
+	)
+	if !errors.Is(err, executeErr) {
+		t.Fatalf("Dispatch() error = %v, want executor failure", err)
+	}
+	if result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeFailed {
+		t.Fatalf("Dispatch() terminal outcome = %q", result.TerminalOutcome)
+	}
+
+	terminal := logger.entriesFor("workers workstation dispatch terminal")
+	if len(terminal) != 1 || len(terminal[0].fields) != 3 ||
+		terminal[0].fields["workstation_name"] != "review" ||
+		terminal[0].fields["dispatch_id"] != "dispatch-failed" ||
+		terminal[0].fields["terminal_outcome"] != string(workers.WorkstationDispatchTerminalOutcomeFailed) {
+		t.Fatalf("terminal log = %#v", terminal)
+	}
+}
+
 func TestPoolLogsCancellationOutcomesIncludingNoOps(t *testing.T) {
 	t.Parallel()
 

@@ -17,6 +17,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 var testRetryRandom = platformrandom.SourceFunc(func(int64) (int64, error) {
@@ -144,6 +146,16 @@ func TestNewInvocationRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 
 func testWorkerService(t *testing.T, providerRunner workers.CommandRunner) *Service {
 	t.Helper()
+	return testWorkerServiceWithRunnerAndLogger(t, providerRunner, zap.NewNop())
+}
+
+func testWorkerServiceWithLogger(t *testing.T, logger *zap.Logger) *Service {
+	t.Helper()
+	return testWorkerServiceWithRunnerAndLogger(t, nil, logger)
+}
+
+func testWorkerServiceWithRunnerAndLogger(t *testing.T, providerRunner workers.CommandRunner, logger *zap.Logger) *Service {
+	t.Helper()
 	if providerRunner == nil {
 		providerRunner = injectedProviderRunner{}
 	}
@@ -154,7 +166,7 @@ func testWorkerService(t *testing.T, providerRunner workers.CommandRunner) *Serv
 		providerRunner,
 		injectedProviderRunner{},
 		&workers.MockPTYAllocator{},
-		zap.NewNop(),
+		logger,
 		false,
 		"",
 		"",
@@ -183,6 +195,39 @@ func testWorkerService(t *testing.T, providerRunner workers.CommandRunner) *Serv
 		t.Fatalf("construct Worker service: %v", err)
 	}
 	return service
+}
+
+// TestWithCommandRunnersPreservesInjectedLoggerForWorkstationPool proves the
+// logger a runtime opening injects at construction keeps reaching the cloned
+// workstation pool through WithCommandRunners, the path every normal Factory
+// Runtime opening takes (factory_runtime/internal/runtime_build.go).
+func TestWithCommandRunnersPreservesInjectedLoggerForWorkstationPool(t *testing.T) {
+	t.Parallel()
+
+	core, logs := observer.New(zapcore.InfoLevel)
+	service := testWorkerServiceWithLogger(t, zap.New(core))
+
+	runtime, err := service.WithCommandRunners(injectedProviderRunner{}, injectedProviderRunner{})
+	if err != nil {
+		t.Fatalf("WithCommandRunners() error = %v", err)
+	}
+
+	if _, err := runtime.StartWorkstationPool(
+		context.Background(),
+		workers.WorkstationPoolStartRequest{Bindings: []workers.AssembledRuntimeBinding{
+			{RoleName: "review", RoleKind: workers.RuntimeBuildRoleKindWorkstation},
+		}},
+	); err != nil {
+		t.Fatalf("StartWorkstationPool() error = %v", err)
+	}
+
+	entries := logs.FilterMessage("workers workstation pool start").All()
+	if len(entries) != 1 {
+		t.Fatalf(
+			"observed logs = %#v, want exactly one workstation pool start record surviving WithCommandRunners",
+			logs.All(),
+		)
+	}
 }
 
 type inertCurrentRuntimeResolver struct{}
