@@ -2646,7 +2646,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers",
-      "minimum": 54.50
+      "minimum": 56.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal",
