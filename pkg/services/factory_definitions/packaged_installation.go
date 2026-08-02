@@ -1,7 +1,5 @@
 package factorydefinitions
 
-import "context"
-
 type PackagedFactoryInstallOutcome string
 
 const (
@@ -25,14 +23,4 @@ type PackagedFactoryInstallResult struct {
 	FactoryDir string
 	Outcome    PackagedFactoryInstallOutcome
 	Format     PackagedFactoryFormat
-}
-
-// PackagedFactoryInstaller owns validation and persistence of the packaged
-// Factory catalog into one named-Factory root.
-type PackagedFactoryInstaller interface {
-	EnsurePackagedFactories(
-		context.Context,
-		string,
-		[]PackagedDefinition,
-	) ([]PackagedFactoryInstallResult, error)
 }

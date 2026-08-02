@@ -37,6 +37,12 @@ func TestUnimplementedService_CatalogTypedOutcomes(t *testing.T) {
 	if _, err := unimplemented.SetCurrentFactoryPointer(ctx, factorydefinitions.SetCurrentFactoryPointerRequest{Name: "alpha"}); !errors.Is(err, factorydefinitions.ErrNamedFactoryNotFound) {
 		t.Fatalf("SetCurrentFactoryPointer: got %v, want ErrNamedFactoryNotFound", err)
 	}
+	if _, err := unimplemented.ClearCurrentFactoryPointer(ctx, factorydefinitions.ClearCurrentFactoryPointerRequest{RootDir: "/factories"}); err == nil {
+		t.Fatal("ClearCurrentFactoryPointer: expected collaborator-required error")
+	}
+	if _, err := unimplemented.ResolveInvocationDefinition(ctx, factorydefinitions.ResolveInvocationDefinitionRequest{}); !errors.Is(err, factorydefinitions.ErrInvalidInvocationDefinition) {
+		t.Fatalf("ResolveInvocationDefinition: got %v, want ErrInvalidInvocationDefinition", err)
+	}
 }
 
 func TestUnimplementedService_AuthoringTypedOutcomes(t *testing.T) {

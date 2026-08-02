@@ -33,20 +33,3 @@ const (
 	GoalRoutingDecisionInterrupted  = "interrupted"
 	GoalRoutingDecisionFailed       = "failed"
 )
-
-// DecisionEnvelopeService interprets packaged Goal decision-envelope output
-// without exposing the packaged Goal implementation to peer services.
-type DecisionEnvelopeService interface {
-	UsesDecisionEnvelopeOutcome(*FactoryWorkstationConfig) bool
-	UsesGoalRoutingDecisionEnvelope(*FactoryWorkstationConfig) bool
-	WorkResultFromDecisionEnvelopeJSONOrFailed(
-		string,
-		string,
-		string,
-	) workerexecution.WorkResult
-	WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed(
-		string,
-		string,
-		string,
-	) workerexecution.WorkResult
-}
