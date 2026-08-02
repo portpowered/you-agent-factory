@@ -8,15 +8,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
-type Service struct{}
-
-var _ factorydefinitions.WorkPropagationPolicyService = Service{}
-
-func NewService() factorydefinitions.WorkPropagationPolicyService {
-	return Service{}
-}
-
-func (Service) Mode(
+func Mode(
 	workstation *factorydefinitions.FactoryWorkstationConfig,
 ) factorydefinitions.WorkPropagationMode {
 	if workstation == nil || workstation.WorkPropagation == nil {

@@ -8,28 +8,29 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	invocationpolicycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/contracts"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-type DecisionEnvelope = factorydefinitions.DecisionEnvelope
+type DecisionEnvelope = invocationpolicycontracts.DecisionEnvelope
 type FactoryWorkstationConfig = factorydefinitions.FactoryWorkstationConfig
 
 // MalformedEnvelopeFailureOutcome is the WorkOutcome used when reviewer/checker output
 // is not valid JSON or contains an unsupported decision value. Both failure cases use
 // the runtime FAILED path so routing does not silently coerce or guess a decision.
-const MalformedEnvelopeFailureOutcome = factorydefinitions.MalformedEnvelopeFailureOutcome
+const MalformedEnvelopeFailureOutcome = workerexecution.OutcomeFailed
 
 // Accepted reviewer/checker decision values map one-to-one onto WorkOutcome.
 const (
-	DecisionAccepted = factorydefinitions.DecisionAccepted
-	DecisionContinue = factorydefinitions.DecisionContinue
-	DecisionRejected = factorydefinitions.DecisionRejected
-	DecisionFailed   = factorydefinitions.DecisionFailed
+	DecisionAccepted = string(workerexecution.OutcomeAccepted)
+	DecisionContinue = string(workerexecution.OutcomeContinue)
+	DecisionRejected = string(workerexecution.OutcomeRejected)
+	DecisionFailed   = string(workerexecution.OutcomeFailed)
 )
 
 // DecisionEnvelopeOutcomeFormat is the workstation outcomeFormat value that routes
 // agent output through the reviewer/checker JSON envelope contract.
-const DecisionEnvelopeOutcomeFormat = factorydefinitions.DecisionEnvelopeOutcomeFormat
+const DecisionEnvelopeOutcomeFormat = factorydefinitions.WorkstationOutcomeFormatDecisionEnvelope
 
 // UsesDecisionEnvelopeOutcome reports whether the workstation routes agent output
 // through the reviewer/checker decision envelope instead of stop-token markers.
@@ -52,58 +53,14 @@ func UsesGoalRoutingDecisionEnvelope(workstation *FactoryWorkstationConfig) bool
 
 // Goal routing decisions use the same vocabulary as packaged goal classifier labels.
 const (
-	GoalRoutingDecisionAccepted     = factorydefinitions.GoalRoutingDecisionAccepted
-	GoalRoutingDecisionNeedsChanges = factorydefinitions.GoalRoutingDecisionNeedsChanges
-	GoalRoutingDecisionTestsFailed  = factorydefinitions.GoalRoutingDecisionTestsFailed
-	GoalRoutingDecisionNeedsHuman   = factorydefinitions.GoalRoutingDecisionNeedsHuman
-	GoalRoutingDecisionBlocked      = factorydefinitions.GoalRoutingDecisionBlocked
-	GoalRoutingDecisionInterrupted  = factorydefinitions.GoalRoutingDecisionInterrupted
-	GoalRoutingDecisionFailed       = factorydefinitions.GoalRoutingDecisionFailed
+	GoalRoutingDecisionAccepted     = "accepted"
+	GoalRoutingDecisionNeedsChanges = "needs_changes"
+	GoalRoutingDecisionTestsFailed  = "tests_failed"
+	GoalRoutingDecisionNeedsHuman   = "needs_human"
+	GoalRoutingDecisionBlocked      = "blocked"
+	GoalRoutingDecisionInterrupted  = "interrupted"
+	GoalRoutingDecisionFailed       = "failed"
 )
-
-type decisionEnvelopeService struct{}
-
-// NewService constructs the nested invocation_policy decision-envelope implementation
-// behind the published Definitions root contract.
-func NewService() factorydefinitions.DecisionEnvelopeService {
-	return decisionEnvelopeService{}
-}
-
-func (decisionEnvelopeService) UsesDecisionEnvelopeOutcome(
-	workstation *factorydefinitions.FactoryWorkstationConfig,
-) bool {
-	return UsesDecisionEnvelopeOutcome(workstation)
-}
-
-func (decisionEnvelopeService) UsesGoalRoutingDecisionEnvelope(
-	workstation *factorydefinitions.FactoryWorkstationConfig,
-) bool {
-	return UsesGoalRoutingDecisionEnvelope(workstation)
-}
-
-func (decisionEnvelopeService) WorkResultFromDecisionEnvelopeJSONOrFailed(
-	dispatchID string,
-	transitionID string,
-	raw string,
-) workerexecution.WorkResult {
-	return WorkResultFromDecisionEnvelopeJSONOrFailed(
-		dispatchID,
-		transitionID,
-		raw,
-	)
-}
-
-func (decisionEnvelopeService) WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed(
-	dispatchID string,
-	transitionID string,
-	raw string,
-) workerexecution.WorkResult {
-	return WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed(
-		dispatchID,
-		transitionID,
-		raw,
-	)
-}
 
 // NormalizeGoalRoutingDecision canonicalizes a packaged-goal envelope decision label.
 func NormalizeGoalRoutingDecision(decision string) (string, error) {

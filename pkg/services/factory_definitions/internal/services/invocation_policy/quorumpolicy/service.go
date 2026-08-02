@@ -9,27 +9,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
-// Service implements the fixed packaged Quorum identity and lineage policy.
-type Service struct{}
-
-var _ factorydefinitions.QuorumPolicyService = Service{}
-
-// NewService returns the canonical packaged Quorum policy.
-func NewService() factorydefinitions.QuorumPolicyService {
-	return Service{}
-}
-
-func (Service) IsPackagedQuorumFactory(cfg *factorydefinitions.FactoryConfig) bool {
-	return IsPackagedQuorumFactory(cfg)
-}
-
-func (Service) WorkRelations(
-	workstationName string,
-	outputParentID string,
-	outputWorkTypeID string,
-	inputs []factorydefinitions.QuorumLineageInput,
-) []work.Relation {
-	return WorkRelations(workstationName, outputParentID, outputWorkTypeID, inputs)
+// LineageInput is the private Work identity used by the packaged Quorum
+// implementation. It is not a Definitions root contract.
+type LineageInput struct {
+	WorkID     string
+	WorkTypeID string
 }
 
 func IsPackagedQuorumFactory(cfg *factorydefinitions.FactoryConfig) bool {
@@ -44,7 +28,7 @@ func WorkRelations(
 	workstationName string,
 	outputParentID string,
 	outputWorkTypeID string,
-	inputs []factorydefinitions.QuorumLineageInput,
+	inputs []LineageInput,
 ) []work.Relation {
 	switch workstationName {
 	case factorydefinitions.PackagedQuorumSplitWorkstationName:
@@ -65,7 +49,7 @@ func WorkRelations(
 	}
 }
 
-func dependenciesForBranchInputs(inputs []factorydefinitions.QuorumLineageInput) []work.Relation {
+func dependenciesForBranchInputs(inputs []LineageInput) []work.Relation {
 	relations := make([]work.Relation, 0, 2)
 	for _, input := range inputs {
 		if input.WorkID == "" {
