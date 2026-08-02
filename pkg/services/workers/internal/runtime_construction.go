@@ -83,7 +83,7 @@ func (s *Service) WithCommandRunners(providerRunner, scriptRunner workers.Comman
 	// Each opened Factory Runtime owns an independent workstation lifecycle.
 	// Sharing the process-level pool would couple route admission, cancellation,
 	// and terminal stop state across otherwise separate Factory Sessions.
-	clone.Root = clone.Root.ReplaceWorkstations(workstationswire.NewService())
+	clone.Root = clone.Root.ReplaceWorkstations(workstationswire.NewService(logging.NewZapLogger(s.logger, s.verbose)))
 	clone.executorBuilder = rebuildExecutorBuilder(
 		s.executorBuilder,
 		clone.providers,

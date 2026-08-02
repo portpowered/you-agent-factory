@@ -71,21 +71,15 @@ func assertCaseSemantics(t *testing.T, c fixtures.Case) {
 		assertOutcome(t, c, resp, err)
 
 	case fixtures.RoleSessionNew:
-		var req acpsdk.NewSessionRequest
-		mustUnmarshal(t, c.Input, &req)
-		got, err := session.ValidateNewSession(req)
+		got, err := session.ValidateNewSession(c.Input)
 		assertOutcome(t, c, got, rejectionOf(err))
 
 	case fixtures.RoleSessionLoad:
-		var req acpsdk.LoadSessionRequest
-		mustUnmarshal(t, c.Input, &req)
-		got, err := session.ValidateLoadSession(req)
+		got, err := session.ValidateLoadSession(c.Input)
 		assertOutcome(t, c, got, rejectionOf(err))
 
 	case fixtures.RoleSessionResume:
-		var req acpsdk.ResumeSessionRequest
-		mustUnmarshal(t, c.Input, &req)
-		got, err := session.ValidateResumeSession(req)
+		got, err := session.ValidateResumeSession(c.Input)
 		assertOutcome(t, c, got, rejectionOf(err))
 
 	case fixtures.RoleSessionCancel:
@@ -95,9 +89,7 @@ func assertCaseSemantics(t *testing.T, c fixtures.Case) {
 		assertOutcome(t, c, got, rejectionOf(err))
 
 	case fixtures.RoleSessionSetConfigOption:
-		var req acpsdk.SetSessionConfigOptionRequest
-		mustUnmarshal(t, c.Input, &req)
-		got, err := session.ValidateSetConfigOption(req)
+		got, err := session.ValidateSetConfigOption(c.Input)
 		assertOutcome(t, c, got, rejectionOf(err))
 
 	case fixtures.RoleSessionPrompt:

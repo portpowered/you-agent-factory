@@ -10,6 +10,8 @@
 package session
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -74,6 +76,55 @@ func isAbsolutePath(p string) bool {
 	return false
 }
 
+// hasRawField reports whether raw -- a JSON object -- contains a non-null
+// value for key. encoding/json collapses an omitted field, an explicit
+// null, and an explicit empty list onto the same Go zero value once decoded
+// into a typed struct, so a required-field check that only inspects the
+// decoded struct can never tell "the client sent nothing" apart from "the
+// client sent an empty list." hasRawField answers that question directly
+// from the wire bytes instead: a required list field must be present and
+// non-null, though it may still be empty.
+func hasRawField(raw json.RawMessage, key string) bool {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return false
+	}
+	value, ok := m[key]
+	if !ok {
+		return false
+	}
+	return string(bytes.TrimSpace(value)) != "null"
+}
+
+// validateCwdAndDirectories validates the cwd and additionalDirectories
+// fields shared by session/new, session/load, and session/resume: cwd is
+// required and must be absolute, and every additionalDirectories entry --
+// each of which the ACP wire contract itself documents as "must be an
+// absolute path" -- is rejected if it is not.
+func validateCwdAndDirectories(cwd string, additionalDirectories []string) (string, []string, error) {
+	if cwd == "" {
+		return "", nil, errors.New("acp: cwd is required")
+	}
+	if !isAbsolutePath(cwd) {
+		return "", nil, errors.New("acp: cwd must be an absolute path")
+	}
+	for i, dir := range additionalDirectories {
+		if !isAbsolutePath(dir) {
+			return "", nil, fmt.Errorf("acp: additionalDirectories[%d] must be an absolute path", i)
+		}
+	}
+	return cwd, append([]string(nil), additionalDirectories...), nil
+}
+
+// rejectNonEmptyMcpServers rejects a non-empty client-supplied MCP server
+// list: L1 V0 implements no MCP passthrough.
+func rejectNonEmptyMcpServers(mcpServers []acpsdk.McpServer) error {
+	if len(mcpServers) > 0 {
+		return errors.New("acp: client-supplied MCP servers are not supported in L1 V0")
+	}
+	return nil
+}
+
 // NewSessionParams is the closed L1 V0 shape of a validated session/new
 // request. Non-empty client-supplied MCP servers are an explicit rejection,
 // not a silently ignored field: L1 V0 implements no MCP passthrough.
@@ -82,22 +133,28 @@ type NewSessionParams struct {
 	AdditionalDirectories []string
 }
 
-// ValidateNewSession validates a session/new request against the L1 V0
-// compatibility boundary.
-func ValidateNewSession(req acpsdk.NewSessionRequest) (NewSessionParams, error) {
-	if req.Cwd == "" {
-		return NewSessionParams{}, errors.New("acp: cwd is required")
+// ValidateNewSession validates a raw session/new request against the L1 V0
+// compatibility boundary. It accepts the raw JSON-RPC params rather than an
+// already-decoded acpsdk.NewSessionRequest because the pinned SDK marks
+// mcpServers a required field with no "omitempty" tag: a decoded Go struct
+// cannot distinguish an omitted mcpServers from an explicit empty list, so
+// the required-field check must run against the wire bytes.
+func ValidateNewSession(raw json.RawMessage) (NewSessionParams, error) {
+	var req acpsdk.NewSessionRequest
+	if err := json.Unmarshal(raw, &req); err != nil {
+		return NewSessionParams{}, fmt.Errorf("acp: malformed session/new request: %w", err)
 	}
-	if !isAbsolutePath(req.Cwd) {
-		return NewSessionParams{}, errors.New("acp: cwd must be an absolute path")
+	if !hasRawField(raw, "mcpServers") {
+		return NewSessionParams{}, errors.New("acp: mcpServers is required")
 	}
-	if len(req.McpServers) > 0 {
-		return NewSessionParams{}, errors.New("acp: client-supplied MCP servers are not supported in L1 V0")
+	if err := rejectNonEmptyMcpServers(req.McpServers); err != nil {
+		return NewSessionParams{}, err
 	}
-	return NewSessionParams{
-		Cwd:                   req.Cwd,
-		AdditionalDirectories: append([]string(nil), req.AdditionalDirectories...),
-	}, nil
+	cwd, dirs, err := validateCwdAndDirectories(req.Cwd, req.AdditionalDirectories)
+	if err != nil {
+		return NewSessionParams{}, err
+	}
+	return NewSessionParams{Cwd: cwd, AdditionalDirectories: dirs}, nil
 }
 
 // LoadSessionParams is the closed L1 V0 shape of a validated session/load
@@ -107,38 +164,51 @@ type LoadSessionParams struct {
 	NewSessionParams
 }
 
-// ValidateLoadSession validates a session/load request against the L1 V0
-// compatibility boundary.
-func ValidateLoadSession(req acpsdk.LoadSessionRequest) (LoadSessionParams, error) {
+// ValidateLoadSession validates a raw session/load request against the L1
+// V0 compatibility boundary. Like session/new, the pinned SDK marks
+// mcpServers required for session/load, so this validates against the raw
+// JSON-RPC params rather than an already-decoded request.
+func ValidateLoadSession(raw json.RawMessage) (LoadSessionParams, error) {
+	var req acpsdk.LoadSessionRequest
+	if err := json.Unmarshal(raw, &req); err != nil {
+		return LoadSessionParams{}, fmt.Errorf("acp: malformed session/load request: %w", err)
+	}
 	if req.SessionId == "" {
 		return LoadSessionParams{}, errors.New("acp: sessionId is required")
 	}
-	base, err := ValidateNewSession(acpsdk.NewSessionRequest{
-		Cwd:                   req.Cwd,
-		AdditionalDirectories: req.AdditionalDirectories,
-		McpServers:            req.McpServers,
-	})
+	if !hasRawField(raw, "mcpServers") {
+		return LoadSessionParams{}, errors.New("acp: mcpServers is required")
+	}
+	if err := rejectNonEmptyMcpServers(req.McpServers); err != nil {
+		return LoadSessionParams{}, err
+	}
+	cwd, dirs, err := validateCwdAndDirectories(req.Cwd, req.AdditionalDirectories)
 	if err != nil {
 		return LoadSessionParams{}, err
 	}
-	return LoadSessionParams{SessionID: SessionID(req.SessionId), NewSessionParams: base}, nil
+	return LoadSessionParams{SessionID: SessionID(req.SessionId), NewSessionParams: NewSessionParams{Cwd: cwd, AdditionalDirectories: dirs}}, nil
 }
 
-// ValidateResumeSession validates a session/resume request against the L1
-// V0 compatibility boundary.
-func ValidateResumeSession(req acpsdk.ResumeSessionRequest) (LoadSessionParams, error) {
+// ValidateResumeSession validates a raw session/resume request against the
+// L1 V0 compatibility boundary. Unlike session/new and session/load, the
+// pinned SDK marks session/resume's mcpServers "omitempty": it is optional,
+// but a non-empty value is still rejected the same way.
+func ValidateResumeSession(raw json.RawMessage) (LoadSessionParams, error) {
+	var req acpsdk.ResumeSessionRequest
+	if err := json.Unmarshal(raw, &req); err != nil {
+		return LoadSessionParams{}, fmt.Errorf("acp: malformed session/resume request: %w", err)
+	}
 	if req.SessionId == "" {
 		return LoadSessionParams{}, errors.New("acp: sessionId is required")
 	}
-	base, err := ValidateNewSession(acpsdk.NewSessionRequest{
-		Cwd:                   req.Cwd,
-		AdditionalDirectories: req.AdditionalDirectories,
-		McpServers:            req.McpServers,
-	})
+	if err := rejectNonEmptyMcpServers(req.McpServers); err != nil {
+		return LoadSessionParams{}, err
+	}
+	cwd, dirs, err := validateCwdAndDirectories(req.Cwd, req.AdditionalDirectories)
 	if err != nil {
 		return LoadSessionParams{}, err
 	}
-	return LoadSessionParams{SessionID: SessionID(req.SessionId), NewSessionParams: base}, nil
+	return LoadSessionParams{SessionID: SessionID(req.SessionId), NewSessionParams: NewSessionParams{Cwd: cwd, AdditionalDirectories: dirs}}, nil
 }
 
 // CancelParams is the closed L1 V0 shape of a validated session/cancel
@@ -166,9 +236,45 @@ type ConfigOptionValue struct {
 	ValueID   *string
 }
 
-// ValidateSetConfigOption validates a session/set_config_option request
+// supportedConfigOptionType is the only session/set_config_option "type"
+// discriminator value this compatibility layer recognizes on the wire; the
+// value-id variant has no discriminator literal of its own and is only ever
+// reached by omitting "type" entirely. The pinned SDK's
+// SetSessionConfigOptionRequest.UnmarshalJSON does not actually reject an
+// unrecognized "type": depending on which other fields are present, it can
+// silently fall through to decoding the payload as the boolean variant (with
+// a zero-value Value) or fail with an opaque "invalid variant payload"
+// error, neither of which is a clear, deterministic rejection of the
+// unsupported discriminator itself. ValidateSetConfigOption re-checks the
+// raw "type" field before ever asking the SDK to decode the payload, so an
+// unrecognized discriminator is rejected on its own terms.
+const supportedConfigOptionType = "boolean"
+
+// ValidateSetConfigOption validates a raw session/set_config_option request
 // against the L1 V0 compatibility boundary.
-func ValidateSetConfigOption(req acpsdk.SetSessionConfigOptionRequest) (ConfigOptionValue, error) {
+func ValidateSetConfigOption(raw json.RawMessage) (ConfigOptionValue, error) {
+	var discriminator struct {
+		Type *string `json:"type"`
+	}
+	if err := json.Unmarshal(raw, &discriminator); err != nil {
+		return ConfigOptionValue{}, fmt.Errorf("acp: malformed session/set_config_option request: %w", err)
+	}
+	if discriminator.Type != nil && *discriminator.Type != supportedConfigOptionType {
+		return ConfigOptionValue{}, fmt.Errorf("acp: unsupported session/set_config_option type %q", *discriminator.Type)
+	}
+	// The pinned SDK's fallback decode path treats a request with neither a
+	// recognized "type" nor a "value" field as a valid boolean payload
+	// defaulting Value to false, rather than failing to decode. Requiring
+	// "value" up front closes that silent-acceptance gap.
+	if !hasRawField(raw, "value") {
+		return ConfigOptionValue{}, errors.New("acp: value is required")
+	}
+
+	var req acpsdk.SetSessionConfigOptionRequest
+	if err := json.Unmarshal(raw, &req); err != nil {
+		return ConfigOptionValue{}, fmt.Errorf("acp: malformed session/set_config_option request: %w", err)
+	}
+
 	switch {
 	case req.Boolean != nil:
 		if req.Boolean.SessionId == "" {
@@ -255,14 +361,35 @@ const (
 	TextUpdateConfigOption      TextUpdateKind = "config_option_update"
 )
 
+// UsageInfo is the closed L1 V0 shape of a usage_update's context-window
+// facts: total size and tokens currently used. Cost is deliberately not
+// carried: it is an unstable, optional SDK field this compatibility layer
+// does not yet advertise support for.
+type UsageInfo struct {
+	Size int
+	Used int
+}
+
+// SessionInfo is the closed L1 V0 shape of a session_info_update's session
+// metadata facts.
+type SessionInfo struct {
+	Title     *string
+	UpdatedAt *string
+}
+
 // TextUpdate is the closed L1 V0 shape of a validated session/update
 // notification. Content and MessageID are populated only for the three
-// streamed-message kinds; the usage, session-info, and config-option kinds
-// are accepted as bare, content-free markers at this compatibility layer.
+// streamed-message kinds; Usage, SessionInfo, and ConfigOptions are
+// populated only for their respective kind and losslessly carry that
+// update's supported semantic fields rather than reducing them to a bare
+// marker.
 type TextUpdate struct {
-	Kind      TextUpdateKind
-	Content   *TextContent
-	MessageID string
+	Kind          TextUpdateKind
+	Content       *TextContent
+	MessageID     string
+	Usage         *UsageInfo
+	SessionInfo   *SessionInfo
+	ConfigOptions []acpsdk.SessionConfigOption
 }
 
 func chunkUpdate(kind TextUpdateKind, content acpsdk.ContentBlock, messageID *string) (TextUpdate, error) {
@@ -288,11 +415,19 @@ func ValidateSessionUpdate(update acpsdk.SessionUpdate) (TextUpdate, error) {
 	case update.AgentThoughtChunk != nil:
 		return chunkUpdate(TextUpdateAgentThoughtChunk, update.AgentThoughtChunk.Content, update.AgentThoughtChunk.MessageId)
 	case update.UsageUpdate != nil:
-		return TextUpdate{Kind: TextUpdateUsage}, nil
+		return TextUpdate{Kind: TextUpdateUsage, Usage: &UsageInfo{
+			Size: update.UsageUpdate.Size,
+			Used: update.UsageUpdate.Used,
+		}}, nil
 	case update.SessionInfoUpdate != nil:
-		return TextUpdate{Kind: TextUpdateSessionInfo}, nil
+		return TextUpdate{Kind: TextUpdateSessionInfo, SessionInfo: &SessionInfo{
+			Title:     update.SessionInfoUpdate.Title,
+			UpdatedAt: update.SessionInfoUpdate.UpdatedAt,
+		}}, nil
 	case update.ConfigOptionUpdate != nil:
-		return TextUpdate{Kind: TextUpdateConfigOption}, nil
+		return TextUpdate{Kind: TextUpdateConfigOption,
+			ConfigOptions: append([]acpsdk.SessionConfigOption(nil), update.ConfigOptionUpdate.ConfigOptions...),
+		}, nil
 	case update.ToolCall != nil:
 		return TextUpdate{}, fmt.Errorf("%w: tool_call", ErrUnsupportedUpdate)
 	case update.ToolCallUpdate != nil:

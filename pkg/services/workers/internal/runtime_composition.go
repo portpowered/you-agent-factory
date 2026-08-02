@@ -102,7 +102,10 @@ func NewRuntime(
 	if err != nil {
 		return nil, err
 	}
-	runtimeService.Root = RootFrom(assembly, workstationswire.NewService())
+	runtimeService.Root = RootFrom(
+		assembly,
+		workstationswire.NewService(logging.NewZapLogger(logger, verbose)),
+	)
 	return runtimeService, nil
 }
 

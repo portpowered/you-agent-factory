@@ -4095,6 +4095,15 @@ type GlobalConfig struct {
 	Workers       *GlobalConfigWorkers        `json:"workers,omitempty"`
 }
 
+// GlobalConfigACPAgentProfile defines model for GlobalConfigACPAgentProfile.
+type GlobalConfigACPAgentProfile struct {
+	// AllowedTargets Ordered allowlist of unversioned namespaced Factory target references. Order is authored and preserved.
+	AllowedTargets []string `json:"allowedTargets"`
+
+	// DefaultTarget Unversioned namespaced Factory target reference, such as factory:@you/factory-builder. Factory Definitions owns enumeration and canonical reference resolution.
+	DefaultTarget string `json:"defaultTarget"`
+}
+
 // GlobalConfigACPIntegration defines model for GlobalConfigACPIntegration.
 type GlobalConfigACPIntegration struct {
 	// Command Operator-authored ACP launch command preserved as one settings value. It contains no permission or timeout policy.
@@ -4115,6 +4124,8 @@ type GlobalConfigACPIntegrationTransport string
 
 // GlobalConfigACPSettings defines model for GlobalConfigACPSettings.
 type GlobalConfigACPSettings struct {
+	AgentProfile *GlobalConfigACPAgentProfile `json:"agentProfile,omitempty"`
+
 	// Integrations Operator-selected ACP provider integrations. Availability is derived by the Providers catalog and is never persisted here.
 	Integrations *[]GlobalConfigACPIntegration `json:"integrations,omitempty"`
 }

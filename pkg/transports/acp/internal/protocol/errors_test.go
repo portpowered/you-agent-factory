@@ -59,6 +59,33 @@ func TestMethodNotFound_CarriesOnlyTheMethodName(t *testing.T) {
 	}
 }
 
+// TestMethodNotFound_RedactsAdversarialMethodValues seeds a credential, a raw
+// provider command, an absolute filesystem path, a tool payload fragment,
+// and an internal topology sentinel as the client-controlled "method" value,
+// then proves none of those sentinels survive into the serialized
+// method-not-found error: MethodNotFound only ever echoes back a value that
+// already matches the safe method-name shape.
+func TestMethodNotFound_RedactsAdversarialMethodValues(t *testing.T) {
+	sentinels := []string{
+		"sk-live-credential-ABC123XYZ",
+		"/usr/local/bin/agent --token=sk-live-credential-ABC123XYZ",
+		"/home/operator/.ssh/id_rsa",
+		"tool_call raw_output: {\"secret\":\"do-not-leak\"}",
+		"internal-dispatch-node-7.factory.internal",
+	}
+
+	for _, sentinel := range sentinels {
+		reqErr := MethodNotFound(sentinel)
+		encoded, err := json.Marshal(reqErr)
+		if err != nil {
+			t.Fatalf("json.Marshal() error = %v", err)
+		}
+		if strings.Contains(string(encoded), sentinel) {
+			t.Errorf("MethodNotFound(%q) leaked the sentinel into serialized error %s", sentinel, encoded)
+		}
+	}
+}
+
 // TestSafeReject_RedactsSensitiveInternalCauses seeds a credential, a raw
 // provider command, an absolute filesystem path, a prompt/tool payload
 // fragment, and an internal topology sentinel into internal causes (both a

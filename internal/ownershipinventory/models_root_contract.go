@@ -23,6 +23,7 @@ var ModelsThinRootContractFiles = []string{
 	"host_scope_characterization_test.go",
 	"local_execution_contract.go",
 	"managed_runtime_contract.go",
+	"presentation_port.go",
 	"root_authority_seal_characterization_test.go",
 	"root_slice_characterization_test.go",
 	"runtime_config_contract.go",

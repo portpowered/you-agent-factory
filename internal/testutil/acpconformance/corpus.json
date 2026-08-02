@@ -1,0 +1,394 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "sdk_module": "github.com/coder/acp-go-sdk",
+    "sdk_version": "v0.13.5",
+    "sdk_commit": "0845a3bb9eddda5bfc22a94dd3598c90cb842451",
+    "sdk_license": "Apache-2.0"
+  },
+  "cases": [
+    {
+      "id": "initialize-protocol-version-1-accepted",
+      "protocol_role": "initialize",
+      "description": "An initialize request naming ACP protocol version 1, the only version the V0 agent-side compatibility boundary accepts.",
+      "directionality": "outbound_only",
+      "payload": {
+        "protocolVersion": 1
+      },
+      "facts": {
+        "kind": "initialize",
+        "outcome": "accepted",
+        "metadata": {
+          "negotiated_version": "1"
+        }
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; wire shape matches acp-go-sdk v0.13.5 InitializeRequest.protocolVersion."
+    },
+    {
+      "id": "initialize-protocol-version-unsupported-rejected",
+      "protocol_role": "initialize",
+      "description": "An initialize request naming an ACP protocol version the V0 boundary does not support.",
+      "directionality": "unsupported",
+      "payload": {
+        "protocolVersion": 2
+      },
+      "facts": {
+        "kind": "initialize",
+        "outcome": "incompatible_version",
+        "metadata": {
+          "requested_version": "2",
+          "supported_version": "1"
+        }
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; wire shape matches acp-go-sdk v0.13.5 InitializeRequest.protocolVersion."
+    },
+    {
+      "id": "capabilities-text-first",
+      "protocol_role": "capabilities",
+      "description": "The exact serialized agent capabilities the V0 boundary advertises: text prompt content only, with every other capability left at its false/absent zero value.",
+      "directionality": "outbound_only",
+      "payload": {
+        "auth": {},
+        "mcpCapabilities": {},
+        "promptCapabilities": {},
+        "sessionCapabilities": {}
+      },
+      "facts": {
+        "kind": "capabilities",
+        "outcome": "text_first",
+        "metadata": {
+          "image": "false",
+          "audio": "false",
+          "embedded_context": "false",
+          "load_session": "false"
+        }
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; matches the literal json.Marshal output of pkg/transports/acp TextFirstAgentCapabilities() against acp-go-sdk v0.13.5 AgentCapabilities."
+    },
+    {
+      "id": "factory-option-select-type",
+      "protocol_role": "factory_option",
+      "description": "A representative Factory target selector serialized as the ACP select-option union, never as an ACP model resource.",
+      "directionality": "outbound_only",
+      "payload": {
+        "id": "target",
+        "name": "Factory",
+        "category": "model",
+        "currentValue": "release-notes-writer",
+        "type": "select",
+        "options": [
+          { "value": "release-notes-writer", "name": "Release Notes Writer" },
+          { "value": "code-reviewer", "name": "Code Reviewer" }
+        ]
+      },
+      "facts": {
+        "kind": "factory_option",
+        "item_id": "target",
+        "outcome": "select_type",
+        "metadata": {
+          "current_value": "release-notes-writer",
+          "choice_count": "2"
+        }
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; matches the literal json.Marshal output of pkg/transports/acp FactoryTargetOption.ToSessionConfigOption() against acp-go-sdk v0.13.5 SessionConfigOption."
+    },
+    {
+      "id": "request-identity-string-id",
+      "protocol_role": "request_identity",
+      "description": "A JSON-RPC request carrying a string id on a named connection.",
+      "directionality": "outbound_only",
+      "payload": {
+        "jsonrpc": "2.0",
+        "method": "session/set_config_option",
+        "id": "req-abc",
+        "connectionId": "conn-1"
+      },
+      "facts": {
+        "kind": "request_identity",
+        "outcome": "string_id",
+        "metadata": {
+          "connection_id": "conn-1",
+          "id_kind": "string"
+        }
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; the \"id\" wire shape matches acp-go-sdk v0.13.5 RequestId.Str; connectionId is transport-assigned metadata, not part of the ACP wire envelope."
+    },
+    {
+      "id": "request-identity-numeric-id",
+      "protocol_role": "request_identity",
+      "description": "A JSON-RPC request carrying a numeric id on a named connection, distinct from a string id with a similar printed form.",
+      "directionality": "outbound_only",
+      "payload": {
+        "jsonrpc": "2.0",
+        "method": "session/set_config_option",
+        "id": 42,
+        "connectionId": "conn-1"
+      },
+      "facts": {
+        "kind": "request_identity",
+        "outcome": "number_id",
+        "metadata": {
+          "connection_id": "conn-1",
+          "id_kind": "number"
+        }
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; the \"id\" wire shape matches acp-go-sdk v0.13.5 RequestId.Number; connectionId is transport-assigned metadata, not part of the ACP wire envelope."
+    },
+    {
+      "id": "request-identity-minted-for-notification",
+      "protocol_role": "request_identity",
+      "description": "A JSON-RPC notification with no wire id, requiring a transport-minted identity for internal correlation only.",
+      "directionality": "outbound_only",
+      "payload": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "connectionId": "conn-1",
+        "mintedId": "minted-session-update-1"
+      },
+      "facts": {
+        "kind": "request_identity",
+        "outcome": "minted",
+        "metadata": {
+          "connection_id": "conn-1",
+          "id_kind": "minted",
+          "reason": "notification_without_wire_id"
+        }
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; mintedId is never a JSON-RPC wire field, it is transport-local correlation metadata for a request/notification with no usable wire id."
+    },
+    {
+      "id": "prompt-content-text",
+      "protocol_role": "prompt_content",
+      "description": "A session/prompt request carrying only text prompt content, matching the V0 text-first prompt capability claim.",
+      "directionality": "inbound_only",
+      "payload": {
+        "sessionId": "session-1",
+        "prompt": [
+          { "type": "text", "text": "Summarize the attached release notes." }
+        ]
+      },
+      "facts": {
+        "kind": "prompt_content",
+        "item_id": "session-1",
+        "text": "Summarize the attached release notes.",
+        "outcome": "text_only"
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; wire shape matches acp-go-sdk v0.13.5 PromptRequest with a single ContentBlock text entry."
+    },
+    {
+      "id": "session-update-agent-message-chunk",
+      "protocol_role": "session_update",
+      "description": "A streamed agent message text chunk, part of the lossless round-trip subset.",
+      "directionality": "round_trip",
+      "payload": {
+        "sessionUpdate": "agent_message_chunk",
+        "messageId": "assistant-message-1",
+        "content": { "type": "text", "text": "The answer is 42." }
+      },
+      "facts": {
+        "kind": "message",
+        "item_id": "assistant-message-1",
+        "phase": "delta",
+        "text": "The answer is 42."
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; wire shape matches acp-go-sdk v0.13.5 SessionUpdateAgentMessageChunk."
+    },
+    {
+      "id": "session-update-agent-thought-chunk",
+      "protocol_role": "session_update",
+      "description": "A streamed agent thought (reasoning) text chunk, part of the lossless round-trip subset.",
+      "directionality": "round_trip",
+      "payload": {
+        "sessionUpdate": "agent_thought_chunk",
+        "messageId": "assistant-thought-1",
+        "content": { "type": "text", "text": "Considering the best approach." }
+      },
+      "facts": {
+        "kind": "reasoning",
+        "item_id": "assistant-thought-1",
+        "phase": "delta",
+        "text": "Considering the best approach."
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; wire shape matches acp-go-sdk v0.13.5 SessionUpdateAgentThoughtChunk."
+    },
+    {
+      "id": "session-update-usage",
+      "protocol_role": "session_update",
+      "description": "A context-window usage update, part of the lossless round-trip subset.",
+      "directionality": "round_trip",
+      "payload": {
+        "sessionUpdate": "usage_update",
+        "used": 128,
+        "size": 8192
+      },
+      "facts": {
+        "kind": "usage",
+        "item_id": "usage",
+        "phase": "updated",
+        "metadata": {
+          "used_tokens": "128",
+          "max_tokens": "8192"
+        }
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; wire shape matches acp-go-sdk v0.13.5 SessionUsageUpdate."
+    },
+    {
+      "id": "session-update-session-info",
+      "protocol_role": "session_update",
+      "description": "A session metadata (title) update, part of the lossless round-trip subset.",
+      "directionality": "round_trip",
+      "payload": {
+        "sessionUpdate": "session_info_update",
+        "title": "Refactor billing module"
+      },
+      "facts": {
+        "kind": "session",
+        "item_id": "session",
+        "phase": "started",
+        "text": "Refactor billing module"
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; wire shape matches acp-go-sdk v0.13.5 SessionSessionInfoUpdate."
+    },
+    {
+      "id": "session-update-tool-call-no-text-output",
+      "protocol_role": "session_update",
+      "description": "A tool call notification. Tool calls are lossy today (only the inbound mapper represents them) and produce no text content, so this case is excluded from the round-trip subset.",
+      "directionality": "inbound_only",
+      "payload": {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "call-1",
+        "title": "Run tests",
+        "status": "pending"
+      },
+      "facts": {
+        "kind": "tool",
+        "item_id": "call-1",
+        "phase": "started",
+        "outcome": "no_text_output"
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; wire shape matches acp-go-sdk v0.13.5 SessionUpdateToolCall."
+    },
+    {
+      "id": "session-update-plan-lossy-excluded",
+      "protocol_role": "session_update",
+      "description": "An agent execution plan update. Plans are lossy today (only the inbound mapper represents them as opaque progress metadata) so this case is excluded from the round-trip subset.",
+      "directionality": "inbound_only",
+      "payload": {
+        "sessionUpdate": "plan",
+        "entries": [
+          { "content": "Investigate the failing test", "priority": "high", "status": "pending" }
+        ]
+      },
+      "facts": {
+        "kind": "plan",
+        "item_id": "plan",
+        "phase": "updated",
+        "outcome": "lossy_not_round_trip_eligible"
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; wire shape matches acp-go-sdk v0.13.5 SessionUpdatePlan."
+    },
+    {
+      "id": "malformed-input-missing-params",
+      "protocol_role": "malformed_input",
+      "description": "A supported method's request with no params field at all, which must be rejected as invalid params without any partially decoded value.",
+      "directionality": "outbound_only",
+      "payload": {
+        "jsonrpc": "2.0",
+        "method": "session/prompt",
+        "id": "req-77",
+        "connectionId": "conn-1"
+      },
+      "facts": {
+        "kind": "malformed_input",
+        "outcome": "invalid_params",
+        "metadata": {
+          "reason": "missing_params"
+        }
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; matches pkg/transports/acp DecodeMethodParams missing-params outcome, which never includes raw params content."
+    },
+    {
+      "id": "malformed-input-invalid-request-id-shape",
+      "protocol_role": "malformed_input",
+      "description": "A request whose id is neither a JSON-RPC string, number, nor null, which must be rejected as an invalid request rather than a partially valid identity.",
+      "directionality": "outbound_only",
+      "payload": {
+        "jsonrpc": "2.0",
+        "method": "session/prompt",
+        "id": [1, 2],
+        "connectionId": "conn-1"
+      },
+      "facts": {
+        "kind": "malformed_input",
+        "outcome": "invalid_request",
+        "metadata": {
+          "reason": "unsupported_id_shape"
+        }
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; an array id has no matching acp-go-sdk v0.13.5 RequestId variant and fails to decode."
+    },
+    {
+      "id": "unsupported-method-unknown-string-id",
+      "protocol_role": "unsupported_method",
+      "description": "A request naming a method this V0 boundary does not recognize at all, correlated by a string id.",
+      "directionality": "unsupported",
+      "payload": {
+        "jsonrpc": "2.0",
+        "method": "factory/unknownOperation",
+        "id": "req-9",
+        "connectionId": "conn-1"
+      },
+      "facts": {
+        "kind": "unsupported_method",
+        "outcome": "method_not_found",
+        "metadata": {
+          "disposition": "unknown",
+          "id_kind": "string",
+          "error_code": "-32601"
+        }
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; matches pkg/transports/acp UnsupportedMethodResponse over acp-go-sdk v0.13.5 NewMethodNotFound."
+    },
+    {
+      "id": "unsupported-method-deferred-session-new-numeric-id",
+      "protocol_role": "unsupported_method",
+      "description": "A request naming session/new, an ACP method the SDK defines but this V0 boundary defers (no stdio serving or session execution yet), correlated by a numeric id.",
+      "directionality": "unsupported",
+      "payload": {
+        "jsonrpc": "2.0",
+        "method": "session/new",
+        "id": 7,
+        "connectionId": "conn-1"
+      },
+      "facts": {
+        "kind": "unsupported_method",
+        "outcome": "method_not_found",
+        "metadata": {
+          "disposition": "deferred",
+          "id_kind": "number",
+          "error_code": "-32601"
+        }
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; matches pkg/transports/acp UnsupportedMethodResponse over acp-go-sdk v0.13.5 NewMethodNotFound; session/new resolves identically to an unknown method on the wire in V0."
+    },
+    {
+      "id": "unsupported-method-unknown-notification-no-response",
+      "protocol_role": "unsupported_method",
+      "description": "A notification (no id) naming a method this V0 boundary does not recognize. Unlike a request, an unsupported notification must produce no response at all.",
+      "directionality": "no_output",
+      "payload": {
+        "jsonrpc": "2.0",
+        "method": "factory/telemetryPing",
+        "connectionId": "conn-1"
+      },
+      "facts": {
+        "kind": "unsupported_method",
+        "outcome": "no_response_emitted",
+        "metadata": {
+          "reason": "notification_without_id"
+        }
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; matches pkg/transports/acp UnsupportedMethodResponse returning nil for a nil wireID."
+    }
+  ]
+}

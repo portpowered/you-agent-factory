@@ -2,11 +2,26 @@ package protocol
 
 import (
 	"errors"
+	"regexp"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
 )
+
+// safeMethodNamePattern matches the shape of every JSON-RPC method name this
+// protocol or its SDK could ever legitimately propose: an initial word,
+// optionally followed by a single "/"-separated word (e.g. "initialize",
+// "session/prompt"). A client-controlled method value that does not match
+// this shape -- for example one carrying a credential, a filesystem path, a
+// shell command, or another adversarial payload -- can never survive into
+// MethodNotFound's serialized output.
+var safeMethodNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(/[A-Za-z_][A-Za-z0-9_]*)?$`)
+
+// redactedMethodPlaceholder replaces a method value that fails
+// safeMethodNamePattern, so MethodNotFound always returns a bounded,
+// sensitive-safe payload regardless of what a client sends as "method".
+const redactedMethodPlaceholder = "unrecognized_method"
 
 // RejectionKind is the closed set of bounded rejection reasons this
 // transport is willing to disclose to a client. Every value is a fixed,
@@ -46,11 +61,19 @@ func Classify(cause error) RejectionKind {
 }
 
 // MethodNotFound returns the bounded JSON-RPC method-not-found error for an
-// unsupported method. It carries only the method name the client sent in
-// its own request — never request parameters or internal state — matching
-// the vendored SDK's own method-not-found shape.
+// unsupported method. It carries the client-sent method name only when that
+// name matches safeMethodNamePattern; any other value -- including one
+// carrying a credential, a filesystem path, a shell command, a tool/prompt
+// payload fragment, or internal topology -- is replaced with
+// redactedMethodPlaceholder before it ever reaches acpsdk.NewMethodNotFound,
+// so the emitted error can never disclose more than a plausible method
+// name.
 func MethodNotFound(method string) *acpsdk.RequestError {
-	return acpsdk.NewMethodNotFound(method)
+	safeMethod := method
+	if !safeMethodNamePattern.MatchString(method) {
+		safeMethod = redactedMethodPlaceholder
+	}
+	return acpsdk.NewMethodNotFound(safeMethod)
 }
 
 // SafeReject converts an internal validation cause into a bounded,

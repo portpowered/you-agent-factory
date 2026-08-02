@@ -7,7 +7,8 @@
       "classification": "accepted",
       "input": {
         "cwd": "/workspace/example-factory",
-        "additionalDirectories": ["/workspace/example-factory/vendor"]
+        "additionalDirectories": ["/workspace/example-factory/vendor"],
+        "mcpServers": []
       },
       "expected": {
         "Cwd": "/workspace/example-factory",
@@ -34,7 +35,35 @@
       "role": "session/new",
       "direction": "inbound",
       "classification": "rejected",
-      "input": {"cwd": "relative/path"},
+      "input": {"cwd": "relative/path", "mcpServers": []},
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
+      }
+    },
+    {
+      "name": "session/new rejects an omitted mcpServers field even with an otherwise valid cwd",
+      "role": "session/new",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {"cwd": "/workspace/example-factory"},
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
+      }
+    },
+    {
+      "name": "session/new rejects a relative additional directory",
+      "role": "session/new",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {
+        "cwd": "/workspace/example-factory",
+        "additionalDirectories": ["relative/vendor"],
+        "mcpServers": []
+      },
       "expected": {
         "code": -32602,
         "message": "Invalid params",
@@ -48,7 +77,8 @@
       "classification": "accepted",
       "input": {
         "sessionId": "sess_synthetic_0001",
-        "cwd": "/workspace/example-factory"
+        "cwd": "/workspace/example-factory",
+        "mcpServers": []
       },
       "expected": {
         "SessionID": "sess_synthetic_0001",
@@ -61,7 +91,19 @@
       "role": "session/load",
       "direction": "inbound",
       "classification": "rejected",
-      "input": {"cwd": "/workspace/example-factory"},
+      "input": {"cwd": "/workspace/example-factory", "mcpServers": []},
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
+      }
+    },
+    {
+      "name": "session/load rejects an omitted mcpServers field",
+      "role": "session/load",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {"sessionId": "sess_synthetic_0001", "cwd": "/workspace/example-factory"},
       "expected": {
         "code": -32602,
         "message": "Invalid params",
@@ -81,6 +123,22 @@
         "SessionID": "sess_synthetic_0002",
         "Cwd": "/workspace/example-factory",
         "AdditionalDirectories": null
+      }
+    },
+    {
+      "name": "session/resume rejects a relative additional directory",
+      "role": "session/resume",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {
+        "sessionId": "sess_synthetic_0002",
+        "cwd": "/workspace/example-factory",
+        "additionalDirectories": ["relative/vendor"]
+      },
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
       }
     },
     {

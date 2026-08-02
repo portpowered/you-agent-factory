@@ -13,7 +13,8 @@
       "expected": {
         "Kind": "user_message_chunk",
         "Content": {"Text": "hello"},
-        "MessageID": "msg_synthetic_0001"
+        "MessageID": "msg_synthetic_0001",
+        "Usage": null, "SessionInfo": null, "ConfigOptions": null
       }
     },
     {
@@ -28,7 +29,8 @@
       "expected": {
         "Kind": "agent_message_chunk",
         "Content": {"Text": "working on it"},
-        "MessageID": ""
+        "MessageID": "",
+        "Usage": null, "SessionInfo": null, "ConfigOptions": null
       }
     },
     {
@@ -43,32 +45,51 @@
       "expected": {
         "Kind": "agent_thought_chunk",
         "Content": {"Text": "considering options"},
-        "MessageID": ""
+        "MessageID": "",
+        "Usage": null, "SessionInfo": null, "ConfigOptions": null
       }
     },
     {
-      "name": "session/update accepts a usage update as a bare marker",
+      "name": "session/update preserves usage update size and used tokens",
       "role": "session/update",
       "direction": "outbound",
       "classification": "accepted",
       "input": {"sessionUpdate": "usage_update", "size": 4096, "used": 512},
-      "expected": {"Kind": "usage_update", "Content": null, "MessageID": ""}
+      "expected": {"Kind": "usage_update", "Content": null, "MessageID": "", "Usage": {"Size": 4096, "Used": 512}, "SessionInfo": null, "ConfigOptions": null}
     },
     {
-      "name": "session/update accepts a session info update as a bare marker",
+      "name": "session/update preserves session info title",
       "role": "session/update",
       "direction": "outbound",
       "classification": "accepted",
       "input": {"sessionUpdate": "session_info_update", "title": "Renamed session"},
-      "expected": {"Kind": "session_info_update", "Content": null, "MessageID": ""}
+      "expected": {"Kind": "session_info_update", "Content": null, "MessageID": "", "Usage": null, "SessionInfo": {"Title": "Renamed session", "UpdatedAt": null}, "ConfigOptions": null}
     },
     {
-      "name": "session/update accepts a config option update as a bare marker",
+      "name": "session/update preserves an empty config option list",
       "role": "session/update",
       "direction": "outbound",
       "classification": "accepted",
       "input": {"sessionUpdate": "config_option_update", "configOptions": []},
-      "expected": {"Kind": "config_option_update", "Content": null, "MessageID": ""}
+      "expected": {"Kind": "config_option_update", "Content": null, "MessageID": "", "Usage": null, "SessionInfo": null, "ConfigOptions": null}
+    },
+    {
+      "name": "session/update preserves a non-empty config option list",
+      "role": "session/update",
+      "direction": "outbound",
+      "classification": "accepted",
+      "input": {
+        "sessionUpdate": "config_option_update",
+        "configOptions": [
+          {"type": "boolean", "id": "verbose_output", "name": "Verbose output", "currentValue": true}
+        ]
+      },
+      "expected": {
+        "Kind": "config_option_update", "Content": null, "MessageID": "", "Usage": null, "SessionInfo": null,
+        "ConfigOptions": [
+          {"type": "boolean", "id": "verbose_output", "name": "Verbose output", "currentValue": true}
+        ]
+      }
     },
     {
       "name": "session/update rejects a tool call as a declared no-output scope cut",

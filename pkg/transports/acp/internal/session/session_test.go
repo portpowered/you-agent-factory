@@ -34,6 +34,20 @@ func resourceLinkBlock() acpsdk.ContentBlock {
 	return block
 }
 
+func strPtr(s string) *string {
+	return &s
+}
+
+// raw marshals v to json.RawMessage for a Validate* call under test.
+func raw(t *testing.T, v any) json.RawMessage {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	return b
+}
+
 func jsonString(s string) string {
 	b, err := json.Marshal(s)
 	if err != nil {
@@ -63,12 +77,12 @@ func roundTrip[T any](t *testing.T, value T) T {
 }
 
 func TestValidateNewSession(t *testing.T) {
-	t.Run("accepts an absolute cwd with no mcp servers", func(t *testing.T) {
-		got, err := ValidateNewSession(acpsdk.NewSessionRequest{
+	t.Run("accepts an absolute cwd with an empty mcp server list", func(t *testing.T) {
+		got, err := ValidateNewSession(raw(t, acpsdk.NewSessionRequest{
 			Cwd:                   "/home/user/project",
 			AdditionalDirectories: []string{"/home/user/other"},
 			McpServers:            []acpsdk.McpServer{},
-		})
+		}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -80,31 +94,78 @@ func TestValidateNewSession(t *testing.T) {
 	})
 
 	t.Run("rejects a relative cwd", func(t *testing.T) {
-		_, err := ValidateNewSession(acpsdk.NewSessionRequest{Cwd: "relative/path"})
+		_, err := ValidateNewSession(raw(t, acpsdk.NewSessionRequest{Cwd: "relative/path", McpServers: []acpsdk.McpServer{}}))
 		if err == nil {
 			t.Fatalf("expected an error for a relative cwd")
 		}
 	})
 
 	t.Run("rejects an empty cwd", func(t *testing.T) {
-		_, err := ValidateNewSession(acpsdk.NewSessionRequest{Cwd: ""})
+		_, err := ValidateNewSession(raw(t, acpsdk.NewSessionRequest{Cwd: "", McpServers: []acpsdk.McpServer{}}))
 		if err == nil {
 			t.Fatalf("expected an error for an empty cwd")
 		}
 	})
 
 	t.Run("rejects non-empty client-supplied mcp servers", func(t *testing.T) {
-		_, err := ValidateNewSession(acpsdk.NewSessionRequest{
+		_, err := ValidateNewSession(raw(t, acpsdk.NewSessionRequest{
 			Cwd:        "/home/user/project",
 			McpServers: []acpsdk.McpServer{{Stdio: &acpsdk.McpServerStdio{Name: "filesystem", Command: "/path/to/mcp-server"}}},
-		})
+		}))
 		if err == nil {
 			t.Fatalf("expected non-empty mcpServers to be rejected")
 		}
 	})
 
 	t.Run("accepts a windows drive-absolute cwd", func(t *testing.T) {
-		if _, err := ValidateNewSession(acpsdk.NewSessionRequest{Cwd: `C:\workspace\project`}); err != nil {
+		if _, err := ValidateNewSession(raw(t, acpsdk.NewSessionRequest{Cwd: `C:\workspace\project`, McpServers: []acpsdk.McpServer{}})); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects an omitted mcpServers field", func(t *testing.T) {
+		_, err := ValidateNewSession(json.RawMessage(`{"cwd":"/home/user/project"}`))
+		if err == nil {
+			t.Fatalf("expected an error for an omitted mcpServers field")
+		}
+	})
+
+	t.Run("rejects a null mcpServers field", func(t *testing.T) {
+		_, err := ValidateNewSession(json.RawMessage(`{"cwd":"/home/user/project","mcpServers":null}`))
+		if err == nil {
+			t.Fatalf("expected an error for a null mcpServers field")
+		}
+	})
+
+	t.Run("rejects a relative additional directory", func(t *testing.T) {
+		_, err := ValidateNewSession(raw(t, acpsdk.NewSessionRequest{
+			Cwd:                   "/home/user/project",
+			AdditionalDirectories: []string{"relative/vendor"},
+			McpServers:            []acpsdk.McpServer{},
+		}))
+		if err == nil {
+			t.Fatalf("expected an error for a relative additional directory")
+		}
+	})
+
+	t.Run("rejects a UNC additional directory", func(t *testing.T) {
+		_, err := ValidateNewSession(raw(t, acpsdk.NewSessionRequest{
+			Cwd:                   "/home/user/project",
+			AdditionalDirectories: []string{`\\server\share\vendor`},
+			McpServers:            []acpsdk.McpServer{},
+		}))
+		if err == nil {
+			t.Fatalf("expected an error for a UNC additional directory")
+		}
+	})
+
+	t.Run("accepts a windows drive-absolute additional directory", func(t *testing.T) {
+		_, err := ValidateNewSession(raw(t, acpsdk.NewSessionRequest{
+			Cwd:                   `C:\workspace\project`,
+			AdditionalDirectories: []string{`C:\workspace\vendor`},
+			McpServers:            []acpsdk.McpServer{},
+		}))
+		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -112,10 +173,11 @@ func TestValidateNewSession(t *testing.T) {
 
 func TestValidateLoadSession(t *testing.T) {
 	t.Run("accepts a valid load request", func(t *testing.T) {
-		got, err := ValidateLoadSession(acpsdk.LoadSessionRequest{
-			SessionId: "sess-1",
-			Cwd:       "/home/user/project",
-		})
+		got, err := ValidateLoadSession(raw(t, acpsdk.LoadSessionRequest{
+			SessionId:  "sess-1",
+			Cwd:        "/home/user/project",
+			McpServers: []acpsdk.McpServer{},
+		}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -127,30 +189,46 @@ func TestValidateLoadSession(t *testing.T) {
 	})
 
 	t.Run("rejects a missing sessionId", func(t *testing.T) {
-		_, err := ValidateLoadSession(acpsdk.LoadSessionRequest{Cwd: "/home/user/project"})
+		_, err := ValidateLoadSession(raw(t, acpsdk.LoadSessionRequest{Cwd: "/home/user/project", McpServers: []acpsdk.McpServer{}}))
 		if err == nil {
 			t.Fatalf("expected an error for a missing sessionId")
 		}
 	})
 
 	t.Run("rejects non-empty mcp servers", func(t *testing.T) {
-		_, err := ValidateLoadSession(acpsdk.LoadSessionRequest{
+		_, err := ValidateLoadSession(raw(t, acpsdk.LoadSessionRequest{
 			SessionId:  "sess-1",
 			Cwd:        "/home/user/project",
 			McpServers: []acpsdk.McpServer{{Stdio: &acpsdk.McpServerStdio{Name: "filesystem", Command: "/path/to/mcp-server"}}},
-		})
+		}))
 		if err == nil {
 			t.Fatalf("expected non-empty mcpServers to be rejected")
+		}
+	})
+
+	t.Run("rejects an omitted mcpServers field", func(t *testing.T) {
+		_, err := ValidateLoadSession(json.RawMessage(`{"sessionId":"sess-1","cwd":"/home/user/project"}`))
+		if err == nil {
+			t.Fatalf("expected an error for an omitted mcpServers field")
+		}
+	})
+
+	t.Run("rejects a relative additional directory", func(t *testing.T) {
+		_, err := ValidateLoadSession(raw(t, acpsdk.LoadSessionRequest{
+			SessionId:             "sess-1",
+			Cwd:                   "/home/user/project",
+			AdditionalDirectories: []string{"relative/vendor"},
+			McpServers:            []acpsdk.McpServer{},
+		}))
+		if err == nil {
+			t.Fatalf("expected an error for a relative additional directory")
 		}
 	})
 }
 
 func TestValidateResumeSession(t *testing.T) {
-	t.Run("accepts a valid resume request", func(t *testing.T) {
-		got, err := ValidateResumeSession(acpsdk.ResumeSessionRequest{
-			SessionId: "sess-1",
-			Cwd:       "/home/user/project",
-		})
+	t.Run("accepts a valid resume request with mcpServers omitted", func(t *testing.T) {
+		got, err := ValidateResumeSession(json.RawMessage(`{"sessionId":"sess-1","cwd":"/home/user/project"}`))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -161,20 +239,31 @@ func TestValidateResumeSession(t *testing.T) {
 	})
 
 	t.Run("rejects a missing cwd", func(t *testing.T) {
-		_, err := ValidateResumeSession(acpsdk.ResumeSessionRequest{SessionId: "sess-1"})
+		_, err := ValidateResumeSession(raw(t, acpsdk.ResumeSessionRequest{SessionId: "sess-1"}))
 		if err == nil {
 			t.Fatalf("expected an error for a missing cwd")
 		}
 	})
 
 	t.Run("rejects non-empty mcp servers", func(t *testing.T) {
-		_, err := ValidateResumeSession(acpsdk.ResumeSessionRequest{
+		_, err := ValidateResumeSession(raw(t, acpsdk.ResumeSessionRequest{
 			SessionId:  "sess-1",
 			Cwd:        "/home/user/project",
 			McpServers: []acpsdk.McpServer{{Stdio: &acpsdk.McpServerStdio{Name: "filesystem", Command: "/path/to/mcp-server"}}},
-		})
+		}))
 		if err == nil {
 			t.Fatalf("expected non-empty mcpServers to be rejected")
+		}
+	})
+
+	t.Run("rejects a relative additional directory", func(t *testing.T) {
+		_, err := ValidateResumeSession(raw(t, acpsdk.ResumeSessionRequest{
+			SessionId:             "sess-1",
+			Cwd:                   "/home/user/project",
+			AdditionalDirectories: []string{"relative/vendor"},
+		}))
+		if err == nil {
+			t.Fatalf("expected an error for a relative additional directory")
 		}
 	})
 }
@@ -199,7 +288,7 @@ func TestValidateSetConfigOption(t *testing.T) {
 		req := acpsdk.SetSessionConfigOptionRequest{
 			Boolean: &acpsdk.SetSessionConfigOptionBoolean{SessionId: "sess-1", ConfigId: "reasoning", Value: true},
 		}
-		got, err := ValidateSetConfigOption(req)
+		got, err := ValidateSetConfigOption(raw(t, req))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -216,7 +305,7 @@ func TestValidateSetConfigOption(t *testing.T) {
 		req := acpsdk.SetSessionConfigOptionRequest{
 			ValueId: &acpsdk.SetSessionConfigOptionValueId{SessionId: "sess-1", ConfigId: "target", Value: "factory:@you/review"},
 		}
-		got, err := ValidateSetConfigOption(req)
+		got, err := ValidateSetConfigOption(raw(t, req))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -229,7 +318,7 @@ func TestValidateSetConfigOption(t *testing.T) {
 	})
 
 	t.Run("rejects a request with neither variant set", func(t *testing.T) {
-		if _, err := ValidateSetConfigOption(acpsdk.SetSessionConfigOptionRequest{}); err == nil {
+		if _, err := ValidateSetConfigOption(json.RawMessage(`{"sessionId":"sess-1","configId":"target"}`)); err == nil {
 			t.Fatalf("expected an error when neither variant is set")
 		}
 	})
@@ -238,7 +327,7 @@ func TestValidateSetConfigOption(t *testing.T) {
 		req := acpsdk.SetSessionConfigOptionRequest{
 			Boolean: &acpsdk.SetSessionConfigOptionBoolean{ConfigId: "reasoning", Value: true},
 		}
-		if _, err := ValidateSetConfigOption(req); err == nil {
+		if _, err := ValidateSetConfigOption(raw(t, req)); err == nil {
 			t.Fatalf("expected an error for a missing sessionId")
 		}
 	})
@@ -247,8 +336,15 @@ func TestValidateSetConfigOption(t *testing.T) {
 		req := acpsdk.SetSessionConfigOptionRequest{
 			ValueId: &acpsdk.SetSessionConfigOptionValueId{SessionId: "sess-1", ConfigId: "target", Value: ""},
 		}
-		if _, err := ValidateSetConfigOption(req); err == nil {
+		if _, err := ValidateSetConfigOption(raw(t, req)); err == nil {
 			t.Fatalf("expected an error for an empty value")
+		}
+	})
+
+	t.Run("rejects an unknown type discriminator that the SDK would otherwise silently accept as value-id", func(t *testing.T) {
+		_, err := ValidateSetConfigOption(json.RawMessage(`{"type":"future_variant","sessionId":"sess-1","configId":"target","value":"factory:@you/review"}`))
+		if err == nil {
+			t.Fatalf("expected an error for an unknown type discriminator")
 		}
 	})
 }
@@ -342,17 +438,19 @@ func TestValidateSessionUpdate(t *testing.T) {
 			{
 				name:   "usage update",
 				update: acpsdk.SessionUpdate{UsageUpdate: &acpsdk.SessionUsageUpdate{Size: 100, Used: 10}},
-				want:   TextUpdate{Kind: TextUpdateUsage},
+				want:   TextUpdate{Kind: TextUpdateUsage, Usage: &UsageInfo{Size: 100, Used: 10}},
 			},
 			{
 				name:   "session info update",
-				update: acpsdk.SessionUpdate{SessionInfoUpdate: &acpsdk.SessionSessionInfoUpdate{}},
-				want:   TextUpdate{Kind: TextUpdateSessionInfo},
+				update: acpsdk.SessionUpdate{SessionInfoUpdate: &acpsdk.SessionSessionInfoUpdate{Title: strPtr("Renamed session")}},
+				want:   TextUpdate{Kind: TextUpdateSessionInfo, SessionInfo: &SessionInfo{Title: strPtr("Renamed session")}},
 			},
 			{
-				name:   "config option update",
-				update: acpsdk.SessionUpdate{ConfigOptionUpdate: &acpsdk.SessionConfigOptionUpdate{}},
-				want:   TextUpdate{Kind: TextUpdateConfigOption},
+				name: "config option update",
+				update: acpsdk.SessionUpdate{ConfigOptionUpdate: &acpsdk.SessionConfigOptionUpdate{
+					ConfigOptions: []acpsdk.SessionConfigOption{},
+				}},
+				want: TextUpdate{Kind: TextUpdateConfigOption},
 			},
 		}
 

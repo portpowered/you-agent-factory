@@ -192,6 +192,118 @@ func TestRootAdapter_PullSuccessPreservesHumanAndJSONOutput(t *testing.T) {
 	}
 }
 
+func TestRootAdapter_PullClosesCatalogScopeAfterSuccess(t *testing.T) {
+	t.Parallel()
+
+	type ctxKey struct{}
+	ctx := context.WithValue(context.Background(), ctxKey{}, "pull-close-scope-test")
+
+	var closed bool
+	var closedCtx context.Context
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			pullModel: func(_ context.Context, name string) (modelinference.PullResult, error) {
+				if closed {
+					t.Fatal("PullModelForScope() called after presentation scope was already closed")
+				}
+				return modelinference.PullResult{ModelName: name, Outcome: "PULLED"}, nil
+			},
+		},
+		OpenCatalogScope: func(context.Context) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{
+				Scope: testRuntimeScope(t),
+				Close: func(closeCtx context.Context) error {
+					closed = true
+					closedCtx = closeCtx
+					return nil
+				},
+			}, nil
+		},
+	})
+
+	var out bytes.Buffer
+	if err := service.Pull(modelscli.PullConfig{
+		Context: ctx, ModelName: "OMNIVOICE_Q4_K_M", Output: &out,
+	}); err != nil {
+		t.Fatalf("Pull() error = %v", err)
+	}
+	if !closed {
+		t.Fatal("Pull() did not close the opened catalog presentation scope")
+	}
+	if closedCtx != ctx {
+		t.Fatalf("Pull() closed scope with a different context than the invocation context")
+	}
+}
+
+func TestRootAdapter_InvokeClosesRuntimeScopeAfterSuccess(t *testing.T) {
+	t.Parallel()
+
+	type ctxKey struct{}
+	ctx := context.WithValue(context.Background(), ctxKey{}, "invoke-close-scope-test")
+	scope := testRuntimeScope(t)
+
+	var closed bool
+	var closedCtx context.Context
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(_ context.Context, request modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return modelinference.GetModelResult{
+					Model: modelinference.Detail{
+						Summary: modelinference.Summary{
+							Name:             "OMNIVOICE_Q4_K_M",
+							ProviderLocality: modelinference.LocalityLocal,
+							Operations:       []modelinference.Operation{{Name: "TTS"}},
+						},
+					},
+				}, nil
+			},
+			acquireModelLease: func(context.Context, modelinference.AcquireModelLeaseRequest) (modelinference.AcquireModelLeaseResult, error) {
+				return modelinference.AcquireModelLeaseResult{
+					Lease: modelinference.ModelLease{Lease: testModelLease(t)},
+				}, nil
+			},
+			invokeModelWithLease: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				if closed {
+					t.Fatal("InvokeModelWithLease() called after presentation scope was already closed")
+				}
+				return modelinference.InvokeModelResult{
+					ModelName: "OMNIVOICE_Q4_K_M",
+					Operation: "TTS",
+					Content:   []modelinference.InferenceContent{{ContentType: "text/plain", Content: "synthesized"}},
+				}, nil
+			},
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{
+				Scope: scope,
+				Close: func(closeCtx context.Context) error {
+					closed = true
+					closedCtx = closeCtx
+					return nil
+				},
+			}, nil
+		},
+	})
+
+	var out bytes.Buffer
+	if err := service.Invoke(modelscli.InvokeConfig{
+		Context:   ctx,
+		ModelName: "OMNIVOICE_Q4_K_M",
+		Operation: "TTS",
+		Text:      "hello world",
+		JSON:      true,
+		Output:    &out,
+	}); err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	if !closed {
+		t.Fatal("Invoke() did not close the opened runtime presentation scope")
+	}
+	if closedCtx != ctx {
+		t.Fatalf("Invoke() closed scope with a different context than the invocation context")
+	}
+}
+
 func TestRootAdapter_InvokeJSONResolvesThroughModelsRootCatalogAndInference(t *testing.T) {
 	t.Parallel()
 

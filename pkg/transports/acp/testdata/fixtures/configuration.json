@@ -65,6 +65,23 @@
         "message": "Invalid params",
         "data": {"reason": "malformed_request"}
       }
+    },
+    {
+      "name": "session/set_config_option rejects an unrecognized type discriminator",
+      "role": "session/set_config_option",
+      "direction": "inbound",
+      "classification": "rejected",
+      "input": {
+        "type": "future_variant",
+        "sessionId": "sess_synthetic_0001",
+        "configId": "target_factory",
+        "value": "factory-builder"
+      },
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
+      }
     }
   ]
 }
