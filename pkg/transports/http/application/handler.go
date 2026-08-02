@@ -4,7 +4,6 @@ package application
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -15,9 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	mappingcomposition "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
-	factoryconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
 )
@@ -94,36 +91,9 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 	workHandler := workhttp.NewAdapterWithSessionScope(opened.Work, func(ctx context.Context, sessionID string) error {
 		_, err := mapped.FactoryDefinitions.GetCurrentFactoryForSession(ctx, sessionID)
 		return err
-	}).WithDefaultWorkTypeResolver(defaultWorkTypeResolver(mapped.FactoryDefinitions, handler.invocationWorkType))
+	}).WithDefaultWorkTypeResolver(workhttp.NewDefaultWorkTypeResolver(mapped.FactoryDefinitions, handler.invocationWorkType))
 	server := transporthttp.NewServer(sessionsHandler, workHandler, modelsHandler, opened.ProviderSessions, opened.Logger)
 	return server.Handler(), nil
-}
-
-func defaultWorkTypeResolver(
-	definitions apisurface.FactorySaveAPI,
-	invocationWorkType factorydefinitions.InvocationWorkTypeService,
-) func(context.Context, string) (string, error) {
-	return func(ctx context.Context, sessionID string) (string, error) {
-		if definitions == nil || invocationWorkType == nil {
-			return "", nil
-		}
-		namedFactory, err := definitions.GetCurrentFactoryForSession(ctx, sessionID)
-		if err != nil {
-			if errors.Is(err, apisurface.ErrFactorySessionNotFound) || errors.Is(err, apisurface.ErrCurrentFactoryNotFound) {
-				return "", nil
-			}
-			return "", err
-		}
-		factoryConfig, err := factoryconfigmapping.FactoryConfigFromOpenAPI(namedFactory)
-		if err != nil {
-			return "", err
-		}
-		defaultWorkTypeID, err := invocationWorkType.DefaultWorkType(&factoryConfig)
-		if err != nil {
-			return "", nil
-		}
-		return defaultWorkTypeID, nil
-	}
 }
 
 // BindDurableExecution binds the same generated API and embedded dashboard

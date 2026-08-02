@@ -39,6 +39,9 @@ func TestHandlerUnavailableBranchesStayOwnedBySessions(t *testing.T) {
 		func(w http.ResponseWriter, r *http.Request) {
 			handler.ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w, r, sessionID, "worker")
 		},
+		func(w http.ResponseWriter, r *http.Request) {
+			handler.InvokeFactorySessionBySessionId(w, r, sessionID)
+		},
 	}
 	for _, call := range tests {
 		call(httptest.NewRecorder(), request)
