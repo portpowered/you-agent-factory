@@ -57,39 +57,12 @@ func WaitForStatus(
 	accept func(factoryapi.StatusResponse) bool,
 ) factoryapi.StatusResponse {
 	t.Helper()
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	var last factoryapi.StatusResponse
-	var lastErr error
-	for {
-		response, err := http.Get(strings.TrimSuffix(baseURL, "/") + "/status")
-		if err == nil {
-			func() {
-				defer response.Body.Close()
-				if response.StatusCode != http.StatusOK {
-					lastErr = fmt.Errorf("status = %d", response.StatusCode)
-					return
-				}
-				if err := json.NewDecoder(response.Body).Decode(&last); err != nil {
-					lastErr = err
-					return
-				}
-				lastErr = nil
-			}()
-			if lastErr == nil && accept(last) {
-				return last
-			}
-		} else {
-			lastErr = err
-		}
-		select {
-		case <-ticker.C:
-		case <-deadline.C:
-			t.Fatalf("timed out waiting for status at %s: last=%#v error=%v", baseURL, last, lastErr)
-		}
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/status"
+	status, err := waitForStatusAt(endpoint, timeout, accept)
+	if err != nil {
+		t.Fatalf("timed out waiting for status at %s: %v", endpoint, err)
 	}
+	return status
 }
 
 func WaitForRuntimeIdle(t testing.TB, baseURL string, timeout time.Duration) factoryapi.StatusResponse {
@@ -330,8 +303,20 @@ func WaitForSessionTerminalStatus(
 	timeout time.Duration,
 ) factoryapi.StatusResponse {
 	t.Helper()
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID + "/status"
-	return WaitForStatus(t, endpoint, timeout, func(status factoryapi.StatusResponse) bool {
+	status, err := observeSessionTerminalStatus(baseURL, sessionID, timeout)
+	if err != nil {
+		t.Fatalf("timed out waiting for terminal %v", err)
+	}
+	return status
+}
+
+func observeSessionTerminalStatus(
+	baseURL string,
+	sessionID string,
+	timeout time.Duration,
+) (factoryapi.StatusResponse, error) {
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/status"
+	status, err := waitForStatusAt(endpoint, timeout, func(status factoryapi.StatusResponse) bool {
 		completed := status.Categories.Terminal + status.Categories.Failed
 		if completed == 0 || status.Categories.Initial != 0 || status.Categories.Processing != 0 {
 			return false
@@ -343,4 +328,53 @@ func WaitForSessionTerminalStatus(
 			return false
 		}
 	})
+	if err != nil {
+		return status, fmt.Errorf(
+			"Factory Session %q at %s: %w",
+			sessionID,
+			endpoint,
+			err,
+		)
+	}
+	return status, nil
+}
+
+func waitForStatusAt(
+	endpoint string,
+	timeout time.Duration,
+	accept func(factoryapi.StatusResponse) bool,
+) (factoryapi.StatusResponse, error) {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	var last factoryapi.StatusResponse
+	var lastErr error
+	for {
+		response, err := http.Get(endpoint)
+		if err == nil {
+			func() {
+				defer response.Body.Close()
+				if response.StatusCode != http.StatusOK {
+					lastErr = fmt.Errorf("status = %d", response.StatusCode)
+					return
+				}
+				if err := json.NewDecoder(response.Body).Decode(&last); err != nil {
+					lastErr = err
+					return
+				}
+				lastErr = nil
+			}()
+			if lastErr == nil && accept(last) {
+				return last, nil
+			}
+		} else {
+			lastErr = err
+		}
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			return last, fmt.Errorf("last=%#v error=%v", last, lastErr)
+		}
+	}
 }

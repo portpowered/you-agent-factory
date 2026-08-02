@@ -207,34 +207,30 @@ capability refresh is proven across supported clients.
 
 ### 3.1 Packaged-service-structure alignment
 
-Implementation must begin from the then-current merged `main`, not the
-checked-out commit observed while this proposal was authored.
+Implementation uses the contracts present in the checked-out integration
+source when each task begins. Pending branches and proposed follow-up merges are
+not assumed to have sealed a dependency.
 
 Observed integration state on 2026-08-02:
 
-| Commit/ref | Relevant delivered or pending boundary |
+| Merged commit/ref | Relevant delivered boundary |
 | --- | --- |
 | `f6b02d2b9` on `origin/main` | Factory Sessions sealed to its singular unary root |
 | `80120c8e6` | Packaged Factory prompt ownership repaired |
 | `ccfe1fab7` | Factory Sessions and Work HTTP ownership separated |
 | `cef3ffcfb` | Factory Runtime HTTP ownership split |
 | `aa4a11083` | JavaScript terminal failure records preserved |
-| `994a636cc` branch tip | Hosted invocation coverage over the unary Sessions root |
-| `43fe2fc5b` branch tip | Typed Models presentation operator defaults |
-| `823f71d96` lane | Factory Definitions unary-root reconstruction integration |
 
-These commits are design context, not implementation gates. The proposal does
+These merged commits are design context, not implementation gates. The proposal does
 not require recording a baseline commit, freezing the repository, or completing
 an audit before implementation begins. The enduring package constraints are:
 
 - Do not copy pre-`f6b02d2b9` nested Factory Session service interfaces.
-- Consume only the Factory Sessions root methods such as `StartAsync`,
-  `InvokeFactorySession`, `ListSessions`, `ReadEvents`, `Pause`, `Resume`,
-  `Cancel`, and `Terminate` after their merged names are verified.
-- Depend on the Factory Definitions root. If catalog enumeration is missing,
-  add one narrow root operation; never import a private Definitions package.
-- Build on typed Models/Operator Settings presentation defaults after their
-  active merge lands; do not restore `any`-typed settings.
+- Define every ACP dependency against the checked-out public root. If a root is
+  incomplete or has secondary service interfaces, its dedicated dependency task
+  seals that owner before ACP integration consumes it.
+- Do not rely on pending Factory Definitions, Operator Settings, Workers,
+  Runtime, Sessions, or Models work to provide the required contract.
 - Follow the repaired packaged-factory prompt ownership. Authored Factory
   sources remain under `packages/packaged-factories/factories/` and generated
   output is regenerated rather than edited.
@@ -317,6 +313,66 @@ Canonical mutable state belongs in owned stores/events. The permitted
 process-local exceptions are bounded delivery queues and active execution
 handles that cannot be reconstructed as live OS/provider processes; they are
 not canonical and must reconcile against durable state after restart.
+
+#### 3.2.3 Dependency root-contract consolidation
+
+The checked-out code, rather than pending service-structure work, determines
+the required consolidation tasks. ACP code does not temporarily consume a peer
+interface with the expectation that a later merge will clean it up.
+
+| Owner | Checked-out contract finding | Required target contract | Task |
+| --- | --- | --- | --- |
+| Factory Definitions | A singular `Service` exists and already carries effective catalog operations, but many peer operations and construction contracts remain exported | Redefine and seal one root catalog/resolve surface using detached Factory values; ACP maps those values itself and imports no Definitions helper | `ACP-DEP01` |
+| Operator Settings | A singular `Service` exists, but no typed `ACPAgentProfile` resolution operation exists and callers can still assemble settings from lower-level helpers | Add typed profile get/resolve/update operations to the root; target kind/ref and permitted Worker overrides are detached values | `ACP-DEP02` |
+| Factory Sessions | `Service` contains the intended unary methods but also `ForRuntime`, which returns another `Service`, plus duplicate legacy live/durable methods | Seal Start/Invoke/Get/List/ReadEvents/Control on one root; remove `ForRuntime` and secondary session binding from the production path | `ACP-DEP03` |
+| Factory Runtime | A root `Service` exists for control/observe/dispatch, while runtime opening and many collaborator factories remain outside it | Add session-state open/start/close operations to the root and keep orchestration collaborators private; return opaque runtime/session references, not services | `ACP-DEP04` |
+| Workers | Root `Service` exists, but `RuntimeService` adds `WithCommandRunners` and `WithProgressPublisher`, creating mutable secondary injection | Seal execution/build/pool operations on `Service`; inject runners and Events publication once at construction; remove `RuntimeService` from production consumers | `ACP-DEP05` |
+| Recordings | The public `Service` embeds `internal/contracts.Service` and exports a large alias surface | Publish an explicit root append/read/replay/source-export contract needed by Runtime, Sessions, and Events; consumers do not name the internal contract | `ACP-DEP06` |
+| Providers | Singular root owns catalog and `Execute`, but continuation and attempt control are not explicit root operations | Extend the root with typed continuation input and attempt pause/cancel/terminate capability results, including explicit unsupported outcomes | `ACP-DEP07` |
+| Provider Sessions | Singular inspection root already exposes typed inspect/project behavior | Consume it unchanged through `Service`; live execution/control remains Providers-owned | none |
+| Work | Singular root already exposes detached admission, state, content, and return-policy operations | Consume it unchanged where Factory services require it; Chat/ACP never calls it directly | none |
+| Models | Singular root already exposes opaque scopes, catalog, host, lease, invocation, and cancellation operations | Workers consumes it unchanged; Chat/ACP and Factory target selection do not depend on Models | none |
+| Factory Visualization | Presentation helpers exist but are dashboard/visualization policy | ACP must not import or reuse Factory Visualization contracts, helpers, sinks, or projections | prohibited |
+
+The target Factory Definitions dependency is domain-oriented, not ACP-oriented:
+ACP consumes detached effective Factory identities, display names, availability,
+and canonical references from the root, then performs model-category picker
+mapping inside `pkg/transports/acp`. Factory Definitions never returns ACP
+configuration-option types.
+
+`ACPAgentProfile` is owned by Operator Settings and contains only target policy
+and explicitly permitted Worker overrides. It does not embed provider clients,
+Factory definitions, Models presentation objects, or transport instances.
+
+```go
+type ACPAgentProfile struct {
+    DefaultTarget  ACPAgentTarget
+    AllowedTargets []ACPAgentTargetPattern
+    WorkerOverrides ACPWorkerOverridePolicy
+}
+
+type ACPAgentTarget struct {
+    Kind ACPAgentTargetKind // FACTORY or WORKER
+    Ref  string
+}
+
+type ACPWorkerOverridePolicy struct {
+    Providers  []string
+    Models     []string
+    ScriptWrap []string
+    ACPRunners []string
+}
+
+type Service interface {
+    // Existing Operator Settings root operations remain here.
+    ResolveACPAgentProfile(context.Context, ResolveACPAgentProfileRequest) (ResolveACPAgentProfileResult, error)
+    UpdateACPAgentProfile(context.Context, UpdateACPAgentProfileRequest) (UpdateACPAgentProfileResult, error)
+}
+```
+
+These methods are additions to the existing Operator Settings `Service`, not a
+second ACP settings service. Chat Sessions maps `ACPAgentTarget` into its own
+`ChatTargetRef`; Operator Settings does not import Chat or transport contracts.
 
 ### 3.3 Chat Session model
 
@@ -640,17 +696,17 @@ pkg/
 
   transports/
     acp/
-      server.go
-      connection.go
-      capabilities.go
-      errors.go
-      mapping/
-        content.go
-        events.go
-        tools.go
-        usage.go
-      stdio/
-        transport.go
+      contracts.go             # minimal inert stdio-server operation
+      internal/
+        server/
+        connection/
+        capabilities/
+        mapping/
+          content.go
+          events.go
+          tools.go
+          usage.go
+        stdio/
       wire/
         wire.go
 
@@ -683,23 +739,28 @@ There must be one canonical package per owner:
 - use `events`, not parallel `event_stream` and `events` services;
 - do not add a top-level Docs service for P0;
 - do not create protocol state under Factory Sessions or Workers internals.
+- keep ACP server, mapping, connection, and stdio implementations under the ACP
+  transport's `internal/` tree; only its minimal injected start operation is
+  visible to composition/lifecycle code.
 
 ### 4.2 Existing packages changed
 
 | Package | Intended change |
 | --- | --- |
-| `pkg/services/operator_settings` | Typed ACP default target, allowlists, and P1 direct-Worker overrides |
-| `pkg/services/factory_definitions` | Root-level Factory target enumeration/resolution if not already available after the Definitions merge |
-| `pkg/services/factory_sessions` | Publish retained response records/source correlations through its unary root implementation; replace the internal `runtimeOpener` composition path with a root-contract adapter |
-| `pkg/services/factory_runtime` | Expose the root operation needed for session-owned runtime opening, dispatch resolved Worker requests through Worker Sessions, and publish committed observations through Events |
-| `pkg/services/workers` | Remain the lower execution engine; accept Worker Session correlation and emit source-native events |
-| `pkg/services/providers` | Expose interruption/resume capability through its root as needed |
+| `pkg/services/operator_settings` | Seal typed `ACPAgentProfile` default, allowlist, and P1 direct-Worker override operations on its singular root |
+| `pkg/services/factory_definitions` | Redefine and seal detached effective Factory catalog/resolution operations on its singular root |
+| `pkg/services/factory_sessions` | Seal unary Start/Invoke/Read/Control operations; remove `ForRuntime` secondary binding and replace `runtimeOpener` with a Factory Runtime root adapter |
+| `pkg/services/factory_runtime` | Seal session opening and orchestration on its root, dispatch through Worker Sessions, and publish committed observations through Events |
+| `pkg/services/workers` | Seal execution on its root, remove `RuntimeService` mutable reinjection, accept Worker Session correlation, and emit source-native events |
+| `pkg/services/recordings` | Replace the embedded internal service contract with explicit public root operations required by Runtime/Sessions/Events |
+| `pkg/services/providers` | Seal typed continuation and interruption/control capabilities on its root |
 | `pkg/services/provider_sessions` | Continue typed inspection; no live execution ownership |
 | `pkg/services/recordings` | Remain canonical Factory Event ledger and source for retained Factory history |
-| `pkg/services/factory_visualization` | Reuse safe presentation helpers where applicable; do not own Chat or ACP state |
 | `pkg/wire` | Construct every new service and transport once, inject exact roots, and remove secondary/runtime service factories from product paths |
-| `pkg/initializer` | Activate already-constructed ACP/event/transport roles; construct nothing |
-| `cmd/factory` | Select activation of the injected `you acp serve` transport; construct no transport or service |
+| `pkg/transports/cli` | Add internal `acp serve` command selection over the injected ACP stdio server operation |
+| `pkg/initializer` | Start, stop, and join the already-constructed ACP stdio server; perform no ACP mapping, subscription construction, or service injection |
+| `pkg/root` | No public-contract change; continue exposing the existing generic `BuildProcess` construction boundary |
+| `cmd/factory` | No changes; continue forwarding process inputs to `root.BuildProcess` and `Process.Execute` |
 | `api/` | Only if a public non-ACP Chat/Worker Session HTTP contract is deliberately included |
 
 ### 4.3 Generated artifacts
@@ -1060,8 +1121,9 @@ Does not own:
 ### 7.4 ACP transport
 
 The ACP transport is constructed by `pkg/wire` with Chat Sessions, Events, and
-all transport effects already injected. The CLI selects and activates this
-transport; it does not construct it.
+all transport effects already injected. Internal CLI composition selects the
+already-constructed stdio server. Initializer only starts, stops, and joins that
+server. `cmd/factory` remains unchanged.
 
 Owns:
 
@@ -1108,6 +1170,10 @@ authoring and validation coverage. A new Docs service is not required.
   Worker Session, Events, and Factory behavior live under their domain
   directories.
 - Concurrency paths run under the race detector and repeat/stress modes.
+- Tests validate public behavior and failure semantics. Do not add bespoke
+  source-shape, import-graph, unchanged-file, constructor-count, or lifecycle-
+  ownership tests solely to restate this proposal's architecture constraints.
+  Those constraints are enforced by implementation scope and code review.
 
 ### 8.2 Functional test matrix
 
@@ -1147,10 +1213,8 @@ authoring and validation coverage. A new Docs service is not required.
 | ACP-FT-032 | `events` | Compaction/gap | Snapshot plus retained tail or explicit load failure; no fabricated history | P1 |
 | ACP-FT-033 | `factory` | Factory Builder success | Creates and validates graph and JavaScript examples through public behavior | P0 |
 | ACP-FT-034 | `factory` | Factory Builder invalid Factory | Returns actionable validation explanation and does not install invalid output | P0 |
-| ACP-FT-035 | package boundary checks | Root-only service integration | Production cross-service imports reference only public roots; no foreign `internal/` imports | P0 |
-| ACP-FT-036 | root construction | Static service/transport injection | `BuildProcess` constructs each role once; command/session execution constructs no service or transport | P0 |
-| ACP-FT-037 | `sessions/factory` | Runtime opening consolidation | Two Factory Sessions allocate independent state/handles through the injected Runtime root with no `runtimeOpener` or child service graph | P0 |
-| ACP-FT-038 | `events` | Secondary consumer unavailable | Producer commits without acknowledgement; restarted consumer resumes from its cursor and projects the fact once | P0 |
+| ACP-FT-035 | `sessions/factory` | Independent runtime sessions | Two concurrently opened Factory Sessions preserve independent state, events, controls, and terminal results | P0 |
+| ACP-FT-036 | `events` | Secondary consumer unavailable | Producer commits without acknowledgement; restarted consumer resumes from its cursor and projects the fact once | P0 |
 
 ### 8.3 Automated end-to-end tests
 
@@ -1204,8 +1268,9 @@ not proposal tasks or phase gates.
 | Settings | `pkg/services/operator_settings/**` |
 | Definitions | `pkg/services/factory_definitions/**` |
 | Packaged Factory | `packages/packaged-factories/factories/factory-builder/**` and generator-owned output |
-| Root integration | `pkg/wire/**`, `pkg/root/**`, `pkg/initializer/**` |
-| CLI integration | `cmd/factory/**` and CLI manifests/generators |
+| Composition | `pkg/wire/**` |
+| Lifecycle | `pkg/initializer/**` |
+| Internal CLI selection | `pkg/transports/cli/**` and generated command manifests; `cmd/factory/**` is out of scope |
 | Authored API | `api/**` — only if separately admitted |
 
 Every workstream can start when its own inputs exist. No workstream waits for a
@@ -1228,6 +1293,20 @@ Tasks:
   error, and operation contracts.
 - **ACP-K02**: define the ACP compatibility contract and representative
   request/update fixtures used by the transport mapping tests.
+- **ACP-DEP01**: redefine and seal Factory Definitions effective catalog and
+  canonical resolution on its singular root using detached domain values.
+- **ACP-DEP02**: seal typed `ACPAgentProfile` get/resolve/update operations on
+  the Operator Settings root.
+- **ACP-DEP03**: seal Factory Sessions unary Start/Invoke/Read/Control and
+  remove `ForRuntime`/secondary Service binding from production consumers.
+- **ACP-DEP04**: seal Factory Runtime session-state open/start/close and
+  orchestration operations on its root; keep collaborator factories private.
+- **ACP-DEP05**: seal Workers execution/build/pool behavior on its root and
+  remove production `RuntimeService.With*` reinjection paths.
+- **ACP-DEP06**: replace Recordings' embedded internal service interface with
+  explicit public root operations used by Runtime, Sessions, and Events.
+- **ACP-DEP07**: add typed provider continuation and attempt-control capability
+  operations to the Providers root.
 
 These are ordinary implementation tasks, not a freeze. They can run in
 parallel, and all work that does not consume their outputs can begin at the same
@@ -1244,6 +1323,8 @@ Parallel tasks, beginning as soon as their specific inputs are available:
 - **ACP-O01**: typed Operator Settings default target and allowlist.
 - **ACP-D01**: Factory Definitions root target catalog adapter.
 - **ACP-T01**: ACP stdio framing, initialize, errors, and fake Chat adapter.
+- **ACP-T00**: implement ACP-owned target/message/tool presentation mapping
+  under `pkg/transports/acp/internal`; import no Factory Visualization package.
 - **ACP-F01**: `@you/factory-builder` authored source and docs coverage audit.
 
 Fan-in:
@@ -1253,7 +1334,9 @@ Fan-in:
   unary root.
 - **ACP-T02**: `session/new`, target picker, `set_config_option`, and prompt
   mapping.
-- **ACP-I01**: `pkg/wire`/initializer/`you acp serve` integration.
+- **ACP-I01**: inject the ACP stdio server through `pkg/wire`, select it through
+  internal CLI composition, and have Initializer only serve/stop/join it;
+  `cmd/factory` remains unchanged.
 - **ACP-FT01**: end-to-end final-only Factory prompt.
 
 #### Slice V2 — Durable ordered streaming
@@ -1265,8 +1348,6 @@ Parallel tasks:
 
 - **ACP-E01**: Events journal append/read, source envelopes, and idempotency.
 - **ACP-E02**: subscription, cursor, retained-then-live handoff, and backpressure.
-- **ACP-R00**: expose the Factory Runtime root operation and root-only adapter
-  needed to open session-owned runtime state without internal contract types.
 - **ACP-C04**: Chat attachment/cursor state and source attachment.
 - **ACP-T03**: message/thought/usage/session-info projectors.
 
@@ -1372,7 +1453,7 @@ Tasks:
 - **ACP-H02**: race/stress/load tests and slow-consumer behavior.
 - **ACP-H03**: safe logging, metrics, traces, and secret/path audit.
 - **ACP-H04**: public docs and `you docs` Factory Builder content.
-- **ACP-H05**: generated artifacts, package manifests, boundary checks.
+- **ACP-H05**: regenerate required artifacts and verify the resulting build.
 - **ACP-E2E**: automated acpx matrix and human client verification.
 - **ACP-M01**: delivery loop through terminal green CI, addressed blocking
   feedback, resolved conflicts, and actual merge.
@@ -1383,10 +1464,18 @@ Tasks:
 flowchart TD
     K01["ACP-K01<br/>service contracts"]
     K02["ACP-K02<br/>ACP contracts and fixtures"]
+    DEP01["ACP-DEP01<br/>Definitions root"]
+    DEP02["ACP-DEP02<br/>Settings root"]
+    DEP03["ACP-DEP03<br/>Sessions root"]
+    DEP04["ACP-DEP04<br/>Runtime root"]
+    DEP05["ACP-DEP05<br/>Workers root"]
+    DEP06["ACP-DEP06<br/>Recordings root"]
+    DEP07["ACP-DEP07<br/>Providers root"]
 
     C01["ACP-C01<br/>Chat store"]
     O01["ACP-O01<br/>target defaults"]
     D01["ACP-D01<br/>Factory catalog"]
+    T00["ACP-T00<br/>ACP-owned presentation"]
     T01["ACP-T01<br/>ACP stdio core"]
     F01["ACP-F01<br/>Factory Builder"]
 
@@ -1398,7 +1487,6 @@ flowchart TD
 
     E01["ACP-E01<br/>journal"]
     E02["ACP-E02<br/>subscriptions"]
-    R00["ACP-R00<br/>Runtime root opening"]
     S00["ACP-S00<br/>retire runtimeOpener"]
     E00["ACP-E00<br/>remove confirmation coupling"]
     S01["ACP-S01<br/>Factory stream bridge"]
@@ -1450,28 +1538,35 @@ flowchart TD
 
     K01 --> C01
     K02 --> T01
+    K02 --> T00
+    DEP01 --> D01
+    DEP02 --> O01
 
     C01 --> C02
     O01 --> C02
     D01 --> C02
     C02 --> C03
     T01 --> T02
+    T00 --> T02
     C02 --> T02
+    DEP03 --> C03
     C03 --> T02
     T02 --> I01
     I01 --> FT01
 
     K01 --> E01
     K01 --> E02
-    R00 --> S00
+    DEP03 --> S00
+    DEP04 --> S00
     E01 --> E00
     E02 --> E00
     S00 --> E00
+    DEP06 --> E00
     C03 --> S01
     E00 --> S01
     C01 --> C04
     E01 --> C04
-    K02 --> T03
+    T00 --> T03
     E01 --> E03
     E02 --> E03
     C04 --> E03
@@ -1490,7 +1585,9 @@ flowchart TD
     W02 --> W05
     W03 --> W05
     W04 --> W05
+    DEP05 --> W05
     W05 --> R01
+    DEP04 --> R01
     R01 --> I03
     I02 --> I03
     I03 --> FT03
@@ -1498,8 +1595,8 @@ flowchart TD
     R01 --> R02
     E03 --> E04
     R02 --> E04
-    K02 --> T04
-    K02 --> T05
+    T00 --> T04
+    T00 --> T05
     E04 --> I04
     T04 --> I04
     T05 --> I04
@@ -1509,6 +1606,8 @@ flowchart TD
     C04 --> C05
     W02 --> W06
     W04 --> W07
+    DEP07 --> W06
+    DEP07 --> W07
     R02 --> S02
     W06 --> S02
     C05 --> T06
@@ -1523,6 +1622,7 @@ flowchart TD
     W05 --> C06
     O01 --> O02
     C06 --> T07
+    T00 --> T07
     O02 --> T08
     C05 --> T09
     T07 --> I06
@@ -1614,6 +1714,11 @@ actually compose.
   Session does not invoke an injector or construct a product service.
 - Every transport, including ACP, is constructed inertly with its dependencies
   and injected before lifecycle selection.
+- Initializer's only ACP-specific lifecycle responsibility is to start, stop,
+  and join the already-injected stdio server. It performs no ACP mapping,
+  service construction, dependency resolution, or subscription assembly.
+- `cmd/factory` is unchanged and contains no ACP-specific imports, flags,
+  construction, routing, or lifecycle logic.
 - Constructors remain inert; Initializer activates already-constructed roles.
 - No service imports another service's `internal/` tree.
 - Consumer shims depend only on the provider's public root contract. Missing
@@ -1622,6 +1727,9 @@ actually compose.
 - Chat Sessions does not call Work or Factory Runtime directly for Factory
   prompts.
 - ACP transport owns ACP types and projection; services do not.
+- ACP presentation and event mapping are implemented inside
+  `pkg/transports/acp/internal`; ACP imports no Factory Visualization helper,
+  projection, sink, or contract.
 - Worker Sessions owns product Worker lifecycle/control; Workers owns execution
   mechanics.
 - Events is not a service locator, secondary injector, or implicit command bus.
@@ -1637,6 +1745,16 @@ actually compose.
 - Factory Definitions, Factory Sessions, Models, Operator Settings, Work,
   Runtime, Recordings, Workers, Providers, and Provider Sessions are consumed
   through their post-PSS root contracts.
+- Factory Definitions target enumeration and resolution are available on its
+  singular root with detached domain values and no ACP/presentation types.
+- Operator Settings owns typed `ACPAgentProfile` resolution on its singular
+  root; no secondary settings/profile service is introduced.
+- Factory Sessions production consumers do not use `ForRuntime`; Workers
+  production consumers do not use `RuntimeService.With*`; Recordings consumers
+  do not embed or name `recordings/internal/contracts.Service`.
+- Factory Runtime opening, Providers continuation/control, and every other new
+  dependency operation are sealed on the owning singular root before ACP code
+  consumes them.
 - Tasks are independently scoped and may execute concurrently; the plan adds no
   path leases, baseline-recording tasks, or repository-wide freeze.
 
