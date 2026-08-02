@@ -176,3 +176,69 @@ type InvalidAttachmentError struct {
 func (e *InvalidAttachmentError) Error() string {
 	return fmt.Sprintf("invalid chat session attachment: %s", e.Reason)
 }
+
+// InvalidControlActionError reports a ControlAction outside the exact
+// declared value set (CANCEL, CLOSE, PAUSE, RESUME, TERMINATE).
+type InvalidControlActionError struct {
+	Action ControlAction
+}
+
+func (e *InvalidControlActionError) Error() string {
+	return fmt.Sprintf("invalid control action: %q", string(e.Action))
+}
+
+// UnsupportedControlActionError reports a ControlAction that is a declared
+// value but is not supported in L1 (PAUSE, RESUME, TERMINATE).
+type UnsupportedControlActionError struct {
+	Action ControlAction
+}
+
+func (e *UnsupportedControlActionError) Error() string {
+	return fmt.Sprintf("unsupported control action in L1: %q", string(e.Action))
+}
+
+// InvalidControlIntentStateError reports a ControlIntentState outside the
+// exact declared value set (REQUESTED, COMMITTED, COMPLETED, NOOP,
+// SUPERSEDED).
+type InvalidControlIntentStateError struct {
+	State ControlIntentState
+}
+
+func (e *InvalidControlIntentStateError) Error() string {
+	return fmt.Sprintf("invalid control intent state: %q", string(e.State))
+}
+
+// InvalidControlIntentStateTransitionError reports a ControlIntentState
+// transition outside the declared legal transition table.
+type InvalidControlIntentStateTransitionError struct {
+	From ControlIntentState
+	To   ControlIntentState
+}
+
+func (e *InvalidControlIntentStateTransitionError) Error() string {
+	return fmt.Sprintf("invalid control intent state transition: %q to %q", string(e.From), string(e.To))
+}
+
+// ControlIntentInvalidReason classifies why a ControlIntent failed
+// validation without exposing the supplied identity values.
+type ControlIntentInvalidReason string
+
+const (
+	// ControlIntentInvalidMissingSessionID reports a missing owning session
+	// identity.
+	ControlIntentInvalidMissingSessionID ControlIntentInvalidReason = "MISSING_SESSION_ID"
+	// ControlIntentInvalidMissingTurnID reports a missing captured turn
+	// identity.
+	ControlIntentInvalidMissingTurnID ControlIntentInvalidReason = "MISSING_TURN_ID"
+)
+
+// InvalidControlIntentError reports a ControlIntent missing a required
+// capture field. Peers branch on Reason; the error never carries the
+// supplied identity values, so it is safe to log.
+type InvalidControlIntentError struct {
+	Reason ControlIntentInvalidReason
+}
+
+func (e *InvalidControlIntentError) Error() string {
+	return fmt.Sprintf("invalid chat session control intent: %s", e.Reason)
+}
