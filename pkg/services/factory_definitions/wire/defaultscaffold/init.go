@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	distributioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/contracts"
 )
 
 const (
@@ -23,9 +24,9 @@ var defaultFactoryJSON string
 // NewScaffoldInitializer constructs the single supported default Factory
 // scaffold operation from exact filesystem and output effects.
 func NewScaffoldInitializer(
-	files factorydefinitions.ScaffoldFileSystem,
-	output factorydefinitions.ScaffoldOutput,
-) (factorydefinitions.ScaffoldInitializer, error) {
+	files distributioncontracts.ScaffoldFileSystem,
+	output distributioncontracts.ScaffoldOutput,
+) (distributioncontracts.ScaffoldInitializer, error) {
 	if files == nil {
 		return nil, fmt.Errorf("Factory Definition scaffold filesystem is required")
 	}
@@ -38,8 +39,8 @@ func NewScaffoldInitializer(
 }
 
 func materializeDefaultScaffold(
-	files factorydefinitions.ScaffoldFileSystem,
-	output factorydefinitions.ScaffoldOutput,
+	files distributioncontracts.ScaffoldFileSystem,
+	output distributioncontracts.ScaffoldOutput,
 	dir string,
 ) error {
 	for _, relativeDir := range []string{
@@ -79,7 +80,7 @@ func materializeDefaultScaffold(
 }
 
 func writeScaffoldFileIfAbsent(
-	files factorydefinitions.ScaffoldFileSystem,
+	files distributioncontracts.ScaffoldFileSystem,
 	path string,
 	contents string,
 ) error {

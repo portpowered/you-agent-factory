@@ -8,6 +8,7 @@ import (
 
 	publishedpackagedcatalog "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	distributioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/contracts"
 )
 
 // LoadPublishedDefinitionCatalog validates and materializes the executable's
@@ -28,7 +29,7 @@ type Catalog struct {
 // New constructs catalog operations from validated packaged definitions.
 func New(
 	definitions []factorydefinitions.PackagedDefinition,
-) (factorydefinitions.PackagedFactoryCatalogOperations, error) {
+) (distributioncontracts.PackagedFactoryCatalogOperations, error) {
 	cloned := make([]factorydefinitions.PackagedDefinition, len(definitions))
 	for index, definition := range definitions {
 		cloned[index] = cloneDefinition(definition)
@@ -38,23 +39,23 @@ func New(
 	})
 	for index, definition := range cloned {
 		if strings.TrimSpace(definition.Name) == "" {
-			return factorydefinitions.PackagedFactoryCatalogOperations{}, fmt.Errorf("construct packaged Factory catalog: public name is required")
+			return distributioncontracts.PackagedFactoryCatalogOperations{}, fmt.Errorf("construct packaged Factory catalog: public name is required")
 		}
 		if index > 0 && cloned[index-1].Name == definition.Name {
-			return factorydefinitions.PackagedFactoryCatalogOperations{}, fmt.Errorf(
+			return distributioncontracts.PackagedFactoryCatalogOperations{}, fmt.Errorf(
 				"construct packaged Factory catalog: duplicate public name %q",
 				definition.Name,
 			)
 		}
 		if len(definition.Formats) == 0 {
-			return factorydefinitions.PackagedFactoryCatalogOperations{}, fmt.Errorf(
+			return distributioncontracts.PackagedFactoryCatalogOperations{}, fmt.Errorf(
 				"construct packaged Factory catalog: %q has no published formats",
 				definition.Name,
 			)
 		}
 	}
 	catalog := &Catalog{definitions: cloned}
-	return factorydefinitions.PackagedFactoryCatalogOperations{
+	return distributioncontracts.PackagedFactoryCatalogOperations{
 		List:    catalog.ListBuiltInPackagedFactories,
 		Resolve: catalog.ResolveBuiltInPackagedFactory,
 	}, nil

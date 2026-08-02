@@ -7,25 +7,26 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	distributionservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
+	distributioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/contracts"
 )
 
 // Service is the private nested distribution implementation behind the CTR-DEF
 // root distribute slice.
 type Service struct {
-	packagedCatalog             factorydefinitions.PackagedFactoryCatalogOperations
-	packagedInstaller           factorydefinitions.PackagedFactoryInstallationOperations
-	scaffoldInitializer         factorydefinitions.ScaffoldInitializer
-	scaffoldFactoryNameResolver distributionservice.ScaffoldFactoryNameResolver
+	packagedCatalog             distributioncontracts.PackagedFactoryCatalogOperations
+	packagedInstaller           distributioncontracts.PackagedFactoryInstallationOperations
+	scaffoldInitializer         distributioncontracts.ScaffoldInitializer
+	scaffoldFactoryNameResolver distributioncontracts.ScaffoldFactoryNameResolver
 }
 
 var _ distributionservice.Service = (*Service)(nil)
 
 // New constructs the distribution implementation from exact injected ports.
 func New(
-	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
-	packagedInstaller factorydefinitions.PackagedFactoryInstallationOperations,
-	scaffoldInitializer factorydefinitions.ScaffoldInitializer,
-	scaffoldFactoryNameResolver distributionservice.ScaffoldFactoryNameResolver,
+	packagedCatalog distributioncontracts.PackagedFactoryCatalogOperations,
+	packagedInstaller distributioncontracts.PackagedFactoryInstallationOperations,
+	scaffoldInitializer distributioncontracts.ScaffoldInitializer,
+	scaffoldFactoryNameResolver distributioncontracts.ScaffoldFactoryNameResolver,
 ) *Service {
 	if packagedCatalog.List == nil ||
 		packagedCatalog.Resolve == nil ||

@@ -15,6 +15,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	distributionservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
+	distributioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/contracts"
 	distributionpackagedcatalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedcatalog"
 	distributionpackagedinstallation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation"
 	distributionscaffoldfacts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts"
@@ -46,9 +47,9 @@ func TestDistributionListsAndResolvesBuiltInPackagedFactories(t *testing.T) {
 		t.Fatalf("New catalog: %v", err)
 	}
 
-	svc, err := distributionwire.NewService(distributionservice.Dependencies{
-		PackagedCatalog: catalog,
-		PackagedInstaller: factorydefinitions.PackagedFactoryInstallationOperations{
+	svc, err := distributionwire.NewService(
+		catalog,
+		distributioncontracts.PackagedFactoryInstallationOperations{
 			Install: func(
 				context.Context,
 				factorydefinitions.PackagedFactoryInstallParams,
@@ -56,9 +57,9 @@ func TestDistributionListsAndResolvesBuiltInPackagedFactories(t *testing.T) {
 				return factorydefinitions.PackagedFactoryInstallResult{}, nil
 			},
 		},
-		ScaffoldInitializer:         func(factorydefinitions.ScaffoldConfig) error { return nil },
-		ScaffoldFactoryNameResolver: scaffoldNameResolver("factory"),
-	})
+		func(factorydefinitions.ScaffoldConfig) error { return nil },
+		scaffoldNameResolver("factory"),
+	)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
@@ -107,9 +108,9 @@ func TestDistributionResolveUnknownOrBlankNameFailsClosed(t *testing.T) {
 		t.Fatalf("New catalog: %v", err)
 	}
 
-	svc, err := distributionwire.NewService(distributionservice.Dependencies{
-		PackagedCatalog: catalog,
-		PackagedInstaller: factorydefinitions.PackagedFactoryInstallationOperations{
+	svc, err := distributionwire.NewService(
+		catalog,
+		distributioncontracts.PackagedFactoryInstallationOperations{
 			Install: func(
 				context.Context,
 				factorydefinitions.PackagedFactoryInstallParams,
@@ -117,9 +118,9 @@ func TestDistributionResolveUnknownOrBlankNameFailsClosed(t *testing.T) {
 				return factorydefinitions.PackagedFactoryInstallResult{}, nil
 			},
 		},
-		ScaffoldInitializer:         func(factorydefinitions.ScaffoldConfig) error { return nil },
-		ScaffoldFactoryNameResolver: scaffoldNameResolver("factory"),
-	})
+		func(factorydefinitions.ScaffoldConfig) error { return nil },
+		scaffoldNameResolver("factory"),
+	)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
@@ -149,7 +150,7 @@ func TestDistributionInstallPackagedFactoryReturnsDistributedFacts(t *testing.T)
 
 	var installed factorydefinitions.PackagedDefinition
 	var installedFormat factorydefinitions.PackagedFactoryFormat
-	svc := newDistributionService(t, goalPackagedCatalog(t), factorydefinitions.PackagedFactoryInstallationOperations{
+	svc := newDistributionService(t, goalPackagedCatalog(t), distributioncontracts.PackagedFactoryInstallationOperations{
 		Install: func(
 			_ context.Context,
 			params factorydefinitions.PackagedFactoryInstallParams,
@@ -196,7 +197,7 @@ func TestDistributionInstallPackagedFactoryUnknownIdentityFailsClosed(t *testing
 	t.Parallel()
 
 	installCalls := 0
-	svc := newDistributionService(t, goalPackagedCatalog(t), factorydefinitions.PackagedFactoryInstallationOperations{
+	svc := newDistributionService(t, goalPackagedCatalog(t), distributioncontracts.PackagedFactoryInstallationOperations{
 		Install: func(
 			context.Context,
 			factorydefinitions.PackagedFactoryInstallParams,
@@ -225,7 +226,7 @@ func TestDistributionInstallPackagedFactoryWrapsInstallerFailure(t *testing.T) {
 	t.Parallel()
 
 	installErr := fmt.Errorf("disk full")
-	svc := newDistributionService(t, goalPackagedCatalog(t), factorydefinitions.PackagedFactoryInstallationOperations{
+	svc := newDistributionService(t, goalPackagedCatalog(t), distributioncontracts.PackagedFactoryInstallationOperations{
 		Install: func(
 			context.Context,
 			factorydefinitions.PackagedFactoryInstallParams,
@@ -250,7 +251,7 @@ func TestDistributionInstallPackagedFactorySkipAndReplaceOutcomes(t *testing.T) 
 	t.Parallel()
 
 	installCalls := 0
-	svc := newDistributionService(t, goalPackagedCatalog(t), factorydefinitions.PackagedFactoryInstallationOperations{
+	svc := newDistributionService(t, goalPackagedCatalog(t), distributioncontracts.PackagedFactoryInstallationOperations{
 		Install: func(
 			_ context.Context,
 			params factorydefinitions.PackagedFactoryInstallParams,
@@ -313,7 +314,7 @@ func TestDistributionInstallPackagedFactoryRejectsIncompatibleScaffoldOptions(t 
 	t.Parallel()
 
 	resolveCalls := 0
-	svc := newDistributionService(t, factorydefinitions.PackagedFactoryCatalogOperations{
+	svc := newDistributionService(t, distributioncontracts.PackagedFactoryCatalogOperations{
 		List: func(
 			context.Context,
 			factorydefinitions.ListBuiltInPackagedFactoriesRequest,
@@ -328,7 +329,7 @@ func TestDistributionInstallPackagedFactoryRejectsIncompatibleScaffoldOptions(t 
 			resolveCalls++
 			return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, nil
 		},
-	}, factorydefinitions.PackagedFactoryInstallationOperations{
+	}, distributioncontracts.PackagedFactoryInstallationOperations{
 		Install: func(
 			context.Context,
 			factorydefinitions.PackagedFactoryInstallParams,
@@ -380,7 +381,7 @@ func TestDistributionInstallPackagedFactoryThroughInjectedPorts(t *testing.T) {
 		factoryvalidation.New(nil),
 	)
 	installer := distributionpackagedinstallation.New(persistence, fileSystem)
-	svc := newDistributionService(t, catalog, factorydefinitions.PackagedFactoryInstallationOperations{
+	svc := newDistributionService(t, catalog, distributioncontracts.PackagedFactoryInstallationOperations{
 		Install: installer.InstallPackagedFactory,
 	})
 
@@ -429,7 +430,7 @@ func TestDistributionCreateFactoryScaffoldReturnsDistributedFacts(t *testing.T) 
 	svc := newDistributionServiceWithScaffold(
 		t,
 		goalPackagedCatalog(t),
-		factorydefinitions.PackagedFactoryInstallationOperations{
+		distributioncontracts.PackagedFactoryInstallationOperations{
 			Install: func(
 				context.Context,
 				factorydefinitions.PackagedFactoryInstallParams,
@@ -473,7 +474,7 @@ func TestDistributionCreateFactoryScaffoldRejectsBlankTargetDir(t *testing.T) {
 	svc := newDistributionServiceWithScaffold(
 		t,
 		goalPackagedCatalog(t),
-		factorydefinitions.PackagedFactoryInstallationOperations{
+		distributioncontracts.PackagedFactoryInstallationOperations{
 			Install: func(
 				context.Context,
 				factorydefinitions.PackagedFactoryInstallParams,
@@ -507,7 +508,7 @@ func TestDistributionCreateFactoryScaffoldRejectsUnsupportedType(t *testing.T) {
 	svc := newDistributionServiceWithScaffold(
 		t,
 		goalPackagedCatalog(t),
-		factorydefinitions.PackagedFactoryInstallationOperations{
+		distributioncontracts.PackagedFactoryInstallationOperations{
 			Install: func(
 				context.Context,
 				factorydefinitions.PackagedFactoryInstallParams,
@@ -544,7 +545,7 @@ func TestDistributionCreateFactoryScaffoldWrapsInitializerFailure(t *testing.T) 
 	svc := newDistributionServiceWithScaffold(
 		t,
 		goalPackagedCatalog(t),
-		factorydefinitions.PackagedFactoryInstallationOperations{
+		distributioncontracts.PackagedFactoryInstallationOperations{
 			Install: func(
 				context.Context,
 				factorydefinitions.PackagedFactoryInstallParams,
@@ -581,7 +582,7 @@ func TestDistributionCreateFactoryScaffoldThroughInjectedPorts(t *testing.T) {
 	svc := newDistributionServiceWithScaffold(
 		t,
 		goalPackagedCatalog(t),
-		factorydefinitions.PackagedFactoryInstallationOperations{
+		distributioncontracts.PackagedFactoryInstallationOperations{
 			Install: func(
 				context.Context,
 				factorydefinitions.PackagedFactoryInstallParams,
@@ -610,8 +611,8 @@ func TestDistributionCreateFactoryScaffoldThroughInjectedPorts(t *testing.T) {
 
 func newDistributionService(
 	t *testing.T,
-	catalog factorydefinitions.PackagedFactoryCatalogOperations,
-	installer factorydefinitions.PackagedFactoryInstallationOperations,
+	catalog distributioncontracts.PackagedFactoryCatalogOperations,
+	installer distributioncontracts.PackagedFactoryInstallationOperations,
 ) distributionservice.Service {
 	return newDistributionServiceWithScaffold(
 		t,
@@ -624,30 +625,30 @@ func newDistributionService(
 
 func newDistributionServiceWithScaffold(
 	t *testing.T,
-	catalog factorydefinitions.PackagedFactoryCatalogOperations,
-	installer factorydefinitions.PackagedFactoryInstallationOperations,
-	scaffoldInitializer factorydefinitions.ScaffoldInitializer,
-	scaffoldFactoryNameResolver distributionservice.ScaffoldFactoryNameResolver,
+	catalog distributioncontracts.PackagedFactoryCatalogOperations,
+	installer distributioncontracts.PackagedFactoryInstallationOperations,
+	scaffoldInitializer distributioncontracts.ScaffoldInitializer,
+	scaffoldFactoryNameResolver distributioncontracts.ScaffoldFactoryNameResolver,
 ) distributionservice.Service {
-	svc, err := distributionwire.NewService(distributionservice.Dependencies{
-		PackagedCatalog:             catalog,
-		PackagedInstaller:           installer,
-		ScaffoldInitializer:         scaffoldInitializer,
-		ScaffoldFactoryNameResolver: scaffoldFactoryNameResolver,
-	})
+	svc, err := distributionwire.NewService(
+		catalog,
+		installer,
+		scaffoldInitializer,
+		scaffoldFactoryNameResolver,
+	)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
 	return svc
 }
 
-func scaffoldNameResolver(name string) distributionservice.ScaffoldFactoryNameResolver {
+func scaffoldNameResolver(name string) distributioncontracts.ScaffoldFactoryNameResolver {
 	return func(string) (string, error) {
 		return name, nil
 	}
 }
 
-func goalPackagedCatalog(t *testing.T) factorydefinitions.PackagedFactoryCatalogOperations {
+func goalPackagedCatalog(t *testing.T) distributioncontracts.PackagedFactoryCatalogOperations {
 	catalog, err := distributionpackagedcatalog.New([]factorydefinitions.PackagedDefinition{{
 		Name:    "@you/goal",
 		Project: "builtin-goal",
