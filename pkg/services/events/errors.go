@@ -1,6 +1,9 @@
 package events
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // Identity, sequence, cursor, and retained-position validation failures.
 // Callers classify a failure with errors.Is against these sentinels rather
@@ -30,4 +33,28 @@ var (
 	ErrCursorTopicMismatch     = errors.New("events: cursor does not belong to the requested topic")
 	ErrInvalidReadLimit        = errors.New("events: read/subscribe limit must be positive")
 	ErrInconsistentReadOutcome = errors.New("events: read result outcome is inconsistent with its records/gap")
+	ErrInvalidGapFacts         = errors.New("events: gap facts are internally inconsistent")
+	ErrInconsistentDelivery    = errors.New("events: delivery is inconsistent with its kind")
+)
+
+// ErrOperationFailed classifies a Read or Subscribe call that failed for a
+// reason other than request validation or an expected at-head/gap outcome. A
+// caller distinguishes any such operation failure from a validation error or
+// a successful ReadResult/Delivery with errors.Is(err, ErrOperationFailed).
+//
+// ErrUnknownTopic and ErrUnresolvableCursor wrap ErrOperationFailed: a caller
+// can classify the specific cause with errors.Is against the narrower
+// sentinel, or classify any operation failure with the general one.
+var (
+	ErrOperationFailed = errors.New("events: operation failed")
+
+	// ErrUnknownTopic reports that a well-formed Topic names no stream
+	// Events knows about.
+	ErrUnknownTopic = fmt.Errorf("events: topic is not known: %w", ErrOperationFailed)
+	// ErrUnresolvableCursor reports that a well-formed, topic-matched Cursor
+	// names a position Events cannot resolve against the topic's aggregate
+	// ordering (distinct from ReadOutcomeInvalidCursor/DeliveryGap, which
+	// report the same condition as an expected result rather than an
+	// operation failure).
+	ErrUnresolvableCursor = fmt.Errorf("events: cursor cannot be resolved: %w", ErrOperationFailed)
 )
