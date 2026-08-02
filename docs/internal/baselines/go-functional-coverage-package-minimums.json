@@ -2895,6 +2895,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp",
+      "minimum": 89.55
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli",
       "minimum": 72.98
     },
