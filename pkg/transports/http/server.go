@@ -15,6 +15,7 @@ import (
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	dashboardui "github.com/portpowered/infinite-you/ui"
 	"go.uber.org/zap"
@@ -26,18 +27,23 @@ var _ factoryapi.ServerInterface = (*Server)(nil)
 
 // Server is the REST API server for the agent-factory.
 type Server struct {
-	*factorysessionshttp.Adapter
+	*factorySessionsAdapter
+	*workAdapter
 	modelsHTTP       *modelshttp.Handler
 	providerSessions providersessions.Service
 	logger           *zap.Logger
 	router           *mux.Router
 }
 
+type factorySessionsAdapter struct{ *factorysessionshttp.Adapter }
+type workAdapter struct{ *workhttp.Adapter }
+
 // NewServer composes an immutable generated HTTP server from dependencies
 // selected by Wire and the opened Factory Session. It performs no dependency
 // construction or service lookup.
 func NewServer(
 	factorySessionsHTTP *factorysessionshttp.Handler,
+	workHTTP *workhttp.Adapter,
 	modelsHTTP *modelshttp.Handler,
 	providerSessions providersessions.Service,
 	logger *zap.Logger,
@@ -46,8 +52,9 @@ func NewServer(
 		logger = zap.NewNop()
 	}
 	srv := &Server{
-		Adapter:    factorySessionsHTTP,
-		modelsHTTP: modelsHTTP, providerSessions: providerSessions, logger: logger,
+		factorySessionsAdapter: &factorySessionsAdapter{Adapter: factorySessionsHTTP},
+		workAdapter:            &workAdapter{Adapter: workHTTP},
+		modelsHTTP:             modelsHTTP, providerSessions: providerSessions, logger: logger,
 	}
 	srv.router = srv.buildRouter()
 	return srv

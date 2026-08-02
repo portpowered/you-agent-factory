@@ -8,6 +8,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -16,8 +17,8 @@ const (
 	sessionEventStreamLogicalSessionKeyHeader = factorysessionshttp.SessionEventStreamLogicalSessionKeyHeader
 	sessionEventStreamFactorySessionHeader    = factorysessionshttp.SessionEventStreamFactorySessionHeader
 	sessionEventStreamGenerationHeader        = factorysessionshttp.SessionEventStreamGenerationHeader
-	submitWorkItemTypeMetadataKey             = factorysessionshttp.SubmitWorkItemTypeMetadataKey
-	submitWorkFileNameMetadataKey             = factorysessionshttp.SubmitWorkFileNameMetadataKey
+	submitWorkItemTypeMetadataKey             = workhttp.SubmitWorkItemTypeMetadataKey
+	submitWorkFileNameMetadataKey             = workhttp.SubmitWorkFileNameMetadataKey
 )
 
 func stringValue(value *string) string {
@@ -42,7 +43,7 @@ func reconnectCursorFromParams(
 }
 
 func workReadModelToGenerated(item work.ReadModel) factoryapi.Work {
-	return factorysessionshttp.WorkReadModelToGenerated(item)
+	return workhttp.WorkReadModelToGenerated(item)
 }
 
 func decodeStrictJSON[T any](body io.Reader) (T, error) {
@@ -54,7 +55,7 @@ func requestFieldValidationMessage(err error) (string, bool) {
 }
 
 func submitWorkResponseFromResult(result work.WorkRequestSubmitResult, sessionID string) factoryapi.SubmitWorkResponse {
-	return factorysessionshttp.SubmitWorkResponseFromResult(result, sessionID)
+	return workhttp.SubmitWorkResponseFromResult(result, sessionID)
 }
 
 func (s *Server) getEvents(
@@ -63,5 +64,5 @@ func (s *Server) getEvents(
 	includeSessionHandshake bool,
 	subscribe func(context.Context) (*interfaces.FactoryEventStream, error),
 ) {
-	s.Adapter.StreamFactoryEvents(w, r, includeSessionHandshake, subscribe)
+	s.factorySessionsAdapter.StreamFactoryEvents(w, r, includeSessionHandshake, subscribe)
 }

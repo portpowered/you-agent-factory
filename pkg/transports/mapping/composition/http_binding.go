@@ -18,8 +18,6 @@ type HTTPBinding struct {
 	Runtime            apisurface.RuntimeAPI
 	FactoryStatus      apisurface.FactoryStatusAPI
 	Sessions           apisurface.LiveSessionAPI
-	Work               apisurface.WorkAPI
-	WorkRead           apisurface.WorkReadAPI
 	Invocation         apisurface.InvocationAPI
 	FactoryDefinitions apisurface.FactorySaveAPI
 	Durable            apisurface.DurableSessionAPI
@@ -49,10 +47,9 @@ func (binder *HTTPBinder) Bind(
 	sessions factorysessions.Service,
 	invocations factorysessionmapping.SessionInvoker,
 	execution factorysessions.ExecutionService,
-	workService work.Service,
 ) (HTTPBinding, error) {
 	if runtime == nil || definitions == nil || sessions == nil || invocations == nil ||
-		execution == nil || workService == nil ||
+		execution == nil ||
 		binder == nil || binder.content == nil {
 		return HTTPBinding{}, fmt.Errorf("bind HTTP mappings: opened Factory Session roles are required")
 	}
@@ -61,13 +58,10 @@ func (binder *HTTPBinder) Bind(
 		return HTTPBinding{}, fmt.Errorf("bind HTTP mappings: legacy Factory Runtime observation is required")
 	}
 	durable := NewDurableAPI(execution, sessions)
-	mappedWork := workAPI{work: workService, sessions: sessions}
 	return HTTPBinding{
 		Runtime:            NewRuntimeAPI(legacyObservation, definitions),
 		FactoryStatus:      newFactoryStatusAPI(runtime, sessions),
 		Sessions:           NewLiveSessionAPI(sessions),
-		Work:               mappedWork,
-		WorkRead:           mappedWork,
 		Invocation:         NewInvocationAPI(invocations),
 		FactoryDefinitions: NewFactoryDefinitionAPI(definitions),
 		Durable:            durable,

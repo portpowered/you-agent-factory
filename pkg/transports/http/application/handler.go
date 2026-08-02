@@ -3,6 +3,7 @@
 package application
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
@@ -11,6 +12,7 @@ import (
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
 	mappingcomposition "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
@@ -46,7 +48,7 @@ func NewHandler(
 	return &Handler{
 		mappings: mappings, modelsContent: modelsContent, validation: validation,
 		invocationWorkType: invocationWorkType,
-		contentStaging: contentStaging, requestPreparation: requestPreparation,
+		contentStaging:     contentStaging, requestPreparation: requestPreparation,
 		sessionRequests: sessionRequests,
 	}, nil
 }
@@ -67,29 +69,30 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 	}
 	mapped, err := handler.mappings.Bind(
 		opened.FactoryRuntime, opened.FactoryDefinitions, opened.FactorySessions,
-		opened.SessionInvocation, opened.SessionExecution, opened.Work,
+		opened.SessionInvocation, opened.SessionExecution,
 	)
 	if err != nil {
 		return nil, err
 	}
 	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
-		Runtime: mapped.Runtime, FactoryStatus: mapped.FactoryStatus,
-		Sessions: mapped.Sessions, Work: mapped.Work, WorkRead: mapped.WorkRead,
+		SessionsRoot: opened.FactorySessions,
+		Runtime:      mapped.Runtime, FactoryStatus: mapped.FactoryStatus,
+		Sessions: mapped.Sessions, SessionEvents: opened.FactorySessions,
 		Invocation: mapped.Invocation, FactoryDefinitions: mapped.FactoryDefinitions,
 		FactoryValidation: handler.validation, WorkflowPreview: opened.WorkflowPreview,
 		DurableExecution: mapped.Durable, DurableLifecycle: mapped.Durable,
 		DurableListing: mapped.Durable, DurableProjection: mapped.Durable,
-		DurableLister:     opened.SessionExecution,
-		LiveSessionLister: factorysessionshttp.ReadProjectionSessionListReader{Reader: opened.FactorySessions},
-		WorkerPrompts: opened.WorkerPrompts,
+		DurableLister:      opened.SessionExecution,
+		LiveSessionLister:  factorysessionshttp.ReadProjectionSessionListReader{Reader: opened.FactorySessions},
+		WorkerPrompts:      opened.WorkerPrompts,
 		InvocationWorkType: handler.invocationWorkType,
-		WorkService: work.AdmissionContentService(
-			handler.contentStaging,
-			handler.requestPreparation,
-		),
-		SessionRequests: handler.sessionRequests,
+		SessionRequests:    handler.sessionRequests,
 	}, opened.Logger)
-	server := transporthttp.NewServer(sessionsHandler, modelsHandler, opened.ProviderSessions, opened.Logger)
+	workHandler := workhttp.NewAdapterWithSessionScope(opened.Work, func(ctx context.Context, sessionID string) error {
+		_, err := mapped.FactoryDefinitions.GetCurrentFactoryForSession(ctx, sessionID)
+		return err
+	}).WithDefaultWorkTypeResolver(workhttp.NewDefaultWorkTypeResolver(mapped.FactoryDefinitions, handler.invocationWorkType))
+	server := transporthttp.NewServer(sessionsHandler, workHandler, modelsHandler, opened.ProviderSessions, opened.Logger)
 	return server.Handler(), nil
 }
 
@@ -110,11 +113,7 @@ func (handler *Handler) BindDurableExecution(
 		DurableListing: durable, DurableProjection: durable,
 		DurableLister: execution, FactoryValidation: handler.validation,
 		InvocationWorkType: handler.invocationWorkType,
-		WorkService: work.AdmissionContentService(
-			handler.contentStaging,
-			handler.requestPreparation,
-		),
-		SessionRequests: handler.sessionRequests,
+		SessionRequests:    handler.sessionRequests,
 	}, logger)
-	return transporthttp.NewServer(sessionsHandler, nil, nil, logger).Handler(), nil
+	return transporthttp.NewServer(sessionsHandler, nil, nil, nil, logger).Handler(), nil
 }

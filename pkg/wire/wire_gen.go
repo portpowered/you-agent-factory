@@ -570,7 +570,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 
 var platformSet = wire3.NewSet(logging.NewDefaultLogger)
 
-var apiSet = wire3.NewSet(composition.NewWorkAPI, composition.NewHTTPBinder, apisurface.NewRuntimeAPI, composition.NewLiveSessionAPI, factorydefinition.NewAPI, factorysession.NewDurableAPI, factorysession.NewLiveAPI, factorysession.NewInvocationAPI, stdio.NewOpener, application2.NewHandler)
+var apiSet = wire3.NewSet(composition.NewHTTPBinder, apisurface.NewRuntimeAPI, composition.NewLiveSessionAPI, factorydefinition.NewAPI, factorysession.NewDurableAPI, factorysession.NewLiveAPI, factorysession.NewInvocationAPI, stdio.NewOpener, application2.NewHandler)
 
 var servicesSet = wire3.NewSet(
 	provideProvidersService,

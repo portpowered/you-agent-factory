@@ -25,7 +25,7 @@ import (
 )
 
 func TestListPackagedFactoriesReturnsPublishedCatalog(t *testing.T) {
-	srv := NewServer(nil, nil, nil, zap.NewNop())
+	srv := NewServer(nil, nil, nil, nil, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/packaged-factories", nil))
 
@@ -110,7 +110,7 @@ func (modelHTTPContentPreparation) PrepareWorkContent(_ context.Context, content
 
 func newEventStreamTestServer() *Server {
 	logger := zap.NewNop()
-	return &Server{Adapter: factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{}, logger), logger: logger}
+	return &Server{factorySessionsAdapter: &factorySessionsAdapter{Adapter: factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{}, logger)}, logger: logger}
 }
 
 func canonicalFactoryEventForHTTPTest(t *testing.T, event factoryapi.FactoryEvent) interfaces.FactoryEvent {

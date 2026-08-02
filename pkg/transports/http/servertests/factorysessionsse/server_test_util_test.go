@@ -109,9 +109,9 @@ func (*programmedFactorySessionEvents) MoveWorkForSession(context.Context, strin
 func newAPITestServer(workAPI apisurface.WorkAPI) *api.Server {
 	logger, _ := zap.NewDevelopment()
 	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
-		Work: workAPI, SessionRequests: sseRequestPreparation{},
+		SessionEvents: workAPI, SessionRequests: sseRequestPreparation{},
 	}, logger)
-	return api.NewServer(handler, nil, nil, logger)
+	return api.NewServer(handler, nil, nil, nil, logger)
 }
 
 func readBody(t *testing.T, resp *http.Response) string {

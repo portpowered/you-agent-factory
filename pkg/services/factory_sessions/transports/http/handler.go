@@ -7,10 +7,11 @@
 package http
 
 import (
+	"context"
+
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
@@ -20,11 +21,10 @@ import (
 // Sessions and their session-scoped Factory and Work resources.
 type Adapter struct {
 	sessionsRoot       factorysessions.Service
+	sessionEvents      SessionEventAPI
 	runtime            apisurface.RuntimeAPI
 	factoryStatus      apisurface.FactoryStatusAPI
 	sessions           apisurface.LiveSessionAPI
-	work               apisurface.WorkAPI
-	workRead           apisurface.WorkReadAPI
 	invocation         apisurface.InvocationAPI
 	factoryDefinitions apisurface.FactorySaveAPI
 	factoryValidation  factorydefinitions.SubmittedDefinitionValidationOperation
@@ -37,7 +37,6 @@ type Adapter struct {
 	liveSessionLister  LiveSessionListReader
 	workerPrompts      workers.PromptTemplates
 	invocationWorkType factorydefinitions.InvocationWorkTypeService
-	workService        work.Service
 	sessionRequests    RequestPreparation
 	logger             *zap.Logger
 }
@@ -46,11 +45,10 @@ type Adapter struct {
 // adapter. They are supplied by the already-opened runtime composition.
 type Dependencies struct {
 	SessionsRoot       factorysessions.Service
+	SessionEvents      SessionEventAPI
 	Runtime            apisurface.RuntimeAPI
 	FactoryStatus      apisurface.FactoryStatusAPI
 	Sessions           apisurface.LiveSessionAPI
-	Work               apisurface.WorkAPI
-	WorkRead           apisurface.WorkReadAPI
 	Invocation         apisurface.InvocationAPI
 	FactoryDefinitions apisurface.FactorySaveAPI
 	FactoryValidation  factorydefinitions.SubmittedDefinitionValidationOperation
@@ -63,7 +61,6 @@ type Dependencies struct {
 	LiveSessionLister  LiveSessionListReader
 	WorkerPrompts      workers.PromptTemplates
 	InvocationWorkType factorydefinitions.InvocationWorkTypeService
-	WorkService        work.Service
 	SessionRequests    RequestPreparation
 }
 
@@ -78,15 +75,22 @@ type RequestPreparation interface {
 	PrepareEventReconnect(factorysessions.EventReconnectRequest) (factorysessions.EventReconnectRequest, error)
 }
 
+// SessionEventAPI is the narrow Factory Sessions event seam retained by this
+// transport. Work HTTP does not participate in session event ownership.
+type SessionEventAPI interface {
+	SubscribeFactoryEventsForSession(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error)
+	ProbeFactoryEventsForSession(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) error
+}
+
 // NewHandler constructs an inert Factory Sessions HTTP adapter.
 func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &Adapter{
-		sessionsRoot: deps.SessionsRoot,
+		sessionsRoot: deps.SessionsRoot, sessionEvents: deps.SessionEvents,
 		runtime: deps.Runtime, factoryStatus: deps.FactoryStatus,
-		sessions: deps.Sessions, work: deps.Work, workRead: deps.WorkRead,
+		sessions:           deps.Sessions,
 		invocation:         deps.Invocation,
 		factoryDefinitions: deps.FactoryDefinitions, factoryValidation: deps.FactoryValidation,
 		workflowPreview:  deps.WorkflowPreview,
@@ -94,21 +98,9 @@ func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
 		durableListing: deps.DurableListing, durableProjection: deps.DurableProjection,
 		durableLister: deps.DurableLister, liveSessionLister: deps.LiveSessionLister,
 		workerPrompts: deps.WorkerPrompts, invocationWorkType: deps.InvocationWorkType,
-		workService: deps.WorkService,
 		sessionRequests: deps.SessionRequests,
-		logger: logger,
+		logger:          logger,
 	}
-}
-
-// WithWorkService returns a copy bound to the supplied Work root for admission
-// and content staging/materialization operations.
-func (h *Adapter) WithWorkService(service work.Service) *Adapter {
-	if h == nil {
-		return nil
-	}
-	bound := *h
-	bound.workService = service
-	return &bound
 }
 
 // Server is retained as a private receiver alias while the moved handler files

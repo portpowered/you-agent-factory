@@ -3,6 +3,8 @@ package application
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -37,6 +39,18 @@ func (*runtimeRole) SubscribeFactoryEvents(
 
 type definitionRole struct{ factorydefinitions.Service }
 type sessionRole struct{ factorysessions.Service }
+
+func (*sessionRole) GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error) {
+	return factorysessions.SessionProjection{
+		Context: factorysessions.ProjectionContext{
+			FactorySessionID: "session-alpha",
+			Session: &factorysessions.ScopedLiveSessionSummary{
+				ID: "session-alpha",
+			},
+		},
+	}, nil
+}
+
 type invocationRole struct {
 	factorysessionmapping.SessionInvoker
 }
@@ -62,7 +76,9 @@ func (statusProjectorRole) ProjectFactoryStatusFromObservation(observation facto
 type contentStagingRole struct{ work.ContentStagingService }
 type contentPreparationRole struct{ work.ContentPreparation }
 type workRequestPreparationRole struct{ work.RequestPreparationService }
-type invocationWorkTypeRole struct{ factorydefinitions.InvocationWorkTypeService }
+type invocationWorkTypeRole struct {
+	factorydefinitions.InvocationWorkTypeService
+}
 
 func TestHandlerBindsOpenedRolesWithoutReconstructingStableGraph(t *testing.T) {
 	t.Parallel()
@@ -100,6 +116,67 @@ func TestHandlerBindsOpenedRolesWithoutReconstructingStableGraph(t *testing.T) {
 	}
 	if first == second {
 		t.Fatal("Bind reused session-owned handler state")
+	}
+}
+
+func TestHandlerBindsSessionsRootAtApplicationEdge(t *testing.T) {
+	t.Parallel()
+
+	mappings, err := mappingcomposition.NewHTTPBinder(statusProjectorRole{}, &contentPreparationRole{})
+	if err != nil {
+		t.Fatalf("NewHTTPBinder: %v", err)
+	}
+	handler, err := NewHandler(
+		mappings,
+		&contentPreparationRole{},
+		&validationRole{},
+		&invocationWorkTypeRole{},
+		&contentStagingRole{},
+		&workRequestPreparationRole{},
+		&requestPreparationRole{},
+	)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+	opened := factorysessions.RuntimeHTTPServices{
+		FactoryRuntime: &runtimeRole{}, FactoryDefinitions: &definitionRole{},
+		FactorySessions: &sessionRole{}, SessionInvocation: &invocationRole{},
+		SessionExecution: &executionRole{}, Work: &workRole{}, Models: &modelRole{},
+		Workers: &workerRole{}, ProviderSessions: &providerSessionRole{},
+		Logger: zap.NewNop(),
+	}
+	bound, err := handler.Bind(opened)
+	if err != nil {
+		t.Fatalf("Bind: %v", err)
+	}
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-alpha", nil)
+	bound.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"id":"session-alpha"`) {
+		t.Fatalf("response = %d %s, want Sessions root response", response.Code, response.Body.String())
+	}
+}
+
+func TestBindRejectsMissingProcessScopedHandler(t *testing.T) {
+	t.Parallel()
+
+	if bound, err := (*Handler)(nil).Bind(factorysessions.RuntimeHTTPServices{}); err == nil || bound != nil {
+		t.Fatalf("Bind = (%T, %v), want missing process-scoped handler error", bound, err)
+	}
+}
+
+func TestBindRejectsMissingModelsBinding(t *testing.T) {
+	t.Parallel()
+
+	mappings, err := mappingcomposition.NewHTTPBinder(statusProjectorRole{}, &contentPreparationRole{})
+	if err != nil {
+		t.Fatalf("NewHTTPBinder: %v", err)
+	}
+	handler := &Handler{mappings: mappings, modelsContent: &contentPreparationRole{}}
+	if bound, err := handler.Bind(factorysessions.RuntimeHTTPServices{}); err == nil || bound != nil {
+		t.Fatalf("Bind = (%T, %v), want missing Models binding error", bound, err)
 	}
 }
 

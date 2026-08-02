@@ -1,10 +1,12 @@
 package http
 
 import (
+	"errors"
+
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/optional"
+	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 )
 
 // ListOptionsFromAPI maps one public list-work request into validated Work root
@@ -22,6 +24,10 @@ func ListOptionsFromAPI(params factoryapi.ListWorkBySessionIdParams) (work.ListO
 	}
 	query, err := work.NormalizeList(options)
 	if err != nil {
+		var validation *work.ValidationError
+		if errors.As(err, &validation) {
+			return work.ListOptions{}, &work.ValidationError{Field: validation.Field, Message: validation.Field + " is invalid"}
+		}
 		return work.ListOptions{}, err
 	}
 	return query.Options(), nil
@@ -88,6 +94,10 @@ func WorkReadModelToAPI(item work.ReadModel) factoryapi.Work {
 		result.Relations = &relations
 	}
 	return result
+}
+
+func WorkReadModelToGenerated(item work.ReadModel) factoryapi.Work {
+	return WorkReadModelToAPI(item)
 }
 
 func workStopSummaryToAPI(summary *work.StopSummary) *factoryapi.FactoryStopSummary {

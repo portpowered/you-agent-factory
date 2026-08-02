@@ -111,12 +111,12 @@ func (s *Server) GetEventsBySessionId(w http.ResponseWriter, r *http.Request, se
 		return
 	}
 
-	workAPI, ok := s.requireWorkAPI(w)
-	if !ok {
+	if s.sessionEvents == nil {
+		s.writeError(w, http.StatusInternalServerError, "session event API is unavailable", "INTERNAL_ERROR")
 		return
 	}
 	s.getEvents(w, r, true, func(ctx context.Context) (*interfaces.FactoryEventStream, error) {
-		return workAPI.SubscribeFactoryEventsForSession(ctx, string(sessionID), reconnect)
+		return s.sessionEvents.SubscribeFactoryEventsForSession(ctx, string(sessionID), reconnect)
 	})
 }
 
@@ -315,11 +315,11 @@ func (s *Server) probeFactorySessionEventStreamRecovery(
 			err = reader.ProbeDurableFactorySessionEvents(r.Context(), sessionID, raw)
 		}
 	} else {
-		workAPI, ok := s.requireWorkAPI(w)
-		if !ok {
+		if s.sessionEvents == nil {
+			s.writeError(w, http.StatusInternalServerError, "session event API is unavailable", "INTERNAL_ERROR")
 			return
 		}
-		err = workAPI.ProbeFactoryEventsForSession(r.Context(), sessionID, reconnect)
+		err = s.sessionEvents.ProbeFactoryEventsForSession(r.Context(), sessionID, reconnect)
 	}
 	if err != nil {
 		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
