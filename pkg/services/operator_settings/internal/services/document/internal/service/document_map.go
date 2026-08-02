@@ -16,6 +16,7 @@ func documentFromConfig(config operatorsettings.Config) operatorsettings.Documen
 		Runtime: documentRuntimeFromConfig(config.Runtime),
 		Workers: operatorsettings.DocumentWorkerSettings{ACP: operatorsettings.DocumentACPSettings{
 			Integrations: append([]operatorsettings.ACPIntegration(nil), config.Workers.ACP.Integrations...),
+			AgentProfile: cloneACPAgentProfilePointer(config.Workers.ACP.AgentProfile),
 		}},
 	}
 	if config.WorkerPresets != nil {
@@ -30,6 +31,16 @@ func documentFromConfig(config operatorsettings.Config) operatorsettings.Documen
 		}
 	}
 	return document
+}
+
+// cloneACPAgentProfilePointer returns a detached copy of an optional ACP
+// Agent profile pointer, preserving nil for an absent profile.
+func cloneACPAgentProfilePointer(profile *operatorsettings.ACPAgentProfile) *operatorsettings.ACPAgentProfile {
+	if profile == nil {
+		return nil
+	}
+	cloned := profile.Clone()
+	return &cloned
 }
 
 func documentRuntimeFromConfig(runtime operatorsettings.RuntimeSettings) operatorsettings.DocumentRuntimeSettings {
@@ -52,6 +63,7 @@ func configFromDocument(document operatorsettings.Document) operatorsettings.Con
 		},
 		Workers: operatorsettings.WorkerSettings{ACP: operatorsettings.ACPSettings{
 			Integrations: append([]operatorsettings.ACPIntegration(nil), document.Workers.ACP.Integrations...),
+			AgentProfile: cloneACPAgentProfilePointer(document.Workers.ACP.AgentProfile),
 		}},
 	}
 	if document.WorkerPresets != nil {

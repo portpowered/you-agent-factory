@@ -337,6 +337,18 @@ func (fake *servicePeerFake) EnsurePackagedACPIntegrations(
 	return operatorsettings.Document{}, errors.New("fake ACP service is not configured")
 }
 
+func (fake *servicePeerFake) ResolveACPAgentProfile(string) (operatorsettings.ACPAgentProfile, error) {
+	return operatorsettings.ACPAgentProfile{}, errors.New("fake ACP Agent profile service is not configured")
+}
+
+func (fake *servicePeerFake) UpdateACPAgentProfile(
+	context.Context,
+	string,
+	operatorsettings.ACPAgentProfile,
+) (operatorsettings.ACPAgentProfile, error) {
+	return operatorsettings.ACPAgentProfile{}, errors.New("fake ACP Agent profile service is not configured")
+}
+
 // TestRootContractInvariants_AllSlicesThroughSingularService seals the
 // Operator Settings root-contract packet: document operations and effective
 // resolution are reachable through one named operatorsettings.Service, a

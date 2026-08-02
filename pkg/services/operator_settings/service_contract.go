@@ -60,4 +60,14 @@ type Service interface {
 	// EnsurePackagedACPIntegrations materializes packaged integrations only when
 	// the customer has not supplied the ACP integration list.
 	EnsurePackagedACPIntegrations(context.Context, string, []ACPIntegration) (Document, error)
+
+	// ResolveACPAgentProfile resolves the effective ACP Agent profile for the
+	// operator document at path without mutating or persisting it. An absent
+	// authored profile resolves to the safe Factory Builder default.
+	ResolveACPAgentProfile(string) (ACPAgentProfile, error)
+
+	// UpdateACPAgentProfile validates a complete candidate ACP Agent profile
+	// and, only once valid, atomically persists it while preserving all other
+	// operator settings.
+	UpdateACPAgentProfile(context.Context, string, ACPAgentProfile) (ACPAgentProfile, error)
 }

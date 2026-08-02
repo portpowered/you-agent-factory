@@ -66,6 +66,7 @@ type WorkerSettings struct {
 
 type ACPSettings struct {
 	Integrations []ACPIntegration
+	AgentProfile *ACPAgentProfile
 }
 
 type ACPIntegration struct {
@@ -161,37 +162,45 @@ func (cfg Config) Normalize() (Config, error) {
 }
 
 func (settings WorkerSettings) normalize() (WorkerSettings, error) {
-	if settings.ACP.Integrations == nil {
-		return WorkerSettings{}, nil
+	normalized := WorkerSettings{}
+	if settings.ACP.Integrations != nil {
+		integrations := make([]ACPIntegration, len(settings.ACP.Integrations))
+		ids := make(map[string]struct{}, len(integrations))
+		names := make(map[string]struct{}, len(integrations))
+		for index, integration := range settings.ACP.Integrations {
+			integration = ACPIntegration{
+				ID: strings.TrimSpace(integration.ID), Name: strings.TrimSpace(integration.Name),
+				Transport: strings.ToLower(strings.TrimSpace(integration.Transport)), Command: strings.TrimSpace(integration.Command),
+			}
+			if integration.ID == "" || integration.Name == "" || integration.Command == "" {
+				return WorkerSettings{}, fmt.Errorf("workers.acp.integrations[%d] requires non-empty id, name, and command", index)
+			}
+			if err := providers.ID(integration.Name).Validate(); err != nil || !acpProviderIdentityPattern.MatchString(integration.Name) {
+				return WorkerSettings{}, fmt.Errorf("workers.acp.integrations[%d].name %q must use canonical lowercase letters, digits, dots, or hyphens", index, integration.Name)
+			}
+			if integration.Transport != "stdio" {
+				return WorkerSettings{}, fmt.Errorf("workers.acp.integrations[%d] %q has unsupported transport %q: accepted value is stdio", index, integration.Name, integration.Transport)
+			}
+			if _, exists := ids[integration.ID]; exists {
+				return WorkerSettings{}, fmt.Errorf("workers.acp.integrations[%d].id %q is duplicated", index, integration.ID)
+			}
+			if _, exists := names[integration.Name]; exists {
+				return WorkerSettings{}, fmt.Errorf("workers.acp.integrations[%d].name %q is duplicated", index, integration.Name)
+			}
+			ids[integration.ID] = struct{}{}
+			names[integration.Name] = struct{}{}
+			integrations[index] = integration
+		}
+		normalized.ACP.Integrations = integrations
 	}
-	integrations := make([]ACPIntegration, len(settings.ACP.Integrations))
-	ids := make(map[string]struct{}, len(integrations))
-	names := make(map[string]struct{}, len(integrations))
-	for index, integration := range settings.ACP.Integrations {
-		integration = ACPIntegration{
-			ID: strings.TrimSpace(integration.ID), Name: strings.TrimSpace(integration.Name),
-			Transport: strings.ToLower(strings.TrimSpace(integration.Transport)), Command: strings.TrimSpace(integration.Command),
+	if settings.ACP.AgentProfile != nil {
+		profile, err := settings.ACP.AgentProfile.Normalize()
+		if err != nil {
+			return WorkerSettings{}, err
 		}
-		if integration.ID == "" || integration.Name == "" || integration.Command == "" {
-			return WorkerSettings{}, fmt.Errorf("workers.acp.integrations[%d] requires non-empty id, name, and command", index)
-		}
-		if err := providers.ID(integration.Name).Validate(); err != nil || !acpProviderIdentityPattern.MatchString(integration.Name) {
-			return WorkerSettings{}, fmt.Errorf("workers.acp.integrations[%d].name %q must use canonical lowercase letters, digits, dots, or hyphens", index, integration.Name)
-		}
-		if integration.Transport != "stdio" {
-			return WorkerSettings{}, fmt.Errorf("workers.acp.integrations[%d] %q has unsupported transport %q: accepted value is stdio", index, integration.Name, integration.Transport)
-		}
-		if _, exists := ids[integration.ID]; exists {
-			return WorkerSettings{}, fmt.Errorf("workers.acp.integrations[%d].id %q is duplicated", index, integration.ID)
-		}
-		if _, exists := names[integration.Name]; exists {
-			return WorkerSettings{}, fmt.Errorf("workers.acp.integrations[%d].name %q is duplicated", index, integration.Name)
-		}
-		ids[integration.ID] = struct{}{}
-		names[integration.Name] = struct{}{}
-		integrations[index] = integration
+		normalized.ACP.AgentProfile = &profile
 	}
-	return WorkerSettings{ACP: ACPSettings{Integrations: integrations}}, nil
+	return normalized, nil
 }
 
 func (settings RuntimeArtifactSettings) normalize(fieldPath string) (RuntimeArtifactSettings, error) {

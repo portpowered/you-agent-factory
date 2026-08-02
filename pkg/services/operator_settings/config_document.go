@@ -101,7 +101,18 @@ func (document ConfigDocument) FileConfig() Config {
 	if document.config.Workers.ACP.Integrations != nil {
 		config.Workers.ACP.Integrations = append([]ACPIntegration{}, document.config.Workers.ACP.Integrations...)
 	}
+	config.Workers.ACP.AgentProfile = cloneACPAgentProfilePointer(document.config.Workers.ACP.AgentProfile)
 	return config
+}
+
+// cloneACPAgentProfilePointer returns a detached copy of an optional ACP
+// Agent profile pointer, preserving nil for an absent profile.
+func cloneACPAgentProfilePointer(profile *ACPAgentProfile) *ACPAgentProfile {
+	if profile == nil {
+		return nil
+	}
+	cloned := profile.Clone()
+	return &cloned
 }
 
 // BackendScopeID returns the operator identity stored beside the defaults.
@@ -275,6 +286,7 @@ func configFromDocument(document Document) Config {
 		},
 		Workers: WorkerSettings{ACP: ACPSettings{
 			Integrations: append([]ACPIntegration(nil), document.Workers.ACP.Integrations...),
+			AgentProfile: cloneACPAgentProfilePointer(document.Workers.ACP.AgentProfile),
 		}},
 	}
 	if document.WorkerPresets != nil {
@@ -302,6 +314,7 @@ func documentFromConfig(config Config) Document {
 		},
 		Workers: DocumentWorkerSettings{ACP: DocumentACPSettings{
 			Integrations: append([]ACPIntegration(nil), config.Workers.ACP.Integrations...),
+			AgentProfile: cloneACPAgentProfilePointer(config.Workers.ACP.AgentProfile),
 		}},
 	}
 	if config.WorkerPresets != nil {

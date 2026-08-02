@@ -6,3 +6,5 @@ properties:
     description: Operator-selected ACP provider integrations. Availability is derived by the Providers catalog and is never persisted here.
     items:
       $ref: './GlobalConfigACPIntegration.yaml'
+  agentProfile:
+    $ref: './GlobalConfigACPAgentProfile.yaml'
