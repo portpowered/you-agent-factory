@@ -1101,7 +1101,7 @@
       "fromOwner": "chat_sessions",
       "toOwner": "factory_sessions",
       "class": "command",
-      "evidence": "pkg/services/chat_sessions -\u003e pkg/services/factory_sessions"
+      "evidence": "pkg/services/chat_sessions/internal/factorysessionsshim -\u003e pkg/services/factory_sessions"
     },
     {
       "fromOwner": "edges",

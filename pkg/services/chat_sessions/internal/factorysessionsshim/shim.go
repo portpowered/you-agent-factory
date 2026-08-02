@@ -3,19 +3,18 @@ package factorysessionsshim
 import (
 	"context"
 
-	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 )
 
-// Shim adapts the public factory_sessions.Service root to the Chat Sessions
-// chatsessions.FactoryTargetService contract. It is stateless: it holds only
-// the injected Service and forwards each call exactly once, with the
-// original context, identifiers, request, result, and error intact.
+// Shim adapts the public factory_sessions.Service root to this package's own
+// FactoryTargetService contract. It is stateless: it holds only the injected
+// Service and forwards each call exactly once, with the original context,
+// identifiers, request, result, and error intact.
 type Shim struct {
 	service factorysessions.Service
 }
 
-var _ chatsessions.FactoryTargetService = (*Shim)(nil)
+var _ FactoryTargetService = (*Shim)(nil)
 
 // New constructs the Factory Sessions shim over the given public Service.
 func New(service factorysessions.Service) *Shim {

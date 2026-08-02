@@ -6,19 +6,20 @@
 // connection attachment, and control-intent request/advancement).
 //
 // Service and its supporting values (contracts.go, types.go, errors.go,
-// transitions.go) are an enabling contract slice: no implementation,
-// persistence, dependency-injection wiring, transport, OpenAPI, CLI, ACP wire
-// operation, Factory Sessions sealing, or Worker Sessions behavior, and they
-// import only the standard library.
+// transitions.go) are the entire public surface of this package: no
+// implementation, persistence, dependency-injection wiring, transport,
+// OpenAPI, CLI, ACP wire operation, Factory Sessions sealing, Worker Sessions
+// behavior, or alternate peer-facing service contract, and they import only
+// the standard library.
 //
-// FactoryTargetService (factory_target_contract.go) is a separate, narrower
-// root: the Factory-target execution dependency some L1 Chat Sessions flows
-// need ahead of L3 Factory Sessions sealing (start, invoke, cancel, and close
-// one Factory Session, in the published factory_sessions root vocabulary).
-// internal/factorysessionsshim is its sole implementation, adapting the
-// public factory_sessions.Service root without importing its internals or
-// becoming a second session authority. It is registered under "Shims
+// internal/factorysessionsshim is a private, unexported implementation
+// detail owned by this package but outside its public contract: a
+// stopgap adapter over the published factory_sessions.Service root that some
+// later L1 Chat Sessions flow will need ahead of L3 Factory Sessions
+// sealing. It defines and implements its own internal FactoryTargetService
+// contract, does not import or extend chatsessions.Service, and is not part
+// of the L1 V0 contract slice above. It is registered under "Shims
 // registered for deletion" in
 // docs/internal/projects/root-consolidation/proposal.md, retired at L3
-// Factory Sessions sealing. It is not part of the L1 V0 contract slice above.
+// Factory Sessions sealing.
 package chatsessions
