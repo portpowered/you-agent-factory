@@ -11,7 +11,7 @@ Customer ask
 Expected solution
 
 # original document
-original reference document that denotes the overall set of intent and changes. This should be an absolute path. 
+original reference document that denotes the overall set of intent and changes. This should be an absolute path.
 
 # changes
 
@@ -28,4 +28,4 @@ original reference document that denotes the overall set of intent and changes. 
 - explicit set of APi chagnes if it exists
 
 ## tests
-- what are the tests that we will write to confirm the changes. 
+- what are the tests that we will write to confirm the changes.

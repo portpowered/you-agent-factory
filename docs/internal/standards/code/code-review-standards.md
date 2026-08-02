@@ -27,7 +27,7 @@ Every contributor **MUST** review this standard before conducting or requesting 
 - Request changes for unexplained stateful helper paths, hidden side effects, special-case subsystem dispatch, dead code, or Go functions longer than 80 lines without a documented exception.
 - Request changes when backend operations bypass service interfaces, operational behavior is exposed as floating functions, dependencies are hidden in constructor bags, services are constructed outside `wire/`, or a secondary injection path is introduced.
 - Request changes when new or changed service operations lack structured, safe, actionable operation logs without a documented high-volume exception.
-- Reject feature changes that do meta file checking, such as those that implement a secondary filesystem check to conform shapes, since those tend to be expensive to execute. 
+- Reject feature changes that do meta file checking, such as those that implement a secondary filesystem check to conform shapes, since those tend to be expensive to execute.
 
 ### functional tests
 - Request changes when a functional-test PR violates any of the five functional-test construction preferences in [general-backend-standards.md §7](./general-backend-standards.md#7-testing-strategy-and-test-pyramid) without a documented, in-scope exception.

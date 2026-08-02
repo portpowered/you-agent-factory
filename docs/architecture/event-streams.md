@@ -1,15 +1,15 @@
 # Event Streams
 
-Systems correspond roughly to the construction of event streams. 
+Systems correspond roughly to the construction of event streams.
 
-there are two general event streams that are high event procedures. 
+there are two general event streams that are high event procedures.
 
 1. factory events
 2. worker events
 
 ## factory events
 
-Factory events denote the system state of the factory, what is next, what is going on. 
+Factory events denote the system state of the factory, what is next, what is going on.
 At any given time, you can largely replay the world state of the factory to the current tick of the event stream it is operating on.
 
 - Factory Created (Definition)

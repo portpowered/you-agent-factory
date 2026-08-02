@@ -101,12 +101,12 @@ flowchart LR
     api --> models
     api --> recs
     api --> chat
-    
+
     chat --constructs worker sessions when appropriate --> wsession
     chat --receives events to publish to downstream on event change--> events
     chat --constructs session when appropriate--> svc
     chat --submits work to responsible workers --> work
-    
+
     wsession --> events
     wsession --> workers
     workers --> provider
@@ -130,9 +130,9 @@ flowchart LR
     events --publishes appropriate events--> recs
     auto --submits work triggers on request--> work
     auto --submits events on request --> events
-    
+
     runtime --publishes system target state on change events--> events
-    
+
     workers --invokes models when appropriate --> models
 
 ```
@@ -180,15 +180,15 @@ owner. Customer-facing Factory Session behavior belongs in Factory Session
 owners; Petri-net concepts stay behind the internal runtime boundary.
 
 ## System State
-Note that some of this is largely inspirational, but partially migrated towards, still few services need to be created. 
+Note that some of this is largely inspirational, but partially migrated towards, still few services need to be created.
 
 ### Cross package interaction
 
-Largely the communication of services is done either via the services: 
+Largely the communication of services is done either via the services:
 1. calling the service APIs directly
-2. receiving event callbacks from registrations to the event stream and then acting upon the event stream. 
+2. receiving event callbacks from registrations to the event stream and then acting upon the event stream.
 
-There is intentionally no other communication between the services besides those two channels to reduce the concurrent problems of complexity. This also enables batching and transactionality of operations. 
+There is intentionally no other communication between the services besides those two channels to reduce the concurrent problems of complexity. This also enables batching and transactionality of operations.
 
 
 ### System state of a session
@@ -201,15 +201,15 @@ a factory session is responsible for:
 1. retrieving the config/definition
 2. converting all the config/definition and turning it into a declaration of what all services need to be activated
 3. wiring the runtime factory with the appropriate set of definitions to execute and publishing to the event stream
-4. having the various runtimes pull from the event stream 
+4. having the various runtimes pull from the event stream
 
 For example:
 
 1. bob asks for a factory session to do some work
 2. factory session gets the definition fo the factory, and figures out what all things needs to be deployed.
-3. factory session sends session instantiation to the event stream for a specific session id under the appropriate topic event. 
+3. factory session sends session instantiation to the event stream for a specific session id under the appropriate topic event.
 4. downstream services listen upon the event stream to trigger appropriate downstream objects as subscriptions.
-5. factory session correspondingly subscribes to events on said event stream channel. 
+5. factory session correspondingly subscribes to events on said event stream channel.
 
 The factory runtime is generally unaware of how the workers, recordsings, models, etc are running, it only knows that it has the service event hooks wired to push to them. Same is true for all the other services.
 
@@ -222,11 +222,11 @@ sequenceDiagram
     participant EVT as Evt Stream
     participant RUN as Factory Runtime Service
     participant WRKR as Worker Session Service
-    participant AUTO as Automations Service    
+    participant AUTO as Automations Service
     participant WORK as Work Service
 
     User->>UI: Initialize session
-    UI->>TRANS: Send command or request to initiate session via transports 
+    UI->>TRANS: Send command or request to initiate session via transports
     TRANS->>SESS: Create session definition
     SESS->>EVT: Send Evt on session creation
     EVT->>RUN: Instantiate the factory session runtime instance
@@ -240,7 +240,7 @@ sequenceDiagram
         RUN->>EVT: Session done
         EVT->>SESS: Session done event receive
         SESS->>USER: DONE
-    else if used in service 
+    else if used in service
         USER->>UI: Submit new work element
         UI->>TRANS: Send req
         TRANS->>WORK: Submit work
