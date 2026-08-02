@@ -24,6 +24,13 @@ var (
 	// ErrUnknownEnumValue, which reports a value outside the declared
 	// vocabulary entirely.
 	ErrUnsupportedControlAction = errors.New("chat sessions: control action is not supported in L1")
+	// ErrInvalidTransition reports a state pair that is not a legal L1 V0
+	// lifecycle transition, including any transition attempted from a
+	// terminal state. It is distinct from the story-001 value-validation
+	// sentinels: both the from and to states are already declared enum
+	// members, but the L1 V0 transition table does not permit moving between
+	// them.
+	ErrInvalidTransition = errors.New("chat sessions: illegal state transition")
 )
 
 // ValidationError reports one Chat Sessions value-validation failure. Value
@@ -52,4 +59,31 @@ func (e *ValidationError) Unwrap() error {
 
 func newValidationError(value, field string, err error) *ValidationError {
 	return &ValidationError{Value: value, Field: field, Err: err}
+}
+
+// TransitionError reports one illegal Chat Sessions lifecycle transition.
+// Value names the owning state machine and From/To record the attempted
+// state pair. Err is ErrInvalidTransition unless From or To is itself not a
+// declared enum member, in which case Err is the underlying
+// ErrUnknownEnumValue *ValidationError so callers can distinguish an
+// invalid-state input from a legal-state-but-illegal-transition outcome.
+type TransitionError struct {
+	Value string
+	From  string
+	To    string
+	Err   error
+}
+
+func (e *TransitionError) Error() string {
+	return fmt.Sprintf("chat sessions: %s: %s -> %s: %v", e.Value, e.From, e.To, e.Err)
+}
+
+// Unwrap exposes the underlying sentinel so errors.Is/errors.As can classify
+// the failure.
+func (e *TransitionError) Unwrap() error {
+	return e.Err
+}
+
+func newTransitionError(value, from, to string) *TransitionError {
+	return &TransitionError{Value: value, From: from, To: to, Err: ErrInvalidTransition}
 }
