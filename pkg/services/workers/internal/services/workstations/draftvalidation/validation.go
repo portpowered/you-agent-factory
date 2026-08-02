@@ -400,6 +400,39 @@ func isKnownKind(kind Kind) bool {
 	return ok
 }
 
+// AllowedPhases returns the declared legal phases for kind and whether kind is
+// a declared response draft kind. The returned slice is a defensive copy so
+// callers cannot mutate the package-owned allow-list.
+func AllowedPhases(kind Kind) ([]Phase, bool) {
+	phases, ok := allowedPhasesByKind[kind]
+	if !ok {
+		return nil, false
+	}
+	out := make([]Phase, len(phases))
+	copy(out, phases)
+	return out, true
+}
+
+// KnownKinds returns every declared response draft kind in a stable,
+// declaration order (matching the const block above), independent of Go's
+// randomized map iteration order.
+func KnownKinds() []Kind {
+	return []Kind{
+		KindSession,
+		KindRun,
+		KindTurn,
+		KindMessage,
+		KindReasoning,
+		KindTool,
+		KindFileChange,
+		KindPlan,
+		KindProgress,
+		KindUsage,
+		KindError,
+		KindStreamGap,
+	}
+}
+
 func formatPhaseList(phases []Phase) string {
 	values := make([]string, len(phases))
 	for index, phase := range phases {

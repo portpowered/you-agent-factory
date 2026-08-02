@@ -2,6 +2,8 @@ package workers
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -22,6 +24,40 @@ const (
 	KindStreamGap  Kind = "STREAM_GAP"
 )
 
+// ErrUnknownDraftKind is the sentinel matched via errors.Is when a Kind value
+// is the zero value or is not one of the twelve declared response draft
+// kinds.
+var ErrUnknownDraftKind = errors.New("workers: unknown draft kind")
+
+// InvalidDraftKindError carries the invalid Kind value that failed Validate.
+type InvalidDraftKindError struct {
+	Kind Kind
+}
+
+func (e *InvalidDraftKindError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return fmt.Sprintf("draft kind %q is not a declared response draft kind", e.Kind)
+}
+
+func (e *InvalidDraftKindError) Unwrap() error {
+	return ErrUnknownDraftKind
+}
+
+// Validate reports whether k is exactly one of the twelve declared response
+// draft kinds. The zero value and any unknown value return a typed error
+// matched via errors.Is(err, ErrUnknownDraftKind).
+func (k Kind) Validate() error {
+	switch k {
+	case KindSession, KindRun, KindTurn, KindMessage, KindReasoning, KindTool,
+		KindFileChange, KindPlan, KindProgress, KindUsage, KindError, KindStreamGap:
+		return nil
+	default:
+		return &InvalidDraftKindError{Kind: k}
+	}
+}
+
 type Phase string
 
 const (
@@ -32,6 +68,40 @@ const (
 	PhaseFailed    Phase = "FAILED"
 	PhaseCanceled  Phase = "CANCELED"
 )
+
+// ErrUnknownDraftPhase is the sentinel matched via errors.Is when a Phase
+// value is the zero value or is not one of the six declared response draft
+// phases.
+var ErrUnknownDraftPhase = errors.New("workers: unknown draft phase")
+
+// InvalidDraftPhaseError carries the invalid Phase value that failed
+// Validate.
+type InvalidDraftPhaseError struct {
+	Phase Phase
+}
+
+func (e *InvalidDraftPhaseError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return fmt.Sprintf("draft phase %q is not a declared response draft phase", e.Phase)
+}
+
+func (e *InvalidDraftPhaseError) Unwrap() error {
+	return ErrUnknownDraftPhase
+}
+
+// Validate reports whether p is exactly one of the six declared response
+// draft phases. The zero value and any unknown value return a typed error
+// matched via errors.Is(err, ErrUnknownDraftPhase).
+func (p Phase) Validate() error {
+	switch p {
+	case PhaseStarted, PhaseDelta, PhaseUpdated, PhaseCompleted, PhaseFailed, PhaseCanceled:
+		return nil
+	default:
+		return &InvalidDraftPhaseError{Phase: p}
+	}
+}
 
 type Delivery string
 
