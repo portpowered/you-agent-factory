@@ -3426,6 +3426,42 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/transports/http/checkpoint",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/control",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/dispatch",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/internal/common",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/internal/errors",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/observation",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/transports/mcp",
       "disposition": "retain",
       "destination": "factory_runtime",

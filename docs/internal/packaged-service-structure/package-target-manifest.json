@@ -213,6 +213,12 @@
     "pkg/services/factory_runtime/internal/testkit",
     "pkg/services/factory_runtime/transports/cli",
     "pkg/services/factory_runtime/transports/http",
+    "pkg/services/factory_runtime/transports/http/checkpoint",
+    "pkg/services/factory_runtime/transports/http/control",
+    "pkg/services/factory_runtime/transports/http/dispatch",
+    "pkg/services/factory_runtime/transports/http/internal/common",
+    "pkg/services/factory_runtime/transports/http/internal/errors",
+    "pkg/services/factory_runtime/transports/http/observation",
     "pkg/services/factory_runtime/transports/mcp",
     "pkg/services/factory_runtime/wire",
     "pkg/services/factory_sessions",
@@ -1422,6 +1428,36 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/transports/http",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/checkpoint",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/control",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/dispatch",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/internal/common",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/internal/errors",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http/observation",
       "disposition": "retain",
       "destination": "factory_runtime"
     },
