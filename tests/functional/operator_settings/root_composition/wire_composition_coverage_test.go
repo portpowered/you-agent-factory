@@ -3,6 +3,7 @@ package root_composition_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -94,6 +95,57 @@ func TestWireCompositionServesDocumentAndResolutionOperations(t *testing.T) {
 	}
 	if updated.Document.Defaults.WorkerModelProvider != "GEMINI" || updated.Document.Defaults.WorkerModel != "gemini-pro" {
 		t.Fatalf("updated defaults = %#v, want GEMINI/gemini-pro", updated.Document.Defaults)
+	}
+
+	defaultProfile, err := root.ResolveACPAgentProfile(configPath)
+	if err != nil {
+		t.Fatalf("ResolveACPAgentProfile() error = %v", err)
+	}
+	wantDefaultProfile := operatorsettings.DefaultACPAgentProfile()
+	if defaultProfile.DefaultTarget != wantDefaultProfile.DefaultTarget ||
+		!reflect.DeepEqual(defaultProfile.AllowedTargets, wantDefaultProfile.AllowedTargets) {
+		t.Fatalf("ResolveACPAgentProfile() = %#v, want safe Factory Builder default %#v", defaultProfile, wantDefaultProfile)
+	}
+
+	authoredProfile := operatorsettings.ACPAgentProfile{
+		DefaultTarget:  "factory:@you/research",
+		AllowedTargets: []string{"factory:@you/research", "factory:@you/factory-builder"},
+	}
+	updatedProfile, err := root.UpdateACPAgentProfile(t.Context(), configPath, authoredProfile)
+	if err != nil {
+		t.Fatalf("UpdateACPAgentProfile() error = %v", err)
+	}
+	if updatedProfile.DefaultTarget != authoredProfile.DefaultTarget {
+		t.Fatalf("UpdateACPAgentProfile() default = %q, want %q", updatedProfile.DefaultTarget, authoredProfile.DefaultTarget)
+	}
+
+	resolvedProfile, err := root.ResolveACPAgentProfile(configPath)
+	if err != nil {
+		t.Fatalf("ResolveACPAgentProfile() after update error = %v", err)
+	}
+	if resolvedProfile.DefaultTarget != authoredProfile.DefaultTarget ||
+		len(resolvedProfile.AllowedTargets) != len(authoredProfile.AllowedTargets) {
+		t.Fatalf("ResolveACPAgentProfile() after update = %#v, want %#v", resolvedProfile, authoredProfile)
+	}
+
+	if updatedAgain, err := root.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
+		Path: configPath,
+		ProviderModel: operatorsettings.DocumentProviderModelUpdate{
+			Provider: &provider,
+			Model:    &model,
+		},
+	}); err != nil {
+		t.Fatalf("ApplyDocumentUpdate() after profile update error = %v", err)
+	} else if updatedAgain.Document.Workers.ACP.AgentProfile == nil ||
+		updatedAgain.Document.Workers.ACP.AgentProfile.DefaultTarget != authoredProfile.DefaultTarget {
+		t.Fatalf(
+			"ApplyDocumentUpdate() after profile update = %#v, want authored profile preserved",
+			updatedAgain.Document.Workers.ACP.AgentProfile,
+		)
+	}
+
+	if _, err := root.UpdateACPAgentProfile(t.Context(), configPath, operatorsettings.ACPAgentProfile{}); err == nil {
+		t.Fatal("UpdateACPAgentProfile() with blank candidate error = nil, want validation failure")
 	}
 }
 
