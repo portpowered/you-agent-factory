@@ -18,7 +18,7 @@ import (
 func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchCreatesGeneratedWork(t *testing.T) {
 	now := time.Date(2026, time.April, 16, 22, 0, 0, 0, time.UTC)
 	net := workerBatchTestNet()
-	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil)
 	output := `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"child","tags":{"priority":"high"}},{"name":"review","workTypeName":"child"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"review","targetWorkName":"draft"}]}}`
 	result := executeWorkerBatchTransition(t, transitioner, workerBatchSnapshot(output))
 	batch, requestID := assertGeneratedWorkerBatchMetadata(t, result)
@@ -31,7 +31,7 @@ func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchCreatesGeneratedWork(
 func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchPreservesInvocationArguments(t *testing.T) {
 	now := time.Date(2026, time.April, 16, 22, 5, 0, 0, time.UTC)
 	net := workerBatchTestNet()
-	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil)
 	snapshot := workerBatchSnapshot(`{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"child","workTypeName":"child"}]}}`)
 	snapshot.Dispatches["dispatch-1"].ConsumedTokens[0].Color.InvocationArguments = &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
 		"baseBranch": {Values: []string{"main"}},
@@ -53,7 +53,7 @@ func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchPreservesInvocationAr
 func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchPreservesCanonicalChainingTrace(t *testing.T) {
 	now := time.Date(2026, time.April, 16, 22, 10, 0, 0, time.UTC)
 	net := workerBatchTestNet()
-	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil)
 	output := `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"child"}]}}`
 	snapshot := workerBatchSnapshot(output)
 	snapshot.Dispatches["dispatch-1"].ConsumedTokens[0].Color.CurrentChainingTraceID = "chain-source"
@@ -253,7 +253,7 @@ func TestTransitioner_WorkerEmittedFactoryRequestBatchReleasesConsumedResources(
 		{ID: "accepted", PlaceID: "task:complete"},
 		{ID: "slot-out", PlaceID: "agent-slot:available"},
 	}
-	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil)
 	output := `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"follow-up","workTypeName":"child"}]}}`
 	snapshot := workerBatchSnapshot(output)
 	snapshot.Dispatches["dispatch-1"].ConsumedTokens = append(snapshot.Dispatches["dispatch-1"].ConsumedTokens, factorytoken.Token{
@@ -330,7 +330,7 @@ func TestTransitioner_AcceptedTransitionReleasesAllConsumedResourceUnitsForCardi
 		{ID: "slot-out", PlaceID: "agent-slot:available", Cardinality: petri.ArcCardinality{Mode: petri.CardinalityN, Count: 2}},
 	}
 
-	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil)
 	snapshot := workerBatchSnapshot("accepted")
 	snapshot.Dispatches["dispatch-1"].ConsumedTokens = append(snapshot.Dispatches["dispatch-1"].ConsumedTokens,
 		factorytoken.Token{
@@ -384,7 +384,7 @@ func TestTransitioner_AcceptedTransitionReleasesAllConsumedResourceUnitsForCardi
 func TestTransitioner_RawWorkerEmittedFactoryRequestBatchRoutesAsAcceptedOutput(t *testing.T) {
 	now := time.Date(2026, time.April, 18, 1, 0, 0, 0, time.UTC)
 	net := workerBatchTestNet()
-	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil)
 	output := `{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"raw","work_type_name":"child"}]}`
 	snapshot := workerBatchSnapshot(output)
 
@@ -416,7 +416,7 @@ func TestTransitioner_RawWorkerEmittedFactoryRequestBatchRoutesAsAcceptedOutput(
 func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchUsesBatchMetadataSource(t *testing.T) {
 	now := time.Date(2026, time.April, 18, 0, 0, 0, 0, time.UTC)
 	net := workerBatchTestNet()
-	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil)
 	output := `{"request":{"requestId":"metadata-request","type":"FACTORY_REQUEST_BATCH","works":[{"name":"generated","workId":"work-generated","workTypeName":"child","payload":"generated"}]},"metadata":{"source":"generator:unit-test","parentLineage":["request-parent","work-parent"]},"submissions":[{"name":"generated","workId":"work-generated","targetState":"complete","executionId":"exec-child","tags":{"runtime":"true"}}]}`
 	snapshot := workerBatchSnapshot(output)
 
@@ -463,7 +463,7 @@ func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchUsesBatchMetadataSour
 func TestTransitioner_MalformedWorkerEmittedFactoryRequestBatchFailsDispatch(t *testing.T) {
 	now := time.Date(2026, time.April, 16, 22, 5, 0, 0, time.UTC)
 	net := workerBatchTestNet()
-	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil)
 	snapshot := workerBatchSnapshot(`{"request":{"requestId":"bad-request","type":"FACTORY_REQUEST_BATCH","works":[]}}`)
 
 	result, err := transitioner.Execute(context.Background(), snapshot)
@@ -497,7 +497,7 @@ func TestTransitioner_WorkerEmittedFactoryRequestBatchHonorsGeneratedWorkLimit(t
 	net.Transitions["t1"].Name = "generate"
 	transitioner := NewTransitioner(
 		net, nil, func() time.Time { return now }, testTokenTransformer(net),
-		generatedWorkLimitRuntime{maximum: 1}, nil, nil, testWorkPropagationPolicy(),
+		generatedWorkLimitRuntime{maximum: 1},
 	)
 	snapshot := workerBatchSnapshot(`{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"first","workTypeName":"child"},{"name":"second","workTypeName":"child"}]}}`)
 
@@ -524,7 +524,7 @@ func TestTransitioner_WorkerEmittedFactoryRequestBatchHonorsInvocationArgumentLi
 	net.Transitions["t1"].Name = "generate"
 	transitioner := NewTransitioner(
 		net, nil, func() time.Time { return now }, testTokenTransformer(net),
-		generatedWorkLimitRuntime{maximum: 9, argument: "maxTasks", offset: 1}, nil, nil, testWorkPropagationPolicy(),
+		generatedWorkLimitRuntime{maximum: 9, argument: "maxTasks", offset: 1},
 	)
 	snapshot := workerBatchSnapshot(`{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"first","workTypeName":"child"},{"name":"second","workTypeName":"child"},{"name":"control","workTypeName":"child"}]}}`)
 	snapshot.Dispatches["dispatch-1"].ConsumedTokens[0].Color.InvocationArguments = &work.InvocationArguments{

@@ -103,8 +103,7 @@ func TestTransitionerRejectsMalformedInternalWorkResults(t *testing.T) {
 				workerBatchTestNet(), nil, testSubsystemNow,
 				testTokenTransformer(
 					workerBatchTestNet()),
-				nil, nil, nil,
-				testWorkPropagationPolicy())
+				nil)
 
 			result, err := transitioner.Execute(t.Context(), snapshot)
 			if err == nil || !strings.Contains(err.Error(), test.wantError) {
@@ -231,10 +230,9 @@ func TestCalculateMutations_RecordedOutputWorkOverridesGeneratedIdentity(t *test
 	}}
 
 	mutations, err := calculateMutations(mutationCalculationInput{
-		workPropagation: testWorkPropagationPolicy(),
-		transition:      &petri.Transition{ID: "t1"},
-		arcs:            []petri.Arc{{ID: "cross", PlaceID: "wt-review:init"}},
-		consumed:        consumed,
+		transition: &petri.Transition{ID: "t1"},
+		arcs:       []petri.Arc{{ID: "cross", PlaceID: "wt-review:init"}},
+		consumed:   consumed,
 		result: resolvedWorkResult{
 			transitionID: "t1",
 			outcome:      workerexecution.OutcomeAccepted,
@@ -315,8 +313,7 @@ func TestCalculateMutations_MultiOutputFanoutPreservesAuthoredNameAcrossAllLanes
 	}}
 
 	mutations, err := calculateMutations(mutationCalculationInput{
-		workPropagation: testWorkPropagationPolicy(),
-		transition:      &petri.Transition{ID: "t1"},
+		transition: &petri.Transition{ID: "t1"},
 		arcs: []petri.Arc{
 			{ID: "review-a", PlaceID: "wt-review-a:init"},
 			{ID: "review-b", PlaceID: "wt-review-b:init"},
@@ -434,7 +431,7 @@ func TestResolveWorkResult_MissingRuntimeConfigPreservesOriginalOutcome(t *testi
 func TestTransitioner_WorkerGeneratedBatchPreservesAuthoredWorkData(t *testing.T) {
 	now := time.Date(2026, time.June, 20, 12, 0, 0, 0, time.UTC)
 	net := workerBatchTestNet()
-	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil)
 	snapshot := workerBatchSnapshot(`{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"child-payload","workId":"child-payload","workTypeName":"child","payload":"child-payload","tags":{"objective":"goal-1"}},{"name":"child-content","workId":"child-content","workTypeName":"child","content":[{"type":"text","text":"child-content"}]}]}}`)
 
 	result, err := transitioner.Execute(context.Background(), snapshot)
@@ -475,7 +472,7 @@ func TestTransitioner_WorkerGeneratedBatchCreatesFanoutCountFromPublicWork(t *te
 	net := workerBatchTestNet()
 	net.Places["t1:fanout-count"] = &petri.Place{ID: "t1:fanout-count", TypeID: "fanout-count"}
 	net.FanoutGroups = map[string]string{"t1": "t1:fanout-count"}
-	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil)
 	snapshot := workerBatchSnapshot(`{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"child-1","workTypeName":"child"},{"name":"child-2","workTypeName":"child"}]}}`)
 
 	result, err := transitioner.Execute(context.Background(), snapshot)
@@ -546,7 +543,7 @@ func TestTransitioner_CompletedDispatchPreservesProviderSession(t *testing.T) {
 			},
 		},
 	}
-	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil)
 	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Dispatches: map[string]*interfaces.DispatchEntry{
 			"d-1": {

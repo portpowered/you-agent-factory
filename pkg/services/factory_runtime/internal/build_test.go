@@ -240,7 +240,7 @@ func testOrchestrationCompilation() factory.OrchestrationCompilation {
 
 func testRuntimeFactory() *factoryinternal.RuntimeFactory {
 	return factoryinternal.NewRuntimeFactory(
-		nil, nil, outputAsPayloadPolicy(), nil, nil, testRuntimeLoggerFactory, nil, nil,
+		nil, testRuntimeLoggerFactory, nil, nil,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
 	)
@@ -248,19 +248,11 @@ func testRuntimeFactory() *factoryinternal.RuntimeFactory {
 
 func testRuntimeFactoryWithSinks(logDir, metricsDir string) *factoryinternal.RuntimeFactory {
 	return factoryinternal.NewRuntimeFactory(
-		nil, nil, outputAsPayloadPolicy(), nil, nil, testRuntimeLoggerFactory,
+		nil, testRuntimeLoggerFactory,
 		testRuntimeLogFactory(logDir), testRuntimeMetricsFactory(metricsDir),
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
 	)
-}
-
-func outputAsPayloadPolicy() interfaces.WorkPropagationPolicyService {
-	return interfaces.WorkPropagationPolicyFunc(func(
-		*interfaces.FactoryWorkstationConfig,
-	) interfaces.WorkPropagationMode {
-		return interfaces.WorkPropagationModeOutputAsPayload
-	})
 }
 
 func newTestRuntimeLedger(

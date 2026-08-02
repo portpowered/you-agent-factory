@@ -53,10 +53,39 @@ func (catalog *definitionsCatalogRecorder) resolve(
 		factorydefinitions.ErrUnknownPackagedFactoryIdentity
 }
 
-func (catalog *definitionsCatalogRecorder) operations() factorydefinitions.PackagedFactoryCatalogOperations {
-	return factorydefinitions.PackagedFactoryCatalogOperations{
-		List:    catalog.list,
-		Resolve: catalog.resolve,
+type definitionsService struct {
+	factorydefinitions.Service
+	listFn    func(context.Context, factorydefinitions.ListBuiltInPackagedFactoriesRequest) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error)
+	resolveFn func(context.Context, factorydefinitions.ResolveBuiltInPackagedFactoryRequest) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error)
+	installFn func(context.Context, factorydefinitions.InstallPackagedFactoryRequest) (factorydefinitions.InstallPackagedFactoryResult, error)
+}
+
+func (service *definitionsService) ListBuiltInPackagedFactories(
+	ctx context.Context,
+	request factorydefinitions.ListBuiltInPackagedFactoriesRequest,
+) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
+	return service.listFn(ctx, request)
+}
+
+func (service *definitionsService) ResolveBuiltInPackagedFactory(
+	ctx context.Context,
+	request factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
+) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
+	return service.resolveFn(ctx, request)
+}
+
+func (service *definitionsService) InstallPackagedFactory(
+	ctx context.Context,
+	request factorydefinitions.InstallPackagedFactoryRequest,
+) (factorydefinitions.InstallPackagedFactoryResult, error) {
+	return service.installFn(ctx, request)
+}
+
+func (catalog *definitionsCatalogRecorder) service(
+	installer func(context.Context, factorydefinitions.InstallPackagedFactoryRequest) (factorydefinitions.InstallPackagedFactoryResult, error),
+) factorydefinitions.Service {
+	return &definitionsService{
+		listFn: catalog.list, resolveFn: catalog.resolve, installFn: installer,
 	}
 }
 
@@ -67,61 +96,55 @@ type filePreservingPackagedInstaller struct {
 	calls int
 }
 
-func (installer *filePreservingPackagedInstaller) EnsurePackagedFactories(
+func (installer *filePreservingPackagedInstaller) install(
 	_ context.Context,
-	root string,
-	definitions []factorydefinitions.PackagedDefinition,
-) ([]factorydefinitions.PackagedFactoryInstallResult, error) {
+	request factorydefinitions.InstallPackagedFactoryRequest,
+) (factorydefinitions.InstallPackagedFactoryResult, error) {
 	installer.calls++
 	outcome := factorydefinitions.PackagedFactoryInstallCreated
 	if installer.calls > 1 {
 		outcome = factorydefinitions.PackagedFactoryInstallSkipped
 	}
 
-	results := make([]factorydefinitions.PackagedFactoryInstallResult, 0, len(definitions))
-	for _, definition := range definitions {
-		factoryDir := filepath.Join(root, strings.TrimPrefix(definition.Name, "@you/"))
-		if installer.calls == 1 {
-			if err := os.MkdirAll(factoryDir, 0o755); err != nil {
-				return nil, err
-			}
-			if err := os.WriteFile(filepath.Join(factoryDir, "customer-owned.txt"), []byte("bootstrap-created\n"), 0o600); err != nil {
-				return nil, err
-			}
+	factoryDir := filepath.Join(request.RootDir, strings.TrimPrefix(request.Name, "@you/"))
+	if installer.calls == 1 {
+		if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+			return factorydefinitions.InstallPackagedFactoryResult{}, err
 		}
-		results = append(results, factorydefinitions.PackagedFactoryInstallResult{
-			Name:       definition.Name,
-			FactoryDir: factoryDir,
-			Outcome:    outcome,
-		})
+		if err := os.WriteFile(filepath.Join(factoryDir, "customer-owned.txt"), []byte("bootstrap-created\n"), 0o600); err != nil {
+			return factorydefinitions.InstallPackagedFactoryResult{}, err
+		}
 	}
-	return results, nil
+	return factorydefinitions.InstallPackagedFactoryResult{
+		Definition: factorydefinitions.DistributedFactoryDefinitionFacts{
+			Name: request.Name, FactoryDir: factoryDir,
+		},
+		Outcome: outcome,
+		Format:  request.Format,
+	}, nil
 }
 
 type failingDefinitionsInstaller struct {
 	err error
 }
 
-func (installer *failingDefinitionsInstaller) EnsurePackagedFactories(
+func (installer *failingDefinitionsInstaller) install(
 	context.Context,
-	string,
-	[]factorydefinitions.PackagedDefinition,
-) ([]factorydefinitions.PackagedFactoryInstallResult, error) {
-	return nil, installer.err
+	factorydefinitions.InstallPackagedFactoryRequest,
+) (factorydefinitions.InstallPackagedFactoryResult, error) {
+	return factorydefinitions.InstallPackagedFactoryResult{}, installer.err
 }
 
 func newDefinitionsRootService(
 	t *testing.T,
 	settings operatorsettings.Service,
-	catalog factorydefinitions.PackagedFactoryCatalogOperations,
-	installer factorydefinitions.PackagedFactoryInstaller,
+	definitions factorydefinitions.Service,
 ) systeminitialization.Service {
 	t.Helper()
 
 	service, err := systeminitializationwire.NewService(
 		settings,
-		catalog,
-		installer,
+		definitions,
 		os.Stat,
 		localMigrationFileSystem{},
 	)
@@ -145,7 +168,7 @@ func TestInitializeDefinitionsRootBoundary_CreatedThenSkippedPreservesCustomerFa
 	}}
 	catalog := &definitionsCatalogRecorder{definitions: definitions}
 	installer := &filePreservingPackagedInstaller{}
-	service := newDefinitionsRootService(t, &routingOperatorSettings{}, catalog.operations(), installer)
+	service := newDefinitionsRootService(t, &routingOperatorSettings{}, catalog.service(installer.install))
 
 	homeDir := t.TempDir()
 	first, err := service.Initialize(context.Background(), systeminitialization.Request{HomeDir: homeDir})
@@ -195,11 +218,12 @@ func TestInitializeDefinitionsRootBoundary_PartialFailureSurfacesRollbackFactsWh
 	t.Parallel()
 
 	installErr := errors.New("packaged factory ensure denied")
+	installer := &failingDefinitionsInstaller{err: installErr}
 	service := newDefinitionsRootService(
 		t,
 		&routingOperatorSettings{},
-		factorydefinitions.PackagedFactoryCatalogOperations{
-			List: func(
+		&definitionsService{
+			listFn: func(
 				context.Context,
 				factorydefinitions.ListBuiltInPackagedFactoriesRequest,
 			) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
@@ -210,7 +234,7 @@ func TestInitializeDefinitionsRootBoundary_PartialFailureSurfacesRollbackFactsWh
 					}},
 				}, nil
 			},
-			Resolve: func(
+			resolveFn: func(
 				_ context.Context,
 				request factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
 			) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
@@ -226,8 +250,8 @@ func TestInitializeDefinitionsRootBoundary_PartialFailureSurfacesRollbackFactsWh
 					},
 				}, nil
 			},
+			installFn: installer.install,
 		},
-		&failingDefinitionsInstaller{err: installErr},
 	)
 
 	_, err := service.Initialize(context.Background(), systeminitialization.Request{HomeDir: t.TempDir()})

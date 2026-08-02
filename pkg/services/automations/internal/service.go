@@ -11,7 +11,6 @@ import (
 	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -30,7 +29,6 @@ type Service struct {
 	defaultFactoryDir  string
 	hostedPollers      automations.HostedPollers
 	resolveTemplates   workers.TemplateFieldResolver
-	executionPolicy    factorydefinitions.WorkstationExecutionPolicyService
 	reconciler         reconciliation.Service
 	scriptPollers      scriptpollers.Service
 	cron               cron.Service
@@ -49,7 +47,6 @@ func New(
 	defaultFactoryDir string,
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 	reconciler reconciliation.Service,
 	scriptPollers scriptpollers.Service,
 	cronService cron.Service,
@@ -63,7 +60,6 @@ func New(
 		defaultFactoryDir:  defaultFactoryDir,
 		hostedPollers:      hostedPollers,
 		resolveTemplates:   resolveTemplates,
-		executionPolicy:    executionPolicy,
 		reconciler:         reconciler,
 		scriptPollers:      scriptPollers,
 		cron:               cronService,
@@ -81,7 +77,6 @@ func NewService(
 	defaultFactoryDir string,
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 	reconciler reconciliation.Service,
 	scriptPollers scriptpollers.Service,
 	cronService cron.Service,
@@ -95,7 +90,6 @@ func NewService(
 		defaultFactoryDir,
 		hostedPollers,
 		resolveTemplates,
-		executionPolicy,
 		reconciler,
 		scriptPollers,
 		cronService,

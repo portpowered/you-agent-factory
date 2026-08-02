@@ -96,11 +96,7 @@ type runtimeConfig struct {
 	petriMutationRecorder     factory.PetriMutationRecorder
 	completionDeliveryPlanner factory.CompletionDeliveryPlanner
 	inlineDispatch            bool
-	quorumPolicy              interfaces.QuorumPolicyService
-	outputShaping             interfaces.InvocationOutputShapingService
-	workPropagation           interfaces.WorkPropagationPolicyService
 	workService               work.Service
-	decisionEnvelopes         interfaces.DecisionEnvelopeService
 }
 
 // Compile-time checks.
@@ -131,13 +127,9 @@ func New(
 	completionRecorder factory.CompletionRecorder,
 	petriMutationRecorder factory.PetriMutationRecorder,
 	completionDeliveryPlanner factory.CompletionDeliveryPlanner,
-	quorumPolicy interfaces.QuorumPolicyService,
-	outputShaping interfaces.InvocationOutputShapingService,
-	workPropagation interfaces.WorkPropagationPolicyService,
 	workService work.Service,
 	workRequestIDs work.RequestIDGenerator,
 	newID factory.IDGenerator,
-	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
 ) (factory.Factory, error) {
 	if net == nil {
 		return nil, fmt.Errorf("a factory specification is required")
@@ -181,11 +173,7 @@ func New(
 		completionRecorder:        completionRecorder,
 		petriMutationRecorder:     petriMutationRecorder,
 		completionDeliveryPlanner: completionDeliveryPlanner,
-		quorumPolicy:              quorumPolicy,
-		outputShaping:             outputShaping,
-		workPropagation:           workPropagation,
 		workService:               workService,
-		decisionEnvelopes:         firstDecisionEnvelopeService(decisionEnvelopes),
 	}
 
 	sched := buildRuntimeScheduler(cfg)
@@ -287,23 +275,10 @@ func buildRuntimeSubsystems(cfg *runtimeConfig, sched scheduler.Scheduler, logge
 			cfg.clock.Now,
 			sharedTransformer,
 			cfg.runtimeConfig,
-			cfg.quorumPolicy,
-			cfg.outputShaping,
-			cfg.workPropagation,
-			cfg.decisionEnvelopes,
 		),
 		subsystems.NewCascadingFailure(cfg.net, logger, cfg.clock.Now),
 		subsystems.NewTerminationCheck(cfg.net, logger, cfg.runtimeMode),
 	}
-}
-
-func firstDecisionEnvelopeService(
-	services []interfaces.DecisionEnvelopeService,
-) interfaces.DecisionEnvelopeService {
-	if len(services) == 0 {
-		return nil
-	}
-	return services[0]
 }
 
 func buildRuntimeMarking(cfg *runtimeConfig) *petri.Marking {

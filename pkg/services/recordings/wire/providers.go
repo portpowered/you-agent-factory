@@ -29,7 +29,7 @@ func NewPortableRecordingWriter(
 // process-graph composition without importing the transitional replay/ shim.
 func NewReplayArtifactLoader(
 	storage platformreplay.Storage,
-	decodeFactorySnapshot factorydefinitions.FactorySnapshotJSONDecoder,
+	decodeFactorySnapshot replayimpl.SnapshotDecoder,
 ) recordings.ReplayArtifactLoader {
 	return func(path string) (*recordings.ReplayArtifact, error) {
 		return replayimpl.Load(storage, path, decodeFactorySnapshot)
@@ -80,8 +80,8 @@ func NewReplayClock(artifact *recordings.ReplayArtifact) recordings.Clock {
 // artifact and the canonical definition decoders selected by the process graph.
 func NewReplayExecution(
 	artifact *recordings.ReplayArtifact,
-	decodeFactorySnapshot factorydefinitions.FactorySnapshotJSONDecoder,
-	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	decodeFactorySnapshot replayimpl.SnapshotDecoder,
+	decodeRuntimeConfig replayimpl.RuntimeConfigDecoder,
 ) (
 	workers.Runner,
 	workers.CommandRunner,

@@ -2,11 +2,9 @@ package workstation_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -28,30 +26,6 @@ type deadlineCapturingExecutor struct {
 
 type contextBlockingExecutor struct{}
 
-func scriptedTimeoutExecutionPolicy() interfaces.WorkstationExecutionPolicyService {
-	return factorydefinitionfixtures.WorkstationExecutionPolicy{
-		Resolve: func(workstation *interfaces.FactoryWorkstationConfig) (time.Duration, error) {
-			if workstation == nil {
-				return 0, nil
-			}
-			switch workstation.Limits.MaxExecutionTime {
-			case "", "0s":
-				return 0, nil
-			case "20ms":
-				return 20 * time.Millisecond, nil
-			case "50ms":
-				return 50 * time.Millisecond, nil
-			case "75ms":
-				return 75 * time.Millisecond, nil
-			case "not-a-duration":
-				return 0, errors.New(`invalid workstation limits.maxExecutionTime "not-a-duration": time: invalid duration "not-a-duration"`)
-			default:
-				return 0, errors.New("unscripted workstation execution limit")
-			}
-		},
-	}
-}
-
 func (m *wsMockExecutor) Execute(_ context.Context, _ workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	m.called = true
 	return m.result, m.err
@@ -71,7 +45,7 @@ func TestWorkstationExecutor_AppliesWorkstationExecutionTimeout(t *testing.T) {
 	mock := &wsMockExecutor{
 		err: context.DeadlineExceeded,
 	}
-	we := &executor.WorkstationExecutor{Now: time.Now, ExecutionPolicy: scriptedTimeoutExecutionPolicy(),
+	we := &executor.WorkstationExecutor{Now: time.Now,
 		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
 			Workers: map[string]*interfaces.FactoryWorkerConfig{
 				"worker-a": {Body: "system"},
@@ -111,7 +85,7 @@ func TestWorkstationExecutor_AppliesWorkstationExecutionTimeout(t *testing.T) {
 
 func TestWorkstationExecutor_InvalidWorkstationExecutionLimitReturnsActionableFailure(t *testing.T) {
 	mock := &wsMockExecutor{}
-	we := &executor.WorkstationExecutor{Now: time.Now, ExecutionPolicy: scriptedTimeoutExecutionPolicy(),
+	we := &executor.WorkstationExecutor{Now: time.Now,
 		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
 			Workers: map[string]*interfaces.FactoryWorkerConfig{
 				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system", Timeout: "75ms"},
@@ -151,7 +125,7 @@ func TestWorkstationExecutor_InvalidWorkstationExecutionLimitReturnsActionableFa
 
 func TestWorkstationExecutor_WorkstationExecutionLimitSetsTimeout(t *testing.T) {
 	mock := &deadlineCapturingExecutor{}
-	we := &executor.WorkstationExecutor{Now: time.Now, ExecutionPolicy: scriptedTimeoutExecutionPolicy(),
+	we := &executor.WorkstationExecutor{Now: time.Now,
 		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
 			Workers: map[string]*interfaces.FactoryWorkerConfig{
 				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system"},
@@ -192,7 +166,7 @@ func TestWorkstationExecutor_WorkstationExecutionLimitSetsTimeout(t *testing.T) 
 
 func TestWorkstationExecutor_ScriptWorkerTimeoutPrefersWorkstationLimit(t *testing.T) {
 	mock := &deadlineCapturingExecutor{}
-	we := &executor.WorkstationExecutor{Now: time.Now, ExecutionPolicy: scriptedTimeoutExecutionPolicy(),
+	we := &executor.WorkstationExecutor{Now: time.Now,
 		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
 			Workers: map[string]*interfaces.FactoryWorkerConfig{
 				"script-worker": {Type: interfaces.WorkerTypeScript, Timeout: "90m"},
@@ -233,7 +207,7 @@ func TestWorkstationExecutor_ScriptWorkerTimeoutPrefersWorkstationLimit(t *testi
 
 func TestWorkstationExecutor_ScriptWorkerTimeoutFallsBackToWorkerTimeout(t *testing.T) {
 	mock := &deadlineCapturingExecutor{}
-	we := &executor.WorkstationExecutor{Now: time.Now, ExecutionPolicy: scriptedTimeoutExecutionPolicy(),
+	we := &executor.WorkstationExecutor{Now: time.Now,
 		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
 			Workers: map[string]*interfaces.FactoryWorkerConfig{
 				"script-worker": {Type: interfaces.WorkerTypeScript, Timeout: "75ms"},
@@ -270,7 +244,7 @@ func TestWorkstationExecutor_ScriptWorkerTimeoutFallsBackToWorkerTimeout(t *test
 
 func TestWorkstationExecutor_ExplicitPositiveTimeoutOverridesDefaults(t *testing.T) {
 	mock := &deadlineCapturingExecutor{}
-	we := &executor.WorkstationExecutor{Now: time.Now, ExecutionPolicy: scriptedTimeoutExecutionPolicy(),
+	we := &executor.WorkstationExecutor{Now: time.Now,
 		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
 			Workers: map[string]*interfaces.FactoryWorkerConfig{
 				"script-worker": {Type: interfaces.WorkerTypeScript, Timeout: "1h"},
@@ -307,7 +281,7 @@ func TestWorkstationExecutor_ExplicitPositiveTimeoutOverridesDefaults(t *testing
 
 func TestWorkstationExecutor_ScriptWorkerTimeoutDefaultsToTwoHours(t *testing.T) {
 	mock := &deadlineCapturingExecutor{}
-	we := &executor.WorkstationExecutor{Now: time.Now, ExecutionPolicy: scriptedTimeoutExecutionPolicy(),
+	we := &executor.WorkstationExecutor{Now: time.Now,
 		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
 			Workers: map[string]*interfaces.FactoryWorkerConfig{
 				"script-worker": {Type: interfaces.WorkerTypeScript},
@@ -363,7 +337,7 @@ func TestWorkstationExecutor_ZeroTimeoutDefaultsToTwoHours(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &deadlineCapturingExecutor{}
-			we := &executor.WorkstationExecutor{Now: time.Now, ExecutionPolicy: scriptedTimeoutExecutionPolicy(),
+			we := &executor.WorkstationExecutor{Now: time.Now,
 				RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
 					Workers: map[string]*interfaces.FactoryWorkerConfig{
 						"script-worker": tt.workerDef,
@@ -402,7 +376,7 @@ func TestWorkstationExecutor_ZeroTimeoutDefaultsToTwoHours(t *testing.T) {
 
 func TestWorkstationExecutor_ModelWorkerTimeoutFallsBackToWorkerTimeout(t *testing.T) {
 	mock := &deadlineCapturingExecutor{}
-	we := &executor.WorkstationExecutor{Now: time.Now, ExecutionPolicy: scriptedTimeoutExecutionPolicy(),
+	we := &executor.WorkstationExecutor{Now: time.Now,
 		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
 			Workers: map[string]*interfaces.FactoryWorkerConfig{
 				"model-worker": {Type: interfaces.WorkerTypeModel, Timeout: "75ms"},
@@ -438,7 +412,7 @@ func TestWorkstationExecutor_ModelWorkerTimeoutFallsBackToWorkerTimeout(t *testi
 }
 
 func TestWorkstationExecutor_ModelWorkerTimeoutCancelsLongRunningExecutor(t *testing.T) {
-	we := &executor.WorkstationExecutor{Now: time.Now, ExecutionPolicy: scriptedTimeoutExecutionPolicy(),
+	we := &executor.WorkstationExecutor{Now: time.Now,
 		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
 			Workers: map[string]*interfaces.FactoryWorkerConfig{
 				"model-worker": {Type: interfaces.WorkerTypeModel, Timeout: "20ms"},

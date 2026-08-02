@@ -30,13 +30,7 @@ func newTestPipeline(n *state.Net) *testPipeline {
 				n),
 
 			nil,
-			nil,
-			nil,
-			interfaces.WorkPropagationPolicyFunc(func(
-				*interfaces.FactoryWorkstationConfig,
-			) interfaces.WorkPropagationMode {
-				return interfaces.WorkPropagationModeOutputAsPayload
-			})),
+		),
 
 		results: buffers.NewTypedBuffer[workerexecution.WorkResult](16),
 	}

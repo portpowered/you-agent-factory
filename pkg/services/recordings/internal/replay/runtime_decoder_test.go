@@ -9,7 +9,7 @@ import (
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
-var testFactorySnapshotDecoder factorydefinitions.FactorySnapshotJSONDecoder = func(
+var testFactorySnapshotDecoder SnapshotDecoder = func(
 	data []byte,
 ) (*factorydefinitions.FactorySnapshot, error) {
 	generated, err := factorymapping.GeneratedFactoryFromOpenAPIJSON(data)
@@ -21,7 +21,7 @@ var testFactorySnapshotDecoder factorydefinitions.FactorySnapshotJSONDecoder = f
 
 func testRuntimeConfigDecoder(
 	snapshot *factorydefinitions.FactorySnapshot,
-) (factorydefinitions.ReplayRuntimeConfig, error) {
+) (ReplayRuntimeConfig, error) {
 	var generated factoryapi.Factory
 	if err := snapshot.Decode(&generated); err != nil {
 		return nil, err

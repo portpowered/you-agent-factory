@@ -19,7 +19,6 @@ import (
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	reconciliationwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation/wire"
 	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -43,7 +42,6 @@ func NewService(
 	hostedSecrets automations.HostedLinearSecretResolver,
 	linearEndpoint string,
 	resolveTemplates workers.TemplateFieldResolver,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 ) (automations.Service, error) {
 	if err := validateDependencies(
 		logger,
@@ -52,7 +50,6 @@ func NewService(
 		hostedSources,
 		hostedClock,
 		resolveTemplates,
-		executionPolicy,
 	); err != nil {
 		return nil, err
 	}
@@ -99,7 +96,6 @@ func NewService(
 		pollerClock,
 		commandRunner,
 		resolveTemplates,
-		executionPolicy,
 	)
 	childCron := cronwire.NewService()
 	childFilesystemWatchers := filesystemwatcherswire.NewService(pollerClock)
@@ -111,7 +107,6 @@ func NewService(
 		defaultFactoryDir,
 		hostedPollers,
 		resolveTemplates,
-		executionPolicy,
 		reconciler,
 		childScriptPollers,
 		childCron,
@@ -137,7 +132,6 @@ func validateDependencies(
 	hostedSources automations.HostedSourcesFactory,
 	hostedClock automations.HostedLinearClock,
 	resolveTemplates workers.TemplateFieldResolver,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 ) error {
 	if logger == nil {
 		return fmt.Errorf("construct Automations: logger is required")
@@ -156,9 +150,6 @@ func validateDependencies(
 	}
 	if resolveTemplates == nil {
 		return fmt.Errorf("construct Automations: template field resolver is required")
-	}
-	if executionPolicy == nil {
-		return fmt.Errorf("construct Automations: workstation execution policy is required")
 	}
 	return nil
 }

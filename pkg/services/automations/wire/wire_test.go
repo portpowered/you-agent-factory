@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
-	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
@@ -27,7 +26,6 @@ type constructionPorts struct {
 	hostedSources    automations.HostedSourcesFactory
 	hostedClock      automations.HostedLinearClock
 	resolveTemplates workers.TemplateFieldResolver
-	executionPolicy  factorydefinitions.WorkstationExecutionPolicyService
 }
 
 type runtimeAutomationService interface {
@@ -75,11 +73,6 @@ func validConstructionPorts(t *testing.T) constructionPorts {
 		) (*workers.ResolvedTemplateFields, error) {
 			return &workers.ResolvedTemplateFields{}, nil
 		},
-		executionPolicy: factorydefinitionfixtures.WorkstationExecutionPolicy{
-			Resolve: func(*factorydefinitions.FactoryWorkstationConfig) (time.Duration, error) {
-				return 0, nil
-			},
-		},
 	}
 }
 
@@ -99,7 +92,6 @@ func (ports constructionPorts) newService(t *testing.T) runtimeAutomationService
 		nil,
 		"",
 		ports.resolveTemplates,
-		ports.executionPolicy,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -291,11 +283,6 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 			mutate: func(ports *constructionPorts) { ports.resolveTemplates = nil },
 			want:   "construct Automations: template field resolver is required",
 		},
-		{
-			name:   "workstation execution policy",
-			mutate: func(ports *constructionPorts) { ports.executionPolicy = nil },
-			want:   "construct Automations: workstation execution policy is required",
-		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -315,7 +302,6 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 				nil,
 				"",
 				ports.resolveTemplates,
-				ports.executionPolicy,
 			)
 			if err == nil {
 				t.Fatalf("NewService() error = nil, want missing %s dependency", test.name)
@@ -354,7 +340,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	service, err := automationswire.NewService(
 		ports.logger, ports.clock, ports.commandRunner, "automations-wire-inert", "",
 		ports.hostedSources, nil, ports.hostedClock, nil, nil, "",
-		ports.resolveTemplates, ports.executionPolicy,
+		ports.resolveTemplates,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)

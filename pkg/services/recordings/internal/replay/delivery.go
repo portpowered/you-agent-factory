@@ -77,8 +77,8 @@ var _ recordings.ReplayHook = (*SubmissionHook)(nil)
 // NewSubmissionHook builds an engine submission hook from recorded artifact
 // submissions.
 func NewSubmissionHook(
-	decodeFactorySnapshot interfaces.FactorySnapshotJSONDecoder,
-	decodeRuntimeConfig interfaces.ReplayRuntimeConfigDecoder,
+	decodeFactorySnapshot SnapshotDecoder,
+	decodeRuntimeConfig RuntimeConfigDecoder,
 	artifact *interfaces.ReplayArtifact,
 ) (*SubmissionHook, error) {
 	eventLog, err := reduceReplayEvents(
@@ -309,8 +309,8 @@ var _ recordings.ReplayHook = (*WorkStateChangeHook)(nil)
 // NewWorkStateChangeHook builds an engine submission hook from recorded
 // operator move events in a replay artifact.
 func NewWorkStateChangeHook(
-	decodeFactorySnapshot interfaces.FactorySnapshotJSONDecoder,
-	decodeRuntimeConfig interfaces.ReplayRuntimeConfigDecoder,
+	decodeFactorySnapshot SnapshotDecoder,
+	decodeRuntimeConfig RuntimeConfigDecoder,
 	artifact *interfaces.ReplayArtifact,
 ) (*WorkStateChangeHook, error) {
 	eventLog, err := reduceReplayEvents(
@@ -410,8 +410,8 @@ var _ recordings.CompletionDeliveryPlanner = (*CompletionDeliveryPlan)(nil)
 // NewCompletionDeliveryPlan builds the replay completion delivery contract
 // from an artifact.
 func NewCompletionDeliveryPlan(
-	decodeFactorySnapshot interfaces.FactorySnapshotJSONDecoder,
-	decodeRuntimeConfig interfaces.ReplayRuntimeConfigDecoder,
+	decodeFactorySnapshot SnapshotDecoder,
+	decodeRuntimeConfig RuntimeConfigDecoder,
 	artifact *interfaces.ReplayArtifact,
 ) (*CompletionDeliveryPlan, error) {
 	eventLog, err := reduceReplayEvents(

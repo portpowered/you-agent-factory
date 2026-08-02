@@ -16,7 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 )
 
-var javascriptRecordingSnapshotDecoder interfaces.FactorySnapshotJSONDecoder = func(
+var javascriptRecordingSnapshotDecoder replay.SnapshotDecoder = func(
 	data []byte,
 ) (*interfaces.FactorySnapshot, error) {
 	generated, err := factorymapping.GeneratedFactoryFromOpenAPIJSON(data)

@@ -27,7 +27,6 @@ type service struct {
 	clock            clockwork.Clock
 	commandRunner    workers.CommandRunner
 	templateResolver workers.TemplateFieldResolver
-	executionPolicy  factorydefinitions.WorkstationExecutionPolicyService
 	cursors          cursorRecorder
 }
 
@@ -40,14 +39,12 @@ func New(
 	clock clockwork.Clock,
 	commandRunner workers.CommandRunner,
 	resolveTemplates workers.TemplateFieldResolver,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 ) scriptpollers.Service {
 	return newWithCursorRecorder(
 		logger,
 		clock,
 		commandRunner,
 		resolveTemplates,
-		executionPolicy,
 		newMemoryCursorRecorder(),
 	)
 }
@@ -57,7 +54,6 @@ func newWithCursorRecorder(
 	clock clockwork.Clock,
 	commandRunner workers.CommandRunner,
 	resolveTemplates workers.TemplateFieldResolver,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 	recorder cursorRecorder,
 ) scriptpollers.Service {
 	if logger == nil {
@@ -71,7 +67,6 @@ func newWithCursorRecorder(
 		clock:            clock,
 		commandRunner:    commandRunner,
 		templateResolver: resolveTemplates,
-		executionPolicy:  executionPolicy,
 		cursors:          recorder,
 	}
 }
@@ -336,15 +331,18 @@ func (s *service) scriptPollerExecutionTimeout(
 	workstation factorydefinitions.FactoryWorkstationConfig,
 	workerDef *factorydefinitions.FactoryWorkerConfig,
 ) (time.Duration, error) {
-	if s.executionPolicy == nil {
-		return 0, fmt.Errorf("Factory Definition Workstation execution policy service is required")
+	authoredTimeout := strings.TrimSpace(workstation.Limits.MaxExecutionTime)
+	if authoredTimeout == "" {
+		authoredTimeout = strings.TrimSpace(workstation.Timeout)
 	}
-	timeout, err := s.executionPolicy.ExecutionTimeout(&workstation)
-	if err != nil {
-		return 0, err
-	}
-	if timeout > 0 {
-		return timeout, nil
+	if authoredTimeout != "" {
+		timeout, err := time.ParseDuration(authoredTimeout)
+		if err != nil {
+			return 0, fmt.Errorf("invalid workstation limits.maxExecutionTime %q: %w", authoredTimeout, err)
+		}
+		if timeout > 0 {
+			return timeout, nil
+		}
 	}
 	if workerDef != nil && strings.TrimSpace(workerDef.Timeout) != "" {
 		parsed, err := time.ParseDuration(workerDef.Timeout)

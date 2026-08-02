@@ -369,9 +369,16 @@ func (s *Service) cronExecutionTimeout(
 	if !ok || def == nil {
 		return 0, nil
 	}
-	timeout, err := s.executionPolicy.ExecutionTimeout(def)
+	authoredTimeout := strings.TrimSpace(def.Limits.MaxExecutionTime)
+	if authoredTimeout == "" {
+		authoredTimeout = strings.TrimSpace(def.Timeout)
+	}
+	if authoredTimeout == "" {
+		return 0, nil
+	}
+	timeout, err := time.ParseDuration(authoredTimeout)
 	if err != nil {
-		return 0, fmt.Errorf("cron workstation %q: %w", ws.Name, err)
+		return 0, fmt.Errorf("cron workstation %q: invalid execution timeout %q: %w", ws.Name, authoredTimeout, err)
 	}
 	if timeout <= 0 {
 		return 0, nil

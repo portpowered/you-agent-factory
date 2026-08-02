@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
-	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -34,13 +32,9 @@ func TestRunScriptPoller_TimesOutWithoutSubmit(t *testing.T) {
 	submitted := &recordingSubmitter{}
 	svc := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{
 		runner: runner,
-		executionPolicy: factorydefinitionfixtures.WorkstationExecutionPolicy{
-			Resolve: func(*interfaces.FactoryWorkstationConfig) (time.Duration, error) {
-				return time.Millisecond, nil
-			},
-		},
 	})
 	poller := newCanonicalScriptPollerWorkstation()
+	poller.Limits.MaxExecutionTime = "1ms"
 	worker := newCanonicalScriptPollerWorker()
 	runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, t.TempDir(), poller, worker)
 
@@ -310,25 +304,16 @@ func TestStartScriptPoller_StopsDuringBackoffWithoutAnotherRun(t *testing.T) {
 }
 
 type scriptPollersServiceOptions struct {
-	runner          workers.CommandRunner
-	clock           clockwork.Clock
-	logger          *zap.Logger
-	executionPolicy factorydefinitionfixtures.WorkstationExecutionPolicy
-	cursorRecorder  cursorRecorder
+	runner         workers.CommandRunner
+	clock          clockwork.Clock
+	logger         *zap.Logger
+	cursorRecorder cursorRecorder
 }
 
 func newScriptPollersServiceWithOptions(options scriptPollersServiceOptions) *service {
 	logger := options.logger
 	if logger == nil {
 		logger = zap.NewNop()
-	}
-	executionPolicy := options.executionPolicy
-	if executionPolicy.Resolve == nil {
-		executionPolicy = factorydefinitionfixtures.WorkstationExecutionPolicy{
-			Resolve: func(*interfaces.FactoryWorkstationConfig) (time.Duration, error) {
-				return 0, nil
-			},
-		}
 	}
 	clock := options.clock
 	if clock == nil {
@@ -339,7 +324,6 @@ func newScriptPollersServiceWithOptions(options scriptPollersServiceOptions) *se
 		clock,
 		options.runner,
 		nil,
-		executionPolicy,
 		options.cursorRecorder,
 	)
 	return constructed.(*service)

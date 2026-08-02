@@ -148,7 +148,7 @@ func TestCronExecutionTimeout_ReturnsCanonicalLimitError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if got, want := err.Error(), `cron workstation "poll-for-work": invalid workstation limits.maxExecutionTime "not-a-duration": time: invalid duration "not-a-duration"`; got != want {
+	if got, want := err.Error(), `cron workstation "poll-for-work": invalid execution timeout "not-a-duration": time: invalid duration "not-a-duration"`; got != want {
 		t.Fatalf("error = %q, want %q", got, want)
 	}
 }
@@ -225,7 +225,7 @@ func TestStartCronWatchersForRuntime_DisablesMissingScheduleWithoutAffectingVali
 			Workstations: []interfaces.FactoryWorkstationConfig{validCron, missingScheduleCron},
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
-			validCron.Name:            &validCron,
+			validCron.Name:           &validCron,
 			missingScheduleCron.Name: &missingScheduleCron,
 		},
 	)

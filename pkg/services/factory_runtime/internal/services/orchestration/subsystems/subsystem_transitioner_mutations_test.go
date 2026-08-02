@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
@@ -72,40 +71,16 @@ func newCalculateMutationsFixture() calculateMutationsFixture {
 	}
 }
 
-func testTTSOutputShaping(
-	metadata string,
-	backendLabel string,
-) interfaces.InvocationOutputShapingService {
-	return factorydefinitionfixtures.InvocationOutputShaping{
-		FormatTTS: func(*interfaces.FactoryWorkstationConfig) bool { return true },
-		TTSBackendLabel: func(*interfaces.FactoryWorkerConfig) string {
-			return backendLabel
-		},
-		TTSMetadataContent: func(
-			string,
-			string,
-			string,
-			string,
-		) ([]work.WorkContentPart, error) {
-			return []work.WorkContentPart{{
-				Type: work.WorkContentPartTypeText,
-				Text: metadata,
-			}}, nil
-		},
-	}
-}
-
 func (f calculateMutationsFixture) calculate(arcs []petri.Arc, result resolvedWorkResult) ([]interfaces.MarkingMutation, error) {
 	return calculateMutations(mutationCalculationInput{
-		workPropagation: testWorkPropagationPolicy(),
-		transition:      f.transition,
-		arcs:            arcs,
-		consumed:        f.consumed,
-		result:          result,
-		now:             f.now,
-		history:         f.baseHistory,
-		inputColors:     f.inputColors,
-		transformer:     f.transformer,
+		transition:  f.transition,
+		arcs:        arcs,
+		consumed:    f.consumed,
+		result:      result,
+		now:         f.now,
+		history:     f.baseHistory,
+		inputColors: f.inputColors,
+		transformer: f.transformer,
 	})
 }
 
@@ -123,41 +98,23 @@ func TestCalculateMutations_CustomerQuorumNamesDoNotGainPackagedRelations(t *tes
 	for _, testCase := range []struct {
 		name          string
 		factoryName   string
-		packaged      bool
 		wantRelations int
 	}{
 		{name: "customer factory", factoryName: "customer-factory", wantRelations: 0},
-		{name: "packaged quorum", factoryName: "@you/quorum", packaged: true, wantRelations: 2},
+		{name: "packaged quorum", factoryName: "@you/quorum", wantRelations: 2},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			mutations, err := calculateMutations(mutationCalculationInput{
-				workPropagation: testWorkPropagationPolicy(),
-				transition:      &petri.Transition{ID: "merge-quorum"},
-				workstation:     &interfaces.FactoryWorkstationConfig{Name: "merge-quorum"},
-				arcs:            []petri.Arc{{ID: "merge-output", PlaceID: "quorum-merge:complete"}},
-				consumed:        inputs,
-				result:          resolvedWorkResult{outcome: workerexecution.OutcomeAccepted},
-				now:             now,
-				inputColors:     tokenColorsFromTokens(inputs),
-				transformer:     token_transformer.New(places, workTypes, petri.NewWorkIDGenerator()),
+				transition:  &petri.Transition{ID: "merge-quorum"},
+				workstation: &interfaces.FactoryWorkstationConfig{Name: "merge-quorum"},
+				arcs:        []petri.Arc{{ID: "merge-output", PlaceID: "quorum-merge:complete"}},
+				consumed:    inputs,
+				result:      resolvedWorkResult{outcome: workerexecution.OutcomeAccepted},
+				now:         now,
+				inputColors: tokenColorsFromTokens(inputs),
+				transformer: token_transformer.New(places, workTypes, petri.NewWorkIDGenerator()),
 				runtimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
 					Factory: &interfaces.FactoryConfig{Name: testCase.factoryName},
-				},
-				quorumPolicy: factorydefinitionfixtures.QuorumPolicy{
-					IsPackaged: func(*interfaces.FactoryConfig) bool {
-						return testCase.packaged
-					},
-					Relations: func(
-						string,
-						string,
-						string,
-						[]interfaces.QuorumLineageInput,
-					) []work.Relation {
-						return []work.Relation{
-							{Type: work.RelationDependsOn, TargetWorkID: "branch-a"},
-							{Type: work.RelationDependsOn, TargetWorkID: "branch-b"},
-						}
-					},
 				},
 			})
 			if err != nil {
@@ -469,9 +426,8 @@ func TestCalculateMutations_PreserveInput_MultiOutput_AllLanesKeepConsumedWorkDa
 	}}
 
 	mutations, err := calculateMutations(mutationCalculationInput{
-		workPropagation: testWorkPropagationPolicy(),
-		transition:      &petri.Transition{ID: "t1"},
-		workstation:     preserveInputWorkstation(),
+		transition:  &petri.Transition{ID: "t1"},
+		workstation: preserveInputWorkstation(),
 		arcs: []petri.Arc{
 			{ID: "review-a", PlaceID: "wt-review-a:init"},
 			{ID: "review-b", PlaceID: "wt-review-b:init"},
@@ -552,16 +508,15 @@ func (f calculateMutationsFixture) calculateWithWorkstation(
 	workstation *interfaces.FactoryWorkstationConfig,
 ) ([]interfaces.MarkingMutation, error) {
 	return calculateMutations(mutationCalculationInput{
-		workPropagation: testWorkPropagationPolicy(),
-		transition:      f.transition,
-		workstation:     workstation,
-		arcs:            arcs,
-		consumed:        f.consumed,
-		result:          result,
-		now:             f.now,
-		history:         f.baseHistory,
-		inputColors:     f.inputColors,
-		transformer:     f.transformer,
+		transition:  f.transition,
+		workstation: workstation,
+		arcs:        arcs,
+		consumed:    f.consumed,
+		result:      result,
+		now:         f.now,
+		history:     f.baseHistory,
+		inputColors: f.inputColors,
+		transformer: f.transformer,
 	})
 }
 
@@ -755,9 +710,8 @@ func TestCalculateMutations_PackagedTTSReplacesTerminalContentWithMetadata(t *te
 	audioOutput := `[{"type":"AUDIO","file":"/tmp/speech.wav","contentType":"audio/wav","slot":"audio"}]`
 
 	mutations, err := calculateMutations(mutationCalculationInput{
-		workPropagation: testWorkPropagationPolicy(),
-		transition:      fixture.transition,
-		workstation:     workstation,
+		transition:  fixture.transition,
+		workstation: workstation,
 		arcs: []petri.Arc{{
 			PlaceID: "wt-code:done",
 		}},
@@ -767,10 +721,6 @@ func TestCalculateMutations_PackagedTTSReplacesTerminalContentWithMetadata(t *te
 		history:     fixture.baseHistory,
 		inputColors: fixture.inputColors,
 		transformer: fixture.transformer,
-		outputShaping: testTTSOutputShaping(
-			`{"artifactPath":"/tmp/speech.wav","mediaType":"audio/wav","backend":"OMNIVOICE_Q4_K_M/LLAMACPP"}`,
-			"",
-		),
 	})
 	if err != nil {
 		t.Fatalf("calculateMutations: %v", err)
@@ -810,9 +760,8 @@ func TestCalculateMutations_PackagedTTSUsesEditedWorkerBackendFromRuntimeConfig(
 	audioOutput := `[{"type":"AUDIO","file":"/tmp/speech.wav","contentType":"audio/wav","slot":"audio"}]`
 
 	mutations, err := calculateMutations(mutationCalculationInput{
-		workPropagation: testWorkPropagationPolicy(),
-		transition:      fixture.transition,
-		workstation:     workstation,
+		transition:  fixture.transition,
+		workstation: workstation,
 		arcs: []petri.Arc{{
 			PlaceID: "wt-code:done",
 		}},
@@ -822,10 +771,6 @@ func TestCalculateMutations_PackagedTTSUsesEditedWorkerBackendFromRuntimeConfig(
 		history:     fixture.baseHistory,
 		inputColors: fixture.inputColors,
 		transformer: fixture.transformer,
-		outputShaping: testTTSOutputShaping(
-			`{"artifactPath":"/tmp/speech.wav","mediaType":"audio/wav","backend":"CUSTOMER_EDITED_TTS_MODEL/LLAMACPP"}`,
-			"CUSTOMER_EDITED_TTS_MODEL/LLAMACPP",
-		),
 		runtimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
 			Workers: map[string]*interfaces.FactoryWorkerConfig{
 				"tts-executor": {
@@ -860,9 +805,8 @@ func TestCalculateMutations_PackagedTTSFailureSkipsMetadataShaping(t *testing.T)
 	}
 
 	mutations, err := calculateMutations(mutationCalculationInput{
-		workPropagation: testWorkPropagationPolicy(),
-		transition:      fixture.transition,
-		workstation:     workstation,
+		transition:  fixture.transition,
+		workstation: workstation,
 		arcs: []petri.Arc{{
 			PlaceID: "task:failed",
 		}},
@@ -872,10 +816,6 @@ func TestCalculateMutations_PackagedTTSFailureSkipsMetadataShaping(t *testing.T)
 		history:     fixture.baseHistory,
 		inputColors: fixture.inputColors,
 		transformer: fixture.transformer,
-		outputShaping: testTTSOutputShaping(
-			`{"artifactPath":"/tmp/speech.wav","mediaType":"audio/wav","backend":"OMNIVOICE_Q4_K_M/LLAMACPP"}`,
-			"",
-		),
 	})
 	if err != nil {
 		t.Fatalf("calculateMutations: %v", err)
@@ -903,9 +843,8 @@ func TestCalculateMutations_PackagedGoalReplacesTerminalContentWithSummary(t *te
 	workerOutput := "Final goal summary.\nCOMPLETE"
 
 	mutations, err := calculateMutations(mutationCalculationInput{
-		workPropagation: testWorkPropagationPolicy(),
-		transition:      fixture.transition,
-		workstation:     workstation,
+		transition:  fixture.transition,
+		workstation: workstation,
 		arcs: []petri.Arc{{
 			PlaceID: "goal:complete",
 		}},
@@ -915,15 +854,6 @@ func TestCalculateMutations_PackagedGoalReplacesTerminalContentWithSummary(t *te
 		history:     fixture.baseHistory,
 		inputColors: fixture.inputColors,
 		transformer: fixture.transformer,
-		outputShaping: factorydefinitionfixtures.InvocationOutputShaping{
-			FormatSummary: func(*interfaces.FactoryWorkstationConfig) bool { return true },
-			SummaryContent: func(string, string) ([]work.WorkContentPart, error) {
-				return []work.WorkContentPart{{
-					Type: work.WorkContentPartTypeText,
-					Text: "Final goal summary.",
-				}}, nil
-			},
-		},
 		runtimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
 			Workers: map[string]*interfaces.FactoryWorkerConfig{
 				"goal-executor": {
@@ -971,9 +901,8 @@ func TestCalculateMutations_PackagedGoalContinuePreservesRequestAndPriorOutput(t
 	workerOutput := "First-pass findings.\n<CONTINUE>"
 
 	mutations, err := calculateMutations(mutationCalculationInput{
-		workPropagation: testWorkPropagationPolicy(),
-		transition:      fixture.transition,
-		workstation:     workstation,
+		transition:  fixture.transition,
+		workstation: workstation,
 		arcs: []petri.Arc{{
 			PlaceID: "goal:init",
 		}},
@@ -983,15 +912,6 @@ func TestCalculateMutations_PackagedGoalContinuePreservesRequestAndPriorOutput(t
 		history:     fixture.baseHistory,
 		inputColors: fixture.inputColors,
 		transformer: fixture.transformer,
-		outputShaping: factorydefinitionfixtures.InvocationOutputShaping{
-			FormatSummary: func(*interfaces.FactoryWorkstationConfig) bool { return true },
-			SummaryContent: func(string, string) ([]work.WorkContentPart, error) {
-				return []work.WorkContentPart{{
-					Type: work.WorkContentPartTypeText,
-					Text: "First-pass findings.",
-				}}, nil
-			},
-		},
 	})
 	if err != nil {
 		t.Fatalf("calculateMutations: %v", err)
@@ -1019,9 +939,8 @@ func TestCalculateMutations_PackagedSubagentReplacesTerminalContentWithAgentResp
 	workerOutput := "mock worker accepted\nCOMPLETE"
 
 	mutations, err := calculateMutations(mutationCalculationInput{
-		workPropagation: testWorkPropagationPolicy(),
-		transition:      fixture.transition,
-		workstation:     workstation,
+		transition:  fixture.transition,
+		workstation: workstation,
 		arcs: []petri.Arc{{
 			PlaceID: interfaces.PackagedSubagentWorkTypeName + ":complete",
 		}},
@@ -1031,15 +950,6 @@ func TestCalculateMutations_PackagedSubagentReplacesTerminalContentWithAgentResp
 		history:     fixture.baseHistory,
 		inputColors: fixture.inputColors,
 		transformer: fixture.transformer,
-		outputShaping: factorydefinitionfixtures.InvocationOutputShaping{
-			FormatResponse: func(*interfaces.FactoryWorkstationConfig) bool { return true },
-			ResponseContent: func(string, string) ([]work.WorkContentPart, error) {
-				return []work.WorkContentPart{{
-					Type: work.WorkContentPartTypeText,
-					Text: "mock worker accepted",
-				}}, nil
-			},
-		},
 		runtimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
 			Workers: map[string]*interfaces.FactoryWorkerConfig{
 				interfaces.PackagedSubagentWorkerName: {
@@ -1107,9 +1017,8 @@ func TestCalculateMutations_PackagedGoalReviewClassifierPreservesCarriedSummary(
 	}
 
 	mutations, err := calculateMutations(mutationCalculationInput{
-		workPropagation: testWorkPropagationPolicy(),
-		transition:      &petri.Transition{ID: "t1"},
-		workstation:     workstation,
+		transition:  &petri.Transition{ID: "t1"},
+		workstation: workstation,
 		arcs: []petri.Arc{{
 			PlaceID: "goal:complete",
 		}},

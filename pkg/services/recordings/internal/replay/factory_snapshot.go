@@ -19,7 +19,7 @@ const (
 
 func validatedFactorySnapshotFromJSON(
 	data []byte,
-	decode interfaces.FactorySnapshotJSONDecoder,
+	decode SnapshotDecoder,
 ) (*interfaces.FactorySnapshot, error) {
 	if decode == nil {
 		return nil, fmt.Errorf("Factory snapshot decoder is required")

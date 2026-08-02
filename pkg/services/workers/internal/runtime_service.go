@@ -50,9 +50,6 @@ type Service struct {
 	processEnvironment                func() []string
 	currentWorkingDirectory           func() (string, error)
 	modelInvocationExecutorOverride   ModelInvocationExecutor
-	interpolation                     interfaces.InvocationInterpolationService
-	executionPolicy                   interfaces.WorkstationExecutionPolicyService
-	decisionEnvelopes                 interfaces.DecisionEnvelopeService
 	factoryDocs                       workers.FactoryDocsLoader
 	worktreePreparer                  workers.FactoryWorktreePreparer
 	agentRunHarness                   workeragentrun.HarnessAdapter
@@ -153,8 +150,6 @@ func New(
 	currentWorkingDirectory func() (string, error),
 	modelInvocationExecutor ModelInvocationExecutor,
 	contentMaterializer work.ContentMaterializer,
-	interpolation interfaces.InvocationInterpolationService,
-	executionPolicy interfaces.WorkstationExecutionPolicyService,
 	factoryDocs workers.FactoryDocsLoader,
 	resolveSymlinks workers.ResolveExecutableSymlinks,
 	executableLocator platformprocess.ExecutableLocator,
@@ -166,7 +161,6 @@ func New(
 	retryRandom platformrandom.Source,
 	workstationFiles platformfilesystem.ReadFileInspector,
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
-	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
 ) (*Service, error) {
 	if sessions == nil {
 		return nil, fmt.Errorf("construct Worker execution service: Factory Session runtime is required")
@@ -212,18 +206,14 @@ func New(
 	if err != nil {
 		return nil, err
 	}
-	decisionEnvelopeService := firstDecisionEnvelopeService(decisionEnvelopes)
 	executorBuilder := workerconstruction.New(
 		providersService,
 		scriptFactory,
-		interpolation,
-		executionPolicy,
 		factoryDocs,
 		worktreePreparer,
 		agentRunHarness,
 		retryRandom,
 		workstationFiles,
-		decisionEnvelopeService,
 	).WithRunWorktree(runWorktree)
 	return &Service{
 		sessions:                          sessions,
@@ -245,9 +235,6 @@ func New(
 		processEnvironment:                processEnvironment,
 		currentWorkingDirectory:           currentWorkingDirectory,
 		modelInvocationExecutorOverride:   modelInvocationExecutor,
-		interpolation:                     interpolation,
-		executionPolicy:                   executionPolicy,
-		decisionEnvelopes:                 decisionEnvelopeService,
 		factoryDocs:                       factoryDocs,
 		worktreePreparer:                  worktreePreparer,
 		agentRunHarness:                   agentRunHarness,
@@ -256,15 +243,6 @@ func New(
 		temporaryFiles:                    temporaryFiles,
 		executableLocator:                 executableLocator,
 	}, nil
-}
-
-func firstDecisionEnvelopeService(
-	services []interfaces.DecisionEnvelopeService,
-) interfaces.DecisionEnvelopeService {
-	if len(services) == 0 {
-		return nil
-	}
-	return services[0]
 }
 
 // Execute delegates one isolated attempt through the composed Execute owner.

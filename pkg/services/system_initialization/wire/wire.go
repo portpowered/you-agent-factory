@@ -15,15 +15,13 @@ import (
 // package.
 func NewService(
 	operatorSettings OperatorSettings,
-	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
-	packagedInstaller factorydefinitions.PackagedFactoryInstaller,
+	definitions factorydefinitions.Service,
 	inspectPath InspectPath,
 	migrationFiles LegacyFactoryMigrationFileSystem,
 ) (systeminitialization.Service, error) {
 	initializer, err := bootstrapworkflow.New(
 		operatorSettings,
-		packagedCatalog,
-		packagedInstaller,
+		definitions,
 		inspectPath,
 		migrationFiles,
 	)

@@ -19,7 +19,7 @@ import (
 
 func TestWithAgentRunnerCutoverPreservesRunnerSelectionWiring(t *testing.T) {
 	service := New(
-		nil, nil, nil, nil, testFactoryDocs, nil,
+		nil, nil, testFactoryDocs, nil,
 		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		testRetryRandom,
 		platformfilesystem.Local{},
@@ -49,8 +49,6 @@ func TestServiceBuildWithAgentRunnerCutoverExposesDispatchAndDirect(t *testing.T
 	service := New(
 		factory,
 		scriptFactory,
-		nil,
-		nil,
 		testFactoryDocs,
 		nil,
 		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
@@ -92,8 +90,6 @@ func TestServiceBuildWithAgentRunnerCutoverAndNilProgressPublisher(t *testing.T)
 	service := New(
 		factory,
 		nil,
-		nil,
-		nil,
 		testFactoryDocs,
 		nil,
 		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
@@ -129,8 +125,6 @@ func TestServiceBuildWithAgentRunnerCutoverAndNilProgressPublisher(t *testing.T)
 
 func TestAgentRunnerProviderOverrideBypassesRegisteredRunner(t *testing.T) {
 	service := New(
-		nil,
-		nil,
 		nil,
 		nil,
 		testFactoryDocs,

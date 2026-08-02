@@ -230,31 +230,11 @@ func (m *dispatchCapturingExecutor) Execute(ctx context.Context, d workerexecuti
 
 func newTestWorkstationExecutor(runtimeConfig interfaces.RuntimeConfigLookup, executor WorkstationRequestExecutor) *WorkstationExecutor {
 	return &WorkstationExecutor{
-		Now:             time.Now,
-		RuntimeConfig:   runtimeConfig,
-		Executor:        executor,
-		Interpolation:   factorydefinitionfixtures.InvocationInterpolation{},
-		ExecutionPolicy: scriptedWorkstationExecutionPolicy(),
-		Renderer:        &DefaultPromptRenderer{},
-		FileSystem:      platformfilesystem.Local{},
-	}
-}
-
-func scriptedWorkstationExecutionPolicy() interfaces.WorkstationExecutionPolicyService {
-	return factorydefinitionfixtures.WorkstationExecutionPolicy{
-		Resolve: func(workstation *interfaces.FactoryWorkstationConfig) (time.Duration, error) {
-			if workstation == nil {
-				return 0, nil
-			}
-			switch workstation.Limits.MaxExecutionTime {
-			case "", "0s":
-				return 0, nil
-			case "75ms":
-				return 75 * time.Millisecond, nil
-			default:
-				return 0, errors.New("unscripted workstation execution limit")
-			}
-		},
+		Now:           time.Now,
+		RuntimeConfig: runtimeConfig,
+		Executor:      executor,
+		Renderer:      &DefaultPromptRenderer{},
+		FileSystem:    platformfilesystem.Local{},
 	}
 }
 
@@ -363,7 +343,7 @@ func TestWorkstationExecutor_PetriInputUsesWorkersExecutionTokenContract(t *test
 
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t *testing.T) {
+func TestWorkstationExecutor_ModelWorkstationUsesResolvedInvocationValues(t *testing.T) {
 	mock := &wsMockExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "done"}}
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
@@ -380,54 +360,20 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t 
 			Workers: map[string]*interfaces.FactoryWorkerConfig{
 				"worker-a": {
 					Type:  interfaces.WorkerTypeModel,
-					Body:  "Provider ${provider}",
-					Model: "${model}",
+					Body:  "Provider cursor",
+					Model: "gpt-5.5",
 				},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"standard": {
 					Type:             interfaces.WorkstationTypeModel,
-					PromptTemplate:   "Process ${input}",
-					WorkingDirectory: "workspace/${provider}",
+					PromptTemplate:   "Process draft",
+					WorkingDirectory: "workspace/cursor",
 				},
 			},
 		},
 		mock,
 	)
-	files := &workstationFileSystemStub{files: map[string][]byte{
-		"worker-provider.txt":   []byte("cursor"),
-		"workstation-input.txt": []byte("draft"),
-	}}
-	we.FileSystem = files
-	we.Interpolation = factorydefinitionfixtures.InvocationInterpolation{
-		InterpolateWorker: func(
-			worker interfaces.FactoryWorkerConfig,
-			_ *work.InvocationArguments,
-			readFile interfaces.FileReader,
-		) (interfaces.FactoryWorkerConfig, error) {
-			provider, err := readFile("worker-provider.txt")
-			if err != nil {
-				return interfaces.FactoryWorkerConfig{}, err
-			}
-			worker.Body = "Provider " + string(provider)
-			worker.Model = "gpt-5.5"
-			return worker, nil
-		},
-		InterpolateWorkstation: func(
-			workstation interfaces.FactoryWorkstationConfig,
-			_ *work.InvocationArguments,
-			readFile interfaces.FileReader,
-		) (interfaces.FactoryWorkstationConfig, error) {
-			input, err := readFile("workstation-input.txt")
-			if err != nil {
-				return interfaces.FactoryWorkstationConfig{}, err
-			}
-			workstation.PromptTemplate = "Process " + string(input)
-			workstation.WorkingDirectory = "workspace/cursor"
-			return workstation, nil
-		},
-	}
-
 	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-interpolate",
 		TransitionID:    "t-interpolate",
@@ -464,11 +410,8 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t 
 	if mock.dispatch.UserMessage != "Process draft" {
 		t.Fatalf("user message = %q, want interpolated prompt", mock.dispatch.UserMessage)
 	}
-	if got, want := strings.Join(files.reads, ","), "workstation-input.txt,worker-provider.txt"; got != want {
-		t.Fatalf("filesystem reads = %q, want %q", got, want)
-	}
 	if !strings.HasSuffix(mock.dispatch.WorkingDirectory, filepath.Join("workspace", "cursor")) {
-		t.Fatalf("working directory = %q, want interpolated provider path suffix", mock.dispatch.WorkingDirectory)
+		t.Fatalf("working directory = %q, want resolved provider path suffix", mock.dispatch.WorkingDirectory)
 	}
 	if result.Diagnostics == nil || result.Diagnostics.Invocation == nil {
 		t.Fatalf("result diagnostics = %#v, want invocation summary", result.Diagnostics)
@@ -486,14 +429,13 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t 
 	}
 }
 
-func TestWorkstationExecutor_ModelWorkstation_InterpolatesOmittedInvocationArguments(t *testing.T) {
+func TestWorkstationExecutor_ModelWorkstation_UsesResolvedOmittedInvocationArguments(t *testing.T) {
 	mock := &wsMockExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}}
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
 			Workers: map[string]*interfaces.FactoryWorkerConfig{
 				"worker-a": {
-					Type: interfaces.WorkerTypeModel, ModelProvider: "${provider}", Model: "${model}",
-					RuntimeDefaultModelProvider: "codex", RuntimeDefaultModel: "operator-model",
+					Type: interfaces.WorkerTypeModel, ModelProvider: "codex", Model: "operator-model",
 				},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
@@ -502,23 +444,6 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesOmittedInvocationArgum
 		},
 		mock,
 	)
-	workerInterpolated := false
-	we.Interpolation = factorydefinitionfixtures.InvocationInterpolation{
-		InterpolateWorker: func(
-			worker interfaces.FactoryWorkerConfig,
-			args *work.InvocationArguments,
-			_ interfaces.FileReader,
-		) (interfaces.FactoryWorkerConfig, error) {
-			if args != nil {
-				t.Fatalf("invocation arguments = %#v, want nil for omitted optional arguments", args)
-			}
-			workerInterpolated = true
-			worker.ModelProvider = ""
-			worker.Model = ""
-			return worker, nil
-		},
-	}
-
 	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID: "d-omitted", TransitionID: "t-omitted", WorkerType: "worker-a", WorkstationName: "standard",
 		InputTokens: InputTokens(workerexecution.Token{ID: "tok-1", Color: workerexecution.Color{WorkID: "work-1"}}),
@@ -526,31 +451,24 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesOmittedInvocationArgum
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if !workerInterpolated || !mock.called || result.Outcome != workerexecution.OutcomeAccepted {
-		t.Fatalf("interpolated=%t called=%t result=%#v", workerInterpolated, mock.called, result)
+	if !mock.called || result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("called=%t result=%#v", mock.called, result)
 	}
 	if mock.dispatch.ModelProvider != "codex" || mock.dispatch.Model != "operator-model" {
 		t.Fatalf("provider/model = %q/%q, want operator fallback", mock.dispatch.ModelProvider, mock.dispatch.Model)
 	}
 }
 
-func TestWorkstationExecutor_ScriptWorkerUsesInvocationInterpolatedArguments(t *testing.T) {
+func TestWorkstationExecutor_ScriptWorkerUsesResolvedArguments(t *testing.T) {
 	mock := &interpolatedScriptExecutorMock{}
 	we := newTestWorkstationExecutor(staticRuntimeConfig{
 		Workers: map[string]*interfaces.FactoryWorkerConfig{
-			"script-a": {Type: interfaces.WorkerTypeScript, Command: "tool", Args: []string{"${branch}"}},
+			"script-a": {Type: interfaces.WorkerTypeScript, Command: "tool", Args: []string{"feature/customer-branch"}},
 		},
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"script-run": {Type: interfaces.WorkstationTypeModel, WorkerTypeName: "script-a"},
 		},
 	}, mock)
-	we.Interpolation = factorydefinitionfixtures.InvocationInterpolation{
-		InterpolateWorker: func(worker interfaces.FactoryWorkerConfig, _ *work.InvocationArguments, _ interfaces.FileReader) (interfaces.FactoryWorkerConfig, error) {
-			worker.Args = []string{"feature/customer-branch"}
-			return worker, nil
-		},
-	}
-
 	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID: "d-script", TransitionID: "t-script", WorkerType: "script-a", WorkstationName: "script-run",
 		InputTokens: InputTokens(workerexecution.Token{ID: "tok-script", Color: workerexecution.Color{
@@ -740,14 +658,24 @@ func interpolatedProviderExecutor(
 			},
 		},
 	}, mock)
-	executor.Interpolation = factorydefinitionfixtures.InvocationInterpolation{
-		InterpolateWorker: func(
-			worker interfaces.FactoryWorkerConfig,
-			_ *work.InvocationArguments,
-			_ interfaces.FileReader,
-		) (interfaces.FactoryWorkerConfig, error) {
-			worker.ModelProvider = resolved
-			return worker, nil
+	executor.RuntimeConfig = staticRuntimeConfig{
+		Factory: &interfaces.FactoryConfig{
+			InvocationSignature: &interfaces.InvocationSignatureConfig{
+				Parameters: []interfaces.InvocationParameterConfig{{Name: "provider"}},
+			},
+		},
+		Workers: map[string]*interfaces.FactoryWorkerConfig{
+			"worker-a": {
+				Type:          interfaces.WorkerTypeModel,
+				ModelProvider: resolved,
+			},
+		},
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"standard": {
+				Type:           interfaces.WorkstationTypeModel,
+				Runner:         "codex",
+				PromptTemplate: "run",
+			},
 		},
 	}
 	return executor
