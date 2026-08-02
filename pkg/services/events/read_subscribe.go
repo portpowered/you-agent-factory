@@ -59,6 +59,27 @@ type GapFacts struct {
 	Head             AggregateSequence
 }
 
+// Validate reports whether g names an internally consistent retention gap: a
+// well-formed Topic, a nonzero Head (a gap cannot exist on a topic that has
+// never retained a record), an EarliestRetained between 1 and Head
+// inclusive, and a Requested position strictly before EarliestRetained (the
+// position must actually have been evicted to be a gap).
+func (g GapFacts) Validate() error {
+	if err := g.Topic.Validate(); err != nil {
+		return err
+	}
+	if g.Head == 0 {
+		return ErrInvalidGapFacts
+	}
+	if g.EarliestRetained == 0 || g.EarliestRetained > g.Head {
+		return ErrInvalidGapFacts
+	}
+	if g.Requested >= g.EarliestRetained {
+		return ErrInvalidGapFacts
+	}
+	return nil
+}
+
 // ReadResult is the detached outcome of one Read call.
 type ReadResult struct {
 	Records  []Record
@@ -84,6 +105,9 @@ func (res ReadResult) Validate() error {
 	case ReadOutcomeGap:
 		if len(res.Records) != 0 || res.Gap == nil {
 			return ErrInconsistentReadOutcome
+		}
+		if err := res.Gap.Validate(); err != nil {
+			return err
 		}
 	default:
 		return ErrInconsistentReadOutcome
@@ -145,6 +169,45 @@ type Delivery struct {
 	Record Record
 	Cursor Cursor
 	Gap    *GapFacts
+}
+
+// Validate reports whether d is internally consistent with its Kind: a
+// caller can never observe an impossible combination such as DeliveryGap
+// with a nil or malformed Gap, DeliveryRecord with an unset Record/Cursor or
+// a Cursor naming a different topic than the delivered Record, or a
+// terminal/gap Delivery carrying a leftover Record or Cursor.
+func (d Delivery) Validate() error {
+	recordSet := d.Record.ID != (RecordID{})
+	cursorSet := d.Cursor != (Cursor{})
+	switch d.Kind {
+	case DeliveryRecord:
+		if !recordSet || !cursorSet || d.Gap != nil {
+			return ErrInconsistentDelivery
+		}
+		if err := d.Record.Validate(); err != nil {
+			return err
+		}
+		if err := d.Cursor.Validate(); err != nil {
+			return err
+		}
+		if !d.Cursor.BelongsTo(d.Record.ID.Topic) {
+			return ErrCursorTopicMismatch
+		}
+	case DeliveryGap:
+		if recordSet || cursorSet || d.Gap == nil {
+			return ErrInconsistentDelivery
+		}
+		if err := d.Gap.Validate(); err != nil {
+			return err
+		}
+	case DeliveryClosed, DeliveryCanceled, DeliveryBackpressure:
+		if recordSet || cursorSet || d.Gap != nil {
+			return ErrInconsistentDelivery
+		}
+	default:
+		return ErrInconsistentDelivery
+	}
+	return nil
 }
 
 // Subscription observes the next Delivery for one Subscribe call. Next may

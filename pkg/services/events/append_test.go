@@ -116,6 +116,45 @@ func TestRecordDetachedPayload(t *testing.T) {
 	}
 }
 
+func TestAppendIdentityValidate(t *testing.T) {
+	valid := AppendIdentity{
+		SourceType:     "worker.tool",
+		SourceID:       "worker-1",
+		SourceSequence: 1,
+		SourceEventID:  "evt-1",
+	}
+
+	tests := []struct {
+		name    string
+		mutate  func(AppendIdentity) AppendIdentity
+		wantErr error
+	}{
+		{"valid", func(id AppendIdentity) AppendIdentity { return id }, nil},
+		{"missing source type", func(id AppendIdentity) AppendIdentity { id.SourceType = ""; return id }, ErrEmptySourceType},
+		{"missing source id", func(id AppendIdentity) AppendIdentity { id.SourceID = ""; return id }, ErrEmptySourceID},
+		{"missing source sequence", func(id AppendIdentity) AppendIdentity { id.SourceSequence = 0; return id }, ErrInvalidSourceSequence},
+		{"missing source event id", func(id AppendIdentity) AppendIdentity { id.SourceEventID = ""; return id }, ErrEmptySourceEventID},
+		{"malformed source id", func(id AppendIdentity) AppendIdentity { id.SourceID = " worker-1"; return id }, ErrMalformedSourceID},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id := tt.mutate(valid)
+			if err := id.Validate(); !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Validate() = %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestAppendRequestValidateDelegatesToIdentity(t *testing.T) {
+	req := validAppendRequest()
+	req.SourceSequence = 0
+
+	if err := req.Validate(); !errors.Is(err, ErrInvalidSourceSequence) {
+		t.Fatalf("Validate() = %v, want %v (delegated from Identity().Validate())", err, ErrInvalidSourceSequence)
+	}
+}
+
 func TestAppendOutcomeValues(t *testing.T) {
 	rec := Record{ID: RecordID{Topic: "chat-session/abc/events", Position: 1}}
 
