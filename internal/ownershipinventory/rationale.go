@@ -122,6 +122,8 @@ func committedOwnerRationales() []OwnerRationaleCard {
 	out = append(out, committedSystemInitializationRationales()...)
 	out = append(out, committedWorkRationales()...)
 	out = append(out, committedWorkersRationales()...)
+	out = append(out, committedChatSessionsRationales()...)
+	out = append(out, committedEventsRationales()...)
 	return out
 }
 
