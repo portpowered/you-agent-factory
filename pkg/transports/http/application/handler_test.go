@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,6 +16,8 @@ import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	mappingcomposition "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
@@ -78,6 +81,25 @@ type contentPreparationRole struct{ work.ContentPreparation }
 type workRequestPreparationRole struct{ work.RequestPreparationService }
 type invocationWorkTypeRole struct {
 	factorydefinitions.InvocationWorkTypeService
+}
+
+type defaultWorkTypeRole struct {
+	id  string
+	err error
+}
+
+func (role defaultWorkTypeRole) DefaultWorkType(*factorydefinitions.FactoryConfig) (string, error) {
+	return role.id, role.err
+}
+
+type factoryDefinitionRole struct {
+	apisurface.FactorySaveAPI
+	factoryapi.Factory
+	err error
+}
+
+func (role factoryDefinitionRole) GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error) {
+	return role.Factory, role.err
 }
 
 func TestHandlerBindsOpenedRolesWithoutReconstructingStableGraph(t *testing.T) {
@@ -156,6 +178,40 @@ func TestHandlerBindsSessionsRootAtApplicationEdge(t *testing.T) {
 
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"id":"session-alpha"`) {
 		t.Fatalf("response = %d %s, want Sessions root response", response.Code, response.Body.String())
+	}
+}
+
+func TestDefaultWorkTypeResolverPreservesSessionAdmissionPolicy(t *testing.T) {
+	t.Parallel()
+
+	checks := []struct {
+		name        string
+		definitions apisurface.FactorySaveAPI
+		invocation  factorydefinitions.InvocationWorkTypeService
+		want        string
+		wantErr     string
+	}{
+		{name: "missing dependencies"},
+		{name: "session not found", definitions: factoryDefinitionRole{err: apisurface.ErrFactorySessionNotFound}},
+		{name: "current factory not found", definitions: factoryDefinitionRole{err: apisurface.ErrCurrentFactoryNotFound}},
+		{name: "opaque definition error", definitions: factoryDefinitionRole{err: errors.New("definition failed")}, invocation: defaultWorkTypeRole{}, wantErr: "definition failed"},
+		{name: "invocation policy error", definitions: factoryDefinitionRole{}, invocation: defaultWorkTypeRole{err: errors.New("policy failed")}, wantErr: ""},
+		{name: "default type", definitions: factoryDefinitionRole{}, invocation: defaultWorkTypeRole{id: "default-task"}, want: "default-task"},
+	}
+	for _, check := range checks {
+		t.Run(check.name, func(t *testing.T) {
+			resolver := defaultWorkTypeResolver(check.definitions, check.invocation)
+			got, err := resolver(context.Background(), "session-alpha")
+			if check.wantErr != "" {
+				if err == nil || err.Error() != check.wantErr {
+					t.Fatalf("error = %v, want %q", err, check.wantErr)
+				}
+				return
+			}
+			if err != nil || got != check.want {
+				t.Fatalf("resolver = (%q, %v), want (%q, nil)", got, err, check.want)
+			}
+		})
 	}
 }
 

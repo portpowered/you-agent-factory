@@ -94,11 +94,20 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 	workHandler := workhttp.NewAdapterWithSessionScope(opened.Work, func(ctx context.Context, sessionID string) error {
 		_, err := mapped.FactoryDefinitions.GetCurrentFactoryForSession(ctx, sessionID)
 		return err
-	}).WithDefaultWorkTypeResolver(func(ctx context.Context, sessionID string) (string, error) {
-		if mapped.FactoryDefinitions == nil || handler.invocationWorkType == nil {
+	}).WithDefaultWorkTypeResolver(defaultWorkTypeResolver(mapped.FactoryDefinitions, handler.invocationWorkType))
+	server := transporthttp.NewServer(sessionsHandler, workHandler, modelsHandler, opened.ProviderSessions, opened.Logger)
+	return server.Handler(), nil
+}
+
+func defaultWorkTypeResolver(
+	definitions apisurface.FactorySaveAPI,
+	invocationWorkType factorydefinitions.InvocationWorkTypeService,
+) func(context.Context, string) (string, error) {
+	return func(ctx context.Context, sessionID string) (string, error) {
+		if definitions == nil || invocationWorkType == nil {
 			return "", nil
 		}
-		namedFactory, err := mapped.FactoryDefinitions.GetCurrentFactoryForSession(ctx, sessionID)
+		namedFactory, err := definitions.GetCurrentFactoryForSession(ctx, sessionID)
 		if err != nil {
 			if errors.Is(err, apisurface.ErrFactorySessionNotFound) || errors.Is(err, apisurface.ErrCurrentFactoryNotFound) {
 				return "", nil
@@ -109,14 +118,12 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 		if err != nil {
 			return "", err
 		}
-		defaultWorkTypeID, err := handler.invocationWorkType.DefaultWorkType(&factoryConfig)
+		defaultWorkTypeID, err := invocationWorkType.DefaultWorkType(&factoryConfig)
 		if err != nil {
 			return "", nil
 		}
 		return defaultWorkTypeID, nil
-	})
-	server := transporthttp.NewServer(sessionsHandler, workHandler, modelsHandler, opened.ProviderSessions, opened.Logger)
-	return server.Handler(), nil
+	}
 }
 
 // BindDurableExecution binds the same generated API and embedded dashboard
