@@ -100,7 +100,12 @@ type ReadResult struct {
 // no aggregate position is silently skipped), to stay within Retained, and
 // Next to name exactly the last delivered Record's position; AtHead
 // requires Next to name exactly the Retained head, since being at head
-// means there is nothing to advance past.
+// means there is nothing to advance past. ReadOutcomeInvalidCursor and
+// ReadOutcomeGap carry no resume/retention state of their own: Next and
+// Retained must be their zero values, since an invalid cursor names no
+// resolvable position and a gap's resumable position is already carried by
+// Gap; a leftover Next or Retained on either outcome would let a caller
+// observe two contradictory resume states for the same read.
 func (res ReadResult) Validate() error {
 	switch res.Outcome {
 	case ReadOutcomeProgress:
@@ -145,12 +150,18 @@ func (res ReadResult) Validate() error {
 		if len(res.Records) != 0 || res.Gap != nil {
 			return ErrInconsistentReadOutcome
 		}
+		if res.Next != (Cursor{}) || res.Retained != (RetainedRange{}) {
+			return ErrInconsistentReadOutcome
+		}
 	case ReadOutcomeGap:
 		if len(res.Records) != 0 || res.Gap == nil {
 			return ErrInconsistentReadOutcome
 		}
 		if err := res.Gap.Validate(); err != nil {
 			return err
+		}
+		if res.Next != (Cursor{}) || res.Retained != (RetainedRange{}) {
+			return ErrInconsistentReadOutcome
 		}
 	default:
 		return ErrInconsistentReadOutcome
