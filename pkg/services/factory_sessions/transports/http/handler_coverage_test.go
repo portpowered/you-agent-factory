@@ -61,4 +61,7 @@ func TestHandlerUnavailableBranchesStayOwnedBySessions(t *testing.T) {
 	for _, call := range tests {
 		call(httptest.NewRecorder(), request)
 	}
+	unsupported := httptest.NewRequest(http.MethodPost, "/", nil)
+	unsupported.Header.Set("Content-Type", "text/plain")
+	handler.OpenFactorySession(httptest.NewRecorder(), unsupported)
 }
