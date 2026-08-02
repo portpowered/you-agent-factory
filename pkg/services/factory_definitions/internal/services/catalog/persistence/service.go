@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	authoringlayoutcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/contracts"
 	authoringlayoutpersist "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/persist"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	catalognamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
@@ -278,13 +279,11 @@ func (s *service) persistNamedFactory(
 		name,
 		prepared,
 		replaceExisting,
-		authoringlayoutpersist.Ports{
-			Write:                s.write,
-			Validate:             s.validate,
-			FileSystem:           s.fileSystem,
-			RequireDefinitionDir: s.requireDefinitionDir,
-			Directories:          s.directories,
-		},
+		authoringlayoutcontracts.LayoutWriter(s.write),
+		authoringlayoutcontracts.LayoutValidatorFunc(s.validate),
+		s.fileSystem,
+		authoringlayoutcontracts.DefinitionDirectoryRequirer(s.requireDefinitionDir),
+		s.directories,
 	)
 }
 
