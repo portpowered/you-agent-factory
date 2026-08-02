@@ -13,11 +13,13 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
-// acpAgentProfileStoreFileName is the Operator-Settings-owned storage file
-// name for the persisted ACP agent profile. It lives beside the operator
-// config document but is decoded/encoded independently of the GlobalConfig
+// acpAgentProfileStoreFileSuffix is the Operator-Settings-owned storage file
+// suffix for the persisted ACP agent profile. It lives beside the operator
+// config document, named after that document's own file stem so that
+// distinct config paths in the same directory never alias the same profile
+// storage, but is decoded/encoded independently of the GlobalConfig
 // contract, keeping this V0 slice free of any OpenAPI dependency.
-const acpAgentProfileStoreFileName = "acp-agent-profile.json"
+const acpAgentProfileStoreFileSuffix = ".acp-agent-profile.json"
 
 // acpAgentProfileFile is the on-disk representation of one persisted ACP
 // agent profile.
@@ -27,7 +29,14 @@ type acpAgentProfileFile struct {
 }
 
 func acpAgentProfileStorePath(configPath string) string {
-	return filepath.Join(filepath.Dir(strings.TrimSpace(configPath)), acpAgentProfileStoreFileName)
+	trimmed := strings.TrimSpace(configPath)
+	dir := filepath.Dir(trimmed)
+	base := filepath.Base(trimmed)
+	stem := strings.TrimSuffix(base, filepath.Ext(base))
+	if stem == "" {
+		stem = base
+	}
+	return filepath.Join(dir, stem+acpAgentProfileStoreFileSuffix)
 }
 
 func (s *Service) ResolveACPAgentProfile(

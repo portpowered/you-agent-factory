@@ -116,7 +116,6 @@ func TestOperatorSettingsRootGoInventoryClassifiesThinRootContractSurfaces(t *te
 	}
 
 	wantThin := []string{
-		"acp_agent_profile_contract.go",
 		"acp_integrations.go",
 		"backend_scope.go",
 		"config_document.go",
@@ -165,7 +164,6 @@ func TestOperatorSettingsRootGoInventoryDistinguishesThinContractTestsFromImplem
 	}
 
 	wantThinTests := []string{
-		"acp_agent_profile_contract_test.go",
 		"acp_integrations_test.go",
 		"del_set_proof_gate_test.go",
 		"packaged_root_shape_test.go",

@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -279,6 +280,237 @@ func TestUpdateACPAgentProfileIsIsolatedFromUnrelatedDocumentUpdates(t *testing.
 	}
 	if len(loaded.Document.Workers.ACP.Integrations) != 1 || loaded.Document.Workers.ACP.Integrations[0] != integration {
 		t.Fatalf("LoadDocument() integrations = %#v, want %#v", loaded.Document.Workers.ACP.Integrations, []operatorsettings.ACPIntegration{integration})
+	}
+}
+
+func TestUpdateACPAgentProfileIsIsolatedAcrossDistinctConfigPathsInSameDirectory(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pathA := filepath.Join(dir, "config-a.json")
+	pathB := filepath.Join(dir, "config-b.json")
+	root := newFilesystemRoot(t, testCreateTemporaryFile)
+
+	updatedA, err := root.UpdateACPAgentProfile(context.Background(), operatorsettings.UpdateACPAgentProfileRequest{
+		Path:                    pathA,
+		DefaultFactoryReference: "@you/profile-a",
+		Allowlist:               []string{"@you/profile-a"},
+	})
+	if err != nil {
+		t.Fatalf("UpdateACPAgentProfile(a) error = %v", err)
+	}
+	updatedB, err := root.UpdateACPAgentProfile(context.Background(), operatorsettings.UpdateACPAgentProfileRequest{
+		Path:                    pathB,
+		DefaultFactoryReference: "@you/profile-b",
+		Allowlist:               []string{"@you/profile-b"},
+	})
+	if err != nil {
+		t.Fatalf("UpdateACPAgentProfile(b) error = %v", err)
+	}
+
+	resolvedA, err := root.ResolveACPAgentProfile(operatorsettings.ResolveACPAgentProfileRequest{Path: pathA})
+	if err != nil {
+		t.Fatalf("ResolveACPAgentProfile(a) error = %v", err)
+	}
+	if !reflect.DeepEqual(resolvedA.Profile, updatedA.Profile) {
+		t.Fatalf("ResolveACPAgentProfile(a) = %#v, want %#v (must be unaffected by the config-b update)", resolvedA.Profile, updatedA.Profile)
+	}
+
+	resolvedB, err := root.ResolveACPAgentProfile(operatorsettings.ResolveACPAgentProfileRequest{Path: pathB})
+	if err != nil {
+		t.Fatalf("ResolveACPAgentProfile(b) error = %v", err)
+	}
+	if !reflect.DeepEqual(resolvedB.Profile, updatedB.Profile) {
+		t.Fatalf("ResolveACPAgentProfile(b) = %#v, want %#v", resolvedB.Profile, updatedB.Profile)
+	}
+	if reflect.DeepEqual(resolvedA.Profile, resolvedB.Profile) {
+		t.Fatalf("profiles for distinct config paths in the same directory were aliased: %#v", resolvedA.Profile)
+	}
+}
+
+func TestUpdateACPAgentProfileSecondValidUpdateReplacesPriorOnReload(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "config.json")
+	root := newFilesystemRoot(t, testCreateTemporaryFile)
+
+	if _, err := root.UpdateACPAgentProfile(context.Background(), operatorsettings.UpdateACPAgentProfileRequest{
+		Path:                    path,
+		DefaultFactoryReference: "@you/first",
+		Allowlist:               []string{"@you/first"},
+	}); err != nil {
+		t.Fatalf("UpdateACPAgentProfile(first) error = %v", err)
+	}
+
+	second, err := root.UpdateACPAgentProfile(context.Background(), operatorsettings.UpdateACPAgentProfileRequest{
+		Path:                    path,
+		DefaultFactoryReference: "@you/second",
+		Allowlist:               []string{"@you/first", "@you/second"},
+	})
+	if err != nil {
+		t.Fatalf("UpdateACPAgentProfile(second) error = %v", err)
+	}
+
+	reconstructed := newFilesystemRoot(t, testCreateTemporaryFile)
+	resolved, err := reconstructed.ResolveACPAgentProfile(operatorsettings.ResolveACPAgentProfileRequest{Path: path})
+	if err != nil {
+		t.Fatalf("ResolveACPAgentProfile() after second update error = %v", err)
+	}
+	if !reflect.DeepEqual(resolved.Profile, second.Profile) {
+		t.Fatalf("ResolveACPAgentProfile() = %#v, want the latest persisted profile %#v", resolved.Profile, second.Profile)
+	}
+}
+
+// TestUpdateACPAgentProfilePreservesFullDocumentSurfaceBidirectionally proves
+// the named-settings preservation matrix from the story's acceptance
+// criteria in both orderings: an ACP agent profile update must not disturb an
+// already-populated document (forward), and unrelated document updates made
+// after a profile is persisted must not disturb that profile (reverse).
+func TestUpdateACPAgentProfilePreservesFullDocumentSurfaceBidirectionally(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{
+		"backendScopeID": "local-11111111-1111-4111-8111-111111111111",
+		"defaults": {"workerModelProvider": "codex", "workerModel": "gpt-5"},
+		"runtime": {
+			"logging": {"directory": "logs/runtime", "maxSizeMB": 11, "maxBackups": 12, "maxAgeDays": 13, "compress": true},
+			"metrics": {"directory": "metrics/runtime", "maxSizeMB": 21, "maxBackups": 22, "maxAgeDays": 23, "compress": true}
+		},
+		"workers": {"acp": {"integrations": [{"id": "entry-1", "name": "cursor-acp", "transport": "stdio", "command": "cursor-agent acp"}]}},
+		"workerPresets": [{"id": "research", "modelProvider": "openai", "model": "gpt-5.4-mini", "reasoningEffort": "high"}]
+	}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(config) error = %v", err)
+	}
+
+	root := newFilesystemRootWithProviderValidation(t)
+
+	before, err := root.LoadDocument(operatorsettings.LoadDocumentRequest{Path: path})
+	if err != nil {
+		t.Fatalf("LoadDocument() before error = %v", err)
+	}
+
+	// Forward: the document already carries backend scope, provider/model
+	// defaults, runtime logging/metrics, a Worker preset, and an ACP
+	// integration. Updating the ACP agent profile must leave all of it intact.
+	if _, err := root.UpdateACPAgentProfile(context.Background(), operatorsettings.UpdateACPAgentProfileRequest{
+		Path:                    path,
+		DefaultFactoryReference: "@you/custom",
+		Allowlist:               []string{"@you/custom"},
+	}); err != nil {
+		t.Fatalf("UpdateACPAgentProfile() error = %v", err)
+	}
+
+	afterProfileUpdate, err := root.LoadDocument(operatorsettings.LoadDocumentRequest{Path: path})
+	if err != nil {
+		t.Fatalf("LoadDocument() after profile update error = %v", err)
+	}
+	if !reflect.DeepEqual(afterProfileUpdate.Document, before.Document) {
+		t.Fatalf("LoadDocument() after profile update = %#v, want unchanged %#v", afterProfileUpdate.Document, before.Document)
+	}
+
+	// Reverse: once the profile is persisted, unrelated document updates
+	// (provider/model defaults and an added ACP integration) must not disturb
+	// the persisted profile.
+	resolvedBeforeDocumentChanges, err := root.ResolveACPAgentProfile(operatorsettings.ResolveACPAgentProfileRequest{Path: path})
+	if err != nil {
+		t.Fatalf("ResolveACPAgentProfile() error = %v", err)
+	}
+
+	provider := "gemini"
+	model := "gemini-pro"
+	if _, err := root.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
+		Path: path,
+		ProviderModel: operatorsettings.DocumentProviderModelUpdate{
+			Provider: &provider,
+			Model:    &model,
+		},
+	}); err != nil {
+		t.Fatalf("ApplyDocumentUpdate() error = %v", err)
+	}
+	if _, err := root.ConfigureACPIntegrationAdd(context.Background(), path, operatorsettings.ACPIntegration{
+		ID: "entry-2", Name: "second-acp", Transport: "stdio", Command: "second-agent acp",
+	}); err != nil {
+		t.Fatalf("ConfigureACPIntegrationAdd() error = %v", err)
+	}
+
+	resolvedAfterDocumentChanges, err := root.ResolveACPAgentProfile(operatorsettings.ResolveACPAgentProfileRequest{Path: path})
+	if err != nil {
+		t.Fatalf("ResolveACPAgentProfile() after document changes error = %v", err)
+	}
+	if !reflect.DeepEqual(resolvedAfterDocumentChanges.Profile, resolvedBeforeDocumentChanges.Profile) {
+		t.Fatalf("ResolveACPAgentProfile() after unrelated document changes = %#v, want unchanged %#v", resolvedAfterDocumentChanges.Profile, resolvedBeforeDocumentChanges.Profile)
+	}
+
+	// Confirm the document-side changes actually landed, so the isolation
+	// proof above is not vacuous, and backend scope, runtime, and Worker
+	// presets remained untouched by those unrelated updates too.
+	finalDocument, err := root.LoadDocument(operatorsettings.LoadDocumentRequest{Path: path})
+	if err != nil {
+		t.Fatalf("LoadDocument() final error = %v", err)
+	}
+	if finalDocument.Document.Defaults.WorkerModelProvider != "GEMINI" || finalDocument.Document.Defaults.WorkerModel != "gemini-pro" {
+		t.Fatalf("final defaults = %#v, want GEMINI/gemini-pro", finalDocument.Document.Defaults)
+	}
+	if len(finalDocument.Document.Workers.ACP.Integrations) != 2 {
+		t.Fatalf("final integrations = %#v, want 2 entries", finalDocument.Document.Workers.ACP.Integrations)
+	}
+	if finalDocument.Document.BackendScopeID != before.Document.BackendScopeID {
+		t.Fatalf("final backend scope = %q, want preserved %q", finalDocument.Document.BackendScopeID, before.Document.BackendScopeID)
+	}
+	if !reflect.DeepEqual(finalDocument.Document.Runtime, before.Document.Runtime) {
+		t.Fatalf("final runtime settings = %#v, want preserved %#v", finalDocument.Document.Runtime, before.Document.Runtime)
+	}
+	if !reflect.DeepEqual(finalDocument.Document.WorkerPresets, before.Document.WorkerPresets) {
+		t.Fatalf("final worker presets = %#v, want preserved %#v", finalDocument.Document.WorkerPresets, before.Document.WorkerPresets)
+	}
+}
+
+// newFilesystemRootWithProviderValidation builds a real filesystem-backed
+// root, like newFilesystemRoot, but with a provider catalog that actually
+// validates provider identities instead of panicking, for tests that also
+// exercise ApplyDocumentUpdate's provider/model validation.
+func newFilesystemRootWithProviderValidation(t *testing.T) operatorsettings.Service {
+	t.Helper()
+
+	files := platformfilesystem.Local{}
+	documentService := documentwire.NewService(
+		files,
+		testCreateTemporaryFile,
+		globalconfigmapping.Decode,
+		globalconfigmapping.Encode,
+		acpAgentProfileFullDocumentProviderCatalog,
+	)
+	resolutionService, err := resolutionwire.NewService(internaltestproviders.StandardCatalog())
+	if err != nil {
+		t.Fatalf("resolutionwire.NewService() = %v", err)
+	}
+	root, err := operatorservice.New(
+		documentService,
+		resolutionService,
+		files,
+		testCreateTemporaryFile,
+		globalconfigmapping.Decode,
+		globalconfigmapping.Encode,
+		func() string { return "00000000-0000-4000-8000-000000000001" },
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("operatorservice.New() = %v", err)
+	}
+	return root
+}
+
+func acpAgentProfileFullDocumentProviderCatalog(value string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "codex", "openai":
+		return "CODEX", true
+	case "claude", "anthropic":
+		return "CLAUDE", true
+	case "gemini":
+		return "GEMINI", true
+	default:
+		return "", false
 	}
 }
 
