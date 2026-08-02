@@ -94,8 +94,9 @@ var _ work.Service = (*roleRoot)(nil)
 
 // Adapter maps Work service values at the outward HTTP boundary.
 type Adapter struct {
-	root         work.Service
-	sessionScope func(context.Context, string) error
+	root            work.Service
+	sessionScope    func(context.Context, string) error
+	defaultWorkType func(context.Context, string) (string, error)
 }
 
 // NewAdapter constructs the Work HTTP representation adapter.
@@ -123,6 +124,19 @@ func (a *Adapter) WithSessionScope(scope func(context.Context, string) error) *A
 	}
 	bound := *a
 	bound.sessionScope = scope
+	return &bound
+}
+
+// WithDefaultWorkTypeResolver binds the application-edge policy used to fill
+// omitted Work Request types from the session's current Factory.
+func (a *Adapter) WithDefaultWorkTypeResolver(
+	resolver func(context.Context, string) (string, error),
+) *Adapter {
+	if a == nil {
+		return nil
+	}
+	bound := *a
+	bound.defaultWorkType = resolver
 	return &bound
 }
 
@@ -201,15 +215,24 @@ func (a *Adapter) invokeSubmitWorkRequestForSession(
 
 func (a *Adapter) invokePrepareWorkRequest(
 	ctx context.Context,
-	_ string,
+	sessionID string,
 	request work.WorkRequest,
 	canonicalJSON []byte,
 ) (work.WorkRequest, error) {
 	if a == nil || a.root == nil {
 		return work.WorkRequest{}, errors.New("work service is required")
 	}
+	defaultWorkTypeID := ""
+	var err error
+	if a.defaultWorkType != nil {
+		defaultWorkTypeID, err = a.defaultWorkType(ctx, sessionID)
+		if err != nil {
+			return work.WorkRequest{}, err
+		}
+	}
 	return a.root.PrepareWorkRequest(ctx, work.WorkRequestPreparation{
 		Request: request, CanonicalJSON: canonicalJSON,
+		DefaultWorkTypeID: defaultWorkTypeID,
 	})
 }
 

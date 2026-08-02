@@ -18,9 +18,13 @@ type rootFake struct {
 	prepareContent              func(context.Context, []work.StagedSubmissionItem) ([]work.WorkContentPart, error)
 	submitWorkRequestForSession func(context.Context, string, work.WorkRequest) (work.WorkRequestSubmitResult, error)
 	moveWorkAndRead             func(context.Context, string, string, string, string) (work.ReadModel, error)
+	prepareWorkRequest          func(context.Context, work.WorkRequestPreparation) (work.WorkRequest, error)
 }
 
-func (fake *rootFake) PrepareWorkRequest(_ context.Context, input work.WorkRequestPreparation) (work.WorkRequest, error) {
+func (fake *rootFake) PrepareWorkRequest(ctx context.Context, input work.WorkRequestPreparation) (work.WorkRequest, error) {
+	if fake.prepareWorkRequest != nil {
+		return fake.prepareWorkRequest(ctx, input)
+	}
 	return input.Request, nil
 }
 
