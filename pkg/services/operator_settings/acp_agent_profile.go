@@ -3,6 +3,7 @@ package operatorsettings
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -11,6 +12,17 @@ import (
 // enumeration and canonical reference resolution; Operator Settings validates
 // local shape only.
 const ACPFactoryTargetNamespace = "factory:"
+
+// acpFactoryTargetReferencePattern is the local lexical grammar for the
+// portion of a reference following the factory: namespace prefix: one or
+// more lowercase kebab-case path segments separated by '/', with an optional
+// leading '@' scope marker on the first segment (e.g. "@you/factory-builder",
+// "local/software-auto"). It rejects blank segments, internal whitespace,
+// control characters, and any shape outside this grammar; it never
+// enumerates or resolves actual Factory targets.
+var acpFactoryTargetReferencePattern = regexp.MustCompile(
+	`^@?[a-z0-9]+(?:-[a-z0-9]+)*(?:/[a-z0-9]+(?:-[a-z0-9]+)*)+$`,
+)
 
 // DefaultACPAgentProfileTarget is the safe Factory Builder target used when an
 // operator document has no authored ACP Agent profile.
@@ -99,5 +111,9 @@ func DefaultACPAgentProfile() ACPAgentProfile {
 }
 
 func isACPFactoryTargetReference(value string) bool {
-	return strings.HasPrefix(value, ACPFactoryTargetNamespace) && len(value) > len(ACPFactoryTargetNamespace)
+	if !strings.HasPrefix(value, ACPFactoryTargetNamespace) {
+		return false
+	}
+	suffix := strings.TrimPrefix(value, ACPFactoryTargetNamespace)
+	return acpFactoryTargetReferencePattern.MatchString(suffix)
 }

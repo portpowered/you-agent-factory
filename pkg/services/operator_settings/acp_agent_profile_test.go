@@ -79,6 +79,30 @@ func TestACPAgentProfileNormalizeRejectsInvalidShapes(t *testing.T) {
 			name:    "default absent from allowlist",
 			profile: ACPAgentProfile{DefaultTarget: "factory:@you/review", AllowedTargets: []string{"factory:@you/factory-builder"}},
 		},
+		{
+			name:    "default reference contains internal whitespace",
+			profile: ACPAgentProfile{DefaultTarget: "factory:@you/bad ref", AllowedTargets: []string{"factory:@you/bad ref"}},
+		},
+		{
+			name:    "allowlist entry contains a control character",
+			profile: ACPAgentProfile{DefaultTarget: "factory:@you/factory-builder", AllowedTargets: []string{"factory:@you/factory-builder", "factory:@you/bad\nref"}},
+		},
+		{
+			name:    "reference has no path segment after the scope",
+			profile: ACPAgentProfile{DefaultTarget: "factory:@you", AllowedTargets: []string{"factory:@you"}},
+		},
+		{
+			name:    "reference has an empty path segment",
+			profile: ACPAgentProfile{DefaultTarget: "factory:@you/", AllowedTargets: []string{"factory:@you/"}},
+		},
+		{
+			name:    "reference segment has a leading hyphen",
+			profile: ACPAgentProfile{DefaultTarget: "factory:@you/-builder", AllowedTargets: []string{"factory:@you/-builder"}},
+		},
+		{
+			name:    "reference uses uppercase characters",
+			profile: ACPAgentProfile{DefaultTarget: "factory:@You/Factory-Builder", AllowedTargets: []string{"factory:@You/Factory-Builder"}},
+		},
 	}
 
 	for _, testCase := range cases {
