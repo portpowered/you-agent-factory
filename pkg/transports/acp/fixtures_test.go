@@ -88,9 +88,9 @@ func assertCaseSemantics(t *testing.T, c acpfixtures.Case) {
 		assertOutcome(t, c, got, rejectionOf(err))
 
 	case acpfixtures.RoleSessionUpdate:
-		var upd acpsdk.SessionUpdate
-		mustUnmarshal(t, c.Input, &upd)
-		got, err := session.ValidateSessionUpdate(upd)
+		var notif acpsdk.SessionNotification
+		mustUnmarshal(t, c.Input, &notif)
+		got, err := session.ValidateSessionUpdate(notif)
 		assertOutcome(t, c, got, rejectionOf(err))
 
 	case acpfixtures.RoleSessionRequestPermission:

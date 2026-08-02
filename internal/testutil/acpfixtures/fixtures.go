@@ -29,7 +29,7 @@
 //   - "session/cancel"                — Input decodes as acpsdk.CancelNotification
 //   - "session/set_config_option"     — Input decodes as acpsdk.SetSessionConfigOptionRequest
 //   - "session/prompt"                — Input decodes as acpsdk.PromptRequest
-//   - "session/update"                — Input decodes as acpsdk.SessionUpdate
+//   - "session/update"                — Input decodes as acpsdk.SessionNotification
 //   - "session/request_permission"    — Input decodes as acpsdk.RequestPermissionRequest
 //   - "stop_reason"                   — Input is {"outcome": "<protocol.TerminalOutcome>"}; Direction is always "outbound"
 //   - "unsupported_method"            — Input is {"method": "<name>"}; the method is always outside SupportedMethods

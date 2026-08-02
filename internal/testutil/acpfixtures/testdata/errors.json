@@ -48,7 +48,10 @@
       "role": "session/update",
       "direction": "outbound",
       "classification": "rejected",
-      "input": {"sessionUpdate": "tool_call_update", "toolCallId": "tool_synthetic_0001"},
+      "input": {
+        "sessionId": "sess_synthetic_0001",
+        "update": {"sessionUpdate": "tool_call_update", "toolCallId": "tool_synthetic_0001"}
+      },
       "expected": {
         "code": -32602,
         "message": "Invalid params",

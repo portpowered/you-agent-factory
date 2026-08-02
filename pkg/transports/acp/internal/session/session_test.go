@@ -413,8 +413,12 @@ func TestValidatePrompt(t *testing.T) {
 	})
 }
 
+func notification(sessionID string, update acpsdk.SessionUpdate) acpsdk.SessionNotification {
+	return acpsdk.SessionNotification{SessionId: acpsdk.SessionId(sessionID), Update: update}
+}
+
 func TestValidateSessionUpdate(t *testing.T) {
-	t.Run("accepts text-first update kinds", func(t *testing.T) {
+	t.Run("accepts text-first update kinds and preserves session identity", func(t *testing.T) {
 		cases := []struct {
 			name   string
 			update acpsdk.SessionUpdate
@@ -423,40 +427,40 @@ func TestValidateSessionUpdate(t *testing.T) {
 			{
 				name:   "user message chunk",
 				update: acpsdk.SessionUpdate{UserMessageChunk: &acpsdk.SessionUpdateUserMessageChunk{Content: textBlock("hi")}},
-				want:   TextUpdate{Kind: TextUpdateUserMessageChunk, Content: &TextContent{Text: "hi"}},
+				want:   TextUpdate{SessionID: "sess-1", Kind: TextUpdateUserMessageChunk, Content: &TextContent{Text: "hi"}},
 			},
 			{
 				name:   "agent message chunk",
 				update: acpsdk.SessionUpdate{AgentMessageChunk: &acpsdk.SessionUpdateAgentMessageChunk{Content: textBlock("hello")}},
-				want:   TextUpdate{Kind: TextUpdateAgentMessageChunk, Content: &TextContent{Text: "hello"}},
+				want:   TextUpdate{SessionID: "sess-1", Kind: TextUpdateAgentMessageChunk, Content: &TextContent{Text: "hello"}},
 			},
 			{
 				name:   "agent thought chunk",
 				update: acpsdk.SessionUpdate{AgentThoughtChunk: &acpsdk.SessionUpdateAgentThoughtChunk{Content: textBlock("thinking")}},
-				want:   TextUpdate{Kind: TextUpdateAgentThoughtChunk, Content: &TextContent{Text: "thinking"}},
+				want:   TextUpdate{SessionID: "sess-1", Kind: TextUpdateAgentThoughtChunk, Content: &TextContent{Text: "thinking"}},
 			},
 			{
 				name:   "usage update",
 				update: acpsdk.SessionUpdate{UsageUpdate: &acpsdk.SessionUsageUpdate{Size: 100, Used: 10}},
-				want:   TextUpdate{Kind: TextUpdateUsage, Usage: &UsageInfo{Size: 100, Used: 10}},
+				want:   TextUpdate{SessionID: "sess-1", Kind: TextUpdateUsage, Usage: &UsageInfo{Size: 100, Used: 10}},
 			},
 			{
 				name:   "session info update",
 				update: acpsdk.SessionUpdate{SessionInfoUpdate: &acpsdk.SessionSessionInfoUpdate{Title: strPtr("Renamed session")}},
-				want:   TextUpdate{Kind: TextUpdateSessionInfo, SessionInfo: &SessionInfo{Title: strPtr("Renamed session")}},
+				want:   TextUpdate{SessionID: "sess-1", Kind: TextUpdateSessionInfo, SessionInfo: &SessionInfo{Title: strPtr("Renamed session")}},
 			},
 			{
 				name: "config option update",
 				update: acpsdk.SessionUpdate{ConfigOptionUpdate: &acpsdk.SessionConfigOptionUpdate{
 					ConfigOptions: []acpsdk.SessionConfigOption{},
 				}},
-				want: TextUpdate{Kind: TextUpdateConfigOption},
+				want: TextUpdate{SessionID: "sess-1", Kind: TextUpdateConfigOption},
 			},
 		}
 
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
-				got, err := ValidateSessionUpdate(tc.update)
+				got, err := ValidateSessionUpdate(notification("sess-1", tc.update))
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
@@ -482,7 +486,7 @@ func TestValidateSessionUpdate(t *testing.T) {
 
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
-				_, err := ValidateSessionUpdate(tc.update)
+				_, err := ValidateSessionUpdate(notification("sess-1", tc.update))
 				if !errors.Is(err, ErrUnsupportedUpdate) {
 					t.Fatalf("expected ErrUnsupportedUpdate, got %v", err)
 				}
@@ -492,14 +496,25 @@ func TestValidateSessionUpdate(t *testing.T) {
 
 	t.Run("rejects a message chunk carrying non-text content", func(t *testing.T) {
 		update := acpsdk.SessionUpdate{AgentMessageChunk: &acpsdk.SessionUpdateAgentMessageChunk{Content: imageBlock()}}
-		if _, err := ValidateSessionUpdate(update); !errors.Is(err, ErrUnsupportedContent) {
+		if _, err := ValidateSessionUpdate(notification("sess-1", update)); !errors.Is(err, ErrUnsupportedContent) {
 			t.Fatalf("expected ErrUnsupportedContent, got %v", err)
 		}
 	})
 
 	t.Run("rejects an empty update", func(t *testing.T) {
-		if _, err := ValidateSessionUpdate(acpsdk.SessionUpdate{}); !errors.Is(err, ErrUnsupportedUpdate) {
+		if _, err := ValidateSessionUpdate(notification("sess-1", acpsdk.SessionUpdate{})); !errors.Is(err, ErrUnsupportedUpdate) {
 			t.Fatalf("expected ErrUnsupportedUpdate for an empty update, got %v", err)
+		}
+	})
+
+	t.Run("rejects a missing session id", func(t *testing.T) {
+		update := acpsdk.SessionUpdate{AgentMessageChunk: &acpsdk.SessionUpdateAgentMessageChunk{Content: textBlock("hi")}}
+		_, err := ValidateSessionUpdate(notification("", update))
+		if err == nil {
+			t.Fatal("expected an error for a missing sessionId, got nil")
+		}
+		if errors.Is(err, ErrUnsupportedContent) || errors.Is(err, ErrUnsupportedUpdate) {
+			t.Fatalf("expected a plain missing-sessionId rejection, got %v", err)
 		}
 	})
 }

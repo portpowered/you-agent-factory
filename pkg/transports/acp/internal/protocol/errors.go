@@ -2,25 +2,20 @@ package protocol
 
 import (
 	"errors"
-	"regexp"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
 )
 
-// safeMethodNamePattern matches the shape of every JSON-RPC method name this
-// protocol or its SDK could ever legitimately propose: an initial word,
-// optionally followed by a single "/"-separated word (e.g. "initialize",
-// "session/prompt"). A client-controlled method value that does not match
-// this shape -- for example one carrying a credential, a filesystem path, a
-// shell command, or another adversarial payload -- can never survive into
-// MethodNotFound's serialized output.
-var safeMethodNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(/[A-Za-z_][A-Za-z0-9_]*)?$`)
-
-// redactedMethodPlaceholder replaces a method value that fails
-// safeMethodNamePattern, so MethodNotFound always returns a bounded,
-// sensitive-safe payload regardless of what a client sends as "method".
+// redactedMethodPlaceholder is the only method value MethodNotFound ever
+// discloses. A client-controlled "method" string is never echoed back --
+// not even one that superficially looks like a plausible method name -- so
+// no shape-matching heuristic can be bypassed by a credential, path,
+// command, payload fragment, or topology sentinel crafted to look like a
+// method name (e.g. "sk_live_credential_ABC123" or
+// "internal_topology_node_7" are syntactically valid identifiers, so any
+// regex admitting real method names would also admit them).
 const redactedMethodPlaceholder = "unrecognized_method"
 
 // RejectionKind is the closed set of bounded rejection reasons this
@@ -61,19 +56,15 @@ func Classify(cause error) RejectionKind {
 }
 
 // MethodNotFound returns the bounded JSON-RPC method-not-found error for an
-// unsupported method. It carries the client-sent method name only when that
-// name matches safeMethodNamePattern; any other value -- including one
-// carrying a credential, a filesystem path, a shell command, a tool/prompt
-// payload fragment, or internal topology -- is replaced with
-// redactedMethodPlaceholder before it ever reaches acpsdk.NewMethodNotFound,
-// so the emitted error can never disclose more than a plausible method
-// name.
+// unsupported method. The client-sent method value is never echoed back --
+// only the fixed redactedMethodPlaceholder ever reaches
+// acpsdk.NewMethodNotFound -- so a credential, filesystem path, shell
+// command, tool/prompt payload fragment, or internal topology sentinel a
+// client sends as "method" can never be disclosed through this error,
+// regardless of whether it happens to look like a plausible method name.
 func MethodNotFound(method string) *acpsdk.RequestError {
-	safeMethod := method
-	if !safeMethodNamePattern.MatchString(method) {
-		safeMethod = redactedMethodPlaceholder
-	}
-	return acpsdk.NewMethodNotFound(safeMethod)
+	_ = method
+	return acpsdk.NewMethodNotFound(redactedMethodPlaceholder)
 }
 
 // SafeReject converts an internal validation cause into a bounded,

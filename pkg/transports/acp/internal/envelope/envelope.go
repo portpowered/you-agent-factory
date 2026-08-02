@@ -51,8 +51,8 @@ type wireRequest struct {
 // syntactically valid (if not yet semantically validated) params.
 type Envelope struct {
 	Identity identity.RequestIdentity `json:"identity"`
-	Method   string                  `json:"method"`
-	Params   json.RawMessage         `json:"params,omitempty"`
+	Method   string                   `json:"method"`
+	Params   json.RawMessage          `json:"params,omitempty"`
 }
 
 // Decode parses raw JSON-RPC 2.0 request bytes received on connectionID

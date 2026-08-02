@@ -6,11 +6,15 @@
       "direction": "outbound",
       "classification": "accepted",
       "input": {
-        "sessionUpdate": "user_message_chunk",
-        "content": {"type": "text", "text": "hello"},
-        "messageId": "msg_synthetic_0001"
+        "sessionId": "sess_synthetic_0001",
+        "update": {
+          "sessionUpdate": "user_message_chunk",
+          "content": {"type": "text", "text": "hello"},
+          "messageId": "msg_synthetic_0001"
+        }
       },
       "expected": {
+        "SessionID": "sess_synthetic_0001",
         "Kind": "user_message_chunk",
         "Content": {"Text": "hello"},
         "MessageID": "msg_synthetic_0001",
@@ -23,10 +27,14 @@
       "direction": "outbound",
       "classification": "accepted",
       "input": {
-        "sessionUpdate": "agent_message_chunk",
-        "content": {"type": "text", "text": "working on it"}
+        "sessionId": "sess_synthetic_0001",
+        "update": {
+          "sessionUpdate": "agent_message_chunk",
+          "content": {"type": "text", "text": "working on it"}
+        }
       },
       "expected": {
+        "SessionID": "sess_synthetic_0001",
         "Kind": "agent_message_chunk",
         "Content": {"Text": "working on it"},
         "MessageID": "",
@@ -39,10 +47,14 @@
       "direction": "outbound",
       "classification": "accepted",
       "input": {
-        "sessionUpdate": "agent_thought_chunk",
-        "content": {"type": "text", "text": "considering options"}
+        "sessionId": "sess_synthetic_0001",
+        "update": {
+          "sessionUpdate": "agent_thought_chunk",
+          "content": {"type": "text", "text": "considering options"}
+        }
       },
       "expected": {
+        "SessionID": "sess_synthetic_0001",
         "Kind": "agent_thought_chunk",
         "Content": {"Text": "considering options"},
         "MessageID": "",
@@ -54,24 +66,33 @@
       "role": "session/update",
       "direction": "outbound",
       "classification": "accepted",
-      "input": {"sessionUpdate": "usage_update", "size": 4096, "used": 512},
-      "expected": {"Kind": "usage_update", "Content": null, "MessageID": "", "Usage": {"Size": 4096, "Used": 512}, "SessionInfo": null, "ConfigOptions": null}
+      "input": {
+        "sessionId": "sess_synthetic_0001",
+        "update": {"sessionUpdate": "usage_update", "size": 4096, "used": 512}
+      },
+      "expected": {"SessionID": "sess_synthetic_0001", "Kind": "usage_update", "Content": null, "MessageID": "", "Usage": {"Size": 4096, "Used": 512}, "SessionInfo": null, "ConfigOptions": null}
     },
     {
       "name": "session/update preserves session info title",
       "role": "session/update",
       "direction": "outbound",
       "classification": "accepted",
-      "input": {"sessionUpdate": "session_info_update", "title": "Renamed session"},
-      "expected": {"Kind": "session_info_update", "Content": null, "MessageID": "", "Usage": null, "SessionInfo": {"Title": "Renamed session", "UpdatedAt": null}, "ConfigOptions": null}
+      "input": {
+        "sessionId": "sess_synthetic_0001",
+        "update": {"sessionUpdate": "session_info_update", "title": "Renamed session"}
+      },
+      "expected": {"SessionID": "sess_synthetic_0001", "Kind": "session_info_update", "Content": null, "MessageID": "", "Usage": null, "SessionInfo": {"Title": "Renamed session", "UpdatedAt": null}, "ConfigOptions": null}
     },
     {
       "name": "session/update preserves an empty config option list",
       "role": "session/update",
       "direction": "outbound",
       "classification": "accepted",
-      "input": {"sessionUpdate": "config_option_update", "configOptions": []},
-      "expected": {"Kind": "config_option_update", "Content": null, "MessageID": "", "Usage": null, "SessionInfo": null, "ConfigOptions": null}
+      "input": {
+        "sessionId": "sess_synthetic_0001",
+        "update": {"sessionUpdate": "config_option_update", "configOptions": []}
+      },
+      "expected": {"SessionID": "sess_synthetic_0001", "Kind": "config_option_update", "Content": null, "MessageID": "", "Usage": null, "SessionInfo": null, "ConfigOptions": null}
     },
     {
       "name": "session/update preserves a non-empty config option list",
@@ -79,12 +100,16 @@
       "direction": "outbound",
       "classification": "accepted",
       "input": {
-        "sessionUpdate": "config_option_update",
-        "configOptions": [
-          {"type": "boolean", "id": "verbose_output", "name": "Verbose output", "currentValue": true}
-        ]
+        "sessionId": "sess_synthetic_0001",
+        "update": {
+          "sessionUpdate": "config_option_update",
+          "configOptions": [
+            {"type": "boolean", "id": "verbose_output", "name": "Verbose output", "currentValue": true}
+          ]
+        }
       },
       "expected": {
+        "SessionID": "sess_synthetic_0001",
         "Kind": "config_option_update", "Content": null, "MessageID": "", "Usage": null, "SessionInfo": null,
         "ConfigOptions": [
           {"type": "boolean", "id": "verbose_output", "name": "Verbose output", "currentValue": true}
@@ -96,7 +121,10 @@
       "role": "session/update",
       "direction": "outbound",
       "classification": "rejected",
-      "input": {"sessionUpdate": "tool_call", "toolCallId": "tool_synthetic_0001", "title": "Synthetic tool"},
+      "input": {
+        "sessionId": "sess_synthetic_0001",
+        "update": {"sessionUpdate": "tool_call", "toolCallId": "tool_synthetic_0001", "title": "Synthetic tool"}
+      },
       "expected": {
         "code": -32602,
         "message": "Invalid params",
@@ -108,7 +136,10 @@
       "role": "session/update",
       "direction": "outbound",
       "classification": "rejected",
-      "input": {"sessionUpdate": "plan", "entries": []},
+      "input": {
+        "sessionId": "sess_synthetic_0001",
+        "update": {"sessionUpdate": "plan", "entries": []}
+      },
       "expected": {
         "code": -32602,
         "message": "Invalid params",
@@ -120,11 +151,31 @@
       "role": "session/update",
       "direction": "outbound",
       "classification": "rejected",
-      "input": {"sessionUpdate": "current_mode_update", "currentModeId": "synthetic-mode"},
+      "input": {
+        "sessionId": "sess_synthetic_0001",
+        "update": {"sessionUpdate": "current_mode_update", "currentModeId": "synthetic-mode"}
+      },
       "expected": {
         "code": -32602,
         "message": "Invalid params",
         "data": {"reason": "unsupported_update"}
+      }
+    },
+    {
+      "name": "session/update rejects a missing session id",
+      "role": "session/update",
+      "direction": "outbound",
+      "classification": "rejected",
+      "input": {
+        "update": {
+          "sessionUpdate": "agent_message_chunk",
+          "content": {"type": "text", "text": "hello"}
+        }
+      },
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
       }
     }
   ]

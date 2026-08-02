@@ -38,6 +38,10 @@ func TestSharedConformanceCorpusSessionUpdateMatchesInboundMapper(t *testing.T) 
 		t.Fatal("expected at least one session/update case in the shared corpus")
 	}
 
+	var envelope struct {
+		SessionID string          `json:"sessionId"`
+		Update    json.RawMessage `json:"update"`
+	}
 	var wire struct {
 		SessionUpdate string `json:"sessionUpdate"`
 		Content       *struct {
@@ -53,8 +57,11 @@ func TestSharedConformanceCorpusSessionUpdateMatchesInboundMapper(t *testing.T) 
 		if c.Classification != acpfixtures.ClassificationAccepted {
 			continue
 		}
-		if err := json.Unmarshal(c.Input, &wire); err != nil {
-			t.Fatalf("%s: decode raw input: %v", c.Name, err)
+		if err := json.Unmarshal(c.Input, &envelope); err != nil {
+			t.Fatalf("%s: decode raw input envelope: %v", c.Name, err)
+		}
+		if err := json.Unmarshal(envelope.Update, &wire); err != nil {
+			t.Fatalf("%s: decode raw update: %v", c.Name, err)
 		}
 		switch wire.SessionUpdate {
 		case "agent_message_chunk", "agent_thought_chunk", "usage_update", "session_info_update":
@@ -63,7 +70,7 @@ func TestSharedConformanceCorpusSessionUpdateMatchesInboundMapper(t *testing.T) 
 		}
 
 		var update acpsdk.SessionUpdate
-		if err := json.Unmarshal(c.Input, &update); err != nil {
+		if err := json.Unmarshal(envelope.Update, &update); err != nil {
 			t.Fatalf("%s: decode as acpsdk.SessionUpdate: %v", c.Name, err)
 		}
 		kind, want := wire.SessionUpdate, wire
@@ -71,7 +78,7 @@ func TestSharedConformanceCorpusSessionUpdateMatchesInboundMapper(t *testing.T) 
 		t.Run(c.Name, func(t *testing.T) {
 			tested++
 			mapperClient := &client{}
-			if err := mapperClient.SessionUpdate(context.Background(), acpsdk.SessionNotification{Update: update}); err != nil {
+			if err := mapperClient.SessionUpdate(context.Background(), acpsdk.SessionNotification{SessionId: acpsdk.SessionId(envelope.SessionID), Update: update}); err != nil {
 				t.Fatalf("SessionUpdate() unexpected error: %v", err)
 			}
 			progress := mapperClient.progressFacts()

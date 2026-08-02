@@ -378,12 +378,15 @@ type SessionInfo struct {
 }
 
 // TextUpdate is the closed L1 V0 shape of a validated session/update
-// notification. Content and MessageID are populated only for the three
-// streamed-message kinds; Usage, SessionInfo, and ConfigOptions are
-// populated only for their respective kind and losslessly carry that
-// update's supported semantic fields rather than reducing them to a bare
-// marker.
+// notification. SessionID is always populated: every session/update
+// notification pertains to exactly one session, and this compatibility
+// layer must be able to correlate an update to the session it belongs to.
+// Content and MessageID are populated only for the three streamed-message
+// kinds; Usage, SessionInfo, and ConfigOptions are populated only for their
+// respective kind and losslessly carry that update's supported semantic
+// fields rather than reducing them to a bare marker.
 type TextUpdate struct {
+	SessionID     SessionID
 	Kind          TextUpdateKind
 	Content       *TextContent
 	MessageID     string
@@ -392,40 +395,49 @@ type TextUpdate struct {
 	ConfigOptions []acpsdk.SessionConfigOption
 }
 
-func chunkUpdate(kind TextUpdateKind, content acpsdk.ContentBlock, messageID *string) (TextUpdate, error) {
+func chunkUpdate(sessionID SessionID, kind TextUpdateKind, content acpsdk.ContentBlock, messageID *string) (TextUpdate, error) {
 	text, err := validateTextBlock(content)
 	if err != nil {
 		return TextUpdate{}, fmt.Errorf("acp: %s: %w", kind, err)
 	}
-	update := TextUpdate{Kind: kind, Content: &text}
+	update := TextUpdate{SessionID: sessionID, Kind: kind, Content: &text}
 	if messageID != nil {
 		update.MessageID = *messageID
 	}
 	return update, nil
 }
 
-// ValidateSessionUpdate validates a session/update notification's Update
-// payload against the L1 V0 compatibility boundary.
-func ValidateSessionUpdate(update acpsdk.SessionUpdate) (TextUpdate, error) {
+// ValidateSessionUpdate validates a session/update notification against the
+// L1 V0 compatibility boundary. The notification's sessionId is required:
+// the wire value is acpsdk.SessionNotification{SessionId, Update}, and a
+// notification with no session identity can never be correlated to the
+// session it pertains to.
+func ValidateSessionUpdate(notification acpsdk.SessionNotification) (TextUpdate, error) {
+	if notification.SessionId == "" {
+		return TextUpdate{}, errors.New("acp: sessionId is required")
+	}
+	sessionID := SessionID(notification.SessionId)
+	update := notification.Update
+
 	switch {
 	case update.UserMessageChunk != nil:
-		return chunkUpdate(TextUpdateUserMessageChunk, update.UserMessageChunk.Content, update.UserMessageChunk.MessageId)
+		return chunkUpdate(sessionID, TextUpdateUserMessageChunk, update.UserMessageChunk.Content, update.UserMessageChunk.MessageId)
 	case update.AgentMessageChunk != nil:
-		return chunkUpdate(TextUpdateAgentMessageChunk, update.AgentMessageChunk.Content, update.AgentMessageChunk.MessageId)
+		return chunkUpdate(sessionID, TextUpdateAgentMessageChunk, update.AgentMessageChunk.Content, update.AgentMessageChunk.MessageId)
 	case update.AgentThoughtChunk != nil:
-		return chunkUpdate(TextUpdateAgentThoughtChunk, update.AgentThoughtChunk.Content, update.AgentThoughtChunk.MessageId)
+		return chunkUpdate(sessionID, TextUpdateAgentThoughtChunk, update.AgentThoughtChunk.Content, update.AgentThoughtChunk.MessageId)
 	case update.UsageUpdate != nil:
-		return TextUpdate{Kind: TextUpdateUsage, Usage: &UsageInfo{
+		return TextUpdate{SessionID: sessionID, Kind: TextUpdateUsage, Usage: &UsageInfo{
 			Size: update.UsageUpdate.Size,
 			Used: update.UsageUpdate.Used,
 		}}, nil
 	case update.SessionInfoUpdate != nil:
-		return TextUpdate{Kind: TextUpdateSessionInfo, SessionInfo: &SessionInfo{
+		return TextUpdate{SessionID: sessionID, Kind: TextUpdateSessionInfo, SessionInfo: &SessionInfo{
 			Title:     update.SessionInfoUpdate.Title,
 			UpdatedAt: update.SessionInfoUpdate.UpdatedAt,
 		}}, nil
 	case update.ConfigOptionUpdate != nil:
-		return TextUpdate{Kind: TextUpdateConfigOption,
+		return TextUpdate{SessionID: sessionID, Kind: TextUpdateConfigOption,
 			ConfigOptions: append([]acpsdk.SessionConfigOption(nil), update.ConfigOptionUpdate.ConfigOptions...),
 		}, nil
 	case update.ToolCall != nil:

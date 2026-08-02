@@ -5,11 +5,15 @@
       "role": "unsupported_method",
       "direction": "inbound",
       "classification": "rejected",
-      "input": {"method": "fs/read_text_file"},
+      "input": {
+        "method": "fs/read_text_file"
+      },
       "expected": {
         "code": -32601,
         "message": "Method not found",
-        "data": {"method": "fs/read_text_file"}
+        "data": {
+          "method": "unrecognized_method"
+        }
       }
     },
     {
@@ -17,11 +21,15 @@
       "role": "unsupported_method",
       "direction": "inbound",
       "classification": "rejected",
-      "input": {"method": "terminal/create"},
+      "input": {
+        "method": "terminal/create"
+      },
       "expected": {
         "code": -32601,
         "message": "Method not found",
-        "data": {"method": "terminal/create"}
+        "data": {
+          "method": "unrecognized_method"
+        }
       }
     },
     {
@@ -29,11 +37,15 @@
       "role": "unsupported_method",
       "direction": "inbound",
       "classification": "rejected",
-      "input": {"method": "session/set_mode"},
+      "input": {
+        "method": "session/set_mode"
+      },
       "expected": {
         "code": -32601,
         "message": "Method not found",
-        "data": {"method": "session/set_mode"}
+        "data": {
+          "method": "unrecognized_method"
+        }
       }
     },
     {
@@ -41,11 +53,15 @@
       "role": "unsupported_method",
       "direction": "inbound",
       "classification": "rejected",
-      "input": {"method": "authenticate"},
+      "input": {
+        "method": "authenticate"
+      },
       "expected": {
         "code": -32601,
         "message": "Method not found",
-        "data": {"method": "authenticate"}
+        "data": {
+          "method": "unrecognized_method"
+        }
       }
     },
     {
@@ -53,11 +69,15 @@
       "role": "unsupported_method",
       "direction": "inbound",
       "classification": "rejected",
-      "input": {"method": "_fork"},
+      "input": {
+        "method": "_fork"
+      },
       "expected": {
         "code": -32601,
         "message": "Method not found",
-        "data": {"method": "_fork"}
+        "data": {
+          "method": "unrecognized_method"
+        }
       }
     }
   ]

@@ -44,7 +44,7 @@ func TestClassify(t *testing.T) {
 	}
 }
 
-func TestMethodNotFound_CarriesOnlyTheMethodName(t *testing.T) {
+func TestMethodNotFound_NeverCarriesTheClientSuppliedMethodName(t *testing.T) {
 	reqErr := MethodNotFound("session/experimental_fork")
 	if reqErr.Code != -32601 {
 		t.Errorf("MethodNotFound() code = %d, want -32601", reqErr.Code)
@@ -54,20 +54,26 @@ func TestMethodNotFound_CarriesOnlyTheMethodName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	if !strings.Contains(string(encoded), "session/experimental_fork") {
-		t.Error("MethodNotFound() encoded output does not contain the method name")
+	if strings.Contains(string(encoded), "session/experimental_fork") {
+		t.Error("MethodNotFound() echoed the client-supplied method name into its serialized output")
+	}
+	if !strings.Contains(string(encoded), redactedMethodPlaceholder) {
+		t.Errorf("MethodNotFound() encoded output = %s, want it to contain %q", encoded, redactedMethodPlaceholder)
 	}
 }
 
 // TestMethodNotFound_RedactsAdversarialMethodValues seeds a credential, a raw
 // provider command, an absolute filesystem path, a tool payload fragment,
-// and an internal topology sentinel as the client-controlled "method" value,
-// then proves none of those sentinels survive into the serialized
-// method-not-found error: MethodNotFound only ever echoes back a value that
-// already matches the safe method-name shape.
+// an internal topology sentinel, and values crafted to look like a
+// plausible JSON-RPC method name (so a shape-matching allowlist would admit
+// them) as the client-controlled "method" value, then proves none of those
+// sentinels survive into the serialized method-not-found error:
+// MethodNotFound never echoes back any client-supplied value.
 func TestMethodNotFound_RedactsAdversarialMethodValues(t *testing.T) {
 	sentinels := []string{
 		"sk-live-credential-ABC123XYZ",
+		"sk_live_credential_ABC123XYZ",
+		"internal_topology_node_7",
 		"/usr/local/bin/agent --token=sk-live-credential-ABC123XYZ",
 		"/home/operator/.ssh/id_rsa",
 		"tool_call raw_output: {\"secret\":\"do-not-leak\"}",
