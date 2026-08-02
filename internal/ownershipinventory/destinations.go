@@ -2,7 +2,9 @@ package ownershipinventory
 
 import "slices"
 
-// ProductOwners is the closed 13-owner destination vocabulary.
+// ProductOwners is the closed destination vocabulary. It held 13 owners
+// through the Packaged Service Structure FND-01 discovery; chat_sessions is
+// the first additive owner registered for a later slice (ACP L1 V0).
 var ProductOwners = []string{
 	"factory_definitions",
 	"factory_sessions",
@@ -17,6 +19,7 @@ var ProductOwners = []string{
 	"factory_visualization",
 	"operator_settings",
 	"system_initialization",
+	"chat_sessions",
 }
 
 // ApprovedFamilies are retain destinations that are not product services.

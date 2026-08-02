@@ -68,6 +68,8 @@ func MapPackage(packagePath string) (PackageRow, error) {
 		return row, nil
 	case strings.HasPrefix(packagePath, "pkg/services/system_initialization"):
 		return retainRow(packagePath, "system_initialization", DestinationKindOwner), nil
+	case strings.HasPrefix(packagePath, "pkg/services/chat_sessions"):
+		return retainRow(packagePath, "chat_sessions", DestinationKindOwner), nil
 	case strings.HasPrefix(packagePath, "pkg/initializer"):
 		return retainRow(packagePath, "initializer", DestinationKindFamily), nil
 	case packagePath == "pkg/root" || strings.HasPrefix(packagePath, "pkg/root/"):

@@ -29,6 +29,9 @@ type OwnerTopLevelSpec struct {
 // productOwnerTopLevelSpecs is the reviewer-verifiable inventory for every
 // committed product owner. Recordings delegates to the INV-REC top-level lists.
 var productOwnerTopLevelSpecs = map[string]OwnerTopLevelSpec{
+	"chat_sessions": {
+		Owner: "chat_sessions",
+	},
 	"automations": {
 		Owner:          "automations",
 		ExpectedRetain: []string{"internal", "transports", "wire"},

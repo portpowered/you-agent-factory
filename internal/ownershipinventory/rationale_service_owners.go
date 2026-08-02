@@ -274,6 +274,20 @@ func committedRecordingsRationales() []OwnerRationaleCard {
 		),
 	}
 }
+func committedChatSessionsRationales() []OwnerRationaleCard {
+	return []OwnerRationaleCard{
+		topLevel(
+			"chat_sessions",
+			"pkg/services/chat_sessions",
+			"L1 V0 Chat Sessions contract owner: detached session/target/turn/attachment/control-intent values, enum validation, and lifecycle transition tables; no implementation in this slice.",
+			"No state store in this slice; publishes value types and pure validation/transition functions only.",
+			"Values are stateless; the Service interface documents session/turn/control lifecycle for a later implementation to satisfy.",
+			"Future ACP transport and Chat Sessions implementation slices; no current consumer imports this package's Service interface yet.",
+			"None in this slice; no persistence or mutation is performed.",
+			"Typed validation/transition/not-found/busy/conflict/unsupported errors are contract-only; no runtime recovery behavior exists in this slice.",
+		),
+	}
+}
 func committedSystemInitializationRationales() []OwnerRationaleCard {
 	return []OwnerRationaleCard{
 		topLevel(

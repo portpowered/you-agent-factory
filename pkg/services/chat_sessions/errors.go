@@ -31,6 +31,16 @@ var (
 	// members, but the L1 V0 transition table does not permit moving between
 	// them.
 	ErrInvalidTransition = errors.New("chat sessions: illegal state transition")
+	// ErrNotFound reports that a Service operation referenced a session or a
+	// subordinate entity (turn, attachment, control intent) that does not
+	// exist.
+	ErrNotFound = errors.New("chat sessions: not found")
+	// ErrBusy reports that a Service operation was rejected because the
+	// session already has a non-terminal active turn.
+	ErrBusy = errors.New("chat sessions: active turn busy")
+	// ErrStaleVersion reports that a Service operation's expected session
+	// version no longer matches the session's current version.
+	ErrStaleVersion = errors.New("chat sessions: stale expected version")
 )
 
 // ValidationError reports one Chat Sessions value-validation failure. Value
@@ -86,4 +96,58 @@ func (e *TransitionError) Unwrap() error {
 
 func newTransitionError(value, from, to string) *TransitionError {
 	return &TransitionError{Value: value, From: from, To: to, Err: ErrInvalidTransition}
+}
+
+// NotFoundError reports that a Service operation referenced a session or
+// subordinate entity that does not exist. Value names the entity kind (for
+// example "Session" or "Turn") and ID names the identity that was not found.
+type NotFoundError struct {
+	Value string
+	ID    string
+}
+
+func (e *NotFoundError) Error() string {
+	return fmt.Sprintf("chat sessions: %s %q: %v", e.Value, e.ID, ErrNotFound)
+}
+
+// Unwrap exposes ErrNotFound so errors.Is/errors.As can classify the
+// failure.
+func (e *NotFoundError) Unwrap() error {
+	return ErrNotFound
+}
+
+// BusyError reports that a Service operation was rejected because the named
+// session already has a non-terminal active turn.
+type BusyError struct {
+	Value string
+	ID    string
+}
+
+func (e *BusyError) Error() string {
+	return fmt.Sprintf("chat sessions: %s %q: %v", e.Value, e.ID, ErrBusy)
+}
+
+// Unwrap exposes ErrBusy so errors.Is/errors.As can classify the failure.
+func (e *BusyError) Unwrap() error {
+	return ErrBusy
+}
+
+// ConflictError reports that a Service operation's Expected session version
+// no longer matches Actual, the session's current version.
+type ConflictError struct {
+	Value    string
+	ID       string
+	Expected uint64
+	Actual   uint64
+}
+
+func (e *ConflictError) Error() string {
+	return fmt.Sprintf("chat sessions: %s %q: expected version %d, current version %d: %v",
+		e.Value, e.ID, e.Expected, e.Actual, ErrStaleVersion)
+}
+
+// Unwrap exposes ErrStaleVersion so errors.Is/errors.As can classify the
+// failure.
+func (e *ConflictError) Unwrap() error {
+	return ErrStaleVersion
 }

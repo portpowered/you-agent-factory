@@ -15,7 +15,8 @@
       "recordings",
       "factory_visualization",
       "operator_settings",
-      "system_initialization"
+      "system_initialization",
+      "chat_sessions"
     ],
     "nonServiceFamilies": [
       "initializer",
@@ -83,6 +84,7 @@
     "pkg/services/automations/internal/services/script_pollers/wire",
     "pkg/services/automations/transports/http",
     "pkg/services/automations/wire",
+    "pkg/services/chat_sessions",
     "pkg/services/edges",
     "pkg/services/factory_definitions",
     "pkg/services/factory_definitions/definition",
@@ -780,6 +782,11 @@
       "packagePath": "pkg/services/automations/wire",
       "disposition": "retain",
       "destination": "automations"
+    },
+    {
+      "packagePath": "pkg/services/chat_sessions",
+      "disposition": "retain",
+      "destination": "chat_sessions"
     },
     {
       "packagePath": "pkg/services/edges",
