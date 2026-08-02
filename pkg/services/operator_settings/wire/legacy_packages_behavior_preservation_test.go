@@ -8,10 +8,11 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
 
 const identityInventoryFixturesRelativeDir = "pkg/services/operator_settings/internal/services/document/identityinventory/testdata/fixtures"
@@ -30,6 +31,7 @@ func TestWireLegacyPackagesFoldPreservesExistingBackendScopeIdentity(t *testing.
 		testConfigDocumentService(),
 		internaltestproviders.StandardCatalog(),
 		testIDGenerator(),
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
@@ -106,6 +108,7 @@ func TestWireLegacyPackagesFoldPreservesRootBehaviorWithRelocatedTestHelpers(t *
 		preservationProviderCatalog,
 		providersRoot,
 		testIDGenerator(),
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)

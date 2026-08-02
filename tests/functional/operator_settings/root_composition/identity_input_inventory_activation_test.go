@@ -10,12 +10,13 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -93,6 +94,7 @@ func TestOperatorInputInventoryActivatesThroughRootBuildProcessAfterLifecycle(t 
 		globalconfigmapping.Decode,
 		providersRoot,
 		func() string { return "00000000-0000-4000-8000-000000000001" },
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromHomePorts() error = %v", err)

@@ -14,6 +14,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	operatorservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 )
 
@@ -297,6 +298,21 @@ func TestRootUpdateACPAgentProfile_RejectsShortWriteWithoutReplacement(t *testin
 	}
 	if _, statErr := os.Stat(path); !errors.Is(statErr, fs.ErrNotExist) {
 		t.Fatalf("config path stat error = %v, want destination to remain absent", statErr)
+	}
+}
+
+func TestRootUpdateACPAgentProfile_RejectsNilServiceWithoutPanicking(t *testing.T) {
+	t.Parallel()
+
+	var nilService *operatorservice.Service
+	profile := operatorsettings.ACPAgentProfile{
+		DefaultTarget:  "factory:@you/reviewer",
+		AllowedTargets: []string{"factory:@you/reviewer"},
+	}
+
+	_, err := nilService.UpdateACPAgentProfile(context.Background(), filepath.Join(t.TempDir(), "config.json"), profile)
+	if err == nil || !strings.Contains(err.Error(), "operator settings document service is required") {
+		t.Fatalf("UpdateACPAgentProfile() on a nil service = %v, want the actionable service-required error", err)
 	}
 }
 
