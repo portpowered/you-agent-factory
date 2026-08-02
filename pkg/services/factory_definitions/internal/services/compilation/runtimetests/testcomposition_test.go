@@ -47,7 +47,7 @@ var factorydefinitioncomposition = func() factorydefinitiontestcomposition.Compo
 	return composition
 }()
 
-func mustRequiredToolChecker() factorydefinitions.RequiredToolChecker {
+func mustRequiredToolChecker() compilationloading.RequiredToolChecker {
 	checker, err := compilationloading.NewPathRequiredToolChecker(
 		exec.LookPath,
 		func(path string, args ...string) ([]byte, error) {

@@ -8,6 +8,7 @@ package canonical
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	compilationcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/contracts"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
@@ -18,6 +19,6 @@ func MarshalFactoryConfig(cfg *factorydefinitions.FactoryConfig) ([]byte, error)
 }
 
 // EncodeFactoryPort is the contracts encoder port bound by compilation wire.
-func EncodeFactoryPort() factorydefinitions.FactoryConfigJSONEncoder {
-	return factorydefinitions.FactoryConfigJSONEncoder(MarshalFactoryConfig)
+func EncodeFactoryPort() compilationcontracts.FactoryConfigEncoder {
+	return compilationcontracts.FactoryConfigEncoder(MarshalFactoryConfig)
 }

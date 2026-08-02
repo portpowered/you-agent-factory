@@ -72,10 +72,10 @@ func TestPathRequiredToolCheckerResolvesToolAndRunsVersionProbe(t *testing.T) {
 func TestNewPathRequiredToolCheckerRejectsMissingEffects(t *testing.T) {
 	t.Parallel()
 
-	probe := factorydefinitions.RequiredToolVersionProbe(
+	probe := RequiredToolVersionProbe(
 		func(string, ...string) ([]byte, error) { return nil, nil },
 	)
-	lookup := factorydefinitions.RequiredToolPathLookup(
+	lookup := RequiredToolPathLookup(
 		func(string) (string, error) { return "", nil },
 	)
 	if _, err := NewPathRequiredToolChecker(nil, probe); err == nil {
