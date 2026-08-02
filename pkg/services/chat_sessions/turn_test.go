@@ -144,9 +144,10 @@ func TestCheckTurnAdmission(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		prior    *Turn
-		wantBusy bool
+		name        string
+		prior       *Turn
+		wantBusy    bool
+		wantInvalid bool
 	}{
 		{name: "absent prior turn is not busy", prior: nil, wantBusy: false},
 		{name: "admitted prior turn is busy", prior: &Turn{ID: "turn-1", State: TurnStateAdmitted}, wantBusy: true},
@@ -154,6 +155,8 @@ func TestCheckTurnAdmission(t *testing.T) {
 		{name: "completed prior turn is not busy", prior: &Turn{ID: "turn-1", State: TurnStateCompleted}, wantBusy: false},
 		{name: "failed prior turn is not busy", prior: &Turn{ID: "turn-1", State: TurnStateFailed}, wantBusy: false},
 		{name: "canceled prior turn is not busy", prior: &Turn{ID: "turn-1", State: TurnStateCanceled}, wantBusy: false},
+		{name: "zero-value prior state is invalid, not busy", prior: &Turn{ID: "turn-1", State: TurnState("")}, wantInvalid: true},
+		{name: "unknown prior state is invalid, not busy", prior: &Turn{ID: "turn-1", State: TurnState("BOGUS")}, wantInvalid: true},
 	}
 
 	for _, test := range tests {
@@ -161,6 +164,22 @@ func TestCheckTurnAdmission(t *testing.T) {
 			t.Parallel()
 
 			err := CheckTurnAdmission("session-1", test.prior)
+
+			if test.wantInvalid {
+				if err == nil {
+					t.Fatalf("CheckTurnAdmission() = nil, want *InvalidTurnStateError")
+				}
+				var invalid *InvalidTurnStateError
+				if !errors.As(err, &invalid) {
+					t.Fatalf("CheckTurnAdmission() error = %v (%T), want *InvalidTurnStateError", err, err)
+				}
+				var busy *TurnBusyError
+				if errors.As(err, &busy) {
+					t.Fatalf("CheckTurnAdmission() returned a busy error for an invalid prior state: %v", err)
+				}
+				return
+			}
+
 			if !test.wantBusy {
 				if err != nil {
 					t.Fatalf("CheckTurnAdmission() = %v, want nil", err)

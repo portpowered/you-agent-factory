@@ -74,13 +74,19 @@ type Turn struct {
 
 // CheckTurnAdmission reports whether a new turn may be admitted into the
 // session identified by sessionID, given the session's prior active turn if
-// any. A nil priorActiveTurn, or one whose State is terminal, does not
-// produce the busy outcome. A priorActiveTurn in TurnStateAdmitted or
+// any. A nil priorActiveTurn does not produce the busy outcome. A
+// priorActiveTurn whose State is not one of the declared TurnState values
+// returns that state's typed invalid-value error rather than being treated
+// as busy. Among valid states, a terminal priorActiveTurn does not produce
+// the busy outcome; a priorActiveTurn in TurnStateAdmitted or
 // TurnStateRunning returns a typed TurnBusyError carrying only the session ID
 // and the active turn's ID and state.
 func CheckTurnAdmission(sessionID string, priorActiveTurn *Turn) error {
 	if priorActiveTurn == nil {
 		return nil
+	}
+	if err := priorActiveTurn.State.Validate(); err != nil {
+		return err
 	}
 	if priorActiveTurn.State.terminal() {
 		return nil

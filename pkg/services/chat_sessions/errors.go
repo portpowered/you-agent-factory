@@ -19,6 +19,9 @@ const (
 	// connection-qualified field and a transport-minted opaque id supplied
 	// together.
 	RequestIdentityInvalidMixedIdentityModes RequestIdentityInvalidReason = "MIXED_IDENTITY_MODES"
+	// RequestIdentityInvalidJSONRPCIDKind reports a JSONRPCIDKind outside the
+	// declared JSONRPCIDKindString/JSONRPCIDKindNumber value set.
+	RequestIdentityInvalidJSONRPCIDKind RequestIdentityInvalidReason = "INVALID_JSONRPC_ID_KIND"
 )
 
 // InvalidRequestIdentityError reports a RequestIdentity that matches neither
