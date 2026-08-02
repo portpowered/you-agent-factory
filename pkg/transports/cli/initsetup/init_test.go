@@ -207,6 +207,7 @@ func testConfigService() operatorsettings.Service {
 		globalconfigmapping.Encode,
 		testProviderCatalog,
 		providersRoot,
+		func() string { return "00000000-0000-4000-8000-000000000001" },
 	)
 	if err != nil {
 		panic(err)

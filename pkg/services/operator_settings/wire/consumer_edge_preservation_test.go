@@ -115,6 +115,7 @@ func newPreservationWireService(t *testing.T) operatorsettings.Service {
 		globalconfigmapping.Encode,
 		preservationProviderCatalog,
 		providersRoot,
+		testIDGenerator(),
 	)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)

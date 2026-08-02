@@ -4,15 +4,23 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
+
+func testIDGenerator() operatorsettings.IDGenerator {
+	return func() string { return "00000000-0000-4000-8000-000000000001" }
+}
 
 func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	t.Parallel()
@@ -26,6 +34,7 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 		stubConfigEncoder,
 		stubProviderCatalog,
 		providersRoot,
+		testIDGenerator(),
 	)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
@@ -52,6 +61,7 @@ func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
 		stubConfigEncoder,
 		stubProviderCatalog,
 		providersRoot,
+		testIDGenerator(),
 	)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
@@ -103,6 +113,39 @@ func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
 	}
 }
 
+func TestNewServiceUsesInjectedIDGeneratorForBackendScope(t *testing.T) {
+	t.Parallel()
+
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(configPath, []byte(`{}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(config) = %v", err)
+	}
+
+	service, err := settingswire.NewService(
+		platformfilesystem.Local{},
+		func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		globalconfigmapping.Decode,
+		globalconfigmapping.Encode,
+		stubProviderCatalog,
+		internaltestproviders.StandardCatalog(),
+		testIDGenerator(),
+	)
+	if err != nil {
+		t.Fatalf("NewService() = %v", err)
+	}
+
+	resolved, err := service.EnsureLocalBackendScope(configPath)
+	if err != nil {
+		t.Fatalf("EnsureLocalBackendScope() = %v", err)
+	}
+	want := operatorsettings.LocalBackendScopePrefix + "00000000-0000-4000-8000-000000000001"
+	if resolved.BackendScopeID != want || resolved.Outcome != operatorsettings.BackendScopeOutcomeGenerated {
+		t.Fatalf("EnsureLocalBackendScope() = %#v, want generated scope %q", resolved, want)
+	}
+}
+
 func TestNewServiceConstructsInertRoot(t *testing.T) {
 	t.Parallel()
 
@@ -124,6 +167,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		encoder.fn,
 		providersCatalog.fn,
 		providersRoot,
+		testIDGenerator(),
 	)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
@@ -191,6 +235,7 @@ func TestNewServiceRejectsMissingFileSystem(t *testing.T) {
 			stubConfigEncoder,
 			stubProviderCatalog,
 			internaltestproviders.StandardCatalog(),
+			testIDGenerator(),
 		)
 	}, "construct Operator Settings: filesystem is required")
 }
@@ -206,6 +251,7 @@ func TestNewServiceRejectsMissingTemporaryFileCreator(t *testing.T) {
 			stubConfigEncoder,
 			stubProviderCatalog,
 			internaltestproviders.StandardCatalog(),
+			testIDGenerator(),
 		)
 	}, "construct Operator Settings: create temporary file is required")
 }
@@ -221,6 +267,7 @@ func TestNewServiceRejectsMissingConfigDecoder(t *testing.T) {
 			stubConfigEncoder,
 			stubProviderCatalog,
 			internaltestproviders.StandardCatalog(),
+			testIDGenerator(),
 		)
 	}, "construct Operator Settings: config decoder is required")
 }
@@ -236,6 +283,7 @@ func TestNewServiceRejectsMissingConfigEncoder(t *testing.T) {
 			nil,
 			stubProviderCatalog,
 			internaltestproviders.StandardCatalog(),
+			testIDGenerator(),
 		)
 	}, "construct Operator Settings: config encoder is required")
 }
@@ -251,6 +299,7 @@ func TestNewServiceRejectsMissingProviderCatalog(t *testing.T) {
 			stubConfigEncoder,
 			nil,
 			internaltestproviders.StandardCatalog(),
+			testIDGenerator(),
 		)
 	}, "construct Operator Settings: provider catalog is required")
 }
@@ -266,8 +315,25 @@ func TestNewServiceRejectsMissingProvidersRoot(t *testing.T) {
 			stubConfigEncoder,
 			stubProviderCatalog,
 			nil,
+			testIDGenerator(),
 		)
 	}, "construct Operator Settings: providers root is required")
+}
+
+func TestNewServiceRejectsMissingIDGenerator(t *testing.T) {
+	t.Parallel()
+
+	assertNewServiceRejectsMissingPort(t, func() (operatorsettings.Service, error) {
+		return settingswire.NewService(
+			&stubFileSystem{},
+			stubCreateTemporaryFile,
+			stubConfigDecoder,
+			stubConfigEncoder,
+			stubProviderCatalog,
+			internaltestproviders.StandardCatalog(),
+			nil,
+		)
+	}, "construct Operator Settings: ID generator is required")
 }
 
 func assertNewServiceRejectsMissingPort(
