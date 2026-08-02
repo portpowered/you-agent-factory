@@ -215,6 +215,10 @@
       "minimum": 84.61
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions",
+      "minimum": 87.82
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/edges",
       "minimum": 71.65
     },
