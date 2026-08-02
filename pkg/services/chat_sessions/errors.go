@@ -48,6 +48,13 @@ var (
 	// ErrStaleVersion reports that a Service operation's expected session
 	// version no longer matches the session's current version.
 	ErrStaleVersion = errors.New("chat sessions: stale expected version")
+	// ErrTargetEpisodeNotClosed reports that OpenNextTargetEpisode was
+	// invoked against a prior TargetEpisode that has not yet reached its
+	// CLOSED terminal state. It is distinct from ErrInvalidTransition: the
+	// prior TargetEpisodeState itself is a legal, validated value, but the
+	// immutable-episode rule requires it to already be closed before the
+	// next episode can be opened.
+	ErrTargetEpisodeNotClosed = errors.New("chat sessions: prior target episode is not closed")
 )
 
 // ValidationError reports one Chat Sessions value-validation failure. Value
@@ -124,14 +131,18 @@ func (e *NotFoundError) Unwrap() error {
 }
 
 // BusyError reports that a Service operation was rejected because the named
-// session already has a non-terminal active turn.
+// session already has a non-terminal active turn. ActiveTurnID and
+// ActiveTurnState carry the safe identity and state of that blocking turn so
+// a caller can distinguish which turn is busy without a follow-up read.
 type BusyError struct {
-	Value string
-	ID    string
+	Value           string
+	ID              string
+	ActiveTurnID    string
+	ActiveTurnState TurnState
 }
 
 func (e *BusyError) Error() string {
-	return fmt.Sprintf("chat sessions: %s %q: %v", e.Value, e.ID, ErrBusy)
+	return fmt.Sprintf("chat sessions: %s %q: active turn %q (%s): %v", e.Value, e.ID, e.ActiveTurnID, e.ActiveTurnState, ErrBusy)
 }
 
 // Unwrap exposes ErrBusy so errors.Is/errors.As can classify the failure.
@@ -157,4 +168,23 @@ func (e *ConflictError) Error() string {
 // failure.
 func (e *ConflictError) Unwrap() error {
 	return ErrStaleVersion
+}
+
+// TargetEpisodeNotClosedError reports that OpenNextTargetEpisode was invoked
+// against a prior TargetEpisode that has not yet reached its CLOSED terminal
+// state. Number and State name the offending prior episode's own identity
+// and state, not the caller-supplied target.
+type TargetEpisodeNotClosedError struct {
+	Number uint64
+	State  TargetEpisodeState
+}
+
+func (e *TargetEpisodeNotClosedError) Error() string {
+	return fmt.Sprintf("chat sessions: TargetEpisode %d: %v: state %s", e.Number, ErrTargetEpisodeNotClosed, e.State)
+}
+
+// Unwrap exposes ErrTargetEpisodeNotClosed so errors.Is/errors.As can
+// classify the failure.
+func (e *TargetEpisodeNotClosedError) Unwrap() error {
+	return ErrTargetEpisodeNotClosed
 }
