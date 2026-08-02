@@ -46,12 +46,18 @@ func (f *fakeService) Read(_ context.Context, req events.ReadRequest) (events.Re
 		return events.ReadResult{}, err
 	}
 	if len(f.records) == 0 {
-		return events.ReadResult{Outcome: events.ReadOutcomeAtHead, Next: req.From}, nil
+		return events.ReadResult{
+			Outcome:  events.ReadOutcomeAtHead,
+			Next:     req.From,
+			Retained: events.RetainedRange{Topic: req.Topic},
+		}, nil
 	}
+	head := f.records[len(f.records)-1].ID.Position
 	return events.ReadResult{
-		Records: f.records,
-		Next:    events.Cursor{Topic: req.Topic, Position: f.records[len(f.records)-1].ID.Position},
-		Outcome: events.ReadOutcomeProgress,
+		Records:  f.records,
+		Next:     events.Cursor{Topic: req.Topic, Position: head},
+		Retained: events.RetainedRange{Topic: req.Topic, Earliest: f.records[0].ID.Position, Head: head},
+		Outcome:  events.ReadOutcomeProgress,
 	}, nil
 }
 
@@ -105,6 +111,9 @@ func TestExternalConsumerImplementsService(t *testing.T) {
 	}
 	if len(readResult.Records) != 1 {
 		t.Fatalf("Read() returned %d records, want 1", len(readResult.Records))
+	}
+	if err := readResult.Validate(); err != nil {
+		t.Fatalf("Read().Validate() error = %v, want a fully consistent public ReadResult", err)
 	}
 
 	subscription, err := svc.Subscribe(ctx, events.SubscribeRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 10})

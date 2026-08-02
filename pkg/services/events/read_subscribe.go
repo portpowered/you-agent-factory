@@ -89,16 +89,59 @@ type ReadResult struct {
 	Gap      *GapFacts
 }
 
-// Validate reports whether res is internally consistent: Records, Gap, and
-// Outcome agree with each other so a caller cannot infer missing history
-// from an empty success.
+// Validate reports whether res is internally consistent: Records, Next,
+// Retained, Gap, and Outcome agree with each other so a caller cannot infer
+// missing history from an empty success, accept a malformed or
+// mixed-topic record, or resume from a Next cursor that skips or replays
+// history. ReadOutcomeProgress and ReadOutcomeAtHead additionally require a
+// well-formed Next cursor and Retained range naming the same topic:
+// Progress requires each Record to validate, to be contiguous in Position
+// (each successive record's Position is exactly one more than the last, so
+// no aggregate position is silently skipped), to stay within Retained, and
+// Next to name exactly the last delivered Record's position; AtHead
+// requires Next to name exactly the Retained head, since being at head
+// means there is nothing to advance past.
 func (res ReadResult) Validate() error {
 	switch res.Outcome {
 	case ReadOutcomeProgress:
 		if len(res.Records) == 0 || res.Gap != nil {
 			return ErrInconsistentReadOutcome
 		}
-	case ReadOutcomeAtHead, ReadOutcomeInvalidCursor:
+		if err := res.validateNextAndRetained(); err != nil {
+			return err
+		}
+		var previous AggregateSequence
+		for i, rec := range res.Records {
+			if err := rec.Validate(); err != nil {
+				return err
+			}
+			if rec.ID.Topic != res.Next.Topic {
+				return ErrCursorTopicMismatch
+			}
+			if i > 0 && (rec.ID.Position <= previous || rec.ID.Position-previous != 1) {
+				return ErrInconsistentReadOutcome
+			}
+			previous = rec.ID.Position
+		}
+		first := res.Records[0]
+		last := res.Records[len(res.Records)-1]
+		if first.ID.Position < res.Retained.Earliest || last.ID.Position > res.Retained.Head {
+			return ErrInconsistentReadOutcome
+		}
+		if res.Next.Position != last.ID.Position {
+			return ErrInconsistentReadOutcome
+		}
+	case ReadOutcomeAtHead:
+		if len(res.Records) != 0 || res.Gap != nil {
+			return ErrInconsistentReadOutcome
+		}
+		if err := res.validateNextAndRetained(); err != nil {
+			return err
+		}
+		if res.Next.Position != res.Retained.Head {
+			return ErrInconsistentReadOutcome
+		}
+	case ReadOutcomeInvalidCursor:
 		if len(res.Records) != 0 || res.Gap != nil {
 			return ErrInconsistentReadOutcome
 		}
@@ -111,6 +154,22 @@ func (res ReadResult) Validate() error {
 		}
 	default:
 		return ErrInconsistentReadOutcome
+	}
+	return nil
+}
+
+// validateNextAndRetained validates Next and Retained individually and
+// checks that they name the same topic. Callers use this for the outcomes
+// (Progress, AtHead) that report real resume/retention state.
+func (res ReadResult) validateNextAndRetained() error {
+	if err := res.Next.Validate(); err != nil {
+		return err
+	}
+	if err := res.Retained.Validate(); err != nil {
+		return err
+	}
+	if res.Retained.Topic != res.Next.Topic {
+		return ErrCursorTopicMismatch
 	}
 	return nil
 }
@@ -173,15 +232,19 @@ type Delivery struct {
 
 // Validate reports whether d is internally consistent with its Kind: a
 // caller can never observe an impossible combination such as DeliveryGap
-// with a nil or malformed Gap, DeliveryRecord with an unset Record/Cursor or
-// a Cursor naming a different topic than the delivered Record, or a
-// terminal/gap Delivery carrying a leftover Record or Cursor.
+// with a nil or malformed Gap, DeliveryRecord with an unset Record/Cursor, a
+// Cursor naming a different topic than the delivered Record, a Cursor whose
+// Position does not name that exact Record (which would let a resumed read
+// skip or replay it), or a terminal/gap Delivery carrying a leftover Record
+// or Cursor. A Record with only some fields set (for example a stray
+// Payload on a gap or terminal delivery) is rejected the same as a
+// fully-set one: Record.IsZero checks every field, not just ID.
 func (d Delivery) Validate() error {
-	recordSet := d.Record.ID != (RecordID{})
+	recordZero := d.Record.IsZero()
 	cursorSet := d.Cursor != (Cursor{})
 	switch d.Kind {
 	case DeliveryRecord:
-		if !recordSet || !cursorSet || d.Gap != nil {
+		if recordZero || !cursorSet || d.Gap != nil {
 			return ErrInconsistentDelivery
 		}
 		if err := d.Record.Validate(); err != nil {
@@ -193,15 +256,18 @@ func (d Delivery) Validate() error {
 		if !d.Cursor.BelongsTo(d.Record.ID.Topic) {
 			return ErrCursorTopicMismatch
 		}
+		if d.Cursor.Position != d.Record.ID.Position {
+			return ErrInconsistentDelivery
+		}
 	case DeliveryGap:
-		if recordSet || cursorSet || d.Gap == nil {
+		if !recordZero || cursorSet || d.Gap == nil {
 			return ErrInconsistentDelivery
 		}
 		if err := d.Gap.Validate(); err != nil {
 			return err
 		}
 	case DeliveryClosed, DeliveryCanceled, DeliveryBackpressure:
-		if recordSet || cursorSet || d.Gap != nil {
+		if !recordZero || cursorSet || d.Gap != nil {
 			return ErrInconsistentDelivery
 		}
 	default:

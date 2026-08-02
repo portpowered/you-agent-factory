@@ -180,22 +180,22 @@
       "owner": "chat_sessions",
       "kind": "top_level",
       "targetPath": "pkg/services/chat_sessions",
-      "authority": "L1 V0 Chat Sessions contract owner: detached session/target/turn/attachment/control-intent values, enum validation, and lifecycle transition tables; no implementation in this slice.",
-      "stateStore": "No state store in this slice; publishes value types and pure validation/transition functions only.",
-      "lifecycle": "Values are stateless; the Service interface documents session/turn/control lifecycle for a later implementation to satisfy.",
-      "consumers": "Future ACP transport and Chat Sessions implementation slices; no current consumer imports this package's Service interface yet.",
-      "transactionBoundary": "None in this slice; no persistence or mutation is performed.",
-      "failureRecovery": "Typed validation/transition/not-found/busy/conflict/unsupported errors are contract-only; no runtime recovery behavior exists in this slice."
+      "authority": "L1 V0 Chat Sessions contract owner: detached session/target/turn/attachment/control-intent values, enum validation, and lifecycle transition tables; no implementation of the public Service interface in this slice. Retains a private internal/factorysessionsshim adapter over the published factory_sessions root for the narrow start/invoke/cancel/close Factory-target dependency, registered for deletion at L3 Factory Sessions sealing.",
+      "stateStore": "No state store for the public contract; publishes value types and pure validation/transition functions only. The internal shim holds no independent state store either — session state lives for the process duration in the factory_sessions target it adapts.",
+      "lifecycle": "Public values are stateless; the Service interface documents session/turn/control lifecycle for a later implementation to satisfy. The internal shim is session-scoped and discarded on process exit, same as the factory_sessions target it adapts.",
+      "consumers": "Future ACP transport and Chat Sessions implementation slices; no current consumer imports this package's public Service interface yet. The internal shim is consumed only within this package.",
+      "transactionBoundary": "None in this slice for the public contract; no persistence or mutation is performed. The internal shim delegates 1:1 to factory_sessions.Service and owns no separate transaction boundary.",
+      "failureRecovery": "Typed validation/transition/not-found/busy/conflict/unsupported errors are contract-only; no runtime recovery behavior exists in this slice. The internal shim's failures normalize at the factory_sessions public root it adapts."
     },
     {
       "serviceId": "events",
       "owner": "events",
       "kind": "top_level",
       "targetPath": "pkg/services/events",
-      "authority": "L1 V0 Events contract owner: detached identity, position, envelope, and outcome contracts for a process-local, in-memory event stream; no implementation or wire construction in this slice.",
+      "authority": "L1 V0 Events contract owner: detached identity, position, envelope, and outcome contracts for a process-local, in-memory event stream; ordering, cursors, retention, gaps, and backpressure (D2 in docs/internal/projects/acp-program/README.md).",
       "stateStore": "No durable journal in this slice; Recordings remains the canonical durable Factory Event ledger.",
       "lifecycle": "Append, source attachment, retained reads, and subscriptions are documented contract operations for a later implementation to satisfy.",
-      "consumers": "Future ACP Core and Worker Events consumers; no current consumer imports this package yet.",
+      "consumers": "Future ACP Core and Worker Events consumers via the events.Service cross-lane contract; no current consumer imports this package yet.",
       "transactionBoundary": "None in this slice; no persistence or mutation is performed.",
       "failureRecovery": "Typed contract errors only; no runtime recovery behavior exists in this slice."
     },
@@ -5324,6 +5324,12 @@
       "disposition": "retain",
       "destination": "workers",
       "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/transports/acp",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
     },
     {
       "packagePath": "pkg/transports/cli",

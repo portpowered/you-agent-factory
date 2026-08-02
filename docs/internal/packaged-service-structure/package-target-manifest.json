@@ -501,6 +501,7 @@
     "pkg/services/workers/internal/services/workstations/worktree",
     "pkg/services/workers/internal/testhelpers",
     "pkg/services/workers/wire",
+    "pkg/transports/acp",
     "pkg/transports/cli",
     "pkg/transports/cli/acp",
     "pkg/transports/cli/baseline",
@@ -2865,6 +2866,11 @@
       "packagePath": "pkg/services/workers/wire",
       "disposition": "retain",
       "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/transports/acp",
+      "disposition": "retain",
+      "destination": "transports"
     },
     {
       "packagePath": "pkg/transports/cli",

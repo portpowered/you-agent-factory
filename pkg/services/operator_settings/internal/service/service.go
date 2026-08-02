@@ -198,7 +198,7 @@ func (s *Service) ConfigureACPIntegrationAdd(
 	path string,
 	integration operatorsettings.ACPIntegration,
 ) (operatorsettings.Document, error) {
-	return s.configureACPIntegrations(ctx, path, func(document operatorsettings.Document) (operatorsettings.Document, error) {
+	return s.mutateDocument(ctx, path, func(document operatorsettings.Document) (operatorsettings.Document, error) {
 		config := documentConfig(document)
 		config.Workers.ACP.Integrations = append(config.Workers.ACP.Integrations, integration)
 		return normalizedDocument(config)
@@ -210,7 +210,7 @@ func (s *Service) ConfigureACPIntegrationDelete(
 	path string,
 	name string,
 ) (operatorsettings.Document, error) {
-	return s.configureACPIntegrations(ctx, path, func(document operatorsettings.Document) (operatorsettings.Document, error) {
+	return s.mutateDocument(ctx, path, func(document operatorsettings.Document) (operatorsettings.Document, error) {
 		config := documentConfig(document)
 		name = strings.TrimSpace(name)
 		filtered := make([]operatorsettings.ACPIntegration, 0, len(config.Workers.ACP.Integrations))
@@ -235,7 +235,7 @@ func (s *Service) EnsurePackagedACPIntegrations(
 	path string,
 	defaults []operatorsettings.ACPIntegration,
 ) (operatorsettings.Document, error) {
-	return s.configureACPIntegrations(ctx, path, func(document operatorsettings.Document) (operatorsettings.Document, error) {
+	return s.mutateDocument(ctx, path, func(document operatorsettings.Document) (operatorsettings.Document, error) {
 		config := documentConfig(document)
 		if config.Workers.ACP.Integrations != nil {
 			return document, nil
@@ -245,7 +245,54 @@ func (s *Service) EnsurePackagedACPIntegrations(
 	})
 }
 
-func (s *Service) configureACPIntegrations(
+// ResolveACPAgentProfile resolves the effective ACP Agent profile for the
+// operator document at path through the existing injected document
+// capability, without mutating or persisting the document. An absent profile
+// resolves to the safe Factory Builder default; a malformed stored profile
+// fails explicitly instead of falling back silently.
+func (s *Service) ResolveACPAgentProfile(path string) (operatorsettings.ACPAgentProfile, error) {
+	if s == nil || s.document == nil {
+		return operatorsettings.ACPAgentProfile{}, fmt.Errorf("operator settings document service is required")
+	}
+	loaded, err := s.document.LoadDocument(operatorsettings.LoadDocumentRequest{Path: path})
+	if err != nil {
+		return operatorsettings.ACPAgentProfile{}, err
+	}
+	profile := loaded.Document.Workers.ACP.AgentProfile
+	if profile == nil {
+		return operatorsettings.DefaultACPAgentProfile(), nil
+	}
+	return profile.Clone().Normalize()
+}
+
+// UpdateACPAgentProfile validates the complete candidate profile before any
+// persistence side effect, then atomically stores the normalized profile
+// while preserving every other operator setting.
+func (s *Service) UpdateACPAgentProfile(
+	ctx context.Context,
+	path string,
+	profile operatorsettings.ACPAgentProfile,
+) (operatorsettings.ACPAgentProfile, error) {
+	normalized, err := profile.Normalize()
+	if err != nil {
+		return operatorsettings.ACPAgentProfile{}, err
+	}
+	updated, err := s.mutateDocument(ctx, path, func(document operatorsettings.Document) (operatorsettings.Document, error) {
+		config := documentConfig(document)
+		candidate := normalized
+		config.Workers.ACP.AgentProfile = &candidate
+		return normalizedDocument(config)
+	})
+	if err != nil {
+		return operatorsettings.ACPAgentProfile{}, err
+	}
+	if updated.Workers.ACP.AgentProfile == nil {
+		return operatorsettings.ACPAgentProfile{}, fmt.Errorf("operator settings: update ACP Agent profile: persisted document is missing the profile")
+	}
+	return updated.Workers.ACP.AgentProfile.Clone(), nil
+}
+
+func (s *Service) mutateDocument(
 	ctx context.Context,
 	path string,
 	update func(operatorsettings.Document) (operatorsettings.Document, error),
@@ -288,9 +335,20 @@ func documentConfig(document operatorsettings.Document) operatorsettings.Config 
 		},
 		Workers: operatorsettings.WorkerSettings{ACP: operatorsettings.ACPSettings{
 			Integrations: append([]operatorsettings.ACPIntegration(nil), document.Workers.ACP.Integrations...),
+			AgentProfile: cloneACPAgentProfilePointer(document.Workers.ACP.AgentProfile),
 		}},
 		WorkerPresets: workerPresetsFromDocument(document.WorkerPresets),
 	}
+}
+
+// cloneACPAgentProfilePointer returns a detached copy of an optional ACP
+// Agent profile pointer, preserving nil for an absent profile.
+func cloneACPAgentProfilePointer(profile *operatorsettings.ACPAgentProfile) *operatorsettings.ACPAgentProfile {
+	if profile == nil {
+		return nil
+	}
+	cloned := profile.Clone()
+	return &cloned
 }
 
 func workerPresetsFromDocument(presets []operatorsettings.DocumentWorkerPreset) []operatorsettings.WorkerPreset {
@@ -324,6 +382,7 @@ func normalizedDocument(config operatorsettings.Config) (operatorsettings.Docume
 		},
 		Workers: operatorsettings.DocumentWorkerSettings{ACP: operatorsettings.DocumentACPSettings{
 			Integrations: append([]operatorsettings.ACPIntegration(nil), normalized.Workers.ACP.Integrations...),
+			AgentProfile: cloneACPAgentProfilePointer(normalized.Workers.ACP.AgentProfile),
 		}},
 		WorkerPresets: make([]operatorsettings.DocumentWorkerPreset, len(normalized.WorkerPresets)),
 	}

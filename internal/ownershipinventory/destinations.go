@@ -2,9 +2,11 @@ package ownershipinventory
 
 import "slices"
 
-// ProductOwners is the closed destination vocabulary. It held 13 owners
-// through the Packaged Service Structure FND-01 discovery; chat_sessions is
-// the first additive owner registered for a later slice (ACP L1 V0).
+// ProductOwners is the closed destination vocabulary. Chat Sessions and Events
+// were confirmed as distinct L1 ACP Core owners in
+// docs/internal/projects/acp-program/README.md (D2, cross-lane contracts); this
+// reconciles the committed tree with that already-settled decision rather than
+// reopening owner discovery.
 var ProductOwners = []string{
 	"factory_definitions",
 	"factory_sessions",
