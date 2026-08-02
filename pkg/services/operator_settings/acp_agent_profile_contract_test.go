@@ -124,3 +124,29 @@ func TestDocumentCloneDetachesACPAgentProfile(t *testing.T) {
 		t.Fatalf("mutating cloned document changed original ACPAgentProfile default: %#v", document.ACPAgentProfile)
 	}
 }
+
+func TestACPAgentProfileFailurePersistKindWrapsPersistSentinel(t *testing.T) {
+	t.Parallel()
+
+	failure := ACPAgentProfileFailure{Kind: ACPAgentProfileFailureKindPersist, Message: "disk full", Field: "acp-agent-profile.json"}
+	if !errors.Is(failure, ErrACPAgentProfilePersistFailed) {
+		t.Fatalf("ACPAgentProfileFailure(persist) does not wrap ErrACPAgentProfilePersistFailed: %v", failure)
+	}
+	if errors.Is(failure, ErrACPAgentProfileInvalid) {
+		t.Fatalf("ACPAgentProfileFailure(persist) unexpectedly wraps ErrACPAgentProfileInvalid: %v", failure)
+	}
+}
+
+func TestUpdateACPAgentProfileRequestValidateRequiresPath(t *testing.T) {
+	t.Parallel()
+
+	err := UpdateACPAgentProfileRequest{DefaultFactoryReference: "@you/custom", Allowlist: []string{"@you/custom"}}.Validate()
+	if !errors.Is(err, ErrACPAgentProfileInvalid) {
+		t.Fatalf("UpdateACPAgentProfileRequest.Validate() error = %v, want ErrACPAgentProfileInvalid", err)
+	}
+
+	err = UpdateACPAgentProfileRequest{Path: "config.json", DefaultFactoryReference: "@you/custom", Allowlist: []string{"@you/custom"}}.Validate()
+	if err != nil {
+		t.Fatalf("UpdateACPAgentProfileRequest.Validate() with path error = %v, want nil", err)
+	}
+}

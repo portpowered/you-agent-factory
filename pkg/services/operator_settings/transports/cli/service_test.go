@@ -454,6 +454,13 @@ func (fake *fakeSettingsRoot) ResolveACPAgentProfile(
 	return operatorsettings.ResolveACPAgentProfileResult{Profile: profile}, nil
 }
 
+func (fake *fakeSettingsRoot) UpdateACPAgentProfile(
+	context.Context,
+	operatorsettings.UpdateACPAgentProfileRequest,
+) (operatorsettings.UpdateACPAgentProfileResult, error) {
+	return operatorsettings.UpdateACPAgentProfileResult{}, errors.New("test settings root does not implement ACP")
+}
+
 func cliWinningDefaultsValue(fileValue, environmentValue, flagValue string) (string, operatorsettings.Source) {
 	switch {
 	case strings.TrimSpace(flagValue) != "":

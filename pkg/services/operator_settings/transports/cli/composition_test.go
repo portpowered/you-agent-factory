@@ -337,6 +337,13 @@ func (root *compositionSettingsRoot) ResolveACPAgentProfile(
 	return operatorsettings.ResolveACPAgentProfileResult{Profile: profile}, nil
 }
 
+func (root *compositionSettingsRoot) UpdateACPAgentProfile(
+	context.Context,
+	operatorsettings.UpdateACPAgentProfileRequest,
+) (operatorsettings.UpdateACPAgentProfileResult, error) {
+	return operatorsettings.UpdateACPAgentProfileResult{}, errors.New("test composition root does not implement ACP")
+}
+
 func compositionWinningValue(fileValue, environmentValue, flagValue string) (string, operatorsettings.Source) {
 	switch {
 	case strings.TrimSpace(flagValue) != "":

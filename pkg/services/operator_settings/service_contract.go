@@ -62,9 +62,19 @@ type Service interface {
 	EnsurePackagedACPIntegrations(context.Context, string, []ACPIntegration) (Document, error)
 
 	// ResolveACPAgentProfile resolves an immutable effective ACP agent profile
-	// from a detached authored-document fact. A request with no authored
-	// profile resolves to BuiltInACPAgentProfile. Resolution does not read or
-	// mutate the operator document, and invalid profiles fail with
-	// ACPAgentProfileFailure (ErrACPAgentProfileInvalid).
+	// from a detached authored-document fact, or from the profile previously
+	// persisted at Path when no authored profile is supplied. A request with
+	// neither an authored profile nor Path resolves to BuiltInACPAgentProfile.
+	// Resolution does not read or mutate the operator document, and invalid
+	// profiles fail with ACPAgentProfileFailure (ErrACPAgentProfileInvalid).
 	ResolveACPAgentProfile(ResolveACPAgentProfileRequest) (ResolveACPAgentProfileResult, error)
+
+	// UpdateACPAgentProfile validates a complete candidate ACP agent profile
+	// and, on success, atomically persists it at Path in isolation from the
+	// operator document, preserving backend scope, provider/model defaults,
+	// runtime settings, Worker presets, and existing ACP integrations. Invalid
+	// candidates fail with ACPAgentProfileFailure (ErrACPAgentProfileInvalid)
+	// and leave the previously persisted profile intact; storage failures fail
+	// with ACPAgentProfileFailure (ErrACPAgentProfilePersistFailed).
+	UpdateACPAgentProfile(context.Context, UpdateACPAgentProfileRequest) (UpdateACPAgentProfileResult, error)
 }

@@ -353,6 +353,13 @@ func (fake *servicePeerFake) ResolveACPAgentProfile(
 	return operatorsettings.ResolveACPAgentProfileResult{Profile: profile}, nil
 }
 
+func (fake *servicePeerFake) UpdateACPAgentProfile(
+	context.Context,
+	operatorsettings.UpdateACPAgentProfileRequest,
+) (operatorsettings.UpdateACPAgentProfileResult, error) {
+	return operatorsettings.UpdateACPAgentProfileResult{}, errors.New("characterization fake does not implement ACP")
+}
+
 func TestService_Characterization_FakeImplementsSingularSeam(t *testing.T) {
 	t.Parallel()
 

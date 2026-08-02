@@ -15,12 +15,17 @@ const DefaultACPAgentFactoryReference = "@you/factory-builder"
 // profile is not a valid detached ACPAgentProfile value.
 var ErrACPAgentProfileInvalid = errors.New("ACP agent profile is invalid")
 
+// ErrACPAgentProfilePersistFailed reports that a validated ACP agent profile
+// could not be read from or atomically published to its owned storage.
+var ErrACPAgentProfilePersistFailed = errors.New("ACP agent profile persist failed")
+
 // ACPAgentProfileFailureKind classifies ACP agent profile failures peers can
 // branch on with errors.Is / errors.As.
 type ACPAgentProfileFailureKind string
 
 const (
 	ACPAgentProfileFailureKindInvalid ACPAgentProfileFailureKind = "invalid"
+	ACPAgentProfileFailureKindPersist ACPAgentProfileFailureKind = "persist"
 )
 
 // ACPAgentProfileFailure retains normalized ACP agent profile failure facts
@@ -54,6 +59,8 @@ func sentinelForACPAgentProfileFailureKind(kind ACPAgentProfileFailureKind) erro
 	switch kind {
 	case ACPAgentProfileFailureKindInvalid:
 		return ErrACPAgentProfileInvalid
+	case ACPAgentProfileFailureKindPersist:
+		return ErrACPAgentProfilePersistFailed
 	default:
 		return ErrACPAgentProfileInvalid
 	}
@@ -163,9 +170,13 @@ func normalizeACPAgentFactoryReference(field, reference string) (string, error) 
 
 // ResolveACPAgentProfileRequest asks for the effective ACP agent profile from
 // a detached authored-document fact. A nil AuthoredProfile resolves to
-// BuiltInACPAgentProfile. Resolution does not read or mutate the operator
-// document; document load/persist remain on document operations.
+// BuiltInACPAgentProfile unless Path is non-blank, in which case the
+// previously persisted profile at Path (if any) is used instead. Resolution
+// does not read or mutate the operator document; document load/persist
+// remain on document operations. AuthoredProfile always takes precedence
+// over Path when both are supplied.
 type ResolveACPAgentProfileRequest struct {
+	Path            string
 	AuthoredProfile *DocumentACPAgentProfile
 }
 
