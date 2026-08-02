@@ -832,7 +832,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/internal/common",
-      "minimum": 83.05
+      "minimum": 83.63
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/internal/errors",
@@ -1122,7 +1122,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http",
-      "minimum": 44.60
+      "minimum": 48.40
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp",
@@ -2352,7 +2352,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/http/application",
-      "minimum": 57.89
+      "minimum": 85.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/http/workstationprojection",
@@ -2364,7 +2364,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/composition",
-      "minimum": 56.41
+      "minimum": 61.11
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig",
