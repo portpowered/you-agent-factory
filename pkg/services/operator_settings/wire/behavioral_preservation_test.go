@@ -8,10 +8,11 @@ import (
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
 
 // Fold-preservation proofs for pss-cln-set-legacy-packages-004 (and the earlier
@@ -43,13 +44,13 @@ func TestWireFoldPreservesDocumentIdentityResolutionAndConfigBehavior(t *testing
 		testConfigDocumentService(),
 		internaltestproviders.StandardCatalog(),
 		testIDGenerator(),
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
 	}
-	var service operatorsettings.Service = root
 
-	loaded, err := service.LoadDocument(operatorsettings.LoadDocumentRequest{
+	loaded, err := root.LoadDocument(operatorsettings.LoadDocumentRequest{
 		Path:            configPath,
 		RequireExisting: true,
 	})
@@ -65,7 +66,7 @@ func TestWireFoldPreservesDocumentIdentityResolutionAndConfigBehavior(t *testing
 
 	provider := "gemini"
 	model := "gemini-pro"
-	updated, err := service.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
+	updated, err := root.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
 		Path:                 configPath,
 		ExpectedBackendScope: backendScopeID,
 		ProviderModel: operatorsettings.DocumentProviderModelUpdate{
@@ -83,7 +84,7 @@ func TestWireFoldPreservesDocumentIdentityResolutionAndConfigBehavior(t *testing
 	}
 
 	unsupported := "unsupported-provider"
-	_, err = service.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
+	_, err = root.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
 		Path: configPath,
 		ProviderModel: operatorsettings.DocumentProviderModelUpdate{
 			Provider: &unsupported,
@@ -93,7 +94,7 @@ func TestWireFoldPreservesDocumentIdentityResolutionAndConfigBehavior(t *testing
 		t.Fatalf("unsupported provider error = %v, want ErrDocumentUnsupported", err)
 	}
 
-	resolved, err := service.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
+	resolved, err := root.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
 		DocumentBaseline: loaded.Document.Defaults,
 		InvocationOverrides: operatorsettings.EffectiveOverrideFacts{
 			WorkerModelProvider: "gemini",
@@ -110,7 +111,7 @@ func TestWireFoldPreservesDocumentIdentityResolutionAndConfigBehavior(t *testing
 		t.Fatalf("ResolveEffective() = %#v", resolved.Selection)
 	}
 
-	_, err = service.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
+	_, err = root.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
 		InvocationOverrides: operatorsettings.EffectiveOverrideFacts{
 			WorkerModelProvider: "unsupported-provider",
 		},
@@ -143,6 +144,7 @@ func TestWireFoldPreservesDefaultsResolutionFromHomeOwnershipPath(t *testing.T) 
 		globalconfigmapping.Decode,
 		internaltestproviders.StandardCatalog(),
 		testIDGenerator(),
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
@@ -174,6 +176,7 @@ func TestWireFoldDefaultsResolutionFromHomeRejectsMissingFilesystemPorts(t *test
 		globalconfigmapping.Decode,
 		internaltestproviders.StandardCatalog(),
 		testIDGenerator(),
+		logging.NoopLogger{},
 	)
 	if err == nil || !strings.Contains(err.Error(), "filesystem is required") {
 		t.Fatalf("NewServiceFromHomePorts() error = %v, want home-port construction failure", err)

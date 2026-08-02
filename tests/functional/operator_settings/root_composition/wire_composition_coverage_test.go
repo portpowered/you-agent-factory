@@ -9,10 +9,11 @@ import (
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 )
 
 // newWireCompositionRoot constructs an Operator Settings root through the
@@ -55,6 +56,7 @@ func newWireCompositionRoot(t *testing.T) (operatorsettings.Service, string) {
 		),
 		providersRoot,
 		func() string { return "00000000-0000-4000-8000-000000000001" },
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
@@ -220,6 +222,7 @@ func TestWireCompositionFromHomePortsConstructsSettingsRoot(t *testing.T) {
 		globalconfigmapping.Decode,
 		providersRoot,
 		func() string { return "00000000-0000-4000-8000-000000000001" },
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
@@ -236,12 +239,12 @@ func TestWireCompositionFromHomePortsRejectsMissingPorts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}
-	_, err = settingswire.NewServiceFromHomePorts(nil, globalconfigmapping.Decode, providersRoot, func() string { return "00000000-0000-4000-8000-000000000001" })
+	_, err = settingswire.NewServiceFromHomePorts(nil, globalconfigmapping.Decode, providersRoot, func() string { return "00000000-0000-4000-8000-000000000001" }, logging.NoopLogger{})
 	if err == nil || !strings.Contains(err.Error(), "filesystem is required") {
 		t.Fatalf("NewServiceFromHomePorts(nil, decode) error = %v, want filesystem required", err)
 	}
 
-	_, err = settingswire.NewServiceFromHomePorts(platformfilesystem.Local{}, nil, providersRoot, func() string { return "00000000-0000-4000-8000-000000000001" })
+	_, err = settingswire.NewServiceFromHomePorts(platformfilesystem.Local{}, nil, providersRoot, func() string { return "00000000-0000-4000-8000-000000000001" }, logging.NoopLogger{})
 	if err == nil || !strings.Contains(err.Error(), "decoder is required") {
 		t.Fatalf("NewServiceFromHomePorts(files, nil) error = %v, want decoder required", err)
 	}
@@ -265,6 +268,7 @@ func TestResolveFromHomeRejectsMissingFilesystemPorts(t *testing.T) {
 		globalconfigmapping.Decode,
 		providersRoot,
 		func() string { return "00000000-0000-4000-8000-000000000001" },
+		logging.NoopLogger{},
 	)
 	if err == nil || !strings.Contains(err.Error(), "operator settings filesystem is required") {
 		t.Fatalf("NewServiceFromHomePorts() error = %v, want home-port construction failure", err)
@@ -297,6 +301,7 @@ func TestResolveFromHomeUsesSettingsAdapterOwnershipPath(t *testing.T) {
 		globalconfigmapping.Decode,
 		providersRoot,
 		func() string { return "00000000-0000-4000-8000-000000000001" },
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
@@ -329,7 +334,7 @@ func TestWireCompositionFromConfigDocumentConstructsFromDocumentPorts(t *testing
 		CreateTemp: func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
 			return os.CreateTemp(dir, pattern)
 		},
-	}, providersRoot, func() string { return "00000000-0000-4000-8000-000000000001" })
+	}, providersRoot, func() string { return "00000000-0000-4000-8000-000000000001" }, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
 	}
@@ -345,7 +350,7 @@ func TestWireCompositionFromConfigDocumentRejectsMissingDocumentPorts(t *testing
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}
-	_, err = settingswire.NewServiceFromConfigDocument(operatorsettings.ConfigDocumentService{}, providersRoot, func() string { return "00000000-0000-4000-8000-000000000001" })
+	_, err = settingswire.NewServiceFromConfigDocument(operatorsettings.ConfigDocumentService{}, providersRoot, func() string { return "00000000-0000-4000-8000-000000000001" }, logging.NoopLogger{})
 	if err == nil || !strings.Contains(err.Error(), "operator settings document ports are required") {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v, want document ports required", err)
 	}
