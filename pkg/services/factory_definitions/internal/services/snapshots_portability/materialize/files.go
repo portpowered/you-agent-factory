@@ -10,6 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	snapshotscontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/contracts"
 )
 
 const portableBundledFactoryPrefix = "factory"
@@ -24,7 +25,7 @@ type bundledFileWrite struct {
 // NewMaterializer binds portable-file materialization to an injected filesystem.
 func NewMaterializer(
 	fileSystem portablefiles.FileSystem,
-) factorydefinitions.PortableBundledFilesMaterializer {
+) snapshotscontracts.PortableBundledFilesMaterializer {
 	return func(targetDir string, config *factorydefinitions.FactoryConfig) ([]factorydefinitions.PortableBundledFileReplacement, error) {
 		return MaterializeFiles(fileSystem, targetDir, config)
 	}
@@ -33,7 +34,7 @@ func NewMaterializer(
 // NewWritesValidator binds portable-path validation to an injected filesystem.
 func NewWritesValidator(
 	fileSystem portablefiles.FileSystem,
-) factorydefinitions.PortableBundledFileWritesValidator {
+) snapshotscontracts.PortableBundledFileWritesValidator {
 	return func(targetDir string, config *factorydefinitions.FactoryConfig) error {
 		return ValidateWrites(fileSystem, targetDir, config)
 	}

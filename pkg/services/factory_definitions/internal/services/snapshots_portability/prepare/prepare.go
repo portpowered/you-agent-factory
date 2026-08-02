@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	snapshotscontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/contracts"
 )
 
 // Import decodes one detached snapshot payload and returns Definitions-owned
 // portable import facts without peer imports of public portableconfig.
 func Import(
 	payload []byte,
-	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
+	decodeSnapshot snapshotscontracts.FactorySnapshotJSONDecoder,
 ) (factorydefinitions.PrepareFactorySnapshotImportResult, error) {
 	if decodeSnapshot == nil {
 		return factorydefinitions.PrepareFactorySnapshotImportResult{}, factorydefinitions.ErrInvalidFactorySnapshotPayload

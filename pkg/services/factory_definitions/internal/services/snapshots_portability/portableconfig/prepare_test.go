@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	snapshotscontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/contracts"
 	snapshotsportabilityprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare"
 )
 
@@ -72,9 +73,9 @@ func TestPrepareRequiresEveryInjectedOperation(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		clone   factorydefinitions.FactoryConfigCloner
-		bundled factorydefinitions.PortableBundledFilesApplier
-		starter factorydefinitions.FactoryStarterWorkApplier
+		clone   snapshotscontracts.FactoryConfigCloner
+		bundled snapshotscontracts.PortableBundledFilesApplier
+		starter snapshotscontracts.FactoryStarterWorkApplier
 		want    string
 	}{
 		{name: "cloner", bundled: bundled, starter: starter, want: "cloner is required"},

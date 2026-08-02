@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	snapshotscontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/contracts"
 )
 
 type runtimeConfig struct {
@@ -19,14 +20,14 @@ type runtimeConfig struct {
 	workstationsByID map[string]*factorydefinitions.FactoryWorkstationConfig
 }
 
-var _ factorydefinitions.ReplayRuntimeConfig = (*runtimeConfig)(nil)
+var _ snapshotscontracts.ReplayRuntimeConfig = (*runtimeConfig)(nil)
 
 // Decode reconstructs a detached runtime lookup using the representation
 // decoder selected by Wire.
 func Decode(
 	snapshot *factorydefinitions.FactorySnapshot,
-	decodeFactoryConfig factorydefinitions.FactoryConfigJSONDecoder,
-) (factorydefinitions.ReplayRuntimeConfig, error) {
+	decodeFactoryConfig snapshotscontracts.FactoryConfigJSONDecoder,
+) (snapshotscontracts.ReplayRuntimeConfig, error) {
 	if snapshot == nil {
 		return nil, errors.New("replay artifact factory is required")
 	}

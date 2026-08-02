@@ -4,15 +4,16 @@ import (
 	"errors"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	snapshotscontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/contracts"
 )
 
 // NewPreparer binds the authored-file operations selected by Wire to the
 // Factory Definitions portable-preparation contract.
 func NewPreparer(
-	cloneFactoryConfig factorydefinitions.FactoryConfigCloner,
-	applyBundledFiles factorydefinitions.PortableBundledFilesApplier,
-	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
-) factorydefinitions.PortableFactoryConfigPreparer {
+	cloneFactoryConfig snapshotscontracts.FactoryConfigCloner,
+	applyBundledFiles snapshotscontracts.PortableBundledFilesApplier,
+	applyStarterWork snapshotscontracts.FactoryStarterWorkApplier,
+) snapshotscontracts.PortableFactoryConfigPreparer {
 	return func(
 		factoryDir string,
 		factoryConfig *factorydefinitions.FactoryConfig,
@@ -35,9 +36,9 @@ func PrepareConfig(
 	factoryDir string,
 	factoryConfig *factorydefinitions.FactoryConfig,
 	includeInlineContent bool,
-	cloneFactoryConfig factorydefinitions.FactoryConfigCloner,
-	applyBundledFiles factorydefinitions.PortableBundledFilesApplier,
-	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
+	cloneFactoryConfig snapshotscontracts.FactoryConfigCloner,
+	applyBundledFiles snapshotscontracts.PortableBundledFilesApplier,
+	applyStarterWork snapshotscontracts.FactoryStarterWorkApplier,
 ) (*factorydefinitions.FactoryConfig, error) {
 	if cloneFactoryConfig == nil {
 		return nil, errors.New("Factory Definition cloner is required")

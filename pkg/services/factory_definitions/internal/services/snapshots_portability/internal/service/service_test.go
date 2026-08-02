@@ -12,6 +12,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
 	snapshotsportabilitycapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture"
+	snapshotscontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/contracts"
 	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
 	snapshotsportabilitywire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
@@ -35,7 +36,7 @@ func (s stubLoadedSource) Workstation(string) (*factorydefinitions.FactoryWorkst
 }
 func (s stubLoadedSource) Worker(string) (*workerconfig.Config, bool) { return nil, false }
 
-func stubLoadCanonical(payload []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+func stubLoadCanonical(payload []byte, _ snapshotscontracts.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 	var cfg factorydefinitions.FactoryConfig
 	if err := json.Unmarshal(payload, &cfg); err != nil {
 		return nil, factorydefinitions.ErrInvalidNamedFactory
@@ -62,7 +63,7 @@ func stubDecodeSnapshot(payload []byte) (*factorydefinitions.FactorySnapshot, er
 
 func newSnapshotService(
 	t *testing.T,
-	decode factorydefinitions.FactorySnapshotJSONDecoder,
+	decode snapshotscontracts.FactorySnapshotJSONDecoder,
 ) snapshotsportability.Service {
 	t.Helper()
 	fileSystem := platformfilesystem.Local{}

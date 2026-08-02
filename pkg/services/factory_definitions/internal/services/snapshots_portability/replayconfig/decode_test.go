@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	snapshotscontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/contracts"
 	snapshotsportabilityreplayconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig"
 )
 
@@ -64,7 +65,7 @@ func TestDecodeRejectsMissingInputs(t *testing.T) {
 	tests := []struct {
 		name     string
 		snapshot *factorydefinitions.FactorySnapshot
-		decoder  factorydefinitions.FactoryConfigJSONDecoder
+		decoder  snapshotscontracts.FactoryConfigJSONDecoder
 		want     string
 	}{
 		{name: "snapshot", want: "factory is required"},

@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	snapshotscontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/contracts"
 )
 
 // ValidateSnapshot applies the canonical pre-persist rules to one detached
@@ -16,9 +17,9 @@ import (
 func ValidateSnapshot(
 	ctx context.Context,
 	snapshot *factorydefinitions.FactorySnapshot,
-	workstationLoader factorydefinitions.WorkstationLoader,
-	mapRequest factorydefinitions.EditableFactoryValidationRequestMapper,
-	validate factorydefinitions.DefinitionValidationOperation,
+	workstationLoader snapshotscontracts.WorkstationLoader,
+	mapRequest snapshotscontracts.EditableFactoryValidationRequestMapper,
+	validate snapshotscontracts.DefinitionValidationOperation,
 ) error {
 	if snapshot == nil {
 		return fmt.Errorf(

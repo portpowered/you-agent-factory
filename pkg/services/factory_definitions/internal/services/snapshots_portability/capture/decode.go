@@ -4,13 +4,14 @@ import (
 	"errors"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	snapshotscontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/contracts"
 )
 
 // NewJSONDecoder binds a representation decoder to the Factory Definition
 // snapshot contract.
 func NewJSONDecoder[T any](
 	decodeBoundary func([]byte) (T, error),
-) factorydefinitions.FactorySnapshotJSONDecoder {
+) snapshotscontracts.FactorySnapshotJSONDecoder {
 	return func(data []byte) (*factorydefinitions.FactorySnapshot, error) {
 		return DecodeJSON(data, decodeBoundary)
 	}
