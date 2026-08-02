@@ -2,7 +2,11 @@ package ownershipinventory
 
 import "slices"
 
-// ProductOwners is the closed 13-owner destination vocabulary.
+// ProductOwners is the closed destination vocabulary. Chat Sessions and Events
+// were confirmed as distinct L1 ACP Core owners in
+// docs/internal/projects/acp-program/README.md (D2, cross-lane contracts); this
+// reconciles the committed tree with that already-settled decision rather than
+// reopening owner discovery.
 var ProductOwners = []string{
 	"factory_definitions",
 	"factory_sessions",
@@ -17,6 +21,8 @@ var ProductOwners = []string{
 	"factory_visualization",
 	"operator_settings",
 	"system_initialization",
+	"chat_sessions",
+	"events",
 }
 
 // ApprovedFamilies are retain destinations that are not product services.
