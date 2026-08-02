@@ -110,10 +110,10 @@ func Decode(connectionID identity.ConnectionID, raw json.RawMessage) (Envelope, 
 		if idPresent {
 			return Envelope{}, fmt.Errorf("%w: %s is a notification and must not carry an id", ErrMalformedEnvelope, w.Method)
 		}
-		mintedIdentity, err := identity.NewMinted(string(connectionID) + "|" + w.Method)
-		if err != nil {
-			return Envelope{}, fmt.Errorf("%w: %v", ErrMalformedEnvelope, err)
-		}
+		// connectionID and w.Method are already validated non-blank above,
+		// so this concatenation can never be empty and NewMinted can never
+		// fail here.
+		mintedIdentity, _ := identity.NewMinted(string(connectionID) + "|" + w.Method)
 		return Envelope{Identity: mintedIdentity, Method: w.Method, Params: w.Params, IsNotification: true}, nil
 	}
 
@@ -124,9 +124,9 @@ func Decode(connectionID identity.ConnectionID, raw json.RawMessage) (Envelope, 
 	if err != nil {
 		return Envelope{}, fmt.Errorf("%w: %v", ErrMalformedEnvelope, err)
 	}
-	reqIdentity, err := identity.NewCorrelated(connectionID, id)
-	if err != nil {
-		return Envelope{}, fmt.Errorf("%w: %v", ErrMalformedEnvelope, err)
-	}
+	// connectionID is already validated non-blank above, and id is already
+	// validated non-zero by NewJSONRPCID, so NewCorrelated can never fail
+	// here.
+	reqIdentity, _ := identity.NewCorrelated(connectionID, id)
 	return Envelope{Identity: reqIdentity, Method: w.Method, Params: w.Params}, nil
 }

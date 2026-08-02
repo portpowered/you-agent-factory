@@ -285,7 +285,10 @@ func TestGuardEnvelope_InvalidNotificationStillSignalsNoResponseOwed(t *testing.
 // (a message this ambiguous still owes an ordinary error response).
 func TestGuardEnvelope_NotificationWithIDIsMalformed(t *testing.T) {
 	env, err := GuardEnvelope("conn-1", json.RawMessage(`{"jsonrpc":"2.0","id":1,"method":"session/cancel","params":{"sessionId":"s"}}`),
-		func(envelope.Envelope) error { t.Fatal("validate must not run for an id-bearing notification"); return nil },
+		func(envelope.Envelope) error {
+			t.Fatal("validate must not run for an id-bearing notification")
+			return nil
+		},
 		func() error { t.Fatal("effect must not run for an id-bearing notification"); return nil },
 	)
 	if err == nil {
