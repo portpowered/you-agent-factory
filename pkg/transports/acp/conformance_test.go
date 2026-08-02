@@ -224,16 +224,19 @@ func TestConformanceMalformedInputCasesProduceTypedOutcomes(t *testing.T) {
 					t.Fatalf("payload does not parse: %v", err)
 				}
 				var decodeErr *acpsdk.RequestError
-				if c.Facts.Metadata["reason"] == "semantically_invalid_params" {
+				switch c.Facts.Metadata["reason"] {
+				case "semantically_invalid_params", "missing_required_scalar_field":
 					// A syntactically valid params object that fails the real
 					// acp-go-sdk request type's own Validate() (e.g. a
 					// session/prompt request missing the required prompt
-					// field) must decode through the actual supported
+					// field), or that omits a required scalar field
+					// Validate() alone cannot detect (e.g. a missing
+					// sessionId), must decode through the actual supported
 					// request type, not a generic map, to prove
-					// DecodeMethodParams enforces semantic validity and not
-					// only JSON structure.
+					// DecodeMethodParams enforces semantic validity and
+					// required-field presence, not only JSON structure.
 					_, decodeErr = acp.DecodeMethodParams[acpsdk.PromptRequest](envelope.Params)
-				} else {
+				default:
 					_, decodeErr = acp.DecodeMethodParams[map[string]any](envelope.Params)
 				}
 				if decodeErr == nil {

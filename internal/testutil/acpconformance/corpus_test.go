@@ -2,6 +2,7 @@ package acpconformance_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -212,6 +213,53 @@ func TestParseCorpusRejectsMismatchedChecksum(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "cases_checksum mismatch") {
 		t.Fatalf("ParseCorpus(mismatched cases_checksum) error = %v, want it to mention cases_checksum mismatch", err)
+	}
+}
+
+// TestParseCorpusRejectsUnknownCaseField proves ParseCorpus cannot be
+// fooled by the exact loophole a prior review found: cases_checksum is
+// computed over the *typed* []Case value, so if unknown fields were merely
+// dropped by json.Unmarshal (rather than rejected), adding an unrecognized
+// field to a case's raw JSON would leave the previously-computed checksum
+// still valid, silently defeating the "checksum makes every case-content
+// change explicit" guarantee. The checksum below is deliberately computed
+// from the clean (no extra field) case -- exactly what would happen if
+// ParseCorpus only checksummed the post-decode typed value -- to prove that
+// is not enough: the unknown field itself must cause ParseCorpus to fail.
+func TestParseCorpusRejectsUnknownCaseField(t *testing.T) {
+	corpus := acpconformance.MustLoad(t)
+	one := corpus.Cases[0]
+	checksum, err := acpconformance.ChecksumCases([]acpconformance.Case{one})
+	if err != nil {
+		t.Fatalf("ChecksumCases: %v", err)
+	}
+	caseJSON, err := json.Marshal(one)
+	if err != nil {
+		t.Fatalf("marshal case: %v", err)
+	}
+	var caseFields map[string]json.RawMessage
+	if err := json.Unmarshal(caseJSON, &caseFields); err != nil {
+		t.Fatalf("unmarshal case: %v", err)
+	}
+	caseFields["unexpected_extra_field"] = json.RawMessage(`"snuck in"`)
+	mutatedCase, err := json.Marshal(caseFields)
+	if err != nil {
+		t.Fatalf("marshal mutated case: %v", err)
+	}
+	provenanceJSON, err := json.Marshal(corpus.Provenance)
+	if err != nil {
+		t.Fatalf("marshal provenance: %v", err)
+	}
+	data := fmt.Appendf(nil,
+		`{"schema_version":1,"provenance":%s,"cases_checksum":%q,"cases":[%s]}`,
+		provenanceJSON, checksum, mutatedCase,
+	)
+	_, err = acpconformance.ParseCorpus(data)
+	if err == nil {
+		t.Fatal("ParseCorpus(case with unknown field, checksum computed as if the field were absent) expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("ParseCorpus(unknown case field) error = %v, want it to mention an unknown field", err)
 	}
 }
 

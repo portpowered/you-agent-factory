@@ -3,6 +3,8 @@ package acp
 import (
 	"bytes"
 	"encoding/json"
+	"reflect"
+	"strings"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 )
@@ -86,10 +88,17 @@ type validatable interface {
 // DecodeMethodParams unmarshals raw JSON-RPC params into T and returns a
 // typed, sensitive-safe invalid-params outcome on missing, null, malformed,
 // or semantically invalid input, so parameter validation never produces a
-// partially decoded value. When T implements validatable (as the acp-go-sdk
-// request types do), the decoded value's own Validate() is also enforced.
-// The returned *acpsdk.RequestError never includes the raw params content or
-// the underlying validation error text.
+// partially decoded value. Required-field presence is enforced generically
+// for every struct T from the raw JSON object's keys (see
+// requiredStructFieldsPresent), because acp-go-sdk v0.13.5's generated
+// Validate() methods do not consistently check that every required scalar
+// field (e.g. PromptRequest.SessionId) was actually present on the wire --
+// a required string/number field silently decodes to its Go zero value
+// whether the key was omitted or the key was present with a zero value, and
+// Validate() alone cannot tell those apart. When T (or *T) additionally
+// implements validatable, the decoded value's own Validate() is also
+// enforced. The returned *acpsdk.RequestError never includes the raw params
+// content or the underlying validation error text.
 func DecodeMethodParams[T any](raw json.RawMessage) (T, *acpsdk.RequestError) {
 	var zero T
 	trimmed := bytes.TrimSpace(raw)
@@ -100,10 +109,55 @@ func DecodeMethodParams[T any](raw json.RawMessage) (T, *acpsdk.RequestError) {
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return zero, acpsdk.NewInvalidParams(map[string]any{"reason": "malformed params"})
 	}
+	if !requiredStructFieldsPresent(trimmed, reflect.TypeOf(v)) {
+		return zero, acpsdk.NewInvalidParams(map[string]any{"reason": "invalid params"})
+	}
 	if validator, ok := any(&v).(validatable); ok {
 		if err := validator.Validate(); err != nil {
 			return zero, acpsdk.NewInvalidParams(map[string]any{"reason": "invalid params"})
 		}
 	}
 	return v, nil
+}
+
+// requiredStructFieldsPresent reports whether every field of struct type t
+// whose json tag lacks "omitempty" (i.e. every field the wire shape declares
+// required) is present as a key in raw's top-level JSON object. It returns
+// true for any non-struct t (e.g. map[string]any params) and for any raw
+// that is not itself a JSON object, since presence checking only applies to
+// struct-shaped, field-required params. This closes the gap a bare
+// json.Unmarshal + Validate() leaves open: a required scalar field (string,
+// number, bool) decodes to the same Go zero value whether its key was
+// omitted or present-but-empty, so Validate() implementations that only
+// check "is this the zero value" cannot detect an omitted required scalar
+// field the way they can detect an omitted required pointer/slice/map field.
+func requiredStructFieldsPresent(raw []byte, t reflect.Type) bool {
+	if t.Kind() != reflect.Struct {
+		return true
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return true
+	}
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		if field.PkgPath != "" {
+			continue
+		}
+		tag, ok := field.Tag.Lookup("json")
+		if !ok || tag == "-" {
+			continue
+		}
+		name, opts, _ := strings.Cut(tag, ",")
+		if name == "" {
+			name = field.Name
+		}
+		if strings.Contains(opts, "omitempty") {
+			continue
+		}
+		if _, present := obj[name]; !present {
+			return false
+		}
+	}
+	return true
 }
