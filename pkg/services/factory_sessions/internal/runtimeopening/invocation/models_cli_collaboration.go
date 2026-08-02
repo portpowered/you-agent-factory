@@ -76,13 +76,10 @@ func (o *operation) OpenModelsPresentationScope(
 	target := roles.InvocationTarget{
 		FactoryDir:       factoryDir,
 		HomeDir:          request.HomeDir,
-		OperatorDefaults: operatorconfig.ResolvedDefaults{},
+		OperatorDefaults: resolvedOperatorDefaultsFromPresentation(request.OperatorDefaults),
 		Logger:           request.Logger,
 		Verbose:          request.Verbose,
 		ModelCacheDir:    request.ModelCacheDir,
-	}
-	if defaults, ok := request.OperatorDefaults.(operatorconfig.ResolvedDefaults); ok {
-		target.OperatorDefaults = defaults
 	}
 	opened, lifecycle, err := o.open(ctx, target)
 	if err != nil {
@@ -101,6 +98,15 @@ func (o *operation) OpenModelsPresentationScope(
 			return lifecycle.close(closeCtx, opened)
 		},
 	}, nil
+}
+
+func resolvedOperatorDefaultsFromPresentation(
+	defaults models.PresentationOperatorDefaults,
+) operatorconfig.ResolvedDefaults {
+	return operatorconfig.ResolvedDefaults{
+		WorkerModelProvider: defaults.WorkerModelProvider,
+		WorkerModel:         defaults.WorkerModel,
+	}
 }
 
 var _ interface {
