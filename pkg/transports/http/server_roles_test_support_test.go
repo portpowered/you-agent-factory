@@ -44,7 +44,7 @@ func newServerFromRoles(
 ) *Server {
 	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
 		Runtime: runtime, FactoryStatus: factoryStatus,
-		Sessions: sessions, Work: workAPI, WorkRead: workRead, Invocation: invocation,
+		Sessions: sessions, SessionEvents: workAPI, Invocation: invocation,
 		FactoryDefinitions: factoryDefinitions, FactoryValidation: factoryValidation,
 		WorkflowPreview:  workflowPreview,
 		DurableExecution: durableExecution, DurableLifecycle: durableLifecycle,

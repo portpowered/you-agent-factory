@@ -7,6 +7,8 @@
 package http
 
 import (
+	"context"
+
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -19,7 +21,7 @@ import (
 // Sessions and their session-scoped Factory and Work resources.
 type Adapter struct {
 	sessionsRoot       factorysessions.Service
-	sessionEvents      factorysessions.Service
+	sessionEvents      SessionEventAPI
 	runtime            apisurface.RuntimeAPI
 	factoryStatus      apisurface.FactoryStatusAPI
 	sessions           apisurface.LiveSessionAPI
@@ -43,7 +45,7 @@ type Adapter struct {
 // adapter. They are supplied by the already-opened runtime composition.
 type Dependencies struct {
 	SessionsRoot       factorysessions.Service
-	SessionEvents      factorysessions.Service
+	SessionEvents      SessionEventAPI
 	Runtime            apisurface.RuntimeAPI
 	FactoryStatus      apisurface.FactoryStatusAPI
 	Sessions           apisurface.LiveSessionAPI
@@ -71,6 +73,13 @@ type RequestPreparation interface {
 	PrepareListSessions(factorysessions.ListSessionsRequest) (factorysessions.ListSessionsRequest, error)
 	PrepareResult(factorysessions.ResultRequest) (factorysessions.ResultRequest, error)
 	PrepareEventReconnect(factorysessions.EventReconnectRequest) (factorysessions.EventReconnectRequest, error)
+}
+
+// SessionEventAPI is the narrow Factory Sessions event seam retained by this
+// transport. Work HTTP does not participate in session event ownership.
+type SessionEventAPI interface {
+	SubscribeFactoryEventsForSession(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error)
+	ProbeFactoryEventsForSession(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) error
 }
 
 // NewHandler constructs an inert Factory Sessions HTTP adapter.
