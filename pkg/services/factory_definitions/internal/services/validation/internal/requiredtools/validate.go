@@ -4,6 +4,7 @@ package requiredtools
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	validationcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 )
 
@@ -11,7 +12,7 @@ import (
 // targets with stable codes and severity.
 func Validate(
 	cfg *factorydefinitions.FactoryConfig,
-	checker factorydefinitions.RequiredToolChecker,
+	checker validationcontracts.RequiredToolChecker,
 ) factorydefinitions.ValidationResult {
 	result := impl.ValidateDeclarativeRequiredTools(cfg, checker)
 	return factorydefinitions.ValidationResult{Targets: append([]factorydefinitions.ValidationTarget(nil), result.Targets...)}

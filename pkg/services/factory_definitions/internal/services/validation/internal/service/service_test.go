@@ -9,6 +9,7 @@ import (
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
+	validationcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 	validationserviceimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/service"
 	validationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire"
@@ -31,7 +32,7 @@ func (s stubLoadedSource) Workstation(string) (*factoryroot.FactoryWorkstationCo
 }
 func (s stubLoadedSource) Worker(string) (*workerconfig.Config, bool) { return nil, false }
 
-func stubLoadCanonical(payload []byte, _ factoryroot.WorkstationLoader) (factoryroot.MutableLoadedFactorySource, error) {
+func stubLoadCanonical(payload []byte, _ validationcontracts.WorkstationLoader) (factoryroot.MutableLoadedFactorySource, error) {
 	var cfg factoryroot.FactoryConfig
 	if err := json.Unmarshal(payload, &cfg); err != nil {
 		return nil, factoryroot.ErrInvalidNamedFactory
@@ -72,11 +73,13 @@ func (s stubOperations) ValidateEffectiveDefinition(
 
 func newValidationService(t *testing.T, operations stubOperations) validationservice.Service {
 	t.Helper()
-	svc, err := validationwire.NewService(validationservice.Dependencies{
-		Operations:    operations,
-		Effective:     operations,
-		LoadCanonical: stubLoadCanonical,
-	})
+	svc, err := validationwire.NewService(
+		operations,
+		operations,
+		stubLoadCanonical,
+		nil,
+		nil,
+	)
 	if err != nil {
 		t.Fatalf("validationwire.NewService: %v", err)
 	}
@@ -91,13 +94,13 @@ func newValidationServiceWithConfig(
 ) validationservice.Service {
 	t.Helper()
 	validator := factoryvalidation.New(orchestratorValidator)
-	svc, err := validationwire.NewService(validationservice.Dependencies{
-		Operations:            validator,
-		Effective:             validator,
-		LoadCanonical:         stubLoadCanonicalForConfig(cfg),
-		RequiredToolChecker:   checker,
-		OrchestratorValidator: orchestratorValidator,
-	})
+	svc, err := validationwire.NewService(
+		validator,
+		validator,
+		stubLoadCanonicalForConfig(cfg),
+		checker,
+		orchestratorValidator,
+	)
 	if err != nil {
 		t.Fatalf("validationwire.NewService: %v", err)
 	}
@@ -106,8 +109,8 @@ func newValidationServiceWithConfig(
 
 func stubLoadCanonicalForConfig(
 	cfg *factoryroot.FactoryConfig,
-) factoryroot.CanonicalFactoryJSONLoader {
-	return func(_ []byte, _ factoryroot.WorkstationLoader) (factoryroot.MutableLoadedFactorySource, error) {
+) validationcontracts.CanonicalFactoryLoader {
+	return func(_ []byte, _ validationcontracts.WorkstationLoader) (factoryroot.MutableLoadedFactorySource, error) {
 		return stubLoadedSource{cfg: cfg}, nil
 	}
 }
@@ -139,7 +142,7 @@ func TestValidationService_RejectsMissingDependencies(t *testing.T) {
 	if svc := validationserviceimpl.New(nil, nil, nil, nil, nil); svc != nil {
 		t.Fatal("expected nil service when dependencies are missing")
 	}
-	if _, err := validationwire.NewService(validationservice.Dependencies{}); err == nil {
+	if _, err := validationwire.NewService(nil, nil, nil, nil, nil); err == nil {
 		t.Fatal("expected dependency error")
 	}
 }

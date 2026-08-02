@@ -7,6 +7,7 @@ import (
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
+	validationcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 	validationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire"
 )
@@ -28,7 +29,7 @@ func (s stubLoadedSource) Workstation(string) (*factoryroot.FactoryWorkstationCo
 }
 func (s stubLoadedSource) Worker(string) (*workerconfig.Config, bool) { return nil, false }
 
-func stubLoadCanonical(payload []byte, _ factoryroot.WorkstationLoader) (factoryroot.MutableLoadedFactorySource, error) {
+func stubLoadCanonical(payload []byte, _ validationcontracts.WorkstationLoader) (factoryroot.MutableLoadedFactorySource, error) {
 	var cfg factoryroot.FactoryConfig
 	if err := json.Unmarshal(payload, &cfg); err != nil {
 		return nil, factoryroot.ErrInvalidNamedFactory
@@ -39,11 +40,13 @@ func stubLoadCanonical(payload []byte, _ factoryroot.WorkstationLoader) (factory
 func TestWire_NewServiceConstructsValidationSubservice(t *testing.T) {
 	t.Parallel()
 	validator := factoryvalidation.New(nil)
-	svc, err := validationwire.NewService(validationservice.Dependencies{
-		Operations:    validator,
-		Effective:     validator,
-		LoadCanonical: stubLoadCanonical,
-	})
+	svc, err := validationwire.NewService(
+		validator,
+		validator,
+		stubLoadCanonical,
+		nil,
+		nil,
+	)
 	if err != nil {
 		t.Fatalf("validationwire.NewService: %v", err)
 	}
@@ -52,7 +55,7 @@ func TestWire_NewServiceConstructsValidationSubservice(t *testing.T) {
 
 func TestWire_NewServiceRejectsMissingDependencies(t *testing.T) {
 	t.Parallel()
-	if _, err := validationwire.NewService(validationservice.Dependencies{}); err == nil {
+	if _, err := validationwire.NewService(nil, nil, nil, nil, nil); err == nil {
 		t.Fatal("expected dependency error")
 	}
 }

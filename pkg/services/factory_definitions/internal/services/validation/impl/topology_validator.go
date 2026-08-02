@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	validationcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/contracts"
 )
 
 type Finding = factorydefinitions.TopologyFinding
@@ -29,7 +30,9 @@ const (
 	RequiredToolFailureKindVersionProbe = factorydefinitions.RequiredToolFailureKindVersionProbe
 )
 
-type RequiredToolChecker = factorydefinitions.RequiredToolChecker
+type RequiredToolChecker = validationcontracts.RequiredToolChecker
+type PortableBundledFileInspection = validationcontracts.PortableBundledFileInspection
+type PortableBundledFileSourceResolver = validationcontracts.PortableBundledFileSourceResolver
 
 // ConfigValidator runs all registered validation rules against a factory config.
 type ConfigValidator struct {
@@ -92,8 +95,8 @@ func validatePortableResourceManifest(cfg *factorydefinitions.FactoryConfig, che
 func validatePortableResourceManifestOnPath(
 	factoryDir string,
 	cfg *factorydefinitions.FactoryConfig,
-	resolveSource factorydefinitions.PortableBundledFileSourceResolver,
-	inspectSource factorydefinitions.PortableBundledFileInspection,
+	resolveSource PortableBundledFileSourceResolver,
+	inspectSource PortableBundledFileInspection,
 	requiredToolChecker RequiredToolChecker,
 ) error {
 	result := validatePortableResourceManifest(cfg, requiredToolChecker, func(cfg *factorydefinitions.FactoryConfig) []Finding {
@@ -108,8 +111,8 @@ func validatePortableResourceManifestOnPath(
 func validatePortableBundledFilesForExpandOnPath(
 	factoryDir string,
 	cfg *factorydefinitions.FactoryConfig,
-	resolveSource factorydefinitions.PortableBundledFileSourceResolver,
-	inspectSource factorydefinitions.PortableBundledFileInspection,
+	resolveSource PortableBundledFileSourceResolver,
+	inspectSource PortableBundledFileInspection,
 ) error {
 	result := validatePortableResourceManifest(cfg, nil, func(cfg *factorydefinitions.FactoryConfig) []Finding {
 		if strings.TrimSpace(factoryDir) == "" {
@@ -134,8 +137,8 @@ func ValidatePortableResourceManifestOnPath(
 func ValidatePortableResourceManifestOnPathWithSourceResolver(
 	factoryDir string,
 	cfg *factorydefinitions.FactoryConfig,
-	resolveSource factorydefinitions.PortableBundledFileSourceResolver,
-	inspectSource factorydefinitions.PortableBundledFileInspection,
+	resolveSource PortableBundledFileSourceResolver,
+	inspectSource PortableBundledFileInspection,
 	requiredToolChecker RequiredToolChecker,
 ) error {
 	return validatePortableResourceManifestOnPath(
@@ -157,8 +160,8 @@ func ValidatePortableBundledFilesForExpandOnPath(
 func ValidatePortableBundledFilesForExpandOnPathWithSourceResolver(
 	factoryDir string,
 	cfg *factorydefinitions.FactoryConfig,
-	resolveSource factorydefinitions.PortableBundledFileSourceResolver,
-	inspectSource factorydefinitions.PortableBundledFileInspection,
+	resolveSource PortableBundledFileSourceResolver,
+	inspectSource PortableBundledFileInspection,
 ) error {
 	return validatePortableBundledFilesForExpandOnPath(
 		factoryDir,
@@ -373,8 +376,8 @@ func ruleBundledFiles(cfg *factorydefinitions.FactoryConfig) []Finding {
 func ruleBundledFilesOnPath(
 	factoryDir string,
 	cfg *factorydefinitions.FactoryConfig,
-	resolveSource factorydefinitions.PortableBundledFileSourceResolver,
-	inspectSource factorydefinitions.PortableBundledFileInspection,
+	resolveSource PortableBundledFileSourceResolver,
+	inspectSource PortableBundledFileInspection,
 ) []Finding {
 	return ruleBundledFilesWithContentValidator(cfg, func(basePath string, file factorydefinitions.BundledFileConfig) []Finding {
 		return validateBundledFileContentOnPath(
@@ -491,8 +494,8 @@ func validateBundledFileContentOnPath(
 	factoryDir string,
 	basePath string,
 	file factorydefinitions.BundledFileConfig,
-	resolveSource factorydefinitions.PortableBundledFileSourceResolver,
-	inspectSource factorydefinitions.PortableBundledFileInspection,
+	resolveSource PortableBundledFileSourceResolver,
+	inspectSource PortableBundledFileInspection,
 ) []Finding {
 	if strings.TrimSpace(file.Content.Inline) != "" {
 		return validateBundledFileContent(basePath, file)
