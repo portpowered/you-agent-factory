@@ -32,32 +32,32 @@ func NewService(
 	openFile modelseffects.AssetOpenFile,
 	logger *zap.Logger,
 	now func() time.Time,
-) (assets.Service, error) {
+) (assets.Service, assets.RemoveModelAssetsOperation, error) {
 	if scopes == nil {
-		return nil, fmt.Errorf("Models Assets runtime scopes service is required")
+		return nil, nil, fmt.Errorf("Models Assets runtime scopes service is required")
 	}
 	if platform.OperatingSystem == "" || platform.Architecture == "" {
-		return nil, fmt.Errorf("Models Assets host platform is required")
+		return nil, nil, fmt.Errorf("Models Assets host platform is required")
 	}
 	if err := validateSourceEffects(client, endpoints); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := validateCacheEffects(
 		makeDirectories, inspectPath, resolveHome, writeFile, renamePath,
 		removePath, readFile, readDirectory, createFile, openFile,
 	); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if removeTree == nil {
-		return nil, fmt.Errorf("Models Assets secure removal effect is required")
+		return nil, nil, fmt.Errorf("Models Assets secure removal effect is required")
 	}
 	if logger == nil {
-		return nil, fmt.Errorf("Models Assets logger is required")
+		return nil, nil, fmt.Errorf("Models Assets logger is required")
 	}
 	if now == nil {
-		return nil, fmt.Errorf("Models Assets clock is required")
+		return nil, nil, fmt.Errorf("Models Assets clock is required")
 	}
-	return internalservice.New(
+	service := internalservice.New(
 		scopes,
 		platform,
 		client,
@@ -75,7 +75,8 @@ func NewService(
 		openFile,
 		logger,
 		now,
-	), nil
+	)
+	return service, assets.RemoveModelAssetsOperation(service.RemoveModelAssets), nil
 }
 
 func validateSourceEffects(

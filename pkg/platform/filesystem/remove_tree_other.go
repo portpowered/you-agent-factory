@@ -2,14 +2,13 @@
 
 package filesystem
 
-import (
-	"fmt"
-	"os"
-)
+import "context"
 
-// openTreeParent refuses deletion on platforms without the explicit
-// handle-relative implementation. The supported desktop/server platforms use
-// the no-follow walkers in remove_tree_unix.go and remove_tree_windows.go.
-func openTreeParent(string) (*os.Root, error) {
-	return nil, fmt.Errorf("secure model asset tree removal is unsupported on this platform")
+const secureTreeRemovalSupported = false
+
+func removeTreePlatform(ctx context.Context, _ string, _ string) (bool, error) {
+	if err := removalContextError(ctx); err != nil {
+		return false, err
+	}
+	return false, errSecureTreeRemovalUnsupported
 }

@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
@@ -390,7 +389,7 @@ func newTestService(scopes runtimescopes.Service, cacheReads *int) *service {
 		os.WriteFile,
 		os.Rename,
 		os.Remove,
-		platformfilesystem.Local{}.RemoveTree,
+		testRemoveTree,
 		func(path string) ([]byte, error) {
 			record()
 			return os.ReadFile(path)
@@ -403,7 +402,7 @@ func newTestService(scopes runtimescopes.Service, cacheReads *int) *service {
 		func(path string) (io.ReadCloser, error) { return os.Open(path) },
 		zap.NewNop(),
 		time.Now,
-	).(*service)
+	)
 }
 
 func writeCacheFixture(t *testing.T, cacheDirectory string, includeMetadata bool) {

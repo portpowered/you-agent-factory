@@ -198,13 +198,6 @@ func (inferenceRecordingAssetsService) InspectModelAssets(
 	return models.InspectModelAssetsResult{}, models.ErrUnsupportedOperation
 }
 
-func (inferenceRecordingAssetsService) RemoveModelAssets(
-	context.Context,
-	models.RemoveModelAssetsRequest,
-) (models.RemoveModelAssetsResult, error) {
-	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
-}
-
 func (inferenceRecordingAssetsService) ResolveRuntimeCache(
 	context.Context,
 	models.InspectModelAssetsRequest,

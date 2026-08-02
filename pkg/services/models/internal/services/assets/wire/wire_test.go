@@ -76,7 +76,7 @@ func TestNewServiceRequiresScopedCacheInspectionDependencies(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			service, err := NewService(
+			service, _, err := NewService(
 				test.scopes,
 				test.platform,
 				test.client,

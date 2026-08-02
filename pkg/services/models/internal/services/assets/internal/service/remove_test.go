@@ -242,6 +242,9 @@ func TestRemoveModelAssetsLogsSafeStartAndTerminalOutcome(t *testing.T) {
 		terminalFields["model"] != "OMNIVOICE_Q4_K_M" ||
 		terminalFields["outcome"] != string(models.AssetRemovalAlreadyAbsent) ||
 		terminalFields["error_classification"] != "none" ||
+		terminalFields["cancelled"] != false ||
+		terminalFields["changed"] != false ||
+		terminalFields["partial_deletion"] != false ||
 		terminalFields["duration_ms"] != int64(125) {
 		t.Fatalf("terminal fields = %#v", terminalFields)
 	}
@@ -280,11 +283,46 @@ func TestRemoveModelAssetsLogsCancellationClassificationWithoutErrorText(t *test
 		t.Fatalf("log count = %d, want start and terminal", len(observed))
 	}
 	terminalFields := observed[1].ContextMap()
-	if terminalFields["error_classification"] != "cancelled" || terminalFields["outcome"] != "ERROR" {
+	if terminalFields["error_classification"] != "cancelled" ||
+		terminalFields["outcome"] != "ERROR" ||
+		terminalFields["cancelled"] != true ||
+		terminalFields["changed"] != false ||
+		terminalFields["partial_deletion"] != false {
 		t.Fatalf("cancellation terminal fields = %#v", terminalFields)
 	}
 	if _, ok := terminalFields["error"]; ok {
 		t.Fatalf("terminal log included raw error: %#v", terminalFields)
+	}
+}
+
+func TestRemoveModelAssetsDoesNotMisclassifyCompletedDeletionAsPartialOnLateCancellation(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	scopes := newScopes(t, "remove-late-cancel-logging")
+	ref := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
+	service := newTestService(scopes, nil)
+	core, logs := observer.New(zap.InfoLevel)
+	service.logger = zap.New(core)
+	ctx, cancel := context.WithCancel(context.Background())
+	service.removeTree = func(context.Context, string, string) (bool, error) {
+		cancel()
+		return true, nil
+	}
+
+	_, err := service.RemoveModelAssets(ctx, modelsRemoveRequest(ref))
+	if !errors.Is(err, models.ErrAssetCancelled) {
+		t.Fatalf("late cancellation error = %v, want ErrAssetCancelled", err)
+	}
+	observed := logs.All()
+	if len(observed) != 2 {
+		t.Fatalf("log count = %d, want start and terminal", len(observed))
+	}
+	terminalFields := observed[1].ContextMap()
+	if terminalFields["cancelled"] != true ||
+		terminalFields["changed"] != true ||
+		terminalFields["partial_deletion"] != false {
+		t.Fatalf("late-cancellation terminal fields = %#v", terminalFields)
 	}
 }
 
@@ -299,7 +337,7 @@ func TestRemoveModelAssetsLogsFilesystemClassificationWithoutPath(t *testing.T) 
 	service.logger = zap.New(core)
 	failure := errors.New("permission denied for " + cacheDirectory)
 	service.removeTree = func(context.Context, string, string) (bool, error) {
-		return false, failure
+		return true, failure
 	}
 
 	_, err := service.RemoveModelAssets(context.Background(), modelsRemoveRequest(ref))
@@ -311,7 +349,11 @@ func TestRemoveModelAssetsLogsFilesystemClassificationWithoutPath(t *testing.T) 
 		t.Fatalf("log count = %d, want start and terminal", len(observed))
 	}
 	terminalFields := observed[1].ContextMap()
-	if terminalFields["error_classification"] != "filesystem" || terminalFields["outcome"] != "ERROR" {
+	if terminalFields["error_classification"] != "filesystem" ||
+		terminalFields["outcome"] != "ERROR" ||
+		terminalFields["cancelled"] != false ||
+		terminalFields["changed"] != true ||
+		terminalFields["partial_deletion"] != true {
 		t.Fatalf("filesystem terminal fields = %#v", terminalFields)
 	}
 	for _, log := range observed {
@@ -323,6 +365,32 @@ func TestRemoveModelAssetsLogsFilesystemClassificationWithoutPath(t *testing.T) 
 			t.Fatalf("filesystem path leaked into log fields: %#v", log.ContextMap())
 		}
 	}
+}
+
+// testRemoveTree is only a policy-service test double. The handle security
+// boundary is exercised by pkg/platform/filesystem tests, not by this fake.
+func testRemoveTree(ctx context.Context, parent, target string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	path := filepath.Join(parent, target)
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if !info.IsDir() {
+		return false, errors.New("test removal target is not a directory")
+	}
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if err := os.RemoveAll(path); err != nil {
+		return true, err
+	}
+	return true, nil
 }
 
 func assertRemovedResult(t *testing.T, result models.RemoveModelAssetsResult, modelName string, outcome models.AssetRemovalOutcome) {

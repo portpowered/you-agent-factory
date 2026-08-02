@@ -46,7 +46,7 @@ func newAssetPullerForTest(
 	if err != nil {
 		return nil, err
 	}
-	service, err := assetswire.NewService(
+	service, _, err := assetswire.NewService(
 		scopes,
 		models.AssetHostPlatform{OperatingSystem: runtime.GOOS, Architecture: runtime.GOARCH},
 		http.DefaultClient,

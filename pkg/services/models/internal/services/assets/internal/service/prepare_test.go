@@ -584,7 +584,7 @@ func newPreparationTestService(
 		func(path string) (io.ReadCloser, error) { return os.Open(path) },
 		zap.NewNop(),
 		time.Now,
-	).(*service)
+	)
 }
 
 func writeVerifiedCacheFixture(t *testing.T, cacheDirectory string) {

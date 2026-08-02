@@ -8,12 +8,17 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 )
 
 func TestLocalRemoveTreeRemovesOnlyNamedTargetAndIsIdempotent(t *testing.T) {
 	t.Parallel()
 
 	parent := t.TempDir()
+	if !secureTreeRemovalSupported {
+		assertUnsupportedTreeRemoval(t, parent, "model")
+		return
+	}
 	target := filepath.Join(parent, "model")
 	if err := os.MkdirAll(filepath.Join(target, "revision", "nested"), 0o755); err != nil {
 		t.Fatalf("create target: %v", err)
@@ -46,6 +51,27 @@ func TestLocalRemoveTreeRemovesOnlyNamedTargetAndIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestLocalRemoveTreeCancellationWinsOverParentAndTargetAbsence(t *testing.T) {
+	t.Parallel()
+
+	t.Run("parent absence", func(t *testing.T) {
+		ctx := &absenceCancellingContext{cancelOn: 2}
+		parent := filepath.Join(t.TempDir(), "not-created", "cache")
+		changed, err := (Local{}).RemoveTree(ctx, parent, "model")
+		if changed || !errors.Is(err, context.Canceled) {
+			t.Fatalf("RemoveTree = changed %t, err %v; want cancellation before absent result", changed, err)
+		}
+	})
+
+	t.Run("target absence", func(t *testing.T) {
+		ctx := &absenceCancellingContext{cancelOn: 2}
+		changed, err := (Local{}).RemoveTree(ctx, t.TempDir(), "model")
+		if changed || !errors.Is(err, context.Canceled) {
+			t.Fatalf("RemoveTree = changed %t, err %v; want cancellation before absent result", changed, err)
+		}
+	})
+}
+
 func TestLocalRemoveTreeFailsClosedOnTargetDirectoryLink(t *testing.T) {
 	t.Parallel()
 
@@ -66,6 +92,47 @@ func TestLocalRemoveTreeFailsClosedOnTargetDirectoryLink(t *testing.T) {
 	if _, err := os.Lstat(link); err != nil {
 		t.Fatalf("target link = %v, want untouched", err)
 	}
+}
+
+func TestLocalRemoveTreeFailsClosedOnTargetSelfLink(t *testing.T) {
+	t.Parallel()
+
+	parent := t.TempDir()
+	link := filepath.Join(parent, "model")
+	if err := os.Symlink(".", link); err != nil {
+		if runtime.GOOS != "windows" {
+			t.Fatalf("create self-directory link: %v", err)
+		}
+		junctionErr := exec.Command("cmd.exe", "/c", "mklink", "/J", link, parent).Run()
+		if junctionErr != nil {
+			t.Skipf("self-directory symlink/reparse capability unavailable on %s: symlink=%v; junction=%v", runtime.GOOS, err, junctionErr)
+		}
+	}
+	t.Cleanup(func() { _ = os.Remove(link) })
+
+	changed, err := (Local{}).RemoveTree(context.Background(), parent, "model")
+	if err == nil || changed {
+		t.Fatalf("RemoveTree = changed %t, err %v; want self-link fail closed", changed, err)
+	}
+	if _, err := os.Lstat(link); err != nil {
+		t.Fatalf("self-link = %v, want untouched", err)
+	}
+}
+
+func TestLocalRemoveTreeRejectsTargetRegularFile(t *testing.T) {
+	t.Parallel()
+
+	parent := t.TempDir()
+	target := filepath.Join(parent, "model")
+	if err := os.WriteFile(target, []byte("preserve"), 0o644); err != nil {
+		t.Fatalf("write regular target: %v", err)
+	}
+
+	changed, err := (Local{}).RemoveTree(context.Background(), parent, "model")
+	if err == nil || changed {
+		t.Fatalf("RemoveTree = changed %t, err %v; want regular target rejection", changed, err)
+	}
+	assertFileBody(t, target, "preserve")
 }
 
 func TestLocalRemoveTreeFailsClosedOnCacheParentLink(t *testing.T) {
@@ -98,6 +165,10 @@ func TestLocalRemoveTreeUnlinksChildLinkWithoutFollowingOutside(t *testing.T) {
 	t.Parallel()
 
 	parent := t.TempDir()
+	if !secureTreeRemovalSupported {
+		assertUnsupportedTreeRemoval(t, parent, "model")
+		return
+	}
 	target := filepath.Join(parent, "model")
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		t.Fatalf("create target: %v", err)
@@ -123,6 +194,10 @@ func TestLocalRemoveTreeDoesNotFollowReplacedDirectoryLink(t *testing.T) {
 	t.Parallel()
 
 	parent := t.TempDir()
+	if !secureTreeRemovalSupported {
+		assertUnsupportedTreeRemoval(t, parent, "model")
+		return
+	}
 	target := filepath.Join(parent, "model")
 	child := filepath.Join(target, "revision")
 	if err := os.MkdirAll(child, 0o755); err != nil {
@@ -149,92 +224,28 @@ func TestLocalRemoveTreeDoesNotFollowReplacedDirectoryLink(t *testing.T) {
 	}
 }
 
-func TestRemoveTreeContentsHasDeterministicPartialFailureSemantics(t *testing.T) {
+func TestLocalRemoveTreeRejectsMalformedTargetNames(t *testing.T) {
 	t.Parallel()
 
-	failure := errors.New("stop at b")
-	directory := &recordingTreeDirectory{
-		entries:   []treeEntry{{name: "b"}, {name: "a"}},
-		removeErr: map[string]error{"b": failure},
-	}
-	changed, err := removeTreeContents(context.Background(), directory)
-	if !changed || !errors.Is(err, failure) {
-		t.Fatalf("removeTreeContents = changed %t, err %v; want partial failure", changed, err)
-	}
-	if got, want := directory.removed, []string{"a", "b"}; !equalStrings(got, want) {
-		t.Fatalf("removal order = %#v, want %#v", got, want)
-	}
-}
-
-func TestRemoveTreeContentsStopsAfterCancellationBetweenEffects(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	directory := &recordingTreeDirectory{
-		entries: []treeEntry{{name: "b"}, {name: "a"}},
-		onRemove: func(name string) {
-			if name == "a" {
-				cancel()
+	for _, name := range []string{
+		"", ".", "..", "\x00", "model/child", `model\child`, "C:model", `C:\model`,
+		`\\server\share`, `\\?\C:\model`, `\\.\C:\model`, " model ",
+	} {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			parent := t.TempDir()
+			marker := filepath.Join(parent, "sibling")
+			if err := os.WriteFile(marker, []byte("preserve"), 0o644); err != nil {
+				t.Fatalf("write sibling: %v", err)
 			}
-		},
-	}
-	changed, err := removeTreeContents(ctx, directory)
-	if !changed || !errors.Is(err, context.Canceled) {
-		t.Fatalf("removeTreeContents = changed %t, err %v; want cancellation after first effect", changed, err)
-	}
-	if got, want := directory.removed, []string{"a"}; !equalStrings(got, want) {
-		t.Fatalf("removal order = %#v, want %#v", got, want)
+			changed, err := (Local{}).RemoveTree(context.Background(), parent, name)
+			if err == nil || changed {
+				t.Fatalf("RemoveTree(%q) = changed %t, err %v; want rejection", name, changed, err)
+			}
+			assertFileBody(t, marker, "preserve")
+		})
 	}
 }
-
-func TestRemoveTreeContentsUnlinksEntryWhenDirectoryIsReplaced(t *testing.T) {
-	t.Parallel()
-
-	replacement := errors.New("directory was replaced before no-follow open")
-	directory := &recordingTreeDirectory{
-		entries: []treeEntry{{name: "revision", isDir: true}},
-		openErr: map[string]error{"revision": replacement},
-	}
-	changed, err := removeTreeContents(context.Background(), directory)
-	if err != nil || !changed {
-		t.Fatalf("removeTreeContents = changed %t, err %v; want replacement entry unlinked", changed, err)
-	}
-	if got, want := directory.removed, []string{"revision"}; !equalStrings(got, want) {
-		t.Fatalf("replacement removal order = %#v, want %#v", got, want)
-	}
-}
-
-type recordingTreeDirectory struct {
-	entries   []treeEntry
-	removed   []string
-	removeErr map[string]error
-	openErr   map[string]error
-	onRemove  func(string)
-}
-
-func (directory *recordingTreeDirectory) ReadDir() ([]treeEntry, error) {
-	return append([]treeEntry(nil), directory.entries...), nil
-}
-
-func (directory *recordingTreeDirectory) OpenDirectory(name string) (treeDirectory, error) {
-	if err := directory.openErr[name]; err != nil {
-		return nil, err
-	}
-	return nil, errors.New("unexpected directory open")
-}
-
-func (directory *recordingTreeDirectory) Remove(name string) error {
-	directory.removed = append(directory.removed, name)
-	if directory.onRemove != nil {
-		directory.onRemove(name)
-	}
-	if err := directory.removeErr[name]; err != nil {
-		return err
-	}
-	return nil
-}
-
-func (*recordingTreeDirectory) Close() error { return nil }
 
 func createDirectoryLink(t *testing.T, link, target string) {
 	t.Helper()
@@ -265,14 +276,26 @@ func assertFileBody(t *testing.T, path, want string) {
 	}
 }
 
-func equalStrings(got, want []string) bool {
-	if len(got) != len(want) {
-		return false
+func assertUnsupportedTreeRemoval(t *testing.T, parent, target string) {
+	t.Helper()
+	changed, err := (Local{}).RemoveTree(context.Background(), parent, target)
+	if changed || !errors.Is(err, errSecureTreeRemovalUnsupported) {
+		t.Fatalf("RemoveTree = changed %t, err %v; want unsupported and unchanged", changed, err)
 	}
-	for index := range got {
-		if got[index] != want[index] {
-			return false
-		}
+}
+
+type absenceCancellingContext struct {
+	calls    int
+	cancelOn int
+}
+
+func (ctx *absenceCancellingContext) Deadline() (time.Time, bool) { return time.Time{}, false }
+func (ctx *absenceCancellingContext) Done() <-chan struct{}       { return nil }
+func (ctx *absenceCancellingContext) Value(any) any               { return nil }
+func (ctx *absenceCancellingContext) Err() error {
+	ctx.calls++
+	if ctx.calls >= ctx.cancelOn {
+		return context.Canceled
 	}
-	return true
+	return nil
 }

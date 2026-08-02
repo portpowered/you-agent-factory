@@ -157,8 +157,14 @@ func (request RemoveModelAssetsRequest) Validate() error {
 
 // RemoveModelAssetsResult reports the resulting readiness and whether assets
 // were removed or were already absent. A non-nil error means the result is not
-// authoritative: deletion stops at the first filesystem or cancellation
-// failure, and effects already applied remain applied for a later retry.
+// authoritative: removal stops before the next destructive boundary when
+// filesystem or cancellation failure is observed, and effects already
+// applied remain in place for a later retry of the same request. Cancellation
+// is cooperative and is checked before each destructive boundary and before
+// returning an absence observation; it never rolls back an earlier effect.
+// The injected filesystem effect must fail closed when it cannot provide its
+// platform's identity-safe deletion boundary; Models does not fall back to a
+// path-based recursive delete.
 type RemoveModelAssetsResult struct {
 	ModelName string
 	Readiness AssetReadinessState

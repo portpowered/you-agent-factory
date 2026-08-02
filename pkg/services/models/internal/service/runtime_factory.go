@@ -33,6 +33,7 @@ type Root struct {
 	runtimeTempFile localmodels.CreateTempFile
 	runtimeScopes   runtimescopes.Service
 	assets          scopedassets.Service
+	assetRemover    scopedassets.RemoveModelAssetsOperation
 	runtimeHost     runtimehost.Service
 	inference       modelinference.Service
 	runtimeMu       sync.RWMutex
@@ -56,6 +57,7 @@ func NewRoot(
 	runtimeScopes runtimescopes.Service,
 	catalogService modelcatalog.Service,
 	assetService scopedassets.Service,
+	assetRemover scopedassets.RemoveModelAssetsOperation,
 	runtimeHostService runtimehost.Service,
 	inferenceService modelinference.Service,
 	processDependencies ...modelseffects.ProcessDependencies,
@@ -93,6 +95,9 @@ func NewRoot(
 	if assetService == nil {
 		return nil, missingDependencyError("Models Assets service")
 	}
+	if assetRemover == nil {
+		return nil, missingDependencyError("Models Assets removal service")
+	}
 	if runtimeHostService == nil {
 		return nil, missingDependencyError("Models Runtime Host service")
 	}
@@ -114,7 +119,8 @@ func NewRoot(
 		runtimeRunner: runtimeRunner, runtimeHTTP: runtimeHTTP,
 		runtimeInspect: runtimeInspect, runtimeTempDir: runtimeTempDir, runtimeTempFile: runtimeTempFile,
 		runtimeScopes: runtimeScopes, catalog: catalogService, assets: assetService,
-		runtimeHost: runtimeHostService, inference: inferenceService,
+		assetRemover: assetRemover,
+		runtimeHost:  runtimeHostService, inference: inferenceService,
 		runtimeByScope: make(map[models.RuntimeScopeRef]models.Service),
 		process:        process,
 	}, nil
@@ -309,10 +315,10 @@ func (o *Root) RemoveModelAssets(
 	ctx context.Context,
 	request models.RemoveModelAssetsRequest,
 ) (models.RemoveModelAssetsResult, error) {
-	if o == nil || o.assets == nil {
+	if o == nil || o.assetRemover == nil {
 		return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
 	}
-	return o.assets.RemoveModelAssets(ctx, request)
+	return o.assetRemover(ctx, request)
 }
 
 func (o *Root) EnsureModelHost(

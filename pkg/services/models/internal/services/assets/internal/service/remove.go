@@ -20,9 +20,11 @@ func (s *service) RemoveModelAssets(
 ) (result models.RemoveModelAssetsResult, resultErr error) {
 	modelIdentity := safeRemovalModelIdentity(request.Name)
 	start := s.operationNow()
+	changed := false
+	partialDeletion := false
 	s.logAssetRemovalStart(modelIdentity)
 	defer func() {
-		s.logAssetRemovalTerminal(modelIdentity, start, result, resultErr)
+		s.logAssetRemovalTerminal(modelIdentity, start, result, resultErr, changed, partialDeletion)
 	}()
 
 	if err := request.Validate(); err != nil {
@@ -43,14 +45,18 @@ func (s *service) RemoveModelAssets(
 	if err != nil {
 		return models.RemoveModelAssetsResult{}, err
 	}
-	changed, err := s.removeTree(ctx, parent, spec.modelName)
+	changed, err = s.removeTree(ctx, parent, spec.modelName)
 	if err != nil {
+		partialDeletion = changed
 		if contextErr := assetContextError(ctx); contextErr != nil {
 			return models.RemoveModelAssetsResult{}, contextErr
 		}
 		return models.RemoveModelAssetsResult{}, fmt.Errorf(
 			"%w: remove managed model assets: %w", models.ErrAssetUnavailable, err,
 		)
+	}
+	if err := assetContextError(ctx); err != nil {
+		return models.RemoveModelAssetsResult{}, err
 	}
 	if changed {
 		return removedAssetResult(spec.modelName, models.AssetRemovalRemoved), nil

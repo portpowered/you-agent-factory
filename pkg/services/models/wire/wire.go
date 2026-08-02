@@ -130,7 +130,7 @@ func NewService(
 	if err != nil {
 		return nil, err
 	}
-	assetService, err := assetswire.NewService(
+	assetService, assetRemover, err := assetswire.NewService(
 		runtimeScopes, assetPlatform, assetHTTP,
 		models.RuntimeAssetEndpoints{
 			BaseURL: defaultEndpoints.BaseURL, APIBaseURL: defaultEndpoints.APIBaseURL,
@@ -177,7 +177,7 @@ func NewService(
 		launcher, hostHTTP, clock,
 		runtimeRunner, runtimeHTTP, localmodels.InspectFile(runtimeInspect),
 		localmodels.TempDirectory(runtimeTempDir), createTempFile,
-		runtimeScopes, catalogService, assetService, runtimeHost, inferenceService,
+		runtimeScopes, catalogService, assetService, assetRemover, runtimeHost, inferenceService,
 		modelseffects.ProcessDependencies{
 			Logger: logger, Clock: now, PullMetrics: pullMetrics,
 			HostLogger: hostLogger, HostMetrics: hostMetrics, LocalHooks: localHooks,

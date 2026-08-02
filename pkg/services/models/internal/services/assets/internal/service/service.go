@@ -80,8 +80,8 @@ func New(
 	openFile modelseffects.AssetOpenFile,
 	logger *zap.Logger,
 	now func() time.Time,
-) assets.Service {
-	return &service{
+) *service {
+	result := &service{
 		scopes:        scopes,
 		platform:      platform,
 		client:        client,
@@ -100,6 +100,7 @@ func New(
 		logger:        logger,
 		now:           now,
 	}
+	return result
 }
 
 func (s *service) InspectModelAssets(

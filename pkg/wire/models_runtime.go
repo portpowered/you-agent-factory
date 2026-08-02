@@ -14,6 +14,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformlogging "github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -22,7 +23,6 @@ import (
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
-	"go.uber.org/zap"
 )
 
 const (
@@ -36,6 +36,10 @@ const (
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
+	applicationLogger, err := platformlogging.NewDefaultLogger()
+	if err != nil {
+		return nil, err
+	}
 	assetPlatform := provideModelAssetHostPlatform(edges)
 	assetEndpoints := edges.ModelAssetEndpoints
 
@@ -147,11 +151,11 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		modelswire.RuntimeInspectFile(runtimeInspect),
 		modelswire.RuntimeTempDirectory(runtimeTempDir),
 		adaptModelRuntimeTempFile(runtimeTempFile),
-		zap.NewNop(),
+		applicationLogger,
 		time.Now,
 		platformrandom.CryptoSource{},
 		adaptModelsPullMetricsRecorder(edges.ModelPullMetricsRecorder),
-		modelswire.HostDiagnosticLogger(factorysessionwire.ModelHostDiagnosticLogger(zap.NewNop())),
+		modelswire.HostDiagnosticLogger(factorysessionwire.ModelHostDiagnosticLogger(applicationLogger)),
 		modelswire.HostMetricsRecorder(factorysessionwire.ModelHostDiagnosticMetrics(edges.InvocationMetricsRecorder)),
 		modelLocalRuntimeHooks(workerswire.LocalRuntimeHooks()),
 	)

@@ -28,6 +28,8 @@ func (s *service) logAssetRemovalTerminal(
 	start time.Time,
 	result models.RemoveModelAssetsResult,
 	err error,
+	changed bool,
+	partialDeletion bool,
 ) {
 	if s == nil || s.logger == nil {
 		return
@@ -47,6 +49,9 @@ func (s *service) logAssetRemovalTerminal(
 		zap.String("outcome", outcome),
 		zap.Int64("duration_ms", duration.Milliseconds()),
 		zap.String("error_classification", assetRemovalErrorClassification(err)),
+		zap.Bool("cancelled", errors.Is(err, models.ErrAssetCancelled)),
+		zap.Bool("changed", changed),
+		zap.Bool("partial_deletion", partialDeletion),
 	}
 	if err != nil {
 		// Error text can contain a filesystem path. The type and bounded

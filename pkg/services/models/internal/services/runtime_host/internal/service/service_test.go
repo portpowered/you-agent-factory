@@ -344,7 +344,7 @@ func mustLeasesService(t *testing.T, clock modelseffects.HostClock) hostleases.S
 
 func mustAssetsService(t *testing.T, scopes runtimescopes.Service) scopedassets.Service {
 	t.Helper()
-	assets, err := assetswire.NewService(
+	assets, _, err := assetswire.NewService(
 		scopes,
 		models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		http.DefaultClient,

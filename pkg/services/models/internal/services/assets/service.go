@@ -19,10 +19,6 @@ type Service interface {
 		context.Context,
 		models.InspectModelAssetsRequest,
 	) (models.InspectModelAssetsResult, error)
-	RemoveModelAssets(
-		context.Context,
-		models.RemoveModelAssetsRequest,
-	) (models.RemoveModelAssetsResult, error)
 	// ResolveRuntimeCache returns the Models-private filesystem layout required
 	// by the existing local runtime. Peers outside Models receive only detached
 	// root-contract asset facts.
@@ -37,6 +33,14 @@ type Service interface {
 		models.InspectModelAssetsRequest,
 	) (RuntimeCacheInspection, error)
 }
+
+// RemoveModelAssetsOperation is the separate destructive Assets port.
+// Pullers, inspectors, inference, runtime-host services, and their fakes do
+// not implement this unsupported operation.
+type RemoveModelAssetsOperation func(
+	context.Context,
+	models.RemoveModelAssetsRequest,
+) (models.RemoveModelAssetsResult, error)
 
 // RuntimeCacheLayout is the Models-private bridge from verified scoped assets
 // to the existing local runtime process boundary.

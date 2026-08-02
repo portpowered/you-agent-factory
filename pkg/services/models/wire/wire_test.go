@@ -1037,6 +1037,10 @@ func newProductionTestServiceWithAssetEdges(
 	issuerEntropy platformrandom.Source,
 ) models.Service {
 	t.Helper()
+	assetRemoveTree := platformfilesystem.Local{}.RemoveTree
+	if runtime.GOOS != "windows" {
+		assetRemoveTree = testAssetRemoveTree
+	}
 	service, err := NewService(
 		models.AssetHostPlatform{OperatingSystem: runtime.GOOS, Architecture: runtime.GOARCH},
 		client,
@@ -1047,7 +1051,7 @@ func newProductionTestServiceWithAssetEdges(
 		os.WriteFile,
 		os.Rename,
 		os.Remove,
-		platformfilesystem.Local{}.RemoveTree,
+		assetRemoveTree,
 		os.ReadFile,
 		os.ReadDir,
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },
@@ -1074,6 +1078,32 @@ func newProductionTestServiceWithAssetEdges(
 		t.Fatalf("NewService: %v", err)
 	}
 	return service
+}
+
+// testAssetRemoveTree keeps the root composition behavior test runnable on
+// Unix, where production secure tree removal deliberately fails closed.
+func testAssetRemoveTree(ctx context.Context, parent, target string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	path := filepath.Join(parent, target)
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if !info.IsDir() {
+		return false, errors.New("test removal target is not a directory")
+	}
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if err := os.RemoveAll(path); err != nil {
+		return true, err
+	}
+	return true, nil
 }
 
 type sequentialEntropySource struct {

@@ -103,7 +103,9 @@ type AssetRemovePath func(string) error
 
 // AssetRemoveTree removes one model-cache directory beneath a selected cache
 // parent through a platform-owned path-security boundary. The bool reports
-// whether any deletion effect was applied before an error or cancellation.
+// whether any mutation effect, including detach/quarantine or entry deletion,
+// was applied before an error or cancellation. Implementations stop before
+// the next destructive boundary and leave their retry state in place.
 type AssetRemoveTree func(context.Context, string, string) (bool, error)
 type AssetReadFile func(string) ([]byte, error)
 type AssetReadDirectory func(string) ([]os.DirEntry, error)
