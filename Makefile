@@ -94,10 +94,18 @@ define run_verification_step
 	@$(MAKE) $(1) || { status=$$?; printf '%s\n' "FAIL: $(2) [make $(1)] failed. Rerun with: make $(1)"; exit $$status; }
 endef
 
+define ensure_directory
+	@mkdir -p $(1)
+endef
+
 ifeq ($(OS),Windows_NT)
 define run_verification_step
 	@echo Running $(2) [make $(1)]
 	@$(MAKE) $(1) || (echo FAIL: $(2) [make $(1)] failed. Rerun with: make $(1) & exit /b 1)
+endef
+
+define ensure_directory
+	@if not exist "$(subst /,\,$(1))" mkdir "$(subst /,\,$(1))"
 endef
 endif
 
@@ -407,10 +415,10 @@ functional-boundary-check:
 # floor fails; Make then stops before Markdown so the failure stays non-zero.
 functional-test-viz:
 	$(MAKE) functional-boundary-check
-	@mkdir -p $(FUNCTIONAL_TEST_VIZ_DIR)
-	GO_FUNCTIONAL_COVERAGE_PROFILE=$(FUNCTIONAL_TEST_VIZ_PROFILE) \
-		GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT=$(FUNCTIONAL_TEST_VIZ_JSON) \
-		$(MAKE) test-functional-coverage
+	$(call ensure_directory,$(FUNCTIONAL_TEST_VIZ_DIR))
+	$(MAKE) test-functional-coverage \
+		GO_FUNCTIONAL_COVERAGE_PROFILE=$(FUNCTIONAL_TEST_VIZ_PROFILE) \
+		GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT=$(FUNCTIONAL_TEST_VIZ_JSON)
 	$(GO) run ./cmd/functionaltestviz \
 		-coverage-summary $(FUNCTIONAL_TEST_VIZ_JSON) \
 		-output $(FUNCTIONAL_TEST_VIZ_MARKDOWN)
@@ -506,7 +514,7 @@ test-unit-coverage:
 # failures exit non-zero before gocoveragecheck starts.
 test-functional-coverage:
 	$(MAKE) functional-boundary-check
-	$(GO) run ./cmd/gocoveragecheck -suite functional -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),) $(if $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),-json-output $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),)
+	$(GO) run ./cmd/gocoveragecheck -suite functional -jobs $(FUNCTIONAL_DEFAULT_JOBS) -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),) $(if $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),-json-output $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),)
 
 script-timeout-companion-smoke-100:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/workers/inference -run $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST) -count=$(SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT) -timeout $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT)

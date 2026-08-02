@@ -85,6 +85,11 @@ flowchart LR
     recs[Recordings service]
     workers[Worker Execution Service]
     models[Model Runtime Service]
+    docs[Documents Service]
+    wsession[Worker Session Service]
+    provider[Provider Service]
+    events[Event Bus Service]
+    chat[Chat Presentation Service]
 
     api --> svc
     api --> runtime
@@ -95,22 +100,40 @@ flowchart LR
     api --> workers
     api --> models
     api --> recs
+    api --> chat
+
+    chat --constructs worker sessions when appropriate --> wsession
+    chat --receives events to publish to downstream on event change--> events
+    chat --constructs session when appropriate--> svc
+    chat --submits work to responsible workers --> work
+
+    wsession --> events
+    wsession --> workers
+    workers --> provider
 
     recs --> ops
     build --> ops
 
     work --> runtime
-    svc --> runtime
-    svc --> auto
-    svc --> ops
-    svc --> work
+    work --> events
 
-    auto --> work
-    runtime --> recs
+    svc --publish creation/manipulations/deletions of active factories--> events
+    svc --validates runtime is appropriate working if needed--> runtime
+    svc --parse factory definition request into real definition--> build
 
-    runtime --> workers
-    workers --> models
-    workers --> recs
+    events --> auto
+    events --> work
+    events --> runtime
+    events --> wsession
+    events --> svc
+    events --> models
+    events --publishes appropriate events--> recs
+    auto --submits work triggers on request--> work
+    auto --submits events on request --> events
+
+    runtime --publishes system target state on change events--> events
+
+    workers --invokes models when appropriate --> models
 
 ```
 
@@ -130,9 +153,8 @@ roots must not be recreated.
 | Dependency construction and bundle assembly | target `pkg/wire` | Use the single `InjectBundle` entrypoint and one canonical provider set for production and functional external-edge injection. Construct one complete inert process graph; CLI selection activates an operation over injected roles and never calls a child injector or hidden full-graph builder. |
 | Initializer lifecycle | `pkg/initializer` | Start, stop, cancel, join, and unwind already-constructed inert handles without constructing product services, transports, or Factory Session runtime state. |
 | Transport boundaries | target `pkg/transports` | Own HTTP, CLI, MCP, generated transport contracts and clients, and boundary mapping. Translate into injected application/domain services; do not own domain policy or canonical runtime state. |
-| Factory Session state and lifecycle | `pkg/services/factory_sessions` | Own the Wire-injected runtime-opening operation, live session registries, runtime identity, lifecycle gateways, event and response-stream access, durable start and resume, controls, results, dispatches, and persisted execution behavior for the customer-facing Factory Session. Runtime opening creates session-owned domain state from already-injected factories; it is not an application injection pass. Canonical ledger, replay, artifacts, and projection logic belong to Recordings. |
+| Factory Session state and lifecycle | `pkg/services/factory_sessions` | Own the control plane operations of factory sessions. Define the session, handle requests for pause/resume/enumeration/control/delete. Submits messages and requests downstreams to create resources. Responsible for system consistency. Does not own the services. |
 | Factory runtime | `pkg/services/factory_runtime` | Expose transport-neutral orchestration contracts through the Factory Runtime service root; keep source resolution, validation, preview preparation, runtime execution, and checkpoint implementation private to Factory Runtime. |
-| Factory runtime loop | `pkg/services/factory_runtime` | Own event-first runtime behavior, subsystem coordination, scheduling, and emitted Factory events. |
 | Factory event ledger, replay, artifacts, and projections | `pkg/services/recordings` | Own canonical event history, replay policy, durable execution artifacts, and read-model projections. |
 | Workers and workstations | `pkg/services/workers` | Own worker and workstation execution, runner selection, prompt and output shaping, worktrees, mock-worker behavior, and invocation-time worker capability policy. Consume provider and model capabilities through their public service contracts. |
 | Providers | `pkg/services/providers` | Own provider identity, catalog, configuration, lifecycle, ACP integration, and provider execution. Provider adapters and registries remain Providers-owned rather than Workers-owned. |
@@ -143,6 +165,12 @@ roots must not be recreated.
 | Operator settings | `pkg/services/operator_settings` | Own operator configuration documents, defaults, input inventory, and effective settings resolution. |
 | Factory visualization | `pkg/services/factory_visualization` | Own runtime presentation, live-view projections, and response-event presentation. |
 | System initialization | `pkg/services/system_initialization` | Own system bootstrap and rollback operations. |
+| Docs | `pkg/services/docs` | Owns prepackaged documentation resources for access via the models |
+| Event Stream | `pkg/services/event_stream` | Owns a event journal of all operations within the system. Manages subscriptions and publication. Services subscribe to the event stream on initialization. |
+| Worker Sessions | `pkg/services/worker_sessions` | Operating similarly the worker session management like the factory session management. Responsible for submission tot he workers and maintaining long running state and events, and deletions. |
+| Chat | `pkg/services/chat` | Owns the transformed event stream of a factory and its corresponding associated event streams and exposing chat like control plane. i.e. for the ACP protocol, is the one responsble for creating the factory session, resume pause abstractions, and transformign the request event stream from the worker sessions into sub agent tool calls, as well as exposing plan abtractions, configuration operations like effort/model/session, etc |
+
+
 | Platform infrastructure | `pkg/platform` | Own cross-cutting logging, replay artifact filesystem mechanics, metrics, cursor storage, and non-domain clocks. Logging is canonical in `pkg/platform/logging`; collision-safe filesystem mechanics are canonical in `pkg/platform/replay`, while Factory event construction, reduction, recording lifecycle, deterministic delivery, and projections remain Recordings-owned; file-backed runtime metric recording is canonical in `pkg/platform/metrics` behind service-owned contracts; and real or deterministic clocks are canonical in `pkg/platform/clock` behind service-owned clock contracts. Platform implementations do not choose Factory, Factory Session, worker, model, scheduling, or Work policy. |
 | Repository-only test support | `internal/testutil` or package-local `_test.go` files | Keep cross-package fixtures, mocks, assertions, and runtime or replay harnesses internal to this repository. Keep helpers coupled to one package beside that package's tests, and never import repository-only support from production code. |
 
@@ -152,9 +180,18 @@ owner. Customer-facing Factory Session behavior belongs in Factory Session
 owners; Petri-net concepts stay behind the internal runtime boundary.
 
 ## System State
+Note that some of this is largely inspirational, but partially migrated towards, still few services need to be created.
+
+### Cross package interaction
+
+Largely the communication of services is done either via the services:
+1. calling the service APIs directly
+2. receiving event callbacks from registrations to the event stream and then acting upon the event stream.
+
+There is intentionally no other communication between the services besides those two channels to reduce the concurrent problems of complexity. This also enables batching and transactionality of operations.
+
 
 ### System state of a session
-
 
 The system largely operates off of a concept of a "factory session", which are instances of a loop along with its accoutrements, such as crons, daemon sse hooks, and other pollers.
 
@@ -163,17 +200,58 @@ There is a bit of complex wiring between factory sessions and runtime so we brea
 a factory session is responsible for:
 1. retrieving the config/definition
 2. converting all the config/definition and turning it into a declaration of what all services need to be activated
-3. wiring the runtime factory with the appropriate set of definitions to execute
-4. deploying the factory runtime and the appropriate services.
+3. wiring the runtime factory with the appropriate set of definitions to execute and publishing to the event stream
+4. having the various runtimes pull from the event stream
 
 For example:
 
 1. bob asks for a factory session to do some work
 2. factory session gets the definition fo the factory, and figures out what all things needs to be deployed.
-3. factory session sends requests to create all those resources.
-4. factory wires the created resources together, i.e. tells the factory runtime service, what all worker hooks needs to be pushed to, wires the evnet hooks to push from th efactory runtime to the recorder etc.
+3. factory session sends session instantiation to the event stream for a specific session id under the appropriate topic event.
+4. downstream services listen upon the event stream to trigger appropriate downstream objects as subscriptions.
+5. factory session correspondingly subscribes to events on said event stream channel.
 
-The factory runtime is generally unaware of how the workers, recordsings, models, etc are running, it only knows that it has the service hooks wired to push to them. Same is true for all the other services.
+The factory runtime is generally unaware of how the workers, recordsings, models, etc are running, it only knows that it has the service event hooks wired to push to them. Same is true for all the other services.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI as User interface
+    participant TRANS as Transports
+    participant SESS as Session Service
+    participant EVT as Evt Stream
+    participant RUN as Factory Runtime Service
+    participant WRKR as Worker Session Service
+    participant AUTO as Automations Service
+    participant WORK as Work Service
+
+    User->>UI: Initialize session
+    UI->>TRANS: Send command or request to initiate session via transports
+    TRANS->>SESS: Create session definition
+    SESS->>EVT: Send Evt on session creation
+    EVT->>RUN: Instantiate the factory session runtime instance
+    EVT->>AUTO: Instantiate automations as appropriate to teh factory definition
+    RUN->>EVT: Send event on system loop change
+    EVT->>WRKR: Send event on dispatch request as system loop change
+    WRKR->>EVT: Send an event on dispatch completion
+    EVT->>RUN: receive on work dispatch complete, to trigger next session tick
+    alt if using single dispatch mode
+        RUN->>RUN: iterate till done
+        RUN->>EVT: Session done
+        EVT->>SESS: Session done event receive
+        SESS->>USER: DONE
+    else if used in service
+        USER->>UI: Submit new work element
+        UI->>TRANS: Send req
+        TRANS->>WORK: Submit work
+        WORK->>WorkSubmission: Submit Work
+        EVT->RUN:Work request event
+        RUN->RUN: process work request to determine if dispatch or something else
+    end
+
+```
+
+When the ser
 
 ### Core Loop
 

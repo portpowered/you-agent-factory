@@ -20,17 +20,24 @@ Every contributor **MUST** review this standard before conducting or requesting 
 - Approve when the change is correct and within standards, even if you would have written it differently.
 - Request changes for correctness bugs, security issues, missing required tests, or standards violations.
 - Review AI-generated code with extra scrutiny.
+
+### meta files
 - Reject feature PRs that include generated one-off artifacts or prohibited task-management files.
 - Request changes when new user-facing production UI copy bypasses the feature-owned localization catalog path or the repo's hardcoded-copy quality gate without a documented exception.
 - Request changes for unexplained stateful helper paths, hidden side effects, special-case subsystem dispatch, dead code, or Go functions longer than 80 lines without a documented exception.
 - Request changes when backend operations bypass service interfaces, operational behavior is exposed as floating functions, dependencies are hidden in constructor bags, services are constructed outside `wire/`, or a secondary injection path is introduced.
 - Request changes when new or changed service operations lack structured, safe, actionable operation logs without a documented high-volume exception.
+- Reject feature changes that do meta file checking, such as those that implement a secondary filesystem check to conform shapes, since those tend to be expensive to execute.
+
+### functional tests
 - Request changes when a functional-test PR violates any of the five functional-test construction preferences in [general-backend-standards.md §7](./general-backend-standards.md#7-testing-strategy-and-test-pyramid) without a documented, in-scope exception.
 - Request changes when functional tests bypass `root.BuildProcess` + `Process.Execute` by default or invoke a built `you` CLI without proving OS/process-boundary behavior that `BuildProcess` cannot express.
 - Request changes when functional tests use HTTP/API for ordinary customer flows without an API-owned contract or explicit CLI+API parity justification.
 - Request changes when functional tests replace external effects outside `edges.Edges` or prefer custom in-process provider fakes over `ProviderCommandRunner` and other command-runner edge mocks.
 - Request changes when functional tests use `--with-mock-workers` / `MockWorkers` outside `tests/functional/workers/mock/...` cells that own the workers/mock feature.
 - Request changes when functional tests add sleeps or timeout-padded wait helpers as the default synchronization strategy without in-code justification for why deterministic observation or edge mocking cannot substitute.
+
+- Request changes
 
 ## Review Checklist
 

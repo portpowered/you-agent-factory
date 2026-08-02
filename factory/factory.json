@@ -548,9 +548,10 @@
   ],
   "workers": [
     {
-      "executorProvider": "ACP",
-      "modelProvider": "cursor-acp",
-      "model": "composer-2.5",
+      "executorProvider": "SCRIPT_WRAP",
+      "modelProvider": "claude",
+      "model": "claude-sonnet-5",
+      "reasoningEffort": "high",
       "name": "processor",
       "skipPermissions": true,
       "stopToken": "\u003cCOMPLETE\u003e",
@@ -567,20 +568,22 @@
       "type": "SCRIPT_WORKER"
     },
     {
-      "executorProvider": "ACP",
+      "executorProvider": "SCRIPT_WRAP",
+      "modelProvider": "codex",
+      "model": "gpt-5.6-sol",
+      "reasoningEffort": "medium",
       "id": "planner",
-      "modelProvider": "cursor-acp",
-      "model": "grok-4.5-high",
       "name": "planner",
       "skipPermissions": true,
       "stopToken": "\u003cCOMPLETE\u003e",
       "type": "AGENT_WORKER"
     },
     {
-      "executorProvider": "ACP",
+      "executorProvider": "SCRIPT_WRAP",
+      "modelProvider": "codex",
+      "model": "gpt-5.6-sol",
+      "reasoningEffort": "medium",
       "id": "ideafier",
-      "modelProvider": "cursor-acp",
-      "model": "grok-4.5-medium",
       "name": "ideafier",
       "skipPermissions": true,
       "type": "AGENT_WORKER"

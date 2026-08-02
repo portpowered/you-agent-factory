@@ -6,11 +6,72 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+func TestWaitForSessionTerminalStatusUsesExactSessionAndReturnsWithoutStabilityDelay(t *testing.T) {
+	const sessionID = "session with identity"
+	canceled := factoryapi.FactorySessionDurableLifecycleStatusCanceled
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/factory-sessions/session with identity/status" {
+			t.Errorf("status path = %q", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(factoryapi.StatusResponse{
+			Categories:             factoryapi.StatusCategories{Failed: 1},
+			LifecycleControlStatus: &canceled,
+			RuntimeStatus:          "IDLE",
+			TotalTokens:            1,
+		})
+	}))
+	defer server.Close()
+
+	started := time.Now()
+	status := support.WaitForSessionTerminalStatus(t, server.URL, sessionID, time.Second)
+	if elapsed := time.Since(started); elapsed >= 200*time.Millisecond {
+		t.Fatalf("terminal observation took %s, want no 300ms stability delay", elapsed)
+	}
+	if status.LifecycleControlStatus == nil ||
+		*status.LifecycleControlStatus != factoryapi.FactorySessionDurableLifecycleStatusCanceled {
+		t.Fatalf("terminal lifecycle status = %#v, want CANCELED", status.LifecycleControlStatus)
+	}
+}
+
+func TestWaitForSessionTerminalStatusRejectsTransientActiveGap(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		request := requests.Add(1)
+		status := factoryapi.StatusResponse{
+			Categories:    factoryapi.StatusCategories{Terminal: 1},
+			RuntimeStatus: "ACTIVE",
+			TotalTokens:   1,
+		}
+		if request == 2 {
+			status.Categories = factoryapi.StatusCategories{Processing: 1}
+		}
+		if request >= 3 {
+			status.RuntimeStatus = "IDLE"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(status)
+	}))
+	defer server.Close()
+
+	status := support.WaitForSessionTerminalStatus(t, server.URL, "session-transient", time.Second)
+	if requests.Load() < 3 {
+		t.Fatalf("status requests = %d, accepted transient active gap", requests.Load())
+	}
+	if status.RuntimeStatus != "IDLE" || status.Categories.Terminal != 1 {
+		t.Fatalf("terminal status = %#v", status)
+	}
+}
 
 func TestUpsertDefaultSessionWorkRequest_PostsGeneratedWorkRequest(t *testing.T) {
 	var (

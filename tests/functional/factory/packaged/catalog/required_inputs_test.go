@@ -33,8 +33,8 @@ type packagedFactoryMissingRequiredInputRun struct {
 
 // TestPackagedFactoriesRejectMissingRequiredInputs proves that omitting required
 // invocation inputs for every packaged Factory in the embedded package matrix
-// rejects through the public packaged-catalog invocation boundary without a
-// completed success primary result attributable to the missing-input attempt.
+// rejects through the public packaged-catalog invocation boundary, without a
+// completed success result, and names both the Factory and missing input.
 func TestPackagedFactoriesRejectMissingRequiredInputs(t *testing.T) {
 	cases, err := packagedFactoriesWithRequiredInvocationInputs()
 	if err != nil {
@@ -47,33 +47,7 @@ func TestPackagedFactoriesRejectMissingRequiredInputs(t *testing.T) {
 	for _, testcase := range cases {
 		testcase := testcase
 		t.Run(testcase.factoryName, func(t *testing.T) {
-			runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-			run := runPackagedFactoryMissingRequiredInputInvocation(
-				t,
-				runner,
-				testcase.factoryName,
-			)
-			assertPackagedFactoryMissingRequiredInputRejected(t, run, runner)
-		})
-	}
-}
-
-// TestPackagedFactoriesNameMissingInputAndFactory proves that omitting required
-// invocation inputs for every packaged Factory in the embedded package matrix
-// surfaces customer-visible failure diagnostics naming both the missing input and
-// the Factory under test through the public packaged-catalog invocation boundary.
-func TestPackagedFactoriesNameMissingInputAndFactory(t *testing.T) {
-	cases, err := packagedFactoriesWithRequiredInvocationInputs()
-	if err != nil {
-		t.Fatalf("packaged Factory matrix: %v", err)
-	}
-	if len(cases) == 0 {
-		t.Fatal("packaged Factory matrix has no required-input cases")
-	}
-
-	for _, testcase := range cases {
-		testcase := testcase
-		t.Run(testcase.factoryName, func(t *testing.T) {
+			t.Parallel()
 			runner := support.NewRecordingCommandRunner("unexpected live provider execution")
 			run := runPackagedFactoryMissingRequiredInputInvocation(
 				t,
