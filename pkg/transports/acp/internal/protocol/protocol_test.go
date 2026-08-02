@@ -110,7 +110,7 @@ func TestGuard_RepeatedInvalidInputIsDeterministic(t *testing.T) {
 func TestGuardEnvelope_MalformedEnvelopeNeverCallsValidateOrEffect(t *testing.T) {
 	validateCalled, effectCalled := false, false
 
-	env, err := GuardEnvelope("conn-1", json.RawMessage(`{"jsonrpc":"2.0","method":"session/new"}`),
+	env, err := GuardEnvelope("conn-1", 1, json.RawMessage(`{"jsonrpc":"2.0","method":"session/new"}`),
 		func(envelope.Envelope) error { validateCalled = true; return nil },
 		func() error { effectCalled = true; return nil },
 	)
@@ -132,7 +132,7 @@ func TestGuardEnvelope_MalformedEnvelopeNeverCallsValidateOrEffect(t *testing.T)
 func TestGuardEnvelope_UnsupportedMethodNeverCallsValidateOrEffect(t *testing.T) {
 	validateCalled, effectCalled := false, false
 
-	_, err := GuardEnvelope("conn-1", json.RawMessage(`{"jsonrpc":"2.0","id":1,"method":"session/experimental_fork"}`),
+	_, err := GuardEnvelope("conn-1", 1, json.RawMessage(`{"jsonrpc":"2.0","id":1,"method":"session/experimental_fork"}`),
 		func(envelope.Envelope) error { validateCalled = true; return nil },
 		func() error { effectCalled = true; return nil },
 	)
@@ -164,7 +164,7 @@ func TestGuardEnvelope_ValidEnvelopeCallsEffectExactlyOnceWithBoundIdentity(t *t
 	var gotIdentity identity.RequestIdentity
 	var gotParams session.NewSessionParams
 
-	env, err := GuardEnvelope("conn-1", json.RawMessage(`{"jsonrpc":"2.0","id":42,"method":"session/new","params":{"cwd":"/a","mcpServers":[]}}`),
+	env, err := GuardEnvelope("conn-1", 1, json.RawMessage(`{"jsonrpc":"2.0","id":42,"method":"session/new","params":{"cwd":"/a","mcpServers":[]}}`),
 		func(env envelope.Envelope) error {
 			gotIdentity = env.Identity
 			v, verr := session.ValidateNewSession(env.Params)
@@ -205,7 +205,7 @@ func TestGuardEnvelope_SameJSONRPCIDDifferentConnectionsNeverCollide(t *testing.
 	var identities []identity.RequestIdentity
 
 	for _, conn := range []identity.ConnectionID{"conn-a", "conn-b"} {
-		_, err := GuardEnvelope(conn, raw,
+		_, err := GuardEnvelope(conn, 1, raw,
 			func(env envelope.Envelope) error {
 				identities = append(identities, env.Identity)
 				var req acpsdk.PromptRequest
@@ -232,7 +232,7 @@ func TestGuardEnvelope_SameJSONRPCIDDifferentConnectionsNeverCollide(t *testing.
 // and proves the resulting Envelope reports IsNotification true, so a
 // caller knows never to send a response for it.
 func TestGuardEnvelope_ValidNotificationSignalsNoResponseOwed(t *testing.T) {
-	env, err := GuardEnvelope("conn-1", json.RawMessage(`{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"s"}}`),
+	env, err := GuardEnvelope("conn-1", 1, json.RawMessage(`{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"s"}}`),
 		func(env envelope.Envelope) error {
 			var notif acpsdk.CancelNotification
 			if uerr := json.Unmarshal(env.Params, &notif); uerr != nil {
@@ -260,7 +260,7 @@ func TestGuardEnvelope_ValidNotificationSignalsNoResponseOwed(t *testing.T) {
 // than ever serializing it back as a JSON-RPC response, even though the
 // error itself is still produced (e.g. for internal logging).
 func TestGuardEnvelope_InvalidNotificationStillSignalsNoResponseOwed(t *testing.T) {
-	env, err := GuardEnvelope("conn-1", json.RawMessage(`{"jsonrpc":"2.0","method":"session/cancel","params":{}}`),
+	env, err := GuardEnvelope("conn-1", 1, json.RawMessage(`{"jsonrpc":"2.0","method":"session/cancel","params":{}}`),
 		func(env envelope.Envelope) error {
 			var notif acpsdk.CancelNotification
 			if uerr := json.Unmarshal(env.Params, &notif); uerr != nil {
@@ -284,7 +284,7 @@ func TestGuardEnvelope_InvalidNotificationStillSignalsNoResponseOwed(t *testing.
 // effect ever runs, and that a decode failure reports IsNotification false
 // (a message this ambiguous still owes an ordinary error response).
 func TestGuardEnvelope_NotificationWithIDIsMalformed(t *testing.T) {
-	env, err := GuardEnvelope("conn-1", json.RawMessage(`{"jsonrpc":"2.0","id":1,"method":"session/cancel","params":{"sessionId":"s"}}`),
+	env, err := GuardEnvelope("conn-1", 1, json.RawMessage(`{"jsonrpc":"2.0","id":1,"method":"session/cancel","params":{"sessionId":"s"}}`),
 		func(envelope.Envelope) error {
 			t.Fatal("validate must not run for an id-bearing notification")
 			return nil

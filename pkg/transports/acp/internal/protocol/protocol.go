@@ -48,14 +48,18 @@ func Guard(method string, validate func() error, effect func() error) error {
 
 // GuardEnvelope decodes raw JSON-RPC message bytes received on
 // connectionID into an identity-bound envelope.Envelope before Guard ever
-// runs. A malformed envelope -- invalid JSON, a missing method, an
-// unsupported id shape, an id-bearing notification, or a request method
-// with no id -- is rejected here, before the method is looked up against
-// SupportedMethods and before validate or effect is ever called, so a
-// malformed message can never reach dispatch under a request identity that
-// was never actually validated. A well-formed envelope is then dispatched
-// exactly like Guard: an unsupported method never calls validate or
-// effect, and a validate failure never calls effect.
+// runs. notificationSeq is forwarded to envelope.Decode unchanged: it is
+// the connection/framing layer's responsibility to supply a value unique
+// per notification received on this connection (see envelope.Decode), and
+// GuardEnvelope has no state of its own to derive one from. A malformed
+// envelope -- invalid JSON, a missing method, an unsupported id shape, an
+// id-bearing notification, or a request method with no id -- is rejected
+// here, before the method is looked up against SupportedMethods and before
+// validate or effect is ever called, so a malformed message can never
+// reach dispatch under a request identity that was never actually
+// validated. A well-formed envelope is then dispatched exactly like Guard:
+// an unsupported method never calls validate or effect, and a validate
+// failure never calls effect.
 //
 // GuardEnvelope returns the decoded Envelope alongside the dispatch error
 // so a caller can tell whether a response is ever owed for this message:
@@ -66,8 +70,8 @@ func Guard(method string, validate func() error, effect func() error) error {
 // Envelope, whose IsNotification is false, matching ordinary JSON-RPC
 // server behavior: input the server cannot even classify still owes an
 // error response.
-func GuardEnvelope(connectionID identity.ConnectionID, raw json.RawMessage, validate func(envelope.Envelope) error, effect func() error) (envelope.Envelope, error) {
-	env, err := envelope.Decode(connectionID, raw)
+func GuardEnvelope(connectionID identity.ConnectionID, notificationSeq uint64, raw json.RawMessage, validate func(envelope.Envelope) error, effect func() error) (envelope.Envelope, error) {
+	env, err := envelope.Decode(connectionID, notificationSeq, raw)
 	if err != nil {
 		return envelope.Envelope{}, SafeReject(err)
 	}

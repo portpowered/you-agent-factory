@@ -3,6 +3,7 @@ package acp_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/acpfixtures"
 	"github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
+	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/protocol"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
 )
@@ -22,19 +24,82 @@ import (
 // not by this corpus.
 const fixtureConnectionID = "fixture-connection"
 
+// methodDispatch is a test-only adapter over this package's real
+// compatibility mapping: for every session/* method this transport
+// supports, it decodes the method-specific SDK params from an already
+// identity-bound envelope.Envelope and calls the exact Validate* function
+// that owns that method. assertDispatchedCase looks this map up by the
+// envelope's own decoded Method -- the same key protocol.GuardEnvelope
+// dispatches on -- rather than by a fixture's declared Role, so a fixture
+// whose Role does not actually match its Input's wire "method" is caught as
+// a test failure instead of silently routed to whichever validator the
+// Role happens to name.
+//
+// "initialize" is deliberately not in this map: NegotiateInitialization
+// returns its own richer *acpsdk.RequestError (see assertInitializeCase),
+// which protocol.Guard's generic SafeReject classification would
+// overwrite.
+var methodDispatch = map[string]func(env envelope.Envelope) (any, error){
+	"session/new": func(env envelope.Envelope) (any, error) {
+		return session.ValidateNewSession(env.Params)
+	},
+	"session/load": func(env envelope.Envelope) (any, error) {
+		return session.ValidateLoadSession(env.Params)
+	},
+	"session/resume": func(env envelope.Envelope) (any, error) {
+		return session.ValidateResumeSession(env.Params)
+	},
+	"session/cancel": func(env envelope.Envelope) (any, error) {
+		var req acpsdk.CancelNotification
+		if err := json.Unmarshal(env.Params, &req); err != nil {
+			return nil, err
+		}
+		return session.ValidateCancel(req)
+	},
+	"session/set_config_option": func(env envelope.Envelope) (any, error) {
+		return session.ValidateSetConfigOption(env.Params)
+	},
+	"session/prompt": func(env envelope.Envelope) (any, error) {
+		var req acpsdk.PromptRequest
+		if err := json.Unmarshal(env.Params, &req); err != nil {
+			return nil, err
+		}
+		return session.ValidatePrompt(req)
+	},
+	"session/update": func(env envelope.Envelope) (any, error) {
+		var notif acpsdk.SessionNotification
+		if err := json.Unmarshal(env.Params, &notif); err != nil {
+			return nil, err
+		}
+		return session.ValidateSessionUpdate(notif)
+	},
+	"session/request_permission": func(env envelope.Envelope) (any, error) {
+		var req acpsdk.RequestPermissionRequest
+		if err := json.Unmarshal(env.Params, &req); err != nil {
+			return nil, err
+		}
+		return session.ValidatePermissionCorrelation(req)
+	},
+}
+
 // TestACPConformanceFixtures decodes every committed sanitized fixture
 // corpus from the shared internal/testutil/acpfixtures corpus and asserts
 // each case's declared semantic behavior against the L1 V0 compatibility
 // functions those cases exercise. Every JSON-RPC method-role case's Input
-// is a complete JSON-RPC message, decoded through envelope.Decode (and, for
-// every role whose rejections use the shared three-way RejectionKind
-// classification, dispatched through protocol.GuardEnvelope) so the
-// combined method + request + method-specific identity round trip is
-// proven, not just the isolated params-to-value mapping. It proves
-// behavior only through parsed protocol outcomes: it never scans the
-// testdata directory's file inventory, and it never asserts anything about
-// which files exist. The same committed corpus is independently consumed
-// by the inbound Providers-owned ACP mapper (see
+// is a complete JSON-RPC message, decoded through envelope.Decode and
+// dispatched by the envelope's own decoded Method (via methodDispatch, or
+// directly to NegotiateInitialization for "initialize") rather than by the
+// fixture's declared Role, so the combined method + request/notification
+// identity + method-specific identity round trip is proven end to end, not
+// just the isolated params-to-value mapping. Every accepted case's semantic
+// value and every case's request identity are additionally round-tripped
+// through encoding/json and compared against the pre-round-trip value, so a
+// content or correlation field that failed to survive encode/decode would
+// fail here even if the raw Expected comparison happened to still match.
+// It proves behavior only through parsed protocol outcomes: it never scans
+// the testdata directory's file inventory, and it never asserts anything
+// about which files exist. The same committed corpus is independently
+// consumed by the inbound Providers-owned ACP mapper (see
 // pkg/services/providers/internal/services/acp/internal/service), so both
 // protocol directions are checked against the same semantic inputs without
 // either importing the other's production package.
@@ -44,10 +109,13 @@ func TestACPConformanceFixtures(t *testing.T) {
 		t.Fatalf("LoadAll() error = %v", err)
 	}
 
+	var seq uint64
 	for _, corpus := range corpora {
 		for _, c := range corpus.Cases {
+			seq++
+			caseSeq := seq
 			t.Run(string(c.Role)+"/"+c.Name, func(t *testing.T) {
-				assertCaseSemantics(t, c)
+				assertCaseSemantics(t, c, caseSeq)
 			})
 		}
 	}
@@ -63,7 +131,7 @@ func TestACPConformanceFixtureShapeRejectsInvalidCorpus(t *testing.T) {
 	}
 }
 
-func assertCaseSemantics(t *testing.T, c acpfixtures.Case) {
+func assertCaseSemantics(t *testing.T, c acpfixtures.Case, seq uint64) {
 	t.Helper()
 	switch c.Role {
 	case acpfixtures.RoleInitialize:
@@ -71,140 +139,10 @@ func assertCaseSemantics(t *testing.T, c acpfixtures.Case) {
 		// unsupported_protocol_version, with requested/supported version
 		// numbers) is richer than the shared three-way RejectionKind
 		// SafeReject produces, so this case decodes the envelope for its
-		// identity/params binding but calls NegotiateInitialization
+		// identity/method binding but calls NegotiateInitialization
 		// directly rather than through protocol.Guard's generic rejection
 		// wrapping.
-		env, err := envelope.Decode(fixtureConnectionID, c.Input)
-		if err != nil {
-			t.Fatalf("%s: envelope.Decode() unexpected error: %v", c.Name, err)
-		}
-		if env.IsNotification {
-			t.Fatalf("%s: initialize decoded as a notification, want a request", c.Name)
-		}
-		var req acpsdk.InitializeRequest
-		mustUnmarshal(t, env.Params, &req)
-		resp, err := acp.NegotiateInitialization(req)
-		assertOutcome(t, c, resp, err)
-
-	case acpfixtures.RoleSessionNew:
-		var got session.NewSessionParams
-		env, err := protocol.GuardEnvelope(fixtureConnectionID, c.Input,
-			func(env envelope.Envelope) error {
-				v, verr := session.ValidateNewSession(env.Params)
-				got = v
-				return verr
-			},
-			func() error { return nil },
-		)
-		requireNotNotification(t, c, env)
-		assertOutcome(t, c, got, err)
-
-	case acpfixtures.RoleSessionLoad:
-		var got session.LoadSessionParams
-		env, err := protocol.GuardEnvelope(fixtureConnectionID, c.Input,
-			func(env envelope.Envelope) error {
-				v, verr := session.ValidateLoadSession(env.Params)
-				got = v
-				return verr
-			},
-			func() error { return nil },
-		)
-		requireNotNotification(t, c, env)
-		assertOutcome(t, c, got, err)
-
-	case acpfixtures.RoleSessionResume:
-		var got session.LoadSessionParams
-		env, err := protocol.GuardEnvelope(fixtureConnectionID, c.Input,
-			func(env envelope.Envelope) error {
-				v, verr := session.ValidateResumeSession(env.Params)
-				got = v
-				return verr
-			},
-			func() error { return nil },
-		)
-		requireNotNotification(t, c, env)
-		assertOutcome(t, c, got, err)
-
-	case acpfixtures.RoleSessionCancel:
-		var got session.CancelParams
-		env, err := protocol.GuardEnvelope(fixtureConnectionID, c.Input,
-			func(env envelope.Envelope) error {
-				var req acpsdk.CancelNotification
-				if uerr := json.Unmarshal(env.Params, &req); uerr != nil {
-					return uerr
-				}
-				v, verr := session.ValidateCancel(req)
-				got = v
-				return verr
-			},
-			func() error { return nil },
-		)
-		requireNotification(t, c, env)
-		assertOutcome(t, c, got, err)
-
-	case acpfixtures.RoleSessionSetConfigOption:
-		var got session.ConfigOptionValue
-		env, err := protocol.GuardEnvelope(fixtureConnectionID, c.Input,
-			func(env envelope.Envelope) error {
-				v, verr := session.ValidateSetConfigOption(env.Params)
-				got = v
-				return verr
-			},
-			func() error { return nil },
-		)
-		requireNotNotification(t, c, env)
-		assertOutcome(t, c, got, err)
-
-	case acpfixtures.RoleSessionPrompt:
-		var got session.PromptTurn
-		env, err := protocol.GuardEnvelope(fixtureConnectionID, c.Input,
-			func(env envelope.Envelope) error {
-				var req acpsdk.PromptRequest
-				if uerr := json.Unmarshal(env.Params, &req); uerr != nil {
-					return uerr
-				}
-				v, verr := session.ValidatePrompt(req)
-				got = v
-				return verr
-			},
-			func() error { return nil },
-		)
-		requireNotNotification(t, c, env)
-		assertOutcome(t, c, got, err)
-
-	case acpfixtures.RoleSessionUpdate:
-		var got session.TextUpdate
-		env, err := protocol.GuardEnvelope(fixtureConnectionID, c.Input,
-			func(env envelope.Envelope) error {
-				var notif acpsdk.SessionNotification
-				if uerr := json.Unmarshal(env.Params, &notif); uerr != nil {
-					return uerr
-				}
-				v, verr := session.ValidateSessionUpdate(notif)
-				got = v
-				return verr
-			},
-			func() error { return nil },
-		)
-		requireNotification(t, c, env)
-		assertOutcome(t, c, got, err)
-
-	case acpfixtures.RoleSessionRequestPermission:
-		var got session.PermissionCorrelation
-		env, err := protocol.GuardEnvelope(fixtureConnectionID, c.Input,
-			func(env envelope.Envelope) error {
-				var req acpsdk.RequestPermissionRequest
-				if uerr := json.Unmarshal(env.Params, &req); uerr != nil {
-					return uerr
-				}
-				v, verr := session.ValidatePermissionCorrelation(req)
-				got = v
-				return verr
-			},
-			func() error { return nil },
-		)
-		requireNotNotification(t, c, env)
-		assertOutcome(t, c, got, err)
+		assertInitializeCase(t, c, seq)
 
 	case acpfixtures.RoleStopReason:
 		var in struct {
@@ -227,31 +165,110 @@ func assertCaseSemantics(t *testing.T, c acpfixtures.Case) {
 		assertOutcome(t, c, nil, err)
 
 	default:
-		t.Fatalf("no compatibility check wired for role %q", c.Role)
+		assertDispatchedCase(t, c, seq)
 	}
 }
 
-// requireNotNotification asserts a request-role case decoded as an
-// ordinary, id-correlated request, proving the envelope layer's
-// request/notification split lines up with this corpus's declared roles.
-func requireNotNotification(t *testing.T, c acpfixtures.Case, env envelope.Envelope) {
+// assertInitializeCase decodes the envelope to prove the fixture's declared
+// Role matches its own Input's wire method and that the resulting request
+// identity round-trips, then asserts NegotiateInitialization's outcome
+// directly (see the RoleInitialize case in assertCaseSemantics for why it
+// bypasses protocol.Guard/GuardEnvelope).
+func assertInitializeCase(t *testing.T, c acpfixtures.Case, seq uint64) {
 	t.Helper()
+	env, err := envelope.Decode(fixtureConnectionID, seq, c.Input)
+	if err != nil {
+		t.Fatalf("%s: envelope.Decode() unexpected error: %v", c.Name, err)
+	}
 	if env.IsNotification {
-		t.Fatalf("%s: decoded as a notification, want a request (IsNotification=false)", c.Name)
+		t.Fatalf("%s: initialize decoded as a notification, want a request", c.Name)
+	}
+	if env.Method != string(c.Role) {
+		t.Fatalf("%s: envelope method = %q, want fixture role %q", c.Name, env.Method, c.Role)
+	}
+	assertIdentityRoundTrips(t, c.Name, env.Identity)
+
+	var req acpsdk.InitializeRequest
+	mustUnmarshal(t, env.Params, &req)
+	resp, err := acp.NegotiateInitialization(req)
+	assertOutcome(t, c, resp, err)
+}
+
+// assertDispatchedCase decodes and dispatches a session/* fixture case
+// through protocol.GuardEnvelope exactly as production dispatch would,
+// selecting the validator to call from the envelope's own decoded Method
+// via methodDispatch rather than from the fixture's declared Role. It then
+// proves: the decoded method matches the fixture's declared Role, the
+// decoded notification/request classification matches the production
+// envelope.NotificationMethods set, the request identity round-trips
+// through JSON, the case's declared Classification and Expected value hold,
+// and -- for an accepted case -- the resulting semantic value (carrying
+// session/content/correlation fields such as SessionID, ToolCallID, or
+// OptionIDs) itself round-trips through JSON without loss.
+func assertDispatchedCase(t *testing.T, c acpfixtures.Case, seq uint64) {
+	t.Helper()
+
+	var got any
+	env, err := protocol.GuardEnvelope(fixtureConnectionID, seq, c.Input,
+		func(env envelope.Envelope) error {
+			dispatch, ok := methodDispatch[env.Method]
+			if !ok {
+				return fmt.Errorf("no compatibility dispatch wired for method %q", env.Method)
+			}
+			v, verr := dispatch(env)
+			got = v
+			return verr
+		},
+		func() error { return nil },
+	)
+
+	if env.Method != string(c.Role) {
+		t.Fatalf("%s: envelope method = %q, want fixture role %q", c.Name, env.Method, c.Role)
+	}
+	if wantNotification := envelope.NotificationMethods[env.Method]; env.IsNotification != wantNotification {
+		t.Fatalf("%s: IsNotification = %v, want %v for method %q", c.Name, env.IsNotification, wantNotification, env.Method)
+	}
+	assertIdentityRoundTrips(t, c.Name, env.Identity)
+
+	assertOutcome(t, c, got, err)
+	if c.Classification == acpfixtures.ClassificationAccepted {
+		assertValueRoundTrips(t, c.Name, got)
 	}
 }
 
-// requireNotification asserts a notification-role case (session/cancel,
-// session/update) decoded with a minted, connection-scoped identity and no
-// JSON-RPC id, proving the envelope layer's request/notification split
-// lines up with this corpus's declared roles.
-func requireNotification(t *testing.T, c acpfixtures.Case, env envelope.Envelope) {
+// assertIdentityRoundTrips proves a request identity produced by decoding a
+// real fixture's wire message survives an encode/decode cycle unchanged.
+func assertIdentityRoundTrips(t *testing.T, name string, id identity.RequestIdentity) {
 	t.Helper()
-	if !env.IsNotification {
-		t.Fatalf("%s: decoded as a request, want a notification (IsNotification=true)", c.Name)
+	encoded, err := json.Marshal(id)
+	if err != nil {
+		t.Fatalf("%s: marshal request identity: %v", name, err)
 	}
-	if !env.Identity.IsMinted() {
-		t.Fatalf("%s: notification identity is not minted", c.Name)
+	var decoded identity.RequestIdentity
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("%s: unmarshal request identity: %v", name, err)
+	}
+	if !decoded.Equal(id) {
+		t.Fatalf("%s: request identity did not round-trip: got %+v, want %+v", name, decoded, id)
+	}
+}
+
+// assertValueRoundTrips proves an accepted case's semantic value survives an
+// encode/decode cycle unchanged, so a lossy reduction (e.g. a dropped
+// session or correlation field) fails here even if it happened to still
+// satisfy the fixture's Expected comparison.
+func assertValueRoundTrips(t *testing.T, name string, value any) {
+	t.Helper()
+	data, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("%s: marshal semantic value: %v", name, err)
+	}
+	roundTripped := reflect.New(reflect.TypeOf(value))
+	if err := json.Unmarshal(data, roundTripped.Interface()); err != nil {
+		t.Fatalf("%s: unmarshal semantic value: %v", name, err)
+	}
+	if !reflect.DeepEqual(value, roundTripped.Elem().Interface()) {
+		t.Fatalf("%s: semantic value did not round-trip: got %+v, want %+v", name, roundTripped.Elem().Interface(), value)
 	}
 }
 

@@ -85,11 +85,15 @@ type Envelope struct {
 // connection id, any id shape identity.NewJSONRPCID does not accept, an
 // id-bearing NotificationMethods message, and a non-notification method
 // with no id, before ever producing an Envelope value. A notification
-// carries no JSON-RPC id to correlate by, so its identity is minted from
-// the connection and method rather than correlated to an id. Decode
-// performs no IO and invokes no downstream validator or effect: a
-// rejection here can never have a side effect to undo.
-func Decode(connectionID identity.ConnectionID, raw json.RawMessage) (Envelope, error) {
+// carries no JSON-RPC id to correlate by, so its identity is instead minted
+// from the connection, the method, and notificationSeq -- a value the
+// connection/framing layer must supply as unique per notification received
+// on this connection (for example a connection-local monotonic counter),
+// since Decode itself has no state across calls and cannot otherwise tell
+// two same-method notifications on one connection apart. Decode performs no
+// IO and invokes no downstream validator or effect: a rejection here can
+// never have a side effect to undo.
+func Decode(connectionID identity.ConnectionID, notificationSeq uint64, raw json.RawMessage) (Envelope, error) {
 	var w wireRequest
 	if err := json.Unmarshal(raw, &w); err != nil {
 		return Envelope{}, fmt.Errorf("%w: invalid JSON: %v", ErrMalformedEnvelope, err)
@@ -111,9 +115,9 @@ func Decode(connectionID identity.ConnectionID, raw json.RawMessage) (Envelope, 
 			return Envelope{}, fmt.Errorf("%w: %s is a notification and must not carry an id", ErrMalformedEnvelope, w.Method)
 		}
 		// connectionID and w.Method are already validated non-blank above,
-		// so this concatenation can never be empty and NewMinted can never
-		// fail here.
-		mintedIdentity, _ := identity.NewMinted(string(connectionID) + "|" + w.Method)
+		// so this formatted string can never be empty and NewMinted can
+		// never fail here.
+		mintedIdentity, _ := identity.NewMinted(fmt.Sprintf("%s|%s|%d", connectionID, w.Method, notificationSeq))
 		return Envelope{Identity: mintedIdentity, Method: w.Method, Params: w.Params, IsNotification: true}, nil
 	}
 

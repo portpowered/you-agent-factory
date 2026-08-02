@@ -9,7 +9,7 @@ import (
 )
 
 func TestDecode_BindsConnectionMethodAndParams(t *testing.T) {
-	env, err := Decode("conn-1", json.RawMessage(`{"jsonrpc":"2.0","id":1,"method":"session/prompt","params":{"sessionId":"sess-1"}}`))
+	env, err := Decode("conn-1", 1, json.RawMessage(`{"jsonrpc":"2.0","id":1,"method":"session/prompt","params":{"sessionId":"sess-1"}}`))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -31,11 +31,11 @@ func TestDecode_BindsConnectionMethodAndParams(t *testing.T) {
 func TestDecode_SameJSONRPCIDDifferentConnectionsProduceDistinctIdentities(t *testing.T) {
 	raw := json.RawMessage(`{"jsonrpc":"2.0","id":1,"method":"session/prompt","params":{}}`)
 
-	envA, err := Decode("conn-a", raw)
+	envA, err := Decode("conn-a", 1, raw)
 	if err != nil {
 		t.Fatalf("Decode(conn-a) unexpected error: %v", err)
 	}
-	envB, err := Decode("conn-b", raw)
+	envB, err := Decode("conn-b", 1, raw)
 	if err != nil {
 		t.Fatalf("Decode(conn-b) unexpected error: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestDecode_RejectsMalformedInput(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := Decode("conn-1", json.RawMessage(tt.raw))
+			_, err := Decode("conn-1", 1, json.RawMessage(tt.raw))
 			if err == nil {
 				t.Fatalf("Decode(%s) error = nil, want a malformed-envelope rejection", tt.raw)
 			}
@@ -77,7 +77,7 @@ func TestDecode_RejectsMalformedInput(t *testing.T) {
 }
 
 func TestDecode_RejectsBlankConnectionID(t *testing.T) {
-	_, err := Decode("", json.RawMessage(`{"jsonrpc":"2.0","id":1,"method":"session/prompt"}`))
+	_, err := Decode("", 1, json.RawMessage(`{"jsonrpc":"2.0","id":1,"method":"session/prompt"}`))
 	if !errors.Is(err, ErrMalformedEnvelope) {
 		t.Fatalf("Decode() with blank connection id error = %v, want it to wrap ErrMalformedEnvelope", err)
 	}
@@ -87,7 +87,7 @@ func TestDecode_AcceptsValidNotificationWithoutID(t *testing.T) {
 	for _, method := range []string{"session/cancel", "session/update"} {
 		t.Run(method, func(t *testing.T) {
 			raw := json.RawMessage(`{"jsonrpc":"2.0","method":"` + method + `","params":{"sessionId":"s"}}`)
-			env, err := Decode("conn-1", raw)
+			env, err := Decode("conn-1", 1, raw)
 			if err != nil {
 				t.Fatalf("Decode() unexpected error: %v", err)
 			}
@@ -107,11 +107,11 @@ func TestDecode_AcceptsValidNotificationWithoutID(t *testing.T) {
 func TestDecode_NotificationIdentityIsDistinctPerConnection(t *testing.T) {
 	raw := json.RawMessage(`{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"s"}}`)
 
-	envA, err := Decode("conn-a", raw)
+	envA, err := Decode("conn-a", 1, raw)
 	if err != nil {
 		t.Fatalf("Decode(conn-a) unexpected error: %v", err)
 	}
-	envB, err := Decode("conn-b", raw)
+	envB, err := Decode("conn-b", 1, raw)
 	if err != nil {
 		t.Fatalf("Decode(conn-b) unexpected error: %v", err)
 	}
@@ -120,8 +120,47 @@ func TestDecode_NotificationIdentityIsDistinctPerConnection(t *testing.T) {
 	}
 }
 
+// TestDecode_NotificationIdentityIsDistinctPerSequenceOnSameConnection proves
+// two same-method notifications received on the *same* connection do not
+// collide: a notification carries no JSON-RPC id, so its identity is minted
+// from the connection, method, and the caller-supplied notificationSeq. This
+// is the collision this transport must avoid in practice -- the
+// connection/framing layer sends a stream of session/update notifications on
+// one connection -- unlike the cross-connection case above, which two
+// different NewMinted inputs already made trivially distinct.
+func TestDecode_NotificationIdentityIsDistinctPerSequenceOnSameConnection(t *testing.T) {
+	raw := json.RawMessage(`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s","update":{}}}`)
+
+	first, err := Decode("conn-1", 1, raw)
+	if err != nil {
+		t.Fatalf("Decode(seq=1) unexpected error: %v", err)
+	}
+	second, err := Decode("conn-1", 2, raw)
+	if err != nil {
+		t.Fatalf("Decode(seq=2) unexpected error: %v", err)
+	}
+	if first.Identity.Equal(second.Identity) {
+		t.Fatal("two notifications on the same connection with different sequence numbers produced equal identities")
+	}
+
+	firstEncoded, err := json.Marshal(first)
+	if err != nil {
+		t.Fatalf("Marshal(first) error = %v", err)
+	}
+	var firstDecoded Envelope
+	if err := json.Unmarshal(firstEncoded, &firstDecoded); err != nil {
+		t.Fatalf("Unmarshal(first) error = %v", err)
+	}
+	if !firstDecoded.Identity.Equal(first.Identity) {
+		t.Fatalf("round-tripped identity = %+v, want %+v", firstDecoded.Identity, first.Identity)
+	}
+	if firstDecoded.Identity.Equal(second.Identity) {
+		t.Fatal("round-tripped notification identity collapsed onto a different sequence's identity")
+	}
+}
+
 func TestEnvelope_JSONRoundTrip(t *testing.T) {
-	env, err := Decode("conn-1", json.RawMessage(`{"jsonrpc":"2.0","id":"req-7","method":"session/new","params":{"cwd":"/a"}}`))
+	env, err := Decode("conn-1", 1, json.RawMessage(`{"jsonrpc":"2.0","id":"req-7","method":"session/new","params":{"cwd":"/a"}}`))
 	if err != nil {
 		t.Fatalf("Decode() unexpected error: %v", err)
 	}
@@ -143,7 +182,7 @@ func TestEnvelope_JSONRoundTrip(t *testing.T) {
 }
 
 func TestEnvelope_NotificationJSONRoundTrip(t *testing.T) {
-	env, err := Decode("conn-1", json.RawMessage(`{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"s"}}`))
+	env, err := Decode("conn-1", 1, json.RawMessage(`{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"s"}}`))
 	if err != nil {
 		t.Fatalf("Decode() unexpected error: %v", err)
 	}
