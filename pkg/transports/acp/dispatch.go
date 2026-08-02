@@ -74,18 +74,36 @@ func UnsupportedMethodResponse(method string, wireID *acpsdk.RequestId) *Unsuppo
 	}
 }
 
+// validatable is implemented by acp-go-sdk request types that enforce
+// required-field and other semantic constraints beyond JSON structural
+// decoding (e.g. *acpsdk.PromptRequest rejecting a missing prompt).
+// DecodeMethodParams calls it, when T implements it, so a syntactically
+// valid but semantically incomplete supported request is still rejected.
+type validatable interface {
+	Validate() error
+}
+
 // DecodeMethodParams unmarshals raw JSON-RPC params into T and returns a
-// typed, sensitive-safe invalid-params outcome on missing or malformed
-// input, so parameter validation never produces a partially decoded value.
-// The returned *acpsdk.RequestError never includes the raw params content.
+// typed, sensitive-safe invalid-params outcome on missing, null, malformed,
+// or semantically invalid input, so parameter validation never produces a
+// partially decoded value. When T implements validatable (as the acp-go-sdk
+// request types do), the decoded value's own Validate() is also enforced.
+// The returned *acpsdk.RequestError never includes the raw params content or
+// the underlying validation error text.
 func DecodeMethodParams[T any](raw json.RawMessage) (T, *acpsdk.RequestError) {
 	var zero T
-	if len(bytes.TrimSpace(raw)) == 0 {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 		return zero, acpsdk.NewInvalidParams(map[string]any{"reason": "missing params"})
 	}
 	var v T
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return zero, acpsdk.NewInvalidParams(map[string]any{"reason": "malformed params"})
+	}
+	if validator, ok := any(&v).(validatable); ok {
+		if err := validator.Validate(); err != nil {
+			return zero, acpsdk.NewInvalidParams(map[string]any{"reason": "invalid params"})
+		}
 	}
 	return v, nil
 }

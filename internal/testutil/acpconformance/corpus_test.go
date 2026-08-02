@@ -10,6 +10,37 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/acpconformance"
 )
 
+// corpusFixture mirrors acpconformance.Corpus's JSON shape for building test
+// fixtures with an explicit, independently-computed cases_checksum.
+type corpusFixture struct {
+	SchemaVersion int                             `json:"schema_version"`
+	Provenance    acpconformance.SourceProvenance `json:"provenance"`
+	CasesChecksum string                          `json:"cases_checksum"`
+	Cases         []acpconformance.Case           `json:"cases"`
+}
+
+// marshalFixture builds a corpus fixture with a correct cases_checksum
+// computed from cases via the same acpconformance.ChecksumCases function
+// ParseCorpus itself uses, so every fixture below stays valid on that axis
+// unless a test deliberately corrupts the checksum field afterward.
+func marshalFixture(t testing.TB, provenance acpconformance.SourceProvenance, cases []acpconformance.Case) []byte {
+	t.Helper()
+	checksum, err := acpconformance.ChecksumCases(cases)
+	if err != nil {
+		t.Fatalf("ChecksumCases: %v", err)
+	}
+	data, err := json.Marshal(corpusFixture{
+		SchemaVersion: 1,
+		Provenance:    provenance,
+		CasesChecksum: checksum,
+		Cases:         cases,
+	})
+	if err != nil {
+		t.Fatalf("marshal fixture: %v", err)
+	}
+	return data
+}
+
 func validMinimalCorpusJSON(t testing.TB) string {
 	t.Helper()
 	corpus := acpconformance.MustLoad(t)
@@ -17,19 +48,7 @@ func validMinimalCorpusJSON(t testing.TB) string {
 		t.Fatal("embedded corpus has no cases to derive a minimal fixture from")
 	}
 	one := corpus.Cases[0]
-	data, err := json.Marshal(struct {
-		SchemaVersion int                             `json:"schema_version"`
-		Provenance    acpconformance.SourceProvenance `json:"provenance"`
-		Cases         []acpconformance.Case           `json:"cases"`
-	}{
-		SchemaVersion: 1,
-		Provenance:    corpus.Provenance,
-		Cases:         []acpconformance.Case{one},
-	})
-	if err != nil {
-		t.Fatalf("marshal minimal corpus fixture: %v", err)
-	}
-	return string(data)
+	return string(marshalFixture(t, corpus.Provenance, []acpconformance.Case{one}))
 }
 
 func TestLoadEmbeddedCorpusIsValid(t *testing.T) {
@@ -58,16 +77,8 @@ func TestParseCorpusRejectsInvalidJSON(t *testing.T) {
 func TestParseCorpusRejectsDuplicateCaseID(t *testing.T) {
 	corpus := acpconformance.MustLoad(t)
 	dup := corpus.Cases[0]
-	broken := struct {
-		SchemaVersion int                             `json:"schema_version"`
-		Provenance    acpconformance.SourceProvenance `json:"provenance"`
-		Cases         []acpconformance.Case           `json:"cases"`
-	}{1, corpus.Provenance, []acpconformance.Case{dup, dup}}
-	data, err := json.Marshal(broken)
-	if err != nil {
-		t.Fatalf("marshal fixture: %v", err)
-	}
-	_, err = acpconformance.ParseCorpus(data)
+	data := marshalFixture(t, corpus.Provenance, []acpconformance.Case{dup, dup})
+	_, err := acpconformance.ParseCorpus(data)
 	if err == nil {
 		t.Fatal("ParseCorpus(duplicate case id) expected error, got nil")
 	}
@@ -80,16 +91,8 @@ func TestParseCorpusRejectsMissingFacts(t *testing.T) {
 	corpus := acpconformance.MustLoad(t)
 	broken := corpus.Cases[0]
 	broken.Facts = acpconformance.Facts{}
-	fixture := struct {
-		SchemaVersion int                             `json:"schema_version"`
-		Provenance    acpconformance.SourceProvenance `json:"provenance"`
-		Cases         []acpconformance.Case           `json:"cases"`
-	}{1, corpus.Provenance, []acpconformance.Case{broken}}
-	data, err := json.Marshal(fixture)
-	if err != nil {
-		t.Fatalf("marshal fixture: %v", err)
-	}
-	_, err = acpconformance.ParseCorpus(data)
+	data := marshalFixture(t, corpus.Provenance, []acpconformance.Case{broken})
+	_, err := acpconformance.ParseCorpus(data)
 	if err == nil {
 		t.Fatal("ParseCorpus(missing facts) expected error, got nil")
 	}
@@ -102,16 +105,8 @@ func TestParseCorpusRejectsUndeclaredDirectionality(t *testing.T) {
 	corpus := acpconformance.MustLoad(t)
 	broken := corpus.Cases[0]
 	broken.Directionality = ""
-	fixture := struct {
-		SchemaVersion int                             `json:"schema_version"`
-		Provenance    acpconformance.SourceProvenance `json:"provenance"`
-		Cases         []acpconformance.Case           `json:"cases"`
-	}{1, corpus.Provenance, []acpconformance.Case{broken}}
-	data, err := json.Marshal(fixture)
-	if err != nil {
-		t.Fatalf("marshal fixture: %v", err)
-	}
-	_, err = acpconformance.ParseCorpus(data)
+	data := marshalFixture(t, corpus.Provenance, []acpconformance.Case{broken})
+	_, err := acpconformance.ParseCorpus(data)
 	if err == nil {
 		t.Fatal("ParseCorpus(undeclared directionality) expected error, got nil")
 	}
@@ -124,15 +119,7 @@ func TestParseCorpusRejectsUnknownDirectionality(t *testing.T) {
 	corpus := acpconformance.MustLoad(t)
 	broken := corpus.Cases[0]
 	broken.Directionality = "sideways"
-	fixture := struct {
-		SchemaVersion int                             `json:"schema_version"`
-		Provenance    acpconformance.SourceProvenance `json:"provenance"`
-		Cases         []acpconformance.Case           `json:"cases"`
-	}{1, corpus.Provenance, []acpconformance.Case{broken}}
-	data, err := json.Marshal(fixture)
-	if err != nil {
-		t.Fatalf("marshal fixture: %v", err)
-	}
+	data := marshalFixture(t, corpus.Provenance, []acpconformance.Case{broken})
 	if _, err := acpconformance.ParseCorpus(data); err == nil {
 		t.Fatal("ParseCorpus(unknown directionality) expected error, got nil")
 	}
@@ -153,16 +140,8 @@ func TestParseCorpusRejectsRoundTripForLossyKind(t *testing.T) {
 		t.Fatal("expected embedded corpus to contain a case with Facts.Kind == \"tool\" to mutate")
 	}
 	toolCase.Directionality = acpconformance.DirectionRoundTrip
-	fixture := struct {
-		SchemaVersion int                             `json:"schema_version"`
-		Provenance    acpconformance.SourceProvenance `json:"provenance"`
-		Cases         []acpconformance.Case           `json:"cases"`
-	}{1, corpus.Provenance, []acpconformance.Case{toolCase}}
-	data, err := json.Marshal(fixture)
-	if err != nil {
-		t.Fatalf("marshal fixture: %v", err)
-	}
-	_, err = acpconformance.ParseCorpus(data)
+	data := marshalFixture(t, corpus.Provenance, []acpconformance.Case{toolCase})
+	_, err := acpconformance.ParseCorpus(data)
 	if err == nil {
 		t.Fatal("ParseCorpus(round_trip declared for lossy kind) expected error, got nil")
 	}
@@ -173,15 +152,7 @@ func TestParseCorpusRejectsRoundTripForLossyKind(t *testing.T) {
 
 func TestParseCorpusRejectsEmptyCorpus(t *testing.T) {
 	corpus := acpconformance.MustLoad(t)
-	fixture := struct {
-		SchemaVersion int                             `json:"schema_version"`
-		Provenance    acpconformance.SourceProvenance `json:"provenance"`
-		Cases         []acpconformance.Case           `json:"cases"`
-	}{1, corpus.Provenance, nil}
-	data, err := json.Marshal(fixture)
-	if err != nil {
-		t.Fatalf("marshal fixture: %v", err)
-	}
+	data := marshalFixture(t, corpus.Provenance, nil)
 	if _, err := acpconformance.ParseCorpus(data); err == nil {
 		t.Fatal("ParseCorpus(no cases) expected error, got nil")
 	}
@@ -189,17 +160,97 @@ func TestParseCorpusRejectsEmptyCorpus(t *testing.T) {
 
 func TestParseCorpusRejectsIncompleteProvenance(t *testing.T) {
 	corpus := acpconformance.MustLoad(t)
-	fixture := struct {
-		SchemaVersion int                             `json:"schema_version"`
-		Provenance    acpconformance.SourceProvenance `json:"provenance"`
-		Cases         []acpconformance.Case           `json:"cases"`
-	}{1, acpconformance.SourceProvenance{}, corpus.Cases[:1]}
+	data := marshalFixture(t, acpconformance.SourceProvenance{}, corpus.Cases[:1])
+	if _, err := acpconformance.ParseCorpus(data); err == nil {
+		t.Fatal("ParseCorpus(incomplete provenance) expected error, got nil")
+	}
+}
+
+func TestParseCorpusRejectsMissingChecksum(t *testing.T) {
+	corpus := acpconformance.MustLoad(t)
+	fixture := corpusFixture{
+		SchemaVersion: 1,
+		Provenance:    corpus.Provenance,
+		CasesChecksum: "",
+		Cases:         corpus.Cases[:1],
+	}
 	data, err := json.Marshal(fixture)
 	if err != nil {
 		t.Fatalf("marshal fixture: %v", err)
 	}
-	if _, err := acpconformance.ParseCorpus(data); err == nil {
-		t.Fatal("ParseCorpus(incomplete provenance) expected error, got nil")
+	_, err = acpconformance.ParseCorpus(data)
+	if err == nil {
+		t.Fatal("ParseCorpus(missing cases_checksum) expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "missing cases_checksum") {
+		t.Fatalf("ParseCorpus(missing cases_checksum) error = %v, want it to mention missing cases_checksum", err)
+	}
+}
+
+func TestParseCorpusRejectsMismatchedChecksum(t *testing.T) {
+	corpus := acpconformance.MustLoad(t)
+	correct, err := acpconformance.ChecksumCases(corpus.Cases[:1])
+	if err != nil {
+		t.Fatalf("ChecksumCases: %v", err)
+	}
+	fixture := corpusFixture{
+		SchemaVersion: 1,
+		Provenance:    corpus.Provenance,
+		CasesChecksum: correct[:len(correct)-1] + "0",
+		Cases:         corpus.Cases[:1],
+	}
+	if fixture.CasesChecksum == correct {
+		t.Fatal("test setup bug: corrupted checksum equals the correct checksum")
+	}
+	data, err := json.Marshal(fixture)
+	if err != nil {
+		t.Fatalf("marshal fixture: %v", err)
+	}
+	_, err = acpconformance.ParseCorpus(data)
+	if err == nil {
+		t.Fatal("ParseCorpus(mismatched cases_checksum) expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "cases_checksum mismatch") {
+		t.Fatalf("ParseCorpus(mismatched cases_checksum) error = %v, want it to mention cases_checksum mismatch", err)
+	}
+}
+
+func TestChecksumCasesIsDeterministicAndContentSensitive(t *testing.T) {
+	corpus := acpconformance.MustLoad(t)
+	first, err := acpconformance.ChecksumCases(corpus.Cases)
+	if err != nil {
+		t.Fatalf("ChecksumCases: %v", err)
+	}
+	second, err := acpconformance.ChecksumCases(corpus.Cases)
+	if err != nil {
+		t.Fatalf("ChecksumCases: %v", err)
+	}
+	if first != second {
+		t.Fatalf("ChecksumCases(same cases) = %q then %q, want identical results", first, second)
+	}
+
+	mutated := corpus.Cases
+	mutated[0].Description = mutated[0].Description + " (mutated)"
+	changed, err := acpconformance.ChecksumCases(mutated)
+	if err != nil {
+		t.Fatalf("ChecksumCases: %v", err)
+	}
+	if changed == first {
+		t.Fatal("ChecksumCases did not change after mutating a case's content")
+	}
+}
+
+func TestEmbeddedCorpusChecksumIsSelfConsistent(t *testing.T) {
+	corpus := acpconformance.MustLoad(t)
+	if strings.TrimSpace(corpus.CasesChecksum) == "" {
+		t.Fatal("embedded corpus has no cases_checksum")
+	}
+	recomputed, err := acpconformance.ChecksumCases(corpus.Cases)
+	if err != nil {
+		t.Fatalf("ChecksumCases: %v", err)
+	}
+	if recomputed != corpus.CasesChecksum {
+		t.Fatalf("recomputed cases checksum %q != declared cases_checksum %q", recomputed, corpus.CasesChecksum)
 	}
 }
 

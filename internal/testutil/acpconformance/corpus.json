@@ -6,6 +6,7 @@
     "sdk_commit": "0845a3bb9eddda5bfc22a94dd3598c90cb842451",
     "sdk_license": "Apache-2.0"
   },
+  "cases_checksum": "39941d81a0ac65999b3689d9d9ade356d42631887cdf507989d111f0b177db39",
   "cases": [
     {
       "id": "initialize-protocol-version-1-accepted",
@@ -326,6 +327,48 @@
         }
       },
       "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; an array id has no matching acp-go-sdk v0.13.5 RequestId variant and fails to decode."
+    },
+    {
+      "id": "malformed-input-null-params",
+      "protocol_role": "malformed_input",
+      "description": "A supported method's request whose params field is JSON null rather than absent, which must be rejected as invalid params without producing a zero-value decoded result.",
+      "directionality": "outbound_only",
+      "payload": {
+        "jsonrpc": "2.0",
+        "method": "session/prompt",
+        "id": "req-78",
+        "connectionId": "conn-1",
+        "params": null
+      },
+      "facts": {
+        "kind": "malformed_input",
+        "outcome": "invalid_params",
+        "metadata": {
+          "reason": "null_params"
+        }
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; matches pkg/transports/acp DecodeMethodParams' explicit JSON null rejection, distinct from an absent params field."
+    },
+    {
+      "id": "malformed-input-semantically-invalid-supported-request",
+      "protocol_role": "malformed_input",
+      "description": "A session/prompt request whose params decode successfully as JSON but omit the required prompt content, which must be rejected as invalid params rather than accepted with a missing required field.",
+      "directionality": "outbound_only",
+      "payload": {
+        "jsonrpc": "2.0",
+        "method": "session/prompt",
+        "id": "req-79",
+        "connectionId": "conn-1",
+        "params": { "sessionId": "session-1" }
+      },
+      "facts": {
+        "kind": "malformed_input",
+        "outcome": "invalid_params",
+        "metadata": {
+          "reason": "semantically_invalid_params"
+        }
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; matches pkg/transports/acp DecodeMethodParams' acpsdk.PromptRequest.Validate() enforcement of the required prompt field, proving structurally valid but semantically incomplete supported input is rejected."
     },
     {
       "id": "unsupported-method-unknown-string-id",
