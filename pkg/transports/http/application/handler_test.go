@@ -27,6 +27,8 @@ type validationRole struct {
 
 type runtimeRole struct{ factoryruntime.Service }
 
+type runtimeWithoutAPIRole struct{ factoryruntime.Service }
+
 func (*runtimeRole) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	return work.WorkRequestSubmitResult{}, nil
 }
@@ -158,6 +160,38 @@ func TestHandlerBindsSessionsRootAtApplicationEdge(t *testing.T) {
 
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"id":"session-alpha"`) {
 		t.Fatalf("response = %d %s, want Sessions root response", response.Code, response.Body.String())
+	}
+}
+
+func TestHandlerBindRejectsRuntimeWithoutLegacyHTTPRole(t *testing.T) {
+	t.Parallel()
+
+	mappings, err := mappingcomposition.NewHTTPBinder(statusProjectorRole{}, &contentPreparationRole{})
+	if err != nil {
+		t.Fatalf("NewHTTPBinder: %v", err)
+	}
+	handler, err := NewHandler(
+		mappings,
+		newProviderSessionsHTTPHandler(),
+		&contentPreparationRole{},
+		&validationRole{},
+		&invocationWorkTypeRole{},
+		&contentStagingRole{},
+		&workRequestPreparationRole{},
+		&requestPreparationRole{},
+	)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+
+	bound, err := handler.Bind(factorysessions.RuntimeHTTPServices{
+		FactoryRuntime:     &runtimeWithoutAPIRole{},
+		FactoryDefinitions: &definitionRole{}, FactorySessions: &sessionRole{},
+		Work: &workRole{}, Models: &modelRole{}, Workers: &workerRole{},
+		ProviderSessions: &providerSessionRole{}, Logger: zap.NewNop(),
+	})
+	if err == nil || bound != nil || !strings.Contains(err.Error(), "legacy Factory Runtime observation") {
+		t.Fatalf("Bind = (%T, %v), want legacy HTTP role error", bound, err)
 	}
 }
 

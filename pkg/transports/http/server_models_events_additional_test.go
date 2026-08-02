@@ -46,6 +46,38 @@ func TestListPackagedFactoriesReturnsPublishedCatalog(t *testing.T) {
 	}
 }
 
+func TestDashboardRoutesServeEmbeddedShellAssetsAndFallback(t *testing.T) {
+	srv := NewServer(nil, nil, nil, nil, zap.NewNop())
+
+	shell := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(shell, httptest.NewRequest(http.MethodGet, "/dashboard/ui", nil))
+	if shell.Code != http.StatusOK {
+		t.Fatalf("dashboard shell status = %d, want %d: %s", shell.Code, http.StatusOK, shell.Body.String())
+	}
+	const assetMarker = "/dashboard/ui/assets/"
+	assetStart := strings.Index(shell.Body.String(), assetMarker)
+	if assetStart < 0 {
+		t.Fatalf("dashboard shell did not contain %q", assetMarker)
+	}
+	assetEnd := strings.Index(shell.Body.String()[assetStart:], "\"")
+	if assetEnd < 0 {
+		t.Fatalf("dashboard shell asset path was not quoted")
+	}
+	assetPath := shell.Body.String()[assetStart : assetStart+assetEnd]
+
+	asset := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(asset, httptest.NewRequest(http.MethodGet, assetPath, nil))
+	if asset.Code != http.StatusOK || asset.Body.Len() == 0 {
+		t.Fatalf("dashboard asset response = status %d len %d", asset.Code, asset.Body.Len())
+	}
+
+	fallback := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(fallback, httptest.NewRequest(http.MethodGet, "/dashboard/ui/client-route", nil))
+	if fallback.Code != http.StatusOK || !strings.Contains(fallback.Body.String(), "<div id=\"root\"></div>") {
+		t.Fatalf("dashboard fallback response = status %d body %q", fallback.Code, fallback.Body.String())
+	}
+}
+
 type strictModelsServiceFake struct {
 	modelinference.Service
 	list   func(context.Context) (modelinference.List, error)
