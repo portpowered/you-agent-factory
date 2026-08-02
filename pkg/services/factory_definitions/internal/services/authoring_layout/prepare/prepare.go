@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	authoringlayoutcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/contracts"
 )
 
 // FactoryLayout prepares one submitted Factory Definition payload for durable
@@ -15,10 +16,10 @@ func FactoryLayout(
 	ctx context.Context,
 	segment string,
 	payload []byte,
-	validator factorydefinitions.Validator,
-	decodeFactory factorydefinitions.FactoryConfigJSONDecoder,
-	normalizeAuthored func(*factorydefinitions.FactoryConfig) (*factorydefinitions.FactoryConfig, error),
-	encodeFactory func(*factorydefinitions.FactoryConfig) ([]byte, error),
+	validator authoringlayoutcontracts.LayoutValidator,
+	decodeFactory authoringlayoutcontracts.FactoryConfigJSONDecoder,
+	normalizeAuthored authoringlayoutcontracts.AuthoredFactoryNormalizer,
+	encodeFactory authoringlayoutcontracts.FactoryConfigJSONEncoder,
 ) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
 	switch {
 	case validator == nil:

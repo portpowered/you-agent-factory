@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	authoringlayoutcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/contracts"
 )
 
 // WorkerParser and WorkstationParser decode authored AGENTS.md bytes without
@@ -23,7 +24,7 @@ type Reader struct {
 	parseWorker      WorkerParser
 	parseWorkstation WorkstationParser
 	parseBody        BodyParser
-	fileSystem       factorydefinitions.AuthoredLayoutReaderFileSystem
+	fileSystem       authoringlayoutcontracts.ReaderFileSystem
 }
 
 // NewReader constructs a split-layout reader from pure representation
@@ -32,7 +33,7 @@ func NewReader(
 	parseWorker WorkerParser,
 	parseWorkstation WorkstationParser,
 	parseBody BodyParser,
-	fileSystem factorydefinitions.AuthoredLayoutReaderFileSystem,
+	fileSystem authoringlayoutcontracts.ReaderFileSystem,
 ) *Reader {
 	return &Reader{
 		parseWorker:      parseWorker,

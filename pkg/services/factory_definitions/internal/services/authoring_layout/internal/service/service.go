@@ -8,6 +8,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
+	authoringlayoutcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/expand"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/flatten"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/persist"
@@ -17,55 +18,70 @@ import (
 // Service is the private nested authoring_layout implementation behind the
 // CTR-DEF root authoring slice.
 type Service struct {
-	validator            factorydefinitions.Validator
-	validateDefinition   factorydefinitions.DefinitionValidationOperation
-	mapInput             factorydefinitions.FactoryLayoutPayloadMapper
-	decodeFactory        factorydefinitions.FactoryConfigJSONDecoder
-	normalizeAuthored    func(*factorydefinitions.FactoryConfig) (*factorydefinitions.FactoryConfig, error)
-	encodeFactory        func(*factorydefinitions.FactoryConfig) ([]byte, error)
-	write                func(string, *factorydefinitions.PreparedFactoryLayoutPayload, string) error
-	validate             func(string) error
-	flatten              factorydefinitions.FactoryLayoutFlattener
-	expand               factorydefinitions.FactoryLayoutExpander
-	fileSystem           factorydefinitions.PersistenceFileSystem
-	requireDefinitionDir factorydefinitions.DefinitionDirectoryRequirer
-	directories          factorydefinitions.DirectoryReplacementStore
+	validator            authoringlayoutcontracts.LayoutValidator
+	validateDefinition   authoringlayoutcontracts.DefinitionValidationOperation
+	mapInput             authoringlayoutcontracts.LayoutPayloadMapper
+	decodeFactory        authoringlayoutcontracts.FactoryConfigJSONDecoder
+	normalizeAuthored    authoringlayoutcontracts.AuthoredFactoryNormalizer
+	encodeFactory        authoringlayoutcontracts.FactoryConfigJSONEncoder
+	write                authoringlayoutcontracts.LayoutWriter
+	validate             authoringlayoutcontracts.LayoutValidatorFunc
+	flatten              authoringlayoutcontracts.LayoutFlattener
+	expand               authoringlayoutcontracts.LayoutExpander
+	fileSystem           authoringlayoutcontracts.PersistenceFileSystem
+	requireDefinitionDir authoringlayoutcontracts.DefinitionDirectoryRequirer
+	directories          authoringlayoutcontracts.DirectoryReplacementStore
 }
 
 var _ authoringlayout.Service = (*Service)(nil)
 
-// New constructs the authoring_layout implementation from exact injected ports.
-func New(deps authoringlayout.Dependencies) *Service {
-	if deps.FileSystem == nil || deps.RequireDefinitionDir == nil {
+// New constructs the authoring_layout implementation from exact injected
+// ports. Each collaborator is supplied independently so construction cannot
+// smuggle a broad dependency bag into the private owner.
+func New(
+	validator authoringlayoutcontracts.LayoutValidator,
+	validateDefinition authoringlayoutcontracts.DefinitionValidationOperation,
+	mapInput authoringlayoutcontracts.LayoutPayloadMapper,
+	decodeFactory authoringlayoutcontracts.FactoryConfigJSONDecoder,
+	normalizeAuthored authoringlayoutcontracts.AuthoredFactoryNormalizer,
+	encodeFactory authoringlayoutcontracts.FactoryConfigJSONEncoder,
+	write authoringlayoutcontracts.LayoutWriter,
+	validate authoringlayoutcontracts.LayoutValidatorFunc,
+	flatten authoringlayoutcontracts.LayoutFlattener,
+	expand authoringlayoutcontracts.LayoutExpander,
+	fileSystem authoringlayoutcontracts.PersistenceFileSystem,
+	requireDefinitionDir authoringlayoutcontracts.DefinitionDirectoryRequirer,
+	directories authoringlayoutcontracts.DirectoryReplacementStore,
+) *Service {
+	if validator == nil ||
+		validateDefinition == nil ||
+		mapInput == nil ||
+		decodeFactory == nil ||
+		normalizeAuthored == nil ||
+		encodeFactory == nil ||
+		write == nil ||
+		validate == nil ||
+		flatten == nil ||
+		expand == nil ||
+		fileSystem == nil ||
+		requireDefinitionDir == nil ||
+		directories == nil {
 		return nil
 	}
-	if deps.Validator == nil ||
-		deps.MapInput == nil ||
-		deps.DecodeFactory == nil ||
-		deps.NormalizeAuthored == nil ||
-		deps.EncodeFactory == nil ||
-		deps.Write == nil ||
-		deps.Validate == nil ||
-		deps.Flatten == nil ||
-		deps.Expand == nil ||
-		deps.Directories == nil {
-		return nil
-	}
-	validateDefinition, _ := any(deps.Validator).(factorydefinitions.DefinitionValidationOperation)
 	return &Service{
-		validator:            deps.Validator,
+		validator:            validator,
 		validateDefinition:   validateDefinition,
-		mapInput:             deps.MapInput,
-		decodeFactory:        deps.DecodeFactory,
-		normalizeAuthored:    deps.NormalizeAuthored,
-		encodeFactory:        deps.EncodeFactory,
-		write:                deps.Write,
-		validate:             deps.Validate,
-		flatten:              deps.Flatten,
-		expand:               deps.Expand,
-		fileSystem:           deps.FileSystem,
-		requireDefinitionDir: deps.RequireDefinitionDir,
-		directories:          deps.Directories,
+		mapInput:             mapInput,
+		decodeFactory:        decodeFactory,
+		normalizeAuthored:    normalizeAuthored,
+		encodeFactory:        encodeFactory,
+		write:                write,
+		validate:             validate,
+		flatten:              flatten,
+		expand:               expand,
+		fileSystem:           fileSystem,
+		requireDefinitionDir: requireDefinitionDir,
+		directories:          directories,
 	}
 }
 
@@ -163,7 +179,11 @@ func (s *Service) CreateNamedFactory(
 		request.Name,
 		&request.Prepared,
 		false,
-		s.persistPorts(),
+		s.write,
+		s.validate,
+		s.fileSystem,
+		s.requireDefinitionDir,
+		s.directories,
 	)
 	if err != nil {
 		return factorydefinitions.CreateNamedFactoryResult{}, atomicWriteFailure(request.Name, factoryDir, err)
@@ -187,7 +207,11 @@ func (s *Service) ReplaceNamedFactory(
 		request.Name,
 		&request.Prepared,
 		true,
-		s.persistPorts(),
+		s.write,
+		s.validate,
+		s.fileSystem,
+		s.requireDefinitionDir,
+		s.directories,
 	)
 	if err != nil {
 		return factorydefinitions.ReplaceNamedFactoryResult{}, atomicWriteFailure(request.Name, factoryDir, err)
@@ -196,16 +220,6 @@ func (s *Service) ReplaceNamedFactory(
 		Name:       strings.TrimSpace(request.Name),
 		FactoryDir: factoryDir,
 	}, nil
-}
-
-func (s *Service) persistPorts() persist.Ports {
-	return persist.Ports{
-		Write:                s.write,
-		Validate:             s.validate,
-		FileSystem:           s.fileSystem,
-		RequireDefinitionDir: s.requireDefinitionDir,
-		Directories:          s.directories,
-	}
 }
 
 func atomicWriteFailure(name, factoryDir string, cause error) error {

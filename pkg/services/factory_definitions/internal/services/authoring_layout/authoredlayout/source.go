@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	authoringlayoutcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/contracts"
 )
 
 const (
@@ -19,8 +20,8 @@ const (
 // NewFactorySourceLoader resolves a file or one unambiguous Factory directory
 // root and returns its JSON-compatible authored representation.
 func NewFactorySourceLoader(
-	fileSystem factorydefinitions.AuthoredLayoutReaderFileSystem,
-) factorydefinitions.AuthoredFactorySourceLoader {
+	fileSystem authoringlayoutcontracts.ReaderFileSystem,
+) authoringlayoutcontracts.FactorySourceLoader {
 	resolveSourcePath := newFactorySourcePathResolver(fileSystem)
 	return func(path string) (factorydefinitions.AuthoredFactorySource, error) {
 		if fileSystem == nil {
@@ -37,7 +38,7 @@ func NewFactorySourceLoader(
 }
 
 func newFactorySourcePathResolver(
-	fileSystem factorydefinitions.AuthoredLayoutReaderFileSystem,
+	fileSystem authoringlayoutcontracts.ReaderFileSystem,
 ) func(string) (string, error) {
 	return func(path string) (string, error) {
 		if fileSystem == nil {
@@ -58,7 +59,7 @@ func newFactorySourcePathResolver(
 }
 
 func loadFactorySourceFile(
-	fileSystem factorydefinitions.AuthoredLayoutReaderFileSystem,
+	fileSystem authoringlayoutcontracts.ReaderFileSystem,
 	sourcePath string,
 ) (factorydefinitions.AuthoredFactorySource, error) {
 	format, err := authoredFactoryFormatForPath(sourcePath)
@@ -106,7 +107,7 @@ func authoredFactoryFormatForPath(
 }
 
 func resolveFactoryDirectoryRoot(
-	fileSystem factorydefinitions.AuthoredLayoutReaderFileSystem,
+	fileSystem authoringlayoutcontracts.ReaderFileSystem,
 	directory string,
 ) (string, error) {
 	rootNames := [...]string{

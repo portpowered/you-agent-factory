@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	authoringlayoutcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/contracts"
 )
 
 // FactoryLayout renders one on-disk or logical Factory path into detached
@@ -15,7 +15,7 @@ import (
 func FactoryLayout(
 	ctx context.Context,
 	path string,
-	flatten factorydefinitions.FactoryLayoutFlattener,
+	flatten authoringlayoutcontracts.LayoutFlattener,
 ) ([]byte, error) {
 	if flatten == nil {
 		return nil, fmt.Errorf("Factory Definitions layout flattener is required")

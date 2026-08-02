@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	authoringlayoutcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/runtimeconfig"
 )
 
@@ -21,8 +22,8 @@ type Writer struct {
 	writeAgents       func(string, []byte) error
 	safeSegment       func(string, string) (string, error)
 	safePromptPath    func(string, string) (string, error)
-	fileSystem        factorydefinitions.AuthoredLayoutWriterFileSystem
-	ensureInbox       factorydefinitions.InputInboxSentinelEnsurer
+	fileSystem        authoringlayoutcontracts.WriterFileSystem
+	ensureInbox       authoringlayoutcontracts.InputInboxSentinelEnsurer
 }
 
 // NewWriter constructs a split-layout writer from flat representation
@@ -34,8 +35,8 @@ func NewWriter(
 	writeAgents func(string, []byte) error,
 	safeSegment func(string, string) (string, error),
 	safePromptPath func(string, string) (string, error),
-	fileSystem factorydefinitions.AuthoredLayoutWriterFileSystem,
-	ensureInbox factorydefinitions.InputInboxSentinelEnsurer,
+	fileSystem authoringlayoutcontracts.WriterFileSystem,
+	ensureInbox authoringlayoutcontracts.InputInboxSentinelEnsurer,
 ) *Writer {
 	return &Writer{
 		renderWorker:      renderWorker,
@@ -52,7 +53,7 @@ func NewWriter(
 // WriteAgentsFile materializes one rendered AGENTS.md file. Authored-layout
 // persistence owns this filesystem effect; mapping only renders the bytes.
 func NewAgentsFileWriter(
-	fileSystem factorydefinitions.AuthoredLayoutWriterFileSystem,
+	fileSystem authoringlayoutcontracts.WriterFileSystem,
 ) func(string, []byte) error {
 	return func(dir string, content []byte) error {
 		if fileSystem == nil {
@@ -63,7 +64,7 @@ func NewAgentsFileWriter(
 }
 
 func writeAgentsFile(
-	fileSystem factorydefinitions.AuthoredLayoutWriterFileSystem,
+	fileSystem authoringlayoutcontracts.WriterFileSystem,
 	dir string,
 	content []byte,
 ) error {
@@ -83,8 +84,8 @@ func (w *Writer) WritePrepared(
 	targetDir string,
 	prepared *factorydefinitions.PreparedFactoryLayoutPayload,
 	sourcePath string,
-	materializePortableFiles factorydefinitions.PortableBundledFilesMaterializer,
-	prunePortableDocs factorydefinitions.PortableBundledDocsPruner,
+	materializePortableFiles authoringlayoutcontracts.PortableBundledFilesMaterializer,
+	prunePortableDocs authoringlayoutcontracts.PortableBundledDocsPruner,
 ) error {
 	if err := w.validate(); err != nil {
 		return err
@@ -145,9 +146,9 @@ func (w *Writer) Expand(
 	sourcePath string,
 	factoryConfig *factorydefinitions.FactoryConfig,
 	canonical []byte,
-	validatePortableFiles factorydefinitions.PortableBundledFileWritesValidator,
-	materializePortableFiles factorydefinitions.PortableBundledFilesMaterializer,
-	copyPortableFiles factorydefinitions.PortableBundledFilesCopier,
+	validatePortableFiles authoringlayoutcontracts.PortableBundledFileWritesValidator,
+	materializePortableFiles authoringlayoutcontracts.PortableBundledFilesMaterializer,
+	copyPortableFiles authoringlayoutcontracts.PortableBundledFilesCopier,
 ) (factorydefinitions.LayoutExpansionReport, error) {
 	if err := w.validate(); err != nil {
 		return factorydefinitions.LayoutExpansionReport{}, err
