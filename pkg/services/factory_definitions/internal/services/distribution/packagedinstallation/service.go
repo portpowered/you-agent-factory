@@ -9,16 +9,17 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
+	distributioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/contracts"
 )
 
 type Service struct {
-	persistence factorydefinitions.Persistence
-	fileSystem  factorydefinitions.PackagedInstallationFileSystem
+	persistence distributioncontracts.Persistence
+	fileSystem  distributioncontracts.PackagedInstallationFileSystem
 }
 
 func New(
-	persistence factorydefinitions.Persistence,
-	fileSystem factorydefinitions.PackagedInstallationFileSystem,
+	persistence distributioncontracts.Persistence,
+	fileSystem distributioncontracts.PackagedInstallationFileSystem,
 ) *Service {
 	return &Service{persistence: persistence, fileSystem: fileSystem}
 }
@@ -193,7 +194,7 @@ func (service *Service) replaceExistingPackagedFactory(
 
 func authoredRootFormat(
 	targetDir string,
-	fileSystem factorydefinitions.PackagedInstallationFileSystem,
+	fileSystem distributioncontracts.PackagedInstallationFileSystem,
 ) (factorydefinitions.PackagedFactoryFormat, error) {
 	for _, candidate := range []struct {
 		file   string

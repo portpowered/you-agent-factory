@@ -18,6 +18,7 @@ import (
 	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
 	authoringlayoutprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare"
 	factorypersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence"
+	distributioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/contracts"
 	distributionpackagedcatalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedcatalog"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
@@ -26,7 +27,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
-func packagedInstallationTestPersistence() factorydefinitions.Persistence {
+func packagedInstallationTestPersistence() distributioncontracts.Persistence {
 	validator := factoryvalidation.New(nil)
 	mapper := factorymapping.NewFactoryConfigMapper()
 	fileSystem := platformfilesystem.Local{}
