@@ -1,6 +1,6 @@
 package factory
 
-import workflowvalidation "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/validation"
+import workflowvalidation "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/validation"
 
 type (
 	WorkflowValidationIssue        = workflowvalidation.Issue
