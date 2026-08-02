@@ -1,6 +1,7 @@
 package events
 
 import (
+	"context"
 	"errors"
 	"testing"
 )
@@ -255,5 +256,129 @@ func TestCursorStatusValuesAreDistinct(t *testing.T) {
 	}
 	if len(statuses) != 3 {
 		t.Fatalf("expected 3 distinct CursorStatus values, got %d", len(statuses))
+	}
+}
+
+func validSubscribeRequest() SubscribeRequest {
+	topic := TopicID("factory-session/s1/response-events")
+	return SubscribeRequest{
+		Topic:    topic,
+		Start:    Cursor{Topic: topic, Generation: 1, Mode: CursorBeginning},
+		Capacity: 10,
+	}
+}
+
+func TestSubscribeRequestValidate(t *testing.T) {
+	tests := []struct {
+		name    string
+		mutate  func(SubscribeRequest) SubscribeRequest
+		wantErr error
+	}{
+		{
+			name:    "valid request",
+			mutate:  func(r SubscribeRequest) SubscribeRequest { return r },
+			wantErr: nil,
+		},
+		{
+			name:    "empty topic",
+			mutate:  func(r SubscribeRequest) SubscribeRequest { r.Topic = ""; return r },
+			wantErr: ErrInvalidTopic,
+		},
+		{
+			name: "malformed start cursor shape",
+			mutate: func(r SubscribeRequest) SubscribeRequest {
+				r.Start.Mode = "UNKNOWN"
+				return r
+			},
+			wantErr: ErrInvalidCursorMode,
+		},
+		{
+			name: "ambiguous start cursor position",
+			mutate: func(r SubscribeRequest) SubscribeRequest {
+				r.Start.Mode = CursorAt
+				r.Start.At = 0
+				return r
+			},
+			wantErr: ErrAmbiguousCursorPosition,
+		},
+		{
+			name: "start cursor topic does not match request topic",
+			mutate: func(r SubscribeRequest) SubscribeRequest {
+				r.Start.Topic = "factory-session/other/response-events"
+				return r
+			},
+			wantErr: ErrCursorForeignTopic,
+		},
+		{
+			name:    "zero capacity",
+			mutate:  func(r SubscribeRequest) SubscribeRequest { r.Capacity = 0; return r },
+			wantErr: ErrInvalidSubscribeCapacity,
+		},
+		{
+			name:    "negative capacity",
+			mutate:  func(r SubscribeRequest) SubscribeRequest { r.Capacity = -1; return r },
+			wantErr: ErrInvalidSubscribeCapacity,
+		},
+		{
+			name: "live head start with positive capacity is valid",
+			mutate: func(r SubscribeRequest) SubscribeRequest {
+				r.Start.Mode = CursorLiveHead
+				return r
+			},
+			wantErr: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.mutate(validSubscribeRequest()).Validate()
+			if tt.wantErr == nil {
+				if err != nil {
+					t.Fatalf("expected no validation error, got %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("expected errors.Is(err, %v), got %v", tt.wantErr, err)
+			}
+			var verr *ValidationError
+			if !errors.As(err, &verr) {
+				t.Fatalf("expected a *ValidationError, got %T", err)
+			}
+		})
+	}
+}
+
+func TestSubscriptionOutcomeValuesAreDistinct(t *testing.T) {
+	outcomes := map[SubscriptionOutcome]struct{}{
+		SubscriptionOutcomeRecords:  {},
+		SubscriptionOutcomeTerminal: {},
+	}
+	if len(outcomes) != 2 {
+		t.Fatalf("expected 2 distinct SubscriptionOutcome values, got %d", len(outcomes))
+	}
+}
+
+func TestSubscriptionTerminalReasonValuesAreDistinct(t *testing.T) {
+	reasons := map[SubscriptionTerminalReason]struct{}{
+		SubscriptionTerminalCanceled:      {},
+		SubscriptionTerminalCompleted:     {},
+		SubscriptionTerminalGap:           {},
+		SubscriptionTerminalInvalidCursor: {},
+		SubscriptionTerminalBackpressure:  {},
+	}
+	if len(reasons) != 5 {
+		t.Fatalf("expected 5 distinct SubscriptionTerminalReason values, got %d", len(reasons))
+	}
+}
+
+func TestNilSubscriptionNextReportsCanceledRatherThanPanicking(t *testing.T) {
+	var sub Subscription
+	delivery := sub.Next(context.Background())
+	if delivery.Outcome != SubscriptionOutcomeTerminal {
+		t.Fatalf("expected SubscriptionOutcomeTerminal, got %v", delivery.Outcome)
+	}
+	if delivery.Terminal == nil || delivery.Terminal.Reason != SubscriptionTerminalCanceled {
+		t.Fatalf("expected SubscriptionTerminalCanceled, got %+v", delivery.Terminal)
 	}
 }

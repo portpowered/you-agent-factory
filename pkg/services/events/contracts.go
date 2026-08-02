@@ -55,4 +55,19 @@ type Service interface {
 	// has evicted is reported as a ReadResult with ReadOutcomeGap, never as
 	// an error and never as silent loss.
 	Read(ctx context.Context, req ReadRequest) (ReadResult, error)
+
+	// Subscribe opens a bounded, ordered live Subscription to req.Topic
+	// starting at req.Start, buffering at most req.Capacity undelivered
+	// SubscriptionDelivery observations.
+	//
+	// Subscribe returns a *ValidationError only when req fails Validate on
+	// its own shape. Every runtime classification — an unknown or stale
+	// req.Start, retention loss, topic completion, caller cancellation, and
+	// slow-consumer backpressure — is reported through the returned
+	// Subscription's SubscriptionTerminal, never as an error from Subscribe
+	// itself and never as silent record loss. Subscribe never blocks on, or
+	// is blocked by, a slow consumer: a subscriber that does not keep pace
+	// within req.Capacity ends with SubscriptionTerminalBackpressure rather
+	// than pausing committed Append progress or buffering unboundedly.
+	Subscribe(ctx context.Context, req SubscribeRequest) (SubscribeResult, error)
 }

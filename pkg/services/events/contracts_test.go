@@ -34,6 +34,7 @@ type fakeAppendService struct {
 	nextAttachSeq int
 
 	retention map[TopicID]RetentionLimits
+	completed map[TopicID]bool
 }
 
 var _ Service = (*fakeAppendService)(nil)
@@ -47,7 +48,16 @@ func newFakeAppendService() *fakeAppendService {
 		genID:       1,
 		attachments: make(map[fakeAttachmentKey]fakeAttachment),
 		retention:   make(map[TopicID]RetentionLimits),
+		completed:   make(map[TopicID]bool),
 	}
+}
+
+// complete marks topic as reaching a defined completion, the fixture
+// condition fakeSubscription reports as SubscriptionTerminalCompleted once
+// every committed Record has been delivered. It is test-fixture behavior
+// only; Events defines no production topic-completion policy.
+func (f *fakeAppendService) complete(topic TopicID) {
+	f.completed[topic] = true
 }
 
 // setRetention bounds topic to limits, evicting from the front of its
@@ -195,6 +205,101 @@ func (f *fakeAppendService) Read(_ context.Context, req ReadRequest) (ReadResult
 		Retained:   retained,
 		Outcome:    ReadOutcomeComplete,
 	}, nil
+}
+
+// fakeSubscription is a minimal detached Subscription fixture proving
+// SubscribeRequest/SubscriptionDelivery is satisfiable: it classifies every
+// published SubscriptionTerminalReason and hands off retained backlog into
+// subsequent live commits without blocking or losing a Record silently. It
+// polls fakeAppendService's in-memory state rather than genuinely blocking
+// on new commits; that is fixture behavior only, not a mandated Subscribe
+// implementation shape.
+type fakeSubscription struct {
+	svc       *fakeAppendService
+	topic     TopicID
+	capacity  int
+	start     Cursor
+	delivered AggregateSequence
+	validated bool
+	done      bool
+}
+
+func (f *fakeAppendService) Subscribe(_ context.Context, req SubscribeRequest) (SubscribeResult, error) {
+	if err := req.Validate(); err != nil {
+		return SubscribeResult{}, err
+	}
+
+	sub := &fakeSubscription{svc: f, topic: req.Topic, capacity: req.Capacity, start: req.Start}
+	switch req.Start.Mode {
+	case CursorAt:
+		sub.delivered = req.Start.At
+	case CursorLiveHead:
+		sub.delivered = f.nextSeq[req.Topic]
+	}
+	return SubscribeResult{Subscription: sub.Next}, nil
+}
+
+func (s *fakeSubscription) cursor() Cursor {
+	if s.delivered == 0 {
+		return Cursor{Topic: s.topic, Generation: s.svc.genID, Mode: CursorBeginning}
+	}
+	return Cursor{Topic: s.topic, Generation: s.svc.genID, Mode: CursorAt, At: s.delivered}
+}
+
+func (s *fakeSubscription) terminal(reason SubscriptionTerminalReason, gap *Gap) SubscriptionDelivery {
+	s.done = true
+	return SubscriptionDelivery{
+		Outcome:  SubscriptionOutcomeTerminal,
+		Terminal: &SubscriptionTerminal{Reason: reason, Cursor: s.cursor(), Gap: gap},
+	}
+}
+
+func (s *fakeSubscription) Next(ctx context.Context) SubscriptionDelivery {
+	if s.done {
+		return s.terminal(SubscriptionTerminalCanceled, nil)
+	}
+	select {
+	case <-ctx.Done():
+		return s.terminal(SubscriptionTerminalCanceled, nil)
+	default:
+	}
+
+	if !s.validated {
+		s.validated = true
+		if _, known := s.svc.nextSeq[s.topic]; !known {
+			return s.terminal(SubscriptionTerminalInvalidCursor, nil)
+		}
+		if status := s.start.ClassifyAgainst(s.topic, s.svc.genID); status == CursorStatusStaleGeneration {
+			return s.terminal(SubscriptionTerminalInvalidCursor, nil)
+		}
+		earliest := s.svc.earliestOf(s.topic)
+		if s.delivered < earliest-1 {
+			return s.terminal(SubscriptionTerminalGap, &Gap{
+				Topic: s.topic, From: s.delivered + 1, To: earliest - 1, ResumeAt: earliest,
+			})
+		}
+	}
+
+	var matching []Record
+	for _, record := range s.svc.byTopic[s.topic] {
+		if record.AggregateSequence > s.delivered {
+			matching = append(matching, record)
+		}
+	}
+
+	if len(matching) > s.capacity {
+		return s.terminal(SubscriptionTerminalBackpressure, nil)
+	}
+
+	if len(matching) == 0 {
+		if s.svc.completed[s.topic] {
+			return s.terminal(SubscriptionTerminalCompleted, nil)
+		}
+		return SubscriptionDelivery{Outcome: SubscriptionOutcomeRecords, NextCursor: s.cursor()}
+	}
+
+	s.delivered = matching[len(matching)-1].AggregateSequence
+	return SubscriptionDelivery{Outcome: SubscriptionOutcomeRecords, Records: matching, NextCursor: s.cursor()}
 }
 
 func TestServiceAppendCommitsInOrderAndSuppressesDuplicates(t *testing.T) {
@@ -526,5 +631,221 @@ func TestServiceReadRejectsUnknownTopic(t *testing.T) {
 	})
 	if !errors.Is(err, ErrTopicNotFound) {
 		t.Fatalf("expected errors.Is(err, ErrTopicNotFound), got %v", err)
+	}
+}
+
+func TestServiceSubscribeDeliversRetainedBacklogThenLiveHandoff(t *testing.T) {
+	svc := newFakeAppendService()
+	ctx := context.Background()
+	topic := TopicID("factory-session/s1/response-events")
+
+	appendTestRecord(t, svc, topic, 1)
+	appendTestRecord(t, svc, topic, 2)
+
+	result, err := svc.Subscribe(ctx, SubscribeRequest{
+		Topic:    topic,
+		Start:    Cursor{Topic: topic, Generation: 1, Mode: CursorBeginning},
+		Capacity: 10,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	first := result.Subscription.Next(ctx)
+	if first.Outcome != SubscriptionOutcomeRecords {
+		t.Fatalf("expected SubscriptionOutcomeRecords for retained backlog, got %v", first.Outcome)
+	}
+	if len(first.Records) != 2 || first.Records[0].AggregateSequence != 1 || first.Records[1].AggregateSequence != 2 {
+		t.Fatalf("expected the 2 retained records in commit order, got %+v", first.Records)
+	}
+
+	// Nothing new has committed yet: the next observation still reports
+	// SubscriptionOutcomeRecords (the subscription remains open), just with
+	// no new Records.
+	idle := result.Subscription.Next(ctx)
+	if idle.Outcome != SubscriptionOutcomeRecords || len(idle.Records) != 0 {
+		t.Fatalf("expected an open, empty observation while caught up, got %+v", idle)
+	}
+
+	third := appendTestRecord(t, svc, topic, 3)
+	live := result.Subscription.Next(ctx)
+	if live.Outcome != SubscriptionOutcomeRecords {
+		t.Fatalf("expected SubscriptionOutcomeRecords for the live handoff, got %v", live.Outcome)
+	}
+	if len(live.Records) != 1 || live.Records[0].AggregateSequence != third.AggregateSequence {
+		t.Fatalf("expected exactly the newly committed record %d, got %+v", third.AggregateSequence, live.Records)
+	}
+}
+
+func TestServiceSubscribeRejectsInvalidRequest(t *testing.T) {
+	svc := newFakeAppendService()
+
+	_, err := svc.Subscribe(context.Background(), SubscribeRequest{
+		Topic:    "factory-session/s1/response-events",
+		Start:    Cursor{Topic: "factory-session/s1/response-events", Generation: 1, Mode: CursorBeginning},
+		Capacity: 0,
+	})
+	if !errors.Is(err, ErrInvalidSubscribeCapacity) {
+		t.Fatalf("expected errors.Is(err, ErrInvalidSubscribeCapacity), got %v", err)
+	}
+}
+
+func TestServiceSubscribeTerminatesOnUnknownTopic(t *testing.T) {
+	svc := newFakeAppendService()
+	ctx := context.Background()
+	topic := TopicID("factory-session/never-appended/response-events")
+
+	result, err := svc.Subscribe(ctx, SubscribeRequest{
+		Topic:    topic,
+		Start:    Cursor{Topic: topic, Generation: 1, Mode: CursorBeginning},
+		Capacity: 10,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	delivery := result.Subscription.Next(ctx)
+	if delivery.Outcome != SubscriptionOutcomeTerminal {
+		t.Fatalf("expected SubscriptionOutcomeTerminal, got %v", delivery.Outcome)
+	}
+	if delivery.Terminal.Reason != SubscriptionTerminalInvalidCursor {
+		t.Fatalf("expected SubscriptionTerminalInvalidCursor, got %v", delivery.Terminal.Reason)
+	}
+}
+
+func TestServiceSubscribeTerminatesOnStaleCursorGeneration(t *testing.T) {
+	svc := newFakeAppendService()
+	ctx := context.Background()
+	topic := TopicID("factory-session/s1/response-events")
+	appendTestRecord(t, svc, topic, 1)
+
+	result, err := svc.Subscribe(ctx, SubscribeRequest{
+		Topic:    topic,
+		Start:    Cursor{Topic: topic, Generation: 2, Mode: CursorBeginning},
+		Capacity: 10,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	delivery := result.Subscription.Next(ctx)
+	if delivery.Outcome != SubscriptionOutcomeTerminal || delivery.Terminal.Reason != SubscriptionTerminalInvalidCursor {
+		t.Fatalf("expected SubscriptionTerminalInvalidCursor, got %+v", delivery)
+	}
+}
+
+func TestServiceSubscribeTerminatesWithGapAfterRetentionEviction(t *testing.T) {
+	svc := newFakeAppendService()
+	ctx := context.Background()
+	topic := TopicID("factory-session/s1/response-events")
+	svc.setRetention(topic, RetentionLimits{MaxRecords: 1, MaxBytes: 1024})
+
+	appendTestRecord(t, svc, topic, 1) // evicted once record 2 commits
+	appendTestRecord(t, svc, topic, 2)
+
+	result, err := svc.Subscribe(ctx, SubscribeRequest{
+		Topic:    topic,
+		Start:    Cursor{Topic: topic, Generation: 1, Mode: CursorBeginning},
+		Capacity: 10,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	delivery := result.Subscription.Next(ctx)
+	if delivery.Outcome != SubscriptionOutcomeTerminal {
+		t.Fatalf("expected SubscriptionOutcomeTerminal, got %v", delivery.Outcome)
+	}
+	if delivery.Terminal.Reason != SubscriptionTerminalGap {
+		t.Fatalf("expected SubscriptionTerminalGap, got %v", delivery.Terminal.Reason)
+	}
+	if delivery.Terminal.Gap == nil {
+		t.Fatalf("expected a non-nil Gap for SubscriptionTerminalGap")
+	}
+	if delivery.Terminal.Gap.From != 1 || delivery.Terminal.Gap.To != 1 || delivery.Terminal.Gap.ResumeAt != 2 {
+		t.Fatalf("expected Gap{From:1, To:1, ResumeAt:2}, got %+v", delivery.Terminal.Gap)
+	}
+	if err := delivery.Terminal.Gap.Validate(); err != nil {
+		t.Fatalf("expected the reported Gap to be well-formed, got %v", err)
+	}
+}
+
+func TestServiceSubscribeTerminatesOnBackpressureWhenCapacityIsExceeded(t *testing.T) {
+	svc := newFakeAppendService()
+	ctx := context.Background()
+	topic := TopicID("factory-session/s1/response-events")
+
+	result, err := svc.Subscribe(ctx, SubscribeRequest{
+		Topic:    topic,
+		Start:    Cursor{Topic: topic, Generation: 1, Mode: CursorLiveHead},
+		Capacity: 2,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Simulate a slow consumer: 3 records commit before the subscriber ever
+	// calls Next, exceeding the bounded Capacity of 2.
+	appendTestRecord(t, svc, topic, 1)
+	appendTestRecord(t, svc, topic, 2)
+	appendTestRecord(t, svc, topic, 3) // 3 undelivered records now exceed Capacity 2
+
+	delivery := result.Subscription.Next(ctx)
+	if delivery.Outcome != SubscriptionOutcomeTerminal {
+		t.Fatalf("expected SubscriptionOutcomeTerminal, got %v", delivery.Outcome)
+	}
+	if delivery.Terminal.Reason != SubscriptionTerminalBackpressure {
+		t.Fatalf("expected SubscriptionTerminalBackpressure, got %v", delivery.Terminal.Reason)
+	}
+}
+
+func TestServiceSubscribeTerminatesOnCompletionAfterDraining(t *testing.T) {
+	svc := newFakeAppendService()
+	ctx := context.Background()
+	topic := TopicID("factory-session/s1/response-events")
+
+	appendTestRecord(t, svc, topic, 1)
+	svc.complete(topic)
+
+	result, err := svc.Subscribe(ctx, SubscribeRequest{
+		Topic:    topic,
+		Start:    Cursor{Topic: topic, Generation: 1, Mode: CursorBeginning},
+		Capacity: 10,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	drained := result.Subscription.Next(ctx)
+	if drained.Outcome != SubscriptionOutcomeRecords || len(drained.Records) != 1 {
+		t.Fatalf("expected the single retained record before completion, got %+v", drained)
+	}
+
+	delivery := result.Subscription.Next(ctx)
+	if delivery.Outcome != SubscriptionOutcomeTerminal || delivery.Terminal.Reason != SubscriptionTerminalCompleted {
+		t.Fatalf("expected SubscriptionTerminalCompleted, got %+v", delivery)
+	}
+}
+
+func TestServiceSubscribeTerminatesOnCallerCancellation(t *testing.T) {
+	svc := newFakeAppendService()
+	topic := TopicID("factory-session/s1/response-events")
+	appendTestRecord(t, svc, topic, 1)
+
+	result, err := svc.Subscribe(context.Background(), SubscribeRequest{
+		Topic:    topic,
+		Start:    Cursor{Topic: topic, Generation: 1, Mode: CursorBeginning},
+		Capacity: 10,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	delivery := result.Subscription.Next(canceled)
+	if delivery.Outcome != SubscriptionOutcomeTerminal || delivery.Terminal.Reason != SubscriptionTerminalCanceled {
+		t.Fatalf("expected SubscriptionTerminalCanceled, got %+v", delivery)
 	}
 }
