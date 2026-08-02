@@ -6,9 +6,8 @@ import (
 	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 )
 
-// PortableBundledFileInspection is the exact filesystem effect used to verify
-// that a resolved portable bundled-file source names a regular filesystem
-// entry. Source resolution policy remains a separate Factory Definitions role.
+// PortableBundledFileInspection remains a temporary owner-local adapter until
+// the validation packet moves it behind the private Definitions wiring.
 type PortableBundledFileInspection interface {
 	Stat(string) (fs.FileInfo, error)
 }

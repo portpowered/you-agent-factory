@@ -13,14 +13,8 @@ import (
 // distribute operations on this same Service using plain request, result,
 // value, and typed-error contracts rather than implementation-package types.
 type Service interface {
-	ActivateNamedFactory(context.Context, string) error
-	Save(context.Context, string, SaveMode, EditableFactory) (EditableFactory, error)
-	GetCurrentNamedFactory(context.Context) (*FactorySnapshot, error)
-	GetCurrentFactoryForSession(context.Context, string) (EditableFactory, error)
-	CurrentFactoryDefinitionVersionAtRoot(string, string) (FactoryVersion, error)
-
 	// Catalog slice: effective discovery, list, get/resolve, delete, and
-	// current-pointer read/write.
+	// current-pointer read/write/clear.
 	ListEffectiveFactories(context.Context, ListEffectiveFactoriesRequest) (ListEffectiveFactoriesResult, error)
 	ListNamedFactories(context.Context, ListNamedFactoriesRequest) (ListNamedFactoriesResult, error)
 	GetNamedFactory(context.Context, GetNamedFactoryRequest) (GetNamedFactoryResult, error)
@@ -28,6 +22,7 @@ type Service interface {
 	DeleteNamedFactory(context.Context, DeleteNamedFactoryRequest) (DeleteNamedFactoryResult, error)
 	GetCurrentFactoryPointer(context.Context, GetCurrentFactoryPointerRequest) (GetCurrentFactoryPointerResult, error)
 	SetCurrentFactoryPointer(context.Context, SetCurrentFactoryPointerRequest) (SetCurrentFactoryPointerResult, error)
+	ClearCurrentFactoryPointer(context.Context, ClearCurrentFactoryPointerRequest) (ClearCurrentFactoryPointerResult, error)
 
 	// Authoring slice: parse/prepare, flatten, expand, create, and replace.
 	PrepareFactoryLayout(context.Context, PrepareFactoryLayoutRequest) (PrepareFactoryLayoutResult, error)
@@ -56,6 +51,11 @@ type Service interface {
 	ResolveBuiltInPackagedFactory(context.Context, ResolveBuiltInPackagedFactoryRequest) (ResolveBuiltInPackagedFactoryResult, error)
 	InstallPackagedFactory(context.Context, InstallPackagedFactoryRequest) (InstallPackagedFactoryResult, error)
 	CreateFactoryScaffold(context.Context, CreateFactoryScaffoldRequest) (CreateFactoryScaffoldResult, error)
+
+	// Invocation-time projection of authored policy. The result is detached
+	// Definitions-owned data; it is not a runtime, worker, or persistence
+	// collaborator.
+	ResolveInvocationDefinition(context.Context, ResolveInvocationDefinitionRequest) (ResolveInvocationDefinitionResult, error)
 }
 
 // ListEffectiveFactoriesRequest selects the project-local and global roots
@@ -119,34 +119,6 @@ type EffectiveFactoryCatalogCandidate struct {
 	Canonical []byte
 	Failure   EffectiveFactoryCatalogDiagnosticCode
 }
-
-// EffectiveFactoryCatalogDiscovery carries the exact read-only source
-// operations used by effective discovery.
-type EffectiveFactoryCatalogDiscovery struct {
-	ListRoot     func(context.Context, string) ([]EffectiveFactoryCatalogCandidate, error)
-	ListPackaged func(context.Context) ([]EffectiveFactoryCatalogCandidate, error)
-}
-
-// EffectiveFactoryRootListing reads one persisted named-Factory root.
-type EffectiveFactoryRootListing func(string) ([]NamedFactoryListEntry, error)
-
-// EffectiveFactoryCandidateRead reads one already-discovered canonical Factory
-// definition payload.
-type EffectiveFactoryCandidateRead func(string) ([]byte, error)
-
-// EffectiveFactoryDefinitionNormalizer converts one candidate payload into the
-// normalized Factory definition consumed by transport projections.
-type EffectiveFactoryDefinitionNormalizer func(
-	context.Context,
-	EffectiveFactoryCatalogCandidate,
-) (*FactoryConfig, error)
-
-// EffectiveFactoryCatalogOperation owns precedence, shadowing, stable ordering,
-// and detached results for effective Factory discovery.
-type EffectiveFactoryCatalogOperation func(
-	context.Context,
-	ListEffectiveFactoriesRequest,
-) (ListEffectiveFactoriesResult, error)
 
 // ListNamedFactoriesRequest selects one Factory definition root for catalog listing.
 type ListNamedFactoriesRequest struct {
@@ -215,6 +187,18 @@ type SetCurrentFactoryPointerRequest struct {
 // SetCurrentFactoryPointerResult confirms the written current-pointer identity.
 type SetCurrentFactoryPointerResult struct {
 	Name string
+}
+
+// ClearCurrentFactoryPointerRequest identifies the root whose current pointer
+// should be removed.
+type ClearCurrentFactoryPointerRequest struct {
+	RootDir string
+}
+
+// ClearCurrentFactoryPointerResult confirms the root whose current pointer was
+// removed.
+type ClearCurrentFactoryPointerResult struct {
+	RootDir string
 }
 
 // ErrMalformedFactoryLayoutPayload reports that authored layout bytes could
@@ -348,6 +332,7 @@ type CompileEffectiveFactorySourceResult struct {
 // EffectiveFactorySource is the Definitions-owned effective-source value
 // equivalent to a detached LoadedFactorySource identity/facts projection.
 type EffectiveFactorySource struct {
+	Factory         *FactoryConfig
 	FactoryDir      string
 	RuntimeBaseDir  string
 	ContentIdentity string
@@ -563,33 +548,6 @@ func (e *UnknownPackagedFactoryError) Is(target error) bool {
 	return target == ErrUnknownPackagedFactoryIdentity
 }
 
-// PackagedFactoryCatalogOperations are the Definitions-owned, read-only
-// catalog operations shared by bootstrap and customer-facing selection.
-type PackagedFactoryCatalogOperations struct {
-	List    func(context.Context, ListBuiltInPackagedFactoriesRequest) (ListBuiltInPackagedFactoriesResult, error)
-	Resolve func(context.Context, ResolveBuiltInPackagedFactoryRequest) (ResolveBuiltInPackagedFactoryResult, error)
-}
-
-func (operations PackagedFactoryCatalogOperations) ListBuiltInPackagedFactories(
-	ctx context.Context,
-	request ListBuiltInPackagedFactoriesRequest,
-) (ListBuiltInPackagedFactoriesResult, error) {
-	if operations.List == nil {
-		return ListBuiltInPackagedFactoriesResult{}, fmt.Errorf("packaged factory catalog collaborator is required")
-	}
-	return operations.List(ctx, request)
-}
-
-func (operations PackagedFactoryCatalogOperations) ResolveBuiltInPackagedFactory(
-	ctx context.Context,
-	request ResolveBuiltInPackagedFactoryRequest,
-) (ResolveBuiltInPackagedFactoryResult, error) {
-	if operations.Resolve == nil {
-		return ResolveBuiltInPackagedFactoryResult{}, ErrUnknownPackagedFactoryIdentity
-	}
-	return operations.Resolve(ctx, request)
-}
-
 // InstallPackagedFactoryRequest installs one built-in packaged Factory by
 // identity under a named-Factory root. Callers do not supply PackagedDefinition
 // payload bytes or installer collaborators as request fields.
@@ -609,27 +567,6 @@ type InstallPackagedFactoryResult struct {
 	Format     PackagedFactoryFormat
 }
 
-// PackagedFactoryInstallationOperations are the Definitions-owned write
-// operations used after catalog selection has returned a detached definition.
-type PackagedFactoryInstallationOperations struct {
-	Install func(
-		context.Context,
-		PackagedFactoryInstallParams,
-	) (PackagedFactoryInstallResult, error)
-}
-
-func (operations PackagedFactoryInstallationOperations) InstallPackagedFactory(
-	ctx context.Context,
-	params PackagedFactoryInstallParams,
-) (PackagedFactoryInstallResult, error) {
-	if operations.Install == nil {
-		return PackagedFactoryInstallResult{}, fmt.Errorf(
-			"packaged Factory installation collaborator is required",
-		)
-	}
-	return operations.Install(ctx, params)
-}
-
 // CreateFactoryScaffoldRequest creates one Factory scaffold under a target
 // directory. Callers do not supply filesystem effects or output streams as
 // part of the cross-service request shape.
@@ -644,19 +581,4 @@ type CreateFactoryScaffoldRequest struct {
 type CreateFactoryScaffoldResult struct {
 	Definition   DistributedFactoryDefinitionFacts
 	ScaffoldType string
-}
-
-// SessionHost is the Factory Definitions-owned port for session-scoped
-// persistence and activation behavior used while composing Service.
-type SessionHost interface {
-	PersistRootDir() string
-	WorkstationLoader() WorkstationLoader
-	CurrentRuntimeConfig() LoadedFactorySource
-	WorkflowID() string
-	RequireSession(string) (*DefinitionSession, error)
-	SessionRuntimeConfig(string) (LoadedFactorySource, error)
-	SessionFactoryPersistRoot(*DefinitionSession) string
-	ValidateEditableFactorySnapshot(context.Context, *FactorySnapshot) error
-	GetCurrentFactorySnapshotForSession(context.Context, string) (*FactorySnapshot, error)
-	ReplaceFactoryLayoutAtDir(string, *PreparedFactoryLayoutPayload) (*FactorySplitLayoutReplaceResult, error)
 }

@@ -20,39 +20,6 @@ type fakeDefinitionsPeer struct {
 	builtIns           []factorydefinitions.BuiltInPackagedFactoryEntry
 }
 
-func (fakeDefinitionsPeer) ActivateNamedFactory(context.Context, string) error {
-	return nil
-}
-
-func (fakeDefinitionsPeer) Save(
-	context.Context,
-	string,
-	factorydefinitions.SaveMode,
-	factorydefinitions.EditableFactory,
-) (factorydefinitions.EditableFactory, error) {
-	return factorydefinitions.EditableFactory{}, nil
-}
-
-func (fakeDefinitionsPeer) GetCurrentNamedFactory(
-	context.Context,
-) (*factorydefinitions.FactorySnapshot, error) {
-	return nil, factorydefinitions.ErrCurrentFactoryNotFound
-}
-
-func (fakeDefinitionsPeer) GetCurrentFactoryForSession(
-	context.Context,
-	string,
-) (factorydefinitions.EditableFactory, error) {
-	return factorydefinitions.EditableFactory{}, factorydefinitions.ErrCurrentFactoryNotFound
-}
-
-func (fakeDefinitionsPeer) CurrentFactoryDefinitionVersionAtRoot(
-	string,
-	string,
-) (factorydefinitions.FactoryVersion, error) {
-	return factorydefinitions.FactoryVersion{}, factorydefinitions.ErrCurrentFactoryNotFound
-}
-
 func (p fakeDefinitionsPeer) ListNamedFactories(
 	_ context.Context,
 	_ factorydefinitions.ListNamedFactoriesRequest,
@@ -138,6 +105,16 @@ func (p fakeDefinitionsPeer) GetCurrentFactoryPointer(
 		}
 	}
 	return factorydefinitions.GetCurrentFactoryPointerResult{}, factorydefinitions.ErrCurrentFactoryNotFound
+}
+
+func (fakeDefinitionsPeer) ClearCurrentFactoryPointer(
+	_ context.Context,
+	request factorydefinitions.ClearCurrentFactoryPointerRequest,
+) (factorydefinitions.ClearCurrentFactoryPointerResult, error) {
+	if strings.TrimSpace(request.RootDir) == "" {
+		return factorydefinitions.ClearCurrentFactoryPointerResult{}, factorydefinitions.ErrCurrentFactoryNotFound
+	}
+	return factorydefinitions.ClearCurrentFactoryPointerResult{RootDir: request.RootDir}, nil
 }
 
 func (fakeDefinitionsPeer) SetCurrentFactoryPointer(
@@ -387,20 +364,65 @@ func (p fakeDefinitionsPeer) MaterializeFactorySnapshot(
 	}, nil
 }
 
-func TestRootService_FakePeerReadPath_TypedNotFound(t *testing.T) {
+func (fakeDefinitionsPeer) ResolveInvocationDefinition(
+	_ context.Context,
+	request factorydefinitions.ResolveInvocationDefinitionRequest,
+) (factorydefinitions.ResolveInvocationDefinitionResult, error) {
+	if request.Definition.Factory == nil {
+		return factorydefinitions.ResolveInvocationDefinitionResult{}, factorydefinitions.ErrInvalidInvocationDefinition
+	}
+	return factorydefinitions.ResolveInvocationDefinitionResult{
+		Factory:         *request.Definition.Factory,
+		FactoryKind:     factorydefinitions.FactoryBehaviorKindStandard,
+		DefaultWorkType: "task",
+	}, nil
+}
+
+func TestRootService_FakePeer_ClearCurrentFactoryPointer(t *testing.T) {
 	t.Parallel()
 
 	var service factorydefinitions.Service = fakeDefinitionsPeer{}
-	snapshot, err := service.GetCurrentNamedFactory(context.Background())
-	if snapshot != nil {
-		t.Fatalf("GetCurrentNamedFactory snapshot = %#v, want nil", snapshot)
+	cleared, err := service.ClearCurrentFactoryPointer(
+		context.Background(),
+		factorydefinitions.ClearCurrentFactoryPointerRequest{RootDir: "/factories"},
+	)
+	if err != nil {
+		t.Fatalf("ClearCurrentFactoryPointer: %v", err)
 	}
+	if cleared.RootDir != "/factories" {
+		t.Fatalf("ClearCurrentFactoryPointer result = %#v, want root", cleared)
+	}
+
+	_, err = service.ClearCurrentFactoryPointer(context.Background(), factorydefinitions.ClearCurrentFactoryPointerRequest{})
 	if !errors.Is(err, factorydefinitions.ErrCurrentFactoryNotFound) {
-		t.Fatalf(
-			"GetCurrentNamedFactory error = %v, want %v",
-			err,
-			factorydefinitions.ErrCurrentFactoryNotFound,
-		)
+		t.Fatalf("empty ClearCurrentFactoryPointer error = %v, want %v", err, factorydefinitions.ErrCurrentFactoryNotFound)
+	}
+}
+
+func TestRootService_FakePeer_ResolveInvocationDefinition(t *testing.T) {
+	t.Parallel()
+
+	factory := factorydefinitions.FactoryConfig{}
+	var service factorydefinitions.Service = fakeDefinitionsPeer{}
+	resolved, err := service.ResolveInvocationDefinition(
+		context.Background(),
+		factorydefinitions.ResolveInvocationDefinitionRequest{
+			Definition: factorydefinitions.EffectiveFactorySource{Factory: &factory},
+			ResolvedFileInput: map[string][]byte{
+				"input.txt": []byte("payload"),
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("ResolveInvocationDefinition: %v", err)
+	}
+	if resolved.DefaultWorkType != "task" || resolved.FactoryKind != factorydefinitions.FactoryBehaviorKindStandard {
+		t.Fatalf("ResolveInvocationDefinition result = %#v, want detached policy facts", resolved)
+	}
+
+	_, err = service.ResolveInvocationDefinition(context.Background(), factorydefinitions.ResolveInvocationDefinitionRequest{})
+	if !errors.Is(err, factorydefinitions.ErrInvalidInvocationDefinition) {
+		t.Fatalf("invalid ResolveInvocationDefinition error = %v, want %v", err, factorydefinitions.ErrInvalidInvocationDefinition)
 	}
 }
 

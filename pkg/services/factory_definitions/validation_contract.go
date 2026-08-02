@@ -41,12 +41,3 @@ const (
 // RequiredToolChecker is the Factory Definitions-owned external process port
 // used to verify declarative tool dependencies.
 type RequiredToolChecker = contracts.RequiredToolChecker
-
-// ValidationOperations is the Factory Definitions validation surface composed by
-// owner Wire. Peers must depend on these root contracts rather than the
-// transitional public validation package.
-type ValidationOperations interface {
-	Validator
-	DefinitionValidationOperation
-	SubmittedDefinitionValidationOperation
-}

@@ -1,7 +1,6 @@
 package factorydefinitions
 
 import (
-	"io/fs"
 	"strings"
 
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
@@ -16,12 +15,6 @@ const (
 	PackagedFactoryFormatYAML = contracts.PackagedFactoryFormatYAML
 	PackagedFactoryFormatYML  = contracts.PackagedFactoryFormatYML
 )
-
-// PackagedGoalPromptFileSystem is the exact filesystem effect used by the
-// packaged Goal drift check to read one already-resolved prompt path.
-type PackagedGoalPromptFileSystem interface {
-	ReadFile(string) ([]byte, error)
-}
 
 const (
 	PackagedDeepResearchFactoryName      = "@you/deep-research"
@@ -70,7 +63,3 @@ type PackagedFactoryAssetDefinition = distributionpackageassets.Definition
 func AssemblePackagedFactoryAssets(definition PackagedFactoryAssetDefinition) ([]byte, error) {
 	return distributionpackageassets.Assemble(definition)
 }
-
-// PackagedFactoryAssetFileSystem is the exact filesystem effect used when
-// assembling packaged Factory assets from an authored package directory.
-type PackagedFactoryAssetFileSystem = fs.FS

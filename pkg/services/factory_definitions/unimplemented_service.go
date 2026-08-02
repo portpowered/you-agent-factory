@@ -11,6 +11,8 @@ import (
 // already connected to collaborators.
 type UnimplementedService struct{}
 
+var _ Service = UnimplementedService{}
+
 // ListEffectiveFactories returns a collaborator-required failure until nested
 // effective-catalog wiring lands.
 func (UnimplementedService) ListEffectiveFactories(
@@ -69,6 +71,15 @@ func (UnimplementedService) SetCurrentFactoryPointer(
 	SetCurrentFactoryPointerRequest,
 ) (SetCurrentFactoryPointerResult, error) {
 	return SetCurrentFactoryPointerResult{}, ErrNamedFactoryNotFound
+}
+
+// ClearCurrentFactoryPointer returns a collaborator-required failure until
+// nested current-pointer wiring lands on the owner implementer.
+func (UnimplementedService) ClearCurrentFactoryPointer(
+	context.Context,
+	ClearCurrentFactoryPointerRequest,
+) (ClearCurrentFactoryPointerResult, error) {
+	return ClearCurrentFactoryPointerResult{}, fmt.Errorf("current Factory pointer collaborator is required")
 }
 
 // PrepareFactoryLayout returns ErrMalformedFactoryLayoutPayload until nested
@@ -210,4 +221,13 @@ func (UnimplementedService) CreateFactoryScaffold(
 	CreateFactoryScaffoldRequest,
 ) (CreateFactoryScaffoldResult, error) {
 	return CreateFactoryScaffoldResult{}, ErrFactoryDistributeFailed
+}
+
+// ResolveInvocationDefinition returns a typed contract failure until the
+// Definitions-owned invocation resolver is wired.
+func (UnimplementedService) ResolveInvocationDefinition(
+	context.Context,
+	ResolveInvocationDefinitionRequest,
+) (ResolveInvocationDefinitionResult, error) {
+	return ResolveInvocationDefinitionResult{}, ErrInvalidInvocationDefinition
 }
