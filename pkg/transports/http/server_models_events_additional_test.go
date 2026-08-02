@@ -17,8 +17,6 @@ import (
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	factoryevents "github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
@@ -80,10 +78,12 @@ func TestDashboardRoutesServeEmbeddedShellAssetsAndFallback(t *testing.T) {
 
 type strictModelsServiceFake struct {
 	modelinference.Service
-	list   func(context.Context) (modelinference.List, error)
-	get    func(context.Context, string) (modelinference.Detail, error)
-	invoke func(context.Context, string, modelinference.Request) (modelinference.Result, error)
-	pull   func(context.Context, string) (modelinference.PullResult, error)
+	list       func(context.Context) (modelinference.List, error)
+	get        func(context.Context, string) (modelinference.Detail, error)
+	getCatalog func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error)
+	acquire    func(context.Context, modelinference.AcquireModelLeaseRequest) (modelinference.AcquireModelLeaseResult, error)
+	invoke     func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error)
+	pull       func(context.Context, string) (modelinference.PullResult, error)
 }
 
 func (fake strictModelsServiceFake) ListCatalog(ctx context.Context, _ modelinference.ListModelsRequest) (modelinference.ListModelsResult, error) {
@@ -95,6 +95,16 @@ func (fake strictModelsServiceFake) ListCatalog(ctx context.Context, _ modelinfe
 }
 
 func (fake strictModelsServiceFake) GetCatalogModel(ctx context.Context, request modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+	if fake.getCatalog != nil {
+		return fake.getCatalog(ctx, request)
+	}
+	if fake.get != nil {
+		detail, err := fake.get(ctx, request.Name)
+		return modelinference.GetModelResult{Model: detail}, err
+	}
+	if request.Operation != "" {
+		return modelinference.GetModelResult{Model: modelInvocationCatalogFixture(request.Name)}, nil
+	}
 	if fake.get == nil {
 		panic("unexpected models.Service.GetCatalogModel call")
 	}
@@ -102,11 +112,29 @@ func (fake strictModelsServiceFake) GetCatalogModel(ctx context.Context, request
 	return modelinference.GetModelResult{Model: detail}, err
 }
 
-func (fake strictModelsServiceFake) InvokeModel(ctx context.Context, name string, request modelinference.Request) (modelinference.Result, error) {
-	if fake.invoke == nil {
-		panic("unexpected models.Service.InvokeModel call")
+func (fake strictModelsServiceFake) AcquireModelLease(ctx context.Context, request modelinference.AcquireModelLeaseRequest) (modelinference.AcquireModelLeaseResult, error) {
+	if fake.acquire != nil {
+		return fake.acquire(ctx, request)
 	}
-	return fake.invoke(ctx, name, request)
+	lease, err := (modelinference.ModelLeaseRef{}).Parse("models-lease:http-transport-test")
+	if err != nil {
+		panic(err)
+	}
+	return modelinference.AcquireModelLeaseResult{Lease: modelinference.ModelLease{
+		Lease: lease, Scope: request.Scope, ModelName: request.Name, Holder: request.Holder,
+		Status: modelinference.ModelLeaseStatusActive,
+	}}, nil
+}
+
+func (fake strictModelsServiceFake) ReleaseModelLease(context.Context, modelinference.ReleaseModelLeaseRequest) (modelinference.ReleaseModelLeaseResult, error) {
+	return modelinference.ReleaseModelLeaseResult{}, nil
+}
+
+func (fake strictModelsServiceFake) InvokeModelWithLease(ctx context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+	if fake.invoke == nil {
+		panic("unexpected models.Service.InvokeModelWithLease call")
+	}
+	return fake.invoke(ctx, request)
 }
 
 func (fake strictModelsServiceFake) PullModelForScope(ctx context.Context, request modelinference.PullModelRequest) (modelinference.PullResult, error) {
@@ -120,7 +148,7 @@ func newStrictModelTestServer(models strictModelsServiceFake) *Server {
 	logger := zap.NewNop()
 	return newServerFromRoles(
 		nil, nil, nil, nil, nil, nil,
-		modelshttp.NewHandler(modelshttp.NewAdapter(models, models, modelHTTPContentPreparation{}, modelHTTPTestScope()), logger),
+		modelshttp.NewHandler(modelshttp.NewAdapter(models, modelHTTPTestScope()), logger),
 		nil, httpFactoryValidator{}, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, logger,
 	)
@@ -134,10 +162,14 @@ func modelHTTPTestScope() modelinference.RuntimeScopeRef {
 	return scope
 }
 
-type modelHTTPContentPreparation struct{}
-
-func (modelHTTPContentPreparation) PrepareWorkContent(_ context.Context, content []work.WorkContentPart) ([]work.WorkContentPart, error) {
-	return content, nil
+func modelInvocationCatalogFixture(name string) modelinference.Detail {
+	return modelinference.Detail{
+		Summary: modelinference.Summary{Name: name, ProviderLocality: modelinference.LocalityLocal},
+		Capabilities: []modelinference.Capability{{
+			Worker: "tts-worker", ProviderLocality: modelinference.LocalityLocal,
+			Operations: []modelinference.Operation{{Name: "TTS", Inputs: []modelinference.OperationSlot{{Name: "text"}}}},
+		}},
+	}
 }
 
 func newEventStreamTestServer() *Server {
@@ -427,12 +459,9 @@ func testInvokeModelRuntimeErrors(t *testing.T) {
 			wantMsg:    "model invocation operation is not supported",
 		},
 		{
-			name: "provider_execution_timeout",
-			body: validBody,
-			invokeErr: &workers.InferenceFailure{
-				Class:   workers.InferenceFailureClassTimeout,
-				Message: "inference timed out for model \"OMNIVOICE_Q4_K_M\" operation \"TTS\": wait and retry the request",
-			},
+			name:       "provider_execution_timeout",
+			body:       validBody,
+			invokeErr:  fmt.Errorf("%w: inference timed out for model \"OMNIVOICE_Q4_K_M\" operation \"TTS\": wait and retry the request", modelinference.ErrInferenceTimeout),
 			wantStatus: http.StatusGatewayTimeout,
 			wantCode:   "MODEL_INFERENCE_TIMEOUT",
 			wantMsg:    "inference timed out for model \"OMNIVOICE_Q4_K_M\" operation \"TTS\": wait and retry the request",
@@ -455,8 +484,8 @@ func assertInvokeModelErrors(t *testing.T, tests []invokeModelErrorCase) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv := newStrictModelTestServer(strictModelsServiceFake{invoke: func(context.Context, string, modelinference.Request) (modelinference.Result, error) {
-				return modelinference.Result{}, tt.invokeErr
+			srv := newStrictModelTestServer(strictModelsServiceFake{invoke: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				return modelinference.InvokeModelResult{}, tt.invokeErr
 			}})
 
 			req := httptest.NewRequest(http.MethodPost, "/models/OMNIVOICE_Q4_K_M/invocations", strings.NewReader(tt.body))

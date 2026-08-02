@@ -8,7 +8,6 @@ import (
 
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -53,15 +52,5 @@ func TestManagedRuntimePullMapping(t *testing.T) {
 	var classified *models.PullError
 	if !errors.As(err, &classified) || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("pull error = %v, want classified deadline failure", err)
-	}
-}
-
-func TestInferenceFailureMapping(t *testing.T) {
-	failure := &workers.InferenceFailure{Class: workers.InferenceFailureClassLoadingModel, Message: "loading"}
-	if got := inferenceFailureHTTPStatus(failure); got != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", got, http.StatusConflict)
-	}
-	if got := inferenceFailureErrorCode(failure); got != "MODEL_RUNTIME_LOADING" {
-		t.Fatalf("code = %q, want MODEL_RUNTIME_LOADING", got)
 	}
 }

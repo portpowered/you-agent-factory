@@ -79,15 +79,17 @@ func (h *Handler) InvokeModel(w http.ResponseWriter, r *http.Request, modelName 
 		h.writeInvocationError(w, err)
 		return
 	}
-	if strings.TrimSpace(result.StreamFile) != "" {
-		if result.StreamContentType != "" {
-			w.Header().Set("Content-Type", result.StreamContentType)
+	if strings.TrimSpace(result.streamFile) != "" {
+		if result.streamContentType != "" {
+			w.Header().Set("Content-Type", result.streamContentType)
 		}
-		http.ServeFile(w, r, result.StreamFile)
+		http.ServeFile(w, r, result.streamFile)
 		return
 	}
 
-	h.writeJSON(w, http.StatusOK, modelInvocationResponseFromResult(result))
+	h.writeJSON(w, http.StatusOK, modelInvocationResponseFromInferenceResult(
+		result.result, result.catalog, result.input.Content, result.inputContent,
+	))
 }
 
 func (h *Handler) writeInvocationError(w http.ResponseWriter, err error) {

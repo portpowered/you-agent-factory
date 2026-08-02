@@ -16,7 +16,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelcontract "github.com/portpowered/infinite-you/pkg/services/models"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -29,12 +28,8 @@ func newAPITestServer(roles any) *api.Server {
 	modelsHandler := &modelshttp.Handler{}
 	modelsService := apiTestRole[modelcontract.Service](roles)
 	if modelsService != nil {
-		invoker := apiTestRole[workers.ModelInvoker](roles)
-		if invoker == nil {
-			invoker = unavailableModelInvoker{}
-		}
 		modelsHandler = modelshttp.NewHandler(
-			modelshttp.NewAdapter(modelsService, invoker, apiModelContentPreparation{}, modelHTTPTestScope()),
+			modelshttp.NewAdapter(modelsService, modelHTTPTestScope()),
 			logger,
 		)
 	}
@@ -66,18 +61,6 @@ func modelHTTPTestScope() modelcontract.RuntimeScopeRef {
 		panic(err)
 	}
 	return scope
-}
-
-type apiModelContentPreparation struct{}
-
-func (apiModelContentPreparation) PrepareWorkContent(_ context.Context, content []work.WorkContentPart) ([]work.WorkContentPart, error) {
-	return content, nil
-}
-
-type unavailableModelInvoker struct{}
-
-func (unavailableModelInvoker) InvokeModel(context.Context, string, modelcontract.Request) (modelcontract.Result, error) {
-	return modelcontract.Result{}, modelcontract.ErrNotAvailable
 }
 
 func apiTestRole[T any](candidate any) T {

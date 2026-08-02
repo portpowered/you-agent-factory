@@ -181,6 +181,70 @@ func TestHandler_PullModelDeadlineExceededReturnsGatewayTimeout(t *testing.T) {
 	)
 }
 
+func TestHandler_InvokeModelCanceledDuringModelsRootCallCompletesWithoutBody(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	root := &rootFake{
+		getCatalog: func(ctx context.Context, _ models.GetModelRequest) (models.GetModelResult, error) {
+			close(started)
+			<-ctx.Done()
+			return models.GetModelResult{}, ctx.Err()
+		},
+	}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest(http.MethodPost, "/models/voice/invocations", strings.NewReader(`{"operation":"TTS","content":[{"type":"TEXT","text":"hello"}]}`)).WithContext(ctx)
+	recorder := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		handler.InvokeModel(recorder, req, "voice")
+		close(done)
+	}()
+	<-started
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("InvokeModel hung after request cancellation")
+	}
+	if body := recorder.Body.String(); body != "" {
+		t.Fatalf("response body = %q, want empty cancel-oriented outcome", body)
+	}
+}
+
+func TestHandler_InvokeModelDeadlineDuringModelsRootCallReturnsGatewayTimeout(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	root := &rootFake{
+		getCatalog: func(ctx context.Context, _ models.GetModelRequest) (models.GetModelResult, error) {
+			close(started)
+			<-ctx.Done()
+			return models.GetModelResult{}, ctx.Err()
+		},
+	}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+	req := httptest.NewRequest(http.MethodPost, "/models/voice/invocations", strings.NewReader(`{"operation":"TTS","content":[{"type":"TEXT","text":"hello"}]}`)).WithContext(ctx)
+	recorder := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		handler.InvokeModel(recorder, req, "voice")
+		close(done)
+	}()
+	<-started
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("InvokeModel hung after request deadline")
+	}
+	assertCatalogHTTPError(t, recorder, http.StatusGatewayTimeout, "INTERNAL_ERROR", "models request timed out")
+}
+
 func TestModelsRequestContextErrorResponseForTest(t *testing.T) {
 	t.Parallel()
 

@@ -3,6 +3,7 @@ package http
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	contentmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
-	workerinferencemapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workerinference"
 )
 
 type requestValidationError struct{ message string }
@@ -52,52 +52,183 @@ func validateModelInvocationOperation(request factoryapi.ModelInvocationRequest)
 	return nil
 }
 
-func modelInvocationRequestFromHTTP(request factoryapi.ModelInvocationRequest) models.Request {
-	return invocationRequestFromGenerated(request)
+type structuredInferenceInput struct {
+	Content  []work.WorkContentPart         `json:"content"`
+	Bindings []models.ModelOperationBinding `json:"bindings,omitempty"`
 }
 
-func invocationRequestFromGenerated(request factoryapi.ModelInvocationRequest) models.Request {
-	domain := models.Request{
-		Operation: request.Operation,
-		Content:   contentmapping.PartsFromGenerated(request.Content),
-		Bindings:  modelBindingsFromGenerated(request.Bindings),
+func inferenceInputFromHTTP(
+	request factoryapi.ModelInvocationRequest,
+) (models.InferenceInput, []work.WorkContentPart, error) {
+	content := contentmapping.PartsFromGenerated(request.Content)
+	if len(content) == 0 {
+		return models.InferenceInput{}, nil, nil
 	}
-	if request.Options != nil {
-		domain.Options = &models.Options{}
-		if request.Options.ResponseMode != nil {
-			domain.Options.ResponseMode = models.ResponseMode(*request.Options.ResponseMode)
+	if simpleTextInput(content, request.Bindings) {
+		var text strings.Builder
+		for index, part := range content {
+			if index > 0 {
+				text.WriteByte('\n')
+			}
+			text.WriteString(part.Text)
 		}
+		contentType := strings.TrimSpace(content[0].ContentType)
+		if contentType == "" {
+			contentType = "text/plain"
+		}
+		return models.InferenceInput{ContentType: contentType, Content: text.String()}, content, nil
 	}
-	return domain
+
+	payload := structuredInferenceInput{
+		Content:  work.CloneWorkContentParts(content),
+		Bindings: modelBindingsFromHTTP(request.Bindings),
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return models.InferenceInput{}, nil, fmt.Errorf("encode model invocation input: %w", err)
+	}
+	return models.InferenceInput{ContentType: "application/json", Content: string(encoded)}, content, nil
 }
 
-func modelBindingsFromGenerated(bindings *[]factoryapi.WorkstationOperationBinding) []models.ModelOperationBinding {
-	authored := workerinferencemapping.OperationBindingsFromGenerated(bindings)
-	result := make([]models.ModelOperationBinding, len(authored))
-	for i := range authored {
-		result[i] = models.ModelOperationBinding{
-			Slot: authored[i].Slot, Config: work.CloneWorkContentParts(authored[i].Config),
-			DefaultContent: work.CloneWorkContentParts(authored[i].DefaultContent),
+func simpleTextInput(content []work.WorkContentPart, bindings *[]factoryapi.WorkstationOperationBinding) bool {
+	if bindings != nil && len(*bindings) > 0 {
+		return false
+	}
+	for _, part := range content {
+		if part.Type.Normalized() != work.WorkContentPartTypeText ||
+			strings.TrimSpace(part.URL) != "" || strings.TrimSpace(part.File) != "" ||
+			len(part.JSON) != 0 || strings.TrimSpace(part.Slot) != "" ||
+			strings.TrimSpace(part.Label) != "" || strings.TrimSpace(part.Role) != "" ||
+			strings.TrimSpace(part.ArtifactID) != "" || len(part.Metadata) != 0 {
+			return false
 		}
-		if authored[i].Selector != nil {
-			result[i].Selector = &models.ModelOperationBindingSelector{
-				Slot: authored[i].Selector.Slot, Label: authored[i].Selector.Label,
-				Type: authored[i].Selector.Type, Role: authored[i].Selector.Role,
+	}
+	return true
+}
+
+func modelBindingsFromHTTP(bindings *[]factoryapi.WorkstationOperationBinding) []models.ModelOperationBinding {
+	if bindings == nil || len(*bindings) == 0 {
+		return nil
+	}
+	result := make([]models.ModelOperationBinding, 0, len(*bindings))
+	for _, binding := range *bindings {
+		mapped := models.ModelOperationBinding{
+			Slot:           strings.TrimSpace(binding.Slot),
+			Config:         work.CloneWorkContentParts(contentmapping.PartsFromGenerated(binding.Config)),
+			DefaultContent: work.CloneWorkContentParts(contentmapping.PartsFromGenerated(binding.DefaultContent)),
+		}
+		if binding.Selector != nil {
+			mapped.Selector = &models.ModelOperationBindingSelector{
+				Slot:  trimmedPointerValue(binding.Selector.Slot),
+				Label: trimmedPointerValue(binding.Selector.Label),
+				Type:  trimmedPointerValue(binding.Selector.Type),
+				Role:  trimmedPointerValue(binding.Selector.Role),
 			}
 		}
+		result = append(result, mapped)
 	}
 	return result
 }
 
-func modelInvocationResponseFromResult(result models.Result) factoryapi.ModelInvocationResponse {
+func trimmedPointerValue[T ~string](value *T) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(string(*value))
+}
+
+func modelInvocationResponseFromInferenceResult(
+	result models.InvokeModelResult,
+	catalog models.Detail,
+	inputText string,
+	inputContent []work.WorkContentPart,
+) factoryapi.ModelInvocationResponse {
+	worker, locality := catalogPresentationForOperation(catalog, result.Operation)
+	bindings := resolvedPresentationBindings(catalog, result.Operation, inputText, inputContent)
 	return factoryapi.ModelInvocationResponse{
 		ModelName:        result.ModelName,
-		Worker:           result.Worker,
+		Worker:           worker,
 		Operation:        result.Operation,
-		ProviderLocality: factoryapi.WorkerModelLocality(result.ProviderLocality),
-		Content:          derefGeneratedWorkContent(contentmapping.GeneratedPtrFromParts(result.Content)),
-		Bindings:         generatedResolvedModelInvocationBindings(result.Bindings),
+		ProviderLocality: factoryapi.WorkerModelLocality(locality),
+		Content:          derefGeneratedWorkContent(contentmapping.GeneratedPtrFromParts(inferenceContentToWorkParts(result.Content))),
+		Bindings:         generatedResolvedModelInvocationBindings(bindings),
 	}
+}
+
+func catalogPresentationForOperation(catalog models.Detail, operation string) (string, string) {
+	for _, capability := range catalog.Capabilities {
+		for _, catalogOperation := range capability.Operations {
+			if catalogOperation.Name == operation {
+				return capability.Worker, string(capability.ProviderLocality)
+			}
+		}
+	}
+	return "", string(catalog.ProviderLocality)
+}
+
+func resolvedPresentationBindings(
+	catalog models.Detail,
+	operation string,
+	inputText string,
+	inputContent []work.WorkContentPart,
+) []models.ResolvedModelOperationBinding {
+	operationDetail, ok := catalogOperationForName(catalog, operation)
+	if !ok {
+		return []models.ResolvedModelOperationBinding{}
+	}
+	for _, input := range operationDetail.Inputs {
+		slot := strings.TrimSpace(input.Name)
+		if slot == "" {
+			continue
+		}
+		content := work.CloneWorkContentParts(inputContent)
+		if len(content) == 0 && strings.TrimSpace(inputText) != "" {
+			content = []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: inputText}}
+		}
+		return []models.ResolvedModelOperationBinding{{Slot: slot, Source: "INPUT", Content: content}}
+	}
+	return []models.ResolvedModelOperationBinding{}
+}
+
+func catalogOperationForName(catalog models.Detail, operation string) (models.Operation, bool) {
+	for _, catalogOperation := range catalog.Operations {
+		if catalogOperation.Name == operation {
+			return catalogOperation, true
+		}
+	}
+	for _, capability := range catalog.Capabilities {
+		for _, catalogOperation := range capability.Operations {
+			if catalogOperation.Name == operation {
+				return catalogOperation, true
+			}
+		}
+	}
+	return models.Operation{}, false
+}
+
+func inferenceContentToWorkParts(content []models.InferenceContent) []work.WorkContentPart {
+	if len(content) == 0 {
+		return nil
+	}
+	parts := make([]work.WorkContentPart, 0, len(content))
+	for _, item := range content {
+		contentType := strings.TrimSpace(item.ContentType)
+		value := strings.TrimSpace(item.Content)
+		switch {
+		case strings.HasPrefix(strings.ToLower(contentType), "audio/"):
+			parts = append(parts, work.WorkContentPart{Type: work.WorkContentPartTypeAudio, File: value, ContentType: contentType, Slot: "audio"})
+		case strings.HasPrefix(strings.ToLower(contentType), "image/"):
+			parts = append(parts, work.WorkContentPart{Type: work.WorkContentPartTypeImage, URL: value, ContentType: contentType, Slot: "image"})
+		case strings.EqualFold(contentType, "application/json"):
+			parts = append(parts, work.WorkContentPart{Type: work.WorkContentPartTypeJSON, JSON: json.RawMessage(value), Slot: "json"})
+		default:
+			if contentType == "" {
+				contentType = "text/plain"
+			}
+			parts = append(parts, work.WorkContentPart{Type: work.WorkContentPartTypeText, Text: value, ContentType: contentType, Slot: "text"})
+		}
+	}
+	return parts
 }
 
 func generatedResolvedModelInvocationBindings(values []models.ResolvedModelOperationBinding) []factoryapi.ResolvedModelOperationBinding {
@@ -119,4 +250,26 @@ func derefGeneratedWorkContent(content *factoryapi.WorkContent) factoryapi.WorkC
 		return nil
 	}
 	return *content
+}
+
+func invocationStreamFromResult(
+	result models.InvokeModelResult,
+	request factoryapi.ModelInvocationRequest,
+) (string, string, error) {
+	if request.Options == nil || request.Options.ResponseMode == nil ||
+		string(*request.Options.ResponseMode) != string(factoryapi.AUDIOSTREAM) {
+		return "", "", nil
+	}
+	for _, artifact := range result.Artifacts {
+		path := strings.TrimSpace(artifact.Artifact.String())
+		if path == "" {
+			return "", "", fmt.Errorf("%w: streamed audio artifact reference is empty", models.ErrInferenceArtifactInvalid)
+		}
+		contentType := strings.TrimSpace(artifact.MediaType)
+		if contentType == "" {
+			contentType = "application/octet-stream"
+		}
+		return path, contentType, nil
+	}
+	return "", "", fmt.Errorf("%w: invocation did not produce audio output", models.ErrUnsupportedResponseMode)
 }

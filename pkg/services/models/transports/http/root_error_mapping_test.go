@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
@@ -103,22 +102,53 @@ func assertRootErrorMapping(t *testing.T, tt rootErrorMappingCase) {
 	}
 }
 
-func TestRootErrorResponse_MapsInferenceFailureForInvoke(t *testing.T) {
+func TestRootErrorResponse_MapsModelsInferenceTimeoutForInvoke(t *testing.T) {
 	t.Parallel()
 
-	failure := &workers.InferenceFailure{
-		Class:   workers.InferenceFailureClassTimeout,
-		Message: "model inference timed out",
-	}
+	failure := fmt.Errorf("%w: model inference timed out", models.ErrInferenceTimeout)
 	status, response, ok := RootErrorResponse(failure, modelsHTTPOperationInvoke)
 	if !ok {
-		t.Fatal("RootErrorResponse(InferenceFailure) = not handled, want typed invoke failure")
+		t.Fatal("RootErrorResponse(ErrInferenceTimeout) = not handled, want typed invoke failure")
 	}
 	if status != http.StatusGatewayTimeout ||
 		response.Family != factoryapi.ErrorFamilyInternalServerError ||
 		response.Code != factoryapi.ErrorResponseCode("MODEL_INFERENCE_TIMEOUT") ||
-		response.Message != failure.Error() {
-		t.Fatalf("RootErrorResponse(InferenceFailure) = %d %#v, want timeout inference failure", status, response)
+		response.Message != "model inference timed out" {
+		t.Fatalf("RootErrorResponse(ErrInferenceTimeout) = %d %#v, want timeout inference failure", status, response)
+	}
+}
+
+func TestRootErrorResponse_MapsModelsInferenceErrorCategoriesForInvoke(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantCode   string
+	}{
+		{name: "cancelled", err: fmt.Errorf("%w: request canceled", models.ErrInferenceCancelled), wantStatus: http.StatusConflict, wantCode: "MODEL_INFERENCE_CANCELLED"},
+		{name: "runtime failure", err: fmt.Errorf("%w: provider exited", models.ErrInferenceFailed), wantStatus: http.StatusInternalServerError, wantCode: "MODEL_INFERENCE_RUNTIME_FAILURE"},
+		{name: "artifact", err: fmt.Errorf("%w: output missing", models.ErrInferenceArtifactInvalid), wantStatus: http.StatusInternalServerError, wantCode: "MODEL_INFERENCE_ARTIFACT_INVALID"},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			status, response, ok := RootErrorResponse(tt.err, modelsHTTPOperationInvoke)
+			if !ok || status != tt.wantStatus || string(response.Code) != tt.wantCode {
+				t.Fatalf("RootErrorResponse(%v) = %d %#v, %v; want status=%d code=%s", tt.err, status, response, ok, tt.wantStatus, tt.wantCode)
+			}
+		})
+	}
+}
+
+func TestRootErrorResponse_LeavesInferenceErrorCategoriesOutsideInvokeUnmapped(t *testing.T) {
+	t.Parallel()
+
+	for _, operation := range []modelsHTTPOperation{modelsHTTPOperationCatalog, modelsHTTPOperationPull} {
+		if _, _, ok := RootErrorResponse(models.ErrInferenceFailed, operation); ok {
+			t.Fatalf("RootErrorResponse(ErrInferenceFailed, %v) = handled, want invoke-only mapping", operation)
+		}
 	}
 }
 
@@ -248,6 +278,27 @@ func TestHandler_InvokeModelMapsTypedRootFailures(t *testing.T) {
 			wantCode:    "MODEL_RUNTIME_UNSUPPORTED",
 			wantMessage: models.ErrUnsupported.Error(),
 		},
+		{
+			name:        "provider inference failure",
+			rootErr:     models.ErrInferenceFailed,
+			wantStatus:  http.StatusInternalServerError,
+			wantCode:    "MODEL_INFERENCE_RUNTIME_FAILURE",
+			wantMessage: models.ErrInferenceFailed.Error(),
+		},
+		{
+			name:        "inference timeout",
+			rootErr:     models.ErrInferenceTimeout,
+			wantStatus:  http.StatusGatewayTimeout,
+			wantCode:    "MODEL_INFERENCE_TIMEOUT",
+			wantMessage: models.ErrInferenceTimeout.Error(),
+		},
+		{
+			name:        "inference cancelled",
+			rootErr:     models.ErrInferenceCancelled,
+			wantStatus:  http.StatusConflict,
+			wantCode:    "MODEL_INFERENCE_CANCELLED",
+			wantMessage: models.ErrInferenceCancelled.Error(),
+		},
 	}
 
 	for _, tt := range tests {
@@ -255,15 +306,10 @@ func TestHandler_InvokeModelMapsTypedRootFailures(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			invoker := invokeInvokerFake{
-				invoke: func(context.Context, string, models.Request) (models.Result, error) {
-					return models.Result{}, tt.rootErr
-				},
-			}
-			handler := NewHandlerFromRoot(RootBinding{
-				Models:  &rootFake{},
-				Invoker: invoker,
-			}, zap.NewNop())
+			root := newInvocationRoot(t, func(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error) {
+				return models.InvokeModelResult{}, tt.rootErr
+			})
+			handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 			recorder := httptest.NewRecorder()
 			body := `{"operation":"TTS","content":[{"type":"TEXT","text":"hello"}]}`
 
@@ -281,15 +327,10 @@ func TestHandler_InvokeModelMapsTypedRootFailures(t *testing.T) {
 func TestHandler_InvokeModelUnmappedFailureDoesNotLeakInternalPaths(t *testing.T) {
 	t.Parallel()
 
-	invoker := invokeInvokerFake{
-		invoke: func(context.Context, string, models.Request) (models.Result, error) {
-			return models.Result{}, errors.New("pkg/services/models/internal/runtime: stack trace at invoke.go:42")
-		},
-	}
-	handler := NewHandlerFromRoot(RootBinding{
-		Models:  &rootFake{},
-		Invoker: invoker,
-	}, zap.NewNop())
+	root := newInvocationRoot(t, func(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error) {
+		return models.InvokeModelResult{}, errors.New("pkg/services/models/internal/runtime: stack trace at invoke.go:42")
+	})
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 	recorder := httptest.NewRecorder()
 	body := `{"operation":"TTS","content":[{"type":"TEXT","text":"hello"}]}`
 

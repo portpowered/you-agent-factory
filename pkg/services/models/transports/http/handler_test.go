@@ -9,8 +9,6 @@ import (
 	"testing"
 
 	modelcontract "github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -77,36 +75,22 @@ func (fake modelAPIFake) PullModelForScope(
 	return fake.pullForScope(ctx, request)
 }
 
-type modelInvokerFake struct {
-	invoke func(context.Context, string, modelcontract.Request) (modelcontract.Result, error)
-}
-
-func (fake modelInvokerFake) InvokeModel(ctx context.Context, name string, request modelcontract.Request) (modelcontract.Result, error) {
-	return fake.invoke(ctx, name, request)
-}
-
-func newTestHandler(service modelcontract.Service, invoker workers.ModelInvoker) *Handler {
+func newTestHandler(service modelcontract.Service) *Handler {
 	scope, err := (modelcontract.RuntimeScopeRef{}).Parse("factory-session:http-test")
 	if err != nil {
 		panic(err)
 	}
-	return NewHandler(NewAdapter(service, invoker, passthroughContentPreparation{}, scope), zap.NewNop())
-}
-
-type passthroughContentPreparation struct{}
-
-func (passthroughContentPreparation) PrepareWorkContent(_ context.Context, content []work.WorkContentPart) ([]work.WorkContentPart, error) {
-	return content, nil
+	return NewHandler(NewAdapter(service, scope), zap.NewNop())
 }
 
 func TestNewHandlerRequiresInjectedAdapter(t *testing.T) {
 	if handler := NewHandler(nil, zap.NewNop()); handler != nil {
 		t.Fatalf("NewHandler(nil) = %T, want nil", handler)
 	}
-	if handler := NewHandler(NewAdapter(modelAPIFake{}, modelInvokerFake{}, passthroughContentPreparation{}), nil); handler != nil {
+	if handler := NewHandler(NewAdapter(modelAPIFake{}), nil); handler != nil {
 		t.Fatalf("NewHandler(adapter, nil) = %T, want nil", handler)
 	}
-	if handler := newTestHandler(modelAPIFake{}, modelInvokerFake{}); handler == nil || handler.adapter == nil || handler.logger == nil {
+	if handler := newTestHandler(modelAPIFake{}); handler == nil || handler.adapter == nil || handler.logger == nil {
 		t.Fatalf("NewHandler(adapter) = %#v, want injected adapter", handler)
 	}
 }
@@ -117,7 +101,7 @@ func TestHandlerListModelsInvokesInjectedAPI(t *testing.T) {
 			return modelcontract.List{Results: []modelcontract.Summary{{Name: "voice"}}}, nil
 		},
 	}
-	handler := newTestHandler(models, modelInvokerFake{})
+	handler := newTestHandler(models)
 	recorder := httptest.NewRecorder()
 
 	handler.ListModels(recorder, httptest.NewRequest(http.MethodGet, "/models", nil))
@@ -167,7 +151,7 @@ func TestAdapterUsesOpenedModelsScopeForCatalogReads(t *testing.T) {
 			return modelcontract.PullResult{ModelName: "voice", Outcome: "PULLED"}, nil
 		},
 	}
-	adapter := NewAdapter(service, modelInvokerFake{}, passthroughContentPreparation{}, scope)
+	adapter := NewAdapter(service, scope)
 
 	listed, err := adapter.ListModels(t.Context())
 	if err != nil || len(listed.Results) != 1 || listed.Results[0].Name != "voice" {
@@ -184,13 +168,7 @@ func TestAdapterUsesOpenedModelsScopeForCatalogReads(t *testing.T) {
 }
 
 func TestHandlerInvokeModelOwnsRequestValidation(t *testing.T) {
-	invoker := modelInvokerFake{
-		invoke: func(context.Context, string, modelcontract.Request) (modelcontract.Result, error) {
-			t.Fatal("InvokeModel called for invalid request")
-			return modelcontract.Result{}, nil
-		},
-	}
-	handler := newTestHandler(modelAPIFake{}, invoker)
+	handler := newTestHandler(modelAPIFake{})
 	recorder := httptest.NewRecorder()
 
 	handler.InvokeModel(recorder, httptest.NewRequest(http.MethodPost, "/models/voice/invocations", strings.NewReader(`{"operation":"TTS","content":{}}`)), "voice")
@@ -201,13 +179,7 @@ func TestHandlerInvokeModelOwnsRequestValidation(t *testing.T) {
 }
 
 func TestHandlerInvokeModelPreservesContentPartValidation(t *testing.T) {
-	invoker := modelInvokerFake{
-		invoke: func(context.Context, string, modelcontract.Request) (modelcontract.Result, error) {
-			t.Fatal("InvokeModel called for invalid content part")
-			return modelcontract.Result{}, nil
-		},
-	}
-	handler := newTestHandler(modelAPIFake{}, invoker)
+	handler := newTestHandler(modelAPIFake{})
 	recorder := httptest.NewRecorder()
 
 	handler.InvokeModel(recorder, httptest.NewRequest(http.MethodPost, "/models/voice/invocations", strings.NewReader(`{"operation":"TTS","content":[{"type":"TEXT","url":"unexpected"}]}`)), "voice")
@@ -223,7 +195,7 @@ func TestHandlerPullModelOwnsErrorMapping(t *testing.T) {
 			return modelcontract.PullResult{}, errors.New("cache unavailable")
 		},
 	}
-	handler := newTestHandler(models, modelInvokerFake{})
+	handler := newTestHandler(models)
 	recorder := httptest.NewRecorder()
 
 	handler.PullModel(recorder, httptest.NewRequest(http.MethodPost, "/models/voice/pull", nil), "voice")

@@ -26,7 +26,6 @@ import (
 type Handler struct {
 	mappings             *mappingcomposition.HTTPBinder
 	providerSessionsHTTP *providersessionshttp.Handler
-	modelsContent        work.ContentPreparation
 	validation           factorydefinitions.SubmittedDefinitionValidationOperation
 	invocationWorkType   factorydefinitions.InvocationWorkTypeService
 	contentStaging       work.ContentStagingService
@@ -37,20 +36,19 @@ type Handler struct {
 func NewHandler(
 	mappings *mappingcomposition.HTTPBinder,
 	providerSessionsHTTP *providersessionshttp.Handler,
-	modelsContent work.ContentPreparation,
 	validation factorydefinitions.SubmittedDefinitionValidationOperation,
 	invocationWorkType factorydefinitions.InvocationWorkTypeService,
 	contentStaging work.ContentStagingService,
 	requestPreparation work.RequestPreparationService,
 	sessionRequests factorysessionshttp.RequestPreparation,
 ) (*Handler, error) {
-	if mappings == nil || providerSessionsHTTP == nil || modelsContent == nil || validation == nil || invocationWorkType == nil ||
+	if mappings == nil || providerSessionsHTTP == nil || validation == nil || invocationWorkType == nil ||
 		contentStaging == nil || requestPreparation == nil || sessionRequests == nil {
 		return nil, fmt.Errorf("construct HTTP handler: mappings, Provider Sessions handler, service handlers, validation, invocation work-type policy, Work operations, and Factory Session operations are required")
 	}
 	return &Handler{
 		mappings: mappings, providerSessionsHTTP: providerSessionsHTTP,
-		modelsContent: modelsContent, validation: validation,
+		validation:         validation,
 		invocationWorkType: invocationWorkType,
 		contentStaging:     contentStaging, requestPreparation: requestPreparation,
 		sessionRequests: sessionRequests,
@@ -58,18 +56,16 @@ func NewHandler(
 }
 
 func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.Handler, error) {
-	if handler == nil || handler.mappings == nil || handler.providerSessionsHTTP == nil || handler.modelsContent == nil {
+	if handler == nil || handler.mappings == nil || handler.providerSessionsHTTP == nil {
 		return nil, fmt.Errorf("bind HTTP handler: process-scoped handler is required")
 	}
 	modelsAdapter := modelshttp.NewAdapter(
 		opened.Models,
-		opened.Workers,
-		handler.modelsContent,
 		opened.ModelsScope,
 	)
 	modelsHandler := modelshttp.NewHandler(modelsAdapter, opened.Logger)
 	if modelsHandler == nil {
-		return nil, fmt.Errorf("bind HTTP handler: Models service, invoker, content preparation, and logger are required")
+		return nil, fmt.Errorf("bind HTTP handler: Models service and logger are required")
 	}
 	mapped, err := handler.mappings.Bind(
 		opened.FactoryRuntime, opened.FactoryDefinitions, opened.FactorySessions,

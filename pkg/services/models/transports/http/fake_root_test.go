@@ -18,6 +18,9 @@ type rootFake struct {
 	listCatalog  func(context.Context, models.ListModelsRequest) (models.ListModelsResult, error)
 	getCatalog   func(context.Context, models.GetModelRequest) (models.GetModelResult, error)
 	pullForScope func(context.Context, models.PullModelRequest) (models.PullResult, error)
+	acquireLease func(context.Context, models.AcquireModelLeaseRequest) (models.AcquireModelLeaseResult, error)
+	releaseLease func(context.Context, models.ReleaseModelLeaseRequest) (models.ReleaseModelLeaseResult, error)
+	invoke       func(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error)
 }
 
 var _ models.Service = (*rootFake)(nil)
@@ -160,9 +163,12 @@ func (fake *rootFake) StopModelHost(
 }
 
 func (fake *rootFake) AcquireModelLease(
-	context.Context,
-	models.AcquireModelLeaseRequest,
+	ctx context.Context,
+	request models.AcquireModelLeaseRequest,
 ) (models.AcquireModelLeaseResult, error) {
+	if fake.acquireLease != nil {
+		return fake.acquireLease(ctx, request)
+	}
 	return models.AcquireModelLeaseResult{}, models.ErrUnsupportedOperation
 }
 
@@ -174,16 +180,22 @@ func (fake *rootFake) GetModelLease(
 }
 
 func (fake *rootFake) ReleaseModelLease(
-	context.Context,
-	models.ReleaseModelLeaseRequest,
+	ctx context.Context,
+	request models.ReleaseModelLeaseRequest,
 ) (models.ReleaseModelLeaseResult, error) {
+	if fake.releaseLease != nil {
+		return fake.releaseLease(ctx, request)
+	}
 	return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
 }
 
 func (fake *rootFake) InvokeModelWithLease(
-	context.Context,
-	models.InvokeModelRequest,
+	ctx context.Context,
+	request models.InvokeModelRequest,
 ) (models.InvokeModelResult, error) {
+	if fake.invoke != nil {
+		return fake.invoke(ctx, request)
+	}
 	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
 }
 

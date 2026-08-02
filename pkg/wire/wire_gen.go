@@ -450,7 +450,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	requestPreparation := provideFactorySessionHTTPRequestPreparation(v69)
-	applicationHandler, err := application2.NewHandler(httpBinder, handler, contentPreparation, v71, invocationWorkTypeService, contentStagingService, requestPreparationService, requestPreparation)
+	applicationHandler, err := application2.NewHandler(httpBinder, handler, v71, invocationWorkTypeService, contentStagingService, requestPreparationService, requestPreparation)
 	if err != nil {
 		return nil, err
 	}

@@ -437,26 +437,12 @@ func TestGetModel_ReturnsNotFoundForUnknownDiscoveredModel(t *testing.T) {
 
 func TestInvokeModel_ReturnsInvocationMetadata(t *testing.T) {
 	var invokedModelNames []string
-	srv := newStrictModelTestServer(strictModelsServiceFake{invoke: func(_ context.Context, name string, _ modelinference.Request) (modelinference.Result, error) {
-		invokedModelNames = append(invokedModelNames, name)
-		return modelinference.Result{
-			ModelName:        "OMNIVOICE_Q4_K_M",
-			Worker:           "tts-worker",
-			Operation:        "TTS",
-			ProviderLocality: workerconfig.ModelLocalityLocal,
-			Content: []work.WorkContentPart{{
-				Type:        work.WorkContentPartTypeAudio,
-				File:        "artifacts/output.wav",
-				ContentType: "audio/wav",
-			}},
-			Bindings: []modelinference.ResolvedModelOperationBinding{{
-				Slot:   "text",
-				Source: "INPUT",
-				Content: []work.WorkContentPart{{
-					Type: work.WorkContentPartTypeText,
-					Text: "hello world",
-				}},
-			}},
+	srv := newStrictModelTestServer(strictModelsServiceFake{invoke: func(_ context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+		invokedModelNames = append(invokedModelNames, request.ModelName)
+		return modelinference.InvokeModelResult{
+			ModelName: "OMNIVOICE_Q4_K_M", Operation: "TTS",
+			Content:          []modelinference.InferenceContent{{ContentType: "audio/wav", Content: "artifacts/output.wav"}},
+			LeaseDisposition: modelinference.InvocationLeaseReleased,
 		}, nil
 	}})
 
@@ -483,14 +469,15 @@ func TestInvokeModel_StreamsAudioOutput(t *testing.T) {
 	if err := os.WriteFile(audioPath, audioBytes, 0o644); err != nil {
 		t.Fatalf("write audio file: %v", err)
 	}
-	srv := newStrictModelTestServer(strictModelsServiceFake{invoke: func(context.Context, string, modelinference.Request) (modelinference.Result, error) {
-		return modelinference.Result{
-			ModelName:         "OMNIVOICE_Q4_K_M",
-			Worker:            "tts-worker",
-			Operation:         "TTS",
-			ProviderLocality:  workerconfig.ModelLocalityLocal,
-			StreamFile:        audioPath,
-			StreamContentType: "audio/wav",
+	artifact, err := (modelinference.InferenceArtifactRef{}).Parse(audioPath)
+	if err != nil {
+		t.Fatalf("parse audio artifact: %v", err)
+	}
+	srv := newStrictModelTestServer(strictModelsServiceFake{invoke: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+		return modelinference.InvokeModelResult{
+			ModelName: "OMNIVOICE_Q4_K_M", Operation: "TTS",
+			Artifacts:        []modelinference.InferenceArtifact{{Artifact: artifact, MediaType: "audio/wav"}},
+			LeaseDisposition: modelinference.InvocationLeaseReleased,
 		}, nil
 	}})
 
@@ -510,8 +497,8 @@ func TestInvokeModel_StreamsAudioOutput(t *testing.T) {
 }
 
 func TestInvokeModel_ReturnsModelNotAvailableWhenLocalAssetsAreMissing(t *testing.T) {
-	srv := newStrictModelTestServer(strictModelsServiceFake{invoke: func(context.Context, string, modelinference.Request) (modelinference.Result, error) {
-		return modelinference.Result{}, fmt.Errorf("%w: required assets missing", modelinference.ErrNotAvailable)
+	srv := newStrictModelTestServer(strictModelsServiceFake{invoke: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+		return modelinference.InvokeModelResult{}, fmt.Errorf("%w: required assets missing", modelinference.ErrNotAvailable)
 	}})
 
 	req := httptest.NewRequest(http.MethodPost, "/models/OMNIVOICE_Q4_K_M/invocations", bytes.NewBufferString(`{"operation":"TTS","content":[{"type":"TEXT","text":"hello world"}]}`))

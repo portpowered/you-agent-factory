@@ -2,49 +2,43 @@ package model_invoke_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
-	"sync"
+	"strings"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
-	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestHTTPModelInvocationMapsAudioWorkContent proves model HTTP transport maps
-// audio work content through the shared workcontent mapper for functional coverage.
-func TestHTTPModelInvocationMapsAudioWorkContent(t *testing.T) {
+// TestHTTPModelInvocationPreservesStructuredWorkContent proves the HTTP
+// transport carries structured Work content and bindings through the Models
+// root invocation input without a Workers/provider execution seam.
+func TestHTTPModelInvocationPreservesStructuredWorkContent(t *testing.T) {
 	dir := support.ScaffoldFactory(t, httpWorkContentFactoryConfig())
-	support.WriteAgentConfig(t, dir, "tts-worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "OMNIVOICE_Q4_K_M"))
-
-	audioPath := filepath.Join(t.TempDir(), "speech.wav")
-	if err := os.WriteFile(audioPath, []byte("RIFF....WAVEpayload"), 0o644); err != nil {
-		t.Fatalf("write audio fixture: %v", err)
-	}
-
-	providerStub := &httpWorkContentProvider{
-		response: workerexecution.InferenceResponse{
-			Content: mustMarshalHTTPWorkContentAudioResponse(t, audioPath),
-		},
-	}
+	home := t.TempDir()
+	writeReadyOmniVoiceCache(t, home)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
+		Env:                       homeEnvironment(home),
 		Edges: serviceedges.Edges{
-			ProviderOverride: providerStub,
+			ModelAssetResolveHomeDirectory: func() (string, error) { return home, nil },
 		},
 	})
 	t.Cleanup(func() { server.Stop(t) })
+	catalogResponse, err := http.Get(server.URL() + "/models/OMNIVOICE_Q4_K_M")
+	if err != nil {
+		t.Fatalf("get model catalog: %v", err)
+	}
+	catalogBody, _ := io.ReadAll(catalogResponse.Body)
+	_ = catalogResponse.Body.Close()
+	if catalogResponse.StatusCode != http.StatusOK {
+		t.Fatalf("catalog status = %d, want 200 body = %s", catalogResponse.StatusCode, catalogBody)
+	}
 
 	responseMode := factoryapi.METADATA
 	response := postHTTPWorkContentJSON[factoryapi.ModelInvocationResponse](
@@ -63,14 +57,23 @@ func TestHTTPModelInvocationMapsAudioWorkContent(t *testing.T) {
 		"model HTTP workcontent coverage invocation",
 	)
 	if len(response.Content) != 1 {
-		t.Fatalf("response content count = %d, want 1", len(response.Content))
+		t.Fatalf("response content count = %d, want one Models-root JSON result", len(response.Content))
 	}
-	audioPart, err := response.Content[0].AsWorkAudioContentPart()
+	jsonPart, err := response.Content[0].AsWorkJsonContentPart()
 	if err != nil {
-		t.Fatalf("decode invocation audio content: %v", err)
+		t.Fatalf("decode invocation JSON content: %v", err)
 	}
-	if stringPointerValue(audioPart.ContentType) != "audio/wav" || httpWorkContentAudioPath(audioPart) != audioPath {
-		t.Fatalf("audio part = %#v, want audio/wav at %s", audioPart, audioPath)
+	encoded, err := json.Marshal(jsonPart.Json)
+	if err != nil {
+		t.Fatalf("marshal echoed JSON content: %v", err)
+	}
+	for _, want := range []string{"hello world", "fixtures/review.png", "coverage"} {
+		if !strings.Contains(string(encoded), want) {
+			t.Fatalf("echoed JSON content = %s, want %q", encoded, want)
+		}
+	}
+	if len(response.Bindings) != 1 || response.Bindings[0].Slot != "text" {
+		t.Fatalf("response bindings = %#v, want text input lineage", response.Bindings)
 	}
 }
 
@@ -85,12 +88,19 @@ func httpWorkContentFactoryConfig() map[string]any {
 				{"name": "failed", "type": "FAILED"},
 			},
 		}},
+		"resources": []map[string]any{{
+			"name": "omnivoice-cache", "type": interfaces.ResourceTypeModel,
+			"capacity": 1, "model": "OMNIVOICE_Q4_K_M", "backend": "LLAMACPP",
+			"loadPolicy": "ON_DEMAND",
+		}},
 		"workers": []map[string]any{{
 			"name":          "tts-worker",
 			"type":          interfaces.WorkerTypeModel,
 			"model":         "OMNIVOICE_Q4_K_M",
 			"modelProvider": "CODEX",
-			"modelLocality": interfaces.ModelLocalityCloud,
+			"modelLocality": interfaces.ModelLocalityLocal,
+			"command":       "omnivoice-llamacpp",
+			"resources":     []map[string]any{{"name": "omnivoice-cache", "capacity": 1}},
 			"operations": []map[string]any{{
 				"name": "TTS",
 				"inputs": []map[string]any{{
@@ -114,19 +124,6 @@ func httpWorkContentModelBindings() *[]factoryapi.WorkstationOperationBinding {
 			}(),
 		},
 	}}
-}
-
-func mustMarshalHTTPWorkContentAudioResponse(t *testing.T, audioPath string) string {
-	t.Helper()
-	body, err := json.Marshal([]work.WorkContentPart{{
-		Type:        work.WorkContentPartTypeAudio,
-		File:        audioPath,
-		ContentType: "audio/wav",
-	}})
-	if err != nil {
-		t.Fatalf("marshal audio response content: %v", err)
-	}
-	return string(body)
 }
 
 func mustHTTPWorkContentTextPart(t *testing.T, text string) factoryapi.WorkContentPart {
@@ -165,13 +162,6 @@ func mustHTTPWorkContentJSONPart(t *testing.T, value map[string]any) factoryapi.
 	return part
 }
 
-func httpWorkContentAudioPath(audio factoryapi.WorkAudioContentPart) string {
-	if audio.File != nil && string(*audio.File) != "" {
-		return string(*audio.File)
-	}
-	return string(audio.Url)
-}
-
 func postHTTPWorkContentJSON[T any](t *testing.T, endpoint string, payload any, failurePrefix string) T {
 	t.Helper()
 	body, err := json.Marshal(payload)
@@ -193,33 +183,3 @@ func postHTTPWorkContentJSON[T any](t *testing.T, endpoint string, payload any, 
 	}
 	return out
 }
-
-func stringPtr(value string) *string {
-	if value == "" {
-		return nil
-	}
-	return &value
-}
-
-func stringPointerValue[T ~string](value *T) string {
-	if value == nil {
-		return ""
-	}
-	return string(*value)
-}
-
-type httpWorkContentProvider struct {
-	mu       sync.Mutex
-	response workerexecution.InferenceResponse
-}
-
-func (provider *httpWorkContentProvider) Infer(
-	_ context.Context,
-	_ workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
-	provider.mu.Lock()
-	defer provider.mu.Unlock()
-	return provider.response, nil
-}
-
-var _ providercontract.Provider = (*httpWorkContentProvider)(nil)

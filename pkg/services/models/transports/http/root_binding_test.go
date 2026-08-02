@@ -59,7 +59,7 @@ func TestNewHandlerFromRoot_ExposesInjectedModelsRoot(t *testing.T) {
 func TestNewAdapterFromRoot_RejectsNilModelsRoot(t *testing.T) {
 	t.Parallel()
 
-	if adapter := NewAdapter(nil, noopModelInvoker{}, noopContentPreparation{}); adapter != nil {
+	if adapter := NewAdapter(nil); adapter != nil {
 		t.Fatalf("NewAdapter(nil) = %#v, want nil", adapter)
 	}
 	if handler := NewHandlerFromRoot(RootBinding{}, zap.NewNop()); handler != nil {

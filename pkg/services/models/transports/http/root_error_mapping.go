@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -34,10 +33,9 @@ func RootErrorResponse(err error, operation modelsHTTPOperation) (int, factoryap
 	if err == nil {
 		return 0, factoryapi.ErrorResponse{}, false
 	}
-
 	if operation == modelsHTTPOperationInvoke {
-		if failure, ok := workers.AsInferenceFailure(err); ok {
-			return inferenceFailureErrorResponse(failure)
+		if status, response, ok := inferenceRootErrorResponse(err); ok {
+			return status, response, true
 		}
 	}
 
@@ -54,10 +52,14 @@ func RootErrorResponse(err error, operation modelsHTTPOperation) (int, factoryap
 		return serviceUnavailableErrorResponse(strings.TrimSpace(err.Error()), "MODEL_RUNTIME_FAILED")
 	case errors.Is(err, models.ErrUnsupported):
 		return badRequestErrorResponseWithCode(strings.TrimSpace(err.Error()), "MODEL_RUNTIME_UNSUPPORTED")
-	case errors.Is(err, models.ErrUnsupportedOperation), errors.Is(err, models.ErrUnsupportedResponseMode):
+	case errors.Is(err, models.ErrUnsupportedOperation),
+		errors.Is(err, models.ErrUnsupportedModelOperation),
+		errors.Is(err, models.ErrUnsupportedResponseMode):
 		return badRequestErrorResponse(strings.TrimSpace(err.Error()))
 	case errors.Is(err, models.ErrPullUnsupported) && operation == modelsHTTPOperationPull:
 		return badRequestErrorResponse(strings.TrimSpace(err.Error()))
+	case errors.Is(err, models.ErrAssetUnavailable):
+		return modelNotAvailableErrorResponse(strings.TrimSpace(err.Error()))
 	default:
 		return 0, factoryapi.ErrorResponse{}, false
 	}
@@ -70,16 +72,47 @@ func CatalogRootErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 	return RootErrorResponse(err, modelsHTTPOperationCatalog)
 }
 
-func inferenceFailureErrorResponse(failure *workers.InferenceFailure) (int, factoryapi.ErrorResponse, bool) {
-	if failure == nil {
+func gatewayTimeoutErrorResponse(message, code string) (int, factoryapi.ErrorResponse, bool) {
+	return http.StatusGatewayTimeout, factoryapi.ErrorResponse{
+		Message: message,
+		Family:  factoryapi.ErrorFamilyInternalServerError,
+		Code:    factoryapi.ErrorResponseCode(code),
+	}, true
+}
+
+func internalErrorResponse(message, code string) (int, factoryapi.ErrorResponse, bool) {
+	return http.StatusInternalServerError, factoryapi.ErrorResponse{
+		Message: message,
+		Family:  factoryapi.ErrorFamilyInternalServerError,
+		Code:    factoryapi.ErrorResponseCode(code),
+	}, true
+}
+
+func inferenceRootErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
+	switch {
+	case errors.Is(err, models.ErrInferenceTimeout):
+		return gatewayTimeoutErrorResponse(inferenceErrorMessage(err, models.ErrInferenceTimeout), "MODEL_INFERENCE_TIMEOUT")
+	case errors.Is(err, models.ErrInferenceCancelled):
+		return conflictErrorResponse(inferenceErrorMessage(err, models.ErrInferenceCancelled), "MODEL_INFERENCE_CANCELLED")
+	case errors.Is(err, models.ErrInferenceArtifactInvalid):
+		return internalErrorResponse(inferenceErrorMessage(err, models.ErrInferenceArtifactInvalid), "MODEL_INFERENCE_ARTIFACT_INVALID")
+	case errors.Is(err, models.ErrInvalidInferenceDependencies):
+		return internalErrorResponse(inferenceErrorMessage(err, models.ErrInvalidInferenceDependencies), "MODEL_INFERENCE_DEPENDENCIES_INVALID")
+	case errors.Is(err, models.ErrInferenceFailed):
+		return internalErrorResponse(inferenceErrorMessage(err, models.ErrInferenceFailed), "MODEL_INFERENCE_RUNTIME_FAILURE")
+	case errors.Is(err, models.ErrHostCapacityExhausted):
+		return conflictErrorResponse(strings.TrimSpace(err.Error()), "MODEL_LEASE_CAPACITY_EXHAUSTED")
+	case errors.Is(err, models.ErrHostCapacityContended):
+		return conflictErrorResponse(strings.TrimSpace(err.Error()), "MODEL_LEASE_CAPACITY_CONTENDED")
+	case errors.Is(err, models.ErrHostRuntimeNotReady):
+		return conflictErrorResponse(strings.TrimSpace(err.Error()), "MODEL_RUNTIME_NOT_READY")
+	case errors.Is(err, models.ErrHostLeaseExpired), errors.Is(err, models.ErrHostLeaseNotFound):
+		return badRequestErrorResponse(strings.TrimSpace(err.Error()))
+	case errors.Is(err, models.ErrHostInvalidHolder):
+		return badRequestErrorResponse(strings.TrimSpace(err.Error()))
+	default:
 		return 0, factoryapi.ErrorResponse{}, false
 	}
-	status := inferenceFailureHTTPStatus(failure)
-	return status, factoryapi.ErrorResponse{
-		Message: failure.Error(),
-		Family:  errorFamilyForStatus(status),
-		Code:    factoryapi.ErrorResponseCode(inferenceFailureErrorCode(failure)),
-	}, true
 }
 
 func notFoundErrorResponse(message string) (int, factoryapi.ErrorResponse, bool) {
@@ -139,4 +172,13 @@ func modelsErrorMessageLeaksInternalDetail(message string) bool {
 		return true
 	}
 	return false
+}
+
+func inferenceErrorMessage(err, sentinel error) string {
+	message := strings.TrimSpace(err.Error())
+	prefix := strings.TrimSpace(sentinel.Error()) + ":"
+	if strings.HasPrefix(message, prefix) {
+		return strings.TrimSpace(strings.TrimPrefix(message, prefix))
+	}
+	return message
 }
