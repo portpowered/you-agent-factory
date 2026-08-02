@@ -8,7 +8,9 @@
 package acpconformance
 
 import (
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -144,16 +146,39 @@ type SourceProvenance struct {
 type Corpus struct {
 	SchemaVersion int              `json:"schema_version"`
 	Provenance    SourceProvenance `json:"provenance"`
-	Cases         []Case           `json:"cases"`
+	// CasesChecksum is a hex-encoded SHA-256 digest over the deterministic
+	// JSON encoding of Cases. It never includes itself, so it cannot
+	// self-reference. ParseCorpus recomputes it with ChecksumCases and
+	// rejects the corpus if the declared and recomputed values differ,
+	// which makes any change to case content -- reviewed or not -- require
+	// an explicit, matching checksum update.
+	CasesChecksum string `json:"cases_checksum"`
+	Cases         []Case `json:"cases"`
 }
 
 const supportedSchemaVersion = 1
 
+// ChecksumCases returns the hex-encoded SHA-256 digest of cases' canonical
+// JSON encoding. It is deterministic for a given slice of cases (field
+// order is fixed by the Case struct, and map[string]string keys sort
+// alphabetically under encoding/json), so it is reproducible by any caller
+// re-deriving it from the same case content, and is the value ParseCorpus
+// compares a corpus's declared cases_checksum against.
+func ChecksumCases(cases []Case) (string, error) {
+	encoded, err := json.Marshal(cases)
+	if err != nil {
+		return "", fmt.Errorf("acpconformance: encoding cases for checksum: %w", err)
+	}
+	sum := sha256.Sum256(encoded)
+	return hex.EncodeToString(sum[:]), nil
+}
+
 // ParseCorpus decodes and validates raw corpus JSON. It rejects invalid
-// JSON, an unpinned or incomplete source provenance, duplicate case
-// identity, an unknown protocol role, undeclared or unknown directionality,
-// a case with no declared expected facts, and a round-trip declaration for a
-// Facts.Kind known to be lossy or unsupported in at least one direction.
+// JSON, an unpinned or incomplete source provenance, a missing or mismatched
+// cases_checksum, duplicate case identity, an unknown protocol role,
+// undeclared or unknown directionality, a case with no declared expected
+// facts, and a round-trip declaration for a Facts.Kind known to be lossy or
+// unsupported in at least one direction.
 func ParseCorpus(data []byte) (Corpus, error) {
 	var corpus Corpus
 	if err := json.Unmarshal(data, &corpus); err != nil {
@@ -168,6 +193,19 @@ func ParseCorpus(data []byte) (Corpus, error) {
 	}
 	if len(corpus.Cases) == 0 {
 		return Corpus{}, fmt.Errorf("acpconformance: corpus has no cases")
+	}
+	if strings.TrimSpace(corpus.CasesChecksum) == "" {
+		return Corpus{}, fmt.Errorf("acpconformance: corpus is missing cases_checksum")
+	}
+	computedChecksum, err := ChecksumCases(corpus.Cases)
+	if err != nil {
+		return Corpus{}, err
+	}
+	if !strings.EqualFold(corpus.CasesChecksum, computedChecksum) {
+		return Corpus{}, fmt.Errorf(
+			"acpconformance: cases_checksum mismatch: corpus declares %q, computed %q from case content -- update cases_checksum after reviewing the case changes",
+			corpus.CasesChecksum, computedChecksum,
+		)
 	}
 	seen := make(map[string]bool, len(corpus.Cases))
 	for _, c := range corpus.Cases {

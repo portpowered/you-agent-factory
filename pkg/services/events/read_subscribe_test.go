@@ -170,12 +170,37 @@ func TestDeliveryValidate(t *testing.T) {
 		{"gap delivery with malformed gap facts", Delivery{Kind: DeliveryGap, Gap: &GapFacts{Topic: testTopic}}, ErrInvalidGapFacts},
 		{"gap delivery with a leftover record", Delivery{Kind: DeliveryGap, Gap: gap, Record: rec}, ErrInconsistentDelivery},
 		{"gap delivery with a leftover cursor", Delivery{Kind: DeliveryGap, Gap: gap, Cursor: cur}, ErrInconsistentDelivery},
+		{
+			name:     "gap delivery with a partial record carrying only a payload",
+			delivery: Delivery{Kind: DeliveryGap, Gap: gap, Record: Record{Payload: []byte(`"secret"`)}},
+			wantErr:  ErrInconsistentDelivery,
+		},
+		{
+			name:     "gap delivery with a partial record carrying only source metadata",
+			delivery: Delivery{Kind: DeliveryGap, Gap: gap, Record: Record{SourceType: "worker.tool"}},
+			wantErr:  ErrInconsistentDelivery,
+		},
 		{"closed delivery", Delivery{Kind: DeliveryClosed}, nil},
 		{"closed delivery with a leftover record", Delivery{Kind: DeliveryClosed, Record: rec}, ErrInconsistentDelivery},
+		{
+			name:     "closed delivery with a partial record carrying only a payload",
+			delivery: Delivery{Kind: DeliveryClosed, Record: Record{Payload: []byte(`"secret"`)}},
+			wantErr:  ErrInconsistentDelivery,
+		},
 		{"canceled delivery", Delivery{Kind: DeliveryCanceled}, nil},
 		{"canceled delivery with a leftover cursor", Delivery{Kind: DeliveryCanceled, Cursor: cur}, ErrInconsistentDelivery},
+		{
+			name:     "canceled delivery with a partial record carrying only a schema id",
+			delivery: Delivery{Kind: DeliveryCanceled, Record: Record{SchemaID: "worker.output.v1"}},
+			wantErr:  ErrInconsistentDelivery,
+		},
 		{"backpressure delivery", Delivery{Kind: DeliveryBackpressure}, nil},
 		{"backpressure delivery with a leftover gap", Delivery{Kind: DeliveryBackpressure, Gap: gap}, ErrInconsistentDelivery},
+		{
+			name:     "backpressure delivery with a partial record carrying only a source sequence",
+			delivery: Delivery{Kind: DeliveryBackpressure, Record: Record{SourceSequence: 1}},
+			wantErr:  ErrInconsistentDelivery,
+		},
 		{"unspecified delivery", Delivery{}, ErrInconsistentDelivery},
 	}
 	for _, tt := range tests {

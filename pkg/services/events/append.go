@@ -138,6 +138,19 @@ func (rec Record) Detached() Record {
 	return detached
 }
 
+// IsZero reports whether rec carries no data in any field, including
+// Payload. A Record with some fields set and others left at their zero
+// value (a partial Record) is never zero.
+func (rec Record) IsZero() bool {
+	return rec.ID == (RecordID{}) &&
+		rec.SourceType == "" &&
+		rec.SourceID == "" &&
+		rec.SourceSequence == 0 &&
+		rec.SourceEventID == "" &&
+		rec.SchemaID == "" &&
+		len(rec.Payload) == 0
+}
+
 // AppendResult is the detached success outcome of one Append call.
 type AppendResult struct {
 	Record  Record
