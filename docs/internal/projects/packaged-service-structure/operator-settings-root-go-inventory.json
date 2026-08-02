@@ -5,6 +5,16 @@
   "clusters": [],
   "files": [
     {
+      "file": "acp_agent_profile_contract.go",
+      "classification": "thin_root_contract",
+      "note": "Peer-facing detached ACPAgentProfile value, built-in default/allowlist policy, normalization, and resolve/update request/result contracts."
+    },
+    {
+      "file": "acp_agent_profile_contract_test.go",
+      "classification": "thin_root_contract_test",
+      "note": "Root-contract tests for ACP agent profile normalization, built-in default, and detached-copy behavior."
+    },
+    {
       "file": "acp_integrations.go",
       "classification": "thin_root_contract",
       "note": "Peer-facing ACP integration projection and validation helpers retained at the thin Operator Settings root."

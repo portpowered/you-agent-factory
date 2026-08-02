@@ -60,4 +60,11 @@ type Service interface {
 	// EnsurePackagedACPIntegrations materializes packaged integrations only when
 	// the customer has not supplied the ACP integration list.
 	EnsurePackagedACPIntegrations(context.Context, string, []ACPIntegration) (Document, error)
+
+	// ResolveACPAgentProfile resolves an immutable effective ACP agent profile
+	// from a detached authored-document fact. A request with no authored
+	// profile resolves to BuiltInACPAgentProfile. Resolution does not read or
+	// mutate the operator document, and invalid profiles fail with
+	// ACPAgentProfileFailure (ErrACPAgentProfileInvalid).
+	ResolveACPAgentProfile(ResolveACPAgentProfileRequest) (ResolveACPAgentProfileResult, error)
 }

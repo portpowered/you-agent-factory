@@ -78,11 +78,12 @@ func sentinelForDocumentFailureKind(kind DocumentFailureKind) error {
 // Document is the detached operator document value peers consume from document
 // operations without importing storage or codec construction ports.
 type Document struct {
-	BackendScopeID string
-	Defaults       DocumentDefaults
-	Runtime        DocumentRuntimeSettings
-	WorkerPresets  []DocumentWorkerPreset
-	Workers        DocumentWorkerSettings
+	BackendScopeID  string
+	Defaults        DocumentDefaults
+	Runtime         DocumentRuntimeSettings
+	WorkerPresets   []DocumentWorkerPreset
+	Workers         DocumentWorkerSettings
+	ACPAgentProfile *DocumentACPAgentProfile
 }
 
 // Clone returns a detached document copy.
@@ -94,6 +95,10 @@ func (document Document) Clone() Document {
 		cloned.WorkerPresets = cloneDocumentWorkerPresets(document.WorkerPresets)
 	}
 	cloned.Workers = document.Workers.Clone()
+	if document.ACPAgentProfile != nil {
+		clonedProfile := document.ACPAgentProfile.Clone()
+		cloned.ACPAgentProfile = &clonedProfile
+	}
 	return cloned
 }
 

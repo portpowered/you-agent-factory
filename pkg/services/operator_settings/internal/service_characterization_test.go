@@ -337,6 +337,22 @@ func (fake *servicePeerFake) EnsurePackagedACPIntegrations(
 	return operatorsettings.Document{}, errors.New("characterization fake does not implement ACP")
 }
 
+func (fake *servicePeerFake) ResolveACPAgentProfile(
+	request operatorsettings.ResolveACPAgentProfileRequest,
+) (operatorsettings.ResolveACPAgentProfileResult, error) {
+	if request.AuthoredProfile == nil {
+		return operatorsettings.ResolveACPAgentProfileResult{Profile: operatorsettings.BuiltInACPAgentProfile()}, nil
+	}
+	profile, err := operatorsettings.NormalizeACPAgentProfile(
+		request.AuthoredProfile.DefaultFactoryReference,
+		request.AuthoredProfile.Allowlist,
+	)
+	if err != nil {
+		return operatorsettings.ResolveACPAgentProfileResult{}, err
+	}
+	return operatorsettings.ResolveACPAgentProfileResult{Profile: profile}, nil
+}
+
 func TestService_Characterization_FakeImplementsSingularSeam(t *testing.T) {
 	t.Parallel()
 
