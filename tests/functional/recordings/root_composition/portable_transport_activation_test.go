@@ -36,7 +36,15 @@ func TestRecordingsPortableBuildValidateAndTransportsActivateThroughRootBuildPro
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"FUN Recordings transport activation"}`))
 
 	recordArtifactPath := filepath.Join(t.TempDir(), "fun-recordings-transport-activation.replay.json")
-	edges := serviceedges.Edges{}
+	edges := serviceedges.Edges{
+		RecordingMakeDirectories: os.MkdirAll,
+		RecordingCreateTempFile: func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		RecordingRemovePath: os.Remove,
+		RecordingRenamePath: os.Rename,
+		RecordingReadFile:   os.ReadFile,
+	}
 	recordServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		Args:                      []string{"--record", recordArtifactPath},
@@ -161,6 +169,11 @@ func recordingsTransportActivationService(
 		func(path string, payload []byte) error {
 			return os.WriteFile(path, payload, 0o600)
 		},
+		edges.RecordingMakeDirectories,
+		edges.RecordingCreateTempFile,
+		edges.RecordingRemovePath,
+		edges.RecordingRenamePath,
+		edges.RecordingReadFile,
 	)
 	if err != nil {
 		t.Fatalf("compose Recordings service for transport activation: %v", err)

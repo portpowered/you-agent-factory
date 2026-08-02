@@ -2,6 +2,9 @@ package wire_test
 
 import (
 	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -57,6 +60,13 @@ func TestNewServiceWithProjectionRejectsMissingProjection(t *testing.T) {
 		nil,
 		nil,
 		func(string, []byte) error { return nil },
+		os.MkdirAll,
+		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		os.Remove,
+		os.Rename,
+		os.ReadFile,
 	)
 	if err == nil {
 		t.Fatal("NewServiceWithProjection() error = nil, want missing projection dependency")
@@ -66,5 +76,30 @@ func TestNewServiceWithProjectionRejectsMissingProjection(t *testing.T) {
 	}
 	if service != nil {
 		t.Fatalf("NewServiceWithProjection() = %#v, want nil service", service)
+	}
+}
+
+func TestRecordingsOwnerConstructionDoesNotSelectHostOSPublication(t *testing.T) {
+	t.Parallel()
+
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller() did not identify the test file")
+	}
+	ownerRoot := filepath.Dir(currentFile)
+	productionFiles := []string{
+		filepath.Join(ownerRoot, "providers.go"),
+		filepath.Join(ownerRoot, "..", "internal", "portable_artifact_publication.go"),
+		filepath.Join(ownerRoot, "..", "internal", "services", "artifacts_export", "wire", "publication.go"),
+	}
+	for _, path := range productionFiles {
+		source, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(source)
+		if strings.Contains(text, `"os"`) || strings.Contains(text, "os.") || strings.Contains(text, "NewOSPublication") {
+			t.Fatalf("Recordings owner construction file %s selects host OS publication effects", path)
+		}
 	}
 }

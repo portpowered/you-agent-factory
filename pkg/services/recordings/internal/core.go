@@ -239,13 +239,6 @@ func NewServiceWithLifecycleEffects(
 		tickers,
 		clocks...,
 	)
-	if publication == nil {
-		var err error
-		publication, err = NewPortableArtifactPublication()
-		if err != nil {
-			return nil
-		}
-	}
 	return &combinedService{
 		Ledger:            ledger,
 		ProjectionService: projection,

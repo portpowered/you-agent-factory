@@ -18,3 +18,20 @@ func TestBuildProcessWiresRecordingsArtifactExportGraph(t *testing.T) {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
 }
+
+func TestBuildProcessAcceptsRecordingArtifactReadEdgeWithoutConstructionIO(t *testing.T) {
+	t.Parallel()
+
+	readCalls := 0
+	if _, err := root.BuildProcess(context.Background(), serviceedges.Edges{
+		RecordingReadFile: func(string) ([]byte, error) {
+			readCalls++
+			return nil, nil
+		},
+	}); err != nil {
+		t.Fatalf("BuildProcess() with RecordingReadFile edge error = %v", err)
+	}
+	if readCalls != 0 {
+		t.Fatalf("RecordingReadFile calls during inert BuildProcess() = %d, want zero", readCalls)
+	}
+}

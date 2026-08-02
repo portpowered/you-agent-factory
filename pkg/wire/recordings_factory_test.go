@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
@@ -16,6 +17,7 @@ func TestProvideRecordingsFactoryConstructsThroughRecordingsWire(t *testing.T) {
 	t.Parallel()
 
 	factory := provideRecordingsFactory(
+		serviceedges.Edges{},
 		recordings.LiveRecordingTargetPlannerFunc(
 			func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
 				return recordings.LiveRecordingTarget{}, nil

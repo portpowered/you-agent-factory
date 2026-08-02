@@ -21,8 +21,17 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	inference "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+)
+
+var (
+	_ recordings.RecordingMakeDirectories     = Edges{}.RecordingMakeDirectories
+	_ recordings.RecordingCreateTemporaryFile = Edges{}.RecordingCreateTempFile
+	_ recordings.RecordingRemovePath          = Edges{}.RecordingRemovePath
+	_ recordings.RecordingRenamePath          = Edges{}.RecordingRenamePath
+	_ recordings.RecordingReadFile            = Edges{}.RecordingReadFile
 )
 
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
@@ -417,6 +426,30 @@ func TestMergeWithEmptyReplacementsPreservesProductionDefaults(t *testing.T) {
 
 	if merged.APIServerStarter == nil {
 		t.Fatal("APIServerStarter = nil")
+	}
+}
+
+func TestMergeReplacesAndPreservesRecordingArtifactReadEffect(t *testing.T) {
+	t.Parallel()
+
+	defaultRead := recordings.RecordingReadFile(func(string) ([]byte, error) {
+		return []byte("default"), nil
+	})
+	replacementRead := recordings.RecordingReadFile(func(string) ([]byte, error) {
+		return []byte("replacement"), nil
+	})
+
+	merged := Merge(
+		Edges{RecordingReadFile: defaultRead},
+		Edges{RecordingReadFile: replacementRead},
+	)
+	if got, err := merged.RecordingReadFile("artifact"); err != nil || string(got) != "replacement" {
+		t.Fatalf("merged RecordingReadFile = (%q, %v), want replacement", got, err)
+	}
+
+	preserved := Merge(Edges{RecordingReadFile: defaultRead}, Edges{})
+	if got, err := preserved.RecordingReadFile("artifact"); err != nil || string(got) != "default" {
+		t.Fatalf("preserved RecordingReadFile = (%q, %v), want default", got, err)
 	}
 }
 

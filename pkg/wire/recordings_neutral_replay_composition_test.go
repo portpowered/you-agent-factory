@@ -28,6 +28,7 @@ func TestInjectBundleComposesRecordingsNeutralReplayThroughWireFactory(t *testin
 	}
 
 	factory := provideRecordingsFactory(
+		serviceedges.Edges{},
 		provideLiveRecordingTargetPlanner(),
 		platformreplay.Local{},
 	)

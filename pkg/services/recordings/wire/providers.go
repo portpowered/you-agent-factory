@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -104,6 +105,11 @@ func NewServiceWithProjection(
 	projection recordings.ProjectionService,
 	targets recordings.LiveRecordingTargetPlanner,
 	writeFile func(string, []byte) error,
+	makeDirectories recordings.RecordingMakeDirectories,
+	createTemporaryFile recordings.RecordingCreateTemporaryFile,
+	removePath recordings.RecordingRemovePath,
+	renamePath recordings.RecordingRenamePath,
+	readFile recordings.RecordingReadFile,
 	clocks ...recordings.RecordingClock,
 ) (recordings.Service, error) {
 	if ledger == nil {
@@ -115,11 +121,91 @@ func NewServiceWithProjection(
 	if writeFile == nil {
 		return nil, fmt.Errorf("construct Recordings: snapshot write function is required")
 	}
-	writer := recordingsinternal.NewReplayRecordingSnapshotWriter(writeFile)
-	tickers := recordingsinternal.NewRecordingFlushTickerFactory()
-	publication, err := recordingsinternal.NewPortableArtifactPublication()
+	return NewServiceWithProjectionAndEffects(
+		ledger,
+		projection,
+		targets,
+		writeFile,
+		makeDirectories,
+		createTemporaryFile,
+		removePath,
+		renamePath,
+		readFile,
+		clocks...,
+	)
+}
+
+// NewServiceWithProjectionAndEffects constructs the Recordings root with the
+// exact portable-artifact filesystem effects selected by the application
+// graph. This owner wire adapts those effects into the private artifact
+// publication capability and selects no host defaults.
+func NewServiceWithProjectionAndEffects(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	makeDirectories recordings.RecordingMakeDirectories,
+	createTemporaryFile recordings.RecordingCreateTemporaryFile,
+	removePath recordings.RecordingRemovePath,
+	renamePath recordings.RecordingRenamePath,
+	readFile recordings.RecordingReadFile,
+	clocks ...recordings.RecordingClock,
+) (recordings.Service, error) {
+	if ledger == nil {
+		return nil, fmt.Errorf("construct Recordings: ledger is required")
+	}
+	if projection == nil {
+		return nil, fmt.Errorf("construct Recordings: projection is required")
+	}
+	publication, err := recordingsinternal.NewPortableArtifactPublication(
+		makeDirectories,
+		createTemporaryFile,
+		removePath,
+		renamePath,
+		readFile,
+	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("construct Recordings publication: %w", err)
+	}
+	return newServiceWithProjection(
+		ledger,
+		projection,
+		targets,
+		writeFile,
+		publication,
+		false,
+		clocks...,
+	)
+}
+
+type portableArtifactPublication interface {
+	Publish(context.Context, string, []byte) error
+	Read(context.Context, string) ([]byte, error)
+}
+
+func newServiceWithProjection(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	publication portableArtifactPublication,
+	requireWriter bool,
+	clocks ...recordings.RecordingClock,
+) (recordings.Service, error) {
+	if ledger == nil {
+		return nil, fmt.Errorf("construct Recordings: ledger is required")
+	}
+	if projection == nil {
+		return nil, fmt.Errorf("construct Recordings: projection is required")
+	}
+	if requireWriter && writeFile == nil {
+		return nil, fmt.Errorf("construct Recordings: snapshot write function is required")
+	}
+	var writer recordings.RecordingSnapshotWriter
+	var tickers recordings.RecordingFlushTickerFactory
+	if writeFile != nil {
+		writer = recordingsinternal.NewReplayRecordingSnapshotWriter(writeFile)
+		tickers = recordingsinternal.NewRecordingFlushTickerFactory()
 	}
 	service := recordingsinternal.NewServiceWithLifecycleEffects(
 		ledger,
