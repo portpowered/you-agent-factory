@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
@@ -163,7 +164,7 @@ func (a *Assembly) Complete(
 	startupSpec factoryruntime.SessionBuildSpec,
 	runtimeLifecycle factoryruntime.Lifecycle,
 	runtimeSidecars factorysessions.RuntimeSidecars,
-	durableExecution factorysessions.ExecutionService,
+	durableExecution durableexecution.Service,
 	dir string,
 	executionBaseDir string,
 	runtimeMode factorydefinitions.RuntimeMode,
@@ -273,11 +274,12 @@ func (a *Assembly) Complete(
 		a.responseStreams,
 	)
 	gateway = runtime.AttachSessionGateway(gateway)
-	a.Service = gateway
 	invoker, err := NewInvocationOwner(runtime, a.interpolation, a.invocationWorkTypes, a.ttsObservability, a.invocationInputFiles)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
+	gateway.bindRootCapabilities(invoker, runtime.ActivateNamedFactory, runtime.DefinitionActivationGateway())
+	a.Service = gateway
 	return runtime, gateway, invoker, definitionHost{runtime: runtime}, nil
 }
 
@@ -319,8 +321,6 @@ func (h definitionHost) ReplaceFactoryLayoutAtDir(
 ) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
 	return h.callbacks().ReplaceFactoryLayoutAtDir(targetDir, prepared)
 }
-
-var _ factorysessions.DefinitionActivationGatewayProvider = definitionHost{}
 
 func (h definitionHost) DefinitionActivationGateway() factorysessions.DefinitionActivationGateway {
 	return h.runtime.DefinitionActivationGateway()

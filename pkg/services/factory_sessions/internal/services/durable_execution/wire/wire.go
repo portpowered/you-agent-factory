@@ -7,16 +7,16 @@ import (
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	durableexecutionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/internal/service"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // NewService binds an existing durable implementation behind the private
 // capability contract without starting execution or performing IO.
-func NewService(execution factorysessions.ExecutionService) (durableexecution.Service, error) {
+func NewService(execution durableexecution.Service) (durableexecution.Service, error) {
 	service, err := durableexecutionservice.New(execution)
 	if err != nil {
 		return nil, err

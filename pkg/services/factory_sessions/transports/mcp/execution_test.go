@@ -599,7 +599,7 @@ func TestToolOperationRejectsMissingContext(t *testing.T) {
 }
 
 type scriptedExecutionService struct {
-	factorysessions.ExecutionService
+	mcpfactorysession.DurableExecution
 	startAsync      func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error)
 	startSync       func(context.Context, factorysessions.StartRequest) (factorysessions.SyncStartResult, error)
 	getSession      func(context.Context, string) (factorysessions.SessionReadResult, error)
@@ -923,4 +923,3 @@ func assertOmitsDurableSession(
 }
 
 func strPtr(value string) *string { return &value }
-

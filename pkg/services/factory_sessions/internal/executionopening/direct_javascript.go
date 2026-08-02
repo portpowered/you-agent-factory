@@ -13,6 +13,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 )
 
 type directJavaScriptRunOperation struct {
@@ -182,7 +183,7 @@ func (o *directJavaScriptRunOperation) prepareHosting(
 }
 
 type directJavaScriptLifecycle struct {
-	execution factorysessions.ExecutionService
+	execution durableexecution.Service
 }
 
 func (adapter directJavaScriptLifecycle) PauseDurableFactorySession(

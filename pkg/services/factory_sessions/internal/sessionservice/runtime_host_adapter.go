@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 )
 
 // newSessionHost combines canonical state-derived callbacks with the few
@@ -28,7 +29,7 @@ func newSessionHost(
 	streamGenerationID func(*livesession.LiveSession) string,
 	stopLiveSession func(string) error,
 	observeLiveLifecycleControl func(string, factorysessions.LifecycleControlKind, factorysessions.ControlRequest, factorysessions.LifecycleControlOutcome, factorysessions.LifecycleStatus, error),
-	durableExecution func() factorysessions.ExecutionService,
+	durableExecution func() durableexecution.Service,
 	newJavaScriptCheckpointStore factory.JavaScriptCheckpointStoreFactory,
 	directoryInspection roles.DirectoryInspection,
 	resolveSessionFolder func(string) (string, error),

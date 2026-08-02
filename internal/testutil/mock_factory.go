@@ -18,6 +18,28 @@ import (
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 )
 
+type durableExecutionService interface {
+	StartAsync(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error)
+	StartSync(context.Context, factorysessions.StartRequest) (factorysessions.SyncStartResult, error)
+	ResumeInterruptedSession(context.Context, string, factorysessions.ResumeSessionRequest) (factorysessions.AsyncStartResult, error)
+	GetSession(context.Context, string) (factorysessions.SessionReadResult, error)
+	Pause(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	Resume(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	Cancel(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	Terminate(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	Approve(context.Context, string, factorysessions.ApproveRequest) (factorysessions.LifecycleControlResult, error)
+	RetryDispatch(context.Context, string, factorysessions.RetryDispatchRequest) (factorysessions.LifecycleControlResult, error)
+	InterruptDispatch(context.Context, string, factorysessions.InterruptDispatchRequest) (factorysessions.LifecycleControlResult, error)
+	GetResult(context.Context, string, factorysessions.ResultRequest) (factorysessions.ResultReadResult, error)
+	ListDispatches(context.Context, string) (factorysessions.ListDispatchesResult, error)
+	QueryDispatches(context.Context, factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error)
+	GetDispatch(context.Context, string, string) (factorysessions.DispatchDetail, error)
+	ListArtifacts(context.Context, string) (factorysessions.ListArtifactsResult, error)
+	GetArtifact(context.Context, string, string) (factorysessions.ArtifactDetail, error)
+	ReadEvents(context.Context, string, factorysessions.EventReconnectRequest) (factorysessions.EventReadResult, error)
+	ListSessions(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
+}
+
 type MockFactory struct {
 	SubmitErr                               error
 	WorkRequests                            []work.WorkRequest
@@ -76,7 +98,7 @@ type MockFactory struct {
 	CloseFactorySessionErr                  error
 	MoveWorkErr                             error
 	AppliedOperatorMoveRequests             map[string]work.OperatorMoveResult
-	DurableExecutionService                 factorysessions.ExecutionService
+	DurableExecutionService                 durableExecutionService
 	FactorySessionRequestPreparation        FactorySessionRequestPreparation
 	ListDurableFactorySessionDispatchesFunc func(
 		context.Context,
@@ -424,7 +446,7 @@ func (m *MockFactory) GetDurableFactorySessionArtifact(
 	return factorysession.ArtifactDetailResponseToAPI(result), nil
 }
 
-func (m *MockFactory) requireDurableExecutionService() (factorysessions.ExecutionService, error) {
+func (m *MockFactory) requireDurableExecutionService() (durableExecutionService, error) {
 	if m == nil || m.DurableExecutionService == nil {
 		return nil, errors.New("durable execution service is unavailable")
 	}

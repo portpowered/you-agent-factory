@@ -13,6 +13,7 @@ import (
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 )
 
 func TestDurableStartAsyncReturnsPublishedSuccessShape(t *testing.T) {
@@ -92,7 +93,7 @@ func TestDurableStartValidationErrorsDistinguishInvalidFields(t *testing.T) {
 }
 
 type startValidationStub struct {
-	factorysessions.ExecutionService
+	durableexecution.Service
 }
 
 func (s *startValidationStub) StartAsync(_ context.Context, req factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
@@ -115,7 +116,7 @@ func (s *startValidationStub) StartSync(_ context.Context, req factorysessions.S
 	return factorysessions.SyncStartResult{}, errors.New("unexpected start request")
 }
 
-func newFixtureBackedExecution(t *testing.T) factorysessions.ExecutionService {
+func newFixtureBackedExecution(t *testing.T) durableexecution.Service {
 	t.Helper()
 	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(
 		contractFixtureCatalogPath(t),

@@ -25,8 +25,6 @@ func NewDefinitionActivationGateway(runtime *SessionRuntime) factorysessions.Def
 
 // DefinitionActivationGateway returns the activation gateway owned by this
 // Factory Session runtime.
-var _ factorysessions.DefinitionActivationGatewayProvider = (*SessionRuntime)(nil)
-
 func (fs *SessionRuntime) DefinitionActivationGateway() factorysessions.DefinitionActivationGateway {
 	return NewDefinitionActivationGateway(fs)
 }

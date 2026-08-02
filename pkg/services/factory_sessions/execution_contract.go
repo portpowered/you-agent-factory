@@ -1,7 +1,6 @@
 package factorysessions
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -14,7 +13,7 @@ import (
 // peers must compile against the root vocabulary rather than nested packages.
 //
 // Published naming notes:
-//   - ExecutionService is the durable execution facet embedded by Service
+//   - durable execution methods are exposed directly by Service
 //   - ExecutionValidationError names ValidationError for peer-facing clarity
 //   - ErrDurableSessionNotFound is the durable missing-session sentinel
 //   - ErrExecutionServiceNotConfigured names the durable service configuration failure
@@ -520,32 +519,6 @@ type RuntimeOptions struct {
 	ChildExecutorMode string
 }
 
-// ExecutionService is the shared durable factory-session execution contract consumed by
-// API, CLI, MCP, and UI transports. Live-session open and invocation remain on
-// the separate factorysessions compatibility surface. All methods are
-// cancellation-aware; transports must not mutate runtime state directly.
-type ExecutionService interface {
-	StartAsync(ctx context.Context, req StartRequest) (AsyncStartResult, error)
-	StartSync(ctx context.Context, req StartRequest) (SyncStartResult, error)
-	ResumeInterruptedSession(ctx context.Context, sessionID string, req ResumeSessionRequest) (AsyncStartResult, error)
-	GetSession(ctx context.Context, sessionID string) (SessionReadResult, error)
-	Pause(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error)
-	Resume(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error)
-	Cancel(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error)
-	Terminate(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error)
-	Approve(ctx context.Context, sessionID string, req ApproveRequest) (LifecycleControlResult, error)
-	RetryDispatch(ctx context.Context, sessionID string, req RetryDispatchRequest) (LifecycleControlResult, error)
-	InterruptDispatch(ctx context.Context, sessionID string, req InterruptDispatchRequest) (LifecycleControlResult, error)
-	GetResult(ctx context.Context, sessionID string, req ResultRequest) (ResultReadResult, error)
-	ListDispatches(ctx context.Context, sessionID string) (ListDispatchesResult, error)
-	QueryDispatches(ctx context.Context, request DispatchQueryRequest) (ListDispatchesResult, error)
-	GetDispatch(ctx context.Context, sessionID, dispatchID string) (DispatchDetail, error)
-	ListArtifacts(ctx context.Context, sessionID string) (ListArtifactsResult, error)
-	GetArtifact(ctx context.Context, sessionID, artifactID string) (ArtifactDetail, error)
-	ReadEvents(ctx context.Context, sessionID string, req EventReconnectRequest) (EventReadResult, error)
-	ListSessions(ctx context.Context, req ListSessionsRequest) (ListSessionsResult, error)
-}
-
 // SessionActionAvailability exposes which lifecycle controls are currently valid
 // for one listed durable session.
 type SessionActionAvailability struct {
@@ -801,7 +774,7 @@ func (e *ResumeError) Error() string {
 // --- merged from durable_execution_contract.go ---
 
 // Durable-execution root slice freezes start, resume, control, and inspect
-// vocabulary on the singular Service (via embedded ExecutionService). Peers
+// vocabulary on the singular Service. Peers
 // consume these plain root contracts without importing nested durable-execution
 // or internal/execution implementation packages:
 //

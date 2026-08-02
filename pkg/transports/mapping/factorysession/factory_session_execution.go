@@ -32,19 +32,19 @@ type DurableLifecycleAPI interface {
 // execution service and the bounded lifecycle router. Compatibility facades
 // and composed transports both delegate to this adapter.
 type DurableAPI struct {
-	execution factorysessionexecution.ExecutionService
+	execution DurableExecution
 	lifecycle DurableLifecycleAPI
 }
 
 // NewDurableAPI composes the canonical durable HTTP collaborator.
 func NewDurableAPI(
-	execution factorysessionexecution.ExecutionService,
+	execution DurableExecution,
 	lifecycle DurableLifecycleAPI,
 ) *DurableAPI {
 	return &DurableAPI{execution: execution, lifecycle: lifecycle}
 }
 
-func (api *DurableAPI) executionService() (factorysessionexecution.ExecutionService, error) {
+func (api *DurableAPI) executionService() (DurableExecution, error) {
 	if api == nil || api.execution == nil {
 		return nil, factorysessionexecution.ErrExecutionServiceNotConfigured
 	}

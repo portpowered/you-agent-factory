@@ -15,6 +15,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
@@ -145,7 +146,7 @@ func newRestartBackedExecution(
 	t *testing.T,
 	clock restartClock,
 	store *restartMemoryStore,
-) factorysessions.ExecutionService {
+) durableexecution.Service {
 	t.Helper()
 	workflows := factoryruntimefixtures.ScriptedJavaScriptWorkflows{}
 	return factorysessionexecution.NewJavaScriptRuntimeService(

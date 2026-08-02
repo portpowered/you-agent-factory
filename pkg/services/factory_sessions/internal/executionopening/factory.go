@@ -13,6 +13,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -27,7 +28,7 @@ type StandaloneSessionExecutionFactory = func(
 	string,
 	workers.InvocationExecutor,
 	factory.Clock,
-) (factorysessions.ExecutionService, error)
+) (durableexecution.Service, error)
 
 type WorkerInvocationFactory = func(
 	workers.CommandRunner,
@@ -160,7 +161,7 @@ func (f *Factory) buildWithWorkerEffects(
 	if err != nil {
 		return nil, err
 	}
-	return ownedExecutionService{ExecutionService: execution}, nil
+	return ownedExecutionService{Service: execution}, nil
 }
 
 // SessionExecutionBuilderWithEdges binds process-selected worker edges to the
@@ -209,7 +210,7 @@ func (f *Factory) build(
 	if err != nil {
 		return nil, fmt.Errorf("load durable session fixture catalog: %w", err)
 	}
-	return ownedExecutionService{ExecutionService: service}, nil
+	return ownedExecutionService{Service: service}, nil
 }
 
 // BuildRuntimeBacked opens one service-owned runtime entity and exposes its
@@ -225,8 +226,8 @@ func (f *Factory) BuildRuntimeBacked(
 		return nil, err
 	}
 	return ownedExecutionService{
-		ExecutionService: opened.Execution,
-		close:            opened.Resources.Close,
+		Service: opened.Execution,
+		close:   opened.Resources.Close,
 	}, nil
 }
 
@@ -273,7 +274,7 @@ func (f *Factory) OpenExecutionRuntime(
 }
 
 type ownedExecutionService struct {
-	factorysessions.ExecutionService
+	durableexecution.Service
 	close func() error
 }
 

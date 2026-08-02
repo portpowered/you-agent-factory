@@ -11,6 +11,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 )
 
 func TestOpenModelsCatalogScope_RequiresOperation(t *testing.T) {
@@ -65,7 +66,7 @@ func TestOpenModelsPresentationScope_RequiresOperation(t *testing.T) {
 	t.Parallel()
 
 	var op *operation
-	_, err := op.OpenModelsPresentationScope(context.Background(), factorysessions.ModelsPresentationScopeRequest{})
+	_, err := op.OpenModelsPresentationScope(context.Background(), models.PresentationScopeRequest{})
 	if err == nil || !strings.Contains(err.Error(), "invocation operation is required") {
 		t.Fatalf("error = %v, want required operation", err)
 	}
@@ -77,7 +78,7 @@ func TestOpenModelsPresentationScope_PropagatesFactoryDirResolutionFailure(t *te
 	op := &operation{
 		workingDirectory: workingDirectoryStub{err: errors.New("cwd unavailable")},
 	}
-	_, err := op.OpenModelsPresentationScope(context.Background(), factorysessions.ModelsPresentationScopeRequest{})
+	_, err := op.OpenModelsPresentationScope(context.Background(), models.PresentationScopeRequest{})
 	if err == nil || !strings.Contains(err.Error(), "cwd unavailable") {
 		t.Fatalf("error = %v, want factory dir resolution failure", err)
 	}
@@ -102,11 +103,15 @@ func TestOpenModelsPresentationScope_PropagatesRuntimeOpenFailure(t *testing.T) 
 	if err != nil {
 		t.Fatalf("NewOperation() error = %v", err)
 	}
-	collaborator, ok := op.(factorysessions.ModelsCLIPresentationCollaborator)
+	collaborator, ok := op.(interface {
+		ModelsPresentationRoot() models.Service
+		OpenModelsCatalogScope(context.Context) (models.PresentationScope, error)
+		OpenModelsPresentationScope(context.Context, models.PresentationScopeRequest) (models.PresentationScope, error)
+	})
 	if !ok {
-		t.Fatal("NewOperation() must implement ModelsCLIPresentationCollaborator")
+		t.Fatal("NewOperation() must implement the Models CLI presentation port")
 	}
-	_, err = collaborator.OpenModelsPresentationScope(context.Background(), factorysessions.ModelsPresentationScopeRequest{
+	_, err = collaborator.OpenModelsPresentationScope(context.Background(), models.PresentationScopeRequest{
 		FactoryDir: factoryDir,
 	})
 	if err == nil {

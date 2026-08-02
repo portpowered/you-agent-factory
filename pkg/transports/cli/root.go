@@ -63,7 +63,25 @@ type cliOperatorDefaultsOptions struct {
 type SubmitWorkOperation func(submitcli.SubmitConfig) error
 type SubmitBatchOperation func(submitcli.BatchConfig) error
 type OwnedExecutionService interface {
-	factorysessions.ExecutionService
+	StartAsync(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error)
+	StartSync(context.Context, factorysessions.StartRequest) (factorysessions.SyncStartResult, error)
+	ResumeInterruptedSession(context.Context, string, factorysessions.ResumeSessionRequest) (factorysessions.AsyncStartResult, error)
+	GetSession(context.Context, string) (factorysessions.SessionReadResult, error)
+	Pause(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	Resume(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	Cancel(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	Terminate(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	Approve(context.Context, string, factorysessions.ApproveRequest) (factorysessions.LifecycleControlResult, error)
+	RetryDispatch(context.Context, string, factorysessions.RetryDispatchRequest) (factorysessions.LifecycleControlResult, error)
+	InterruptDispatch(context.Context, string, factorysessions.InterruptDispatchRequest) (factorysessions.LifecycleControlResult, error)
+	GetResult(context.Context, string, factorysessions.ResultRequest) (factorysessions.ResultReadResult, error)
+	ListDispatches(context.Context, string) (factorysessions.ListDispatchesResult, error)
+	QueryDispatches(context.Context, factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error)
+	GetDispatch(context.Context, string, string) (factorysessions.DispatchDetail, error)
+	ListArtifacts(context.Context, string) (factorysessions.ListArtifactsResult, error)
+	GetArtifact(context.Context, string, string) (factorysessions.ArtifactDetail, error)
+	ReadEvents(context.Context, string, factorysessions.EventReconnectRequest) (factorysessions.EventReadResult, error)
+	ListSessions(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
 	Close() error
 }
 type ExecutionServiceBuilder func(context.Context, string, string, string, string) (OwnedExecutionService, error)

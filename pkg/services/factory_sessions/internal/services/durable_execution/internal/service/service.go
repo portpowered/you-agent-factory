@@ -12,7 +12,7 @@ import (
 // Service keeps the durable execution implementation private while preserving
 // the established execution contract during the package migration.
 type Service struct {
-	factorysessions.ExecutionService
+	durableexecution.Service
 }
 
 // SubscribeResponseEvents forwards durable-session response-event subscriptions
@@ -22,10 +22,10 @@ func (s *Service) SubscribeResponseEvents(
 	sessionID string,
 	request factorysessions.ResponseEventSubscriptionRequest,
 ) (*factorysessions.ResponseEventCursor, error) {
-	if s == nil || s.ExecutionService == nil {
+	if s == nil || s.Service == nil {
 		return nil, factorysessions.ErrRuntimeNotAvailable
 	}
-	subscriber, ok := s.ExecutionService.(interface {
+	subscriber, ok := s.Service.(interface {
 		SubscribeResponseEvents(context.Context, string, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error)
 	})
 	if !ok {
@@ -36,20 +36,20 @@ func (s *Service) SubscribeResponseEvents(
 
 // New constructs an inert durable execution capability around an explicitly
 // injected implementation.
-func New(execution factorysessions.ExecutionService) (*Service, error) {
+func New(execution durableexecution.Service) (*Service, error) {
 	if execution == nil {
 		return nil, fmt.Errorf("construct durable Factory Sessions execution: execution service is required")
 	}
-	return &Service{ExecutionService: execution}, nil
+	return &Service{Service: execution}, nil
 }
 
 // IsNonLiveReplay preserves the optional replay routing capability without
 // exposing the underlying recording-replay implementation.
 func (s *Service) IsNonLiveReplay() bool {
-	if s == nil || s.ExecutionService == nil {
+	if s == nil || s.Service == nil {
 		return false
 	}
-	replay, ok := s.ExecutionService.(interface{ IsNonLiveReplay() bool })
+	replay, ok := s.Service.(interface{ IsNonLiveReplay() bool })
 	return ok && replay.IsNonLiveReplay()
 }
 
@@ -59,10 +59,10 @@ func (s *Service) RecordPetriTokenMutations(
 	sessionID string,
 	records []factorydefinitions.TokenMutationRecord,
 ) error {
-	if s == nil || s.ExecutionService == nil {
+	if s == nil || s.Service == nil {
 		return factorysessions.ErrExecutionServiceNotConfigured
 	}
-	recorder, ok := s.ExecutionService.(interface {
+	recorder, ok := s.Service.(interface {
 		RecordPetriTokenMutations(string, []factorydefinitions.TokenMutationRecord) error
 	})
 	if !ok {

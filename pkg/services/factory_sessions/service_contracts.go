@@ -65,7 +65,7 @@ type RuntimeBinding struct {
 // DurableAsyncStartResult, DurableResumeRequest, DurableControlRequest,
 // DurableControlResult, DurableInspectResult, *DurableValidationError,
 // ErrDurableSessionNotFound, *DurableResumeError, and *DurableControlError on
-// ExecutionService methods embedded in Service; peers must not import nested
+// Service durable execution methods; peers must not import nested
 // durable-execution or internal/execution implementation packages as the
 // peer-facing source of truth.
 // The published invocation slice uses InvocationRequest,
@@ -90,7 +90,27 @@ type RuntimeBinding struct {
 // bound view serves the remaining application operations. Peers must depend on
 // Service rather than introducing a second peer-facing session authority.
 type Service interface {
-	ExecutionService
+	StartAsync(context.Context, StartRequest) (AsyncStartResult, error)
+	StartSync(context.Context, StartRequest) (SyncStartResult, error)
+	ResumeInterruptedSession(context.Context, string, ResumeSessionRequest) (AsyncStartResult, error)
+	GetSession(context.Context, string) (SessionReadResult, error)
+	Pause(context.Context, string, ControlRequest) (LifecycleControlResult, error)
+	Resume(context.Context, string, ControlRequest) (LifecycleControlResult, error)
+	Cancel(context.Context, string, ControlRequest) (LifecycleControlResult, error)
+	Terminate(context.Context, string, ControlRequest) (LifecycleControlResult, error)
+	Approve(context.Context, string, ApproveRequest) (LifecycleControlResult, error)
+	RetryDispatch(context.Context, string, RetryDispatchRequest) (LifecycleControlResult, error)
+	InterruptDispatch(context.Context, string, InterruptDispatchRequest) (LifecycleControlResult, error)
+	GetResult(context.Context, string, ResultRequest) (ResultReadResult, error)
+	ListDispatches(context.Context, string) (ListDispatchesResult, error)
+	QueryDispatches(context.Context, DispatchQueryRequest) (ListDispatchesResult, error)
+	GetDispatch(context.Context, string, string) (DispatchDetail, error)
+	ListArtifacts(context.Context, string) (ListArtifactsResult, error)
+	GetArtifact(context.Context, string, string) (ArtifactDetail, error)
+	ReadEvents(context.Context, string, EventReconnectRequest) (EventReadResult, error)
+	ListSessions(context.Context, ListSessionsRequest) (ListSessionsResult, error)
+	InvokeFactorySession(context.Context, string, InvocationRequest) (InvocationResult, error)
+	ActivateNamedFactory(context.Context, string) error
 	ForRuntime(OpeningBindingRequest) (Service, error)
 	OpenFactorySession(context.Context, OpenRequest) (*OpenResult, error)
 	OpenFactorySessionFromFolder(context.Context, string, *TargetRef, bool, bool) (*OpenResult, error)

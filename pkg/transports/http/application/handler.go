@@ -69,7 +69,6 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 	}
 	mapped, err := handler.mappings.Bind(
 		opened.FactoryRuntime, opened.FactoryDefinitions, opened.FactorySessions,
-		opened.SessionInvocation, opened.SessionExecution,
 	)
 	if err != nil {
 		return nil, err
@@ -82,7 +81,7 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 		FactoryValidation: handler.validation, WorkflowPreview: opened.WorkflowPreview,
 		DurableExecution: mapped.Durable, DurableLifecycle: mapped.Durable,
 		DurableListing: mapped.Durable, DurableProjection: mapped.Durable,
-		DurableLister:      opened.SessionExecution,
+		DurableLister:      opened.FactorySessions,
 		LiveSessionLister:  factorysessionshttp.ReadProjectionSessionListReader{Reader: opened.FactorySessions},
 		WorkerPrompts:      opened.WorkerPrompts,
 		InvocationWorkType: handler.invocationWorkType,
@@ -100,7 +99,7 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 // server to a standalone JavaScript execution scope. Routes outside that
 // scope retain their normal not-configured behavior.
 func (handler *Handler) BindDurableExecution(
-	execution factorysessions.ExecutionService,
+	execution factorysessionmapping.DurableExecution,
 	lifecycle factorysessionmapping.DurableLifecycleAPI,
 	logger *zap.Logger,
 ) (http.Handler, error) {

@@ -530,7 +530,7 @@ func provideFactorySessionExecutionFactory(
 		workerSettings factoryruntime.JavaScriptWorkerSettings,
 		mockWorkers *workers.MockWorkersConfig,
 		acpIntegrations []operatorsettings.ACPIntegration,
-	) (factorysessions.ExecutionService, error) {
+	) (factorysessionwire.DurableExecutionService, error) {
 		executor := workerswire.NewExecutor(provider)
 		var liveChildInvocation factorysessionwire.LiveChildInvocationFactory
 		// An explicit process provider is already the complete invocation edge.
@@ -607,7 +607,7 @@ func provideStandaloneSessionExecutionFactory(
 		childExecutorMode string,
 		executor workers.InvocationExecutor,
 		clock factoryruntime.Clock,
-	) (factorysessions.ExecutionService, error) {
+	) (factorysessionwire.DurableExecutionService, error) {
 		return factorysessionwire.NewStandaloneExecution(
 			provider,
 			projectRoot,

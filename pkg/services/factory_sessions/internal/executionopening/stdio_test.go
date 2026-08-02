@@ -9,6 +9,7 @@ import (
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 )
 
 func TestStdioOpeningServiceOwnsFixtureSelection(t *testing.T) {
@@ -17,7 +18,7 @@ func TestStdioOpeningServiceOwnsFixtureSelection(t *testing.T) {
 	application := stdioApplicationStub{}
 	operation, err := NewStdioOpeningService(
 		opening,
-		func(_ context.Context, got factorysessions.ExecutionService, _ io.Reader, _ io.Writer) (roles.StdioApplication, error) {
+		func(_ context.Context, got durableexecution.Service, _ io.Reader, _ io.Writer) (roles.StdioApplication, error) {
 			if got != owned {
 				t.Fatal("fixture builder did not receive opened execution")
 			}
@@ -76,7 +77,7 @@ func TestStdioOpeningServiceClosesFixtureWhenApplicationBuildFails(t *testing.T)
 	owned := &ownedExecutionStub{closeErr: closeErr}
 	operation, err := NewStdioOpeningService(
 		&stdioExecutionOpeningStub{execution: owned},
-		func(context.Context, factorysessions.ExecutionService, io.Reader, io.Writer) (roles.StdioApplication, error) {
+		func(context.Context, durableexecution.Service, io.Reader, io.Writer) (roles.StdioApplication, error) {
 			return nil, buildErr
 		},
 		runtimeStdioBuilderNotCalled(t),
@@ -131,7 +132,7 @@ func TestStdioOpeningServiceRejectsNilApplications(t *testing.T) {
 	owned := &ownedExecutionStub{}
 	operation, err := NewStdioOpeningService(
 		&stdioExecutionOpeningStub{execution: owned},
-		func(context.Context, factorysessions.ExecutionService, io.Reader, io.Writer) (roles.StdioApplication, error) {
+		func(context.Context, durableexecution.Service, io.Reader, io.Writer) (roles.StdioApplication, error) {
 			return nil, nil
 		},
 		runtimeStdioBuilderNotCalled(t),
@@ -179,7 +180,7 @@ func (stub *stdioExecutionOpeningStub) Build(_ context.Context, _, _, fixtureCat
 
 func fixtureStdioBuilderNotCalled(t *testing.T) roles.FixtureStdioApplicationBuilder {
 	t.Helper()
-	return func(context.Context, factorysessions.ExecutionService, io.Reader, io.Writer) (roles.StdioApplication, error) {
+	return func(context.Context, durableexecution.Service, io.Reader, io.Writer) (roles.StdioApplication, error) {
 		t.Fatal("fixture builder called")
 		return nil, nil
 	}

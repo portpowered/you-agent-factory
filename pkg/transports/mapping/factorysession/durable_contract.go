@@ -1,4 +1,4 @@
-package durableexecution
+package factorysession
 
 import (
 	"context"
@@ -6,9 +6,10 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 )
 
-// Service owns durable Factory Session start, lifecycle, inspection, replay,
-// and restart behavior behind the Factory Sessions private capability boundary.
-type Service interface {
+// DurableExecution is the mapping adapter's narrow durable capability. The
+// opened value comes from the Factory Sessions root; this type belongs to the
+// representation boundary rather than the Sessions service root.
+type DurableExecution interface {
 	StartAsync(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error)
 	StartSync(context.Context, factorysessions.StartRequest) (factorysessions.SyncStartResult, error)
 	ResumeInterruptedSession(context.Context, string, factorysessions.ResumeSessionRequest) (factorysessions.AsyncStartResult, error)

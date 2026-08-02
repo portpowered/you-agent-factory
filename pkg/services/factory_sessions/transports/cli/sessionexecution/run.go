@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
@@ -17,7 +18,7 @@ import (
 // Factory Sessions-owned direct JavaScript operation.
 func RunNormalizedSync(
 	ctx context.Context,
-	service factorysessionexecution.ExecutionService,
+	service factorysessionwire.DurableExecutionService,
 	normalized factorysessionexecution.StartRequest,
 	jsonOutput bool,
 	output io.Writer,
@@ -79,7 +80,7 @@ func isSyncTimeoutOutcome(result factoryapi.FactorySessionSyncExecutionResponse)
 
 func syncResultAvailability(
 	ctx context.Context,
-	service factorysessionexecution.ExecutionService,
+	service factorysessionwire.DurableExecutionService,
 	sessionID string,
 ) (factoryapi.FactorySessionResultStatus, error) {
 	result, err := service.GetResult(ctx, sessionID, factorysessionexecution.ResultRequest{

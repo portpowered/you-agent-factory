@@ -14,6 +14,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 )
 
 func TestDirectJavaScriptRunOperationSupportsCustomerSourceExtensions(t *testing.T) {
@@ -53,7 +54,7 @@ func TestDirectJavaScriptRunOperationOwnsOpeningRequestPolicyAndCleanup(t *testi
 			output := &bytes.Buffer{}
 			runSync := func(
 				_ context.Context,
-				service factorysessions.ExecutionService,
+				service durableexecution.Service,
 				request factorysessions.StartRequest,
 				jsonValue bool,
 				writer io.Writer,
@@ -108,7 +109,7 @@ func TestDirectJavaScriptRunOperationJoinsExecutionAndCloseFailures(t *testing.T
 		func(context.Context, string, string, string, string) (roles.OwnedExecutionService, error) {
 			return owned, nil
 		},
-		func(context.Context, factorysessions.ExecutionService, factorysessions.StartRequest, bool, io.Writer) error {
+		func(context.Context, durableexecution.Service, factorysessions.StartRequest, bool, io.Writer) error {
 			return runFailure
 		},
 		func() string { return "direct-test-id" },
@@ -139,7 +140,7 @@ func TestDirectJavaScriptRunOperationGatesHostedCompletionOnReadiness(t *testing
 		func(context.Context, string, string, string, string) (roles.OwnedExecutionService, error) {
 			return owned, nil
 		},
-		func(context.Context, factorysessions.ExecutionService, factorysessions.StartRequest, bool, io.Writer) error {
+		func(context.Context, durableexecution.Service, factorysessions.StartRequest, bool, io.Writer) error {
 			if !ready.Load() {
 				t.Fatal("direct JavaScript completion started before listener readiness")
 			}
@@ -174,7 +175,7 @@ func TestDirectJavaScriptRunOperationGatesHostedCompletionOnReadiness(t *testing
 }
 
 type ownedExecutionStub struct {
-	factorysessions.ExecutionService
+	durableexecution.Service
 	closed   bool
 	closeErr error
 }

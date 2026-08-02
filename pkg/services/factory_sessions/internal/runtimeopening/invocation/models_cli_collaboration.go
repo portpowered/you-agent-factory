@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
 func (o *operation) ModelsPresentationRoot() models.Service {
@@ -18,27 +18,27 @@ func (o *operation) ModelsPresentationRoot() models.Service {
 
 func (o *operation) OpenModelsCatalogScope(
 	ctx context.Context,
-) (factorysessions.ModelsPresentationScope, error) {
+) (models.PresentationScope, error) {
 	if o == nil || o.openRuntime == nil {
-		return factorysessions.ModelsPresentationScope{}, errors.New("invocation operation is required")
+		return models.PresentationScope{}, errors.New("invocation operation is required")
 	}
 	o.catalogScopeMu.Lock()
 	defer o.catalogScopeMu.Unlock()
 	if !o.catalogScope.IsZero() {
-		return factorysessions.ModelsPresentationScope{
+		return models.PresentationScope{
 			Scope: o.catalogScope,
 			Close: o.catalogScopeClose,
 		}, nil
 	}
 	root := o.openRuntime.ModelsRoot()
 	if root == nil {
-		return factorysessions.ModelsPresentationScope{}, errors.New("models presentation root is unavailable")
+		return models.PresentationScope{}, errors.New("models presentation root is unavailable")
 	}
 	opened, err := root.OpenRuntimeScope(ctx, models.OpenRuntimeScopeRequest{
 		Config: models.RuntimeScopeConfig{Runtime: models.RuntimeConfig{}},
 	})
 	if err != nil {
-		return factorysessions.ModelsPresentationScope{}, err
+		return models.PresentationScope{}, err
 	}
 	scope := opened.Scope
 	closeFn := func(closeCtx context.Context) error {
@@ -59,40 +59,43 @@ func (o *operation) OpenModelsCatalogScope(
 	}
 	o.catalogScope = scope
 	o.catalogScopeClose = closeFn
-	return factorysessions.ModelsPresentationScope{Scope: scope, Close: closeFn}, nil
+	return models.PresentationScope{Scope: scope, Close: closeFn}, nil
 }
 
 func (o *operation) OpenModelsPresentationScope(
 	ctx context.Context,
-	request factorysessions.ModelsPresentationScopeRequest,
-) (factorysessions.ModelsPresentationScope, error) {
+	request models.PresentationScopeRequest,
+) (models.PresentationScope, error) {
 	if o == nil {
-		return factorysessions.ModelsPresentationScope{}, errors.New("invocation operation is required")
+		return models.PresentationScope{}, errors.New("invocation operation is required")
 	}
 	factoryDir, err := o.ResolveModelInvocationFactoryDir(request.FactoryDir)
 	if err != nil {
-		return factorysessions.ModelsPresentationScope{}, err
+		return models.PresentationScope{}, err
 	}
 	target := roles.InvocationTarget{
 		FactoryDir:       factoryDir,
 		HomeDir:          request.HomeDir,
-		OperatorDefaults: request.OperatorDefaults,
+		OperatorDefaults: operatorconfig.ResolvedDefaults{},
 		Logger:           request.Logger,
 		Verbose:          request.Verbose,
 		ModelCacheDir:    request.ModelCacheDir,
 	}
+	if defaults, ok := request.OperatorDefaults.(operatorconfig.ResolvedDefaults); ok {
+		target.OperatorDefaults = defaults
+	}
 	opened, lifecycle, err := o.open(ctx, target)
 	if err != nil {
-		return factorysessions.ModelsPresentationScope{}, err
+		return models.PresentationScope{}, err
 	}
 	if opened.ModelsScope.IsZero() {
 		closeErr := lifecycle.close(ctx, opened)
-		return factorysessions.ModelsPresentationScope{}, errors.Join(
+		return models.PresentationScope{}, errors.Join(
 			errors.New("models presentation scope is unavailable"),
 			closeErr,
 		)
 	}
-	return factorysessions.ModelsPresentationScope{
+	return models.PresentationScope{
 		Scope: opened.ModelsScope,
 		Close: func(closeCtx context.Context) error {
 			return lifecycle.close(closeCtx, opened)
@@ -100,4 +103,8 @@ func (o *operation) OpenModelsPresentationScope(
 	}, nil
 }
 
-var _ factorysessions.ModelsCLIPresentationCollaborator = (*operation)(nil)
+var _ interface {
+	ModelsPresentationRoot() models.Service
+	OpenModelsCatalogScope(context.Context) (models.PresentationScope, error)
+	OpenModelsPresentationScope(context.Context, models.PresentationScopeRequest) (models.PresentationScope, error)
+} = (*operation)(nil)

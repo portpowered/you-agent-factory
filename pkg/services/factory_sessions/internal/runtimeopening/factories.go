@@ -10,6 +10,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -67,7 +68,7 @@ type FactorySessionExecutionFactory = func(
 	factoryruntime.JavaScriptWorkerSettings,
 	*workers.MockWorkersConfig,
 	[]operatorsettings.ACPIntegration,
-) (factorysessions.ExecutionService, error)
+) (durableexecution.Service, error)
 
 type ConductorInvocationWithProgressFactory = func(
 	providers.Service,
@@ -113,7 +114,7 @@ type FactoryDefinitionsFactory = func(
 ) factorydefinitions.Service
 
 type DurableExecution struct {
-	Service         factorysessions.ExecutionService
+	Service         durableexecution.Service
 	ACPIntegrations []operatorsettings.ACPIntegration
 }
 

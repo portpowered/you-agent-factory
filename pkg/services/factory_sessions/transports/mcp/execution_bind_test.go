@@ -521,7 +521,7 @@ func mustStartAsyncJSON(t *testing.T) json.RawMessage {
 }
 
 type fakeExecutionRoot struct {
-	factorysessions.ExecutionService
+	mcpfactorysession.DurableExecution
 	invoked         *bool
 	listSessions    func(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
 	getSession      func(context.Context, string) (factorysessions.SessionReadResult, error)

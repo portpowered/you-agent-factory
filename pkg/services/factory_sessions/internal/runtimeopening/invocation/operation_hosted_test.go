@@ -14,7 +14,9 @@ import (
 
 type hostedLiveSessionsFake struct {
 	executionMethodsStub
-	sessions map[string]factorysessions.SessionProjection
+	sessions     map[string]factorysessions.SessionProjection
+	invokeResult factorysessions.InvocationResult
+	invokeErr    error
 }
 
 func newHostedLiveSessionsFake(projection factorysessions.SessionProjection) *hostedLiveSessionsFake {
@@ -29,6 +31,14 @@ var _ factorysessions.Service = (*hostedLiveSessionsFake)(nil)
 
 func (fake *hostedLiveSessionsFake) ForRuntime(factorysessions.OpeningBindingRequest) (factorysessions.Service, error) {
 	return fake, nil
+}
+
+func (fake *hostedLiveSessionsFake) ActivateNamedFactory(context.Context, string) error {
+	return factorysessions.ErrSessionNotFound
+}
+
+func (fake *hostedLiveSessionsFake) InvokeFactorySession(context.Context, string, factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
+	return fake.invokeResult, fake.invokeErr
 }
 
 func (fake *hostedLiveSessionsFake) OpenFactorySession(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error) {

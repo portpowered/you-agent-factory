@@ -35,7 +35,7 @@ func NewInvocationAPI(invocations factorysessionmapping.SessionInvoker) apisurfa
 }
 
 func NewDurableAPI(
-	execution factorysessions.ExecutionService,
+	execution factorysessionmapping.DurableExecution,
 	sessions factorysessions.Service,
 ) apisurface.DurableSessionAPI {
 	return factorysessionmapping.NewDurableAPI(

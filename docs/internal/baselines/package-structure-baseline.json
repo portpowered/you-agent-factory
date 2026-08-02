@@ -2344,11 +2344,6 @@
     },
     {
       "rule": "service-root-interface-count",
-      "filePath": "pkg/services/factory_sessions",
-      "target": "pkg/services/factory_sessions/activation_contract.go:DefinitionActivationGatewayProvider,pkg/services/factory_sessions/execution_contract.go:ExecutionService,pkg/services/factory_sessions/models_cli_collaboration.go:ModelsCLIPresentationCollaborator,pkg/services/factory_sessions/service_contracts.go:Service"
-    },
-    {
-      "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle",
       "target": "pkg/services/factory_visualization/internal/services/activation_lifecycle/service.go:Clock,pkg/services/factory_visualization/internal/services/activation_lifecycle/service.go:EventSource,pkg/services/factory_visualization/internal/services/activation_lifecycle/service.go:Service,pkg/services/factory_visualization/internal/services/activation_lifecycle/service.go:ViewSink"
     },
