@@ -19,55 +19,55 @@ import (
 // Loader coordinates Factory Definition filesystem loading while representation
 // parsing remains an adapter selected by Wire.
 type Loader struct {
-	fileSystem               factorydefinitions.LoadingFileSystem
-	loadAuthoredSource       factorydefinitions.AuthoredFactorySourceLoader
-	resolveCurrentDir        factorydefinitions.CurrentFactoryDirectoryResolver
-	newSource                factorydefinitions.LoadedFactorySourceFactory
-	decodeFactory            func([]byte) (*factorydefinitions.FactoryConfig, error)
-	decodeAuthoredLayout     func([]byte) (*factorydefinitions.FactoryConfig, error)
-	encodeFactory            func(*factorydefinitions.FactoryConfig) ([]byte, error)
-	normalizeAuthored        func(*factorydefinitions.FactoryConfig) (*factorydefinitions.FactoryConfig, error)
-	normalizeCanonical       func([]byte) (*factorydefinitions.FactoryConfig, error)
-	validateManifest         func(string, *factorydefinitions.FactoryConfig) error
-	validateCanonicalFiles   func(string, *factorydefinitions.FactoryConfig) error
-	validateBlockingLoad     func(*factorydefinitions.FactoryConfig) factorydefinitions.ValidationResult
-	applyPortableFiles       factorydefinitions.PortableBundledFilesApplier
-	applyStarterWork         factorydefinitions.FactoryStarterWorkApplier
-	materializePortableFiles factorydefinitions.PortableBundledFilesMaterializer
-	loadWorker               func(string) (*factorydefinitions.FactoryWorkerConfig, error)
-	loadWorkstation          func(string) (*factorydefinitions.FactoryWorkstationConfig, error)
-	loadWorkerBody           func(string) (string, bool, error)
-	loadWorkstationBody      func(string) (string, bool, error)
-	loadWorkstationPrompt    func(string, string) (string, error)
-	safeLayoutSegment        func(string, string) (string, error)
-	splitRuntimeEntityExists func(string) bool
+	fileSystem               FileSystem
+	loadAuthoredSource       AuthoredFactorySourceLoader
+	resolveCurrentDir        CurrentFactoryDirectoryResolver
+	newSource                LoadedFactorySourceFactory
+	decodeFactory            FactoryConfigDecoder
+	decodeAuthoredLayout     FactoryConfigDecoder
+	encodeFactory            FactoryConfigEncoder
+	normalizeAuthored        AuthoredFactoryNormalizer
+	normalizeCanonical       CanonicalFactoryNormalizer
+	validateManifest         ManifestValidator
+	validateCanonicalFiles   ManifestValidator
+	validateBlockingLoad     BlockingLoadValidator
+	applyPortableFiles       PortableBundledFilesApplier
+	applyStarterWork         FactoryStarterWorkApplier
+	materializePortableFiles PortableBundledFilesMaterializer
+	loadWorker               WorkerLoader
+	loadWorkstation          WorkstationLoaderFunc
+	loadWorkerBody           WorkerBodyLoader
+	loadWorkstationBody      WorkstationBodyLoader
+	loadWorkstationPrompt    WorkstationPromptLoader
+	safeLayoutSegment        LayoutSegmentResolver
+	splitRuntimeEntityExists RuntimeEntityExists
 }
 
 // New constructs the Factory Definitions loader from flat representation and
 // filesystem capabilities.
 func New(
-	fileSystem factorydefinitions.LoadingFileSystem,
-	loadAuthoredSource factorydefinitions.AuthoredFactorySourceLoader,
-	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
-	newSource factorydefinitions.LoadedFactorySourceFactory,
-	decodeFactory func([]byte) (*factorydefinitions.FactoryConfig, error),
-	decodeAuthoredLayout func([]byte) (*factorydefinitions.FactoryConfig, error),
-	encodeFactory func(*factorydefinitions.FactoryConfig) ([]byte, error),
-	normalizeAuthored func(*factorydefinitions.FactoryConfig) (*factorydefinitions.FactoryConfig, error),
-	normalizeCanonical func([]byte) (*factorydefinitions.FactoryConfig, error),
-	validateManifest func(string, *factorydefinitions.FactoryConfig) error,
-	validateCanonicalFiles func(string, *factorydefinitions.FactoryConfig) error,
-	validateBlockingLoad func(*factorydefinitions.FactoryConfig) factorydefinitions.ValidationResult,
-	applyPortableFiles factorydefinitions.PortableBundledFilesApplier,
-	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
-	materializePortableFiles factorydefinitions.PortableBundledFilesMaterializer,
-	loadWorker func(string) (*factorydefinitions.FactoryWorkerConfig, error),
-	loadWorkstation func(string) (*factorydefinitions.FactoryWorkstationConfig, error),
-	loadWorkerBody func(string) (string, bool, error),
-	loadWorkstationBody func(string) (string, bool, error),
-	loadWorkstationPrompt func(string, string) (string, error),
-	safeLayoutSegment func(string, string) (string, error),
-	splitRuntimeEntityExists func(string) bool,
+	fileSystem FileSystem,
+	loadAuthoredSource AuthoredFactorySourceLoader,
+	resolveCurrentDir CurrentFactoryDirectoryResolver,
+	newSource LoadedFactorySourceFactory,
+	decodeFactory FactoryConfigDecoder,
+	decodeAuthoredLayout FactoryConfigDecoder,
+	encodeFactory FactoryConfigEncoder,
+	normalizeAuthored AuthoredFactoryNormalizer,
+	normalizeCanonical CanonicalFactoryNormalizer,
+	validateManifest ManifestValidator,
+	validateCanonicalFiles ManifestValidator,
+	validateBlockingLoad BlockingLoadValidator,
+	applyPortableFiles PortableBundledFilesApplier,
+	applyStarterWork FactoryStarterWorkApplier,
+	materializePortableFiles PortableBundledFilesMaterializer,
+	loadWorker WorkerLoader,
+	loadWorkstation WorkstationLoaderFunc,
+	loadWorkerBody WorkerBodyLoader,
+	loadWorkstationBody WorkstationBodyLoader,
+	loadWorkstationPrompt WorkstationPromptLoader,
+	safeLayoutSegment LayoutSegmentResolver,
+	splitRuntimeEntityExists RuntimeEntityExists,
 ) *Loader {
 	return &Loader{
 		fileSystem:               fileSystem,
@@ -362,7 +362,7 @@ func (l *Loader) LoadSourceFromCanonicalJSON(
 func (l *Loader) ValidateFactoryDirReadOnly(
 	factoryDir string,
 	workstationLoader factorydefinitions.WorkstationLoader,
-	validatePortableFiles factorydefinitions.PortableBundledFileWritesValidator,
+	validatePortableFiles PortableBundledFileWritesValidator,
 ) error {
 	if err := l.validate(); err != nil {
 		return err

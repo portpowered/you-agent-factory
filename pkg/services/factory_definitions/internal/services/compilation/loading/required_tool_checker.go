@@ -8,16 +8,16 @@ import (
 )
 
 type pathRequiredToolChecker struct {
-	lookPath     factorydefinitions.RequiredToolPathLookup
-	versionProbe factorydefinitions.RequiredToolVersionProbe
+	lookPath     RequiredToolPathLookup
+	versionProbe RequiredToolVersionProbe
 }
 
 // NewPathRequiredToolChecker constructs the Factory Definitions external-tool
 // availability adapter used by the application composition root.
 func NewPathRequiredToolChecker(
-	lookPath factorydefinitions.RequiredToolPathLookup,
-	versionProbe factorydefinitions.RequiredToolVersionProbe,
-) (factorydefinitions.RequiredToolChecker, error) {
+	lookPath RequiredToolPathLookup,
+	versionProbe RequiredToolVersionProbe,
+) (RequiredToolChecker, error) {
 	if lookPath == nil {
 		return nil, fmt.Errorf("required-tool executable path lookup is required")
 	}

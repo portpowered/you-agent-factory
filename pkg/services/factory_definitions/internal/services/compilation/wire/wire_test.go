@@ -9,6 +9,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
+	compilationcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/contracts"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
 )
 
@@ -48,39 +49,23 @@ func stubEncodeFactory(cfg *factorydefinitions.FactoryConfig) ([]byte, error) {
 func TestNewService_RequiresExactInjectedPorts(t *testing.T) {
 	t.Parallel()
 
-	loadCanonical := factorydefinitions.CanonicalFactoryJSONLoader(stubLoadCanonical)
-	loadFromFactoryDir := factorydefinitions.LoadedFactoryLoader(func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+	loadCanonical := compilationcontracts.CanonicalFactoryLoader(stubLoadCanonical)
+	loadFromFactoryDir := compilationcontracts.LoadedFactoryLoader(func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 		return nil, factoryroot.ErrInvalidNamedFactory
 	})
-	encodeFactory := factorydefinitions.FactoryConfigJSONEncoder(stubEncodeFactory)
+	encodeFactory := compilationcontracts.FactoryConfigEncoder(stubEncodeFactory)
 
-	if svc, err := compilationwire.NewService(compilationservice.Dependencies{
-		LoadCanonical:      nil,
-		LoadFromFactoryDir: loadFromFactoryDir,
-		EncodeFactory:      encodeFactory,
-	}); err == nil || svc != nil || !strings.Contains(err.Error(), "canonical Factory loader is required") {
+	if svc, err := compilationwire.NewService(nil, loadFromFactoryDir, encodeFactory); err == nil || svc != nil || !strings.Contains(err.Error(), "canonical Factory loader is required") {
 		t.Fatalf("NewService(nil LoadCanonical) = %#v, %v; want canonical loader required error", svc, err)
 	}
-	if svc, err := compilationwire.NewService(compilationservice.Dependencies{
-		LoadCanonical:      loadCanonical,
-		LoadFromFactoryDir: nil,
-		EncodeFactory:      encodeFactory,
-	}); err == nil || svc != nil || !strings.Contains(err.Error(), "directory loader is required") {
+	if svc, err := compilationwire.NewService(loadCanonical, nil, encodeFactory); err == nil || svc != nil || !strings.Contains(err.Error(), "directory loader is required") {
 		t.Fatalf("NewService(nil LoadFromFactoryDir) = %#v, %v; want directory loader required error", svc, err)
 	}
-	if svc, err := compilationwire.NewService(compilationservice.Dependencies{
-		LoadCanonical:      loadCanonical,
-		LoadFromFactoryDir: loadFromFactoryDir,
-		EncodeFactory:      nil,
-	}); err == nil || svc != nil || !strings.Contains(err.Error(), "encoder is required") {
+	if svc, err := compilationwire.NewService(loadCanonical, loadFromFactoryDir, nil); err == nil || svc != nil || !strings.Contains(err.Error(), "encoder is required") {
 		t.Fatalf("NewService(nil EncodeFactory) = %#v, %v; want encoder required error", svc, err)
 	}
 
-	svc, err := compilationwire.NewService(compilationservice.Dependencies{
-		LoadCanonical:      loadCanonical,
-		LoadFromFactoryDir: loadFromFactoryDir,
-		EncodeFactory:      encodeFactory,
-	})
+	svc, err := compilationwire.NewService(loadCanonical, loadFromFactoryDir, encodeFactory)
 	if err != nil {
 		t.Fatalf("NewService with exact injected ports: %v", err)
 	}
@@ -94,20 +79,16 @@ func TestNewService_HostEffectsComeOnlyFromInjectedPorts(t *testing.T) {
 	t.Parallel()
 
 	loadCalls := 0
-	loadCanonical := factorydefinitions.CanonicalFactoryJSONLoader(func(payload []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+	loadCanonical := compilationcontracts.CanonicalFactoryLoader(func(payload []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 		loadCalls++
 		return stubLoadCanonical(payload, nil)
 	})
-	loadFromFactoryDir := factorydefinitions.LoadedFactoryLoader(func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+	loadFromFactoryDir := compilationcontracts.LoadedFactoryLoader(func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 		t.Fatal("directory loader must not be used for canonical compile")
 		return nil, nil
 	})
 
-	svc, err := compilationwire.NewService(compilationservice.Dependencies{
-		LoadCanonical:      loadCanonical,
-		LoadFromFactoryDir: loadFromFactoryDir,
-		EncodeFactory:      stubEncodeFactory,
-	})
+	svc, err := compilationwire.NewService(loadCanonical, loadFromFactoryDir, stubEncodeFactory)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}

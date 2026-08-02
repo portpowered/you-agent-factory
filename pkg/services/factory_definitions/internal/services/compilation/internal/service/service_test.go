@@ -10,6 +10,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
+	compilationcontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/contracts"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
 )
 
@@ -38,8 +39,8 @@ func (s stubLoadedSource) Worker(string) (*factorydefinitions.FactoryWorkerConfi
 
 func newCompilationService(
 	t *testing.T,
-	loadCanonical factorydefinitions.CanonicalFactoryJSONLoader,
-	loadFromFactoryDir factorydefinitions.LoadedFactoryLoader,
+	loadCanonical compilationcontracts.CanonicalFactoryLoader,
+	loadFromFactoryDir compilationcontracts.LoadedFactoryLoader,
 ) compilationservice.Service {
 	t.Helper()
 	if loadCanonical == nil {
@@ -52,11 +53,7 @@ func newCompilationService(
 			return nil, factoryroot.ErrInvalidNamedFactory
 		}
 	}
-	svc, err := compilationwire.NewService(compilationservice.Dependencies{
-		LoadCanonical:      loadCanonical,
-		LoadFromFactoryDir: loadFromFactoryDir,
-		EncodeFactory:      stubEncodeFactory,
-	})
+	svc, err := compilationwire.NewService(loadCanonical, loadFromFactoryDir, stubEncodeFactory)
 	if err != nil {
 		t.Fatalf("compilationwire.NewService: %v", err)
 	}
