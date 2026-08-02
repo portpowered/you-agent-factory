@@ -150,3 +150,29 @@ type VersionConflictError struct {
 func (e *VersionConflictError) Error() string {
 	return fmt.Sprintf("version conflict: expected %d, actual %d", e.Expected, e.Actual)
 }
+
+// AttachmentInvalidReason classifies why an Attachment failed validation
+// without exposing the supplied identity values.
+type AttachmentInvalidReason string
+
+const (
+	// AttachmentInvalidMissingID reports a missing attachment identity.
+	AttachmentInvalidMissingID AttachmentInvalidReason = "MISSING_ID"
+	// AttachmentInvalidMissingSessionID reports a missing owning session
+	// identity.
+	AttachmentInvalidMissingSessionID AttachmentInvalidReason = "MISSING_SESSION_ID"
+	// AttachmentInvalidMissingConnectionID reports a missing connection
+	// identity.
+	AttachmentInvalidMissingConnectionID AttachmentInvalidReason = "MISSING_CONNECTION_ID"
+)
+
+// InvalidAttachmentError reports an Attachment missing a required identity.
+// Peers branch on Reason; the error never carries the supplied identity
+// values, so it is safe to log.
+type InvalidAttachmentError struct {
+	Reason AttachmentInvalidReason
+}
+
+func (e *InvalidAttachmentError) Error() string {
+	return fmt.Sprintf("invalid chat session attachment: %s", e.Reason)
+}
