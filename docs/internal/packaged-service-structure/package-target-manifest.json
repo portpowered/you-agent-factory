@@ -502,6 +502,11 @@
     "pkg/services/workers/internal/testhelpers",
     "pkg/services/workers/wire",
     "pkg/transports/acp",
+    "pkg/transports/acp/internal/envelope",
+    "pkg/transports/acp/internal/identity",
+    "pkg/transports/acp/internal/negotiation",
+    "pkg/transports/acp/internal/protocol",
+    "pkg/transports/acp/internal/session",
     "pkg/transports/cli",
     "pkg/transports/cli/acp",
     "pkg/transports/cli/baseline",
@@ -2869,6 +2874,31 @@
     },
     {
       "packagePath": "pkg/transports/acp",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/acp/internal/envelope",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/acp/internal/identity",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/acp/internal/negotiation",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/acp/internal/protocol",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/acp/internal/session",
       "disposition": "retain",
       "destination": "transports"
     },

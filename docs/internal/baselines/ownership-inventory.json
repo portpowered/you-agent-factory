@@ -5338,6 +5338,36 @@
       "destinationKind": "family"
     },
     {
+      "packagePath": "pkg/transports/acp/internal/envelope",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/acp/internal/identity",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/acp/internal/negotiation",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/acp/internal/protocol",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/acp/internal/session",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
       "packagePath": "pkg/transports/cli",
       "disposition": "retain",
       "destination": "transports",
