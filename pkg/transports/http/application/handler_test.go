@@ -215,6 +215,27 @@ func TestDefaultWorkTypeResolverPreservesSessionAdmissionPolicy(t *testing.T) {
 	}
 }
 
+func TestBindRejectsMissingProcessScopedHandler(t *testing.T) {
+	t.Parallel()
+
+	if bound, err := (*Handler)(nil).Bind(factorysessions.RuntimeHTTPServices{}); err == nil || bound != nil {
+		t.Fatalf("Bind = (%T, %v), want missing process-scoped handler error", bound, err)
+	}
+}
+
+func TestBindRejectsMissingModelsBinding(t *testing.T) {
+	t.Parallel()
+
+	mappings, err := mappingcomposition.NewHTTPBinder(statusProjectorRole{}, &contentPreparationRole{})
+	if err != nil {
+		t.Fatalf("NewHTTPBinder: %v", err)
+	}
+	handler := &Handler{mappings: mappings, modelsContent: &contentPreparationRole{}}
+	if bound, err := handler.Bind(factorysessions.RuntimeHTTPServices{}); err == nil || bound != nil {
+		t.Fatalf("Bind = (%T, %v), want missing Models binding error", bound, err)
+	}
+}
+
 func TestNewHandlerRejectsMissingStableOperations(t *testing.T) {
 	t.Parallel()
 
