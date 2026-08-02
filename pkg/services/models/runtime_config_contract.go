@@ -55,6 +55,9 @@ func (ref RuntimeScopeRef) IsZero() bool {
 // for one scope. It deliberately excludes loaders, services, processes,
 // storage handles, clocks, HTTP clients, and concrete runtime dependencies.
 type RuntimeScopeConfig struct {
+	// CacheDirectory may be absolute or a valid relative managed-cache
+	// directory. Models resolves valid relative values against the process
+	// working directory before secure filesystem effects use them.
 	CacheDirectory string
 	Runtime        RuntimeConfig
 }

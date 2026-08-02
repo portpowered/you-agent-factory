@@ -31,9 +31,9 @@ func TestLocalRemoveTreeRemovesOnlyNamedTargetAndIsIdempotent(t *testing.T) {
 		t.Fatalf("write sibling: %v", err)
 	}
 
-	changed, err := (Local{}).RemoveTree(context.Background(), parent, "model")
-	if err != nil || !changed {
-		t.Fatalf("RemoveTree = changed %t, err %v; want changed", changed, err)
+	result, err := (Local{}).RemoveTree(context.Background(), parent, "model")
+	if err != nil || result.State != RemoveTreeRemoved {
+		t.Fatalf("RemoveTree = result %#v, err %v; want removed", result, err)
 	}
 	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("target = %v, want absent", err)
@@ -45,9 +45,9 @@ func TestLocalRemoveTreeRemovesOnlyNamedTargetAndIsIdempotent(t *testing.T) {
 		t.Fatalf("sibling = %q, %v; want preserved", body, err)
 	}
 
-	changed, err = (Local{}).RemoveTree(context.Background(), parent, "model")
-	if err != nil || changed {
-		t.Fatalf("repeated RemoveTree = changed %t, err %v; want unchanged", changed, err)
+	result, err = (Local{}).RemoveTree(context.Background(), parent, "model")
+	if err != nil || result.State != RemoveTreeAbsent {
+		t.Fatalf("repeated RemoveTree = result %#v, err %v; want absent", result, err)
 	}
 }
 
@@ -57,17 +57,17 @@ func TestLocalRemoveTreeCancellationWinsOverParentAndTargetAbsence(t *testing.T)
 	t.Run("parent absence", func(t *testing.T) {
 		ctx := &absenceCancellingContext{cancelOn: 2}
 		parent := filepath.Join(t.TempDir(), "not-created", "cache")
-		changed, err := (Local{}).RemoveTree(ctx, parent, "model")
-		if changed || !errors.Is(err, context.Canceled) {
-			t.Fatalf("RemoveTree = changed %t, err %v; want cancellation before absent result", changed, err)
+		result, err := (Local{}).RemoveTree(ctx, parent, "model")
+		if result.State != RemoveTreeNotAttempted || !errors.Is(err, context.Canceled) {
+			t.Fatalf("RemoveTree = result %#v, err %v; want cancellation before absent result", result, err)
 		}
 	})
 
 	t.Run("target absence", func(t *testing.T) {
 		ctx := &absenceCancellingContext{cancelOn: 2}
-		changed, err := (Local{}).RemoveTree(ctx, t.TempDir(), "model")
-		if changed || !errors.Is(err, context.Canceled) {
-			t.Fatalf("RemoveTree = changed %t, err %v; want cancellation before absent result", changed, err)
+		result, err := (Local{}).RemoveTree(ctx, t.TempDir(), "model")
+		if result.State != RemoveTreeNotAttempted || !errors.Is(err, context.Canceled) {
+			t.Fatalf("RemoveTree = result %#v, err %v; want cancellation before absent result", result, err)
 		}
 	})
 }
@@ -84,9 +84,9 @@ func TestLocalRemoveTreeFailsClosedOnTargetDirectoryLink(t *testing.T) {
 	link := filepath.Join(parent, "model")
 	createDirectoryLink(t, link, outside)
 
-	changed, err := (Local{}).RemoveTree(context.Background(), parent, "model")
-	if err == nil || changed {
-		t.Fatalf("RemoveTree = changed %t, err %v; want fail-closed unchanged", changed, err)
+	result, err := (Local{}).RemoveTree(context.Background(), parent, "model")
+	if err == nil || result.State != RemoveTreeNotAttempted {
+		t.Fatalf("RemoveTree = result %#v, err %v; want fail-closed unchanged", result, err)
 	}
 	assertFileBody(t, marker, "preserve")
 	if _, err := os.Lstat(link); err != nil {
@@ -110,9 +110,9 @@ func TestLocalRemoveTreeFailsClosedOnTargetSelfLink(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Remove(link) })
 
-	changed, err := (Local{}).RemoveTree(context.Background(), parent, "model")
-	if err == nil || changed {
-		t.Fatalf("RemoveTree = changed %t, err %v; want self-link fail closed", changed, err)
+	result, err := (Local{}).RemoveTree(context.Background(), parent, "model")
+	if err == nil || result.State != RemoveTreeNotAttempted {
+		t.Fatalf("RemoveTree = result %#v, err %v; want self-link fail closed", result, err)
 	}
 	if _, err := os.Lstat(link); err != nil {
 		t.Fatalf("self-link = %v, want untouched", err)
@@ -128,9 +128,9 @@ func TestLocalRemoveTreeRejectsTargetRegularFile(t *testing.T) {
 		t.Fatalf("write regular target: %v", err)
 	}
 
-	changed, err := (Local{}).RemoveTree(context.Background(), parent, "model")
-	if err == nil || changed {
-		t.Fatalf("RemoveTree = changed %t, err %v; want regular target rejection", changed, err)
+	result, err := (Local{}).RemoveTree(context.Background(), parent, "model")
+	if err == nil || result.State != RemoveTreeNotAttempted {
+		t.Fatalf("RemoveTree = result %#v, err %v; want regular target rejection", result, err)
 	}
 	assertFileBody(t, target, "preserve")
 }
@@ -151,9 +151,9 @@ func TestLocalRemoveTreeFailsClosedOnCacheParentLink(t *testing.T) {
 	parentLink := filepath.Join(linkParent, "cache")
 	createDirectoryLink(t, parentLink, outside)
 
-	changed, err := (Local{}).RemoveTree(context.Background(), parentLink, "model")
-	if err == nil || changed {
-		t.Fatalf("RemoveTree = changed %t, err %v; want fail-closed unchanged", changed, err)
+	result, err := (Local{}).RemoveTree(context.Background(), parentLink, "model")
+	if err == nil || result.State != RemoveTreeNotAttempted {
+		t.Fatalf("RemoveTree = result %#v, err %v; want fail-closed unchanged", result, err)
 	}
 	assertFileBody(t, marker, "preserve")
 	if _, err := os.Lstat(parentLink); err != nil {
@@ -180,9 +180,9 @@ func TestLocalRemoveTreeUnlinksChildLinkWithoutFollowingOutside(t *testing.T) {
 	}
 	createDirectoryLink(t, filepath.Join(target, "redirect"), outside)
 
-	changed, err := (Local{}).RemoveTree(context.Background(), parent, "model")
-	if err != nil || !changed {
-		t.Fatalf("RemoveTree = changed %t, err %v; want successful removal", changed, err)
+	result, err := (Local{}).RemoveTree(context.Background(), parent, "model")
+	if err != nil || result.State != RemoveTreeRemoved {
+		t.Fatalf("RemoveTree = result %#v, err %v; want successful removal", result, err)
 	}
 	assertFileBody(t, marker, "preserve")
 	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
@@ -214,9 +214,9 @@ func TestLocalRemoveTreeDoesNotFollowReplacedDirectoryLink(t *testing.T) {
 	}
 	createDirectoryLink(t, child, outside)
 
-	changed, err := (Local{}).RemoveTree(context.Background(), parent, "model")
-	if err != nil || !changed {
-		t.Fatalf("RemoveTree = changed %t, err %v; want successful removal", changed, err)
+	result, err := (Local{}).RemoveTree(context.Background(), parent, "model")
+	if err != nil || result.State != RemoveTreeRemoved {
+		t.Fatalf("RemoveTree = result %#v, err %v; want successful removal", result, err)
 	}
 	assertFileBody(t, marker, "preserve")
 	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
@@ -238,9 +238,9 @@ func TestLocalRemoveTreeRejectsMalformedTargetNames(t *testing.T) {
 			if err := os.WriteFile(marker, []byte("preserve"), 0o644); err != nil {
 				t.Fatalf("write sibling: %v", err)
 			}
-			changed, err := (Local{}).RemoveTree(context.Background(), parent, name)
-			if err == nil || changed {
-				t.Fatalf("RemoveTree(%q) = changed %t, err %v; want rejection", name, changed, err)
+			result, err := (Local{}).RemoveTree(context.Background(), parent, name)
+			if err == nil || result.State != RemoveTreeNotAttempted {
+				t.Fatalf("RemoveTree(%q) = result %#v, err %v; want rejection", name, result, err)
 			}
 			assertFileBody(t, marker, "preserve")
 		})
@@ -278,9 +278,9 @@ func assertFileBody(t *testing.T, path, want string) {
 
 func assertUnsupportedTreeRemoval(t *testing.T, parent, target string) {
 	t.Helper()
-	changed, err := (Local{}).RemoveTree(context.Background(), parent, target)
-	if changed || !errors.Is(err, errSecureTreeRemovalUnsupported) {
-		t.Fatalf("RemoveTree = changed %t, err %v; want unsupported and unchanged", changed, err)
+	result, err := (Local{}).RemoveTree(context.Background(), parent, target)
+	if result.State != RemoveTreeNotAttempted || !errors.Is(err, errSecureTreeRemovalUnsupported) {
+		t.Fatalf("RemoveTree = result %#v, err %v; want unsupported and unchanged", result, err)
 	}
 }
 

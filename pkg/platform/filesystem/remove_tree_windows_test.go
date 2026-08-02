@@ -6,7 +6,9 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -31,12 +33,12 @@ func TestWindowsRemoveTreeDeniesRenameAfterOpen(t *testing.T) {
 		}
 	}}
 
-	changed, err := (Local{}).RemoveTree(ctx, parent, "model")
+	result, err := (Local{}).RemoveTree(ctx, parent, "model")
 	if renameErr == nil {
 		t.Fatal("rename-after-open succeeded; target handle did not hold the canonical name")
 	}
-	if err != nil || !changed {
-		t.Fatalf("RemoveTree = changed %t, err %v; want deletion while rename is denied", changed, err)
+	if err != nil || result.State != RemoveTreeRemoved {
+		t.Fatalf("RemoveTree = result %#v, err %v; want deletion while rename is denied", result, err)
 	}
 	if _, err := os.Lstat(target); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("canonical target = %v, want absent", err)
@@ -60,9 +62,9 @@ func TestWindowsRemoveTreePartialDeletionRetriesFromCanonicalHandle(t *testing.T
 		}
 	}
 	ctx := &windowsCancelAfterContext{cancelOn: 7}
-	changed, err := (Local{}).RemoveTree(ctx, parent, "model")
-	if !changed || !errors.Is(err, context.Canceled) {
-		t.Fatalf("partial RemoveTree = changed %t, err %v; want cancellation after one handle deletion", changed, err)
+	result, err := (Local{}).RemoveTree(ctx, parent, "model")
+	if result.State != RemoveTreeRemaining || !errors.Is(err, context.Canceled) {
+		t.Fatalf("partial RemoveTree = result %#v, err %v; want cancellation with remaining tree", result, err)
 	}
 	if _, err := os.Stat(filepath.Join(target, "a")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("first asset = %v, want removed before cancellation", err)
@@ -71,9 +73,9 @@ func TestWindowsRemoveTreePartialDeletionRetriesFromCanonicalHandle(t *testing.T
 		t.Fatalf("second asset = %v, want retry state", err)
 	}
 
-	changed, err = (Local{}).RemoveTree(context.Background(), parent, "model")
-	if err != nil || !changed {
-		t.Fatalf("retry RemoveTree = changed %t, err %v; want completion", changed, err)
+	result, err = (Local{}).RemoveTree(context.Background(), parent, "model")
+	if err != nil || result.State != RemoveTreeRemoved {
+		t.Fatalf("retry RemoveTree = result %#v, err %v; want completion", result, err)
 	}
 	if _, err := os.Lstat(target); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("target after retry = %v, want absent", err)
@@ -106,12 +108,12 @@ func TestWindowsRemoveTreeRejectsParentAndTargetReplacementRaces(t *testing.T) {
 		}
 	}}
 
-	changed, err := (Local{}).RemoveTree(ctx, parent, "model")
+	result, err := (Local{}).RemoveTree(ctx, parent, "model")
 	if parentRenameErr == nil || targetRenameErr == nil {
 		t.Fatalf("replacement races succeeded: parent=%v target=%v", parentRenameErr, targetRenameErr)
 	}
-	if err != nil || !changed {
-		t.Fatalf("RemoveTree = changed %t, err %v; want protected removal", changed, err)
+	if err != nil || result.State != RemoveTreeRemoved {
+		t.Fatalf("RemoveTree = result %#v, err %v; want protected removal", result, err)
 	}
 	if _, err := os.Lstat(target); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("target = %v, want absent", err)
@@ -159,10 +161,10 @@ func TestWindowsRemoveTreeRejectsConcurrentTargetNameMutation(t *testing.T) {
 		<-attemptStarted
 	}}
 
-	changed, err := (Local{}).RemoveTree(ctx, parent, "model")
+	result, err := (Local{}).RemoveTree(ctx, parent, "model")
 	<-mutatorDone
-	if err != nil || !changed {
-		t.Fatalf("RemoveTree = changed %t, err %v; want successful removal", changed, err)
+	if err != nil || result.State != RemoveTreeRemoved {
+		t.Fatalf("RemoveTree = result %#v, err %v; want successful removal", result, err)
 	}
 	if attempts.Load() == 0 {
 		t.Fatal("concurrent mutator made no target-name mutation attempt")
@@ -187,11 +189,100 @@ func TestWindowsRemoveTreeRejectsMalformedParentPrefixes(t *testing.T) {
 	} {
 		parent := parent
 		t.Run(parent, func(t *testing.T) {
-			changed, err := (Local{}).RemoveTree(context.Background(), parent, "model")
-			if changed || err == nil {
-				t.Fatalf("RemoveTree(%q) = changed %t, err %v; want malformed-parent rejection", parent, changed, err)
+			result, err := (Local{}).RemoveTree(context.Background(), parent, "model")
+			if result.State != RemoveTreeNotAttempted || err == nil {
+				t.Fatalf("RemoveTree(%q) = result %#v, err %v; want malformed-parent rejection", parent, result, err)
 			}
 		})
+	}
+}
+
+func TestWindowsRemoveTreeRejectsOverlargeParentComponents(t *testing.T) {
+	t.Parallel()
+
+	deepComponents := make([]string, windowsMaxParentDepth+1)
+	for index := range deepComponents {
+		deepComponents[index] = "cache"
+	}
+	longDepthParent := `C:\` + strings.Join(deepComponents, `\`)
+	longComponentParent := `C:\` + strings.Repeat("x", windowsMaxParentNameBytes+1)
+	longPathParent := `C:\` + strings.Repeat("cache\\", windowsMaxParentPathBytes)
+
+	for _, parent := range []string{longDepthParent, longComponentParent, longPathParent} {
+		result, err := (Local{}).RemoveTree(context.Background(), parent, "model")
+		if result.State != RemoveTreeNotAttempted || err == nil {
+			t.Fatalf("RemoveTree(%q) = result %#v, err %v; want bounded-parent rejection", parent, result, err)
+		}
+	}
+}
+
+func TestWindowsRemoveTreeUsesCaseSensitiveDirectoryLookup(t *testing.T) {
+	parent := t.TempDir()
+	if err := exec.Command("fsutil.exe", "file", "SetCaseSensitiveInfo", parent, "enable").Run(); err != nil {
+		t.Skipf("case-sensitive directory support unavailable: %v", err)
+	}
+	lower := filepath.Join(parent, "model")
+	upper := filepath.Join(parent, "MODEL")
+	for _, root := range []string{lower, upper} {
+		if err := os.MkdirAll(filepath.Join(root, "revision"), 0o755); err != nil {
+			t.Fatalf("create %s: %v", root, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(lower, "revision", "remove"), []byte("remove"), 0o644); err != nil {
+		t.Fatalf("write lower target: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(upper, "revision", "preserve"), []byte("preserve"), 0o644); err != nil {
+		t.Fatalf("write upper target: %v", err)
+	}
+
+	result, err := (Local{}).RemoveTree(context.Background(), parent, "model")
+	if err != nil || result.State != RemoveTreeRemoved {
+		t.Fatalf("case-sensitive RemoveTree = %#v, err %v; want removed lower target", result, err)
+	}
+	if _, err := os.Lstat(lower); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("lower target = %v, want absent", err)
+	}
+	if _, err := os.Stat(filepath.Join(upper, "revision", "preserve")); err != nil {
+		t.Fatalf("upper target = %v, want preserved", err)
+	}
+}
+
+func TestWindowsRemoveTreeAcceptsUniqueCaseInsensitiveTargetName(t *testing.T) {
+	parent := t.TempDir()
+	target := filepath.Join(parent, "Model")
+	if err := os.MkdirAll(filepath.Join(target, "revision"), 0o755); err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(target, "revision", "asset"), []byte("remove"), 0o644); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+
+	result, err := (Local{}).RemoveTree(context.Background(), parent, "model")
+	if err != nil || result.State != RemoveTreeRemoved {
+		t.Fatalf("case-insensitive RemoveTree = %#v, err %v; want removed unique target", result, err)
+	}
+	if _, err := os.Lstat(target); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("target = %v, want absent", err)
+	}
+}
+
+func TestWindowsRemoveTreeStopsAtBoundedDepth(t *testing.T) {
+	parent := t.TempDir()
+	target := filepath.Join(parent, "model")
+	deep := target
+	for index := 0; index < windowsMaxRemovalDepth+2; index++ {
+		deep = filepath.Join(deep, "level")
+	}
+	if err := os.MkdirAll(deep, 0o755); err != nil {
+		t.Fatalf("create deep tree: %v", err)
+	}
+
+	result, err := (Local{}).RemoveTree(context.Background(), parent, "model")
+	if err == nil || result.State != RemoveTreeRemaining {
+		t.Fatalf("bounded-depth RemoveTree = %#v, err %v; want remaining error", result, err)
+	}
+	if _, err := os.Stat(target); err != nil {
+		t.Fatalf("target after depth bound = %v, want retryable tree", err)
 	}
 }
 

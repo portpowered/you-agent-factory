@@ -101,12 +101,29 @@ type AssetWriteFile func(string, []byte, os.FileMode) error
 type AssetRenamePath func(string, string) error
 type AssetRemovePath func(string) error
 
+// AssetRemoveTreeState is the explicit completion vocabulary for the private
+// Models removal effect. The canonical composition boundary maps the platform
+// result into this service-owned value rather than coupling platform code to
+// Models.
+type AssetRemoveTreeState string
+
+const (
+	AssetRemoveTreeNotAttempted AssetRemoveTreeState = "NOT_ATTEMPTED"
+	AssetRemoveTreeAbsent       AssetRemoveTreeState = "ABSENT"
+	AssetRemoveTreeRemoved      AssetRemoveTreeState = "REMOVED"
+	AssetRemoveTreeRemaining    AssetRemoveTreeState = "REMAINING"
+	AssetRemoveTreeUnknown      AssetRemoveTreeState = "UNKNOWN"
+)
+
+// AssetRemoveTreeResult records one platform removal attempt without exposing
+// handles or filesystem-specific identity data to the Models service.
+type AssetRemoveTreeResult struct {
+	State AssetRemoveTreeState
+}
+
 // AssetRemoveTree removes one model-cache directory beneath a selected cache
-// parent through a platform-owned path-security boundary. The bool reports
-// whether any mutation effect, including detach/quarantine or entry deletion,
-// was applied before an error or cancellation. Implementations stop before
-// the next destructive boundary and leave their retry state in place.
-type AssetRemoveTree func(context.Context, string, string) (bool, error)
+// parent through a platform-owned path-security boundary.
+type AssetRemoveTree func(context.Context, string, string) (AssetRemoveTreeResult, error)
 type AssetReadFile func(string) ([]byte, error)
 type AssetReadDirectory func(string) ([]os.DirEntry, error)
 type AssetCreateFile func(string) (io.WriteCloser, error)

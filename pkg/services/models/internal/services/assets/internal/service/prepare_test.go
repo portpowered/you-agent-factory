@@ -574,7 +574,9 @@ func newPreparationTestService(
 			record()
 			return os.Remove(path)
 		},
-		func(context.Context, string, string) (bool, error) { return false, nil },
+		func(context.Context, string, string) (modelseffects.AssetRemoveTreeResult, error) {
+			return modelseffects.AssetRemoveTreeResult{State: modelseffects.AssetRemoveTreeAbsent}, nil
+		},
 		os.ReadFile,
 		os.ReadDir,
 		func(path string) (io.WriteCloser, error) {

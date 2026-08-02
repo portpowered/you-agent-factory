@@ -43,7 +43,11 @@ type Service interface {
 	InspectModelAssets(context.Context, InspectModelAssetsRequest) (InspectModelAssetsResult, error)
 	// RemoveModelAssets removes scoped model assets and reports whether removal
 	// changed state or the assets were already absent. Cancellation remains a
-	// typed Models-owned failure.
+	// typed Models-owned failure, including when the platform committed the
+	// final removal immediately before cancellation was observed; retry is
+	// idempotent. Unix implementations protect handle-relative traversal and
+	// reject detected replacement, but cannot guarantee against a same-privilege
+	// race replacing the final name between identity validation and POSIX unlink.
 	RemoveModelAssets(context.Context, RemoveModelAssetsRequest) (RemoveModelAssetsResult, error)
 	// EnsureModelHost starts or reuses the supervised host for one scoped model
 	// and waits until it is ready. Host processes, health clients, runtime

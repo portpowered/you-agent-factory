@@ -84,7 +84,7 @@ func newModelsRootWireService(t *testing.T) models.Service {
 		os.WriteFile,
 		os.Rename,
 		os.Remove,
-		platformfilesystem.Local{}.RemoveTree,
+		modelsRootAssetRemoveTree,
 		os.ReadFile,
 		os.ReadDir,
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },
@@ -112,6 +112,17 @@ func newModelsRootWireService(t *testing.T) models.Service {
 		t.Fatal("models/wire.NewService() returned nil service")
 	}
 	return service
+}
+
+func modelsRootAssetRemoveTree(
+	ctx context.Context,
+	parent string,
+	target string,
+) (modelswire.AssetRemoveTreeResult, error) {
+	result, err := (platformfilesystem.Local{}).RemoveTree(ctx, parent, target)
+	return modelswire.AssetRemoveTreeResult{
+		State: modelswire.AssetRemoveTreeState(result.State),
+	}, err
 }
 
 type modelsRootInertProcessLauncher struct{}

@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,7 +15,6 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	platformlogging "github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -23,6 +23,7 @@ import (
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
+	"go.uber.org/zap"
 )
 
 const (
@@ -35,10 +36,9 @@ const (
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
-	applicationLogger, err := platformlogging.NewDefaultLogger()
-	if err != nil {
-		return nil, err
+func provideModelsService(edges serviceedges.Edges, applicationLogger *zap.Logger) (models.Service, error) {
+	if applicationLogger == nil {
+		return nil, fmt.Errorf("application logger is required")
 	}
 	assetPlatform := provideModelAssetHostPlatform(edges)
 	assetEndpoints := edges.ModelAssetEndpoints
@@ -71,7 +71,7 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 	if assetRemove == nil {
 		assetRemove = os.Remove
 	}
-	assetRemoveTree := modelswire.AssetRemoveTree(platformfilesystem.Local{}.RemoveTree)
+	assetRemoveTree := adaptModelAssetRemoveTree(platformfilesystem.Local{}.RemoveTree)
 	assetReadFile := edges.ModelAssetReadFile
 	if assetReadFile == nil {
 		assetReadFile = os.ReadFile
@@ -159,6 +159,40 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		modelswire.HostMetricsRecorder(factorysessionwire.ModelHostDiagnosticMetrics(edges.InvocationMetricsRecorder)),
 		modelLocalRuntimeHooks(workerswire.LocalRuntimeHooks()),
 	)
+}
+
+func adaptModelAssetRemoveTree(
+	next func(context.Context, string, string) (platformfilesystem.RemoveTreeResult, error),
+) modelswire.AssetRemoveTree {
+	return func(ctx context.Context, parent, target string) (modelswire.AssetRemoveTreeResult, error) {
+		result, err := next(ctx, parent, target)
+		state, stateErr := mapModelAssetRemoveTreeState(result.State)
+		if stateErr != nil {
+			return modelswire.AssetRemoveTreeResult{State: modelswire.AssetRemoveTreeUnknown}, errors.Join(err, stateErr)
+		}
+		return modelswire.AssetRemoveTreeResult{
+			State: state,
+		}, err
+	}
+}
+
+func mapModelAssetRemoveTreeState(
+	state platformfilesystem.RemoveTreeState,
+) (modelswire.AssetRemoveTreeState, error) {
+	switch state {
+	case platformfilesystem.RemoveTreeNotAttempted:
+		return modelswire.AssetRemoveTreeNotAttempted, nil
+	case platformfilesystem.RemoveTreeAbsent:
+		return modelswire.AssetRemoveTreeAbsent, nil
+	case platformfilesystem.RemoveTreeRemoved:
+		return modelswire.AssetRemoveTreeRemoved, nil
+	case platformfilesystem.RemoveTreeRemaining:
+		return modelswire.AssetRemoveTreeRemaining, nil
+	case platformfilesystem.RemoveTreeUnknown:
+		return modelswire.AssetRemoveTreeUnknown, nil
+	default:
+		return modelswire.AssetRemoveTreeUnknown, fmt.Errorf("unsupported platform tree removal state %q", state)
+	}
 }
 
 func providePlatformProcessCommandRunner(edges serviceedges.Edges) (platformprocess.CommandRunner, error) {

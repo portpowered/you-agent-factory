@@ -1,6 +1,7 @@
 package local
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	assetswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/wire"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"go.uber.org/zap"
@@ -59,7 +61,7 @@ func newAssetPullerForTest(
 		os.WriteFile,
 		os.Rename,
 		os.Remove,
-		platformfilesystem.Local{}.RemoveTree,
+		localAssetRemoveTree,
 		os.ReadFile,
 		os.ReadDir,
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },
@@ -71,6 +73,17 @@ func newAssetPullerForTest(
 		return nil, err
 	}
 	return NewScopedAssetPuller(service, scope)
+}
+
+func localAssetRemoveTree(
+	ctx context.Context,
+	parent string,
+	target string,
+) (modelseffects.AssetRemoveTreeResult, error) {
+	result, err := (platformfilesystem.Local{}).RemoveTree(ctx, parent, target)
+	return modelseffects.AssetRemoveTreeResult{
+		State: modelseffects.AssetRemoveTreeState(result.State),
+	}, err
 }
 
 func TestNewScopedAssetPullerRequiresServiceAndScope(t *testing.T) {

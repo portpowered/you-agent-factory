@@ -66,6 +66,23 @@ jobs:
           echo "classification=full" >> "$GITHUB_OUTPUT"
           echo "areas=ci-tooling" >> "$GITHUB_OUTPUT"
 
+  models-asset-removal-windows:
+    name: Models Asset Removal (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: Run native Models asset-removal tests
+        run: go test ./pkg/platform/filesystem ./pkg/services/models/internal/services/assets/internal/service ./pkg/services/models/wire ./pkg/wire -count=1 -timeout 240s
+      - name: Run native Models asset-removal race tests
+        run: go test -race ./pkg/platform/filesystem ./pkg/services/models/internal/services/assets/internal/service ./pkg/services/models/wire -count=1 -timeout 240s
+
   docs-reference:
     name: Docs Reference
     needs: classify

@@ -14,12 +14,25 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
+
+func TestAdaptModelAssetRemoveTreeRejectsUnknownPlatformState(t *testing.T) {
+	adapter := adaptModelAssetRemoveTree(func(context.Context, string, string) (platformfilesystem.RemoveTreeResult, error) {
+		return platformfilesystem.RemoveTreeResult{State: platformfilesystem.RemoveTreeState("future-state")}, nil
+	})
+
+	result, err := adapter(context.Background(), `C:\cache`, "model")
+	if result.State != modelswire.AssetRemoveTreeUnknown || err == nil {
+		t.Fatalf("adapted removal = result %#v, err %v; want unknown state and error", result, err)
+	}
+}
 
 func TestModelsServiceIsConstructedOnceAndOpensRuntimeScopeOnSameRoot(t *testing.T) {
 	t.Parallel()
 
-	root, err := provideModelsService(serviceedges.Edges{})
+	root, err := provideModelsService(serviceedges.Edges{}, zap.NewNop())
 	if err != nil {
 		t.Fatalf("provideModelsService: %v", err)
 	}
@@ -51,6 +64,34 @@ func TestModelsServiceIsConstructedOnceAndOpensRuntimeScopeOnSameRoot(t *testing
 	}
 	if !closed.Closed || closed.Scope != opened.Scope {
 		t.Fatalf("CloseRuntimeScope result = %#v, want issued scope closed", closed)
+	}
+}
+
+func TestModelsServiceUsesInjectedApplicationLoggerForAssetRemoval(t *testing.T) {
+	core, logs := observer.New(zap.WarnLevel)
+	root, err := provideModelsService(serviceedges.Edges{}, zap.New(core))
+	if err != nil {
+		t.Fatalf("provideModelsService: %v", err)
+	}
+	opened, err := root.OpenRuntimeScope(context.Background(), models.OpenRuntimeScopeRequest{
+		Config: models.RuntimeScopeConfig{CacheDirectory: t.TempDir()},
+	})
+	if err != nil {
+		t.Fatalf("OpenRuntimeScope: %v", err)
+	}
+	_, err = root.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
+		Scope: opened.Scope,
+		Name:  "OMNIVOICE_Q4_K_M",
+	})
+	if err != nil {
+		t.Fatalf("RemoveModelAssets: %v", err)
+	}
+	observed := logs.All()
+	if len(observed) != 2 || observed[0].Level != zap.WarnLevel || observed[1].Level != zap.WarnLevel {
+		t.Fatalf("injected logger records = %#v, want two Warn records", observed)
+	}
+	if observed[0].ContextMap()["phase"] != "start" || observed[1].ContextMap()["phase"] != "terminal" {
+		t.Fatalf("injected logger phases = %#v, want start and terminal", observed)
 	}
 }
 

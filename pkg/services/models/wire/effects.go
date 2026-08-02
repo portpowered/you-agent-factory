@@ -18,7 +18,18 @@ type AssetResolveHomeDirectory = effects.AssetResolveHomeDirectory
 type AssetWriteFile = effects.AssetWriteFile
 type AssetRenamePath = effects.AssetRenamePath
 type AssetRemovePath = effects.AssetRemovePath
+type AssetRemoveTreeState = effects.AssetRemoveTreeState
+type AssetRemoveTreeResult = effects.AssetRemoveTreeResult
 type AssetRemoveTree = effects.AssetRemoveTree
+
+const (
+	AssetRemoveTreeNotAttempted = effects.AssetRemoveTreeNotAttempted
+	AssetRemoveTreeAbsent       = effects.AssetRemoveTreeAbsent
+	AssetRemoveTreeRemoved      = effects.AssetRemoveTreeRemoved
+	AssetRemoveTreeRemaining    = effects.AssetRemoveTreeRemaining
+	AssetRemoveTreeUnknown      = effects.AssetRemoveTreeUnknown
+)
+
 type AssetReadFile = effects.AssetReadFile
 type AssetReadDirectory = effects.AssetReadDirectory
 type AssetCreateFile = effects.AssetCreateFile

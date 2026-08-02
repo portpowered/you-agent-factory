@@ -154,8 +154,10 @@ func validAssetDependencies(
 		name: name, scopes: scopes, platform: platform, client: http.DefaultClient, endpoints: endpoints,
 		mkdir: os.MkdirAll, inspect: os.Stat, home: os.UserHomeDir, write: os.WriteFile,
 		rename: os.Rename, remove: os.Remove,
-		removeTree: func(context.Context, string, string) (bool, error) { return false, nil },
-		readFile:   os.ReadFile, readDir: os.ReadDir,
+		removeTree: func(context.Context, string, string) (modelseffects.AssetRemoveTreeResult, error) {
+			return modelseffects.AssetRemoveTreeResult{State: modelseffects.AssetRemoveTreeAbsent}, nil
+		},
+		readFile: os.ReadFile, readDir: os.ReadDir,
 		create: func(path string) (io.WriteCloser, error) { return os.Create(path) },
 		open:   func(path string) (io.ReadCloser, error) { return os.Open(path) },
 	}

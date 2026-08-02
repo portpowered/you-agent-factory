@@ -357,7 +357,7 @@ func mustAssetsService(t *testing.T, scopes runtimescopes.Service) scopedassets.
 		os.WriteFile,
 		os.Rename,
 		os.Remove,
-		platformfilesystem.Local{}.RemoveTree,
+		runtimeHostAssetRemoveTree,
 		os.ReadFile,
 		os.ReadDir,
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },
@@ -369,6 +369,17 @@ func mustAssetsService(t *testing.T, scopes runtimescopes.Service) scopedassets.
 		t.Fatalf("construct assets: %v", err)
 	}
 	return assets
+}
+
+func runtimeHostAssetRemoveTree(
+	ctx context.Context,
+	parent string,
+	target string,
+) (modelseffects.AssetRemoveTreeResult, error) {
+	result, err := (platformfilesystem.Local{}).RemoveTree(ctx, parent, target)
+	return modelseffects.AssetRemoveTreeResult{
+		State: modelseffects.AssetRemoveTreeState(result.State),
+	}, err
 }
 
 type recordingProcessLauncher struct {

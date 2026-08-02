@@ -6,6 +6,7 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	"go.uber.org/zap"
 )
 
@@ -15,7 +16,7 @@ func (s *service) logAssetRemovalStart(modelIdentity string) {
 	if s == nil || s.logger == nil {
 		return
 	}
-	s.logger.Info(
+	s.logger.Warn(
 		"model asset removal started",
 		zap.String("operation", assetRemovalOperation),
 		zap.String("phase", "start"),
@@ -28,8 +29,7 @@ func (s *service) logAssetRemovalTerminal(
 	start time.Time,
 	result models.RemoveModelAssetsResult,
 	err error,
-	changed bool,
-	partialDeletion bool,
+	removal modelseffects.AssetRemoveTreeResult,
 ) {
 	if s == nil || s.logger == nil {
 		return
@@ -50,15 +50,14 @@ func (s *service) logAssetRemovalTerminal(
 		zap.Int64("duration_ms", duration.Milliseconds()),
 		zap.String("error_classification", assetRemovalErrorClassification(err)),
 		zap.Bool("cancelled", errors.Is(err, models.ErrAssetCancelled)),
-		zap.Bool("changed", changed),
-		zap.Bool("partial_deletion", partialDeletion),
+		zap.String("removal_state", string(removal.State)),
 	}
 	if err != nil {
 		// Error text can contain a filesystem path. The type and bounded
 		// classification are enough for correlation without leaking it.
 		fields = append(fields, zap.String("error_type", fmt.Sprintf("%T", err)))
 	}
-	s.logger.Info("model asset removal finished", fields...)
+	s.logger.Warn("model asset removal finished", fields...)
 }
 
 func assetRemovalErrorClassification(err error) string {

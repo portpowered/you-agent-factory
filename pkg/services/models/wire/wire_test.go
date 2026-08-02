@@ -304,7 +304,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		assetWriteFile.write,
 		assetRename.rename,
 		assetRemove.remove,
-		platformfilesystem.Local{}.RemoveTree,
+		productionAssetRemoveTree,
 		assetReadFile.read,
 		assetReadDir.readDir,
 		assetCreate.create,
@@ -414,7 +414,7 @@ func validConstructionEdges() constructionEdges {
 		assetWriteFile:  os.WriteFile,
 		assetRename:     os.Rename,
 		assetRemove:     os.Remove,
-		assetRemoveTree: platformfilesystem.Local{}.RemoveTree,
+		assetRemoveTree: productionAssetRemoveTree,
 		assetReadFile:   os.ReadFile,
 		assetReadDir:    os.ReadDir,
 		assetCreate:     func(path string) (io.WriteCloser, error) { return os.Create(path) },
@@ -781,6 +781,39 @@ func TestProductionCompositionRemovesScopedAssetsThroughModelsRoot(t *testing.T)
 	}
 }
 
+func TestProductionCompositionNormalizesRelativeCacheDirectoryForRemoval(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	service := newProductionTestService(t)
+	opened, err := service.OpenRuntimeScope(context.Background(), models.OpenRuntimeScopeRequest{
+		Config: models.RuntimeScopeConfig{CacheDirectory: "managed-model-cache"},
+	})
+	if err != nil {
+		t.Fatalf("OpenRuntimeScope: %v", err)
+	}
+	modelRoot := filepath.Join("managed-model-cache", "OMNIVOICE_Q4_K_M")
+	if err := os.MkdirAll(filepath.Join(modelRoot, "revision"), 0o755); err != nil {
+		t.Fatalf("create relative model cache: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(modelRoot, "revision", "asset"), []byte("remove"), 0o644); err != nil {
+		t.Fatalf("write relative model cache: %v", err)
+	}
+
+	result, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
+		Scope: opened.Scope,
+		Name:  "OMNIVOICE_Q4_K_M",
+	})
+	if err != nil {
+		t.Fatalf("RemoveModelAssets relative cache: %v", err)
+	}
+	if result.Outcome != models.AssetRemovalRemoved {
+		t.Fatalf("RemoveModelAssets = %#v, want removed outcome", result)
+	}
+	if _, err := os.Lstat(modelRoot); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("relative model root = %v, want absent", err)
+	}
+}
+
 func TestProductionCompositionInspectsScopedHostThroughModelsRoot(t *testing.T) {
 	t.Parallel()
 
@@ -1037,10 +1070,7 @@ func newProductionTestServiceWithAssetEdges(
 	issuerEntropy platformrandom.Source,
 ) models.Service {
 	t.Helper()
-	assetRemoveTree := platformfilesystem.Local{}.RemoveTree
-	if runtime.GOOS != "windows" {
-		assetRemoveTree = testAssetRemoveTree
-	}
+	assetRemoveTree := modelseffects.AssetRemoveTree(productionAssetRemoveTree)
 	service, err := NewService(
 		models.AssetHostPlatform{OperatingSystem: runtime.GOOS, Architecture: runtime.GOARCH},
 		client,
@@ -1080,30 +1110,15 @@ func newProductionTestServiceWithAssetEdges(
 	return service
 }
 
-// testAssetRemoveTree keeps the root composition behavior test runnable on
-// Unix, where production secure tree removal deliberately fails closed.
-func testAssetRemoveTree(ctx context.Context, parent, target string) (bool, error) {
-	if err := ctx.Err(); err != nil {
-		return false, err
-	}
-	path := filepath.Join(parent, target)
-	info, err := os.Lstat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if !info.IsDir() {
-		return false, errors.New("test removal target is not a directory")
-	}
-	if err := ctx.Err(); err != nil {
-		return false, err
-	}
-	if err := os.RemoveAll(path); err != nil {
-		return true, err
-	}
-	return true, nil
+func productionAssetRemoveTree(
+	ctx context.Context,
+	parent string,
+	target string,
+) (modelseffects.AssetRemoveTreeResult, error) {
+	result, err := (platformfilesystem.Local{}).RemoveTree(ctx, parent, target)
+	return modelseffects.AssetRemoveTreeResult{
+		State: modelseffects.AssetRemoveTreeState(result.State),
+	}, err
 }
 
 type sequentialEntropySource struct {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -79,6 +80,45 @@ func TestRemoveModelAssetsReportsAbsentCacheWithoutCreatingParent(t *testing.T) 
 	}
 }
 
+func TestModelCacheParentNormalizesValidRelativeDirectory(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	service := &service{}
+	got, err := service.modelCacheParent("managed-model-cache")
+	if err != nil {
+		t.Fatalf("modelCacheParent: %v", err)
+	}
+	want, err := filepath.Abs("managed-model-cache")
+	if err != nil {
+		t.Fatalf("filepath.Abs: %v", err)
+	}
+	if got != want {
+		t.Fatalf("modelCacheParent = %q, want %q", got, want)
+	}
+}
+
+func TestModelCacheParentNormalizesRelativeDotComponents(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	service := &service{}
+	for _, input := range []string{
+		filepath.Join(".", "managed-model-cache"),
+		filepath.Join("nested", "..", "managed-model-cache"),
+	} {
+		got, err := service.modelCacheParent(input)
+		if err != nil {
+			t.Fatalf("modelCacheParent(%q): %v", input, err)
+		}
+		want, err := filepath.Abs(filepath.Clean(input))
+		if err != nil {
+			t.Fatalf("filepath.Abs(%q): %v", input, err)
+		}
+		if got != want {
+			t.Fatalf("modelCacheParent(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
 func TestRemoveModelAssetsRejectsInvalidScopesAndIdentitiesBeforeFilesystemEffects(t *testing.T) {
 	t.Parallel()
 
@@ -142,9 +182,9 @@ func TestRemoveModelAssetsPreservesMalformedCacheAndTypedFilesystemFailure(t *te
 
 	failure := errors.New("injected remove failure")
 	var calls int
-	service.removeTree = func(context.Context, string, string) (bool, error) {
+	service.removeTree = func(context.Context, string, string) (modelseffects.AssetRemoveTreeResult, error) {
 		calls++
-		return true, failure
+		return modelseffects.AssetRemoveTreeResult{State: modelseffects.AssetRemoveTreeRemaining}, failure
 	}
 	if _, err := service.RemoveModelAssets(context.Background(), modelsRemoveRequest(ref)); !errors.Is(err, models.ErrAssetUnavailable) || !errors.Is(err, failure) {
 		t.Fatalf("typed removal failure = %v, want unavailable and injected failure", err)
@@ -164,9 +204,9 @@ func TestRemoveModelAssetsHonorsPreCancelledAndInFlightCancellation(t *testing.T
 		ref := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
 		service := newTestService(scopes, nil)
 		var calls int
-		service.removeTree = func(context.Context, string, string) (bool, error) {
+		service.removeTree = func(context.Context, string, string) (modelseffects.AssetRemoveTreeResult, error) {
 			calls++
-			return false, nil
+			return modelseffects.AssetRemoveTreeResult{State: modelseffects.AssetRemoveTreeNotAttempted}, nil
 		}
 		cause := errors.New("operator stopped removal")
 		ctx, cancel := context.WithCancelCause(context.Background())
@@ -189,10 +229,10 @@ func TestRemoveModelAssetsHonorsPreCancelledAndInFlightCancellation(t *testing.T
 		cause := errors.New("scope closed during removal")
 		ctx, cancel := context.WithCancelCause(context.Background())
 		var calls int
-		service.removeTree = func(context.Context, string, string) (bool, error) {
+		service.removeTree = func(context.Context, string, string) (modelseffects.AssetRemoveTreeResult, error) {
 			calls++
 			cancel(cause)
-			return true, context.Canceled
+			return modelseffects.AssetRemoveTreeResult{State: modelseffects.AssetRemoveTreeRemaining}, context.Canceled
 		}
 
 		_, err := service.RemoveModelAssets(ctx, modelsRemoveRequest(ref))
@@ -210,7 +250,7 @@ func TestRemoveModelAssetsLogsSafeStartAndTerminalOutcome(t *testing.T) {
 	scopes := newScopes(t, "remove-logging")
 	ref := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
 	service := newTestService(scopes, nil)
-	core, logs := observer.New(zap.InfoLevel)
+	core, logs := observer.New(zap.WarnLevel)
 	service.logger = zap.New(core)
 	times := []time.Time{
 		time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
@@ -243,8 +283,7 @@ func TestRemoveModelAssetsLogsSafeStartAndTerminalOutcome(t *testing.T) {
 		terminalFields["outcome"] != string(models.AssetRemovalAlreadyAbsent) ||
 		terminalFields["error_classification"] != "none" ||
 		terminalFields["cancelled"] != false ||
-		terminalFields["changed"] != false ||
-		terminalFields["partial_deletion"] != false ||
+		terminalFields["removal_state"] != string(modelseffects.AssetRemoveTreeAbsent) ||
 		terminalFields["duration_ms"] != int64(125) {
 		t.Fatalf("terminal fields = %#v", terminalFields)
 	}
@@ -266,10 +305,10 @@ func TestRemoveModelAssetsLogsCancellationClassificationWithoutErrorText(t *test
 	scopes := newScopes(t, "remove-cancel-logging")
 	ref := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
 	service := newTestService(scopes, nil)
-	core, logs := observer.New(zap.InfoLevel)
+	core, logs := observer.New(zap.WarnLevel)
 	service.logger = zap.New(core)
-	service.removeTree = func(ctx context.Context, _ string, _ string) (bool, error) {
-		return false, ctx.Err()
+	service.removeTree = func(ctx context.Context, _ string, _ string) (modelseffects.AssetRemoveTreeResult, error) {
+		return modelseffects.AssetRemoveTreeResult{State: modelseffects.AssetRemoveTreeRemaining}, ctx.Err()
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -286,8 +325,7 @@ func TestRemoveModelAssetsLogsCancellationClassificationWithoutErrorText(t *test
 	if terminalFields["error_classification"] != "cancelled" ||
 		terminalFields["outcome"] != "ERROR" ||
 		terminalFields["cancelled"] != true ||
-		terminalFields["changed"] != false ||
-		terminalFields["partial_deletion"] != false {
+		terminalFields["removal_state"] != string(modelseffects.AssetRemoveTreeNotAttempted) {
 		t.Fatalf("cancellation terminal fields = %#v", terminalFields)
 	}
 	if _, ok := terminalFields["error"]; ok {
@@ -302,12 +340,12 @@ func TestRemoveModelAssetsDoesNotMisclassifyCompletedDeletionAsPartialOnLateCanc
 	scopes := newScopes(t, "remove-late-cancel-logging")
 	ref := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
 	service := newTestService(scopes, nil)
-	core, logs := observer.New(zap.InfoLevel)
+	core, logs := observer.New(zap.WarnLevel)
 	service.logger = zap.New(core)
 	ctx, cancel := context.WithCancel(context.Background())
-	service.removeTree = func(context.Context, string, string) (bool, error) {
+	service.removeTree = func(context.Context, string, string) (modelseffects.AssetRemoveTreeResult, error) {
 		cancel()
-		return true, nil
+		return modelseffects.AssetRemoveTreeResult{State: modelseffects.AssetRemoveTreeRemoved}, nil
 	}
 
 	_, err := service.RemoveModelAssets(ctx, modelsRemoveRequest(ref))
@@ -320,8 +358,7 @@ func TestRemoveModelAssetsDoesNotMisclassifyCompletedDeletionAsPartialOnLateCanc
 	}
 	terminalFields := observed[1].ContextMap()
 	if terminalFields["cancelled"] != true ||
-		terminalFields["changed"] != true ||
-		terminalFields["partial_deletion"] != false {
+		terminalFields["removal_state"] != string(modelseffects.AssetRemoveTreeRemoved) {
 		t.Fatalf("late-cancellation terminal fields = %#v", terminalFields)
 	}
 }
@@ -333,11 +370,11 @@ func TestRemoveModelAssetsLogsFilesystemClassificationWithoutPath(t *testing.T) 
 	scopes := newScopes(t, "remove-error-logging")
 	ref := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
 	service := newTestService(scopes, nil)
-	core, logs := observer.New(zap.InfoLevel)
+	core, logs := observer.New(zap.WarnLevel)
 	service.logger = zap.New(core)
 	failure := errors.New("permission denied for " + cacheDirectory)
-	service.removeTree = func(context.Context, string, string) (bool, error) {
-		return true, failure
+	service.removeTree = func(context.Context, string, string) (modelseffects.AssetRemoveTreeResult, error) {
+		return modelseffects.AssetRemoveTreeResult{State: modelseffects.AssetRemoveTreeRemaining}, failure
 	}
 
 	_, err := service.RemoveModelAssets(context.Background(), modelsRemoveRequest(ref))
@@ -352,8 +389,7 @@ func TestRemoveModelAssetsLogsFilesystemClassificationWithoutPath(t *testing.T) 
 	if terminalFields["error_classification"] != "filesystem" ||
 		terminalFields["outcome"] != "ERROR" ||
 		terminalFields["cancelled"] != false ||
-		terminalFields["changed"] != true ||
-		terminalFields["partial_deletion"] != true {
+		terminalFields["removal_state"] != string(modelseffects.AssetRemoveTreeRemaining) {
 		t.Fatalf("filesystem terminal fields = %#v", terminalFields)
 	}
 	for _, log := range observed {
@@ -369,28 +405,28 @@ func TestRemoveModelAssetsLogsFilesystemClassificationWithoutPath(t *testing.T) 
 
 // testRemoveTree is only a policy-service test double. The handle security
 // boundary is exercised by pkg/platform/filesystem tests, not by this fake.
-func testRemoveTree(ctx context.Context, parent, target string) (bool, error) {
+func testRemoveTree(ctx context.Context, parent, target string) (modelseffects.AssetRemoveTreeResult, error) {
 	if err := ctx.Err(); err != nil {
-		return false, err
+		return modelseffects.AssetRemoveTreeResult{State: modelseffects.AssetRemoveTreeNotAttempted}, err
 	}
 	path := filepath.Join(parent, target)
 	info, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
+		return modelseffects.AssetRemoveTreeResult{State: modelseffects.AssetRemoveTreeAbsent}, nil
 	}
 	if err != nil {
-		return false, err
+		return modelseffects.AssetRemoveTreeResult{State: modelseffects.AssetRemoveTreeNotAttempted}, err
 	}
 	if !info.IsDir() {
-		return false, errors.New("test removal target is not a directory")
+		return modelseffects.AssetRemoveTreeResult{State: modelseffects.AssetRemoveTreeNotAttempted}, errors.New("test removal target is not a directory")
 	}
 	if err := ctx.Err(); err != nil {
-		return false, err
+		return modelseffects.AssetRemoveTreeResult{State: modelseffects.AssetRemoveTreeRemaining}, err
 	}
 	if err := os.RemoveAll(path); err != nil {
-		return true, err
+		return modelseffects.AssetRemoveTreeResult{State: modelseffects.AssetRemoveTreeRemaining}, err
 	}
-	return true, nil
+	return modelseffects.AssetRemoveTreeResult{State: modelseffects.AssetRemoveTreeRemoved}, nil
 }
 
 func assertRemovedResult(t *testing.T, result models.RemoveModelAssetsResult, modelName string, outcome models.AssetRemovalOutcome) {

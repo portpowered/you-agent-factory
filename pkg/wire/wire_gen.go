@@ -144,7 +144,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v14 := provideFactoryDefinitionValidator(validationOperations)
 	v15 := provideDurableExecutionFactory(configLoader)
 	v16 := provideWorkerExecutionFactory()
-	modelsService, err := provideModelsService(edges2)
+	logger, err := logging.NewDefaultLogger()
+	if err != nil {
+		return nil, err
+	}
+	modelsService, err := provideModelsService(edges2, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -360,10 +364,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v63 := provideWorkerInvocationFactory(service, edges2)
 	runtimeArtifactRootResolver := provideRuntimeArtifactRootResolver()
 	v64 := provideFactorySessionExecutionOpeningFileSystem(edges2)
-	logger, err := logging.NewDefaultLogger()
-	if err != nil {
-		return nil, err
-	}
 	v65, err := provideSessionExecutionOpeningFactory(v60, edges2, v62, v63, clockResolver, runtimeArtifactRootResolver, v28, v64, ptyAllocator, logger)
 	if err != nil {
 		return nil, err

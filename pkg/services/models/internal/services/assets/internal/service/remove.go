@@ -8,6 +8,7 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 )
 
 // RemoveModelAssets validates the scoped identity and delegates the entire
@@ -20,11 +21,10 @@ func (s *service) RemoveModelAssets(
 ) (result models.RemoveModelAssetsResult, resultErr error) {
 	modelIdentity := safeRemovalModelIdentity(request.Name)
 	start := s.operationNow()
-	changed := false
-	partialDeletion := false
+	removal := modelseffects.AssetRemoveTreeResult{State: modelseffects.AssetRemoveTreeNotAttempted}
 	s.logAssetRemovalStart(modelIdentity)
 	defer func() {
-		s.logAssetRemovalTerminal(modelIdentity, start, result, resultErr, changed, partialDeletion)
+		s.logAssetRemovalTerminal(modelIdentity, start, result, resultErr, removal)
 	}()
 
 	if err := request.Validate(); err != nil {
@@ -45,9 +45,8 @@ func (s *service) RemoveModelAssets(
 	if err != nil {
 		return models.RemoveModelAssetsResult{}, err
 	}
-	changed, err = s.removeTree(ctx, parent, spec.modelName)
+	removal, err = s.removeTree(ctx, parent, spec.modelName)
 	if err != nil {
-		partialDeletion = changed
 		if contextErr := assetContextError(ctx); contextErr != nil {
 			return models.RemoveModelAssetsResult{}, contextErr
 		}
@@ -58,16 +57,34 @@ func (s *service) RemoveModelAssets(
 	if err := assetContextError(ctx); err != nil {
 		return models.RemoveModelAssetsResult{}, err
 	}
-	if changed {
+	switch removal.State {
+	case modelseffects.AssetRemoveTreeRemoved:
 		return removedAssetResult(spec.modelName, models.AssetRemovalRemoved), nil
+	case modelseffects.AssetRemoveTreeAbsent:
+		return removedAssetResult(spec.modelName, models.AssetRemovalAlreadyAbsent), nil
+	default:
+		return models.RemoveModelAssetsResult{}, fmt.Errorf(
+			"%w: removal returned non-terminal state %q",
+			models.ErrAssetUnavailable,
+			removal.State,
+		)
 	}
-	return removedAssetResult(spec.modelName, models.AssetRemovalAlreadyAbsent), nil
 }
 
 func (s *service) modelCacheParent(cacheDirectory string) (string, error) {
 	parent := strings.TrimSpace(cacheDirectory)
 	if parent != "" {
-		return parent, nil
+		// Normalize every valid relative cache directory before it reaches the
+		// secure platform boundary. Absolute, drive-relative, UNC, and device
+		// paths remain the boundary's responsibility to accept or reject.
+		if filepath.IsAbs(parent) || filepath.VolumeName(parent) != "" {
+			return parent, nil
+		}
+		absolute, err := filepath.Abs(filepath.Clean(parent))
+		if err != nil {
+			return "", fmt.Errorf("normalize managed model cache directory: %w", err)
+		}
+		return absolute, nil
 	}
 	home, err := s.resolveHome()
 	if err != nil {
@@ -76,9 +93,8 @@ func (s *service) modelCacheParent(cacheDirectory string) (string, error) {
 	if strings.TrimSpace(home) == "" {
 		return "", fmt.Errorf("resolve managed model cache directory: empty home directory")
 	}
-	return filepath.Join(home, ".agent-factory", "models"), nil
+	return filepath.Abs(filepath.Join(home, ".agent-factory", "models"))
 }
-
 func removalAssetSpec(modelName string) (assetSpec, error) {
 	spec, ok := supportedAssetSpecs()[canonicalModelName(modelName)]
 	if !ok {

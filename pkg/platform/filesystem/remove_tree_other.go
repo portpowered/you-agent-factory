@@ -2,13 +2,15 @@
 
 package filesystem
 
-import "context"
+import (
+	"context"
+)
 
 const secureTreeRemovalSupported = false
 
-func removeTreePlatform(ctx context.Context, _ string, _ string) (bool, error) {
+func removeTreePlatform(ctx context.Context, _ string, _ string) (RemoveTreeResult, error) {
 	if err := removalContextError(ctx); err != nil {
-		return false, err
+		return RemoveTreeResult{State: RemoveTreeNotAttempted}, err
 	}
-	return false, errSecureTreeRemovalUnsupported
+	return RemoveTreeResult{State: RemoveTreeNotAttempted}, errSecureTreeRemovalUnsupported
 }
