@@ -13,6 +13,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
+var RuntimeRequestContextErrorResponseForTest = runtimeRequestContextErrorResponse
+
 func TestGetStatus_EndsWithoutBodyWhenContextCanceledBeforeFakeRoot(t *testing.T) {
 	t.Parallel()
 
