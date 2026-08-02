@@ -215,6 +215,16 @@ func TestReadResultValidate(t *testing.T) {
 			ReadResult{Outcome: ReadOutcomeInvalidCursor, Records: []Record{rec1}},
 			ErrInconsistentReadOutcome,
 		},
+		{
+			"invalid cursor with a leftover Next cursor is inconsistent",
+			ReadResult{Outcome: ReadOutcomeInvalidCursor, Next: next, Retained: retained},
+			ErrInconsistentReadOutcome,
+		},
+		{
+			"invalid cursor with a leftover Retained range is inconsistent",
+			ReadResult{Outcome: ReadOutcomeInvalidCursor, Retained: retained},
+			ErrInconsistentReadOutcome,
+		},
 		{"gap with gap facts", ReadResult{Outcome: ReadOutcomeGap, Gap: gap}, nil},
 		{"gap without gap facts is inconsistent", ReadResult{Outcome: ReadOutcomeGap}, ErrInconsistentReadOutcome},
 		{"gap with fabricated records is inconsistent", ReadResult{Outcome: ReadOutcomeGap, Gap: gap, Records: []Record{rec1}}, ErrInconsistentReadOutcome},
@@ -222,6 +232,16 @@ func TestReadResultValidate(t *testing.T) {
 			"gap with malformed gap facts is inconsistent",
 			ReadResult{Outcome: ReadOutcomeGap, Gap: &GapFacts{Topic: testTopic}},
 			ErrInvalidGapFacts,
+		},
+		{
+			"gap with an unrelated leftover Next cursor is inconsistent",
+			ReadResult{Outcome: ReadOutcomeGap, Gap: gap, Next: Cursor{Topic: testTopic, Position: 1}, Retained: retained},
+			ErrInconsistentReadOutcome,
+		},
+		{
+			"gap with an unrelated leftover Retained range is inconsistent",
+			ReadResult{Outcome: ReadOutcomeGap, Gap: gap, Retained: retained},
+			ErrInconsistentReadOutcome,
 		},
 		{"unspecified outcome is inconsistent", ReadResult{}, ErrInconsistentReadOutcome},
 	}

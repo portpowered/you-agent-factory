@@ -247,6 +247,14 @@ func provideOperatorSettingsProviderCatalog(
 	}
 }
 
+// provideOperatorSettingsLogger converts the canonical process-wide zap
+// logger into the logging.Logger abstraction accepted by the Operator
+// Settings service, so ResolveACPAgentProfile/UpdateACPAgentProfile emit
+// operation logs through the same logger the rest of the process uses.
+func provideOperatorSettingsLogger(logger *zap.Logger) logging.Logger {
+	return logging.NewZapLogger(logger, false)
+}
+
 func provideOperatorSettingsService(
 	files operatorsettings.FileSystem,
 	createTemp operatorsettings.CreateTemporaryFile,
@@ -255,6 +263,7 @@ func provideOperatorSettingsService(
 	encode operatorsettings.ConfigEncoder,
 	idGenerator operatorsettings.IDGenerator,
 	providersRoot providers.Service,
+	logger logging.Logger,
 ) (operatorsettings.Service, error) {
 	return settingswire.NewService(
 		files,
@@ -264,6 +273,7 @@ func provideOperatorSettingsService(
 		providerCatalog,
 		providersRoot,
 		idGenerator,
+		logger,
 	)
 }
 

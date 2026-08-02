@@ -180,24 +180,24 @@
       "owner": "chat_sessions",
       "kind": "top_level",
       "targetPath": "pkg/services/chat_sessions",
-      "authority": "Session, target, turn, control, and attachment for ACP Core chat; the narrow start/invoke/cancel/close Factory-target dependency in the published factory_sessions root vocabulary.",
-      "stateStore": "No independent state store; session state lives for the process duration in the sole factorysessionsshim implementation.",
-      "lifecycle": "Session-scoped; discarded on process exit, same as the factory_sessions target it adapts.",
-      "consumers": "ACP Core (L1) and ACP Worker Events (L4) via the chat_sessions.Service cross-lane contract.",
-      "transactionBoundary": "Delegates 1:1 to factory_sessions.Service; owns no separate transaction boundary.",
-      "failureRecovery": "Failures normalize at the factory_sessions public root the shim adapts."
+      "authority": "L1 V0 Chat Sessions contract owner: detached session/target/turn/attachment/control-intent values, enum validation, and lifecycle transition tables; no implementation of the public Service interface in this slice. Retains a private internal/factorysessionsshim adapter over the published factory_sessions root for the narrow start/invoke/cancel/close Factory-target dependency, registered for deletion at L3 Factory Sessions sealing.",
+      "stateStore": "No state store for the public contract; publishes value types and pure validation/transition functions only. The internal shim holds no independent state store either — session state lives for the process duration in the factory_sessions target it adapts.",
+      "lifecycle": "Public values are stateless; the Service interface documents session/turn/control lifecycle for a later implementation to satisfy. The internal shim is session-scoped and discarded on process exit, same as the factory_sessions target it adapts.",
+      "consumers": "Future ACP transport and Chat Sessions implementation slices; no current consumer imports this package's public Service interface yet. The internal shim is consumed only within this package.",
+      "transactionBoundary": "None in this slice for the public contract; no persistence or mutation is performed. The internal shim delegates 1:1 to factory_sessions.Service and owns no separate transaction boundary.",
+      "failureRecovery": "Typed validation/transition/not-found/busy/conflict/unsupported errors are contract-only; no runtime recovery behavior exists in this slice. The internal shim's failures normalize at the factory_sessions public root it adapts."
     },
     {
       "serviceId": "events",
       "owner": "events",
       "kind": "top_level",
       "targetPath": "pkg/services/events",
-      "authority": "Append, source attachment, retained reads, and subscriptions for the in-memory ACP event stream; ordering, cursors, retention, gaps, and backpressure (D2 in docs/internal/projects/acp-program/README.md).",
-      "stateStore": "No persistence and no internal/store package; process-local, session-scoped stream state only.",
-      "lifecycle": "Session-scoped; discarded on process exit. Recordings remains the durable canonical ledger.",
-      "consumers": "ACP Core (L1) and ACP Worker Events (L4) via the events.Service cross-lane contract.",
-      "transactionBoundary": "Stream operations are session-scoped; no cross-service transaction absorption.",
-      "failureRecovery": "Gap/backpressure facts surface at the Events root without a durable retry log."
+      "authority": "L1 V0 Events contract owner: detached identity, position, envelope, and outcome contracts for a process-local, in-memory event stream; ordering, cursors, retention, gaps, and backpressure (D2 in docs/internal/projects/acp-program/README.md).",
+      "stateStore": "No durable journal in this slice; Recordings remains the canonical durable Factory Event ledger.",
+      "lifecycle": "Append, source attachment, retained reads, and subscriptions are documented contract operations for a later implementation to satisfy.",
+      "consumers": "Future ACP Core and Worker Events consumers via the events.Service cross-lane contract; no current consumer imports this package yet.",
+      "transactionBoundary": "None in this slice; no persistence or mutation is performed.",
+      "failureRecovery": "Typed contract errors only; no runtime recovery behavior exists in this slice."
     },
     {
       "serviceId": "factory_definitions",
@@ -1101,7 +1101,7 @@
       "fromOwner": "chat_sessions",
       "toOwner": "factory_sessions",
       "class": "command",
-      "evidence": "pkg/services/chat_sessions -\u003e pkg/services/factory_sessions"
+      "evidence": "pkg/services/chat_sessions/internal/factorysessionsshim -\u003e pkg/services/factory_sessions"
     },
     {
       "fromOwner": "edges",
@@ -5333,6 +5333,36 @@
     },
     {
       "packagePath": "pkg/transports/acp",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/acp/internal/envelope",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/acp/internal/identity",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/acp/internal/negotiation",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/acp/internal/protocol",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/acp/internal/session",
       "disposition": "retain",
       "destination": "transports",
       "destinationKind": "family"

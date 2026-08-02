@@ -191,5 +191,3 @@ func BuildInventory(root string, packages []string) (Inventory, error) {
 		Packages:                rows,
 	}, nil
 }
-
-

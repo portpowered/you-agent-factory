@@ -296,6 +296,9 @@ func (s *Service) UpdateACPAgentProfile(
 	path string,
 	profile operatorsettings.ACPAgentProfile,
 ) (operatorsettings.ACPAgentProfile, error) {
+	if s == nil || s.document == nil {
+		return operatorsettings.ACPAgentProfile{}, fmt.Errorf("operator settings document service is required")
+	}
 	s.logger.Info("operator_settings.update_acp_agent_profile.started")
 	updated, err := s.updateACPAgentProfile(ctx, path, profile)
 	if err != nil {

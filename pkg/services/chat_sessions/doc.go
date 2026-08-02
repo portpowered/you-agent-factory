@@ -1,26 +1,24 @@
-// Package chatsessions is the public, transport-neutral Chat Sessions
-// service boundary described by
-// docs/internal/projects/acp-client/final-proposal.md section 4 and by
-// docs/internal/projects/root-consolidation/proposal.md's Service peer
-// contract.
+// Package chatsessions publishes the L1 V0 Chat Sessions domain boundary:
+// detached public values for chat targets, sessions, target episodes, turns,
+// attachments, and control intents, plus their enum vocabulary, deterministic
+// value validation, and the singular Service root contract that operates on
+// them (session create/read, target selection, turn admission/advancement,
+// connection attachment, and control-intent request/advancement).
 //
-// This packet defines pure public values, exhaustive enum and transition
-// validation, and structured typed errors for request identity, unversioned
-// Chat targets, session and target-episode lifecycle, turn admission and
-// version-checked mutation, independent attachments, and race-safe control
-// intents. It introduces no persistence, no Worker Sessions behavior, and no
-// second normalized event vocabulary: pkg/services/workers/response_drafts.go
-// remains the sole owner of the Worker event Kind/Phase taxonomy.
+// Service and its supporting values (contracts.go, types.go, errors.go,
+// transitions.go) are the entire public surface of this package: no
+// implementation, persistence, dependency-injection wiring, transport,
+// OpenAPI, CLI, ACP wire operation, Factory Sessions sealing, Worker Sessions
+// behavior, or alternate peer-facing service contract, and they import only
+// the standard library.
 //
-// Peer-facing root contract (source of truth for published slices):
-//   - Service — singular cross-service seam
-//
-// Chat Sessions currently owns only the narrow Factory-target execution
-// dependency described on Service: start, invoke, cancel, and close one
-// Factory Session, in the published factory_sessions root vocabulary.
-// internal/factorysessionsshim is the sole implementation, adapting the
-// public factory_sessions.Service root without importing its internals or
-// becoming a second session authority. It is registered under "Shims
+// internal/factorysessionsshim is a private, unexported implementation
+// detail owned by this package but outside its public contract: a
+// stopgap adapter over the published factory_sessions.Service root that some
+// later L1 Chat Sessions flow will need ahead of L3 Factory Sessions
+// sealing. It defines and implements its own internal FactoryTargetService
+// contract, does not import or extend chatsessions.Service, and is not part
+// of the L1 V0 contract slice above. It is registered under "Shims
 // registered for deletion" in
 // docs/internal/projects/root-consolidation/proposal.md, retired at L3
 // Factory Sessions sealing.

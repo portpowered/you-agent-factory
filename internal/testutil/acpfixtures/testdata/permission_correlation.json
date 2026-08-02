@@ -1,0 +1,133 @@
+{
+  "cases": [
+    {
+      "name": "session/request_permission correlates session, tool call, and option ids",
+      "role": "session/request_permission",
+      "direction": "outbound",
+      "classification": "accepted",
+      "input": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "session/request_permission",
+        "params": {
+          "sessionId": "sess_synthetic_0001",
+          "toolCall": {"toolCallId": "tool_synthetic_0001"},
+          "options": [
+            {"optionId": "allow_once", "kind": "allow_once", "name": "Allow once"},
+            {"optionId": "reject_once", "kind": "reject_once", "name": "Reject once"}
+          ]
+        }
+      },
+      "expected": {
+        "SessionID": "sess_synthetic_0001",
+        "ToolCallID": "tool_synthetic_0001",
+        "OptionIDs": ["allow_once", "reject_once"]
+      }
+    },
+    {
+      "name": "session/request_permission rejects an empty options list",
+      "role": "session/request_permission",
+      "direction": "outbound",
+      "classification": "rejected",
+      "input": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "session/request_permission",
+        "params": {
+          "sessionId": "sess_synthetic_0001",
+          "toolCall": {"toolCallId": "tool_synthetic_0001"},
+          "options": []
+        }
+      },
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
+      }
+    },
+    {
+      "name": "session/request_permission rejects a missing tool call id",
+      "role": "session/request_permission",
+      "direction": "outbound",
+      "classification": "rejected",
+      "input": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "session/request_permission",
+        "params": {
+          "sessionId": "sess_synthetic_0001",
+          "toolCall": {},
+          "options": [{"optionId": "allow_once", "kind": "allow_once", "name": "Allow once"}]
+        }
+      },
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
+      }
+    },
+    {
+      "name": "session/request_permission rejects an option with a missing name",
+      "role": "session/request_permission",
+      "direction": "outbound",
+      "classification": "rejected",
+      "input": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "session/request_permission",
+        "params": {
+          "sessionId": "sess_synthetic_0001",
+          "toolCall": {"toolCallId": "tool_synthetic_0001"},
+          "options": [{"optionId": "allow_once", "kind": "allow_once"}]
+        }
+      },
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
+      }
+    },
+    {
+      "name": "session/request_permission rejects an option with a missing kind",
+      "role": "session/request_permission",
+      "direction": "outbound",
+      "classification": "rejected",
+      "input": {
+        "jsonrpc": "2.0",
+        "id": 5,
+        "method": "session/request_permission",
+        "params": {
+          "sessionId": "sess_synthetic_0001",
+          "toolCall": {"toolCallId": "tool_synthetic_0001"},
+          "options": [{"optionId": "allow_once", "name": "Allow once"}]
+        }
+      },
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
+      }
+    },
+    {
+      "name": "session/request_permission rejects an option with an unknown kind",
+      "role": "session/request_permission",
+      "direction": "outbound",
+      "classification": "rejected",
+      "input": {
+        "jsonrpc": "2.0",
+        "id": 6,
+        "method": "session/request_permission",
+        "params": {
+          "sessionId": "sess_synthetic_0001",
+          "toolCall": {"toolCallId": "tool_synthetic_0001"},
+          "options": [{"optionId": "allow_once", "kind": "future_kind", "name": "Allow once"}]
+        }
+      },
+      "expected": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {"reason": "malformed_request"}
+      }
+    }
+  ]
+}

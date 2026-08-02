@@ -9,10 +9,11 @@ import (
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
 
 func TestNewServiceFromConfigDocumentRequiresDocumentPorts(t *testing.T) {
@@ -22,6 +23,7 @@ func TestNewServiceFromConfigDocumentRequiresDocumentPorts(t *testing.T) {
 		operatorsettings.ConfigDocumentService{},
 		internaltestproviders.StandardCatalog(),
 		testIDGenerator(),
+		logging.NoopLogger{},
 	)
 	if err == nil || !strings.Contains(err.Error(), "operator settings document ports are required") {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v, want document ports required", err)
@@ -35,6 +37,7 @@ func TestNewServiceFromConfigDocumentConstructsFromPorts(t *testing.T) {
 		testConfigDocumentService(),
 		internaltestproviders.StandardCatalog(),
 		testIDGenerator(),
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
@@ -60,6 +63,7 @@ func TestNewServiceFromConfigDocumentUsesInjectedDocumentOwner(t *testing.T) {
 		service,
 		internaltestproviders.StandardCatalog(),
 		testIDGenerator(),
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
@@ -108,6 +112,7 @@ func TestWireCompositionDelegatesDocumentAndResolutionOperations(t *testing.T) {
 		testConfigDocumentService(),
 		internaltestproviders.StandardCatalog(),
 		testIDGenerator(),
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
@@ -173,6 +178,7 @@ func TestNewServiceFromConfigDocumentRejectsMissingIDGenerator(t *testing.T) {
 		testConfigDocumentService(),
 		internaltestproviders.StandardCatalog(),
 		nil,
+		logging.NoopLogger{},
 	)
 	if err == nil || err.Error() != "operator settings ID generator is required" {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v, want missing ID generator", err)

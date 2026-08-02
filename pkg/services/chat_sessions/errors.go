@@ -1,254 +1,160 @@
 package chatsessions
 
-import "fmt"
-
-// RequestIdentityInvalidReason classifies why a RequestIdentity failed
-// validation without exposing the supplied identity values.
-type RequestIdentityInvalidReason string
-
-const (
-	// RequestIdentityInvalidEmpty reports that no identity mode was supplied.
-	RequestIdentityInvalidEmpty RequestIdentityInvalidReason = "EMPTY"
-	// RequestIdentityInvalidBareJSONRPCID reports a JSON-RPC id supplied
-	// without its pairing connection id.
-	RequestIdentityInvalidBareJSONRPCID RequestIdentityInvalidReason = "BARE_JSONRPC_ID"
-	// RequestIdentityInvalidIncompleteConnectionPair reports a connection id
-	// supplied without its pairing JSON-RPC id.
-	RequestIdentityInvalidIncompleteConnectionPair RequestIdentityInvalidReason = "INCOMPLETE_CONNECTION_PAIR"
-	// RequestIdentityInvalidMixedIdentityModes reports both a
-	// connection-qualified field and a transport-minted opaque id supplied
-	// together.
-	RequestIdentityInvalidMixedIdentityModes RequestIdentityInvalidReason = "MIXED_IDENTITY_MODES"
-	// RequestIdentityInvalidJSONRPCIDKind reports a JSONRPCIDKind outside the
-	// declared JSONRPCIDKindString/JSONRPCIDKindNumber value set.
-	RequestIdentityInvalidJSONRPCIDKind RequestIdentityInvalidReason = "INVALID_JSONRPC_ID_KIND"
-	// RequestIdentityInvalidStrayField reports a populated identity field that
-	// is not part of the active identity shape: an OpaqueID, JSONRPCIDString,
-	// or JSONRPCIDNumber value left set even though the selected mode or
-	// JSONRPCIDKind does not use it. Left unrejected, a stray field would
-	// either be silently ignored or make two identities that should compare
-	// equal under their active shape compare unequal.
-	RequestIdentityInvalidStrayField RequestIdentityInvalidReason = "STRAY_FIELD"
+import (
+	"errors"
+	"fmt"
 )
 
-// InvalidRequestIdentityError reports a RequestIdentity that matches neither
-// legal identity mode. Peers branch on Reason; the error never carries the
-// supplied identity values, so it is safe to log.
-type InvalidRequestIdentityError struct {
-	Reason RequestIdentityInvalidReason
+// Sentinel value-validation categories. Callers use errors.Is against these
+// sentinels (typically through a returned *ValidationError) instead of
+// parsing error text.
+var (
+	// ErrRequiredValue reports a blank or zero value where the L1 V0 contract
+	// requires a caller-supplied identity, reference, or timestamp.
+	ErrRequiredValue = errors.New("chat sessions: required value is blank or zero")
+	// ErrUnknownEnumValue reports an enum value outside its declared members.
+	ErrUnknownEnumValue = errors.New("chat sessions: unknown enum value")
+	// ErrInconsistentValue reports a value whose fields disagree with each
+	// other under the L1 V0 model, such as a terminal sequence or terminal
+	// time fact that does not match the value's declared state, or a
+	// RequestIdentity carrying a field that is populated but inactive for its
+	// declared Kind.
+	ErrInconsistentValue = errors.New("chat sessions: structurally inconsistent value")
+	// ErrMalformedValue reports a non-blank value that fails a required
+	// lexical shape, such as a RequestIdentity TransportUUID that is not a
+	// well-formed UUID. It is distinct from ErrRequiredValue (blank/zero) and
+	// ErrUnknownEnumValue (declared enum vocabulary).
+	ErrMalformedValue = errors.New("chat sessions: malformed value")
+	// ErrUnsupportedControlAction reports a ControlAction that is declared in
+	// the L1 vocabulary for a later lane (PAUSE, RESUME, TERMINATE) but is not
+	// an executable action in this L1 V0 slice. It is distinct from
+	// ErrUnknownEnumValue, which reports a value outside the declared
+	// vocabulary entirely.
+	ErrUnsupportedControlAction = errors.New("chat sessions: control action is not supported in L1")
+	// ErrInvalidTransition reports a state pair that is not a legal L1 V0
+	// lifecycle transition, including any transition attempted from a
+	// terminal state. It is distinct from the story-001 value-validation
+	// sentinels: both the from and to states are already declared enum
+	// members, but the L1 V0 transition table does not permit moving between
+	// them.
+	ErrInvalidTransition = errors.New("chat sessions: illegal state transition")
+	// ErrNotFound reports that a Service operation referenced a session or a
+	// subordinate entity (turn, attachment, control intent) that does not
+	// exist.
+	ErrNotFound = errors.New("chat sessions: not found")
+	// ErrBusy reports that a Service operation was rejected because the
+	// session already has a non-terminal active turn.
+	ErrBusy = errors.New("chat sessions: active turn busy")
+	// ErrStaleVersion reports that a Service operation's expected session
+	// version no longer matches the session's current version.
+	ErrStaleVersion = errors.New("chat sessions: stale expected version")
+)
+
+// ValidationError reports one Chat Sessions value-validation failure. Value
+// names the owning type, Field names the offending field (empty when the
+// failure applies to the whole value, such as an enum receiver), and Err is
+// one of the package sentinel errors so callers can use errors.Is/errors.As
+// without parsing Error() text.
+type ValidationError struct {
+	Value string
+	Field string
+	Err   error
 }
 
-func (e *InvalidRequestIdentityError) Error() string {
-	return fmt.Sprintf("invalid chat session request identity: %s", e.Reason)
+func (e *ValidationError) Error() string {
+	if e.Field == "" {
+		return fmt.Sprintf("chat sessions: %s: %v", e.Value, e.Err)
+	}
+	return fmt.Sprintf("chat sessions: %s.%s: %v", e.Value, e.Field, e.Err)
 }
 
-// InvalidChatTargetKindError reports a ChatTargetKind outside the exact
-// declared value set (FACTORY, WORKER).
-type InvalidChatTargetKindError struct {
-	Kind ChatTargetKind
+// Unwrap exposes the underlying sentinel (or nested *ValidationError) so
+// errors.Is/errors.As can classify the failure across a wrapped chain.
+func (e *ValidationError) Unwrap() error {
+	return e.Err
 }
 
-func (e *InvalidChatTargetKindError) Error() string {
-	return fmt.Sprintf("invalid chat target kind: %q", string(e.Kind))
+func newValidationError(value, field string, err error) *ValidationError {
+	return &ValidationError{Value: value, Field: field, Err: err}
 }
 
-// InvalidChatTargetRefError reports a ChatTargetRef missing its canonical
-// reference.
-type InvalidChatTargetRefError struct {
-	Kind ChatTargetKind
+// TransitionError reports one illegal Chat Sessions lifecycle transition.
+// Value names the owning state machine and From/To record the attempted
+// state pair. Err is ErrInvalidTransition unless From or To is itself not a
+// declared enum member, in which case Err is the underlying
+// ErrUnknownEnumValue *ValidationError so callers can distinguish an
+// invalid-state input from a legal-state-but-illegal-transition outcome.
+type TransitionError struct {
+	Value string
+	From  string
+	To    string
+	Err   error
 }
 
-func (e *InvalidChatTargetRefError) Error() string {
-	return fmt.Sprintf("invalid chat target ref: empty canonical ref for kind %q", string(e.Kind))
+func (e *TransitionError) Error() string {
+	return fmt.Sprintf("chat sessions: %s: %s -> %s: %v", e.Value, e.From, e.To, e.Err)
 }
 
-// InvalidSessionStateError reports a SessionState outside the exact declared
-// value set (CREATED, ACTIVE, CLOSED).
-type InvalidSessionStateError struct {
-	State SessionState
+// Unwrap exposes the underlying sentinel so errors.Is/errors.As can classify
+// the failure.
+func (e *TransitionError) Unwrap() error {
+	return e.Err
 }
 
-func (e *InvalidSessionStateError) Error() string {
-	return fmt.Sprintf("invalid session state: %q", string(e.State))
+func newTransitionError(value, from, to string) *TransitionError {
+	return &TransitionError{Value: value, From: from, To: to, Err: ErrInvalidTransition}
 }
 
-// InvalidSessionStateTransitionError reports a SessionState transition
-// outside the declared legal transition table.
-type InvalidSessionStateTransitionError struct {
-	From SessionState
-	To   SessionState
+// NotFoundError reports that a Service operation referenced a session or
+// subordinate entity that does not exist. Value names the entity kind (for
+// example "Session" or "Turn") and ID names the identity that was not found.
+type NotFoundError struct {
+	Value string
+	ID    string
 }
 
-func (e *InvalidSessionStateTransitionError) Error() string {
-	return fmt.Sprintf("invalid session state transition: %q to %q", string(e.From), string(e.To))
+func (e *NotFoundError) Error() string {
+	return fmt.Sprintf("chat sessions: %s %q: %v", e.Value, e.ID, ErrNotFound)
 }
 
-// InvalidTargetEpisodeStateError reports a TargetEpisodeState outside the
-// exact declared value set (OPEN, CLOSED).
-type InvalidTargetEpisodeStateError struct {
-	State TargetEpisodeState
+// Unwrap exposes ErrNotFound so errors.Is/errors.As can classify the
+// failure.
+func (e *NotFoundError) Unwrap() error {
+	return ErrNotFound
 }
 
-func (e *InvalidTargetEpisodeStateError) Error() string {
-	return fmt.Sprintf("invalid target episode state: %q", string(e.State))
+// BusyError reports that a Service operation was rejected because the named
+// session already has a non-terminal active turn.
+type BusyError struct {
+	Value string
+	ID    string
 }
 
-// InvalidTargetEpisodeStateTransitionError reports a TargetEpisodeState
-// transition outside the declared legal transition table.
-type InvalidTargetEpisodeStateTransitionError struct {
-	From TargetEpisodeState
-	To   TargetEpisodeState
+func (e *BusyError) Error() string {
+	return fmt.Sprintf("chat sessions: %s %q: %v", e.Value, e.ID, ErrBusy)
 }
 
-func (e *InvalidTargetEpisodeStateTransitionError) Error() string {
-	return fmt.Sprintf("invalid target episode state transition: %q to %q", string(e.From), string(e.To))
+// Unwrap exposes ErrBusy so errors.Is/errors.As can classify the failure.
+func (e *BusyError) Unwrap() error {
+	return ErrBusy
 }
 
-// TargetEpisodeNotClosedError reports an attempt to open the next Target
-// Episode while the prior episode is not yet closed.
-type TargetEpisodeNotClosedError struct {
-	Number uint64
-	State  TargetEpisodeState
-}
-
-func (e *TargetEpisodeNotClosedError) Error() string {
-	return fmt.Sprintf("target episode %d is not closed: state %q", e.Number, string(e.State))
-}
-
-// InvalidTurnStateError reports a TurnState outside the exact declared value
-// set (ADMITTED, RUNNING, COMPLETED, FAILED, CANCELED).
-type InvalidTurnStateError struct {
-	State TurnState
-}
-
-func (e *InvalidTurnStateError) Error() string {
-	return fmt.Sprintf("invalid turn state: %q", string(e.State))
-}
-
-// InvalidTurnStateTransitionError reports a TurnState transition outside the
-// declared legal transition table.
-type InvalidTurnStateTransitionError struct {
-	From TurnState
-	To   TurnState
-}
-
-func (e *InvalidTurnStateTransitionError) Error() string {
-	return fmt.Sprintf("invalid turn state transition: %q to %q", string(e.From), string(e.To))
-}
-
-// TurnBusyError reports that turn admission was rejected because the session
-// already has a non-terminal active turn. It carries only safe identity
-// facts: the session ID and the active turn's ID and state.
-type TurnBusyError struct {
-	SessionID       string
-	ActiveTurnID    string
-	ActiveTurnState TurnState
-}
-
-func (e *TurnBusyError) Error() string {
-	return fmt.Sprintf("chat session %q busy: active turn %q in state %q", e.SessionID, e.ActiveTurnID, string(e.ActiveTurnState))
-}
-
-// VersionConflictError reports that a version-checked mutation's expected
-// version did not match the actual version. It carries only the two version
-// numbers; the mutation it guarded is left unchanged.
-type VersionConflictError struct {
+// ConflictError reports that a Service operation's Expected session version
+// no longer matches Actual, the session's current version.
+type ConflictError struct {
+	Value    string
+	ID       string
 	Expected uint64
 	Actual   uint64
 }
 
-func (e *VersionConflictError) Error() string {
-	return fmt.Sprintf("version conflict: expected %d, actual %d", e.Expected, e.Actual)
+func (e *ConflictError) Error() string {
+	return fmt.Sprintf("chat sessions: %s %q: expected version %d, current version %d: %v",
+		e.Value, e.ID, e.Expected, e.Actual, ErrStaleVersion)
 }
 
-// AttachmentInvalidReason classifies why an Attachment failed validation
-// without exposing the supplied identity values.
-type AttachmentInvalidReason string
-
-const (
-	// AttachmentInvalidMissingID reports a missing attachment identity.
-	AttachmentInvalidMissingID AttachmentInvalidReason = "MISSING_ID"
-	// AttachmentInvalidMissingSessionID reports a missing owning session
-	// identity.
-	AttachmentInvalidMissingSessionID AttachmentInvalidReason = "MISSING_SESSION_ID"
-	// AttachmentInvalidMissingConnectionID reports a missing connection
-	// identity.
-	AttachmentInvalidMissingConnectionID AttachmentInvalidReason = "MISSING_CONNECTION_ID"
-)
-
-// InvalidAttachmentError reports an Attachment missing a required identity.
-// Peers branch on Reason; the error never carries the supplied identity
-// values, so it is safe to log.
-type InvalidAttachmentError struct {
-	Reason AttachmentInvalidReason
-}
-
-func (e *InvalidAttachmentError) Error() string {
-	return fmt.Sprintf("invalid chat session attachment: %s", e.Reason)
-}
-
-// InvalidControlActionError reports a ControlAction outside the exact
-// declared value set (CANCEL, CLOSE, PAUSE, RESUME, TERMINATE).
-type InvalidControlActionError struct {
-	Action ControlAction
-}
-
-func (e *InvalidControlActionError) Error() string {
-	return fmt.Sprintf("invalid control action: %q", string(e.Action))
-}
-
-// UnsupportedControlActionError reports a ControlAction that is a declared
-// value but is not supported in L1 (PAUSE, RESUME, TERMINATE).
-type UnsupportedControlActionError struct {
-	Action ControlAction
-}
-
-func (e *UnsupportedControlActionError) Error() string {
-	return fmt.Sprintf("unsupported control action in L1: %q", string(e.Action))
-}
-
-// InvalidControlIntentStateError reports a ControlIntentState outside the
-// exact declared value set (REQUESTED, COMMITTED, COMPLETED, NOOP,
-// SUPERSEDED).
-type InvalidControlIntentStateError struct {
-	State ControlIntentState
-}
-
-func (e *InvalidControlIntentStateError) Error() string {
-	return fmt.Sprintf("invalid control intent state: %q", string(e.State))
-}
-
-// InvalidControlIntentStateTransitionError reports a ControlIntentState
-// transition outside the declared legal transition table.
-type InvalidControlIntentStateTransitionError struct {
-	From ControlIntentState
-	To   ControlIntentState
-}
-
-func (e *InvalidControlIntentStateTransitionError) Error() string {
-	return fmt.Sprintf("invalid control intent state transition: %q to %q", string(e.From), string(e.To))
-}
-
-// ControlIntentInvalidReason classifies why a ControlIntent failed
-// validation without exposing the supplied identity values.
-type ControlIntentInvalidReason string
-
-const (
-	// ControlIntentInvalidMissingSessionID reports a missing owning session
-	// identity.
-	ControlIntentInvalidMissingSessionID ControlIntentInvalidReason = "MISSING_SESSION_ID"
-	// ControlIntentInvalidMissingTurnID reports a missing captured turn
-	// identity.
-	ControlIntentInvalidMissingTurnID ControlIntentInvalidReason = "MISSING_TURN_ID"
-)
-
-// InvalidControlIntentError reports a ControlIntent missing a required
-// capture field. Peers branch on Reason; the error never carries the
-// supplied identity values, so it is safe to log.
-type InvalidControlIntentError struct {
-	Reason ControlIntentInvalidReason
-}
-
-func (e *InvalidControlIntentError) Error() string {
-	return fmt.Sprintf("invalid chat session control intent: %s", e.Reason)
+// Unwrap exposes ErrStaleVersion so errors.Is/errors.As can classify the
+// failure.
+func (e *ConflictError) Unwrap() error {
+	return ErrStaleVersion
 }

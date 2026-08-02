@@ -6,6 +6,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
@@ -123,6 +124,7 @@ func TestProvideSystemInitializationServiceComposedInitializeCreatesThenSkipsPac
 		encoder,
 		provideOperatorSettingsIDGenerator(edges),
 		providersRoot,
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("provideOperatorSettingsService() error = %v", err)

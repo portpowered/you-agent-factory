@@ -10,11 +10,12 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	internaltestlink "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testlink"
 	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
 
 const rootWireIdentityFixtureRelative = "pkg/services/operator_settings/internal/services/document/identityinventory/testdata/fixtures/valid/existing-scope.json"
@@ -133,6 +134,7 @@ func TestRootWireBehavioralBoundary_PublishedServicePreservesBackendScopeAndConf
 		rootWireConfigDocumentService(),
 		internaltestproviders.StandardCatalog(),
 		func() string { return "00000000-0000-4000-8000-000000000001" },
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() = %v", err)
@@ -273,6 +275,7 @@ func newRootWireBehavioralService(t *testing.T) operatorsettings.Service {
 		rootWireProviderCatalog,
 		providersRoot,
 		func() string { return "00000000-0000-4000-8000-000000000001" },
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
