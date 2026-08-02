@@ -51,3 +51,56 @@ type InvalidChatTargetRefError struct {
 func (e *InvalidChatTargetRefError) Error() string {
 	return fmt.Sprintf("invalid chat target ref: empty canonical ref for kind %q", string(e.Kind))
 }
+
+// InvalidSessionStateError reports a SessionState outside the exact declared
+// value set (CREATED, ACTIVE, CLOSED).
+type InvalidSessionStateError struct {
+	State SessionState
+}
+
+func (e *InvalidSessionStateError) Error() string {
+	return fmt.Sprintf("invalid session state: %q", string(e.State))
+}
+
+// InvalidSessionStateTransitionError reports a SessionState transition
+// outside the declared legal transition table.
+type InvalidSessionStateTransitionError struct {
+	From SessionState
+	To   SessionState
+}
+
+func (e *InvalidSessionStateTransitionError) Error() string {
+	return fmt.Sprintf("invalid session state transition: %q to %q", string(e.From), string(e.To))
+}
+
+// InvalidTargetEpisodeStateError reports a TargetEpisodeState outside the
+// exact declared value set (OPEN, CLOSED).
+type InvalidTargetEpisodeStateError struct {
+	State TargetEpisodeState
+}
+
+func (e *InvalidTargetEpisodeStateError) Error() string {
+	return fmt.Sprintf("invalid target episode state: %q", string(e.State))
+}
+
+// InvalidTargetEpisodeStateTransitionError reports a TargetEpisodeState
+// transition outside the declared legal transition table.
+type InvalidTargetEpisodeStateTransitionError struct {
+	From TargetEpisodeState
+	To   TargetEpisodeState
+}
+
+func (e *InvalidTargetEpisodeStateTransitionError) Error() string {
+	return fmt.Sprintf("invalid target episode state transition: %q to %q", string(e.From), string(e.To))
+}
+
+// TargetEpisodeNotClosedError reports an attempt to open the next Target
+// Episode while the prior episode is not yet closed.
+type TargetEpisodeNotClosedError struct {
+	Number uint64
+	State  TargetEpisodeState
+}
+
+func (e *TargetEpisodeNotClosedError) Error() string {
+	return fmt.Sprintf("target episode %d is not closed: state %q", e.Number, string(e.State))
+}
