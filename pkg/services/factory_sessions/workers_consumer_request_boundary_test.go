@@ -9,72 +9,97 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+type workersRootBoundaryFixture struct {
+	runnerID      string
+	dispatchID    string
+	sessionID     string
+	workerType    string
+	modelProvider string
+	model         string
+	userMessage   string
+	commandName   string
+}
+
+func newWorkersRootBoundaryFixture() workersRootBoundaryFixture {
+	return workersRootBoundaryFixture{
+		runnerID:      "session-workers-root-runner",
+		dispatchID:    "dispatch-root-boundary",
+		sessionID:     "session-root-boundary",
+		workerType:    "agent-run-fake-child",
+		modelProvider: "mock",
+		model:         "gpt-test",
+		userMessage:   "summarize workflows",
+		commandName:   "boundary-cmd",
+	}
+}
+
 // TestFactorySessionsConstructsWorkersRequestsThroughRoot proves CUT-SES-WRK
 // story 005: Factory Sessions consumer edges construct Workers root requests
 // only through the sealed Workers service root contract.
 func TestFactorySessionsConstructsWorkersRequestsThroughRoot(t *testing.T) {
 	t.Parallel()
 
-	const (
-		runnerID      = "session-workers-root-runner"
-		dispatchID    = "dispatch-root-boundary"
-		sessionID     = "session-root-boundary"
-		workerType    = "agent-run-fake-child"
-		modelProvider = "mock"
-		model         = "gpt-test"
-		userMessage   = "summarize workflows"
-		commandName   = "boundary-cmd"
-	)
+	fixture := newWorkersRootBoundaryFixture()
+	stub := &workersRequestBoundaryStub{}
+	ctx := context.Background()
+
+	runWorkersOpeningAndInvocationTargetProof(t, fixture)
+	runWorkersInvocationThroughRootProof(t, ctx, stub, fixture)
+	runWorkersInferenceThroughRootProof(t, ctx, stub, fixture)
+	runWorkersCommandThroughRootProof(t, ctx, stub, fixture)
+}
+
+func runWorkersOpeningAndInvocationTargetProof(t *testing.T, fixture workersRootBoundaryFixture) {
+	t.Helper()
 
 	openingRequest := factorysessions.RuntimeOpeningRequest{
 		Workers: workers.RuntimeOpeningRequest{
-			RunnerID: runnerID,
+			RunnerID: fixture.runnerID,
 		},
 	}
-	if openingRequest.Workers.RunnerID != runnerID {
+	if openingRequest.Workers.RunnerID != fixture.runnerID {
 		t.Fatalf(
 			"Workers.RuntimeOpeningRequest.RunnerID = %q, want %q",
 			openingRequest.Workers.RunnerID,
-			runnerID,
+			fixture.runnerID,
 		)
 	}
 
 	invocationTarget := factorysessions.InvocationTarget{
-		RunnerID:          runnerID,
+		RunnerID:          fixture.runnerID,
 		MockWorkersConfig: &workers.MockWorkersConfig{},
 	}
-	if invocationTarget.RunnerID != runnerID {
-		t.Fatalf("InvocationTarget.RunnerID = %q, want %q", invocationTarget.RunnerID, runnerID)
+	if invocationTarget.RunnerID != fixture.runnerID {
+		t.Fatalf("InvocationTarget.RunnerID = %q, want %q", invocationTarget.RunnerID, fixture.runnerID)
 	}
 	if invocationTarget.MockWorkersConfig == nil {
 		t.Fatal("InvocationTarget.MockWorkersConfig is nil, want Workers root mock config")
 	}
+}
 
-	inferRequest := workers.ProviderInferenceRequest{
-		Dispatch: work.WorkDispatch{
-			DispatchID: dispatchID,
-			WorkerType: workerType,
-		},
-		UserMessage:   userMessage,
-		ModelProvider: modelProvider,
-		Model:         model,
-		SessionID:     sessionID,
-		RunnerID:      runnerID,
-		WorkerType:    workerType,
-	}
+func runWorkersInvocationThroughRootProof(
+	t *testing.T,
+	ctx context.Context,
+	stub *workersRequestBoundaryStub,
+	fixture workersRootBoundaryFixture,
+) {
+	t.Helper()
+
 	invocationInput := workers.InvocationInput{
-		Request: inferRequest,
+		Request: workers.ProviderInferenceRequest{
+			Dispatch: work.WorkDispatch{
+				DispatchID: fixture.dispatchID,
+				WorkerType: fixture.workerType,
+			},
+			UserMessage:   fixture.userMessage,
+			ModelProvider: fixture.modelProvider,
+			Model:         fixture.model,
+			SessionID:     fixture.sessionID,
+			RunnerID:      fixture.runnerID,
+			WorkerType:    fixture.workerType,
+		},
 		Attempt: 1,
 	}
-
-	commandRequest := workers.CommandRequest{
-		Command:    commandName,
-		DispatchID: dispatchID,
-		WorkerType: workerType,
-	}
-
-	stub := &workersRequestBoundaryStub{}
-	ctx := context.Background()
 
 	invocationResult, err := stub.Execute(ctx, invocationInput)
 	if err != nil {
@@ -86,46 +111,68 @@ func TestFactorySessionsConstructsWorkersRequestsThroughRoot(t *testing.T) {
 	if stub.lastInvocation.Attempt != 1 {
 		t.Fatalf("recorded invocation attempt = %d, want 1", stub.lastInvocation.Attempt)
 	}
-	if stub.lastInvocation.Request.Dispatch.DispatchID != dispatchID {
+	if stub.lastInvocation.Request.Dispatch.DispatchID != fixture.dispatchID {
 		t.Fatalf(
 			"recorded invocation dispatch id = %q, want %q",
 			stub.lastInvocation.Request.Dispatch.DispatchID,
-			dispatchID,
+			fixture.dispatchID,
 		)
 	}
-	if stub.lastInvocation.Request.SessionID != sessionID {
+	if stub.lastInvocation.Request.SessionID != fixture.sessionID {
 		t.Fatalf(
 			"recorded invocation session id = %q, want %q",
 			stub.lastInvocation.Request.SessionID,
-			sessionID,
+			fixture.sessionID,
 		)
 	}
-	if stub.lastInvocation.Request.RunnerID != runnerID {
+	if stub.lastInvocation.Request.RunnerID != fixture.runnerID {
 		t.Fatalf(
 			"recorded invocation runner id = %q, want %q",
 			stub.lastInvocation.Request.RunnerID,
-			runnerID,
+			fixture.runnerID,
 		)
+	}
+}
+
+func runWorkersInferenceThroughRootProof(
+	t *testing.T,
+	ctx context.Context,
+	stub *workersRequestBoundaryStub,
+	fixture workersRootBoundaryFixture,
+) {
+	t.Helper()
+
+	inferRequest := workers.ProviderInferenceRequest{
+		Dispatch: work.WorkDispatch{
+			DispatchID: fixture.dispatchID,
+			WorkerType: fixture.workerType,
+		},
+		UserMessage:   fixture.userMessage,
+		ModelProvider: fixture.modelProvider,
+		Model:         fixture.model,
+		SessionID:     fixture.sessionID,
+		RunnerID:      fixture.runnerID,
+		WorkerType:    fixture.workerType,
 	}
 
 	inferResponse, err := stub.Infer(ctx, inferRequest)
 	if err != nil {
 		t.Fatalf("Infer provider request: %v", err)
 	}
-	if stub.lastInference.Dispatch.DispatchID != dispatchID {
+	if stub.lastInference.Dispatch.DispatchID != fixture.dispatchID {
 		t.Fatalf(
 			"recorded inference dispatch id = %q, want %q",
 			stub.lastInference.Dispatch.DispatchID,
-			dispatchID,
+			fixture.dispatchID,
 		)
 	}
-	if stub.lastInference.ModelProvider != modelProvider || stub.lastInference.Model != model {
+	if stub.lastInference.ModelProvider != fixture.modelProvider || stub.lastInference.Model != fixture.model {
 		t.Fatalf(
 			"recorded inference model = (%q,%q), want (%q,%q)",
 			stub.lastInference.ModelProvider,
 			stub.lastInference.Model,
-			modelProvider,
-			model,
+			fixture.modelProvider,
+			fixture.model,
 		)
 	}
 	if inferResponse.ProviderSession == nil || inferResponse.ProviderSession.ID != "workers-root-boundary-session" {
@@ -134,19 +181,34 @@ func TestFactorySessionsConstructsWorkersRequestsThroughRoot(t *testing.T) {
 			inferResponse.ProviderSession,
 		)
 	}
+}
+
+func runWorkersCommandThroughRootProof(
+	t *testing.T,
+	ctx context.Context,
+	stub *workersRequestBoundaryStub,
+	fixture workersRootBoundaryFixture,
+) {
+	t.Helper()
+
+	commandRequest := workers.CommandRequest{
+		Command:    fixture.commandName,
+		DispatchID: fixture.dispatchID,
+		WorkerType: fixture.workerType,
+	}
 
 	commandResult, err := stub.Run(ctx, commandRequest)
 	if err != nil {
 		t.Fatalf("Run command request: %v", err)
 	}
-	if stub.lastCommand.Command != commandName {
-		t.Fatalf("recorded command = %q, want %q", stub.lastCommand.Command, commandName)
+	if stub.lastCommand.Command != fixture.commandName {
+		t.Fatalf("recorded command = %q, want %q", stub.lastCommand.Command, fixture.commandName)
 	}
-	if stub.lastCommand.DispatchID != dispatchID {
+	if stub.lastCommand.DispatchID != fixture.dispatchID {
 		t.Fatalf(
 			"recorded command dispatch id = %q, want %q",
 			stub.lastCommand.DispatchID,
-			dispatchID,
+			fixture.dispatchID,
 		)
 	}
 	if commandResult.ExitCode != 0 {
