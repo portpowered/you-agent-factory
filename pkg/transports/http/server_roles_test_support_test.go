@@ -1,12 +1,15 @@
 package http
 
 import (
+	"context"
+
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
@@ -47,9 +50,16 @@ func newServerFromRoles(
 		DurableExecution: durableExecution, DurableLifecycle: durableLifecycle,
 		DurableListing: durableListing, DurableProjection: durableProjection,
 		DurableLister: durableLister, LiveSessionLister: liveSessionLister,
-		WorkerPrompts: workerPrompts,
-		WorkService: work.AdmissionContentService(contentStaging, requestPreparation),
+		WorkerPrompts:   workerPrompts,
 		SessionRequests: sessionRequests,
 	}, logger)
-	return NewServer(handler, modelsHTTP, providerSessions, logger)
+	workRoot := work.AdmissionContentService(contentStaging, requestPreparation)
+	workAdapter := workhttp.NewAdapterFromRoles(workRoot, workRoot, workAPI, workRead)
+	if factoryDefinitions != nil {
+		workAdapter = workAdapter.WithSessionScope(func(ctx context.Context, sessionID string) error {
+			_, err := factoryDefinitions.GetCurrentFactoryForSession(ctx, sessionID)
+			return err
+		})
+	}
+	return NewServer(handler, workAdapter, modelsHTTP, providerSessions, logger)
 }

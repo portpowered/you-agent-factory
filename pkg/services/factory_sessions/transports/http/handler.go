@@ -10,7 +10,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
@@ -37,7 +36,6 @@ type Adapter struct {
 	liveSessionLister  LiveSessionListReader
 	workerPrompts      workers.PromptTemplates
 	invocationWorkType factorydefinitions.InvocationWorkTypeService
-	workService        work.Service
 	sessionRequests    RequestPreparation
 	logger             *zap.Logger
 }
@@ -63,7 +61,6 @@ type Dependencies struct {
 	LiveSessionLister  LiveSessionListReader
 	WorkerPrompts      workers.PromptTemplates
 	InvocationWorkType factorydefinitions.InvocationWorkTypeService
-	WorkService        work.Service
 	SessionRequests    RequestPreparation
 }
 
@@ -85,7 +82,7 @@ func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
 	}
 	return &Adapter{
 		sessionsRoot: deps.SessionsRoot,
-		runtime: deps.Runtime, factoryStatus: deps.FactoryStatus,
+		runtime:      deps.Runtime, factoryStatus: deps.FactoryStatus,
 		sessions: deps.Sessions, work: deps.Work, workRead: deps.WorkRead,
 		invocation:         deps.Invocation,
 		factoryDefinitions: deps.FactoryDefinitions, factoryValidation: deps.FactoryValidation,
@@ -94,21 +91,9 @@ func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
 		durableListing: deps.DurableListing, durableProjection: deps.DurableProjection,
 		durableLister: deps.DurableLister, liveSessionLister: deps.LiveSessionLister,
 		workerPrompts: deps.WorkerPrompts, invocationWorkType: deps.InvocationWorkType,
-		workService: deps.WorkService,
 		sessionRequests: deps.SessionRequests,
-		logger: logger,
+		logger:          logger,
 	}
-}
-
-// WithWorkService returns a copy bound to the supplied Work root for admission
-// and content staging/materialization operations.
-func (h *Adapter) WithWorkService(service work.Service) *Adapter {
-	if h == nil {
-		return nil
-	}
-	bound := *h
-	bound.workService = service
-	return &bound
 }
 
 // Server is retained as a private receiver alias while the moved handler files

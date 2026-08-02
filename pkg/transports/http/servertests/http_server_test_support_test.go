@@ -7,6 +7,7 @@ import (
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -45,9 +46,9 @@ func newAPIServerFromRoles(
 		DurableExecution: durableExecution, DurableLifecycle: durableLifecycle,
 		DurableListing: durableListing, DurableProjection: durableProjection,
 		DurableLister: durableLister, LiveSessionLister: liveSessionLister,
-		WorkerPrompts: workerPrompts,
-		WorkService: work.AdmissionContentService(contentStaging, requestPreparation),
+		WorkerPrompts:   workerPrompts,
 		SessionRequests: sessionRequests,
 	}, logger)
-	return api.NewServer(handler, modelsHTTP, providerSessions, logger)
+	workRoot := work.AdmissionContentService(contentStaging, requestPreparation)
+	return api.NewServer(handler, workhttp.NewAdapterFromRoles(workRoot, workRoot, workAPI, workRead), modelsHTTP, providerSessions, logger)
 }

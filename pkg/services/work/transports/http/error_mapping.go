@@ -65,6 +65,10 @@ func RootErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 	if errors.As(err, &validation) {
 		return badRequestErrorResponse(validation.Message)
 	}
+	var preparation *work.RequestPreparationError
+	if errors.As(err, &preparation) {
+		return badRequestErrorResponse(preparation.Message)
+	}
 
 	if message, ok := workRequestBadRequestMessage(err); ok {
 		return badRequestErrorResponse(message)
