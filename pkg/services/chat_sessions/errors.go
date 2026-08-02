@@ -16,8 +16,14 @@ var (
 	ErrUnknownEnumValue = errors.New("chat sessions: unknown enum value")
 	// ErrInconsistentValue reports a value whose fields disagree with each
 	// other under the L1 V0 model, such as a terminal sequence or terminal
-	// time fact that does not match the value's declared state.
+	// time fact that does not match the value's declared state, or a
+	// RequestIdentity that mixes its two legal forms.
 	ErrInconsistentValue = errors.New("chat sessions: structurally inconsistent value")
+	// ErrMalformedValue reports a non-blank value that fails a required
+	// lexical shape, such as a RequestIdentity TransportUUID that is not a
+	// well-formed UUID. It is distinct from ErrRequiredValue (blank/zero) and
+	// ErrUnknownEnumValue (declared enum vocabulary).
+	ErrMalformedValue = errors.New("chat sessions: malformed value")
 	// ErrUnsupportedControlAction reports a ControlAction that is declared in
 	// the L1 vocabulary for a later lane (PAUSE, RESUME, TERMINATE) but is not
 	// an executable action in this L1 V0 slice. It is distinct from

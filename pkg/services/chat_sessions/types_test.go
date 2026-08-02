@@ -53,7 +53,10 @@ func TestRequestIdentity_Validate(t *testing.T) {
 	}{
 		{"valid connection-scoped", RequestIdentity{ConnectionID: "conn-1", JSONRPCID: "req-1"}, nil},
 		{"valid transport-minted UUID", RequestIdentity{TransportUUID: "550e8400-e29b-41d4-a716-446655440000"}, nil},
-		{"transport UUID ignores blank connection", RequestIdentity{ConnectionID: "", TransportUUID: "req-uuid-1"}, nil},
+		{"transport UUID with blank connection", RequestIdentity{ConnectionID: "", TransportUUID: "550e8400-e29b-41d4-a716-446655440000"}, nil},
+		{"malformed transport UUID", RequestIdentity{TransportUUID: "req-uuid-1"}, ErrMalformedValue},
+		{"mixed transport UUID and connection", RequestIdentity{TransportUUID: "550e8400-e29b-41d4-a716-446655440000", ConnectionID: "conn-1"}, ErrInconsistentValue},
+		{"mixed transport UUID and JSON-RPC id", RequestIdentity{TransportUUID: "550e8400-e29b-41d4-a716-446655440000", JSONRPCID: "req-1"}, ErrInconsistentValue},
 		{"bare JSON-RPC id without connection", RequestIdentity{JSONRPCID: "req-1"}, ErrRequiredValue},
 		{"blank JSON-RPC id", RequestIdentity{ConnectionID: "conn-1"}, ErrRequiredValue},
 		{"zero value", RequestIdentity{}, ErrRequiredValue},

@@ -1,6 +1,15 @@
 package chatsessions
 
-import "time"
+import (
+	"regexp"
+	"time"
+)
+
+// transportUUIDPattern matches a canonical RFC 4122 UUID string (8-4-4-4-12
+// hex digits). It does not validate the version/variant bits, only the
+// lexical shape, which is sufficient to reject non-UUID values such as a
+// caller-supplied opaque token.
+var transportUUIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // ChatTargetKind names the class of destination a Chat Session can select.
 type ChatTargetKind string
@@ -55,12 +64,21 @@ type RequestIdentity struct {
 	TransportUUID string
 }
 
-// Validate reports whether the RequestIdentity expresses one of its two
-// legal forms: a non-blank TransportUUID, or a JSONRPCID paired with a
-// non-blank ConnectionID. A JSONRPCID without a paired ConnectionID, and an
-// identity with neither form present, are both rejected.
+// Validate reports whether the RequestIdentity expresses exactly one of its
+// two legal forms: a well-formed TransportUUID with no ConnectionID or
+// JSONRPCID present, or a JSONRPCID paired with a non-blank ConnectionID and
+// no TransportUUID present. A JSONRPCID without a paired ConnectionID, an
+// identity with neither form present, a malformed TransportUUID, and a
+// TransportUUID mixed with either connection-scoped field are all rejected
+// so the two forms never overlap.
 func (r RequestIdentity) Validate() error {
 	if r.TransportUUID != "" {
+		if r.ConnectionID != "" || r.JSONRPCID != "" {
+			return newValidationError("RequestIdentity", "TransportUUID", ErrInconsistentValue)
+		}
+		if !transportUUIDPattern.MatchString(r.TransportUUID) {
+			return newValidationError("RequestIdentity", "TransportUUID", ErrMalformedValue)
+		}
 		return nil
 	}
 	if r.JSONRPCID == "" {
