@@ -140,6 +140,36 @@ re-deriving the evidence; re-run both checkers and re-confirm zero findings
 against your own package(s) if a reviewer disputes it, since violation counts
 drift as other lanes land unrelated changes.
 
+### D8 — `backend-size` (`make lint`) is evaluated diff-scoped, not repo-wide-zero
+
+`make lint` already exits non-zero on `main` itself because `backend-size`
+(`go run ./cmd/backendsizecheck`) reports pre-existing function/file-length
+violations outside any lane's change. Confirmed on `origin/main` at
+`cbf49eb50` (2026-08-02): `backend-size` reports 69 violations, spanning
+`cmd/`, `internal/`, `pkg/services/*`, and `tests/functional/*` packages
+unrelated to Operator Settings; zero of the 69 name a file under
+`pkg/services/operator_settings`.
+
+`backend-size` is the same kind of pre-existing, deletion-only debt tracker as
+D7's `pkg-file-count`/`pkg-boundary`, and it is not part of the required
+merge-blocking CI umbrella either — `.github/workflows/ci.yml`'s only lint-like
+required step is `make typecheck ui-lint`; no job in the `Verification Policy`
+dependency list runs `make lint` or `backendsizecheck`. A lane satisfies its
+own slice of AC-6's "lint passes" clause by contributing **zero new
+`backend-size` findings against packages it owns**, verified the same way as
+D7: run `go run ./cmd/backendsizecheck -root .` before and after the lane's
+diff (in a disposable detached worktree of the pre-diff commit) and confirm no
+new entry for the lane's own package path(s). Bringing `backend-size` itself to
+a literal repo-wide zero exit code is out of scope for any single lane's
+feature work per D5, for the same reason as D7: the flagged functions/files
+belong to other lanes/services, and trimming them out-of-band risks colliding
+with concurrent work on those same files.
+
+Lanes citing this decision in review: link to this section instead of
+re-deriving the evidence; re-run `backendsizecheck` and re-confirm zero new
+findings against your own package(s) if a reviewer disputes it, since
+violation counts drift as other lanes land unrelated changes.
+
 ## 3. Cross-lane contracts
 
 Published on day 0 so all four lanes code against them with fakes immediately.
