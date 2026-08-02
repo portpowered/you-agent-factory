@@ -11,25 +11,25 @@ import (
 )
 
 type effectiveCatalogSource struct {
-	listRoot factorydefinitions.EffectiveFactoryRootListing
-	read     factorydefinitions.EffectiveFactoryCandidateRead
+	listRoot EffectiveCatalogRootListing
+	read     EffectiveCatalogCandidateRead
 	packaged []factorydefinitions.PackagedDefinition
 }
 
 // NewEffectiveCatalogDiscovery constructs read-only disk and published-package
 // discovery.
 func NewEffectiveCatalogDiscovery(
-	listRoot factorydefinitions.EffectiveFactoryRootListing,
-	read factorydefinitions.EffectiveFactoryCandidateRead,
+	listRoot EffectiveCatalogRootListing,
+	read EffectiveCatalogCandidateRead,
 	packaged []factorydefinitions.PackagedDefinition,
-) (factorydefinitions.EffectiveFactoryCatalogDiscovery, error) {
+) (EffectiveCatalogDiscovery, error) {
 	if listRoot == nil {
-		return factorydefinitions.EffectiveFactoryCatalogDiscovery{}, fmt.Errorf(
+		return EffectiveCatalogDiscovery{}, fmt.Errorf(
 			"persisted Factory catalog is required",
 		)
 	}
 	if read == nil {
-		return factorydefinitions.EffectiveFactoryCatalogDiscovery{}, fmt.Errorf(
+		return EffectiveCatalogDiscovery{}, fmt.Errorf(
 			"Factory definition filesystem is required",
 		)
 	}
@@ -39,7 +39,7 @@ func NewEffectiveCatalogDiscovery(
 		cloned[index] = definition
 	}
 	source := effectiveCatalogSource{listRoot: listRoot, read: read, packaged: cloned}
-	return factorydefinitions.EffectiveFactoryCatalogDiscovery{
+	return EffectiveCatalogDiscovery{
 		ListRoot:     source.listRootCandidates,
 		ListPackaged: source.listPackagedCandidates,
 	}, nil

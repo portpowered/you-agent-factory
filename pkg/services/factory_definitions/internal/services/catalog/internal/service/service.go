@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
@@ -14,16 +16,16 @@ import (
 // Service is the private nested catalog implementation behind the CTR-DEF
 // root catalog slice.
 type Service struct {
-	paths      factorydefinitions.NamedPathResolver
-	fileSystem factorydefinitions.NamedFactoryCatalogFileSystem
+	paths      internalnamedfactories.PathResolver
+	fileSystem internalnamedfactories.FileSystem
 }
 
 var _ catalog.Service = (*Service)(nil)
 
 // New constructs the catalog implementation from exact injected ports.
 func New(
-	paths factorydefinitions.NamedPathResolver,
-	fileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
+	paths internalnamedfactories.PathResolver,
+	fileSystem internalnamedfactories.FileSystem,
 ) *Service {
 	if paths == nil || fileSystem == nil {
 		return nil
@@ -186,6 +188,28 @@ func (s *Service) SetCurrentFactoryPointer(
 	return factorydefinitions.SetCurrentFactoryPointerResult{Name: canonical}, nil
 }
 
+func (s *Service) ClearCurrentFactoryPointer(
+	_ context.Context,
+	request factorydefinitions.ClearCurrentFactoryPointerRequest,
+) (factorydefinitions.ClearCurrentFactoryPointerResult, error) {
+	if err := s.requirePorts(); err != nil {
+		return factorydefinitions.ClearCurrentFactoryPointerResult{}, err
+	}
+	rootDir := strings.TrimSpace(request.RootDir)
+	if rootDir == "" {
+		return factorydefinitions.ClearCurrentFactoryPointerResult{}, fmt.Errorf("factory root is required")
+	}
+	pointerPath := filepath.Join(rootDir, factorydefinitions.CurrentFactoryPointerFile)
+	if err := s.fileSystem.RemoveAll(pointerPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return factorydefinitions.ClearCurrentFactoryPointerResult{}, fmt.Errorf(
+			"clear current factory pointer %s: %w",
+			pointerPath,
+			err,
+		)
+	}
+	return factorydefinitions.ClearCurrentFactoryPointerResult{RootDir: rootDir}, nil
+}
+
 func (s *Service) requirePorts() error {
 	if s == nil || s.paths == nil {
 		return fmt.Errorf("named Factory path resolver is required")
@@ -205,7 +229,7 @@ func canonicalName(name string) (string, error) {
 }
 
 func readOptionalCurrent(
-	paths factorydefinitions.NamedPathResolver,
+	paths internalnamedfactories.PathResolver,
 	rootDir string,
 ) (string, error) {
 	name, err := paths.ReadCurrentPointer(rootDir)

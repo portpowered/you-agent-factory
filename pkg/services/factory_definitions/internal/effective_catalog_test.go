@@ -17,12 +17,8 @@ type source struct {
 	packaged []factorydefinitions.EffectiveFactoryCatalogCandidate
 }
 
-type baseService struct {
-	factorydefinitions.Service
-}
-
-func (s source) discovery() factorydefinitions.EffectiveFactoryCatalogDiscovery {
-	return factorydefinitions.EffectiveFactoryCatalogDiscovery{
+func (s source) discovery() factoryinternal.EffectiveCatalogDiscovery {
+	return factoryinternal.EffectiveCatalogDiscovery{
 		ListRoot:     s.listRoot,
 		ListPackaged: s.listPackaged,
 	}
@@ -154,39 +150,10 @@ func TestCatalogCoversEveryPrecedenceCombination(t *testing.T) {
 	}
 }
 
-func TestAttachPublishesEffectiveCatalogOnRootService(t *testing.T) {
-	t.Parallel()
-
-	catalog := newCatalog(t, source{
-		roots: map[string][]factorydefinitions.EffectiveFactoryCatalogCandidate{
-			"/project": {candidate("project-only", "/project", "project")},
-			"/global":  nil,
-		},
-	}.discovery())
-	service, err := factoryinternal.AttachEffectiveCatalog(baseService{}, catalog)
-	if err != nil {
-		t.Fatalf("attach effective catalog: %v", err)
-	}
-
-	result, err := service.ListEffectiveFactories(
-		t.Context(),
-		factorydefinitions.ListEffectiveFactoriesRequest{
-			ProjectRoot: "/project",
-			GlobalRoot:  "/global",
-		},
-	)
-	if err != nil {
-		t.Fatalf("root service ListEffectiveFactories: %v", err)
-	}
-	if got := names(result.Entries); !slices.Equal(got, []string{"project-only"}) {
-		t.Fatalf("root service effective names = %v, want [project-only]", got)
-	}
-}
-
 func newCatalog(
 	t *testing.T,
-	discovery factorydefinitions.EffectiveFactoryCatalogDiscovery,
-) factorydefinitions.EffectiveFactoryCatalogOperation {
+	discovery factoryinternal.EffectiveCatalogDiscovery,
+) factoryinternal.EffectiveCatalogOperation {
 	t.Helper()
 	catalog, err := factoryinternal.NewEffectiveCatalog(discovery, normalize)
 	if err != nil {
@@ -208,7 +175,7 @@ func normalize(
 
 func list(
 	t *testing.T,
-	catalog factorydefinitions.EffectiveFactoryCatalogOperation,
+	catalog factoryinternal.EffectiveCatalogOperation,
 	projectRoot string,
 	globalRoot string,
 ) factorydefinitions.ListEffectiveFactoriesResult {

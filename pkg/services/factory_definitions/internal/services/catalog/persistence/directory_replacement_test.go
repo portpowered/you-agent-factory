@@ -9,6 +9,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	catalogpersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence"
 )
 
@@ -65,7 +66,7 @@ func TestReplaceFactoryLayoutDelegatesMechanicsAndRetainsFactoryDiagnostics(t *t
 	}
 }
 
-func replacementService(store factorydefinitions.DirectoryReplacementStore) factorydefinitions.Persistence {
+func replacementService(store catalog.DirectoryReplacementStore) factorydefinitions.Persistence {
 	persistence, err := catalogpersistence.New(
 		nil,
 		nil,

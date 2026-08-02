@@ -158,8 +158,8 @@ func TestCatalogCancellationIsAtomicAcrossDiscoveryAndMerge(t *testing.T) {
 
 type cancellationCase struct {
 	name       string
-	discovery  func(context.CancelFunc) factorydefinitions.EffectiveFactoryCatalogDiscovery
-	normalizer func(context.CancelFunc) factorydefinitions.EffectiveFactoryDefinitionNormalizer
+	discovery  func(context.CancelFunc) factoryinternal.EffectiveCatalogDiscovery
+	normalizer func(context.CancelFunc) factoryinternal.EffectiveDefinitionNormalizer
 }
 
 func cancellationCases() []cancellationCase {
@@ -173,14 +173,14 @@ func cancellationCases() []cancellationCase {
 
 func standardNormalizer(
 	context.CancelFunc,
-) factorydefinitions.EffectiveFactoryDefinitionNormalizer {
+) factoryinternal.EffectiveDefinitionNormalizer {
 	return normalize
 }
 
 func cancelProjectDiscovery(
 	cancel context.CancelFunc,
-) factorydefinitions.EffectiveFactoryCatalogDiscovery {
-	return factorydefinitions.EffectiveFactoryCatalogDiscovery{
+) factoryinternal.EffectiveCatalogDiscovery {
+	return factoryinternal.EffectiveCatalogDiscovery{
 		ListRoot: func(context.Context, string) (
 			[]factorydefinitions.EffectiveFactoryCatalogCandidate,
 			error,
@@ -194,9 +194,9 @@ func cancelProjectDiscovery(
 
 func cancelGlobalDiscovery(
 	cancel context.CancelFunc,
-) factorydefinitions.EffectiveFactoryCatalogDiscovery {
+) factoryinternal.EffectiveCatalogDiscovery {
 	rootCalls := 0
-	return factorydefinitions.EffectiveFactoryCatalogDiscovery{
+	return factoryinternal.EffectiveCatalogDiscovery{
 		ListRoot: func(context.Context, string) (
 			[]factorydefinitions.EffectiveFactoryCatalogCandidate,
 			error,
@@ -214,8 +214,8 @@ func cancelGlobalDiscovery(
 
 func cancelPackagedDiscovery(
 	cancel context.CancelFunc,
-) factorydefinitions.EffectiveFactoryCatalogDiscovery {
-	return factorydefinitions.EffectiveFactoryCatalogDiscovery{
+) factoryinternal.EffectiveCatalogDiscovery {
+	return factoryinternal.EffectiveCatalogDiscovery{
 		ListRoot: func(context.Context, string) (
 			[]factorydefinitions.EffectiveFactoryCatalogCandidate,
 			error,
@@ -247,7 +247,7 @@ func partialCandidates() []factorydefinitions.EffectiveFactoryCatalogCandidate {
 
 func mergeCancellationDiscovery(
 	context.CancelFunc,
-) factorydefinitions.EffectiveFactoryCatalogDiscovery {
+) factoryinternal.EffectiveCatalogDiscovery {
 	return source{
 		roots: map[string][]factorydefinitions.EffectiveFactoryCatalogCandidate{
 			"/project": {candidate("partial", "/project", "partial")},
@@ -257,7 +257,7 @@ func mergeCancellationDiscovery(
 
 func cancelNormalizer(
 	cancel context.CancelFunc,
-) factorydefinitions.EffectiveFactoryDefinitionNormalizer {
+) factoryinternal.EffectiveDefinitionNormalizer {
 	return func(
 		ctx context.Context,
 		candidate factorydefinitions.EffectiveFactoryCatalogCandidate,
@@ -271,7 +271,7 @@ func TestCatalogPreCancellationSkipsEveryDiscoverySource(t *testing.T) {
 	t.Parallel()
 
 	calls := 0
-	discovery := factorydefinitions.EffectiveFactoryCatalogDiscovery{
+	discovery := factoryinternal.EffectiveCatalogDiscovery{
 		ListRoot: func(context.Context, string) (
 			[]factorydefinitions.EffectiveFactoryCatalogCandidate,
 			error,
