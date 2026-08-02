@@ -83,6 +83,8 @@ var committedNestedSubservices = map[string][]string{
 		"resolution",
 	},
 	"system_initialization": {},
+	"chat_sessions":         {},
+	"events":                {},
 }
 
 func productOwnerSet() map[string]struct{} {

@@ -8,6 +8,7 @@
 package acpconformance
 
 import (
+	"bytes"
 	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
@@ -174,14 +175,28 @@ func ChecksumCases(cases []Case) (string, error) {
 }
 
 // ParseCorpus decodes and validates raw corpus JSON. It rejects invalid
-// JSON, an unpinned or incomplete source provenance, a missing or mismatched
+// JSON, an unrecognized field anywhere outside a case's free-form Payload,
+// an unpinned or incomplete source provenance, a missing or mismatched
 // cases_checksum, duplicate case identity, an unknown protocol role,
 // undeclared or unknown directionality, a case with no declared expected
 // facts, and a round-trip declaration for a Facts.Kind known to be lossy or
 // unsupported in at least one direction.
+//
+// Unrecognized fields are rejected (rather than silently dropped) because
+// cases_checksum is computed over the *typed* Cases value after decoding: a
+// plain json.Unmarshal would discard any field not present on Case/Facts/
+// SourceProvenance before ChecksumCases ever saw it, so a change that only
+// added an unknown field to a case would leave the previous cases_checksum
+// valid even though the committed case content changed. Rejecting unknown
+// fields up front means the only way to add a field to a case is to add it
+// to the Case/Facts struct too, which then changes the typed checksum along
+// with it. Case.Payload is a json.RawMessage, so this does not constrain the
+// arbitrary ACP wire JSON a case's payload may contain.
 func ParseCorpus(data []byte) (Corpus, error) {
 	var corpus Corpus
-	if err := json.Unmarshal(data, &corpus); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&corpus); err != nil {
 		return Corpus{}, fmt.Errorf("acpconformance: invalid corpus JSON: %w", err)
 	}
 	if corpus.SchemaVersion != supportedSchemaVersion {

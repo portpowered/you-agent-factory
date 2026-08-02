@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	operatorservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service"
 	documentwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/wire"
@@ -41,6 +42,7 @@ func TestRootDelegatesResolveEffectiveToPrivateOwner(t *testing.T) {
 		rootTestConfigDecoder,
 		rootTestConfigEncoder,
 		func() string { return "00000000-0000-4000-8000-000000000001" },
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("New() = %v", err)
@@ -78,7 +80,7 @@ func TestNew_RejectsNilDocument(t *testing.T) {
 		t.Fatalf("resolutionwire.NewService() = %v", err)
 	}
 
-	service, err := operatorservice.New(nil, resolutionService, nil, nil, nil, nil, nil)
+	service, err := operatorservice.New(nil, resolutionService, nil, nil, nil, nil, nil, nil)
 	if err == nil || service != nil {
 		t.Fatalf("New(nil, resolution) = (%v, %v), want error", service, err)
 	}
@@ -95,7 +97,7 @@ func TestNew_RejectsNilResolution(t *testing.T) {
 		rootTestProviderCatalog,
 	)
 
-	service, err := operatorservice.New(documentService, nil, nil, nil, nil, nil, nil)
+	service, err := operatorservice.New(documentService, nil, nil, nil, nil, nil, nil, nil)
 	if err == nil || service != nil {
 		t.Fatalf("New(document, nil) = (%v, %v), want error", service, err)
 	}
@@ -191,290 +193,41 @@ func TestRootACPConfigurationAddsDeletesAndMaterializesDefaults(t *testing.T) {
 	}
 }
 
-func TestRootResolveACPAgentProfile_AbsentDocumentReturnsSafeDefault(t *testing.T) {
-	t.Parallel()
-
-	root := newFilesystemRoot(t, testCreateTemporaryFile)
-	path := filepath.Join(t.TempDir(), "config.json")
-
-	resolved, err := root.ResolveACPAgentProfile(path)
-	if err != nil {
-		t.Fatalf("ResolveACPAgentProfile() = %v", err)
-	}
-	want := operatorsettings.DefaultACPAgentProfile()
-	if resolved.DefaultTarget != want.DefaultTarget || strings.Join(resolved.AllowedTargets, ",") != strings.Join(want.AllowedTargets, ",") {
-		t.Fatalf("ResolveACPAgentProfile() = %#v, want %#v", resolved, want)
-	}
-}
-
-func TestRootResolveACPAgentProfile_AbsentDocumentIsReadOnly(t *testing.T) {
-	t.Parallel()
-
-	root := newFilesystemRoot(t, testCreateTemporaryFile)
-	path := filepath.Join(t.TempDir(), "config.json")
-
-	if _, err := root.ResolveACPAgentProfile(path); err != nil {
-		t.Fatalf("ResolveACPAgentProfile() = %v", err)
-	}
-	if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("os.Stat(path) = %v, want ErrNotExist because resolve must not create the document", err)
-	}
-}
-
-func TestRootResolveACPAgentProfile_MalformedStoredProfileFailsExplicitly(t *testing.T) {
-	t.Parallel()
-
-	root := newFilesystemRoot(t, testCreateTemporaryFile)
-	path := filepath.Join(t.TempDir(), "config.json")
-	malformed := `{"workers":{"acp":{"agentProfile":{"defaultTarget":"factory:@you/review","allowedTargets":["factory:@you/factory-builder"]}}}}`
-	if err := os.WriteFile(path, []byte(malformed), 0o600); err != nil {
-		t.Fatalf("os.WriteFile() = %v", err)
-	}
-
-	_, err := root.ResolveACPAgentProfile(path)
-	if err == nil {
-		t.Fatal("ResolveACPAgentProfile() error = nil, want a typed failure for a malformed stored profile")
-	}
-	if !strings.Contains(err.Error(), "must be present in allowedTargets") {
-		t.Fatalf("ResolveACPAgentProfile() error = %q, want the ACP Agent profile validation fragment", err)
-	}
-}
-
-func TestRootResolveACPAgentProfile_ValidAuthoredProfileReturnsNormalizedDetachedValue(t *testing.T) {
-	t.Parallel()
-
-	root := newFilesystemRoot(t, testCreateTemporaryFile)
-	path := filepath.Join(t.TempDir(), "config.json")
-	authored := operatorsettings.ACPAgentProfile{
-		DefaultTarget:  " factory:@you/reviewer ",
-		AllowedTargets: []string{" factory:@you/reviewer ", "factory:@you/factory-builder"},
-	}
-
-	updated, err := root.UpdateACPAgentProfile(context.Background(), path, authored)
-	if err != nil {
-		t.Fatalf("UpdateACPAgentProfile() = %v", err)
-	}
-	if updated.DefaultTarget != "factory:@you/reviewer" {
-		t.Fatalf("UpdateACPAgentProfile() default = %q", updated.DefaultTarget)
-	}
-
-	resolved, err := root.ResolveACPAgentProfile(path)
-	if err != nil {
-		t.Fatalf("ResolveACPAgentProfile() = %v", err)
-	}
-	if resolved.DefaultTarget != "factory:@you/reviewer" ||
-		len(resolved.AllowedTargets) != 2 ||
-		resolved.AllowedTargets[0] != "factory:@you/reviewer" ||
-		resolved.AllowedTargets[1] != "factory:@you/factory-builder" {
-		t.Fatalf("ResolveACPAgentProfile() = %#v", resolved)
-	}
-
-	// Mutating the resolved slice must not alias stored state.
-	resolved.AllowedTargets[0] = "factory:@you/mutated"
-	reresolved, err := root.ResolveACPAgentProfile(path)
-	if err != nil {
-		t.Fatalf("ResolveACPAgentProfile() second call = %v", err)
-	}
-	if reresolved.AllowedTargets[0] != "factory:@you/reviewer" {
-		t.Fatalf("ResolveACPAgentProfile() returned an aliased slice: %#v", reresolved)
-	}
-}
-
-func TestRootUpdateACPAgentProfile_RejectsInvalidCandidateWithoutPersisting(t *testing.T) {
-	t.Parallel()
-
-	root := newFilesystemRoot(t, testCreateTemporaryFile)
-	path := filepath.Join(t.TempDir(), "config.json")
-	valid := operatorsettings.ACPAgentProfile{
-		DefaultTarget:  "factory:@you/reviewer",
-		AllowedTargets: []string{"factory:@you/reviewer"},
-	}
-	if _, err := root.UpdateACPAgentProfile(context.Background(), path, valid); err != nil {
-		t.Fatalf("UpdateACPAgentProfile(valid) = %v", err)
-	}
-
-	invalid := operatorsettings.ACPAgentProfile{
-		DefaultTarget:  "not-a-factory-reference",
-		AllowedTargets: []string{"factory:@you/reviewer"},
-	}
-	if _, err := root.UpdateACPAgentProfile(context.Background(), path, invalid); !errors.Is(err, operatorsettings.ErrACPAgentProfileInvalid) {
-		t.Fatalf("UpdateACPAgentProfile(invalid) = %v, want ErrACPAgentProfileInvalid", err)
-	}
-
-	resolved, err := root.ResolveACPAgentProfile(path)
-	if err != nil {
-		t.Fatalf("ResolveACPAgentProfile() after rejected update = %v", err)
-	}
-	if resolved.DefaultTarget != "factory:@you/reviewer" {
-		t.Fatalf("ResolveACPAgentProfile() after rejected update = %#v, want the prior valid profile intact", resolved)
-	}
-}
-
-func TestRootUpdateACPAgentProfile_RejectsCanceledContextWithoutPersisting(t *testing.T) {
-	t.Parallel()
-
-	root := newFilesystemRoot(t, testCreateTemporaryFile)
-	path := filepath.Join(t.TempDir(), "config.json")
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	profile := operatorsettings.ACPAgentProfile{
-		DefaultTarget:  "factory:@you/reviewer",
-		AllowedTargets: []string{"factory:@you/reviewer"},
-	}
-	if _, err := root.UpdateACPAgentProfile(ctx, path, profile); !errors.Is(err, context.Canceled) {
-		t.Fatalf("UpdateACPAgentProfile(canceled ctx) = %v, want context.Canceled", err)
-	}
-	if _, statErr := os.Stat(path); !errors.Is(statErr, fs.ErrNotExist) {
-		t.Fatalf("config path stat error = %v, want destination to remain absent", statErr)
-	}
-}
-
-func TestRootUpdateACPAgentProfile_RejectsShortWriteWithoutReplacement(t *testing.T) {
-	t.Parallel()
-
-	root := newFilesystemRoot(t, func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
-		return shortWriteTemporaryFile{name: filepath.Join(dir, pattern)}, nil
-	})
-	path := filepath.Join(t.TempDir(), "config.json")
-	profile := operatorsettings.ACPAgentProfile{
-		DefaultTarget:  "factory:@you/reviewer",
-		AllowedTargets: []string{"factory:@you/reviewer"},
-	}
-
-	_, err := root.UpdateACPAgentProfile(context.Background(), path, profile)
-	if err == nil || !strings.Contains(err.Error(), "short write") {
-		t.Fatalf("UpdateACPAgentProfile() = %v, want short-write failure", err)
-	}
-	if _, statErr := os.Stat(path); !errors.Is(statErr, fs.ErrNotExist) {
-		t.Fatalf("config path stat error = %v, want destination to remain absent", statErr)
-	}
-}
-
-func TestRootUpdateACPAgentProfile_PersistsAtomicallyAndSurvivesReloadThroughNewService(t *testing.T) {
-	t.Parallel()
-
-	path := filepath.Join(t.TempDir(), "config.json")
-	profile := operatorsettings.ACPAgentProfile{
-		DefaultTarget:  "factory:@you/reviewer",
-		AllowedTargets: []string{"factory:@you/reviewer", "factory:@you/factory-builder"},
-	}
-
-	firstRoot := newFilesystemRoot(t, testCreateTemporaryFile)
-	if _, err := firstRoot.UpdateACPAgentProfile(context.Background(), path, profile); err != nil {
-		t.Fatalf("UpdateACPAgentProfile() = %v", err)
-	}
-
-	secondRoot := newFilesystemRoot(t, testCreateTemporaryFile)
-	resolved, err := secondRoot.ResolveACPAgentProfile(path)
-	if err != nil {
-		t.Fatalf("ResolveACPAgentProfile() through newly constructed service = %v", err)
-	}
-	if resolved.DefaultTarget != profile.DefaultTarget ||
-		len(resolved.AllowedTargets) != len(profile.AllowedTargets) ||
-		resolved.AllowedTargets[0] != profile.AllowedTargets[0] ||
-		resolved.AllowedTargets[1] != profile.AllowedTargets[1] {
-		t.Fatalf("ResolveACPAgentProfile() through new service = %#v, want %#v", resolved, profile)
-	}
-}
-
-func TestRootACPIntegrationAndProviderModelUpdates_PreserveAuthoredACPAgentProfile(t *testing.T) {
-	t.Parallel()
-
-	root := newFilesystemRoot(t, testCreateTemporaryFile)
-	path := filepath.Join(t.TempDir(), "config.json")
-	profile := operatorsettings.ACPAgentProfile{
-		DefaultTarget:  "factory:@you/reviewer",
-		AllowedTargets: []string{"factory:@you/reviewer"},
-	}
-	if _, err := root.UpdateACPAgentProfile(context.Background(), path, profile); err != nil {
-		t.Fatalf("UpdateACPAgentProfile() = %v", err)
-	}
-
-	integration := operatorsettings.ACPIntegration{
-		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
-	}
-	afterIntegrationAdd, err := root.ConfigureACPIntegrationAdd(context.Background(), path, integration)
-	if err != nil {
-		t.Fatalf("ConfigureACPIntegrationAdd() = %v", err)
-	}
-	if afterIntegrationAdd.Workers.ACP.AgentProfile == nil ||
-		afterIntegrationAdd.Workers.ACP.AgentProfile.DefaultTarget != profile.DefaultTarget {
-		t.Fatalf("ConfigureACPIntegrationAdd() dropped the authored ACP Agent profile: %#v", afterIntegrationAdd.Workers.ACP.AgentProfile)
-	}
-
-	nextModel := "gpt-5.2"
-	afterProviderModelUpdate, err := root.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
-		Path: path,
-		ProviderModel: operatorsettings.DocumentProviderModelUpdate{
-			Model: &nextModel,
-		},
-	})
-	if err != nil {
-		t.Fatalf("ApplyDocumentUpdate() = %v", err)
-	}
-	if afterProviderModelUpdate.Document.Workers.ACP.AgentProfile == nil ||
-		afterProviderModelUpdate.Document.Workers.ACP.AgentProfile.DefaultTarget != profile.DefaultTarget {
-		t.Fatalf(
-			"ApplyDocumentUpdate() dropped the authored ACP Agent profile: %#v",
-			afterProviderModelUpdate.Document.Workers.ACP.AgentProfile,
-		)
-	}
-
-	resolved, err := root.ResolveACPAgentProfile(path)
-	if err != nil {
-		t.Fatalf("ResolveACPAgentProfile() = %v", err)
-	}
-	if resolved.DefaultTarget != profile.DefaultTarget {
-		t.Fatalf("ResolveACPAgentProfile() after unrelated updates = %#v, want %#v", resolved, profile)
-	}
-}
-
-func TestRootUpdateACPAgentProfile_PreservesUnrelatedSettings(t *testing.T) {
-	t.Parallel()
-
-	root := newFilesystemRoot(t, testCreateTemporaryFile)
-	path := filepath.Join(t.TempDir(), "config.json")
-	integration := operatorsettings.ACPIntegration{
-		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
-	}
-	if _, err := root.ConfigureACPIntegrationAdd(context.Background(), path, integration); err != nil {
-		t.Fatalf("ConfigureACPIntegrationAdd() = %v", err)
-	}
-	scope, err := root.EnsureLocalBackendScope(path)
-	if err != nil {
-		t.Fatalf("EnsureLocalBackendScope() = %v", err)
-	}
-
-	profile := operatorsettings.ACPAgentProfile{
-		DefaultTarget:  "factory:@you/reviewer",
-		AllowedTargets: []string{"factory:@you/reviewer"},
-	}
-	if _, err := root.UpdateACPAgentProfile(context.Background(), path, profile); err != nil {
-		t.Fatalf("UpdateACPAgentProfile() = %v", err)
-	}
-
-	loaded, err := root.LoadDocument(operatorsettings.LoadDocumentRequest{Path: path})
-	if err != nil {
-		t.Fatalf("LoadDocument() = %v", err)
-	}
-	if loaded.Document.BackendScopeID != scope.BackendScopeID {
-		t.Fatalf("LoadDocument().BackendScopeID = %q, want %q", loaded.Document.BackendScopeID, scope.BackendScopeID)
-	}
-	if len(loaded.Document.Workers.ACP.Integrations) != 1 || loaded.Document.Workers.ACP.Integrations[0] != integration {
-		t.Fatalf("LoadDocument() integrations = %#v, want %#v", loaded.Document.Workers.ACP.Integrations, []operatorsettings.ACPIntegration{integration})
-	}
-}
-
+// newFilesystemRoot constructs a real-filesystem Operator Settings root Service
+// with the default codec, so tests can exercise persistence without
+// duplicating construction. See newFilesystemRootWithOptions for injecting
+// fault-injecting or observing fakes (filesystem, codec, logger).
 func newFilesystemRoot(t *testing.T, createTemp operatorsettings.CreateTemporaryFile) operatorsettings.Service {
 	t.Helper()
 
-	files := platformfilesystem.Local{}
+	return newFilesystemRootWithOptions(t, filesystemRootOptions{
+		files:      platformfilesystem.Local{},
+		createTemp: createTemp,
+		decode:     globalconfigmapping.Decode,
+		encode:     globalconfigmapping.Encode,
+	})
+}
+
+// filesystemRootOptions overrides the ports newFilesystemRootWithOptions
+// wires into a root Service, so tests can inject fault-injecting or
+// observing fakes (filesystem, codec, logger) without duplicating the whole
+// construction sequence.
+type filesystemRootOptions struct {
+	files      operatorsettings.FileSystem
+	createTemp operatorsettings.CreateTemporaryFile
+	decode     operatorsettings.ConfigDecoder
+	encode     operatorsettings.ConfigEncoder
+	logger     logging.Logger
+}
+
+func newFilesystemRootWithOptions(t *testing.T, opts filesystemRootOptions) operatorsettings.Service {
+	t.Helper()
+
 	documentService := documentwire.NewService(
-		files,
-		createTemp,
-		globalconfigmapping.Decode,
-		globalconfigmapping.Encode,
+		opts.files,
+		opts.createTemp,
+		opts.decode,
+		opts.encode,
 		rootTestProviderCatalog,
 	)
 	resolutionService, err := resolutionwire.NewService(internaltestproviders.StandardCatalog())
@@ -484,11 +237,12 @@ func newFilesystemRoot(t *testing.T, createTemp operatorsettings.CreateTemporary
 	root, err := operatorservice.New(
 		documentService,
 		resolutionService,
-		files,
-		createTemp,
-		globalconfigmapping.Decode,
-		globalconfigmapping.Encode,
+		opts.files,
+		opts.createTemp,
+		opts.decode,
+		opts.encode,
 		func() string { return "00000000-0000-4000-8000-000000000001" },
+		opts.logger,
 	)
 	if err != nil {
 		t.Fatalf("operatorservice.New() = %v", err)

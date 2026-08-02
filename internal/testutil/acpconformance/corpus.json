@@ -6,7 +6,7 @@
     "sdk_commit": "0845a3bb9eddda5bfc22a94dd3598c90cb842451",
     "sdk_license": "Apache-2.0"
   },
-  "cases_checksum": "39941d81a0ac65999b3689d9d9ade356d42631887cdf507989d111f0b177db39",
+  "cases_checksum": "b0640aab4b648114e147d769386fd603dd798a90c253fca98bf30e6fbb583ab7",
   "cases": [
     {
       "id": "initialize-protocol-version-1-accepted",
@@ -369,6 +369,27 @@
         }
       },
       "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; matches pkg/transports/acp DecodeMethodParams' acpsdk.PromptRequest.Validate() enforcement of the required prompt field, proving structurally valid but semantically incomplete supported input is rejected."
+    },
+    {
+      "id": "malformed-input-missing-required-scalar-field",
+      "protocol_role": "malformed_input",
+      "description": "A session/prompt request whose params decode successfully as JSON and pass acpsdk.PromptRequest.Validate() (prompt is present) but omit the required sessionId scalar field, which Validate() alone does not check and which must still be rejected as invalid params rather than accepted with an empty sessionId.",
+      "directionality": "outbound_only",
+      "payload": {
+        "jsonrpc": "2.0",
+        "method": "session/prompt",
+        "id": "req-80",
+        "connectionId": "conn-1",
+        "params": { "prompt": [{ "type": "text", "text": "hi" }] }
+      },
+      "facts": {
+        "kind": "malformed_input",
+        "outcome": "invalid_params",
+        "metadata": {
+          "reason": "missing_required_scalar_field"
+        }
+      },
+      "provenance": "Hand-authored for ACP-L1-V0-protocol-conformance; matches pkg/transports/acp DecodeMethodParams' required-field-presence check, proving an omitted required scalar field (sessionId) is rejected even though acpsdk.PromptRequest.Validate() does not itself check for it."
     },
     {
       "id": "unsupported-method-unknown-string-id",
