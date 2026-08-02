@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,6 +14,7 @@ import (
 
 type sessionEventAPIFake struct {
 	subscribe func(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error)
+	probe     func(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) error
 }
 
 func (f sessionEventAPIFake) SubscribeFactoryEventsForSession(
@@ -25,8 +25,15 @@ func (f sessionEventAPIFake) SubscribeFactoryEventsForSession(
 	return f.subscribe(ctx, sessionID, cursor)
 }
 
-func (sessionEventAPIFake) ProbeFactoryEventsForSession(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) error {
-	return nil
+func (f sessionEventAPIFake) ProbeFactoryEventsForSession(
+	ctx context.Context,
+	sessionID string,
+	cursor *factorydefinitions.FactoryEventReconnectCursor,
+) error {
+	if f.probe == nil {
+		return nil
+	}
+	return f.probe(ctx, sessionID, cursor)
 }
 
 // TestHandlerUnavailableBranchesStayOwnedBySessions exercises the retained
@@ -86,62 +93,35 @@ func TestHandlerUnavailableBranchesStayOwnedBySessions(t *testing.T) {
 	handler.OpenFactorySession(httptest.NewRecorder(), unsupported)
 }
 
-func TestGetEventsBySessionIdMapsSessionEventReconnectFailure(t *testing.T) {
+func TestGetEventsBySessionIdJSONRecoveryProbeUsesSessionEventAPI(t *testing.T) {
 	t.Parallel()
 
+	var probedSessionID string
+	var probedCursor *factorydefinitions.FactoryEventReconnectCursor
 	handler := NewHandler(Dependencies{
 		SessionEvents: sessionEventAPIFake{
-			subscribe: func(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error) {
-				return nil, errors.Join(apisurface.ErrInvalidEventReconnectCursor, errors.New("cursor expired"))
+			probe: func(_ context.Context, sessionID string, cursor *factorydefinitions.FactoryEventReconnectCursor) error {
+				probedSessionID, probedCursor = sessionID, cursor
+				return nil
 			},
 		},
 	}, zap.NewNop())
 	afterSequence := factoryapi.AfterSequence(7)
 	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-alpha/events", nil)
+	request.Header.Set("Accept", "application/json")
 
 	handler.GetEventsBySessionId(
 		recorder,
-		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-alpha/events", nil),
+		request,
 		factoryapi.SessionID("session-alpha"),
 		factoryapi.GetEventsBySessionIdParams{AfterSequence: &afterSequence},
 	)
 
-	if recorder.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	if recorder.Code != http.StatusOK || recorder.Header().Get("Content-Type") != "application/json" {
+		t.Fatalf("response = %d %q, want JSON recovery response", recorder.Code, recorder.Header().Get("Content-Type"))
 	}
-}
-
-func TestGetEventsBySessionIdStreamsSessionEvents(t *testing.T) {
-	t.Parallel()
-
-	events := make(chan factorydefinitions.FactoryEvent)
-	close(events)
-	handler := NewHandler(Dependencies{
-		SessionEvents: sessionEventAPIFake{
-			subscribe: func(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error) {
-				return &factorydefinitions.FactoryEventStream{
-					BackendScopeID:      "backend-scope",
-					LogicalSessionKeyID: "logical-session",
-					FactorySessionID:    "session-alpha",
-					StreamGenerationID:  "generation-1",
-					Events:              events,
-				}, nil
-			},
-		},
-	}, zap.NewNop())
-	recorder := httptest.NewRecorder()
-
-	handler.GetEventsBySessionId(
-		recorder,
-		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-alpha/events", nil),
-		factoryapi.SessionID("session-alpha"),
-		factoryapi.GetEventsBySessionIdParams{},
-	)
-
-	if recorder.Code != http.StatusOK || recorder.Header().Get("Content-Type") != "text/event-stream" {
-		t.Fatalf("response = %d %q, want event stream", recorder.Code, recorder.Header().Get("Content-Type"))
-	}
-	if recorder.Header().Get(SessionEventStreamGenerationHeader) != "generation-1" {
-		t.Fatalf("generation header = %q, want generation-1", recorder.Header().Get(SessionEventStreamGenerationHeader))
+	if probedSessionID != "session-alpha" || probedCursor == nil || probedCursor.AfterSequence == nil || *probedCursor.AfterSequence != 7 {
+		t.Fatalf("probe = session %q cursor %#v, want session-alpha after_sequence 7", probedSessionID, probedCursor)
 	}
 }
