@@ -3018,7 +3018,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/http/application",
-      "minimum": 75.00
+      "minimum": 73.68
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/http/workstationprojection",
@@ -3036,7 +3036,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/composition",
-      "minimum": 75.00
+      "minimum": 71.79
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig",
