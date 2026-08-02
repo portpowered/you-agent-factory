@@ -227,6 +227,52 @@ func TestACPAgentProfileFailurePersistKindWrapsPersistSentinel(t *testing.T) {
 	}
 }
 
+func TestACPAgentProfileFailureErrorFormatsMessageAndField(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		failure ACPAgentProfileFailure
+		want    string
+	}{
+		{
+			name:    "message and field",
+			failure: ACPAgentProfileFailure{Kind: ACPAgentProfileFailureKindInvalid, Message: "blank reference", Field: "default"},
+			want:    "ACP agent profile is invalid: blank reference (default)",
+		},
+		{
+			name:    "message only",
+			failure: ACPAgentProfileFailure{Kind: ACPAgentProfileFailureKindInvalid, Message: "blank reference"},
+			want:    "ACP agent profile is invalid: blank reference",
+		},
+		{
+			name:    "field only",
+			failure: ACPAgentProfileFailure{Kind: ACPAgentProfileFailureKindPersist, Field: "acp-agent-profile.json"},
+			want:    "ACP agent profile persist failed (acp-agent-profile.json)",
+		},
+		{
+			name:    "neither message nor field",
+			failure: ACPAgentProfileFailure{Kind: ACPAgentProfileFailureKindPersist},
+			want:    "ACP agent profile persist failed",
+		},
+		{
+			name:    "unrecognized kind falls back to invalid sentinel",
+			failure: ACPAgentProfileFailure{Kind: ACPAgentProfileFailureKind("unrecognized")},
+			want:    "ACP agent profile is invalid",
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := testCase.failure.Error(); got != testCase.want {
+				t.Fatalf("ACPAgentProfileFailure.Error() = %q, want %q", got, testCase.want)
+			}
+		})
+	}
+}
+
 func TestUpdateACPAgentProfileRequestValidateRequiresPath(t *testing.T) {
 	t.Parallel()
 
