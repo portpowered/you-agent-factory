@@ -55,18 +55,28 @@ func (f *fakeService) SetTarget(_ context.Context, req chatsessions.SetTargetReq
 
 // startTurnIfNotBusy is the fakeService.StartTurn admission check, factored
 // out so the busy/non-busy behavioral tests can drive it directly against
-// every prior-turn shape (nil, admitted, running, or terminal) without first
-// having to route a real turn through its full lifecycle.
+// every prior-turn shape (nil, admitted, running, terminal, or invalid)
+// without first having to route a real turn through its full lifecycle. A
+// prior turn's state is validated before IsBusy is ever consulted -- IsBusy
+// intentionally reports false for a zero/unknown TurnState (see
+// TurnState.IsBusy's doc comment), so admission would otherwise silently
+// treat a corrupt active-turn state as free and overwrite it with a
+// replacement turn instead of reporting the typed invalid-state error.
 func (f *fakeService) startTurnIfNotBusy(req chatsessions.StartTurnRequest) (chatsessions.StartTurnResult, error) {
 	if req.ExpectedVersion != f.session.Version {
 		return chatsessions.StartTurnResult{}, &chatsessions.ConflictError{
 			Value: "Session", ID: req.SessionID, Expected: req.ExpectedVersion, Actual: f.session.Version,
 		}
 	}
-	if f.session.ActiveTurnID != "" && f.turn.State.IsBusy() {
-		return chatsessions.StartTurnResult{}, &chatsessions.BusyError{
-			Value: "Session", ID: req.SessionID,
-			ActiveTurnID: f.turn.ID, ActiveTurnState: f.turn.State,
+	if f.session.ActiveTurnID != "" {
+		if err := f.turn.State.Validate(); err != nil {
+			return chatsessions.StartTurnResult{}, err
+		}
+		if f.turn.State.IsBusy() {
+			return chatsessions.StartTurnResult{}, &chatsessions.BusyError{
+				Value: "Session", ID: req.SessionID,
+				ActiveTurnID: f.turn.ID, ActiveTurnState: f.turn.State,
+			}
 		}
 	}
 	f.turn = chatsessions.Turn{ID: "turn-1", State: chatsessions.TurnStateAdmitted, RequestID: req.RequestID}
@@ -147,7 +157,15 @@ func (f *fakeService) AdvanceControl(_ context.Context, req chatsessions.Advance
 		// the case ResolveControlIntentOutcome needs -- when the captured
 		// turn is no longer current, the mismatch against currentActiveID
 		// resolves to SUPERSEDED before this state value is even consulted.
-		next = chatsessions.ResolveControlIntentOutcome(f.intent.TurnID, f.turn.State, f.session.ActiveTurnID)
+		// ResolveControlIntentOutcome validates f.turn.State itself and
+		// returns a typed error for a zero/unknown value rather than
+		// silently resolving it, so a corrupt captured turn state never
+		// completes an intent.
+		outcome, err := chatsessions.ResolveControlIntentOutcome(f.intent.TurnID, f.turn.State, f.session.ActiveTurnID)
+		if err != nil {
+			return chatsessions.AdvanceControlResult{}, err
+		}
+		next = outcome
 	}
 	if err := f.intent.State.CanTransitionTo(next); err != nil {
 		return chatsessions.AdvanceControlResult{}, err
@@ -332,6 +350,40 @@ func TestFakeService_StartTurnAdmissionBusyCases(t *testing.T) {
 			}
 		})
 	}
+
+	// A zero or unknown prior TurnState is neither busy nor free: it is a
+	// corrupt fact that must classify as a typed invalid-state error, and
+	// admission must not overwrite the active turn with a replacement.
+	for _, state := range []chatsessions.TurnState{"", "BOGUS"} {
+		t.Run("invalid prior turn state "+string(state)+" is rejected, not admitted", func(t *testing.T) {
+			svc := &fakeService{}
+			session := newTestSession(t, ctx, svc)
+			if _, err := svc.StartTurn(ctx, chatsessions.StartTurnRequest{
+				RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-1"},
+				SessionID: session.ID,
+			}); err != nil {
+				t.Fatalf("initial StartTurn: %v", err)
+			}
+			svc.turn.State = state
+			beforeSession, beforeTurn := svc.session, svc.turn
+
+			_, err := svc.StartTurn(ctx, chatsessions.StartTurnRequest{
+				RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-2"},
+				SessionID: session.ID,
+			})
+			if !errors.Is(err, chatsessions.ErrUnknownEnumValue) {
+				t.Fatalf("StartTurn with prior turn state %q: got %v, want ErrUnknownEnumValue", state, err)
+			}
+			var busyErr *chatsessions.BusyError
+			if errors.As(err, &busyErr) {
+				t.Fatalf("StartTurn with prior turn state %q: got *BusyError, want the typed invalid-state error instead", state)
+			}
+			if svc.session != beforeSession || svc.turn != beforeTurn {
+				t.Fatalf("StartTurn with prior turn state %q must not admit a replacement turn: session %+v turn %+v, want unchanged %+v / %+v",
+					state, svc.session, svc.turn, beforeSession, beforeTurn)
+			}
+		})
+	}
 }
 
 // TestFakeService_StaleVersionConflictsDoNotMutateState proves a stale
@@ -498,6 +550,49 @@ func TestFakeService_ControlIntentCapturedTurnRaceOutcomes(t *testing.T) {
 			t.Fatalf("a superseded outcome must never rebind to the later turn: got TurnID %q, captured %q", result.Intent.TurnID, committed.TurnID)
 		}
 	})
+
+	// An invalid captured turn state must reject the completion outcome with
+	// a typed error and leave the COMMITTED intent unchanged, both when the
+	// captured turn is still current and when it is no longer current -- an
+	// identity mismatch must never mask the invalid captured state as a
+	// successful SUPERSEDED outcome.
+	for _, tt := range []struct {
+		name             string
+		state            chatsessions.TurnState
+		rebindActiveTurn bool
+	}{
+		{name: "invalid captured state, still current", state: "", rebindActiveTurn: false},
+		{name: "unknown captured state, still current", state: "BOGUS", rebindActiveTurn: false},
+		{name: "invalid captured state, no longer current", state: "", rebindActiveTurn: true},
+		{name: "unknown captured state, no longer current", state: "BOGUS", rebindActiveTurn: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &fakeService{}
+			session := newTestSession(t, ctx, svc)
+			if _, err := svc.StartTurn(ctx, chatsessions.StartTurnRequest{
+				RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-turn"},
+				SessionID: session.ID,
+			}); err != nil {
+				t.Fatalf("StartTurn: %v", err)
+			}
+			committed := commit(t, svc, session.ID)
+			svc.turn.State = tt.state
+			if tt.rebindActiveTurn {
+				svc.session.ActiveTurnID = "turn-2"
+			}
+			beforeIntent := svc.intent
+
+			_, err := svc.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
+				SessionID: session.ID, RequestID: committed.RequestID, Next: chatsessions.ControlIntentStateCompleted,
+			})
+			if !errors.Is(err, chatsessions.ErrUnknownEnumValue) {
+				t.Fatalf("AdvanceControl with captured turn state %q: got %v, want ErrUnknownEnumValue", tt.state, err)
+			}
+			if svc.intent != beforeIntent {
+				t.Fatalf("AdvanceControl with captured turn state %q must not mutate the intent: got %+v, want unchanged %+v", tt.state, svc.intent, beforeIntent)
+			}
+		})
+	}
 }
 
 // TestAttachment_IndependentAcrossSameSessionAndPosition proves two valid

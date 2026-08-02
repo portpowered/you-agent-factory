@@ -240,6 +240,18 @@ func TestCloseTargetEpisode(t *testing.T) {
 	if _, err := CloseTargetEpisode(unknown, closedAt); !errors.Is(err, ErrUnknownEnumValue) {
 		t.Fatalf("CloseTargetEpisode(unknown state): got %v, want ErrUnknownEnumValue", err)
 	}
+
+	if got, err := CloseTargetEpisode(open, time.Time{}); !errors.Is(err, ErrInconsistentValue) {
+		t.Fatalf("CloseTargetEpisode(zero closedAt): got (%+v, %v), want ErrInconsistentValue", got, err)
+	} else if got != open {
+		t.Fatalf("CloseTargetEpisode(zero closedAt): input must not be mutated, got %+v, want %+v", got, open)
+	}
+
+	if got, err := CloseTargetEpisode(open, started.Add(-time.Minute)); !errors.Is(err, ErrInconsistentValue) {
+		t.Fatalf("CloseTargetEpisode(closedAt before StartedAt): got (%+v, %v), want ErrInconsistentValue", got, err)
+	} else if got != open {
+		t.Fatalf("CloseTargetEpisode(closedAt before StartedAt): input must not be mutated, got %+v, want %+v", got, open)
+	}
 }
 
 func TestOpenNextTargetEpisode(t *testing.T) {
@@ -248,15 +260,21 @@ func TestOpenNextTargetEpisode(t *testing.T) {
 	nextStarted := closedAt
 	factoryTarget := ChatTargetRef{Kind: ChatTargetKindFactory, Ref: "@you/review"}
 	nextTarget := ChatTargetRef{Kind: ChatTargetKindFactory, Ref: "@you/factory-builder"}
+	const priorFactorySessionID = "fsession-1"
+	const nextFactorySessionID = "fsession-2"
 
 	closedPrior := TargetEpisode{
 		Number: 1, State: TargetEpisodeStateClosed,
-		Target: factoryTarget, StartedAt: started, ClosedAt: &closedAt,
+		Target: factoryTarget, FactorySessionID: priorFactorySessionID,
+		StartedAt: started, ClosedAt: &closedAt,
 	}
 
-	next, err := OpenNextTargetEpisode(closedPrior, nextTarget, nextStarted)
+	next, err := OpenNextTargetEpisode(closedPrior, nextTarget, nextFactorySessionID, nextStarted)
 	if err != nil {
 		t.Fatalf("OpenNextTargetEpisode(CLOSED prior): %v", err)
+	}
+	if err := next.Validate(); err != nil {
+		t.Fatalf("OpenNextTargetEpisode(CLOSED prior): result fails its own Validate(): %v", err)
 	}
 	if next.Number != closedPrior.Number+1 {
 		t.Fatalf("OpenNextTargetEpisode: got Number %d, want %d", next.Number, closedPrior.Number+1)
@@ -267,14 +285,18 @@ func TestOpenNextTargetEpisode(t *testing.T) {
 	if next.Target != nextTarget {
 		t.Fatalf("OpenNextTargetEpisode: got target %+v, want %+v", next.Target, nextTarget)
 	}
-	if closedPrior.Target != factoryTarget || closedPrior.Number != 1 || closedPrior.State != TargetEpisodeStateClosed {
+	if next.FactorySessionID != nextFactorySessionID || next.FactorySessionID == closedPrior.FactorySessionID {
+		t.Fatalf("OpenNextTargetEpisode: got FactorySessionID %q, want the new %q distinct from prior's %q",
+			next.FactorySessionID, nextFactorySessionID, closedPrior.FactorySessionID)
+	}
+	if closedPrior.Target != factoryTarget || closedPrior.Number != 1 || closedPrior.State != TargetEpisodeStateClosed || closedPrior.FactorySessionID != priorFactorySessionID {
 		t.Fatalf("OpenNextTargetEpisode: prior episode's identity must never be rewritten, got %+v", closedPrior)
 	}
 
 	openPrior := closedPrior
 	openPrior.State = TargetEpisodeStateOpen
 	openPrior.ClosedAt = nil
-	_, openErr := OpenNextTargetEpisode(openPrior, nextTarget, nextStarted)
+	_, openErr := OpenNextTargetEpisode(openPrior, nextTarget, nextFactorySessionID, nextStarted)
 	if !errors.Is(openErr, ErrTargetEpisodeNotClosed) {
 		t.Fatalf("OpenNextTargetEpisode(OPEN prior): got %v, want ErrTargetEpisodeNotClosed", openErr)
 	}
@@ -286,7 +308,7 @@ func TestOpenNextTargetEpisode(t *testing.T) {
 	for _, state := range []TargetEpisodeState{"", "BOGUS"} {
 		invalidPrior := closedPrior
 		invalidPrior.State = state
-		_, err := OpenNextTargetEpisode(invalidPrior, nextTarget, nextStarted)
+		_, err := OpenNextTargetEpisode(invalidPrior, nextTarget, nextFactorySessionID, nextStarted)
 		if !errors.Is(err, ErrUnknownEnumValue) {
 			t.Fatalf("OpenNextTargetEpisode(prior state %q): got %v, want ErrUnknownEnumValue", state, err)
 		}
@@ -295,8 +317,20 @@ func TestOpenNextTargetEpisode(t *testing.T) {
 		}
 	}
 
-	if _, err := OpenNextTargetEpisode(closedPrior, ChatTargetRef{}, nextStarted); !errors.Is(err, ErrUnknownEnumValue) {
+	if _, err := OpenNextTargetEpisode(closedPrior, ChatTargetRef{}, nextFactorySessionID, nextStarted); !errors.Is(err, ErrUnknownEnumValue) {
 		t.Fatalf("OpenNextTargetEpisode(invalid target): got %v, want ErrUnknownEnumValue", err)
+	}
+
+	if got, err := OpenNextTargetEpisode(closedPrior, nextTarget, nextFactorySessionID, time.Time{}); !errors.Is(err, ErrRequiredValue) {
+		t.Fatalf("OpenNextTargetEpisode(zero startedAt): got (%+v, %v), want ErrRequiredValue", got, err)
+	} else if got != (TargetEpisode{}) {
+		t.Fatalf("OpenNextTargetEpisode(zero startedAt): must return a zero-value result on error, got %+v", got)
+	}
+
+	if got, err := OpenNextTargetEpisode(closedPrior, nextTarget, nextFactorySessionID, closedAt.Add(-time.Minute)); !errors.Is(err, ErrInconsistentValue) {
+		t.Fatalf("OpenNextTargetEpisode(startedAt before prior.ClosedAt): got (%+v, %v), want ErrInconsistentValue", got, err)
+	} else if got != (TargetEpisode{}) {
+		t.Fatalf("OpenNextTargetEpisode(startedAt before prior.ClosedAt): must return a zero-value result on error, got %+v", got)
 	}
 }
 
@@ -321,7 +355,11 @@ func TestResolveControlIntentOutcome(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ResolveControlIntentOutcome(capturedTurn, tt.capturedTurnState, tt.currentActiveID)
+			got, err := ResolveControlIntentOutcome(capturedTurn, tt.capturedTurnState, tt.currentActiveID)
+			if err != nil {
+				t.Fatalf("ResolveControlIntentOutcome(%q, %s, %q) returned error %v, want nil",
+					capturedTurn, tt.capturedTurnState, tt.currentActiveID, err)
+			}
 			if got != tt.want {
 				t.Fatalf("ResolveControlIntentOutcome(%q, %s, %q) = %v, want %v",
 					capturedTurn, tt.capturedTurnState, tt.currentActiveID, got, tt.want)
@@ -330,11 +368,40 @@ func TestResolveControlIntentOutcome(t *testing.T) {
 	}
 
 	t.Run("never rebinds to a later admitted turn", func(t *testing.T) {
-		got := ResolveControlIntentOutcome(capturedTurn, TurnStateAdmitted, otherTurn)
+		got, err := ResolveControlIntentOutcome(capturedTurn, TurnStateAdmitted, otherTurn)
+		if err != nil {
+			t.Fatalf("ResolveControlIntentOutcome: got error %v, want nil", err)
+		}
 		if got != ControlIntentStateSuperseded {
 			t.Fatalf("a later admitted turn must never be completed by an older intent: got %v, want SUPERSEDED", got)
 		}
 	})
+
+	// An invalid captured TurnState is rejected with a typed error before any
+	// outcome is selected, both when the captured turn is still current and
+	// when an identity mismatch would otherwise resolve to SUPERSEDED -- the
+	// mismatch must never hide the invalid captured state.
+	for _, state := range []TurnState{"", "BOGUS"} {
+		t.Run("invalid captured state still current: "+string(state), func(t *testing.T) {
+			got, err := ResolveControlIntentOutcome(capturedTurn, state, capturedTurn)
+			if !errors.Is(err, ErrUnknownEnumValue) {
+				t.Fatalf("ResolveControlIntentOutcome(captured state %q): got %v, want ErrUnknownEnumValue", state, err)
+			}
+			if got != "" {
+				t.Fatalf("ResolveControlIntentOutcome(captured state %q): got outcome %v, want zero value on error", state, got)
+			}
+		})
+
+		t.Run("invalid captured state no longer current: "+string(state), func(t *testing.T) {
+			got, err := ResolveControlIntentOutcome(capturedTurn, state, otherTurn)
+			if !errors.Is(err, ErrUnknownEnumValue) {
+				t.Fatalf("ResolveControlIntentOutcome(captured state %q, mismatched id): got %v, want ErrUnknownEnumValue", state, err)
+			}
+			if got != "" {
+				t.Fatalf("ResolveControlIntentOutcome(captured state %q, mismatched id): got outcome %v, want zero value on error", state, got)
+			}
+		})
+	}
 }
 
 func TestControlAction_L1Support(t *testing.T) {

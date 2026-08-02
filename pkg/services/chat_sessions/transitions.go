@@ -107,7 +107,10 @@ func (s ControlIntentState) CanTransitionTo(next ControlIntentState) error {
 // transitioned to CLOSED at closedAt, without modifying prior. It reports the
 // same typed error CanTransitionTo would (an invalid-state outcome for a
 // zero/unknown prior.State, or an invalid-transition outcome for a prior that
-// is already CLOSED) and returns prior unchanged on any error.
+// is already CLOSED) and returns prior unchanged on any error, including when
+// closedAt is zero or precedes prior.StartedAt -- the candidate closed value
+// is validated with TargetEpisode.Validate() before it is ever returned, so a
+// caller can never observe a TargetEpisode that fails its own invariants.
 func CloseTargetEpisode(prior TargetEpisode, closedAt time.Time) (TargetEpisode, error) {
 	if err := prior.State.CanTransitionTo(TargetEpisodeStateClosed); err != nil {
 		return prior, err
@@ -115,35 +118,50 @@ func CloseTargetEpisode(prior TargetEpisode, closedAt time.Time) (TargetEpisode,
 	closed := prior
 	closed.State = TargetEpisodeStateClosed
 	closed.ClosedAt = &closedAt
+	if err := closed.Validate(); err != nil {
+		return prior, err
+	}
 	return closed, nil
 }
 
-// OpenNextTargetEpisode returns a new TargetEpisode selecting target,
-// numbered prior.Number+1, in state OPEN. Target episodes are immutable
-// historical identities: this never rewrites prior's Target, Number, or
-// State, and it requires prior to already be CLOSED -- a target change is
-// represented by closing the current episode first (CloseTargetEpisode) and
-// then opening the next one, never by mutating the old episode in place. A
-// zero or unknown prior.State reports prior's own typed invalid-state error
-// (from Validate); a validated but still-OPEN prior reports
-// *TargetEpisodeNotClosedError, distinct from that invalid-state outcome.
-func OpenNextTargetEpisode(prior TargetEpisode, target ChatTargetRef, startedAt time.Time) (TargetEpisode, error) {
+// OpenNextTargetEpisode returns a new TargetEpisode selecting target and
+// factorySessionID, numbered prior.Number+1, in state OPEN. Target episodes
+// are immutable historical identities: this never rewrites prior's Target,
+// Number, State, or FactorySessionID, and it requires prior to already be
+// CLOSED -- a target change is represented by closing the current episode
+// first (CloseTargetEpisode) and then opening the next one, never by
+// mutating the old episode in place. factorySessionID is the new episode's
+// own Factory Session reference, supplied by the caller rather than copied
+// from prior, since a target change can select a different Factory Session
+// than the one the prior episode ran against; a caller with no Factory
+// Session to associate yet may pass the empty string. A zero or unknown
+// prior.State reports prior's own typed invalid-state error (from Validate);
+// a validated but still-OPEN prior reports *TargetEpisodeNotClosedError,
+// distinct from that invalid-state outcome. startedAt that is zero, or that
+// precedes prior.ClosedAt, and any other invariant TargetEpisode.Validate()
+// enforces (including an invalid target) are rejected before the candidate
+// value is ever returned.
+func OpenNextTargetEpisode(prior TargetEpisode, target ChatTargetRef, factorySessionID string, startedAt time.Time) (TargetEpisode, error) {
 	if err := prior.State.Validate(); err != nil {
 		return TargetEpisode{}, err
 	}
 	if !prior.State.IsTerminal() {
 		return TargetEpisode{}, &TargetEpisodeNotClosedError{Number: prior.Number, State: prior.State}
 	}
-	if err := target.Validate(); err != nil {
-		return TargetEpisode{}, err
-	}
-	return TargetEpisode{
+	next := TargetEpisode{
 		Number:           prior.Number + 1,
 		State:            TargetEpisodeStateOpen,
 		Target:           target,
-		FactorySessionID: prior.FactorySessionID,
+		FactorySessionID: factorySessionID,
 		StartedAt:        startedAt,
-	}, nil
+	}
+	if err := next.Validate(); err != nil {
+		return TargetEpisode{}, err
+	}
+	if prior.ClosedAt != nil && startedAt.Before(*prior.ClosedAt) {
+		return TargetEpisode{}, newValidationError("TargetEpisode", "StartedAt", ErrInconsistentValue)
+	}
+	return next, nil
 }
 
 // ResolveControlIntentOutcome is the pure captured-turn race rule a
@@ -153,19 +171,27 @@ func OpenNextTargetEpisode(prior TargetEpisode, target ChatTargetRef, startedAt 
 // Session's currentActiveTurnID at completion time; it never rebinds the
 // intent to a different turn.
 //
-// A captured turn that is no longer the session's current active turn
-// resolves to SUPERSEDED regardless of capturedTurnState -- including when
-// capturedTurnState is itself already terminal, since "no longer current" is
-// evaluated first and takes precedence. Otherwise, an already-terminal
-// captured turn (one that finished before the intent completed) resolves to
-// NOOP, since there is nothing left to cancel or close; a still-active
-// captured turn resolves to COMPLETED.
-func ResolveControlIntentOutcome(capturedTurnID string, capturedTurnState TurnState, currentActiveTurnID string) ControlIntentState {
+// capturedTurnState is validated first, before any outcome is selected, so a
+// zero or unknown captured state always reports a typed invalid-state error
+// -- an identity mismatch (capturedTurnID no longer the current active turn)
+// never hides an invalid captured state behind a SUPERSEDED outcome. Once
+// capturedTurnState is a declared member, a captured turn that is no longer
+// the session's current active turn resolves to SUPERSEDED regardless of
+// capturedTurnState -- including when capturedTurnState is itself already
+// terminal, since "no longer current" is evaluated first and takes
+// precedence. Otherwise, an already-terminal captured turn (one that
+// finished before the intent completed) resolves to NOOP, since there is
+// nothing left to cancel or close; a still-active captured turn resolves to
+// COMPLETED.
+func ResolveControlIntentOutcome(capturedTurnID string, capturedTurnState TurnState, currentActiveTurnID string) (ControlIntentState, error) {
+	if err := capturedTurnState.Validate(); err != nil {
+		return "", err
+	}
 	if capturedTurnID != currentActiveTurnID {
-		return ControlIntentStateSuperseded
+		return ControlIntentStateSuperseded, nil
 	}
 	if capturedTurnState.IsTerminal() {
-		return ControlIntentStateNoop
+		return ControlIntentStateNoop, nil
 	}
-	return ControlIntentStateCompleted
+	return ControlIntentStateCompleted, nil
 }
