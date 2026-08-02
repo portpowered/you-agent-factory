@@ -2,6 +2,7 @@ package chatsessions
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -45,27 +46,124 @@ func TestChatTargetRef_Validate(t *testing.T) {
 	}
 }
 
+const validUUID = "550e8400-e29b-41d4-a716-446655440000"
+
 func TestRequestIdentity_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
 		id      RequestIdentity
 		wantErr error
 	}{
-		{"valid connection-scoped", RequestIdentity{ConnectionID: "conn-1", JSONRPCID: "req-1"}, nil},
-		{"valid transport-minted UUID", RequestIdentity{TransportUUID: "550e8400-e29b-41d4-a716-446655440000"}, nil},
-		{"transport UUID with blank connection", RequestIdentity{ConnectionID: "", TransportUUID: "550e8400-e29b-41d4-a716-446655440000"}, nil},
-		{"malformed transport UUID", RequestIdentity{TransportUUID: "req-uuid-1"}, ErrMalformedValue},
-		{"mixed transport UUID and connection", RequestIdentity{TransportUUID: "550e8400-e29b-41d4-a716-446655440000", ConnectionID: "conn-1"}, ErrInconsistentValue},
-		{"mixed transport UUID and JSON-RPC id", RequestIdentity{TransportUUID: "550e8400-e29b-41d4-a716-446655440000", JSONRPCID: "req-1"}, ErrInconsistentValue},
-		{"bare JSON-RPC id without connection", RequestIdentity{JSONRPCID: "req-1"}, ErrRequiredValue},
-		{"blank JSON-RPC id", RequestIdentity{ConnectionID: "conn-1"}, ErrRequiredValue},
-		{"zero value", RequestIdentity{}, ErrRequiredValue},
+		// Valid forms, one per closed kind.
+		{"valid JSON-RPC string", RequestIdentity{Kind: RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-1"}, nil},
+		{"valid JSON-RPC number", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: 1}, nil},
+		{"valid JSON-RPC number zero", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: 0}, nil},
+		{"valid transport UUID", RequestIdentity{Kind: RequestIdentityKindTransportUUID, TransportUUID: validUUID}, nil},
+
+		// Zero and unknown kind.
+		{"zero value", RequestIdentity{}, ErrUnknownEnumValue},
+		{"unknown kind", RequestIdentity{Kind: "BOGUS", ConnectionID: "conn-1", JSONRPCStringID: "req-1"}, ErrUnknownEnumValue},
+
+		// Bare / incomplete JSON-RPC forms.
+		{"string id without connection", RequestIdentity{Kind: RequestIdentityKindJSONRPCString, JSONRPCStringID: "req-1"}, ErrRequiredValue},
+		{"connection without string id", RequestIdentity{Kind: RequestIdentityKindJSONRPCString, ConnectionID: "conn-1"}, ErrRequiredValue},
+		{"number id without connection", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, JSONRPCNumberID: 1}, ErrRequiredValue},
+
+		// Missing / malformed UUID.
+		{"blank transport UUID", RequestIdentity{Kind: RequestIdentityKindTransportUUID}, ErrRequiredValue},
+		{"malformed transport UUID", RequestIdentity{Kind: RequestIdentityKindTransportUUID, TransportUUID: "req-uuid-1"}, ErrMalformedValue},
+
+		// Mixed UUID / connection-scoped modes.
+		{"UUID kind with connection", RequestIdentity{Kind: RequestIdentityKindTransportUUID, TransportUUID: validUUID, ConnectionID: "conn-1"}, ErrInconsistentValue},
+		{"UUID kind with string id", RequestIdentity{Kind: RequestIdentityKindTransportUUID, TransportUUID: validUUID, JSONRPCStringID: "req-1"}, ErrInconsistentValue},
+		{"UUID kind with number id", RequestIdentity{Kind: RequestIdentityKindTransportUUID, TransportUUID: validUUID, JSONRPCNumberID: 1}, ErrInconsistentValue},
+
+		// Every inactive field populated for its own kind.
+		{"string kind with number id", RequestIdentity{Kind: RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-1", JSONRPCNumberID: 1}, ErrInconsistentValue},
+		{"string kind with UUID", RequestIdentity{Kind: RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-1", TransportUUID: validUUID}, ErrInconsistentValue},
+		{"number kind with string id", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCStringID: "req-1"}, ErrInconsistentValue},
+		{"number kind with UUID", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", TransportUUID: validUUID}, ErrInconsistentValue},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.id.Validate()
 			assertSentinel(t, err, tt.wantErr)
 		})
+	}
+}
+
+// TestRequestIdentity_TypedNonCollisionAndEquality proves that a
+// connection-scoped numeric id and string id with the same printed form are
+// distinct, unequal identities; that repeated construction of the same
+// connection, kind, and typed id produces equal identities; and that
+// changing the connection, kind, or active id changes identity.
+func TestRequestIdentity_TypedNonCollisionAndEquality(t *testing.T) {
+	numberOne := RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: 1}
+	stringOne := RequestIdentity{Kind: RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "1"}
+	if numberOne == stringOne {
+		t.Fatalf("numeric id 1 and string id %q on the same connection must not collide, got equal identities %+v", "1", numberOne)
+	}
+	if err := numberOne.Validate(); err != nil {
+		t.Fatalf("numberOne.Validate(): %v", err)
+	}
+	if err := stringOne.Validate(); err != nil {
+		t.Fatalf("stringOne.Validate(): %v", err)
+	}
+
+	numberOneAgain := RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: 1}
+	if numberOne != numberOneAgain {
+		t.Fatalf("identical connection, kind, and typed id must produce equal identities, got %+v != %+v", numberOne, numberOneAgain)
+	}
+
+	otherConnection := RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-2", JSONRPCNumberID: 1}
+	if numberOne == otherConnection {
+		t.Fatalf("different connections must remain distinct, got equal identities %+v == %+v", numberOne, otherConnection)
+	}
+
+	numberZero := RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: 0}
+	if err := numberZero.Validate(); err != nil {
+		t.Fatalf("numeric id zero must be a valid active id: %v", err)
+	}
+	if numberZero == numberOne {
+		t.Fatalf("numeric id 0 and numeric id 1 must remain distinct, got equal identities %+v", numberZero)
+	}
+}
+
+// TestRequestIdentity_ErrorsDoNotLeakSuppliedValues proves that
+// RequestIdentity validation failures never echo the caller-supplied
+// connection id, JSON-RPC id, or UUID text in their error message or
+// structured fields, using secret-looking input designed to be obvious if it
+// leaked.
+func TestRequestIdentity_ErrorsDoNotLeakSuppliedValues(t *testing.T) {
+	const secretConnection = "conn-secret-token-do-not-leak"
+	const secretStringID = "req-secret-credential-do-not-leak"
+	const secretUUID = "not-a-uuid-secret-do-not-leak"
+
+	cases := []RequestIdentity{
+		{Kind: RequestIdentityKindJSONRPCString, JSONRPCStringID: secretStringID},
+		{Kind: RequestIdentityKindJSONRPCString, ConnectionID: secretConnection},
+		{Kind: RequestIdentityKindTransportUUID, TransportUUID: secretUUID, ConnectionID: secretConnection},
+		{Kind: RequestIdentityKindTransportUUID, TransportUUID: secretUUID},
+	}
+	for _, id := range cases {
+		err := id.Validate()
+		if err == nil {
+			t.Fatalf("case %+v: expected a validation error, got nil", id)
+		}
+		msg := err.Error()
+		for _, secret := range []string{secretConnection, secretStringID, secretUUID} {
+			if strings.Contains(msg, secret) {
+				t.Fatalf("case %+v: error message %q leaks supplied value %q", id, msg, secret)
+			}
+		}
+		var ve *ValidationError
+		if errors.As(err, &ve) {
+			for _, secret := range []string{secretConnection, secretStringID, secretUUID} {
+				if strings.Contains(ve.Value, secret) || strings.Contains(ve.Field, secret) {
+					t.Fatalf("case %+v: ValidationError fields leak supplied value %q: %+v", id, secret, ve)
+				}
+			}
+		}
 	}
 }
 
@@ -259,7 +357,7 @@ func validTurn() Turn {
 		ID:               "turn-1",
 		Episode:          1,
 		State:            TurnStateAdmitted,
-		RequestID:        RequestIdentity{ConnectionID: "conn-1", JSONRPCID: "req-1"},
+		RequestID:        RequestIdentity{Kind: RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-1"},
 		StartSequence:    0,
 		TerminalSequence: 0,
 	}
@@ -287,7 +385,7 @@ func TestTurn_Validate(t *testing.T) {
 		}, nil},
 		{"blank id", func(t Turn) Turn { t.ID = ""; return t }, ErrRequiredValue},
 		{"unknown state", func(t Turn) Turn { t.State = "BOGUS"; return t }, ErrUnknownEnumValue},
-		{"invalid request id", func(t Turn) Turn { t.RequestID = RequestIdentity{}; return t }, ErrRequiredValue},
+		{"invalid request id", func(t Turn) Turn { t.RequestID = RequestIdentity{}; return t }, ErrUnknownEnumValue},
 		{"terminal without terminal sequence", func(t Turn) Turn {
 			t.State = TurnStateCompleted
 			return t
@@ -400,7 +498,7 @@ func TestControlIntentState_Validate(t *testing.T) {
 
 func validControlIntent() ControlIntent {
 	return ControlIntent{
-		RequestID:       RequestIdentity{ConnectionID: "conn-1", JSONRPCID: "req-1"},
+		RequestID:       RequestIdentity{Kind: RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-1"},
 		SessionID:       "session-1",
 		TurnID:          "turn-1",
 		TargetEpisode:   1,
@@ -418,14 +516,14 @@ func TestControlIntent_Validate(t *testing.T) {
 		wantErr error
 	}{
 		{"valid", func(c ControlIntent) ControlIntent { return c }, nil},
-		{"invalid request id", func(c ControlIntent) ControlIntent { c.RequestID = RequestIdentity{}; return c }, ErrRequiredValue},
+		{"invalid request id", func(c ControlIntent) ControlIntent { c.RequestID = RequestIdentity{}; return c }, ErrUnknownEnumValue},
 		{"blank session id", func(c ControlIntent) ControlIntent { c.SessionID = ""; return c }, ErrRequiredValue},
 		{"blank turn id", func(c ControlIntent) ControlIntent { c.TurnID = ""; return c }, ErrRequiredValue},
 		{"unsupported action", func(c ControlIntent) ControlIntent { c.Action = ControlActionPause; return c }, ErrUnsupportedControlAction},
 		{"unknown action", func(c ControlIntent) ControlIntent { c.Action = "BOGUS"; return c }, ErrUnknownEnumValue},
 		{"unknown state", func(c ControlIntent) ControlIntent { c.State = "BOGUS"; return c }, ErrUnknownEnumValue},
 		{"zero requested at", func(c ControlIntent) ControlIntent { c.RequestedAt = time.Time{}; return c }, ErrRequiredValue},
-		{"zero value", func(ControlIntent) ControlIntent { return ControlIntent{} }, ErrRequiredValue},
+		{"zero value", func(ControlIntent) ControlIntent { return ControlIntent{} }, ErrUnknownEnumValue},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

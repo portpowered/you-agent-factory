@@ -17,7 +17,8 @@ var (
 	// ErrInconsistentValue reports a value whose fields disagree with each
 	// other under the L1 V0 model, such as a terminal sequence or terminal
 	// time fact that does not match the value's declared state, or a
-	// RequestIdentity that mixes its two legal forms.
+	// RequestIdentity carrying a field that is populated but inactive for its
+	// declared Kind.
 	ErrInconsistentValue = errors.New("chat sessions: structurally inconsistent value")
 	// ErrMalformedValue reports a non-blank value that fails a required
 	// lexical shape, such as a RequestIdentity TransportUUID that is not a

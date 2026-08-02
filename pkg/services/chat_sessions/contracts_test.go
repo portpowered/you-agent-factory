@@ -116,7 +116,7 @@ func (f *fakeService) RequestControl(_ context.Context, req chatsessions.Request
 
 func (f *fakeService) AdvanceControl(_ context.Context, req chatsessions.AdvanceControlRequest) (chatsessions.AdvanceControlResult, error) {
 	if req.RequestID != f.intent.RequestID {
-		return chatsessions.AdvanceControlResult{}, &chatsessions.NotFoundError{Value: "ControlIntent", ID: req.RequestID.JSONRPCID}
+		return chatsessions.AdvanceControlResult{}, &chatsessions.NotFoundError{Value: "ControlIntent", ID: req.RequestID.JSONRPCStringID}
 	}
 	if err := f.intent.State.CanTransitionTo(req.Next); err != nil {
 		return chatsessions.AdvanceControlResult{}, err
@@ -128,7 +128,7 @@ func (f *fakeService) AdvanceControl(_ context.Context, req chatsessions.Advance
 func newTestSession(t *testing.T, ctx context.Context, svc *fakeService) chatsessions.Session {
 	t.Helper()
 	created, err := svc.CreateSession(ctx, chatsessions.CreateSessionRequest{
-		RequestID:     chatsessions.RequestIdentity{ConnectionID: "conn-1", JSONRPCID: "req-1"},
+		RequestID:     chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-1"},
 		InitialTarget: chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
 	})
 	if err != nil {
@@ -150,7 +150,7 @@ func TestFakeService_SessionTargetAndAttachment(t *testing.T) {
 	}
 
 	retargeted, err := svc.SetTarget(ctx, chatsessions.SetTargetRequest{
-		RequestID:       chatsessions.RequestIdentity{ConnectionID: "conn-1", JSONRPCID: "req-1b"},
+		RequestID:       chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-1b"},
 		SessionID:       session.ID,
 		ExpectedVersion: session.Version,
 		Target:          chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/factory-builder"},
@@ -180,7 +180,7 @@ func TestFakeService_TurnAndControlLifecycle(t *testing.T) {
 	session := newTestSession(t, ctx, svc)
 
 	started, err := svc.StartTurn(ctx, chatsessions.StartTurnRequest{
-		RequestID: chatsessions.RequestIdentity{ConnectionID: "conn-1", JSONRPCID: "req-2"},
+		RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-2"},
 		SessionID: session.ID,
 	})
 	if err != nil {
@@ -188,7 +188,7 @@ func TestFakeService_TurnAndControlLifecycle(t *testing.T) {
 	}
 
 	if _, err := svc.StartTurn(ctx, chatsessions.StartTurnRequest{
-		RequestID: chatsessions.RequestIdentity{ConnectionID: "conn-1", JSONRPCID: "req-3"},
+		RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-3"},
 		SessionID: session.ID,
 	}); !errors.Is(err, chatsessions.ErrBusy) {
 		t.Fatalf("StartTurn while active: got %v, want ErrBusy", err)
@@ -201,21 +201,21 @@ func TestFakeService_TurnAndControlLifecycle(t *testing.T) {
 	}
 
 	if _, err := svc.RequestControl(ctx, chatsessions.RequestControlRequest{
-		RequestID: chatsessions.RequestIdentity{ConnectionID: "conn-1", JSONRPCID: "req-4"},
+		RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-4"},
 		SessionID: session.ID, ExpectedVersion: 99, Action: chatsessions.ControlActionCancel,
 	}); !errors.Is(err, chatsessions.ErrStaleVersion) {
 		t.Fatalf("RequestControl stale version: got %v, want ErrStaleVersion", err)
 	}
 
 	if _, err := svc.RequestControl(ctx, chatsessions.RequestControlRequest{
-		RequestID: chatsessions.RequestIdentity{ConnectionID: "conn-1", JSONRPCID: "req-5"},
+		RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-5"},
 		SessionID: session.ID, ExpectedVersion: session.Version, Action: chatsessions.ControlActionPause,
 	}); !errors.Is(err, chatsessions.ErrUnsupportedControlAction) {
 		t.Fatalf("RequestControl PAUSE: got %v, want ErrUnsupportedControlAction", err)
 	}
 
 	requested, err := svc.RequestControl(ctx, chatsessions.RequestControlRequest{
-		RequestID: chatsessions.RequestIdentity{ConnectionID: "conn-1", JSONRPCID: "req-6"},
+		RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-6"},
 		SessionID: session.ID, ExpectedVersion: session.Version, Action: chatsessions.ControlActionCancel,
 	})
 	if err != nil {
