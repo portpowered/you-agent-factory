@@ -167,9 +167,6 @@ The checklist should follow the format of
 ```
 as work completes. you should mark off the checkboxes. 
 
-customers will sometimes give you the checkbox directly. we recommend you copy the checkbox as much as possible directly into your checklist.md if the checklist is intended to denote progression of work.
-
-
 ## Submitting New Work
 
 Submit work using the batch-input format documented by `you docs batch-inputs`.
@@ -230,23 +227,11 @@ then review, then completion.
 
 ### work request structure
 
-
 Avoid issuing broad, vague ideas such as "build the website." Each idea should
 be concrete enough for the `plan` workstation to create an implementation-ready
 PRD with behavioral acceptance criteria. 
 
 The Plan should be generally verbose enough such that the model won't screw up your intentions. 
-
-Every submitted implementation idea must explicitly include this delivery
-contract in its payload: implementation and review loop until all required CI
-is terminal and passing, every blocking PR conversation comment is addressed,
-merge conflicts are resolved, the PR is merged, and only then may the Factory
-work complete. Opening a PR, making it review-ready, or obtaining green CI
-without merge is not completion. Shared-file churn is not an admission blocker;
-the worker must rebase or reconcile the shared files as part of this delivery
-loop.
-
-
 
 ### Work Batch Guidance
 

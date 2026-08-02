@@ -423,78 +423,6 @@ func TestRunCreatesAndRemovesTempCoverageProfile(t *testing.T) {
 	}
 }
 
-func TestRunWrapsCoverSummaryFailureUsingStderrDetail(t *testing.T) {
-	originalCommandRunner := commandRunner
-	originalStdout := stdoutWriter
-	originalStderr := stderrWriter
-	defer func() {
-		commandRunner = originalCommandRunner
-		stdoutWriter = originalStdout
-		stderrWriter = originalStderr
-	}()
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	commandRunner = fakeGoCoverageCommandCoverFailsWithStderr
-	stdoutWriter = &stdout
-	stderrWriter = &stderr
-
-	_, err := run(config{
-		coverpkg: modulePath + "/pkg/config",
-		packages: "./pkg/config",
-		profile:  filepath.Join(t.TempDir(), "coverage.out"),
-	})
-	if err == nil {
-		t.Fatal("run() unexpectedly succeeded")
-	}
-
-	if !strings.Contains(err.Error(), "summarize go coverage: exit status 3") {
-		t.Fatalf("run() error = %q, want summarize wrapper", err.Error())
-	}
-	if !strings.Contains(err.Error(), "stderr detail from cover tool") {
-		t.Fatalf("run() error = %q, want stderr detail", err.Error())
-	}
-	if strings.Contains(err.Error(), "stdout detail from cover tool") {
-		t.Fatalf("run() error = %q, did not expect stdout fallback detail", err.Error())
-	}
-}
-
-func TestRunWrapsCoverSummaryFailureUsingStdoutFallback(t *testing.T) {
-	originalCommandRunner := commandRunner
-	originalStdout := stdoutWriter
-	originalStderr := stderrWriter
-	defer func() {
-		commandRunner = originalCommandRunner
-		stdoutWriter = originalStdout
-		stderrWriter = originalStderr
-	}()
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	commandRunner = fakeGoCoverageCommandCoverFailsWithStdout
-	stdoutWriter = &stdout
-	stderrWriter = &stderr
-
-	_, err := run(config{
-		coverpkg: modulePath + "/pkg/config",
-		packages: "./pkg/config",
-		profile:  filepath.Join(t.TempDir(), "coverage.out"),
-	})
-	if err == nil {
-		t.Fatal("run() unexpectedly succeeded")
-	}
-
-	if !strings.Contains(err.Error(), "summarize go coverage: exit status 4") {
-		t.Fatalf("run() error = %q, want summarize wrapper", err.Error())
-	}
-	if !strings.Contains(err.Error(), "stdout detail from cover tool") {
-		t.Fatalf("run() error = %q, want stdout fallback detail", err.Error())
-	}
-	if strings.Contains(err.Error(), "stderr detail from cover tool") {
-		t.Fatalf("run() error = %q, did not expect stderr detail", err.Error())
-	}
-}
-
 func TestRunWrapsCoverageLaneFailure(t *testing.T) {
 	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
@@ -520,43 +448,12 @@ func TestRunWrapsCoverageLaneFailure(t *testing.T) {
 		t.Fatal("run() unexpectedly succeeded")
 	}
 
-	want := "run go test coverage shard 1/1: exit status 7"
+	want := "run go test coverage lane: exit status 7"
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("run() error = %q, want prefix %q", err.Error(), want)
 	}
 	if !strings.Contains(err.Error(), "raw failure output from go test") {
 		t.Fatalf("run() error = %q, want raw go test output detail", err.Error())
-	}
-}
-
-func TestRunWrapsCoverSummaryFailureWithoutDetail(t *testing.T) {
-	originalCommandRunner := commandRunner
-	originalStdout := stdoutWriter
-	originalStderr := stderrWriter
-	defer func() {
-		commandRunner = originalCommandRunner
-		stdoutWriter = originalStdout
-		stderrWriter = originalStderr
-	}()
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	commandRunner = fakeGoCoverageCommandCoverFailsWithoutDetail
-	stdoutWriter = &stdout
-	stderrWriter = &stderr
-
-	_, err := run(config{
-		coverpkg: modulePath + "/pkg/config",
-		packages: "./pkg/config",
-		profile:  filepath.Join(t.TempDir(), "coverage.out"),
-	})
-	if err == nil {
-		t.Fatal("run() unexpectedly succeeded")
-	}
-
-	want := "summarize go coverage: exit status 8"
-	if err.Error() != want {
-		t.Fatalf("run() error = %q, want %q", err.Error(), want)
 	}
 }
 

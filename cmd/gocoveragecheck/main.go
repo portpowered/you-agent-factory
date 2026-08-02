@@ -12,6 +12,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -39,7 +40,6 @@ const defaultPackageCoverageBaselinePath = "docs/internal/baselines/go-coverage-
 const defaultFunctionalPackageCoverageBaselinePath = "docs/internal/baselines/go-functional-coverage-package-baseline.txt"
 const defaultPackageCoverageMin = 80.0
 const defaultCoverageJobs = 2
-const windowsCoveragePackageArgumentLimit = 16_000
 
 var (
 	defaultCoveragePatterns                   = []string{"./pkg/..."}
@@ -171,7 +171,7 @@ func parseConfig() config {
 	var cfg config
 	flag.StringVar(&cfg.covermode, "covermode", "count", "go test -covermode value")
 	flag.StringVar(&cfg.coverpkg, "coverpkg", "", "comma-separated import paths to measure; defaults to backend-owned packages")
-	flag.IntVar(&cfg.jobs, "jobs", 0, "number of isolated coverage shards; defaults to 2")
+	flag.IntVar(&cfg.jobs, "jobs", 0, "maximum concurrent go test packages; defaults to 2")
 	flag.StringVar(&cfg.generateManifest, "generate-manifest", "", "create a deterministic package-minimum manifest from this lane's coverage profile")
 	flag.StringVar(&cfg.updateManifest, "update-manifest", "", "monotonically add or raise floors in an existing package-minimum manifest")
 	flag.StringVar(&cfg.packageManifest, "package-manifest", "", "enforce the active lane's checked-in package-minimum manifest")
@@ -247,10 +247,18 @@ func run(cfg config) (coverageResult, error) {
 	if err != nil {
 		return coverageResult{}, err
 	}
+	coverPackageArgument := strings.Join(coverPackages, ",")
+	if runtime.GOOS == "windows" && strings.TrimSpace(cfg.coverpkg) == "" {
+		// A fully expanded backend package list exceeds Windows' command-line
+		// limit. A package pattern keeps the invocation to one logical coverage
+		// pass; the resolved list above remains authoritative for profile
+		// filtering, reporting, and package gates.
+		coverPackageArgument = modulePath + "/pkg/..."
+	}
 	mergedTestArgs := []string{
 		"test",
-		fmt.Sprintf("-coverpkg=%s", strings.Join(coverPackages, ",")),
-		"-p=1",
+		fmt.Sprintf("-coverpkg=%s", coverPackageArgument),
+		fmt.Sprintf("-p=%d", cfg.testJobs()),
 	}
 	if cfg.short {
 		mergedTestArgs = append(mergedTestArgs, "-short")
@@ -260,27 +268,13 @@ func run(cfg config) (coverageResult, error) {
 		fmt.Sprintf("-timeout=%s", cfg.timeout),
 	)
 
-	if err := runGoTestCoverageShards(mergedTestArgs, testPackages, cfg.testJobs(), profilePath, repoRoot, coverPackages); err != nil {
+	mergedTestArgs = append(mergedTestArgs, fmt.Sprintf("-coverprofile=%s", profilePath))
+	mergedTestArgs = append(mergedTestArgs, testPackages...)
+	if _, _, err := runGoTestCoverageLane(mergedTestArgs, "run go test coverage lane"); err != nil {
 		return coverageResult{}, err
 	}
-
-	coverStdout, coverStderr, err := runCommand(commandInvocation{
-		name: "go",
-		args: []string{"tool", "cover", "-func", profilePath},
-		env:  os.Environ(),
-	})
-	// Print for utility
-	fmt.Println(formatCommandLine("go", "tool", "cover", "-func", profilePath))
-
-	if err != nil {
-		detail := strings.TrimSpace(coverStderr)
-		if detail == "" {
-			detail = strings.TrimSpace(coverStdout)
-		}
-		if detail != "" {
-			return coverageResult{}, fmt.Errorf("summarize go coverage: %w\n%s", err, detail)
-		}
-		return coverageResult{}, fmt.Errorf("summarize go coverage: %w", err)
+	if err := canonicalizeCoverageProfile(profilePath, repoRoot, coverPackages); err != nil {
+		return coverageResult{}, err
 	}
 
 	legacyPackageGateEnabled := !cfg.totalOnly && cfg.generateManifest == "" && cfg.updateManifest == "" && strings.TrimSpace(cfg.packageManifest) == ""
@@ -292,7 +286,7 @@ func run(cfg config) (coverageResult, error) {
 		}
 	}
 
-	result, totalLine, err := evaluateCoverage(coverStdout, "", profilePath, repoRoot, coverPackages, cfg.packageCoverageMin(), baselinePackages, legacyPackageGateEnabled)
+	result, totalLine, err := evaluateCoverage("", "", profilePath, repoRoot, coverPackages, cfg.packageCoverageMin(), baselinePackages, legacyPackageGateEnabled)
 	if err != nil {
 		return coverageResult{}, err
 	}
@@ -347,13 +341,6 @@ func runGoTestCoverageLane(args []string, failurePrefix string) (string, string,
 
 func runCommand(invocation commandInvocation) (string, string, error) {
 	return commandRunner(invocation)
-}
-
-func formatCommandLine(name string, args ...string) string {
-	parts := make([]string, 0, len(args)+1)
-	parts = append(parts, name)
-	parts = append(parts, args...)
-	return strings.Join(parts, " ")
 }
 
 func mergeGoTestFailureDetail(stderr string, stdout string) string {

@@ -30,20 +30,8 @@ func fakeGoCoverageCommandWithTempProfileReport(invocation commandInvocation) (s
 	return fakeGoCommandByScenario("coverage-temp-profile", invocation.name, invocation.args...)
 }
 
-func fakeGoCoverageCommandCoverFailsWithStderr(invocation commandInvocation) (string, string, error) {
-	return fakeGoCommandByScenario("coverage-cover-fails-with-stderr", invocation.name, invocation.args...)
-}
-
-func fakeGoCoverageCommandCoverFailsWithStdout(invocation commandInvocation) (string, string, error) {
-	return fakeGoCommandByScenario("coverage-cover-fails-with-stdout", invocation.name, invocation.args...)
-}
-
 func fakeGoCoverageCommandTestFailsWithoutDetail(invocation commandInvocation) (string, string, error) {
 	return fakeGoCommandByScenario("coverage-test-fails-without-detail", invocation.name, invocation.args...)
-}
-
-func fakeGoCoverageCommandCoverFailsWithoutDetail(invocation commandInvocation) (string, string, error) {
-	return fakeGoCommandByScenario("coverage-cover-fails-without-detail", invocation.name, invocation.args...)
 }
 
 func fakeGoListCommandFailsWithStderr(invocation commandInvocation) (string, string, error) {

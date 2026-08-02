@@ -2,32 +2,41 @@
 
 ## System architecture
 
-- Customer ask: implement `docs/internal/projects/acp-client/final-proposal.md`
-  completely, with P0 ACP Chat/Factory behavior and the Worker Sessions control
-  plane delivered through singular, statically injected service roots.
-- Current code has none of the proposed `chat_sessions`, `worker_sessions`,
-  `events`, or top-level ACP transport packages. `RuntimeOpeningFactory` and
-  `runtimeOpener` remain live migration targets.
-- Live default PETRI session: `5146e0a4-a4d3-4d93-a51c-560a5243a474`.
+- Live `~default` PETRI session: `87cc7a00-4f23-4d36-adef-36ff99ea8754`.
+- Customer ask: maximize test-throughput and lint/validation cleanup with
+  maximal parallelism; fix underlying causes on failure. Additional ask block
+  empty on this pass.
+- Capacity: `executor-slot` 0/16, `concurrent-planners` 0/1 (saturated).
+- Tip includes delivered lint/test slices: #1666 UI dead-code, #1667/#1671 UI
+  unit throughput, #1668 Bun unit foundation, #1670 LTV-FUN-02.
 
 ## Operational notes
 
-- The prior lint/Bun queue was replaced. Current queue began this pass with two
-  failed legacy tasks whose only last output was successful workspace setup.
-- Both failures were retried once to `task:init` after capacity recovered and
-  failed again immediately with unchanged setup-only output. Do not retry again
-  without new process-dispatch/provider evidence or a narrow correction.
-- Root has unrelated Claude provider/test changes. ACP workers must preserve
-  them and resolve normal shared-file conflicts through the delivery loop.
+- Session replacement can strand queues; recover from Git/PR/worktree evidence
+  with new request IDs. Do not re-admit same-name work already live.
+- Plan dual-output defect: COMPLETE + dual PRDs without `plan:init` under
+  concurrency. Never blanket `failed→init` after retry 1; reconstruct with
+  `idea:to-complete` + injected `plan:init`, restore guarded loopbacks.
+- 2026-08-01 18:06: 0 FAILED; tokens initial 61 / processing 65 / terminal 74 /
+  in-flight 17 / total 200. ~10 tasks PROCESSING + ~50 queued; reconstructed
+  ideas at `to-complete`; harness + five Bun cohorts now `idea:init`
+  PROCESSING (plan dispatched). Hold admission while saturated.
+- Chart #1665 OPEN/MERGEABLE, all required checks SUCCESS — merge still
+  required. Two same-name chart tasks both PROCESSING; empty duplicate move
+  rejected mid-dispatch (retry next pass if still idle). Do not planner-
+  terminalize green-but-unmerged delivery-contract work.
 - `docs/temp/**` is gitignored planner state.
 
 # Progressive change notes
 
 ## High-level track state
 
-- ACP Phase 0 is active under request `planner-acp-v0-contracts-20260802`: nine
-  ideas are processing and the loopback is guarded on all nine completions.
-- Subsequent work follows the semantic DAG in final-proposal section 9.3;
-  numbered phases are review checkpoints, not repository freezes.
-- Every loopback must reconcile queue health and verify actual merged evidence
-  before admitting the next dependency-ready vertical slice.
+- Phase 1 delivered: UI lint baseline, UI unit throughput, FUN-02.
+- Open product lanes: LTV-GO, LTV-FUN-01, BSZ lanes, Bun cohorts (mostly past
+  plan; tasks in process/queue), chart merge (#1665), residual backend-size,
+  Phase 3 terminal proof.
+- Plan capacity reopened for the last six PRD-less ideas (5 Bun + harness).
+- Harness track still required before trusting natural plan dual-output.
+- Next loopback: inspect merges/CI/migration evidence; retry chart-duplicate
+  terminalization only if the empty twin is moveable; do not auto-refill
+  while executors are saturated.

@@ -430,7 +430,7 @@ func TestExecuteDoesNotWriteJSONWhenMeasurementIncomplete(t *testing.T) {
 	if err == nil {
 		t.Fatal("execute() unexpectedly succeeded")
 	}
-	if !strings.Contains(err.Error(), "run go test coverage shard") {
+	if !strings.Contains(err.Error(), "run go test coverage lane") {
 		t.Fatalf("execute() error = %q, want incomplete measurement failure", err.Error())
 	}
 	if _, statErr := os.Stat(jsonPath); !os.IsNotExist(statErr) {

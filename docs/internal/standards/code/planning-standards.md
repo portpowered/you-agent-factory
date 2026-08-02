@@ -27,6 +27,10 @@ Every contributor or agent who creates or updates a PRD, `prd.json`, or work-sto
   CI, blocking review feedback, conflict resolution, and actual PR merge before
   the work is complete.
 
+### Task shaping
+- Every task when creating tasks for submission into sub workers/the You Agent Factory must match the template structure denoted in docs/internal/standards/templates/task-templates.md
+- Every task subshape that you implement that is given to a subagent should be small enough that we can submit it to an agent that is very dumb and they should be able to roughly do it. 
+
 ## Review Checklist
 
 Before a PRD or story breakdown is accepted, reviewers **SHOULD** confirm:
