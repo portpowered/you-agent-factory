@@ -241,14 +241,17 @@ func baseAgentRequest() workers.RunnerExecutionRequest {
 }
 
 type providersFake struct {
+	providers.Service
 	request providers.ExecuteRequest
 }
 
 type failingProvidersFake struct {
+	providers.Service
 	failure providers.ExecuteFailure
 }
 
 type pointerFailureProvidersFake struct {
+	providers.Service
 	failure *providers.ExecuteFailure
 }
 

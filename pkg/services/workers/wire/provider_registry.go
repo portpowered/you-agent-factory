@@ -32,9 +32,8 @@ type providerRegistry struct {
 func (*providerRegistry) UsesNativeRunner(string) bool { return true }
 
 func (registry *providerRegistry) CanonicalIdentity(identity string) (string, error) {
-	resolved, err := providers.ResolveIdentity(
+	resolved, err := registry.service.ResolveIdentity(
 		context.Background(),
-		registry.service,
 		providers.ResolveIdentityRequest{Identity: identity},
 	)
 	if err != nil {
@@ -60,9 +59,8 @@ func (registry *providerRegistry) RunnerIdentities() []string {
 }
 
 func (registry *providerRegistry) RunnerMetadata(identity string) (workers.RunnerMetadata, error) {
-	resolved, err := providers.ResolveIdentity(
+	resolved, err := registry.service.ResolveIdentity(
 		context.Background(),
-		registry.service,
 		providers.ResolveIdentityRequest{Identity: identity},
 	)
 	if err != nil {
@@ -120,17 +118,15 @@ func (registry *providerRegistry) ValidateRunnerPrerequisites(
 	_ platformprocess.ExecutableLocator,
 	identity string,
 ) error {
-	resolved, err := providers.ResolveIdentity(
+	resolved, err := registry.service.ResolveIdentity(
 		context.Background(),
-		registry.service,
 		providers.ResolveIdentityRequest{Identity: identity},
 	)
 	if err != nil {
 		return err
 	}
-	return providers.ValidatePrerequisites(
+	return registry.service.ValidatePrerequisites(
 		context.Background(),
-		registry.service,
 		providers.ValidatePrerequisitesRequest{ID: resolved.ID},
 	)
 }
@@ -140,9 +136,8 @@ func (registry *providerRegistry) ResolveRunnerSelection(
 	factory string,
 	model string,
 ) (workers.ResolvedRunnerSelection, error) {
-	resolved, err := providers.ResolveSelection(
+	resolved, err := registry.service.ResolveSelection(
 		context.Background(),
-		registry.service,
 		providers.ResolveSelectionRequest{
 			Workstation:   workstation,
 			Factory:       factory,

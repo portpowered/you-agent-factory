@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -95,7 +96,36 @@ func TestExecuteRejectsUnavailableProvider(t *testing.T) {
 	}
 }
 
-type unavailableCursorProvidersFake struct{}
+type unavailableCursorProvidersFake struct {
+	providers.Service
+}
+
+func (*unavailableCursorProvidersFake) ResolveIdentity(
+	_ context.Context,
+	request providers.ResolveIdentityRequest,
+) (providers.ResolveIdentityResult, error) {
+	if strings.EqualFold(strings.TrimSpace(request.Identity), string(providers.IDCursor)) {
+		return providers.ResolveIdentityResult{ID: providers.IDCursor}, nil
+	}
+	return providers.ResolveIdentityResult{}, providers.ErrUnknownProvider
+}
+
+func (*unavailableCursorProvidersFake) ResolveSelection(
+	_ context.Context,
+	_ providers.ResolveSelectionRequest,
+) (providers.ResolveSelectionResult, error) {
+	return providers.ResolveSelectionResult{}, providers.ErrUnknownProvider
+}
+
+func (*unavailableCursorProvidersFake) ValidatePrerequisites(
+	_ context.Context,
+	request providers.ValidatePrerequisitesRequest,
+) error {
+	if request.ID == providers.IDCursor {
+		return providers.ErrProviderUnavailable
+	}
+	return providers.ErrUnknownProvider
+}
 
 func (*unavailableCursorProvidersFake) Execute(
 	context.Context,

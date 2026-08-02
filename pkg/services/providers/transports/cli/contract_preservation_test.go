@@ -15,6 +15,7 @@ import (
 )
 
 type catalogPeerFake struct {
+	providers.Service
 	providers map[providers.ID]providers.Descriptor
 }
 

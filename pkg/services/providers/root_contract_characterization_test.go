@@ -2,10 +2,16 @@ package providers_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/ownershipinventory"
@@ -236,6 +242,124 @@ func TestProvidersRootContractInventorySeal(t *testing.T) {
 
 	if err := ownershipinventory.VerifyProvidersRootContractInventory(providersRepositoryRoot(t)); err != nil {
 		t.Fatalf("VerifyProvidersRootContractInventory() error = %v", err)
+	}
+}
+
+func TestProvidersRootServiceInterfaceCountAndSelectionMethods(t *testing.T) {
+	t.Parallel()
+
+	serviceRoot := filepath.Join(providersRepositoryRoot(t), "pkg", "services", "providers")
+	entries, err := os.ReadDir(serviceRoot)
+	if err != nil {
+		t.Fatalf("ReadDir(%q) = %v", serviceRoot, err)
+	}
+	var serviceInterfaces []string
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+		path := filepath.Join(serviceRoot, entry.Name())
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if err != nil {
+			t.Fatalf("ParseFile(%q) = %v", path, err)
+		}
+		for _, declaration := range file.Decls {
+			generic, ok := declaration.(*ast.GenDecl)
+			if !ok || generic.Tok != token.TYPE {
+				continue
+			}
+			for _, specification := range generic.Specs {
+				typeSpec, ok := specification.(*ast.TypeSpec)
+				if !ok || typeSpec.Name.Name != "Service" {
+					continue
+				}
+				if _, ok := typeSpec.Type.(*ast.InterfaceType); ok {
+					serviceInterfaces = append(serviceInterfaces, entry.Name()+":Service")
+				}
+			}
+		}
+	}
+	slices.Sort(serviceInterfaces)
+	if want := []string{"service_contract.go:Service"}; !slices.Equal(serviceInterfaces, want) {
+		t.Fatalf("Providers root Service interfaces = %v, want %v", serviceInterfaces, want)
+	}
+
+	rootType := reflect.TypeOf((*providers.Service)(nil)).Elem()
+	wantMethods := []string{
+		"Execute",
+		"GetProvider",
+		"ListProviders",
+		"ResolveIdentity",
+		"ResolveSelection",
+		"ValidatePrerequisites",
+	}
+	gotMethods := make([]string, rootType.NumMethod())
+	for index := range gotMethods {
+		gotMethods[index] = rootType.Method(index).Name
+	}
+	if !slices.Equal(gotMethods, wantMethods) {
+		t.Fatalf("Providers Service methods = %v, want %v", gotMethods, wantMethods)
+	}
+}
+
+func TestSelectionContractDeletesFloatingOperationsAndBaselines(t *testing.T) {
+	t.Parallel()
+
+	selectionPath := filepath.Join(
+		providersRepositoryRoot(t),
+		"pkg",
+		"services",
+		"providers",
+		"selection_contract.go",
+	)
+	file, err := parser.ParseFile(token.NewFileSet(), selectionPath, nil, 0)
+	if err != nil {
+		t.Fatalf("ParseFile(%q) = %v", selectionPath, err)
+	}
+	forbidden := map[string]struct{}{
+		"ResolveIdentity":       {},
+		"ResolveSelection":      {},
+		"ValidatePrerequisites": {},
+	}
+	for _, declaration := range file.Decls {
+		function, ok := declaration.(*ast.FuncDecl)
+		if !ok || function.Recv != nil {
+			continue
+		}
+		if _, forbidden := forbidden[function.Name.Name]; forbidden {
+			t.Fatalf("selection_contract.go still declares floating operation %q", function.Name.Name)
+		}
+	}
+
+	baselinePath := filepath.Join(
+		providersRepositoryRoot(t),
+		"docs",
+		"internal",
+		"baselines",
+		"package-structure-baseline.json",
+	)
+	data, err := os.ReadFile(baselinePath)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) = %v", baselinePath, err)
+	}
+	var baseline struct {
+		Entries []struct {
+			Rule     string `json:"rule"`
+			FilePath string `json:"filePath"`
+			Target   string `json:"target"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(data, &baseline); err != nil {
+		t.Fatalf("Unmarshal(%q) = %v", baselinePath, err)
+	}
+	for _, entry := range baseline.Entries {
+		if entry.Rule != "service-root-exported-function" ||
+			entry.FilePath != "pkg/services/providers/selection_contract.go" {
+			continue
+		}
+		if _, forbidden := forbidden[entry.Target]; forbidden {
+			t.Fatalf("baseline still records deleted floating operation %q", entry.Target)
+		}
 	}
 }
 

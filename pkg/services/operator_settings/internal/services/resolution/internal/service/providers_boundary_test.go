@@ -12,6 +12,7 @@ import (
 )
 
 type recordingProvidersBoundaryFake struct {
+	providers.Service
 	getProviderRequests []providers.GetProviderRequest
 	providers           map[providers.ID]providers.Descriptor
 	getProviderErrors   map[providers.ID]error

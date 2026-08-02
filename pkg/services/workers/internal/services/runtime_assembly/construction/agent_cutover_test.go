@@ -177,6 +177,7 @@ func TestProvidersRootMapsThrottledFailure(t *testing.T) {
 }
 
 type cutoverProvidersFake struct {
+	providers.Service
 	err error
 }
 

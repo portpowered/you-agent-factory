@@ -483,6 +483,7 @@ func newRecordingProviderCatalog() *recordingProviderCatalog {
 }
 
 type recordingProvidersRoot struct {
+	providers.Service
 	listCalls    int
 	getCalls     int
 	executeCalls int

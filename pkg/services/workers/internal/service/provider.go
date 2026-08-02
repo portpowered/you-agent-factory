@@ -43,17 +43,15 @@ func (s *Service) authorizeProviderTarget(
 			workers.ErrInvalidExecuteRequest,
 		)
 	}
-	resolved, err := providers.ResolveIdentity(
+	resolved, err := s.providers.ResolveIdentity(
 		ctx,
-		s.providers,
 		providers.ResolveIdentityRequest{Identity: raw},
 	)
 	if err != nil {
 		return fmt.Errorf("%w: %w", workers.ErrInvalidExecuteRequest, err)
 	}
-	if err := providers.ValidatePrerequisites(
+	if err := s.providers.ValidatePrerequisites(
 		ctx,
-		s.providers,
 		providers.ValidatePrerequisitesRequest{ID: resolved.ID},
 	); err != nil {
 		return fmt.Errorf("%w: %w", workers.ErrInvalidExecuteRequest, err)

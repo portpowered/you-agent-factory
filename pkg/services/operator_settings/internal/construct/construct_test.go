@@ -278,7 +278,9 @@ func testProviderCatalog(value string) (string, bool) {
 	}
 }
 
-type stubProvidersRoot struct{}
+type stubProvidersRoot struct {
+	providers.Service
+}
 
 func (stubProvidersRoot) ListProviders(context.Context, providers.ListProvidersRequest) (providers.ListProvidersResult, error) {
 	return providers.ListProvidersResult{}, nil

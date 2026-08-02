@@ -125,6 +125,7 @@ func TestAgentRunnerCancellationThroughServiceComposition(t *testing.T) {
 }
 
 type serviceAgentProvidersFake struct {
+	providers.Service
 	mu      sync.Mutex
 	request providers.ExecuteRequest
 	result  providers.ExecuteResult
