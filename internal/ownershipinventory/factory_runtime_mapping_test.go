@@ -53,31 +53,31 @@ var factoryRuntimeMappingCases = []packageMappingCase{
 		wantRetain:  true,
 		retainOwner: "factory_runtime",
 	},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/orchestration/javascript",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/orchestration/javascript/preview",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/orchestration/javascript/source",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/orchestration/javascript/validation",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/orchestration/javascript",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/orchestration/javascript/preview",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/orchestration/javascript/source",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/orchestration/javascript/validation",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
 	{
 		path:        "pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
 		wantRetain:  true,

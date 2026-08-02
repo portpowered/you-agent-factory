@@ -24,18 +24,18 @@ type exportAssignment struct {
 }
 
 type bundledModule struct {
-	sourceRef         string
-	body              string
-	imports           []resolvedImport
-	deferredExports   []exportAssignment
+	sourceRef       string
+	body            string
+	imports         []resolvedImport
+	deferredExports []exportAssignment
 }
 
 type resolvedImport struct {
-	spec       string
-	resolved   string
-	bindings   []importBinding
-	isDefault  bool
-	defaultAs  string
+	spec      string
+	resolved  string
+	bindings  []importBinding
+	isDefault bool
+	defaultAs string
 }
 
 // ContainsFactoryRelativeImports reports whether source includes factory-relative
@@ -130,9 +130,9 @@ func BundleFactoryRelativeImports(
 					return childIssues
 				}
 				module.imports = append(module.imports, resolvedImport{
-					spec:     spec,
-					resolved: resolved,
-					bindings: importBindingsFromStmt(node),
+					spec:      spec,
+					resolved:  resolved,
+					bindings:  importBindingsFromStmt(node),
 					isDefault: len(node.Default) > 0,
 					defaultAs: string(node.Default),
 				})
