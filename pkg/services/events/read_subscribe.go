@@ -95,11 +95,12 @@ type ReadResult struct {
 // mixed-topic record, or resume from a Next cursor that skips or replays
 // history. ReadOutcomeProgress and ReadOutcomeAtHead additionally require a
 // well-formed Next cursor and Retained range naming the same topic:
-// Progress requires each Record to validate, to be strictly increasing in
-// Position, to stay within Retained, and Next to name exactly the last
-// delivered Record's position; AtHead requires Next to name exactly the
-// Retained head, since being at head means there is nothing to advance
-// past.
+// Progress requires each Record to validate, to be contiguous in Position
+// (each successive record's Position is exactly one more than the last, so
+// no aggregate position is silently skipped), to stay within Retained, and
+// Next to name exactly the last delivered Record's position; AtHead
+// requires Next to name exactly the Retained head, since being at head
+// means there is nothing to advance past.
 func (res ReadResult) Validate() error {
 	switch res.Outcome {
 	case ReadOutcomeProgress:
@@ -117,7 +118,7 @@ func (res ReadResult) Validate() error {
 			if rec.ID.Topic != res.Next.Topic {
 				return ErrCursorTopicMismatch
 			}
-			if i > 0 && rec.ID.Position <= previous {
+			if i > 0 && (rec.ID.Position <= previous || rec.ID.Position-previous != 1) {
 				return ErrInconsistentReadOutcome
 			}
 			previous = rec.ID.Position

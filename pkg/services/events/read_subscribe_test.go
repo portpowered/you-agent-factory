@@ -90,6 +90,15 @@ func TestReadResultValidate(t *testing.T) {
 		SchemaID:       "worker.output.v1",
 		Payload:        json.RawMessage(`{"tool":"grep"}`),
 	}
+	rec3 := Record{
+		ID:             RecordID{Topic: testTopic, Position: 3},
+		SourceType:     "worker.tool",
+		SourceID:       "worker-1",
+		SourceSequence: 3,
+		SourceEventID:  "evt-3",
+		SchemaID:       "worker.output.v1",
+		Payload:        json.RawMessage(`{"tool":"grep"}`),
+	}
 	otherTopicRec := Record{
 		ID:             RecordID{Topic: "factory-session/abc/response-events", Position: 1},
 		SourceType:     "worker.tool",
@@ -154,6 +163,16 @@ func TestReadResultValidate(t *testing.T) {
 		{
 			"progress with records out of order",
 			ReadResult{Outcome: ReadOutcomeProgress, Records: []Record{rec2, rec1}, Next: next, Retained: retained},
+			ErrInconsistentReadOutcome,
+		},
+		{
+			"progress with a skipped position (hole) is inconsistent",
+			ReadResult{
+				Outcome:  ReadOutcomeProgress,
+				Records:  []Record{rec1, rec3},
+				Next:     Cursor{Topic: testTopic, Position: 3},
+				Retained: RetainedRange{Topic: testTopic, Earliest: 1, Head: 3},
+			},
 			ErrInconsistentReadOutcome,
 		},
 		{
