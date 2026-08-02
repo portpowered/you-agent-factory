@@ -83,6 +83,7 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 				Code:    CodeUnresolvedFinal,
 				Message: "workflow completed without a returned or final value",
 			},
+			Records: records.list(),
 		}, nil
 	}
 

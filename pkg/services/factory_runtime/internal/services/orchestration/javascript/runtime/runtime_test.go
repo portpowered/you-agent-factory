@@ -289,6 +289,26 @@ func TestRun_UnresolvedFinal_ReturnsStableFailure(t *testing.T) {
 	assertFailureDoesNotProjectPrimaryResult(t, req.SessionID, outcome)
 }
 
+func TestRun_UnresolvedFinal_PreservesRuntimeRecords(t *testing.T) {
+	req := factory.JavaScriptRuntimeRequest{
+		Source:    `phase("execute");`,
+		SourceRef: "unresolved-final-with-record.workflow.js",
+		SessionID: "session-unresolved-final-records",
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}
+
+	outcome, err := runtimeWorkflows.Run(t.Context(), req, factory.JavaScriptRuntimeHooks{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if outcome.OK || outcome.Failure.Code != factory.JavaScriptRuntimeCodeUnresolvedFinal {
+		t.Fatalf("outcome = %#v, want unresolved-final failure", outcome)
+	}
+	if len(outcome.Records) != 1 || outcome.Records[0].Kind != factory.JavaScriptRecordKindPhase {
+		t.Fatalf("runtime records = %#v, want one phase record", outcome.Records)
+	}
+}
+
 func TestRun_InvalidTerminalValue_ReturnsStableInvalidResultFailure(t *testing.T) {
 	cases := []struct {
 		fixture      string
