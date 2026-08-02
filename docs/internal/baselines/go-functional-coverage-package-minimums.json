@@ -1349,6 +1349,10 @@
       "minimum": 0.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/scopedlisting",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire",
       "minimum": 65.11
     },
