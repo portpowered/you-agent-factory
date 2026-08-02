@@ -10,7 +10,6 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
-	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	catalognamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
 )
@@ -299,6 +298,46 @@ func TestPrivateCatalog_RootFailedCurrentPointerUpdatePreservesPrior(t *testing.
 	}
 }
 
+func TestPrivateCatalog_RootClearCurrentPointerIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	_ = writeNamedFactory(t, rootDir, "alpha")
+	root := newRootCatalog(t)
+
+	if _, err := root.SetCurrentFactoryPointer(
+		context.Background(),
+		factorydefinitions.SetCurrentFactoryPointerRequest{RootDir: rootDir, Name: "alpha"},
+	); err != nil {
+		t.Fatalf("SetCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	cleared, err := root.ClearCurrentFactoryPointer(
+		context.Background(),
+		factorydefinitions.ClearCurrentFactoryPointerRequest{RootDir: rootDir},
+	)
+	if err != nil {
+		t.Fatalf("ClearCurrentFactoryPointer: %v", err)
+	}
+	if cleared.RootDir != rootDir {
+		t.Fatalf("ClearCurrentFactoryPointer result = %#v, want root %q", cleared, rootDir)
+	}
+
+	if _, err := root.GetCurrentFactoryPointer(
+		context.Background(),
+		factorydefinitions.GetCurrentFactoryPointerRequest{RootDir: rootDir},
+	); !errors.Is(err, factorydefinitions.ErrCurrentFactoryNotFound) {
+		t.Fatalf("GetCurrentFactoryPointer after clear error = %v, want %v", err, factorydefinitions.ErrCurrentFactoryNotFound)
+	}
+
+	if _, err := root.ClearCurrentFactoryPointer(
+		context.Background(),
+		factorydefinitions.ClearCurrentFactoryPointerRequest{RootDir: rootDir},
+	); err != nil {
+		t.Fatalf("second ClearCurrentFactoryPointer: %v", err)
+	}
+}
+
 func TestPrivateCatalog_RootTypedInvalidNameFailures(t *testing.T) {
 	t.Parallel()
 
@@ -411,16 +450,10 @@ func TestPrivateCatalog_RequiresInjectedPorts(t *testing.T) {
 		t.Fatalf("catalognamedpaths.New: %v", err)
 	}
 
-	if _, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      nil,
-		FileSystem: fileSystem,
-	}); err == nil {
+	if _, err := catalogwire.NewService(nil, fileSystem); err == nil {
 		t.Fatal("NewService(nil paths): expected path resolver required error")
 	}
-	if _, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      paths,
-		FileSystem: nil,
-	}); err == nil {
+	if _, err := catalogwire.NewService(paths, nil); err == nil {
 		t.Fatal("NewService(nil filesystem): expected catalog filesystem required error")
 	}
 }
@@ -443,10 +476,7 @@ func newRootCatalog(t *testing.T) factorydefinitions.Service {
 	if err != nil {
 		t.Fatalf("catalognamedpaths.New: %v", err)
 	}
-	catalogService, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      paths,
-		FileSystem: fileSystem,
-	})
+	catalogService, err := catalogwire.NewService(paths, fileSystem)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService: %v", err)
 	}

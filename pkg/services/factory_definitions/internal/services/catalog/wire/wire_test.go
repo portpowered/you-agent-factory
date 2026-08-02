@@ -27,10 +27,6 @@ type recordingPathResolver struct {
 	existing                  map[string]string
 }
 
-func (r *recordingPathResolver) ResolveCandidatePaths(_, _, _ string) (factorydefinitions.NamedFactoryCandidatePaths, error) {
-	return factorydefinitions.NamedFactoryCandidatePaths{}, nil
-}
-
 func (r *recordingPathResolver) ResolveExistingDir(rootDir, name string) (string, error) {
 	r.resolveExistingDirCalls++
 	if dir, ok := r.existing[name]; ok {
@@ -145,23 +141,14 @@ func TestNewService_RequiresExactInjectedPorts(t *testing.T) {
 	paths := &recordingPathResolver{}
 	fileSystem := &recordingCatalogFileSystem{}
 
-	if svc, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      nil,
-		FileSystem: fileSystem,
-	}); err == nil || svc != nil || !strings.Contains(err.Error(), "path resolver is required") {
+	if svc, err := catalogwire.NewService(nil, fileSystem); err == nil || svc != nil || !strings.Contains(err.Error(), "path resolver is required") {
 		t.Fatalf("NewService(nil paths) = %#v, %v; want path resolver required error", svc, err)
 	}
-	if svc, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      paths,
-		FileSystem: nil,
-	}); err == nil || svc != nil || !strings.Contains(err.Error(), "catalog filesystem is required") {
+	if svc, err := catalogwire.NewService(paths, nil); err == nil || svc != nil || !strings.Contains(err.Error(), "catalog filesystem is required") {
 		t.Fatalf("NewService(nil filesystem) = %#v, %v; want catalog filesystem required error", svc, err)
 	}
 
-	svc, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      paths,
-		FileSystem: fileSystem,
-	})
+	svc, err := catalogwire.NewService(paths, fileSystem)
 	if err != nil {
 		t.Fatalf("NewService with exact injected ports: %v", err)
 	}
@@ -194,10 +181,7 @@ func TestNewService_HostEffectsComeOnlyFromInjectedPorts(t *testing.T) {
 		},
 	}
 
-	svc, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      paths,
-		FileSystem: fileSystem,
-	})
+	svc, err := catalogwire.NewService(paths, fileSystem)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
@@ -248,10 +232,7 @@ func TestNewPathResolverAndCatalogWireResolveNamedFactoryAndCurrentPointer(t *te
 	if err != nil {
 		t.Fatalf("NewPathResolver: %v", err)
 	}
-	svc, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      paths,
-		FileSystem: fileSystem,
-	})
+	svc, err := catalogwire.NewService(paths, fileSystem)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
@@ -317,10 +298,7 @@ func TestNewService_ListGetResolveDeleteNamedFactory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPathResolver: %v", err)
 	}
-	svc, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      paths,
-		FileSystem: fileSystem,
-	})
+	svc, err := catalogwire.NewService(paths, fileSystem)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}

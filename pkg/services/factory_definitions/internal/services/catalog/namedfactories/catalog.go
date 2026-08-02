@@ -7,14 +7,14 @@ import (
 )
 
 type catalog struct {
-	paths      factorydefinitions.NamedPathResolver
-	fileSystem factorydefinitions.NamedFactoryCatalogFileSystem
+	paths      PathResolver
+	fileSystem FileSystem
 }
 
 // New constructs the stateless persisted named-Factory catalog.
 func New(
-	paths factorydefinitions.NamedPathResolver,
-	fileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
+	paths PathResolver,
+	fileSystem FileSystem,
 ) (factorydefinitions.NamedFactoryCatalog, error) {
 	if paths == nil {
 		return nil, fmt.Errorf("named Factory path resolver is required")

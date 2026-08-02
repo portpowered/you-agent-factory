@@ -10,6 +10,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	authoringlayoutpersist "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/persist"
+	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	catalognamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 )
 
@@ -22,10 +23,10 @@ type service struct {
 	validate             func(string) error
 	flatten              factorydefinitions.FactoryLayoutFlattener
 	expand               factorydefinitions.FactoryLayoutExpander
-	writeCurrent         factorydefinitions.CurrentFactoryPointerWriter
-	fileSystem           factorydefinitions.PersistenceFileSystem
-	requireDefinitionDir factorydefinitions.DefinitionDirectoryRequirer
-	directories          factorydefinitions.DirectoryReplacementStore
+	writeCurrent         catalog.CurrentFactoryPointerWriter
+	fileSystem           catalog.PersistenceFileSystem
+	requireDefinitionDir catalog.DefinitionDirectoryRequirer
+	directories          catalog.DirectoryReplacementStore
 }
 
 // New constructs the Factory Definitions persistence implementation from flat
@@ -38,10 +39,10 @@ func New(
 	validate func(string) error,
 	flatten factorydefinitions.FactoryLayoutFlattener,
 	expand factorydefinitions.FactoryLayoutExpander,
-	writeCurrent factorydefinitions.CurrentFactoryPointerWriter,
-	fileSystem factorydefinitions.PersistenceFileSystem,
-	requireDefinitionDir factorydefinitions.DefinitionDirectoryRequirer,
-	directories factorydefinitions.DirectoryReplacementStore,
+	writeCurrent catalog.CurrentFactoryPointerWriter,
+	fileSystem catalog.PersistenceFileSystem,
+	requireDefinitionDir catalog.DefinitionDirectoryRequirer,
+	directories catalog.DirectoryReplacementStore,
 ) (factorydefinitions.Persistence, error) {
 	if fileSystem == nil {
 		return nil, fmt.Errorf("Factory Definitions persistence filesystem is required")
