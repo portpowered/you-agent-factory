@@ -6,11 +6,15 @@
       "direction": "outbound",
       "classification": "accepted",
       "input": {
-        "sessionId": "sess_synthetic_0001",
-        "update": {
-          "sessionUpdate": "user_message_chunk",
-          "content": {"type": "text", "text": "hello"},
-          "messageId": "msg_synthetic_0001"
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "sess_synthetic_0001",
+          "update": {
+            "sessionUpdate": "user_message_chunk",
+            "content": {"type": "text", "text": "hello"},
+            "messageId": "msg_synthetic_0001"
+          }
         }
       },
       "expected": {
@@ -27,10 +31,14 @@
       "direction": "outbound",
       "classification": "accepted",
       "input": {
-        "sessionId": "sess_synthetic_0001",
-        "update": {
-          "sessionUpdate": "agent_message_chunk",
-          "content": {"type": "text", "text": "working on it"}
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "sess_synthetic_0001",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {"type": "text", "text": "working on it"}
+          }
         }
       },
       "expected": {
@@ -47,10 +55,14 @@
       "direction": "outbound",
       "classification": "accepted",
       "input": {
-        "sessionId": "sess_synthetic_0001",
-        "update": {
-          "sessionUpdate": "agent_thought_chunk",
-          "content": {"type": "text", "text": "considering options"}
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "sess_synthetic_0001",
+          "update": {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {"type": "text", "text": "considering options"}
+          }
         }
       },
       "expected": {
@@ -67,8 +79,12 @@
       "direction": "outbound",
       "classification": "accepted",
       "input": {
-        "sessionId": "sess_synthetic_0001",
-        "update": {"sessionUpdate": "usage_update", "size": 4096, "used": 512}
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "sess_synthetic_0001",
+          "update": {"sessionUpdate": "usage_update", "size": 4096, "used": 512}
+        }
       },
       "expected": {"SessionID": "sess_synthetic_0001", "Kind": "usage_update", "Content": null, "MessageID": "", "Usage": {"Size": 4096, "Used": 512}, "SessionInfo": null, "ConfigOptions": null}
     },
@@ -78,8 +94,12 @@
       "direction": "outbound",
       "classification": "accepted",
       "input": {
-        "sessionId": "sess_synthetic_0001",
-        "update": {"sessionUpdate": "session_info_update", "title": "Renamed session"}
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "sess_synthetic_0001",
+          "update": {"sessionUpdate": "session_info_update", "title": "Renamed session"}
+        }
       },
       "expected": {"SessionID": "sess_synthetic_0001", "Kind": "session_info_update", "Content": null, "MessageID": "", "Usage": null, "SessionInfo": {"Title": "Renamed session", "UpdatedAt": null}, "ConfigOptions": null}
     },
@@ -89,8 +109,12 @@
       "direction": "outbound",
       "classification": "accepted",
       "input": {
-        "sessionId": "sess_synthetic_0001",
-        "update": {"sessionUpdate": "config_option_update", "configOptions": []}
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "sess_synthetic_0001",
+          "update": {"sessionUpdate": "config_option_update", "configOptions": []}
+        }
       },
       "expected": {"SessionID": "sess_synthetic_0001", "Kind": "config_option_update", "Content": null, "MessageID": "", "Usage": null, "SessionInfo": null, "ConfigOptions": null}
     },
@@ -100,12 +124,16 @@
       "direction": "outbound",
       "classification": "accepted",
       "input": {
-        "sessionId": "sess_synthetic_0001",
-        "update": {
-          "sessionUpdate": "config_option_update",
-          "configOptions": [
-            {"type": "boolean", "id": "verbose_output", "name": "Verbose output", "currentValue": true}
-          ]
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "sess_synthetic_0001",
+          "update": {
+            "sessionUpdate": "config_option_update",
+            "configOptions": [
+              {"type": "boolean", "id": "verbose_output", "name": "Verbose output", "currentValue": true}
+            ]
+          }
         }
       },
       "expected": {
@@ -122,8 +150,12 @@
       "direction": "outbound",
       "classification": "rejected",
       "input": {
-        "sessionId": "sess_synthetic_0001",
-        "update": {"sessionUpdate": "tool_call", "toolCallId": "tool_synthetic_0001", "title": "Synthetic tool"}
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "sess_synthetic_0001",
+          "update": {"sessionUpdate": "tool_call", "toolCallId": "tool_synthetic_0001", "title": "Synthetic tool"}
+        }
       },
       "expected": {
         "code": -32602,
@@ -137,8 +169,12 @@
       "direction": "outbound",
       "classification": "rejected",
       "input": {
-        "sessionId": "sess_synthetic_0001",
-        "update": {"sessionUpdate": "plan", "entries": []}
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "sess_synthetic_0001",
+          "update": {"sessionUpdate": "plan", "entries": []}
+        }
       },
       "expected": {
         "code": -32602,
@@ -152,8 +188,12 @@
       "direction": "outbound",
       "classification": "rejected",
       "input": {
-        "sessionId": "sess_synthetic_0001",
-        "update": {"sessionUpdate": "current_mode_update", "currentModeId": "synthetic-mode"}
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "sess_synthetic_0001",
+          "update": {"sessionUpdate": "current_mode_update", "currentModeId": "synthetic-mode"}
+        }
       },
       "expected": {
         "code": -32602,
@@ -167,9 +207,13 @@
       "direction": "outbound",
       "classification": "rejected",
       "input": {
-        "update": {
-          "sessionUpdate": "agent_message_chunk",
-          "content": {"type": "text", "text": "hello"}
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {"type": "text", "text": "hello"}
+          }
         }
       },
       "expected": {

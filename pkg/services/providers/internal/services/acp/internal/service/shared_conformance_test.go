@@ -38,6 +38,9 @@ func TestSharedConformanceCorpusSessionUpdateMatchesInboundMapper(t *testing.T) 
 		t.Fatal("expected at least one session/update case in the shared corpus")
 	}
 
+	var message struct {
+		Params json.RawMessage `json:"params"`
+	}
 	var envelope struct {
 		SessionID string          `json:"sessionId"`
 		Update    json.RawMessage `json:"update"`
@@ -57,7 +60,10 @@ func TestSharedConformanceCorpusSessionUpdateMatchesInboundMapper(t *testing.T) 
 		if c.Classification != acpfixtures.ClassificationAccepted {
 			continue
 		}
-		if err := json.Unmarshal(c.Input, &envelope); err != nil {
+		if err := json.Unmarshal(c.Input, &message); err != nil {
+			t.Fatalf("%s: decode raw input JSON-RPC message: %v", c.Name, err)
+		}
+		if err := json.Unmarshal(message.Params, &envelope); err != nil {
 			t.Fatalf("%s: decode raw input envelope: %v", c.Name, err)
 		}
 		if err := json.Unmarshal(envelope.Update, &wire); err != nil {

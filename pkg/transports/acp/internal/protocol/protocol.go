@@ -46,19 +46,31 @@ func Guard(method string, validate func() error, effect func() error) error {
 	return effect()
 }
 
-// GuardEnvelope decodes raw JSON-RPC request bytes received on
+// GuardEnvelope decodes raw JSON-RPC message bytes received on
 // connectionID into an identity-bound envelope.Envelope before Guard ever
-// runs. A malformed envelope -- invalid JSON, a missing method, or an
-// unsupported id shape -- is rejected here, before the method is looked up
-// against SupportedMethods and before validate or effect is ever called, so
-// a malformed request can never reach dispatch under a request identity
-// that was never actually validated. A well-formed envelope is then
-// dispatched exactly like Guard: an unsupported method never calls
-// validate or effect, and a validate failure never calls effect.
-func GuardEnvelope(connectionID identity.ConnectionID, raw json.RawMessage, validate func(envelope.Envelope) error, effect func() error) error {
+// runs. A malformed envelope -- invalid JSON, a missing method, an
+// unsupported id shape, an id-bearing notification, or a request method
+// with no id -- is rejected here, before the method is looked up against
+// SupportedMethods and before validate or effect is ever called, so a
+// malformed message can never reach dispatch under a request identity that
+// was never actually validated. A well-formed envelope is then dispatched
+// exactly like Guard: an unsupported method never calls validate or
+// effect, and a validate failure never calls effect.
+//
+// GuardEnvelope returns the decoded Envelope alongside the dispatch error
+// so a caller can tell whether a response is ever owed for this message:
+// per JSON-RPC 2.0, a notification (Envelope.IsNotification true) never
+// receives a response -- success or error -- so a caller must discard the
+// returned error for a notification rather than serializing it back to the
+// connection. A message that never successfully decodes returns the zero
+// Envelope, whose IsNotification is false, matching ordinary JSON-RPC
+// server behavior: input the server cannot even classify still owes an
+// error response.
+func GuardEnvelope(connectionID identity.ConnectionID, raw json.RawMessage, validate func(envelope.Envelope) error, effect func() error) (envelope.Envelope, error) {
 	env, err := envelope.Decode(connectionID, raw)
 	if err != nil {
-		return SafeReject(err)
+		return envelope.Envelope{}, SafeReject(err)
 	}
-	return Guard(env.Method, func() error { return validate(env) }, effect)
+	dispatchErr := Guard(env.Method, func() error { return validate(env) }, effect)
+	return env, dispatchErr
 }

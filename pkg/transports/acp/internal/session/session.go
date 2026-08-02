@@ -478,8 +478,24 @@ type PermissionCorrelation struct {
 	OptionIDs  []string
 }
 
+// validPermissionOptionKinds is the closed ACP PermissionOptionKind enum.
+// An option whose kind is empty or does not match one of these four values
+// is a malformed required field, not a passthrough detail this boundary can
+// ignore.
+var validPermissionOptionKinds = map[acpsdk.PermissionOptionKind]bool{
+	acpsdk.PermissionOptionKindAllowOnce:    true,
+	acpsdk.PermissionOptionKindAllowAlways:  true,
+	acpsdk.PermissionOptionKindRejectOnce:   true,
+	acpsdk.PermissionOptionKindRejectAlways: true,
+}
+
 // ValidatePermissionCorrelation validates a session/request_permission
-// request against the L1 V0 compatibility boundary.
+// request against the L1 V0 compatibility boundary. Every option's
+// optionId, name, and kind are required ACP fields validated here, even
+// though only optionId survives into the reduced PermissionCorrelation
+// value: accepting an option with a missing name or an unsupported kind
+// discriminator would let a malformed required field silently reach
+// whatever later renders these options to a user.
 func ValidatePermissionCorrelation(req acpsdk.RequestPermissionRequest) (PermissionCorrelation, error) {
 	if req.SessionId == "" {
 		return PermissionCorrelation{}, errors.New("acp: sessionId is required")
@@ -495,6 +511,12 @@ func ValidatePermissionCorrelation(req acpsdk.RequestPermissionRequest) (Permiss
 	for i, opt := range req.Options {
 		if opt.OptionId == "" {
 			return PermissionCorrelation{}, fmt.Errorf("acp: option %d optionId is required", i)
+		}
+		if opt.Name == "" {
+			return PermissionCorrelation{}, fmt.Errorf("acp: option %d name is required", i)
+		}
+		if !validPermissionOptionKinds[opt.Kind] {
+			return PermissionCorrelation{}, fmt.Errorf("acp: option %d kind %q is unsupported", i, opt.Kind)
 		}
 		optionIDs = append(optionIDs, string(opt.OptionId))
 	}

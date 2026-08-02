@@ -6,10 +6,15 @@
       "direction": "inbound",
       "classification": "accepted",
       "input": {
-        "type": "boolean",
-        "sessionId": "sess_synthetic_0001",
-        "configId": "verbose_output",
-        "value": true
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "session/set_config_option",
+        "params": {
+          "type": "boolean",
+          "sessionId": "sess_synthetic_0001",
+          "configId": "verbose_output",
+          "value": true
+        }
       },
       "expected": {
         "SessionID": "sess_synthetic_0001",
@@ -24,9 +29,14 @@
       "direction": "inbound",
       "classification": "accepted",
       "input": {
-        "sessionId": "sess_synthetic_0001",
-        "configId": "target_factory",
-        "value": "factory-builder"
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "session/set_config_option",
+        "params": {
+          "sessionId": "sess_synthetic_0001",
+          "configId": "target_factory",
+          "value": "factory-builder"
+        }
       },
       "expected": {
         "SessionID": "sess_synthetic_0001",
@@ -41,9 +51,14 @@
       "direction": "inbound",
       "classification": "rejected",
       "input": {
-        "type": "boolean",
-        "sessionId": "sess_synthetic_0001",
-        "value": true
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "session/set_config_option",
+        "params": {
+          "type": "boolean",
+          "sessionId": "sess_synthetic_0001",
+          "value": true
+        }
       },
       "expected": {
         "code": -32602,
@@ -57,8 +72,13 @@
       "direction": "inbound",
       "classification": "rejected",
       "input": {
-        "configId": "target_factory",
-        "value": "factory-builder"
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "session/set_config_option",
+        "params": {
+          "configId": "target_factory",
+          "value": "factory-builder"
+        }
       },
       "expected": {
         "code": -32602,
@@ -72,10 +92,15 @@
       "direction": "inbound",
       "classification": "rejected",
       "input": {
-        "type": "future_variant",
-        "sessionId": "sess_synthetic_0001",
-        "configId": "target_factory",
-        "value": "factory-builder"
+        "jsonrpc": "2.0",
+        "id": 5,
+        "method": "session/set_config_option",
+        "params": {
+          "type": "future_variant",
+          "sessionId": "sess_synthetic_0001",
+          "configId": "target_factory",
+          "value": "factory-builder"
+        }
       },
       "expected": {
         "code": -32602,

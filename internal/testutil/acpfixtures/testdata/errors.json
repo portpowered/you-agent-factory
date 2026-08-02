@@ -5,7 +5,12 @@
       "role": "initialize",
       "direction": "inbound",
       "classification": "rejected",
-      "input": {},
+      "input": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {}
+      },
       "expected": {
         "code": -32602,
         "message": "Invalid params",
@@ -21,7 +26,12 @@
       "role": "session/new",
       "direction": "inbound",
       "classification": "rejected",
-      "input": {},
+      "input": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "session/new",
+        "params": {}
+      },
       "expected": {
         "code": -32602,
         "message": "Invalid params",
@@ -34,8 +44,13 @@
       "direction": "inbound",
       "classification": "rejected",
       "input": {
-        "sessionId": "sess_synthetic_0001",
-        "prompt": [{"type": "resource_link", "uri": "file:///workspace/example-factory/README.md", "name": "README.md"}]
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "sess_synthetic_0001",
+          "prompt": [{"type": "resource_link", "uri": "file:///workspace/example-factory/README.md", "name": "README.md"}]
+        }
       },
       "expected": {
         "code": -32602,
@@ -49,8 +64,12 @@
       "direction": "outbound",
       "classification": "rejected",
       "input": {
-        "sessionId": "sess_synthetic_0001",
-        "update": {"sessionUpdate": "tool_call_update", "toolCallId": "tool_synthetic_0001"}
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "sess_synthetic_0001",
+          "update": {"sessionUpdate": "tool_call_update", "toolCallId": "tool_synthetic_0001"}
+        }
       },
       "expected": {
         "code": -32602,

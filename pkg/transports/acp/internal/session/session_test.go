@@ -563,7 +563,7 @@ func TestValidatePermissionCorrelation(t *testing.T) {
 	t.Run("rejects a missing tool call id", func(t *testing.T) {
 		req := acpsdk.RequestPermissionRequest{
 			SessionId: "sess-1",
-			Options:   []acpsdk.PermissionOption{{OptionId: "allow", Name: "Allow"}},
+			Options:   []acpsdk.PermissionOption{{OptionId: "allow", Name: "Allow", Kind: acpsdk.PermissionOptionKindAllowOnce}},
 		}
 		if _, err := ValidatePermissionCorrelation(req); err == nil {
 			t.Fatalf("expected an error for a missing tool call id")
@@ -580,6 +580,39 @@ func TestValidatePermissionCorrelation(t *testing.T) {
 		}
 	})
 
+	t.Run("rejects an option with a missing name", func(t *testing.T) {
+		req := acpsdk.RequestPermissionRequest{
+			SessionId: "sess-1",
+			ToolCall:  acpsdk.ToolCallUpdate{ToolCallId: "call-1"},
+			Options:   []acpsdk.PermissionOption{{OptionId: "allow", Kind: acpsdk.PermissionOptionKindAllowOnce}},
+		}
+		if _, err := ValidatePermissionCorrelation(req); err == nil {
+			t.Fatalf("expected an error for an option with a missing name")
+		}
+	})
+
+	t.Run("rejects an option with a missing kind", func(t *testing.T) {
+		req := acpsdk.RequestPermissionRequest{
+			SessionId: "sess-1",
+			ToolCall:  acpsdk.ToolCallUpdate{ToolCallId: "call-1"},
+			Options:   []acpsdk.PermissionOption{{OptionId: "allow", Name: "Allow"}},
+		}
+		if _, err := ValidatePermissionCorrelation(req); err == nil {
+			t.Fatalf("expected an error for an option with a missing kind")
+		}
+	})
+
+	t.Run("rejects an option with an unknown kind", func(t *testing.T) {
+		req := acpsdk.RequestPermissionRequest{
+			SessionId: "sess-1",
+			ToolCall:  acpsdk.ToolCallUpdate{ToolCallId: "call-1"},
+			Options:   []acpsdk.PermissionOption{{OptionId: "allow", Name: "Allow", Kind: acpsdk.PermissionOptionKind("future_kind")}},
+		}
+		if _, err := ValidatePermissionCorrelation(req); err == nil {
+			t.Fatalf("expected an error for an option with an unknown kind")
+		}
+	})
+
 	t.Run("does not carry raw tool call payload through", func(t *testing.T) {
 		req := acpsdk.RequestPermissionRequest{
 			SessionId: "sess-1",
@@ -588,7 +621,7 @@ func TestValidatePermissionCorrelation(t *testing.T) {
 				RawInput:   map[string]any{"command": "rm -rf /"},
 				RawOutput:  "secret output",
 			},
-			Options: []acpsdk.PermissionOption{{OptionId: "allow", Name: "Allow"}},
+			Options: []acpsdk.PermissionOption{{OptionId: "allow", Name: "Allow", Kind: acpsdk.PermissionOptionKindAllowOnce}},
 		}
 		got, err := ValidatePermissionCorrelation(req)
 		if err != nil {

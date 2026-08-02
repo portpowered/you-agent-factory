@@ -20,24 +20,32 @@
 //
 // Role is a closed, documented set matching the L1 V0 JSON-RPC method
 // surface plus the two derived, non-request compatibility checks this
-// transport also verifies:
+// transport also verifies. For every JSON-RPC method Role, Input is a
+// complete JSON-RPC 2.0 message -- {"jsonrpc":"2.0","id":...,"method":...,
+// "params":...} for a request method, or the same shape with no "id" member
+// for a notification method -- not a bare params object: this lets a
+// consumer decode Input through the same envelope-level identity binding
+// (method + request/connection identity + params, all bound together) the
+// real compatibility boundary uses, proving the combined round trip rather
+// than only the isolated params-to-value mapping.
 //
-//   - "initialize"                    — an initialize request (Input decodes as acpsdk.InitializeRequest)
-//   - "session/new"                   — Input decodes as acpsdk.NewSessionRequest
-//   - "session/load"                  — Input decodes as acpsdk.LoadSessionRequest
-//   - "session/resume"                — Input decodes as acpsdk.ResumeSessionRequest
-//   - "session/cancel"                — Input decodes as acpsdk.CancelNotification
-//   - "session/set_config_option"     — Input decodes as acpsdk.SetSessionConfigOptionRequest
-//   - "session/prompt"                — Input decodes as acpsdk.PromptRequest
-//   - "session/update"                — Input decodes as acpsdk.SessionNotification
-//   - "session/request_permission"    — Input decodes as acpsdk.RequestPermissionRequest
-//   - "stop_reason"                   — Input is {"outcome": "<protocol.TerminalOutcome>"}; Direction is always "outbound"
-//   - "unsupported_method"            — Input is {"method": "<name>"}; the method is always outside SupportedMethods
+//   - "initialize"                    — a request; params decode as acpsdk.InitializeRequest
+//   - "session/new"                   — a request; params decode as acpsdk.NewSessionRequest
+//   - "session/load"                  — a request; params decode as acpsdk.LoadSessionRequest
+//   - "session/resume"                — a request; params decode as acpsdk.ResumeSessionRequest
+//   - "session/cancel"                — a notification (no "id"); params decode as acpsdk.CancelNotification
+//   - "session/set_config_option"     — a request; params decode as acpsdk.SetSessionConfigOptionRequest
+//   - "session/prompt"                — a request; params decode as acpsdk.PromptRequest
+//   - "session/update"                — a notification (no "id"); params decode as acpsdk.SessionNotification
+//   - "session/request_permission"    — a request; params decode as acpsdk.RequestPermissionRequest
+//   - "stop_reason"                   — Input is {"outcome": "<protocol.TerminalOutcome>"}, not a JSON-RPC message; Direction is always "outbound"
+//   - "unsupported_method"            — Input is {"method": "<name>"}, not a JSON-RPC message; the method is always outside SupportedMethods
 //
-// For every request Role, Classification "accepted" means Expected is the
-// JSON-marshaled semantic value the owning Validate/Negotiate function
-// returns; Classification "rejected" means Expected is the JSON-marshaled
-// *acpsdk.RequestError the owning compatibility boundary returns instead.
+// For every request/notification Role, Classification "accepted" means
+// Expected is the JSON-marshaled semantic value the owning
+// Validate/Negotiate function returns; Classification "rejected" means
+// Expected is the JSON-marshaled *acpsdk.RequestError the owning
+// compatibility boundary returns instead.
 package acpfixtures
 
 import (

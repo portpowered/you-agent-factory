@@ -6,9 +6,14 @@
       "direction": "inbound",
       "classification": "accepted",
       "input": {
-        "cwd": "/workspace/example-factory",
-        "additionalDirectories": ["/workspace/example-factory/vendor"],
-        "mcpServers": []
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "session/new",
+        "params": {
+          "cwd": "/workspace/example-factory",
+          "additionalDirectories": ["/workspace/example-factory/vendor"],
+          "mcpServers": []
+        }
       },
       "expected": {
         "Cwd": "/workspace/example-factory",
@@ -21,8 +26,13 @@
       "direction": "inbound",
       "classification": "rejected",
       "input": {
-        "cwd": "/workspace/example-factory",
-        "mcpServers": [{"type": "stdio", "name": "synthetic-mcp", "command": "synthetic-mcp-server", "args": [], "env": []}]
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "session/new",
+        "params": {
+          "cwd": "/workspace/example-factory",
+          "mcpServers": [{"type": "stdio", "name": "synthetic-mcp", "command": "synthetic-mcp-server", "args": [], "env": []}]
+        }
       },
       "expected": {
         "code": -32602,
@@ -35,7 +45,12 @@
       "role": "session/new",
       "direction": "inbound",
       "classification": "rejected",
-      "input": {"cwd": "relative/path", "mcpServers": []},
+      "input": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "session/new",
+        "params": {"cwd": "relative/path", "mcpServers": []}
+      },
       "expected": {
         "code": -32602,
         "message": "Invalid params",
@@ -47,7 +62,12 @@
       "role": "session/new",
       "direction": "inbound",
       "classification": "rejected",
-      "input": {"cwd": "/workspace/example-factory"},
+      "input": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "session/new",
+        "params": {"cwd": "/workspace/example-factory"}
+      },
       "expected": {
         "code": -32602,
         "message": "Invalid params",
@@ -60,9 +80,14 @@
       "direction": "inbound",
       "classification": "rejected",
       "input": {
-        "cwd": "/workspace/example-factory",
-        "additionalDirectories": ["relative/vendor"],
-        "mcpServers": []
+        "jsonrpc": "2.0",
+        "id": 5,
+        "method": "session/new",
+        "params": {
+          "cwd": "/workspace/example-factory",
+          "additionalDirectories": ["relative/vendor"],
+          "mcpServers": []
+        }
       },
       "expected": {
         "code": -32602,
@@ -76,9 +101,14 @@
       "direction": "inbound",
       "classification": "accepted",
       "input": {
-        "sessionId": "sess_synthetic_0001",
-        "cwd": "/workspace/example-factory",
-        "mcpServers": []
+        "jsonrpc": "2.0",
+        "id": 6,
+        "method": "session/load",
+        "params": {
+          "sessionId": "sess_synthetic_0001",
+          "cwd": "/workspace/example-factory",
+          "mcpServers": []
+        }
       },
       "expected": {
         "SessionID": "sess_synthetic_0001",
@@ -91,7 +121,12 @@
       "role": "session/load",
       "direction": "inbound",
       "classification": "rejected",
-      "input": {"cwd": "/workspace/example-factory", "mcpServers": []},
+      "input": {
+        "jsonrpc": "2.0",
+        "id": 7,
+        "method": "session/load",
+        "params": {"cwd": "/workspace/example-factory", "mcpServers": []}
+      },
       "expected": {
         "code": -32602,
         "message": "Invalid params",
@@ -103,7 +138,12 @@
       "role": "session/load",
       "direction": "inbound",
       "classification": "rejected",
-      "input": {"sessionId": "sess_synthetic_0001", "cwd": "/workspace/example-factory"},
+      "input": {
+        "jsonrpc": "2.0",
+        "id": 8,
+        "method": "session/load",
+        "params": {"sessionId": "sess_synthetic_0001", "cwd": "/workspace/example-factory"}
+      },
       "expected": {
         "code": -32602,
         "message": "Invalid params",
@@ -116,8 +156,13 @@
       "direction": "inbound",
       "classification": "accepted",
       "input": {
-        "sessionId": "sess_synthetic_0002",
-        "cwd": "/workspace/example-factory"
+        "jsonrpc": "2.0",
+        "id": 9,
+        "method": "session/resume",
+        "params": {
+          "sessionId": "sess_synthetic_0002",
+          "cwd": "/workspace/example-factory"
+        }
       },
       "expected": {
         "SessionID": "sess_synthetic_0002",
@@ -131,9 +176,14 @@
       "direction": "inbound",
       "classification": "rejected",
       "input": {
-        "sessionId": "sess_synthetic_0002",
-        "cwd": "/workspace/example-factory",
-        "additionalDirectories": ["relative/vendor"]
+        "jsonrpc": "2.0",
+        "id": 10,
+        "method": "session/resume",
+        "params": {
+          "sessionId": "sess_synthetic_0002",
+          "cwd": "/workspace/example-factory",
+          "additionalDirectories": ["relative/vendor"]
+        }
       },
       "expected": {
         "code": -32602,
@@ -146,7 +196,12 @@
       "role": "session/resume",
       "direction": "inbound",
       "classification": "rejected",
-      "input": {"sessionId": "sess_synthetic_0002"},
+      "input": {
+        "jsonrpc": "2.0",
+        "id": 11,
+        "method": "session/resume",
+        "params": {"sessionId": "sess_synthetic_0002"}
+      },
       "expected": {
         "code": -32602,
         "message": "Invalid params",
@@ -158,7 +213,11 @@
       "role": "session/cancel",
       "direction": "inbound",
       "classification": "accepted",
-      "input": {"sessionId": "sess_synthetic_0003"},
+      "input": {
+        "jsonrpc": "2.0",
+        "method": "session/cancel",
+        "params": {"sessionId": "sess_synthetic_0003"}
+      },
       "expected": {"SessionID": "sess_synthetic_0003"}
     },
     {
@@ -166,7 +225,11 @@
       "role": "session/cancel",
       "direction": "inbound",
       "classification": "rejected",
-      "input": {},
+      "input": {
+        "jsonrpc": "2.0",
+        "method": "session/cancel",
+        "params": {}
+      },
       "expected": {
         "code": -32602,
         "message": "Invalid params",
