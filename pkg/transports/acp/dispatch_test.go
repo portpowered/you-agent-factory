@@ -2,6 +2,7 @@ package acp_test
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	acpsdk "github.com/coder/acp-go-sdk"
@@ -98,5 +99,56 @@ func TestDecodeMethodParamsRejectsMalformedJSON(t *testing.T) {
 	}
 	if decodeErr.Code != -32602 {
 		t.Fatalf("DecodeMethodParams(malformed).Code = %d, want -32602", decodeErr.Code)
+	}
+}
+
+func TestDecodeMethodParamsRejectsNullParams(t *testing.T) {
+	_, decodeErr := acp.DecodeMethodParams[decodeParamsFixture](json.RawMessage(`null`))
+	if decodeErr == nil {
+		t.Fatal("DecodeMethodParams(null) expected invalid-params error, got nil")
+	}
+	if decodeErr.Code != -32602 {
+		t.Fatalf("DecodeMethodParams(null).Code = %d, want -32602", decodeErr.Code)
+	}
+}
+
+// TestDecodeMethodParamsRejectsSemanticallyInvalidSupportedRequest proves a
+// syntactically valid but semantically incomplete supported request (an
+// object that unmarshals cleanly but fails the real acp-go-sdk request
+// type's own Validate(), e.g. session/prompt with no prompt content) is
+// rejected as invalid params rather than silently accepted with a zero
+// required field.
+func TestDecodeMethodParamsRejectsSemanticallyInvalidSupportedRequest(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  json.RawMessage
+	}{
+		{"empty object missing required prompt", json.RawMessage(`{}`)},
+		{"sessionId present but prompt still missing", json.RawMessage(`{"sessionId":"session-1"}`)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, decodeErr := acp.DecodeMethodParams[acpsdk.PromptRequest](tc.raw)
+			if decodeErr == nil {
+				t.Fatalf("DecodeMethodParams(%s) expected invalid-params error, got value %+v", tc.raw, got)
+			}
+			if decodeErr.Code != -32602 {
+				t.Fatalf("DecodeMethodParams(%s).Code = %d, want -32602", tc.raw, decodeErr.Code)
+			}
+			if !reflect.DeepEqual(got, acpsdk.PromptRequest{}) {
+				t.Fatalf("DecodeMethodParams(%s) returned a non-zero value %+v on error, want the zero value", tc.raw, got)
+			}
+		})
+	}
+}
+
+func TestDecodeMethodParamsAcceptsSemanticallyValidSupportedRequest(t *testing.T) {
+	raw := json.RawMessage(`{"sessionId":"session-1","prompt":[{"type":"text","text":"hi"}]}`)
+	got, decodeErr := acp.DecodeMethodParams[acpsdk.PromptRequest](raw)
+	if decodeErr != nil {
+		t.Fatalf("DecodeMethodParams() unexpected error: %v", decodeErr)
+	}
+	if len(got.Prompt) != 1 {
+		t.Fatalf("DecodeMethodParams() = %+v, want exactly one prompt content block", got)
 	}
 }

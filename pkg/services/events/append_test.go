@@ -121,6 +121,7 @@ func TestRecordIsZero(t *testing.T) {
 		{"fully set", full, false},
 		{"only id set", Record{ID: full.ID}, false},
 		{"only payload set", Record{Payload: full.Payload}, false},
+		{"only payload set as a non-nil empty slice", Record{Payload: json.RawMessage{}}, false},
 		{"only source type set", Record{SourceType: full.SourceType}, false},
 		{"only source id set", Record{SourceID: full.SourceID}, false},
 		{"only source sequence set", Record{SourceSequence: full.SourceSequence}, false},
