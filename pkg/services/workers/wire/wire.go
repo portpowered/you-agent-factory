@@ -100,7 +100,11 @@ func NewService(
 	if err != nil {
 		return nil, fmt.Errorf("construct Workers: %w", err)
 	}
-	return workersinternal.NewRoot(runtimeAssembly, workstationswire.NewService(), executeService)
+	return workersinternal.NewRoot(
+		runtimeAssembly,
+		workstationswire.NewService(executeOptions.Logger),
+		executeService,
+	)
 }
 
 func validateConstructionPorts(

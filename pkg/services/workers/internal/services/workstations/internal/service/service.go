@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workstations "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations"
 )
@@ -29,6 +30,7 @@ type Pool struct {
 	dispatches map[string]*dispatchRecord
 	active     sync.WaitGroup
 	stopped    chan struct{}
+	logger     logging.Logger
 }
 
 type routePool struct {
@@ -54,16 +56,24 @@ type dispatchRecord struct {
 	canceled        bool
 	result          workers.WorkstationDispatchResult
 	err             error
+	logger          logging.Logger
 }
 
 var _ workstations.Service = (*Pool)(nil)
 
-// New constructs an inert pool without starting background activity.
-func New() *Pool {
+// New constructs an inert pool without starting background activity. Logger
+// is optional and constructed directly here; omitting it selects a no-op
+// logger rather than a service locator or mutable reinjection path.
+func New(logger ...logging.Logger) *Pool {
+	var provided logging.Logger
+	if len(logger) > 0 {
+		provided = logger[0]
+	}
 	return &Pool{
 		state:      stateConstructed,
 		dispatches: make(map[string]*dispatchRecord),
 		stopped:    make(chan struct{}),
+		logger:     logging.EnsureLogger(provided),
 	}
 }
 
@@ -101,14 +111,27 @@ func (p *Pool) start(
 	case stateConstructed:
 		p.routes = snapshot
 		p.state = stateRunning
+		p.logStart(workers.WorkstationPoolLifecycleOutcomeStarted, len(snapshot))
 		return workers.WorkstationPoolLifecycleOutcomeStarted, nil
 	case stateRunning:
+		p.logStart(workers.WorkstationPoolLifecycleOutcomeAlreadyRunning, len(p.routes))
 		return workers.WorkstationPoolLifecycleOutcomeAlreadyRunning, nil
 	case stateStopping, stateStopped:
 		return "", workers.ErrWorkstationPoolStopped
 	default:
 		return "", workers.ErrWorkstationPoolUnavailable
 	}
+}
+
+func (p *Pool) logStart(outcome workers.WorkstationPoolLifecycleOutcome, routeCount int) {
+	if p == nil || p.logger == nil {
+		return
+	}
+	p.logger.Info(
+		"workers workstation pool start",
+		"outcome", string(outcome),
+		"workstation_count", routeCount,
+	)
 }
 
 // Stop closes admission and returns the Workers-root lifecycle result.
@@ -211,12 +234,13 @@ func (p *Pool) Dispatch(
 	}
 
 	executionCtx, cancelExecution := context.WithCancel(ctx)
-	record := newDispatchRecord(request, name, cancelExecution)
+	record := newDispatchRecord(request, name, cancelExecution, p.logger)
 	route, entry, err := p.accept(record)
 	if err != nil {
 		cancelExecution()
 		return workers.WorkstationDispatchResult{}, err
 	}
+	p.logAccepted(name, record.dispatchID)
 	defer p.active.Done()
 	defer cancelExecution()
 
@@ -241,6 +265,17 @@ func (p *Pool) Dispatch(
 		return record.commitCancellation(executionCtx.Err())
 	}
 	return record.commit(dispatchResult, executeErr)
+}
+
+func (p *Pool) logAccepted(workstationName, dispatchID string) {
+	if p == nil || p.logger == nil {
+		return
+	}
+	p.logger.Info(
+		"workers workstation dispatch accepted",
+		"workstation_name", workstationName,
+		"dispatch_id", dispatchID,
+	)
 }
 
 // execute contains untrusted executor behavior so an implementation panic
@@ -396,12 +431,14 @@ func newDispatchRecord(
 	request workers.WorkstationDispatchRequest,
 	workstationName string,
 	cancel context.CancelFunc,
+	logger logging.Logger,
 ) *dispatchRecord {
 	return &dispatchRecord{
 		dispatchID:      request.Execution.Dispatch.DispatchID,
 		workstationName: workstationName,
 		transitionID:    request.Execution.Dispatch.TransitionID,
 		cancel:          cancel,
+		logger:          logger,
 	}
 }
 
@@ -417,7 +454,23 @@ func (record *dispatchRecord) commit(
 	record.terminal = true
 	record.result = cloneDispatchResult(result)
 	record.err = err
+	record.logTerminal()
 	return cloneDispatchResult(record.result), err
+}
+
+// logTerminal emits exactly one structured record for this dispatch's
+// terminal completion, regardless of whether it committed through the
+// executor path, cancellation, or pool shutdown. Callers hold record.mu.
+func (record *dispatchRecord) logTerminal() {
+	if record == nil || record.logger == nil {
+		return
+	}
+	record.logger.Info(
+		"workers workstation dispatch terminal",
+		"workstation_name", record.workstationName,
+		"dispatch_id", record.dispatchID,
+		"terminal_outcome", string(record.result.TerminalOutcome),
+	)
 }
 
 func (record *dispatchRecord) commitCancellation(
@@ -445,6 +498,7 @@ func (record *dispatchRecord) commitCancellationLocked(
 	record.result.Result.Outcome = workers.OutcomeFailed
 	record.result.Result.Error = workers.ErrWorkstationDispatchCanceled.Error()
 	record.err = canceledDispatchError(cause)
+	record.logTerminal()
 	return record.result, record.err, record.cancel
 }
 
@@ -461,6 +515,7 @@ func (record *dispatchRecord) cancelOutcome() (
 			err = nil
 		}
 		record.mu.Unlock()
+		record.logCancelOutcome(outcome)
 		return workers.WorkstationDispatchCancelResult{
 			DispatchID: record.dispatchID,
 			Outcome:    outcome,
@@ -469,10 +524,26 @@ func (record *dispatchRecord) cancelOutcome() (
 	_, _, cancel := record.commitCancellationLocked(context.Canceled)
 	record.mu.Unlock()
 	cancel()
+	record.logCancelOutcome(workers.WorkstationDispatchCancelOutcomeCanceled)
 	return workers.WorkstationDispatchCancelResult{
 		DispatchID: record.dispatchID,
 		Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
 	}, nil
+}
+
+// logCancelOutcome emits one structured record per explicit Cancel call,
+// including idempotent no-op outcomes. dispatchID and workstationName are
+// immutable after construction so this is safe without holding record.mu.
+func (record *dispatchRecord) logCancelOutcome(outcome workers.WorkstationDispatchCancelOutcome) {
+	if record == nil || record.logger == nil {
+		return
+	}
+	record.logger.Info(
+		"workers workstation dispatch cancellation",
+		"workstation_name", record.workstationName,
+		"dispatch_id", record.dispatchID,
+		"outcome", string(outcome),
+	)
 }
 
 func (record *dispatchRecord) baseResult() workers.WorkstationDispatchResult {
