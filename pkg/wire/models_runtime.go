@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -117,14 +118,17 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 	}
 	runtimeTempFile := edges.ModelRuntimeCreateTempFile
 	if runtimeTempFile == nil {
-		runtimeTempFile = func(dir, pattern string) (modelswire.RuntimeTempFile, error) {
+		runtimeTempFile = func(dir, pattern string) (interface {
+			Close() error
+			Name() string
+		}, error) {
 			return os.CreateTemp(dir, pattern)
 		}
 	}
 
 	return modelswire.NewService(
 		assetPlatform,
-		modelswire.AssetHTTPDoer(assetHTTP),
+		assetHTTP,
 		assetEndpoints,
 		modelswire.AssetMakeDirectories(assetMkdirAll),
 		modelswire.AssetInspectPath(assetStat),
@@ -136,18 +140,18 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		modelswire.AssetReadDirectory(assetReadDir),
 		modelswire.AssetCreateFile(assetCreate),
 		modelswire.AssetOpenFile(assetOpen),
-		launcher,
+		adaptModelHostProcessLauncher(launcher),
 		hostHTTP,
-		hostClock,
+		adaptModelHostClock(hostClock),
 		runtimeRunner,
-		modelswire.RuntimeHTTPDoer(runtimeHTTP),
+		runtimeHTTP,
 		modelswire.RuntimeInspectFile(runtimeInspect),
 		modelswire.RuntimeTempDirectory(runtimeTempDir),
-		runtimeTempFile,
+		adaptModelRuntimeTempFile(runtimeTempFile),
 		zap.NewNop(),
 		time.Now,
 		platformrandom.CryptoSource{},
-		edges.ModelPullMetricsRecorder,
+		adaptModelsPullMetricsRecorder(edges.ModelPullMetricsRecorder),
 		modelswire.HostDiagnosticLogger(factorysessionwire.ModelHostDiagnosticLogger(zap.NewNop())),
 		modelswire.HostMetricsRecorder(factorysessionwire.ModelHostDiagnosticMetrics(edges.InvocationMetricsRecorder)),
 		modelLocalRuntimeHooks(workerswire.LocalRuntimeHooks()),
@@ -185,7 +189,10 @@ type modelsClock struct{}
 
 func (modelsClock) Now() time.Time { return time.Now() }
 
-func (modelsClock) NewTimer(duration time.Duration) modelswire.HostTimer {
+func (modelsClock) NewTimer(duration time.Duration) interface {
+	C() <-chan time.Time
+	Stop() bool
+} {
 	return modelsTimer{Timer: time.NewTimer(duration)}
 }
 
@@ -195,7 +202,11 @@ func (timer modelsTimer) C() <-chan time.Time { return timer.Timer.C }
 
 type modelsProcessLauncher struct{}
 
-func (modelsProcessLauncher) Start(ctx context.Context, spec modelswire.HostProcessStartSpec) (modelswire.HostManagedProcess, error) {
+func (modelsProcessLauncher) Start(ctx context.Context, spec serviceedges.HostProcessStartSpec) (interface {
+	HealthEndpoint() string
+	Wait() error
+	Stop(context.Context) error
+}, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -220,6 +231,128 @@ func (modelsProcessLauncher) Start(ctx context.Context, spec modelswire.HostProc
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 	return &modelsManagedProcess{cmd: cmd, healthEndpoint: endpoint, done: done}, nil
+}
+
+type modelHostProcessLauncherAdapter struct {
+	next interface {
+		Start(context.Context, serviceedges.HostProcessStartSpec) (interface {
+			HealthEndpoint() string
+			Wait() error
+			Stop(context.Context) error
+		}, error)
+	}
+}
+
+func adaptModelHostProcessLauncher(next interface {
+	Start(context.Context, serviceedges.HostProcessStartSpec) (interface {
+		HealthEndpoint() string
+		Wait() error
+		Stop(context.Context) error
+	}, error)
+}) modelswire.HostProcessLauncher {
+	if isNilModelEdgeDependency(next) {
+		return nil
+	}
+	return modelHostProcessLauncherAdapter{next: next}
+}
+
+func (adapter modelHostProcessLauncherAdapter) Start(
+	ctx context.Context,
+	spec modelswire.HostProcessStartSpec,
+) (modelswire.HostManagedProcess, error) {
+	process, err := adapter.next.Start(ctx, serviceedges.HostProcessStartSpec{
+		Command:        spec.Command,
+		Args:           spec.Args,
+		Env:            spec.Env,
+		WorkDir:        spec.WorkDir,
+		HealthEndpoint: spec.HealthEndpoint,
+	})
+	if err != nil || process == nil {
+		return modelswire.HostManagedProcess(process), err
+	}
+	return modelswire.HostManagedProcess(process), nil
+}
+
+type modelHostClockAdapter struct {
+	next interface {
+		Now() time.Time
+		NewTimer(time.Duration) interface {
+			C() <-chan time.Time
+			Stop() bool
+		}
+	}
+}
+
+func adaptModelHostClock(next interface {
+	Now() time.Time
+	NewTimer(time.Duration) interface {
+		C() <-chan time.Time
+		Stop() bool
+	}
+}) modelswire.HostClock {
+	if isNilModelEdgeDependency(next) {
+		return nil
+	}
+	return modelHostClockAdapter{next: next}
+}
+
+func (adapter modelHostClockAdapter) Now() time.Time { return adapter.next.Now() }
+
+func (adapter modelHostClockAdapter) NewTimer(duration time.Duration) modelswire.HostTimer {
+	return modelswire.HostTimer(adapter.next.NewTimer(duration))
+}
+
+func adaptModelRuntimeTempFile(next serviceedges.RuntimeCreateTempFile) modelswire.RuntimeCreateTempFile {
+	if next == nil {
+		return nil
+	}
+	return func(dir, pattern string) (modelswire.RuntimeTempFile, error) {
+		file, err := next(dir, pattern)
+		return modelswire.RuntimeTempFile(file), err
+	}
+}
+
+type modelsPullMetricsAdapter struct {
+	next interface {
+		RecordModelPullMetric(serviceedges.PullMetric)
+	}
+}
+
+func adaptModelsPullMetricsRecorder(next interface {
+	RecordModelPullMetric(serviceedges.PullMetric)
+}) modelswire.PullMetricsRecorder {
+	if next == nil {
+		return nil
+	}
+	return modelsPullMetricsAdapter{next: next}
+}
+
+// isNilModelEdgeDependency preserves Models Wire's typed-nil validation when
+// an edge-owned interface is wrapped by a canonical adapter. Without this
+// check, a nil pointer would become a non-nil adapter value and fail later at
+// invocation rather than during inert construction.
+func isNilModelEdgeDependency(value any) bool {
+	if value == nil {
+		return true
+	}
+	reflected := reflect.ValueOf(value)
+	switch reflected.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return reflected.IsNil()
+	default:
+		return false
+	}
+}
+
+func (adapter modelsPullMetricsAdapter) RecordModelPullMetric(metric modelswire.PullMetric) {
+	labels := make(map[string]string, len(metric.Labels))
+	for key, value := range metric.Labels {
+		labels[key] = value
+	}
+	adapter.next.RecordModelPullMetric(serviceedges.PullMetric{
+		Name:   metric.Name,
+		Labels: labels,
+	})
 }
 
 func modelLocalRuntimeHooks(hooks workers.LocalRuntimeHooks) modelswire.LocalRuntimeHooks {

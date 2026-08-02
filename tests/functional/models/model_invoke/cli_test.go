@@ -17,7 +17,6 @@ import (
 	root "github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -185,8 +184,12 @@ type processModelLauncher struct {
 
 func (launcher *processModelLauncher) Start(
 	context.Context,
-	modelswire.HostProcessStartSpec,
-) (modelswire.HostManagedProcess, error) {
+	serviceedges.HostProcessStartSpec,
+) (interface {
+	HealthEndpoint() string
+	Wait() error
+	Stop(context.Context) error
+}, error) {
 	launcher.mu.Lock()
 	defer launcher.mu.Unlock()
 	return &processModelProcess{endpoint: launcher.endpoint, stopped: make(chan struct{})}, nil

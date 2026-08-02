@@ -19,7 +19,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	inference "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
@@ -91,8 +90,12 @@ type rootRecordingModelHostLauncher struct {
 
 func (launcher *rootRecordingModelHostLauncher) Start(
 	context.Context,
-	modelswire.HostProcessStartSpec,
-) (modelswire.HostManagedProcess, error) {
+	serviceedges.HostProcessStartSpec,
+) (interface {
+	HealthEndpoint() string
+	Wait() error
+	Stop(context.Context) error
+}, error) {
 	launcher.starts++
 	panic("model host process launcher called during inert construction")
 }

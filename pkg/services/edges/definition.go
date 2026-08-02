@@ -10,9 +10,12 @@
 package edges
 
 import (
+	"context"
 	"database/sql"
 	"io"
 	"io/fs"
+	"net/http"
+	"time"
 
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -28,7 +31,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -41,40 +43,61 @@ import (
 // pkg/root, pkg/wire, and BuildProcess override tests) consumes this bag;
 // constructed services take exact ports instead. It is not a service locator.
 type Edges struct {
-	CLIObserver                                     platformprocess.CLIObserver
-	PlatformProcessClock                            platformprocess.Clock
-	PlatformProcessCommandFactory                   platformprocess.CommandFactory
-	ProvidersExecutableLocator                      platformprocess.ExecutableLocator
-	ProviderCommandRunner                           platformprocess.CommandRunner
-	AgyPTYHost                                      platformpty.Host
-	AgyPTYClock                                     platformclock.Source
-	HostedHTTPClient                                automations.HostedLinearHTTPDoer
-	HostedLinearEndpoint                            string
-	HostedSecretResolver                            automations.HostedLinearSecretResolver
-	HostedLinearCheckpointStore                     automations.HostedLinearCheckpointStore
-	HostedClock                                     automations.HostedLinearClock
-	ModelAssetHTTPClient                            modelswire.AssetHTTPDoer
-	ModelAssetEndpoints                             models.RuntimeAssetEndpoints
-	ModelAssetHostPlatform                          models.AssetHostPlatform
-	ModelAssetMakeDirectories                       modelswire.AssetMakeDirectories
-	ModelAssetInspectPath                           modelswire.AssetInspectPath
-	ModelAssetResolveHomeDirectory                  modelswire.AssetResolveHomeDirectory
-	ModelAssetWriteFile                             modelswire.AssetWriteFile
-	ModelAssetRenamePath                            modelswire.AssetRenamePath
-	ModelAssetRemovePath                            modelswire.AssetRemovePath
-	ModelAssetReadFile                              modelswire.AssetReadFile
-	ModelAssetReadDirectory                         modelswire.AssetReadDirectory
-	ModelAssetCreateFile                            modelswire.AssetCreateFile
-	ModelAssetOpenFile                              modelswire.AssetOpenFile
-	ModelHostProcessLauncher                        modelswire.HostProcessLauncher
-	ModelHostHTTPClient                             modelswire.HostHTTPDoer
-	ModelHostClock                                  modelswire.HostClock
-	ModelRuntimeCommandRunner                       platformprocess.CommandRunner
-	ModelRuntimeHTTPClient                          modelswire.RuntimeHTTPDoer
-	ModelRuntimeInspectFile                         modelswire.RuntimeInspectFile
-	ModelRuntimeTempDirectory                       modelswire.RuntimeTempDirectory
-	ModelRuntimeCreateTempFile                      modelswire.RuntimeCreateTempFile
-	ModelInvocationArtifactFileSystem               modelswire.InvocationArtifactFileSystem
+	CLIObserver                   platformprocess.CLIObserver
+	PlatformProcessClock          platformprocess.Clock
+	PlatformProcessCommandFactory platformprocess.CommandFactory
+	ProvidersExecutableLocator    platformprocess.ExecutableLocator
+	ProviderCommandRunner         platformprocess.CommandRunner
+	AgyPTYHost                    platformpty.Host
+	AgyPTYClock                   platformclock.Source
+	HostedHTTPClient              automations.HostedLinearHTTPDoer
+	HostedLinearEndpoint          string
+	HostedSecretResolver          automations.HostedLinearSecretResolver
+	HostedLinearCheckpointStore   automations.HostedLinearCheckpointStore
+	HostedClock                   automations.HostedLinearClock
+	ModelAssetHTTPClient          interface {
+		Do(*http.Request) (*http.Response, error)
+	}
+	ModelAssetEndpoints            models.RuntimeAssetEndpoints
+	ModelAssetHostPlatform         models.AssetHostPlatform
+	ModelAssetMakeDirectories      AssetMakeDirectories
+	ModelAssetInspectPath          AssetInspectPath
+	ModelAssetResolveHomeDirectory AssetResolveHomeDirectory
+	ModelAssetWriteFile            AssetWriteFile
+	ModelAssetRenamePath           AssetRenamePath
+	ModelAssetRemovePath           AssetRemovePath
+	ModelAssetReadFile             AssetReadFile
+	ModelAssetReadDirectory        AssetReadDirectory
+	ModelAssetCreateFile           AssetCreateFile
+	ModelAssetOpenFile             AssetOpenFile
+	ModelHostProcessLauncher       interface {
+		Start(context.Context, HostProcessStartSpec) (interface {
+			HealthEndpoint() string
+			Wait() error
+			Stop(context.Context) error
+		}, error)
+	}
+	ModelHostHTTPClient interface {
+		Do(*http.Request) (*http.Response, error)
+	}
+	ModelHostClock interface {
+		Now() time.Time
+		NewTimer(time.Duration) interface {
+			C() <-chan time.Time
+			Stop() bool
+		}
+	}
+	ModelRuntimeCommandRunner platformprocess.CommandRunner
+	ModelRuntimeHTTPClient    interface {
+		Do(*http.Request) (*http.Response, error)
+	}
+	ModelRuntimeInspectFile           RuntimeInspectFile
+	ModelRuntimeTempDirectory         RuntimeTempDirectory
+	ModelRuntimeCreateTempFile        RuntimeCreateTempFile
+	ModelInvocationArtifactFileSystem interface {
+		Open(string) (io.ReadCloser, error)
+		Create(string) (io.WriteCloser, error)
+	}
 	FactorySessionsWorkingDirectory                 platformfilesystem.WorkingDirectory
 	FactorySessionExecutionOpeningFileSystem        factorysessions.ExecutionOpeningFileSystem
 	FactorySessionDirectoryInspection               factorysessions.DirectoryInspection
@@ -151,7 +174,7 @@ type Edges struct {
 	RuntimeHostObserver              factorysessions.RuntimeHostObserver
 	FactoryVisualizationSink         factoryvisualization.Sink
 	FactoryVisualizationRootObserver factoryvisualization.RootObserver
-	ModelPullMetricsRecorder         modelswire.PullMetricsRecorder
+	ModelPullMetricsRecorder         interface{ RecordModelPullMetric(PullMetric) }
 	ProviderOverride                 providercontract.Provider
 	providercontract.ProviderRegistrations
 	WorkersFactoryDocsFileSystem       platformfilesystem.ReadFileTree
