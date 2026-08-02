@@ -347,6 +347,7 @@
     "pkg/services/operator_settings/internal/testlink",
     "pkg/services/operator_settings/internal/testproviders",
     "pkg/services/operator_settings/transports/cli",
+    "pkg/services/operator_settings/transports/globalconfig",
     "pkg/services/operator_settings/transports/http",
     "pkg/services/operator_settings/transports/mcp",
     "pkg/services/operator_settings/wire",
@@ -548,7 +549,6 @@
     "pkg/transports/mapping/factoryeventprojection",
     "pkg/transports/mapping/factorysession",
     "pkg/transports/mapping/factorysnapshot",
-    "pkg/transports/mapping/globalconfig",
     "pkg/transports/mapping/optional",
     "pkg/transports/mapping/validationentry",
     "pkg/transports/mapping/workcontent",
@@ -2102,6 +2102,11 @@
       "destination": "operator_settings"
     },
     {
+      "packagePath": "pkg/services/operator_settings/transports/globalconfig",
+      "disposition": "retain",
+      "destination": "operator_settings"
+    },
+    {
       "packagePath": "pkg/services/operator_settings/transports/http",
       "disposition": "retain",
       "destination": "operator_settings"
@@ -3103,11 +3108,6 @@
     },
     {
       "packagePath": "pkg/transports/mapping/factorysnapshot",
-      "disposition": "retain",
-      "destination": "transports"
-    },
-    {
-      "packagePath": "pkg/transports/mapping/globalconfig",
       "disposition": "retain",
       "destination": "transports"
     },

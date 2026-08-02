@@ -5,7 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )

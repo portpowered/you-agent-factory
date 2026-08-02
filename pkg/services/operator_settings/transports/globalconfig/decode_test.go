@@ -9,8 +9,8 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	globalconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
 func TestLoadFileConfig_DecodesGeneratedContractAndNormalizesDomainValues(t *testing.T) {
@@ -113,6 +113,45 @@ func TestEncode_RoundTripsCanonicalIdentityAndSiblingSettings(t *testing.T) {
 	}
 	if len(got.WorkerPresets) != 1 || got.WorkerPresets[0] != want.WorkerPresets[0] {
 		t.Fatalf("round trip presets = %#v, want %#v", got.WorkerPresets, want.WorkerPresets)
+	}
+}
+
+func TestEncode_EmitsCanonicalJSONBytes(t *testing.T) {
+	payload, err := globalconfig.Encode(operatorsettings.Config{
+		BackendScopeID: "local-11111111-1111-4111-8111-111111111111",
+		Defaults: operatorsettings.Defaults{
+			WorkerModelProvider: "codex",
+			WorkerModel:         "gpt-5.4",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+	want := `{
+  "backendScopeID": "local-11111111-1111-4111-8111-111111111111",
+  "defaults": {
+    "workerModel": "gpt-5.4",
+    "workerModelProvider": "codex"
+  },
+  "runtime": {
+    "logging": {
+      "compress": false,
+      "maxAgeDays": 30,
+      "maxBackups": 20,
+      "maxSizeMB": 100
+    },
+    "metrics": {
+      "compress": false,
+      "maxAgeDays": 30,
+      "maxBackups": 20,
+      "maxSizeMB": 100
+    }
+  },
+  "workerPresets": []
+}
+`
+	if string(payload) != want {
+		t.Fatalf("Encode() bytes = %q, want %q", payload, want)
 	}
 }
 
@@ -315,6 +354,31 @@ func TestLoadFileConfig_InvalidDocumentsNamePathAndCause(t *testing.T) {
 				if !strings.Contains(err.Error(), fragment) {
 					t.Fatalf("error = %q, want fragment %q", err, fragment)
 				}
+			}
+		})
+	}
+}
+
+func TestDecode_PreservesCanonicalErrorWrappingAndRejection(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload string
+		want    string
+	}{
+		{name: "malformed", payload: `{"defaults":`, want: "decode generated global config: unexpected EOF"},
+		{name: "null root", payload: `null`, want: "decode generated global config: expected a JSON object"},
+		{name: "unknown field", payload: `{"unsupported":true}`, want: `decode generated global config: json: unknown field "unsupported"`},
+		{name: "trailing JSON", payload: "{}\n{}", want: "decode generated global config: unexpected trailing JSON"},
+		{name: "invalid runtime", payload: `{"runtime":{"metrics":{"maxSizeMB":0}}}`, want: "runtime.metrics.maxSizeMB must be at least 1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := globalconfig.Decode([]byte(tt.payload))
+			if err == nil {
+				t.Fatal("Decode() error = nil, want rejection")
+			}
+			if got := err.Error(); got != tt.want {
+				t.Fatalf("Decode() error = %q, want %q", got, tt.want)
 			}
 		})
 	}

@@ -9,7 +9,7 @@ import (
 	mcpoperatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/mcp"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 

@@ -16,7 +16,7 @@ import (
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 )
 
 func TestConfigurerRequiresSuppliedProviderBeforePersistence(t *testing.T) {

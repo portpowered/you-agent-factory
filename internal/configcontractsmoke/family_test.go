@@ -6,8 +6,8 @@ import (
 )
 
 func TestFamiliesRegisterThreeDistinctProductionContracts(t *testing.T) {
-	families := Families()
-	if diagnostics := ValidateFamilies(families); len(diagnostics) != 0 {
+	families := FamiliesWithParser(testGlobalParser)
+	if diagnostics := ValidateFamilies(families, testGlobalParser); len(diagnostics) != 0 {
 		t.Fatalf("ValidateFamilies() diagnostics = %v", diagnostics)
 	}
 	if len(families) != 3 {
@@ -68,7 +68,7 @@ func TestValidateFamiliesNamesMissingDuplicateAndCrossWiredPaths(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			diagnostics := ValidateFamilies(test.mutate(Families()))
+			diagnostics := ValidateFamilies(test.mutate(FamiliesWithParser(testGlobalParser)), testGlobalParser)
 			if len(diagnostics) != 1 {
 				t.Fatalf("ValidateFamilies() diagnostics = %v, want one", diagnostics)
 			}

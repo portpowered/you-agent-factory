@@ -304,15 +304,11 @@ The live checks found these concrete violations:
 
    [factory_preview.go](C:/Users/andre/work/portos/infinite-you/pkg/transports/mapping/factory_preview.go:321) determines which diagnostics are blocking based on source resolution, conflict codes, artifact-root allowance, and policy findings. Factory Runtime orchestration/preview should return the already-classified result.
 
-7. Operator Settings defaults and validation are applied during mapping.
-
-   [globalconfig/decode.go](C:/Users/andre/work/portos/infinite-you/pkg/transports/mapping/globalconfig/decode.go:51) installs runtime defaults and validates normalized artifact settings before calling `Config.Normalize`. The mapper should decode generated fields; Operator Settings should own defaults and normalization.
-
-8. Automation domain validation sits in HTTP mapping.
+7. Automation domain validation sits in HTTP mapping.
 
    [convergence_mapping.go](C:/Users/andre/work/portos/infinite-you/pkg/services/automations/transports/http/convergence_mapping.go:206) defines required desired/observed identity fields and lifecycle interpretation. Structural decoding belongs in HTTP, but required identity invariants and lifecycle validation belong in Automations.
 
-9. Factory Sessions HTTP owns factory/workstation policy.
+8. Factory Sessions HTTP owns factory/workstation policy.
 
    The 1,037-line factory handler performs bundled-document target selection, workstation lookup, prompt-contract construction, durable/live session detection, and list merging. Examples begin in [handlers_factory.go](C:/Users/andre/work/portos/infinite-you/pkg/services/factory_sessions/transports/http/handlers_factory.go:709). These should be service results or service-local projection operations.
 

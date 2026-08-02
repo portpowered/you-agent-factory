@@ -15,7 +15,7 @@ import (
 	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 )
 
 func testIDGenerator() operatorsettings.IDGenerator {

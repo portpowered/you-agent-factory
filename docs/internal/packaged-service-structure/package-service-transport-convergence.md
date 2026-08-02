@@ -339,8 +339,8 @@ intent, then renders the returned definition.
 Legacy field rejection lives under
 `mapping/factorydefinition/retiredboundary`; Factory config conversion spans
 multi-thousand-line `mapping/factoryconfig` files; Work legacy state
-normalization exists in two handlers; global config defaults are assigned in
-`mapping/globalconfig`.
+normalization exists in two handlers; global config defaults were assigned in
+the removed `mapping/globalconfig` package.
 
 Required change:
 
@@ -584,7 +584,7 @@ ownership, not permission for the service transport to call peer services.
 | Providers | `cli/acp` live configuration/catalog portions, current `you workers list` and `workers acp` handlers, provider-related generated mapping | CLI/HTTP/MCP | Own provider catalog/ACP application and raw command adapters; descriptors carry source/kind |
 | Models | Models command construction in CLI root/registry, Models portions of `mapping/workerinference`, duplicate top-level Models HTTP methods | CLI/HTTP/MCP | Call Models root directly; remove Sessions/Work/Workers/Settings composition from adapters |
 | Provider Sessions | Duplicate top-level provider-session HTTP handler/mapping | HTTP | Keep owner HTTP handler and delete top-level duplicate; add other protocols only when exposed |
-| Operator Settings | `cli/initsetup`, Settings half of `cli/acp`, `mapping/globalconfig`, operator-default resolution in CLI root | CLI/HTTP/MCP | Own raw settings commands/config codecs; remove transport-time wire construction |
+| Operator Settings | `cli/initsetup`, Settings half of `cli/acp`, removed `mapping/globalconfig`, operator-default resolution in CLI root | CLI/HTTP/MCP | Own raw settings commands/config codecs; remove transport-time wire construction |
 | Factory Visualization | `cli/dashboard`, event/result human rendering and fallback presentation in `cli/run`, dashboard UI static serving in top-level HTTP | CLI/HTTP/MCP | Own detached presentation, terminal rendering, event redaction, and dashboard asset HTTP handling |
 | System Initialization | CLI root pre-run initialization decision and system bootstrap presentation | CLI | Owner CLI receives raw command context for bootstrap policy; application role lifecycle remains Initializer |
 | Documentation (new) | `cli/docs`, docs handler in `commandregistry`, docs-topic baseline metadata; embedded source currently exposed by `docs/reference` | none | Add root `List`/`Get`, `wire`, and CLI adapter; top-level CLI only attaches `docs` nodes and forwards Cobra objects |
@@ -926,7 +926,8 @@ pkg/transports/mapping/factorysession    -> sessions/transports/http + recording
 pkg/transports/mapping/factorysnapshot   -> factory_definitions/transports/http
 pkg/transports/mapping/factoryeventprojection
                                           -> recordings/transports/http
-pkg/transports/mapping/globalconfig      -> operator_settings internal/transports
+pkg/transports/mapping/globalconfig      -> removed; owner codec is at
+                                           operator_settings/transports/globalconfig
 pkg/transports/mapping/validationentry   -> factory_definitions root/transports/http
 pkg/transports/mapping/workcontent       -> work/transports/http
 pkg/transports/mapping/workerdiagnostics -> workers/transports/http

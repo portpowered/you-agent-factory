@@ -1,5 +1,6 @@
-// Package globalconfig maps the generated global-config contract into
-// Operator Settings domain values.
+// Package globalconfig owns the generated GlobalConfig codec for Operator
+// Settings. It keeps generated-contract decoding, representation mapping, and
+// canonical document encoding at the Operator Settings transport boundary.
 package globalconfig
 
 import (

@@ -9,7 +9,6 @@ import (
 
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
 // FamilyID is the stable identifier for one separately loadable configuration root.
@@ -47,36 +46,56 @@ func (d Diagnostic) Error() string {
 	return fmt.Sprintf("%s: configuration family %q path %q: %s", d.Code, d.Family, d.Path, d.Message)
 }
 
-var expectedFamilies = []Family{
-	{
-		ID:                   FamilyGlobal,
-		ParserID:             "pkg/transports/mapping/globalconfig.Decode",
-		parser:               parseGlobal,
-		CanonicalOwnerPath:   "contracts/config/you-config.schema.json",
-		SchemaProjectionPath: "contracts/config/you-config.schema.json",
-		ExportPath:           "packages/api/generated/schemas/you-config.schema.json",
-	},
-	{
-		ID:                   FamilyMockWorker,
-		ParserID:             "pkg/services/workers/internal/interface.ParseMockWorkersConfig",
-		parser:               parseMockWorkers,
-		CanonicalOwnerPath:   "contracts/config/mock-workers.schema.json",
-		SchemaProjectionPath: "contracts/config/mock-workers.schema.json",
-		ExportPath:           "packages/api/generated/schemas/mock-workers.schema.json",
-	},
-	{
-		ID:                   FamilyFactory,
-		ParserID:             "pkg/transports/mapping/factoryconfig.FactoryConfigMapper.Expand",
-		parser:               parseFactory,
-		CanonicalOwnerPath:   "api/openapi.yaml#/components/schemas/Factory",
-		SchemaProjectionPath: "contracts/config/factory.schema.json",
-		ExportPath:           "packages/api/generated/schemas/factory.schema.json",
-	},
+// Families returns independent registry entries in stable family order.
+//
+// The global parser is supplied by the command composition root. Keeping the
+// registry package parser-agnostic prevents repository-wide contract tooling
+// from depending on an owner-local transport adapter.
+func Families() []Family {
+	return familiesWithParser(unconfiguredGlobalParser)
 }
 
-// Families returns independent registry entries in stable family order.
-func Families() []Family {
-	return append([]Family(nil), expectedFamilies...)
+func familiesWithParser(globalParser ParseFunc) []Family {
+	if globalParser == nil {
+		globalParser = unconfiguredGlobalParser
+	}
+	expected := []Family{
+		{
+			ID:                   FamilyGlobal,
+			ParserID:             "pkg/services/operator_settings/transports/globalconfig.Decode",
+			parser:               globalParser,
+			CanonicalOwnerPath:   "contracts/config/you-config.schema.json",
+			SchemaProjectionPath: "contracts/config/you-config.schema.json",
+			ExportPath:           "packages/api/generated/schemas/you-config.schema.json",
+		},
+		{
+			ID:                   FamilyMockWorker,
+			ParserID:             "pkg/services/workers/internal/interface.ParseMockWorkersConfig",
+			parser:               parseMockWorkers,
+			CanonicalOwnerPath:   "contracts/config/mock-workers.schema.json",
+			SchemaProjectionPath: "contracts/config/mock-workers.schema.json",
+			ExportPath:           "packages/api/generated/schemas/mock-workers.schema.json",
+		},
+		{
+			ID:                   FamilyFactory,
+			ParserID:             "pkg/transports/mapping/factoryconfig.FactoryConfigMapper.Expand",
+			parser:               parseFactory,
+			CanonicalOwnerPath:   "api/openapi.yaml#/components/schemas/Factory",
+			SchemaProjectionPath: "contracts/config/factory.schema.json",
+			ExportPath:           "packages/api/generated/schemas/factory.schema.json",
+		},
+	}
+	return expected
+}
+
+func unconfiguredGlobalParser([]byte) error {
+	return fmt.Errorf("global configuration parser is not configured")
+}
+
+// FamiliesWithParser returns independent registry entries with the supplied
+// production parser bound to the global configuration family.
+func FamiliesWithParser(globalParser ParseFunc) []Family {
+	return familiesWithParser(globalParser)
 }
 
 // Parse invokes the registered production parser.
@@ -89,7 +108,11 @@ func (f Family) Parse(payload []byte) error {
 
 // ValidateFamilies fails closed when a root is omitted, duplicated, or wired to
 // another root's parser or schema paths.
-func ValidateFamilies(families []Family) []Diagnostic {
+func ValidateFamilies(families []Family, globalParser ...ParseFunc) []Diagnostic {
+	expectedFamilies := Families()
+	if len(globalParser) > 0 {
+		expectedFamilies = FamiliesWithParser(globalParser[0])
+	}
 	byID := make(map[FamilyID][]Family, len(families))
 	for _, family := range families {
 		byID[family.ID] = append(byID[family.ID], family)
@@ -164,17 +187,12 @@ func registryDiagnostic(code string, family Family, path, message string) Diagno
 }
 
 func isExpectedFamily(id FamilyID) bool {
-	for _, family := range expectedFamilies {
+	for _, family := range Families() {
 		if family.ID == id {
 			return true
 		}
 	}
 	return false
-}
-
-func parseGlobal(payload []byte) error {
-	_, err := globalconfigmapping.Decode(payload)
-	return err
 }
 
 func parseMockWorkers(payload []byte) error {

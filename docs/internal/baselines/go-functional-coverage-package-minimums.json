@@ -1813,6 +1813,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig",
+      "minimum": 83.69
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/http",
       "exception": {
         "kind": "measurement",
@@ -3087,10 +3091,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot",
       "minimum": 75.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig",
-      "minimum": 83.69
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/optional",
