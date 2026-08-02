@@ -201,12 +201,19 @@ func TestAutomatPortabilityFixture_ExpandedLayoutIsDispatchReadyForBoundedSmoke(
 
 func flattenAutomatFixture(t *testing.T) (string, *interfaces.FactoryConfig, []byte) {
 	t.Helper()
+	return flattenAutomatFixtureWithProcess(t, support.BuildProcess(t, serviceEdgesForAutomatPortability()))
+}
+
+func flattenAutomatFixtureWithProcess(
+	t *testing.T,
+	process support.Process,
+) (string, *interfaces.FactoryConfig, []byte) {
+	t.Helper()
 
 	projectDir := t.TempDir()
 	authoredFactoryDir := filepath.Join(projectDir, "factory")
 	copyFixtureIntoDir(t, support.LegacyFixtureDir(t, automatFixtureName), authoredFactoryDir)
 
-	process := support.BuildProcess(t, serviceEdgesForAutomatPortability())
 	flattenInputs := support.FakeInputs(
 		context.Background(),
 		[]string{"you", "factory", "config", "flatten", authoredFactoryDir},
@@ -228,7 +235,8 @@ func flattenAutomatFixture(t *testing.T) (string, *interfaces.FactoryConfig, []b
 func flattenAndExpandAutomatFixture(t *testing.T) (string, *interfaces.FactoryConfig, string) {
 	t.Helper()
 
-	authoredFactoryDir, flattenedCfg, flattenedBytes := flattenAutomatFixture(t)
+	process := support.BuildProcess(t, serviceEdgesForAutomatPortability())
+	authoredFactoryDir, flattenedCfg, flattenedBytes := flattenAutomatFixtureWithProcess(t, process)
 
 	expandedDir := t.TempDir()
 	expandedFactoryPath := filepath.Join(expandedDir, interfaces.FactoryConfigFile)
@@ -237,7 +245,6 @@ func flattenAndExpandAutomatFixture(t *testing.T) (string, *interfaces.FactoryCo
 	}
 	copyAutomatPortableExportSidecars(t, authoredFactoryDir, expandedDir)
 
-	process := support.BuildProcess(t, serviceEdgesForAutomatPortability())
 	expandInputs := support.FakeInputs(
 		context.Background(),
 		[]string{"you", "factory", "config", "expand", expandedFactoryPath},

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
@@ -42,6 +43,10 @@ type FunctionalAPIServerConfig struct {
 	Env                          []string
 	ProviderOverride             providercontract.Provider
 	Edges                        serviceedges.Edges
+	// BeforeStart prepares scenario-owned durable state through the same
+	// root-built process that will host the server. The callback runs after
+	// invocation-local environment setup and before the server command starts.
+	BeforeStart func(testing.TB, Process, root.Input)
 }
 
 // FunctionalAPIServer owns one daemon invocation on a reusable root Process.
@@ -94,6 +99,18 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 		inputs.Env = withFunctionalEnvironment(inputs.Env, "USERPROFILE", home)
 	} else {
 		inputs.Env = append([]string(nil), cfg.Env...)
+	}
+	if closer, ok := process.(interface{ Close(context.Context) error }); ok {
+		t.Cleanup(func() {
+			closeCtx, cancelClose := context.WithTimeout(context.Background(), processCommandStopTimeout)
+			defer cancelClose()
+			if err := closer.Close(closeCtx); err != nil {
+				t.Errorf("close application process: %v", err)
+			}
+		})
+	}
+	if cfg.BeforeStart != nil {
+		cfg.BeforeStart(t, process, inputs.Input)
 	}
 	t.Cleanup(func() {
 		if !t.Failed() {

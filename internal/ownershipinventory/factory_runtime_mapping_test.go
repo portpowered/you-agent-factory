@@ -7,147 +7,130 @@ import (
 	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 )
 
+var factoryRuntimeMappingCases = []packageMappingCase{
+	{
+		path:        "pkg/services/factory_runtime",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/wire",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/transports/http",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/orchestration/wire",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/instance_host/build",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/orchestration/engine",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptsummary",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/orchestration/context",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/orchestration/javascript",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/orchestration/state/validation",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/orchestration/throttle",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/orchestration/token",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/orchestration/token_transformer",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/orchestration/metrics",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/orchestration/replayhooks",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path:        "pkg/services/factory_runtime/internal/services/orchestration/runtimecontract",
+		wantRetain:  true,
+		retainOwner: "factory_runtime",
+	},
+	{
+		path: "pkg/services/factory_runtime/testdata",
+		wantMove: &ownershipinventory.PackageRow{
+			PackagePath:       "pkg/services/factory_runtime/testdata",
+			Disposition:       ownershipinventory.DispositionMove,
+			Destination:       "factory_runtime",
+			DestinationKind:   ownershipinventory.DestinationKindOwner,
+			Successor:         "pkg/services/factory_runtime/internal",
+			DeletionCondition: "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof",
+		},
+	},
+}
+
 func TestMapPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		path        string
-		wantRetain  bool
-		retainOwner string
-		wantMove    *ownershipinventory.PackageRow
-	}{
-		{
-			path:        "pkg/services/factory_runtime",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/wire",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/transports/http",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/orchestration/wire",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/instance_host/build",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/orchestration/engine",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptsummary",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/orchestration/context",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/orchestration/javascript",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/orchestration/state/validation",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/orchestration/throttle",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/orchestration/token",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/orchestration/token_transformer",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/orchestration/metrics",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/orchestration/replayhooks",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path:        "pkg/services/factory_runtime/internal/services/orchestration/runtimecontract",
-			wantRetain:  true,
-			retainOwner: "factory_runtime",
-		},
-		{
-			path: "pkg/services/factory_runtime/testdata",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_runtime/testdata",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_runtime",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_runtime/internal",
-				DeletionCondition: "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof",
-			},
-		},
-	}
-
-	for _, tc := range cases {
-		got, err := ownershipinventory.MapPackage(tc.path)
-		if err != nil {
-			t.Fatalf("MapPackage(%q) error = %v", tc.path, err)
-		}
-		if tc.wantRetain {
-			if got.Disposition != ownershipinventory.DispositionRetain || got.Destination != tc.retainOwner {
-				t.Fatalf("MapPackage(%q) = %#v, want retain→%s", tc.path, got, tc.retainOwner)
-			}
-			continue
-		}
-		if got != *tc.wantMove {
-			t.Fatalf("MapPackage(%q) = %#v, want %#v", tc.path, got, *tc.wantMove)
-		}
+	for _, tc := range factoryRuntimeMappingCases {
+		assertPackageMapping(t, tc)
 	}
 }
 

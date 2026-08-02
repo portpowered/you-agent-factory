@@ -18,123 +18,88 @@ import (
 func TestRootErrorResponse_MapsRepresentativeTypedFailures(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name       string
-		operation  modelsHTTPOperation
-		err        error
-		wantStatus int
-		wantCode   string
-		wantFamily factoryapi.ErrorFamily
-	}{
-		{
-			name:       "catalog not found",
-			operation:  modelsHTTPOperationCatalog,
-			err:        models.ErrNotFound,
-			wantStatus: http.StatusNotFound,
-			wantCode:   "NOT_FOUND",
-			wantFamily: factoryapi.ErrorFamilyNotFound,
-		},
-		{
-			name:       "catalog unavailable",
-			operation:  modelsHTTPOperationCatalog,
-			err:        models.ErrUnavailable,
-			wantStatus: http.StatusNotFound,
-			wantCode:   "MODEL_NOT_AVAILABLE",
-			wantFamily: factoryapi.ErrorFamilyNotFound,
-		},
-		{
-			name:       "pull not found",
-			operation:  modelsHTTPOperationPull,
-			err:        models.ErrNotFound,
-			wantStatus: http.StatusNotFound,
-			wantCode:   "NOT_FOUND",
-			wantFamily: factoryapi.ErrorFamilyNotFound,
-		},
-		{
-			name:       "pull unsupported",
-			operation:  modelsHTTPOperationPull,
-			err:        models.ErrPullUnsupported,
-			wantStatus: http.StatusBadRequest,
-			wantCode:   "BAD_REQUEST",
-			wantFamily: factoryapi.ErrorFamilyBadRequest,
-		},
-		{
-			name:       "pull not available",
-			operation:  modelsHTTPOperationPull,
-			err:        models.ErrNotAvailable,
-			wantStatus: http.StatusNotFound,
-			wantCode:   "MODEL_NOT_AVAILABLE",
-			wantFamily: factoryapi.ErrorFamilyNotFound,
-		},
-		{
-			name:       "invoke missing runtime",
-			operation:  modelsHTTPOperationInvoke,
-			err:        models.ErrMissing,
-			wantStatus: http.StatusNotFound,
-			wantCode:   "MODEL_NOT_AVAILABLE",
-			wantFamily: factoryapi.ErrorFamilyNotFound,
-		},
-		{
-			name:       "invoke loading runtime",
-			operation:  modelsHTTPOperationInvoke,
-			err:        models.ErrLoading,
-			wantStatus: http.StatusConflict,
-			wantCode:   "MODEL_RUNTIME_LOADING",
-			wantFamily: factoryapi.ErrorFamilyConflict,
-		},
-		{
-			name:       "invoke failed runtime",
-			operation:  modelsHTTPOperationInvoke,
-			err:        models.ErrFailed,
-			wantStatus: http.StatusServiceUnavailable,
-			wantCode:   "MODEL_RUNTIME_FAILED",
-			wantFamily: factoryapi.ErrorFamilyInternalServerError,
-		},
-		{
-			name:       "invoke unsupported runtime",
-			operation:  modelsHTTPOperationInvoke,
-			err:        models.ErrUnsupported,
-			wantStatus: http.StatusBadRequest,
-			wantCode:   "MODEL_RUNTIME_UNSUPPORTED",
-			wantFamily: factoryapi.ErrorFamilyBadRequest,
-		},
-		{
-			name:       "invoke unsupported operation",
-			operation:  modelsHTTPOperationInvoke,
-			err:        models.ErrUnsupportedOperation,
-			wantStatus: http.StatusBadRequest,
-			wantCode:   "BAD_REQUEST",
-			wantFamily: factoryapi.ErrorFamilyBadRequest,
-		},
-		{
-			name:       "invoke unsupported response mode",
-			operation:  modelsHTTPOperationInvoke,
-			err:        models.ErrUnsupportedResponseMode,
-			wantStatus: http.StatusBadRequest,
-			wantCode:   "BAD_REQUEST",
-			wantFamily: factoryapi.ErrorFamilyBadRequest,
-		},
-	}
-
-	for _, tt := range tests {
+	for _, tt := range rootErrorMappingCases() {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-
-			status, response, ok := RootErrorResponse(tt.err, tt.operation)
-			if !ok {
-				t.Fatalf("RootErrorResponse(%v, %v) = not handled, want typed outcome", tt.err, tt.operation)
-			}
-			if status != tt.wantStatus ||
-				response.Family != tt.wantFamily ||
-				string(response.Code) != tt.wantCode {
-				t.Fatalf("RootErrorResponse(%v, %v) = %d %#v, want %d family=%s code=%s",
-					tt.err, tt.operation, status, response, tt.wantStatus, tt.wantFamily, tt.wantCode)
-			}
-			if strings.TrimSpace(response.Message) == "" {
-				t.Fatalf("RootErrorResponse(%v, %v) message = %q, want non-empty public message", tt.err, tt.operation, response.Message)
-			}
+			assertRootErrorMapping(t, tt)
 		})
+	}
+}
+
+type rootErrorMappingCase struct {
+	name       string
+	operation  modelsHTTPOperation
+	err        error
+	wantStatus int
+	wantCode   string
+	wantFamily factoryapi.ErrorFamily
+}
+
+func rootErrorMappingCases() []rootErrorMappingCase {
+	return []rootErrorMappingCase{
+		{
+			name: "catalog not found", operation: modelsHTTPOperationCatalog, err: models.ErrNotFound,
+			wantStatus: http.StatusNotFound, wantCode: "NOT_FOUND", wantFamily: factoryapi.ErrorFamilyNotFound,
+		},
+		{
+			name: "catalog unavailable", operation: modelsHTTPOperationCatalog, err: models.ErrUnavailable,
+			wantStatus: http.StatusNotFound, wantCode: "MODEL_NOT_AVAILABLE", wantFamily: factoryapi.ErrorFamilyNotFound,
+		},
+		{
+			name: "pull not found", operation: modelsHTTPOperationPull, err: models.ErrNotFound,
+			wantStatus: http.StatusNotFound, wantCode: "NOT_FOUND", wantFamily: factoryapi.ErrorFamilyNotFound,
+		},
+		{
+			name: "pull unsupported", operation: modelsHTTPOperationPull, err: models.ErrPullUnsupported,
+			wantStatus: http.StatusBadRequest, wantCode: "BAD_REQUEST", wantFamily: factoryapi.ErrorFamilyBadRequest,
+		},
+		{
+			name: "pull not available", operation: modelsHTTPOperationPull, err: models.ErrNotAvailable,
+			wantStatus: http.StatusNotFound, wantCode: "MODEL_NOT_AVAILABLE", wantFamily: factoryapi.ErrorFamilyNotFound,
+		},
+		{
+			name: "invoke missing runtime", operation: modelsHTTPOperationInvoke, err: models.ErrMissing,
+			wantStatus: http.StatusNotFound, wantCode: "MODEL_NOT_AVAILABLE", wantFamily: factoryapi.ErrorFamilyNotFound,
+		},
+		{
+			name: "invoke loading runtime", operation: modelsHTTPOperationInvoke, err: models.ErrLoading,
+			wantStatus: http.StatusConflict, wantCode: "MODEL_RUNTIME_LOADING", wantFamily: factoryapi.ErrorFamilyConflict,
+		},
+		{
+			name: "invoke failed runtime", operation: modelsHTTPOperationInvoke, err: models.ErrFailed,
+			wantStatus: http.StatusServiceUnavailable, wantCode: "MODEL_RUNTIME_FAILED", wantFamily: factoryapi.ErrorFamilyInternalServerError,
+		},
+		{
+			name: "invoke unsupported runtime", operation: modelsHTTPOperationInvoke, err: models.ErrUnsupported,
+			wantStatus: http.StatusBadRequest, wantCode: "MODEL_RUNTIME_UNSUPPORTED", wantFamily: factoryapi.ErrorFamilyBadRequest,
+		},
+		{
+			name: "invoke unsupported operation", operation: modelsHTTPOperationInvoke, err: models.ErrUnsupportedOperation,
+			wantStatus: http.StatusBadRequest, wantCode: "BAD_REQUEST", wantFamily: factoryapi.ErrorFamilyBadRequest,
+		},
+		{
+			name: "invoke unsupported response mode", operation: modelsHTTPOperationInvoke, err: models.ErrUnsupportedResponseMode,
+			wantStatus: http.StatusBadRequest, wantCode: "BAD_REQUEST", wantFamily: factoryapi.ErrorFamilyBadRequest,
+		},
+	}
+}
+
+func assertRootErrorMapping(t *testing.T, tt rootErrorMappingCase) {
+	t.Helper()
+
+	status, response, ok := RootErrorResponse(tt.err, tt.operation)
+	if !ok {
+		t.Fatalf("RootErrorResponse(%v, %v) = not handled, want typed outcome", tt.err, tt.operation)
+	}
+	if status != tt.wantStatus ||
+		response.Family != tt.wantFamily ||
+		string(response.Code) != tt.wantCode {
+		t.Fatalf("RootErrorResponse(%v, %v) = %d %#v, want %d family=%s code=%s",
+			tt.err, tt.operation, status, response, tt.wantStatus, tt.wantFamily, tt.wantCode)
+	}
+	if strings.TrimSpace(response.Message) == "" {
+		t.Fatalf("RootErrorResponse(%v, %v) message = %q, want non-empty public message", tt.err, tt.operation, response.Message)
 	}
 }
 

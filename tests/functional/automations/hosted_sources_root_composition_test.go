@@ -44,6 +44,8 @@ func TestBuildProcessRemainsHostedSourcesInertBeforeRuntimeLifecycle(t *testing.
 // TestAutomationsHostedSourcesActivateThroughRuntimeLifecycle proves hosted automation
 // sources admit Work through the runtime lifecycle after BuildProcess composition.
 func TestAutomationsHostedSourcesActivateThroughRuntimeLifecycle(t *testing.T) {
+	t.Parallel()
+
 	linearServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
