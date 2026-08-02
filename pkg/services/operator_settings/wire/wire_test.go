@@ -11,11 +11,12 @@ import (
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 )
 
 func testIDGenerator() operatorsettings.IDGenerator {
@@ -35,6 +36,7 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 		stubProviderCatalog,
 		providersRoot,
 		testIDGenerator(),
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
@@ -62,6 +64,7 @@ func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
 		stubProviderCatalog,
 		providersRoot,
 		testIDGenerator(),
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
@@ -131,6 +134,7 @@ func TestNewServiceUsesInjectedIDGeneratorForBackendScope(t *testing.T) {
 		stubProviderCatalog,
 		internaltestproviders.StandardCatalog(),
 		testIDGenerator(),
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
@@ -168,6 +172,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		providersCatalog.fn,
 		providersRoot,
 		testIDGenerator(),
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
@@ -236,6 +241,7 @@ func TestNewServiceRejectsMissingFileSystem(t *testing.T) {
 			stubProviderCatalog,
 			internaltestproviders.StandardCatalog(),
 			testIDGenerator(),
+			logging.NoopLogger{},
 		)
 	}, "construct Operator Settings: filesystem is required")
 }
@@ -252,6 +258,7 @@ func TestNewServiceRejectsMissingTemporaryFileCreator(t *testing.T) {
 			stubProviderCatalog,
 			internaltestproviders.StandardCatalog(),
 			testIDGenerator(),
+			logging.NoopLogger{},
 		)
 	}, "construct Operator Settings: create temporary file is required")
 }
@@ -268,6 +275,7 @@ func TestNewServiceRejectsMissingConfigDecoder(t *testing.T) {
 			stubProviderCatalog,
 			internaltestproviders.StandardCatalog(),
 			testIDGenerator(),
+			logging.NoopLogger{},
 		)
 	}, "construct Operator Settings: config decoder is required")
 }
@@ -284,6 +292,7 @@ func TestNewServiceRejectsMissingConfigEncoder(t *testing.T) {
 			stubProviderCatalog,
 			internaltestproviders.StandardCatalog(),
 			testIDGenerator(),
+			logging.NoopLogger{},
 		)
 	}, "construct Operator Settings: config encoder is required")
 }
@@ -300,6 +309,7 @@ func TestNewServiceRejectsMissingProviderCatalog(t *testing.T) {
 			nil,
 			internaltestproviders.StandardCatalog(),
 			testIDGenerator(),
+			logging.NoopLogger{},
 		)
 	}, "construct Operator Settings: provider catalog is required")
 }
@@ -316,6 +326,7 @@ func TestNewServiceRejectsMissingProvidersRoot(t *testing.T) {
 			stubProviderCatalog,
 			nil,
 			testIDGenerator(),
+			logging.NoopLogger{},
 		)
 	}, "construct Operator Settings: providers root is required")
 }
@@ -332,6 +343,7 @@ func TestNewServiceRejectsMissingIDGenerator(t *testing.T) {
 			stubProviderCatalog,
 			internaltestproviders.StandardCatalog(),
 			nil,
+			logging.NoopLogger{},
 		)
 	}, "construct Operator Settings: ID generator is required")
 }

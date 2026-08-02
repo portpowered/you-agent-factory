@@ -13,14 +13,13 @@ import (
 
 // NewServiceFromConfigDocument constructs the accepted Settings root from the
 // ConfigDocumentService ports Wire already injects for configure composition.
-// logger is an optional trailing operation-logging abstraction; omitting it
-// (or passing nil) resolves to a safe no-op, so existing callers are
-// unaffected.
+// logger is the direct, required operation-logging abstraction; callers with
+// no operation logging pass logging.NoopLogger{}.
 func NewServiceFromConfigDocument(
 	service operatorsettings.ConfigDocumentService,
 	providersRoot providers.Service,
 	idGenerator operatorsettings.IDGenerator,
-	logger ...logging.Logger,
+	logger logging.Logger,
 ) (operatorsettings.Service, error) {
 	if providersRoot == nil {
 		return nil, fmt.Errorf("operator settings providers root is required")
@@ -52,6 +51,6 @@ func NewServiceFromConfigDocument(
 		service.Decoder,
 		service.Encoder,
 		idGenerator,
-		firstLogger(logger),
+		logger,
 	)
 }
