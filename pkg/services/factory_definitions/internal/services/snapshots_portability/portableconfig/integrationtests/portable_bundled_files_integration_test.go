@@ -10,6 +10,7 @@ import (
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	snapshotscontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/contracts"
 )
 
 func TestPortableBundledFiles_FlattenAndLoadIncludeNestedDocsUnderFactoryDocs(t *testing.T) {
@@ -655,7 +656,7 @@ func writePortableBundledRoundTripFile(t *testing.T, path, content string) {
 
 func loadPortableRuntimeConfig(
 	factoryDir string,
-	workstationLoader factorydefinitions.WorkstationLoader,
+	workstationLoader snapshotscontracts.WorkstationLoader,
 ) (factorydefinitions.MutableLoadedFactorySource, error) {
 	return factorydefinitioncomposition.LoadDirectory(
 		factoryDir,

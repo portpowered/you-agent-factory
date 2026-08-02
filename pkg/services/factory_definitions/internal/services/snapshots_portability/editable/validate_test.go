@@ -7,6 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	snapshotscontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/contracts"
 	snapshotsportabilityeditable "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/editable"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
@@ -49,7 +50,7 @@ func TestValidateSnapshotForcesPrePersistOwnerProfile(t *testing.T) {
 		t.Fatalf("NewFactorySnapshot: %v", err)
 	}
 	canonicalLoads := 0
-	loadCanonical := func(payload []byte, loader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+	loadCanonical := func(payload []byte, loader snapshotscontracts.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 		canonicalLoads++
 		return factorydefinitioncomposition.LoadCanonicalJSON(payload, loader)
 	}
@@ -57,7 +58,7 @@ func TestValidateSnapshotForcesPrePersistOwnerProfile(t *testing.T) {
 		t.Context(),
 		snapshot,
 		nil,
-		func(snapshot *factorydefinitions.FactorySnapshot, loader factorydefinitions.WorkstationLoader) (factorydefinitions.DefinitionValidationRequest, error) {
+		func(snapshot *factorydefinitions.FactorySnapshot, loader snapshotscontracts.WorkstationLoader) (factorydefinitions.DefinitionValidationRequest, error) {
 			request, mapErr := validationentry.MapEditableFactorySnapshot(snapshot, loader, loadCanonical)
 			request.Profile = factorydefinitions.ValidationProfileTopology
 			return request, mapErr
@@ -74,7 +75,7 @@ func TestValidateSnapshotForcesPrePersistOwnerProfile(t *testing.T) {
 
 func validateSnapshot(
 	snapshot *factorydefinitions.FactorySnapshot,
-	workstationLoader factorydefinitions.WorkstationLoader,
+	workstationLoader snapshotscontracts.WorkstationLoader,
 ) error {
 	return snapshotsportabilityeditable.ValidateSnapshot(
 		context.Background(),
@@ -82,7 +83,7 @@ func validateSnapshot(
 		workstationLoader,
 		func(
 			snapshot *factorydefinitions.FactorySnapshot,
-			loader factorydefinitions.WorkstationLoader,
+			loader snapshotscontracts.WorkstationLoader,
 		) (factorydefinitions.DefinitionValidationRequest, error) {
 			return validationentry.MapEditableFactorySnapshot(
 				snapshot,

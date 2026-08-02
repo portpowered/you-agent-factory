@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	snapshotscontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/contracts"
 )
 
 // Snapshot restores bundled portable assets under one target directory and
@@ -12,8 +13,8 @@ import (
 func Snapshot(
 	targetDir string,
 	snapshot *factorydefinitions.FactorySnapshot,
-	validateMaterializeWrites factorydefinitions.PortableBundledFileWritesValidator,
-	materializePortableFiles factorydefinitions.PortableBundledFilesMaterializer,
+	validateMaterializeWrites snapshotscontracts.PortableBundledFileWritesValidator,
+	materializePortableFiles snapshotscontracts.PortableBundledFilesMaterializer,
 ) (factorydefinitions.MaterializeFactorySnapshotResult, error) {
 	if validateMaterializeWrites == nil || materializePortableFiles == nil {
 		return factorydefinitions.MaterializeFactorySnapshotResult{}, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize

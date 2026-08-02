@@ -11,6 +11,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
 	snapshotsportabilitycapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture"
+	snapshotscontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/contracts"
 	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
 	snapshotsportabilityprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare"
 )
@@ -18,24 +19,24 @@ import (
 // Service is the private nested snapshots_portability implementation behind
 // the CTR-DEF root snapshot slice.
 type Service struct {
-	loadCanonical             factorydefinitions.CanonicalFactoryJSONLoader
-	captureLoaded             factorydefinitions.LoadedFactorySnapshotCapturer
-	preparePortable           factorydefinitions.PortableFactoryConfigPreparer
-	decodeSnapshot            factorydefinitions.FactorySnapshotJSONDecoder
-	materializePortableFiles  factorydefinitions.PortableBundledFilesMaterializer
-	validateMaterializeWrites factorydefinitions.PortableBundledFileWritesValidator
+	loadCanonical             snapshotscontracts.CanonicalFactoryLoader
+	captureLoaded             snapshotscontracts.LoadedFactorySnapshotCapturer
+	preparePortable           snapshotscontracts.PortableFactoryConfigPreparer
+	decodeSnapshot            snapshotscontracts.FactorySnapshotJSONDecoder
+	materializePortableFiles  snapshotscontracts.PortableBundledFilesMaterializer
+	validateMaterializeWrites snapshotscontracts.PortableBundledFileWritesValidator
 }
 
 var _ snapshotsportability.Service = (*Service)(nil)
 
 // New constructs the snapshots_portability implementation from exact injected ports.
 func New(
-	loadCanonical factorydefinitions.CanonicalFactoryJSONLoader,
-	captureLoaded factorydefinitions.LoadedFactorySnapshotCapturer,
-	preparePortable factorydefinitions.PortableFactoryConfigPreparer,
-	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
-	materializePortableFiles factorydefinitions.PortableBundledFilesMaterializer,
-	validateMaterializeWrites factorydefinitions.PortableBundledFileWritesValidator,
+	loadCanonical snapshotscontracts.CanonicalFactoryLoader,
+	captureLoaded snapshotscontracts.LoadedFactorySnapshotCapturer,
+	preparePortable snapshotscontracts.PortableFactoryConfigPreparer,
+	decodeSnapshot snapshotscontracts.FactorySnapshotJSONDecoder,
+	materializePortableFiles snapshotscontracts.PortableBundledFilesMaterializer,
+	validateMaterializeWrites snapshotscontracts.PortableBundledFileWritesValidator,
 ) *Service {
 	if loadCanonical == nil ||
 		captureLoaded == nil ||

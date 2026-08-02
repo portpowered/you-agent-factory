@@ -35,16 +35,3 @@ type Service interface {
 		factorydefinitions.MaterializeFactorySnapshotRequest,
 	) (factorydefinitions.MaterializeFactorySnapshotResult, error)
 }
-
-// Dependencies are the exact collaborator ports required by snapshots_portability.
-// They are supplied by Factory Definitions composition and never selected here:
-// snapshots_portability does not choose host filesystem adapters, boundary
-// codecs, or Wire/root constructors.
-type Dependencies struct {
-	LoadCanonical             factorydefinitions.CanonicalFactoryJSONLoader
-	CaptureLoaded             factorydefinitions.LoadedFactorySnapshotCapturer
-	PreparePortable           factorydefinitions.PortableFactoryConfigPreparer
-	DecodeSnapshot            factorydefinitions.FactorySnapshotJSONDecoder
-	MaterializePortableFiles  factorydefinitions.PortableBundledFilesMaterializer
-	ValidateMaterializeWrites factorydefinitions.PortableBundledFileWritesValidator
-}

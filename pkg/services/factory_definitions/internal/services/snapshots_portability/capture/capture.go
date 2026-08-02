@@ -10,6 +10,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/runtimeconfig"
+	snapshotscontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/contracts"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 )
 
@@ -17,10 +18,10 @@ import (
 // composition boundary. The returned operation consumes only Factory
 // Definitions root contracts.
 func NewLoaded(
-	mapSnapshotObject factorydefinitions.FactorySnapshotObjectMapper,
-) factorydefinitions.LoadedFactorySnapshotCapturer {
+	mapSnapshotObject snapshotscontracts.FactorySnapshotObjectMapper,
+) snapshotscontracts.LoadedFactorySnapshotCapturer {
 	return func(
-		source factorydefinitions.FactorySnapshotSource,
+		source snapshotscontracts.FactorySnapshotSource,
 		sourceDirectory string,
 		metadata map[string]string,
 	) (*factorydefinitions.FactorySnapshot, error) {
@@ -36,13 +37,13 @@ func NewLoaded(
 // NewExplicit adapts explicit Factory Definition values to the snapshot
 // capturer used by Factory Definitions persistence.
 func NewExplicit(
-	mapSnapshotObject factorydefinitions.FactorySnapshotObjectMapper,
-) factorydefinitions.FactorySnapshotCapturer {
+	mapSnapshotObject snapshotscontracts.FactorySnapshotObjectMapper,
+) snapshotscontracts.FactorySnapshotCapturer {
 	captureLoaded := NewLoaded(mapSnapshotObject)
 	return func(
 		factoryDir string,
 		factoryConfig *factorydefinitions.FactoryConfig,
-		runtimeConfig factorydefinitions.RuntimeDefinitionLookup,
+		runtimeConfig snapshotscontracts.RuntimeDefinitionLookup,
 		sourceDirectory string,
 		metadata map[string]string,
 	) (*factorydefinitions.FactorySnapshot, error) {
@@ -58,8 +59,8 @@ func NewExplicit(
 func NewExplicitSource(
 	factoryDir string,
 	factoryConfig *factorydefinitions.FactoryConfig,
-	runtimeConfig factorydefinitions.RuntimeDefinitionLookup,
-) factorydefinitions.FactorySnapshotSource {
+	runtimeConfig snapshotscontracts.RuntimeDefinitionLookup,
+) snapshotscontracts.FactorySnapshotSource {
 	return explicitFactorySnapshotSource{
 		factoryDir:    factoryDir,
 		factoryConfig: factoryConfig,
@@ -70,10 +71,10 @@ func NewExplicitSource(
 // CaptureLoaded captures a portable snapshot without requiring the loaded
 // source to know about transport representations.
 func CaptureLoaded(
-	source factorydefinitions.FactorySnapshotSource,
+	source snapshotscontracts.FactorySnapshotSource,
 	sourceDirectory string,
 	metadata map[string]string,
-	mapSnapshotObject factorydefinitions.FactorySnapshotObjectMapper,
+	mapSnapshotObject snapshotscontracts.FactorySnapshotObjectMapper,
 ) (*factorydefinitions.FactorySnapshot, error) {
 	if source == nil {
 		return nil, errors.New("loaded factory config is required")
@@ -117,7 +118,7 @@ func CaptureLoaded(
 type explicitFactorySnapshotSource struct {
 	factoryDir    string
 	factoryConfig *factorydefinitions.FactoryConfig
-	runtimeConfig factorydefinitions.RuntimeDefinitionLookup
+	runtimeConfig snapshotscontracts.RuntimeDefinitionLookup
 }
 
 func (s explicitFactorySnapshotSource) FactoryDir() string {
@@ -148,7 +149,7 @@ func (s explicitFactorySnapshotSource) Workstation(
 
 func snapshotRuntimeWorkers(
 	factoryConfig *factorydefinitions.FactoryConfig,
-	runtimeConfig factorydefinitions.RuntimeDefinitionLookup,
+	runtimeConfig snapshotscontracts.RuntimeDefinitionLookup,
 ) map[string]workerconfig.Config {
 	workers := make(map[string]workerconfig.Config)
 	for _, workerConfig := range factoryConfig.Workers {
@@ -161,7 +162,7 @@ func snapshotRuntimeWorkers(
 
 func snapshotRuntimeWorkstations(
 	factoryConfig *factorydefinitions.FactoryConfig,
-	runtimeConfig factorydefinitions.RuntimeDefinitionLookup,
+	runtimeConfig snapshotscontracts.RuntimeDefinitionLookup,
 ) map[string]factorydefinitions.FactoryWorkstationConfig {
 	workstations := make(
 		map[string]factorydefinitions.FactoryWorkstationConfig,

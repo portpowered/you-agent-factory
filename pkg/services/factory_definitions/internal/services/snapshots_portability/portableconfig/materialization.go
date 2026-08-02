@@ -9,13 +9,14 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	snapshotscontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/contracts"
 	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
 )
 
 // NewFilesCopier binds portable-file copying to an injected symlink resolver.
 func NewFilesCopier(
 	fileSystem portablefiles.FileSystem,
-) factorydefinitions.PortableBundledFilesCopier {
+) snapshotscontracts.PortableBundledFilesCopier {
 	return func(sourceDir, targetDir string, config *factorydefinitions.FactoryConfig) error {
 		return CopySupportedFiles(fileSystem, sourceDir, targetDir, config)
 	}
@@ -25,7 +26,7 @@ func NewFilesCopier(
 // resolver.
 func NewMaterializer(
 	fileSystem portablefiles.FileSystem,
-) factorydefinitions.PortableBundledFilesMaterializer {
+) snapshotscontracts.PortableBundledFilesMaterializer {
 	return snapshotsportabilitymaterialize.NewMaterializer(fileSystem)
 }
 
@@ -33,7 +34,7 @@ func NewMaterializer(
 // resolver.
 func NewWritesValidator(
 	fileSystem portablefiles.FileSystem,
-) factorydefinitions.PortableBundledFileWritesValidator {
+) snapshotscontracts.PortableBundledFileWritesValidator {
 	return snapshotsportabilitymaterialize.NewWritesValidator(fileSystem)
 }
 

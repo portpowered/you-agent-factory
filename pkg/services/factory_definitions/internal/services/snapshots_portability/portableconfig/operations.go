@@ -5,13 +5,14 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	snapshotscontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/contracts"
 )
 
 // NewPortableBundledFilesApplier binds the filesystem selected by Wire to
 // portable authored-file discovery.
 func NewPortableBundledFilesApplier(
 	fileSystem portablefiles.FileSystem,
-) (factorydefinitions.PortableBundledFilesApplier, error) {
+) (snapshotscontracts.PortableBundledFilesApplier, error) {
 	if fileSystem == nil {
 		return nil, errors.New("portable filesystem is required")
 	}
@@ -35,7 +36,7 @@ func NewPortableBundledFilesApplier(
 // Wire to starter-Work discovery.
 func NewFactoryStarterWorkApplier(
 	fileSystem portablefiles.FileSystem,
-) (factorydefinitions.FactoryStarterWorkApplier, error) {
+) (snapshotscontracts.FactoryStarterWorkApplier, error) {
 	if fileSystem == nil {
 		return nil, errors.New("portable filesystem is required")
 	}
@@ -51,7 +52,7 @@ func NewFactoryStarterWorkApplier(
 // Wire to obsolete authored-document cleanup.
 func NewPortableBundledDocsPruner(
 	fileSystem portablefiles.FileSystem,
-) (factorydefinitions.PortableBundledDocsPruner, error) {
+) (snapshotscontracts.PortableBundledDocsPruner, error) {
 	if fileSystem == nil {
 		return nil, errors.New("portable filesystem is required")
 	}
