@@ -8,6 +8,7 @@ import (
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -61,5 +62,14 @@ func newServerFromRoles(
 			return err
 		})
 	}
-	return NewServer(handler, workAdapter, modelsHTTP, providerSessions, logger)
+	var providerSessionsHTTP *providersessionshttp.Handler
+	if providerSessions != nil {
+		if logger == nil {
+			logger = zap.NewNop()
+		}
+		providerSessionsHTTP = providersessionshttp.NewHandler(
+			providersessionshttp.NewAdapter(providerSessions), logger,
+		)
+	}
+	return NewServer(handler, workAdapter, modelsHTTP, providerSessionsHTTP, logger)
 }

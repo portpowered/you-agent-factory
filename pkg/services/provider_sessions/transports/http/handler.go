@@ -11,7 +11,7 @@ import (
 
 // Handler owns HTTP decoding, Provider Sessions root invocation, and response
 // encoding for owned Provider Sessions HTTP operations. Route registration
-// remains in the top-level HTTP transport until PSS-I02 fan-in.
+// remains in the top-level HTTP transport.
 type Handler struct {
 	adapter *Adapter
 	logger  *zap.Logger

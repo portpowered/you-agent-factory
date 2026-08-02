@@ -11,6 +11,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
+	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
@@ -23,17 +24,19 @@ import (
 // Bind supplies the opened runtime roles to runtime-bound mapping and protocol
 // views before injecting those completed views into the top-level server.
 type Handler struct {
-	mappings           *mappingcomposition.HTTPBinder
-	modelsContent      work.ContentPreparation
-	validation         factorydefinitions.SubmittedDefinitionValidationOperation
-	invocationWorkType factorydefinitions.InvocationWorkTypeService
-	contentStaging     work.ContentStagingService
-	requestPreparation work.RequestPreparationService
-	sessionRequests    factorysessionshttp.RequestPreparation
+	mappings             *mappingcomposition.HTTPBinder
+	providerSessionsHTTP *providersessionshttp.Handler
+	modelsContent        work.ContentPreparation
+	validation           factorydefinitions.SubmittedDefinitionValidationOperation
+	invocationWorkType   factorydefinitions.InvocationWorkTypeService
+	contentStaging       work.ContentStagingService
+	requestPreparation   work.RequestPreparationService
+	sessionRequests      factorysessionshttp.RequestPreparation
 }
 
 func NewHandler(
 	mappings *mappingcomposition.HTTPBinder,
+	providerSessionsHTTP *providersessionshttp.Handler,
 	modelsContent work.ContentPreparation,
 	validation factorydefinitions.SubmittedDefinitionValidationOperation,
 	invocationWorkType factorydefinitions.InvocationWorkTypeService,
@@ -41,12 +44,13 @@ func NewHandler(
 	requestPreparation work.RequestPreparationService,
 	sessionRequests factorysessionshttp.RequestPreparation,
 ) (*Handler, error) {
-	if mappings == nil || modelsContent == nil || validation == nil || invocationWorkType == nil ||
+	if mappings == nil || providerSessionsHTTP == nil || modelsContent == nil || validation == nil || invocationWorkType == nil ||
 		contentStaging == nil || requestPreparation == nil || sessionRequests == nil {
-		return nil, fmt.Errorf("construct HTTP handler: mappings, service handlers, validation, invocation work-type policy, Work operations, and Factory Session operations are required")
+		return nil, fmt.Errorf("construct HTTP handler: mappings, Provider Sessions handler, service handlers, validation, invocation work-type policy, Work operations, and Factory Session operations are required")
 	}
 	return &Handler{
-		mappings: mappings, modelsContent: modelsContent, validation: validation,
+		mappings: mappings, providerSessionsHTTP: providerSessionsHTTP,
+		modelsContent: modelsContent, validation: validation,
 		invocationWorkType: invocationWorkType,
 		contentStaging:     contentStaging, requestPreparation: requestPreparation,
 		sessionRequests: sessionRequests,
@@ -54,7 +58,7 @@ func NewHandler(
 }
 
 func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.Handler, error) {
-	if handler == nil || handler.mappings == nil || handler.modelsContent == nil {
+	if handler == nil || handler.mappings == nil || handler.providerSessionsHTTP == nil || handler.modelsContent == nil {
 		return nil, fmt.Errorf("bind HTTP handler: process-scoped handler is required")
 	}
 	modelsAdapter := modelshttp.NewAdapter(
@@ -91,7 +95,7 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 		_, err := mapped.FactoryDefinitions.GetCurrentFactoryForSession(ctx, sessionID)
 		return err
 	}).WithDefaultWorkTypeResolver(workhttp.NewDefaultWorkTypeResolver(mapped.FactoryDefinitions, handler.invocationWorkType))
-	server := transporthttp.NewServer(sessionsHandler, workHandler, modelsHandler, opened.ProviderSessions, opened.Logger)
+	server := transporthttp.NewServer(sessionsHandler, workHandler, modelsHandler, handler.providerSessionsHTTP, opened.Logger)
 	return server.Handler(), nil
 }
 

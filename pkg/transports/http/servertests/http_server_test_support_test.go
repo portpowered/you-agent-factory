@@ -6,6 +6,7 @@ import (
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -50,5 +51,11 @@ func newAPIServerFromRoles(
 		SessionRequests: sessionRequests,
 	}, logger)
 	workRoot := work.AdmissionContentService(contentStaging, requestPreparation)
-	return api.NewServer(handler, workhttp.NewAdapterFromRoles(workRoot, workRoot, workAPI, workRead), modelsHTTP, providerSessions, logger)
+	var providerSessionsHTTP *providersessionshttp.Handler
+	if providerSessions != nil {
+		providerSessionsHTTP = providersessionshttp.NewHandler(
+			providersessionshttp.NewAdapter(providerSessions), logger,
+		)
+	}
+	return api.NewServer(handler, workhttp.NewAdapterFromRoles(workRoot, workRoot, workAPI, workRead), modelsHTTP, providerSessionsHTTP, logger)
 }

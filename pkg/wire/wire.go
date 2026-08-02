@@ -13,6 +13,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
+	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
@@ -30,6 +31,8 @@ var platformSet = wire.NewSet(
 )
 
 var apiSet = wire.NewSet(
+	providersessionshttp.NewAdapter,
+	providersessionshttp.NewHandler,
 	composition.NewHTTPBinder,
 	apisurface.NewRuntimeAPI,
 	composition.NewLiveSessionAPI,

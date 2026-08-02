@@ -13,6 +13,7 @@ import (
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	mappingcomposition "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
@@ -25,6 +26,8 @@ type validationRole struct {
 }
 
 type runtimeRole struct{ factoryruntime.Service }
+
+type runtimeWithoutAPIRole struct{ factoryruntime.Service }
 
 func (*runtimeRole) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	return work.WorkRequestSubmitResult{}, nil
@@ -58,6 +61,13 @@ type workRole struct{ work.Service }
 type modelRole struct{ models.Service }
 type workerRole struct{ workers.Service }
 type providerSessionRole struct{ providersessions.Service }
+
+func newProviderSessionsHTTPHandler() *providersessionshttp.Handler {
+	return providersessionshttp.NewHandler(
+		providersessionshttp.NewAdapter(&providerSessionRole{}), zap.NewNop(),
+	)
+}
+
 type requestPreparationRole struct {
 	factorysessionshttp.RequestPreparation
 }
@@ -83,6 +93,7 @@ func TestHandlerBindsOpenedRolesWithoutReconstructingStableGraph(t *testing.T) {
 	}
 	handler, err := NewHandler(
 		mappings,
+		newProviderSessionsHTTPHandler(),
 		&contentPreparationRole{},
 		&validationRole{},
 		&invocationWorkTypeRole{},
@@ -121,6 +132,7 @@ func TestHandlerBindsSessionsRootAtApplicationEdge(t *testing.T) {
 	}
 	handler, err := NewHandler(
 		mappings,
+		newProviderSessionsHTTPHandler(),
 		&contentPreparationRole{},
 		&validationRole{},
 		&invocationWorkTypeRole{},
@@ -148,6 +160,38 @@ func TestHandlerBindsSessionsRootAtApplicationEdge(t *testing.T) {
 
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"id":"session-alpha"`) {
 		t.Fatalf("response = %d %s, want Sessions root response", response.Code, response.Body.String())
+	}
+}
+
+func TestHandlerBindRejectsRuntimeWithoutLegacyHTTPRole(t *testing.T) {
+	t.Parallel()
+
+	mappings, err := mappingcomposition.NewHTTPBinder(statusProjectorRole{}, &contentPreparationRole{})
+	if err != nil {
+		t.Fatalf("NewHTTPBinder: %v", err)
+	}
+	handler, err := NewHandler(
+		mappings,
+		newProviderSessionsHTTPHandler(),
+		&contentPreparationRole{},
+		&validationRole{},
+		&invocationWorkTypeRole{},
+		&contentStagingRole{},
+		&workRequestPreparationRole{},
+		&requestPreparationRole{},
+	)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+
+	bound, err := handler.Bind(factorysessions.RuntimeHTTPServices{
+		FactoryRuntime:     &runtimeWithoutAPIRole{},
+		FactoryDefinitions: &definitionRole{}, FactorySessions: &sessionRole{},
+		Work: &workRole{}, Models: &modelRole{}, Workers: &workerRole{},
+		ProviderSessions: &providerSessionRole{}, Logger: zap.NewNop(),
+	})
+	if err == nil || bound != nil || !strings.Contains(err.Error(), "legacy Factory Runtime observation") {
+		t.Fatalf("Bind = (%T, %v), want legacy HTTP role error", bound, err)
 	}
 }
 
@@ -187,25 +231,28 @@ func TestNewHandlerRejectsMissingStableOperations(t *testing.T) {
 	sessionRequests := &requestPreparationRole{}
 	for name, construct := range map[string]func() (*Handler, error){
 		"mappings": func() (*Handler, error) {
-			return NewHandler(nil, modelsContent, validation, invocationWorkType, contentStaging, requestPreparation, sessionRequests)
+			return NewHandler(nil, newProviderSessionsHTTPHandler(), modelsContent, validation, invocationWorkType, contentStaging, requestPreparation, sessionRequests)
+		},
+		"Provider Sessions HTTP handler": func() (*Handler, error) {
+			return NewHandler(mappings, nil, modelsContent, validation, invocationWorkType, contentStaging, requestPreparation, sessionRequests)
 		},
 		"models content preparation": func() (*Handler, error) {
-			return NewHandler(mappings, nil, validation, invocationWorkType, contentStaging, requestPreparation, sessionRequests)
+			return NewHandler(mappings, newProviderSessionsHTTPHandler(), nil, validation, invocationWorkType, contentStaging, requestPreparation, sessionRequests)
 		},
 		"validation": func() (*Handler, error) {
-			return NewHandler(mappings, modelsContent, nil, invocationWorkType, contentStaging, requestPreparation, sessionRequests)
+			return NewHandler(mappings, newProviderSessionsHTTPHandler(), modelsContent, nil, invocationWorkType, contentStaging, requestPreparation, sessionRequests)
 		},
 		"invocation work type": func() (*Handler, error) {
-			return NewHandler(mappings, modelsContent, validation, nil, contentStaging, requestPreparation, sessionRequests)
+			return NewHandler(mappings, newProviderSessionsHTTPHandler(), modelsContent, validation, nil, contentStaging, requestPreparation, sessionRequests)
 		},
 		"content staging": func() (*Handler, error) {
-			return NewHandler(mappings, modelsContent, validation, invocationWorkType, nil, requestPreparation, sessionRequests)
+			return NewHandler(mappings, newProviderSessionsHTTPHandler(), modelsContent, validation, invocationWorkType, nil, requestPreparation, sessionRequests)
 		},
 		"request preparation": func() (*Handler, error) {
-			return NewHandler(mappings, modelsContent, validation, invocationWorkType, contentStaging, nil, sessionRequests)
+			return NewHandler(mappings, newProviderSessionsHTTPHandler(), modelsContent, validation, invocationWorkType, contentStaging, nil, sessionRequests)
 		},
 		"session requests": func() (*Handler, error) {
-			return NewHandler(mappings, modelsContent, validation, invocationWorkType, contentStaging, requestPreparation, nil)
+			return NewHandler(mappings, newProviderSessionsHTTPHandler(), modelsContent, validation, invocationWorkType, contentStaging, requestPreparation, nil)
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -225,6 +272,7 @@ func TestHandlerBindsStandaloneDurableExecution(t *testing.T) {
 	}
 	handler, err := NewHandler(
 		mappings,
+		newProviderSessionsHTTPHandler(),
 		&contentPreparationRole{},
 		&validationRole{},
 		&invocationWorkTypeRole{},
