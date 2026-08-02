@@ -75,6 +75,19 @@ func TestParseCorpusRejectsInvalidJSON(t *testing.T) {
 	}
 }
 
+func TestParseCorpusRejectsTrailingContent(t *testing.T) {
+	corpus := acpconformance.MustLoad(t)
+	valid := marshalFixture(t, corpus.Provenance, corpus.Cases[:1])
+	trailing := append(append([]byte{}, valid...), []byte("\n{}")...)
+	_, err := acpconformance.ParseCorpus(trailing)
+	if err == nil {
+		t.Fatal("ParseCorpus(valid corpus + trailing JSON value) expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "trailing content") {
+		t.Fatalf("ParseCorpus(trailing content) error = %v, want it to mention trailing content", err)
+	}
+}
+
 func TestParseCorpusRejectsDuplicateCaseID(t *testing.T) {
 	corpus := acpconformance.MustLoad(t)
 	dup := corpus.Cases[0]
