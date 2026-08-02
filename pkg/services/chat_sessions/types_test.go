@@ -57,8 +57,12 @@ func TestRequestIdentity_Validate(t *testing.T) {
 		// Valid forms, one per closed kind.
 		{"valid JSON-RPC string", RequestIdentity{Kind: RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-1"}, nil},
 		{"valid JSON-RPC string empty", RequestIdentity{Kind: RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: ""}, nil},
-		{"valid JSON-RPC number", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: 1}, nil},
-		{"valid JSON-RPC number zero", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: 0}, nil},
+		{"valid JSON-RPC number", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: "1"}, nil},
+		{"valid JSON-RPC number zero", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: "0"}, nil},
+		{"valid JSON-RPC number fractional", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: "1.5"}, nil},
+		{"valid JSON-RPC number negative", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: "-3"}, nil},
+		{"valid JSON-RPC number outside int64 range", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: "99999999999999999999999999"}, nil},
+		{"valid JSON-RPC number with exponent", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: "1e10"}, nil},
 		{"valid transport UUID", RequestIdentity{Kind: RequestIdentityKindTransportUUID, TransportUUID: validUUID}, nil},
 
 		// Zero and unknown kind. A fully zero-value identity is rejected by
@@ -71,7 +75,17 @@ func TestRequestIdentity_Validate(t *testing.T) {
 
 		// Bare / incomplete JSON-RPC forms.
 		{"string id without connection", RequestIdentity{Kind: RequestIdentityKindJSONRPCString, JSONRPCStringID: "req-1"}, ErrRequiredValue},
-		{"number id without connection", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, JSONRPCNumberID: 1}, ErrRequiredValue},
+		{"number id without connection", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, JSONRPCNumberID: "1"}, ErrRequiredValue},
+		{"number kind without number id", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1"}, ErrRequiredValue},
+
+		// Malformed numeric wire tokens: the empty string is not a legal JSON
+		// number token, so it is reported as missing (ErrRequiredValue,
+		// covered above), not malformed; every case below is a non-empty
+		// string that still isn't a syntactically valid JSON number.
+		{"number id leading zero", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: "01"}, ErrMalformedValue},
+		{"number id leading plus", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: "+1"}, ErrMalformedValue},
+		{"number id not numeric", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: "abc"}, ErrMalformedValue},
+		{"number id trailing content", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: "1,2"}, ErrMalformedValue},
 
 		// Missing / malformed UUID.
 		{"blank transport UUID", RequestIdentity{Kind: RequestIdentityKindTransportUUID}, ErrRequiredValue},
@@ -80,10 +94,10 @@ func TestRequestIdentity_Validate(t *testing.T) {
 		// Mixed UUID / connection-scoped modes.
 		{"UUID kind with connection", RequestIdentity{Kind: RequestIdentityKindTransportUUID, TransportUUID: validUUID, ConnectionID: "conn-1"}, ErrInconsistentValue},
 		{"UUID kind with string id", RequestIdentity{Kind: RequestIdentityKindTransportUUID, TransportUUID: validUUID, JSONRPCStringID: "req-1"}, ErrInconsistentValue},
-		{"UUID kind with number id", RequestIdentity{Kind: RequestIdentityKindTransportUUID, TransportUUID: validUUID, JSONRPCNumberID: 1}, ErrInconsistentValue},
+		{"UUID kind with number id", RequestIdentity{Kind: RequestIdentityKindTransportUUID, TransportUUID: validUUID, JSONRPCNumberID: "1"}, ErrInconsistentValue},
 
 		// Every inactive field populated for its own kind.
-		{"string kind with number id", RequestIdentity{Kind: RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-1", JSONRPCNumberID: 1}, ErrInconsistentValue},
+		{"string kind with number id", RequestIdentity{Kind: RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-1", JSONRPCNumberID: "1"}, ErrInconsistentValue},
 		{"string kind with UUID", RequestIdentity{Kind: RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-1", TransportUUID: validUUID}, ErrInconsistentValue},
 		{"number kind with string id", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCStringID: "req-1"}, ErrInconsistentValue},
 		{"number kind with UUID", RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", TransportUUID: validUUID}, ErrInconsistentValue},
@@ -102,7 +116,7 @@ func TestRequestIdentity_Validate(t *testing.T) {
 // connection, kind, and typed id produces equal identities; and that
 // changing the connection, kind, or active id changes identity.
 func TestRequestIdentity_TypedNonCollisionAndEquality(t *testing.T) {
-	numberOne := RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: 1}
+	numberOne := RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: "1"}
 	stringOne := RequestIdentity{Kind: RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "1"}
 	if numberOne == stringOne {
 		t.Fatalf("numeric id 1 and string id %q on the same connection must not collide, got equal identities %+v", "1", numberOne)
@@ -114,22 +128,51 @@ func TestRequestIdentity_TypedNonCollisionAndEquality(t *testing.T) {
 		t.Fatalf("stringOne.Validate(): %v", err)
 	}
 
-	numberOneAgain := RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: 1}
+	numberOneAgain := RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: "1"}
 	if numberOne != numberOneAgain {
 		t.Fatalf("identical connection, kind, and typed id must produce equal identities, got %+v != %+v", numberOne, numberOneAgain)
 	}
 
-	otherConnection := RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-2", JSONRPCNumberID: 1}
+	otherConnection := RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-2", JSONRPCNumberID: "1"}
 	if numberOne == otherConnection {
 		t.Fatalf("different connections must remain distinct, got equal identities %+v == %+v", numberOne, otherConnection)
 	}
 
-	numberZero := RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: 0}
+	numberZero := RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: "0"}
 	if err := numberZero.Validate(); err != nil {
 		t.Fatalf("numeric id zero must be a valid active id: %v", err)
 	}
 	if numberZero == numberOne {
 		t.Fatalf("numeric id 0 and numeric id 1 must remain distinct, got equal identities %+v", numberZero)
+	}
+
+	// Fractional id and an integer outside int64's range must be
+	// representable losslessly, remain equal on repeated construction, and
+	// never collide with a string id spelled the same way.
+	fractional := RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: "1.5"}
+	if err := fractional.Validate(); err != nil {
+		t.Fatalf("fractional numeric id must be a valid active id: %v", err)
+	}
+	fractionalAgain := RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: "1.5"}
+	if fractional != fractionalAgain {
+		t.Fatalf("identically constructed fractional identities must compare equal, got %+v != %+v", fractional, fractionalAgain)
+	}
+	fractionalAsString := RequestIdentity{Kind: RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "1.5"}
+	if fractional == fractionalAsString {
+		t.Fatalf("fractional numeric id %q and string id with the same text must not collide, got equal identities %+v", "1.5", fractional)
+	}
+
+	const outsideInt64Range = "99999999999999999999999999"
+	outsideRange := RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: outsideInt64Range}
+	if err := outsideRange.Validate(); err != nil {
+		t.Fatalf("integer numeric id outside int64's range must be a valid active id: %v", err)
+	}
+	outsideRangeAgain := RequestIdentity{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-1", JSONRPCNumberID: outsideInt64Range}
+	if outsideRange != outsideRangeAgain {
+		t.Fatalf("identically constructed out-of-range numeric identities must compare equal, got %+v != %+v", outsideRange, outsideRangeAgain)
+	}
+	if outsideRange == fractional {
+		t.Fatalf("distinct numeric tokens must remain distinct, got equal identities %+v", outsideRange)
 	}
 }
 
@@ -174,10 +217,12 @@ func TestRequestIdentity_ErrorsDoNotLeakSuppliedValues(t *testing.T) {
 	const secretConnection = "conn-secret-token-do-not-leak"
 	const secretStringID = "req-secret-credential-do-not-leak"
 	const secretUUID = "not-a-uuid-secret-do-not-leak"
+	const secretNumberToken = "not-a-number-secret-do-not-leak"
 
 	cases := []RequestIdentity{
 		{Kind: RequestIdentityKindJSONRPCString, JSONRPCStringID: secretStringID},
-		{Kind: RequestIdentityKindJSONRPCString, ConnectionID: secretConnection, JSONRPCNumberID: 1},
+		{Kind: RequestIdentityKindJSONRPCString, ConnectionID: secretConnection, JSONRPCNumberID: "1"},
+		{Kind: RequestIdentityKindJSONRPCNumber, ConnectionID: secretConnection, JSONRPCNumberID: secretNumberToken},
 		{Kind: RequestIdentityKindTransportUUID, TransportUUID: secretUUID, ConnectionID: secretConnection},
 		{Kind: RequestIdentityKindTransportUUID, TransportUUID: secretUUID},
 	}
@@ -187,14 +232,14 @@ func TestRequestIdentity_ErrorsDoNotLeakSuppliedValues(t *testing.T) {
 			t.Fatalf("case %+v: expected a validation error, got nil", id)
 		}
 		msg := err.Error()
-		for _, secret := range []string{secretConnection, secretStringID, secretUUID} {
+		for _, secret := range []string{secretConnection, secretStringID, secretUUID, secretNumberToken} {
 			if strings.Contains(msg, secret) {
 				t.Fatalf("case %+v: error message %q leaks supplied value %q", id, msg, secret)
 			}
 		}
 		var ve *ValidationError
 		if errors.As(err, &ve) {
-			for _, secret := range []string{secretConnection, secretStringID, secretUUID} {
+			for _, secret := range []string{secretConnection, secretStringID, secretUUID, secretNumberToken} {
 				if strings.Contains(ve.Value, secret) || strings.Contains(ve.Field, secret) {
 					t.Fatalf("case %+v: ValidationError fields leak supplied value %q: %+v", id, secret, ve)
 				}
