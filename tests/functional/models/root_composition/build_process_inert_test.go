@@ -13,7 +13,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -198,7 +197,11 @@ func (recorder *modelEffectRecorder) recordAssetOpen(string) (io.ReadCloser, err
 	return nil, errRecordingModelEffect
 }
 
-func (recorder *modelEffectRecorder) Start(context.Context, modelswire.HostProcessStartSpec) (modelswire.HostManagedProcess, error) {
+func (recorder *modelEffectRecorder) Start(context.Context, serviceedges.HostProcessStartSpec) (interface {
+	HealthEndpoint() string
+	Wait() error
+	Stop(context.Context) error
+}, error) {
 	recorder.hostLauncher.Add(1)
 	return nil, errRecordingModelEffect
 }
@@ -208,7 +211,10 @@ func (recorder *modelEffectRecorder) Now() time.Time {
 	return time.Unix(0, 0).UTC()
 }
 
-func (recorder *modelEffectRecorder) NewTimer(time.Duration) modelswire.HostTimer {
+func (recorder *modelEffectRecorder) NewTimer(time.Duration) interface {
+	C() <-chan time.Time
+	Stop() bool
+} {
 	recorder.hostClockTimer.Add(1)
 	return recordingModelHostTimer{}
 }
@@ -233,7 +239,10 @@ func (recorder *modelEffectRecorder) recordRuntimeTempDir() string {
 	return ""
 }
 
-func (recorder *modelEffectRecorder) recordRuntimeTempFile(string, string) (modelswire.RuntimeTempFile, error) {
+func (recorder *modelEffectRecorder) recordRuntimeTempFile(string, string) (interface {
+	Close() error
+	Name() string
+}, error) {
 	recorder.runtimeTempFile.Add(1)
 	return nil, errRecordingModelEffect
 }
@@ -248,6 +257,6 @@ func (recorder *modelEffectRecorder) Create(string) (io.WriteCloser, error) {
 	return nil, errRecordingModelEffect
 }
 
-func (recorder *modelEffectRecorder) RecordModelPullMetric(modelswire.PullMetric) {
+func (recorder *modelEffectRecorder) RecordModelPullMetric(serviceedges.PullMetric) {
 	recorder.pullMetrics.Add(1)
 }
