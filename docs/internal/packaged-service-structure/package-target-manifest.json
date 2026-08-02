@@ -16,7 +16,8 @@
       "factory_visualization",
       "operator_settings",
       "system_initialization",
-      "chat_sessions"
+      "chat_sessions",
+      "events"
     ],
     "nonServiceFamilies": [
       "initializer",
@@ -85,7 +86,9 @@
     "pkg/services/automations/transports/http",
     "pkg/services/automations/wire",
     "pkg/services/chat_sessions",
+    "pkg/services/chat_sessions/internal/factorysessionsshim",
     "pkg/services/edges",
+    "pkg/services/events",
     "pkg/services/factory_definitions",
     "pkg/services/factory_definitions/definition",
     "pkg/services/factory_definitions/internal",
@@ -789,9 +792,19 @@
       "destination": "chat_sessions"
     },
     {
+      "packagePath": "pkg/services/chat_sessions/internal/factorysessionsshim",
+      "disposition": "retain",
+      "destination": "chat_sessions"
+    },
+    {
       "packagePath": "pkg/services/edges",
       "disposition": "retain",
       "destination": "edges"
+    },
+    {
+      "packagePath": "pkg/services/events",
+      "disposition": "retain",
+      "destination": "events"
     },
     {
       "packagePath": "pkg/services/factory_definitions",

@@ -288,6 +288,20 @@ func committedChatSessionsRationales() []OwnerRationaleCard {
 		),
 	}
 }
+func committedEventsRationales() []OwnerRationaleCard {
+	return []OwnerRationaleCard{
+		topLevel(
+			"events",
+			"pkg/services/events",
+			"L1 V0 Events contract owner: detached identity, position, envelope, and outcome contracts for a process-local, in-memory event stream; no implementation or wire construction in this slice.",
+			"No durable journal in this slice; Recordings remains the canonical durable Factory Event ledger.",
+			"Append, source attachment, retained reads, and subscriptions are documented contract operations for a later implementation to satisfy.",
+			"Future ACP Core and Worker Events consumers; no current consumer imports this package yet.",
+			"None in this slice; no persistence or mutation is performed.",
+			"Typed contract errors only; no runtime recovery behavior exists in this slice.",
+		),
+	}
+}
 func committedSystemInitializationRationales() []OwnerRationaleCard {
 	return []OwnerRationaleCard{
 		topLevel(

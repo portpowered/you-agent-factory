@@ -18,7 +18,8 @@
       "factory_visualization",
       "operator_settings",
       "system_initialization",
-      "chat_sessions"
+      "chat_sessions",
+      "events"
     ],
     "families": [
       "initializer",
@@ -185,6 +186,18 @@
       "consumers": "Future ACP transport and Chat Sessions implementation slices; no current consumer imports this package's Service interface yet.",
       "transactionBoundary": "None in this slice; no persistence or mutation is performed.",
       "failureRecovery": "Typed validation/transition/not-found/busy/conflict/unsupported errors are contract-only; no runtime recovery behavior exists in this slice."
+    },
+    {
+      "serviceId": "events",
+      "owner": "events",
+      "kind": "top_level",
+      "targetPath": "pkg/services/events",
+      "authority": "L1 V0 Events contract owner: detached identity, position, envelope, and outcome contracts for a process-local, in-memory event stream; no implementation or wire construction in this slice.",
+      "stateStore": "No durable journal in this slice; Recordings remains the canonical durable Factory Event ledger.",
+      "lifecycle": "Append, source attachment, retained reads, and subscriptions are documented contract operations for a later implementation to satisfy.",
+      "consumers": "Future ACP Core and Worker Events consumers; no current consumer imports this package yet.",
+      "transactionBoundary": "None in this slice; no persistence or mutation is performed.",
+      "failureRecovery": "Typed contract errors only; no runtime recovery behavior exists in this slice."
     },
     {
       "serviceId": "factory_definitions",
@@ -1083,6 +1096,12 @@
       "toOwner": "workers",
       "class": "command",
       "evidence": "pkg/services/automations/internal -\u003e pkg/services/workers"
+    },
+    {
+      "fromOwner": "chat_sessions",
+      "toOwner": "factory_sessions",
+      "class": "command",
+      "evidence": "pkg/services/chat_sessions -\u003e pkg/services/factory_sessions"
     },
     {
       "fromOwner": "edges",
@@ -2557,10 +2576,22 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/chat_sessions/internal/factorysessionsshim",
+      "disposition": "retain",
+      "destination": "chat_sessions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/edges",
       "disposition": "retain",
       "destination": "edges",
       "destinationKind": "architecture_exception"
+    },
+    {
+      "packagePath": "pkg/services/events",
+      "disposition": "retain",
+      "destination": "events",
+      "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/factory_definitions",

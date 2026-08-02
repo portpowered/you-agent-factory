@@ -67,6 +67,7 @@ func closedDestinationVocabulary() DestinationVocabulary {
 			"operator_settings",
 			"system_initialization",
 			"chat_sessions",
+			"events",
 		},
 		NonServiceFamilies: []string{
 			"initializer",

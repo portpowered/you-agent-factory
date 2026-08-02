@@ -20,6 +20,7 @@ var ProductOwners = []string{
 	"operator_settings",
 	"system_initialization",
 	"chat_sessions",
+	"events",
 }
 
 // ApprovedFamilies are retain destinations that are not product services.

@@ -111,6 +111,7 @@ func committedOwnerRationales() []OwnerRationaleCard {
 	out := make([]OwnerRationaleCard, 0, 65)
 	out = append(out, committedAutomationsRationales()...)
 	out = append(out, committedChatSessionsRationales()...)
+	out = append(out, committedEventsRationales()...)
 	out = append(out, committedFactoryDefinitionsRationales()...)
 	out = append(out, committedFactoryRuntimeRationales()...)
 	out = append(out, committedFactorySessionsRationales()...)

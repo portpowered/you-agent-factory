@@ -27,6 +27,7 @@ func TestClosedDestinationVocabularyMatchesCommittedOwners(t *testing.T) {
 		"operator_settings",
 		"system_initialization",
 		"chat_sessions",
+		"events",
 	}
 	wantFamilies := []string{
 		"initializer",

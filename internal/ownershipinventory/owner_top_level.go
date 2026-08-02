@@ -30,7 +30,11 @@ type OwnerTopLevelSpec struct {
 // committed product owner. Recordings delegates to the INV-REC top-level lists.
 var productOwnerTopLevelSpecs = map[string]OwnerTopLevelSpec{
 	"chat_sessions": {
-		Owner: "chat_sessions",
+		Owner:          "chat_sessions",
+		ExpectedRetain: []string{"internal"},
+	},
+	"events": {
+		Owner: "events",
 	},
 	"automations": {
 		Owner:          "automations",
