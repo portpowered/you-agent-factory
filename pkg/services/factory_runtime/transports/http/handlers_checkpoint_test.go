@@ -136,17 +136,29 @@ func TestRestoreCheckpoint_ForwardsDecodedFieldsToRoot(t *testing.T) {
 	}
 }
 
+type checkpointTypedFailureCase struct {
+	name       string
+	programmed error
+	invoke     func(*Adapter, *httptest.ResponseRecorder)
+	wantStatus int
+	wantCode   string
+	wantMsg    string
+}
+
 func TestCheckpointHandlers_MapTypedFailures(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name       string
-		programmed error
-		invoke     func(*Adapter, *httptest.ResponseRecorder)
-		wantStatus int
-		wantCode   string
-		wantMsg    string
-	}{
+	for _, tc := range checkpointTypedFailureCases() {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			runCheckpointTypedFailureCase(t, tc)
+		})
+	}
+}
+
+func checkpointTypedFailureCases() []checkpointTypedFailureCase {
+	return []checkpointTypedFailureCase{
 		{
 			name:       "capture checkpoint not found",
 			programmed: factoryruntime.ErrCheckpointNotFound,
@@ -233,28 +245,25 @@ func TestCheckpointHandlers_MapTypedFailures(t *testing.T) {
 			wantMsg:    "factory runtime is not running",
 		},
 	}
+}
 
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			fake := &runtimeRootFake{
-				captureCheckpoint: func(context.Context, factoryruntime.CaptureCheckpointRequest) (factoryruntime.CaptureCheckpointResult, error) {
-					return factoryruntime.CaptureCheckpointResult{}, tc.programmed
-				},
-				loadCheckpoint: func(context.Context, factoryruntime.LoadCheckpointRequest) (factoryruntime.LoadCheckpointResult, error) {
-					return factoryruntime.LoadCheckpointResult{}, tc.programmed
-				},
-				restoreCheckpoint: func(context.Context, factoryruntime.RestoreCheckpointRequest) (factoryruntime.RestoreCheckpointResult, error) {
-					return factoryruntime.RestoreCheckpointResult{}, tc.programmed
-				},
-			}
-			adapter := NewAdapter(fake)
-			rec := httptest.NewRecorder()
-			tc.invoke(adapter, rec)
-			assertErrorResponse(t, rec, tc.wantStatus, tc.wantCode, tc.wantMsg)
-		})
+func runCheckpointTypedFailureCase(t *testing.T, tc checkpointTypedFailureCase) {
+	t.Helper()
+	fake := &runtimeRootFake{
+		captureCheckpoint: func(context.Context, factoryruntime.CaptureCheckpointRequest) (factoryruntime.CaptureCheckpointResult, error) {
+			return factoryruntime.CaptureCheckpointResult{}, tc.programmed
+		},
+		loadCheckpoint: func(context.Context, factoryruntime.LoadCheckpointRequest) (factoryruntime.LoadCheckpointResult, error) {
+			return factoryruntime.LoadCheckpointResult{}, tc.programmed
+		},
+		restoreCheckpoint: func(context.Context, factoryruntime.RestoreCheckpointRequest) (factoryruntime.RestoreCheckpointResult, error) {
+			return factoryruntime.RestoreCheckpointResult{}, tc.programmed
+		},
 	}
+	adapter := NewAdapter(fake)
+	rec := httptest.NewRecorder()
+	tc.invoke(adapter, rec)
+	assertErrorResponse(t, rec, tc.wantStatus, tc.wantCode, tc.wantMsg)
 }
 
 func TestCaptureCheckpoint_RejectsInvalidJSON(t *testing.T) {

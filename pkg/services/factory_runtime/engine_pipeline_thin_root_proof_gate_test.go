@@ -28,6 +28,19 @@ func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing
 	root := testutil.MustRepoRoot(t)
 	serviceRoot := filepath.Join(root, "pkg", "services", "factory_runtime")
 
+	runCanonicalRootDirectoriesProof(t, serviceRoot)
+	runUnexpectedRootChildrenProof(t, root)
+	runDeletedPublicPipelineDirectoriesProof(t, serviceRoot)
+	runServiceDirectoryProof(t, serviceRoot)
+	runCheckpointRecoveryProof(t, serviceRoot)
+	runPublishedServiceBoundaryProof(t)
+	runOwnershipInventoryProof(t, root)
+	runPackageStructureBaselineProof(t, root)
+	runPackageTargetManifestProof(t, root)
+	runInternalServicesLayoutProof(t, serviceRoot)
+}
+
+func runCanonicalRootDirectoriesProof(t *testing.T, serviceRoot string) {
 	t.Run("canonical_root_directories", func(t *testing.T) {
 		t.Parallel()
 
@@ -66,7 +79,9 @@ func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing
 			}
 		}
 	})
+}
 
+func runUnexpectedRootChildrenProof(t *testing.T, root string) {
 	t.Run("unexpected_root_children_recorded_as_move_debt_only", func(t *testing.T) {
 		t.Parallel()
 
@@ -92,7 +107,9 @@ func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing
 			}
 		}
 	})
+}
 
+func runDeletedPublicPipelineDirectoriesProof(t *testing.T, serviceRoot string) {
 	t.Run("deleted_public_pipeline_directories_absent", func(t *testing.T) {
 		t.Parallel()
 
@@ -105,7 +122,9 @@ func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing
 			}
 		}
 	})
+}
 
+func runServiceDirectoryProof(t *testing.T, serviceRoot string) {
 	t.Run("service_directory_absent", func(t *testing.T) {
 		t.Parallel()
 
@@ -118,7 +137,9 @@ func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing
 			}
 		}
 	})
+}
 
+func runCheckpointRecoveryProof(t *testing.T, serviceRoot string) {
 	t.Run("checkpoint_recovery_undisturbed", func(t *testing.T) {
 		t.Parallel()
 
@@ -131,7 +152,9 @@ func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing
 			t.Fatal("checkpoint_recovery nested service is not a directory")
 		}
 	})
+}
 
+func runPublishedServiceBoundaryProof(t *testing.T) {
 	t.Run("wire_constructs_published_control_observation_dispatch", func(t *testing.T) {
 		t.Parallel()
 
@@ -176,7 +199,9 @@ func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing
 			t.Fatalf("ControlPause() error = %v, want ErrNotRunning", err)
 		}
 	})
+}
 
+func runOwnershipInventoryProof(t *testing.T, root string) {
 	t.Run("ownership_inventory_omits_deleted_public_pipeline_packages", func(t *testing.T) {
 		t.Parallel()
 
@@ -193,7 +218,9 @@ func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing
 			}
 		}
 	})
+}
 
+func runPackageStructureBaselineProof(t *testing.T, root string) {
 	t.Run("package_structure_baseline_omits_deleted_public_pipeline_directories", func(t *testing.T) {
 		t.Parallel()
 
@@ -210,7 +237,9 @@ func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing
 			}
 		}
 	})
+}
 
+func runPackageTargetManifestProof(t *testing.T, root string) {
 	t.Run("package_target_manifest_omits_deleted_public_pipeline_packages", func(t *testing.T) {
 		t.Parallel()
 
@@ -232,7 +261,9 @@ func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing
 			}
 		}
 	})
+}
 
+func runInternalServicesLayoutProof(t *testing.T, serviceRoot string) {
 	t.Run("internal_services_layout", func(t *testing.T) {
 		t.Parallel()
 
