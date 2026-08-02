@@ -23,7 +23,9 @@ var testRetryRandom = platformrandom.SourceFunc(func(int64) (int64, error) {
 	return 0, nil
 })
 
-type testProvidersService struct{}
+type testProvidersService struct {
+	providers.Service
+}
 
 func (testProvidersService) ListProviders(context.Context, providers.ListProvidersRequest) (providers.ListProvidersResult, error) {
 	return providers.ListProvidersResult{}, nil

@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -39,6 +40,8 @@ func TestNewProviderRegistryProjectsProvidersAuthority(t *testing.T) {
 
 type registryProvidersFake struct{}
 
+var _ providers.Service = (*registryProvidersFake)(nil)
+
 func (*registryProvidersFake) Execute(
 	context.Context,
 	providers.ExecuteRequest,
@@ -50,18 +53,14 @@ func (*registryProvidersFake) ListProviders(
 	context.Context,
 	providers.ListProvidersRequest,
 ) (providers.ListProvidersResult, error) {
-	return providers.ListProvidersResult{
-		Providers: []providers.Descriptor{
-			{
-				ID:           providers.IDCodex,
-				Aliases:      []string{"openai"},
-				DisplayName:  "Codex",
-				Availability: providers.AvailabilitySelectable,
-				Readiness:    providers.ReadinessReady,
-				Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},
-			},
-		},
-	}, nil
+	return providers.ListProvidersResult{Providers: []providers.Descriptor{{
+		ID:           providers.IDCodex,
+		Aliases:      []string{"openai"},
+		DisplayName:  "Codex",
+		Availability: providers.AvailabilitySelectable,
+		Readiness:    providers.ReadinessReady,
+		Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},
+	}}}, nil
 }
 
 func (*registryProvidersFake) GetProvider(
@@ -71,14 +70,59 @@ func (*registryProvidersFake) GetProvider(
 	if err := request.Validate(); err != nil {
 		return providers.GetProviderResult{}, err
 	}
-	switch request.ID {
-	case providers.IDCodex:
-		return providers.GetProviderResult{Provider: providers.Descriptor{
-			ID:           providers.IDCodex,
-			Availability: providers.AvailabilitySelectable,
-			Readiness:    providers.ReadinessReady,
-		}}, nil
-	default:
+	if request.ID != providers.IDCodex {
 		return providers.GetProviderResult{}, providers.ErrUnknownProvider
 	}
+	return providers.GetProviderResult{Provider: providers.Descriptor{
+		ID:           providers.IDCodex,
+		DisplayName:  "Codex",
+		Availability: providers.AvailabilitySelectable,
+		Readiness:    providers.ReadinessReady,
+	}}, nil
+}
+
+func (*registryProvidersFake) ResolveIdentity(
+	_ context.Context,
+	request providers.ResolveIdentityRequest,
+) (providers.ResolveIdentityResult, error) {
+	switch strings.ToLower(strings.TrimSpace(request.Identity)) {
+	case "codex", "openai":
+		return providers.ResolveIdentityResult{ID: providers.IDCodex}, nil
+	default:
+		return providers.ResolveIdentityResult{}, providers.ErrUnknownProvider
+	}
+}
+
+func (fake *registryProvidersFake) ResolveSelection(
+	ctx context.Context,
+	request providers.ResolveSelectionRequest,
+) (providers.ResolveSelectionResult, error) {
+	for _, candidate := range []struct {
+		identity string
+		source   providers.SelectionSource
+	}{
+		{request.Workstation, providers.SelectionSourceWorkstation},
+		{request.Factory, providers.SelectionSourceFactory},
+		{request.ModelProvider, providers.SelectionSourceLegacyProvider},
+	} {
+		if strings.TrimSpace(candidate.identity) == "" {
+			continue
+		}
+		resolved, err := fake.ResolveIdentity(ctx, providers.ResolveIdentityRequest{Identity: candidate.identity})
+		if err != nil {
+			return providers.ResolveSelectionResult{}, err
+		}
+		return providers.ResolveSelectionResult{Provider: resolved.ID, Source: candidate.source}, nil
+	}
+	return providers.ResolveSelectionResult{Provider: providers.IDCodex, Source: providers.SelectionSourceDefault}, nil
+}
+
+func (*registryProvidersFake) ValidatePrerequisites(
+	_ context.Context,
+	request providers.ValidatePrerequisitesRequest,
+) error {
+	if request.ID != providers.IDCodex {
+		return providers.ErrUnknownProvider
+	}
+	return nil
 }

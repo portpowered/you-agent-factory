@@ -9,6 +9,7 @@ import (
 )
 
 type recordingProvidersRoot struct {
+	providers.Service
 	listProvidersCalls int
 	getProviderCalls   int
 	executeCalls       int

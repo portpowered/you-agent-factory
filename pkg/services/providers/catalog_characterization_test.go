@@ -17,6 +17,27 @@ type catalogPeerFake struct {
 
 var _ providers.Service = (*catalogPeerFake)(nil)
 
+func (*catalogPeerFake) ResolveIdentity(
+	context.Context,
+	providers.ResolveIdentityRequest,
+) (providers.ResolveIdentityResult, error) {
+	return providers.ResolveIdentityResult{}, errors.New("selection is not part of this catalog fake")
+}
+
+func (*catalogPeerFake) ResolveSelection(
+	context.Context,
+	providers.ResolveSelectionRequest,
+) (providers.ResolveSelectionResult, error) {
+	return providers.ResolveSelectionResult{}, errors.New("selection is not part of this catalog fake")
+}
+
+func (*catalogPeerFake) ValidatePrerequisites(
+	context.Context,
+	providers.ValidatePrerequisitesRequest,
+) error {
+	return errors.New("selection is not part of this catalog fake")
+}
+
 func newCatalogPeerFake(entries ...providers.Descriptor) *catalogPeerFake {
 	catalog := make(map[providers.ID]providers.Descriptor, len(entries))
 	for _, entry := range entries {

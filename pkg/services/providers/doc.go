@@ -4,8 +4,9 @@
 //   - Service — singular cross-service seam (catalog, availability/capabilities,
 //     and one-attempt Execute slices publish additively on this interface)
 //   - ID, Descriptor, SessionRef — Providers-owned identity vocabulary
-//   - ResolveIdentity, ResolveSelection, ValidatePrerequisites — Providers-owned
-//     alias, selection, and prerequisite authority over Service
+//   - Service.ResolveIdentity, Service.ResolveSelection,
+//     Service.ValidatePrerequisites — Providers-owned alias, selection, and
+//     prerequisite authority
 //   - detached request, result, value, and typed-error contracts
 //
 // Construction/process-edge ports exist so Wire and owner constructors can

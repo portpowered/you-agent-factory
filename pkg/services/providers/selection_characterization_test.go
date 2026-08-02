@@ -6,12 +6,14 @@ import (
 	"testing"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
 func TestSelectionContract_ResolveIdentityAliasesAndCompatibility(t *testing.T) {
 	t.Parallel()
 
-	service := newCatalogPeerFake(
+	service := newSelectionRoot(t,
 		providers.Descriptor{
 			ID:           providers.IDCodex,
 			Aliases:      []string{"openai-codex"},
@@ -40,9 +42,8 @@ func TestSelectionContract_ResolveIdentityAliasesAndCompatibility(t *testing.T) 
 		test := test
 		t.Run(test.identity, func(t *testing.T) {
 			t.Parallel()
-			got, err := providers.ResolveIdentity(
+			got, err := service.ResolveIdentity(
 				context.Background(),
-				service,
 				providers.ResolveIdentityRequest{Identity: test.identity},
 			)
 			if err != nil {
@@ -54,9 +55,8 @@ func TestSelectionContract_ResolveIdentityAliasesAndCompatibility(t *testing.T) 
 		})
 	}
 
-	_, err := providers.ResolveIdentity(
+	_, err := service.ResolveIdentity(
 		context.Background(),
-		service,
 		providers.ResolveIdentityRequest{Identity: "unknown"},
 	)
 	if !errors.Is(err, providers.ErrUnknownProvider) {
@@ -67,7 +67,7 @@ func TestSelectionContract_ResolveIdentityAliasesAndCompatibility(t *testing.T) 
 func TestSelectionContract_ResolveSelectionPrecedenceAndDefault(t *testing.T) {
 	t.Parallel()
 
-	service := newCatalogPeerFake(
+	service := newSelectionRoot(t,
 		providers.Descriptor{
 			ID:           providers.IDCodex,
 			DisplayName:  "Codex",
@@ -88,7 +88,7 @@ func TestSelectionContract_ResolveSelectionPrecedenceAndDefault(t *testing.T) {
 		},
 	)
 
-	got, err := providers.ResolveSelection(context.Background(), service, providers.ResolveSelectionRequest{
+	got, err := service.ResolveSelection(context.Background(), providers.ResolveSelectionRequest{
 		Workstation:   "cursor",
 		Factory:       "claude",
 		ModelProvider: "openai",
@@ -100,7 +100,7 @@ func TestSelectionContract_ResolveSelectionPrecedenceAndDefault(t *testing.T) {
 		t.Fatalf("ResolveSelection() = %#v, want cursor/workstation", got)
 	}
 
-	got, err = providers.ResolveSelection(context.Background(), service, providers.ResolveSelectionRequest{
+	got, err = service.ResolveSelection(context.Background(), providers.ResolveSelectionRequest{
 		Factory:       "claude",
 		ModelProvider: "openai",
 	})
@@ -111,7 +111,7 @@ func TestSelectionContract_ResolveSelectionPrecedenceAndDefault(t *testing.T) {
 		t.Fatalf("ResolveSelection(factory) = %#v", got)
 	}
 
-	got, err = providers.ResolveSelection(context.Background(), service, providers.ResolveSelectionRequest{})
+	got, err = service.ResolveSelection(context.Background(), providers.ResolveSelectionRequest{})
 	if err != nil {
 		t.Fatalf("ResolveSelection(default) = %v", err)
 	}
@@ -123,7 +123,7 @@ func TestSelectionContract_ResolveSelectionPrecedenceAndDefault(t *testing.T) {
 func TestSelectionContract_ValidatePrerequisitesUsesCatalogAuthority(t *testing.T) {
 	t.Parallel()
 
-	service := newCatalogPeerFake(
+	service := newSelectionRoot(t,
 		providers.Descriptor{
 			ID:           providers.IDCodex,
 			DisplayName:  "Codex",
@@ -143,19 +143,29 @@ func TestSelectionContract_ValidatePrerequisitesUsesCatalogAuthority(t *testing.
 		},
 	)
 
-	if err := providers.ValidatePrerequisites(
+	if err := service.ValidatePrerequisites(
 		context.Background(),
-		service,
 		providers.ValidatePrerequisitesRequest{ID: providers.IDCodex},
 	); err != nil {
 		t.Fatalf("ValidatePrerequisites(codex) = %v", err)
 	}
-	err := providers.ValidatePrerequisites(
+	err := service.ValidatePrerequisites(
 		context.Background(),
-		service,
 		providers.ValidatePrerequisitesRequest{ID: providers.IDCursor},
 	)
 	if !errors.Is(err, providers.ErrProviderUnavailable) {
 		t.Fatalf("ValidatePrerequisites(cursor) = %v, want ErrProviderUnavailable", err)
 	}
+}
+
+func newSelectionRoot(t *testing.T, entries ...providers.Descriptor) providers.Service {
+	t.Helper()
+
+	root, err := providerswire.NewService(
+		providerswire.CatalogOption(catalogwire.WithDescriptors(entries...)),
+	)
+	if err != nil {
+		t.Fatalf("providerswire.NewService() = %v", err)
+	}
+	return root
 }

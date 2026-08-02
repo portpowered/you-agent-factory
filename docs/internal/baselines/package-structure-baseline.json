@@ -1659,21 +1659,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/providers/selection_contract.go",
-      "target": "ResolveIdentity"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/providers/selection_contract.go",
-      "target": "ResolveSelection"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/providers/selection_contract.go",
-      "target": "ValidatePrerequisites"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/work/admission_contract.go",
       "target": "NewContentPreparation"
     },

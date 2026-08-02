@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -445,7 +446,54 @@ func (in newServiceInputs) callNewService() (workers.Service, error) {
 }
 
 type wireProvidersFake struct {
+	providers.Service
 	calls atomic.Int32
+}
+
+func (*wireProvidersFake) ResolveIdentity(
+	_ context.Context,
+	request providers.ResolveIdentityRequest,
+) (providers.ResolveIdentityResult, error) {
+	switch strings.ToLower(strings.TrimSpace(request.Identity)) {
+	case "codex", "openai":
+		return providers.ResolveIdentityResult{ID: providers.IDCodex}, nil
+	default:
+		return providers.ResolveIdentityResult{}, providers.ErrUnknownProvider
+	}
+}
+
+func (*wireProvidersFake) ResolveSelection(
+	_ context.Context,
+	request providers.ResolveSelectionRequest,
+) (providers.ResolveSelectionResult, error) {
+	for _, candidate := range []struct {
+		identity string
+		source   providers.SelectionSource
+	}{
+		{request.Workstation, providers.SelectionSourceWorkstation},
+		{request.Factory, providers.SelectionSourceFactory},
+		{request.ModelProvider, providers.SelectionSourceLegacyProvider},
+	} {
+		if strings.TrimSpace(candidate.identity) == "" {
+			continue
+		}
+		resolved, err := (&wireProvidersFake{}).ResolveIdentity(context.Background(), providers.ResolveIdentityRequest{Identity: candidate.identity})
+		if err != nil {
+			return providers.ResolveSelectionResult{}, err
+		}
+		return providers.ResolveSelectionResult{Provider: resolved.ID, Source: candidate.source}, nil
+	}
+	return providers.ResolveSelectionResult{Provider: providers.IDCodex, Source: providers.SelectionSourceDefault}, nil
+}
+
+func (*wireProvidersFake) ValidatePrerequisites(
+	_ context.Context,
+	request providers.ValidatePrerequisitesRequest,
+) error {
+	if request.ID != providers.IDCodex {
+		return providers.ErrUnknownProvider
+	}
+	return nil
 }
 
 func (fake *wireProvidersFake) Execute(

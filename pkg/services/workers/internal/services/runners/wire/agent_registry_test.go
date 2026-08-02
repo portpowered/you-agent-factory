@@ -180,6 +180,7 @@ func TestNewAgentRegistryRejectsMissingProgressPublisher(t *testing.T) {
 }
 
 type agentProvidersFake struct {
+	providers.Service
 	mu      sync.Mutex
 	request providers.ExecuteRequest
 	result  providers.ExecuteResult

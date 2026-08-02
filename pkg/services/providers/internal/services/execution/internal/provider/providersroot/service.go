@@ -32,16 +32,15 @@ type Config struct {
 	Conductor        *conductor.Conductor
 }
 
-// Service implements providers.Service by delegating Execute to one
-// factory-built provider attempt without retry or provider-graph assembly.
+// Service owns one factory-built provider attempt without retry or
+// provider-graph assembly. It is an internal execution adapter, not the
+// published Providers root.
 type Service struct {
 	config   Config
 	provider inferencecontract.Provider
 }
 
-var _ providers.Service = (*Service)(nil)
-
-// NewService validates config and constructs one inert Providers root.
+// NewService validates config and constructs one inert execution adapter.
 func NewService(config Config) (*Service, error) {
 	if config.Factory == nil {
 		return nil, fmt.Errorf("construct Providers root: provider factory is required")

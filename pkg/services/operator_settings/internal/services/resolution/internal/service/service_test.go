@@ -29,6 +29,7 @@ func mustProvidersRoot(t *testing.T) providers.Service {
 }
 
 type resolutionProvidersFake struct {
+	providers.Service
 	providers map[providers.ID]providers.Descriptor
 }
 
@@ -583,7 +584,9 @@ func TestResolveEffective_UnexpectedProviderErrorDoesNotLeakProvidersType(t *tes
 	}
 }
 
-type unexpectedProviderErrorFake struct{}
+type unexpectedProviderErrorFake struct {
+	providers.Service
+}
 
 var _ providers.Service = (*unexpectedProviderErrorFake)(nil)
 
