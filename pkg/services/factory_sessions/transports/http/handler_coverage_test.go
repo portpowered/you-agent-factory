@@ -42,6 +42,21 @@ func TestHandlerUnavailableBranchesStayOwnedBySessions(t *testing.T) {
 		func(w http.ResponseWriter, r *http.Request) {
 			handler.InvokeFactorySessionBySessionId(w, r, sessionID)
 		},
+		func(w http.ResponseWriter, r *http.Request) {
+			handler.GetFactorySessionResults(w, r, sessionID, factoryapi.GetFactorySessionResultsParams{})
+		},
+		func(w http.ResponseWriter, r *http.Request) {
+			handler.ListFactorySessionDispatches(w, r, sessionID, factoryapi.ListFactorySessionDispatchesParams{})
+		},
+		func(w http.ResponseWriter, r *http.Request) {
+			handler.GetEventsBySessionId(w, r, sessionID, factoryapi.GetEventsBySessionIdParams{})
+		},
+		func(w http.ResponseWriter, r *http.Request) {
+			handler.GetFactoryResponseEventsBySessionId(w, r, sessionID, factoryapi.GetFactoryResponseEventsBySessionIdParams{})
+		},
+		func(w http.ResponseWriter, r *http.Request) {
+			handler.GetFactorySessionSyncPreflightBySessionId(w, r, sessionID, factoryapi.GetFactorySessionSyncPreflightBySessionIdParams{})
+		},
 	}
 	for _, call := range tests {
 		call(httptest.NewRecorder(), request)
