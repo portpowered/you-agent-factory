@@ -3,6 +3,7 @@ package wire_test
 import (
 	"context"
 	"errors"
+	"os"
 	"runtime"
 	"testing"
 	"time"
@@ -77,7 +78,17 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 	baseline := runtime.NumGoroutine()
 
-	service, err := recordingswire.NewService(ledger, nil, writeFile)
+	makeDirectories, createTemporaryFile, removePath, renamePath, readFile := testPublicationEffects()
+	service, err := recordingswire.NewService(
+		ledger,
+		nil,
+		writeFile,
+		makeDirectories,
+		createTemporaryFile,
+		removePath,
+		renamePath,
+		readFile,
+	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -134,7 +145,17 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			service, err := recordingswire.NewService(test.ledger, nil, test.writeFile)
+			makeDirectories, createTemporaryFile, removePath, renamePath, readFile := testPublicationEffects()
+			service, err := recordingswire.NewService(
+				test.ledger,
+				nil,
+				test.writeFile,
+				makeDirectories,
+				createTemporaryFile,
+				removePath,
+				renamePath,
+				readFile,
+			)
 			if err == nil {
 				t.Fatalf("NewService() error = nil, want missing %s dependency", test.name)
 			}
@@ -155,6 +176,13 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 		stubLedger{},
 		nil,
 		func(string, []byte) error { return nil },
+		func(string, os.FileMode) error { return nil },
+		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		os.Remove,
+		os.Rename,
+		os.ReadFile,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -168,4 +196,44 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	}); !errors.Is(err, recordings.ErrReplayRecordingNotFound) {
 		t.Fatalf("LoadReplayRecording() = %v, want ErrReplayRecordingNotFound", err)
 	}
+}
+
+func TestNewServiceRejectsMissingArtifactPublicationEffects(t *testing.T) {
+	t.Parallel()
+
+	service, err := recordingswire.NewService(
+		stubLedger{},
+		nil,
+		func(string, []byte) error { return nil },
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	if err == nil {
+		t.Fatal("NewService() error = nil, want missing artifact publication effects")
+	}
+	if err.Error() != "construct Recordings publication: portable artifact publication operations are required" {
+		t.Fatalf("NewService() error = %q, want missing publication effects", err.Error())
+	}
+	if service != nil {
+		t.Fatalf("NewService() = %#v, want nil service", service)
+	}
+}
+
+func testPublicationEffects() (
+	recordings.RecordingMakeDirectories,
+	recordings.RecordingCreateTemporaryFile,
+	recordings.RecordingRemovePath,
+	recordings.RecordingRenamePath,
+	recordings.RecordingReadFile,
+) {
+	return os.MkdirAll,
+		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		os.Remove,
+		os.Rename,
+		os.ReadFile
 }

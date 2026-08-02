@@ -22,6 +22,11 @@ func NewService(
 	ledger recordings.Ledger,
 	targets recordings.LiveRecordingTargetPlanner,
 	writeFile func(string, []byte) error,
+	makeDirectories recordings.RecordingMakeDirectories,
+	createTemporaryFile recordings.RecordingCreateTemporaryFile,
+	removePath recordings.RecordingRemovePath,
+	renamePath recordings.RecordingRenamePath,
+	readFile recordings.RecordingReadFile,
 	clocks ...recordings.RecordingClock,
 ) (recordings.Service, error) {
 	if ledger == nil {
@@ -35,6 +40,11 @@ func NewService(
 		recordingsinternal.NewProjectionService(),
 		targets,
 		writeFile,
+		makeDirectories,
+		createTemporaryFile,
+		removePath,
+		renamePath,
+		readFile,
 		clocks...,
 	)
 }

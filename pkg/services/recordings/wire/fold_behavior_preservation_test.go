@@ -54,12 +54,20 @@ func (ledger *behavioralLedger) AppendRecordedEvent(event factorydefinitions.Fac
 
 func newWireFoldService(t *testing.T, ledger recordings.Ledger) recordings.Service {
 	t.Helper()
-	service, err := recordingswire.NewService(
+	service, err := recordingswire.NewServiceWithProjectionAndEffects(
 		ledger,
+		recordingswire.NewProjectionService(),
 		nil,
 		func(path string, data []byte) error {
 			return os.WriteFile(path, data, 0o644)
 		},
+		os.MkdirAll,
+		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		os.Remove,
+		os.Rename,
+		os.ReadFile,
 	)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)

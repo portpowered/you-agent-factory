@@ -644,6 +644,19 @@ func provideRuntimeLedgerFactory() factorysessionwire.RuntimeLedgerFactory {
 }
 
 func providePortableRecordingWriter(edges serviceedges.Edges) (recordings.PortableRecordingWriter, error) {
+	makeDirectories, createTemporaryFile, removePath, renamePath, _ := provideRecordingFilesystemEffects(edges)
+	return recordingswire.NewPortableRecordingWriter(makeDirectories, createTemporaryFile, removePath, renamePath)
+}
+
+func provideRecordingFilesystemEffects(
+	edges serviceedges.Edges,
+) (
+	recordings.RecordingMakeDirectories,
+	recordings.RecordingCreateTemporaryFile,
+	recordings.RecordingRemovePath,
+	recordings.RecordingRenamePath,
+	recordings.RecordingReadFile,
+) {
 	makeDirectories := edges.RecordingMakeDirectories
 	if makeDirectories == nil {
 		makeDirectories = os.MkdirAll
@@ -662,7 +675,11 @@ func providePortableRecordingWriter(edges serviceedges.Edges) (recordings.Portab
 	if renamePath == nil {
 		renamePath = os.Rename
 	}
-	return recordingswire.NewPortableRecordingWriter(makeDirectories, createTemporaryFile, removePath, renamePath)
+	readFile := edges.RecordingReadFile
+	if readFile == nil {
+		readFile = os.ReadFile
+	}
+	return makeDirectories, createTemporaryFile, removePath, renamePath, readFile
 }
 
 func provideLoadedFactorySnapshotCapturer() factorydefinitions.LoadedFactorySnapshotCapturer {

@@ -62,7 +62,15 @@ func TestNewServiceRejectsNilDependencies(t *testing.T) {
 func TestNewServiceWithLifecycleEffectsUsesProvidedPublicationAndPlanner(t *testing.T) {
 	t.Parallel()
 
-	publication, err := NewPortableArtifactPublication()
+	publication, err := NewPortableArtifactPublication(
+		os.MkdirAll,
+		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		os.Remove,
+		os.Rename,
+		os.ReadFile,
+	)
 	if err != nil {
 		t.Fatalf("NewPortableArtifactPublication: %v", err)
 	}
@@ -933,7 +941,26 @@ func TestCombinedServicePortableExportAndReadDelegates(t *testing.T) {
 		t.Fatalf("Mkdir: %v", err)
 	}
 	ledger := &stubLedger{}
-	svc := NewService(ledger, NewProjectionService())
+	publication, err := NewPortableArtifactPublication(
+		os.MkdirAll,
+		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		os.Remove,
+		os.Rename,
+		os.ReadFile,
+	)
+	if err != nil {
+		t.Fatalf("NewPortableArtifactPublication: %v", err)
+	}
+	svc := NewServiceWithLifecycleEffects(
+		ledger,
+		NewProjectionService(),
+		nil,
+		nil,
+		nil,
+		publication,
+	)
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-export-delegate"}
 	bound, err := svc.BindRecording(recordings.BindRecordingRequest{
 		RecordingID: "recording-export-delegate",

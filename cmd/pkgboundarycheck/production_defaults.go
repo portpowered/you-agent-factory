@@ -153,12 +153,6 @@ var productionDefaultAllowances = []productionDefaultAllowance{
 	{filePath: "pkg/platform/replay/storage.go", operation: "Local.WriteFile", symbol: "os.Rename", wireSymbol: repositoryImportPrefix + "pkg/platform/replay.NewLocal"},
 	{filePath: "pkg/platform/replay/storage.go", operation: "Local.ReadFile", symbol: "os.ReadFile", wireSymbol: repositoryImportPrefix + "pkg/platform/replay.NewLocal"},
 
-	{filePath: "pkg/services/recordings/internal/services/artifacts_export/wire/publication.go", operation: "NewOSPublication", symbol: "os.MkdirAll", wireSymbol: repositoryImportPrefix + "pkg/services/recordings/internal.NewPortableArtifactPublication"},
-	{filePath: "pkg/services/recordings/internal/services/artifacts_export/wire/publication.go", operation: "NewOSPublication", symbol: "os.CreateTemp", wireSymbol: repositoryImportPrefix + "pkg/services/recordings/internal.NewPortableArtifactPublication"},
-	{filePath: "pkg/services/recordings/internal/services/artifacts_export/wire/publication.go", operation: "NewOSPublication", symbol: "os.Remove", wireSymbol: repositoryImportPrefix + "pkg/services/recordings/internal.NewPortableArtifactPublication"},
-	{filePath: "pkg/services/recordings/internal/services/artifacts_export/wire/publication.go", operation: "NewOSPublication", symbol: "os.Rename", wireSymbol: repositoryImportPrefix + "pkg/services/recordings/internal.NewPortableArtifactPublication"},
-	{filePath: "pkg/services/recordings/internal/services/artifacts_export/wire/publication.go", operation: "NewOSPublication", symbol: "os.ReadFile", wireSymbol: repositoryImportPrefix + "pkg/services/recordings/internal.NewPortableArtifactPublication"},
-
 	// These become allowed only after Wire explicitly selects the adapter. Until
 	// then their ambient effects remain ordinary deletion-only findings.
 	{filePath: "pkg/platform/process/command.go", operation: "ExecCommandRunner.Run", symbol: "os/exec.Command", wireSymbol: repositoryImportPrefix + "pkg/platform/process.ExecCommandRunner"},

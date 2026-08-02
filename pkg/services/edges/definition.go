@@ -168,6 +168,7 @@ type Edges struct {
 	RecordingCreateTempFile          recordings.RecordingCreateTemporaryFile
 	RecordingRemovePath              recordings.RecordingRemovePath
 	RecordingRenamePath              recordings.RecordingRenamePath
+	RecordingReadFile                recordings.RecordingReadFile
 	APIServerStarter                 platformhttpserver.Starter
 	BrowserOpener                    platformbrowser.Opener
 	InvocationMetricsRecorder        factorysessions.InvocationMetricsRecorder
@@ -503,6 +504,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.RecordingRenamePath != nil {
 		defaults.RecordingRenamePath = replacements.RecordingRenamePath
+	}
+	if replacements.RecordingReadFile != nil {
+		defaults.RecordingReadFile = replacements.RecordingReadFile
 	}
 	if replacements.APIServerStarter != nil {
 		defaults.APIServerStarter = replacements.APIServerStarter
