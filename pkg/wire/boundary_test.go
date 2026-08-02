@@ -12,6 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
+
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -19,6 +23,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
 func TestProvideProviderRegistryComposesBuiltIns(t *testing.T) {
@@ -54,6 +59,61 @@ func TestProvideResponsePresentationReturnsUsableInjectedService(t *testing.T) {
 	if got, want := output.String(), "factory event\n"; got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
+}
+
+func TestProvideOperatorSettingsACPAgentProfileLoggerEmitsSafeStructuredFields(t *testing.T) {
+	t.Parallel()
+
+	core, logs := observer.New(zap.InfoLevel)
+	logACPAgentProfile := provideOperatorSettingsACPAgentProfileLogger(zap.New(core))
+
+	logACPAgentProfile(operatorsettings.ACPAgentProfileLogRecord{
+		Operation: operatorsettings.ACPAgentProfileOperationResolve,
+		Stage:     operatorsettings.ACPAgentProfileLogStageSuccess,
+		Fields:    map[string]any{"source": "built_in", "allowlist_count": 1},
+	})
+	logACPAgentProfile(operatorsettings.ACPAgentProfileLogRecord{
+		Operation:   operatorsettings.ACPAgentProfileOperationUpdate,
+		Stage:       operatorsettings.ACPAgentProfileLogStageFailure,
+		FailureKind: "invalid",
+	})
+
+	entries := logs.All()
+	if len(entries) != 2 {
+		t.Fatalf("logged entries = %#v, want 2", entries)
+	}
+
+	success := entries[0]
+	if success.Level != zapcore.InfoLevel {
+		t.Fatalf("success entry level = %v, want info", success.Level)
+	}
+	successFields := success.ContextMap()
+	if successFields["operation"] != operatorsettings.ACPAgentProfileOperationResolve ||
+		successFields["stage"] != operatorsettings.ACPAgentProfileLogStageSuccess ||
+		successFields["source"] != "built_in" {
+		t.Fatalf("success entry fields = %#v, want operation/stage/source", successFields)
+	}
+
+	failure := entries[1]
+	if failure.Level != zapcore.WarnLevel {
+		t.Fatalf("failure entry level = %v, want warn", failure.Level)
+	}
+	failureFields := failure.ContextMap()
+	if failureFields["operation"] != operatorsettings.ACPAgentProfileOperationUpdate ||
+		failureFields["stage"] != operatorsettings.ACPAgentProfileLogStageFailure ||
+		failureFields["failure_kind"] != "invalid" {
+		t.Fatalf("failure entry fields = %#v, want operation/stage/failure_kind", failureFields)
+	}
+}
+
+func TestProvideOperatorSettingsACPAgentProfileLoggerToleratesNilLogger(t *testing.T) {
+	t.Parallel()
+
+	logACPAgentProfile := provideOperatorSettingsACPAgentProfileLogger(nil)
+	logACPAgentProfile(operatorsettings.ACPAgentProfileLogRecord{
+		Operation: operatorsettings.ACPAgentProfileOperationResolve,
+		Stage:     operatorsettings.ACPAgentProfileLogStageAcceptedIntent,
+	})
 }
 
 func TestProvideWorkStopSummaryProjectorDelegatesToFactorySessions(t *testing.T) {

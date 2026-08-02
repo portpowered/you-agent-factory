@@ -123,6 +123,7 @@ func TestProvideSystemInitializationServiceComposedInitializeCreatesThenSkipsPac
 		encoder,
 		provideOperatorSettingsIDGenerator(edges),
 		providersRoot,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("provideOperatorSettingsService() error = %v", err)

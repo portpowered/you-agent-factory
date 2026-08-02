@@ -41,6 +41,7 @@ func TestRootDelegatesResolveEffectiveToPrivateOwner(t *testing.T) {
 		rootTestConfigDecoder,
 		rootTestConfigEncoder,
 		func() string { return "00000000-0000-4000-8000-000000000001" },
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("New() = %v", err)
@@ -78,7 +79,7 @@ func TestNew_RejectsNilDocument(t *testing.T) {
 		t.Fatalf("resolutionwire.NewService() = %v", err)
 	}
 
-	service, err := operatorservice.New(nil, resolutionService, nil, nil, nil, nil, nil)
+	service, err := operatorservice.New(nil, resolutionService, nil, nil, nil, nil, nil, nil)
 	if err == nil || service != nil {
 		t.Fatalf("New(nil, resolution) = (%v, %v), want error", service, err)
 	}
@@ -95,7 +96,7 @@ func TestNew_RejectsNilResolution(t *testing.T) {
 		rootTestProviderCatalog,
 	)
 
-	service, err := operatorservice.New(documentService, nil, nil, nil, nil, nil, nil)
+	service, err := operatorservice.New(documentService, nil, nil, nil, nil, nil, nil, nil)
 	if err == nil || service != nil {
 		t.Fatalf("New(document, nil) = (%v, %v), want error", service, err)
 	}
@@ -214,6 +215,7 @@ func newFilesystemRoot(t *testing.T, createTemp operatorsettings.CreateTemporary
 		globalconfigmapping.Decode,
 		globalconfigmapping.Encode,
 		func() string { return "00000000-0000-4000-8000-000000000001" },
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("operatorservice.New() = %v", err)

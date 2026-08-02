@@ -213,3 +213,32 @@ type UpdateACPAgentProfileResult struct {
 	Profile   ACPAgentProfile
 	Persisted bool
 }
+
+// Stable ACP agent profile operation names for structured logs. Peers may
+// branch on these values; they do not change across releases within L1 V0.
+const (
+	ACPAgentProfileOperationResolve = "operator_settings.resolve_acp_agent_profile"
+	ACPAgentProfileOperationUpdate  = "operator_settings.update_acp_agent_profile"
+)
+
+// ACP agent profile structured log stages: one accepted-intent log per
+// invocation, followed by exactly one terminal success or failure log.
+const (
+	ACPAgentProfileLogStageAcceptedIntent = "accepted_intent"
+	ACPAgentProfileLogStageSuccess        = "success"
+	ACPAgentProfileLogStageFailure        = "failure"
+)
+
+// ACPAgentProfileLogRecord is one safe structured ACP agent profile operation
+// log record. Fields never include raw settings documents, full allowlists,
+// credentials, prompts, raw provider commands, or filesystem paths.
+type ACPAgentProfileLogRecord struct {
+	Operation   string
+	Stage       string
+	FailureKind string
+	Fields      map[string]any
+}
+
+// ACPAgentProfileLogger receives safe ACP agent profile operation log
+// records. A nil logger disables logging without changing operation outcomes.
+type ACPAgentProfileLogger func(ACPAgentProfileLogRecord)

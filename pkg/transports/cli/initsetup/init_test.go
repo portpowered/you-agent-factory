@@ -13,10 +13,10 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 )
 
 func TestConfigurerRequiresSuppliedProviderBeforePersistence(t *testing.T) {
@@ -208,6 +208,7 @@ func testConfigService() operatorsettings.Service {
 		testProviderCatalog,
 		providersRoot,
 		func() string { return "00000000-0000-4000-8000-000000000001" },
+		nil,
 	)
 	if err != nil {
 		panic(err)

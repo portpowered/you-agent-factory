@@ -36,24 +36,39 @@ func (s *Service) ResolveACPAgentProfile(
 	if s == nil {
 		return operatorsettings.ResolveACPAgentProfileResult{}, fmt.Errorf("operator settings service is required")
 	}
+	s.logACPAgentProfileEvent(operatorsettings.ACPAgentProfileOperationResolve, operatorsettings.ACPAgentProfileLogStageAcceptedIntent, nil, nil)
+
 	authored := request.AuthoredProfile
+	source := "authored"
 	if authored == nil && strings.TrimSpace(request.Path) != "" {
 		loaded, err := s.loadACPAgentProfileDocument(request.Path)
 		if err != nil {
+			s.logACPAgentProfileEvent(operatorsettings.ACPAgentProfileOperationResolve, operatorsettings.ACPAgentProfileLogStageFailure, err, nil)
 			return operatorsettings.ResolveACPAgentProfileResult{}, err
 		}
 		authored = loaded
+		source = "persisted"
 	}
 	if authored == nil {
-		return operatorsettings.ResolveACPAgentProfileResult{Profile: operatorsettings.BuiltInACPAgentProfile()}, nil
+		result := operatorsettings.ResolveACPAgentProfileResult{Profile: operatorsettings.BuiltInACPAgentProfile()}
+		s.logACPAgentProfileEvent(operatorsettings.ACPAgentProfileOperationResolve, operatorsettings.ACPAgentProfileLogStageSuccess, nil, map[string]any{
+			"source":          "built_in",
+			"allowlist_count": len(result.Profile.Allowlist),
+		})
+		return result, nil
 	}
 	profile, err := operatorsettings.NormalizeACPAgentProfile(
 		authored.DefaultFactoryReference,
 		authored.Allowlist,
 	)
 	if err != nil {
+		s.logACPAgentProfileEvent(operatorsettings.ACPAgentProfileOperationResolve, operatorsettings.ACPAgentProfileLogStageFailure, err, map[string]any{"source": source})
 		return operatorsettings.ResolveACPAgentProfileResult{}, err
 	}
+	s.logACPAgentProfileEvent(operatorsettings.ACPAgentProfileOperationResolve, operatorsettings.ACPAgentProfileLogStageSuccess, nil, map[string]any{
+		"source":          source,
+		"allowlist_count": len(profile.Allowlist),
+	})
 	return operatorsettings.ResolveACPAgentProfileResult{Profile: profile}, nil
 }
 
@@ -68,24 +83,38 @@ func (s *Service) UpdateACPAgentProfile(
 	if s == nil {
 		return operatorsettings.UpdateACPAgentProfileResult{}, fmt.Errorf("operator settings service is required")
 	}
+	s.logACPAgentProfileEvent(operatorsettings.ACPAgentProfileOperationUpdate, operatorsettings.ACPAgentProfileLogStageAcceptedIntent, nil, nil)
+
 	if ctx == nil {
-		return operatorsettings.UpdateACPAgentProfileResult{}, fmt.Errorf("operator settings context is required")
+		err := fmt.Errorf("operator settings context is required")
+		s.logACPAgentProfileEvent(operatorsettings.ACPAgentProfileOperationUpdate, operatorsettings.ACPAgentProfileLogStageFailure, err, nil)
+		return operatorsettings.UpdateACPAgentProfileResult{}, err
 	}
 	if err := request.Validate(); err != nil {
+		s.logACPAgentProfileEvent(operatorsettings.ACPAgentProfileOperationUpdate, operatorsettings.ACPAgentProfileLogStageFailure, err, nil)
 		return operatorsettings.UpdateACPAgentProfileResult{}, err
 	}
 	profile, err := operatorsettings.NormalizeACPAgentProfile(request.DefaultFactoryReference, request.Allowlist)
 	if err != nil {
+		s.logACPAgentProfileEvent(operatorsettings.ACPAgentProfileOperationUpdate, operatorsettings.ACPAgentProfileLogStageFailure, err, map[string]any{
+			"allowlist_count": len(request.Allowlist),
+		})
 		return operatorsettings.UpdateACPAgentProfileResult{}, err
 	}
+	fields := map[string]any{"allowlist_count": len(profile.Allowlist)}
 	if err := ctx.Err(); err != nil {
+		s.logACPAgentProfileEvent(operatorsettings.ACPAgentProfileOperationUpdate, operatorsettings.ACPAgentProfileLogStageFailure, err, fields)
 		return operatorsettings.UpdateACPAgentProfileResult{}, err
 	}
 	if s.files == nil {
-		return operatorsettings.UpdateACPAgentProfileResult{}, fmt.Errorf("operator settings filesystem is required")
+		err := fmt.Errorf("operator settings filesystem is required")
+		s.logACPAgentProfileEvent(operatorsettings.ACPAgentProfileOperationUpdate, operatorsettings.ACPAgentProfileLogStageFailure, err, fields)
+		return operatorsettings.UpdateACPAgentProfileResult{}, err
 	}
 	if s.createTemp == nil {
-		return operatorsettings.UpdateACPAgentProfileResult{}, fmt.Errorf("operator settings temporary-file creator is required")
+		err := fmt.Errorf("operator settings temporary-file creator is required")
+		s.logACPAgentProfileEvent(operatorsettings.ACPAgentProfileOperationUpdate, operatorsettings.ACPAgentProfileLogStageFailure, err, fields)
+		return operatorsettings.UpdateACPAgentProfileResult{}, err
 	}
 
 	data, err := json.Marshal(acpAgentProfileFile{
@@ -93,22 +122,58 @@ func (s *Service) UpdateACPAgentProfile(
 		Allowlist:               profile.Allowlist,
 	})
 	if err != nil {
-		return operatorsettings.UpdateACPAgentProfileResult{}, operatorsettings.ACPAgentProfileFailure{
+		encodeErr := operatorsettings.ACPAgentProfileFailure{
 			Kind:    operatorsettings.ACPAgentProfileFailureKindPersist,
 			Message: fmt.Sprintf("encode ACP agent profile: %v", err),
 		}
+		s.logACPAgentProfileEvent(operatorsettings.ACPAgentProfileOperationUpdate, operatorsettings.ACPAgentProfileLogStageFailure, encodeErr, fields)
+		return operatorsettings.UpdateACPAgentProfileResult{}, encodeErr
 	}
 
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 
 	if err := ctx.Err(); err != nil {
+		s.logACPAgentProfileEvent(operatorsettings.ACPAgentProfileOperationUpdate, operatorsettings.ACPAgentProfileLogStageFailure, err, fields)
 		return operatorsettings.UpdateACPAgentProfileResult{}, err
 	}
 	if err := s.persistACPAgentProfileFile(ctx, acpAgentProfileStorePath(request.Path), data); err != nil {
+		s.logACPAgentProfileEvent(operatorsettings.ACPAgentProfileOperationUpdate, operatorsettings.ACPAgentProfileLogStageFailure, err, fields)
 		return operatorsettings.UpdateACPAgentProfileResult{}, err
 	}
+	fields["persisted"] = true
+	s.logACPAgentProfileEvent(operatorsettings.ACPAgentProfileOperationUpdate, operatorsettings.ACPAgentProfileLogStageSuccess, nil, fields)
 	return operatorsettings.UpdateACPAgentProfileResult{Profile: profile, Persisted: true}, nil
+}
+
+// logACPAgentProfileEvent emits one safe ACP agent profile structured log
+// record when a logger is injected. err is mapped to a typed failure kind
+// without exposing its message, which may otherwise carry candidate Factory
+// reference values.
+func (s *Service) logACPAgentProfileEvent(operation, stage string, err error, fields map[string]any) {
+	if s == nil || s.logACPAgentProfile == nil {
+		return
+	}
+	record := operatorsettings.ACPAgentProfileLogRecord{
+		Operation: operation,
+		Stage:     stage,
+		Fields:    fields,
+	}
+	if err != nil {
+		record.FailureKind = acpAgentProfileLogFailureKind(err)
+	}
+	s.logACPAgentProfile(record)
+}
+
+func acpAgentProfileLogFailureKind(err error) string {
+	var failure operatorsettings.ACPAgentProfileFailure
+	if errors.As(err, &failure) {
+		return string(failure.Kind)
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return "canceled"
+	}
+	return "unknown"
 }
 
 func (s *Service) loadACPAgentProfileDocument(configPath string) (*operatorsettings.DocumentACPAgentProfile, error) {

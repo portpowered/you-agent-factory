@@ -101,7 +101,12 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	configDecoder := provideOperatorConfigDecoder()
 	configEncoder := provideOperatorConfigEncoder()
 	idGenerator := provideOperatorSettingsIDGenerator(edges2)
-	operatorsettingsService, err := provideOperatorSettingsService(fileSystem, createTemporaryFile, providerCatalog, configDecoder, configEncoder, idGenerator, service)
+	logger, err := logging.NewDefaultLogger()
+	if err != nil {
+		return nil, err
+	}
+	acpAgentProfileLogger := provideOperatorSettingsACPAgentProfileLogger(logger)
+	operatorsettingsService, err := provideOperatorSettingsService(fileSystem, createTemporaryFile, providerCatalog, configDecoder, configEncoder, idGenerator, service, acpAgentProfileLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -361,10 +366,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v63 := provideWorkerInvocationFactory(service, edges2)
 	runtimeArtifactRootResolver := provideRuntimeArtifactRootResolver()
 	v64 := provideFactorySessionExecutionOpeningFileSystem(edges2)
-	logger, err := logging.NewDefaultLogger()
-	if err != nil {
-		return nil, err
-	}
 	v65, err := provideSessionExecutionOpeningFactory(v60, edges2, v62, v63, clockResolver, runtimeArtifactRootResolver, v28, v64, ptyAllocator, logger)
 	if err != nil {
 		return nil, err
@@ -583,6 +584,7 @@ var servicesSet = wire3.NewSet(
 	provideOperatorSettingsCreateTemporaryFile,
 	provideOperatorSettingsProviderCatalog,
 	provideOperatorSettingsService,
+	provideOperatorSettingsACPAgentProfileLogger,
 	provideOperatorSettingsIDGenerator,
 	provideOperatorConfigDecoder,
 	provideOperatorConfigEncoder,

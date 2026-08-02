@@ -47,5 +47,6 @@ func NewServiceFromConfigDocument(
 		service.Decoder,
 		service.Encoder,
 		idGenerator,
+		nil,
 	)
 }

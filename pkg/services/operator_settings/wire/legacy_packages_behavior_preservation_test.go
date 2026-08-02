@@ -10,8 +10,8 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
 
 const identityInventoryFixturesRelativeDir = "pkg/services/operator_settings/internal/services/document/identityinventory/testdata/fixtures"
@@ -106,6 +106,7 @@ func TestWireLegacyPackagesFoldPreservesRootBehaviorWithRelocatedTestHelpers(t *
 		preservationProviderCatalog,
 		providersRoot,
 		testIDGenerator(),
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)

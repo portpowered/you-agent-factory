@@ -19,20 +19,23 @@ import (
 
 // Service fulfills the published Operator Settings root contract.
 type Service struct {
-	document    settingsdocument.Service
-	resolution  resolution.Service
-	files       operatorsettings.FileSystem
-	createTemp  operatorsettings.CreateTemporaryFile
-	decoder     operatorsettings.ConfigDecoder
-	encoder     operatorsettings.ConfigEncoder
-	idGenerator operatorsettings.IDGenerator
-	writeMu     sync.Mutex
+	document           settingsdocument.Service
+	resolution         resolution.Service
+	files              operatorsettings.FileSystem
+	createTemp         operatorsettings.CreateTemporaryFile
+	decoder            operatorsettings.ConfigDecoder
+	encoder            operatorsettings.ConfigEncoder
+	idGenerator        operatorsettings.IDGenerator
+	logACPAgentProfile operatorsettings.ACPAgentProfileLogger
+	writeMu            sync.Mutex
 }
 
 var _ operatorsettings.Service = (*Service)(nil)
 
 // New constructs an inert Operator Settings root facade over the private
-// document and resolution capabilities.
+// document and resolution capabilities. logACPAgentProfile is optional: a nil
+// logger disables ACP agent profile structured logs without changing
+// operation outcomes.
 func New(
 	documentService settingsdocument.Service,
 	resolutionService resolution.Service,
@@ -41,6 +44,7 @@ func New(
 	decoder operatorsettings.ConfigDecoder,
 	encoder operatorsettings.ConfigEncoder,
 	idGenerator operatorsettings.IDGenerator,
+	logACPAgentProfile operatorsettings.ACPAgentProfileLogger,
 ) (operatorsettings.Service, error) {
 	if documentService == nil {
 		return nil, fmt.Errorf("construct Operator Settings: document is required")
@@ -49,13 +53,14 @@ func New(
 		return nil, fmt.Errorf("construct Operator Settings: resolution is required")
 	}
 	return &Service{
-		document:    documentService,
-		resolution:  resolutionService,
-		files:       files,
-		createTemp:  createTemp,
-		decoder:     decoder,
-		encoder:     encoder,
-		idGenerator: idGenerator,
+		document:           documentService,
+		resolution:         resolutionService,
+		files:              files,
+		createTemp:         createTemp,
+		decoder:            decoder,
+		encoder:            encoder,
+		idGenerator:        idGenerator,
+		logACPAgentProfile: logACPAgentProfile,
 	}, nil
 }
 

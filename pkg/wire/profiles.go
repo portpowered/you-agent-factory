@@ -255,6 +255,7 @@ func provideOperatorSettingsService(
 	encode operatorsettings.ConfigEncoder,
 	idGenerator operatorsettings.IDGenerator,
 	providersRoot providers.Service,
+	logACPAgentProfile operatorsettings.ACPAgentProfileLogger,
 ) (operatorsettings.Service, error) {
 	return settingswire.NewService(
 		files,
@@ -264,7 +265,34 @@ func provideOperatorSettingsService(
 		providerCatalog,
 		providersRoot,
 		idGenerator,
+		logACPAgentProfile,
 	)
+}
+
+// provideOperatorSettingsACPAgentProfileLogger adapts the process-wide zap
+// logger into the safe ACP agent profile log port. Only stable operation
+// names, log stages, typed failure kinds, and non-sensitive counters cross
+// this boundary; raw settings documents, full allowlists, credentials,
+// prompts, provider commands, and filesystem paths never do.
+func provideOperatorSettingsACPAgentProfileLogger(logger *zap.Logger) operatorsettings.ACPAgentProfileLogger {
+	return func(record operatorsettings.ACPAgentProfileLogRecord) {
+		if logger == nil {
+			return
+		}
+		fields := make([]zap.Field, 0, len(record.Fields)+2)
+		fields = append(fields, zap.String("operation", record.Operation), zap.String("stage", record.Stage))
+		if record.FailureKind != "" {
+			fields = append(fields, zap.String("failure_kind", record.FailureKind))
+		}
+		for key, value := range record.Fields {
+			fields = append(fields, zap.Any(key, value))
+		}
+		if record.Stage == operatorsettings.ACPAgentProfileLogStageFailure {
+			logger.Warn("operator settings ACP agent profile operation failed", fields...)
+			return
+		}
+		logger.Info("operator settings ACP agent profile operation", fields...)
+	}
 }
 
 func provideOperatorSettingsIDGenerator(edges serviceedges.Edges) operatorsettings.IDGenerator {

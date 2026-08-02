@@ -28,6 +28,7 @@ func NewService(
 	providersCatalog operatorsettings.ProviderCatalog,
 	providersRoot providers.Service,
 	idGenerator operatorsettings.IDGenerator,
+	logACPAgentProfile operatorsettings.ACPAgentProfileLogger,
 ) (operatorsettings.Service, error) {
 	if err := validateNewServiceInputs(
 		files,
@@ -62,6 +63,7 @@ func NewService(
 		decoder,
 		encoder,
 		idGenerator,
+		logACPAgentProfile,
 	)
 }
 

@@ -5,13 +5,16 @@ import (
 	"errors"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	operatorservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service"
 	documentwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/wire"
 	resolutionwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/wire"
 	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 )
 
 func newACPAgentProfileTestRoot(t *testing.T) operatorsettings.Service {
@@ -37,6 +40,7 @@ func newACPAgentProfileTestRoot(t *testing.T) operatorsettings.Service {
 		rootTestConfigDecoder,
 		rootTestConfigEncoder,
 		func() string { return "00000000-0000-4000-8000-000000000001" },
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("New() = %v", err)
@@ -276,4 +280,209 @@ func TestUpdateACPAgentProfileIsIsolatedFromUnrelatedDocumentUpdates(t *testing.
 	if len(loaded.Document.Workers.ACP.Integrations) != 1 || loaded.Document.Workers.ACP.Integrations[0] != integration {
 		t.Fatalf("LoadDocument() integrations = %#v, want %#v", loaded.Document.Workers.ACP.Integrations, []operatorsettings.ACPIntegration{integration})
 	}
+}
+
+func newACPAgentProfileTestRootWithLogger(t *testing.T, logger operatorsettings.ACPAgentProfileLogger) operatorsettings.Service {
+	t.Helper()
+
+	providersRoot := internaltestproviders.StandardCatalog()
+	documentService := documentwire.NewService(
+		&rootTestFileSystem{},
+		rootTestCreateTemporaryFile,
+		rootTestConfigDecoder,
+		rootTestConfigEncoder,
+		rootTestProviderCatalog,
+	)
+	resolutionService, err := resolutionwire.NewService(providersRoot)
+	if err != nil {
+		t.Fatalf("resolutionwire.NewService() = %v", err)
+	}
+	root, err := operatorservice.New(
+		documentService,
+		resolutionService,
+		&rootTestFileSystem{},
+		rootTestCreateTemporaryFile,
+		rootTestConfigDecoder,
+		rootTestConfigEncoder,
+		func() string { return "00000000-0000-4000-8000-000000000001" },
+		logger,
+	)
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+	return root
+}
+
+func newACPAgentProfileFilesystemRootWithLogger(t *testing.T, logger operatorsettings.ACPAgentProfileLogger) operatorsettings.Service {
+	t.Helper()
+
+	files := platformfilesystem.Local{}
+	documentService := documentwire.NewService(
+		files,
+		testCreateTemporaryFile,
+		globalconfigmapping.Decode,
+		globalconfigmapping.Encode,
+		rootTestProviderCatalog,
+	)
+	resolutionService, err := resolutionwire.NewService(internaltestproviders.StandardCatalog())
+	if err != nil {
+		t.Fatalf("resolutionwire.NewService() = %v", err)
+	}
+	root, err := operatorservice.New(
+		documentService,
+		resolutionService,
+		files,
+		testCreateTemporaryFile,
+		globalconfigmapping.Decode,
+		globalconfigmapping.Encode,
+		func() string { return "00000000-0000-4000-8000-000000000001" },
+		logger,
+	)
+	if err != nil {
+		t.Fatalf("operatorservice.New() = %v", err)
+	}
+	return root
+}
+
+func TestResolveACPAgentProfileEmitsAcceptedIntentAndSuccessLogs(t *testing.T) {
+	t.Parallel()
+
+	var records []operatorsettings.ACPAgentProfileLogRecord
+	root := newACPAgentProfileTestRootWithLogger(t, func(record operatorsettings.ACPAgentProfileLogRecord) {
+		records = append(records, record)
+	})
+
+	if _, err := root.ResolveACPAgentProfile(operatorsettings.ResolveACPAgentProfileRequest{}); err != nil {
+		t.Fatalf("ResolveACPAgentProfile() error = %v", err)
+	}
+
+	if len(records) != 2 {
+		t.Fatalf("log records = %#v, want exactly 2 (accepted-intent, success)", records)
+	}
+	if records[0].Operation != operatorsettings.ACPAgentProfileOperationResolve ||
+		records[0].Stage != operatorsettings.ACPAgentProfileLogStageAcceptedIntent {
+		t.Fatalf("first record = %#v, want accepted-intent for resolve operation", records[0])
+	}
+	if records[1].Operation != operatorsettings.ACPAgentProfileOperationResolve ||
+		records[1].Stage != operatorsettings.ACPAgentProfileLogStageSuccess ||
+		records[1].FailureKind != "" {
+		t.Fatalf("second record = %#v, want success terminal log with no failure kind", records[1])
+	}
+	if records[1].Fields["source"] != "built_in" {
+		t.Fatalf("success record fields = %#v, want source=built_in", records[1].Fields)
+	}
+}
+
+func TestResolveACPAgentProfileFailureLogHasTypedKindAndNoRawReferenceValues(t *testing.T) {
+	t.Parallel()
+
+	var records []operatorsettings.ACPAgentProfileLogRecord
+	root := newACPAgentProfileTestRootWithLogger(t, func(record operatorsettings.ACPAgentProfileLogRecord) {
+		records = append(records, record)
+	})
+
+	const sensitiveReference = "@you/should-not-appear-in-logs"
+	authored := &operatorsettings.DocumentACPAgentProfile{
+		DefaultFactoryReference: sensitiveReference,
+		Allowlist:               []string{"@you/factory-builder"},
+	}
+	_, err := root.ResolveACPAgentProfile(operatorsettings.ResolveACPAgentProfileRequest{AuthoredProfile: authored})
+	if !errors.Is(err, operatorsettings.ErrACPAgentProfileInvalid) {
+		t.Fatalf("ResolveACPAgentProfile() error = %v, want ErrACPAgentProfileInvalid", err)
+	}
+
+	if len(records) != 2 {
+		t.Fatalf("log records = %#v, want exactly 2 (accepted-intent, failure)", records)
+	}
+	failure := records[1]
+	if failure.Stage != operatorsettings.ACPAgentProfileLogStageFailure || failure.FailureKind != string(operatorsettings.ACPAgentProfileFailureKindInvalid) {
+		t.Fatalf("failure record = %#v, want failure stage with typed invalid kind", failure)
+	}
+	if strings.Contains(recordText(failure), sensitiveReference) {
+		t.Fatalf("failure record leaked the candidate Factory reference: %#v", failure)
+	}
+}
+
+func TestUpdateACPAgentProfileEmitsAcceptedIntentAndSuccessLogs(t *testing.T) {
+	t.Parallel()
+
+	var records []operatorsettings.ACPAgentProfileLogRecord
+	root := newACPAgentProfileFilesystemRootWithLogger(t, func(record operatorsettings.ACPAgentProfileLogRecord) {
+		records = append(records, record)
+	})
+	path := filepath.Join(t.TempDir(), "config.json")
+
+	_, err := root.UpdateACPAgentProfile(context.Background(), operatorsettings.UpdateACPAgentProfileRequest{
+		Path:                    path,
+		DefaultFactoryReference: "@you/custom",
+		Allowlist:               []string{"@you/custom"},
+	})
+	if err != nil {
+		t.Fatalf("UpdateACPAgentProfile() error = %v", err)
+	}
+
+	if len(records) != 2 {
+		t.Fatalf("log records = %#v, want exactly 2 (accepted-intent, success)", records)
+	}
+	if records[0].Operation != operatorsettings.ACPAgentProfileOperationUpdate ||
+		records[0].Stage != operatorsettings.ACPAgentProfileLogStageAcceptedIntent {
+		t.Fatalf("first record = %#v, want accepted-intent for update operation", records[0])
+	}
+	if records[1].Stage != operatorsettings.ACPAgentProfileLogStageSuccess || records[1].FailureKind != "" {
+		t.Fatalf("second record = %#v, want success terminal log with no failure kind", records[1])
+	}
+	if records[1].Fields["persisted"] != true {
+		t.Fatalf("success record fields = %#v, want persisted=true", records[1].Fields)
+	}
+	if _, hasPath := records[1].Fields["path"]; hasPath {
+		t.Fatalf("success record fields = %#v, must not include the raw filesystem path", records[1].Fields)
+	}
+}
+
+func TestUpdateACPAgentProfileFailureLogHasTypedKindAndNoRawReferenceValues(t *testing.T) {
+	t.Parallel()
+
+	var records []operatorsettings.ACPAgentProfileLogRecord
+	root := newACPAgentProfileFilesystemRootWithLogger(t, func(record operatorsettings.ACPAgentProfileLogRecord) {
+		records = append(records, record)
+	})
+	path := filepath.Join(t.TempDir(), "config.json")
+
+	const sensitiveReference = "@you/should-not-appear-in-logs"
+	_, err := root.UpdateACPAgentProfile(context.Background(), operatorsettings.UpdateACPAgentProfileRequest{
+		Path:                    path,
+		DefaultFactoryReference: sensitiveReference,
+		Allowlist:               []string{"@you/other"},
+	})
+	if !errors.Is(err, operatorsettings.ErrACPAgentProfileInvalid) {
+		t.Fatalf("UpdateACPAgentProfile() error = %v, want ErrACPAgentProfileInvalid", err)
+	}
+
+	if len(records) != 2 {
+		t.Fatalf("log records = %#v, want exactly 2 (accepted-intent, failure)", records)
+	}
+	failure := records[1]
+	if failure.Stage != operatorsettings.ACPAgentProfileLogStageFailure || failure.FailureKind != string(operatorsettings.ACPAgentProfileFailureKindInvalid) {
+		t.Fatalf("failure record = %#v, want failure stage with typed invalid kind", failure)
+	}
+	if strings.Contains(recordText(failure), sensitiveReference) {
+		t.Fatalf("failure record leaked the candidate Factory reference: %#v", failure)
+	}
+}
+
+// recordText renders a log record's textual surface (everything other than
+// numeric/boolean counters) so tests can assert sensitive values never cross
+// the logging boundary.
+func recordText(record operatorsettings.ACPAgentProfileLogRecord) string {
+	var builder strings.Builder
+	builder.WriteString(record.Operation)
+	builder.WriteString(record.Stage)
+	builder.WriteString(record.FailureKind)
+	for key, value := range record.Fields {
+		builder.WriteString(key)
+		if text, ok := value.(string); ok {
+			builder.WriteString(text)
+		}
+	}
+	return builder.String()
 }

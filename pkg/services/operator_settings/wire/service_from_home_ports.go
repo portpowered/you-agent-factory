@@ -43,5 +43,6 @@ func NewServiceFromHomePorts(
 		decode,
 		nil,
 		idGenerator,
+		nil,
 	)
 }
