@@ -77,6 +77,66 @@ func TestAPIUnknownRouteReturnsStructuredNotFound(t *testing.T) {
 	assertStructuredNotFoundHTTPResponse(t, response)
 }
 
+func TestAPIDashboardRoutesServeEmbeddedShellAssetAndFallback(t *testing.T) {
+	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	defer server.Stop(t)
+
+	shellResponse, err := http.Get(server.URL() + "/dashboard/ui")
+	if err != nil {
+		t.Fatalf("GET dashboard shell: %v", err)
+	}
+	shellBody, err := io.ReadAll(shellResponse.Body)
+	_ = shellResponse.Body.Close()
+	if err != nil {
+		t.Fatalf("read dashboard shell: %v", err)
+	}
+	if shellResponse.StatusCode != http.StatusOK {
+		t.Fatalf("dashboard shell status = %d, want %d: %s", shellResponse.StatusCode, http.StatusOK, strings.TrimSpace(string(shellBody)))
+	}
+
+	const assetMarker = "/dashboard/ui/assets/"
+	assetStart := strings.Index(string(shellBody), assetMarker)
+	if assetStart < 0 {
+		t.Fatalf("dashboard shell did not contain %q", assetMarker)
+	}
+	assetEnd := strings.Index(string(shellBody)[assetStart:], "\"")
+	if assetEnd < 0 {
+		t.Fatal("dashboard shell asset path was not quoted")
+	}
+	assetPath := string(shellBody)[assetStart : assetStart+assetEnd]
+
+	assetResponse, err := http.Get(server.URL() + assetPath)
+	if err != nil {
+		t.Fatalf("GET dashboard asset: %v", err)
+	}
+	assetBody, err := io.ReadAll(assetResponse.Body)
+	_ = assetResponse.Body.Close()
+	if err != nil {
+		t.Fatalf("read dashboard asset: %v", err)
+	}
+	if assetResponse.StatusCode != http.StatusOK || len(assetBody) == 0 {
+		t.Fatalf("dashboard asset response = status %d len %d", assetResponse.StatusCode, len(assetBody))
+	}
+
+	fallbackResponse, err := http.Get(server.URL() + "/dashboard/ui/client-route")
+	if err != nil {
+		t.Fatalf("GET dashboard fallback: %v", err)
+	}
+	fallbackBody, err := io.ReadAll(fallbackResponse.Body)
+	_ = fallbackResponse.Body.Close()
+	if err != nil {
+		t.Fatalf("read dashboard fallback: %v", err)
+	}
+	if fallbackResponse.StatusCode != http.StatusOK || !strings.Contains(string(fallbackBody), "<div id=\"root\"></div>") {
+		t.Fatalf("dashboard fallback response = status %d body %q", fallbackResponse.StatusCode, string(fallbackBody))
+	}
+}
+
 // TestAPIWrongMethodReturnsDocumentedMethodError proves wrong HTTP methods on known
 // OpenAPI routes return the documented method-error response at the public HTTP
 // contract boundary instead of a not-found outcome that would hide the mismatch.
