@@ -73,6 +73,13 @@ func isAbsolutePath(p string) bool {
 		c := p[0]
 		return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
 	}
+	// A Windows UNC absolute path: "\\server\share\..." naming a network
+	// host and share rather than a drive letter. Both leading separators
+	// must be backslashes -- a single leading "\" is not a recognized
+	// absolute form on its own.
+	if len(p) >= 2 && p[0] == '\\' && p[1] == '\\' {
+		return true
+	}
 	return false
 }
 

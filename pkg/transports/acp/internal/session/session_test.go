@@ -148,14 +148,34 @@ func TestValidateNewSession(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects a UNC additional directory", func(t *testing.T) {
+	t.Run("accepts a UNC additional directory", func(t *testing.T) {
 		_, err := ValidateNewSession(raw(t, acpsdk.NewSessionRequest{
 			Cwd:                   "/home/user/project",
 			AdditionalDirectories: []string{`\\server\share\vendor`},
 			McpServers:            []acpsdk.McpServer{},
 		}))
+		if err != nil {
+			t.Fatalf("unexpected error for a UNC additional directory: %v", err)
+		}
+	})
+
+	t.Run("accepts a UNC cwd", func(t *testing.T) {
+		_, err := ValidateNewSession(raw(t, acpsdk.NewSessionRequest{
+			Cwd:        `\\server\share\project`,
+			McpServers: []acpsdk.McpServer{},
+		}))
+		if err != nil {
+			t.Fatalf("unexpected error for a UNC cwd: %v", err)
+		}
+	})
+
+	t.Run("rejects a single leading backslash cwd", func(t *testing.T) {
+		_, err := ValidateNewSession(raw(t, acpsdk.NewSessionRequest{
+			Cwd:        `\workspace\project`,
+			McpServers: []acpsdk.McpServer{},
+		}))
 		if err == nil {
-			t.Fatalf("expected an error for a UNC additional directory")
+			t.Fatalf("expected an error for a single leading backslash cwd")
 		}
 	})
 

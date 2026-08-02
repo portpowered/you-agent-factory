@@ -20,7 +20,7 @@
           "loadSession": true,
           "mcpCapabilities": {},
           "promptCapabilities": {},
-          "sessionCapabilities": {"close": {}, "resume": {}}
+          "sessionCapabilities": {"resume": {}}
         }
       }
     },
