@@ -27,6 +27,24 @@ type AppendIdentity struct {
 	SourceEventID  SourceEventID
 }
 
+// Validate reports whether id names a well-formed idempotency identity: all
+// four tuple members are individually well-formed.
+func (id AppendIdentity) Validate() error {
+	if err := id.SourceType.Validate(); err != nil {
+		return err
+	}
+	if err := id.SourceID.Validate(); err != nil {
+		return err
+	}
+	if err := id.SourceSequence.Validate(); err != nil {
+		return err
+	}
+	if err := id.SourceEventID.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
 // AppendRequest asks Events to append one source-native record to Topic.
 // Payload stays source-native JSON; Events does not convert it into an
 // Events-owned kind union.
@@ -57,16 +75,7 @@ func (r AppendRequest) Validate() error {
 	if err := r.Topic.Validate(); err != nil {
 		return err
 	}
-	if err := r.SourceType.Validate(); err != nil {
-		return err
-	}
-	if err := r.SourceID.Validate(); err != nil {
-		return err
-	}
-	if err := r.SourceSequence.Validate(); err != nil {
-		return err
-	}
-	if err := r.SourceEventID.Validate(); err != nil {
+	if err := r.Identity().Validate(); err != nil {
 		return err
 	}
 	if err := r.SchemaID.Validate(); err != nil {
@@ -111,16 +120,7 @@ func (rec Record) Validate() error {
 	if err := rec.ID.Validate(); err != nil {
 		return err
 	}
-	if err := rec.SourceType.Validate(); err != nil {
-		return err
-	}
-	if err := rec.SourceID.Validate(); err != nil {
-		return err
-	}
-	if err := rec.SourceSequence.Validate(); err != nil {
-		return err
-	}
-	if err := rec.SourceEventID.Validate(); err != nil {
+	if err := rec.Identity().Validate(); err != nil {
 		return err
 	}
 	if err := rec.SchemaID.Validate(); err != nil {

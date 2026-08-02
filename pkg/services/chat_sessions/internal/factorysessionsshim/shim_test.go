@@ -16,7 +16,7 @@ import (
 type recordingFactorySessionsService struct {
 	factorysessions.Service
 
-	startCalls  []factorysessions.StartRequest
+	startCalls  []startCall
 	startResult factorysessions.AsyncStartResult
 	startErr    error
 
@@ -28,50 +28,88 @@ type recordingFactorySessionsService struct {
 	cancelResult factorysessions.LifecycleControlResult
 	cancelErr    error
 
-	closeCalls []string
+	closeCalls []closeCall
 	closeErr   error
 }
 
+type startCall struct {
+	ctx     context.Context
+	request factorysessions.StartRequest
+}
+
 type invokeCall struct {
+	ctx       context.Context
 	sessionID string
 	request   factorysessions.InvocationRequest
 }
 
 type cancelCall struct {
+	ctx       context.Context
 	sessionID string
 	request   factorysessions.ControlRequest
 }
 
+type closeCall struct {
+	ctx       context.Context
+	sessionID string
+}
+
 func (fake *recordingFactorySessionsService) StartAsync(
-	_ context.Context,
+	ctx context.Context,
 	request factorysessions.StartRequest,
 ) (factorysessions.AsyncStartResult, error) {
-	fake.startCalls = append(fake.startCalls, request)
+	fake.startCalls = append(fake.startCalls, startCall{ctx: ctx, request: request})
 	return fake.startResult, fake.startErr
 }
 
 func (fake *recordingFactorySessionsService) InvokeFactorySession(
-	_ context.Context,
+	ctx context.Context,
 	sessionID string,
 	request factorysessions.InvocationRequest,
 ) (factorysessions.InvocationResult, error) {
-	fake.invokeCalls = append(fake.invokeCalls, invokeCall{sessionID: sessionID, request: request})
+	fake.invokeCalls = append(fake.invokeCalls, invokeCall{ctx: ctx, sessionID: sessionID, request: request})
 	return fake.invokeResult, fake.invokeErr
 }
 
 func (fake *recordingFactorySessionsService) Cancel(
-	_ context.Context,
+	ctx context.Context,
 	sessionID string,
 	request factorysessions.ControlRequest,
 ) (factorysessions.LifecycleControlResult, error) {
-	fake.cancelCalls = append(fake.cancelCalls, cancelCall{sessionID: sessionID, request: request})
+	fake.cancelCalls = append(fake.cancelCalls, cancelCall{ctx: ctx, sessionID: sessionID, request: request})
 	return fake.cancelResult, fake.cancelErr
 }
 
-func (fake *recordingFactorySessionsService) CloseFactorySession(_ context.Context, sessionID string) error {
-	fake.closeCalls = append(fake.closeCalls, sessionID)
+func (fake *recordingFactorySessionsService) CloseFactorySession(ctx context.Context, sessionID string) error {
+	fake.closeCalls = append(fake.closeCalls, closeCall{ctx: ctx, sessionID: sessionID})
 	return fake.closeErr
 }
+
+// assertNoOtherCalls fails the test unless every recorded call slice other
+// than the named target operation is empty, proving the shim delegated to
+// exactly one Factory Sessions capability.
+func assertNoOtherCalls(t *testing.T, fake *recordingFactorySessionsService, target string) {
+	t.Helper()
+	counts := map[string]int{
+		"start":  len(fake.startCalls),
+		"invoke": len(fake.invokeCalls),
+		"cancel": len(fake.cancelCalls),
+		"close":  len(fake.closeCalls),
+	}
+	for name, count := range counts {
+		if name == target {
+			continue
+		}
+		if count != 0 {
+			t.Fatalf("unexpected delegation to %s: call count = %d, want 0", name, count)
+		}
+	}
+}
+
+// ctxProbeKey distinguishes each test's context.Context value so the
+// delegation assertions below prove the shim forwards the exact context it
+// was given, rather than substituting a fresh one.
+type ctxProbeKey struct{}
 
 func TestShimStart(t *testing.T) {
 	tests := []struct {
@@ -93,22 +131,27 @@ func TestShimStart(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fake := &recordingFactorySessionsService{startResult: tt.result, startErr: tt.err}
 			shim := New(fake)
+			ctx := context.WithValue(context.Background(), ctxProbeKey{}, "start-"+tt.name)
 			request := factorysessions.StartRequest{RequestID: "req-1", Args: map[string]any{"k": "v"}}
 
-			got, err := shim.StartFactoryTarget(context.Background(), request)
+			got, err := shim.StartFactoryTarget(ctx, request)
 
 			if len(fake.startCalls) != 1 {
 				t.Fatalf("StartAsync call count = %d, want 1", len(fake.startCalls))
 			}
-			if !reflect.DeepEqual(fake.startCalls[0], request) {
-				t.Fatalf("StartAsync request = %#v, want %#v", fake.startCalls[0], request)
+			if fake.startCalls[0].ctx != ctx {
+				t.Fatalf("StartAsync ctx = %#v, want the exact ctx passed in", fake.startCalls[0].ctx)
 			}
-			if !errors.Is(err, tt.err) {
-				t.Fatalf("StartFactoryTarget() error = %v, want %v", err, tt.err)
+			if !reflect.DeepEqual(fake.startCalls[0].request, request) {
+				t.Fatalf("StartAsync request = %#v, want %#v", fake.startCalls[0].request, request)
+			}
+			if err != tt.err {
+				t.Fatalf("StartFactoryTarget() error = %v, want the exact same error value %v", err, tt.err)
 			}
 			if !reflect.DeepEqual(got, tt.result) {
 				t.Fatalf("StartFactoryTarget() result = %#v, want %#v", got, tt.result)
 			}
+			assertNoOtherCalls(t, fake, "start")
 		})
 	}
 }
@@ -133,25 +176,27 @@ func TestShimInvoke(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fake := &recordingFactorySessionsService{invokeResult: tt.result, invokeErr: tt.err}
 			shim := New(fake)
+			ctx := context.WithValue(context.Background(), ctxProbeKey{}, "invoke-"+tt.name)
 			request := factorysessions.InvocationRequest{RequestID: strPtr("req-1")}
 
-			got, err := shim.InvokeFactoryTarget(context.Background(), "session-1", request)
+			got, err := shim.InvokeFactoryTarget(ctx, "session-1", request)
 
 			if len(fake.invokeCalls) != 1 {
 				t.Fatalf("InvokeFactorySession call count = %d, want 1", len(fake.invokeCalls))
 			}
+			if fake.invokeCalls[0].ctx != ctx {
+				t.Fatalf("InvokeFactorySession ctx = %#v, want the exact ctx passed in", fake.invokeCalls[0].ctx)
+			}
 			if fake.invokeCalls[0].sessionID != "session-1" || !reflect.DeepEqual(fake.invokeCalls[0].request, request) {
 				t.Fatalf("InvokeFactorySession call = %#v, want session-1 / %#v", fake.invokeCalls[0], request)
 			}
-			if !errors.Is(err, tt.err) {
-				t.Fatalf("InvokeFactoryTarget() error = %v, want %v", err, tt.err)
+			if err != tt.err {
+				t.Fatalf("InvokeFactoryTarget() error = %v, want the exact same error value %v", err, tt.err)
 			}
 			if !reflect.DeepEqual(got, tt.result) {
 				t.Fatalf("InvokeFactoryTarget() result = %#v, want %#v", got, tt.result)
 			}
-			if len(fake.startCalls) != 0 {
-				t.Fatalf("StartAsync call count = %d, want 0", len(fake.startCalls))
-			}
+			assertNoOtherCalls(t, fake, "invoke")
 		})
 	}
 }
@@ -176,28 +221,27 @@ func TestShimCancel(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fake := &recordingFactorySessionsService{cancelResult: tt.result, cancelErr: tt.err}
 			shim := New(fake)
+			ctx := context.WithValue(context.Background(), ctxProbeKey{}, "cancel-"+tt.name)
 			request := factorysessions.ControlRequest{RequestID: "req-1", Reason: "user requested"}
 
-			got, err := shim.CancelFactoryTarget(context.Background(), "session-1", request)
+			got, err := shim.CancelFactoryTarget(ctx, "session-1", request)
 
 			if len(fake.cancelCalls) != 1 {
 				t.Fatalf("Cancel call count = %d, want 1", len(fake.cancelCalls))
 			}
+			if fake.cancelCalls[0].ctx != ctx {
+				t.Fatalf("Cancel ctx = %#v, want the exact ctx passed in", fake.cancelCalls[0].ctx)
+			}
 			if fake.cancelCalls[0].sessionID != "session-1" || !reflect.DeepEqual(fake.cancelCalls[0].request, request) {
 				t.Fatalf("Cancel call = %#v, want session-1 / %#v", fake.cancelCalls[0], request)
 			}
-			if !errors.Is(err, tt.err) {
-				t.Fatalf("CancelFactoryTarget() error = %v, want %v", err, tt.err)
+			if err != tt.err {
+				t.Fatalf("CancelFactoryTarget() error = %v, want the exact same error value %v", err, tt.err)
 			}
 			if !reflect.DeepEqual(got, tt.result) {
 				t.Fatalf("CancelFactoryTarget() result = %#v, want %#v", got, tt.result)
 			}
-			if len(fake.startCalls) != 0 || len(fake.invokeCalls) != 0 || len(fake.closeCalls) != 0 {
-				t.Fatalf(
-					"unexpected delegation: start=%d invoke=%d close=%d, want all 0",
-					len(fake.startCalls), len(fake.invokeCalls), len(fake.closeCalls),
-				)
-			}
+			assertNoOtherCalls(t, fake, "cancel")
 		})
 	}
 }
@@ -215,21 +259,23 @@ func TestShimClose(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fake := &recordingFactorySessionsService{closeErr: tt.err}
 			shim := New(fake)
+			ctx := context.WithValue(context.Background(), ctxProbeKey{}, "close-"+tt.name)
 
-			err := shim.CloseFactoryTarget(context.Background(), "session-1")
+			err := shim.CloseFactoryTarget(ctx, "session-1")
 
-			if len(fake.closeCalls) != 1 || fake.closeCalls[0] != "session-1" {
-				t.Fatalf("CloseFactorySession calls = %#v, want [session-1]", fake.closeCalls)
+			if len(fake.closeCalls) != 1 {
+				t.Fatalf("CloseFactorySession call count = %d, want 1", len(fake.closeCalls))
 			}
-			if !errors.Is(err, tt.err) {
-				t.Fatalf("CloseFactoryTarget() error = %v, want %v", err, tt.err)
+			if fake.closeCalls[0].ctx != ctx {
+				t.Fatalf("CloseFactorySession ctx = %#v, want the exact ctx passed in", fake.closeCalls[0].ctx)
 			}
-			if len(fake.startCalls) != 0 || len(fake.invokeCalls) != 0 || len(fake.cancelCalls) != 0 {
-				t.Fatalf(
-					"unexpected delegation: start=%d invoke=%d cancel=%d, want all 0",
-					len(fake.startCalls), len(fake.invokeCalls), len(fake.cancelCalls),
-				)
+			if fake.closeCalls[0].sessionID != "session-1" {
+				t.Fatalf("CloseFactorySession sessionID = %q, want session-1", fake.closeCalls[0].sessionID)
 			}
+			if err != tt.err {
+				t.Fatalf("CloseFactoryTarget() error = %v, want the exact same error value %v", err, tt.err)
+			}
+			assertNoOtherCalls(t, fake, "close")
 		})
 	}
 }
