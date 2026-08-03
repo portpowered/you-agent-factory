@@ -339,26 +339,8 @@ func TestService_ConcurrentPublishAndCompletionNeverDivergesFromEvents(t *testin
 func TestService_PublishNeverDivergesFromEventsWhenTheTopicIsNotAligned(t *testing.T) {
 	t.Parallel()
 
-	eventsService := newTestEventsService(t)
-	service, err := serviceWithEvents(t, eventsService)
-	if err != nil {
-		t.Fatalf("construct response-stream service: %v", err)
-	}
-	store := newStore(t, service)
-	topic := responseEventTopicForTest(store.FactorySessionID())
-
+	eventsService, service, store, topic := newNonAlignedTopicFixture(t)
 	ctx := context.Background()
-	if _, err := eventsService.Append(ctx, events.AppendRequest{
-		Topic:          topic,
-		SourceType:     "factory-session-response-event",
-		SourceID:       events.SourceID(store.FactorySessionID()),
-		SourceSequence: 1,
-		SourceEventID:  "pre-existing-from-another-store-instance",
-		SchemaID:       "factory-response-event.v1",
-		Payload:        json.RawMessage(`{"foreign":"record"}`),
-	}); err != nil {
-		t.Fatalf("pre-populate topic with a foreign record: %v", err)
-	}
 
 	published := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
 	if published.Sequence != 2 {
@@ -387,18 +369,58 @@ func TestService_PublishNeverDivergesFromEventsWhenTheTopicIsNotAligned(t *testi
 		t.Fatalf("stored.EventID = %q, want %q: store and Events must observe the same record at the same position", stored.EventID, published.EventID)
 	}
 
-	// The publisher marshals the payload it sends to Events before Append
-	// assigns the real position, using its own predicted sequenceHint (1)
-	// rather than the position Events ends up assigning (2): the accepted
-	// Events record at position 2's raw JSON payload therefore embeds a
-	// stale self-reported Sequence of 1, not 2. events.Service.Append is one
-	// round trip -- the payload can never be rewritten after acceptance to
-	// correct that prediction -- so responseeventstore.DecodeFactoryResponseEvent
-	// is the single authoritative decode boundary every reader of this topic
-	// (direct or through the compatibility surface) must use: it always
-	// derives Sequence from the record's own assigned aggregate Position,
-	// never from the payload's embedded field.
-	directlyDecoded, err := responseeventstore.DecodeFactoryResponseEvent(read.Records[1])
+	directlyDecoded := assertDirectDecodeUsesAuthorityAssignedIdentity(t, read.Records[1], published)
+	assertCompatibilitySurfaceAgreesWithDirectDecode(t, ctx, service, store, directlyDecoded, published)
+}
+
+// newNonAlignedTopicFixture builds the exact non-aligned-topic shape a real
+// Events topic can carry across two different store instances for the same
+// session identity (for example, a second SessionResponseEventStore created
+// for a session whose Events topic already has history from a prior store
+// instance): the topic already has a foreign record at position 1 before
+// this test's store ever publishes anything, so the store's own predicted
+// sequenceHint (1) cannot match what Events actually assigns (2).
+func newNonAlignedTopicFixture(t *testing.T) (events.Service, responsestreamservice.Service, *responseeventstore.SessionResponseEventStore, events.Topic) {
+	t.Helper()
+
+	eventsService := newTestEventsService(t)
+	service, err := serviceWithEvents(t, eventsService)
+	if err != nil {
+		t.Fatalf("construct response-stream service: %v", err)
+	}
+	store := newStore(t, service)
+	topic := responseEventTopicForTest(store.FactorySessionID())
+
+	if _, err := eventsService.Append(context.Background(), events.AppendRequest{
+		Topic:          topic,
+		SourceType:     "factory-session-response-event",
+		SourceID:       events.SourceID(store.FactorySessionID()),
+		SourceSequence: 1,
+		SourceEventID:  "pre-existing-from-another-store-instance",
+		SchemaID:       "factory-response-event.v1",
+		Payload:        json.RawMessage(`{"foreign":"record"}`),
+	}); err != nil {
+		t.Fatalf("pre-populate topic with a foreign record: %v", err)
+	}
+
+	return eventsService, service, store, topic
+}
+
+// assertDirectDecodeUsesAuthorityAssignedIdentity proves
+// responseeventstore.DecodeFactoryResponseEvent is the single authoritative
+// decode boundary every reader of this topic must use. The publisher
+// marshals the payload it sends to Events before Append assigns the real
+// position, using its own predicted sequenceHint (1) rather than the
+// position Events ends up assigning (2): the accepted Events record's raw
+// JSON payload therefore embeds a stale self-reported Sequence of 1, not 2.
+// events.Service.Append is one round trip -- the payload can never be
+// rewritten after acceptance to correct that prediction -- so the decode
+// boundary must always derive Sequence from the record's own assigned
+// aggregate Position, never from the payload's embedded field.
+func assertDirectDecodeUsesAuthorityAssignedIdentity(t *testing.T, record events.Record, published responseevents.FactoryResponseEvent) responseevents.FactoryResponseEvent {
+	t.Helper()
+
+	directlyDecoded, err := responseeventstore.DecodeFactoryResponseEvent(record)
 	if err != nil {
 		t.Fatalf("DecodeFactoryResponseEvent: %v", err)
 	}
@@ -408,14 +430,20 @@ func TestService_PublishNeverDivergesFromEventsWhenTheTopicIsNotAligned(t *testi
 			directlyDecoded, published.EventID,
 		)
 	}
+	return directlyDecoded
+}
 
-	// The compatibility surface must decode through the exact same
-	// authoritative boundary, so a direct Events reader and the
-	// compatibility surface always agree on identity for the same accepted
-	// record -- not just agree with the store's own bookkeeping. This is the
-	// regression PR #1753's round-11 review flagged (2026-08-03T22:51:32Z):
-	// repairing only the compatibility copy after the fact still left a
-	// direct Events reader observing the stale, unresolved payload sequence.
+// assertCompatibilitySurfaceAgreesWithDirectDecode proves the compatibility
+// surface decodes through the exact same authoritative boundary, so a direct
+// Events reader and the compatibility surface always agree on identity for
+// the same accepted record -- not just agree with the store's own
+// bookkeeping. This is the regression PR #1753's round-11 review flagged
+// (2026-08-03T22:51:32Z): repairing only the compatibility copy after the
+// fact still left a direct Events reader observing the stale, unresolved
+// payload sequence.
+func assertCompatibilitySurfaceAgreesWithDirectDecode(t *testing.T, ctx context.Context, service responsestreamservice.Service, store *responseeventstore.SessionResponseEventStore, directlyDecoded, published responseevents.FactoryResponseEvent) {
+	t.Helper()
+
 	cursor, err := service.Subscribe(ctx, store, responsestreamservice.SubscriptionRequest{})
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)

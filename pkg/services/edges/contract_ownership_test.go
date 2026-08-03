@@ -116,13 +116,13 @@ func TestPackageOwnsOnlyTheEdgeAggregator(t *testing.T) {
 	t.Parallel()
 
 	localModelEffectTypes := map[string]struct{}{
-		"PullMetric":           {},
+		"PullMetric": {},
 		"AssetMakeDirectories": {}, "AssetInspectPath": {},
 		"AssetResolveHomeDirectory": {}, "AssetWriteFile": {}, "AssetRenamePath": {},
 		"AssetRemovePath": {}, "AssetReadFile": {}, "AssetReadDirectory": {},
 		"AssetCreateFile": {}, "AssetOpenFile": {},
 		"HostProcessStartSpec": {},
-		"RuntimeInspectFile":   {},
+		"RuntimeInspectFile": {},
 		"RuntimeTempDirectory": {}, "RuntimeCreateTempFile": {},
 	}
 	entries, err := os.ReadDir(".")

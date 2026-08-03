@@ -223,16 +223,13 @@ func TestRead_RetentionEvictsOldestWithoutRenumberingHead(t *testing.T) {
 	}
 }
 
-// TestRead_DuplicateIdentityIsAcceptedAsNewAfterEviction proves idempotency
-// state is bounded by the same explicit retention policy as retained
-// records: once a record's position has been evicted, ts.identity no longer
-// holds its entry (see topicState.commitLocked), so repeating that identity
-// is accepted as a new record instead of resolving as a duplicate forever.
-// Retaining full accepted records/payloads in ts.identity indefinitely,
-// unbounded by the declared retention policy, is the hidden second
-// retention path this test guards against (PR #1753 review finding 2,
-// 2026-08-03T18:37:32Z).
-func TestRead_DuplicateIdentityIsAcceptedAsNewAfterEviction(t *testing.T) {
+// TestRead_DuplicateIdentityStillResolvesAfterEviction proves the published
+// Append idempotency contract has no retention-horizon exception: repeating
+// an already-accepted (sourceType, sourceID, sourceSequence, sourceEventID)
+// must still resolve to the original accepted record and position even
+// after that position has been evicted from the bounded ts.records
+// retention window (PR #1753 review finding 1, 2026-08-03T23:16:17Z).
+func TestRead_DuplicateIdentityStillResolvesAfterEviction(t *testing.T) {
 	st := NewWithRetention(1)
 	ctx := context.Background()
 
@@ -256,36 +253,11 @@ func TestRead_DuplicateIdentityIsAcceptedAsNewAfterEviction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Append() repeat error = %v", err)
 	}
-	if repeatResult.Outcome != events.AppendOutcomeAccepted {
-		t.Fatalf("Outcome = %v, want AppendOutcomeAccepted (identity was evicted, so idempotency detection no longer applies)", repeatResult.Outcome)
+	if repeatResult.Outcome != events.AppendOutcomeDuplicate {
+		t.Fatalf("Outcome = %v, want AppendOutcomeDuplicate (identity resolution never expires)", repeatResult.Outcome)
 	}
-	if repeatResult.Record.ID == firstResult.Record.ID {
-		t.Fatalf("repeat Record.ID = %+v, want a new position distinct from the evicted original %+v", repeatResult.Record.ID, firstResult.Record.ID)
-	}
-}
-
-// TestRead_IdentityIndexStaysBoundedByRetentionPolicy proves the bounded
-// retention policy applies to all retained state, not just the readable
-// records slice: appending well beyond the retention cap must not leave
-// ts.identity growing without bound (PR #1753 review finding 2,
-// 2026-08-03T18:37:32Z).
-func TestRead_IdentityIndexStaysBoundedByRetentionPolicy(t *testing.T) {
-	const retentionCap = 5
-	st := NewWithRetention(retentionCap)
-	ctx := context.Background()
-	appendN(t, st, ctx, readTestTopic, retentionCap*20)
-
-	ts := st.topic(readTestTopic)
-	ts.mu.Lock()
-	recordCount := len(ts.records)
-	identityCount := len(ts.identity)
-	ts.mu.Unlock()
-
-	if recordCount != retentionCap {
-		t.Fatalf("len(records) = %d, want %d", recordCount, retentionCap)
-	}
-	if identityCount != retentionCap {
-		t.Fatalf("len(identity) = %d, want %d (identity must stay bounded by the same retention policy as records, not grow with every append)", identityCount, retentionCap)
+	if repeatResult.Record.ID != firstResult.Record.ID {
+		t.Fatalf("repeat Record.ID = %+v, want the original evicted position %+v", repeatResult.Record.ID, firstResult.Record.ID)
 	}
 }
 

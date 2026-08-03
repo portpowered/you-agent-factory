@@ -59,15 +59,17 @@ func (st *Store) Append(ctx context.Context, req events.AppendRequest) (result e
 
 // commitLocked stores req as the next accepted record for ts (assigning the
 // next aggregate position), or resolves to the existing accepted Record when
-// req's identity was already accepted. It evicts the oldest retained record
-// once the topic exceeds the store's retention cap, pruning that evicted
-// record's entry from ts.identity in the same step so idempotency state
-// stays bounded by the same explicit retention policy as the retained
-// records themselves: once a record's position has been evicted, repeating
-// its identity is accepted as a new record rather than resolved as a
-// duplicate. It then notifies both live subscribers and any topics attached
-// to ts as a forwarding destination under this same lock, so no observer can
-// ever see one commit before another and no aggregate position is skipped or
+// req's identity was already accepted. Duplicate identity resolution never
+// expires: the published Append contract requires repeating the same
+// (sourceType, sourceID, sourceSequence, sourceEventID) to return
+// AppendOutcomeDuplicate and the original record unconditionally, so
+// ts.identity retains every accepted identity's Record for the life of the
+// topic even after that record's position has been evicted from the bounded
+// ts.records retention window (see TestRead_RetentionEvictsOldestWithoutRenumberingHead
+// for the retained-records eviction this is deliberately independent of).
+// It then notifies both live subscribers and any topics attached to ts as a
+// forwarding destination under this same lock, so no observer can ever see
+// one commit before another and no aggregate position is skipped or
 // duplicated across a retained-then-live or attachment forwarding handoff.
 // Callers hold ts.mu; req must already carry a detached Payload (see
 // AppendRequest.Detached and Record.Detached), since commitLocked does not
@@ -90,9 +92,7 @@ func (ts *topicState) commitLocked(st *Store, topic events.Topic, req events.App
 	ts.records = append(ts.records, stored)
 	ts.identity[identity] = stored
 	if len(ts.records) > st.maxRetainedPerTopic {
-		evicted := ts.records[0]
 		ts.records = ts.records[1:]
-		delete(ts.identity, evicted.Identity())
 	}
 	ts.notifySubscribersLocked(st, topic, stored)
 	ts.notifyAttachmentsLocked(st, stored)
