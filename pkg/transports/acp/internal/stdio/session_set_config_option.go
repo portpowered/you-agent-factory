@@ -78,9 +78,10 @@ func (s *Server) handleSessionSetConfigOption(ctx context.Context, env envelope.
 	return result, nil
 }
 
-// changeTarget executes the shared target-change sequence used by
-// "session/set_config_option" (and, in a later story, the "/factory"
-// command fallback): read the addressed Chat Session, resolve the
+// changeTarget executes the shared target-change sequence used by both
+// "session/set_config_option" and the "/factory" command fallback
+// (handleSessionPrompt in session_prompt.go): read the addressed Chat
+// Session, resolve the
 // requested value through the existing Factory target catalog using that
 // session's own WorkingRoot, and call Chat Sessions' SetTarget with the
 // canonical revalidated target, the caller's identity, the session id, and

@@ -343,17 +343,17 @@ func TestServeIsolatesConnectionsReusingTheSameWireID(t *testing.T) {
 }
 
 // TestServeRespondsMethodNotFoundForEveryUnimplementedMethod covers every
-// deferred ACP session/prompt method already listed in
-// protocol.SupportedMethods (a forward-looking closed set for the whole
-// future method surface, not what this transport slice actually
-// implements -- see the Codebase Patterns entry on protocol.SupportedMethods)
-// plus a method this transport never expects at all, proving all of them
-// get method-not-found rather than being dispatched or hanging.
+// deferred ACP method already listed in protocol.SupportedMethods (a
+// forward-looking closed set for the whole future method surface, not what
+// this transport slice actually implements -- see the Codebase Patterns
+// entry on protocol.SupportedMethods) plus a method this transport never
+// expects at all, proving all of them get method-not-found rather than
+// being dispatched or hanging. "session/prompt" is excluded: it is now
+// dispatched (for "/factory <value>" only), covered in session_prompt_test.go.
 func TestServeRespondsMethodNotFoundForEveryUnimplementedMethod(t *testing.T) {
 	methods := []string{
 		"session/load",
 		"session/resume",
-		"session/prompt",
 		"session/request_permission",
 		"totally/unrecognized_method",
 	}
