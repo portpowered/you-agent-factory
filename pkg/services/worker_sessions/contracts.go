@@ -39,7 +39,7 @@ type Service interface {
 
 	// Start validates req, then establishes or reuses one stable Worker
 	// Session identity in StateReserved, transitions StateStarting, and hands
-	// req.Execution unchanged to the one directly injected
+	// a detached clone of req.Execution to the one directly injected
 	// workers.WorkstationExecutionService. Start is synchronous: it returns
 	// only after the attempt commits its exactly-once absorbing COMPLETED or
 	// FAILED terminal outcome, classified from the Workers WorkResult first
@@ -121,11 +121,13 @@ type StartRequest struct {
 	// reuses that exact session and never creates a replacement. Any other
 	// existing state is a conflicting start.
 	ID string
-	// Execution is the detached, already-resolved Workers execution request
-	// handed unchanged to the injected workers.WorkstationExecutionService.
-	// Worker Sessions performs no runner selection, prompt rendering,
-	// worktree preparation, provider invocation, or output shaping on this
-	// value.
+	// Execution is the already-resolved Workers execution request. Start
+	// hands a detached clone of Execution to the injected
+	// workers.WorkstationExecutionService, so the caller retains exclusive
+	// ownership of Execution's reference-backed fields after Start is
+	// called. Worker Sessions performs no runner selection, prompt
+	// rendering, worktree preparation, provider invocation, or output
+	// shaping on this value.
 	Execution workers.WorkstationDispatchRequest
 }
 

@@ -37,7 +37,7 @@ func TestStart_InvalidRequest_ReturnsTypedErrorAndMakesNoWorkersCall(t *testing.
 	}
 }
 
-func TestStart_ValidNewIdentity_IsReservedBeforeWorkersIsInvoked(t *testing.T) {
+func TestStart_ValidNewIdentity_ObservesStartingDuringInFlightHandoff(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
 	execution := &fakeExecution{
@@ -107,6 +107,55 @@ func TestStart_ExactlyOneDetachedRequestReachesWorkersWithExpectedAttemptIdentit
 	}
 	if got := requests[0].Execution.Dispatch.DispatchID; got != "dispatch-1" {
 		t.Fatalf("dispatch request attempt id = %q, want dispatch-1", got)
+	}
+}
+
+// TestStart_ClonesExecutionRequestBeforeHandoff proves Start hands Workers a
+// detached clone of req.Execution, not a shallow alias: an injected
+// implementation mutating a reference-backed field (EnvVars) on the request
+// it receives must never be able to mutate the caller's original
+// StartRequest.
+func TestStart_ClonesExecutionRequestBeforeHandoff(t *testing.T) {
+	req := validStartRequest("worker-1", "dispatch-1")
+	req.Execution.Execution.EnvVars = map[string]string{"SAFE": "value"}
+	req.Execution.Execution.ProcessEnvironment = []string{"PATH=/usr/bin"}
+	req.Execution.Execution.InputTokens = []any{"token-a"}
+
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, received workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			// An injected implementation is entitled to treat the request it
+			// receives as its own: mutate the reference-backed fields it was
+			// handed, exactly as a real executor implementation could.
+			received.Execution.EnvVars["INJECTED"] = "mutated-by-executor"
+			received.Execution.ProcessEnvironment[0] = "mutated"
+			received.Execution.InputTokens[0] = "mutated"
+			return workers.WorkstationDispatchResult{
+				DispatchID: received.Execution.Dispatch.DispatchID,
+				Result: workers.WorkResult{
+					DispatchID: received.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+				},
+			}, nil
+		},
+	}
+	registry := newRegistryWithExecution(execution)
+	ctx := context.Background()
+
+	if _, err := registry.Start(ctx, req); err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+
+	if _, mutated := req.Execution.Execution.EnvVars["INJECTED"]; mutated {
+		t.Fatalf("original request EnvVars mutated by injected execution: %v", req.Execution.Execution.EnvVars)
+	}
+	if got := req.Execution.Execution.EnvVars["SAFE"]; got != "value" {
+		t.Fatalf("original request EnvVars[SAFE] = %q, want unchanged %q", got, "value")
+	}
+	if got := req.Execution.Execution.ProcessEnvironment[0]; got != "PATH=/usr/bin" {
+		t.Fatalf("original request ProcessEnvironment[0] = %q, want unchanged", got)
+	}
+	if got := req.Execution.Execution.InputTokens[0]; got != "token-a" {
+		t.Fatalf("original request InputTokens[0] = %v, want unchanged", got)
 	}
 }
 

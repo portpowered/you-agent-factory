@@ -25,14 +25,14 @@ func classifyTerminal(
 		// misconfigured workstation pool). This is the only case that never
 		// reached the executor, so it is the only case classified from the
 		// dispatch error alone.
-		return failedTerminal(workersessions.FailureCauseStartFailure, safeDetail(dispatchErr))
+		return failedTerminal(workersessions.FailureCauseStartFailure, redactDetail(rawDetail(dispatchErr)))
 	}
 
 	switch workResult.Outcome {
 	case workers.OutcomeAccepted, workers.OutcomeContinue:
 		return workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}
 	default: // workers.OutcomeRejected, workers.OutcomeFailed
-		detail := safeFailureDetail(workResult, dispatchErr)
+		detail := redactDetail(failureRawDetail(workResult, dispatchErr))
 		if isExecutorPanicEvidence(dispatchErr, workResult) {
 			return failedTerminal(workersessions.FailureCauseExecutorPanic, detail)
 		}
@@ -47,12 +47,15 @@ func classifyTerminal(
 // WorkResult itself carries the Workers-established executor-panic
 // evidence. The WorkResult text is checked independently of the adapter
 // error so panic evidence is recognized even when the adapter error is nil.
+// Classification always inspects the raw, unredacted text: redaction only
+// governs what reaches the public FailureCause.Detail, never what Worker
+// Sessions itself is allowed to classify from.
 func isExecutorPanicEvidence(dispatchErr error, workResult workers.WorkResult) bool {
 	var panicErr *workers.WorkerExecutorPanicError
 	if errors.As(dispatchErr, &panicErr) {
 		return true
 	}
-	return isExecutorPanicText(workResult.Error) || isExecutorPanicText(safeDetail(dispatchErr))
+	return isExecutorPanicText(workResult.Error) || isExecutorPanicText(rawDetail(dispatchErr))
 }
 
 // isExecutorPanicText matches the Workers-owned executor-panic
@@ -71,17 +74,20 @@ func failedTerminal(kind workersessions.FailureCauseKind, detail string) workers
 	}
 }
 
-// safeFailureDetail prefers the Workers-owned WorkResult.Error text, which
-// Workers already documents as safe result text, and falls back to the
-// adapter error's message only when WorkResult carries none.
-func safeFailureDetail(workResult workers.WorkResult, dispatchErr error) string {
+// failureRawDetail prefers the Workers-owned WorkResult.Error text and falls
+// back to the adapter error's message only when WorkResult carries none.
+// Neither Workers nor the adapter boundary establishes this text as free of
+// payloads, credentials, environment values, prompts, or raw provider
+// commands, so callers must pass the result through redactDetail before it
+// can reach the public FailureCause.Detail.
+func failureRawDetail(workResult workers.WorkResult, dispatchErr error) string {
 	if workResult.Error != "" {
 		return workResult.Error
 	}
-	return safeDetail(dispatchErr)
+	return rawDetail(dispatchErr)
 }
 
-func safeDetail(err error) string {
+func rawDetail(err error) string {
 	if err == nil {
 		return ""
 	}

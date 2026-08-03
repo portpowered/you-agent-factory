@@ -65,9 +65,14 @@ func (k FailureCauseKind) Valid() bool {
 }
 
 // FailureCause is the non-nil typed reason attached to every FAILED terminal
-// result. Detail is safe diagnostic text sourced only from Workers-owned
-// WorkResult/error text; it never carries payloads, credentials, environment
-// values, prompts, or raw provider commands.
+// result. Kind always reflects the true classification, including
+// EXECUTOR_PANIC. Detail is best-effort diagnostic text derived from
+// Workers/adapter error text and passed through a bounded redaction policy
+// before it is ever attached here: text matching a known secret, token,
+// credential, path, URL, or KEY=VALUE shape is replaced wholesale with a
+// fixed safe placeholder, and any remaining text is length-bounded. Detail is
+// not guaranteed to reproduce the original Workers/adapter text verbatim, and
+// callers must not treat it as a verbatim error message.
 type FailureCause struct {
 	Kind   FailureCauseKind
 	Detail string

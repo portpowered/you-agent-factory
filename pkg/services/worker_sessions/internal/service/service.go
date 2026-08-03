@@ -111,12 +111,14 @@ func matchesFilter(session workersessions.Session, filter workersessions.Filter)
 }
 
 // Start validates req, then establishes or reuses one stable Worker Session
-// identity in StateReserved, transitions StateStarting before handoff, and
-// hands req.Execution unchanged to the one injected
-// workers.WorkstationExecutionService. Start is synchronous: it blocks until
-// the attempt commits its exactly-once absorbing terminal outcome,
-// classified from the Workers WorkResult first and the adapter error
-// second, and returns the committed detached snapshot.
+// identity, observably persisted in StateReserved before any Workers call,
+// transitions StateStarting before handoff, and hands a detached clone of
+// req.Execution to the one injected workers.WorkstationExecutionService so
+// the caller retains exclusive ownership of req.Execution's reference-backed
+// fields. Start is synchronous: it blocks until the attempt commits its
+// exactly-once absorbing terminal outcome, classified from the Workers
+// WorkResult first and the adapter error second, and returns the committed
+// detached snapshot.
 func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
 
@@ -125,13 +127,18 @@ func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (
 		return workersessions.StartResult{}, err
 	}
 
-	if _, err := r.beginStart(req); err != nil {
+	r.reserveIfAbsent(req.ID)
+	if _, err := r.transitionToStarting(req.ID); err != nil {
 		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "not_startable")
 		return workersessions.StartResult{}, err
 	}
 	r.logger.Info("worker session start", "sessionID", req.ID, "attemptID", attemptID, "outcome", "handoff", "state", string(workersessions.StateStarting))
 
-	dispatchResult, dispatchErr := r.execution.DispatchWorkstation(ctx, req.Execution)
+	handoff := workers.WorkstationDispatchRequest{
+		WorkstationName: req.Execution.WorkstationName,
+		Execution:       workers.CloneWorkstationExecutionRequest(req.Execution.Execution),
+	}
+	dispatchResult, dispatchErr := r.execution.DispatchWorkstation(ctx, handoff)
 	terminal := classifyTerminal(dispatchErr, dispatchResult)
 
 	finalState := workersessions.StateFailed
@@ -152,25 +159,40 @@ func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (
 	return workersessions.StartResult{Session: final}, nil
 }
 
-// beginStart establishes or reuses req.ID in StateReserved and atomically
-// transitions it to StateStarting, so a concurrent Start for the same
-// identity can never observe a partial or replaced session and can never
-// trigger a second Workers handoff. Any identity already registered outside
-// StateReserved is a conflicting start: ErrSessionNotStartable, no mutation.
-func (r *registry) beginStart(req workersessions.StartRequest) (workersessions.Session, error) {
+// reserveIfAbsent stores id as a new StateReserved session when it is not
+// already registered, in its own locked critical section distinct from
+// transitionToStarting. This makes a brand-new identity's RESERVED state a
+// genuine, observable map write (visible to a concurrent Get/List) before
+// Start ever transitions it to StateStarting or calls Workers. An identity
+// already registered, in any state, is left untouched here; conflicts are
+// reported by the following transitionToStarting call.
+func (r *registry) reserveIfAbsent(id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	session, exists := r.sessions[req.ID]
-	if !exists {
-		session = workersessions.Session{ID: req.ID, State: workersessions.StateReserved}
-	} else if session.State != workersessions.StateReserved {
+	if _, exists := r.sessions[id]; exists {
+		return
+	}
+	r.sessions[id] = workersessions.Session{ID: id, State: workersessions.StateReserved}
+}
+
+// transitionToStarting atomically moves id from StateReserved to
+// StateStarting. Only one caller can win this transition for a given id: a
+// concurrent Start racing to claim the same newly reserved or already
+// reserved identity, or an identity in any other state, sees
+// ErrSessionNotStartable and makes no mutation and no Workers call.
+func (r *registry) transitionToStarting(id string) (workersessions.Session, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	session, exists := r.sessions[id]
+	if !exists || session.State != workersessions.StateReserved {
 		return workersessions.Session{}, workersessions.ErrSessionNotStartable
 	}
 
 	session.State = workersessions.StateStarting
 	session.Result = nil
-	r.sessions[req.ID] = session
+	r.sessions[id] = session
 	return cloneSession(session), nil
 }
 
