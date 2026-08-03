@@ -54,6 +54,95 @@ func TestControlContract_Characterization_UnsupportedForEveryAction(t *testing.T
 	}
 }
 
+// controlPeerFake implements the published Providers Service control slice
+// with configurable per-attempt outcomes, proving that completed, unsupported,
+// and genuine operation failures are all distinguishable using only Providers
+// root contracts.
+type controlPeerFake struct {
+	catalogPeerFake
+	completedAttemptID string
+	failingAttemptID   string
+}
+
+func newControlPeerFake(completedAttemptID, failingAttemptID string, entries ...providers.Descriptor) *controlPeerFake {
+	return &controlPeerFake{
+		catalogPeerFake:    *newCatalogPeerFake(entries...),
+		completedAttemptID: completedAttemptID,
+		failingAttemptID:   failingAttemptID,
+	}
+}
+
+func (fake *controlPeerFake) ControlAttempt(
+	_ context.Context,
+	request providers.ControlAttemptRequest,
+) (providers.ControlAttemptResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ControlAttemptResult{}, err
+	}
+	if request.AttemptID == fake.failingAttemptID {
+		return providers.ControlAttemptResult{}, providers.ErrUnknownProvider
+	}
+	outcome := providers.ControlOutcomeUnsupported
+	if request.AttemptID == fake.completedAttemptID {
+		outcome = providers.ControlOutcomeCompleted
+	}
+	return providers.ControlAttemptResult{
+		Provider:  request.Provider,
+		AttemptID: request.AttemptID,
+		Action:    request.Action,
+		Outcome:   outcome,
+	}, nil
+}
+
+func TestControlContract_Characterization_CompletedVersusUnsupportedVersusError(t *testing.T) {
+	t.Parallel()
+
+	var root providers.Service = newControlPeerFake(
+		"completed-attempt",
+		"failing-attempt",
+		providers.Descriptor{ID: providers.IDCodex},
+	)
+
+	completed, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
+		Provider:  providers.IDCodex,
+		AttemptID: "completed-attempt",
+		Action:    providers.ControlActionCancel,
+	})
+	if err != nil {
+		t.Fatalf("ControlAttempt(completed) error = %v, want nil", err)
+	}
+	if completed.Outcome != providers.ControlOutcomeCompleted {
+		t.Fatalf("ControlAttempt(completed).Outcome = %q, want completed", completed.Outcome)
+	}
+
+	unsupported, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
+		Provider:  providers.IDCodex,
+		AttemptID: "unsupported-attempt",
+		Action:    providers.ControlActionCancel,
+	})
+	if err != nil {
+		t.Fatalf("ControlAttempt(unsupported) error = %v, want nil", err)
+	}
+	if unsupported.Outcome != providers.ControlOutcomeUnsupported {
+		t.Fatalf("ControlAttempt(unsupported).Outcome = %q, want unsupported", unsupported.Outcome)
+	}
+	if completed.Outcome == unsupported.Outcome {
+		t.Fatal("completed and unsupported outcomes must be distinguishable typed values")
+	}
+
+	failed, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
+		Provider:  providers.IDCodex,
+		AttemptID: "failing-attempt",
+		Action:    providers.ControlActionCancel,
+	})
+	if !errors.Is(err, providers.ErrUnknownProvider) {
+		t.Fatalf("ControlAttempt(failing) error = %v, want ErrUnknownProvider", err)
+	}
+	if (failed != providers.ControlAttemptResult{}) {
+		t.Fatalf("ControlAttempt(failing) result = %#v, want zero value when a genuine operation error is returned", failed)
+	}
+}
+
 func TestControlContract_Characterization_ValidationFailuresPrecedeOutcome(t *testing.T) {
 	t.Parallel()
 
