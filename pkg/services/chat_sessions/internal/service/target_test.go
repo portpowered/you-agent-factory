@@ -1,0 +1,349 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+	"testing"
+	"time"
+
+	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+)
+
+func otherTarget() chatsessions.ChatTargetRef {
+	return chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/other"}
+}
+
+func setTargetRequestID(id string) chatsessions.RequestIdentity {
+	return chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: id}
+}
+
+// newSetTargetTestSession constructs a Store and one created Session ready
+// for SetTarget calls.
+func newSetTargetTestSession(t *testing.T, now time.Time) (*Store, chatsessions.Session) {
+	t.Helper()
+	store := New(sequentialIDs("session"), fixedClock(now))
+	created, err := store.CreateSession(context.Background(), validCreateRequest())
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	return store, created.Session
+}
+
+// TestStore_SetTarget_RolloverClosesAndOpensEpisode proves a target change
+// with the current version atomically closes the prior episode, opens the
+// next consecutively numbered episode at the new target, updates session
+// selection/episode number, and returns a strictly newer version.
+func TestStore_SetTarget_RolloverClosesAndOpensEpisode(t *testing.T) {
+	ctx := context.Background()
+	created := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
+	rollover := created.Add(time.Minute)
+	store, session := newSetTargetTestSession(t, created)
+	store.now = fixedClock(rollover)
+
+	result, err := store.SetTarget(ctx, chatsessions.SetTargetRequest{
+		RequestID:       setTargetRequestID("req-target"),
+		SessionID:       session.ID,
+		ExpectedVersion: session.Version,
+		Target:          otherTarget(),
+	})
+	if err != nil {
+		t.Fatalf("SetTarget: %v", err)
+	}
+	if result.Session.SelectedTarget != otherTarget() {
+		t.Fatalf("SelectedTarget = %+v, want %+v", result.Session.SelectedTarget, otherTarget())
+	}
+	if result.Session.TargetEpisode != 2 {
+		t.Fatalf("TargetEpisode = %d, want 2", result.Session.TargetEpisode)
+	}
+	if result.Session.Version <= session.Version {
+		t.Fatalf("Version = %d, want strictly greater than %d", result.Session.Version, session.Version)
+	}
+
+	store.mu.RLock()
+	record := store.sessions[session.ID]
+	store.mu.RUnlock()
+	if len(record.episodes) != 2 {
+		t.Fatalf("got %d episodes, want 2", len(record.episodes))
+	}
+	prior := record.episodes[0]
+	if prior.Number != 1 || prior.State != chatsessions.TargetEpisodeStateClosed {
+		t.Fatalf("prior episode = %+v, want Number=1 State=CLOSED", prior)
+	}
+	if prior.Target.Ref != "factory:@you/review" {
+		t.Fatalf("prior episode Target = %+v, want original initial target", prior.Target)
+	}
+	if prior.ClosedAt == nil || !prior.ClosedAt.Equal(rollover) {
+		t.Fatalf("prior episode ClosedAt = %v, want %v", prior.ClosedAt, rollover)
+	}
+	next := record.episodes[1]
+	if next.Number != 2 || next.State != chatsessions.TargetEpisodeStateOpen {
+		t.Fatalf("next episode = %+v, want Number=2 State=OPEN", next)
+	}
+	if next.Target != otherTarget() {
+		t.Fatalf("next episode Target = %+v, want %+v", next.Target, otherTarget())
+	}
+	if next.ClosedAt != nil {
+		t.Fatalf("next episode ClosedAt = %v, want nil", next.ClosedAt)
+	}
+}
+
+// TestStore_SetTarget_PreviouslyReturnedValuesUnaffected proves a Session
+// value read before a rollover is not mutated by the rollover, and a
+// previously observed closed episode's fields are never rewritten by a
+// subsequent rollover.
+func TestStore_SetTarget_PreviouslyReturnedValuesUnaffected(t *testing.T) {
+	ctx := context.Background()
+	store, session := newSetTargetTestSession(t, time.Now())
+	before := session
+
+	if _, err := store.SetTarget(ctx, chatsessions.SetTargetRequest{
+		RequestID:       setTargetRequestID("req-1"),
+		SessionID:       session.ID,
+		ExpectedVersion: session.Version,
+		Target:          otherTarget(),
+	}); err != nil {
+		t.Fatalf("SetTarget first: %v", err)
+	}
+	if before.TargetEpisode != 1 || before.SelectedTarget.Ref != "factory:@you/review" {
+		t.Fatalf("previously returned Session was mutated: %+v", before)
+	}
+
+	store.mu.RLock()
+	firstClosed := store.sessions[session.ID].episodes[0]
+	store.mu.RUnlock()
+
+	second, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if _, err := store.SetTarget(ctx, chatsessions.SetTargetRequest{
+		RequestID:       setTargetRequestID("req-2"),
+		SessionID:       session.ID,
+		ExpectedVersion: second.Session.Version,
+		Target:          chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/third"},
+	}); err != nil {
+		t.Fatalf("SetTarget second: %v", err)
+	}
+
+	store.mu.RLock()
+	firstClosedAfter := store.sessions[session.ID].episodes[0]
+	store.mu.RUnlock()
+	if firstClosedAfter != firstClosed {
+		t.Fatalf("historical episode 1 was rewritten: got %+v, want %+v", firstClosedAfter, firstClosed)
+	}
+}
+
+// TestStore_SetTarget_StaleVersionConflictLeavesStateUnchanged proves a
+// stale ExpectedVersion reports *ConflictError with the expected/actual
+// facts and leaves selection, episode history, and version unchanged.
+func TestStore_SetTarget_StaleVersionConflictLeavesStateUnchanged(t *testing.T) {
+	ctx := context.Background()
+	store, session := newSetTargetTestSession(t, time.Now())
+
+	_, err := store.SetTarget(ctx, chatsessions.SetTargetRequest{
+		RequestID:       setTargetRequestID("req-1"),
+		SessionID:       session.ID,
+		ExpectedVersion: session.Version + 1,
+		Target:          otherTarget(),
+	})
+	var conflict *chatsessions.ConflictError
+	if !errors.As(err, &conflict) {
+		t.Fatalf("SetTarget stale version: got %v, want *ConflictError", err)
+	}
+	if conflict.Expected != session.Version+1 || conflict.Actual != session.Version {
+		t.Fatalf("ConflictError = %+v, want Expected=%d Actual=%d", conflict, session.Version+1, session.Version)
+	}
+
+	store.mu.RLock()
+	record := store.sessions[session.ID]
+	store.mu.RUnlock()
+	if record.session != session {
+		t.Fatalf("stale SetTarget mutated Session: got %+v, want %+v", record.session, session)
+	}
+	if len(record.episodes) != 1 {
+		t.Fatalf("stale SetTarget created %d episodes, want 1", len(record.episodes))
+	}
+}
+
+// TestStore_SetTarget_BusyWhileTurnActive proves a target change while a
+// turn is non-terminal reports *BusyError, creates no episode, and leaves
+// the session unchanged.
+func TestStore_SetTarget_BusyWhileTurnActive(t *testing.T) {
+	ctx := context.Background()
+	store, session := newSetTargetTestSession(t, time.Now())
+
+	activeTurn := &chatsessions.Turn{
+		ID:        "turn-1",
+		Episode:   session.TargetEpisode,
+		State:     chatsessions.TurnStateRunning,
+		RequestID: setTargetRequestID("req-turn"),
+	}
+	store.mu.Lock()
+	record := store.sessions[session.ID]
+	record.activeTurn = activeTurn
+	store.sessions[session.ID] = record
+	store.mu.Unlock()
+
+	_, err := store.SetTarget(ctx, chatsessions.SetTargetRequest{
+		RequestID:       setTargetRequestID("req-1"),
+		SessionID:       session.ID,
+		ExpectedVersion: session.Version,
+		Target:          otherTarget(),
+	})
+	var busy *chatsessions.BusyError
+	if !errors.As(err, &busy) {
+		t.Fatalf("SetTarget while active turn: got %v, want *BusyError", err)
+	}
+	if busy.ActiveTurnID != "turn-1" || busy.ActiveTurnState != chatsessions.TurnStateRunning {
+		t.Fatalf("BusyError = %+v, want ActiveTurnID=turn-1 ActiveTurnState=RUNNING", busy)
+	}
+
+	store.mu.RLock()
+	after := store.sessions[session.ID]
+	store.mu.RUnlock()
+	if after.session != session {
+		t.Fatalf("busy SetTarget mutated Session: got %+v, want %+v", after.session, session)
+	}
+	if len(after.episodes) != 1 {
+		t.Fatalf("busy SetTarget created %d episodes, want 1", len(after.episodes))
+	}
+}
+
+// TestStore_SetTarget_UnknownSessionIsTypedNotFound proves SetTarget against
+// an unknown SessionID reports *NotFoundError and mutates nothing.
+func TestStore_SetTarget_UnknownSessionIsTypedNotFound(t *testing.T) {
+	ctx := context.Background()
+	store := New(sequentialIDs("session"), fixedClock(time.Now()))
+
+	_, err := store.SetTarget(ctx, chatsessions.SetTargetRequest{
+		RequestID:       setTargetRequestID("req-1"),
+		SessionID:       "does-not-exist",
+		ExpectedVersion: 1,
+		Target:          otherTarget(),
+	})
+	var notFound *chatsessions.NotFoundError
+	if !errors.As(err, &notFound) {
+		t.Fatalf("SetTarget unknown session: got %v, want *NotFoundError", err)
+	}
+	if notFound.Value != "Session" || notFound.ID != "does-not-exist" {
+		t.Fatalf("NotFoundError = %+v, want Value=Session ID=does-not-exist", notFound)
+	}
+}
+
+// TestStore_SetTarget_InvalidInputCreatesNoMutation proves an invalid
+// RequestID or Target reports the existing typed validation classification
+// and leaves the session and episode history untouched.
+func TestStore_SetTarget_InvalidInputCreatesNoMutation(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		mutate  func(chatsessions.SetTargetRequest) chatsessions.SetTargetRequest
+		wantErr error
+	}{
+		{"invalid request identity", func(r chatsessions.SetTargetRequest) chatsessions.SetTargetRequest {
+			r.RequestID = chatsessions.RequestIdentity{}
+			return r
+		}, chatsessions.ErrUnknownEnumValue},
+		{"invalid target", func(r chatsessions.SetTargetRequest) chatsessions.SetTargetRequest {
+			r.Target = chatsessions.ChatTargetRef{}
+			return r
+		}, chatsessions.ErrUnknownEnumValue},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			store, session := newSetTargetTestSession(t, time.Now())
+
+			req := chatsessions.SetTargetRequest{
+				RequestID:       setTargetRequestID("req-1"),
+				SessionID:       session.ID,
+				ExpectedVersion: session.Version,
+				Target:          otherTarget(),
+			}
+			_, err := store.SetTarget(ctx, tt.mutate(req))
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("SetTarget(%s): got %v, want %v", tt.name, err, tt.wantErr)
+			}
+
+			store.mu.RLock()
+			record := store.sessions[session.ID]
+			store.mu.RUnlock()
+			if record.session != session {
+				t.Fatalf("SetTarget(%s) mutated Session: got %+v, want %+v", tt.name, record.session, session)
+			}
+			if len(record.episodes) != 1 {
+				t.Fatalf("SetTarget(%s) created %d episodes, want 1", tt.name, len(record.episodes))
+			}
+		})
+	}
+}
+
+// TestStore_SetTarget_ConcurrentSameExpectedVersionSingleWinner proves
+// concurrent target changes issued with the same ExpectedVersion yield
+// exactly one successful commit; every other caller observes the committed
+// state as a typed conflict, and the final episode history has no skipped
+// or duplicate episode number.
+func TestStore_SetTarget_ConcurrentSameExpectedVersionSingleWinner(t *testing.T) {
+	ctx := context.Background()
+	store, session := newSetTargetTestSession(t, time.Now())
+
+	const n = 25
+	var wg sync.WaitGroup
+	errs := make([]error, n)
+	for i := range n {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, err := store.SetTarget(ctx, chatsessions.SetTargetRequest{
+				RequestID:       setTargetRequestID(fmt.Sprintf("req-%d", i)),
+				SessionID:       session.ID,
+				ExpectedVersion: session.Version,
+				Target:          otherTarget(),
+			})
+			errs[i] = err
+		}(i)
+	}
+	wg.Wait()
+
+	successes, conflicts := 0, 0
+	for _, err := range errs {
+		var conflict *chatsessions.ConflictError
+		switch {
+		case err == nil:
+			successes++
+		case errors.As(err, &conflict):
+			conflicts++
+		default:
+			t.Fatalf("unexpected SetTarget error: %v", err)
+		}
+	}
+	if successes != 1 {
+		t.Fatalf("successes = %d, want exactly 1", successes)
+	}
+	if conflicts != n-1 {
+		t.Fatalf("conflicts = %d, want %d", conflicts, n-1)
+	}
+
+	final, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if final.Session.Version != session.Version+1 {
+		t.Fatalf("final Version = %d, want %d", final.Session.Version, session.Version+1)
+	}
+	if final.Session.TargetEpisode != 2 {
+		t.Fatalf("final TargetEpisode = %d, want 2", final.Session.TargetEpisode)
+	}
+
+	store.mu.RLock()
+	record := store.sessions[session.ID]
+	store.mu.RUnlock()
+	if len(record.episodes) != 2 {
+		t.Fatalf("final episode count = %d, want 2", len(record.episodes))
+	}
+	for idx, ep := range record.episodes {
+		if ep.Number != uint64(idx+1) {
+			t.Fatalf("episodes[%d].Number = %d, want %d", idx, ep.Number, idx+1)
+		}
+	}
+}

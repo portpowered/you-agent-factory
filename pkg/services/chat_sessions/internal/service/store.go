@@ -27,10 +27,16 @@ type Store struct {
 }
 
 // sessionRecord is the Store-owned mutable aggregate for one Chat Session.
-// Story 001 tracks only the Session value itself; later stories add the
-// episode, turn, attachment, and control-intent state that hangs off it.
+// episodes is the session's full, consecutively numbered TargetEpisode
+// history ordered by Number, index 0 being Number 1; it is never rewritten
+// in place, only replaced with a new slice on rollover. activeTurn is the
+// session's current non-terminal Turn, or nil when no turn is active; later
+// stories (003+) populate it via StartTurn/AdvanceTurn. attachments and
+// control-intent state are added by later stories as needed.
 type sessionRecord struct {
-	session chatsessions.Session
+	session    chatsessions.Session
+	episodes   []chatsessions.TargetEpisode
+	activeTurn *chatsessions.Turn
 }
 
 // New constructs an empty Store from explicit dependencies. newID and now

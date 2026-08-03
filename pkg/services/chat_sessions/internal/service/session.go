@@ -44,10 +44,19 @@ func (s *Store) CreateSession(_ context.Context, req chatsessions.CreateSessionR
 	if err := session.Validate(); err != nil {
 		return chatsessions.CreateSessionResult{}, err
 	}
+	episode := chatsessions.TargetEpisode{
+		Number:    initialTargetEpisodeNumber,
+		State:     chatsessions.TargetEpisodeStateOpen,
+		Target:    req.InitialTarget,
+		StartedAt: now,
+	}
+	if err := episode.Validate(); err != nil {
+		return chatsessions.CreateSessionResult{}, err
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.sessions[session.ID] = sessionRecord{session: session}
+	s.sessions[session.ID] = sessionRecord{session: session, episodes: []chatsessions.TargetEpisode{episode}}
 	return chatsessions.CreateSessionResult{Session: session}, nil
 }
 
