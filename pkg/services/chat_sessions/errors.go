@@ -55,6 +55,12 @@ var (
 	// immutable-episode rule requires it to already be closed before the
 	// next episode can be opened.
 	ErrTargetEpisodeNotClosed = errors.New("chat sessions: prior target episode is not closed")
+	// ErrTargetEpisodeNumberExhausted reports that OpenNextTargetEpisode was
+	// invoked against a prior TargetEpisode already at the maximum
+	// representable episode Number (math.MaxUint64), so prior.Number+1 would
+	// silently wrap to 0 instead of producing the next monotonic episode
+	// identity.
+	ErrTargetEpisodeNumberExhausted = errors.New("chat sessions: target episode number is exhausted")
 )
 
 // ValidationError reports one Chat Sessions value-validation failure. Value

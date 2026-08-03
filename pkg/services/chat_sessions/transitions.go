@@ -1,6 +1,9 @@
 package chatsessions
 
-import "time"
+import (
+	"math"
+	"time"
+)
 
 // This file enforces the L1 V0 lifecycle transition tables from
 // docs/internal/projects/acp-client/final-proposal.md section 4.2. Every
@@ -150,10 +153,14 @@ func CloseTargetEpisode(prior TargetEpisode, closedAt time.Time) (TargetEpisode,
 // own typed error rather than being silently accepted or misreported as
 // merely "not closed". Only once prior is confirmed fully valid does a
 // still-OPEN prior report *TargetEpisodeNotClosedError, distinct from any
-// invalid-state or invalid-value outcome. startedAt that is zero, or that
-// precedes prior.ClosedAt, and any other invariant TargetEpisode.Validate()
-// enforces on the candidate next value (including an invalid target) are
-// rejected before the candidate value is ever returned.
+// invalid-state or invalid-value outcome. A prior.Number already at
+// math.MaxUint64 is rejected with a typed ErrTargetEpisodeNumberExhausted
+// validation error before prior.Number+1 is ever computed, so the next
+// episode number can never silently wrap to 0. startedAt that is zero, or
+// that precedes prior.ClosedAt, and any other invariant
+// TargetEpisode.Validate() enforces on the candidate next value (including
+// an invalid target) are rejected before the candidate value is ever
+// returned.
 func OpenNextTargetEpisode(prior TargetEpisode, target ChatTargetRef, factorySessionID string, startedAt time.Time) (TargetEpisode, error) {
 	if err := prior.State.Validate(); err != nil {
 		return TargetEpisode{}, err
@@ -163,6 +170,9 @@ func OpenNextTargetEpisode(prior TargetEpisode, target ChatTargetRef, factorySes
 	}
 	if !prior.State.IsTerminal() {
 		return TargetEpisode{}, &TargetEpisodeNotClosedError{Number: prior.Number, State: prior.State}
+	}
+	if prior.Number == math.MaxUint64 {
+		return TargetEpisode{}, newValidationError("TargetEpisode", "Number", ErrTargetEpisodeNumberExhausted)
 	}
 	next := TargetEpisode{
 		Number:           prior.Number + 1,

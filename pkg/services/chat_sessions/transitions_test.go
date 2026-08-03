@@ -2,6 +2,7 @@ package chatsessions
 
 import (
 	"errors"
+	"math"
 	"testing"
 	"time"
 )
@@ -360,6 +361,28 @@ func TestOpenNextTargetEpisode_InvalidCandidateValuesRejected(t *testing.T) {
 		t.Fatalf("OpenNextTargetEpisode(startedAt before prior.ClosedAt): got (%+v, %v), want ErrInconsistentValue", got, err)
 	} else if got != (TargetEpisode{}) {
 		t.Fatalf("OpenNextTargetEpisode(startedAt before prior.ClosedAt): must return a zero-value result on error, got %+v", got)
+	}
+}
+
+// A prior.Number already at the maximum representable uint64 must be
+// rejected before prior.Number+1 is ever computed, so the next episode
+// number can never silently wrap to 0 and collide with the very first
+// episode's identity.
+func TestOpenNextTargetEpisode_ExhaustedNumberRejected(t *testing.T) {
+	_, _, nextStarted, _, nextTarget, _, nextFactorySessionID, closedPrior := openNextTargetEpisodeFixture()
+
+	exhaustedPrior := closedPrior
+	exhaustedPrior.Number = math.MaxUint64
+
+	got, err := OpenNextTargetEpisode(exhaustedPrior, nextTarget, nextFactorySessionID, nextStarted)
+	if !errors.Is(err, ErrTargetEpisodeNumberExhausted) {
+		t.Fatalf("OpenNextTargetEpisode(prior.Number == MaxUint64): got (%+v, %v), want ErrTargetEpisodeNumberExhausted", got, err)
+	}
+	if got != (TargetEpisode{}) {
+		t.Fatalf("OpenNextTargetEpisode(prior.Number == MaxUint64): must return a zero-value result on error, got %+v", got)
+	}
+	if exhaustedPrior.Number != math.MaxUint64 {
+		t.Fatalf("OpenNextTargetEpisode(prior.Number == MaxUint64): prior must not be mutated, got Number %d", exhaustedPrior.Number)
 	}
 }
 
