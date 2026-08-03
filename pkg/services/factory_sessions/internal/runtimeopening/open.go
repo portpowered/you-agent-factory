@@ -15,6 +15,7 @@ import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -229,6 +230,10 @@ func openRuntime(
 	}
 	providerCommandRunner := adaptWorkerCommandRunner(edges.ProviderCommandRunner)
 	scriptCommandRunner := adaptWorkerCommandRunner(edges.ScriptCommandRunner)
+	var initialProgressPublisher workers.ProgressPublisher
+	if inferenceProgressPublisherFactory := runtimeService.InferenceProgressPublisherFactory(logger); inferenceProgressPublisherFactory != nil {
+		initialProgressPublisher = inferenceProgressPublisherFactory(factorysessions.DefaultSessionID)
+	}
 	serviceService, err := workerExecutionFactory(
 		configured.Runtime,
 		configured.Workers,
@@ -236,6 +241,7 @@ func openRuntime(
 		logger,
 		providerCommandRunner,
 		scriptCommandRunner,
+		initialProgressPublisher,
 		nil,
 		edges.ProviderOverride,
 		runtimeService,

@@ -382,6 +382,7 @@ func (failure *openingCoordinatorFailure) openWorkerExecution(
 	*zap.Logger,
 	workers.CommandRunner,
 	workers.CommandRunner,
+	workers.ProgressPublisher,
 	workers.PTYAllocator,
 	workers.Provider,
 	roles.CurrentRuntimeResolver,
@@ -492,6 +493,10 @@ type openingCoordinatorBoundSessions struct {
 }
 
 func (openingCoordinatorBoundSessions) CurrentRuntime() *factorysessions.LiveRuntime {
+	return nil
+}
+
+func (openingCoordinatorBoundSessions) InferenceProgressPublisherFactory(*zap.Logger) func(string) factorysessions.ProgressPublisher {
 	return nil
 }
 
