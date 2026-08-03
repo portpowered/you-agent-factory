@@ -10,6 +10,8 @@ import (
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	events "github.com/portpowered/infinite-you/pkg/services/events"
+	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 )
@@ -97,6 +99,42 @@ func TestSessionResponseEventStore_RequiresExplicitClock(t *testing.T) {
 	)
 	if err == nil || store != nil {
 		t.Fatalf("NewSessionResponseEventStoreWithLimits without clock = %#v, %v; want validation error", store, err)
+	}
+}
+
+func TestSessionResponseEventStoreWithEventsAuthority_RequiresEventsService(t *testing.T) {
+	t.Parallel()
+
+	store, err := responseeventstore.NewSessionResponseEventStoreWithEventsAuthority(
+		"session-abc",
+		platformclock.Real{},
+		responseeventstore.DefaultRetentionLimits(),
+		testResponseEventID,
+		nil,
+		events.Topic("factory-session/session-abc/response-events"),
+	)
+	if err == nil || store != nil {
+		t.Fatalf("store, err = %#v, %v; want nil store and Events-service validation error", store, err)
+	}
+}
+
+func TestSessionResponseEventStoreWithEventsAuthority_RequiresWellFormedTopic(t *testing.T) {
+	t.Parallel()
+
+	eventsService, err := eventswire.NewService()
+	if err != nil {
+		t.Fatalf("eventswire.NewService: %v", err)
+	}
+	store, err := responseeventstore.NewSessionResponseEventStoreWithEventsAuthority(
+		"session-abc",
+		platformclock.Real{},
+		responseeventstore.DefaultRetentionLimits(),
+		testResponseEventID,
+		eventsService,
+		events.Topic(""),
+	)
+	if err == nil || store != nil {
+		t.Fatalf("store, err = %#v, %v; want nil store and topic validation error", store, err)
 	}
 }
 

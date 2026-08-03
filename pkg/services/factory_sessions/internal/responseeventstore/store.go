@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
@@ -31,6 +32,19 @@ type SessionResponseEventStore struct {
 	completedAt      time.Time
 	nextSubID        int64
 	subscribers      map[int64]*storeSubscriber
+
+	// eventsService and eventsTopic are optional: when set (via
+	// NewSessionResponseEventStoreWithEventsAuthority), Subscribe/Next/Drain
+	// source each delivered record's content from this injected Events root
+	// instead of trusting the locally retained copy, so the compatibility
+	// surface's read path is genuinely backed by Events rather than merely
+	// sharing write-order identity with it. The local retained copy in
+	// events/eventSizes/droppedSequences is still authoritative for which
+	// sequences the tiered retention policy still considers live (Events has
+	// no equivalent importance-tiered eviction), and is used unchanged as a
+	// fallback if an Events read is ever unavailable.
+	eventsService events.Service
+	eventsTopic   events.Topic
 }
 
 // ResponseEventIDGenerator supplies opaque identities for canonical Factory
@@ -96,6 +110,36 @@ func NewSessionResponseEventStoreWithClockAndLimits(
 		limits:           limits,
 		subscribers:      make(map[int64]*storeSubscriber),
 	}, nil
+}
+
+// NewSessionResponseEventStoreWithEventsAuthority allocates an empty store
+// exactly like NewSessionResponseEventStoreWithClockAndLimits, additionally
+// binding the injected Events root and the topic this session's response
+// events are published to. Once bound, Subscribe/Next/Drain fetch each
+// delivered record's content from eventsService rather than only trusting
+// the store's own retained copy, so the compatibility surface's read path is
+// genuinely backed by the same Events root Publish writes through.
+func NewSessionResponseEventStoreWithEventsAuthority(
+	factorySessionID string,
+	clock factory.Clock,
+	limits RetentionLimits,
+	generateEventID ResponseEventIDGenerator,
+	eventsService events.Service,
+	eventsTopic events.Topic,
+) (*SessionResponseEventStore, error) {
+	if eventsService == nil {
+		return nil, errors.New("Events root is required")
+	}
+	if err := eventsTopic.Validate(); err != nil {
+		return nil, fmt.Errorf("Events topic: %w", err)
+	}
+	store, err := NewSessionResponseEventStoreWithClockAndLimits(factorySessionID, clock, limits, generateEventID)
+	if err != nil {
+		return nil, err
+	}
+	store.eventsService = eventsService
+	store.eventsTopic = eventsTopic
+	return store, nil
 }
 
 // RetentionLimits returns the active session-wide hard limits.

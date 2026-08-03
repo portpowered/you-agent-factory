@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	events "github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 )
 
@@ -240,6 +241,7 @@ func (s *Subscription) Next(ctx context.Context) ([]responseevents.FactoryRespon
 			return nil, ErrSubscriptionClosed
 		}
 		if len(result.events) > 0 {
+			result.events = s.store.substituteFromEvents(ctx, result.events)
 			s.advance(result.nextSequence)
 			return result.events, nil
 		}
@@ -254,6 +256,7 @@ func (s *Subscription) Next(ctx context.Context) ([]responseevents.FactoryRespon
 				return nil, ErrSubscriptionClosed
 			}
 			if len(result.events) > 0 {
+				result.events = s.store.substituteFromEvents(ctx, result.events)
 				s.advance(result.nextSequence)
 				return result.events, nil
 			}
@@ -294,6 +297,7 @@ func (s *Subscription) Drain() ([]responseevents.FactoryResponseEvent, error) {
 		return nil, ErrSubscriptionClosed
 	}
 	if len(result.events) > 0 {
+		result.events = s.store.substituteFromEvents(context.Background(), result.events)
 		s.advance(result.nextSequence)
 	}
 	return result.events, nil
@@ -345,6 +349,70 @@ func (s *SessionResponseEventStore) eventsAfterLocked(afterSequence int64, dispa
 		}
 	}
 	return result
+}
+
+// substituteFromEvents replaces each real (non-gap) delivered event's
+// content with the matching record read back from the injected Events root,
+// so a subscriber's delivered content is genuinely sourced from Events
+// rather than only from this store's own retained copy. It is a no-op when
+// no Events root is bound (see NewSessionResponseEventStoreWithEventsAuthority)
+// and falls back to the store's own retained content -- which PublishThroughAuthority
+// already guarantees is identical, since both are committed under the same
+// write lock as the originating Events.Append -- if the Events root cannot
+// serve the read (for example, mid-shutdown), so a transient Events read
+// failure never fails a subscriber's delivery.
+func (s *SessionResponseEventStore) substituteFromEvents(ctx context.Context, delivered []responseevents.FactoryResponseEvent) []responseevents.FactoryResponseEvent {
+	if s == nil || s.eventsService == nil || len(delivered) == 0 {
+		return delivered
+	}
+
+	var minSeq, maxSeq int64
+	realCount := 0
+	for _, event := range delivered {
+		if event.Sequence <= 0 {
+			continue
+		}
+		if realCount == 0 || event.Sequence < minSeq {
+			minSeq = event.Sequence
+		}
+		if event.Sequence > maxSeq {
+			maxSeq = event.Sequence
+		}
+		realCount++
+	}
+	if realCount == 0 {
+		return delivered
+	}
+
+	result, err := s.eventsService.Read(ctx, events.ReadRequest{
+		Topic: s.eventsTopic,
+		From:  events.Cursor{Topic: s.eventsTopic, Position: events.AggregateSequence(minSeq - 1)},
+		Limit: int(maxSeq-minSeq) + 1,
+	})
+	if err != nil || result.Outcome != events.ReadOutcomeProgress {
+		return delivered
+	}
+
+	bySequence := make(map[int64]json.RawMessage, len(result.Records))
+	for _, record := range result.Records {
+		bySequence[int64(record.ID.Position)] = record.Payload
+	}
+
+	substituted := make([]responseevents.FactoryResponseEvent, len(delivered))
+	for i, event := range delivered {
+		payload, ok := bySequence[event.Sequence]
+		if !ok {
+			substituted[i] = event
+			continue
+		}
+		var fromEvents responseevents.FactoryResponseEvent
+		if err := json.Unmarshal(payload, &fromEvents); err != nil {
+			substituted[i] = event
+			continue
+		}
+		substituted[i] = fromEvents
+	}
+	return substituted
 }
 
 func (s *SessionResponseEventStore) firstAvailableSequenceLocked(afterSequence int64, dispatchID string) int64 {

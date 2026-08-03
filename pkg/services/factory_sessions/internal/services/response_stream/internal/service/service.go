@@ -29,9 +29,16 @@ const responseEventSourceType = events.SourceType("factory-session-response-even
 // ResponseStream owns process-scoped response-event identity generation and
 // publishes every Factory Session response event through the injected
 // Events root before its session-owned store ever retains it, so the two
-// surfaces can never observe different records or aggregate ordering. All
-// runtime state is allocated only when the outer service binds an explicit
-// runtime clock.
+// surfaces can never observe different records or aggregate ordering.
+// NewEventStore additionally binds the store to that same injected Events
+// root (responseeventstore.NewSessionResponseEventStoreWithEventsAuthority),
+// so Subscribe's delivered content is read back from Events rather than
+// trusted solely from the store's own retained copy: the store's tiered
+// retention/gap bookkeeping (which Events has no equivalent for) still
+// decides which sequences remain deliverable, but the bytes returned for a
+// still-deliverable sequence come from the injected Events root. All runtime
+// state is allocated only when the outer service binds an explicit runtime
+// clock.
 type ResponseStream struct {
 	eventIDs        responseeventstore.ResponseEventIDGenerator
 	retentionLimits *responseeventstore.RetentionLimits
@@ -86,8 +93,9 @@ func (s *ResponseStream) NewEventStore(sessionID string, clock factoryruntime.Cl
 	if s.retentionLimits != nil {
 		limits = *s.retentionLimits
 	}
-	store, err := responseeventstore.NewSessionResponseEventStoreWithClockAndLimits(
-		strings.TrimSpace(sessionID), clock, limits, s.eventIDs,
+	trimmedSessionID := strings.TrimSpace(sessionID)
+	store, err := responseeventstore.NewSessionResponseEventStoreWithEventsAuthority(
+		trimmedSessionID, clock, limits, s.eventIDs, s.events, responseEventTopic(trimmedSessionID),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create Factory Session response-event store: %w", err)
