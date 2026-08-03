@@ -588,6 +588,8 @@ var servicesSet = wire3.NewSet(
 	provideOperatorSettingsService,
 	provideOperatorSettingsIDGenerator,
 	provideChatSessionsFactoryTargetCatalogService,
+	provideACPServerResolveHomeDir,
+	provideACPServer,
 	provideOperatorConfigDecoder,
 	provideOperatorConfigEncoder,
 	provideSystemInitializationInspectPath,
