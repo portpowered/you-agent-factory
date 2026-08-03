@@ -61,3 +61,27 @@ func (st *Store) logAppendOutcome(req events.AppendRequest, result events.Append
 	fields = append(fields, "outcome", outcome, "position", uint64(result.Record.ID.Position))
 	st.logger.Info("events append outcome", fields...)
 }
+
+// logReadOutcome records the terminal outcome of one Read call: safe,
+// stable topic/cursor context plus the explicit outcome Read observed. It
+// fires only once a well-formed request has been evaluated (Read rejects a
+// malformed request or canceled context before this call), and it never
+// logs a Record's payload or other source content.
+func (st *Store) logReadOutcome(req events.ReadRequest, result events.ReadResult) {
+	fields := []any{
+		"topic", string(req.Topic),
+		"from", uint64(req.From.Position),
+		"limit", req.Limit,
+	}
+	switch result.Outcome {
+	case events.ReadOutcomeProgress:
+		fields = append(fields, "outcome", "progress", "count", len(result.Records), "next", uint64(result.Next.Position))
+	case events.ReadOutcomeAtHead:
+		fields = append(fields, "outcome", "at_head", "head", uint64(result.Retained.Head))
+	case events.ReadOutcomeInvalidCursor:
+		fields = append(fields, "outcome", "invalid_cursor")
+	case events.ReadOutcomeGap:
+		fields = append(fields, "outcome", "gap", "earliest_retained", uint64(result.Gap.EarliestRetained), "head", uint64(result.Gap.Head))
+	}
+	st.logger.Info("events read outcome", fields...)
+}

@@ -54,6 +54,9 @@ func (st *Store) Append(ctx context.Context, req events.AppendRequest) (result e
 	}.Detached()
 	ts.records = append(ts.records, stored)
 	ts.identity[identity] = stored
+	if len(ts.records) > st.maxRetainedPerTopic {
+		ts.records = ts.records[1:]
+	}
 
 	result = events.AppendResult{Record: stored.Detached(), Outcome: events.AppendOutcomeAccepted}
 	return result, nil

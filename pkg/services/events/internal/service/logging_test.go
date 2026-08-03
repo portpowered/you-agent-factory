@@ -182,6 +182,57 @@ func TestNew_DefaultsToNoopLoggerWhenOmitted(t *testing.T) {
 	}
 }
 
+func TestRead_LogsProgressOutcomeWithoutPayload(t *testing.T) {
+	logger, calls := newCaptureLogger()
+	st := New(logger)
+	ctx := context.Background()
+	req := validAppendRequest()
+	req.Topic = readTestTopic
+	if _, err := st.Append(ctx, req); err != nil {
+		t.Fatalf("Append() error = %v", err)
+	}
+	*calls = nil
+
+	result, err := st.Read(ctx, events.ReadRequest{Topic: readTestTopic, From: events.Cursor{Topic: readTestTopic}, Limit: 10})
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+
+	if len(*calls) != 1 {
+		t.Fatalf("Read() logged %d calls, want 1 (outcome only): %+v", len(*calls), *calls)
+	}
+	outcome := (*calls)[0]
+	if outcome.level != "info" {
+		t.Fatalf("Read() outcome log level = %q, want info", outcome.level)
+	}
+	if !hasKV(outcome.kv, "outcome", "progress") {
+		t.Fatalf("outcome log missing outcome=progress: %+v", outcome.kv)
+	}
+	if !hasKV(outcome.kv, "next", uint64(result.Next.Position)) {
+		t.Fatalf("outcome log missing next=%d: %+v", result.Next.Position, outcome.kv)
+	}
+	for _, call := range *calls {
+		for i := 0; i+1 < len(call.kv); i += 2 {
+			if fmt.Sprintf("%v", call.kv[i+1]) == string(req.Payload) {
+				t.Fatalf("Read() log call %+v carries raw payload content", call)
+			}
+		}
+	}
+}
+
+func TestRead_RejectedRequestLogsNothing(t *testing.T) {
+	logger, calls := newCaptureLogger()
+	st := New(logger)
+
+	_, err := st.Read(context.Background(), events.ReadRequest{Topic: readTestTopic, From: events.Cursor{Topic: readTestTopic}, Limit: 0})
+	if !errors.Is(err, events.ErrInvalidReadLimit) {
+		t.Fatalf("Read() error = %v, want ErrInvalidReadLimit", err)
+	}
+	if len(*calls) != 0 {
+		t.Fatalf("rejected Read() logged %d calls, want 0 (no log side effect before validation succeeds): %+v", len(*calls), *calls)
+	}
+}
+
 func TestValidAppendRequestPayloadNotJSONEncodedAsAnyOtherField(t *testing.T) {
 	// Guards the payload-leak assertion above: proves the fixture payload is
 	// distinct from every other fixture field so a false negative can't hide
