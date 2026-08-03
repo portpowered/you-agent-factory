@@ -150,10 +150,11 @@ func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *t
 // fails the identical safe way, proving the first failure released the
 // session's busy state.
 func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(t *testing.T) {
-	if testing.Short() {
-		t.Skip("integration test driving root.BuildProcess Factory Session dispatch")
-	}
-
+	// Unlike this file's other integration tests, this one never reaches
+	// real Factory execution -- both prompts fail during runtime-target
+	// resolution, before any provider or workflow runs -- so it stays fast
+	// and runs even under -short, which is exactly the lane
+	// `make test-functional-coverage` uses.
 	home, err := os.MkdirTemp("", "acp-prompt-delegation-unresolvable-home-*")
 	if err != nil {
 		t.Fatalf("MkdirTemp(home) error = %v", err)
