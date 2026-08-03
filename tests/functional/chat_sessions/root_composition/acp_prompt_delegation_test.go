@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 )
@@ -180,13 +181,18 @@ func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(
 	if sessionID == "" {
 		t.Fatal("session/new returned a blank sessionId")
 	}
-	// A second session/new call, while the installed Factory and home
-	// directory are both still intact, admits a third episode this test
-	// reuses below only after breaking home-directory resolution -- session
-	// admission itself must not depend on a resolvable home directory.
+	// Two more session/new calls, while the installed Factory, home
+	// directory, and Operator Settings document are all still intact, admit
+	// a third and fourth episode this test reuses below only after breaking
+	// home-directory resolution and Operator Settings resolution
+	// respectively -- session admission itself must not depend on either.
 	thirdSessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
 	if thirdSessionID == "" {
 		t.Fatal("session/new (third episode) returned a blank sessionId")
+	}
+	fourthSessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
+	if fourthSessionID == "" {
+		t.Fatal("session/new (fourth episode) returned a blank sessionId")
 	}
 
 	// Remove the installed Factory's own directory only after session/new
@@ -221,6 +227,22 @@ func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(
 	thirdResp := sendSessionPrompt(t, server, thirdSessionID, "a prompt with no resolvable home directory")
 	if thirdResp.Error == nil {
 		t.Fatal("third session/prompt response error = nil, want a bounded internal error when the home directory cannot be resolved")
+	}
+
+	// The fourth episode's prompt proves the resolver's Operator Defaults
+	// resolution failure classifies the same safe way: restore a resolvable
+	// home directory and the installed Factory this episode's own target
+	// still needs to resolve past the earlier catalog-lookup branch, then
+	// corrupt only the persisted Operator Settings document.
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	seedInstalledPackagedFactory(t, home, "@you/goal")
+	if err := os.WriteFile(operatorsettings.DefaultConfigPath(home), []byte("not valid json"), 0o644); err != nil {
+		t.Fatalf("WriteFile(corrupt Operator Settings document) error = %v", err)
+	}
+	fourthResp := sendSessionPrompt(t, server, fourthSessionID, "a prompt with no resolvable Operator Defaults")
+	if fourthResp.Error == nil {
+		t.Fatal("fourth session/prompt response error = nil, want a bounded internal error when Operator Defaults cannot be resolved")
 	}
 }
 
