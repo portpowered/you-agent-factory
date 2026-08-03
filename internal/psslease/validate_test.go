@@ -267,6 +267,77 @@ func TestValidateDispatchCandidateAllowsDisjointActivation(t *testing.T) {
 	}
 }
 
+// TestValidateLeaseHoldersAcceptsReconciledRuntimeDispatchSingleOwner proves
+// the docs/internal/projects/packaged-service-structure/README.md "Runtime
+// dispatch ownership reconciliation" record: PSS IMP-RUN-03 superseded (done,
+// lease released) and L2 IMP-RUN-DISPATCH as the single prospective owner
+// validate cleanly even though their exclusive paths would otherwise overlap.
+func TestValidateLeaseHoldersAcceptsReconciledRuntimeDispatchSingleOwner(t *testing.T) {
+	t.Parallel()
+
+	manifest := loadFixture(t, "valid-runtime-dispatch-single-owner.json")
+	if err := psslease.ValidateLeaseHolders(manifest); err != nil {
+		t.Fatalf("ValidateLeaseHolders() error = %v, want nil for reconciled single owner", err)
+	}
+
+	superseded := packetByID(t, manifest, "IMP-RUN-03")
+	if superseded.State != psslease.StateDone {
+		t.Fatalf("IMP-RUN-03 state = %q, want %q (superseded/lease-released)", superseded.State, psslease.StateDone)
+	}
+}
+
+// TestValidateLeaseHoldersRejectsAmbiguousRuntimeDispatchOwnership is the
+// ambiguity/overlap regression: if PSS IMP-RUN-03 were reactivated instead of
+// superseded while L2 IMP-RUN-DISPATCH also holds the overlapping Factory
+// Runtime path, validation must deterministically reject the ambiguous
+// dual-owner state.
+func TestValidateLeaseHoldersRejectsAmbiguousRuntimeDispatchOwnership(t *testing.T) {
+	t.Parallel()
+
+	manifest := loadFixture(t, "invalid-runtime-dispatch-ambiguous-owner.json")
+	err := psslease.ValidateLeaseHolders(manifest)
+	if err == nil {
+		t.Fatal("ValidateLeaseHolders() error = nil, want ambiguous Runtime dispatch owner rejection")
+	}
+	message := err.Error()
+	for _, want := range []string{"IMP-RUN-03", "IMP-RUN-DISPATCH", "pkg/services/factory_runtime/"} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("ValidateLeaseHolders() error = %v, want substring %q", err, want)
+		}
+	}
+}
+
+// TestSetPacketStateAdmitsRuntimeDispatchThenRejectsReintroducedAmbiguity
+// proves both PSS-002 requirements together: the reconciled ledger permits
+// L2 IMP-RUN-DISPATCH admission (blocked -> active) once no lease holder
+// overlaps it, and reintroducing PSS IMP-RUN-03 as a second active owner is
+// rejected before either competing packet is treated as lease-holding.
+func TestSetPacketStateAdmitsRuntimeDispatchThenRejectsReintroducedAmbiguity(t *testing.T) {
+	t.Parallel()
+
+	manifest := loadFixture(t, "valid-runtime-dispatch-single-owner.json")
+
+	if err := psslease.SetPacketState(manifest, "IMP-RUN-DISPATCH", psslease.StateActive); err != nil {
+		t.Fatalf("SetPacketState(IMP-RUN-DISPATCH, active) error = %v, want nil admission for the reconciled single owner", err)
+	}
+	if got := packetByID(t, manifest, "IMP-RUN-DISPATCH").State; got != psslease.StateActive {
+		t.Fatalf("IMP-RUN-DISPATCH state = %q, want %q after admission", got, psslease.StateActive)
+	}
+
+	err := psslease.SetPacketState(manifest, "IMP-RUN-03", psslease.StateActive)
+	if err == nil {
+		t.Fatal("SetPacketState(IMP-RUN-03, active) error = nil, want rejection of reintroduced ambiguous ownership")
+	}
+	for _, want := range []string{"IMP-RUN-03", "IMP-RUN-DISPATCH"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("SetPacketState() error = %v, want substring %q", err, want)
+		}
+	}
+	if got := packetByID(t, manifest, "IMP-RUN-03").State; got != psslease.StateDone {
+		t.Fatalf("IMP-RUN-03 state = %q after rejected promotion, want unchanged %q", got, psslease.StateDone)
+	}
+}
+
 func TestCommittedProgramMetadataManifestPassesLeaseHolderValidation(t *testing.T) {
 	t.Parallel()
 

@@ -84,6 +84,13 @@ const jsonrpcVersion = "2.0"
 // ACP spec: neither has a response payload. Every other method this
 // transport supports is a request that requires a response, and therefore
 // requires an id.
+//
+// NotificationMethods only governs the reverse violation: an id-bearing
+// message for one of these methods is rejected as a malformed envelope,
+// since a caller that attaches an id to a notification is expecting a
+// response that will never come. Decode treats absence of an id as
+// notification status for every method, known or not, per JSON-RPC 2.0 --
+// see Decode's doc comment.
 var NotificationMethods = map[string]bool{
 	"session/cancel": true,
 	"session/update": true,
@@ -123,28 +130,45 @@ type Envelope struct {
 }
 
 // Decode parses raw JSON-RPC 2.0 message bytes received on connectionID
-// into an Envelope. It rejects -- wrapping ErrMalformedEnvelope -- invalid
-// JSON, a wrong or missing "jsonrpc" version, a missing method, a blank
-// connection id, any id shape identity.NewJSONRPCID does not accept, an
-// id-bearing NotificationMethods message, and a non-notification method
-// with no id, before ever producing an Envelope value. Every rejection is
-// returned as a *DecodeError: unparseable JSON wraps ErrInvalidJSON and
-// never carries a recoverable id, while every other rejection wraps
-// ErrInvalidRequestShape and carries the message's id when that id token
-// was itself syntactically valid, even though some other part of the
-// message was rejected. A notification carries no JSON-RPC id to correlate
-// by, so its identity is instead minted from the connection, the method,
-// and notificationSeq -- a value the connection/framing layer must supply
-// as unique per notification received on this connection (for example a
-// connection-local monotonic counter), since Decode itself has no state
-// across calls and cannot otherwise tell two same-method notifications on
-// one connection apart. Decode performs no IO and invokes no downstream
-// validator or effect: a rejection here can never have a side effect to
-// undo.
+// into an Envelope. It rejects -- wrapping ErrMalformedEnvelope -- input
+// that never parses as JSON at all, valid JSON that is not a JSON-RPC
+// request object, a wrong or missing "jsonrpc" version, a missing method, a
+// blank connection id, any id shape identity.NewJSONRPCID does not accept,
+// and an id-bearing NotificationMethods message, before ever producing an
+// Envelope value. Every rejection is returned as a *DecodeError:
+// unparseable JSON wraps ErrInvalidJSON and never carries a recoverable id,
+// while every other rejection wraps ErrInvalidRequestShape and carries the
+// message's id when that id token was itself syntactically valid, even
+// though some other part of the message was rejected -- per JSON-RPC 2.0's
+// parse-error-vs-invalid-request distinction, only a message that never
+// parsed as JSON at all is ErrInvalidJSON; syntactically valid JSON that is
+// merely the wrong top-level shape (a scalar, an array, or an object with a
+// field of the wrong type) is ErrInvalidRequestShape instead.
+//
+// A message with no "id" member is a notification per JSON-RPC 2.0,
+// regardless of whether its method is one of NotificationMethods: Decode
+// never rejects an unrecognized or not-yet-implemented method for want of
+// an id, since JSON-RPC 2.0 defines notification status solely by id
+// absence and a server must never send any response for one.
+// NotificationMethods instead governs the one id-bearing case Decode does
+// reject: an id attached to a method this transport already knows is a
+// notification, which can never receive the response its id implies.
+// A notification carries no JSON-RPC id to correlate by, so its identity is
+// instead minted from the connection, the method, and notificationSeq -- a
+// value the connection/framing layer must supply as unique per
+// notification received on this connection (for example a connection-local
+// monotonic counter), since Decode itself has no state across calls and
+// cannot otherwise tell two same-method notifications on one connection
+// apart. Decode performs no IO and invokes no downstream validator or
+// effect: a rejection here can never have a side effect to undo.
 func Decode(connectionID identity.ConnectionID, notificationSeq uint64, raw json.RawMessage) (Envelope, error) {
 	var w wireRequest
 	if err := json.Unmarshal(raw, &w); err != nil {
-		return Envelope{}, newDecodeError(fmt.Errorf("%w: %v", ErrInvalidJSON, err), identity.JSONRPCID{}, false)
+		if !json.Valid(raw) {
+			return Envelope{}, newDecodeError(fmt.Errorf("%w: %v", ErrInvalidJSON, err), identity.JSONRPCID{}, false)
+		}
+		candidateID, candidateOK := recoverCandidateID(raw)
+		return Envelope{}, newDecodeError(fmt.Errorf("%w: %v", ErrInvalidRequestShape, err), candidateID, candidateOK)
 	}
 
 	// candidateID is a best-effort recovery of the message's id, used to
@@ -172,20 +196,21 @@ func Decode(connectionID identity.ConnectionID, notificationSeq uint64, raw json
 
 	idPresent := w.ID != nil
 
-	if NotificationMethods[w.Method] {
-		if idPresent {
-			return Envelope{}, newDecodeError(fmt.Errorf("%w: %s is a notification and must not carry an id", ErrInvalidRequestShape, w.Method), candidateID, candidateOK)
-		}
-		// connectionID and w.Method are already validated non-blank above,
-		// so this formatted string can never be empty and NewMinted can
-		// never fail here.
+	if !idPresent {
+		// JSON-RPC 2.0 defines notification status solely by the absence of
+		// an id: every method without one -- known, unrecognized, or not
+		// yet implemented -- is a notification that must never receive a
+		// response. connectionID and w.Method are already validated
+		// non-blank above, so this formatted string can never be empty and
+		// NewMinted can never fail here.
 		mintedIdentity, _ := identity.NewMinted(fmt.Sprintf("%s|%s|%d", connectionID, w.Method, notificationSeq))
 		return Envelope{Identity: mintedIdentity, Method: w.Method, Params: w.Params, IsNotification: true}, nil
 	}
 
-	if !idPresent {
-		return Envelope{}, newDecodeError(fmt.Errorf("%w: id is required for a request method", ErrInvalidRequestShape), identity.JSONRPCID{}, false)
+	if NotificationMethods[w.Method] {
+		return Envelope{}, newDecodeError(fmt.Errorf("%w: %s is a notification and must not carry an id", ErrInvalidRequestShape, w.Method), candidateID, candidateOK)
 	}
+
 	id, err := identity.NewJSONRPCID(w.ID)
 	if err != nil {
 		return Envelope{}, newDecodeError(fmt.Errorf("%w: %v", ErrInvalidRequestShape, err), identity.JSONRPCID{}, false)
@@ -195,4 +220,25 @@ func Decode(connectionID identity.ConnectionID, notificationSeq uint64, raw json
 	// here.
 	reqIdentity, _ := identity.NewCorrelated(connectionID, id)
 	return Envelope{Identity: reqIdentity, Method: w.Method, Params: w.Params}, nil
+}
+
+// recoverCandidateID best-effort-recovers a JSON-RPC id from raw bytes that
+// parsed as valid JSON but failed to unmarshal into wireRequest -- for
+// example a top-level scalar or array, which has no "id" field at all, or
+// an object whose "id" field is valid but some other field (such as
+// "method") has the wrong type. It reports false whenever raw is not a JSON
+// object, has no "id" member, or that member is not itself a syntactically
+// valid JSON-RPC id.
+func recoverCandidateID(raw json.RawMessage) (identity.JSONRPCID, bool) {
+	var partial struct {
+		ID json.RawMessage `json:"id"`
+	}
+	if err := json.Unmarshal(raw, &partial); err != nil || partial.ID == nil {
+		return identity.JSONRPCID{}, false
+	}
+	id, err := identity.NewJSONRPCID(partial.ID)
+	if err != nil {
+		return identity.JSONRPCID{}, false
+	}
+	return id, true
 }
