@@ -8,11 +8,12 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
-	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"go.uber.org/zap"
 )
 
@@ -99,23 +100,15 @@ func NewRuntimeBuild(
 		runtimeFactory.newID,
 		baseLogger,
 		func(ctx context.Context, spec runtimebuild.SessionBuildSpec) (*factoryhost.Bundle, error) {
-			providerCommandRunner := spec.ProviderCommandRunner
 			var progressPublisher workers.ProgressPublisher
-			progressPublisherSet := false
 			if progressFactory != nil {
 				progressPublisher = progressFactory(spec.SessionID)
-				progressPublisherSet = true
 			}
-			runtimeWorkers, err := workerServiceWithProgress(
+			runtimeWorkers, err := workerswire.NewSessionBuildRuntime(
 				workerExecution,
 				spec.ProviderCommandRunner,
 				spec.CommandRunnerOverride,
-				providerCommandRunner,
 				progressPublisher,
-				progressPublisherSet,
-				spec.BaseLogger,
-				verbose,
-				runtimeFactory.loggerFactory,
 			)
 			if err != nil {
 				return nil, fmt.Errorf("construct runtime Worker service: %w", err)
@@ -325,34 +318,4 @@ func loadWorkerOptions(
 		return nil, fmt.Errorf("load workers: %w", err)
 	}
 	return executors, nil
-}
-
-func workerServiceWithProgress(
-	workerExecution workers.RuntimeService,
-	providerRunner workers.CommandRunner,
-	scriptRunner workers.CommandRunner,
-	progressRunner workers.CommandRunner,
-	publisher workers.ProgressPublisher,
-	publisherSet bool,
-	baseLogger *zap.Logger,
-	verbose bool,
-	loggerFactory factory.RuntimeLoggerFactory,
-) (workers.RuntimeService, error) {
-	service, err := workerExecution.WithCommandRunners(
-		providerRunner,
-		scriptRunner,
-	)
-	if err != nil {
-		return nil, err
-	}
-	var logger factory.Logger = factory.NoopLogger{}
-	if baseLogger != nil {
-		logger = loggerFactory(baseLogger, verbose)
-	}
-	return service.WithProgressPublisher(
-		progressRunner,
-		publisher,
-		publisherSet,
-		logger,
-	)
 }

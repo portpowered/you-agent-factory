@@ -2,8 +2,6 @@ package workers
 
 import (
 	"context"
-
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
 
 // RuntimeOpeningRequest contains only Worker execution selection for one
@@ -30,17 +28,12 @@ type AgentRunEventRecorder func(AgentRunResponseEvent)
 
 // RuntimeService is the Worker service role used while constructing a Factory
 // Runtime. Provider factories, executor builders, and runner decorators remain
-// private to the Workers implementation.
+// private to the Workers implementation. The provider command runner, script
+// command runner, and progress publisher are explicit, immutable construction
+// dependencies for the runtime's lifetime; there is no supported operation
+// that replaces them after construction.
 type RuntimeService interface {
 	Service
 
 	Close(context.Context) error
-	WithCommandRunners(CommandRunner, CommandRunner) (RuntimeService, error)
-	WithProgressPublisher(
-		CommandRunner,
-		ProgressPublisher,
-		bool,
-		logging.Logger,
-	) (RuntimeService, error)
-	ProviderCommandInjected() bool
 }
