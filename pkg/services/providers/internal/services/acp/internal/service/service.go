@@ -54,8 +54,8 @@ func New(integrations []providers.ACPIntegration, newCommand platformprocess.Com
 // resolveDaemon resolves id (including an accepted alias) to its canonical
 // identity and owning daemon under a single read lock. ok mirrors
 // resolveLocked's own result; it does not additionally guarantee daemon is
-// non-nil, matching Execute's pre-existing behavior. Cancelable and
-// TryCancel additionally check for a nil daemon themselves.
+// non-nil, matching Execute's pre-existing behavior. Claim additionally
+// checks for a nil daemon itself.
 func (service *Service) resolveDaemon(id providers.ID) (target *daemon, canonical providers.ID, ok bool) {
 	service.mu.RLock()
 	canonical, ok = service.resolveLocked(id)
@@ -72,22 +72,28 @@ func (service *Service) Execute(ctx context.Context, id providers.ID, request pr
 	return daemon.execute(ctx, canonical, request)
 }
 
-// Cancelable reports whether attemptID names the exact attempt id's daemon
-// currently has an established session/prompt turn in flight for.
-func (service *Service) Cancelable(id providers.ID, attemptID string) bool {
-	target, _, ok := service.resolveDaemon(id)
-	return ok && target != nil && target.window.Live(attemptID)
-}
-
-// TryCancel atomically determines whether id/attemptID names the exact live
-// session/prompt turn and, only if so, delivers a session/cancel
-// notification and blocks (bounded by ctx) until that turn returns.
-func (service *Service) TryCancel(ctx context.Context, id providers.ID, attemptID string) (bool, error) {
+// Claim atomically captures the exact live cancel-window generation named by
+// id/attemptID, if id's daemon currently has an established session/prompt
+// turn in flight for it.
+func (service *Service) Claim(id providers.ID, attemptID string) (acp.Generation, bool) {
 	target, _, ok := service.resolveDaemon(id)
 	if !ok || target == nil {
+		return nil, false
+	}
+	return target.window.Claim(attemptID)
+}
+
+// TryCancel delivers a session/cancel notification to the exact generation
+// captured by a prior Claim call and blocks (bounded by ctx) until it
+// observes that generation's real recorded terminal outcome. It never
+// re-resolves generation by identity strings, so it cannot be redirected to
+// a different generation that later reuses the same provider/attemptID.
+func (service *Service) TryCancel(ctx context.Context, generation acp.Generation) (bool, error) {
+	session, ok := generation.(*cancelwindow.Session)
+	if !ok || session == nil {
 		return false, nil
 	}
-	return target.window.TryCancel(ctx, attemptID)
+	return session.TryCancel(ctx)
 }
 
 func (service *Service) Close(ctx context.Context) error {

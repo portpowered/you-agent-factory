@@ -10,18 +10,28 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
+	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 )
+
+// acpAwareGeneration is the opaque per-claim capability acpAwareAttempt hands
+// out from Claim, mirroring cancelwindow.Session's role for the real
+// implementation: TryCancel only acts when the generation it is handed is
+// still the one Claim captured (checked by identity via owner+attemptID),
+// never by re-deriving liveness from provider/attemptID strings alone.
+type acpAwareGeneration struct {
+	owner     *acpAwareAttempt
+	attemptID string
+}
 
 // acpAwareAttempt is a channel-gated fake acp.Service standing in for one
 // live ACP attempt. It reports when Execute started, only becomes
 // truthfully cancelable once the test signals openCancelWindow (modeling
 // the span between an attempt's session/new and session/prompt returning,
-// see acp.Service.Cancelable), and returns the same
-// ExecuteFailureKindCanceled outcome the real ACP session/cancel path
-// normalizes StopReasonCancelled to once Cancel names its exact attempt
-// while cancelable.
+// see acp.Service.Claim), and returns the same ExecuteFailureKindCanceled
+// outcome the real ACP session/cancel path normalizes StopReasonCancelled to
+// once Cancel names its exact attempt while cancelable.
 type acpAwareAttempt struct {
 	provider providers.ID
 
@@ -87,15 +97,19 @@ func (a *acpAwareAttempt) Execute(
 	}
 }
 
-func (a *acpAwareAttempt) Cancelable(_ providers.ID, attemptID string) bool {
+func (a *acpAwareAttempt) Claim(_ providers.ID, attemptID string) (acp.Generation, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.cancelable && a.attemptID == attemptID
+	if !a.cancelable || a.attemptID != attemptID {
+		return nil, false
+	}
+	return acpAwareGeneration{owner: a, attemptID: attemptID}, true
 }
 
-func (a *acpAwareAttempt) TryCancel(_ context.Context, _ providers.ID, attemptID string) (bool, error) {
+func (a *acpAwareAttempt) TryCancel(_ context.Context, generation acp.Generation) (bool, error) {
+	gen, generationOK := generation.(acpAwareGeneration)
 	a.mu.Lock()
-	matches := a.cancelable && a.attemptID == attemptID
+	matches := generationOK && gen.owner == a && a.cancelable && a.attemptID == gen.attemptID
 	if matches {
 		a.cancelCalls++
 	}
@@ -136,17 +150,20 @@ func (m *multiACPService) Execute(
 	return m.byProvider[id].Execute(ctx, id, request)
 }
 
-func (m *multiACPService) Cancelable(id providers.ID, attemptID string) bool {
-	target, ok := m.byProvider[id]
-	return ok && target.Cancelable(id, attemptID)
-}
-
-func (m *multiACPService) TryCancel(ctx context.Context, id providers.ID, attemptID string) (bool, error) {
+func (m *multiACPService) Claim(id providers.ID, attemptID string) (acp.Generation, bool) {
 	target, ok := m.byProvider[id]
 	if !ok {
+		return nil, false
+	}
+	return target.Claim(id, attemptID)
+}
+
+func (m *multiACPService) TryCancel(ctx context.Context, generation acp.Generation) (bool, error) {
+	gen, ok := generation.(acpAwareGeneration)
+	if !ok || gen.owner == nil {
 		return false, nil
 	}
-	return target.TryCancel(ctx, id, attemptID)
+	return gen.owner.TryCancel(ctx, generation)
 }
 
 func mustACPControlRootService(t *testing.T, acpService *acpAwareAttempt) providers.Service {
@@ -328,15 +345,19 @@ func (a *blockingACPAttempt) Execute(
 	return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindCanceled}
 }
 
-func (a *blockingACPAttempt) Cancelable(_ providers.ID, attemptID string) bool {
+func (a *blockingACPAttempt) Claim(_ providers.ID, attemptID string) (acp.Generation, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.cancelable && a.attemptID == attemptID
+	if !a.cancelable || a.attemptID != attemptID {
+		return nil, false
+	}
+	return acpAwareGeneration{owner: nil, attemptID: attemptID}, true
 }
 
-func (a *blockingACPAttempt) TryCancel(_ context.Context, _ providers.ID, attemptID string) (bool, error) {
+func (a *blockingACPAttempt) TryCancel(_ context.Context, generation acp.Generation) (bool, error) {
+	gen, generationOK := generation.(acpAwareGeneration)
 	a.mu.Lock()
-	matches := a.cancelable && a.attemptID == attemptID
+	matches := generationOK && a.cancelable && a.attemptID == gen.attemptID
 	a.mu.Unlock()
 	if !matches {
 		return false, nil
@@ -496,8 +517,8 @@ type failingCancelACPService struct {
 	cancelErr error
 }
 
-func (f *failingCancelACPService) TryCancel(ctx context.Context, id providers.ID, attemptID string) (bool, error) {
-	_, _ = f.acpAwareAttempt.TryCancel(ctx, id, attemptID)
+func (f *failingCancelACPService) TryCancel(ctx context.Context, generation acp.Generation) (bool, error) {
+	_, _ = f.acpAwareAttempt.TryCancel(ctx, generation)
 	return false, fmt.Errorf("%w: %v", providers.ErrControlSignalFailed, f.cancelErr)
 }
 
@@ -579,21 +600,23 @@ func TestControlAttempt_ACPSignalFailureIsDistinguishableFromUnsupportedAndClear
 	}
 }
 
-// raceLostACPService reports a stale Cancelable()=true pre-check (as a real
+// raceLostACPService reports a stale Claim()-succeeds pre-check (as a real
 // ACP session can look live a moment before it naturally finishes) while
 // TryCancel grounds its answer in the real recorded outcome and reports the
 // race was lost to natural completion. This is the root-level regression for
-// the ACP Cancelable/Cancel TOCTOU this story's review required: a claimed
-// control (registry.claim consulted the stale Cancelable pre-check) must
-// still report Unsupported, never a false Completed, when the underlying
+// the ACP Claim/TryCancel TOCTOU this story's review required: a claimed
+// control (registry.claim consulted the stale Claim pre-check) must still
+// report Unsupported, never a false Completed, when the underlying
 // acp.Service.TryCancel says the cancellation was not actually accepted.
 type raceLostACPService struct {
 	*acpAwareAttempt
 }
 
-func (r *raceLostACPService) Cancelable(providers.ID, string) bool { return true }
+func (r *raceLostACPService) Claim(providers.ID, string) (acp.Generation, bool) {
+	return acpAwareGeneration{owner: r.acpAwareAttempt}, true
+}
 
-func (r *raceLostACPService) TryCancel(context.Context, providers.ID, string) (bool, error) {
+func (r *raceLostACPService) TryCancel(context.Context, acp.Generation) (bool, error) {
 	return false, nil
 }
 
@@ -647,5 +670,288 @@ func TestControlAttempt_ACPClaimedControlLosingRaceToNaturalCompletionReturnsUns
 	close(fake.release)
 	if err := <-executeDone; err != nil {
 		t.Fatalf("Execute() error = %v, want nil (normal completion, not cancellation)", err)
+	}
+}
+
+// sequentialGeneration is one live execution generation for
+// sequentialACPService, mirroring cancelwindow.Session: cancelled is closed
+// by TryCancel to request cancellation, done is closed by Execute with the
+// real recorded outcome once this exact generation ends, and accepted holds
+// that real outcome. Because each Execute call allocates a fresh
+// *sequentialGeneration even when the caller reuses the same attemptID
+// string, a delayed TryCancel holding a stale generation pointer can never
+// be satisfied by a later, unrelated generation.
+type sequentialGeneration struct {
+	attemptID string
+	cancelled chan struct{}
+	done      chan struct{}
+	accepted  bool
+}
+
+// sequentialACPService is a fake acp.Service supporting multiple sequential
+// executions that reuse the same provider/attemptID identity, modeling the
+// real daemon's single-slot cancelwindow.Window across generations. Claim
+// captures whichever *sequentialGeneration is currently open; TryCancel's
+// delivery can be paused mid-flight via armTryCancelGate so a test can
+// deterministically interleave "claim generation A", "A completes and fully
+// releases", "generation B opens with the same identity", and "A's delayed
+// signal resumes" without any sleep-based timing.
+type sequentialACPService struct {
+	provider providers.ID
+
+	mu         sync.Mutex
+	attemptID  string
+	generation *sequentialGeneration
+	release    chan struct{}
+	ready      chan struct{}
+
+	tryCancelEntered chan struct{}
+	tryCancelGate    chan struct{}
+}
+
+func newSequentialACPService(provider providers.ID) *sequentialACPService {
+	return &sequentialACPService{provider: provider}
+}
+
+func (s *sequentialACPService) Close(context.Context) error { return nil }
+func (s *sequentialACPService) Configure(context.Context, []providers.ACPIntegration) error {
+	return nil
+}
+func (s *sequentialACPService) Integrations() []providers.ACPIntegration { return nil }
+func (s *sequentialACPService) Resolve(id providers.ID) (providers.ID, bool) {
+	return s.provider, id == s.provider
+}
+
+// beginExecute arms this service for the next Execute call: the caller must
+// call this before starting that Execute call (in a goroutine), then wait on
+// the returned ready channel before claiming a control against the
+// generation Execute opens.
+func (s *sequentialACPService) beginExecute() (release chan struct{}, ready <-chan struct{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	release = make(chan struct{})
+	readyCh := make(chan struct{})
+	s.release, s.ready = release, readyCh
+	return release, readyCh
+}
+
+func (s *sequentialACPService) Execute(
+	_ context.Context,
+	_ providers.ID,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	s.mu.Lock()
+	release, ready := s.release, s.ready
+	generation := &sequentialGeneration{attemptID: request.AttemptID, cancelled: make(chan struct{}), done: make(chan struct{})}
+	s.attemptID, s.generation = request.AttemptID, generation
+	s.mu.Unlock()
+	close(ready)
+
+	var cancelled bool
+	select {
+	case <-release:
+	case <-generation.cancelled:
+		cancelled = true
+	}
+
+	s.mu.Lock()
+	if s.generation == generation {
+		s.generation = nil
+	}
+	s.mu.Unlock()
+	generation.accepted = cancelled
+	close(generation.done)
+
+	if cancelled {
+		return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindCanceled}
+	}
+	return providers.ExecuteResult{Content: request.AttemptID}, nil
+}
+
+// Claim captures whichever generation is currently open for attemptID, if
+// any - the fake's analog of cancelwindow.Window.Claim.
+func (s *sequentialACPService) Claim(_ providers.ID, attemptID string) (acp.Generation, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.generation == nil || s.attemptID != attemptID {
+		return nil, false
+	}
+	return s.generation, true
+}
+
+// armTryCancelGate installs a one-shot gate: the next TryCancel call closes
+// the returned entered channel the moment it is invoked, then blocks until
+// releaseGate is called. Only the single next TryCancel call is gated; later
+// calls proceed immediately.
+func (s *sequentialACPService) armTryCancelGate() (entered <-chan struct{}, releaseGate func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	enteredCh := make(chan struct{})
+	gateCh := make(chan struct{})
+	s.tryCancelEntered, s.tryCancelGate = enteredCh, gateCh
+	var once sync.Once
+	return enteredCh, func() { once.Do(func() { close(gateCh) }) }
+}
+
+// TryCancel delivers only to the exact generation captured by a prior Claim
+// call, never re-deriving liveness from provider/attemptID strings - the
+// fake's analog of cancelwindow.Session.TryCancel.
+func (s *sequentialACPService) TryCancel(ctx context.Context, generationValue acp.Generation) (bool, error) {
+	s.mu.Lock()
+	entered, gate := s.tryCancelEntered, s.tryCancelGate
+	s.tryCancelEntered, s.tryCancelGate = nil, nil
+	s.mu.Unlock()
+	if entered != nil {
+		close(entered)
+	}
+	if gate != nil {
+		<-gate
+	}
+
+	generation, ok := generationValue.(*sequentialGeneration)
+	if !ok || generation == nil {
+		return false, nil
+	}
+	select {
+	case <-generation.done:
+		// Already terminal by the time this delivery ran: a stale claim,
+		// must not be reinterpreted against whatever is live now.
+		return false, nil
+	default:
+	}
+	close(generation.cancelled)
+	select {
+	case <-generation.done:
+		return generation.accepted, nil
+	case <-ctx.Done():
+		return false, ctx.Err()
+	}
+}
+
+// TestControlAttempt_ACPDelayedControlCannotRedirectToReplacementGenerationAfterIdentityReuse
+// is the root-level deterministic ABA regression required by
+// ACP-L2-FIX-PRV-CONTROL-GENERATION-002: claim a control for generation A,
+// let A complete and fully release (both the Providers live-attempt registry
+// entry and the ACP cancel-window ownership), bind and open generation B
+// with the identical canonical provider and attempt ID, then resume A's
+// already-claimed but delayed signal. Generation B must receive zero
+// notifications, complete normally on its own terms, and remain
+// independently controllable; A's delayed control must report Unsupported
+// and never derive a false Completed from B's terminal outcome. Every step
+// is gated by real channels (armTryCancelGate, beginExecute's ready channel,
+// Execute/ControlAttempt done channels) - no sleep-based timing is used.
+func TestControlAttempt_ACPDelayedControlCannotRedirectToReplacementGenerationAfterIdentityReuse(t *testing.T) {
+	t.Parallel()
+
+	const identity = "acp-identity-reused"
+	fake := newSequentialACPService("cursor-acp")
+
+	catalogService, err := catalogwire.NewService()
+	if err != nil {
+		t.Fatalf("catalogwire.NewService() = %v", err)
+	}
+	executionService, err := executionwire.NewService(catalogService)
+	if err != nil {
+		t.Fatalf("executionwire.NewService() = %v", err)
+	}
+	root, err := providerservice.NewWithACP(catalogService, executionService, fake, nil, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("NewWithACP() = %v", err)
+	}
+
+	// --- Generation A opens and its control is claimed.
+	releaseA, readyA := fake.beginExecute()
+	executeADone := make(chan error, 1)
+	go func() {
+		_, err := root.Execute(context.Background(), providers.ExecuteRequest{
+			Provider: "cursor-acp", AttemptID: identity, Model: "cursor-model",
+		})
+		executeADone <- err
+	}()
+	<-readyA
+
+	tryCancelEntered, releaseTryCancelGate := fake.armTryCancelGate()
+	controlAResult := make(chan providers.ControlAttemptResult, 1)
+	controlAErr := make(chan error, 1)
+	go func() {
+		result, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
+			Provider: "cursor-acp", AttemptID: identity, Action: providers.ControlActionCancel,
+		})
+		controlAErr <- err
+		controlAResult <- result
+	}()
+	// Once this fires, the Providers registry entry for `identity` is already
+	// gone (registry.claim removed it before ControlAttempt ever called
+	// signal), and this control's delivery is paused mid-flight.
+	<-tryCancelEntered
+
+	// --- A completes naturally (not via this control) and fully releases:
+	// its registry entry is already gone, and closing releaseA now also
+	// closes A's cancel-window generation (done).
+	close(releaseA)
+	if err := <-executeADone; err != nil {
+		t.Fatalf("Execute(A) error = %v, want nil (natural completion)", err)
+	}
+
+	// --- Generation B opens, reusing the identical canonical provider and
+	// attempt ID, now that A's registry and cancel-window ownership are both
+	// released.
+	releaseB, readyB := fake.beginExecute()
+	executeBDone := make(chan error, 1)
+	go func() {
+		_, err := root.Execute(context.Background(), providers.ExecuteRequest{
+			Provider: "cursor-acp", AttemptID: identity, Model: "cursor-model",
+		})
+		executeBDone <- err
+	}()
+	<-readyB
+
+	// --- Resume A's delayed signal.
+	releaseTryCancelGate()
+	if err := <-controlAErr; err != nil {
+		t.Fatalf("ControlAttempt(A, delayed) error = %v, want nil", err)
+	}
+	resultA := <-controlAResult
+	if resultA.Outcome != providers.ControlOutcomeUnsupported {
+		t.Fatalf("ControlAttempt(A, delayed) outcome = %q, want unsupported: must not reach or derive completed from generation B", resultA.Outcome)
+	}
+
+	// --- B must have received zero notifications: it completes on its own
+	// terms (not cancellation) once released, exactly as if A's delayed
+	// control never existed.
+	close(releaseB)
+	if err := <-executeBDone; err != nil {
+		t.Fatalf("Execute(B) error = %v, want nil: A's delayed control must not have reached B", err)
+	}
+
+	// --- B must remain independently, correctly claimable/cancelable: prove
+	// this with a fresh generation C using the same identity. C is expected
+	// to end via the cancellation below, not via release.
+	_, readyC := fake.beginExecute()
+	executeCDone := make(chan error, 1)
+	go func() {
+		_, err := root.Execute(context.Background(), providers.ExecuteRequest{
+			Provider: "cursor-acp", AttemptID: identity, Model: "cursor-model",
+		})
+		executeCDone <- err
+	}()
+	<-readyC
+
+	resultC, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
+		Provider: "cursor-acp", AttemptID: identity, Action: providers.ControlActionCancel,
+	})
+	if err != nil {
+		t.Fatalf("ControlAttempt(C) error = %v, want nil", err)
+	}
+	if resultC.Outcome != providers.ControlOutcomeCompleted {
+		t.Fatalf("ControlAttempt(C) outcome = %q, want completed: the identity must remain independently controllable after the stale A claim", resultC.Outcome)
+	}
+	if err := <-executeCDone; err != nil {
+		var failure providers.ExecuteFailure
+		if !errors.As(err, &failure) || failure.Kind != providers.ExecuteFailureKindCanceled {
+			t.Fatalf("Execute(C) error = %v, want ExecuteFailureKindCanceled", err)
+		}
+	} else {
+		t.Fatal("Execute(C) error = nil, want ExecuteFailureKindCanceled")
 	}
 }

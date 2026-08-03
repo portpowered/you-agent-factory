@@ -55,13 +55,13 @@ func newPipedConnection(t *testing.T, peer *fakeSessionPeer) *acpsdk.ClientSideC
 	return acpsdk.NewClientSideConnection(&client{}, outboundWriter, io.MultiReader())
 }
 
-// TestServiceCancelableAndTryCancelResolveAliasAndDelegateToDaemon proves the
-// Service-level Cancelable/TryCancel wrappers resolve aliases and unknown
+// TestServiceClaimAndTryCancelResolveAliasAndDelegateToDaemon proves the
+// Service-level Claim/TryCancel wrappers resolve aliases and unknown
 // providers correctly and delegate to the exact resolved daemon's
 // cancelwindow.Window. The window's own accept/reject/race semantics are
 // covered directly and exhaustively by the cancelwindow package tests; this
 // file only proves the resolution/delegation wiring on top of it.
-func TestServiceCancelableAndTryCancelResolveAliasAndDelegateToDaemon(t *testing.T) {
+func TestServiceClaimAndTryCancelResolveAliasAndDelegateToDaemon(t *testing.T) {
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "custom-acp", Aliases: []string{"custom"}, Transport: "stdio", Command: "agent acp",
 	}}, nil, nil)
@@ -75,14 +75,15 @@ func TestServiceCancelableAndTryCancelResolveAliasAndDelegateToDaemon(t *testing
 	connection := newPipedConnection(t, peer)
 	session := d.window.Begin("attempt-1", acpsdk.SessionId("session-1"), connection)
 
-	if !svc.Cancelable("custom", "attempt-1") {
-		t.Fatal("Cancelable(alias) = false, want true")
+	generation, ok := svc.Claim("custom", "attempt-1")
+	if !ok || generation == nil {
+		t.Fatalf("Claim(alias) = (%v, %v), want a non-nil generation and true", generation, ok)
 	}
-	if svc.Cancelable("custom", "attempt-other") {
-		t.Fatal("Cancelable(alias, wrong attempt) = true, want false")
+	if _, ok := svc.Claim("custom", "attempt-other"); ok {
+		t.Fatal("Claim(alias, wrong attempt) ok = true, want false")
 	}
-	if svc.Cancelable("unknown-provider", "attempt-1") {
-		t.Fatal("Cancelable(unknown provider) = true, want false")
+	if _, ok := svc.Claim("unknown-provider", "attempt-1"); ok {
+		t.Fatal("Claim(unknown provider) ok = true, want false")
 	}
 
 	type outcome struct {
@@ -91,7 +92,7 @@ func TestServiceCancelableAndTryCancelResolveAliasAndDelegateToDaemon(t *testing
 	}
 	tryCancelDone := make(chan outcome, 1)
 	go func() {
-		accepted, err := svc.TryCancel(context.Background(), "custom", "attempt-1")
+		accepted, err := svc.TryCancel(context.Background(), generation)
 		tryCancelDone <- outcome{accepted: accepted, err: err}
 	}()
 	<-peer.received
@@ -103,15 +104,15 @@ func TestServiceCancelableAndTryCancelResolveAliasAndDelegateToDaemon(t *testing
 	if !result.accepted {
 		t.Fatal("TryCancel() accepted = false, want true")
 	}
-	if svc.Cancelable("custom", "attempt-1") {
-		t.Fatal("Cancelable(alias) = true after the window closed, want false")
+	if _, ok := svc.Claim("custom", "attempt-1"); ok {
+		t.Fatal("Claim(alias) ok = true after the window closed, want false")
 	}
 
-	accepted, err := svc.TryCancel(context.Background(), "unknown-provider", "attempt-1")
+	accepted, err := svc.TryCancel(context.Background(), nil)
 	if err != nil {
-		t.Fatalf("TryCancel(unknown provider) error = %v, want nil", err)
+		t.Fatalf("TryCancel(nil generation) error = %v, want nil", err)
 	}
 	if accepted {
-		t.Fatal("TryCancel(unknown provider) accepted = true, want false")
+		t.Fatal("TryCancel(nil generation) accepted = true, want false")
 	}
 }
