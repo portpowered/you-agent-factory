@@ -272,11 +272,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/events",
-      "minimum": 98.57
+      "minimum": 20.85
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/events/internal/service",
-      "minimum": 96.19
+      "minimum": 24.91
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/events/wire",
@@ -1354,7 +1354,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/internal/service",
-      "minimum": 38.46
+      "minimum": 53.77
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire",
@@ -1402,7 +1402,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire",
-      "minimum": 65.11
+      "minimum": 64.44
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts",

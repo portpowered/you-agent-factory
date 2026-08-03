@@ -401,10 +401,11 @@ func NewStreamManager(state *sessionruntime.Service) *sessionstream.Manager {
 	if state == nil {
 		return nil
 	}
-	return sessionstream.NewManagerWithDependencies(
+	return sessionstream.NewManagerWithResponseService(
 		state,
 		sessionruntime.NewResponseStreamObserver(ResponseStreamRuntimeFromSessionHandle),
 		state.ResponseStreams(),
+		state.ResponseEventService(),
 	)
 }
 
