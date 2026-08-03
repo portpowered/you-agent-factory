@@ -488,10 +488,11 @@ func provideFactorySessionsService(
 	invocationInputFiles factorysessionwire.InvocationInputReader,
 	initialWorkFiles factorysessionwire.InitialWorkReader,
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
+	eventsService events.Service,
 ) (factorysessions.Service, error) {
 	return factorysessionwire.NewService(func() factoryruntime.JavaScriptCheckpointStore {
 		return factoryruntimewire.NewJavaScriptCheckpointStore()
-	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, responseEventRetentionLimits, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks)
+	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, responseEventRetentionLimits, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks, eventsService)
 }
 
 func provideOrchestrationJavaScriptExecution(
@@ -525,6 +526,7 @@ func provideFactorySessionExecutionFactory(
 	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	conductorInvocationWithProgress factorysessionwire.ConductorInvocationWithProgressFactory,
 	edges serviceedges.Edges,
+	eventsService events.Service,
 ) factorysessionwire.FactorySessionExecutionFactory {
 	return func(
 		projectRoot string,
@@ -592,6 +594,7 @@ func provideFactorySessionExecutionFactory(
 			liveChildInvocation,
 			responseEventIDs,
 			responseEventRetentionLimits,
+			eventsService,
 		)
 	}
 }

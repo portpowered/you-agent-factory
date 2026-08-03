@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
@@ -17,10 +18,14 @@ import (
 func newDurableResponseEventsService(t *testing.T) *JavaScriptRuntimeService {
 	t.Helper()
 
+	eventsService, err := eventswire.NewService()
+	if err != nil {
+		t.Fatalf("events NewService: %v", err)
+	}
 	var next atomic.Uint64
 	streams, err := responsestreamwire.NewService(func() string {
 		return fmt.Sprintf("response-event-%d", next.Add(1))
-	}, nil)
+	}, nil, eventsService)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}

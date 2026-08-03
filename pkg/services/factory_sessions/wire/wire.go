@@ -9,6 +9,7 @@ package wire
 import (
 	"fmt"
 
+	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -64,12 +65,16 @@ func NewService(
 	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
+	eventsService events.Service,
 ) (factorysessions.Service, error) {
 	if sessionResultProjection == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: session result projection is required")
 	}
 	if eventIDs == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: response event ID generator is required")
+	}
+	if eventsService == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: Events root is required")
 	}
 	if sessionIDs == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: session ID generator is required")
@@ -93,7 +98,7 @@ func NewService(
 	if err != nil {
 		return nil, err
 	}
-	responseStreams, err := responsestreamwire.NewService(eventIDs, responseEventRetentionLimits)
+	responseStreams, err := responsestreamwire.NewService(eventIDs, responseEventRetentionLimits, eventsService)
 	if err != nil {
 		return nil, err
 	}
@@ -142,8 +147,9 @@ func NewDurableExecution(
 	liveChildInvocation factorysessionexecution.LiveChildInvocationFactory,
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
+	eventsService events.Service,
 ) (durableexecution.Service, error) {
-	responseStreams, err := responsestreamwire.NewService(generateResponseEventID, responseEventRetentionLimits)
+	responseStreams, err := responsestreamwire.NewService(generateResponseEventID, responseEventRetentionLimits, eventsService)
 	if err != nil {
 		return nil, err
 	}

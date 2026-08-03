@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
@@ -162,6 +163,10 @@ func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *test
 	adaptRunner := provideWorkerCommandRunnerAdapter()
 	mockRunnerFactory := provideWorkersMockCommandRunnerFactory()
 	conductorInvocation := provideConductorInvocationWithProgressFactory(providersService, edges)
+	eventsService, err := eventswire.NewService()
+	if err != nil {
+		t.Fatalf("construct events service: %v", err)
+	}
 	factory := provideFactorySessionExecutionFactory(
 		workflows,
 		provideOrchestrationJavaScriptExecution(provideFactoryRuntimeIDGenerator(edges), workflows),
@@ -179,6 +184,7 @@ func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *test
 		mockRunnerFactory,
 		conductorInvocation,
 		edges,
+		eventsService,
 	)
 
 	provider := wireTestProvider{}

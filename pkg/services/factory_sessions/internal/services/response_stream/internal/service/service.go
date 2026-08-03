@@ -2,12 +2,16 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
@@ -15,12 +19,26 @@ import (
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 )
 
-// ResponseStream owns process-scoped response-event identity generation. All
-// runtime state is allocated only when the outer service binds an explicit
-// runtime clock.
+// responseEventSchemaID identifies the source-native JSON shape Events
+// receives for every mirrored Factory Session response event.
+const responseEventSchemaID = events.SchemaID("factory-response-event.v1")
+
+// responseEventSourceType names the Factory Sessions response-event
+// producer family within the injected Events root's identity space.
+const responseEventSourceType = events.SourceType("factory-session-response-event")
+
+// ResponseStream owns process-scoped response-event identity generation and
+// mirrors every accepted Factory Session response event into the injected
+// Events root so the two surfaces observe the same underlying records and
+// aggregate ordering. All runtime state is allocated only when the outer
+// service binds an explicit runtime clock.
 type ResponseStream struct {
 	eventIDs        responseeventstore.ResponseEventIDGenerator
 	retentionLimits *responseeventstore.RetentionLimits
+	events          events.Service
+	logger          logging.Logger
+
+	publishMu sync.Mutex
 }
 
 var _ responsestreamservice.Service = (*ResponseStream)(nil)
@@ -28,11 +46,20 @@ var _ responsestreamservice.Service = (*ResponseStream)(nil)
 func New(
 	eventIDs responseeventstore.ResponseEventIDGenerator,
 	limits *factorysessions.ResponseEventRetentionLimits,
+	eventsService events.Service,
+	logger ...logging.Logger,
 ) (*ResponseStream, error) {
 	if eventIDs == nil {
 		return nil, errors.New("construct Factory Session response streams: event ID generator is required")
 	}
-	service := &ResponseStream{eventIDs: eventIDs}
+	if eventsService == nil {
+		return nil, errors.New("construct Factory Session response streams: Events root is required")
+	}
+	service := &ResponseStream{
+		eventIDs: eventIDs,
+		events:   eventsService,
+		logger:   logging.EnsureLogger(firstLogger(logger)),
+	}
 	if limits != nil {
 		service.retentionLimits = &responseeventstore.RetentionLimits{
 			MaxEvents:                limits.MaxEvents,
@@ -41,6 +68,13 @@ func New(
 		}
 	}
 	return service, nil
+}
+
+func firstLogger(loggers []logging.Logger) logging.Logger {
+	if len(loggers) == 0 {
+		return nil
+	}
+	return loggers[0]
 }
 
 func (s *ResponseStream) NewEventStore(sessionID string, clock factoryruntime.Clock) (*responseeventstore.SessionResponseEventStore, error) {
@@ -118,11 +152,66 @@ func (s *ResponseStream) Complete(store *responseeventstore.SessionResponseEvent
 	}
 }
 
+// Publish accepts one response event into the session-owned store, exactly
+// as before, and then mirrors the accepted, identity-assigned record into the
+// injected Events root on a session-scoped topic. The store's own sequence
+// remains the sole assignment authority; publish and mirror are serialized
+// together under publishMu so a topic's Events aggregate positions always
+// agree 1:1 with the store's own sequence, even under concurrent publishers.
+// A mirror failure (for example Events shutting down mid-process) is logged
+// and does not fail the accepted local publish: the session-scoped store
+// remains the proven, tested surface SubscribeFactoryResponseEvents serves.
 func (s *ResponseStream) Publish(store *responseeventstore.SessionResponseEventStore, event responseevents.FactoryResponseEvent) (responseevents.FactoryResponseEvent, error) {
 	if store == nil {
 		return responseevents.FactoryResponseEvent{}, errors.New("Factory Session response-event store is required")
 	}
-	return store.Publish(event)
+	s.publishMu.Lock()
+	defer s.publishMu.Unlock()
+
+	published, err := store.Publish(event)
+	if err != nil {
+		return responseevents.FactoryResponseEvent{}, err
+	}
+	s.mirrorIntoEvents(store, published)
+	return published, nil
+}
+
+func (s *ResponseStream) mirrorIntoEvents(store *responseeventstore.SessionResponseEventStore, published responseevents.FactoryResponseEvent) {
+	if s == nil || s.events == nil {
+		return
+	}
+	sessionID := store.FactorySessionID()
+	payload, err := json.Marshal(published)
+	if err != nil {
+		s.logger.Warn("factory session response event mirror encode failed",
+			"factory_session_id", sessionID,
+			"sequence", published.Sequence,
+		)
+		return
+	}
+	_, err = s.events.Append(context.Background(), events.AppendRequest{
+		Topic:          responseEventTopic(sessionID),
+		SourceType:     responseEventSourceType,
+		SourceID:       events.SourceID(sessionID),
+		SourceSequence: events.SourceSequence(published.Sequence),
+		SourceEventID:  events.SourceEventID(published.EventID),
+		SchemaID:       responseEventSchemaID,
+		Payload:        payload,
+	})
+	if err != nil {
+		s.logger.Warn("factory session response event mirror append failed",
+			"factory_session_id", sessionID,
+			"sequence", published.Sequence,
+			"error", err.Error(),
+		)
+	}
+}
+
+// responseEventTopic names the Events topic one Factory Session's response
+// events mirror into: one topic per session, matching the documented Topic
+// naming example in pkg/services/events/identity.go.
+func responseEventTopic(factorySessionID string) events.Topic {
+	return events.Topic(fmt.Sprintf("factory-session/%s/response-events", factorySessionID))
 }
 
 func (s *ResponseStream) NewPublisher(stream *responsestream.SessionResponseStream, observer responsestream.DiagnosticsObserver) *responsestreamservice.Publisher {

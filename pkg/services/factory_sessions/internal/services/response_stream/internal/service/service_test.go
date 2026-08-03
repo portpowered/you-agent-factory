@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	events "github.com/portpowered/infinite-you/pkg/services/events"
+	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
@@ -17,6 +19,15 @@ import (
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
 )
+
+func newTestEventsService(t *testing.T) events.Service {
+	t.Helper()
+	service, err := eventswire.NewService()
+	if err != nil {
+		t.Fatalf("events wire NewService: %v", err)
+	}
+	return service
+}
 
 type memoryCursorStore struct {
 	checkpoint cursors.Checkpoint
@@ -43,11 +54,19 @@ func newService(t *testing.T) responsestreamservice.Service {
 	var next atomic.Uint64
 	service, err := responsestreamwire.NewService(func() string {
 		return fmt.Sprintf("response-event-%d", next.Add(1))
-	}, nil)
+	}, nil, newTestEventsService(t))
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
 	return service
+}
+
+func serviceWithEvents(t *testing.T, eventsService events.Service) (responsestreamservice.Service, error) {
+	t.Helper()
+	var next atomic.Uint64
+	return responsestreamwire.NewService(func() string {
+		return fmt.Sprintf("response-event-%d", next.Add(1))
+	}, nil, eventsService)
 }
 
 func newStore(t *testing.T, service responsestreamservice.Service) *responseeventstore.SessionResponseEventStore {
@@ -167,7 +186,7 @@ func TestService_NewEventStoreAppliesConfiguredRetentionLimits(t *testing.T) {
 		MaxBytes:                 8192,
 		CompletedRetentionWindow: time.Minute,
 	}
-	service, err := responsestreamwire.NewService(func() string { return "response-event-1" }, wantLimits)
+	service, err := responsestreamwire.NewService(func() string { return "response-event-1" }, wantLimits, newTestEventsService(t))
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
@@ -186,8 +205,11 @@ func TestService_NewEventStoreAppliesConfiguredRetentionLimits(t *testing.T) {
 
 func TestService_ConstructionIsInertAndRejectsMissingEffects(t *testing.T) {
 	t.Parallel()
-	if service, err := responsestreamwire.NewService(nil, nil); err == nil || service != nil {
+	if service, err := responsestreamwire.NewService(nil, nil, newTestEventsService(t)); err == nil || service != nil {
 		t.Fatalf("NewService(nil) = %#v, %v; want deterministic dependency error", service, err)
+	}
+	if service, err := responsestreamwire.NewService(func() string { return "response-event-1" }, nil, nil); err == nil || service != nil {
+		t.Fatalf("NewService(eventsService=nil) = %#v, %v; want deterministic dependency error", service, err)
 	}
 	service := newService(t)
 	if store, err := service.NewEventStore("session-1", nil); err == nil || store != nil {
