@@ -253,17 +253,24 @@ func (g *gatedWriter) Write(p []byte) (int, error) {
 	return g.w.Write(p)
 }
 
-// TestWindowEndCannotRecordCompletionWhileATryCancelSendItAlreadyLostIsInFlight
-// is the deterministic regression for the atomic-ownership gap: the earlier
-// implementation decided "not yet terminal" with a non-blocking check and
-// only afterwards performed the outbound send, so End could record
-// completion - and the identity could become free for reuse - in the gap
-// between that check and the send actually reaching the wire. This test
-// pins TryCancel exactly inside that gap (via gatedWriter, a real blocking
-// primitive, not a sleep) and proves End cannot record completion until the
-// send TryCancel already committed to finishes: the two decisions are one
-// atomic unit, not two independently-timed ones.
-func TestWindowEndCannotRecordCompletionWhileATryCancelSendItAlreadyLostIsInFlight(t *testing.T) {
+// TestWindowEndReachesTerminalResultAndReleasesIdentityWhileATryCancelSendIsStuckPastTheSendBound
+// is the deterministic regression for the blocked-write liveness bug: an
+// earlier fix held session.mu across the outbound send itself, so a peer
+// that stopped reading mid-write (the acp-go-sdk connection does not honor
+// ctx once inside its synchronous io.Writer.Write call) left that mutex held
+// forever, and End - which must acquire the same mutex to record completion
+// - blocked indefinitely. That meant Window's active slot, the identity
+// reservation, and everything upstream that waits on daemon.execute
+// returning could hang forever on a single unresponsive peer. This test
+// pins TryCancel deep inside a send that is held open well past sendTimeout
+// (via gatedWriter, a real blocking primitive, not a sleep) and proves End
+// still reaches a defined terminal result and fully releases the window
+// promptly - including letting a same-identity Begin proceed immediately -
+// without ever waiting on that stuck send. It also proves that once the
+// stuck send is finally released, its late notification reaches only its
+// own session ID and never the replacement generation that reused the
+// identity in the meantime.
+func TestWindowEndReachesTerminalResultAndReleasesIdentityWhileATryCancelSendIsStuckPastTheSendBound(t *testing.T) {
 	peer := newFakeSessionPeer()
 	outboundReader, outboundWriter := io.Pipe()
 	gate := &gatedWriter{w: outboundWriter, entered: make(chan struct{}), release: make(chan struct{})}
@@ -272,10 +279,10 @@ func TestWindowEndCannotRecordCompletionWhileATryCancelSendItAlreadyLostIsInFlig
 	connection := acpsdk.NewClientSideConnection(noopClient{}, gate, io.MultiReader())
 
 	w := &Window{}
-	session := w.Begin("attempt-1", acpsdk.SessionId("session-1"), connection)
-	claimed, ok := w.Claim("attempt-1")
-	if !ok || claimed != session {
-		t.Fatalf("Claim(attempt-1) = (%v, %v), want the open session and true", claimed, ok)
+	sessionA := w.Begin("attempt-1", acpsdk.SessionId("session-A"), connection)
+	claimedA, ok := w.Claim("attempt-1")
+	if !ok || claimedA != sessionA {
+		t.Fatalf("Claim(attempt-1) = (%v, %v), want the open session and true", claimedA, ok)
 	}
 
 	type outcome struct {
@@ -284,35 +291,56 @@ func TestWindowEndCannotRecordCompletionWhileATryCancelSendItAlreadyLostIsInFlig
 	}
 	tryCancelDone := make(chan outcome, 1)
 	go func() {
-		accepted, err := claimed.TryCancel(context.Background())
+		accepted, err := claimedA.TryCancel(context.Background())
 		tryCancelDone <- outcome{accepted: accepted, err: err}
 	}()
 
-	// TryCancel has observed the generation as not yet terminal and is now
-	// blocked mid-send, holding ownership of the atomic decision.
+	// TryCancel has won ownership of A and is now blocked mid-send, well past
+	// what sendTimeout would bound if the SDK actually honored it.
 	<-gate.entered
+	time.Sleep(2 * sendTimeout)
 
 	endDone := make(chan struct{})
 	go func() {
-		w.End(session, true)
+		// A's real Execute() outcome was not a cancellation - the daemon's
+		// own response raced ahead of the (still in-flight) cancel send.
+		w.End(sessionA, false)
 		close(endDone)
 	}()
 
 	select {
 	case <-endDone:
-		t.Fatal("End() recorded completion while TryCancel's already-committed send was still in flight; ownership is not atomic")
-	case <-time.After(50 * time.Millisecond):
+	case <-time.After(2 * time.Second):
+		t.Fatal("End() did not reach a terminal result while TryCancel's send was stuck; a blocked peer write must never block End")
 	}
 
+	// The identity must be free for reuse immediately - not just eventually.
+	sessionB := w.Begin("attempt-1", acpsdk.SessionId("session-B"), connection)
+	claimedB, ok := w.Claim("attempt-1")
+	if !ok || claimedB != sessionB {
+		t.Fatalf("Claim(attempt-1) after A's End = (%v, %v), want the fresh session B and true", claimedB, ok)
+	}
+	w.End(sessionB, false)
+
+	// Now let A's long-stuck send finally land.
 	close(gate.release)
-	<-endDone
 
 	result := <-tryCancelDone
 	if result.err != nil {
 		t.Fatalf("TryCancel() error = %v, want nil", result.err)
 	}
-	if !result.accepted {
-		t.Fatal("TryCancel() accepted = false, want true: it won ownership of the generation before End could record completion")
+	if result.accepted {
+		t.Fatal("TryCancel() accepted = true, want false: End already recorded A's outcome before this call could observe cancellation")
+	}
+
+	notification := <-peer.received
+	if notification.SessionId != "session-A" {
+		t.Fatalf("late notification SessionId = %q, want session-A (A's own identity), never B's", notification.SessionId)
+	}
+	select {
+	case extra := <-peer.received:
+		t.Fatalf("received an unexpected second notification %#v, want exactly one (A's stale send, never one addressed to B)", extra)
+	default:
 	}
 }
 

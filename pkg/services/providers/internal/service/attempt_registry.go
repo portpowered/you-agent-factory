@@ -26,12 +26,17 @@ type liveAttemptKey struct {
 // signal for the attempt right now (supports) and, once claim has already
 // removed the registration for that seam, deliver the signal and block
 // (bounded by ctx) until the attempt's real recorded outcome is known
-// (signal). supports is a deliberately racy pre-filter (see
-// acpAttemptControl.supports); signal is the atomic source of truth and
-// re-derives liveness itself instead of trusting supports's earlier
-// observation, so a natural completion racing a claimed control is reported
-// as accepted=false rather than a false ControlOutcomeCompleted. signal
-// returns a non-nil error only for a genuine delivery failure (see
+// (signal). For acpAttemptControl, supports does not merely pre-filter: it
+// atomically claims the exact live execution generation (see
+// acp.Service.Claim) and captures it for signal to use, so signal never
+// re-derives liveness from canonical/attemptID strings - it operates only on
+// the generation captured at claim time, which is what keeps a claimed
+// control bound to that exact generation even if a later execution reuses
+// the identical identity before signal runs. A natural completion racing a
+// claimed control is still reported as accepted=false rather than a false
+// ControlOutcomeCompleted, because the captured generation's own recorded
+// outcome - not the bare fact that a signal was sent - grounds the result.
+// signal returns a non-nil error only for a genuine delivery failure (see
 // providers.ErrControlSignalFailed) or the caller's ctx ending before the
 // outcome could be observed - both distinguishable from accepted=false,
 // err=nil (unsupported/lost-the-race). nativeAttemptControl and
