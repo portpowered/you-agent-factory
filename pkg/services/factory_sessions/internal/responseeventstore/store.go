@@ -258,47 +258,37 @@ func (s *SessionResponseEventStore) Publish(input responseevents.FactoryResponse
 	return cloneEvent(stored), nil
 }
 
-// PrepareInput normalizes input's schema version, factory session ID, and
-// recorded-at timestamp exactly as Publish does internally, without
-// assigning identity or mutating any store state. It exists so a caller
-// that must know a publish's fully normalized content before this store's
-// state changes -- for example, to compute an external identity/order
-// authority's payload before deciding whether that authority accepts the
-// record -- can do so safely and without a lock.
-func (s *SessionResponseEventStore) PrepareInput(input responseevents.FactoryResponseEvent) responseevents.FactoryResponseEvent {
-	if s == nil {
-		return input
-	}
-	return s.preparePublishInput(input)
-}
-
-// NextSequenceHint returns the sequence PublishWithIdentity must be given to
-// be accepted as this store's next record, based on the latest sequence
-// assigned so far. It is only a safe prediction when the caller is this
-// store's sole publisher (as ResponseStream.Publish's single serialized
-// entry point guarantees for every store it constructs); a store published
-// to directly, outside that serialized path, must keep using Publish.
-func (s *SessionResponseEventStore) NextSequenceHint() int64 {
-	return s.LatestSequence() + 1
-}
-
-// PublishWithIdentity behaves exactly like Publish -- the same validation,
-// retained-append, retention enforcement, and subscriber notification --
-// except sequence and eventID are supplied by the caller (already
-// normalized via PrepareInput) instead of generated internally. It exists
-// so an external identity/order authority (the injected Events root) can be
-// given the exact identity a publish will use, and can reject the whole
-// publish deterministically, before this store -- or any of its
-// subscribers -- ever observes it: the caller is expected to call the
-// external authority first and only call PublishWithIdentity once that
-// authority has already accepted the same identity, so the two can never
-// disagree about which records exist for this session. sequence must equal
-// NextSequenceHint() at the time of the call; any other value is rejected
-// with ErrSequenceMismatch without mutating state.
-func (s *SessionResponseEventStore) PublishWithIdentity(prepared responseevents.FactoryResponseEvent, sequence int64, eventID string) (responseevents.FactoryResponseEvent, error) {
+// PublishThroughAuthority normalizes input exactly as Publish does, then --
+// while holding this store's write lock so no concurrent Close, Complete, or
+// other PublishThroughAuthority call can interleave -- calls commit with the
+// normalized event and the sequence commit must be given to be accepted as
+// this store's next record. commit is expected to submit the record to an
+// external identity/order authority (the injected Events root) and, only on
+// that authority's acceptance, return the exact sequence and event ID it
+// assigned; PublishThroughAuthority then retains the identical event under
+// that assigned identity before releasing the lock. Because the authority
+// call and this store's own retained-append happen inside one critical
+// section, the authority's decision and this store's retained state can
+// never diverge: the authority can never accept a record this store then
+// fails to retain (commit's returned sequence is validated but the retained
+// append itself cannot fail for a normalized, already-validated event), and
+// this store never retains a record the authority rejected (a commit error
+// leaves state completely untouched). A store that is closed or has
+// completed publication rejects the call before commit is ever invoked, so
+// the authority is never asked to accept a record this store has already
+// decided it will not retain.
+func (s *SessionResponseEventStore) PublishThroughAuthority(
+	input responseevents.FactoryResponseEvent,
+	commit func(prepared responseevents.FactoryResponseEvent, sequenceHint int64) (sequence int64, eventID string, err error),
+) (responseevents.FactoryResponseEvent, error) {
 	if s == nil {
 		return responseevents.FactoryResponseEvent{}, errNilStore
 	}
+	if commit == nil {
+		return responseevents.FactoryResponseEvent{}, errors.New("publish authority is required")
+	}
+
+	prepared := s.preparePublishInput(input)
 	if prepared.FactorySessionID != s.factorySessionID {
 		return responseevents.FactoryResponseEvent{}, fmt.Errorf(
 			"%w: got %q, want %q",
@@ -307,11 +297,6 @@ func (s *SessionResponseEventStore) PublishWithIdentity(prepared responseevents.
 			s.factorySessionID,
 		)
 	}
-	if strings.TrimSpace(eventID) == "" {
-		return responseevents.FactoryResponseEvent{}, errors.New("response event ID is required")
-	}
-	prepared.Sequence = sequence
-	prepared.EventID = eventID
 	if err := responseevents.ValidateEvent(prepared); err != nil {
 		return responseevents.FactoryResponseEvent{}, err
 	}
@@ -325,10 +310,25 @@ func (s *SessionResponseEventStore) PublishWithIdentity(prepared responseevents.
 		s.mu.Unlock()
 		return responseevents.FactoryResponseEvent{}, ErrStoreCompleted
 	}
-	if sequence != s.nextSequence+1 {
+
+	sequenceHint := s.nextSequence + 1
+	sequence, eventID, err := commit(prepared, sequenceHint)
+	if err != nil {
 		s.mu.Unlock()
-		return responseevents.FactoryResponseEvent{}, fmt.Errorf("%w: got %d, want %d", ErrSequenceMismatch, sequence, s.nextSequence+1)
+		return responseevents.FactoryResponseEvent{}, err
 	}
+	if sequence != sequenceHint {
+		s.mu.Unlock()
+		return responseevents.FactoryResponseEvent{}, fmt.Errorf("%w: got %d, want %d", ErrSequenceMismatch, sequence, sequenceHint)
+	}
+	eventID = strings.TrimSpace(eventID)
+	if eventID == "" {
+		s.mu.Unlock()
+		return responseevents.FactoryResponseEvent{}, errors.New("response event ID is required")
+	}
+
+	prepared.Sequence = sequence
+	prepared.EventID = eventID
 	stored := cloneEvent(prepared)
 	storedBytes, err := SerializedEventSize(stored)
 	if err != nil {

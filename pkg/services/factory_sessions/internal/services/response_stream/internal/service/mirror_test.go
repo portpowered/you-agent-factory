@@ -249,3 +249,79 @@ func TestService_PublishFailsAtomicallyWhenEventsRejectsTheAppend(t *testing.T) 
 		t.Fatalf("subscriber observed %d events after a rejected Publish, want 0 (no partial/local-only notification)", len(got))
 	}
 }
+
+// TestService_ConcurrentPublishAndCompletionNeverDivergesFromEvents races
+// Publish against Complete/Close on the same store -- the exact interleaving
+// the earlier two-phase-commit design could lose (an Events-accepted record
+// whose subsequent local store write was rejected by intervening completion
+// or closure). Publish now holds the store's write lock across the entire
+// Events.Append call, so Complete/Close cannot interleave inside a single
+// publish's critical section; this test proves that holds under real
+// concurrency by asserting every record accepted by Events for this topic
+// is also retained by the store, with no exceptions.
+func TestService_ConcurrentPublishAndCompletionNeverDivergesFromEvents(t *testing.T) {
+	t.Parallel()
+
+	eventsService := newTestEventsService(t)
+	service, err := serviceWithEvents(t, eventsService)
+	if err != nil {
+		t.Fatalf("construct response-stream service: %v", err)
+	}
+	store := newStore(t, service)
+
+	const producers = 8
+	const perProducer = 25
+	var wg sync.WaitGroup
+	var accepted atomic.Int64
+	for range producers {
+		wg.Go(func() {
+			for i := range perProducer {
+				if _, err := service.Publish(store, responseevents.FactoryResponseEvent{
+					DispatchID: fmt.Sprintf("dispatch-%d", i),
+					RunID:      "run-1",
+					Kind:       responseevents.KindMessage,
+					Phase:      responseevents.PhaseDelta,
+					Provenance: responseevents.Provenance{
+						Provider: "test", NativeEventType: "delta",
+						Delivery:       responseevents.DeliveryNativeStream,
+						Representation: responseevents.RepresentationDelta,
+						Fidelity:       responseevents.FidelityLossless,
+					},
+					Payload: json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"hello"}`),
+				}); err == nil {
+					accepted.Add(1)
+				}
+			}
+		})
+	}
+	wg.Go(func() {
+		time.Sleep(time.Millisecond)
+		service.Complete(store)
+	})
+	wg.Wait()
+
+	ctx := context.Background()
+	topic := responseEventTopicForTest(store.FactorySessionID())
+	read, err := eventsService.Read(ctx, events.ReadRequest{
+		Topic: topic,
+		From:  events.Cursor{Topic: topic},
+		Limit: producers*perProducer + 1,
+	})
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+
+	storeEvents := store.Events()
+	storeSequences := make(map[int64]bool, len(storeEvents))
+	for _, event := range storeEvents {
+		storeSequences[event.Sequence] = true
+	}
+	for _, record := range read.Records {
+		if !storeSequences[int64(record.ID.Position)] {
+			t.Fatalf("Events accepted position %d for this topic, but the store never retained a matching record: divergence between the two surfaces", record.ID.Position)
+		}
+	}
+	if int64(len(read.Records)) != accepted.Load() {
+		t.Fatalf("Events retained %d records, want exactly %d (every Publish call this test observed as accepted)", len(read.Records), accepted.Load())
+	}
+}

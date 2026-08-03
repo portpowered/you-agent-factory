@@ -31,11 +31,11 @@ var ErrInvalidDispatchFilter = errors.New("session response event store dispatch
 // ErrInvalidRetentionLimits indicates that one or both hard limits are not positive.
 var ErrInvalidRetentionLimits = errors.New("invalid session response event retention limits")
 
-// ErrSequenceMismatch indicates PublishWithIdentity was given a sequence
-// other than this store's current next expected value, so the identity an
-// external authority already assigned (for example, the injected Events
-// root) could not be honored without breaking this store's own
-// session-monotonic contiguity.
+// ErrSequenceMismatch indicates PublishThroughAuthority's commit callback
+// returned a sequence other than this store's current next expected value,
+// so the identity an external authority already assigned (for example, the
+// injected Events root) could not be honored without breaking this store's
+// own session-monotonic contiguity.
 var ErrSequenceMismatch = errors.New("session response event sequence does not match the store's next expected sequence")
 
 var errInvalidDispatchFilter = ErrInvalidDispatchFilter

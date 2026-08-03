@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
@@ -28,17 +27,16 @@ const responseEventSchemaID = events.SchemaID("factory-response-event.v1")
 const responseEventSourceType = events.SourceType("factory-session-response-event")
 
 // ResponseStream owns process-scoped response-event identity generation and
-// mirrors every accepted Factory Session response event into the injected
-// Events root so the two surfaces observe the same underlying records and
-// aggregate ordering. All runtime state is allocated only when the outer
-// service binds an explicit runtime clock.
+// publishes every Factory Session response event through the injected
+// Events root before its session-owned store ever retains it, so the two
+// surfaces can never observe different records or aggregate ordering. All
+// runtime state is allocated only when the outer service binds an explicit
+// runtime clock.
 type ResponseStream struct {
 	eventIDs        responseeventstore.ResponseEventIDGenerator
 	retentionLimits *responseeventstore.RetentionLimits
 	events          events.Service
 	logger          logging.Logger
-
-	publishMu sync.Mutex
 }
 
 var _ responsestreamservice.Service = (*ResponseStream)(nil)
@@ -152,52 +150,50 @@ func (s *ResponseStream) Complete(store *responseeventstore.SessionResponseEvent
 	}
 }
 
-// Publish assigns identity for event through the injected Events root
-// before this session's store ever observes it: Events.Append is the
-// authority that accepts or rejects the record, using the exact sequence
-// and event ID this call also gives the store, so the two can never
-// disagree about which records exist for this session or in what order. If
-// Events rejects the append, Publish fails and the store's retained state
-// and subscribers are left untouched -- no partial, mirrored, or
-// locally-only record is ever produced. Publish and every other publish
-// (for any session) are serialized together under publishMu, since
-// predicting the store's next sequence before assigning it through Events
-// is only safe against a single in-flight publisher at a time.
+// Publish submits event to the injected Events root and, only once Events
+// has accepted it, retains the identical record in store: Events.Append is
+// the sole authority that accepts or rejects the record and assigns its
+// aggregate position, and store.PublishThroughAuthority holds the store's
+// write lock across that exact Append call, so Events' decision and the
+// store's retained state are one atomic step. The store's session-monotonic
+// Sequence is taken directly from the aggregate position Events assigned
+// (rather than predicted beforehand), so no external authority ever accepts
+// an identity the store did not itself produce. If Events rejects the
+// append, Publish fails and the store's retained state and subscribers are
+// left completely untouched -- no partial, mirrored, or locally-only record
+// is ever produced, and the store can never retain a record Events did not
+// accept.
 func (s *ResponseStream) Publish(store *responseeventstore.SessionResponseEventStore, event responseevents.FactoryResponseEvent) (responseevents.FactoryResponseEvent, error) {
 	if store == nil {
 		return responseevents.FactoryResponseEvent{}, errors.New("Factory Session response-event store is required")
 	}
-	s.publishMu.Lock()
-	defer s.publishMu.Unlock()
-
-	prepared := store.PrepareInput(event)
-	sequence := store.NextSequenceHint()
 	eventID := strings.TrimSpace(s.eventIDs())
 	if eventID == "" {
 		return responseevents.FactoryResponseEvent{}, errors.New("response event ID generator returned an empty identity")
 	}
-	prepared.Sequence = sequence
-	prepared.EventID = eventID
-
-	payload, err := json.Marshal(prepared)
-	if err != nil {
-		return responseevents.FactoryResponseEvent{}, fmt.Errorf("encode factory session response event for Events: %w", err)
-	}
-
 	sessionID := store.FactorySessionID()
-	if _, err := s.events.Append(context.Background(), events.AppendRequest{
-		Topic:          responseEventTopic(sessionID),
-		SourceType:     responseEventSourceType,
-		SourceID:       events.SourceID(sessionID),
-		SourceSequence: events.SourceSequence(sequence),
-		SourceEventID:  events.SourceEventID(eventID),
-		SchemaID:       responseEventSchemaID,
-		Payload:        payload,
-	}); err != nil {
-		return responseevents.FactoryResponseEvent{}, fmt.Errorf("factory session response event rejected by Events: %w", err)
-	}
 
-	published, err := store.PublishWithIdentity(prepared, sequence, eventID)
+	published, err := store.PublishThroughAuthority(event, func(prepared responseevents.FactoryResponseEvent, sequenceHint int64) (int64, string, error) {
+		prepared.Sequence = sequenceHint
+		prepared.EventID = eventID
+		payload, err := json.Marshal(prepared)
+		if err != nil {
+			return 0, "", fmt.Errorf("encode factory session response event for Events: %w", err)
+		}
+		result, err := s.events.Append(context.Background(), events.AppendRequest{
+			Topic:          responseEventTopic(sessionID),
+			SourceType:     responseEventSourceType,
+			SourceID:       events.SourceID(sessionID),
+			SourceSequence: events.SourceSequence(sequenceHint),
+			SourceEventID:  events.SourceEventID(eventID),
+			SchemaID:       responseEventSchemaID,
+			Payload:        payload,
+		})
+		if err != nil {
+			return 0, "", fmt.Errorf("factory session response event rejected by Events: %w", err)
+		}
+		return int64(result.Record.ID.Position), eventID, nil
+	})
 	if err != nil {
 		return responseevents.FactoryResponseEvent{}, err
 	}
