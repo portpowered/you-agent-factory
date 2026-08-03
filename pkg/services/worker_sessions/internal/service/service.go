@@ -1,35 +1,50 @@
-// Package service implements the Worker Sessions W1 registry: reservation,
-// immutable Get, and deterministic filtered List over a synchronized
+// Package service implements the Worker Sessions W1+W2 registry:
+// reservation, immutable Get, deterministic filtered List, and supervised
+// Start with exactly-once terminal classification, over a synchronized
 // process-local map.
 package service
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"sort"
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// ErrMissingExecution reports that New was constructed without the one
+// required directly injected workers.WorkstationExecutionService.
+var ErrMissingExecution = errors.New("worker sessions: execution service is required")
+
 type registry struct {
-	mu       sync.RWMutex
-	sessions map[string]workersessions.Session
-	logger   logging.Logger
+	mu        sync.RWMutex
+	sessions  map[string]workersessions.Session
+	execution workers.WorkstationExecutionService
+	logger    logging.Logger
 }
 
-// Compile-time proof that production registry seals the W1 root contract
-// (Reserve + Get + List) without exposing the mutable map or a broader API.
+// Compile-time proof that production registry seals the W1+W2 root contract
+// (Reserve + Get + List + Start) without exposing the mutable map or a
+// broader API.
 var _ workersessions.Service = (*registry)(nil)
 
-// New constructs the process-local Worker Session registry. A nil logger
-// falls back to logging.NoopLogger.
-func New(logger logging.Logger) workersessions.Service {
-	return &registry{
-		sessions: make(map[string]workersessions.Session),
-		logger:   logging.EnsureLogger(logger),
+// New constructs the process-local Worker Session registry from the one
+// directly injected workers.WorkstationExecutionService that Start hands
+// attempts to. A nil logger falls back to logging.NoopLogger. A nil
+// execution is rejected: Start has no meaningful behavior without it.
+func New(execution workers.WorkstationExecutionService, logger logging.Logger) (workersessions.Service, error) {
+	if execution == nil {
+		return nil, ErrMissingExecution
 	}
+	return &registry{
+		sessions:  make(map[string]workersessions.Session),
+		execution: execution,
+		logger:    logging.EnsureLogger(logger),
+	}, nil
 }
 
 func (r *registry) Reserve(_ context.Context, req workersessions.ReserveRequest) (workersessions.Session, error) {
@@ -65,7 +80,7 @@ func (r *registry) Get(_ context.Context, req workersessions.GetRequest) (worker
 		return workersessions.Session{}, workersessions.ErrSessionNotFound
 	}
 	r.logger.Info("worker session get", "sessionID", req.ID, "outcome", "found", "state", string(session.State))
-	return session, nil
+	return cloneSession(session), nil
 }
 
 func (r *registry) List(_ context.Context, req workersessions.ListRequest) (workersessions.ListResult, error) {
@@ -78,7 +93,7 @@ func (r *registry) List(_ context.Context, req workersessions.ListRequest) (work
 	matched := make([]workersessions.Session, 0, len(r.sessions))
 	for _, session := range r.sessions {
 		if matchesFilter(session, req.Filter) {
-			matched = append(matched, session)
+			matched = append(matched, cloneSession(session))
 		}
 	}
 	r.mu.RUnlock()
@@ -93,4 +108,109 @@ func matchesFilter(session workersessions.Session, filter workersessions.Filter)
 		return true
 	}
 	return slices.Contains(filter.States, session.State)
+}
+
+// Start validates req, then establishes or reuses one stable Worker Session
+// identity in StateReserved, transitions StateStarting before handoff, and
+// hands req.Execution unchanged to the one injected
+// workers.WorkstationExecutionService. Start is synchronous: it blocks until
+// the attempt commits its exactly-once absorbing terminal outcome,
+// classified from the Workers WorkResult first and the adapter error
+// second, and returns the committed detached snapshot.
+func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
+	attemptID := req.Execution.Execution.Dispatch.DispatchID
+
+	if err := req.Validate(); err != nil {
+		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "invalid")
+		return workersessions.StartResult{}, err
+	}
+
+	if _, err := r.beginStart(req); err != nil {
+		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "not_startable")
+		return workersessions.StartResult{}, err
+	}
+	r.logger.Info("worker session start", "sessionID", req.ID, "attemptID", attemptID, "outcome", "handoff", "state", string(workersessions.StateStarting))
+
+	dispatchResult, dispatchErr := r.execution.DispatchWorkstation(ctx, req.Execution)
+	terminal := classifyTerminal(dispatchErr, dispatchResult)
+
+	finalState := workersessions.StateFailed
+	if terminal.Outcome == workersessions.TerminalOutcomeCompleted {
+		finalState = workersessions.StateCompleted
+	}
+
+	final := r.commitTerminal(req.ID, finalState, terminal)
+	r.logger.Info(
+		"worker session start terminal",
+		"sessionID", req.ID,
+		"attemptID", attemptID,
+		"outcome", string(finalState),
+		"state", string(finalState),
+		"cause", causeKindString(terminal.Cause),
+	)
+
+	return workersessions.StartResult{Session: final}, nil
+}
+
+// beginStart establishes or reuses req.ID in StateReserved and atomically
+// transitions it to StateStarting, so a concurrent Start for the same
+// identity can never observe a partial or replaced session and can never
+// trigger a second Workers handoff. Any identity already registered outside
+// StateReserved is a conflicting start: ErrSessionNotStartable, no mutation.
+func (r *registry) beginStart(req workersessions.StartRequest) (workersessions.Session, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	session, exists := r.sessions[req.ID]
+	if !exists {
+		session = workersessions.Session{ID: req.ID, State: workersessions.StateReserved}
+	} else if session.State != workersessions.StateReserved {
+		return workersessions.Session{}, workersessions.ErrSessionNotStartable
+	}
+
+	session.State = workersessions.StateStarting
+	session.Result = nil
+	r.sessions[req.ID] = session
+	return cloneSession(session), nil
+}
+
+// commitTerminal stores the exactly-once terminal outcome for req.ID and
+// returns a detached copy. Only the Start call that itself transitioned the
+// session to StateStarting ever reaches commitTerminal for that identity, so
+// no additional compare-and-swap is required for exactly-once commit.
+func (r *registry) commitTerminal(id string, state workersessions.State, result workersessions.TerminalResult) workersessions.Session {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	session := r.sessions[id]
+	session.State = state
+	session.Result = cloneTerminalResult(&result)
+	r.sessions[id] = session
+	return cloneSession(session)
+}
+
+// cloneSession returns a detached copy of session: mutating the returned
+// value, or its Result, never affects registry-owned state.
+func cloneSession(session workersessions.Session) workersessions.Session {
+	session.Result = cloneTerminalResult(session.Result)
+	return session
+}
+
+func cloneTerminalResult(result *workersessions.TerminalResult) *workersessions.TerminalResult {
+	if result == nil {
+		return nil
+	}
+	clone := *result
+	if result.Cause != nil {
+		cause := *result.Cause
+		clone.Cause = &cause
+	}
+	return &clone
+}
+
+func causeKindString(cause *workersessions.FailureCause) string {
+	if cause == nil {
+		return ""
+	}
+	return string(cause.Kind)
 }

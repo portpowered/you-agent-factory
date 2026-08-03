@@ -7,6 +7,7 @@ import (
 
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type recordedLogEntry struct {
@@ -71,7 +72,7 @@ func assertNoPayloadOrCredentialKeys(t *testing.T, fields map[string]any) {
 	t.Helper()
 	for key := range fields {
 		switch key {
-		case "sessionID", "outcome", "state", "filter_state_count", "result_count":
+		case "sessionID", "attemptID", "outcome", "state", "cause", "filter_state_count", "result_count":
 			continue
 		default:
 			t.Fatalf("unexpected log field %q leaked into operation log: %#v", key, fields)
@@ -79,9 +80,18 @@ func assertNoPayloadOrCredentialKeys(t *testing.T, fields map[string]any) {
 	}
 }
 
+func newLoggingRegistry(t *testing.T, logger *recordingLogger) workersessions.Service {
+	t.Helper()
+	registry, err := service.New(succeedingExecution(), logger)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	return registry
+}
+
 func TestRegistryLogsReserveOutcomes(t *testing.T) {
 	logger := &recordingLogger{}
-	registry := service.New(logger)
+	registry := newLoggingRegistry(t, logger)
 	ctx := context.Background()
 
 	if _, err := registry.Reserve(ctx, workersessions.ReserveRequest{ID: "   "}); err == nil {
@@ -114,7 +124,7 @@ func TestRegistryLogsReserveOutcomes(t *testing.T) {
 
 func TestRegistryLogsListOutcomes(t *testing.T) {
 	logger := &recordingLogger{}
-	registry := service.New(logger)
+	registry := newLoggingRegistry(t, logger)
 	ctx := context.Background()
 
 	if _, err := registry.List(ctx, workersessions.ListRequest{Filter: workersessions.Filter{States: []workersessions.State{"INTERRUPTED"}}}); err == nil {
@@ -137,4 +147,55 @@ func TestRegistryLogsListOutcomes(t *testing.T) {
 		t.Fatalf("list-success log = %#v", succeeded)
 	}
 	assertNoPayloadOrCredentialKeys(t, succeeded[0].fields)
+}
+
+func TestRegistryLogsStartOutcomes(t *testing.T) {
+	logger := &recordingLogger{}
+	registry, err := service.New(&fakeExecution{
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			return workers.WorkstationDispatchResult{
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeFailed,
+					Error:      "executor panic: boom",
+				},
+			}, nil
+		},
+	}, logger)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	ctx := context.Background()
+
+	if _, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+
+	handoff := logger.entriesFor("worker session start")
+	if len(handoff) != 1 || handoff[0].fields["sessionID"] != "worker-1" || handoff[0].fields["outcome"] != "handoff" {
+		t.Fatalf("start-handoff log = %#v", handoff)
+	}
+	assertNoPayloadOrCredentialKeys(t, handoff[0].fields)
+
+	terminal := logger.entriesFor("worker session start terminal")
+	if len(terminal) != 1 || terminal[0].fields["sessionID"] != "worker-1" ||
+		terminal[0].fields["outcome"] != "FAILED" || terminal[0].fields["cause"] != "EXECUTOR_PANIC" {
+		t.Fatalf("start-terminal log = %#v", terminal)
+	}
+	assertNoPayloadOrCredentialKeys(t, terminal[0].fields)
+	for _, entry := range terminal {
+		for key, value := range entry.fields {
+			if key == "cause" {
+				continue
+			}
+			if text, ok := value.(string); ok && containsPanicWorkContent(text) {
+				t.Fatalf("start-terminal log field %q leaked panic detail text: %#v", key, entry.fields)
+			}
+		}
+	}
+}
+
+func containsPanicWorkContent(text string) bool {
+	return text == "executor panic: boom"
 }

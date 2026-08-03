@@ -47,6 +47,72 @@ func TestSession_Validate_IsDeterministicAndDoesNotMutate(t *testing.T) {
 	}
 }
 
+func TestSession_Validate_CompletedRequiresMatchingCompletedResult(t *testing.T) {
+	session := workersessions.Session{
+		ID:     "worker-1",
+		State:  workersessions.StateCompleted,
+		Result: &workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted},
+	}
+	if err := session.Validate(); err != nil {
+		t.Fatalf("Validate() = %v, want nil", err)
+	}
+
+	missing := workersessions.Session{ID: "worker-1", State: workersessions.StateCompleted}
+	if err := missing.Validate(); !errors.Is(err, workersessions.ErrInvalidTerminalResult) {
+		t.Errorf("Validate() with missing Result = %v, want ErrInvalidTerminalResult", err)
+	}
+
+	mismatched := workersessions.Session{
+		ID:    "worker-1",
+		State: workersessions.StateCompleted,
+		Result: &workersessions.TerminalResult{
+			Outcome: workersessions.TerminalOutcomeFailed,
+			Cause:   &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure},
+		},
+	}
+	if err := mismatched.Validate(); !errors.Is(err, workersessions.ErrInvalidTerminalResult) {
+		t.Errorf("Validate() with mismatched Result = %v, want ErrInvalidTerminalResult", err)
+	}
+}
+
+func TestSession_Validate_FailedRequiresMatchingFailedResultWithCause(t *testing.T) {
+	session := workersessions.Session{
+		ID:    "worker-1",
+		State: workersessions.StateFailed,
+		Result: &workersessions.TerminalResult{
+			Outcome: workersessions.TerminalOutcomeFailed,
+			Cause:   &workersessions.FailureCause{Kind: workersessions.FailureCauseExecutorPanic},
+		},
+	}
+	if err := session.Validate(); err != nil {
+		t.Fatalf("Validate() = %v, want nil", err)
+	}
+
+	noCause := workersessions.Session{
+		ID:     "worker-1",
+		State:  workersessions.StateFailed,
+		Result: &workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeFailed},
+	}
+	if err := noCause.Validate(); !errors.Is(err, workersessions.ErrInvalidTerminalResult) {
+		t.Errorf("Validate() with FAILED and nil Cause = %v, want ErrInvalidTerminalResult", err)
+	}
+}
+
+func TestSession_Validate_NonTerminalStateRejectsTerminalResult(t *testing.T) {
+	for _, state := range []workersessions.State{
+		workersessions.StateReserved, workersessions.StateStarting, workersessions.StateRunning, workersessions.StatePaused,
+	} {
+		session := workersessions.Session{
+			ID:     "worker-1",
+			State:  state,
+			Result: &workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted},
+		}
+		if err := session.Validate(); !errors.Is(err, workersessions.ErrInvalidTerminalResult) {
+			t.Errorf("Validate() with state %q and a Result = %v, want ErrInvalidTerminalResult", state, err)
+		}
+	}
+}
+
 func TestSession_Terminal_MatchesStateTerminal(t *testing.T) {
 	for _, state := range []workersessions.State{
 		workersessions.StateReserved, workersessions.StateStarting, workersessions.StateRunning, workersessions.StatePaused,
