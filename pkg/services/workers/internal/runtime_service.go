@@ -61,6 +61,11 @@ type Service struct {
 	workstationFiles                  platformfilesystem.ReadFileInspector
 	temporaryFiles                    platformfilesystem.TemporaryFileSystem
 	executableLocator                 platformprocess.ExecutableLocator
+	allocator                         workers.PTYAllocator
+	resolveSymlinks                   workers.ResolveExecutableSymlinks
+	executableInspector               platformfilesystem.PathInspector
+	executableFiles                   platformfilesystem.ReadOpener
+	operatingSystem                   workers.OperatingSystem
 	providerRegistry                  workers.ProviderRegistry
 	providerRegistryRebinder          ProviderRegistryRebinder
 	agentDispatchUsesRegisteredRunner bool
@@ -261,6 +266,11 @@ func New(
 		workstationFiles:                  workstationFiles,
 		temporaryFiles:                    temporaryFiles,
 		executableLocator:                 executableLocator,
+		allocator:                         agyPTYAllocator,
+		resolveSymlinks:                   resolveSymlinks,
+		executableInspector:               executableInspector,
+		executableFiles:                   executableFiles,
+		operatingSystem:                   operatingSystem,
 	}, nil
 }
 

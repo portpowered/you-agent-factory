@@ -104,16 +104,18 @@ func NewRuntimeWithSelection(
 	)
 }
 
-// RebuildForSessionBuild returns a per-session-build clone of base with the
-// supplied command-runner overrides applied. It is the one seam
-// ACP-L2-CUT-RUN-WRK-RUNNERS is chartered to remove; RuntimeService itself
-// exposes no supported operation that replaces its constructed dependencies.
-func RebuildForSessionBuild(
+// NewSessionBuildRuntime returns an independently constructed per-session-build
+// Workers runtime with its final provider/script command runners and progress
+// publisher supplied at construction. RuntimeService itself exposes no
+// supported operation that replaces its constructed dependencies; this
+// constructs a new, independent instance instead.
+func NewSessionBuildRuntime(
 	base workers.RuntimeService,
 	providerRunner workers.CommandRunner,
 	scriptRunner workers.CommandRunner,
+	progressPublisher workers.ProgressPublisher,
 ) (workers.RuntimeService, error) {
-	return workersinternal.RebuildForSessionBuild(base, providerRunner, scriptRunner)
+	return workersinternal.NewSessionBuildRuntime(base, providerRunner, scriptRunner, progressPublisher)
 }
 
 // BuildRuntimeExecutors invokes the concrete Workers runtime implementation.

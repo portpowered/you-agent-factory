@@ -104,10 +104,11 @@ func NewRuntimeBuild(
 			if progressFactory != nil {
 				progressPublisher = progressFactory(spec.SessionID)
 			}
-			runtimeWorkers, err := workerswire.RebuildForSessionBuild(
+			runtimeWorkers, err := workerswire.NewSessionBuildRuntime(
 				workerExecution,
 				spec.ProviderCommandRunner,
 				spec.CommandRunnerOverride,
+				progressPublisher,
 			)
 			if err != nil {
 				return nil, fmt.Errorf("construct runtime Worker service: %w", err)

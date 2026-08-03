@@ -196,22 +196,23 @@ func testWorkerServiceWithRunnerAndLogger(t *testing.T, providerRunner workers.C
 	return service
 }
 
-// TestRebuiltForBuildPreservesInjectedLoggerForWorkstationPool proves the
-// logger a runtime opening injects at construction keeps reaching the cloned
-// workstation pool through rebuiltForBuild, the path every normal Factory
-// Runtime session-build activation takes (via wire.RebuildForSessionBuild,
-// factory_runtime/internal/runtime_build.go). rebuiltForBuild is deliberately
-// unexported and off the public RuntimeService contract; this test exercises
-// it directly from within the package.
-func TestRebuiltForBuildPreservesInjectedLoggerForWorkstationPool(t *testing.T) {
+// TestNewSessionBuildRuntimePreservesInjectedLoggerForWorkstationPool proves
+// the logger a runtime opening injects at construction keeps reaching the
+// freshly constructed per-build workstation pool through
+// newSessionBuildRuntime, the path every normal Factory Runtime session-build
+// activation takes (via wire.NewSessionBuildRuntime,
+// factory_runtime/internal/runtime_build.go). newSessionBuildRuntime is
+// deliberately unexported and off the public RuntimeService contract; this
+// test exercises it directly from within the package.
+func TestNewSessionBuildRuntimePreservesInjectedLoggerForWorkstationPool(t *testing.T) {
 	t.Parallel()
 
 	core, logs := observer.New(zapcore.InfoLevel)
 	service := testWorkerServiceWithLogger(t, zap.New(core))
 
-	runtime, err := service.rebuiltForBuild(injectedProviderRunner{}, injectedProviderRunner{})
+	runtime, err := service.newSessionBuildRuntime(injectedProviderRunner{}, injectedProviderRunner{}, nil)
 	if err != nil {
-		t.Fatalf("rebuiltForBuild() error = %v", err)
+		t.Fatalf("newSessionBuildRuntime() error = %v", err)
 	}
 
 	if _, err := runtime.StartWorkstationPool(
@@ -226,7 +227,7 @@ func TestRebuiltForBuildPreservesInjectedLoggerForWorkstationPool(t *testing.T) 
 	entries := logs.FilterMessage("workers workstation pool start").All()
 	if len(entries) != 1 {
 		t.Fatalf(
-			"observed logs = %#v, want exactly one workstation pool start record surviving rebuiltForBuild",
+			"observed logs = %#v, want exactly one workstation pool start record surviving newSessionBuildRuntime",
 			logs.All(),
 		)
 	}
