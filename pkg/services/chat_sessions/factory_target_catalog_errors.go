@@ -54,6 +54,13 @@ var (
 type FactoryTargetCatalogError struct {
 	Target string
 	Err    error
+	// Cause, when non-nil, is context.Canceled or context.DeadlineExceeded
+	// exactly as returned by the dependency that failed, preserved so a
+	// caller's errors.Is against the original context cause still succeeds
+	// through this typed error. It is deliberately never set for any other
+	// dependency failure, so an arbitrary raw collaborator error can never
+	// leak through this field or become externally classifiable.
+	Cause error
 }
 
 func (e *FactoryTargetCatalogError) Error() string {
@@ -63,8 +70,11 @@ func (e *FactoryTargetCatalogError) Error() string {
 	return fmt.Sprintf("chat sessions: factory target catalog %q: %v", e.Target, e.Err)
 }
 
-// Unwrap exposes the underlying sentinel so errors.Is/errors.As can classify
-// the failure.
-func (e *FactoryTargetCatalogError) Unwrap() error {
-	return e.Err
+// Unwrap exposes the sentinel classification and, when present, the original
+// context cause, so errors.Is can classify the failure by either.
+func (e *FactoryTargetCatalogError) Unwrap() []error {
+	if e.Cause != nil {
+		return []error{e.Err, e.Cause}
+	}
+	return []error{e.Err}
 }

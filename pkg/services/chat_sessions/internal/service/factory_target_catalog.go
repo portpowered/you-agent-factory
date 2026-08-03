@@ -36,6 +36,21 @@ func isWellFormedFactoryTargetReference(value string) bool {
 	return factoryTargetReferencePattern.MatchString(suffix)
 }
 
+// dependencyContextCause returns context.Canceled or context.DeadlineExceeded
+// when err is classifiable as one, and nil otherwise. It never returns err
+// itself: only these two safe, text-free sentinels are ever attached to a
+// public FactoryTargetCatalogError's Cause field, so an arbitrary dependency
+// error can never leak through it.
+func dependencyContextCause(err error) error {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return context.Canceled
+	case errors.Is(err, context.DeadlineExceeded):
+		return context.DeadlineExceeded
+	}
+	return nil
+}
+
 // ResolveFactoryTargetCatalog resolves the effective ACP Agent profile
 // through Operator Settings, reads the installed Factory catalog through
 // Factory Definitions, intersects the profile's allowlist with that catalog,
@@ -97,7 +112,8 @@ func (s *Service) resolveFactoryTargetCatalog(
 	profile, err := s.operatorSettings.ResolveACPAgentProfile(req.OperatorSettingsPath)
 	if err != nil {
 		return chatsessions.ResolveFactoryTargetCatalogResult{}, &chatsessions.FactoryTargetCatalogError{
-			Err: chatsessions.ErrFactoryTargetProfileUnavailable,
+			Err:   chatsessions.ErrFactoryTargetProfileUnavailable,
+			Cause: dependencyContextCause(err),
 		}
 	}
 
@@ -107,7 +123,8 @@ func (s *Service) resolveFactoryTargetCatalog(
 	})
 	if err != nil {
 		return chatsessions.ResolveFactoryTargetCatalogResult{}, &chatsessions.FactoryTargetCatalogError{
-			Err: chatsessions.ErrFactoryTargetCatalogUnavailable,
+			Err:   chatsessions.ErrFactoryTargetCatalogUnavailable,
+			Cause: dependencyContextCause(err),
 		}
 	}
 
@@ -174,6 +191,7 @@ func (s *Service) resolveFactoryTargetCatalog(
 			return chatsessions.ResolveFactoryTargetCatalogResult{}, &chatsessions.FactoryTargetCatalogError{
 				Target: current,
 				Err:    chatsessions.ErrFactoryTargetCatalogUnavailable,
+				Cause:  dependencyContextCause(err),
 			}
 		}
 		if resolved.Resolution.Source == factorydefinitions.NamedFactoryResolutionSourceProjectLocal &&
