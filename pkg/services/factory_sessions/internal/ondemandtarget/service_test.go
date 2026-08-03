@@ -126,7 +126,7 @@ func (f *fakeSessions) CloseFactorySession(_ context.Context, sessionID string) 
 	return f.closeErr
 }
 
-func newTestService(t *testing.T, opener *fakeOpener, resolve RuntimeResolver, generateID factorysessions.SessionIDGenerator) *Service {
+func newTestService(t *testing.T, opener invocationRuntimeOpener, resolve RuntimeResolver, generateID factorysessions.SessionIDGenerator) *Service {
 	t.Helper()
 	return &Service{
 		factory:    opener,
@@ -357,4 +357,91 @@ func TestCloseFactoryTargetUnknownIdentityIsNoOpSuccess(t *testing.T) {
 	if err := svc.CloseFactoryTarget(context.Background(), "unknown"); err != nil {
 		t.Fatalf("CloseFactoryTarget() error = %v, want nil for an unknown identity", err)
 	}
+}
+
+// TestCloseTearsDownEveryTrackedRuntime proves Close (the io.Closer this
+// Service implements for a future process lifecycle plan to register) tears
+// down every runtime this Service has opened -- not just one -- and evicts
+// each of them, so a later call against any of their identities reports
+// ErrSessionNotFound instead of reusing a torn-down runtime.
+func TestCloseTearsDownEveryTrackedRuntime(t *testing.T) {
+	firstLifecycle := &fakeLifecycle{}
+	secondLifecycle := &fakeLifecycle{}
+	openCount := 0
+	opener := &funcOpener{open: func(context.Context, *factorysessions.RuntimeOpeningRequest, runtimeopening.ExternalEffects, *zap.Logger) (roles.OpenedInvocationRuntime, error) {
+		openCount++
+		lifecycle := firstLifecycle
+		if openCount == 2 {
+			lifecycle = secondLifecycle
+		}
+		return roles.OpenedInvocationRuntime{
+			Sessions:  &fakeSessions{invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}},
+			Lifecycle: lifecycle,
+		}, nil
+	}}
+	resolve := func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+		return factorysessions.RuntimeOpeningRequest{}, nil
+	}
+	svc := newTestService(t, opener, resolve, sequentialIDs("wrapper"))
+
+	first, err := svc.StartFactoryTarget(context.Background(), factorysessions.StartRequest{Source: factorysessions.Source{FactoryID: "@you/first"}})
+	if err != nil {
+		t.Fatalf("StartFactoryTarget() first error = %v", err)
+	}
+	second, err := svc.StartFactoryTarget(context.Background(), factorysessions.StartRequest{Source: factorysessions.Source{FactoryID: "@you/second"}})
+	if err != nil {
+		t.Fatalf("StartFactoryTarget() second error = %v", err)
+	}
+
+	if err := svc.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if firstLifecycle.stopCalls != 1 {
+		t.Fatalf("first runtime StopLifecycle call count = %d, want exactly 1", firstLifecycle.stopCalls)
+	}
+	if secondLifecycle.stopCalls != 1 {
+		t.Fatalf("second runtime StopLifecycle call count = %d, want exactly 1", secondLifecycle.stopCalls)
+	}
+
+	if _, err := svc.InvokeFactoryTarget(context.Background(), first.SessionID, factorysessions.InvocationRequest{}); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("InvokeFactoryTarget(first) after Close error = %v, want ErrSessionNotFound", err)
+	}
+	if _, err := svc.InvokeFactoryTarget(context.Background(), second.SessionID, factorysessions.InvocationRequest{}); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("InvokeFactoryTarget(second) after Close error = %v, want ErrSessionNotFound", err)
+	}
+
+	// Close is idempotent: a second call has nothing left to close and
+	// succeeds without re-closing either runtime.
+	if err := svc.Close(); err != nil {
+		t.Fatalf("second Close() error = %v, want nil (idempotent)", err)
+	}
+	if firstLifecycle.stopCalls != 1 || secondLifecycle.stopCalls != 1 {
+		t.Fatalf("StopLifecycle call counts after second Close = (%d, %d), want (1, 1) -- no double close", firstLifecycle.stopCalls, secondLifecycle.stopCalls)
+	}
+}
+
+// TestCloseWithNoOpenedRuntimesIsNoOpSuccess proves calling Close before any
+// StartFactoryTarget call succeeds without effect.
+func TestCloseWithNoOpenedRuntimesIsNoOpSuccess(t *testing.T) {
+	svc := newTestService(t, &fakeOpener{}, nil, sequentialIDs("wrapper"))
+	if err := svc.Close(); err != nil {
+		t.Fatalf("Close() error = %v, want nil when no runtime was ever opened", err)
+	}
+}
+
+// funcOpener is an invocationRuntimeOpener test double backed directly by a
+// function, for tests that need each successive OpenInvocationRuntime call
+// to return a distinct opened runtime (fakeOpener always returns the same
+// fixed one).
+type funcOpener struct {
+	open func(context.Context, *factorysessions.RuntimeOpeningRequest, runtimeopening.ExternalEffects, *zap.Logger) (roles.OpenedInvocationRuntime, error)
+}
+
+func (f *funcOpener) OpenInvocationRuntime(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+	effects runtimeopening.ExternalEffects,
+	logger *zap.Logger,
+) (roles.OpenedInvocationRuntime, error) {
+	return f.open(ctx, request, effects, logger)
 }

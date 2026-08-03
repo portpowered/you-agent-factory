@@ -181,6 +181,21 @@ func provideACPServerFactoryTargetRuntimeResolver(
 // on the process-scoped factorysessions.Service, which stays permanently
 // inert outside the CLI daemon bootstrap. Construction alone performs no
 // I/O and opens no runtime.
+//
+// The concrete *factorysessionwire.OnDemandFactoryTargetService this
+// constructs satisfies io.Closer: its Close tears down and evicts every
+// runtime it has lazily activated. No production caller currently reaches
+// it through this narrowed acp.FactoryTargetService return (which exposes
+// only per-identity CloseFactoryTarget, not the aggregate Close), because no
+// production ACP stdio entrypoint exists yet to run initializer.Process's
+// already-composed ACPServer() -- pkg/initializer/application/process.go's
+// ACPServer accessor is today consumed only by tests
+// (tests/functional/chat_sessions/root_composition). A future production
+// entrypoint that actually serves ACP over stdio must obtain this same
+// singleton as its concrete type (not just acp.FactoryTargetService) and
+// register it as a lifecycle.NamedResource in its own Plan (see
+// pkg/initializer/lifecycle) so every runtime it opens is guaranteed a
+// reachable, deterministic close on process shutdown.
 func provideACPServerFactoryTarget(
 	openRuntime *factorysessionwire.RuntimeOpeningFactory,
 	edges serviceedges.Edges,

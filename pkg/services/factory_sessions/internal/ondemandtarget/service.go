@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 
 	"go.uber.org/zap"
@@ -23,6 +24,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
+
+// Service satisfies io.Closer so a process lifecycle plan can register it as
+// a NamedResource (see pkg/initializer/lifecycle) whose Close tears down
+// every runtime it ever lazily activated.
+var _ io.Closer = (*Service)(nil)
 
 // RuntimeResolver turns one canonical Factory target identity and editor
 // working root into the concrete Runtime Opening request that activating a
@@ -312,4 +318,36 @@ func (s *Service) CloseFactoryTarget(ctx context.Context, sessionID string) erro
 		s.logger.Info("on-demand Factory target closed")
 	}
 	return err
+}
+
+// Close tears down and evicts every runtime this Service has opened and not
+// yet closed, aggregating every individual close failure into one returned
+// error rather than stopping at the first. It satisfies io.Closer so a
+// process lifecycle plan can register this Service as a reachable,
+// deterministic unwind step for every runtime it ever lazily activated,
+// instead of leaving them open for the life of the process; construction
+// alone opens no runtime, so calling Close before any StartFactoryTarget
+// call is a no-op success. Close is idempotent: a runtime evicted by this
+// call or by an earlier CloseFactoryTarget call is never closed twice.
+func (s *Service) Close() error {
+	s.mu.Lock()
+	active := make([]*activatedRuntime, 0, len(s.runtimes))
+	for sessionID, runtime := range s.runtimes {
+		active = append(active, runtime)
+		delete(s.runtimes, sessionID)
+	}
+	s.mu.Unlock()
+
+	var result error
+	for _, runtime := range active {
+		if err := runtime.close(context.WithoutCancel(context.Background())); err != nil {
+			result = errors.Join(result, err)
+		}
+	}
+	if result != nil {
+		s.logger.Error("on-demand Factory target close-all failed", zap.Error(result))
+	} else if len(active) > 0 {
+		s.logger.Info("on-demand Factory target close-all completed", zap.Int("runtimeCount", len(active)))
+	}
+	return result
 }
