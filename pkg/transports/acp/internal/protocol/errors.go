@@ -5,6 +5,8 @@ import (
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
+	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
+	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
 )
 
@@ -77,4 +79,47 @@ func MethodNotFound(method string) *acpsdk.RequestError {
 // way.
 func SafeReject(cause error) *acpsdk.RequestError {
 	return acpsdk.NewInvalidParams(map[string]any{"reason": string(Classify(cause))})
+}
+
+// ParseError returns the bounded JSON-RPC parse-error response for input
+// that never parsed as JSON at all. It carries only a fixed, static reason
+// label -- never the underlying parse cause's message -- so it can never
+// disclose fragments of unparseable client input.
+func ParseError() *acpsdk.RequestError {
+	return acpsdk.NewParseError(map[string]any{"reason": "invalid_json"})
+}
+
+// InvalidRequest returns the bounded JSON-RPC invalid-request response for
+// input that parsed as JSON but violates the JSON-RPC 2.0 request shape
+// this transport requires (for example a missing method, a wrong protocol
+// version token, or an id-bearing message for a notification-only method).
+// It carries only a fixed, static reason label, for the same reason
+// ParseError does.
+func InvalidRequest() *acpsdk.RequestError {
+	return acpsdk.NewInvalidRequest(map[string]any{"reason": "invalid_request_shape"})
+}
+
+// RejectEnvelope classifies an envelope.Decode failure into the bounded
+// JSON-RPC error to serialize, and the JSON-RPC id, if any, to correlate
+// the response to. Completely unparseable JSON classifies as ParseError and
+// is never correlated, matching JSON-RPC 2.0's requirement that a parse
+// error response always carries a null id. Every other envelope.Decode
+// failure classifies as InvalidRequest and is correlated to the message's
+// id only when envelope.DecodeError reports that id as syntactically valid
+// -- an id that is itself malformed, or altogether absent, has nothing to
+// correlate to. A cause that is not an *envelope.DecodeError (for example a
+// method-specific params decode failure a caller passes through this same
+// path) falls back to the general SafeReject classification and is never
+// correlated by this function; a caller with its own recoverable id for
+// that case correlates it separately.
+func RejectEnvelope(cause error) (*acpsdk.RequestError, identity.JSONRPCID, bool) {
+	var decodeErr *envelope.DecodeError
+	if errors.As(cause, &decodeErr) {
+		if errors.Is(decodeErr, envelope.ErrInvalidJSON) {
+			return ParseError(), identity.JSONRPCID{}, false
+		}
+		id, ok := decodeErr.ID()
+		return InvalidRequest(), id, ok
+	}
+	return SafeReject(cause), identity.JSONRPCID{}, false
 }

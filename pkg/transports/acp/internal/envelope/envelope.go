@@ -29,6 +29,49 @@ import (
 // method-specific validation failure.
 var ErrMalformedEnvelope = errors.New("acp: malformed json-rpc envelope")
 
+// ErrInvalidJSON marks a Decode failure caused by input that never parsed
+// as JSON at all. It wraps ErrMalformedEnvelope, so a caller checking only
+// for ErrMalformedEnvelope still matches, while a caller that needs the
+// JSON-RPC 2.0 parse-error-vs-invalid-request distinction can check for
+// this sentinel specifically.
+var ErrInvalidJSON = fmt.Errorf("%w: invalid JSON", ErrMalformedEnvelope)
+
+// ErrInvalidRequestShape marks a Decode failure caused by input that parsed
+// as JSON but violates the JSON-RPC 2.0 request shape this transport
+// requires: a wrong or missing "jsonrpc" version, a missing or blank
+// method, an unsupported id shape, an id-bearing notification, or a
+// request-shaped method with no id. It wraps ErrMalformedEnvelope for the
+// same reason ErrInvalidJSON does.
+var ErrInvalidRequestShape = fmt.Errorf("%w: invalid JSON-RPC request shape", ErrMalformedEnvelope)
+
+// DecodeError classifies a Decode failure and, when possible, carries the
+// JSON-RPC id token a caller may still correlate a rejection response to.
+// Per JSON-RPC 2.0, a request that is otherwise malformed should still
+// receive a response correlated to its id when that id token was itself
+// syntactically valid; ID reports false when the inbound message had no id,
+// or its id was itself malformed, or the failure was ErrInvalidJSON (input
+// unparseable enough that no id could ever be recovered from it).
+type DecodeError struct {
+	cause error
+	id    identity.JSONRPCID
+	hasID bool
+}
+
+// Error returns the underlying cause's message.
+func (e *DecodeError) Error() string { return e.cause.Error() }
+
+// Unwrap exposes the underlying cause so errors.Is/errors.As can match
+// ErrMalformedEnvelope, ErrInvalidJSON, or ErrInvalidRequestShape.
+func (e *DecodeError) Unwrap() error { return e.cause }
+
+// ID returns the JSON-RPC id to correlate a rejection response to, and true
+// only when the inbound message's id token was itself syntactically valid.
+func (e *DecodeError) ID() (identity.JSONRPCID, bool) { return e.id, e.hasID }
+
+func newDecodeError(cause error, id identity.JSONRPCID, hasID bool) *DecodeError {
+	return &DecodeError{cause: cause, id: id, hasID: hasID}
+}
+
 // jsonrpcVersion is the only JSON-RPC protocol version this boundary
 // accepts on the wire.
 const jsonrpcVersion = "2.0"
@@ -84,35 +127,54 @@ type Envelope struct {
 // JSON, a wrong or missing "jsonrpc" version, a missing method, a blank
 // connection id, any id shape identity.NewJSONRPCID does not accept, an
 // id-bearing NotificationMethods message, and a non-notification method
-// with no id, before ever producing an Envelope value. A notification
-// carries no JSON-RPC id to correlate by, so its identity is instead minted
-// from the connection, the method, and notificationSeq -- a value the
-// connection/framing layer must supply as unique per notification received
-// on this connection (for example a connection-local monotonic counter),
-// since Decode itself has no state across calls and cannot otherwise tell
-// two same-method notifications on one connection apart. Decode performs no
-// IO and invokes no downstream validator or effect: a rejection here can
-// never have a side effect to undo.
+// with no id, before ever producing an Envelope value. Every rejection is
+// returned as a *DecodeError: unparseable JSON wraps ErrInvalidJSON and
+// never carries a recoverable id, while every other rejection wraps
+// ErrInvalidRequestShape and carries the message's id when that id token
+// was itself syntactically valid, even though some other part of the
+// message was rejected. A notification carries no JSON-RPC id to correlate
+// by, so its identity is instead minted from the connection, the method,
+// and notificationSeq -- a value the connection/framing layer must supply
+// as unique per notification received on this connection (for example a
+// connection-local monotonic counter), since Decode itself has no state
+// across calls and cannot otherwise tell two same-method notifications on
+// one connection apart. Decode performs no IO and invokes no downstream
+// validator or effect: a rejection here can never have a side effect to
+// undo.
 func Decode(connectionID identity.ConnectionID, notificationSeq uint64, raw json.RawMessage) (Envelope, error) {
 	var w wireRequest
 	if err := json.Unmarshal(raw, &w); err != nil {
-		return Envelope{}, fmt.Errorf("%w: invalid JSON: %v", ErrMalformedEnvelope, err)
+		return Envelope{}, newDecodeError(fmt.Errorf("%w: %v", ErrInvalidJSON, err), identity.JSONRPCID{}, false)
 	}
+
+	// candidateID is a best-effort recovery of the message's id, used to
+	// correlate a rejection response for every failure below that isn't
+	// ErrInvalidJSON. It is populated only when the id token itself is a
+	// syntactically valid JSON-RPC id, regardless of what else about the
+	// message is rejected.
+	var candidateID identity.JSONRPCID
+	candidateOK := false
+	if w.ID != nil {
+		if parsed, err := identity.NewJSONRPCID(w.ID); err == nil {
+			candidateID, candidateOK = parsed, true
+		}
+	}
+
 	if w.JSONRPC != jsonrpcVersion {
-		return Envelope{}, fmt.Errorf("%w: jsonrpc must be %q", ErrMalformedEnvelope, jsonrpcVersion)
+		return Envelope{}, newDecodeError(fmt.Errorf("%w: jsonrpc must be %q", ErrInvalidRequestShape, jsonrpcVersion), candidateID, candidateOK)
 	}
 	if strings.TrimSpace(w.Method) == "" {
-		return Envelope{}, fmt.Errorf("%w: method is required", ErrMalformedEnvelope)
+		return Envelope{}, newDecodeError(fmt.Errorf("%w: method is required", ErrInvalidRequestShape), candidateID, candidateOK)
 	}
 	if strings.TrimSpace(string(connectionID)) == "" {
-		return Envelope{}, fmt.Errorf("%w: connection id must not be empty", ErrMalformedEnvelope)
+		return Envelope{}, newDecodeError(fmt.Errorf("%w: connection id must not be empty", ErrInvalidRequestShape), candidateID, candidateOK)
 	}
 
 	idPresent := w.ID != nil
 
 	if NotificationMethods[w.Method] {
 		if idPresent {
-			return Envelope{}, fmt.Errorf("%w: %s is a notification and must not carry an id", ErrMalformedEnvelope, w.Method)
+			return Envelope{}, newDecodeError(fmt.Errorf("%w: %s is a notification and must not carry an id", ErrInvalidRequestShape, w.Method), candidateID, candidateOK)
 		}
 		// connectionID and w.Method are already validated non-blank above,
 		// so this formatted string can never be empty and NewMinted can
@@ -122,11 +184,11 @@ func Decode(connectionID identity.ConnectionID, notificationSeq uint64, raw json
 	}
 
 	if !idPresent {
-		return Envelope{}, fmt.Errorf("%w: id is required for a request method", ErrMalformedEnvelope)
+		return Envelope{}, newDecodeError(fmt.Errorf("%w: id is required for a request method", ErrInvalidRequestShape), identity.JSONRPCID{}, false)
 	}
 	id, err := identity.NewJSONRPCID(w.ID)
 	if err != nil {
-		return Envelope{}, fmt.Errorf("%w: %v", ErrMalformedEnvelope, err)
+		return Envelope{}, newDecodeError(fmt.Errorf("%w: %v", ErrInvalidRequestShape, err), identity.JSONRPCID{}, false)
 	}
 	// connectionID is already validated non-blank above, and id is already
 	// validated non-zero by NewJSONRPCID, so NewCorrelated can never fail

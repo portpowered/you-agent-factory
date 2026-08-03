@@ -2259,6 +2259,14 @@
       "minimum": 88.43
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/stdio",
+      "minimum": 94.25
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/wire",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli",
       "minimum": 71.22
     },
