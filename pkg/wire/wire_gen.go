@@ -563,7 +563,18 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	process, err := application.NewProcess(commandFactory, initializer, providerRegistry, processLifecycle)
+	chatsessionsService, err := provideChatSessionsService(loggingLogger)
+	if err != nil {
+		return nil, err
+	}
+	factorydefinitionsService := provideACPServerFactoryDefinitions(effectiveFactoryCatalogOperation, v)
+	factoryTargetCatalogService, err := provideChatSessionsFactoryTargetCatalogService(operatorsettingsService, factorydefinitionsService, loggingLogger)
+	if err != nil {
+		return nil, err
+	}
+	wireAcpServerResolveHomeDir := provideACPServerResolveHomeDir()
+	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, wireAcpServerResolveHomeDir)
+	process, err := application.NewProcess(commandFactory, initializer, providerRegistry, processLifecycle, server)
 	if err != nil {
 		return nil, err
 	}
@@ -588,6 +599,7 @@ var servicesSet = wire3.NewSet(
 	provideOperatorSettingsService,
 	provideOperatorSettingsIDGenerator,
 	provideChatSessionsFactoryTargetCatalogService,
+	provideACPServerFactoryDefinitions,
 	provideACPServerResolveHomeDir,
 	provideACPServer,
 	provideOperatorConfigDecoder,
