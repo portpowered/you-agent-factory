@@ -82,9 +82,6 @@ func RootErrorResponse(err error, operation Operation) (int, factoryapi.ErrorRes
 		}
 	}
 
-	if stderrors.Is(err, factoryruntime.ErrCapabilityUnavailable) {
-		return serviceUnavailableErrorResponse("factory runtime capability is unavailable")
-	}
 	if stderrors.Is(err, factoryruntime.ErrNotRunning) {
 		return serviceUnavailableErrorResponse("factory runtime is not running")
 	}

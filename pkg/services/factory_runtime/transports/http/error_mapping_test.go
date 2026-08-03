@@ -45,13 +45,6 @@ func TestRootErrorResponse_MapsSharedRuntimeSentinels(t *testing.T) {
 			wantCode:   factoryapi.ErrorResponseCodeNOTFOUND,
 			wantMsg:    "factory runtime target not found",
 		},
-		{
-			name:       "capability unavailable",
-			err:        factoryruntime.ErrCapabilityUnavailable,
-			wantStatus: http.StatusServiceUnavailable,
-			wantCode:   factoryapi.ErrorResponseCode("SERVICE_UNAVAILABLE"),
-			wantMsg:    "factory runtime capability is unavailable",
-		},
 	}
 
 	for _, operation := range operations {
