@@ -550,6 +550,50 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 		}
 	})
 
+	t.Run("executor_panic_routes_to_failed_terminal", func(t *testing.T) {
+		t.Parallel()
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+		traceID := "trace-executor-panic"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "task",
+			TraceID:    traceID,
+			Payload:    []byte(`{"title":"will panic at executor"}`),
+		})
+
+		provider := panicInferenceProvider{message: "simulated executor catastrophic panic"}
+		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+			t,
+			dir,
+			serviceedges.Edges{ProviderOverride: provider},
+			10*time.Second,
+		)
+
+		failedTerminal := support.WorkCustomerLocation("task", "failed")
+		successTerminal := support.WorkCustomerLocation("task", "done")
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			failedTerminal:  1,
+			successTerminal: 0,
+			support.WorkCustomerLocation("task", "init"): 0,
+		})
+		assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{traceID})
+		assertTraceAbsentAtCustomerState(t, listed, successTerminal, traceID)
+		assertQuiescentSession(t, session, 0, 1)
+
+		failedWorkID, ok := workIDAtCustomerState(t, listed, failedTerminal, traceID)
+		if !ok {
+			t.Fatalf("missing failed Work for trace %q at %s", traceID, failedTerminal)
+		}
+		dispatches := support.ObserveDispatchEvents(t, events)
+		assertFailedDispatchForWork(t, dispatches, failedWorkID)
+		assertFailedDispatchResponseErrorForWork(t, dispatches, failedWorkID)
+		assertDispatchResponseErrorContains(
+			t,
+			dispatches,
+			failedWorkID,
+			"executor panic: simulated executor catastrophic panic",
+		)
+	})
+
 	t.Run("provider_command_exit_routes_to_failed_terminal", func(t *testing.T) {
 		t.Parallel()
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_failure_no_arcs"))
@@ -1408,4 +1452,40 @@ func (r nonZeroExitScriptCommandRunner) Run(
 		Stderr:   []byte(r.stderr),
 		ExitCode: r.exitCode,
 	}, nil
+}
+
+// panicInferenceProvider panics from Infer to exercise the Workers execution
+// boundary's WorkerExecutor panic recovery through the customer process
+// boundary rather than any internal Petri or Workers seam.
+type panicInferenceProvider struct {
+	message string
+}
+
+func (p panicInferenceProvider) Infer(
+	_ context.Context,
+	_ workerexecution.ProviderInferenceRequest,
+) (workerexecution.InferenceResponse, error) {
+	panic(p.message)
+}
+
+func assertDispatchResponseErrorContains(
+	t *testing.T,
+	dispatches []support.DispatchEventObservation,
+	workID string,
+	want string,
+) {
+	t.Helper()
+
+	for _, dispatch := range dispatches {
+		if !support.DispatchObservationIncludesWork(dispatch, workID) {
+			continue
+		}
+		if dispatch.Response == nil || dispatch.Response.Error == nil {
+			continue
+		}
+		if strings.Contains(*dispatch.Response.Error, want) {
+			return
+		}
+	}
+	t.Fatalf("no dispatch response error for work %q containing %q", workID, want)
 }

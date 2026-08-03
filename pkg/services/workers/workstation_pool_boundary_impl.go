@@ -7,6 +7,33 @@ import (
 	"sync"
 )
 
+// WorkerExecutorPanicError is the Workers-owned typed failure returned when a
+// configured WorkerExecutor panics inside the Workers execution boundary. Its
+// Error text preserves the established `executor panic: <cause>` WorkResult
+// compatibility string, and Cause retains the original recovered panic value
+// (which may not be an error) for errors.As-based inspection without string
+// parsing.
+type WorkerExecutorPanicError struct {
+	Cause any
+}
+
+func (e *WorkerExecutorPanicError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return fmt.Sprintf("executor panic: %v", e.Cause)
+}
+
+// Unwrap exposes the recovered panic value's error chain when the recovered
+// cause is itself an error.
+func (e *WorkerExecutorPanicError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	cause, _ := e.Cause.(error)
+	return cause
+}
+
 // NewWorkstationPoolBoundary constructs a Workers-owned pool boundary from
 // detached executor bindings and route names supplied by the runtime peer.
 func NewWorkstationPoolBoundary(cfg WorkstationPoolBoundaryConfig) WorkstationPoolBoundary {
@@ -46,12 +73,13 @@ func (a workerExecutorRequestAdapter) Execute(
 ) (result WorkResult, err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
+			panicErr := &WorkerExecutorPanicError{Cause: recovered}
 			result = WorkResult{
 				DispatchID: request.Dispatch.DispatchID, TransitionID: request.Dispatch.TransitionID,
 				Outcome: OutcomeFailed,
-				Error:   fmt.Sprintf("executor panic: %v", recovered),
+				Error:   panicErr.Error(),
 			}
-			err = nil
+			err = panicErr
 		}
 	}()
 	workerType := request.WorkerType
