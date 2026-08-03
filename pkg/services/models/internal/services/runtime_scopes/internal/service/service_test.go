@@ -71,8 +71,8 @@ func TestOpenRejectsInvalidBindingWithoutIssuingReference(t *testing.T) {
 
 	service := newService(t, "invalid-binding")
 	ref, err := service.Open(models.RuntimeBinding{CacheDirectory: "cache"})
-	if !errors.Is(err, models.ErrInvalidRuntimeBinding) {
-		t.Fatalf("Open error = %v, want ErrInvalidRuntimeBinding", err)
+	if !errors.Is(err, runtimescopes.ErrInvalidBinding) {
+		t.Fatalf("Open error = %v, want ErrInvalidBinding", err)
 	}
 	if ref != "" {
 		t.Fatalf("Open reference = %q, want empty", ref)

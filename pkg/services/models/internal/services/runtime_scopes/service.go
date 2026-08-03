@@ -20,6 +20,10 @@ var ErrScopeForeign = errors.New("models runtime scope is foreign")
 // and explicitly closed.
 var ErrScopeClosed = errors.New("models runtime scope is closed")
 
+// ErrInvalidBinding reports a binding submitted to Open that is missing
+// required runtime-scope configuration.
+var ErrInvalidBinding = errors.New("models runtime binding is invalid")
+
 // Reference is an opaque identifier issued by a Runtime Scopes service.
 type Reference string
 

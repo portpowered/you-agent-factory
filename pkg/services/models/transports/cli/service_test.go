@@ -114,10 +114,6 @@ func (stub stubModelsRoot) CancelInvocation(context.Context, modelinference.Canc
 	return modelinference.CancelInvocationResult{}, modelinference.ErrUnsupportedOperation
 }
 
-func (stub stubModelsRoot) ForRuntime(modelinference.RuntimeBinding) (modelinference.Service, error) {
-	return nil, modelinference.ErrUnsupportedOperation
-}
-
 func (stub stubModelsRoot) ListModels(ctx context.Context) (modelinference.List, error) {
 	if stub.listModels != nil {
 		return stub.listModels(ctx)
