@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	events "github.com/portpowered/infinite-you/pkg/services/events"
-	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
@@ -15,15 +14,12 @@ import (
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/testing/eventsstub"
 )
 
 func newTestEventsServiceForSessionService(t *testing.T) events.Service {
 	t.Helper()
-	service, err := eventswire.NewService()
-	if err != nil {
-		t.Fatalf("events wire NewService: %v", err)
-	}
-	return service
+	return eventsstub.New()
 }
 
 func newResponseServiceTestGateway(t *testing.T, host *openTestHost) *factorysessionservice.Service {

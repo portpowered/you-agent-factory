@@ -11,9 +11,9 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
-	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/testing/eventsstub"
 )
 
 var responseEventIdentity atomic.Uint64
@@ -121,10 +121,7 @@ func TestSessionResponseEventStoreWithEventsAuthority_RequiresEventsService(t *t
 func TestSessionResponseEventStoreWithEventsAuthority_RequiresWellFormedTopic(t *testing.T) {
 	t.Parallel()
 
-	eventsService, err := eventswire.NewService()
-	if err != nil {
-		t.Fatalf("eventswire.NewService: %v", err)
-	}
+	eventsService := eventsstub.New()
 	store, err := responseeventstore.NewSessionResponseEventStoreWithEventsAuthority(
 		"session-abc",
 		platformclock.Real{},

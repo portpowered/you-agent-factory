@@ -4,20 +4,10 @@ import (
 	"context"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
-
-// provideEventsMaxRetainedRecordsPerTopic projects the process-edge Events
-// retention override so provideEventsService stays a focused construction
-// call. Zero (the default when no functional test overrides it) keeps
-// eventswire.NewServiceWithRetention on the same production default
-// NewService uses.
-func provideEventsMaxRetainedRecordsPerTopic(edges serviceedges.Edges) int {
-	return edges.EventsMaxRetainedRecordsPerTopic
-}
 
 // provideEventsService constructs the singular canonical events.Service
 // instance through its focused wire provider. It is the one construction
@@ -25,8 +15,8 @@ func provideEventsMaxRetainedRecordsPerTopic(edges serviceedges.Edges) int {
 // dependency bag, or secondary injector exists. Canonical application
 // construction (provideApplicationProcessLifecycle below) folds this exact
 // instance's Close into the composed process shutdown path.
-func provideEventsService(logger logging.Logger, maxRetainedRecordsPerTopic int) (events.Service, error) {
-	return eventswire.NewServiceWithRetention(maxRetainedRecordsPerTopic, logger)
+func provideEventsService(logger logging.Logger) (events.Service, error) {
+	return eventswire.NewService(logger)
 }
 
 // eventsLifecycle is the exact Close(context.Context) error shutdown role

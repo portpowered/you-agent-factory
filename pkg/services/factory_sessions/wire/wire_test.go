@@ -8,11 +8,11 @@ import (
 	"time"
 
 	events "github.com/portpowered/infinite-you/pkg/services/events"
-	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/testing/eventsstub"
 )
 
 func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
@@ -223,10 +223,7 @@ type newServiceInputs struct {
 }
 
 func validNewServiceInputs() newServiceInputs {
-	eventsService, err := eventswire.NewService()
-	if err != nil {
-		panic(err)
-	}
+	eventsService := eventsstub.New()
 	return newServiceInputs{
 		sessionResultProjection: resultProjector{},
 		eventIDs:                func() string { return "response-event-id" },

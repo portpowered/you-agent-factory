@@ -7,9 +7,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -93,176 +91,19 @@ func TestFactoryResponseEventsSurviveTheEventsAuthoritativePublishPath(t *testin
 	}
 }
 
-// eventsRetentionCapForDelegationTest is the tightened per-topic retention
-// cap used by TestFactoryResponseEventDeliveryDivergesWhenEventsRetentionIsTighterThanLocal.
-// Under a cap of N, all N of the most recent positions are provably
-// recoverable, including the earliest retained one: Events' own Read
-// contract (established by story 002:
-// pkg/services/events/internal/service/read.go) treats a From naming
-// exactly EarliestRetained-1 as a valid, non-gap cursor whose first returned
-// record is EarliestRetained itself (fixed by PR #1753 review finding 1,
-// 2026-08-03T18:37:32Z). Using a cap of 3 (rather than the minimum useful
-// cap of 1) keeps the recoverable tail at 3 real events, so this test
-// demonstrably recovers more than a single trailing record.
-const eventsRetentionCapForDelegationTest = 3
-
-// TestFactoryResponseEventDeliveryDivergesWhenEventsRetentionIsTighterThanLocal
-// proves SubscribeFactoryResponseEvents genuinely reads delivered content
-// back through the injected Events root rather than only from Factory
-// Sessions' own locally retained copy, and that a partial eviction only
-// surfaces a gap for the positions Events has genuinely lost -- it must not
-// collapse an entire batch into gaps just because a single Events Read call
-// is gap-or-nothing for the range it was asked about (PR #1753 review
-// finding 1, 2026-08-03T18:01:32Z). It runs the identical golden Codex
-// session twice through the exact customer-facing response-event HTTP
-// endpoint, changing only edges.EventsMaxRetainedRecordsPerTopic between
-// runs: with the production default, every published event is retained and
-// delivered with real content; with the process-scoped Events root's
-// per-topic retention tightened below the number of events this session
-// publishes -- while Factory Sessions' own response-event retention limits
-// stay at their large default, so this store's own tiered retention would
-// otherwise still consider every position deliverable -- the oldest
-// positions must surface an explicit STREAM_GAP reasoned
-// "events_authority_unavailable" while the retained tail Events can still
-// produce must deliver the same real content as the baseline run. If
-// Subscribe reverted to reading only its own local copy -- one regression
-// this test guards against -- the tightened run would deliver identical
-// real content to the baseline run for the leading (evicted) positions too;
-// if a partial eviction instead erased the whole batch -- the regression
-// finding 1 identified -- the retained tail would incorrectly read back as
-// gaps as well. A public HTTP contract test that only asserts ascending
-// unique sequence numbers (as
-// TestFactoryResponseEventsSurviveTheEventsAuthoritativePublishPath does for
-// the write path) would not detect either regression on the read path,
-// which is exactly the coverage gap this test closes.
-func TestFactoryResponseEventDeliveryDivergesWhenEventsRetentionIsTighterThanLocal(t *testing.T) {
-	t.Parallel()
-
-	baseline := runCodexGoldenSessionAndListResponseEvents(t, 0)
-	if len(baseline) <= eventsRetentionCapForDelegationTest {
-		t.Fatalf(
-			"baseline run produced %d public Factory response events, want more than %d so the tightened run below has both a genuinely evicted leading position and a recoverable retained tail",
-			len(baseline),
-			eventsRetentionCapForDelegationTest,
-		)
-	}
-	assertResponseEventsAscendingSequence(t, baseline)
-	for _, event := range baseline {
-		if event.Kind == factoryapi.FactoryResponseEventKindStreamGap {
-			t.Fatalf(
-				"baseline run (production default Events retention) unexpectedly delivered a STREAM_GAP event at sequence %d",
-				event.Sequence,
-			)
-		}
-	}
-
-	tightened := runCodexGoldenSessionAndListResponseEvents(t, eventsRetentionCapForDelegationTest)
-	if len(tightened) != len(baseline) {
-		t.Fatalf(
-			"tightened-Events-retention run delivered %d events, want %d (same total as baseline; substitution must replace content, not drop or duplicate positions)",
-			len(tightened),
-			len(baseline),
-		)
-	}
-
-	// Under a per-topic cap of eventsRetentionCapForDelegationTest, all
-	// eventsRetentionCapForDelegationTest of the most recent positions are
-	// recoverable (see the constant's doc comment); every earlier position
-	// must surface as a gap.
-	recoverableTail := eventsRetentionCapForDelegationTest
-	gapCount := len(tightened) - recoverableTail
-
-	for index, event := range tightened {
-		if index < gapCount {
-			if event.Kind != factoryapi.FactoryResponseEventKindStreamGap {
-				t.Fatalf(
-					"tightened-Events-retention run delivered real content at index %d (sequence %d, kind %s), want STREAM_GAP: this position has been evicted from Events under the tightened cap",
-					index,
-					event.Sequence,
-					event.Kind,
-				)
-			}
-			gapUnion, err := event.Payload.AsFactoryResponseEventStreamGapPayload()
-			if err != nil {
-				t.Fatalf("decode STREAM_GAP union payload at index %d: %v", index, err)
-			}
-			gapPayload, err := gapUnion.AsFactoryResponseEventStreamGapPayload0()
-			if err != nil {
-				t.Fatalf("decode STREAM_GAP payload at index %d: %v", index, err)
-			}
-			if gapPayload.Reason == nil || *gapPayload.Reason != "events_authority_unavailable" {
-				t.Fatalf("STREAM_GAP reason at index %d = %#v, want events_authority_unavailable", index, gapPayload.Reason)
-			}
-			continue
-		}
-
-		if event.Kind == factoryapi.FactoryResponseEventKindStreamGap {
-			t.Fatalf(
-				"tightened-Events-retention run delivered STREAM_GAP at index %d (sequence %d), want the real retained content Events still has: one evicted older position must not erase the still-retained tail; if Subscribe stopped reading through the injected Events root and reverted to this store's own locally retained copy, or if a partial eviction still collapsed the whole batch, this position would not match the baseline run",
-				index,
-				event.Sequence,
-			)
-		}
-		if event.Kind != baseline[index].Kind || event.Sequence != baseline[index].Sequence {
-			t.Fatalf(
-				"tightened-Events-retention run at index %d = {sequence %d, kind %s}, want the same as baseline {sequence %d, kind %s}",
-				index, event.Sequence, event.Kind, baseline[index].Sequence, baseline[index].Kind,
-			)
-		}
-	}
-}
-
-// runCodexGoldenSessionAndListResponseEvents runs the codex "success" golden
-// session fixture through root.BuildProcess (via
-// support.StartFunctionalAPIServer) and the real customer response-event
-// HTTP endpoint, with only the provider command boundary and Events'
-// per-topic retention cap replaced through edges.Edges, and returns the
-// resulting public Factory response events for the default session.
-// eventsMaxRetainedRecordsPerTopic of 0 keeps the production default.
-func runCodexGoldenSessionAndListResponseEvents(
-	t *testing.T,
-	eventsMaxRetainedRecordsPerTopic int,
-) []factoryapi.FactoryResponseEvent {
-	t.Helper()
-
-	loaded := loadCodexPartialStreamGoldenCase(t)
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(
-		t,
-		dir,
-		"worker",
-		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, loaded.Process.Model),
-	)
-
-	exitCode := 0
-	if loaded.Process.ExitCode != nil {
-		exitCode = *loaded.Process.ExitCode
-	}
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-		Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
-		Stderr:   []byte(loaded.Stderr),
-		ExitCode: exitCode,
-	})
-
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner:            runner,
-			EventsMaxRetainedRecordsPerTopic: eventsMaxRetainedRecordsPerTopic,
-		},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	workName := "events-authority-delegation-work"
-	support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
-		Name:         &workName,
-		WorkTypeName: "task",
-		Payload: map[string]string{
-			"title": "publish response events for the Events-authority delegation proof",
-		},
-	})
-	support.WaitForTerminalStatus(t, server.URL(), 20*time.Second)
-
-	return support.GetFactoryResponseEventsAt(t, server.URL(), factorysessions.DefaultSessionID)
-}
+// The partial-eviction/gap-recovery delegation proof this file previously
+// carried at the functional level (varying Events' per-topic retention cap
+// between two full root.BuildProcess runs) required a construction-only
+// override with no true external effect: edges.Edges is the narrow
+// architecture exception for replaceable external effects, and Events'
+// bounded-retention policy is internal product policy, not an effect (PR
+// #1753 review, 2026-08-03T19:06:13Z finding 2). That override has been
+// removed from edges.Edges and canonical wiring; the identical
+// substituteFromEvents boundary/partial-eviction behavior this test proved
+// is now proved at package/composition level instead, against a
+// retention-limited events.Service test double, in
+// pkg/services/factory_sessions/internal/responseeventstore/events_authority_subscription_test.go
+// (TestSessionResponseEventStoreSubscription_PartialEvictionDoesNotEraseNewerRetainedRecords).
+// This file keeps the happy-path, real-process delegation proof above
+// (TestFactoryResponseEventsSurviveTheEventsAuthoritativePublishPath), which
+// needs no retention override.

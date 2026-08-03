@@ -9,7 +9,6 @@ import (
 	"time"
 
 	events "github.com/portpowered/infinite-you/pkg/services/events"
-	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
@@ -17,15 +16,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/testing/eventsstub"
 )
 
 func newTestEventsService(t *testing.T) events.Service {
 	t.Helper()
-	service, err := eventswire.NewService()
-	if err != nil {
-		t.Fatalf("events wire NewService: %v", err)
-	}
-	return service
+	return eventsstub.New()
 }
 
 type memoryCursorStore struct {

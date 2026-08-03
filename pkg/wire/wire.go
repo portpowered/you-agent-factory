@@ -47,7 +47,6 @@ var apiSet = wire.NewSet(
 var servicesSet = wire.NewSet(
 	provideProvidersService,
 	provideEventsService,
-	provideEventsMaxRetainedRecordsPerTopic,
 	provideApplicationProcessLifecycle,
 	provideProviderRegistry,
 	provideProviderRegistryRebinder,

@@ -183,8 +183,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v21 := provideFactorySessionInvocationInputReader(edges2)
 	v22 := provideFactorySessionInitialWorkReader(edges2)
 	logicalTargetResolveSymlinks := provideFactorySessionResolveLogicalTargetSymlinks(edges2)
-	int2 := provideEventsMaxRetainedRecordsPerTopic(edges2)
-	eventsService, err := provideEventsService(loggingLogger, int2)
+	eventsService, err := provideEventsService(loggingLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -595,7 +594,6 @@ var apiSet = wire3.NewSet(http.NewAdapter, http.NewHandler, composition.NewHTTPB
 var servicesSet = wire3.NewSet(
 	provideProvidersService,
 	provideEventsService,
-	provideEventsMaxRetainedRecordsPerTopic,
 	provideApplicationProcessLifecycle,
 	provideProviderRegistry,
 	provideProviderRegistryRebinder, wire3.Bind(new(application.ProviderRegistry), new(workers.ProviderRegistry)), provideFactorySessionProviderIdentityResolver, wire2.NewRequestPreparation, provideFactorySessionHTTPRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,

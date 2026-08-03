@@ -4,91 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"sync"
 	"testing"
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
-	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/testing/eventsstub"
 )
-
-// memoryEventsService is a minimal, hand-rolled events.Service double built
-// only against the published pkg/services/events contract (no dependency on
-// the owning service's wire/internal construction paths, which are reserved
-// for pkg/wire and the owning service itself). It supports exactly what
-// these tests need: Append accepts records in commit order per topic, and
-// Read serves back a contiguous slice. AttachSource/Subscribe are not
-// exercised by substituteFromEvents (only Read is) and are left
-// unimplemented.
-type memoryEventsService struct {
-	mu      sync.Mutex
-	records map[events.Topic][]events.Record
-}
-
-func newMemoryEventsService() *memoryEventsService {
-	return &memoryEventsService{records: make(map[events.Topic][]events.Record)}
-}
-
-func (m *memoryEventsService) Append(_ context.Context, req events.AppendRequest) (events.AppendResult, error) {
-	if err := req.Validate(); err != nil {
-		return events.AppendResult{}, err
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	position := events.AggregateSequence(len(m.records[req.Topic]) + 1)
-	record := events.Record{
-		ID:             events.RecordID{Topic: req.Topic, Position: position},
-		SourceType:     req.SourceType,
-		SourceID:       req.SourceID,
-		SourceSequence: req.SourceSequence,
-		SourceEventID:  req.SourceEventID,
-		SchemaID:       req.SchemaID,
-		Payload:        append(json.RawMessage(nil), req.Payload...),
-	}
-	m.records[req.Topic] = append(m.records[req.Topic], record)
-	return events.AppendResult{Record: record.Detached(), Outcome: events.AppendOutcomeAccepted}, nil
-}
-
-func (m *memoryEventsService) Read(_ context.Context, req events.ReadRequest) (events.ReadResult, error) {
-	if err := req.Validate(); err != nil {
-		return events.ReadResult{}, err
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	all := m.records[req.Topic]
-	head := events.AggregateSequence(len(all))
-	retained := events.RetainedRange{Topic: req.Topic, Earliest: 1, Head: head}
-	if head == 0 || req.From.Position >= head {
-		return events.ReadResult{Outcome: events.ReadOutcomeAtHead, Next: events.Cursor{Topic: req.Topic, Position: head}, Retained: retained}, nil
-	}
-	start := int(req.From.Position)
-	end := min(start+req.Limit, len(all))
-	slice := all[start:end]
-	out := make([]events.Record, len(slice))
-	for i, rec := range slice {
-		out[i] = rec.Detached()
-	}
-	last := out[len(out)-1]
-	return events.ReadResult{
-		Outcome:  events.ReadOutcomeProgress,
-		Records:  out,
-		Next:     events.Cursor{Topic: req.Topic, Position: last.ID.Position},
-		Retained: retained,
-	}, nil
-}
-
-func (m *memoryEventsService) Subscribe(context.Context, events.SubscribeRequest) (events.Subscription, error) {
-	return nil, errors.New("memoryEventsService: Subscribe is not implemented")
-}
-
-func (m *memoryEventsService) AttachSource(context.Context, events.AttachSourceRequest) (events.AttachSourceResult, error) {
-	return events.AttachSourceResult{}, errors.New("memoryEventsService: AttachSource is not implemented")
-}
-
-var _ events.Service = (*memoryEventsService)(nil)
 
 // newEventsAuthorityStore constructs a store bound to the given Events
 // double and publishes through it exactly the way response_stream's
@@ -196,7 +120,7 @@ var _ events.Service = (*payloadSwappingEventsService)(nil)
 func TestSessionResponseEventStoreSubscription_DeliversContentReadBackFromEventsAuthority(t *testing.T) {
 	t.Parallel()
 
-	swapping := &payloadSwappingEventsService{inner: newMemoryEventsService()}
+	swapping := &payloadSwappingEventsService{inner: eventsstub.New()}
 	topic := events.Topic("factory-session/session-events-authority/response-events")
 	store := newEventsAuthorityStore(t, swapping, "session-events-authority")
 
@@ -244,7 +168,7 @@ func TestSessionResponseEventStoreSubscription_DeliversContentReadBackFromEvents
 func TestSessionResponseEventStoreSubscription_NextCanceledContextDrainsRetainedEventsWithEventsAuthority(t *testing.T) {
 	t.Parallel()
 
-	eventsService := newMemoryEventsService()
+	eventsService := eventsstub.New()
 	topic := events.Topic("factory-session/session-canceled-drain/response-events")
 	store := newEventsAuthorityStore(t, eventsService, "session-canceled-drain")
 
@@ -313,21 +237,17 @@ var _ events.Service = (*gapReportingEventsService)(nil)
 // still delivers the real content Events retains for every newer position --
 // it must not collapse the whole batch into gaps just because Events' Read
 // is Gap-or-nothing for the exact call it answers (PR #1753 review finding
-// 1, 2026-08-03T18:01:32Z). This uses the real Events implementation (not a
-// hand-rolled double) bound to a tight per-topic retention cap, so it also
-// exercises the real Store's own Read boundary contract: a From naming
+// 1, 2026-08-03T18:01:32Z). This uses eventsstub.NewWithRetention, whose
+// Read boundary resolution mirrors the real Store's contract: a From naming
 // exactly EarliestRetained-1 is a valid, non-gap cursor whose first returned
 // record is EarliestRetained itself (PR #1753 review finding 1,
-// 2026-08-03T18:37:32Z fixed this boundary), so every still-retained
-// position -- including the earliest one -- is provably real, and only the
-// genuinely evicted positions surface as a gap.
+// 2026-08-03T18:37:32Z fixed this boundary in the real implementation), so
+// every still-retained position -- including the earliest one -- is provably
+// real, and only the genuinely evicted positions surface as a gap.
 func TestSessionResponseEventStoreSubscription_PartialEvictionDoesNotEraseNewerRetainedRecords(t *testing.T) {
 	t.Parallel()
 
-	eventsService, err := eventswire.NewServiceWithRetention(2)
-	if err != nil {
-		t.Fatalf("eventswire.NewServiceWithRetention: %v", err)
-	}
+	eventsService := eventsstub.NewWithRetention(2)
 	topic := events.Topic("factory-session/session-partial-eviction/response-events")
 	store := newEventsAuthorityStore(t, eventsService, "session-partial-eviction")
 
@@ -384,7 +304,7 @@ func TestSessionResponseEventStoreSubscription_PartialEvictionDoesNotEraseNewerR
 func TestSessionResponseEventStoreSubscription_SurfacesGapWhenEventsAuthorityCannotProduceContent(t *testing.T) {
 	t.Parallel()
 
-	gapping := &gapReportingEventsService{inner: newMemoryEventsService()}
+	gapping := &gapReportingEventsService{inner: eventsstub.New()}
 	topic := events.Topic("factory-session/session-events-authority-gap/response-events")
 	store := newEventsAuthorityStore(t, gapping, "session-events-authority-gap")
 
@@ -454,7 +374,7 @@ var _ events.Service = (*readErroringEventsService)(nil)
 func TestSessionResponseEventStoreSubscription_SurfacesGapWhenEventsReadErrors(t *testing.T) {
 	t.Parallel()
 
-	erroring := &readErroringEventsService{inner: newMemoryEventsService()}
+	erroring := &readErroringEventsService{inner: eventsstub.New()}
 	topic := events.Topic("factory-session/session-events-authority-read-error/response-events")
 	store := newEventsAuthorityStore(t, erroring, "session-events-authority-read-error")
 
@@ -513,7 +433,7 @@ var _ events.Service = (*unexpectedOutcomeEventsService)(nil)
 func TestSessionResponseEventStoreSubscription_SurfacesGapOnUnexpectedReadOutcome(t *testing.T) {
 	t.Parallel()
 
-	unexpected := &unexpectedOutcomeEventsService{inner: newMemoryEventsService()}
+	unexpected := &unexpectedOutcomeEventsService{inner: eventsstub.New()}
 	topic := events.Topic("factory-session/session-events-authority-unexpected-outcome/response-events")
 	store := newEventsAuthorityStore(t, unexpected, "session-events-authority-unexpected-outcome")
 
@@ -578,7 +498,7 @@ var _ events.Service = (*stalledProgressEventsService)(nil)
 func TestSessionResponseEventStoreSubscription_StopsOnNonAdvancingProgressRead(t *testing.T) {
 	t.Parallel()
 
-	stalled := &stalledProgressEventsService{inner: newMemoryEventsService()}
+	stalled := &stalledProgressEventsService{inner: eventsstub.New()}
 	topic := events.Topic("factory-session/session-events-authority-stalled/response-events")
 	store := newEventsAuthorityStore(t, stalled, "session-events-authority-stalled")
 

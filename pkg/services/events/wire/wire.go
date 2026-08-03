@@ -22,14 +22,3 @@ import (
 func NewService(logger ...logging.Logger) (events.Service, error) {
 	return internalservice.New(logger...), nil
 }
-
-// NewServiceWithRetention constructs an inert, process-scoped Events root
-// bounded to at most maxRetainedRecordsPerTopic records per topic; a
-// non-positive value falls back to the same default bounded-retention policy
-// NewService uses. This exists so canonical construction can accept an
-// explicit per-process retention override (see pkg/wire's
-// provideEventsService) without widening events.Service or exposing the
-// internal Store constructor outside this package's construction boundary.
-func NewServiceWithRetention(maxRetainedRecordsPerTopic int, logger ...logging.Logger) (events.Service, error) {
-	return internalservice.NewWithRetention(maxRetainedRecordsPerTopic, logger...), nil
-}
