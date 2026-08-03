@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"go.uber.org/zap"
+
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -14,8 +16,10 @@ import (
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -232,4 +236,89 @@ func TestOperatorSettingsHomePortCompositionUsesProcessProviderRoot(t *testing.T
 	if service == nil {
 		t.Fatal("NewServiceFromHomePorts() = nil, want Operator Settings root")
 	}
+}
+
+// TestProvideApplicationProcessLifecycle_ComposesProvidersAndFactoryTargetClose
+// proves the composed ProcessLifecycle actually invokes both the Providers
+// lifecycle's own Close and the on-demand Factory Sessions activation
+// singleton's Close when Close is called on the composed value -- not just
+// that construction succeeds -- and that a nil factoryTarget (a graph
+// misconfiguration, defensively handled) is a no-op rather than a panic.
+func TestProvideApplicationProcessLifecycle_ComposesProvidersAndFactoryTargetClose(t *testing.T) {
+	t.Parallel()
+
+	providersService, err := provideProvidersService(serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("provideProvidersService() error = %v", err)
+	}
+
+	factoryTarget, err := factorysessionwire.NewOnDemandFactoryTargetService(
+		&factorysessionwire.RuntimeOpeningFactory{},
+		factorysessionwire.RuntimeOpeningExternalEffects{},
+		func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+			return factorysessions.RuntimeOpeningRequest{}, nil
+		},
+		func() string { return "id" },
+		zap.NewNop(),
+	)
+	if err != nil {
+		t.Fatalf("NewOnDemandFactoryTargetService() error = %v", err)
+	}
+
+	eventsService, err := eventswire.NewService()
+	if err != nil {
+		t.Fatalf("construct events service: %v", err)
+	}
+
+	lifecycle, err := provideApplicationProcessLifecycle(providersService, eventsService, factoryTarget)
+	if err != nil {
+		t.Fatalf("provideApplicationProcessLifecycle() error = %v", err)
+	}
+	if lifecycle == nil {
+		t.Fatal("provideApplicationProcessLifecycle() = nil, want a composed ProcessLifecycle")
+	}
+
+	// factoryTarget never opened any runtime, so its own Close is a
+	// documented no-op success; the Providers lifecycle's Close is likewise
+	// a no-op with no providers configured -- so the composed Close
+	// succeeding proves both closers actually ran, not that either was
+	// skipped.
+	if err := lifecycle.Close(context.Background()); err != nil {
+		t.Fatalf("composed ProcessLifecycle.Close() error = %v, want nil", err)
+	}
+
+	secondEventsService, err := eventswire.NewService()
+	if err != nil {
+		t.Fatalf("construct second events service: %v", err)
+	}
+
+	nilFactoryLifecycle, err := provideApplicationProcessLifecycle(providersService, secondEventsService, nil)
+	if err != nil {
+		t.Fatalf("provideApplicationProcessLifecycle(nil factoryTarget) error = %v", err)
+	}
+	if err := nilFactoryLifecycle.Close(context.Background()); err != nil {
+		t.Fatalf("composed ProcessLifecycle.Close() with a nil factoryTarget error = %v, want nil (defensive no-op)", err)
+	}
+}
+
+// TestProvideApplicationProcessLifecycle_RequiresProvidersLifecycle proves a
+// providers.Service that does not implement providers.Lifecycle is rejected
+// at construction rather than silently producing a ProcessLifecycle whose
+// Providers-side Close can never run.
+func TestProvideApplicationProcessLifecycle_RequiresProvidersLifecycle(t *testing.T) {
+	t.Parallel()
+
+	_, err := provideApplicationProcessLifecycle(nonLifecycleProvidersService{}, nil, nil)
+	if err == nil {
+		t.Fatal("provideApplicationProcessLifecycle() error = nil, want a construction error for a non-Lifecycle providers.Service")
+	}
+}
+
+// nonLifecycleProvidersService is a providers.Service stand-in (embedding
+// the interface as a permanently nil value, satisfying it for the compiler
+// without implementing any method) that deliberately does not also
+// implement providers.Lifecycle, for
+// TestProvideApplicationProcessLifecycle_RequiresProvidersLifecycle.
+type nonLifecycleProvidersService struct {
+	providers.Service
 }

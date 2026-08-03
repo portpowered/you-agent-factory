@@ -7,22 +7,30 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 )
 
 // fakeChatSessionsService is a minimal chatsessions.Service test double.
-// CreateSession, GetSession, and SetTarget are configurable and tracked --
-// the methods this package's session/new and session/set_config_option
-// handlers actually call. Every other method fails loudly: neither handler
-// calls them, and a call to one would itself be a defect worth catching.
+// CreateSession, GetSession, SetTarget, and StartTurn are configurable and
+// tracked -- the methods this package's session/new,
+// session/set_config_option, and session/prompt handlers actually call.
+// Every other method fails loudly: no handler calls them, and a call to one
+// would itself be a defect worth catching. mu guards every field so the
+// fake is safe under the concurrent/duplicate-delivery admission tests that
+// call it from multiple goroutines against the same instance.
 type fakeChatSessionsService struct {
+	mu sync.Mutex
+
 	createCalled bool
 	created      chatsessions.CreateSessionRequest
 	createErr    error
@@ -39,11 +47,62 @@ type fakeChatSessionsService struct {
 	setTargetErr    error
 
 	startTurnCalled bool
+	startTurnReq    chatsessions.StartTurnRequest
+	startTurnReqs   []chatsessions.StartTurnRequest
+	startTurnResult chatsessions.StartTurnResult
+	// startTurnResults, when non-empty, is consumed front-first across
+	// successive StartTurn calls (one queued result per call) instead of the
+	// single static startTurnResult -- for sequential tests that need a
+	// later call to observe a different admitted episode snapshot (e.g. a
+	// later turn's episode already carrying a Factory Session ID bound by an
+	// earlier call).
+	startTurnResults []chatsessions.StartTurnResult
+	startTurnErr     error
+
+	bindFactorySessionCalled bool
+	bindFactorySessionReq    chatsessions.BindFactorySessionRequest
+	bindFactorySessionReqs   []chatsessions.BindFactorySessionRequest
+	bindFactorySessionResult chatsessions.BindFactorySessionResult
+	// bindFactorySessionErrs, when non-empty, is consumed front-first across
+	// successive BindFactorySession calls (one queued error per call, nil
+	// meaning that call succeeds) instead of the single static
+	// bindFactorySessionErr -- for retry tests that need one specific bind
+	// attempt to fail while a later retry against the same pending identity
+	// succeeds.
+	bindFactorySessionErrs []error
+	bindFactorySessionErr  error
+
+	recordPendingFactorySessionCalled bool
+	recordPendingFactorySessionReq    chatsessions.RecordPendingFactorySessionRequest
+	recordPendingFactorySessionReqs   []chatsessions.RecordPendingFactorySessionRequest
+	recordPendingFactorySessionResult chatsessions.RecordPendingFactorySessionResult
+	// recordPendingFactorySessionErrs, when non-empty, is consumed front-first
+	// across successive RecordPendingFactorySession calls (one queued error
+	// per call, nil meaning that call succeeds) instead of the single static
+	// recordPendingFactorySessionErr -- for retry tests that need one
+	// specific record-pending attempt to fail while a later retry for the
+	// same still-unbound episode succeeds.
+	recordPendingFactorySessionErrs []error
+	recordPendingFactorySessionErr  error
+
+	advanceTurnCalled bool
+	advanceTurnReq    chatsessions.AdvanceTurnRequest
+	advanceTurnReqs   []chatsessions.AdvanceTurnRequest
+	// advanceTurnErrs, when non-empty, is consumed front-first across
+	// successive AdvanceTurn calls (one queued error per call, nil meaning
+	// that call succeeds) instead of the single static advanceTurnErr -- for
+	// fault-injection tests that need one specific AdvanceTurn call (e.g. the
+	// admission-time transition to RUNNING) to succeed while a later one
+	// (e.g. the terminal transition) fails, or vice versa.
+	advanceTurnErrs []error
+	advanceTurnErr  error
 }
 
 var _ chatsessions.Service = (*fakeChatSessionsService)(nil)
 
 func (f *fakeChatSessionsService) CreateSession(_ context.Context, req chatsessions.CreateSessionRequest) (chatsessions.CreateSessionResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.createCalled = true
 	f.created = req
 	if f.createErr != nil {
@@ -65,6 +124,8 @@ func (f *fakeChatSessionsService) CreateSession(_ context.Context, req chatsessi
 }
 
 func (f *fakeChatSessionsService) GetSession(_ context.Context, req chatsessions.GetSessionRequest) (chatsessions.GetSessionResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.getSessionCalled = true
 	f.getSessionReq = req
 	if f.getSessionErr != nil {
@@ -74,6 +135,8 @@ func (f *fakeChatSessionsService) GetSession(_ context.Context, req chatsessions
 }
 
 func (f *fakeChatSessionsService) SetTarget(_ context.Context, req chatsessions.SetTargetRequest) (chatsessions.SetTargetResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.setTargetCalled = true
 	f.setTargetReq = req
 	if f.setTargetErr != nil {
@@ -82,13 +145,81 @@ func (f *fakeChatSessionsService) SetTarget(_ context.Context, req chatsessions.
 	return f.setTargetResult, nil
 }
 
-func (f *fakeChatSessionsService) StartTurn(context.Context, chatsessions.StartTurnRequest) (chatsessions.StartTurnResult, error) {
+func (f *fakeChatSessionsService) StartTurn(_ context.Context, req chatsessions.StartTurnRequest) (chatsessions.StartTurnResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.startTurnCalled = true
-	return chatsessions.StartTurnResult{}, errors.New("fakeChatSessionsService: StartTurn not implemented")
+	f.startTurnReq = req
+	f.startTurnReqs = append(f.startTurnReqs, req)
+	if f.startTurnErr != nil {
+		return chatsessions.StartTurnResult{}, f.startTurnErr
+	}
+	if len(f.startTurnResults) > 0 {
+		next := f.startTurnResults[0]
+		f.startTurnResults = f.startTurnResults[1:]
+		return next, nil
+	}
+	return f.startTurnResult, nil
 }
 
-func (f *fakeChatSessionsService) AdvanceTurn(context.Context, chatsessions.AdvanceTurnRequest) (chatsessions.AdvanceTurnResult, error) {
-	return chatsessions.AdvanceTurnResult{}, errors.New("fakeChatSessionsService: AdvanceTurn not implemented")
+func (f *fakeChatSessionsService) BindFactorySession(_ context.Context, req chatsessions.BindFactorySessionRequest) (chatsessions.BindFactorySessionResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.bindFactorySessionCalled = true
+	f.bindFactorySessionReq = req
+	f.bindFactorySessionReqs = append(f.bindFactorySessionReqs, req)
+	if len(f.bindFactorySessionErrs) > 0 {
+		next := f.bindFactorySessionErrs[0]
+		f.bindFactorySessionErrs = f.bindFactorySessionErrs[1:]
+		if next != nil {
+			return chatsessions.BindFactorySessionResult{}, next
+		}
+		return f.bindFactorySessionResult, nil
+	}
+	if f.bindFactorySessionErr != nil {
+		return chatsessions.BindFactorySessionResult{}, f.bindFactorySessionErr
+	}
+	return f.bindFactorySessionResult, nil
+}
+
+func (f *fakeChatSessionsService) RecordPendingFactorySession(_ context.Context, req chatsessions.RecordPendingFactorySessionRequest) (chatsessions.RecordPendingFactorySessionResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.recordPendingFactorySessionCalled = true
+	f.recordPendingFactorySessionReq = req
+	f.recordPendingFactorySessionReqs = append(f.recordPendingFactorySessionReqs, req)
+	if len(f.recordPendingFactorySessionErrs) > 0 {
+		next := f.recordPendingFactorySessionErrs[0]
+		f.recordPendingFactorySessionErrs = f.recordPendingFactorySessionErrs[1:]
+		if next != nil {
+			return chatsessions.RecordPendingFactorySessionResult{}, next
+		}
+		return f.recordPendingFactorySessionResult, nil
+	}
+	if f.recordPendingFactorySessionErr != nil {
+		return chatsessions.RecordPendingFactorySessionResult{}, f.recordPendingFactorySessionErr
+	}
+	return f.recordPendingFactorySessionResult, nil
+}
+
+func (f *fakeChatSessionsService) AdvanceTurn(_ context.Context, req chatsessions.AdvanceTurnRequest) (chatsessions.AdvanceTurnResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.advanceTurnCalled = true
+	f.advanceTurnReq = req
+	f.advanceTurnReqs = append(f.advanceTurnReqs, req)
+	if len(f.advanceTurnErrs) > 0 {
+		next := f.advanceTurnErrs[0]
+		f.advanceTurnErrs = f.advanceTurnErrs[1:]
+		if next != nil {
+			return chatsessions.AdvanceTurnResult{}, next
+		}
+		return chatsessions.AdvanceTurnResult{Turn: chatsessions.Turn{ID: req.TurnID, State: req.Next}}, nil
+	}
+	if f.advanceTurnErr != nil {
+		return chatsessions.AdvanceTurnResult{}, f.advanceTurnErr
+	}
+	return chatsessions.AdvanceTurnResult{Turn: chatsessions.Turn{ID: req.TurnID, State: req.Next}}, nil
 }
 
 func (f *fakeChatSessionsService) Attach(context.Context, chatsessions.AttachRequest) (chatsessions.AttachResult, error) {
@@ -128,6 +259,84 @@ func (f *fakeFactoryTargetCatalogService) ResolveFactoryTargetCatalog(
 	return f.result, nil
 }
 
+// fakeFactoryTargetService is a minimal
+// acp.FactoryTargetService test double: it embeds the interface
+// unimplemented so a call to a capability beyond Start/Invoke reaches a nil
+// method value and panics, proving the consumer never dispatches to
+// Cancel/Close from the ordinary prompt-delegation path this package's
+// tests exercise. mu guards every field for concurrent/duplicate-delivery
+// tests.
+type fakeFactoryTargetService struct {
+	acp.FactoryTargetService
+
+	mu sync.Mutex
+
+	startCalls  []factorysessions.StartRequest
+	startResult factorysessions.AsyncStartResult
+	startErr    error
+
+	invokeCalls  []invokeFactoryTargetCall
+	invokeResult factorysessions.InvocationResult
+	invokeErr    error
+	// invokeErrs, when non-empty, is consumed front-first across successive
+	// InvokeFactoryTarget calls (one queued error per call, nil meaning that
+	// call succeeds with invokeResult) instead of the single static
+	// invokeErr -- for tests that need one specific dispatch to fail while a
+	// later retry against the same (or a differently bound) identity
+	// succeeds.
+	invokeErrs []error
+
+	closeCalls []string
+	closeErr   error
+}
+
+type invokeFactoryTargetCall struct {
+	sessionID string
+	request   factorysessions.InvocationRequest
+}
+
+func (f *fakeFactoryTargetService) StartFactoryTarget(
+	_ context.Context,
+	request factorysessions.StartRequest,
+) (factorysessions.AsyncStartResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.startCalls = append(f.startCalls, request)
+	if f.startErr != nil {
+		return factorysessions.AsyncStartResult{}, f.startErr
+	}
+	return f.startResult, nil
+}
+
+func (f *fakeFactoryTargetService) InvokeFactoryTarget(
+	_ context.Context,
+	sessionID string,
+	request factorysessions.InvocationRequest,
+) (factorysessions.InvocationResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.invokeCalls = append(f.invokeCalls, invokeFactoryTargetCall{sessionID: sessionID, request: request})
+	if len(f.invokeErrs) > 0 {
+		next := f.invokeErrs[0]
+		f.invokeErrs = f.invokeErrs[1:]
+		if next != nil {
+			return factorysessions.InvocationResult{}, next
+		}
+		return f.invokeResult, nil
+	}
+	if f.invokeErr != nil {
+		return factorysessions.InvocationResult{}, f.invokeErr
+	}
+	return f.invokeResult, nil
+}
+
+func (f *fakeFactoryTargetService) CloseFactoryTarget(_ context.Context, sessionID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.closeCalls = append(f.closeCalls, sessionID)
+	return f.closeErr
+}
+
 func defaultTestCatalogResult() chatsessions.ResolveFactoryTargetCatalogResult {
 	return chatsessions.ResolveFactoryTargetCatalogResult{
 		CurrentTarget: "factory:@you/factory-builder",
@@ -139,8 +348,20 @@ func defaultTestCatalogResult() chatsessions.ResolveFactoryTargetCatalogResult {
 }
 
 func newTestServer(chatSessions *fakeChatSessionsService, catalog *fakeFactoryTargetCatalogService, homeDir string) *Server {
+	return newTestServerWithFactoryTarget(chatSessions, catalog, nil, homeDir)
+}
+
+// newTestServerWithFactoryTarget is newTestServer plus an explicit Factory
+// Sessions delegation collaborator, for the ordinary-prompt-delegation tests
+// that need to observe or fail StartFactoryTarget/InvokeFactoryTarget calls.
+func newTestServerWithFactoryTarget(
+	chatSessions *fakeChatSessionsService,
+	catalog *fakeFactoryTargetCatalogService,
+	factoryTarget acp.FactoryTargetService,
+	homeDir string,
+) *Server {
 	resolveHomeDir := func() (string, error) { return homeDir, nil }
-	return New(nil, chatSessions, catalog, resolveHomeDir)
+	return New(nil, chatSessions, catalog, factoryTarget, resolveHomeDir)
 }
 
 func numberIdentityEnvelope(t *testing.T, connID identity.ConnectionID, wireID int64, method string, params string) envelope.Envelope {
@@ -392,7 +613,7 @@ func TestServeDispatchesSessionNewOverRealJSONRPCFraming(t *testing.T) {
 func TestServeRespondsMethodNotFoundForEveryUnimplementedMethodStillExcludesSessionNew(t *testing.T) {
 	input := `{"jsonrpc":"2.0","id":9,"method":"session/new","params":{"cwd":"/work/project","mcpServers":[]}}` + "\n"
 	out := &bytes.Buffer{}
-	server := New(nil, nil, nil, nil)
+	server := New(nil, nil, nil, nil, nil)
 	if err := server.Serve(context.Background(), strings.NewReader(input), out); err != nil {
 		t.Fatalf("Serve() error = %v", err)
 	}
@@ -407,7 +628,7 @@ func TestServeRespondsMethodNotFoundForEveryUnimplementedMethodStillExcludesSess
 }
 
 func TestHandleSessionNewWithoutCollaboratorsReportsBoundedFailure(t *testing.T) {
-	server := New(nil, nil, nil, nil)
+	server := New(nil, nil, nil, nil, nil)
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionNew, validSessionNewParams)
 
 	result, rpcErr := server.handleSessionNew(context.Background(), env)
@@ -485,7 +706,7 @@ func TestClassifyDependencyFailureMapsContextCauseToRequestCancelled(t *testing.
 func TestHandleSessionNewResolveHomeDirFailureReturnsNoEffect(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{}
 	catalog := &fakeFactoryTargetCatalogService{result: defaultTestCatalogResult()}
-	server := New(nil, chatSessions, catalog, func() (string, error) { return "", errors.New("resolve home dir boom") })
+	server := New(nil, chatSessions, catalog, nil, func() (string, error) { return "", errors.New("resolve home dir boom") })
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionNew, validSessionNewParams)
 	result, rpcErr := server.handleSessionNew(context.Background(), env)
@@ -506,7 +727,7 @@ func TestHandleSessionNewResolveHomeDirFailureReturnsNoEffect(t *testing.T) {
 func TestHandleSessionNewBlankHomeDirFailureReturnsNoEffect(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{}
 	catalog := &fakeFactoryTargetCatalogService{result: defaultTestCatalogResult()}
-	server := New(nil, chatSessions, catalog, func() (string, error) { return "", nil })
+	server := New(nil, chatSessions, catalog, nil, func() (string, error) { return "", nil })
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionNew, validSessionNewParams)
 	result, rpcErr := server.handleSessionNew(context.Background(), env)

@@ -153,7 +153,7 @@ func TestChangeTargetBlankWorkingRootRejectsWithNoCatalogResolution(t *testing.T
 func TestChangeTargetResolveHomeDirFailureReturnsNoMutation(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project")}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
-	server := New(nil, chatSessions, catalog, func() (string, error) { return "", errors.New("resolve home dir boom") })
+	server := New(nil, chatSessions, catalog, nil, func() (string, error) { return "", errors.New("resolve home dir boom") })
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionSetConfigOption,
 		setConfigOptionParams("session-1", "factory:@you/review"))
@@ -173,7 +173,7 @@ func TestChangeTargetResolveHomeDirFailureReturnsNoMutation(t *testing.T) {
 func TestChangeTargetBlankHomeDirFailureReturnsNoMutation(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project")}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
-	server := New(nil, chatSessions, catalog, func() (string, error) { return "", nil })
+	server := New(nil, chatSessions, catalog, nil, func() (string, error) { return "", nil })
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionSetConfigOption,
 		setConfigOptionParams("session-1", "factory:@you/review"))
@@ -445,7 +445,7 @@ func TestServeDispatchesSessionSetConfigOptionOverRealJSONRPCFraming(t *testing.
 func TestServeRespondsMethodNotFoundForEveryUnimplementedMethodStillExcludesSessionSetConfigOption(t *testing.T) {
 	input := `{"jsonrpc":"2.0","id":9,"method":"session/set_config_option","params":{"sessionId":"s","configId":"target","value":"factory:@you/factory-builder"}}` + "\n"
 	out := &bytes.Buffer{}
-	server := New(nil, nil, nil, nil)
+	server := New(nil, nil, nil, nil, nil)
 	if err := server.Serve(context.Background(), strings.NewReader(input), out); err != nil {
 		t.Fatalf("Serve() error = %v", err)
 	}

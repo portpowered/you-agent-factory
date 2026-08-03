@@ -15,6 +15,19 @@ import (
 // and turn state are left byte-for-byte unchanged. On success it moves a
 // CREATED session to ACTIVE on its first turn and leaves an already-ACTIVE
 // session's State unchanged.
+//
+// Reusing a RequestID that already identifies an admitted turn is treated as
+// an idempotent retry, the same way RequestControl treats a reused control
+// RequestID: the existing turn (and the TargetEpisode it was originally
+// admitted into) is returned unchanged instead of admitting a second turn,
+// regardless of whether that existing turn is still busy or has since
+// terminalized and released ActiveTurnID. This is what makes redelivery of
+// the same connection-scoped request after the original turn's terminal
+// transition safe -- without it, StartTurn would admit a brand-new turn and
+// the caller would dispatch a second Factory effect for content already
+// executed once. The caller (this transport's admitPromptTurn) distinguishes
+// a genuinely fresh admission from this replay by inspecting the returned
+// Turn's State.
 func (s *Store) StartTurn(_ context.Context, req chatsessions.StartTurnRequest) (result chatsessions.StartTurnResult, err error) {
 	s.logStart("StartTurn", req.SessionID)
 	defer func() {
@@ -30,6 +43,14 @@ func (s *Store) StartTurn(_ context.Context, req chatsessions.StartTurnRequest) 
 	record, ok := s.sessions[req.SessionID]
 	if !ok {
 		return chatsessions.StartTurnResult{}, &chatsessions.NotFoundError{Value: "Session", ID: req.SessionID}
+	}
+	if turnID, exists := record.turnsByRequest[req.RequestID]; exists {
+		turn := record.turns[turnID]
+		return chatsessions.StartTurnResult{
+			Session: record.session,
+			Turn:    turn,
+			Episode: record.episodes[turn.Episode-1],
+		}, nil
 	}
 	if req.ExpectedVersion != record.session.Version {
 		return chatsessions.StartTurnResult{}, &chatsessions.ConflictError{
@@ -53,6 +74,7 @@ func (s *Store) StartTurn(_ context.Context, req chatsessions.StartTurnRequest) 
 	if err := turn.Validate(); err != nil {
 		return chatsessions.StartTurnResult{}, err
 	}
+	episode := record.episodes[len(record.episodes)-1]
 
 	updated := record.session
 	if updated.State == chatsessions.SessionStateCreated {
@@ -69,11 +91,12 @@ func (s *Store) StartTurn(_ context.Context, req chatsessions.StartTurnRequest) 
 	}
 
 	record.turns[turn.ID] = turn
+	record.turnsByRequest[req.RequestID] = turn.ID
 	record.lastTurnID = turn.ID
 	record.session = updated
 	s.sessions[req.SessionID] = record
 
-	return chatsessions.StartTurnResult{Session: updated, Turn: turn}, nil
+	return chatsessions.StartTurnResult{Session: updated, Turn: turn, Episode: episode}, nil
 }
 
 // AdvanceTurn moves one Turn to Next, enforcing the TurnState transition

@@ -120,29 +120,6 @@ func NewRoot(
 	}, nil
 }
 
-// ForRuntime binds the injected Models service to one Factory Session.
-func (o *Root) ForRuntime(binding models.RuntimeBinding) (models.Service, error) {
-	if o == nil {
-		return nil, missingDependencyError("Models service")
-	}
-	if err := models.ValidateRuntimeBinding(binding); err != nil {
-		return nil, err
-	}
-	privateScope, err := o.runtimeScopes.Open(binding)
-	if err != nil {
-		return nil, err
-	}
-	scope, err := (models.RuntimeScopeRef{}).Parse(string(privateScope))
-	if err != nil {
-		return nil, err
-	}
-	assets, err := localmodels.NewScopedAssetPuller(o.assets, scope)
-	if err != nil {
-		return nil, err
-	}
-	return o.runtimeForBindingWithAssets(scope, binding, assets)
-}
-
 func (o *Root) runtimeForBindingWithAssets(
 	scope models.RuntimeScopeRef,
 	binding models.RuntimeBinding,
@@ -550,10 +527,6 @@ type runtimeService struct {
 }
 
 var _ models.Service = (*runtimeService)(nil)
-
-func (s *runtimeService) ForRuntime(models.RuntimeBinding) (models.Service, error) {
-	return s, nil
-}
 
 func (s *runtimeService) OpenRuntimeScope(
 	context.Context,

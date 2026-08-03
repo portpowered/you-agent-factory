@@ -1201,6 +1201,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/ondemandtarget",
+      "minimum": 5.26
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle",
       "minimum": 76.31
     },
