@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"sync"
 	"testing"
 	"time"
 
@@ -95,11 +96,8 @@ func TestWindowTryCancelDeliversNotificationAndBlocksUntilWindowCloses(t *testin
 	w := &Window{}
 	session := w.Begin("attempt-1", acpsdk.SessionId("session-1"), connection)
 
-	if !w.Live("attempt-1") {
-		t.Fatal("Live(attempt-1) = false, want true once Begin has run")
-	}
-	if w.Live("attempt-other") {
-		t.Fatal("Live(attempt-other) = true, want false for a different attempt id")
+	if _, ok := w.Claim("attempt-other"); ok {
+		t.Fatal("Claim(attempt-other) ok = true, want false for a different attempt id")
 	}
 
 	claimed, ok := w.Claim("attempt-1")
@@ -137,8 +135,8 @@ func TestWindowTryCancelDeliversNotificationAndBlocksUntilWindowCloses(t *testin
 	if !result.accepted {
 		t.Fatal("TryCancel() accepted = false, want true when the turn's real outcome was cancellation")
 	}
-	if w.Live("attempt-1") {
-		t.Fatal("Live(attempt-1) = true after End, want false")
+	if _, ok := w.Claim("attempt-1"); ok {
+		t.Fatal("Claim(attempt-1) ok = true after End, want false")
 	}
 }
 
@@ -207,8 +205,8 @@ func TestWindowClaimPinsExactGenerationSoReusedAttemptIDCannotRedirectDelivery(t
 
 	// A completes normally (not via cancellation) and its window fully closes.
 	w.End(sessionA, false)
-	if w.Live("attempt-1") {
-		t.Fatal("Live(attempt-1) = true after A's End, want false: identity must be free for reuse")
+	if _, ok := w.Claim("attempt-1"); ok {
+		t.Fatal("Claim(attempt-1) ok = true after A's End, want false: identity must be free for reuse")
 	}
 
 	// B opens, reusing the exact same attemptID string.
@@ -233,6 +231,88 @@ func TestWindowClaimPinsExactGenerationSoReusedAttemptIDCannotRedirectDelivery(t
 	claimB, ok := w.Claim("attempt-1")
 	if !ok || claimB != sessionB {
 		t.Fatalf("Claim(B) = (%v, %v), want (sessionB, true)", claimB, ok)
+	}
+}
+
+// gatedWriter blocks the first Write call until release is closed, letting a
+// test pause a TryCancel goroutine at the exact instant it is inside its
+// outbound send - after it has already decided the generation was not yet
+// terminal - so a concurrent End can be attempted against that same window.
+// entered is closed once the blocked Write is reached, giving the test a
+// real synchronization point instead of a sleep.
+type gatedWriter struct {
+	w       io.Writer
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (g *gatedWriter) Write(p []byte) (int, error) {
+	g.once.Do(func() { close(g.entered) })
+	<-g.release
+	return g.w.Write(p)
+}
+
+// TestWindowEndCannotRecordCompletionWhileATryCancelSendItAlreadyLostIsInFlight
+// is the deterministic regression for the atomic-ownership gap: the earlier
+// implementation decided "not yet terminal" with a non-blocking check and
+// only afterwards performed the outbound send, so End could record
+// completion - and the identity could become free for reuse - in the gap
+// between that check and the send actually reaching the wire. This test
+// pins TryCancel exactly inside that gap (via gatedWriter, a real blocking
+// primitive, not a sleep) and proves End cannot record completion until the
+// send TryCancel already committed to finishes: the two decisions are one
+// atomic unit, not two independently-timed ones.
+func TestWindowEndCannotRecordCompletionWhileATryCancelSendItAlreadyLostIsInFlight(t *testing.T) {
+	peer := newFakeSessionPeer()
+	outboundReader, outboundWriter := io.Pipe()
+	gate := &gatedWriter{w: outboundWriter, entered: make(chan struct{}), release: make(chan struct{})}
+	go peer.run(outboundReader)
+	t.Cleanup(func() { _ = outboundWriter.Close() })
+	connection := acpsdk.NewClientSideConnection(noopClient{}, gate, io.MultiReader())
+
+	w := &Window{}
+	session := w.Begin("attempt-1", acpsdk.SessionId("session-1"), connection)
+	claimed, ok := w.Claim("attempt-1")
+	if !ok || claimed != session {
+		t.Fatalf("Claim(attempt-1) = (%v, %v), want the open session and true", claimed, ok)
+	}
+
+	type outcome struct {
+		accepted bool
+		err      error
+	}
+	tryCancelDone := make(chan outcome, 1)
+	go func() {
+		accepted, err := claimed.TryCancel(context.Background())
+		tryCancelDone <- outcome{accepted: accepted, err: err}
+	}()
+
+	// TryCancel has observed the generation as not yet terminal and is now
+	// blocked mid-send, holding ownership of the atomic decision.
+	<-gate.entered
+
+	endDone := make(chan struct{})
+	go func() {
+		w.End(session, true)
+		close(endDone)
+	}()
+
+	select {
+	case <-endDone:
+		t.Fatal("End() recorded completion while TryCancel's already-committed send was still in flight; ownership is not atomic")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(gate.release)
+	<-endDone
+
+	result := <-tryCancelDone
+	if result.err != nil {
+		t.Fatalf("TryCancel() error = %v, want nil", result.err)
+	}
+	if !result.accepted {
+		t.Fatal("TryCancel() accepted = false, want true: it won ownership of the generation before End could record completion")
 	}
 }
 

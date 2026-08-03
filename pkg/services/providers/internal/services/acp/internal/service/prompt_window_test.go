@@ -28,14 +28,10 @@ func TestDaemonPromptWithWindow_PanicStillClosesWindowForLaterIdentityReuse(t *t
 		})
 	}()
 
-	if d.window.Live(attemptID) {
-		t.Fatal("window.Live() = true after a panicking prompt, want the window closed on unexpected unwind")
-	}
-
 	// A control racing in before the next execution's own Begin must observe
 	// no live window for this identity - not hang on the dead stale session.
 	if _, ok := d.window.Claim(attemptID); ok {
-		t.Fatal("Claim() on stale identity ok = true, want false: no live window remains for a closed session")
+		t.Fatal("Claim() on stale identity ok = true, want false: no live window remains for a closed session, including after a panicking prompt")
 	}
 
 	// A later execution reusing the same attempt ID must be able to bind and
@@ -87,7 +83,7 @@ func TestDaemonPromptWithWindow_NormalReturnRecordsOutcomeAndClosesWindow(t *tes
 	if response.StopReason != acpsdk.StopReasonEndTurn {
 		t.Fatalf("promptWithWindow() response = %#v, want the prompt func's own response", response)
 	}
-	if d.window.Live(attemptID) {
-		t.Fatal("window.Live() = true after a normal return, want the window closed")
+	if _, ok := d.window.Claim(attemptID); ok {
+		t.Fatal("Claim() ok = true after a normal return, want the window closed")
 	}
 }
