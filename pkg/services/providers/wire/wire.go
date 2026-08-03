@@ -277,8 +277,8 @@ func newRoot(
 		executionService,
 		acpService,
 		acpIntegrations,
-		providerservice.WithLifecycle(acpService),
-		providerservice.WithLogger(logger),
+		logger,
+		acpService,
 	)
 }
 

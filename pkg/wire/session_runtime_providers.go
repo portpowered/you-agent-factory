@@ -15,6 +15,7 @@ import (
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
@@ -49,12 +50,13 @@ func provideApplicationProcessLifecycle(service providers.Service) (initializera
 	return lifecycle, nil
 }
 
-func provideProvidersService(edges serviceedges.Edges) (providers.Service, error) {
-	return provideConfiguredProvidersService(edges, nil, nil)
+func provideProvidersService(edges serviceedges.Edges, logger logging.Logger) (providers.Service, error) {
+	return provideConfiguredProvidersService(edges, logger, nil, nil)
 }
 
 func provideConfiguredProvidersService(
 	edges serviceedges.Edges,
+	logger logging.Logger,
 	integrations []operatorsettings.ACPIntegration,
 	workersRunner workers.CommandRunner,
 ) (providers.Service, error) {
@@ -63,6 +65,7 @@ func provideConfiguredProvidersService(
 		return nil, err
 	}
 	options := []providerswire.Option{
+		providerswire.WithLogger(logger),
 		providerswire.WithAgyPTY(agyPTYPlatform),
 		providerswire.WithCommandFactory(providePlatformProcessCommandFactory(edges)),
 		providerswire.WithExecutableLocator(edges.ProvidersExecutableLocator),
@@ -120,12 +123,13 @@ func buildProviderRegistry(
 func provideProviderRegistryRebinder(
 	providersService providers.Service,
 	edges serviceedges.Edges,
+	logger logging.Logger,
 ) (workerswire.ProviderRegistryRebinder, error) {
 	return func(providerRunner workers.CommandRunner) (workers.ProviderRegistry, providers.Service, error) {
 		if providerRunner == nil {
 			return nil, nil, fmt.Errorf("provider registry rebind requires command runner")
 		}
-		rebound, err := provideConfiguredProvidersService(edges, nil, providerRunner)
+		rebound, err := provideConfiguredProvidersService(edges, logger, nil, providerRunner)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -744,6 +748,7 @@ func provideWorkersRuntimeFactory(
 	edges serviceedges.Edges,
 	providerRegistry workers.ProviderRegistry,
 	providerRegistryRebinder workerswire.ProviderRegistryRebinder,
+	providersLogger logging.Logger,
 ) (factorysessionwire.WorkersRuntimeFactory, error) {
 	if defaultAllocator == nil {
 		return nil, workers.ErrPTYHostRequired
@@ -841,6 +846,7 @@ func provideWorkersRuntimeFactory(
 				edges,
 				acpIntegrations,
 				providerCommandRunner,
+				providersLogger,
 			)
 			if err != nil {
 				return nil, err

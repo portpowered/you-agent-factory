@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -17,8 +18,9 @@ func provideRuntimeProviderBindings(
 	edges serviceedges.Edges,
 	integrations []operatorsettings.ACPIntegration,
 	runner workers.CommandRunner,
+	logger logging.Logger,
 ) (workers.ProviderRegistry, providers.Service, workerswire.ProviderRegistryRebinder, error) {
-	runtimeProviders, err := provideConfiguredProvidersService(edges, integrations, runner)
+	runtimeProviders, err := provideConfiguredProvidersService(edges, logger, integrations, runner)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("construct runtime Providers service: %w", err)
 	}
@@ -27,7 +29,7 @@ func provideRuntimeProviderBindings(
 		return nil, nil, nil, fmt.Errorf("construct runtime provider registry: %w", err)
 	}
 	rebinder := workerswire.ProviderRegistryRebinder(func(reboundRunner workers.CommandRunner) (workers.ProviderRegistry, providers.Service, error) {
-		reboundProviders, rebuildErr := provideConfiguredProvidersService(edges, integrations, reboundRunner)
+		reboundProviders, rebuildErr := provideConfiguredProvidersService(edges, logger, integrations, reboundRunner)
 		if rebuildErr != nil {
 			return nil, nil, rebuildErr
 		}

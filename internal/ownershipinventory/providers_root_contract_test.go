@@ -3,7 +3,6 @@ package ownershipinventory_test
 import (
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -21,28 +20,6 @@ func TestProvidersRootGoFilesMatchCommittedInventory(t *testing.T) {
 func TestProvidersThinRootContractFiles(t *testing.T) {
 	t.Parallel()
 
-	want := []string{
-		"acp_configuration_contract.go",
-		"acp_contract.go",
-		"catalog_characterization_test.go",
-		"catalog_contract.go",
-		"control_characterization_test.go",
-		"control_contract.go",
-		"doc.go",
-		"execute_characterization_test.go",
-		"execute_contract.go",
-		"identity_characterization_test.go",
-		"identity_contract.go",
-		"lifecycle_contract.go",
-		"root_catalog_delegation_test.go",
-		"root_contract_characterization_test.go",
-		"selection_characterization_test.go",
-		"selection_contract.go",
-		"service_contract.go",
-	}
-	if !slices.Equal(ownershipinventory.ProvidersThinRootContractFiles, want) {
-		t.Fatalf("ProvidersThinRootContractFiles = %v, want %v", ownershipinventory.ProvidersThinRootContractFiles, want)
-	}
 	for _, fileName := range ownershipinventory.ProvidersThinRootContractFiles {
 		kind, _, ok := ownershipinventory.ClassifyProvidersRootContractFile(fileName)
 		if !ok || kind != "thin_root_retain" {

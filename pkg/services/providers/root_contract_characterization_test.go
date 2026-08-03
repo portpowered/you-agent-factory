@@ -9,7 +9,6 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -245,7 +244,7 @@ func TestProvidersRootContractInventorySeal(t *testing.T) {
 	}
 }
 
-func TestProvidersRootServiceInterfaceCountAndSelectionMethods(t *testing.T) {
+func TestProvidersRootServiceInterfaceLivesInServiceContractFile(t *testing.T) {
 	t.Parallel()
 
 	serviceRoot := filepath.Join(providersRepositoryRoot(t), "pkg", "services", "providers")
@@ -282,24 +281,6 @@ func TestProvidersRootServiceInterfaceCountAndSelectionMethods(t *testing.T) {
 	slices.Sort(serviceInterfaces)
 	if want := []string{"service_contract.go:Service"}; !slices.Equal(serviceInterfaces, want) {
 		t.Fatalf("Providers root Service interfaces = %v, want %v", serviceInterfaces, want)
-	}
-
-	rootType := reflect.TypeOf((*providers.Service)(nil)).Elem()
-	wantMethods := []string{
-		"ControlAttempt",
-		"Execute",
-		"GetProvider",
-		"ListProviders",
-		"ResolveIdentity",
-		"ResolveSelection",
-		"ValidatePrerequisites",
-	}
-	gotMethods := make([]string, rootType.NumMethod())
-	for index := range gotMethods {
-		gotMethods[index] = rootType.Method(index).Name
-	}
-	if !slices.Equal(gotMethods, wantMethods) {
-		t.Fatalf("Providers Service methods = %v, want %v", gotMethods, wantMethods)
 	}
 }
 

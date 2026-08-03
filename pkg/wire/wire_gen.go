@@ -89,7 +89,12 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	opener := provideBrowserOpener(edges2)
 	fileSystem := provideOperatorSettingsFileSystem(edges2)
 	createTemporaryFile := provideOperatorSettingsCreateTemporaryFile(edges2)
-	service, err := provideProvidersService(edges2)
+	logger, err := logging.NewDefaultLogger()
+	if err != nil {
+		return nil, err
+	}
+	loggingLogger := provideOperatorSettingsLogger(logger)
+	service, err := provideProvidersService(edges2, loggingLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -101,11 +106,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	configDecoder := provideOperatorConfigDecoder()
 	configEncoder := provideOperatorConfigEncoder()
 	idGenerator := provideOperatorSettingsIDGenerator(edges2)
-	logger, err := logging.NewDefaultLogger()
-	if err != nil {
-		return nil, err
-	}
-	loggingLogger := provideOperatorSettingsLogger(logger)
 	operatorsettingsService, err := provideOperatorSettingsService(fileSystem, createTemporaryFile, providerCatalog, configDecoder, configEncoder, idGenerator, service, loggingLogger)
 	if err != nil {
 		return nil, err
@@ -202,7 +202,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	v28 := provideWorkerCommandRunnerAdapter()
-	v29, err := provideProviderRegistryRebinder(service, edges2)
+	v29, err := provideProviderRegistryRebinder(service, edges2, loggingLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +223,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	source := provideWorkersRetryRandomSource(edges2)
 	readFileInspector := provideWorkersWorkstationFileSystem(edges2)
 	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
-	v41, err := provideWorkersRuntimeFactory(service, invocationInterpolationService, decisionEnvelopeService, workstationExecutionPolicyService, v39, v40, source, readFileInspector, temporaryFileSystem, ptyAllocator, edges2, providerRegistry, v29)
+	v41, err := provideWorkersRuntimeFactory(service, invocationInterpolationService, decisionEnvelopeService, workstationExecutionPolicyService, v39, v40, source, readFileInspector, temporaryFileSystem, ptyAllocator, edges2, providerRegistry, v29, loggingLogger)
 	if err != nil {
 		return nil, err
 	}

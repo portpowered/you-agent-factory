@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
@@ -102,7 +103,7 @@ func mustControlRootService(t *testing.T, logger *recordingControlLogger) provid
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService, providerservice.WithLogger(logger))
+	root, err := providerservice.New(catalogService, executionService, logger)
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -207,7 +208,7 @@ func TestControlAttempt_InvokesNoExecutionAdapter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService)
+	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}

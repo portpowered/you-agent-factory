@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
@@ -109,7 +110,7 @@ func mustSelectionRoot(t *testing.T, descriptors ...providers.Descriptor) provid
 	t.Helper()
 
 	catalog := &selectionCatalogStub{descriptors: descriptors}
-	root, err := New(catalog, selectionExecutionStub{})
+	root, err := New(catalog, selectionExecutionStub{}, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}

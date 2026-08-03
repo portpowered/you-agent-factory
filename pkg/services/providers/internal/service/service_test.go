@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
@@ -19,7 +20,7 @@ import (
 func TestNew_RejectsNilCatalog(t *testing.T) {
 	t.Parallel()
 
-	service, err := providerservice.New(nil, &stubExecution{})
+	service, err := providerservice.New(nil, &stubExecution{}, logging.NoopLogger{})
 	if err == nil || service != nil {
 		t.Fatalf("New(nil) = (%v, %v), want error", service, err)
 	}
@@ -33,7 +34,7 @@ func TestNewRejectsInvalidExecutionComposition(t *testing.T) {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
 	var nilExecution execution.Service
-	service, constructionErr := providerservice.New(catalogService, nilExecution)
+	service, constructionErr := providerservice.New(catalogService, nilExecution, logging.NoopLogger{})
 	if constructionErr == nil || service != nil {
 		t.Fatalf(
 			"New() = (%v, %v), want invalid execution composition error",
@@ -54,7 +55,7 @@ func TestRootDelegatesListAndGetToCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService)
+	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -111,7 +112,7 @@ func TestRootDelegatesExecuteToOnePrivateExecutionAttempt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService)
+	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -141,7 +142,7 @@ func TestRootACPRejectsSeparateReasoningEffortAndAcceptsExactModelID(t *testing.
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
 	acpService := &stubACPService{provider: "cursor-acp"}
-	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil)
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -257,7 +258,7 @@ func TestRootDelegatesTypedExecutionFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService)
+	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -408,7 +409,7 @@ func TestRegisteredCompositionIsInert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService)
+	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}

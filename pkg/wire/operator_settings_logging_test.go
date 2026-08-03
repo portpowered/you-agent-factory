@@ -25,7 +25,7 @@ func TestProvideOperatorSettingsServiceLogsThroughTheCanonicalWireLogger(t *test
 
 	edges := serviceedges.Edges{}
 	files := provideOperatorSettingsFileSystem(edges)
-	providersRoot, err := provideProvidersService(edges)
+	providersRoot, err := provideProvidersService(edges, logger)
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}

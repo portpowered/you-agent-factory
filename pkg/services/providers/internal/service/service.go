@@ -27,21 +27,25 @@ type Service struct {
 var _ providers.Service = (*Service)(nil)
 
 // New constructs an inert Providers root facade over its two private sibling
-// capabilities.
-func New(catalogService catalog.Service, executionService execution.Service, options ...Option) (providers.Service, error) {
-	return newService(catalogService, executionService, nil, nil, options...)
+// capabilities. logger is the direct, required operation-logging
+// abstraction; callers with no operation logging pass logging.NoopLogger{}.
+func New(catalogService catalog.Service, executionService execution.Service, logger logging.Logger) (providers.Service, error) {
+	return newService(catalogService, executionService, nil, nil, logger, nil)
 }
 
 // NewWithACP constructs the production Providers root with its persistent ACP
-// subservice and exact lifecycle roles.
+// subservice and exact lifecycle roles. logger is the direct, required
+// operation-logging abstraction; callers with no operation logging pass
+// logging.NoopLogger{}.
 func NewWithACP(
 	catalogService catalog.Service,
 	executionService execution.Service,
 	acpService acp.Service,
 	packagedACP []providers.ACPIntegration,
-	options ...Option,
+	logger logging.Logger,
+	lifecycles ...providers.Lifecycle,
 ) (providers.Service, error) {
-	return newService(catalogService, executionService, acpService, packagedACP, options...)
+	return newService(catalogService, executionService, acpService, packagedACP, logger, lifecycles)
 }
 
 func newService(
@@ -49,7 +53,8 @@ func newService(
 	executionService execution.Service,
 	acpService acp.Service,
 	packagedACP []providers.ACPIntegration,
-	options ...Option,
+	logger logging.Logger,
+	lifecycles []providers.Lifecycle,
 ) (providers.Service, error) {
 	if catalogService == nil {
 		return nil, fmt.Errorf("construct Providers: catalog is required")
@@ -57,13 +62,7 @@ func newService(
 	if executionService == nil {
 		return nil, fmt.Errorf("construct Providers: execution is required")
 	}
-	var config rootConfig
-	for _, option := range options {
-		if option != nil {
-			option(&config)
-		}
-	}
-	for index, lifecycle := range config.lifecycles {
+	for index, lifecycle := range lifecycles {
 		if lifecycle == nil {
 			return nil, fmt.Errorf("construct Providers: lifecycle %d is required", index)
 		}
@@ -73,8 +72,8 @@ func newService(
 		execution:   executionService,
 		acp:         acpService,
 		packagedACP: cloneACPIntegrations(packagedACP),
-		lifecycles:  append([]providers.Lifecycle(nil), config.lifecycles...),
-		logger:      logging.EnsureLogger(config.logger),
+		lifecycles:  append([]providers.Lifecycle(nil), lifecycles...),
+		logger:      logging.EnsureLogger(logger),
 	}, nil
 }
 
