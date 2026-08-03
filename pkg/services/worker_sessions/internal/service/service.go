@@ -34,16 +34,19 @@ func New(logger logging.Logger) workersessions.Service {
 
 func (r *registry) Reserve(_ context.Context, req workersessions.ReserveRequest) (workersessions.Session, error) {
 	if err := req.Validate(); err != nil {
+		r.logger.Info("worker session reserve rejected", "sessionID", req.ID, "outcome", "invalid")
 		return workersessions.Session{}, err
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.sessions[req.ID]; exists {
+		r.logger.Info("worker session reserve", "sessionID", req.ID, "outcome", "duplicate")
 		return workersessions.Session{}, workersessions.ErrSessionAlreadyExists
 	}
 	session := workersessions.Session{ID: req.ID, State: workersessions.StateReserved}
 	r.sessions[req.ID] = session
+	r.logger.Info("worker session reserve", "sessionID", req.ID, "outcome", "reserved")
 	return session, nil
 }
 
@@ -67,6 +70,7 @@ func (r *registry) Get(_ context.Context, req workersessions.GetRequest) (worker
 
 func (r *registry) List(_ context.Context, req workersessions.ListRequest) (workersessions.ListResult, error) {
 	if err := req.Validate(); err != nil {
+		r.logger.Info("worker session list rejected", "outcome", "invalid")
 		return workersessions.ListResult{}, err
 	}
 
@@ -80,6 +84,7 @@ func (r *registry) List(_ context.Context, req workersessions.ListRequest) (work
 	r.mu.RUnlock()
 
 	sort.Slice(matched, func(i, j int) bool { return matched[i].ID < matched[j].ID })
+	r.logger.Info("worker session list", "outcome", "success", "filter_state_count", len(req.Filter.States), "result_count", len(matched))
 	return workersessions.ListResult{Sessions: matched}, nil
 }
 
