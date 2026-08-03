@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 )
@@ -130,6 +132,75 @@ func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *t
 	assertPromptResponseStopReason(t, secondResp, acpsdk.StopReasonEndTurn)
 	if got := factorySessionIDCalls.Load(); got != callsAfterFirstTurn {
 		t.Fatalf("Factory Session ID generator calls after the second (already-bound) turn = %d, want unchanged from %d (no second Factory Session activation)", got, callsAfterFirstTurn)
+	}
+}
+
+// TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes
+// proves that when the admitted episode's Factory target can no longer
+// resolve to an installed named Factory at dispatch time -- distinct from
+// session/new's own effective-catalog check, which reads the same
+// named-Factory installation this test removes only after session/new has
+// already succeeded, exactly the window where a concurrent uninstall could
+// leave a session pointed at a target its own catalog snapshot no longer
+// backs -- the real root.BuildProcess composition, through
+// provideACPServerFactoryTargetRuntimeResolver's
+// factorydefinitions.ErrNamedFactoryNotFound path, returns a bounded
+// internal ACP error instead of a crash or a fabricated success, and leaves
+// no turn stranded: a second prompt on the same session is admitted and
+// fails the identical safe way, proving the first failure released the
+// session's busy state.
+func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test driving root.BuildProcess Factory Session dispatch")
+	}
+
+	home, err := os.MkdirTemp("", "acp-prompt-delegation-unresolvable-home-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp(home) error = %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	seedInstalledPackagedFactory(t, home, "@you/goal")
+	seedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
+
+	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("root.BuildProcess() error = %v", err)
+	}
+	server := process.ACPServer()
+	if server == nil {
+		t.Fatal("Process.ACPServer() returned a nil acp.Server")
+	}
+
+	cwd := t.TempDir()
+	sessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
+	if sessionID == "" {
+		t.Fatal("session/new returned a blank sessionId")
+	}
+
+	// Remove the installed Factory's own directory only after session/new
+	// already resolved and admitted it, so the runtime resolver's
+	// named-Factory cross-root lookup -- reached only from Factory dispatch,
+	// never from session/new's separate effective-catalog check -- fails at
+	// prompt-dispatch time.
+	globalRoot, err := factorydefinitions.NamedFactoriesRootForHome(home)
+	if err != nil {
+		t.Fatalf("NamedFactoriesRootForHome() error = %v", err)
+	}
+	if err := os.RemoveAll(filepath.Join(globalRoot, "@you", "goal")); err != nil {
+		t.Fatalf("RemoveAll(installed Factory directory) error = %v", err)
+	}
+
+	firstResp := sendSessionPrompt(t, server, sessionID, "please help with this goal")
+	if firstResp.Error == nil {
+		t.Fatal("first session/prompt response error = nil, want a bounded internal error for an unresolvable Factory target")
+	}
+
+	secondResp := sendSessionPrompt(t, server, sessionID, "a retry after the unresolvable target failure")
+	if secondResp.Error == nil {
+		t.Fatal("second session/prompt response error = nil, want the same bounded rejection, not a stranded busy session")
 	}
 }
 

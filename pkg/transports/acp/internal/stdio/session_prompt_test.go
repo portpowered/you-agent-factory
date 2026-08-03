@@ -378,6 +378,50 @@ func TestHandleSessionPromptStaleVersionRejectsWithProtocolSafeClassification(t 
 	}
 }
 
+// TestHandleSessionPromptAdmissionFailureClassification proves
+// classifyTurnAdmissionFailure's remaining causes -- a StartTurn
+// *chatsessions.ValidationError, a GetSession context.Canceled, and any
+// other unclassified GetSession failure -- all reject with no Factory
+// effect, matching the same bounded-classification contract as the
+// NotFoundError/ConflictError/BusyError causes covered above.
+func TestHandleSessionPromptAdmissionFailureClassification(t *testing.T) {
+	tests := []struct {
+		name          string
+		getSessionErr error
+		startTurnErr  error
+	}{
+		{"validation_error", nil, &chatsessions.ValidationError{Value: "Session", Field: "WorkingRoot", Err: chatsessions.ErrRequiredValue}},
+		{"get_session_canceled", context.Canceled, nil},
+		{"get_session_unclassified", errors.New("store unavailable"), nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			chatSessions := &fakeChatSessionsService{
+				getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project"),
+				getSessionErr:    tt.getSessionErr,
+				startTurnErr:     tt.startTurnErr,
+			}
+			catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+			factoryTarget := &fakeFactoryTargetService{}
+			server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+			env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+				promptTextParams("session-1", "hello there"))
+
+			result, rpcErr := server.handleSessionPrompt(context.Background(), env)
+			if rpcErr == nil {
+				t.Fatal("handleSessionPrompt() error = nil, want a rejection")
+			}
+			if result != nil {
+				t.Fatalf("handleSessionPrompt() result = %q, want nil on rejection", result)
+			}
+			if len(factoryTarget.startCalls) != 0 || len(factoryTarget.invokeCalls) != 0 {
+				t.Fatal("Factory effect observed, want zero Factory calls on admission rejection")
+			}
+		})
+	}
+}
+
 // TestHandleSessionPromptBusyRejectsSequentialAndConcurrentAdmission proves
 // that once a session has a non-terminal active turn, StartTurn's
 // *chatsessions.BusyError classifies as a bounded protocol-safe rejection
@@ -1210,40 +1254,57 @@ func TestHandleSessionPromptSequentialTurnsStartThenInvokeExactlyOnce(t *testing
 // exactly what chat_sessions/internal/service.Store.StartTurn now returns for
 // a reused RequestID), this transport neither calls AdvanceTurn nor dispatches
 // any Factory effect, and still returns a deterministic final response
-// derived from that turn's own recorded terminal state.
+// derived from that turn's own recorded terminal state -- exercising
+// turnStateStopReason's full mapping: TurnStateCanceled to the distinct
+// cancelled stop reason, and every other terminal state (including
+// TurnStateFailed) to the same end_turn safe fallback TurnStateCompleted
+// uses.
 func TestHandleSessionPromptRedeliveredRequestMakesNoFactoryCall(t *testing.T) {
-	replayed := admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", "fs-1")
-	replayed.Turn.State = chatsessions.TurnStateCompleted
-	chatSessions := &fakeChatSessionsService{
-		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
-		startTurnResult:  replayed,
+	tests := []struct {
+		name       string
+		turnState  chatsessions.TurnState
+		wantReason acpsdk.StopReason
+	}{
+		{"completed", chatsessions.TurnStateCompleted, acpsdk.StopReasonEndTurn},
+		{"canceled", chatsessions.TurnStateCanceled, acpsdk.StopReasonCancelled},
+		{"failed", chatsessions.TurnStateFailed, acpsdk.StopReasonEndTurn},
 	}
-	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
-	factoryTarget := &fakeFactoryTargetService{}
-	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			replayed := admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", "fs-1")
+			replayed.Turn.State = tt.turnState
+			chatSessions := &fakeChatSessionsService{
+				getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+				startTurnResult:  replayed,
+			}
+			catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+			factoryTarget := &fakeFactoryTargetService{}
+			server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
 
-	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
-		promptTextParams("session-1", "hello there"))
-	result, rpcErr := server.handleSessionPrompt(context.Background(), env)
-	if rpcErr != nil {
-		t.Fatalf("handleSessionPrompt() error = %+v, want a deterministic final response for a redelivered request", rpcErr)
-	}
-	if chatSessions.advanceTurnCalled {
-		t.Fatal("AdvanceTurn was called, want no turn-state mutation for a redelivered already-terminal request")
-	}
-	if len(factoryTarget.startCalls) != 0 {
-		t.Fatalf("StartFactoryTarget call count = %d, want 0 for a redelivered request", len(factoryTarget.startCalls))
-	}
-	if len(factoryTarget.invokeCalls) != 0 {
-		t.Fatalf("InvokeFactoryTarget call count = %d, want 0 for a redelivered request", len(factoryTarget.invokeCalls))
-	}
+			env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+				promptTextParams("session-1", "hello there"))
+			result, rpcErr := server.handleSessionPrompt(context.Background(), env)
+			if rpcErr != nil {
+				t.Fatalf("handleSessionPrompt() error = %+v, want a deterministic final response for a redelivered request", rpcErr)
+			}
+			if chatSessions.advanceTurnCalled {
+				t.Fatal("AdvanceTurn was called, want no turn-state mutation for a redelivered already-terminal request")
+			}
+			if len(factoryTarget.startCalls) != 0 {
+				t.Fatalf("StartFactoryTarget call count = %d, want 0 for a redelivered request", len(factoryTarget.startCalls))
+			}
+			if len(factoryTarget.invokeCalls) != 0 {
+				t.Fatalf("InvokeFactoryTarget call count = %d, want 0 for a redelivered request", len(factoryTarget.invokeCalls))
+			}
 
-	var resp acpsdk.PromptResponse
-	if err := json.Unmarshal(result, &resp); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
-	if resp.StopReason != acpsdk.StopReasonEndTurn {
-		t.Fatalf("StopReason = %q, want end_turn for the original COMPLETED turn", resp.StopReason)
+			var resp acpsdk.PromptResponse
+			if err := json.Unmarshal(result, &resp); err != nil {
+				t.Fatalf("unmarshal response: %v", err)
+			}
+			if resp.StopReason != tt.wantReason {
+				t.Fatalf("StopReason = %q, want %q for the original %s turn", resp.StopReason, tt.wantReason, tt.turnState)
+			}
+		})
 	}
 }
 
