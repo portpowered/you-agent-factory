@@ -397,3 +397,77 @@ func TestControlAttempt_UnsupportedForAlreadyTerminalAttempt(t *testing.T) {
 		t.Fatalf("ControlAttempt() outcome = %q, want unsupported for an already-terminal attempt", result.Outcome)
 	}
 }
+
+// TestControlAttempt_ReturnsPromptlyWhenControlContextEndsBeforeAttemptReturns
+// proves story 004's context-threading requirement: the caller's own
+// ControlAttempt ctx, not just the underlying attempt's, bounds how long a
+// claimed control waits. The fake attempt here deliberately keeps running
+// for a while after observing cancellation (modeling a slow adapter), so if
+// ControlAttempt ignored its own ctx and waited unconditionally on the
+// attempt's done signal, this test would hang until its own timeout.
+// Canceling the control ctx must return promptly with a distinguishable,
+// non-nil error and the zero result - never ControlOutcomeCompleted.
+func TestControlAttempt_ReturnsPromptlyWhenControlContextEndsBeforeAttemptReturns(t *testing.T) {
+	t.Parallel()
+
+	cancelledSeen := make(chan struct{})
+	releaseAttempt := make(chan struct{})
+	started := make(chan struct{})
+	root := mustControlCapableRootService(t, func(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+		close(started)
+		<-ctx.Done()
+		close(cancelledSeen)
+		<-releaseAttempt
+		return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindCanceled}
+	})
+
+	executeDone := make(chan error, 1)
+	go func() {
+		_, err := root.Execute(context.Background(), providers.ExecuteRequest{
+			Provider:  providers.IDCodex,
+			AttemptID: "control-ctx-ends",
+		})
+		executeDone <- err
+	}()
+	<-started
+
+	controlCtx, cancelControl := context.WithCancel(context.Background())
+	type outcome struct {
+		result providers.ControlAttemptResult
+		err    error
+	}
+	controlDone := make(chan outcome, 1)
+	go func() {
+		result, err := root.ControlAttempt(controlCtx, providers.ControlAttemptRequest{
+			Provider:  providers.IDCodex,
+			AttemptID: "control-ctx-ends",
+			Action:    providers.ControlActionCancel,
+		})
+		controlDone <- outcome{result: result, err: err}
+	}()
+
+	<-cancelledSeen
+	select {
+	case <-controlDone:
+		t.Fatal("ControlAttempt() returned before its own context ended")
+	default:
+	}
+
+	cancelControl()
+
+	result := <-controlDone
+	if result.err == nil {
+		t.Fatal("ControlAttempt() error = nil, want a non-nil context-ended error")
+	}
+	if !errors.Is(result.err, context.Canceled) {
+		t.Fatalf("ControlAttempt() error = %v, want errors.Is context.Canceled", result.err)
+	}
+	if result.result != (providers.ControlAttemptResult{}) {
+		t.Fatalf("ControlAttempt() result = %#v, want the zero value alongside a context-ended error", result.result)
+	}
+
+	close(releaseAttempt)
+	if !errors.Is(<-executeDone, providers.ErrExecuteCancelled) {
+		t.Fatal("Execute() did not observe cancellation")
+	}
+}

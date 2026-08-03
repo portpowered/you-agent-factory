@@ -236,7 +236,9 @@ func (service *stubACPService) Execute(
 
 func (service *stubACPService) Cancelable(providers.ID, string) bool { return false }
 
-func (service *stubACPService) Cancel(context.Context, providers.ID, string) error { return nil }
+func (service *stubACPService) TryCancel(context.Context, providers.ID, string) (bool, error) {
+	return false, nil
+}
 
 func TestRootDelegatesTypedExecutionFailure(t *testing.T) {
 	t.Parallel()

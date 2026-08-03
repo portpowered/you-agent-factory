@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"sync/atomic"
@@ -206,7 +207,7 @@ func TestLiveAttemptRegistry_ClaimRemovesEntryAndSignalWaitsForDone(t *testing.T
 	// this unit level without sleep-based timing.
 	signalDone := make(chan struct{})
 	go func() {
-		claimed.signal()
+		_, _ = claimed.signal(context.Background())
 		close(signalDone)
 	}()
 	close(done)

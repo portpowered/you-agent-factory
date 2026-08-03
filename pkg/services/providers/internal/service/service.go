@@ -179,8 +179,14 @@ func (s *Service) Execute(
 		cancelAttempt()
 		return providers.ExecuteResult{}, bindErr
 	}
-	defer release()
+	// Declared release-then-close-then-cancelAttempt so LIFO defer order
+	// executes cancelAttempt, then release, then close(done): a concurrent
+	// ControlAttempt claim can only ever observe this registration while
+	// done is still open, never the reverse, so nativeAttemptControl.signal
+	// never sees a stale-already-closed done for an attempt it did not
+	// itself signal.
 	defer close(done)
+	defer release()
 	defer cancelAttempt()
 	return s.execution.Execute(attemptCtx, request)
 }
@@ -214,7 +220,7 @@ func (s *Service) bindLiveAttempt(
 // live attempt and invokes no Worker cancellation method or continuation
 // behavior.
 func (s *Service) ControlAttempt(
-	_ context.Context,
+	ctx context.Context,
 	request providers.ControlAttemptRequest,
 ) (providers.ControlAttemptResult, error) {
 	if err := request.Validate(); err != nil {
@@ -236,7 +242,8 @@ func (s *Service) ControlAttempt(
 	outcome := providers.ControlOutcomeUnsupported
 	key := liveAttemptKey{provider: request.Provider, attemptID: request.AttemptID}
 	if control, claimed := s.attempts.claim(key, request.Action); claimed {
-		if err := control.signal(); err != nil {
+		accepted, err := control.signal(ctx)
+		if err != nil {
 			s.logger.Info(
 				"provider control attempt outcome",
 				"provider", string(request.Provider),
@@ -246,7 +253,13 @@ func (s *Service) ControlAttempt(
 			)
 			return providers.ControlAttemptResult{}, err
 		}
-		outcome = providers.ControlOutcomeCompleted
+		// accepted is false only when a claimed control genuinely lost the
+		// race to the attempt's own natural completion (see
+		// acpAttemptControl.signal); outcome correctly stays Unsupported
+		// rather than a false Completed.
+		if accepted {
+			outcome = providers.ControlOutcomeCompleted
+		}
 	}
 	result := providers.ControlAttemptResult{
 		Provider:  request.Provider,

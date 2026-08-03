@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -92,7 +93,7 @@ func (a *acpAwareAttempt) Cancelable(_ providers.ID, attemptID string) bool {
 	return a.cancelable && a.attemptID == attemptID
 }
 
-func (a *acpAwareAttempt) Cancel(_ context.Context, _ providers.ID, attemptID string) error {
+func (a *acpAwareAttempt) TryCancel(_ context.Context, _ providers.ID, attemptID string) (bool, error) {
 	a.mu.Lock()
 	matches := a.cancelable && a.attemptID == attemptID
 	if matches {
@@ -100,7 +101,7 @@ func (a *acpAwareAttempt) Cancel(_ context.Context, _ providers.ID, attemptID st
 	}
 	a.mu.Unlock()
 	if !matches {
-		return nil
+		return false, nil
 	}
 	select {
 	case <-a.canceledSignal:
@@ -108,7 +109,7 @@ func (a *acpAwareAttempt) Cancel(_ context.Context, _ providers.ID, attemptID st
 		close(a.canceledSignal)
 	}
 	<-a.done
-	return nil
+	return true, nil
 }
 
 // multiACPService dispatches to one acpAwareAttempt per configured provider
@@ -140,12 +141,12 @@ func (m *multiACPService) Cancelable(id providers.ID, attemptID string) bool {
 	return ok && target.Cancelable(id, attemptID)
 }
 
-func (m *multiACPService) Cancel(ctx context.Context, id providers.ID, attemptID string) error {
+func (m *multiACPService) TryCancel(ctx context.Context, id providers.ID, attemptID string) (bool, error) {
 	target, ok := m.byProvider[id]
 	if !ok {
-		return nil
+		return false, nil
 	}
-	return target.Cancel(ctx, id, attemptID)
+	return target.TryCancel(ctx, id, attemptID)
 }
 
 func mustACPControlRootService(t *testing.T, acpService *acpAwareAttempt) providers.Service {
@@ -333,16 +334,16 @@ func (a *blockingACPAttempt) Cancelable(_ providers.ID, attemptID string) bool {
 	return a.cancelable && a.attemptID == attemptID
 }
 
-func (a *blockingACPAttempt) Cancel(_ context.Context, _ providers.ID, attemptID string) error {
+func (a *blockingACPAttempt) TryCancel(_ context.Context, _ providers.ID, attemptID string) (bool, error) {
 	a.mu.Lock()
 	matches := a.cancelable && a.attemptID == attemptID
 	a.mu.Unlock()
 	if !matches {
-		return nil
+		return false, nil
 	}
 	close(a.cancelledSeen)
 	<-a.releaseAttempt
-	return nil
+	return true, nil
 }
 
 func TestControlAttempt_ACPBlocksUntilSignaledAttemptReturns(t *testing.T) {
@@ -479,21 +480,25 @@ func TestControlAttempt_ACPCrossProviderIdentityIsolation(t *testing.T) {
 }
 
 // failingCancelACPService wraps acpAwareAttempt to report a genuine
-// signal-delivery failure from Cancel (for example a broken ACP connection)
-// while still letting the underlying attempt observe the real cancellation
-// path, proving ControlAttempt surfaces a genuine operation failure as an
-// error distinct from the successful unsupported-capability result, per
-// story 004's "control context cancellation or a real adapter signaling
-// failure remains distinguishable from an unsupported capability result"
-// requirement.
+// signal-delivery failure from TryCancel (for example a broken ACP
+// connection) while still letting the underlying attempt observe the real
+// cancellation path, proving ControlAttempt surfaces a genuine operation
+// failure as an error distinct from the successful unsupported-capability
+// result, per story 004's "control context cancellation or a real adapter
+// signaling failure remains distinguishable from an unsupported capability
+// result" requirement. It wraps cancelErr in providers.ErrControlSignalFailed
+// itself, matching the contract the real acp.Service implementation upholds
+// (see acp/internal/service/cancel.go's tryCancel): TryCancel's non-context
+// errors are already classified as genuine delivery failures by the time
+// they reach acpAttemptControl.signal.
 type failingCancelACPService struct {
 	*acpAwareAttempt
 	cancelErr error
 }
 
-func (f *failingCancelACPService) Cancel(ctx context.Context, id providers.ID, attemptID string) error {
-	_ = f.acpAwareAttempt.Cancel(ctx, id, attemptID)
-	return f.cancelErr
+func (f *failingCancelACPService) TryCancel(ctx context.Context, id providers.ID, attemptID string) (bool, error) {
+	_, _ = f.acpAwareAttempt.TryCancel(ctx, id, attemptID)
+	return false, fmt.Errorf("%w: %v", providers.ErrControlSignalFailed, f.cancelErr)
 }
 
 func TestControlAttempt_ACPSignalFailureIsDistinguishableFromUnsupportedAndClearsRegistration(t *testing.T) {
@@ -571,5 +576,76 @@ func TestControlAttempt_ACPSignalFailureIsDistinguishableFromUnsupportedAndClear
 	}
 	if fake.cancelCalls != 1 {
 		t.Fatalf("ACP cancel calls = %d, want exactly 1 (no duplicate signal from the second control)", fake.cancelCalls)
+	}
+}
+
+// raceLostACPService reports a stale Cancelable()=true pre-check (as a real
+// ACP session can look live a moment before it naturally finishes) while
+// TryCancel grounds its answer in the real recorded outcome and reports the
+// race was lost to natural completion. This is the root-level regression for
+// the ACP Cancelable/Cancel TOCTOU this story's review required: a claimed
+// control (registry.claim consulted the stale Cancelable pre-check) must
+// still report Unsupported, never a false Completed, when the underlying
+// acp.Service.TryCancel says the cancellation was not actually accepted.
+type raceLostACPService struct {
+	*acpAwareAttempt
+}
+
+func (r *raceLostACPService) Cancelable(providers.ID, string) bool { return true }
+
+func (r *raceLostACPService) TryCancel(context.Context, providers.ID, string) (bool, error) {
+	return false, nil
+}
+
+func TestControlAttempt_ACPClaimedControlLosingRaceToNaturalCompletionReturnsUnsupported(t *testing.T) {
+	t.Parallel()
+
+	fake := newACPAwareAttempt("cursor-acp")
+	racing := &raceLostACPService{acpAwareAttempt: fake}
+
+	catalogService, err := catalogwire.NewService()
+	if err != nil {
+		t.Fatalf("catalogwire.NewService() = %v", err)
+	}
+	executionService, err := executionwire.NewService(catalogService)
+	if err != nil {
+		t.Fatalf("executionwire.NewService() = %v", err)
+	}
+	root, err := providerservice.NewWithACP(catalogService, executionService, racing, nil, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("NewWithACP() = %v", err)
+	}
+
+	executeDone := make(chan error, 1)
+	go func() {
+		_, err := root.Execute(context.Background(), providers.ExecuteRequest{
+			Provider:  "cursor-acp",
+			AttemptID: "acp-race-lost",
+			Model:     "cursor-model",
+		})
+		executeDone <- err
+	}()
+	<-fake.started
+	close(fake.openCancelWindow)
+	<-fake.becameCancelable
+
+	result, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
+		Provider:  "cursor-acp",
+		AttemptID: "acp-race-lost",
+		Action:    providers.ControlActionCancel,
+	})
+	if err != nil {
+		t.Fatalf("ControlAttempt() error = %v, want nil", err)
+	}
+	if result.Outcome != providers.ControlOutcomeUnsupported {
+		t.Fatalf("ControlAttempt() outcome = %q, want unsupported (claimed control lost the race to natural completion)", result.Outcome)
+	}
+
+	// The underlying attempt must have actually completed normally, not via
+	// cancellation: proves the race-lost path did not corrupt the attempt's
+	// real outcome even though the registration was claimed and removed.
+	close(fake.release)
+	if err := <-executeDone; err != nil {
+		t.Fatalf("Execute() error = %v, want nil (normal completion, not cancellation)", err)
 	}
 }

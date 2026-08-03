@@ -21,15 +21,23 @@ type Service interface {
 	// prompt turn in flight for -- the only ACP protocol state a session/
 	// cancel notification can truthfully target. It answers false before the
 	// session exists, after the turn has already returned, and for any other
-	// attempt or provider identity.
+	// attempt or provider identity. It is a cheap, deliberately racy
+	// pre-filter (the turn can end at any moment after this call returns);
+	// callers that need a truthful accept/reject outcome must use TryCancel,
+	// which re-derives liveness atomically at the instant it acts instead of
+	// trusting an earlier Cancelable observation.
 	Cancelable(id providers.ID, attemptID string) bool
 
-	// Cancel delivers a session/cancel protocol notification to id/
-	// attemptID's exact in-flight session/prompt turn and blocks until that
-	// turn has returned. It is a harmless no-op if attemptID is no longer
-	// the live turn (for example, the turn finished naturally between a
-	// caller's Cancelable check and this call); callers that need a
-	// truthful accept/reject signal must call Cancelable first under the
-	// same exclusive claim.
-	Cancel(ctx context.Context, id providers.ID, attemptID string) error
+	// TryCancel atomically determines whether id/attemptID names the exact
+	// live session/prompt turn and, only if so, delivers a session/cancel
+	// protocol notification to it and blocks (bounded by ctx) until the turn
+	// returns. accepted is true only when the turn's real recorded outcome
+	// was that cancellation -- never merely because a matching identity was
+	// observed a moment earlier -- so a natural completion racing this call
+	// is reported as accepted=false, not a false positive. A non-nil err
+	// reports a genuine delivery failure or ctx ending before the turn's
+	// outcome could be observed; both are distinguishable from
+	// accepted=false, err=nil (unsupported/lost-the-race) and from each
+	// other (errors.Is against the returned error identifies which).
+	TryCancel(ctx context.Context, id providers.ID, attemptID string) (accepted bool, err error)
 }

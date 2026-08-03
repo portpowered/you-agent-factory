@@ -173,25 +173,6 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 		}
 		return p.scanner.Err()
 	}
-	if p.mode == "cancelable" {
-		// A real ACP agent honors session/cancel by returning session/prompt's
-		// existing pending response with StopReasonCancelled rather than an RPC
-		// error - see daemon.execute's `response.StopReason ==
-		// acpsdk.StopReasonCancelled` branch this mode exists to exercise.
-		if signal := os.Getenv("YOU_TEST_ACP_PROMPT_SIGNAL"); signal != "" {
-			_ = os.WriteFile(signal, []byte("prompt-started"), 0o600)
-		}
-		for p.scanner.Scan() {
-			var message rpcEnvelope
-			if err := json.Unmarshal(p.scanner.Bytes(), &message); err != nil {
-				return err
-			}
-			if message.Method == "session/cancel" || message.Method == "$/cancel_request" {
-				return p.respond(request.ID, json.RawMessage(`{"stopReason":"cancelled"}`))
-			}
-		}
-		return p.scanner.Err()
-	}
 	if p.mode == "resource" {
 		var params struct {
 			Prompt []map[string]any `json:"prompt"`
