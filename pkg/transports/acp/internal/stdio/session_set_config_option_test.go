@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -88,6 +89,158 @@ func TestHandleSessionSetConfigOptionSucceedsAndRevalidatesThroughCatalog(t *tes
 	}
 	if chatSessions.setTargetReq.ExpectedVersion != 3 {
 		t.Fatalf("SetTarget ExpectedVersion = %d, want 3 (the version observed from GetSession)", chatSessions.setTargetReq.ExpectedVersion)
+	}
+}
+
+func TestHandleSessionSetConfigOptionMalformedParamsRejectsBeforeAnyEffect(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project")}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	server := newTestServer(chatSessions, catalog, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionSetConfigOption, `{not json`)
+
+	result, rpcErr := server.handleSessionSetConfigOption(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionSetConfigOption() error = nil, want a rejection for malformed params")
+	}
+	if result != nil {
+		t.Fatalf("handleSessionSetConfigOption() result = %q, want nil on rejection", result)
+	}
+	if chatSessions.getSessionCalled {
+		t.Fatal("GetSession was called, want no effect for malformed params")
+	}
+}
+
+func TestHandleSessionSetConfigOptionIdentityFailureReturnsNoEffect(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project")}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	server := newTestServer(chatSessions, catalog, "/home/operator")
+
+	env := mintedIdentityEnvelope(t, acpsdk.AgentMethodSessionSetConfigOption, setConfigOptionParams("session-1", "factory:@you/review"))
+
+	result, rpcErr := server.handleSessionSetConfigOption(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionSetConfigOption() error = nil, want a rejection for a non-correlated identity")
+	}
+	if result != nil {
+		t.Fatalf("handleSessionSetConfigOption() result = %q, want nil on rejection", result)
+	}
+	if chatSessions.getSessionCalled {
+		t.Fatal("GetSession was called, want no effect for a rejected identity")
+	}
+}
+
+func TestChangeTargetBlankWorkingRootRejectsWithNoCatalogResolution(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "")}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	server := newTestServer(chatSessions, catalog, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionSetConfigOption,
+		setConfigOptionParams("session-1", "factory:@you/review"))
+
+	result, rpcErr := server.handleSessionSetConfigOption(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionSetConfigOption() error = nil, want a rejection for an unknown working root")
+	}
+	if result != nil {
+		t.Fatalf("handleSessionSetConfigOption() result = %q, want nil on rejection", result)
+	}
+	if len(catalog.calls) != 0 {
+		t.Fatalf("catalog resolved %d times, want 0 for a blank session working root", len(catalog.calls))
+	}
+}
+
+func TestChangeTargetResolveHomeDirFailureReturnsNoMutation(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project")}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	server := New(nil, chatSessions, catalog, func() (string, error) { return "", errors.New("resolve home dir boom") })
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionSetConfigOption,
+		setConfigOptionParams("session-1", "factory:@you/review"))
+
+	result, rpcErr := server.handleSessionSetConfigOption(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionSetConfigOption() error = nil, want a rejection when resolveHomeDir fails")
+	}
+	if result != nil {
+		t.Fatalf("handleSessionSetConfigOption() result = %q, want nil on rejection", result)
+	}
+	if len(catalog.calls) != 0 {
+		t.Fatalf("catalog resolved %d times, want 0 when resolveHomeDir fails", len(catalog.calls))
+	}
+}
+
+func TestChangeTargetBlankHomeDirFailureReturnsNoMutation(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project")}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	server := New(nil, chatSessions, catalog, func() (string, error) { return "", nil })
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionSetConfigOption,
+		setConfigOptionParams("session-1", "factory:@you/review"))
+
+	result, rpcErr := server.handleSessionSetConfigOption(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionSetConfigOption() error = nil, want a rejection for a blank home directory")
+	}
+	if result != nil {
+		t.Fatalf("handleSessionSetConfigOption() result = %q, want nil on rejection", result)
+	}
+	if len(catalog.calls) != 0 {
+		t.Fatalf("catalog resolved %d times, want 0 for a blank home directory", len(catalog.calls))
+	}
+}
+
+func TestChangeTargetConfigProjectionFailureReturnsMutatedButUnprojectedFailure(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project")}
+	catalog := &fakeFactoryTargetCatalogService{result: chatsessions.ResolveFactoryTargetCatalogResult{
+		CurrentTarget: "factory:@you/review",
+		Choices:       nil,
+	}}
+	server := newTestServer(chatSessions, catalog, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionSetConfigOption,
+		setConfigOptionParams("session-1", "factory:@you/review"))
+
+	result, rpcErr := server.handleSessionSetConfigOption(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionSetConfigOption() error = nil, want a rejection when the catalog projects no picker choices")
+	}
+	if result != nil {
+		t.Fatalf("handleSessionSetConfigOption() result = %q, want nil on rejection", result)
+	}
+}
+
+func TestClassifyTargetSelectionFailureMapsContextCauseThroughClassifyDependencyFailure(t *testing.T) {
+	got := classifyTargetSelectionFailure(context.Canceled)
+	want := classifyDependencyFailure(context.Canceled)
+	if got.Code != want.Code {
+		t.Fatalf("classifyTargetSelectionFailure(context.Canceled) code = %d, want %d (delegated to classifyDependencyFailure)", got.Code, want.Code)
+	}
+}
+
+func TestClassifyTargetSelectionFailureMapsUnclassifiedCatalogErrorToInternalError(t *testing.T) {
+	cause := &chatsessions.FactoryTargetCatalogError{Err: chatsessions.ErrFactoryTargetCatalogUnavailable}
+	got := classifyTargetSelectionFailure(cause)
+	want := classifyDependencyFailure(cause)
+	if got.Code != want.Code {
+		t.Fatalf("classifyTargetSelectionFailure(unclassified catalog error) code = %d, want %d (internal error, not invalid-params)", got.Code, want.Code)
+	}
+}
+
+func TestClassifyTargetSelectionFailureMapsValidationErrorToSafeReject(t *testing.T) {
+	cause := &chatsessions.ValidationError{Value: "Session", Field: "WorkingRoot", Err: chatsessions.ErrRequiredValue}
+	got := classifyTargetSelectionFailure(cause)
+	internal := classifyDependencyFailure(cause)
+	if got.Code == internal.Code {
+		t.Fatalf("classifyTargetSelectionFailure(*ValidationError) code = %d, want a caller-attributable rejection distinct from the generic internal error code %d", got.Code, internal.Code)
+	}
+}
+
+func TestClassifyTargetSelectionFailureMapsUnknownCauseToInternalError(t *testing.T) {
+	got := classifyTargetSelectionFailure(errors.New("boom"))
+	want := classifyDependencyFailure(errors.New("boom"))
+	if got.Code != want.Code {
+		t.Fatalf("classifyTargetSelectionFailure(plain error) code = %d, want %d (generic internal error fallback)", got.Code, want.Code)
 	}
 }
 

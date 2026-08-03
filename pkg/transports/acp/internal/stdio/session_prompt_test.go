@@ -270,6 +270,64 @@ func TestHandleSessionPromptNonCommandContentFallsThroughToMethodNotFound(t *tes
 	}
 }
 
+func TestHandleSessionPromptMalformedParamsRejectsBeforeAnyEffect(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project")}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	server := newTestServer(chatSessions, catalog, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt, `{not json`)
+
+	result, rpcErr := server.handleSessionPrompt(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a rejection for malformed params")
+	}
+	if result != nil {
+		t.Fatalf("handleSessionPrompt() result = %q, want nil on rejection", result)
+	}
+	if chatSessions.getSessionCalled {
+		t.Fatal("GetSession was called, want no effect for malformed params")
+	}
+}
+
+func TestHandleSessionPromptValidationFailureRejectsBeforeAnyEffect(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project")}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	server := newTestServer(chatSessions, catalog, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("", "/factory factory:@you/review"))
+
+	result, rpcErr := server.handleSessionPrompt(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a rejection for a blank sessionId")
+	}
+	if result != nil {
+		t.Fatalf("handleSessionPrompt() result = %q, want nil on rejection", result)
+	}
+	if chatSessions.getSessionCalled {
+		t.Fatal("GetSession was called, want no effect for a validation failure")
+	}
+}
+
+func TestHandleSessionPromptIdentityFailureReturnsNoEffect(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project")}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	server := newTestServer(chatSessions, catalog, "/home/operator")
+
+	env := mintedIdentityEnvelope(t, acpsdk.AgentMethodSessionPrompt, promptTextParams("session-1", "/factory factory:@you/review"))
+
+	result, rpcErr := server.handleSessionPrompt(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a rejection for a non-correlated identity")
+	}
+	if result != nil {
+		t.Fatalf("handleSessionPrompt() result = %q, want nil on rejection", result)
+	}
+	if chatSessions.getSessionCalled {
+		t.Fatal("GetSession was called, want no effect for a rejected identity")
+	}
+}
+
 func TestServeDispatchesSessionPromptFactoryCommandOverRealJSONRPCFraming(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project")}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}

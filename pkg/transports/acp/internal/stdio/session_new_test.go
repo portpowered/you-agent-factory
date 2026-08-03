@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -415,5 +416,128 @@ func TestHandleSessionNewWithoutCollaboratorsReportsBoundedFailure(t *testing.T)
 	}
 	if result != nil {
 		t.Fatalf("handleSessionNew() result = %q, want nil", result)
+	}
+}
+
+// mintedIdentityEnvelope builds an envelope carrying a transport-minted
+// (non-connection-correlated) identity, the one RequestIdentity shape
+// chatRequestIdentity always rejects: "session/new" and "session/prompt" are
+// always real inbound JSON-RPC requests, so they only ever see a correlated
+// identity in production, but the boundary must still fail closed rather
+// than panic or fabricate a connection if it ever saw one.
+func mintedIdentityEnvelope(t *testing.T, method string, params string) envelope.Envelope {
+	t.Helper()
+	minted, err := identity.NewMinted("transport-minted-id")
+	if err != nil {
+		t.Fatalf("identity.NewMinted: %v", err)
+	}
+	return envelope.Envelope{Identity: minted, Method: method, Params: json.RawMessage(params)}
+}
+
+func TestChatRequestIdentityRejectsNonCorrelatedIdentity(t *testing.T) {
+	minted, err := identity.NewMinted("transport-minted-id")
+	if err != nil {
+		t.Fatalf("identity.NewMinted: %v", err)
+	}
+	if _, err := chatRequestIdentity(minted); err == nil {
+		t.Fatal("chatRequestIdentity() error = nil, want a rejection for a non-connection-correlated identity")
+	}
+}
+
+func TestHandleSessionNewIdentityFailureReturnsNoEffect(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{}
+	catalog := &fakeFactoryTargetCatalogService{result: defaultTestCatalogResult()}
+	server := newTestServer(chatSessions, catalog, "/home/operator")
+
+	env := mintedIdentityEnvelope(t, acpsdk.AgentMethodSessionNew, validSessionNewParams)
+	result, rpcErr := server.handleSessionNew(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionNew() error = nil, want a rejection for a non-correlated identity")
+	}
+	if result != nil {
+		t.Fatalf("handleSessionNew() result = %q, want nil on rejection", result)
+	}
+	if len(catalog.calls) != 0 {
+		t.Fatalf("catalog resolved %d times, want 0: identity conversion must fail before catalog resolution", len(catalog.calls))
+	}
+	if chatSessions.createCalled {
+		t.Fatal("CreateSession was called, want no session creation for a rejected identity")
+	}
+}
+
+func TestClassifyDependencyFailureMapsContextCauseToRequestCancelled(t *testing.T) {
+	cancelled := classifyDependencyFailure(context.Canceled)
+	deadlineExceeded := classifyDependencyFailure(fmt.Errorf("wrapped: %w", context.DeadlineExceeded))
+	generic := classifyDependencyFailure(errors.New("boom"))
+
+	wantCancelled := acpsdk.NewRequestCancelled(map[string]any{"reason": "cancelled"})
+	if cancelled.Code != wantCancelled.Code {
+		t.Fatalf("classifyDependencyFailure(context.Canceled) code = %d, want %d (request-cancelled)", cancelled.Code, wantCancelled.Code)
+	}
+	if deadlineExceeded.Code != wantCancelled.Code {
+		t.Fatalf("classifyDependencyFailure(wrapped DeadlineExceeded) code = %d, want %d (request-cancelled)", deadlineExceeded.Code, wantCancelled.Code)
+	}
+	if generic.Code == wantCancelled.Code {
+		t.Fatalf("classifyDependencyFailure(plain error) code = %d, want a code distinct from request-cancelled", generic.Code)
+	}
+}
+
+func TestHandleSessionNewResolveHomeDirFailureReturnsNoEffect(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{}
+	catalog := &fakeFactoryTargetCatalogService{result: defaultTestCatalogResult()}
+	server := New(nil, chatSessions, catalog, func() (string, error) { return "", errors.New("resolve home dir boom") })
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionNew, validSessionNewParams)
+	result, rpcErr := server.handleSessionNew(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionNew() error = nil, want a rejection when resolveHomeDir fails")
+	}
+	if result != nil {
+		t.Fatalf("handleSessionNew() result = %q, want nil on rejection", result)
+	}
+	if len(catalog.calls) != 0 {
+		t.Fatalf("catalog resolved %d times, want 0 when resolveHomeDir fails", len(catalog.calls))
+	}
+	if chatSessions.createCalled {
+		t.Fatal("CreateSession was called, want no session creation when resolveHomeDir fails")
+	}
+}
+
+func TestHandleSessionNewBlankHomeDirFailureReturnsNoEffect(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{}
+	catalog := &fakeFactoryTargetCatalogService{result: defaultTestCatalogResult()}
+	server := New(nil, chatSessions, catalog, func() (string, error) { return "", nil })
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionNew, validSessionNewParams)
+	result, rpcErr := server.handleSessionNew(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionNew() error = nil, want a rejection when resolveHomeDir returns a blank home directory")
+	}
+	if result != nil {
+		t.Fatalf("handleSessionNew() result = %q, want nil on rejection", result)
+	}
+	if len(catalog.calls) != 0 {
+		t.Fatalf("catalog resolved %d times, want 0 for a blank home directory", len(catalog.calls))
+	}
+}
+
+func TestHandleSessionNewConfigProjectionFailureReturnsNoSessionCreation(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{}
+	catalog := &fakeFactoryTargetCatalogService{result: chatsessions.ResolveFactoryTargetCatalogResult{
+		CurrentTarget: "factory:@you/factory-builder",
+		Choices:       nil,
+	}}
+	server := newTestServer(chatSessions, catalog, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionNew, validSessionNewParams)
+	result, rpcErr := server.handleSessionNew(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionNew() error = nil, want a rejection when the catalog projects no picker choices")
+	}
+	if result != nil {
+		t.Fatalf("handleSessionNew() result = %q, want nil on rejection", result)
+	}
+	if chatSessions.createCalled {
+		t.Fatal("CreateSession was called, want no session creation when picker projection fails")
 	}
 }
