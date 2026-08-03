@@ -129,9 +129,6 @@ func (f *factoryImpl) PlanDispatch(
 	if err := f.requireActiveDispatchRuntime(); err != nil {
 		return factory.PlanDispatchResult{}, err
 	}
-	if f.dispatchPlan == nil {
-		return factory.PlanDispatchResult{}, factory.ErrCapabilityUnavailable
-	}
 	if err := validateRootDispatchPlan(req); err != nil {
 		return factory.PlanDispatchResult{}, err
 	}
@@ -184,9 +181,6 @@ func (f *factoryImpl) AcceptDispatchResult(
 	if err := f.requireDispatchResultRuntime(); err != nil {
 		return factory.AcceptDispatchResultResult{}, err
 	}
-	if f.dispatchPlan == nil {
-		return factory.AcceptDispatchResultResult{}, factory.ErrCapabilityUnavailable
-	}
 	if req.CorrelationID == "" {
 		return factory.AcceptDispatchResultResult{}, factory.ErrUnknownDispatchCorrelation
 	}
@@ -196,9 +190,6 @@ func (f *factoryImpl) AcceptDispatchResult(
 	outcome, err := rootTerminalResultOutcome(req.ResultOutcome)
 	if err != nil {
 		return factory.AcceptDispatchResultResult{}, err
-	}
-	if f.dispatchFlow == nil {
-		return factory.AcceptDispatchResultResult{}, factory.ErrCapabilityUnavailable
 	}
 	retired, err := f.dispatchFlow.acceptRootResult(ctx, req, outcome)
 	if err != nil {

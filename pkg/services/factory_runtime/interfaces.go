@@ -85,16 +85,14 @@ type Service interface {
 	// PlanDispatch publishes a stable dispatch intent into Runtime-owned
 	// planning/outbox vocabulary. Workers remains the execution owner. Returns
 	// ErrDuplicateDispatchIntent, ErrNotRunning, or ErrNotFound for typed
-	// dispatch-plan failures, or ErrCapabilityUnavailable until the canonical
-	// outbox implementation lands. Nested IMP-RUN packets own durable wiring.
+	// dispatch-plan failures. Nested IMP-RUN packets own durable wiring.
 	PlanDispatch(ctx context.Context, req PlanDispatchRequest) (PlanDispatchResult, error)
 
 	// AcceptDispatchResult accepts or retires a correlated worker result against
 	// a previously planned dispatch intent, including idempotent duplicate
 	// handling vocabulary on success. Returns ErrUnknownDispatchCorrelation,
 	// ErrInvalidDispatchResultBoundary, ErrNotRunning, or ErrNotFound for typed
-	// dispatch-plan failures, or ErrCapabilityUnavailable until the canonical
-	// result-ingress implementation lands.
+	// dispatch-plan failures.
 	AcceptDispatchResult(ctx context.Context, req AcceptDispatchResultRequest) (AcceptDispatchResultResult, error)
 }
 

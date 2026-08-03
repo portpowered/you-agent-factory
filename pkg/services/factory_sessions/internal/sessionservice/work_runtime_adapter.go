@@ -20,11 +20,7 @@ type workRuntimeAdapter struct {
 }
 
 func (a workRuntimeAdapter) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
-	legacyRuntime, ok := a.runtime.(factoryruntime.APIFactory)
-	if !ok {
-		return work.WorkRequestSubmitResult{}, factoryruntime.ErrCapabilityUnavailable
-	}
-	return legacyRuntime.SubmitWorkRequest(ctx, request)
+	return a.runtime.(factoryruntime.APIFactory).SubmitWorkRequest(ctx, request)
 }
 
 func (a workRuntimeAdapter) MoveWork(ctx context.Context, workID, state string, source work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error) {
