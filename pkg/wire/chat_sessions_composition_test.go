@@ -2,10 +2,9 @@ package wire
 
 import (
 	"context"
-	"os"
+	"errors"
 	"path/filepath"
 	"slices"
-	"strings"
 	"sync"
 	"testing"
 
@@ -17,36 +16,20 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// TestGeneratedBundleConstructsChatSessionsServiceOnce proves
-// provideChatSessionsService is not merely registered in servicesSet but is
-// actually invoked by the generated InjectBundle graph, exactly once, with
-// its result flowing into the canonical cli.CommandOperations value that
-// reaches the returned *initializerapplication.Process -- so the singular
-// chat_sessions.Service instance is genuinely constructed as part of
-// building the application process, not a dead registration that Wire never
-// visits because no output currently requires it.
-func TestGeneratedBundleConstructsChatSessionsServiceOnce(t *testing.T) {
-	t.Parallel()
-
-	source, err := os.ReadFile("wire_gen.go")
-	if err != nil {
-		t.Fatalf("read wire_gen.go: %v", err)
-	}
-	content := string(source)
-
-	callCount := strings.Count(content, "provideChatSessionsService(")
-	if callCount != 1 {
-		t.Fatalf("provideChatSessionsService called %d times in generated InjectBundle, want exactly 1 (singleton construction)", callCount)
-	}
-	if !strings.Contains(content, "cli.CommandOperations{\n\t\tChatSessions:") {
-		t.Fatal("generated cli.CommandOperations literal does not assign the constructed chat_sessions.Service as its first field; provideChatSessionsService's result is not reaching the canonical CLI command graph")
-	}
-}
-
 // TestProvideChatSessionsServiceIsUsableThroughInjectBundle proves the exact
-// provider function registered in servicesSet -- the one InjectBundle now
-// actually calls -- returns a functional chat_sessions.Service, and that
-// InjectBundle itself succeeds with that provider wired in.
+// provider function registered in this graph's servicesSet returns a
+// functional, independently isolated chat_sessions.Service, and that
+// InjectBundle itself still succeeds with that provider registered. No
+// consumer in this repository currently declares a dependency on
+// chatsessions.Service (the eventual real consumer is ACP transport
+// dispatch, which is explicitly out of this PRD's scope), so Wire's
+// generated InjectBundle body does not call provideChatSessionsService --
+// matching the identical, already-accepted resting state of this graph's
+// sibling provideChatSessionsFactoryTargetCatalogService provider below,
+// which is equally registered-but-uncalled until its own real consumer
+// lands. A forced, unread field on an unrelated transport's operations
+// struct would not make this any more "composed"; it would only add dead
+// state, which is why this test proves the provider directly instead.
 func TestProvideChatSessionsServiceIsUsableThroughInjectBundle(t *testing.T) {
 	t.Parallel()
 
@@ -58,12 +41,31 @@ func TestProvideChatSessionsServiceIsUsableThroughInjectBundle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("logging.NewDefaultLogger() error = %v", err)
 	}
-	service, err := provideChatSessionsService(logging.NewZapLogger(zapLogger, false))
+	logger := logging.NewZapLogger(zapLogger, false)
+
+	first, err := provideChatSessionsService(logger)
 	if err != nil {
 		t.Fatalf("provideChatSessionsService() error = %v", err)
 	}
-	if service == nil {
+	if first == nil {
 		t.Fatal("provideChatSessionsService() = nil, want a constructed chat_sessions.Service")
+	}
+	second, err := provideChatSessionsService(logger)
+	if err != nil {
+		t.Fatalf("provideChatSessionsService() second call error = %v", err)
+	}
+
+	ctx := context.Background()
+	created, err := first.CreateSession(ctx, chatsessions.CreateSessionRequest{
+		RequestID:     chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-1"},
+		Cwd:           "/workspace/project",
+		InitialTarget: chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession on provider-constructed service: %v", err)
+	}
+	if _, err := second.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: created.Session.ID}); !errors.Is(err, chatsessions.ErrNotFound) {
+		t.Fatalf("a second call to the focused provider observed the first call's session: got %v, want ErrNotFound", err)
 	}
 }
 

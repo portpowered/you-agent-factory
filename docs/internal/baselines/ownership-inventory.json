@@ -1610,12 +1610,6 @@
     },
     {
       "fromOwner": "transports",
-      "toOwner": "chat_sessions",
-      "class": "protocol_composition",
-      "evidence": "pkg/transports/cli -\u003e pkg/services/chat_sessions"
-    },
-    {
-      "fromOwner": "transports",
       "toOwner": "factory_definitions",
       "class": "protocol_composition",
       "evidence": "pkg/transports/cli/cobracompletion -\u003e pkg/services/factory_definitions"

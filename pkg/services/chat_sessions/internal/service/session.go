@@ -17,6 +17,11 @@ const initialTargetEpisodeNumber uint64 = 1
 
 // CreateSession validates req in full before any state is touched, so an
 // invalid RequestID, Cwd, or InitialTarget creates no observable session.
+// newID and now are only ever called while s.mu is held (see the write-lock
+// below), so CreateSession is safe under concurrent calls even when the
+// injected IDGenerator/Clock are not themselves safe for concurrent use --
+// Store does not require its dependencies to be concurrency-safe by
+// contract, it serializes access to them itself.
 func (s *Store) CreateSession(_ context.Context, req chatsessions.CreateSessionRequest) (result chatsessions.CreateSessionResult, err error) {
 	s.logStart("CreateSession", "")
 	defer func() {
@@ -33,6 +38,9 @@ func (s *Store) CreateSession(_ context.Context, req chatsessions.CreateSessionR
 	if err := req.InitialTarget.Validate(); err != nil {
 		return chatsessions.CreateSessionResult{}, err
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	now := s.now()
 	session := chatsessions.Session{
@@ -58,8 +66,6 @@ func (s *Store) CreateSession(_ context.Context, req chatsessions.CreateSessionR
 		return chatsessions.CreateSessionResult{}, err
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.sessions[session.ID] = sessionRecord{
 		session:     session,
 		episodes:    []chatsessions.TargetEpisode{episode},

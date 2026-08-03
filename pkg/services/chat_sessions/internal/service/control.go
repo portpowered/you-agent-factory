@@ -85,13 +85,18 @@ func (s *Store) RequestControl(_ context.Context, req chatsessions.RequestContro
 // unchanged. Once an intent is COMMITTED, its terminal outcome is always
 // resolved with chatsessions.ResolveControlIntentOutcome against the
 // intent's own captured TurnID, the captured turn's live State, and the
-// session's lastTurnID -- caller-supplied Next is never consulted for that
-// resolution, so a delayed advancement can never retarget a captured intent
-// to a later turn. lastTurnID (not session.ActiveTurnID) is the comparison
-// point: ActiveTurnID clears to blank the instant the captured turn
-// terminates, which would make every resolution SUPERSEDED and the NOOP
-// outcome unreachable; lastTurnID keeps identifying the captured turn until
-// a newer one is actually admitted, so a cancel racing a same-turn terminal
+// session's record.lastTurnID as that helper's mostRecentTurnID parameter --
+// caller-supplied Next is never consulted for that resolution, so a delayed
+// advancement can never retarget a captured intent to a later turn.
+// record.lastTurnID (not session.ActiveTurnID) is what the helper's
+// mostRecentTurnID parameter requires: a value that keeps identifying the
+// captured turn through that turn's own termination and only changes once a
+// newer turn is actually admitted. session.ActiveTurnID cannot serve that
+// role -- it clears to blank in the very commit that marks a turn terminal,
+// which would make every resolution SUPERSEDED and the NOOP outcome
+// unreachable. Passing lastTurnID is therefore not a substitution for a
+// different value the contract wants; it is the value the contract's own
+// documented semantics require, so a cancel racing a same-turn terminal
 // resolves NOOP while a control racing a since-admitted newer turn resolves
 // SUPERSEDED.
 func (s *Store) AdvanceControl(_ context.Context, req chatsessions.AdvanceControlRequest) (result chatsessions.AdvanceControlResult, err error) {

@@ -15,7 +15,6 @@ import (
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -105,11 +104,6 @@ type NamedFactoryRootsResolver func(homeDir, workingDir string) (interfaces.Name
 
 // CommandOperations is the complete inert CLI operation graph assembled by Wire.
 type CommandOperations struct {
-	// ChatSessions is the canonically injected, process-scoped Chat Sessions
-	// state engine, ready for the later ACP transport slice that will
-	// consume it; its presence here makes InjectBundle actually construct
-	// the one canonical instance instead of leaving the provider unused.
-	ChatSessions                      chatsessions.Service
 	ObserveCLI                        platformprocess.CLIObserver
 	NamedFactoryCatalog               interfaces.NamedFactoryCatalog
 	CompleteFactoryNames              cobracompletion.FactoryNamesOperation
@@ -203,7 +197,6 @@ type CommandFactory struct {
 	VisualizeWork          func(workcli.VisualizeConfig) error
 	openRunSelection       runcli.SelectionFactory
 	acp                    acpcli.Service
-	chatSessions           chatsessions.Service
 }
 
 // NewCommandFactory copies the Wire-built graph without installing defaults.
@@ -251,7 +244,6 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		VisualizeWork:                     operations.VisualizeWork,
 		openRunSelection:                  operations.OpenRunSelection,
 		acp:                               operations.ACP,
-		chatSessions:                      operations.ChatSessions,
 	}
 }
 

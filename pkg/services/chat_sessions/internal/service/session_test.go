@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -190,5 +192,92 @@ func TestStore_InstancesShareNoState(t *testing.T) {
 	}
 	if _, err := second.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: created.Session.ID}); !errors.Is(err, chatsessions.ErrNotFound) {
 		t.Fatalf("second Store observed the first Store's session: got %v, want ErrNotFound", err)
+	}
+}
+
+// TestStore_CreateSession_ConcurrentDifferentSessionsAreIndependent proves
+// CreateSession is safe under concurrent calls that each create a distinct
+// session, even though the injected IDGenerator here (sequentialIDs)
+// mutates a plain closure variable with no synchronization of its own:
+// Store must serialize its own calls to newID/now under s.mu rather than
+// require every caller-supplied dependency to be concurrency-safe by
+// contract. It also proves the resulting sessions are independent -- a
+// concurrent SetTarget against each of the n distinct sessions afterward
+// succeeds for every one with no cross-session interference.
+func TestStore_CreateSession_ConcurrentDifferentSessionsAreIndependent(t *testing.T) {
+	ctx := context.Background()
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()))
+
+	const n = 25
+	var wg sync.WaitGroup
+	results := make([]chatsessions.CreateSessionResult, n)
+	createErrs := make([]error, n)
+	for i := range n {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			results[i], createErrs[i] = store.CreateSession(ctx, chatsessions.CreateSessionRequest{
+				RequestID: chatsessions.RequestIdentity{
+					Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: fmt.Sprintf("conn-%d", i), JSONRPCStringID: "req-1",
+				},
+				Cwd:           fmt.Sprintf("/workspace/project-%d", i),
+				InitialTarget: chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
+			})
+		}(i)
+	}
+	wg.Wait()
+
+	seenIDs := make(map[string]int, n)
+	for i, err := range createErrs {
+		if err != nil {
+			t.Fatalf("CreateSession[%d]: unexpected error %v", i, err)
+		}
+		seenIDs[results[i].Session.ID]++
+		wantCwd := fmt.Sprintf("/workspace/project-%d", i)
+		if results[i].Session.Cwd != wantCwd {
+			t.Fatalf("CreateSession[%d]: Cwd = %q, want %q", i, results[i].Session.Cwd, wantCwd)
+		}
+	}
+	for id, count := range seenIDs {
+		if count != 1 {
+			t.Fatalf("session ID %q was assigned to %d concurrent CreateSession calls, want a unique ID per call", id, count)
+		}
+	}
+	if len(seenIDs) != n {
+		t.Fatalf("got %d unique session IDs from %d concurrent CreateSession calls, want %d", len(seenIDs), n, n)
+	}
+
+	var mutateWG sync.WaitGroup
+	setErrs := make([]error, n)
+	for i := range n {
+		mutateWG.Add(1)
+		go func(i int) {
+			defer mutateWG.Done()
+			_, setErrs[i] = store.SetTarget(ctx, chatsessions.SetTargetRequest{
+				RequestID:       setTargetRequestID(fmt.Sprintf("retarget-%d", i)),
+				SessionID:       results[i].Session.ID,
+				ExpectedVersion: results[i].Session.Version,
+				Target:          otherTarget(),
+			})
+		}(i)
+	}
+	mutateWG.Wait()
+
+	for i, err := range setErrs {
+		if err != nil {
+			t.Fatalf("SetTarget[%d]: unexpected error %v", i, err)
+		}
+	}
+	for i := range n {
+		final, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: results[i].Session.ID})
+		if err != nil {
+			t.Fatalf("GetSession[%d]: %v", i, err)
+		}
+		if final.Session.SelectedTarget != otherTarget() {
+			t.Fatalf("GetSession[%d]: SelectedTarget = %+v, want %+v", i, final.Session.SelectedTarget, otherTarget())
+		}
+		if final.Session.Version != results[i].Session.Version+1 {
+			t.Fatalf("GetSession[%d]: Version = %d, want %d", i, final.Session.Version, results[i].Session.Version+1)
+		}
 	}
 }
