@@ -2067,10 +2067,6 @@
       "minimum": 94.81
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/service",
-      "minimum": 71.71
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners",
       "exception": {
         "kind": "measurement",
