@@ -161,6 +161,15 @@ type Edges struct {
 		Rename(string, string) error
 	}
 
+	// EventsMaxRetainedRecordsPerTopic overrides the process-scoped Events
+	// root's default per-topic retention cap; zero keeps the production
+	// default. Functional tests use this to force Events eviction
+	// independently of Factory Sessions' own response-event retention
+	// limits (FactorySessionResponseEventRetentionLimits), proving
+	// compatibility delivery genuinely reads through Events rather than a
+	// locally retained copy.
+	EventsMaxRetainedRecordsPerTopic int
+
 	Clock                            platformclock.Source
 	SubmissionRecorder               recordings.SubmissionRecorder
 	DispatchRecorder                 recordings.DispatchRecorder
@@ -483,6 +492,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.SystemInitializationMigrationFileSystem != nil {
 		defaults.SystemInitializationMigrationFileSystem = replacements.SystemInitializationMigrationFileSystem
+	}
+	if replacements.EventsMaxRetainedRecordsPerTopic != 0 {
+		defaults.EventsMaxRetainedRecordsPerTopic = replacements.EventsMaxRetainedRecordsPerTopic
 	}
 	if replacements.Clock != nil {
 		defaults.Clock = replacements.Clock

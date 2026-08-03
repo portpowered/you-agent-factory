@@ -274,6 +274,7 @@ func TestEdgesAggregateExactOwnerTypes(t *testing.T) {
 		"SystemInitializationInspectPath":                 {typeName: "func(string) (fs.FileInfo, error)", effect: "inspect system-initialization configuration paths"},
 		"SystemInitializationMigrationFileSystem":         {typeName: "interface {\n\tStat(string) (fs.FileInfo, error)\n\tReadFile(string) ([]byte, error)\n\tReadDir(string) ([]fs.DirEntry, error)\n\tMkdirAll(string, fs.FileMode) error\n\tRename(string, string) error\n}", effect: "migrate customer-owned Factories from the retired global catalog"},
 
+		"EventsMaxRetainedRecordsPerTopic": {typeName: "int", effect: "override the process-scoped Events root's per-topic retention cap for functional construction"},
 		"Clock":                            {typeName: "platformclock.Source", effect: "supply process time to runtime and automation adapters"},
 		"SubmissionRecorder":               {typeName: "recordings.SubmissionRecorder", effect: "observe canonical submission recording"},
 		"DispatchRecorder":                 {typeName: "recordings.DispatchRecorder", effect: "observe canonical dispatch recording"},

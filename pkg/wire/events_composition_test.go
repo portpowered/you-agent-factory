@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -40,7 +41,7 @@ func TestProvideEventsServiceConstructsAnIndependentServiceDirectly(t *testing.T
 	}
 	logger := logging.NewZapLogger(zapLogger, false)
 
-	first, err := provideEventsService(logger)
+	first, err := provideEventsService(logger, 0)
 	if err != nil {
 		t.Fatalf("provideEventsService() error = %v", err)
 	}
@@ -53,7 +54,7 @@ func TestProvideEventsServiceConstructsAnIndependentServiceDirectly(t *testing.T
 		t.Fatalf("Append() on provider-constructed service error = %v", err)
 	}
 
-	second, err := provideEventsService(logger)
+	second, err := provideEventsService(logger, 0)
 	if err != nil {
 		t.Fatalf("provideEventsService() second call error = %v", err)
 	}
@@ -94,7 +95,7 @@ func TestProvideApplicationProcessLifecycleSharesTheExactEventsInstance(t *testi
 	}
 	logger := logging.NewZapLogger(zapLogger, false)
 
-	eventsService, err := provideEventsService(logger)
+	eventsService, err := provideEventsService(logger, 0)
 	if err != nil {
 		t.Fatalf("provideEventsService() error = %v", err)
 	}
@@ -141,4 +142,63 @@ func TestProvideApplicationProcessLifecycleRequiresEventsLifecycle(t *testing.T)
 // shut down instead of silently skipping its Close.
 type staticEventsServiceWithoutLifecycle struct {
 	events.Service
+}
+
+// TestProvideEventsMaxRetainedRecordsPerTopicProjectsEdgesOverride proves the
+// registered provider function projects exactly
+// edges.EventsMaxRetainedRecordsPerTopic (zero when unset), and that
+// provideEventsService actually honors a positive override by bounding the
+// constructed root's per-topic retention. Functional tests use the same
+// edges field to force Events eviction independently of Factory Sessions'
+// own response-event retention limits (see
+// tests/functional/events/response_events for the end-to-end delegation
+// proof); this is the focused construction-level guard that the override
+// reaches the constructed Store at all.
+func TestProvideEventsMaxRetainedRecordsPerTopicProjectsEdgesOverride(t *testing.T) {
+	t.Parallel()
+
+	if got := provideEventsMaxRetainedRecordsPerTopic(serviceedges.Edges{}); got != 0 {
+		t.Fatalf("provideEventsMaxRetainedRecordsPerTopic(unset) = %d, want 0", got)
+	}
+	if got := provideEventsMaxRetainedRecordsPerTopic(serviceedges.Edges{EventsMaxRetainedRecordsPerTopic: 2}); got != 2 {
+		t.Fatalf("provideEventsMaxRetainedRecordsPerTopic(2) = %d, want 2", got)
+	}
+
+	zapLogger, err := logging.NewDefaultLogger()
+	if err != nil {
+		t.Fatalf("logging.NewDefaultLogger() error = %v", err)
+	}
+	logger := logging.NewZapLogger(zapLogger, false)
+
+	service, err := provideEventsService(logger, 2)
+	if err != nil {
+		t.Fatalf("provideEventsService(logger, 2) error = %v", err)
+	}
+
+	ctx := context.Background()
+	const topic = events.Topic("chat-session/wire-retention-override/events")
+	for sequence := int64(1); sequence <= 3; sequence++ {
+		request := eventsWireTestAppendRequest()
+		request.Topic = topic
+		request.SourceSequence = events.SourceSequence(sequence)
+		request.SourceEventID = events.SourceEventID(fmt.Sprintf("evt-retention-override-%d", sequence))
+		if _, err := service.Append(ctx, request); err != nil {
+			t.Fatalf("Append() record %d error = %v", sequence, err)
+		}
+	}
+
+	result, err := service.Read(ctx, events.ReadRequest{
+		Topic: topic,
+		From:  events.Cursor{Topic: topic, Position: 0},
+		Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	if result.Outcome != events.ReadOutcomeGap {
+		t.Fatalf("Read() Outcome = %v, want ReadOutcomeGap (a retention cap of 2 must have evicted position 1 after 3 appends)", result.Outcome)
+	}
+	if result.Gap == nil || result.Gap.EarliestRetained != 2 {
+		t.Fatalf("Read() Gap = %#v, want EarliestRetained = 2", result.Gap)
+	}
 }
