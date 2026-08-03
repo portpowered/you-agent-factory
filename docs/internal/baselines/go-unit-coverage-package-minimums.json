@@ -245,6 +245,14 @@
       "minimum": 95.97
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/events/internal/service",
+      "minimum": 95.84
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/events/wire",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
       "minimum": 80.57
     },

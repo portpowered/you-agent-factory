@@ -272,13 +272,15 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/events",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
-      }
+      "minimum": 98.57
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/events/internal/service",
+      "minimum": 96.19
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/events/wire",
+      "minimum": 100.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
