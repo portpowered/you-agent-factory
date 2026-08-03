@@ -230,7 +230,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/service",
-      "minimum": 92.59
+      "minimum": 93.05
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/wire",

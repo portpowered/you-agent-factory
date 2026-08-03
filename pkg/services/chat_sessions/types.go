@@ -214,8 +214,12 @@ func (s SessionState) IsTerminal() bool {
 // captured turn/episode/version are three distinct positions and are never
 // conflated by this contract.
 type Session struct {
-	ID             string
-	State          SessionState
+	ID    string
+	State SessionState
+	// WorkingRoot is the validated ACP editor working root this session was created
+	// with. It is set once at CreateSession and never changes for the life
+	// of the session.
+	WorkingRoot    string
 	SelectedTarget ChatTargetRef
 	TargetEpisode  uint64
 	// ActiveTurnID is the non-terminal turn currently admitted for this
@@ -239,6 +243,9 @@ func (s Session) Validate() error {
 	}
 	if err := s.State.Validate(); err != nil {
 		return newValidationError("Session", "State", err)
+	}
+	if s.WorkingRoot == "" {
+		return newValidationError("Session", "WorkingRoot", ErrRequiredValue)
 	}
 	if err := s.SelectedTarget.Validate(); err != nil {
 		return newValidationError("Session", "SelectedTarget", err)

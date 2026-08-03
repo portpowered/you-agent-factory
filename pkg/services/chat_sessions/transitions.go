@@ -194,8 +194,21 @@ func OpenNextTargetEpisode(prior TargetEpisode, target ChatTargetRef, factorySes
 // ControlIntent's COMMITTED->{COMPLETED,NOOP,SUPERSEDED} advancement must
 // follow. It evaluates only the identities and facts captured when the
 // intent was requested (capturedTurnID, capturedTurnState) against the
-// Session's currentActiveTurnID at completion time; it never rebinds the
-// intent to a different turn.
+// session's mostRecentTurnID at completion time; it never rebinds the intent
+// to a different turn.
+//
+// mostRecentTurnID identifies the most recently admitted turn, not merely
+// whichever turn is presently non-terminal: it stays equal to a turn's ID
+// through that turn's own termination and only changes once a later turn is
+// actually admitted. A "currently active" identity that clears the instant
+// its turn terminates cannot serve this role, since every captured turn
+// eventually terminates and such a value would then always mismatch,
+// collapsing COMPLETED and NOOP into SUPERSEDED. mostRecentTurnID is exactly
+// what lets the two outcomes stay distinguishable: a captured turn that
+// terminated with no newer turn admitted since resolves NOOP (nothing left
+// to cancel or close), while a captured turn superseded by an actually newer
+// admission resolves SUPERSEDED, regardless of the captured turn's own
+// state.
 //
 // This helper accepts raw captured facts rather than a validated
 // ControlIntent, so it independently enforces the same required-value rule
@@ -206,23 +219,23 @@ func OpenNextTargetEpisode(prior TargetEpisode, target ChatTargetRef, factorySes
 // a meaningless SUPERSEDED/COMPLETED outcome. capturedTurnState is validated
 // next, before any outcome is selected, so a zero or unknown captured state
 // always reports a typed invalid-state error -- an identity mismatch
-// (capturedTurnID no longer the current active turn) never hides an invalid
+// (capturedTurnID no longer the most recent turn) never hides an invalid
 // captured state behind a SUPERSEDED outcome. Once both facts are valid, a
-// captured turn that is no longer the session's current active turn resolves
+// captured turn that is no longer the most recently admitted turn resolves
 // to SUPERSEDED regardless of capturedTurnState -- including when
-// capturedTurnState is itself already terminal, since "no longer current" is
-// evaluated first and takes precedence. Otherwise, an already-terminal
-// captured turn (one that finished before the intent completed) resolves to
-// NOOP, since there is nothing left to cancel or close; a still-active
-// captured turn resolves to COMPLETED.
-func ResolveControlIntentOutcome(capturedTurnID string, capturedTurnState TurnState, currentActiveTurnID string) (ControlIntentState, error) {
+// capturedTurnState is itself already terminal, since "no longer most
+// recent" is evaluated first and takes precedence. Otherwise, an
+// already-terminal captured turn (one that finished before the intent
+// completed) resolves to NOOP, since there is nothing left to cancel or
+// close; a still-active captured turn resolves to COMPLETED.
+func ResolveControlIntentOutcome(capturedTurnID string, capturedTurnState TurnState, mostRecentTurnID string) (ControlIntentState, error) {
 	if capturedTurnID == "" {
 		return "", newValidationError("ControlIntent", "TurnID", ErrRequiredValue)
 	}
 	if err := capturedTurnState.Validate(); err != nil {
 		return "", err
 	}
-	if capturedTurnID != currentActiveTurnID {
+	if capturedTurnID != mostRecentTurnID {
 		return ControlIntentStateSuperseded, nil
 	}
 	if capturedTurnState.IsTerminal() {

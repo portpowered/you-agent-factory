@@ -2,17 +2,74 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"slices"
 	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/testdeps"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"go.uber.org/zap/zapcore"
 )
+
+// TestProvideChatSessionsServiceConstructsAnIndependentServiceDirectly proves
+// the exact provider function registered in this graph's servicesSet returns
+// a functional, independently isolated chat_sessions.Service, and that
+// InjectBundle itself still succeeds with that provider registered. This
+// test deliberately does NOT claim to prove InjectBundle-composed injection:
+// no consumer in this repository currently declares a dependency on
+// chatsessions.Service (the eventual real consumer is ACP transport
+// dispatch, which is explicitly out of this PRD's scope), so Wire's
+// generated InjectBundle body does not call provideChatSessionsService. The
+// sibling provideChatSessionsFactoryTargetCatalogService provider below is
+// in the same registered-but-uncalled shape, but that sibling shape remains
+// an open, unresolved reviewer objection on its own PR (#1736), not an
+// accepted precedent -- do not cite it as one. A forced, unread field on an
+// unrelated transport's operations struct would not make this any more
+// "composed"; it would only add dead state, which is why this test proves
+// the provider directly instead.
+func TestProvideChatSessionsServiceConstructsAnIndependentServiceDirectly(t *testing.T) {
+	t.Parallel()
+
+	if _, err := InjectBundle(context.Background(), serviceedges.Edges{}); err != nil {
+		t.Fatalf("InjectBundle() error = %v", err)
+	}
+
+	zapLogger, err := logging.NewDefaultLogger()
+	if err != nil {
+		t.Fatalf("logging.NewDefaultLogger() error = %v", err)
+	}
+	logger := logging.NewZapLogger(zapLogger, false)
+
+	first, err := provideChatSessionsService(logger)
+	if err != nil {
+		t.Fatalf("provideChatSessionsService() error = %v", err)
+	}
+	if first == nil {
+		t.Fatal("provideChatSessionsService() = nil, want a constructed chat_sessions.Service")
+	}
+	second, err := provideChatSessionsService(logger)
+	if err != nil {
+		t.Fatalf("provideChatSessionsService() second call error = %v", err)
+	}
+
+	ctx := context.Background()
+	created, err := first.CreateSession(ctx, chatsessions.CreateSessionRequest{
+		RequestID:     chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-1"},
+		WorkingRoot:   "/workspace/project",
+		InitialTarget: chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession on provider-constructed service: %v", err)
+	}
+	if _, err := second.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: created.Session.ID}); !errors.Is(err, chatsessions.ErrNotFound) {
+		t.Fatalf("a second call to the focused provider observed the first call's session: got %v, want ErrNotFound", err)
+	}
+}
 
 // staticFactoryDefinitionsService is a minimal factorydefinitions.Service
 // double covering only ListEffectiveFactories, the sole collaborator method
@@ -95,9 +152,14 @@ func TestProvideChatSessionsFactoryTargetCatalogServiceComposesThroughTheCanonic
 		t.Fatalf("provideOperatorSettingsService() error = %v", err)
 	}
 
+	factoryBuilderLocation := "/factories/@you/factory-builder"
 	factoryDefinitions := &staticFactoryDefinitionsService{
 		entries: []factorydefinitions.EffectiveFactoryCatalogEntry{
-			{Name: "@you/factory-builder", Definition: &factorydefinitions.FactoryConfig{Name: "Factory Builder"}},
+			{
+				Name:       "@you/factory-builder",
+				Location:   &factoryBuilderLocation,
+				Definition: &factorydefinitions.FactoryConfig{Name: "Factory Builder"},
+			},
 		},
 	}
 
