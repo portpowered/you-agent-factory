@@ -485,6 +485,71 @@ func TestValidateDispatchCandidateRejectsClaimOnRetainedPSSI01StructuralPath(t *
 	}
 }
 
+// TestValidateDispatchCandidateAdmitsNarrowedPSSI05WithoutMutatingState proves
+// the committed ledger's re-scoped PSS-I05 (single dedicated
+// event-boundary-d2-rescope.md metadata path instead of the prior
+// pkg/factory/contracts/ and event-backbone-convergence.md event-backbone
+// lease) is admissible into a lease-holding state before dispatch, and that
+// ValidateDispatchCandidate never mutates the candidate's committed state.
+func TestValidateDispatchCandidateAdmitsNarrowedPSSI05WithoutMutatingState(t *testing.T) {
+	t.Parallel()
+
+	manifest := loadCommittedCatalog(t)
+	before := packetByID(t, manifest, "PSS-I05")
+	if len(before.ExclusivePaths) != 1 {
+		t.Fatalf("PSS-I05 exclusivePaths = %v, want exactly one residual metadata path", before.ExclusivePaths)
+	}
+	wantPath := "docs/internal/projects/packaged-service-structure/event-boundary-d2-rescope.md"
+	if before.ExclusivePaths[0] != wantPath {
+		t.Fatalf("PSS-I05 exclusivePaths[0] = %q, want %q", before.ExclusivePaths[0], wantPath)
+	}
+	for _, forbidden := range []string{"pkg/factory/contracts/", "event-backbone-convergence.md"} {
+		for _, path := range before.ExclusivePaths {
+			if strings.Contains(path, forbidden) {
+				t.Fatalf("PSS-I05 exclusivePaths %v still references forbidden path %q", before.ExclusivePaths, forbidden)
+			}
+		}
+	}
+
+	if err := psslease.ValidateDispatchCandidate(manifest, "PSS-I05", psslease.StateActive); err != nil {
+		t.Fatalf("ValidateDispatchCandidate(PSS-I05, active) error = %v, want nil for re-scoped candidate", err)
+	}
+
+	after := packetByID(t, manifest, "PSS-I05")
+	if after.State != before.State {
+		t.Fatalf("PSS-I05 state = %q after ValidateDispatchCandidate, want unchanged %q (candidate check must not commit a state change)", after.State, before.State)
+	}
+	if after.ExclusivePaths[0] != wantPath {
+		t.Fatalf("PSS-I05 exclusivePaths[0] = %q after ValidateDispatchCandidate, want unchanged %q", after.ExclusivePaths[0], wantPath)
+	}
+}
+
+// TestValidateDispatchCandidateRejectsClaimOnRetainedPSSI05BoundaryPath proves
+// a genuine equal/path-prefix claim on the retained PSS-I05 residual metadata
+// path is rejected before activation, with both packet identities and the
+// conflicting path in the diagnostic, and that the rejected packet remains
+// non-holding.
+func TestValidateDispatchCandidateRejectsClaimOnRetainedPSSI05BoundaryPath(t *testing.T) {
+	t.Parallel()
+
+	manifest := loadFixture(t, "invalid-pss-i05-narrowed-boundary-conflict.json")
+
+	err := psslease.SetPacketState(manifest, "PKT-BOUNDARY-CONFLICT", psslease.StateActive)
+	if err == nil {
+		t.Fatal("SetPacketState(PKT-BOUNDARY-CONFLICT, active) error = nil, want rejection for overlap with PSS-I05's retained metadata path")
+	}
+	message := err.Error()
+	for _, want := range []string{"PSS-I05", "PKT-BOUNDARY-CONFLICT", "docs/internal/projects/packaged-service-structure/event-boundary-d2-rescope.md"} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("SetPacketState() error = %v, want substring %q", err, want)
+		}
+	}
+
+	if got := packetByID(t, manifest, "PKT-BOUNDARY-CONFLICT").State; got != psslease.StateBlocked {
+		t.Fatalf("PKT-BOUNDARY-CONFLICT state = %q after rejected promotion, want unchanged %q (non-holding)", got, psslease.StateBlocked)
+	}
+}
+
 func loadCommittedCatalog(t *testing.T) *psslease.Manifest {
 	t.Helper()
 	path := filepath.Join("..", "..", "docs", "internal", "projects", "packaged-service-structure", "path-lease-packet-manifest.json")
