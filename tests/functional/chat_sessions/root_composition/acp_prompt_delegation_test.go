@@ -1,6 +1,7 @@
 package root_composition_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	acpsdk "github.com/coder/acp-go-sdk"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/root"
@@ -63,6 +66,14 @@ func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *t
 	seedInstalledPackagedFactory(t, home, "@you/goal")
 	seedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
 
+	// ProviderOverride (an in-process Provider fake) rather than
+	// ProviderCommandRunner (a subprocess-shaped fake) is the same
+	// established pattern this exact packaged Factory's own functional tests
+	// already use for the @you/goal fixture elsewhere (see
+	// tests/functional/cli/named_invocation/named_invocation_test.go's
+	// TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatureInput),
+	// not a deviation this test introduces; both edges are equally real
+	// external-effect ports serviceedges.Edges accepts.
 	provider := testutil.NewMockProvider(workers.InferenceResponse{Content: "acknowledged\n<COMPLETE>"})
 	// Factory Session runtime activations are counted through the shared
 	// FactorySessionIDGenerator edge. That generator is also consumed for
@@ -99,6 +110,14 @@ func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *t
 	if firstResp.Error != nil {
 		t.Fatalf("first session/prompt response error = %+v, want a successful final result", firstResp.Error)
 	}
+	// The seeded @you/goal packaged Factory's own business workflow reaches a
+	// real published FAILED terminal status against this bare mock provider
+	// (its goal loop needs an actual child worker dispatch a mock alone can't
+	// satisfy -- see this file's doc comment) -- a genuine downstream Factory
+	// failure this production composition must still map to the documented
+	// end_turn safe fallback rather than an ACP-level error, exactly like
+	// this transport's already-unit-tested mapping does.
+	assertPromptResponseStopReason(t, firstResp, acpsdk.StopReasonEndTurn)
 	callsAfterFirstTurn := factorySessionIDCalls.Load()
 	if callsAfterFirstTurn == 0 {
 		t.Fatal("Factory Session ID generator was never called after the first (unbound) turn, want at least one Factory Session activation")
@@ -108,9 +127,167 @@ func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *t
 	if secondResp.Error != nil {
 		t.Fatalf("second session/prompt response error = %+v, want a successful final result", secondResp.Error)
 	}
+	assertPromptResponseStopReason(t, secondResp, acpsdk.StopReasonEndTurn)
 	if got := factorySessionIDCalls.Load(); got != callsAfterFirstTurn {
 		t.Fatalf("Factory Session ID generator calls after the second (already-bound) turn = %d, want unchanged from %d (no second Factory Session activation)", got, callsAfterFirstTurn)
 	}
+}
+
+// assertPromptResponseStopReason decodes resp's Result as a real
+// acpsdk.PromptResponse and asserts its StopReason, proving the response is
+// the closed final-only shape this transport publishes, not just the
+// absence of an RPC-level error.
+func assertPromptResponseStopReason(t *testing.T, resp rpcMessage, want acpsdk.StopReason) {
+	t.Helper()
+	var decoded acpsdk.PromptResponse
+	if err := json.Unmarshal(resp.Result, &decoded); err != nil {
+		t.Fatalf("unmarshal PromptResponse: %v", err)
+	}
+	if decoded.StopReason != want {
+		t.Fatalf("stopReason = %q, want %q", decoded.StopReason, want)
+	}
+}
+
+// TestACPPromptDelegationRedeliveredRequestMakesNoSecondFactoryDispatch
+// proves, through the same real root.BuildProcess composition, that
+// redelivering the identical connection-scoped "session/prompt" request --
+// the same JSON-RPC id on the same connection, exactly what a retrying
+// client sends after an ambiguous or dropped response -- never dispatches a
+// second Factory Session start for content this process already admitted and
+// executed once. This is a regression guard for the gap
+// chat_sessions/internal/service.Store.StartTurn's turnsByRequest index
+// closes: without it, a redelivered request admitted a brand-new turn and
+// dispatched Factory work a second time.
+func TestACPPromptDelegationRedeliveredRequestMakesNoSecondFactoryDispatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test driving root.BuildProcess Factory Session dispatch")
+	}
+
+	// A single delivery's own Factory Session ID generator call count is the
+	// baseline: if a redelivered duplicate on the same connection dispatched
+	// a second time, sending it twice would produce a strictly larger count
+	// than sending it once, since each real activation consumes this
+	// generator at least once (see the sibling test's own comment on why
+	// this shared edge is an indirect but sufficient activation-count proxy).
+	singleDeliveryCalls := runPromptDeliveries(t, "single-delivery", 1)
+	if singleDeliveryCalls == 0 {
+		t.Fatal("Factory Session ID generator was never called for a single delivery, want at least one Factory Session activation")
+	}
+
+	duplicateDeliveryCalls := runPromptDeliveries(t, "duplicate-delivery", 2)
+	if duplicateDeliveryCalls != singleDeliveryCalls {
+		t.Fatalf("Factory Session ID generator calls after a redelivered duplicate = %d, want unchanged from the single-delivery baseline %d (no second Factory Session activation)",
+			duplicateDeliveryCalls, singleDeliveryCalls)
+	}
+}
+
+// runPromptDeliveries builds one fresh, isolated root.BuildProcess
+// composition, creates one session, then sends copies of the identical
+// "session/prompt" request (same wire id, same connection) within a single
+// Serve call, asserting every resulting response is successful. It returns
+// the final Factory Session ID generator call count, so a caller can compare
+// counts across a different number of identical deliveries.
+func runPromptDeliveries(t *testing.T, homePrefix string, deliveries int) int32 {
+	t.Helper()
+
+	home, err := os.MkdirTemp("", "acp-prompt-delegation-"+homePrefix+"-home-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp(home) error = %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	seedInstalledPackagedFactory(t, home, "@you/goal")
+	seedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
+
+	provider := testutil.NewMockProvider(workers.InferenceResponse{Content: "acknowledged\n<COMPLETE>"})
+	var factorySessionIDCalls atomic.Int32
+	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{
+		ProviderOverride: provider,
+		FactorySessionIDGenerator: func() string {
+			n := factorySessionIDCalls.Add(1)
+			return fmt.Sprintf("acp-%s-factory-session-id-%d", homePrefix, n)
+		},
+	})
+	if err != nil {
+		t.Fatalf("root.BuildProcess() error = %v", err)
+	}
+	server := process.ACPServer()
+	if server == nil {
+		t.Fatal("Process.ACPServer() returned a nil acp.Server")
+	}
+
+	cwd := t.TempDir()
+	sessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
+	if sessionID == "" {
+		t.Fatal("session/new returned a blank sessionId")
+	}
+
+	// Every delivered line carries the exact same wire id (2) on one Serve
+	// call, so every one resolves to the identical connection-scoped
+	// RequestIdentity -- a true redelivery, not distinct requests that merely
+	// share a bare id across different connections (which this transport
+	// already keeps distinct on purpose).
+	params, err := json.Marshal(map[string]any{
+		"sessionId": sessionID,
+		"prompt":    []map[string]any{{"type": "text", "text": "please help with this goal"}},
+	})
+	if err != nil {
+		t.Fatalf("marshal session/prompt params: %v", err)
+	}
+	promptLine := fmt.Sprintf(`{"jsonrpc":"2.0","id":2,"method":"session/prompt","params":%s}`, params) + "\n"
+	input := strings.Repeat(promptLine, deliveries)
+
+	var out bytes.Buffer
+	if err := server.Serve(context.Background(), strings.NewReader(input), &out); err != nil {
+		t.Fatalf("Serve() error = %v", err)
+	}
+
+	responses := responseLinesOnly(t, &out)
+	if len(responses) != deliveries {
+		t.Fatalf("response line count = %d, want exactly %d (one per delivered request): %s", len(responses), deliveries, out.String())
+	}
+	for i, resp := range responses {
+		if resp.Error != nil {
+			t.Fatalf("response[%d] error = %+v, want a successful final result", i, resp.Error)
+		}
+		assertPromptResponseStopReason(t, resp, acpsdk.StopReasonEndTurn)
+	}
+
+	return factorySessionIDCalls.Load()
+}
+
+// responseLinesOnly splits out into complete newline-terminated lines and
+// decodes only the ones carrying a request/response shape (a populated Result
+// or Error), skipping any interleaved outbound "session/update" notification
+// lines (which never carry a "result" or "error" member).
+func responseLinesOnly(t *testing.T, out *bytes.Buffer) []rpcMessage {
+	t.Helper()
+	var responses []rpcMessage
+	scanner := bufio.NewScanner(bytes.NewReader(out.Bytes()))
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		var decoded map[string]json.RawMessage
+		if err := json.Unmarshal(line, &decoded); err != nil {
+			t.Fatalf("unmarshal line %q: %v", line, err)
+		}
+		if _, isNotification := decoded["method"]; isNotification {
+			continue
+		}
+		var msg rpcMessage
+		if err := json.Unmarshal(line, &msg); err != nil {
+			t.Fatalf("unmarshal response line %q: %v", line, err)
+		}
+		responses = append(responses, msg)
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("scan response lines: %v", err)
+	}
+	return responses
 }
 
 // sendSessionPrompt drives one real "session/prompt" call, with one text
