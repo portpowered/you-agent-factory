@@ -180,6 +180,14 @@ func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(
 	if sessionID == "" {
 		t.Fatal("session/new returned a blank sessionId")
 	}
+	// A second session/new call, while the installed Factory and home
+	// directory are both still intact, admits a third episode this test
+	// reuses below only after breaking home-directory resolution -- session
+	// admission itself must not depend on a resolvable home directory.
+	thirdSessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
+	if thirdSessionID == "" {
+		t.Fatal("session/new (third episode) returned a blank sessionId")
+	}
 
 	// Remove the installed Factory's own directory only after session/new
 	// already resolved and admitted it, so the runtime resolver's
@@ -202,6 +210,17 @@ func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(
 	secondResp := sendSessionPrompt(t, server, sessionID, "a retry after the unresolvable target failure")
 	if secondResp.Error == nil {
 		t.Fatal("second session/prompt response error = nil, want the same bounded rejection, not a stranded busy session")
+	}
+
+	// The third episode's prompt proves the resolver's own earlier
+	// home-directory lookup failure (reached before any catalog lookup)
+	// fails exactly as safely: unset both home-directory environment
+	// variables only for this call.
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+	thirdResp := sendSessionPrompt(t, server, thirdSessionID, "a prompt with no resolvable home directory")
+	if thirdResp.Error == nil {
+		t.Fatal("third session/prompt response error = nil, want a bounded internal error when the home directory cannot be resolved")
 	}
 }
 
