@@ -60,3 +60,26 @@ type unexpectedCallError struct{}
 func (unexpectedCallError) Error() string { return "unexpected fake call" }
 
 var errUnexpectedCall = unexpectedCallError{}
+
+// installedFactoryEntry returns an EffectiveFactoryCatalogEntry representing
+// a materialized (installed) Factory. Factory Definitions' contract leaves
+// Location nil for packaged definitions that have not been materialized, so
+// every fixture standing in for an installed Factory must set it explicitly.
+func installedFactoryEntry(name, displayName string) factorydefinitions.EffectiveFactoryCatalogEntry {
+	location := "/factories/" + name
+	return factorydefinitions.EffectiveFactoryCatalogEntry{
+		Name:       name,
+		Location:   &location,
+		Definition: &factorydefinitions.FactoryConfig{Name: displayName},
+	}
+}
+
+// packagedOnlyFactoryEntry returns an EffectiveFactoryCatalogEntry
+// representing a packaged Factory definition that has not been materialized:
+// it is effective/listable but never counts as installed.
+func packagedOnlyFactoryEntry(name, displayName string) factorydefinitions.EffectiveFactoryCatalogEntry {
+	return factorydefinitions.EffectiveFactoryCatalogEntry{
+		Name:       name,
+		Definition: &factorydefinitions.FactoryConfig{Name: displayName},
+	}
+}
