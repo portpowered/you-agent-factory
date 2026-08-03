@@ -12,7 +12,11 @@ import (
 // attachment is created. A successful attachment is independent of every
 // other attachment on the session and of the session's own state: it never
 // reads or writes Session, episodes, turns, or control intents.
-func (s *Store) Attach(_ context.Context, req chatsessions.AttachRequest) (chatsessions.AttachResult, error) {
+func (s *Store) Attach(_ context.Context, req chatsessions.AttachRequest) (result chatsessions.AttachResult, err error) {
+	s.logStart("Attach", req.SessionID)
+	defer func() {
+		s.logOutcome("Attach", req.SessionID, err, "attachment_id", result.Attachment.ID)
+	}()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -42,7 +46,11 @@ func (s *Store) Attach(_ context.Context, req chatsessions.AttachRequest) (chats
 // when AttachmentID does not identify an existing attachment on that
 // session; in either failure case no attachment is removed. Removing one
 // attachment never changes any other attachment or the session's own state.
-func (s *Store) Detach(_ context.Context, req chatsessions.DetachRequest) (chatsessions.DetachResult, error) {
+func (s *Store) Detach(_ context.Context, req chatsessions.DetachRequest) (result chatsessions.DetachResult, err error) {
+	s.logStart("Detach", req.SessionID)
+	defer func() {
+		s.logOutcome("Detach", req.SessionID, err, "attachment_id", req.AttachmentID)
+	}()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

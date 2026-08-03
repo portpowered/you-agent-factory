@@ -13,7 +13,11 @@ import (
 // matches the session's current version, and *BusyError while a non-terminal
 // turn is active -- in every failure case, no episode is created and the
 // stored session and episode history are left byte-for-byte unchanged.
-func (s *Store) SetTarget(_ context.Context, req chatsessions.SetTargetRequest) (chatsessions.SetTargetResult, error) {
+func (s *Store) SetTarget(_ context.Context, req chatsessions.SetTargetRequest) (result chatsessions.SetTargetResult, err error) {
+	s.logStart("SetTarget", req.SessionID)
+	defer func() {
+		s.logOutcome("SetTarget", req.SessionID, err, "version", result.Session.Version, "target_episode", result.Session.TargetEpisode)
+	}()
 	if err := req.RequestID.Validate(); err != nil {
 		return chatsessions.SetTargetResult{}, err
 	}

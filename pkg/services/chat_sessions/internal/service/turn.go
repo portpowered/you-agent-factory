@@ -15,7 +15,11 @@ import (
 // and turn state are left byte-for-byte unchanged. On success it moves a
 // CREATED session to ACTIVE on its first turn and leaves an already-ACTIVE
 // session's State unchanged.
-func (s *Store) StartTurn(_ context.Context, req chatsessions.StartTurnRequest) (chatsessions.StartTurnResult, error) {
+func (s *Store) StartTurn(_ context.Context, req chatsessions.StartTurnRequest) (result chatsessions.StartTurnResult, err error) {
+	s.logStart("StartTurn", req.SessionID)
+	defer func() {
+		s.logOutcome("StartTurn", req.SessionID, err, "version", result.Session.Version, "turn_id", result.Turn.ID)
+	}()
 	if err := req.RequestID.Validate(); err != nil {
 		return chatsessions.StartTurnResult{}, err
 	}
@@ -81,7 +85,11 @@ func (s *Store) StartTurn(_ context.Context, req chatsessions.StartTurnRequest) 
 // distinct, non-zero TerminalSequence from the session's private turn
 // sequence counter), clears the session's ActiveTurnID, and advances the
 // session's version so later guarded callers observe the release.
-func (s *Store) AdvanceTurn(_ context.Context, req chatsessions.AdvanceTurnRequest) (chatsessions.AdvanceTurnResult, error) {
+func (s *Store) AdvanceTurn(_ context.Context, req chatsessions.AdvanceTurnRequest) (result chatsessions.AdvanceTurnResult, err error) {
+	s.logStart("AdvanceTurn", req.SessionID)
+	defer func() {
+		s.logOutcome("AdvanceTurn", req.SessionID, err, "turn_id", result.Turn.ID, "state", string(result.Turn.State))
+	}()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

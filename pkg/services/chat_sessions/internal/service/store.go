@@ -4,8 +4,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 )
+
+var _ chatsessions.Service = (*Store)(nil)
 
 // IDGenerator produces a new opaque, process-unique entity identity. Store
 // never chooses an ambient UUID source itself; chat_sessions/wire supplies
@@ -22,8 +25,9 @@ type Store struct {
 	mu       sync.RWMutex
 	sessions map[string]sessionRecord
 
-	newID IDGenerator
-	now   Clock
+	newID  IDGenerator
+	now    Clock
+	logger logging.Logger
 }
 
 // sessionRecord is the Store-owned mutable aggregate for one Chat Session.
@@ -59,11 +63,18 @@ type sessionRecord struct {
 }
 
 // New constructs an empty Store from explicit dependencies. newID and now
-// must be non-nil.
-func New(newID IDGenerator, now Clock) *Store {
+// must be non-nil. logger is optional and defaults to a no-op logger when
+// omitted, matching the repository's optional-logger construction
+// convention rather than a mutable reinjection path.
+func New(newID IDGenerator, now Clock, logger ...logging.Logger) *Store {
+	var provided logging.Logger
+	if len(logger) > 0 {
+		provided = logger[0]
+	}
 	return &Store{
 		sessions: make(map[string]sessionRecord),
 		newID:    newID,
 		now:      now,
+		logger:   logging.EnsureLogger(provided),
 	}
 }

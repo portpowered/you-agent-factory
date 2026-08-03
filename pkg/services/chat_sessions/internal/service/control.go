@@ -18,7 +18,13 @@ import (
 // ConnectionID, Kind, or a bare TransportUUID) can never retrieve, advance,
 // overwrite, or deduplicate one another even when their JSON-RPC id tokens
 // happen to match.
-func (s *Store) RequestControl(_ context.Context, req chatsessions.RequestControlRequest) (chatsessions.RequestControlResult, error) {
+func (s *Store) RequestControl(_ context.Context, req chatsessions.RequestControlRequest) (result chatsessions.RequestControlResult, err error) {
+	s.logStart("RequestControl", req.SessionID)
+	defer func() {
+		s.logOutcome("RequestControl", req.SessionID, err,
+			"request_kind", string(req.RequestID.Kind), "action", string(req.Action),
+			"turn_id", result.Intent.TurnID, "target_episode", result.Intent.TargetEpisode)
+	}()
 	if err := req.RequestID.Validate(); err != nil {
 		return chatsessions.RequestControlResult{}, err
 	}
@@ -73,7 +79,12 @@ func (s *Store) RequestControl(_ context.Context, req chatsessions.RequestContro
 // intent's own captured TurnID and the session's live active turn --
 // caller-supplied Next is never consulted for that resolution -- so a
 // delayed advancement can never retarget a captured intent to a later turn.
-func (s *Store) AdvanceControl(_ context.Context, req chatsessions.AdvanceControlRequest) (chatsessions.AdvanceControlResult, error) {
+func (s *Store) AdvanceControl(_ context.Context, req chatsessions.AdvanceControlRequest) (result chatsessions.AdvanceControlResult, err error) {
+	s.logStart("AdvanceControl", req.SessionID)
+	defer func() {
+		s.logOutcome("AdvanceControl", req.SessionID, err,
+			"request_kind", string(req.RequestID.Kind), "state", string(result.Intent.State))
+	}()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

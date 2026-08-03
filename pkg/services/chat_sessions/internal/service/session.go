@@ -17,7 +17,11 @@ const initialTargetEpisodeNumber uint64 = 1
 
 // CreateSession validates req in full before any state is touched, so an
 // invalid RequestID, Cwd, or InitialTarget creates no observable session.
-func (s *Store) CreateSession(_ context.Context, req chatsessions.CreateSessionRequest) (chatsessions.CreateSessionResult, error) {
+func (s *Store) CreateSession(_ context.Context, req chatsessions.CreateSessionRequest) (result chatsessions.CreateSessionResult, err error) {
+	s.logStart("CreateSession", "")
+	defer func() {
+		s.logOutcome("CreateSession", result.Session.ID, err, "version", result.Session.Version, "target_episode", result.Session.TargetEpisode)
+	}()
 	if err := req.RequestID.Validate(); err != nil {
 		return chatsessions.CreateSessionResult{}, err
 	}
