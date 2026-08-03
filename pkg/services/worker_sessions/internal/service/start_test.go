@@ -323,6 +323,34 @@ func TestStart_FailedResultWithNonPanicAdapterError_MapsToAdapterFailureCause(t 
 	}
 }
 
+func TestStart_FailedResultWithBlankWorkResultError_FallsBackToAdapterErrorDetail(t *testing.T) {
+	adapterErr := errors.New("transport reset")
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			return workers.WorkstationDispatchResult{
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeFailed,
+				},
+			}, adapterErr
+		},
+	}
+	registry := newRegistryWithExecution(execution)
+	ctx := context.Background()
+
+	result, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1"))
+	if err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+	if got := result.Session.Result.Cause.Kind; got != workersessions.FailureCauseAdapterFailure {
+		t.Fatalf("Start() cause kind = %q, want ADAPTER_FAILURE", got)
+	}
+	if got := result.Session.Result.Cause.Detail; got != adapterErr.Error() {
+		t.Fatalf("Start() cause detail = %q, want fallback to adapter error %q", got, adapterErr.Error())
+	}
+}
+
 func TestStart_DuplicateConflictingStart_ReturnsTypedErrorAndMakesNoWorkersCall(t *testing.T) {
 	execution := succeedingExecution()
 	registry := newRegistryWithExecution(execution)
