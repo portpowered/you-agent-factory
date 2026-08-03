@@ -97,6 +97,91 @@ func TestRecoveryRestoreRejectsIncompatibleStrategyKind(t *testing.T) {
 	}
 }
 
+func TestRecoveryRestoreFailuresDoNotMutatePreviouslyValidStoredEnvelope(t *testing.T) {
+	t.Parallel()
+
+	recovery := checkpointrecoverywire.New()
+	validPayload := []byte(`{"factoryState":"PAUSED"}`)
+	restored, err := recovery.Restore(checkpointrecovery.RestoreRequest{
+		Envelope: checkpointrecovery.Envelope{
+			CheckpointID:  "checkpoint-1",
+			SchemaVersion: checkpointrecovery.RuntimeOpaqueCheckpointSchemaVersion,
+			StrategyKind:  checkpointrecovery.RuntimeOpaqueCheckpointStrategyKind,
+			Payload:       validPayload,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Restore() error = %v", err)
+	}
+
+	failingRequests := []struct {
+		name    string
+		request checkpointrecovery.RestoreRequest
+		wantErr error
+	}{
+		{
+			name: "corrupt payload",
+			request: checkpointrecovery.RestoreRequest{
+				Envelope: checkpointrecovery.Envelope{
+					CheckpointID:  "checkpoint-1",
+					SchemaVersion: checkpointrecovery.RuntimeOpaqueCheckpointSchemaVersion,
+					StrategyKind:  checkpointrecovery.RuntimeOpaqueCheckpointStrategyKind,
+					Payload:       []byte(`{}`),
+				},
+			},
+			wantErr: checkpointrecovery.ErrCorruptCheckpoint,
+		},
+		{
+			name: "incompatible schema",
+			request: checkpointrecovery.RestoreRequest{
+				Envelope: checkpointrecovery.Envelope{
+					CheckpointID:  "checkpoint-1",
+					SchemaVersion: checkpointrecovery.RuntimeOpaqueCheckpointSchemaVersion + 1,
+					StrategyKind:  checkpointrecovery.RuntimeOpaqueCheckpointStrategyKind,
+					Payload:       validPayload,
+				},
+			},
+			wantErr: checkpointrecovery.ErrIncompatibleCheckpoint,
+		},
+		{
+			name: "incompatible strategy kind",
+			request: checkpointrecovery.RestoreRequest{
+				Envelope: checkpointrecovery.Envelope{
+					CheckpointID:  "checkpoint-1",
+					SchemaVersion: checkpointrecovery.RuntimeOpaqueCheckpointSchemaVersion,
+					StrategyKind:  "petri",
+					Payload:       validPayload,
+				},
+			},
+			wantErr: checkpointrecovery.ErrIncompatibleCheckpoint,
+		},
+		{
+			name:    "missing checkpoint identity",
+			request: checkpointrecovery.RestoreRequest{},
+			wantErr: checkpointrecovery.ErrCheckpointNotFound,
+		},
+	}
+
+	for _, tc := range failingRequests {
+		if _, err := recovery.Restore(tc.request); !errors.Is(err, tc.wantErr) {
+			t.Fatalf("Restore(%s) error = %v, want %v", tc.name, err, tc.wantErr)
+		}
+
+		loaded, err := recovery.Load(checkpointrecovery.LoadRequest{CheckpointID: "checkpoint-1"})
+		if err != nil {
+			t.Fatalf("Load() after failed Restore(%s) error = %v", tc.name, err)
+		}
+		if loaded.Envelope.SchemaVersion != restored.Envelope.SchemaVersion ||
+			loaded.Envelope.StrategyKind != restored.Envelope.StrategyKind ||
+			string(loaded.Envelope.Payload) != string(restored.Envelope.Payload) {
+			t.Fatalf(
+				"Load() after failed Restore(%s) = %#v, want previously valid envelope %#v unmutated",
+				tc.name, loaded.Envelope, restored.Envelope,
+			)
+		}
+	}
+}
+
 func TestRecoveryRestoreDoesNotPersistCorruptPayload(t *testing.T) {
 	t.Parallel()
 
