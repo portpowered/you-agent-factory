@@ -100,8 +100,11 @@ type Service interface {
 	AdvanceControl(ctx context.Context, req AdvanceControlRequest) (AdvanceControlResult, error)
 }
 
-// CreateSessionRequest carries the caller identity, validated ACP working
-// root, and initial target for a new Chat Session.
+// CreateSessionRequest carries the caller identity, initial target, and
+// working root for a new Chat Session. WorkingRoot is the ACP client's
+// validated editor cwd; it is fixed for the Session's lifetime and is the
+// root a later target change (SetTarget) revalidates a requested target
+// against.
 type CreateSessionRequest struct {
 	RequestID RequestIdentity
 	// WorkingRoot is the caller-supplied ACP editor working root. It must be
