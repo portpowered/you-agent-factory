@@ -38,14 +38,18 @@ type Store struct {
 // monotonic counter used solely to give each newly terminal Turn a distinct,
 // non-zero TerminalSequence -- it is unrelated to and never written into the
 // public Session.StreamHead, since this in-memory engine does not wire into
-// a real event stream. attachments and control-intent state are added by
-// later stories as needed.
+// a real event stream. attachments holds every currently connected
+// Attachment keyed by its own ID; it is independent of session, episodes,
+// and turns -- attaching or detaching one connection never reads or writes
+// any of those fields. control-intent state is added by a later story as
+// needed.
 type sessionRecord struct {
 	session      chatsessions.Session
 	episodes     []chatsessions.TargetEpisode
 	activeTurn   *chatsessions.Turn
 	turns        map[string]chatsessions.Turn
 	turnSequence uint64
+	attachments  map[string]chatsessions.Attachment
 }
 
 // New constructs an empty Store from explicit dependencies. newID and now
