@@ -252,6 +252,17 @@ func TestCloseTargetEpisode(t *testing.T) {
 	} else if got != open {
 		t.Fatalf("CloseTargetEpisode(closedAt before StartedAt): input must not be mutated, got %+v, want %+v", got, open)
 	}
+
+	// A structurally corrupt source (OPEN but already carrying a non-nil
+	// ClosedAt) must be rejected by prior.Validate() rather than silently
+	// repaired by overwriting ClosedAt with the caller's new value.
+	corruptOpen := open
+	corruptOpen.ClosedAt = &closedAt
+	if got, err := CloseTargetEpisode(corruptOpen, closedAt.Add(time.Minute)); !errors.Is(err, ErrInconsistentValue) {
+		t.Fatalf("CloseTargetEpisode(OPEN with non-nil ClosedAt): got (%+v, %v), want ErrInconsistentValue", got, err)
+	} else if got != corruptOpen {
+		t.Fatalf("CloseTargetEpisode(OPEN with non-nil ClosedAt): input must not be mutated, got %+v, want %+v", got, corruptOpen)
+	}
 }
 
 func TestOpenNextTargetEpisode(t *testing.T) {
@@ -332,6 +343,71 @@ func TestOpenNextTargetEpisode(t *testing.T) {
 	} else if got != (TargetEpisode{}) {
 		t.Fatalf("OpenNextTargetEpisode(startedAt before prior.ClosedAt): must return a zero-value result on error, got %+v", got)
 	}
+
+	// A CLOSED prior.State is not, by itself, proof the rest of prior is a
+	// consistent history fact. Each of these corrupt-source cases must be
+	// rejected by prior.Validate() rather than silently accepted while
+	// building the next episode.
+	corruptPriors := []struct {
+		name  string
+		prior TargetEpisode
+		want  error
+	}{
+		{
+			name: "CLOSED prior with nil ClosedAt",
+			prior: TargetEpisode{
+				Number: 1, State: TargetEpisodeStateClosed,
+				Target: factoryTarget, FactorySessionID: priorFactorySessionID,
+				StartedAt: started, ClosedAt: nil,
+			},
+			want: ErrInconsistentValue,
+		},
+		{
+			name: "CLOSED prior with invalid Target",
+			prior: TargetEpisode{
+				Number: 1, State: TargetEpisodeStateClosed,
+				Target: ChatTargetRef{}, FactorySessionID: priorFactorySessionID,
+				StartedAt: started, ClosedAt: &closedAt,
+			},
+			want: ErrUnknownEnumValue,
+		},
+		{
+			name: "CLOSED prior with zero StartedAt",
+			prior: TargetEpisode{
+				Number: 1, State: TargetEpisodeStateClosed,
+				Target: factoryTarget, FactorySessionID: priorFactorySessionID,
+				StartedAt: time.Time{}, ClosedAt: &closedAt,
+			},
+			want: ErrRequiredValue,
+		},
+		{
+			name: "CLOSED prior with ClosedAt before StartedAt",
+			prior: TargetEpisode{
+				Number: 1, State: TargetEpisodeStateClosed,
+				Target: factoryTarget, FactorySessionID: priorFactorySessionID,
+				StartedAt: started, ClosedAt: &started, // set below to precede StartedAt
+			},
+			want: ErrInconsistentValue,
+		},
+	}
+	backdated := started.Add(-time.Minute)
+	corruptPriors[3].prior.ClosedAt = &backdated
+
+	for _, tt := range corruptPriors {
+		t.Run(tt.name, func(t *testing.T) {
+			beforePrior := tt.prior
+			got, err := OpenNextTargetEpisode(tt.prior, nextTarget, nextFactorySessionID, nextStarted)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("OpenNextTargetEpisode(%s): got %v, want error wrapping %v", tt.name, err, tt.want)
+			}
+			if got != (TargetEpisode{}) {
+				t.Fatalf("OpenNextTargetEpisode(%s): must return a zero-value result on error, got %+v", tt.name, got)
+			}
+			if tt.prior != beforePrior {
+				t.Fatalf("OpenNextTargetEpisode(%s): prior must not be mutated, got %+v, want %+v", tt.name, tt.prior, beforePrior)
+			}
+		})
+	}
 }
 
 func TestResolveControlIntentOutcome(t *testing.T) {
@@ -402,6 +478,29 @@ func TestResolveControlIntentOutcome(t *testing.T) {
 			}
 		})
 	}
+
+	// A blank capturedTurnID is invalid under ControlIntent.Validate() and
+	// must reject the outcome before an identity comparison (still current or
+	// mismatched) could otherwise resolve a meaningless outcome.
+	t.Run("blank captured turn id still current", func(t *testing.T) {
+		got, err := ResolveControlIntentOutcome("", TurnStateRunning, "")
+		if !errors.Is(err, ErrRequiredValue) {
+			t.Fatalf("ResolveControlIntentOutcome(blank captured id, still current): got %v, want ErrRequiredValue", err)
+		}
+		if got != "" {
+			t.Fatalf("ResolveControlIntentOutcome(blank captured id, still current): got outcome %v, want zero value on error", got)
+		}
+	})
+
+	t.Run("blank captured turn id no longer current", func(t *testing.T) {
+		got, err := ResolveControlIntentOutcome("", TurnStateRunning, otherTurn)
+		if !errors.Is(err, ErrRequiredValue) {
+			t.Fatalf("ResolveControlIntentOutcome(blank captured id, mismatched): got %v, want ErrRequiredValue", err)
+		}
+		if got != "" {
+			t.Fatalf("ResolveControlIntentOutcome(blank captured id, mismatched): got outcome %v, want zero value on error", got)
+		}
+	})
 }
 
 func TestControlAction_L1Support(t *testing.T) {

@@ -292,19 +292,39 @@ func TestFakeService_TurnAndControlLifecycle(t *testing.T) {
 // busy only for an ADMITTED or RUNNING prior turn, not for a terminal or
 // absent one, and that the returned *BusyError carries the blocking turn's
 // own identity and state.
+// startTurnRequest builds a StartTurnRequest against sessionID with a
+// distinct jsonrpcID per call, so callers issuing more than one StartTurn in
+// the same test do not collide on request identity.
+func startTurnRequest(sessionID, jsonrpcID string) chatsessions.StartTurnRequest {
+	return chatsessions.StartTurnRequest{
+		RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: jsonrpcID},
+		SessionID: sessionID,
+	}
+}
+
+// sessionWithAdmittedTurn creates a session and admits its first turn
+// (turn-1), the shared starting point for every busy/invalid-prior-state
+// admission case below.
+func sessionWithAdmittedTurn(t *testing.T, ctx context.Context, svc *fakeService) chatsessions.Session {
+	t.Helper()
+	session := newTestSession(t, ctx, svc)
+	if _, err := svc.StartTurn(ctx, startTurnRequest(session.ID, "req-1")); err != nil {
+		t.Fatalf("initial StartTurn: %v", err)
+	}
+	return session
+}
+
+func TestFakeService_StartTurnNoPriorTurnIsNotBusy(t *testing.T) {
+	ctx := context.Background()
+	svc := &fakeService{}
+	session := newTestSession(t, ctx, svc)
+	if _, err := svc.StartTurn(ctx, startTurnRequest(session.ID, "req-1")); err != nil {
+		t.Fatalf("StartTurn with no prior turn: got %v, want nil", err)
+	}
+}
+
 func TestFakeService_StartTurnAdmissionBusyCases(t *testing.T) {
 	ctx := context.Background()
-
-	t.Run("no prior turn is not busy", func(t *testing.T) {
-		svc := &fakeService{}
-		session := newTestSession(t, ctx, svc)
-		if _, err := svc.StartTurn(ctx, chatsessions.StartTurnRequest{
-			RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-1"},
-			SessionID: session.ID,
-		}); err != nil {
-			t.Fatalf("StartTurn with no prior turn: got %v, want nil", err)
-		}
-	})
 
 	for _, tt := range []struct {
 		name  string
@@ -319,19 +339,10 @@ func TestFakeService_StartTurnAdmissionBusyCases(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := &fakeService{}
-			session := newTestSession(t, ctx, svc)
-			if _, err := svc.StartTurn(ctx, chatsessions.StartTurnRequest{
-				RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-1"},
-				SessionID: session.ID,
-			}); err != nil {
-				t.Fatalf("initial StartTurn: %v", err)
-			}
+			session := sessionWithAdmittedTurn(t, ctx, svc)
 			svc.turn.State = tt.state
 
-			_, err := svc.StartTurn(ctx, chatsessions.StartTurnRequest{
-				RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-2"},
-				SessionID: session.ID,
-			})
+			_, err := svc.StartTurn(ctx, startTurnRequest(session.ID, "req-2"))
 			if !tt.busy {
 				if err != nil {
 					t.Fatalf("StartTurn with %s prior turn: got %v, want nil", tt.state, err)
@@ -350,27 +361,23 @@ func TestFakeService_StartTurnAdmissionBusyCases(t *testing.T) {
 			}
 		})
 	}
+}
 
-	// A zero or unknown prior TurnState is neither busy nor free: it is a
-	// corrupt fact that must classify as a typed invalid-state error, and
-	// admission must not overwrite the active turn with a replacement.
+// TestFakeService_StartTurnInvalidPriorStateIsRejectedNotAdmitted proves a
+// zero or unknown prior TurnState is neither busy nor free: it is a corrupt
+// fact that must classify as a typed invalid-state error, and admission must
+// not overwrite the active turn with a replacement.
+func TestFakeService_StartTurnInvalidPriorStateIsRejectedNotAdmitted(t *testing.T) {
+	ctx := context.Background()
+
 	for _, state := range []chatsessions.TurnState{"", "BOGUS"} {
 		t.Run("invalid prior turn state "+string(state)+" is rejected, not admitted", func(t *testing.T) {
 			svc := &fakeService{}
-			session := newTestSession(t, ctx, svc)
-			if _, err := svc.StartTurn(ctx, chatsessions.StartTurnRequest{
-				RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-1"},
-				SessionID: session.ID,
-			}); err != nil {
-				t.Fatalf("initial StartTurn: %v", err)
-			}
+			session := sessionWithAdmittedTurn(t, ctx, svc)
 			svc.turn.State = state
 			beforeSession, beforeTurn := svc.session, svc.turn
 
-			_, err := svc.StartTurn(ctx, chatsessions.StartTurnRequest{
-				RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-2"},
-				SessionID: session.ID,
-			})
+			_, err := svc.StartTurn(ctx, startTurnRequest(session.ID, "req-2"))
 			if !errors.Is(err, chatsessions.ErrUnknownEnumValue) {
 				t.Fatalf("StartTurn with prior turn state %q: got %v, want ErrUnknownEnumValue", state, err)
 			}
@@ -438,124 +445,118 @@ func TestFakeService_StaleVersionConflictsDoNotMutateState(t *testing.T) {
 	})
 }
 
-// TestFakeService_ControlIntentCapturedTurnRaceOutcomes proves the three
-// captured-turn race outcomes a committed ControlIntent can resolve to:
-// COMPLETED for a still-current, still-active captured turn; NOOP for a
+// committedCancelIntent starts a session's first turn, requests a CANCEL
+// control intent against it, and advances that intent to COMMITTED -- the
+// shared starting point for every captured-turn race outcome below.
+func committedCancelIntent(t *testing.T, ctx context.Context, svc *fakeService) chatsessions.ControlIntent {
+	t.Helper()
+	session := newTestSession(t, ctx, svc)
+	if _, err := svc.StartTurn(ctx, startTurnRequest(session.ID, "req-turn")); err != nil {
+		t.Fatalf("StartTurn: %v", err)
+	}
+	requested, err := svc.RequestControl(ctx, chatsessions.RequestControlRequest{
+		RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-control"},
+		SessionID: session.ID, ExpectedVersion: svc.session.Version, Action: chatsessions.ControlActionCancel,
+	})
+	if err != nil {
+		t.Fatalf("RequestControl: %v", err)
+	}
+	committed, err := svc.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
+		SessionID: session.ID, RequestID: requested.Intent.RequestID, Next: chatsessions.ControlIntentStateCommitted,
+	})
+	if err != nil {
+		t.Fatalf("AdvanceControl REQUESTED->COMMITTED: %v", err)
+	}
+	return committed.Intent
+}
+
+// TestFakeService_ControlIntentCompletedWhenStillCurrentAndActive proves a
+// still-current, still-active captured turn resolves to COMPLETED and does
+// not rebind the intent's TurnID.
+func TestFakeService_ControlIntentCompletedWhenStillCurrentAndActive(t *testing.T) {
+	ctx := context.Background()
+	svc := &fakeService{}
+	committed := committedCancelIntent(t, ctx, svc)
+
+	result, err := svc.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
+		SessionID: svc.session.ID, RequestID: committed.RequestID, Next: chatsessions.ControlIntentStateCompleted,
+	})
+	if err != nil {
+		t.Fatalf("AdvanceControl: %v", err)
+	}
+	if result.Intent.State != chatsessions.ControlIntentStateCompleted {
+		t.Fatalf("got state %v, want COMPLETED", result.Intent.State)
+	}
+	if result.Intent.TurnID != committed.TurnID {
+		t.Fatalf("outcome rebound TurnID: got %q, want %q", result.Intent.TurnID, committed.TurnID)
+	}
+}
+
+// TestFakeService_ControlIntentNoopWhenStillCurrentButTerminal proves a
 // still-current captured turn that reached a terminal state before the
-// intent completed; and SUPERSEDED for a captured turn that is no longer the
-// session's active turn, regardless of that captured turn's own state -- and
-// that none of the three ever rebinds the intent's TurnID.
-func TestFakeService_ControlIntentCapturedTurnRaceOutcomes(t *testing.T) {
+// intent completed resolves to NOOP, not COMPLETED, and does not rebind the
+// intent's TurnID.
+func TestFakeService_ControlIntentNoopWhenStillCurrentButTerminal(t *testing.T) {
+	ctx := context.Background()
+	svc := &fakeService{}
+	committed := committedCancelIntent(t, ctx, svc)
+
+	// The captured turn reaches a terminal state before the intent completes,
+	// while remaining the session's active turn (this fakeService, like a
+	// real implementation would on Detach/Advance, does not clear
+	// ActiveTurnID purely from a Turn's own transition).
+	svc.turn.State = chatsessions.TurnStateCompleted
+
+	result, err := svc.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
+		SessionID: svc.session.ID, RequestID: committed.RequestID, Next: chatsessions.ControlIntentStateCompleted,
+	})
+	if err != nil {
+		t.Fatalf("AdvanceControl: %v", err)
+	}
+	if result.Intent.State != chatsessions.ControlIntentStateNoop {
+		t.Fatalf("got state %v, want NOOP", result.Intent.State)
+	}
+	if result.Intent.TurnID != committed.TurnID {
+		t.Fatalf("outcome rebound TurnID: got %q, want %q", result.Intent.TurnID, committed.TurnID)
+	}
+}
+
+// TestFakeService_ControlIntentSupersededWhenNoLongerCurrent proves a
+// captured turn that is no longer the session's active turn resolves to
+// SUPERSEDED regardless of that captured turn's own state, and never rebinds
+// the intent's TurnID to the later turn.
+func TestFakeService_ControlIntentSupersededWhenNoLongerCurrent(t *testing.T) {
+	ctx := context.Background()
+	svc := &fakeService{}
+	committed := committedCancelIntent(t, ctx, svc)
+
+	// Simulate a later turn becoming the session's active turn after this
+	// intent already captured the prior one.
+	svc.session.ActiveTurnID = "turn-2"
+
+	result, err := svc.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
+		SessionID: svc.session.ID, RequestID: committed.RequestID, Next: chatsessions.ControlIntentStateCompleted,
+	})
+	if err != nil {
+		t.Fatalf("AdvanceControl: %v", err)
+	}
+	if result.Intent.State != chatsessions.ControlIntentStateSuperseded {
+		t.Fatalf("got state %v, want SUPERSEDED", result.Intent.State)
+	}
+	if result.Intent.TurnID != committed.TurnID || result.Intent.TurnID == "turn-2" {
+		t.Fatalf("a superseded outcome must never rebind to the later turn: got TurnID %q, captured %q", result.Intent.TurnID, committed.TurnID)
+	}
+}
+
+// TestFakeService_ControlIntentInvalidCapturedStateIsRejectedNotCompleted
+// proves an invalid captured turn state rejects the completion outcome with
+// a typed error and leaves the COMMITTED intent unchanged, both when the
+// captured turn is still current and when it is no longer current -- an
+// identity mismatch must never mask the invalid captured state as a
+// successful SUPERSEDED outcome.
+func TestFakeService_ControlIntentInvalidCapturedStateIsRejectedNotCompleted(t *testing.T) {
 	ctx := context.Background()
 
-	commit := func(t *testing.T, svc *fakeService, sessionID string) chatsessions.ControlIntent {
-		t.Helper()
-		requested, err := svc.RequestControl(ctx, chatsessions.RequestControlRequest{
-			RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-control"},
-			SessionID: sessionID, ExpectedVersion: svc.session.Version, Action: chatsessions.ControlActionCancel,
-		})
-		if err != nil {
-			t.Fatalf("RequestControl: %v", err)
-		}
-		committed, err := svc.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
-			SessionID: sessionID, RequestID: requested.Intent.RequestID, Next: chatsessions.ControlIntentStateCommitted,
-		})
-		if err != nil {
-			t.Fatalf("AdvanceControl REQUESTED->COMMITTED: %v", err)
-		}
-		return committed.Intent
-	}
-
-	t.Run("still current and active resolves to completed", func(t *testing.T) {
-		svc := &fakeService{}
-		session := newTestSession(t, ctx, svc)
-		if _, err := svc.StartTurn(ctx, chatsessions.StartTurnRequest{
-			RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-turn"},
-			SessionID: session.ID,
-		}); err != nil {
-			t.Fatalf("StartTurn: %v", err)
-		}
-		committed := commit(t, svc, session.ID)
-
-		result, err := svc.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
-			SessionID: session.ID, RequestID: committed.RequestID, Next: chatsessions.ControlIntentStateCompleted,
-		})
-		if err != nil {
-			t.Fatalf("AdvanceControl: %v", err)
-		}
-		if result.Intent.State != chatsessions.ControlIntentStateCompleted {
-			t.Fatalf("got state %v, want COMPLETED", result.Intent.State)
-		}
-		if result.Intent.TurnID != committed.TurnID {
-			t.Fatalf("outcome rebound TurnID: got %q, want %q", result.Intent.TurnID, committed.TurnID)
-		}
-	})
-
-	t.Run("still current but already terminal resolves to noop", func(t *testing.T) {
-		svc := &fakeService{}
-		session := newTestSession(t, ctx, svc)
-		if _, err := svc.StartTurn(ctx, chatsessions.StartTurnRequest{
-			RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-turn"},
-			SessionID: session.ID,
-		}); err != nil {
-			t.Fatalf("StartTurn: %v", err)
-		}
-		committed := commit(t, svc, session.ID)
-
-		// The captured turn reaches a terminal state before the intent
-		// completes, while remaining the session's active turn (this
-		// fakeService, like a real implementation would on Detach/Advance,
-		// does not clear ActiveTurnID purely from a Turn's own transition).
-		svc.turn.State = chatsessions.TurnStateCompleted
-
-		result, err := svc.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
-			SessionID: session.ID, RequestID: committed.RequestID, Next: chatsessions.ControlIntentStateCompleted,
-		})
-		if err != nil {
-			t.Fatalf("AdvanceControl: %v", err)
-		}
-		if result.Intent.State != chatsessions.ControlIntentStateNoop {
-			t.Fatalf("got state %v, want NOOP", result.Intent.State)
-		}
-		if result.Intent.TurnID != committed.TurnID {
-			t.Fatalf("outcome rebound TurnID: got %q, want %q", result.Intent.TurnID, committed.TurnID)
-		}
-	})
-
-	t.Run("no longer current resolves to superseded even if captured turn is non-terminal", func(t *testing.T) {
-		svc := &fakeService{}
-		session := newTestSession(t, ctx, svc)
-		if _, err := svc.StartTurn(ctx, chatsessions.StartTurnRequest{
-			RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-turn"},
-			SessionID: session.ID,
-		}); err != nil {
-			t.Fatalf("StartTurn: %v", err)
-		}
-		committed := commit(t, svc, session.ID)
-
-		// Simulate a later turn becoming the session's active turn after
-		// this intent already captured the prior one.
-		svc.session.ActiveTurnID = "turn-2"
-
-		result, err := svc.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
-			SessionID: session.ID, RequestID: committed.RequestID, Next: chatsessions.ControlIntentStateCompleted,
-		})
-		if err != nil {
-			t.Fatalf("AdvanceControl: %v", err)
-		}
-		if result.Intent.State != chatsessions.ControlIntentStateSuperseded {
-			t.Fatalf("got state %v, want SUPERSEDED", result.Intent.State)
-		}
-		if result.Intent.TurnID != committed.TurnID || result.Intent.TurnID == "turn-2" {
-			t.Fatalf("a superseded outcome must never rebind to the later turn: got TurnID %q, captured %q", result.Intent.TurnID, committed.TurnID)
-		}
-	})
-
-	// An invalid captured turn state must reject the completion outcome with
-	// a typed error and leave the COMMITTED intent unchanged, both when the
-	// captured turn is still current and when it is no longer current -- an
-	// identity mismatch must never mask the invalid captured state as a
-	// successful SUPERSEDED outcome.
 	for _, tt := range []struct {
 		name             string
 		state            chatsessions.TurnState
@@ -568,14 +569,7 @@ func TestFakeService_ControlIntentCapturedTurnRaceOutcomes(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := &fakeService{}
-			session := newTestSession(t, ctx, svc)
-			if _, err := svc.StartTurn(ctx, chatsessions.StartTurnRequest{
-				RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-turn"},
-				SessionID: session.ID,
-			}); err != nil {
-				t.Fatalf("StartTurn: %v", err)
-			}
-			committed := commit(t, svc, session.ID)
+			committed := committedCancelIntent(t, ctx, svc)
 			svc.turn.State = tt.state
 			if tt.rebindActiveTurn {
 				svc.session.ActiveTurnID = "turn-2"
@@ -583,7 +577,7 @@ func TestFakeService_ControlIntentCapturedTurnRaceOutcomes(t *testing.T) {
 			beforeIntent := svc.intent
 
 			_, err := svc.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
-				SessionID: session.ID, RequestID: committed.RequestID, Next: chatsessions.ControlIntentStateCompleted,
+				SessionID: svc.session.ID, RequestID: committed.RequestID, Next: chatsessions.ControlIntentStateCompleted,
 			})
 			if !errors.Is(err, chatsessions.ErrUnknownEnumValue) {
 				t.Fatalf("AdvanceControl with captured turn state %q: got %v, want ErrUnknownEnumValue", tt.state, err)
