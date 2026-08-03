@@ -254,25 +254,36 @@ Session. This record makes that routing binding for PSS:
   proving this ledger state passes and that an ambiguous/overlapping
   dispatch-owner ledger is rejected.
 
-## Required manifest follow-up
+## Applied manifest narrowing — PSS-I01
 
-D3 requires a `path-lease-packet-manifest.json` change that has **not** been
-applied. It is recorded here rather than executed because the manifest is
-validated by `internal/psslease` and edits must be made with its validators.
+D3 required a `path-lease-packet-manifest.json` change, now **applied**: the
+committed ledger's `PSS-I01` packet (`leaseClass: root-wire-process`) claims
+exactly the concrete structural contract files it genuinely owns instead of
+the blanket `pkg/wire/`, `pkg/root/`, and `pkg/initializer/` directory
+prefixes.
 
-Target packet — identified by its current exclusive paths:
-
-| Packet | `leaseClass` | Current exclusive paths | Required change |
+| Packet | `leaseClass` | Prior exclusive paths | Applied exclusive paths |
 | --- | --- | --- | --- |
-| `PSS-I01` | `root-wire-process` | `pkg/wire/` ; `pkg/root/` ; `pkg/initializer/` | Narrow to the structural surfaces it genuinely owns; drop the blanket directory prefixes so additive composition is unleased |
+| `PSS-I01` | `root-wire-process` | `pkg/wire/` ; `pkg/root/` ; `pkg/initializer/` | `pkg/root/process.go` ; `pkg/wire/profiles.go` ; `pkg/wire/wire.go` |
 
-Constraints the follow-up must respect:
-
-- `ValidateCatalog` requires `PSS-I01` to remain present. The packet is
-  **narrowed, not deleted**.
-- `exclusivePaths` must stay non-empty; an empty set fails validation.
-- The path-overlap rule is prefix-based, so `pkg/wire/` must be replaced with
-  specific files rather than left as a directory claim.
+- `PSS-I01` remains present exactly once, with its lease class, state, and
+  prerequisites unchanged. The packet is **narrowed, not deleted**, and
+  `exclusivePaths` stays non-empty.
+- Because the path-overlap rule (above) is prefix-based, the narrowed set
+  lists concrete files rather than directory prefixes, so ordinary additive
+  composition elsewhere under `pkg/wire/`, `pkg/root/`, and `pkg/initializer/`
+  (for example adding a new provider registration) is no longer serialised
+  behind this packet.
+- Genuine structural contract edits remain exclusive: a second lease holder
+  claiming `pkg/root/process.go`, `pkg/wire/profiles.go`, or `pkg/wire/wire.go`
+  while `PSS-I01` holds a lease-holding state is still rejected by
+  `ValidateDispatchCandidate`/`ValidateLeaseHolders`, with both packet
+  identities and the overlapping path in the diagnostic.
+- `internal/psslease` regression coverage proves both halves: an additive
+  composition claim outside the retained files (for example
+  `pkg/wire/service_registration.go`) is admitted alongside an active
+  `PSS-I01`, and a claim on a retained structural file is rejected before
+  activation.
 
 If a future planner instead wants "additive edits shared, structural edits
 exclusive" expressed directly, that requires a change-kind dimension in
