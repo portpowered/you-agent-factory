@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -292,5 +293,107 @@ func TestControlAttempt_BlocksUntilSignaledNativeAttemptReturns(t *testing.T) {
 	}
 	if !errors.Is(<-executeDone, providers.ErrExecuteCancelled) {
 		t.Fatal("Execute() did not observe cancellation")
+	}
+}
+
+// TestControlAttempt_DuplicateConcurrentControlsExactlyOneCompletes proves
+// story 004's "at most one supported control can claim a live attempt"
+// requirement at the root ControlAttempt level (registry.claim's exclusivity
+// is already unit-tested directly; this proves ControlAttempt actually wires
+// that guarantee through to real concurrent callers and the underlying
+// adapter observes exactly one cancellation, not one per duplicate caller).
+func TestControlAttempt_DuplicateConcurrentControlsExactlyOneCompletes(t *testing.T) {
+	t.Parallel()
+
+	fake := newCtxAwareAttempt()
+	root := mustControlCapableRootService(t, fake.attempt)
+
+	executeDone := make(chan error, 1)
+	go func() {
+		_, err := root.Execute(context.Background(), providers.ExecuteRequest{
+			Provider:  providers.IDCodex,
+			AttemptID: "duplicate-control",
+		})
+		executeDone <- err
+	}()
+	<-fake.started
+
+	const callers = 8
+	results := make(chan providers.ControlAttemptResult, callers)
+	var wg sync.WaitGroup
+	wg.Add(callers)
+	for range callers {
+		go func() {
+			defer wg.Done()
+			result, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
+				Provider:  providers.IDCodex,
+				AttemptID: "duplicate-control",
+				Action:    providers.ControlActionCancel,
+			})
+			if err != nil {
+				t.Errorf("ControlAttempt() error = %v, want nil", err)
+			}
+			results <- result
+		}()
+	}
+	wg.Wait()
+	close(results)
+
+	var completed, unsupported int
+	for result := range results {
+		switch result.Outcome {
+		case providers.ControlOutcomeCompleted:
+			completed++
+		case providers.ControlOutcomeUnsupported:
+			unsupported++
+		default:
+			t.Fatalf("unexpected outcome %q", result.Outcome)
+		}
+	}
+	if completed != 1 {
+		t.Fatalf("completed count = %d, want exactly 1", completed)
+	}
+	if unsupported != callers-1 {
+		t.Fatalf("unsupported count = %d, want %d", unsupported, callers-1)
+	}
+	if !errors.Is(<-executeDone, providers.ErrExecuteCancelled) {
+		t.Fatal("Execute() did not observe exactly one cancellation")
+	}
+}
+
+// TestControlAttempt_UnsupportedForAlreadyTerminalAttempt proves an attempt
+// that has already completed naturally (no control ever claimed it) answers
+// a later control with the deterministic unsupported outcome, not an error
+// or a stale/leaked live registration.
+func TestControlAttempt_UnsupportedForAlreadyTerminalAttempt(t *testing.T) {
+	t.Parallel()
+
+	fake := newCtxAwareAttempt()
+	root := mustControlCapableRootService(t, fake.attempt)
+
+	executeDone := make(chan error, 1)
+	go func() {
+		_, err := root.Execute(context.Background(), providers.ExecuteRequest{
+			Provider:  providers.IDCodex,
+			AttemptID: "already-terminal",
+		})
+		executeDone <- err
+	}()
+	<-fake.started
+	close(fake.release)
+	if err := <-executeDone; err != nil {
+		t.Fatalf("Execute() error = %v, want nil", err)
+	}
+
+	result, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
+		Provider:  providers.IDCodex,
+		AttemptID: "already-terminal",
+		Action:    providers.ControlActionCancel,
+	})
+	if err != nil {
+		t.Fatalf("ControlAttempt() error = %v, want nil", err)
+	}
+	if result.Outcome != providers.ControlOutcomeUnsupported {
+		t.Fatalf("ControlAttempt() outcome = %q, want unsupported for an already-terminal attempt", result.Outcome)
 	}
 }

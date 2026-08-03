@@ -25,13 +25,16 @@ type liveAttemptKey struct {
 // exact signal seam. Implementations report which actions have a truthful
 // signal for the attempt right now (supports) and, once claim has already
 // atomically proven that seam was live, deliver the signal and block until
-// the attempt observes its terminal behavior (signal). nativeAttemptControl
-// and acpAttemptControl are the two implementations; ControlAttempt and the
-// registry operate on the interface and do not need to know which kind a
-// given live identity bound.
+// the attempt observes its terminal behavior (signal). signal returns a
+// non-nil error only for a genuine delivery failure (see
+// providers.ErrControlSignalFailed), never to mean "unsupported" - claim
+// already proved supports(action) was true at the atomic claim instant.
+// nativeAttemptControl and acpAttemptControl are the two implementations;
+// ControlAttempt and the registry operate on the interface and do not need
+// to know which kind a given live identity bound.
 type liveAttemptControl interface {
 	supports(action providers.ControlAction) bool
-	signal()
+	signal() error
 }
 
 // nativeAttemptControl is the control handle bound for one in-flight native
@@ -65,10 +68,13 @@ func (control *nativeAttemptControl) supports(action providers.ControlAction) bo
 
 // signal delivers the already-validated action to the bound attempt and
 // blocks until the execution observes its terminal behavior. Callers must
-// only invoke signal after supports(action) reported true.
-func (control *nativeAttemptControl) signal() {
+// only invoke signal after supports(action) reported true. Native
+// cancellation has no genuine-failure path of its own - cancel is a plain
+// context.CancelFunc - so signal always succeeds.
+func (control *nativeAttemptControl) signal() error {
 	control.cancel()
 	<-control.done
+	return nil
 }
 
 // liveAttemptEntry is the value held for one live identity. control is nil

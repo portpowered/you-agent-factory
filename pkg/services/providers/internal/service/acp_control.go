@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -42,9 +43,19 @@ func (control *acpAttemptControl) supports(action providers.ControlAction) bool 
 // returned. Callers must only invoke signal after supports(Cancel) reported
 // true under the same registry claim, which guarantees the identity was
 // truthfully live at that atomic instant; a natural completion racing this
-// call is a harmless no-op handled by acp.Service.Cancel.
-func (control *acpAttemptControl) signal() {
+// call is a harmless no-op handled by acp.Service.Cancel. A non-nil return
+// reports a genuine delivery failure (for example the outbound notification
+// timing out against acpCancelTimeout, or the ACP connection itself
+// erroring) - distinct from "unsupported", since supports(Cancel) already
+// proved the capability was truthfully live at claim time.
+func (control *acpAttemptControl) signal() error {
 	ctx, cancel := context.WithTimeout(context.Background(), acpCancelTimeout)
 	defer cancel()
-	_ = control.acp.Cancel(ctx, control.canonical, control.attemptID)
+	if err := control.acp.Cancel(ctx, control.canonical, control.attemptID); err != nil {
+		return fmt.Errorf(
+			"%w: deliver cancel to provider %q attempt %q: %w",
+			providers.ErrControlSignalFailed, control.canonical, control.attemptID, err,
+		)
+	}
+	return nil
 }

@@ -225,6 +225,15 @@ func cloneStringMap(values map[string]string) map[string]string {
 // fails with ErrInvalidID for consistency with the rest of the root contract.
 var ErrInvalidControlRequest = errors.New("provider control request is invalid")
 
+// ErrControlSignalFailed reports that a claimed, truthfully-supported control
+// signal was not accepted by its owning live attempt for a genuine operation
+// reason (for example a broken ACP connection or a timed-out notification
+// send). It is returned as an error, distinct from the successful
+// ControlOutcomeUnsupported result: the capability was truthfully live, the
+// live registration was already removed, and the signal attempt itself
+// failed.
+var ErrControlSignalFailed = errors.New("provider control signal was not accepted")
+
 // ControlAction is the closed Providers-owned attempt-control action
 // vocabulary. Peers branch on these typed values instead of provider-specific
 // control strings.

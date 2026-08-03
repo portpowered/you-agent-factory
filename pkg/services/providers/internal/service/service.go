@@ -236,7 +236,16 @@ func (s *Service) ControlAttempt(
 	outcome := providers.ControlOutcomeUnsupported
 	key := liveAttemptKey{provider: request.Provider, attemptID: request.AttemptID}
 	if control, claimed := s.attempts.claim(key, request.Action); claimed {
-		control.signal()
+		if err := control.signal(); err != nil {
+			s.logger.Info(
+				"provider control attempt outcome",
+				"provider", string(request.Provider),
+				"attemptID", request.AttemptID,
+				"action", string(request.Action),
+				"outcome", "failed",
+			)
+			return providers.ControlAttemptResult{}, err
+		}
 		outcome = providers.ControlOutcomeCompleted
 	}
 	result := providers.ControlAttemptResult{

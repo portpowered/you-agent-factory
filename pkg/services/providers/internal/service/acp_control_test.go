@@ -477,3 +477,99 @@ func TestControlAttempt_ACPCrossProviderIdentityIsolation(t *testing.T) {
 		t.Fatalf("bystander Execute() error = %v, want nil (unrelated provider must be unaffected)", err)
 	}
 }
+
+// failingCancelACPService wraps acpAwareAttempt to report a genuine
+// signal-delivery failure from Cancel (for example a broken ACP connection)
+// while still letting the underlying attempt observe the real cancellation
+// path, proving ControlAttempt surfaces a genuine operation failure as an
+// error distinct from the successful unsupported-capability result, per
+// story 004's "control context cancellation or a real adapter signaling
+// failure remains distinguishable from an unsupported capability result"
+// requirement.
+type failingCancelACPService struct {
+	*acpAwareAttempt
+	cancelErr error
+}
+
+func (f *failingCancelACPService) Cancel(ctx context.Context, id providers.ID, attemptID string) error {
+	_ = f.acpAwareAttempt.Cancel(ctx, id, attemptID)
+	return f.cancelErr
+}
+
+func TestControlAttempt_ACPSignalFailureIsDistinguishableFromUnsupportedAndClearsRegistration(t *testing.T) {
+	t.Parallel()
+
+	fake := newACPAwareAttempt("cursor-acp")
+	failing := &failingCancelACPService{acpAwareAttempt: fake, cancelErr: errors.New("broken acp connection")}
+
+	catalogService, err := catalogwire.NewService()
+	if err != nil {
+		t.Fatalf("catalogwire.NewService() = %v", err)
+	}
+	executionService, err := executionwire.NewService(catalogService)
+	if err != nil {
+		t.Fatalf("executionwire.NewService() = %v", err)
+	}
+	logger := &recordingControlLogger{}
+	root, err := providerservice.NewWithACP(catalogService, executionService, failing, nil, logger)
+	if err != nil {
+		t.Fatalf("NewWithACP() = %v", err)
+	}
+
+	executeDone := make(chan error, 1)
+	go func() {
+		_, err := root.Execute(context.Background(), providers.ExecuteRequest{
+			Provider:  "cursor-acp",
+			AttemptID: "acp-signal-failure",
+			Model:     "cursor-model",
+		})
+		executeDone <- err
+	}()
+	<-fake.started
+	close(fake.openCancelWindow)
+	<-fake.becameCancelable
+
+	result, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
+		Provider:  "cursor-acp",
+		AttemptID: "acp-signal-failure",
+		Action:    providers.ControlActionCancel,
+	})
+	if err == nil {
+		t.Fatal("ControlAttempt() error = nil, want a genuine signal-delivery failure")
+	}
+	if !errors.Is(err, providers.ErrControlSignalFailed) {
+		t.Fatalf("ControlAttempt() error = %v, want errors.Is ErrControlSignalFailed", err)
+	}
+	if result != (providers.ControlAttemptResult{}) {
+		t.Fatalf("ControlAttempt() result = %#v, want the zero value alongside a genuine failure error", result)
+	}
+
+	var failure providers.ExecuteFailure
+	if !errors.As(<-executeDone, &failure) || failure.Kind != providers.ExecuteFailureKindCanceled {
+		t.Fatal("target Execute() did not still observe cancellation despite the reported signal failure")
+	}
+
+	outcome := logger.entriesFor("provider control attempt outcome")
+	if len(outcome) != 1 || outcome[0].fields["outcome"] != "failed" {
+		t.Fatalf("outcome log = %#v, want a single entry with outcome=failed", outcome)
+	}
+	assertNoUnsafeControlLogFields(t, outcome[0].fields)
+
+	// The live registration must already be gone (claimed atomically before
+	// signal() was even invoked, not stale): a second control for the same
+	// identity is unsupported, and the adapter is not signaled again.
+	second, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
+		Provider:  "cursor-acp",
+		AttemptID: "acp-signal-failure",
+		Action:    providers.ControlActionCancel,
+	})
+	if err != nil {
+		t.Fatalf("second ControlAttempt() error = %v, want nil", err)
+	}
+	if second.Outcome != providers.ControlOutcomeUnsupported {
+		t.Fatalf("second ControlAttempt() outcome = %q, want unsupported (registration already claimed, not stale)", second.Outcome)
+	}
+	if fake.cancelCalls != 1 {
+		t.Fatalf("ACP cancel calls = %d, want exactly 1 (no duplicate signal from the second control)", fake.cancelCalls)
+	}
+}

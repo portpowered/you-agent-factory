@@ -247,3 +247,49 @@ func TestLiveAttemptRegistry_ClaimIsExclusiveAmongConcurrentCallers(t *testing.T
 		t.Fatalf("concurrent claim() winners = %d, want exactly 1", wins)
 	}
 }
+
+// TestLiveAttemptRegistry_ClaimRacingReleaseHasOneDeterministicWinnerAndAlwaysRemoves
+// proves the natural-completion-versus-control race story 004 requires:
+// registry.claim (a control call) and the release closure returned by bind
+// (a natural Execute completion) share one mutex, so a concurrent pair of
+// them can never both observe the identity as live, and the identity is
+// always gone afterward either way. Run repeatedly (no sleep) so both
+// possible lock-acquisition orderings actually occur across iterations.
+func TestLiveAttemptRegistry_ClaimRacingReleaseHasOneDeterministicWinnerAndAlwaysRemoves(t *testing.T) {
+	t.Parallel()
+
+	for i := range 200 {
+		registry := newLiveAttemptRegistry()
+		key := liveAttemptKey{provider: providers.IDCodex, attemptID: "attempt-1"}
+		closedDone := make(chan struct{})
+		close(closedDone)
+		control := &nativeAttemptControl{cancel: func() {}, done: closedDone}
+
+		release, err := registry.bind(key, control)
+		if err != nil {
+			t.Fatalf("iteration %d: bind() error = %v, want nil", i, err)
+		}
+
+		var claimed int32
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			if _, ok := registry.claim(key, providers.ControlActionCancel); ok {
+				atomic.AddInt32(&claimed, 1)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			release()
+		}()
+		wg.Wait()
+
+		if claimed > 1 {
+			t.Fatalf("iteration %d: claim() succeeded more than once racing a concurrent release()", i)
+		}
+		if registry.contains(key) {
+			t.Fatalf("iteration %d: contains() = true after a claim/release race, want the identity removed either way", i)
+		}
+	}
+}
