@@ -99,9 +99,14 @@ func buildACPCompositionTestCollaborators(t *testing.T) (logging.Logger, chatses
 		t.Fatalf("provideChatSessionsService() error = %v", err)
 	}
 
+	factoryBuilderLocation := "/factories/@you/factory-builder"
 	factoryDefinitions := &staticFactoryDefinitionsService{
 		entries: []factorydefinitions.EffectiveFactoryCatalogEntry{
-			{Name: "@you/factory-builder", Definition: &factorydefinitions.FactoryConfig{Name: "Factory Builder"}},
+			{
+				Name:       "@you/factory-builder",
+				Location:   &factoryBuilderLocation,
+				Definition: &factorydefinitions.FactoryConfig{Name: "Factory Builder"},
+			},
 		},
 	}
 	// A non-existent Operator Settings path resolves the built-in default ACP
