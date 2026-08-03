@@ -3,16 +3,47 @@ package service_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 )
+
+// rejectingEventsService is a minimal events.Service test double whose
+// Append always fails, used to prove Publish cannot produce a locally-only
+// record when the injected Events root rejects the write: the two surfaces
+// must never be able to diverge, not even under an Events failure.
+type rejectingEventsService struct {
+	appendCalls atomic.Int64
+}
+
+var errRejectingEventsServiceAppend = errors.New("rejectingEventsService: Append always fails")
+
+func (r *rejectingEventsService) Append(context.Context, events.AppendRequest) (events.AppendResult, error) {
+	r.appendCalls.Add(1)
+	return events.AppendResult{}, errRejectingEventsServiceAppend
+}
+
+func (r *rejectingEventsService) AttachSource(context.Context, events.AttachSourceRequest) (events.AttachSourceResult, error) {
+	return events.AttachSourceResult{}, errRejectingEventsServiceAppend
+}
+
+func (r *rejectingEventsService) Read(context.Context, events.ReadRequest) (events.ReadResult, error) {
+	return events.ReadResult{}, errRejectingEventsServiceAppend
+}
+
+func (r *rejectingEventsService) Subscribe(context.Context, events.SubscribeRequest) (events.Subscription, error) {
+	return nil, errRejectingEventsServiceAppend
+}
+
+var _ events.Service = (*rejectingEventsService)(nil)
 
 func publishThroughService(
 	t *testing.T,
@@ -155,5 +186,66 @@ func TestService_ConcurrentPublishesKeepEventsPositionsInLockstepWithStoreSequen
 	}
 	if store.LatestSequence() != int64(want) {
 		t.Fatalf("store.LatestSequence() = %d, want %d", store.LatestSequence(), want)
+	}
+}
+
+// TestService_PublishFailsAtomicallyWhenEventsRejectsTheAppend proves Events
+// is the authority the local store's own record depends on, not a
+// best-effort shadow copy: when the injected Events root's Append fails, the
+// whole Publish call fails and the session-owned store is left completely
+// untouched (no sequence assigned, no subscriber notified) -- the two
+// surfaces can never observe different records because Events accepting the
+// write is a precondition for the store ever seeing it, not an
+// after-the-fact side effect that can silently fail alone.
+func TestService_PublishFailsAtomicallyWhenEventsRejectsTheAppend(t *testing.T) {
+	t.Parallel()
+
+	rejecting := &rejectingEventsService{}
+	service, err := serviceWithEvents(t, rejecting)
+	if err != nil {
+		t.Fatalf("construct response-stream service: %v", err)
+	}
+	store := newStore(t, service)
+
+	subscribed, err := service.Subscribe(context.Background(), store, responsestreamservice.SubscriptionRequest{})
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer subscribed.Detach()
+
+	if _, err := service.Publish(store, responseevents.FactoryResponseEvent{
+		DispatchID: "dispatch-1",
+		RunID:      "run-1",
+		Kind:       responseevents.KindMessage,
+		Phase:      responseevents.PhaseDelta,
+		Provenance: responseevents.Provenance{
+			Provider: "test", NativeEventType: "delta",
+			Delivery:       responseevents.DeliveryNativeStream,
+			Representation: responseevents.RepresentationDelta,
+			Fidelity:       responseevents.FidelityLossless,
+		},
+		Payload: json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"hello"}`),
+	}); !errors.Is(err, errRejectingEventsServiceAppend) {
+		t.Fatalf("Publish() error = %v, want it to wrap the Events rejection", err)
+	}
+
+	if rejecting.appendCalls.Load() != 1 {
+		t.Fatalf("Events Append call count = %d, want exactly 1", rejecting.appendCalls.Load())
+	}
+	if got := store.LatestSequence(); got != 0 {
+		t.Fatalf("store.LatestSequence() = %d, want 0 (a rejected Publish must never assign a local sequence)", got)
+	}
+	if events := store.Events(); len(events) != 0 {
+		t.Fatalf("store.Events() = %d, want 0 (a rejected Publish must never retain a local record)", len(events))
+	}
+
+	drainCtx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	got, err := subscribed.Next(drainCtx)
+	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Next() error = %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("subscriber observed %d events after a rejected Publish, want 0 (no partial/local-only notification)", len(got))
 	}
 }

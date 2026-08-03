@@ -28,6 +28,13 @@ type Store struct {
 	maxRetainedPerTopic int
 	logger              logging.Logger
 	closed              bool
+
+	// attachMu serializes AttachSource calls store-wide so two concurrent
+	// requests can never each observe an individually-acyclic graph and
+	// register complementary edges that together form a cycle. It guards
+	// only attachment-graph structural changes; Append/Read/Subscribe never
+	// take it and stay on their existing per-topic ts.mu fast path.
+	attachMu sync.Mutex
 }
 
 var _ events.Service = (*Store)(nil)

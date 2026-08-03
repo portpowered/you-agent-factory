@@ -258,6 +258,96 @@ func (s *SessionResponseEventStore) Publish(input responseevents.FactoryResponse
 	return cloneEvent(stored), nil
 }
 
+// PrepareInput normalizes input's schema version, factory session ID, and
+// recorded-at timestamp exactly as Publish does internally, without
+// assigning identity or mutating any store state. It exists so a caller
+// that must know a publish's fully normalized content before this store's
+// state changes -- for example, to compute an external identity/order
+// authority's payload before deciding whether that authority accepts the
+// record -- can do so safely and without a lock.
+func (s *SessionResponseEventStore) PrepareInput(input responseevents.FactoryResponseEvent) responseevents.FactoryResponseEvent {
+	if s == nil {
+		return input
+	}
+	return s.preparePublishInput(input)
+}
+
+// NextSequenceHint returns the sequence PublishWithIdentity must be given to
+// be accepted as this store's next record, based on the latest sequence
+// assigned so far. It is only a safe prediction when the caller is this
+// store's sole publisher (as ResponseStream.Publish's single serialized
+// entry point guarantees for every store it constructs); a store published
+// to directly, outside that serialized path, must keep using Publish.
+func (s *SessionResponseEventStore) NextSequenceHint() int64 {
+	return s.LatestSequence() + 1
+}
+
+// PublishWithIdentity behaves exactly like Publish -- the same validation,
+// retained-append, retention enforcement, and subscriber notification --
+// except sequence and eventID are supplied by the caller (already
+// normalized via PrepareInput) instead of generated internally. It exists
+// so an external identity/order authority (the injected Events root) can be
+// given the exact identity a publish will use, and can reject the whole
+// publish deterministically, before this store -- or any of its
+// subscribers -- ever observes it: the caller is expected to call the
+// external authority first and only call PublishWithIdentity once that
+// authority has already accepted the same identity, so the two can never
+// disagree about which records exist for this session. sequence must equal
+// NextSequenceHint() at the time of the call; any other value is rejected
+// with ErrSequenceMismatch without mutating state.
+func (s *SessionResponseEventStore) PublishWithIdentity(prepared responseevents.FactoryResponseEvent, sequence int64, eventID string) (responseevents.FactoryResponseEvent, error) {
+	if s == nil {
+		return responseevents.FactoryResponseEvent{}, errNilStore
+	}
+	if prepared.FactorySessionID != s.factorySessionID {
+		return responseevents.FactoryResponseEvent{}, fmt.Errorf(
+			"%w: got %q, want %q",
+			ErrFactorySessionMismatch,
+			prepared.FactorySessionID,
+			s.factorySessionID,
+		)
+	}
+	if strings.TrimSpace(eventID) == "" {
+		return responseevents.FactoryResponseEvent{}, errors.New("response event ID is required")
+	}
+	prepared.Sequence = sequence
+	prepared.EventID = eventID
+	if err := responseevents.ValidateEvent(prepared); err != nil {
+		return responseevents.FactoryResponseEvent{}, err
+	}
+
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return responseevents.FactoryResponseEvent{}, ErrStoreClosed
+	}
+	if s.completed {
+		s.mu.Unlock()
+		return responseevents.FactoryResponseEvent{}, ErrStoreCompleted
+	}
+	if sequence != s.nextSequence+1 {
+		s.mu.Unlock()
+		return responseevents.FactoryResponseEvent{}, fmt.Errorf("%w: got %d, want %d", ErrSequenceMismatch, sequence, s.nextSequence+1)
+	}
+	stored := cloneEvent(prepared)
+	storedBytes, err := SerializedEventSize(stored)
+	if err != nil {
+		s.mu.Unlock()
+		return responseevents.FactoryResponseEvent{}, err
+	}
+	s.nextSequence = sequence
+	s.events = append(s.events, stored)
+	s.eventSizes = append(s.eventSizes, storedBytes)
+	s.retainedBytes += storedBytes
+	s.enforceRetentionLocked()
+	subscribers := s.subscribersSnapshotLocked()
+	s.mu.Unlock()
+
+	notifyStoreSubscribers(subscribers)
+
+	return cloneEvent(stored), nil
+}
+
 func (s *SessionResponseEventStore) enforceRetentionLocked() {
 	for len(s.events) > s.limits.MaxEvents || s.retainedBytes > s.limits.MaxBytes {
 		index := s.evictionIndexLocked()

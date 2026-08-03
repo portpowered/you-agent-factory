@@ -33,20 +33,22 @@ type attachmentForward struct {
 // forwarded the moment it commits -- both phases run under the source
 // topic's own lock, so no source commit can ever be observed out of order
 // or missed across the retained-to-live handoff. A StartAt naming a position
-// the source topic has already evicted is not itself a rejection (unlike a
-// StartAt beyond the live head): AttachSource reuses the same retained-range
-// resolution Read/Subscribe use, reports the resulting GapFacts once via a
-// safe structured log, and resumes forwarding from the earliest still
-// retained record, mirroring Subscribe's own gap recovery rather than
-// Read's stricter invalid-cursor outcome, since there is no per-attachment
-// consumer to hand a Gap outcome to the way Subscribe's Delivery does.
+// the source topic has already evicted is rejected with ErrUnresolvableCursor
+// before any record is forwarded or attachment registered, exactly like a
+// StartAt beyond the live head: unlike Subscribe (which has a per-consumer
+// Delivery to report a recovered Gap through), AttachSource has no outcome
+// vocabulary for "some requested history was silently lost," so it never
+// forwards a partial backlog.
 //
 // Forwarded records preserve the source record's identity, schema, and
 // detached payload; only the destination's own aggregate position differs.
 // A destination is itself eligible to be a further attachment source, so
-// forwarding chains recurse; AttachSource only rejects the direct
-// Destination == Source case, not a longer forwarding cycle, so attaching
-// topics in a cycle can deadlock and is out of this Store's supported usage.
+// forwarding chains recurse; AttachSource rejects both the direct
+// Destination == Source case (via req.Validate) and any longer forwarding
+// cycle (Source indirectly reachable from Destination through already
+// registered attachments) with ErrSelfAttachment before registering
+// anything, so no accepted attachment graph can ever deadlock Append's
+// nested destination-lock forwarding.
 func (st *Store) AttachSource(ctx context.Context, req events.AttachSourceRequest) (result events.AttachSourceResult, err error) {
 	defer func() {
 		st.logAttachOutcome(req, result, err)
@@ -59,6 +61,19 @@ func (st *Store) AttachSource(ctx context.Context, req events.AttachSourceReques
 		return events.AttachSourceResult{}, err
 	}
 	st.logAttachIntent(req)
+
+	// attachMu serializes the whole call against every other AttachSource,
+	// so the reachability check below and the registration it guards form
+	// one atomic step against the attachment graph: no concurrent AttachSource
+	// call can register a complementary edge that only individually looked
+	// acyclic.
+	st.attachMu.Lock()
+	defer st.attachMu.Unlock()
+
+	if st.reachable(req.Destination, req.Source) {
+		err = events.ErrSelfAttachment
+		return events.AttachSourceResult{}, err
+	}
 
 	id := events.AttachmentID{Destination: req.Destination, Source: req.Source}
 	srcTS := st.topic(req.Source)
@@ -76,7 +91,6 @@ func (st *Store) AttachSource(ctx context.Context, req events.AttachSourceReques
 	}
 
 	var catchup []events.Record
-	var gap *events.GapFacts
 	var startAt events.Cursor
 	switch req.Mode {
 	case events.AttachModeLiveOnly:
@@ -87,7 +101,12 @@ func (st *Store) AttachSource(ctx context.Context, req events.AttachSourceReques
 			err = events.ErrUnresolvableCursor
 			return events.AttachSourceResult{}, err
 		}
-		catchup, gap = srcTS.catchupLocked(req.Source, req.StartAt.Position)
+		if earliest := srcTS.earliestLocked(); earliest > 1 && req.StartAt.Position < earliest {
+			srcTS.mu.Unlock()
+			err = events.ErrUnresolvableCursor
+			return events.AttachSourceResult{}, err
+		}
+		catchup, _ = srcTS.catchupLocked(req.Source, req.StartAt.Position)
 		startAt = req.StartAt
 	}
 
@@ -97,11 +116,42 @@ func (st *Store) AttachSource(ctx context.Context, req events.AttachSourceReques
 	srcTS.attachments[req.Destination] = &attachmentForward{startAt: startAt}
 	srcTS.mu.Unlock()
 
-	if gap != nil {
-		st.logAttachGap(req, gap)
-	}
 	result = events.AttachSourceResult{ID: id, Outcome: events.AttachOutcomeAccepted, StartAt: startAt}
 	return result, nil
+}
+
+// reachable reports whether target is reachable from start by following
+// currently registered attachment edges (start -> ... -> target) forward.
+// It locks at most one topic at a time -- never two simultaneously -- so the
+// traversal itself can never deadlock against Append's nested
+// source-then-destination forwarding locks; callers hold st.attachMu so the
+// attachment graph cannot change out from under the traversal.
+func (st *Store) reachable(start, target events.Topic) bool {
+	visited := map[events.Topic]bool{start: true}
+	queue := []events.Topic{start}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+
+		ts := st.topic(cur)
+		ts.mu.Lock()
+		next := make([]events.Topic, 0, len(ts.attachments))
+		for dest := range ts.attachments {
+			next = append(next, dest)
+		}
+		ts.mu.Unlock()
+
+		for _, dest := range next {
+			if dest == target {
+				return true
+			}
+			if !visited[dest] {
+				visited[dest] = true
+				queue = append(queue, dest)
+			}
+		}
+	}
+	return false
 }
 
 // forwardRecord commits rec (already accepted on some other topic) into

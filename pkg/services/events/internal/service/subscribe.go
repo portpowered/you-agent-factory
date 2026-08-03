@@ -145,11 +145,13 @@ func (st *Store) Subscribe(ctx context.Context, req events.SubscribeRequest) (ev
 
 	catchup, gap := ts.catchupLocked(req.Topic, req.From.Position)
 	sub := newLiveSubscriber(req.Limit)
+	var subID uint64
 	if ts.closed {
 		sub.terminate(events.DeliveryClosed)
 	} else {
 		ts.nextSubID++
-		ts.subscribers[ts.nextSubID] = sub
+		subID = ts.nextSubID
+		ts.subscribers[subID] = sub
 	}
 	ts.mu.Unlock()
 
@@ -162,6 +164,7 @@ func (st *Store) Subscribe(ctx context.Context, req events.SubscribeRequest) (ev
 		store:   st,
 		topic:   req.Topic,
 		sub:     sub,
+		subID:   subID,
 		catchup: catchup,
 		gap:     gap,
 	}
@@ -169,26 +172,40 @@ func (st *Store) Subscribe(ctx context.Context, req events.SubscribeRequest) (ev
 }
 
 // subscriptionState is the mutable cursor behind one Subscribe call's
-// returned events.Subscription closure.
+// returned events.Subscription closure. subID is the topic-scoped
+// registration key used to unregister sub from ts.subscribers on
+// cancellation; it is zero when the subscription started already closed
+// (never registered in the first place, so there is nothing to unregister).
 type subscriptionState struct {
 	store *Store
 	topic events.Topic
 	sub   *liveSubscriber
+	subID uint64
 
-	mu      sync.Mutex
-	gap     *events.GapFacts
-	catchup []events.Record
+	mu       sync.Mutex
+	gap      *events.GapFacts
+	catchup  []events.Record
+	canceled bool
 }
 
-// next observes the next Delivery: a canceled context is checked first
-// (unlike Read, this can fire on every call since a Subscription is
-// long-lived), then any pending gap notice, then any remaining catch-up
-// record, then a live record or the fixed terminal kind once the live
-// buffer is closed and drained.
+// next observes the next Delivery: once this subscription has ever observed
+// a canceled context, it is permanently terminal -- every later call, even
+// with a fresh, uncanceled context, deterministically returns the same
+// DeliveryCanceled outcome rather than resuming catch-up/gap/live delivery.
+// Otherwise a canceled context is checked first (this can fire on every call
+// since a Subscription is long-lived), then any pending gap notice, then any
+// remaining catch-up record, then a live record or the fixed terminal kind
+// once the live buffer is closed and drained.
 func (s *subscriptionState) next(ctx context.Context) events.Delivery {
+	s.mu.Lock()
+	alreadyCanceled := s.canceled
+	s.mu.Unlock()
+	if alreadyCanceled {
+		return s.cancel()
+	}
+
 	if err := ctx.Err(); err != nil {
-		s.store.logSubscribeCanceled(s.topic)
-		return events.Delivery{Kind: events.DeliveryCanceled}
+		return s.cancel()
 	}
 
 	s.mu.Lock()
@@ -213,7 +230,46 @@ func (s *subscriptionState) next(ctx context.Context) events.Delivery {
 		}
 		return events.Delivery{Kind: events.DeliveryRecord, Record: rec, Cursor: events.Cursor{Topic: s.topic, Position: rec.ID.Position}}
 	case <-ctx.Done():
-		s.store.logSubscribeCanceled(s.topic)
-		return events.Delivery{Kind: events.DeliveryCanceled}
+		return s.cancel()
 	}
+}
+
+// cancel atomically terminalizes s with DeliveryCanceled: it discards any
+// pending gap/catch-up so a later call (even with a fresh context) cannot
+// resume delivering them, unregisters the underlying live subscriber from
+// its topic so no future commit is ever offered to it again (proving
+// append-after-cancel cannot deliver), and closes the live buffer so every
+// later Next observes the same terminal kind. Only the first call has any
+// side effect (unregistering, logging); later calls just re-report the
+// already-persisted terminal kind, which -- because liveSubscriber.terminate
+// is itself first-kind-wins -- stays DeliveryCanceled even if the store
+// later also closes the topic.
+func (s *subscriptionState) cancel() events.Delivery {
+	s.mu.Lock()
+	first := !s.canceled
+	s.canceled = true
+	s.gap = nil
+	s.catchup = nil
+	s.mu.Unlock()
+
+	s.sub.terminate(events.DeliveryCanceled)
+	if first {
+		s.store.unregisterSubscriber(s.topic, s.subID)
+		s.store.logSubscribeCanceled(s.topic)
+	}
+	return events.Delivery{Kind: s.sub.terminalKind()}
+}
+
+// unregisterSubscriber removes id from topic's live registration when still
+// present. id == 0 means the subscription started already closed (never
+// registered), and a missing id is a harmless no-op (for example, backpressure
+// eviction or topic closure already removed it).
+func (st *Store) unregisterSubscriber(topic events.Topic, id uint64) {
+	if id == 0 {
+		return
+	}
+	ts := st.topic(topic)
+	ts.mu.Lock()
+	delete(ts.subscribers, id)
+	ts.mu.Unlock()
 }

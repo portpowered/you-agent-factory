@@ -189,6 +189,77 @@ func TestSubscribe_ContextCancellationWhileBlockedReleasesNext(t *testing.T) {
 	}
 }
 
+func TestSubscribe_CancellationIsPersistentAcrossLaterLiveContextCalls(t *testing.T) {
+	st := New()
+	ctx := context.Background()
+	sub := mustSubscribe(t, st, ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 10})
+
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	first := sub.Next(canceledCtx)
+	if first.Kind != events.DeliveryCanceled {
+		t.Fatalf("first Next().Kind = %v, want DeliveryCanceled", first.Kind)
+	}
+
+	// A fresh, never-canceled context must not resume delivery: once a
+	// subscription has observed cancellation it is permanently terminal.
+	appendN(t, st, ctx, subscribeTestTopic, 1)
+
+	live := sub.Next(context.Background())
+	if live.Kind != events.DeliveryCanceled {
+		t.Fatalf("Next() with a fresh live context after cancellation = %v, want DeliveryCanceled (a canceled subscription must never resume)", live.Kind)
+	}
+
+	// Repeated observation stays deterministic.
+	again := sub.Next(context.Background())
+	if again.Kind != events.DeliveryCanceled {
+		t.Fatalf("repeated Next() after cancellation = %v, want DeliveryCanceled", again.Kind)
+	}
+}
+
+func TestSubscribe_CancellationUnregistersSubscriberSoAppendAfterCancelIsNotDelivered(t *testing.T) {
+	st := New()
+	ctx := context.Background()
+
+	ts := st.topic(subscribeTestTopic)
+	ts.mu.Lock()
+	before := len(ts.subscribers)
+	ts.mu.Unlock()
+	if before != 0 {
+		t.Fatalf("topic has %d subscribers before Subscribe, want 0", before)
+	}
+
+	sub := mustSubscribe(t, st, ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 10})
+
+	ts.mu.Lock()
+	afterSubscribe := len(ts.subscribers)
+	ts.mu.Unlock()
+	if afterSubscribe != 1 {
+		t.Fatalf("topic has %d subscribers after Subscribe, want 1", afterSubscribe)
+	}
+
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if delivery := sub.Next(canceledCtx); delivery.Kind != events.DeliveryCanceled {
+		t.Fatalf("Next().Kind = %v, want DeliveryCanceled", delivery.Kind)
+	}
+
+	ts.mu.Lock()
+	afterCancel := len(ts.subscribers)
+	ts.mu.Unlock()
+	if afterCancel != 0 {
+		t.Fatalf("topic has %d subscribers after cancellation, want 0 (the subscriber must be unregistered so no future commit is offered to it)", afterCancel)
+	}
+
+	// A record appended after cancellation must not be delivered: the
+	// subscription is already permanently terminal.
+	appendN(t, st, ctx, subscribeTestTopic, 1)
+	if delivery := sub.Next(context.Background()); delivery.Kind != events.DeliveryCanceled {
+		t.Fatalf("Next() after append-following-cancel = %v, want DeliveryCanceled", delivery.Kind)
+	}
+}
+
 func TestSubscribe_BackpressureTerminatesConsumerWithoutSilentLoss(t *testing.T) {
 	st := New()
 	ctx := context.Background()

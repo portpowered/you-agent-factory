@@ -526,7 +526,7 @@ func TestAttachSource_RejectedLogsClassificationOnlyWithoutIntentLog(t *testing.
 	}
 }
 
-func TestAttachSource_GapLogsSafeFacts(t *testing.T) {
+func TestAttachSource_EvictedStartAtLogsRejectedUnresolvableCursor(t *testing.T) {
 	logger, calls := newCaptureLogger()
 	st := NewWithRetention(2, logger)
 	ctx := context.Background()
@@ -541,24 +541,22 @@ func TestAttachSource_GapLogsSafeFacts(t *testing.T) {
 		StartAt:     events.Cursor{Topic: source, Position: 1},
 		Mode:        events.AttachModeRetainedThenLive,
 	})
-	if err != nil {
-		t.Fatalf("AttachSource() error = %v", err)
+	if !errors.Is(err, events.ErrUnresolvableCursor) {
+		t.Fatalf("AttachSource() error = %v, want ErrUnresolvableCursor", err)
 	}
 
-	var found bool
-	for _, call := range *calls {
-		if call.msg == "events attach gap" {
-			found = true
-			if !hasKV(call.kv, "earliest_retained", uint64(4)) {
-				t.Fatalf("gap log missing earliest_retained=4: %+v", call.kv)
-			}
-			if !hasKV(call.kv, "requested", uint64(1)) {
-				t.Fatalf("gap log missing requested=1: %+v", call.kv)
-			}
-		}
+	// This rejection happens after request-shape validation succeeds (the
+	// gap is only discoverable against source topic state), so -- unlike the
+	// self-attachment case rejected by Validate itself -- the intent log
+	// still fires, matching logAppendIntent's identical timing precedent.
+	if len(*calls) != 2 {
+		t.Fatalf("rejected AttachSource() logged %d calls, want 2 (intent + rejected outcome): %+v", len(*calls), *calls)
 	}
-	if !found {
-		t.Fatalf("no attach gap log emitted: %+v", *calls)
+	if !hasKV((*calls)[1].kv, "outcome", "rejected") {
+		t.Fatalf("outcome log missing outcome=rejected: %+v", (*calls)[1].kv)
+	}
+	if !hasKV((*calls)[1].kv, "error_class", "unresolvable_cursor") {
+		t.Fatalf("outcome log missing error_class=unresolvable_cursor: %+v", (*calls)[1].kv)
 	}
 }
 

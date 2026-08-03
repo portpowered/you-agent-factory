@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 )
@@ -315,7 +316,7 @@ func TestAttachSource_StartAtBeyondHeadIsRejected(t *testing.T) {
 	}
 }
 
-func TestAttachSource_EvictedStartAtRecoversFromEarliestRetained(t *testing.T) {
+func TestAttachSource_EvictedStartAtIsRejectedWithoutPartialForwarding(t *testing.T) {
 	st := NewWithRetention(2)
 	ctx := context.Background()
 	source := events.Topic("factory-session/gap/response-events")
@@ -326,29 +327,81 @@ func TestAttachSource_EvictedStartAtRecoversFromEarliestRetained(t *testing.T) {
 	appendFixture(st, ctx, t, source, 3, "evt-3")
 	appendFixture(st, ctx, t, source, 4, "evt-4") // retention cap 2 -> records 3,4 retained
 
-	result, err := st.AttachSource(ctx, events.AttachSourceRequest{
+	_, err := st.AttachSource(ctx, events.AttachSourceRequest{
 		Destination: destination,
 		Source:      source,
 		StartAt:     events.Cursor{Topic: source, Position: 1},
 		Mode:        events.AttachModeRetainedThenLive,
 	})
-	if err != nil {
-		t.Fatalf("AttachSource() error = %v, want a successful gap-recovering attachment, not a rejection", err)
-	}
-	if result.Outcome != events.AttachOutcomeAccepted {
-		t.Fatalf("Outcome = %v, want AttachOutcomeAccepted", result.Outcome)
-	}
-	if result.StartAt.Position != 1 {
-		t.Fatalf("StartAt.Position = %d, want 1 (the caller's requested StartAt is echoed back even though it recovered from a gap)", result.StartAt.Position)
+	if !errors.Is(err, events.ErrUnresolvableCursor) {
+		t.Fatalf("AttachSource() error = %v, want ErrUnresolvableCursor (a StartAt naming an evicted position must be rejected, not silently recovered)", err)
 	}
 
-	destRecords := readAll(st, ctx, t, destination)
-	if len(destRecords) != 2 {
-		t.Fatalf("destination has %d records, want 2 (only the still-retained backlog: source seq 3 and 4)", len(destRecords))
+	if destRecords := readAll(st, ctx, t, destination); len(destRecords) != 0 {
+		t.Fatalf("destination has %d records after a rejected AttachSource, want 0 (no partial attachment/forwarding)", len(destRecords))
 	}
-	if destRecords[0].SourceSequence != 3 || destRecords[1].SourceSequence != 4 {
-		t.Fatalf("destination forwarded source sequences [%d,%d], want [3,4] (recovery must start from the earliest still-retained record, never fabricating the evicted ones)",
-			destRecords[0].SourceSequence, destRecords[1].SourceSequence)
+
+	// A rejected request must not register an attachment: a valid attach for
+	// the same pair afterward must still report AttachOutcomeAccepted.
+	result, err := st.AttachSource(ctx, events.AttachSourceRequest{
+		Destination: destination,
+		Source:      source,
+		StartAt:     events.Cursor{Topic: source, Position: 4},
+		Mode:        events.AttachModeRetainedThenLive,
+	})
+	if err != nil {
+		t.Fatalf("AttachSource() after rejection error = %v", err)
+	}
+	if result.Outcome != events.AttachOutcomeAccepted {
+		t.Fatalf("Outcome = %v, want AttachOutcomeAccepted (no attachment should have been registered by the rejected call)", result.Outcome)
+	}
+}
+
+func TestAttachSource_IndirectCycleIsRejectedWithoutDeadlock(t *testing.T) {
+	st := New()
+	ctx := context.Background()
+	a := events.Topic("factory-session/cycle-a/response-events")
+	b := events.Topic("factory-session/cycle-b/response-events")
+	c := events.Topic("factory-session/cycle-c/response-events")
+
+	// a -> b -> c is a valid acyclic chain.
+	if _, err := st.AttachSource(ctx, events.AttachSourceRequest{
+		Destination: b, Source: a, StartAt: events.Cursor{Topic: a}, Mode: events.AttachModeRetainedThenLive,
+	}); err != nil {
+		t.Fatalf("AttachSource(a->b) error = %v", err)
+	}
+	if _, err := st.AttachSource(ctx, events.AttachSourceRequest{
+		Destination: c, Source: b, StartAt: events.Cursor{Topic: b}, Mode: events.AttachModeRetainedThenLive,
+	}); err != nil {
+		t.Fatalf("AttachSource(b->c) error = %v", err)
+	}
+
+	// c -> a would close the cycle a -> b -> c -> a and must be rejected.
+	_, err := st.AttachSource(ctx, events.AttachSourceRequest{
+		Destination: a, Source: c, StartAt: events.Cursor{Topic: c}, Mode: events.AttachModeRetainedThenLive,
+	})
+	if !errors.Is(err, events.ErrSelfAttachment) {
+		t.Fatalf("AttachSource(c->a) error = %v, want ErrSelfAttachment (indirect cycle)", err)
+	}
+
+	// Proves no deadlock was introduced: an append cascading a -> b -> c must
+	// still complete and observe the accepted chain, not the rejected edge.
+	done := make(chan struct{})
+	go func() {
+		appendFixture(st, ctx, t, a, 1, "evt-1")
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Append cascading through the attachment chain did not complete, want no deadlock")
+	}
+
+	if recs := readAll(st, ctx, t, c); len(recs) != 1 {
+		t.Fatalf("destination c has %d records, want 1 (forwarded through the accepted a->b->c chain)", len(recs))
+	}
+	if recs := readAll(st, ctx, t, a); len(recs) != 1 {
+		t.Fatalf("source a has %d records, want 1 (the rejected c->a edge must not have forwarded anything back)", len(recs))
 	}
 }
 

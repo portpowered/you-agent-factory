@@ -201,20 +201,6 @@ func (st *Store) logAttachOutcome(req events.AttachSourceRequest, result events.
 	st.logger.Info("events attach outcome", fields...)
 }
 
-// logAttachGap records that a newly accepted attachment's starting position
-// had already been evicted from the source topic's retained window: safe
-// destination/source/requested/earliest-retained/head facts, logged exactly
-// once at attach time, never payload content.
-func (st *Store) logAttachGap(req events.AttachSourceRequest, gap *events.GapFacts) {
-	st.logger.Info("events attach gap",
-		"destination", string(req.Destination),
-		"source", string(req.Source),
-		"requested", uint64(gap.Requested),
-		"earliest_retained", uint64(gap.EarliestRetained),
-		"head", uint64(gap.Head),
-	)
-}
-
 // logAttachTopicClosed records that a topic's outgoing attachment
 // registrations were torn down by Store.Close(): safe topic context and the
 // number of attachments removed, logged exactly once per topic closure.

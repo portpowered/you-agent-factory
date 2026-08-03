@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 )
@@ -145,5 +146,68 @@ func TestAttachSource_ConcurrentIdempotentAttachOnlyRegistersOnce(t *testing.T) 
 	destRecords := readAll(st, ctx, t, destination)
 	if len(destRecords) != 1 {
 		t.Fatalf("destination has %d records, want exactly 1: concurrent idempotent attaches must never register more than one forwarding path", len(destRecords))
+	}
+}
+
+// TestAttachSource_ConcurrentComplementaryEdgesNeverFormACycle races two
+// goroutines each trying to register one half of a two-topic cycle (a->b and
+// b->a) many times over. attachMu must serialize the reachability check
+// against registration so the two calls can never both observe the graph as
+// still acyclic and each accept their own edge -- if that happened, the
+// resulting cycle would deadlock a later Append cascading through both
+// topics (see the direct-chain deadlock this guards against in
+// attach_test.go's IndirectCycleIsRejectedWithoutDeadlock). Every round
+// exactly one of the two calls must be accepted.
+func TestAttachSource_ConcurrentComplementaryEdgesNeverFormACycle(t *testing.T) {
+	const rounds = 30
+
+	for round := range rounds {
+		st := New()
+		ctx := context.Background()
+		a := events.Topic(fmt.Sprintf("factory-session/race-cycle-a-%d/response-events", round))
+		b := events.Topic(fmt.Sprintf("factory-session/race-cycle-b-%d/response-events", round))
+
+		var wg sync.WaitGroup
+		var mu sync.Mutex
+		var accepted int
+		race := func(destination, source events.Topic) {
+			defer wg.Done()
+			result, err := st.AttachSource(ctx, events.AttachSourceRequest{
+				Destination: destination,
+				Source:      source,
+				StartAt:     events.Cursor{Topic: source},
+				Mode:        events.AttachModeRetainedThenLive,
+			})
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			if result.Outcome == events.AttachOutcomeAccepted {
+				accepted++
+			}
+			mu.Unlock()
+		}
+
+		wg.Add(2)
+		go race(b, a) // a -> b
+		go race(a, b) // b -> a
+		wg.Wait()
+
+		if accepted != 1 {
+			t.Fatalf("round %d: accepted count = %d, want exactly 1 (one edge must win, the complementary edge must be rejected as a cycle)", round, accepted)
+		}
+
+		// Proves no deadlock was introduced by whichever edge won.
+		done := make(chan struct{})
+		go func() {
+			appendFixture(st, ctx, t, a, 1, "evt-1")
+			appendFixture(st, ctx, t, b, 1, "evt-1")
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("round %d: Append did not complete, want no deadlock", round)
+		}
 	}
 }

@@ -152,15 +152,17 @@ func (s *ResponseStream) Complete(store *responseeventstore.SessionResponseEvent
 	}
 }
 
-// Publish accepts one response event into the session-owned store, exactly
-// as before, and then mirrors the accepted, identity-assigned record into the
-// injected Events root on a session-scoped topic. The store's own sequence
-// remains the sole assignment authority; publish and mirror are serialized
-// together under publishMu so a topic's Events aggregate positions always
-// agree 1:1 with the store's own sequence, even under concurrent publishers.
-// A mirror failure (for example Events shutting down mid-process) is logged
-// and does not fail the accepted local publish: the session-scoped store
-// remains the proven, tested surface SubscribeFactoryResponseEvents serves.
+// Publish assigns identity for event through the injected Events root
+// before this session's store ever observes it: Events.Append is the
+// authority that accepts or rejects the record, using the exact sequence
+// and event ID this call also gives the store, so the two can never
+// disagree about which records exist for this session or in what order. If
+// Events rejects the append, Publish fails and the store's retained state
+// and subscribers are left untouched -- no partial, mirrored, or
+// locally-only record is ever produced. Publish and every other publish
+// (for any session) are serialized together under publishMu, since
+// predicting the store's next sequence before assigning it through Events
+// is only safe against a single in-flight publisher at a time.
 func (s *ResponseStream) Publish(store *responseeventstore.SessionResponseEventStore, event responseevents.FactoryResponseEvent) (responseevents.FactoryResponseEvent, error) {
 	if store == nil {
 		return responseevents.FactoryResponseEvent{}, errors.New("Factory Session response-event store is required")
@@ -168,43 +170,38 @@ func (s *ResponseStream) Publish(store *responseeventstore.SessionResponseEventS
 	s.publishMu.Lock()
 	defer s.publishMu.Unlock()
 
-	published, err := store.Publish(event)
-	if err != nil {
-		return responseevents.FactoryResponseEvent{}, err
+	prepared := store.PrepareInput(event)
+	sequence := store.NextSequenceHint()
+	eventID := strings.TrimSpace(s.eventIDs())
+	if eventID == "" {
+		return responseevents.FactoryResponseEvent{}, errors.New("response event ID generator returned an empty identity")
 	}
-	s.mirrorIntoEvents(store, published)
-	return published, nil
-}
+	prepared.Sequence = sequence
+	prepared.EventID = eventID
 
-func (s *ResponseStream) mirrorIntoEvents(store *responseeventstore.SessionResponseEventStore, published responseevents.FactoryResponseEvent) {
-	if s == nil || s.events == nil {
-		return
-	}
-	sessionID := store.FactorySessionID()
-	payload, err := json.Marshal(published)
+	payload, err := json.Marshal(prepared)
 	if err != nil {
-		s.logger.Warn("factory session response event mirror encode failed",
-			"factory_session_id", sessionID,
-			"sequence", published.Sequence,
-		)
-		return
+		return responseevents.FactoryResponseEvent{}, fmt.Errorf("encode factory session response event for Events: %w", err)
 	}
-	_, err = s.events.Append(context.Background(), events.AppendRequest{
+
+	sessionID := store.FactorySessionID()
+	if _, err := s.events.Append(context.Background(), events.AppendRequest{
 		Topic:          responseEventTopic(sessionID),
 		SourceType:     responseEventSourceType,
 		SourceID:       events.SourceID(sessionID),
-		SourceSequence: events.SourceSequence(published.Sequence),
-		SourceEventID:  events.SourceEventID(published.EventID),
+		SourceSequence: events.SourceSequence(sequence),
+		SourceEventID:  events.SourceEventID(eventID),
 		SchemaID:       responseEventSchemaID,
 		Payload:        payload,
-	})
-	if err != nil {
-		s.logger.Warn("factory session response event mirror append failed",
-			"factory_session_id", sessionID,
-			"sequence", published.Sequence,
-			"error", err.Error(),
-		)
+	}); err != nil {
+		return responseevents.FactoryResponseEvent{}, fmt.Errorf("factory session response event rejected by Events: %w", err)
 	}
+
+	published, err := store.PublishWithIdentity(prepared, sequence, eventID)
+	if err != nil {
+		return responseevents.FactoryResponseEvent{}, err
+	}
+	return published, nil
 }
 
 // responseEventTopic names the Events topic one Factory Session's response
