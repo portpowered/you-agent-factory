@@ -415,6 +415,76 @@ func TestSetPacketStateRejectsOverlappingLeaseHoldingPromotion(t *testing.T) {
 	}
 }
 
+// TestValidateDispatchCandidateAdmitsNarrowedPSSI01WithoutMutatingState proves
+// the committed ledger's narrowed PSS-I01 (pkg/root/process.go,
+// pkg/wire/profiles.go, pkg/wire/wire.go instead of the blanket pkg/wire/,
+// pkg/root/, and pkg/initializer/ prefixes) is admissible into a
+// lease-holding state before dispatch, and that ValidateDispatchCandidate is
+// a pure pre-dispatch check: it never mutates the candidate's committed state.
+func TestValidateDispatchCandidateAdmitsNarrowedPSSI01WithoutMutatingState(t *testing.T) {
+	t.Parallel()
+
+	manifest := loadCommittedCatalog(t)
+	before := packetByID(t, manifest, "PSS-I01")
+
+	if err := psslease.ValidateDispatchCandidate(manifest, "PSS-I01", psslease.StateActive); err != nil {
+		t.Fatalf("ValidateDispatchCandidate(PSS-I01, active) error = %v, want nil for narrowed candidate", err)
+	}
+
+	after := packetByID(t, manifest, "PSS-I01")
+	if after.State != before.State {
+		t.Fatalf("PSS-I01 state = %q after ValidateDispatchCandidate, want unchanged %q (candidate check must not commit a state change)", after.State, before.State)
+	}
+	for i, path := range []string{"pkg/root/process.go", "pkg/wire/profiles.go", "pkg/wire/wire.go"} {
+		if after.ExclusivePaths[i] != path {
+			t.Fatalf("PSS-I01 exclusivePaths[%d] = %q, want %q", i, after.ExclusivePaths[i], path)
+		}
+	}
+}
+
+// TestValidateLeaseHoldersAllowsAdditiveCompositionOutsideNarrowedPSSI01Paths
+// proves an active additive-composition claim outside the retained
+// structural files (pkg/wire/service_registration.go) does not conflict with
+// the narrowed PSS-I01 lease.
+func TestValidateLeaseHoldersAllowsAdditiveCompositionOutsideNarrowedPSSI01Paths(t *testing.T) {
+	t.Parallel()
+
+	manifest := loadFixture(t, "valid-pss-i01-narrowed-additive-composition.json")
+	if err := psslease.ValidateLeaseHolders(manifest); err != nil {
+		t.Fatalf("ValidateLeaseHolders() error = %v, want nil for additive composition outside PSS-I01's retained structural files", err)
+	}
+
+	if err := psslease.SetPacketState(manifest, "PKT-WIRE-ADDITIVE", psslease.StateActive); err != nil {
+		t.Fatalf("SetPacketState(PKT-WIRE-ADDITIVE, active) error = %v, want nil admission alongside active PSS-I01", err)
+	}
+}
+
+// TestValidateDispatchCandidateRejectsClaimOnRetainedPSSI01StructuralPath
+// proves an active claim equal to a retained PSS-I01 structural path
+// (pkg/root/process.go) is rejected before activation, with both packet
+// identities and the overlapping path in the diagnostic, and that the
+// rejected packet remains non-holding.
+func TestValidateDispatchCandidateRejectsClaimOnRetainedPSSI01StructuralPath(t *testing.T) {
+	t.Parallel()
+
+	manifest := loadFixture(t, "invalid-pss-i01-narrowed-structural-conflict.json")
+
+	err := psslease.SetPacketState(manifest, "PKT-STRUCTURAL-CONFLICT", psslease.StateActive)
+	if err == nil {
+		t.Fatal("SetPacketState(PKT-STRUCTURAL-CONFLICT, active) error = nil, want rejection for overlap with PSS-I01's retained structural path")
+	}
+	message := err.Error()
+	for _, want := range []string{"PSS-I01", "PKT-STRUCTURAL-CONFLICT", "pkg/root/process.go"} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("SetPacketState() error = %v, want substring %q", err, want)
+		}
+	}
+
+	if got := packetByID(t, manifest, "PKT-STRUCTURAL-CONFLICT").State; got != psslease.StateBlocked {
+		t.Fatalf("PKT-STRUCTURAL-CONFLICT state = %q after rejected promotion, want unchanged %q (non-holding)", got, psslease.StateBlocked)
+	}
+}
+
 func loadCommittedCatalog(t *testing.T) *psslease.Manifest {
 	t.Helper()
 	path := filepath.Join("..", "..", "docs", "internal", "projects", "packaged-service-structure", "path-lease-packet-manifest.json")
