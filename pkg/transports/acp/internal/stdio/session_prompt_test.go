@@ -281,7 +281,10 @@ func TestHandleSessionPromptFactoryCommandFailureNeverLeaksRawValueOrRoot(t *tes
 // (newTestServer), so admission success still reports a bounded
 // (non-method-not-found) internal error rather than fabricated success.
 func TestHandleSessionPromptNonCommandContentAdmitsOneVersionGuardedTurn(t *testing.T) {
-	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project")}
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project"),
+		startTurnResult:  chatsessions.StartTurnResult{Turn: chatsessions.Turn{State: chatsessions.TurnStateAdmitted}},
+	}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
 	server := newTestServer(chatSessions, catalog, "/home/operator")
 
@@ -452,7 +455,10 @@ func TestHandleSessionPromptDuplicateDeliveryRejectsSecondCall(t *testing.T) {
 // admitting an ordinary prompt turn, matching "session/new"'s existing
 // identity-collision-safety guarantee.
 func TestHandleSessionPromptEqualWireIDsAcrossConnectionsRemainDistinct(t *testing.T) {
-	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project")}
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project"),
+		startTurnResult:  chatsessions.StartTurnResult{Turn: chatsessions.Turn{State: chatsessions.TurnStateAdmitted}},
+	}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
 	server := newTestServer(chatSessions, catalog, "/home/operator")
 
@@ -1007,6 +1013,79 @@ func TestHandleSessionPromptSequentialTurnsStartThenInvokeExactlyOnce(t *testing
 	}
 	if got := factoryTarget.invokeCalls[0].sessionID; got != "fs-1" {
 		t.Fatalf("InvokeFactoryTarget sessionID = %q, want the identity bound by the first turn's start (fs-1)", got)
+	}
+}
+
+// TestHandleSessionPromptRedeliveredRequestMakesNoFactoryCall proves that
+// when StartTurn reports a redelivered RequestID whose originally admitted
+// turn has already terminalized (a returned Turn.State other than ADMITTED,
+// exactly what chat_sessions/internal/service.Store.StartTurn now returns for
+// a reused RequestID), this transport neither calls AdvanceTurn nor dispatches
+// any Factory effect, and still returns a deterministic final response
+// derived from that turn's own recorded terminal state.
+func TestHandleSessionPromptRedeliveredRequestMakesNoFactoryCall(t *testing.T) {
+	replayed := admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", "fs-1")
+	replayed.Turn.State = chatsessions.TurnStateCompleted
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResult:  replayed,
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "hello there"))
+	result, rpcErr := server.handleSessionPrompt(context.Background(), env)
+	if rpcErr != nil {
+		t.Fatalf("handleSessionPrompt() error = %+v, want a deterministic final response for a redelivered request", rpcErr)
+	}
+	if chatSessions.advanceTurnCalled {
+		t.Fatal("AdvanceTurn was called, want no turn-state mutation for a redelivered already-terminal request")
+	}
+	if len(factoryTarget.startCalls) != 0 {
+		t.Fatalf("StartFactoryTarget call count = %d, want 0 for a redelivered request", len(factoryTarget.startCalls))
+	}
+	if len(factoryTarget.invokeCalls) != 0 {
+		t.Fatalf("InvokeFactoryTarget call count = %d, want 0 for a redelivered request", len(factoryTarget.invokeCalls))
+	}
+
+	var resp acpsdk.PromptResponse
+	if err := json.Unmarshal(result, &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if resp.StopReason != acpsdk.StopReasonEndTurn {
+		t.Fatalf("StopReason = %q, want end_turn for the original COMPLETED turn", resp.StopReason)
+	}
+}
+
+// TestHandleSessionPromptRedeliveredBusyRequestRejectsAsBusy proves that when
+// StartTurn reports a redelivered RequestID whose originally admitted turn is
+// still busy (RUNNING), this transport rejects the request the same way a
+// genuinely distinct concurrent duplicate would, with zero Factory effect.
+func TestHandleSessionPromptRedeliveredBusyRequestRejectsAsBusy(t *testing.T) {
+	replayed := admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", "")
+	replayed.Turn.State = chatsessions.TurnStateRunning
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResult:  replayed,
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "hello there"))
+	_, rpcErr := server.handleSessionPrompt(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a bounded busy rejection for a redelivered in-flight request")
+	}
+	if chatSessions.advanceTurnCalled {
+		t.Fatal("AdvanceTurn was called, want no turn-state mutation for a redelivered busy request")
+	}
+	if len(factoryTarget.startCalls) != 0 || len(factoryTarget.invokeCalls) != 0 {
+		t.Fatalf("Factory calls = start:%d invoke:%d, want 0 and 0 for a redelivered busy request",
+			len(factoryTarget.startCalls), len(factoryTarget.invokeCalls))
 	}
 }
 

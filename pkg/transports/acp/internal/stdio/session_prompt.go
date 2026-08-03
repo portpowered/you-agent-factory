@@ -154,6 +154,16 @@ func (s *Server) handleSessionPrompt(ctx context.Context, env envelope.Envelope)
 // FAILED) regardless of how the Factory dispatch and response mapping below
 // it turn out, clearing the session's active-turn/busy state in every case
 // so a later prompt can always be admitted.
+//
+// StartTurn treats a reused RequestID as an idempotent retry and returns the
+// existing turn instead of admitting a new one; a returned Turn.State other
+// than TurnStateAdmitted therefore means this call redelivered a request this
+// Session already handled (or is still handling), not a fresh admission.
+// respondToRedeliveredTurn classifies that case without ever reaching a
+// Factory effect: a still-busy existing turn (RUNNING) rejects the same way
+// a genuinely distinct concurrent duplicate would, and an already-terminal
+// existing turn returns a deterministic response derived only from that
+// turn's own recorded terminal state.
 func (s *Server) admitPromptTurn(ctx context.Context, turn session.PromptTurn, reqIdentity chatsessions.RequestIdentity) (json.RawMessage, *acpsdk.RequestError) {
 	if s.chatSessions == nil {
 		return nil, classifyDependencyFailure(errSessionPromptUnavailable)
@@ -173,6 +183,10 @@ func (s *Server) admitPromptTurn(ctx context.Context, turn session.PromptTurn, r
 		return nil, classifyTurnAdmissionFailure(err)
 	}
 
+	if startResult.Turn.State != chatsessions.TurnStateAdmitted {
+		return respondToRedeliveredTurn(startResult.Session.ID, startResult.Turn)
+	}
+
 	if _, err := s.chatSessions.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
 		SessionID: startResult.Session.ID,
 		TurnID:    startResult.Turn.ID,
@@ -182,6 +196,43 @@ func (s *Server) admitPromptTurn(ctx context.Context, turn session.PromptTurn, r
 	}
 
 	return s.dispatchFactoryTurn(ctx, startResult, turn)
+}
+
+// respondToRedeliveredTurn classifies a StartTurn result that identified an
+// already-admitted turn (via RequestID reuse) rather than a fresh admission.
+// A busy existing turn rejects exactly the way classifyTurnAdmissionFailure
+// classifies any other *chatsessions.BusyError; an already-terminal existing
+// turn returns the deterministic response its own recorded TurnState implies,
+// via turnStateStopReason, with no Factory effect and no further Chat
+// Sessions mutation in either case.
+func respondToRedeliveredTurn(sessionID string, turn chatsessions.Turn) (json.RawMessage, *acpsdk.RequestError) {
+	if turn.State.IsBusy() {
+		return nil, classifyTurnAdmissionFailure(&chatsessions.BusyError{
+			Value: "Session", ID: sessionID,
+			ActiveTurnID: turn.ID, ActiveTurnState: turn.State,
+		})
+	}
+
+	resp := acpsdk.PromptResponse{StopReason: turnStateStopReason(turn.State)}
+	result, err := json.Marshal(resp)
+	if err != nil {
+		return nil, classifyDependencyFailure(err)
+	}
+	return result, nil
+}
+
+// turnStateStopReason maps an already-terminal Turn's recorded TurnState to
+// the ACP stop reason a redelivered request for it deterministically
+// reports: TurnStateCompleted to end_turn, TurnStateCanceled to cancelled,
+// and TurnStateFailed -- or any other value, which Turn.Validate never
+// actually allows here since respondToRedeliveredTurn only reaches this for
+// an already-terminal turn -- to the same end_turn safe fallback this
+// transport uses elsewhere for a Factory failure.
+func turnStateStopReason(state chatsessions.TurnState) acpsdk.StopReason {
+	if state == chatsessions.TurnStateCanceled {
+		return acpsdk.StopReasonCancelled
+	}
+	return acpsdk.StopReasonEndTurn
 }
 
 // dispatchFactoryTurn runs the one Factory effect a running turn owns --
