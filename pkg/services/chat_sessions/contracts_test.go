@@ -143,20 +143,22 @@ func (f *fakeService) RequestControl(_ context.Context, req chatsessions.Request
 // AdvanceControl demonstrates the captured-turn race rule this packet
 // requires: once an intent is COMMITTED, its terminal outcome is computed
 // with ResolveControlIntentOutcome against the intent's own captured TurnID
-// and the session's live active turn -- never taken as a caller-selected
-// value -- so a completion can only ever resolve for the turn it captured.
+// and the session's most recently admitted turn -- never taken as a
+// caller-selected value -- so a completion can only ever resolve for the
+// turn it captured.
 func (f *fakeService) AdvanceControl(_ context.Context, req chatsessions.AdvanceControlRequest) (chatsessions.AdvanceControlResult, error) {
 	if req.RequestID != f.intent.RequestID {
 		return chatsessions.AdvanceControlResult{}, &chatsessions.NotFoundError{Value: "ControlIntent", ID: req.RequestID.JSONRPCStringID}
 	}
 	next := req.Next
 	if f.intent.State == chatsessions.ControlIntentStateCommitted {
-		// f.turn.State is the live state of whichever turn is currently known
-		// to the session; it only represents the captured turn's own state
-		// when that turn is still the session's active one, which is exactly
-		// the case ResolveControlIntentOutcome needs -- when the captured
-		// turn is no longer current, the mismatch against currentActiveID
-		// resolves to SUPERSEDED before this state value is even consulted.
+		// f.turn.State is the live state of whichever turn this minimal fake
+		// currently knows about, and f.session.ActiveTurnID is never cleared
+		// by this fake's AdvanceTurn (unlike a production Store, it is only
+		// overwritten by a later StartTurn) -- so it already plays the
+		// "most recently admitted turn" role ResolveControlIntentOutcome
+		// needs: when the captured turn is no longer that one, the mismatch
+		// resolves SUPERSEDED before f.turn.State is even consulted.
 		// ResolveControlIntentOutcome validates f.turn.State itself and
 		// returns a typed error for a zero/unknown value rather than
 		// silently resolving it, so a corrupt captured turn state never

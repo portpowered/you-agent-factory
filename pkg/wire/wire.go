@@ -59,6 +59,7 @@ var servicesSet = wire.NewSet(
 	provideOperatorSettingsCreateTemporaryFile,
 	provideOperatorSettingsProviderCatalog,
 	provideOperatorSettingsLogger,
+	provideChatSessionsService,
 	provideOperatorSettingsService,
 	provideOperatorSettingsIDGenerator,
 	provideChatSessionsFactoryTargetCatalogService,
