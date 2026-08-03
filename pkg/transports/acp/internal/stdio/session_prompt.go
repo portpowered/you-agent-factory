@@ -43,11 +43,10 @@ var errSessionPromptUnavailable = errors.New("acp: session/prompt collaborators 
 
 // errFactoryDelegationNotImplemented marks a validated, admitted ordinary
 // prompt turn whose downstream dispatch this transport slice does not yet
-// finish: mapping a Factory Session's outcome into a final ACP response, and
-// invoking an already-bound Factory Session for a later turn, are later
-// stories' scope (003/004). It never reaches a client verbatim --
-// classifyDependencyFailure maps it to the same bounded internal-error
-// response every other dependency failure receives.
+// finish: mapping a Factory Session's outcome (start or invoke) into a final
+// ACP response is later stories' scope (004/005). It never reaches a client
+// verbatim -- classifyDependencyFailure maps it to the same bounded
+// internal-error response every other dependency failure receives.
 var errFactoryDelegationNotImplemented = errors.New("acp: factory session delegation is not yet implemented")
 
 // errFactoryTargetUnavailable marks a "session/prompt" call this Server was
@@ -144,12 +143,12 @@ func (s *Server) handleSessionPrompt(ctx context.Context, env envelope.Envelope)
 //
 // Once admitted, the turn's episode snapshot decides the one Factory effect
 // this story owns: when the episode has no Factory Session ID yet, start one
-// and bind the returned identity onto that exact episode/turn/version. An
-// already-bound episode (a later turn in the same episode) makes zero start
-// calls -- invoking that bound Factory Session is story 003's scope, not
-// this one's -- so this method still reports the bounded not-yet-implemented
-// failure after a successful start+bind or an already-bound episode, since
-// neither downstream dispatch nor final response mapping exist yet.
+// and bind the returned identity onto that exact episode/turn/version. When
+// the episode already carries a Factory Session ID (a later turn in the same
+// episode), invoke that exact bound session exactly once instead -- never a
+// second start. Either branch still reports the bounded not-yet-implemented
+// failure afterward, since mapping the Factory Session's outcome into a final
+// ACP response is a later story's scope.
 func (s *Server) admitPromptTurn(ctx context.Context, turn session.PromptTurn, reqIdentity chatsessions.RequestIdentity) (json.RawMessage, *acpsdk.RequestError) {
 	if s.chatSessions == nil {
 		return nil, classifyDependencyFailure(errSessionPromptUnavailable)
@@ -171,6 +170,10 @@ func (s *Server) admitPromptTurn(ctx context.Context, turn session.PromptTurn, r
 
 	if startResult.Episode.FactorySessionID == "" {
 		if err := s.startFactorySessionForEpisode(ctx, startResult, turn); err != nil {
+			return nil, classifyDependencyFailure(err)
+		}
+	} else {
+		if err := s.invokeFactorySessionForEpisode(ctx, startResult, turn); err != nil {
 			return nil, classifyDependencyFailure(err)
 		}
 	}
@@ -229,6 +232,32 @@ func (s *Server) startFactorySessionForEpisode(
 		Episode:          startResult.Episode.Number,
 		TurnID:           startResult.Turn.ID,
 		FactorySessionID: startOutcome.SessionID,
+	})
+	return err
+}
+
+// invokeFactorySessionForEpisode invokes the given turn's already-bound
+// Factory Session exactly once, with that exact bound identity, the
+// validated prompt content in the shared work.WorkContentPart shape, the text
+// source kind, and the admitted turn's ID as the correlated request ID. It
+// never starts a second Factory Session for an already-bound episode -- an
+// unbound episode is startFactorySessionForEpisode's job, not this one's.
+func (s *Server) invokeFactorySessionForEpisode(
+	ctx context.Context,
+	startResult chatsessions.StartTurnResult,
+	turn session.PromptTurn,
+) error {
+	if s.factoryTarget == nil {
+		return errFactoryTargetUnavailable
+	}
+
+	requestID := startResult.Turn.ID
+	sourceKind := factorysessions.InvocationInputSourceKindText
+	_, err := s.factoryTarget.InvokeFactoryTarget(ctx, startResult.Episode.FactorySessionID, factorysessions.InvocationRequest{
+		Content:         promptContentToWorkParts(turn.Content),
+		ContentProvided: true,
+		RequestID:       &requestID,
+		SourceKind:      &sourceKind,
 	})
 	return err
 }

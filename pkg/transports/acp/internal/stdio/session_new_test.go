@@ -48,8 +48,16 @@ type fakeChatSessionsService struct {
 
 	startTurnCalled bool
 	startTurnReq    chatsessions.StartTurnRequest
+	startTurnReqs   []chatsessions.StartTurnRequest
 	startTurnResult chatsessions.StartTurnResult
-	startTurnErr    error
+	// startTurnResults, when non-empty, is consumed front-first across
+	// successive StartTurn calls (one queued result per call) instead of the
+	// single static startTurnResult -- for sequential tests that need a
+	// later call to observe a different admitted episode snapshot (e.g. a
+	// later turn's episode already carrying a Factory Session ID bound by an
+	// earlier call).
+	startTurnResults []chatsessions.StartTurnResult
+	startTurnErr     error
 
 	bindFactorySessionCalled bool
 	bindFactorySessionReq    chatsessions.BindFactorySessionRequest
@@ -109,8 +117,14 @@ func (f *fakeChatSessionsService) StartTurn(_ context.Context, req chatsessions.
 	defer f.mu.Unlock()
 	f.startTurnCalled = true
 	f.startTurnReq = req
+	f.startTurnReqs = append(f.startTurnReqs, req)
 	if f.startTurnErr != nil {
 		return chatsessions.StartTurnResult{}, f.startTurnErr
+	}
+	if len(f.startTurnResults) > 0 {
+		next := f.startTurnResults[0]
+		f.startTurnResults = f.startTurnResults[1:]
+		return next, nil
 	}
 	return f.startTurnResult, nil
 }

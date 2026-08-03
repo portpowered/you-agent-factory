@@ -755,12 +755,14 @@ func TestHandleSessionPromptFirstTurnBindsReturnedFactorySessionID(t *testing.T)
 	}
 }
 
-// TestHandleSessionPromptAlreadyBoundEpisodeMakesNoStartCall proves a later
-// turn in an episode that already carries a Factory Session ID makes zero
-// StartFactoryTarget and zero BindFactorySession calls: invoking the bound
-// session is story 003's scope, not this one's, and this story must never
-// start a second Factory Session for an already-started episode.
-func TestHandleSessionPromptAlreadyBoundEpisodeMakesNoStartCall(t *testing.T) {
+// TestHandleSessionPromptLaterTurnInvokesBoundFactorySessionExactlyOnce
+// proves a later turn in an episode that already carries a Factory Session
+// ID calls InvokeFactoryTarget exactly once with that exact bound identity,
+// the validated prompt content, the text source kind, and the admitted
+// turn's ID as the correlated request ID -- and makes zero
+// StartFactoryTarget or BindFactorySession calls, since a second Factory
+// Session must never be started for an already-started episode.
+func TestHandleSessionPromptLaterTurnInvokesBoundFactorySessionExactlyOnce(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{
 		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
 		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", "fs-already-bound"),
@@ -772,7 +774,7 @@ func TestHandleSessionPromptAlreadyBoundEpisodeMakesNoStartCall(t *testing.T) {
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams("session-1", "a later message"))
 	if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr == nil {
-		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure: invoke dispatch is not yet implemented")
+		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure: response mapping is not yet implemented")
 	}
 
 	if len(factoryTarget.startCalls) != 0 {
@@ -780,6 +782,103 @@ func TestHandleSessionPromptAlreadyBoundEpisodeMakesNoStartCall(t *testing.T) {
 	}
 	if chatSessions.bindFactorySessionCalled {
 		t.Fatal("BindFactorySession was called, want no binding attempt for an already-bound episode")
+	}
+
+	if len(factoryTarget.invokeCalls) != 1 {
+		t.Fatalf("InvokeFactoryTarget call count = %d, want exactly 1", len(factoryTarget.invokeCalls))
+	}
+	got := factoryTarget.invokeCalls[0]
+	if got.sessionID != "fs-already-bound" {
+		t.Fatalf("InvokeFactoryTarget sessionID = %q, want the bound identity fs-already-bound", got.sessionID)
+	}
+	wantContent := []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "a later message"}}
+	if !reflect.DeepEqual(got.request.Content, wantContent) {
+		t.Fatalf("InvokeFactoryTarget request.Content = %#v, want %#v", got.request.Content, wantContent)
+	}
+	if !got.request.ContentProvided {
+		t.Fatal("InvokeFactoryTarget request.ContentProvided = false, want true")
+	}
+	if got.request.SourceKind == nil || *got.request.SourceKind != factorysessions.InvocationInputSourceKindText {
+		t.Fatalf("InvokeFactoryTarget request.SourceKind = %v, want %q", got.request.SourceKind, factorysessions.InvocationInputSourceKindText)
+	}
+	if got.request.RequestID == nil || *got.request.RequestID != "turn-2" {
+		t.Fatalf("InvokeFactoryTarget request.RequestID = %v, want the admitted turn id turn-2", got.request.RequestID)
+	}
+}
+
+// TestHandleSessionPromptInvokeFactoryTargetFailureMakesNoStartCall proves an
+// InvokeFactoryTarget failure for a later turn reports a bounded failure and
+// never falls back to starting a second Factory Session for the episode.
+func TestHandleSessionPromptInvokeFactoryTargetFailureMakesNoStartCall(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", "fs-already-bound"),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{invokeErr: errors.New("factory sessions boom")}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "a later message"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure for an Invoke failure")
+	}
+
+	if len(factoryTarget.invokeCalls) != 1 {
+		t.Fatalf("InvokeFactoryTarget call count = %d, want exactly 1", len(factoryTarget.invokeCalls))
+	}
+	if len(factoryTarget.startCalls) != 0 {
+		t.Fatalf("StartFactoryTarget call count = %d, want 0 after an Invoke failure", len(factoryTarget.startCalls))
+	}
+	if chatSessions.bindFactorySessionCalled {
+		t.Fatal("BindFactorySession was called, want no binding attempt for an already-bound episode")
+	}
+}
+
+// TestHandleSessionPromptSequentialTurnsStartThenInvokeExactlyOnce proves the
+// full first-turn-starts / later-turn-invokes sequence across two real
+// handleSessionPrompt calls against the same session: the first turn's
+// unbound episode starts exactly one Factory Session, and the second turn --
+// observing that same episode now carrying the returned identity -- invokes
+// it exactly once and starts none, without ever mutating the first turn's
+// start call.
+func TestHandleSessionPromptSequentialTurnsStartThenInvokeExactlyOnce(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResults: []chatsessions.StartTurnResult{
+			admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
+			admittedTurnResult("session-1", "factory:@you/review", 5, "/work/project", "turn-2", "fs-1"),
+		},
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.AsyncStartResult{SessionID: "fs-1"}}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "first message"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), firstEnv); rpcErr == nil {
+		t.Fatal("handleSessionPrompt() (first turn) error = nil, want a bounded failure: response mapping is not yet implemented")
+	}
+	if len(factoryTarget.startCalls) != 1 {
+		t.Fatalf("StartFactoryTarget call count after first turn = %d, want exactly 1", len(factoryTarget.startCalls))
+	}
+	if len(factoryTarget.invokeCalls) != 0 {
+		t.Fatalf("InvokeFactoryTarget call count after first turn = %d, want 0", len(factoryTarget.invokeCalls))
+	}
+
+	secondEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 2, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "second message"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), secondEnv); rpcErr == nil {
+		t.Fatal("handleSessionPrompt() (second turn) error = nil, want a bounded failure: response mapping is not yet implemented")
+	}
+	if len(factoryTarget.startCalls) != 1 {
+		t.Fatalf("StartFactoryTarget call count after second turn = %d, want still exactly 1 (no second start)", len(factoryTarget.startCalls))
+	}
+	if len(factoryTarget.invokeCalls) != 1 {
+		t.Fatalf("InvokeFactoryTarget call count after second turn = %d, want exactly 1", len(factoryTarget.invokeCalls))
+	}
+	if got := factoryTarget.invokeCalls[0].sessionID; got != "fs-1" {
+		t.Fatalf("InvokeFactoryTarget sessionID = %q, want the identity bound by the first turn's start (fs-1)", got)
 	}
 }
 
