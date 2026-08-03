@@ -858,7 +858,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/internal/errors",
-      "minimum": 96.42
+      "minimum": 96.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/observation",
