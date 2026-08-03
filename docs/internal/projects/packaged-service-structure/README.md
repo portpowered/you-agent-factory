@@ -238,9 +238,9 @@ Session. This record makes that routing binding for PSS:
   both operations to the active runtime service (`ErrNotRunning` only when no
   session is open) — neither returns `ErrCapabilityUnavailable`. This
   corrects the root-consolidation proposal's E5 evidence, which was captured
-  against an earlier snapshot; only the three checkpoint methods
-  (`CaptureCheckpoint`, `LoadCheckpoint`, `RestoreCheckpoint`) still return
-  `ErrCapabilityUnavailable` today, consistent with `DEC-L2-CKPT`/D1.
+  against an earlier snapshot. The three checkpoint methods
+  (`CaptureCheckpoint`, `LoadCheckpoint`, `RestoreCheckpoint`) are no longer on
+  the root contract at all — see the checkpoint deletion reconciliation below.
 - `CTR-WRK-EXEC` (the sealed Workers execution contract `IMP-RUN-DISPATCH`
   depends on per the L2 task catalog) has not landed: there is no sealed
   `WorkstationExecutionService` root and no `CTR-WRK-EXEC` history on `main`.
@@ -253,6 +253,66 @@ Session. This record makes that routing binding for PSS:
   other lease holder overlaps it. See `internal/psslease` regression coverage
   proving this ledger state passes and that an ambiguous/overlapping
   dispatch-owner ledger is rejected.
+
+## Checkpoint deletion reconciliation (PSS IMP-RUN-04 vs. L2 DEC-L2-CKPT/DEL-RUN-CKPT)
+
+**Status: closed.** This is a program-metadata reconciliation record, not a new
+decision and not a reopening of durability scope. It preserves D1 and D2 above
+without modification.
+
+### Decision
+
+[`docs/internal/projects/root-consolidation/proposal.md`](../root-consolidation/proposal.md)
+§4 `DEC-L2-CKPT` decided that `CaptureCheckpoint`, `LoadCheckpoint`, and
+`RestoreCheckpoint` cannot be honestly implemented under D1 (no durable store,
+none planned) and are deleted from the Factory Runtime root rather than
+implemented. §5 catalogs `DEL-RUN-CKPT` as the packet that performs the
+deletion and requires "an amendment note in `packaged-service-structure`
+recording that the `IMP-RUN-04` follow-on is closed." `DEL-RUN-CKPT` has now
+landed (`ACP-L2-DEL-RUN-CKPT-001`): the three methods, their root-only
+vocabulary, and every boundary, caller, and test made dead by the deletion are
+removed from the public Factory Runtime root. This record makes that closure
+binding for PSS:
+
+- **`IMP-RUN-04` is closed by deletion, not by further implementation.** The
+  gate this program's [`dec-run-rec-durability.md`](../../packaged-service-structure/dec-run-rec-durability.md)
+  decision recorded for `IMP-RUN-04` (`checkpoint_recovery` implementation) was
+  satisfied by PR #1580, as that decision already states; the *public root
+  operations* that once motivated a durability follow-on for that
+  implementation are now removed under `DEC-L2-CKPT`, so no further PSS
+  admission, packet, or scheduling action against `IMP-RUN-04` remains.
+- **The private process-local `CheckpointStore` is permanent, not interim.**
+  `factory_runtime/internal/services/checkpoint_recovery` (shipped under
+  `IMP-RUN-04`, PR #1580) keeps its capture/load/restore behavior unchanged and
+  stays a Runtime-private, parent-private subservice. It is not exposed
+  through the root, a transport, or a peer dependency.
+- **The Recordings-backed durable checkpoint storage follow-on described in
+  [`dec-run-rec-durability.md`](../../packaged-service-structure/dec-run-rec-durability.md#recordings-backed-durable-checkpoint-storage-follow-on)
+  is cancelled, not deferred**, consistent with D1 above. Recordings JSONL
+  artifacts remain the sole canonical history and replay authority; no
+  durable checkpoint adapter, journal, or new persistence engine is scheduled.
+- This reconciliation creates **no replacement PSS packet, storage-engine
+  task, durable journal proposal, L4 requirement, or broader Runtime
+  refactoring scope.** It does not claim that the unrelated JavaScript
+  workflow checkpoint artifacts or UI replay/timeline checkpoint concepts were
+  touched — `DEL-RUN-CKPT` left those unchanged.
+
+### Evidence
+
+- `pkg/services/factory_runtime/interfaces.go` no longer declares
+  `CaptureCheckpoint`, `LoadCheckpoint`, or `RestoreCheckpoint` on the Runtime
+  root `Service` contract.
+- `pkg/services/factory_runtime/checkpoint_deletion_proof_test.go` is the
+  external-consumer negative-compilation and positive-behavior proof that the
+  three methods are unavailable while supported root operations still compile
+  and run.
+- `pkg/services/factory_runtime/internal/services/checkpoint_recovery` is
+  unchanged in behavior and remains reachable only from its own package's
+  `wire` and tests; no root, transport, or peer service imports it (verified by
+  ownership-inventory/import audit during `ACP-L2-DEL-RUN-CKPT-002`).
+- The committed ledger (`path-lease-packet-manifest.json`) holds no packet with
+  an exclusive path under `pkg/services/factory_runtime/`, so this closure
+  requires no manifest edit.
 
 ## Applied manifest narrowing — PSS-I01
 
