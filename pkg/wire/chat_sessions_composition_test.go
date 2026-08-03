@@ -24,13 +24,14 @@ import (
 // no consumer in this repository currently declares a dependency on
 // chatsessions.Service (the eventual real consumer is ACP transport
 // dispatch, which is explicitly out of this PRD's scope), so Wire's
-// generated InjectBundle body does not call provideChatSessionsService --
-// matching the identical, already-accepted resting state of this graph's
-// sibling provideChatSessionsFactoryTargetCatalogService provider below,
-// which is equally registered-but-uncalled until its own real consumer
-// lands. A forced, unread field on an unrelated transport's operations
-// struct would not make this any more "composed"; it would only add dead
-// state, which is why this test proves the provider directly instead.
+// generated InjectBundle body does not call provideChatSessionsService. The
+// sibling provideChatSessionsFactoryTargetCatalogService provider below is
+// in the same registered-but-uncalled shape, but that sibling shape remains
+// an open, unresolved reviewer objection on its own PR (#1736), not an
+// accepted precedent -- do not cite it as one. A forced, unread field on an
+// unrelated transport's operations struct would not make this any more
+// "composed"; it would only add dead state, which is why this test proves
+// the provider directly instead.
 func TestProvideChatSessionsServiceConstructsAnIndependentServiceDirectly(t *testing.T) {
 	t.Parallel()
 
