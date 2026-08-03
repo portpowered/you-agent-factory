@@ -34,8 +34,8 @@ func (s *service) Open(binding models.RuntimeBinding) (runtimescopes.Reference, 
 	if s == nil {
 		return "", fmt.Errorf("%w: service is required", runtimescopes.ErrScopeUnknown)
 	}
-	if err := models.ValidateRuntimeBinding(binding); err != nil {
-		return "", err
+	if binding.RuntimeConfig == nil {
+		return "", fmt.Errorf("%w: runtime configuration lookup is required", runtimescopes.ErrInvalidBinding)
 	}
 
 	snapshot := cloneRuntimeConfig(binding.RuntimeConfig())

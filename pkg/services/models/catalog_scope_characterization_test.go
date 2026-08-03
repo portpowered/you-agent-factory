@@ -37,10 +37,6 @@ type catalogPeerService struct {
 	entries     map[string]models.Detail
 }
 
-func (catalogPeerService) ForRuntime(models.RuntimeBinding) (models.Service, error) {
-	return catalogPeerService{runtimeScopePeerService: newRuntimeScopePeerService("legacy")}, nil
-}
-
 func (s catalogPeerService) ListModels(context.Context) (models.List, error) {
 	if s.unavailable {
 		return models.List{}, models.ErrUnavailable
