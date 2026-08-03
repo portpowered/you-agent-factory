@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -22,6 +23,7 @@ type Service struct {
 	packagedACP []providers.ACPIntegration
 	lifecycles  []providers.Lifecycle
 	logger      logging.Logger
+	attempts    *liveAttemptRegistry
 }
 
 var _ providers.Service = (*Service)(nil)
@@ -74,6 +76,7 @@ func newService(
 		packagedACP: cloneACPIntegrations(packagedACP),
 		lifecycles:  append([]providers.Lifecycle(nil), lifecycles...),
 		logger:      logging.EnsureLogger(logger),
+		attempts:    newLiveAttemptRegistry(),
 	}, nil
 }
 
@@ -143,6 +146,12 @@ func (s *Service) Execute(
 				}
 			}
 			request.Provider = canonical
+			control := &acpAttemptControl{acp: s.acp, canonical: canonical, attemptID: request.AttemptID}
+			release, bindErr := s.bindLiveAttempt(canonical, request.AttemptID, control)
+			if bindErr != nil {
+				return providers.ExecuteResult{}, bindErr
+			}
+			defer release()
 			return s.acp.Execute(ctx, canonical, request)
 		}
 	}
@@ -163,15 +172,71 @@ func (s *Service) Execute(
 			Message: "Agy does not support a separate reasoning effort",
 		}
 	}
-	return s.execution.Execute(ctx, request)
+	attemptCtx, cancelAttempt := context.WithCancel(ctx)
+	control := &nativeAttemptControl{cancel: cancelAttempt, done: make(chan struct{})}
+	release, bindErr := s.bindLiveAttempt(canonicalProvider, request.AttemptID, control)
+	if bindErr != nil {
+		cancelAttempt()
+		return providers.ExecuteResult{}, bindErr
+	}
+	defer release()
+	defer cancelAttempt()
+	return s.executeNativeAttempt(attemptCtx, control, request)
 }
 
-// ControlAttempt answers every valid pause, cancel, or terminate request with
-// the canonical deterministic unsupported outcome for this packet. It invokes
-// no execution adapter, provider process, ACP operation, Worker cancellation
-// method, or continuation behavior.
+// executeNativeAttempt runs the bound native execution and records its real
+// outcome on control before returning - via defer, so an unexpected unwind
+// (including a panic) still closes control.done instead of leaving a
+// concurrent claimed signal() call blocked until its own ctx ends.
+// control.finish closes done itself, synchronously, right after Execute
+// returns and before this defer's caller's own deferred release/
+// cancelAttempt run. A concurrent ControlAttempt claim that lands in the
+// registry-release race window therefore still only ever observes the true
+// recorded outcome once it waits on done (see nativeAttemptControl.finish) -
+// a natural success can never be reported as ControlOutcomeCompleted merely
+// because a claim happened to land after Execute already returned.
+func (s *Service) executeNativeAttempt(
+	attemptCtx context.Context,
+	control *nativeAttemptControl,
+	request providers.ExecuteRequest,
+) (result providers.ExecuteResult, err error) {
+	defer func() {
+		control.finish(errors.Is(err, providers.ErrExecuteCancelled))
+	}()
+	result, err = s.execution.Execute(attemptCtx, request)
+	return result, err
+}
+
+// bindLiveAttempt registers canonical/attemptID as the one live execution for
+// that exact identity before its controllable provider operation begins. A
+// collision with an already-live identity is reported through the same typed
+// ExecuteFailure model as any other Execute rejection, before any provider
+// side effect for the second request begins. control is the exact-attempt
+// signal handle a later ControlAttempt call can claim.
+func (s *Service) bindLiveAttempt(
+	canonical providers.ID,
+	attemptID string,
+	control liveAttemptControl,
+) (func(), error) {
+	release, err := s.attempts.bind(liveAttemptKey{provider: canonical, attemptID: attemptID}, control)
+	if err != nil {
+		return nil, providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindInvalidRequest,
+			Message: err.Error(),
+		}
+	}
+	return release, nil
+}
+
+// ControlAttempt routes a valid cancel or terminate request to the exact
+// live native provider attempt it names, or a valid cancel request to the
+// exact live ACP attempt it names, when one is bound and truthfully
+// supports the requested action right now, and otherwise answers with the
+// closed deterministic unsupported outcome. It never signals a different
+// live attempt and invokes no Worker cancellation method or continuation
+// behavior.
 func (s *Service) ControlAttempt(
-	_ context.Context,
+	ctx context.Context,
 	request providers.ControlAttemptRequest,
 ) (providers.ControlAttemptResult, error) {
 	if err := request.Validate(); err != nil {
@@ -190,11 +255,33 @@ func (s *Service) ControlAttempt(
 		"attemptID", request.AttemptID,
 		"action", string(request.Action),
 	)
+	outcome := providers.ControlOutcomeUnsupported
+	key := liveAttemptKey{provider: request.Provider, attemptID: request.AttemptID}
+	if control, claimed := s.attempts.claim(key, request.Action); claimed {
+		accepted, err := control.signal(ctx)
+		if err != nil {
+			s.logger.Info(
+				"provider control attempt outcome",
+				"provider", string(request.Provider),
+				"attemptID", request.AttemptID,
+				"action", string(request.Action),
+				"outcome", "failed",
+			)
+			return providers.ControlAttemptResult{}, err
+		}
+		// accepted is false only when a claimed control genuinely lost the
+		// race to the attempt's own natural completion (see
+		// acpAttemptControl.signal); outcome correctly stays Unsupported
+		// rather than a false Completed.
+		if accepted {
+			outcome = providers.ControlOutcomeCompleted
+		}
+	}
 	result := providers.ControlAttemptResult{
 		Provider:  request.Provider,
 		AttemptID: request.AttemptID,
 		Action:    request.Action,
-		Outcome:   providers.ControlOutcomeUnsupported,
+		Outcome:   outcome,
 	}
 	s.logger.Info(
 		"provider control attempt outcome",

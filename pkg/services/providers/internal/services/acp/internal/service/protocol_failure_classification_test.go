@@ -82,6 +82,41 @@ func TestProtocolFailuresMapToStableExecuteFailureKinds(t *testing.T) {
 	}
 }
 
+// TestPromptCancelledStopReasonMapsToExecuteFailureKindCanceled proves the
+// established ACP cancellation normalization independent of any real
+// concurrent control call: whenever session/prompt returns
+// StopReasonCancelled (the ACP protocol's outcome for a session/cancel
+// notification the agent honored, whether triggered through
+// ControlAttempt or otherwise), daemon.execute reports the same
+// ExecuteFailureKindCanceled every other cancellation path in this service
+// already normalizes to.
+func TestPromptCancelledStopReasonMapsToExecuteFailureKindCanceled(t *testing.T) {
+	var starts atomic.Int32
+	serviceValue, err := New([]providers.ACPIntegration{{
+		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
+	}}, protocolHelperCommandFactory(&starts), availableLocator{})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	t.Cleanup(func() { _ = serviceValue.Close(context.Background()) })
+
+	_, err = serviceValue.Execute(context.Background(), "cursor-acp", providers.ExecuteRequest{
+		Provider:           "cursor-acp",
+		AttemptID:          "attempt-cancelled-turn",
+		Model:              "test-model",
+		UserMessage:        "cancelled turn",
+		WorkingDirectory:   t.TempDir(),
+		ProcessEnvironment: append(os.Environ(), protocolHelperEnvironment+"=cancelled-turn"),
+	})
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Execute() error = %v (%T), want ExecuteFailure", err, err)
+	}
+	if failure.Kind != providers.ExecuteFailureKindCanceled {
+		t.Fatalf("ExecuteFailure.Kind = %q, want %q", failure.Kind, providers.ExecuteFailureKindCanceled)
+	}
+}
+
 func TestMissingExecutableFailsBeforeStartWithWorkFailureType(t *testing.T) {
 	var starts atomic.Int32
 	serviceValue, err := New([]providers.ACPIntegration{{
@@ -228,6 +263,9 @@ func runProtocolFailurePeer(mode string, stdin io.Reader, stdout, stderr io.Writ
 		case "session/prompt":
 			if mode == "fail" {
 				return writeRPCError(writer, request.ID, -32603, "Internal error")
+			}
+			if mode == "cancelled-turn" {
+				return writeRPCResult(writer, request.ID, `{"stopReason":"cancelled"}`)
 			}
 			return writeRPCResult(writer, request.ID, `{"stopReason":"end_turn"}`)
 		case "$/cancel_request", "session/cancel":

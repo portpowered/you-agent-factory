@@ -9,8 +9,17 @@
 //     Service.ValidatePrerequisites — Providers-owned alias, selection, and
 //     prerequisite authority
 //   - Service.ControlAttempt — Providers-owned pause/cancel/terminate action
-//     vocabulary with a closed completed/unsupported outcome; every valid
-//     action currently answers with the canonical unsupported outcome
+//     vocabulary with a closed completed/unsupported outcome. Cancel and
+//     Terminate reach the exact live native (non-ACP) attempt named by
+//     canonical provider identity plus attempt ID, when one is in flight,
+//     by cancelling the context every native adapter (codex, claude, agy)
+//     already force-terminates its subprocess/PTY session on. Cancel also
+//     reaches the exact live ACP attempt it names once that attempt has an
+//     established session/prompt turn in flight, by delivering the ACP
+//     protocol's session/cancel notification through its owning session;
+//     Pause, ACP Terminate, ACP attempts before or after that turn is in
+//     flight, and unknown/already-terminal/mismatched attempts answer with
+//     the canonical unsupported outcome
 //   - detached request, result, value, and typed-error contracts
 //
 // Construction/process-edge ports exist so Wire and owner constructors can
