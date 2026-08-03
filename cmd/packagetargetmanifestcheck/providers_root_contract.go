@@ -16,8 +16,6 @@ var providersThinRootContractFiles = []string{
 	"acp_contract.go",
 	"catalog_characterization_test.go",
 	"catalog_contract.go",
-	"control_characterization_test.go",
-	"control_contract.go",
 	"doc.go",
 	"execute_characterization_test.go",
 	"execute_contract.go",

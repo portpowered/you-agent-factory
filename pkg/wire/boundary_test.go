@@ -14,7 +14,6 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -25,7 +24,7 @@ import (
 func TestProvideProviderRegistryComposesBuiltIns(t *testing.T) {
 	t.Parallel()
 
-	providersService, err := provideProvidersService(serviceedges.Edges{}, logging.NoopLogger{})
+	providersService, err := provideProvidersService(serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}

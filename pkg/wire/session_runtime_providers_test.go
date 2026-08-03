@@ -55,7 +55,7 @@ func TestProvideConductorInvocationWithProgressFactory_AcceptsDefaultProvidersSe
 	edges := serviceedges.Edges{
 		ProviderCommandRunner: testutil.NewProviderCommandRunner(),
 	}
-	providersService, err := provideProvidersService(edges, logging.NoopLogger{})
+	providersService, err := provideProvidersService(edges)
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -77,7 +77,7 @@ func TestProvideConductorInvocationWithProgressFactory_AcceptsDefaultProvidersSe
 func TestProvideConductorInvocationWithProgressFactory_ExecutesCodexThroughInjectedRunner(t *testing.T) {
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: codexWireTestOutput("child result")})
 	edges := serviceedges.Edges{ProviderCommandRunner: runner}
-	providersService, err := provideProvidersService(edges, logging.NoopLogger{})
+	providersService, err := provideProvidersService(edges)
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -109,7 +109,7 @@ func TestProvideConductorInvocationWithProgressFactory_AcceptsSelectedProvidersS
 	edges := serviceedges.Edges{
 		ProviderCommandRunner: testutil.NewProviderCommandRunner(),
 	}
-	providersService, err := provideProvidersService(edges, logging.NoopLogger{})
+	providersService, err := provideProvidersService(edges)
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -128,7 +128,7 @@ func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *test
 	t.Parallel()
 
 	edges := serviceedges.Edges{}
-	providersService, err := provideProvidersService(edges, logging.NoopLogger{})
+	providersService, err := provideProvidersService(edges)
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -136,7 +136,7 @@ func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *test
 	if err != nil {
 		t.Fatalf("provideProviderRegistry() error = %v", err)
 	}
-	registryRebinder, err := provideProviderRegistryRebinder(providersService, edges, logging.NoopLogger{})
+	registryRebinder, err := provideProviderRegistryRebinder(providersService, edges)
 	if err != nil {
 		t.Fatalf("provideProviderRegistryRebinder() error = %v", err)
 	}
@@ -209,7 +209,7 @@ func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *test
 func TestOperatorSettingsHomePortCompositionUsesProcessProviderRoot(t *testing.T) {
 	t.Parallel()
 
-	providersRoot, err := provideProvidersService(serviceedges.Edges{}, logging.NoopLogger{})
+	providersRoot, err := provideProvidersService(serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
