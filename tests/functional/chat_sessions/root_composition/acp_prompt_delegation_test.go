@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -420,18 +421,199 @@ func responseLinesOnly(t *testing.T, out *bytes.Buffer) []rpcMessage {
 func sendSessionPrompt(t *testing.T, server acp.Server, sessionID, text string) rpcMessage {
 	t.Helper()
 
+	msg, err := doSessionPrompt(server, sessionID, text)
+	if err != nil {
+		t.Fatalf("session/prompt: %v", err)
+	}
+	return msg
+}
+
+// doSessionPrompt is sendSessionPrompt's *testing.T-free core: it reports
+// failures via its returned error instead of calling any testing.T method,
+// so it is safe to call from a goroutine other than the one running the
+// test (testing.T's Fatal/Fatalf family must only ever be called from the
+// test's own goroutine) -- needed by tests that drive one "session/prompt"
+// call concurrently with another against the same session.
+func doSessionPrompt(server acp.Server, sessionID, text string) (rpcMessage, error) {
 	params, err := json.Marshal(map[string]any{
 		"sessionId": sessionID,
 		"prompt":    []map[string]any{{"type": "text", "text": text}},
 	})
 	if err != nil {
-		t.Fatalf("marshal session/prompt params: %v", err)
+		return rpcMessage{}, fmt.Errorf("marshal session/prompt params: %w", err)
 	}
 	line := fmt.Sprintf(`{"jsonrpc":"2.0","id":2,"method":"session/prompt","params":%s}`, params) + "\n"
 
 	var out bytes.Buffer
 	if err := server.Serve(context.Background(), strings.NewReader(line), &out); err != nil {
-		t.Fatalf("Serve(session/prompt) error = %v", err)
+		return rpcMessage{}, fmt.Errorf("Serve(session/prompt): %w", err)
 	}
-	return decodeRPCMessage(t, &out)
+	responses := responseLinesOnlyErr(&out)
+	if len(responses) != 1 {
+		return rpcMessage{}, fmt.Errorf("response line count = %d, want exactly 1", len(responses))
+	}
+	return responses[0], nil
+}
+
+// responseLinesOnlyErr is responseLinesOnly's *testing.T-free core, for use
+// from doSessionPrompt (which must itself stay callable from a non-test
+// goroutine).
+func responseLinesOnlyErr(out *bytes.Buffer) []rpcMessage {
+	var responses []rpcMessage
+	scanner := bufio.NewScanner(bytes.NewReader(out.Bytes()))
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		var decoded map[string]json.RawMessage
+		if err := json.Unmarshal(line, &decoded); err != nil {
+			continue
+		}
+		if _, isNotification := decoded["method"]; isNotification {
+			continue
+		}
+		var msg rpcMessage
+		if err := json.Unmarshal(line, &msg); err != nil {
+			continue
+		}
+		responses = append(responses, msg)
+	}
+	return responses
+}
+
+// blockingProvider wraps a workers.Provider and blocks its first Infer call
+// until release is closed, closing started exactly once when that call
+// begins. A test uses this to deterministically observe that a Factory
+// dispatch's own inference call is genuinely in flight -- proving the
+// admitted turn is actually RUNNING, not merely scheduled on a goroutine --
+// before sending a concurrent request, with no sleep-based synchronization.
+type blockingProvider struct {
+	inner   workers.Provider
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func newBlockingProvider(inner workers.Provider) *blockingProvider {
+	return &blockingProvider{inner: inner, started: make(chan struct{}), release: make(chan struct{})}
+}
+
+func (b *blockingProvider) Infer(ctx context.Context, req workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
+	b.once.Do(func() { close(b.started) })
+	<-b.release
+	return b.inner.Infer(ctx, req)
+}
+
+// TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch
+// proves, through the same real root.BuildProcess composition, that a second
+// "session/prompt" call arriving while the first is genuinely still
+// dispatching (its Factory Session activation has already reached the
+// workflow's own inference call and not yet returned) is rejected as busy
+// with zero additional Factory Session activation, and that the first,
+// legitimately in-flight turn still completes normally afterward with no
+// stranded busy state left behind. This is the functional-level counterpart
+// to the unit-level busy-admission coverage in
+// pkg/transports/acp/internal/stdio/session_prompt_test.go, driven against
+// the real Chat Sessions Store and the real on-demand Factory Sessions
+// activation instead of fakes.
+func TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test driving root.BuildProcess Factory Session dispatch")
+	}
+
+	home, err := os.MkdirTemp("", "acp-prompt-delegation-busy-home-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp(home) error = %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	seedInstalledPackagedFactory(t, home, "@you/goal")
+	seedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
+
+	provider := newBlockingProvider(testutil.NewMockProvider(workers.InferenceResponse{Content: "acknowledged\n<COMPLETE>"}))
+	var factorySessionIDCalls atomic.Int32
+	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{
+		ProviderOverride: provider,
+		FactorySessionIDGenerator: func() string {
+			n := factorySessionIDCalls.Add(1)
+			return fmt.Sprintf("acp-busy-factory-session-id-%d", n)
+		},
+	})
+	if err != nil {
+		t.Fatalf("root.BuildProcess() error = %v", err)
+	}
+	server := process.ACPServer()
+	if server == nil {
+		t.Fatal("Process.ACPServer() returned a nil acp.Server")
+	}
+
+	cwd := t.TempDir()
+	sessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
+	if sessionID == "" {
+		t.Fatal("session/new returned a blank sessionId")
+	}
+
+	firstDone := make(chan rpcMessage, 1)
+	firstErr := make(chan error, 1)
+	go func() {
+		msg, err := doSessionPrompt(server, sessionID, "please help with this goal")
+		if err != nil {
+			firstErr <- err
+			return
+		}
+		firstDone <- msg
+	}()
+
+	select {
+	case <-provider.started:
+	case err := <-firstErr:
+		t.Fatalf("first session/prompt failed before its dispatch began: %v", err)
+	}
+
+	// Snapshot the generator count immediately before and after the
+	// concurrent busy request, while the first turn's own dispatch is still
+	// parked inside the blocked Infer call and so cannot itself be
+	// consuming the generator concurrently. The first turn keeps consuming
+	// this same generator for its own internal bookkeeping once unblocked
+	// below, so "unchanged across the whole test" is not the right
+	// invariant -- "unchanged across exactly the concurrent busy request" is.
+	callsBeforeConcurrent := factorySessionIDCalls.Load()
+	if callsBeforeConcurrent == 0 {
+		t.Fatal("Factory Session ID generator was never called for the in-flight first turn")
+	}
+
+	concurrentResp, err := doSessionPrompt(server, sessionID, "a concurrent prompt while the turn is busy")
+	if err != nil {
+		t.Fatalf("concurrent session/prompt: %v", err)
+	}
+	if concurrentResp.Error == nil {
+		t.Fatal("concurrent session/prompt response error = nil, want a bounded rejection for a busy session")
+	}
+	if got := factorySessionIDCalls.Load(); got != callsBeforeConcurrent {
+		t.Fatalf("Factory Session ID generator calls changed by %d during the concurrent busy request, want unchanged from %d (the busy rejection must make zero Factory effect)",
+			got-callsBeforeConcurrent, callsBeforeConcurrent)
+	}
+
+	close(provider.release)
+
+	select {
+	case firstResp := <-firstDone:
+		if firstResp.Error != nil {
+			t.Fatalf("first session/prompt response error = %+v, want a successful final result", firstResp.Error)
+		}
+		assertPromptResponseStopReason(t, firstResp, acpsdk.StopReasonEndTurn)
+	case err := <-firstErr:
+		t.Fatalf("first session/prompt error = %v", err)
+	}
+
+	// The busy rejection must not have stranded the session: a later, wholly
+	// distinct prompt is still admitted and completes normally.
+	laterResp := sendSessionPrompt(t, server, sessionID, "a later prompt after the busy rejection resolved")
+	if laterResp.Error != nil {
+		t.Fatalf("later session/prompt response error = %+v, want a successful final result", laterResp.Error)
+	}
+	assertPromptResponseStopReason(t, laterResp, acpsdk.StopReasonEndTurn)
 }
