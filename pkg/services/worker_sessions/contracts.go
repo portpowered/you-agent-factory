@@ -3,15 +3,20 @@ package workersessions
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// Service is the W1 Worker Session identity and registry foundation: stable
-// identity reservation and immutable deterministic inspection. Supervision,
-// Start/StartTurn, Events publication, Runtime and Provider Session
-// association, Pause/Resume/Cancel/Terminate controls, persistence, and
-// transport behavior are later ACP Worker Events slices (W2-W7) and are not
-// exposed here. Later slices land as additive methods on this same named
-// interface; W1 does not publish placeholder methods for them.
+// Service is the W1+W2 Worker Session identity, registry, and supervision
+// foundation: stable identity reservation, immutable deterministic
+// inspection, and supervised Start with exactly-once terminal
+// classification. StartTurn, Events publication, Runtime and Provider
+// Session association, Pause/Resume/Cancel/Terminate controls, persistence,
+// and transport behavior are later ACP Worker Events slices (W3-W7) and are
+// not exposed here. Later slices land as additive methods on this same named
+// interface; W2 does not publish placeholder methods for them.
 type Service interface {
 	// Reserve validates req and, when req.ID is not already registered,
 	// stores a new session in StateReserved and returns its snapshot.
@@ -31,6 +36,16 @@ type Service interface {
 	// successful empty ListResult, not a not-found failure. An invalid
 	// filter value returns a typed validation error and no partial result.
 	List(ctx context.Context, req ListRequest) (ListResult, error)
+
+	// Start validates req, then establishes or reuses one stable Worker
+	// Session identity in StateReserved, transitions StateStarting, and hands
+	// a detached clone of req.Execution to the one directly injected
+	// workers.WorkstationExecutionService. Start is synchronous: it returns
+	// only after the attempt commits its exactly-once absorbing COMPLETED or
+	// FAILED terminal outcome, classified from the Workers WorkResult first
+	// and the adapter error second. Invalid requests and conflicting starts
+	// return a typed error before any registry mutation or Workers call.
+	Start(ctx context.Context, req StartRequest) (StartResult, error)
 }
 
 // ReserveRequest asks Service to reserve one new Worker Session identity.
@@ -98,6 +113,70 @@ type ListResult struct {
 	Sessions []Session
 }
 
+// StartRequest asks Service to supervise one already-resolved Workers
+// execution attempt under a stable Worker Session identity.
+type StartRequest struct {
+	// ID is the stable Worker Session identity. If ID is not yet registered,
+	// Start reserves it. If ID is already registered in StateReserved, Start
+	// reuses that exact session and never creates a replacement. Any other
+	// existing state is a conflicting start.
+	ID string
+	// Execution is the already-resolved Workers execution request. Start
+	// hands a detached clone of Execution to the injected
+	// workers.WorkstationExecutionService, so the caller retains exclusive
+	// ownership of Execution's reference-backed fields after Start is
+	// called. Worker Sessions performs no runner selection, prompt
+	// rendering, worktree preparation, provider invocation, or output
+	// shaping on this value.
+	Execution workers.WorkstationDispatchRequest
+}
+
+// Validate reports whether req carries a non-empty stable identity and a
+// minimally well-formed resolved execution request: a named workstation
+// route, a non-empty attempt (dispatch) identity, and a nested dispatch
+// workstation name that is non-empty and matches the top-level route. The
+// nested-name checks mirror the same dispatch identity invariant the Workers
+// boundary itself enforces (see validDispatch in
+// pkg/services/workers/internal/services/workstations/internal/service/service.go),
+// so Worker Sessions rejects a malformed resolved request before any
+// registry mutation or Workers call instead of allowing Workers to reject it
+// after effects have already happened. Validate is pure and does not mutate
+// req, the registry, or call Workers.
+func (req StartRequest) Validate() error {
+	if !validSessionID(req.ID) {
+		return ErrInvalidSessionID
+	}
+	workstationName := strings.TrimSpace(req.Execution.WorkstationName)
+	if workstationName == "" {
+		return fmt.Errorf("%w: workstation name is required", ErrInvalidExecutionRequest)
+	}
+	if strings.TrimSpace(req.Execution.Execution.Dispatch.DispatchID) == "" {
+		return fmt.Errorf("%w: attempt (dispatch) id is required", ErrInvalidExecutionRequest)
+	}
+	// The nested comparison intentionally compares the RAW (untrimmed)
+	// nested dispatch workstation name against the already-trimmed
+	// top-level workstationName, mirroring validDispatch in
+	// pkg/services/workers/internal/services/workstations/internal/service/service.go
+	// exactly: that function trims only the top-level name and requires
+	// dispatch.WorkstationName == name with no trimming applied to the
+	// nested value. Trimming both sides here would incorrectly accept a
+	// whitespace-padded nested name that the real Workers boundary rejects.
+	rawNestedWorkstationName := req.Execution.Execution.Dispatch.WorkstationName
+	if strings.TrimSpace(rawNestedWorkstationName) == "" {
+		return fmt.Errorf("%w: nested dispatch workstation name is required", ErrInvalidExecutionRequest)
+	}
+	if rawNestedWorkstationName != workstationName {
+		return fmt.Errorf("%w: nested dispatch workstation name must match the top-level workstation name", ErrInvalidExecutionRequest)
+	}
+	return nil
+}
+
+// StartResult is the detached snapshot Start returns once the started
+// session's exactly-once terminal outcome has been committed.
+type StartResult struct {
+	Session Session
+}
+
 var (
 	// ErrInvalidSessionID reports a request or session with an empty or
 	// whitespace-only identity.
@@ -111,4 +190,12 @@ var (
 	// ErrSessionNotFound reports Get called with a valid but unregistered
 	// identity.
 	ErrSessionNotFound = errors.New("worker session: not found")
+	// ErrInvalidExecutionRequest reports a Start request whose resolved
+	// Workers execution request is missing required identity fields.
+	ErrInvalidExecutionRequest = errors.New("worker session: invalid execution request")
+	// ErrSessionNotStartable reports Start called for an identity that is
+	// already registered outside StateReserved (already starting, running,
+	// paused, or terminal). No Workers call is made and the existing session
+	// is left unchanged.
+	ErrSessionNotStartable = errors.New("worker session: not startable")
 )
