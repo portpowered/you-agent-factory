@@ -242,6 +242,31 @@
       ]
     },
     {
+      "stableId": "cli/you.serve",
+      "name": "you serve",
+      "interface": "cli",
+      "classification": "grouping",
+      "status": "not-applicable",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
+    },
+    {
+      "stableId": "cli/you.serve.acp",
+      "name": "you serve acp",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/cli/serve_acp/serve_acp_prompt_test.go::TestServeACP_RootBuildProcessCompletesOneFactoryPrompt",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
       "stableId": "cli/you.server",
       "name": "you server",
       "interface": "cli",
