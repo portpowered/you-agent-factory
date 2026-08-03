@@ -1609,6 +1609,10 @@
       "minimum": 49.81
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/internal/service/cancelwindow",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/wire",
       "minimum": 100.00
     },

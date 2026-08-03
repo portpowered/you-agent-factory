@@ -3,6 +3,7 @@ package acp_test
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -14,6 +15,42 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// TestACPCommandStartFailureMapsToDependencyFailure keeps a root.BuildProcess
+// cell for the case where the ACP command factory produces a non-nil,
+// lookup-eligible *exec.Cmd but the OS itself refuses to start it (here, a
+// command name no PATH entry can resolve), proving the observable,
+// caller-visible outcome the daemon's cmd.Start() failure path maps to: the
+// run fails with a dependency-kind error rather than hanging or panicking.
+func TestACPCommandStartFailureMapsToDependencyFailure(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP command start failure"}`))
+	writeACPWorker(t, dir, "cursor-acp")
+
+	_, listed, _, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(t, dir, serviceedges.Edges{
+		PlatformProcessCommandFactory: func(string, ...string) *exec.Cmd {
+			return exec.Command("you-agent-factory-acp-helper-does-not-exist-xyz")
+		},
+		ProvidersExecutableLocator: availableExecutableLocator{},
+	}, 20*time.Second)
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed work = %d, want 1", got)
+	}
+	for _, event := range responseEvents {
+		if event.Kind != "ERROR" || event.Phase != "FAILED" || event.Provenance.Provider != "cursor-acp" {
+			continue
+		}
+		payload, err := event.Payload.AsFactoryResponseEventErrorPayload()
+		if err != nil {
+			t.Fatalf("decode ACP error response: %v", err)
+		}
+		if payload.Message == "" {
+			t.Fatal("ACP command start failure produced an empty error message")
+		}
+		return
+	}
+	t.Fatalf("ACP response stream had no FAILED error event for the command start failure: %#v", responseEvents)
+}
 
 func TestACPFailureRedactsConfiguredSecretsFromStderr(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
@@ -49,6 +86,48 @@ func TestACPFailureRedactsConfiguredSecretsFromStderr(t *testing.T) {
 		}
 	}
 	t.Fatalf("ACP response stream omitted redacted stderr diagnostic: %#v", responseEvents)
+}
+
+// TestACPAgentSelfReportedCancellationMapsToCanceledFailure keeps a
+// root.BuildProcess cell for an ACP agent that honors a turn by returning
+// StopReasonCancelled from session/prompt itself (a real, spec-legal
+// response an agent can send independent of any session/cancel notification
+// from this system). Providers.ControlAttempt's own cancel-delivery seam has
+// no wired transport yet and is proven at the package-integration layer
+// instead (see acp/internal/service/cancel_test.go); this cell instead
+// proves the observable, caller-visible outcome of that same StopReason
+// mapping: the run fails, and the surfaced error reflects a canceled
+// attempt rather than a generic failure.
+func TestACPAgentSelfReportedCancellationMapsToCanceledFailure(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP self-reported cancellation"}`))
+	writeACPWorker(t, dir, "cursor-acp")
+	t.Setenv(acpHelperEnvironment, "cancelled-response")
+
+	var starts atomic.Int32
+	_, listed, _, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(t, dir, serviceedges.Edges{
+		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
+		ProvidersExecutableLocator:    availableExecutableLocator{},
+	}, 20*time.Second)
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed work = %d, want 1", got)
+	}
+	if starts.Load() == 0 {
+		t.Fatal("ACP self-cancellation did not start the Agent process")
+	}
+	for _, event := range responseEvents {
+		if event.Kind != "ERROR" || event.Phase != "FAILED" || event.Provenance.Provider != "cursor-acp" {
+			continue
+		}
+		payload, err := event.Payload.AsFactoryResponseEventErrorPayload()
+		if err != nil {
+			t.Fatalf("decode ACP error response: %v", err)
+		}
+		if strings.Contains(payload.Message, "canceled") {
+			return
+		}
+	}
+	t.Fatalf("ACP response stream omitted the canceled attempt failure: %#v", responseEvents)
 }
 
 // TestACPProtocolFailuresMapToStableWorkerFailureClasses keeps two representative
