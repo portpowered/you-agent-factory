@@ -142,26 +142,27 @@ func CloseTargetEpisode(prior TargetEpisode, closedAt time.Time) (TargetEpisode,
 // from prior, since a target change can select a different Factory Session
 // than the one the prior episode ran against; a caller with no Factory
 // Session to associate yet may pass the empty string. A zero or unknown
-// prior.State reports prior's own typed invalid-state error (from Validate);
-// a validated but still-OPEN prior reports *TargetEpisodeNotClosedError,
-// distinct from that invalid-state outcome. Once prior.State is confirmed
-// CLOSED, prior is validated in full (TargetEpisode.Validate()) so a
-// structurally corrupt source episode -- a nil ClosedAt, an invalid Target, a
-// zero StartedAt, or a ClosedAt before StartedAt -- reports prior's own typed
-// error rather than being silently accepted as a valid history fact.
-// startedAt that is zero, or that precedes prior.ClosedAt, and any other
-// invariant TargetEpisode.Validate() enforces on the candidate next value
-// (including an invalid target) are rejected before the candidate value is
-// ever returned.
+// prior.State reports prior's own typed invalid-state error (from Validate).
+// Before the OPEN/CLOSED precondition is ever checked, prior is validated in
+// full (TargetEpisode.Validate()), so a structurally corrupt source episode
+// -- in any state -- an inconsistent ClosedAt for its State, an invalid
+// Target, a zero StartedAt, or a ClosedAt before StartedAt -- reports prior's
+// own typed error rather than being silently accepted or misreported as
+// merely "not closed". Only once prior is confirmed fully valid does a
+// still-OPEN prior report *TargetEpisodeNotClosedError, distinct from any
+// invalid-state or invalid-value outcome. startedAt that is zero, or that
+// precedes prior.ClosedAt, and any other invariant TargetEpisode.Validate()
+// enforces on the candidate next value (including an invalid target) are
+// rejected before the candidate value is ever returned.
 func OpenNextTargetEpisode(prior TargetEpisode, target ChatTargetRef, factorySessionID string, startedAt time.Time) (TargetEpisode, error) {
 	if err := prior.State.Validate(); err != nil {
 		return TargetEpisode{}, err
 	}
-	if !prior.State.IsTerminal() {
-		return TargetEpisode{}, &TargetEpisodeNotClosedError{Number: prior.Number, State: prior.State}
-	}
 	if err := prior.Validate(); err != nil {
 		return TargetEpisode{}, err
+	}
+	if !prior.State.IsTerminal() {
+		return TargetEpisode{}, &TargetEpisodeNotClosedError{Number: prior.Number, State: prior.State}
 	}
 	next := TargetEpisode{
 		Number:           prior.Number + 1,
