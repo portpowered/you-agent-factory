@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -20,7 +21,11 @@ type workRuntimeAdapter struct {
 }
 
 func (a workRuntimeAdapter) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
-	return a.runtime.(factoryruntime.APIFactory).SubmitWorkRequest(ctx, request)
+	submitter, ok := a.runtime.(factoryruntime.APIFactory)
+	if !ok {
+		return work.WorkRequestSubmitResult{}, fmt.Errorf("legacy Factory Runtime submission is required")
+	}
+	return submitter.SubmitWorkRequest(ctx, request)
 }
 
 func (a workRuntimeAdapter) MoveWork(ctx context.Context, workID, state string, source work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error) {
