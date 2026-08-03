@@ -1522,6 +1522,69 @@ func TestHandleSessionPromptEmptyFactorySessionIdentityFailsSafely(t *testing.T)
 	}
 }
 
+// TestHandleSessionPromptRecordPendingFailureAfterStartMakesNoBindCall
+// proves that when RecordPendingFactorySession itself fails (a Go-level
+// error) right after a successful start, the handler reports a bounded
+// failure and never proceeds to dispatch or bind against the just-started
+// identity -- an unrecorded pending identity must not be treated as safely
+// reconcilable.
+func TestHandleSessionPromptRecordPendingFailureAfterStartMakesNoBindCall(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult:               sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResult:                admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
+		recordPendingFactorySessionErr: errors.New("record pending boom"),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.AsyncStartResult{SessionID: "fs-1"}}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "hello there"))
+	_, rpcErr := server.handleSessionPrompt(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure when RecordPendingFactorySession fails")
+	}
+	if len(factoryTarget.invokeCalls) != 0 {
+		t.Fatalf("InvokeFactoryTarget call count = %d, want 0 when the pending identity was never durably recorded", len(factoryTarget.invokeCalls))
+	}
+	if chatSessions.bindFactorySessionCalled {
+		t.Fatal("BindFactorySession was called, want no binding attempt when RecordPendingFactorySession fails")
+	}
+}
+
+// TestHandleSessionPromptFirstTurnInvokeFailureMakesNoBindCall proves that
+// when the first turn's own follow-up InvokeFactoryTarget call (the one that
+// actually dispatches this turn's content into the just-started identity)
+// fails, the handler reports a bounded failure and never proceeds to bind.
+func TestHandleSessionPromptFirstTurnInvokeFailureMakesNoBindCall(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{
+		startResult: factorysessions.AsyncStartResult{SessionID: "fs-1"},
+		invokeErr:   errors.New("dispatch boom"),
+	}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "hello there"))
+	_, rpcErr := server.handleSessionPrompt(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure when the first turn's own invoke fails")
+	}
+	if len(factoryTarget.startCalls) != 1 {
+		t.Fatalf("StartFactoryTarget call count = %d, want exactly 1", len(factoryTarget.startCalls))
+	}
+	if len(factoryTarget.invokeCalls) != 1 {
+		t.Fatalf("InvokeFactoryTarget call count = %d, want exactly 1", len(factoryTarget.invokeCalls))
+	}
+	if chatSessions.bindFactorySessionCalled {
+		t.Fatal("BindFactorySession was called, want no binding attempt when the dispatch itself failed")
+	}
+}
+
 // TestHandleSessionPromptBindConflictClosesTheJustStartedRuntime proves that
 // when BindFactorySession fails with *chatsessions.FactorySessionConflictError
 // -- a different identity already won the episode -- the handler compensates
