@@ -1,0 +1,25 @@
+{
+  "formatVersion": "pss-path-lease-packet-manifest/v1",
+  "packets": [
+    {
+      "packetId": "IMP-RUN-03",
+      "leaseClass": "runtime-dispatch-superseded",
+      "exclusivePaths": [
+        "pkg/services/factory_runtime/"
+      ],
+      "state": "done",
+      "prerequisites": []
+    },
+    {
+      "packetId": "IMP-RUN-DISPATCH",
+      "leaseClass": "runtime-dispatch",
+      "exclusivePaths": [
+        "pkg/services/factory_runtime/internal/root.go"
+      ],
+      "state": "blocked",
+      "prerequisites": [
+        "CTR-WRK-EXEC"
+      ]
+    }
+  ]
+}

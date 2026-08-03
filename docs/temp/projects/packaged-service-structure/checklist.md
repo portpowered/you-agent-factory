@@ -38,6 +38,33 @@ When admitting IMP-RUN-04 implementation:
 - Recordings-backed durable CheckpointStore adapter remains follow-on after
   Recordings durable log work
 
+## Runtime — Dispatch reconciliation (IMP-RUN-03 superseded by L2 IMP-RUN-DISPATCH)
+
+**Decision:** [`docs/internal/projects/packaged-service-structure/README.md`](../../../internal/projects/packaged-service-structure/README.md)
+§ "Runtime dispatch ownership reconciliation" (accepted).
+
+**Admission status:** Reconciled. Metadata/lease decision only; no Runtime
+implementation changed.
+
+- [x] Record names L2 `IMP-RUN-DISPATCH` as sole owner of `PlanDispatch`,
+  `AcceptDispatchResult`, and the stable Runtime dispatch identity; L4 named
+  only as consumer
+- [x] Record states `IMP-RUN-03` is superseded, not narrowed, with no coherent
+  remainder, and cites why (behavior already live on `main` under other
+  packets)
+- [x] `IMP-RUN-03` claims no Factory Runtime implementation path; no second
+  dispatch contract or implementation packet remains active
+- [x] Record cites current-main prerequisite evidence, including that
+  `CTR-WRK-EXEC` (the sealed Workers execution contract `IMP-RUN-DISPATCH`
+  depends on) has not yet landed
+- [x] Record preserves D1/D2/D3 and is identified as metadata/lease
+  reconciliation, not dispatch implementation or checkpoint policy
+- [x] Committed ledger (`path-lease-packet-manifest.json`) holds no exclusive
+  path under `pkg/services/factory_runtime/`, so it already permits L2
+  `IMP-RUN-DISPATCH` admission without edits
+- [x] `internal/psslease` regression proves the reconciled single-owner ledger
+  state passes and an ambiguous/overlapping dispatch-owner ledger is rejected
+
 ## DEC-RUN-REC-DURABILITY changed-path lease proof
 
 Lease matrix: [`plan.md`](plan.md) **Changed-Path Lease Matrix
