@@ -74,18 +74,40 @@ func (w *Window) End(session *Session, cancelled bool) {
 }
 
 // Live reports, without any side effect, whether attemptID names the
-// currently open cancelable window. It is a deliberately racy pre-filter;
-// see acp.Service.Cancelable.
+// currently open cancelable window. It is a deliberately racy pre-filter.
 func (w *Window) Live(attemptID string) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.active != nil && w.active.attemptID == attemptID
 }
 
-// TryCancel atomically determines whether attemptID names the exact live
-// cancelable window and, only if so, delivers a session/cancel notification
-// and blocks (bounded by ctx) until the window closes. See acp.Service.
-// TryCancel for the accepted/err contract.
+// Claim atomically captures the exact Session currently open for attemptID,
+// if any, without altering window state (it does not clear w.active - only
+// End does that). The returned Session is an opaque generation handle: its
+// own TryCancel method is thereafter the only way to deliver to it, and it
+// never re-resolves "whatever the window's active session is now". This is
+// what lets a caller pin the exact generation a control was claimed against
+// at claim time, so a later Begin call that reuses attemptID for a
+// replacement generation cannot be substituted in when the claimed control's
+// delivery finally runs.
+func (w *Window) Claim(attemptID string) (*Session, bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.active == nil || w.active.attemptID != attemptID {
+		return nil, false
+	}
+	return w.active, true
+}
+
+// TryCancel delivers a session/cancel notification to this exact session -
+// the one Window.Claim captured - and blocks (bounded by ctx) until it
+// observes the session's real recorded terminal outcome. Because it operates
+// only on the Session pinned at claim time, never on whatever Window.active
+// happens to be right now, a later Begin call that reuses this session's
+// attemptID for a different generation cannot redirect delivery to that
+// replacement: this exact Session either delivers to itself, or - if it has
+// already ended - reports accepted=false, err=nil without sending anything,
+// so a stale claim can never observe a replacement generation's outcome.
 //
 // The outbound send is bounded by its own fixed sendTimeout, independent of
 // ctx: this keeps a send failure (wrapped in providers.ErrControlSignalFailed
@@ -96,12 +118,15 @@ func (w *Window) Live(attemptID string) bool {
 // same context.DeadlineExceeded value and erase that distinction. A send
 // failure returns promptly without waiting further: an already-broken
 // connection has no reason to ever close session.done on its own.
-func (w *Window) TryCancel(ctx context.Context, attemptID string) (accepted bool, err error) {
-	w.mu.Lock()
-	session := w.active
-	w.mu.Unlock()
-	if session == nil || session.attemptID != attemptID {
+func (session *Session) TryCancel(ctx context.Context) (accepted bool, err error) {
+	select {
+	case <-session.done:
+		// Already terminal: this generation ended (naturally or otherwise)
+		// before this claim's delivery ran. Sending a notification to a dead
+		// session would be meaningless, and could never be misread as
+		// reaching a replacement generation, since we never touch w.active.
 		return false, nil
+	default:
 	}
 
 	sendCtx, cancelSend := context.WithTimeout(context.Background(), sendTimeout)

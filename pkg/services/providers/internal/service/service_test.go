@@ -234,9 +234,9 @@ func (service *stubACPService) Execute(
 	return providers.ExecuteResult{Content: "acp result"}, nil
 }
 
-func (service *stubACPService) Cancelable(providers.ID, string) bool { return false }
+func (service *stubACPService) Claim(providers.ID, string) (acp.Generation, bool) { return nil, false }
 
-func (service *stubACPService) TryCancel(context.Context, providers.ID, string) (bool, error) {
+func (service *stubACPService) TryCancel(context.Context, acp.Generation) (bool, error) {
 	return false, nil
 }
 

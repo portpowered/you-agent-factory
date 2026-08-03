@@ -34,12 +34,8 @@ func TestDaemonPromptWithWindow_PanicStillClosesWindowForLaterIdentityReuse(t *t
 
 	// A control racing in before the next execution's own Begin must observe
 	// no live window for this identity - not hang on the dead stale session.
-	accepted, err := d.window.TryCancel(context.Background(), attemptID)
-	if err != nil {
-		t.Fatalf("TryCancel() on stale identity error = %v, want nil", err)
-	}
-	if accepted {
-		t.Fatal("TryCancel() on stale identity accepted = true, want false: no live window remains for a closed session")
+	if _, ok := d.window.Claim(attemptID); ok {
+		t.Fatal("Claim() on stale identity ok = true, want false: no live window remains for a closed session")
 	}
 
 	// A later execution reusing the same attempt ID must be able to bind and
@@ -47,6 +43,10 @@ func TestDaemonPromptWithWindow_PanicStillClosesWindowForLaterIdentityReuse(t *t
 	peer := newFakeSessionPeer()
 	connection := newPipedConnection(t, peer)
 	freshSession := d.window.Begin(attemptID, acpsdk.SessionId("fresh-session"), connection)
+	claimed, ok := d.window.Claim(attemptID)
+	if !ok || claimed != freshSession {
+		t.Fatalf("Claim() on reused identity = (%v, %v), want the fresh session and true", claimed, ok)
+	}
 
 	type outcome struct {
 		accepted bool
@@ -54,7 +54,7 @@ func TestDaemonPromptWithWindow_PanicStillClosesWindowForLaterIdentityReuse(t *t
 	}
 	tryCancelDone := make(chan outcome, 1)
 	go func() {
-		accepted, err := d.window.TryCancel(context.Background(), attemptID)
+		accepted, err := claimed.TryCancel(context.Background())
 		tryCancelDone <- outcome{accepted: accepted, err: err}
 	}()
 	<-peer.received
