@@ -128,6 +128,7 @@ func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (
 	}
 
 	r.reserveIfAbsent(req.ID)
+	r.logger.Info("worker session start accepted", "sessionID", req.ID, "attemptID", attemptID, "outcome", "reserved", "state", string(workersessions.StateReserved))
 	if _, err := r.transitionToStarting(req.ID); err != nil {
 		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "not_startable")
 		return workersessions.StartResult{}, err

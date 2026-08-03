@@ -147,6 +147,79 @@ func TestStart_ValidNewIdentity_ObservesStartingDuringInFlightHandoff(t *testing
 	wg.Wait()
 }
 
+// gatingLogger is a recordingLogger whose Info call blocks after recording
+// any call whose message equals gateMessage, until the test signals proceed.
+// This turns the production "worker session start accepted" operation log --
+// which Start emits after reserveIfAbsent and before transitionToStarting --
+// into a deterministic synchronization point, without adding a test-only
+// hook to production code.
+type gatingLogger struct {
+	recordingLogger
+	gateMessage string
+	reached     chan struct{}
+	proceed     chan struct{}
+	once        sync.Once
+}
+
+func (l *gatingLogger) Info(message string, keysAndValues ...any) {
+	l.recordingLogger.Info(message, keysAndValues...)
+	if message == l.gateMessage {
+		l.once.Do(func() { close(l.reached) })
+		<-l.proceed
+	}
+}
+
+// TestStart_ReservationIsObservableBeforeWorkersHandoff proves, through the
+// public Start API and a controlled Workers fake (never calling
+// reserveIfAbsent/transitionToStarting directly), that a brand-new identity
+// is committed and observable as RESERVED strictly before the injected
+// workers.WorkstationExecutionService receives DispatchWorkstation. The
+// production "worker session start accepted" log -- emitted right after the
+// RESERVED write and before the STARTING transition -- gates the Start
+// goroutine so a concurrent Get() can observe RESERVED, and the fake's own
+// call count proves Workers has not yet been invoked at that point.
+func TestStart_ReservationIsObservableBeforeWorkersHandoff(t *testing.T) {
+	execution := succeedingExecution()
+	logger := &gatingLogger{
+		gateMessage: "worker session start accepted",
+		reached:     make(chan struct{}),
+		proceed:     make(chan struct{}),
+	}
+	registry, err := service.New(execution, logger)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	ctx := context.Background()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if _, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
+			t.Errorf("Start() error = %v, want nil", err)
+		}
+	}()
+
+	<-logger.reached
+	session, err := registry.Get(ctx, workersessions.GetRequest{ID: "worker-1"})
+	if err != nil {
+		t.Fatalf("Get() while Start() is paused at the reservation log error = %v, want nil", err)
+	}
+	if session.State != workersessions.StateReserved {
+		t.Fatalf("Get() while Start() is paused at the reservation log state = %q, want RESERVED", session.State)
+	}
+	if got := execution.callCount(); got != 0 {
+		t.Fatalf("Workers received %d dispatch calls before the reservation was observed, want 0", got)
+	}
+
+	close(logger.proceed)
+	wg.Wait()
+
+	if got := execution.callCount(); got != 1 {
+		t.Fatalf("Workers received %d dispatch calls after Start() completed, want 1", got)
+	}
+}
+
 func TestStart_ReuseAlreadyReservedIdentity_DoesNotCreateAReplacementSession(t *testing.T) {
 	execution := succeedingExecution()
 	registry := newRegistryWithExecution(execution)

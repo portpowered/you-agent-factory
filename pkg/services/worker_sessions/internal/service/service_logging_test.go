@@ -172,6 +172,13 @@ func TestRegistryLogsStartOutcomes(t *testing.T) {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 
+	accepted := logger.entriesFor("worker session start accepted")
+	if len(accepted) != 1 || accepted[0].fields["sessionID"] != "worker-1" ||
+		accepted[0].fields["outcome"] != "reserved" || accepted[0].fields["state"] != "RESERVED" {
+		t.Fatalf("start-accepted log = %#v", accepted)
+	}
+	assertNoPayloadOrCredentialKeys(t, accepted[0].fields)
+
 	handoff := logger.entriesFor("worker session start")
 	if len(handoff) != 1 || handoff[0].fields["sessionID"] != "worker-1" || handoff[0].fields["outcome"] != "handoff" {
 		t.Fatalf("start-handoff log = %#v", handoff)
