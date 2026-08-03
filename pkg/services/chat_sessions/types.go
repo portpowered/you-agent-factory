@@ -222,6 +222,11 @@ type Session struct {
 	// session, or blank when no turn is active.
 	ActiveTurnID string
 	Version      uint64
+	// WorkingRoot is the ACP client's validated editor cwd this Session was
+	// created with. It is fixed for the Session's lifetime; a later target
+	// change revalidates a requested target against this same root rather
+	// than a different or unvalidated one.
+	WorkingRoot string
 	// StreamHead is the last event sequence associated with this session. It
 	// is distinct from any single Attachment's AfterSequence delivery cursor.
 	StreamHead uint64

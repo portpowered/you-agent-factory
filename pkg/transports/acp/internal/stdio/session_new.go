@@ -81,6 +81,7 @@ func (s *Server) handleSessionNew(ctx context.Context, env envelope.Envelope) (j
 			Kind: chatsessions.ChatTargetKindFactory,
 			Ref:  catalogResult.CurrentTarget,
 		},
+		WorkingRoot: params.Cwd,
 	})
 	if err != nil {
 		return nil, classifyDependencyFailure(err)

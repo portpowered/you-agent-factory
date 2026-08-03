@@ -17,14 +17,25 @@ import (
 )
 
 // fakeChatSessionsService is a minimal chatsessions.Service test double.
-// Every method other than CreateSession fails: this slice's session/new
-// handler only ever calls CreateSession, and a call to any other method
-// would itself be a defect worth failing loudly on.
+// CreateSession, GetSession, and SetTarget are configurable and tracked --
+// the methods this package's session/new and session/set_config_option
+// handlers actually call. Every other method fails loudly: neither handler
+// calls them, and a call to one would itself be a defect worth catching.
 type fakeChatSessionsService struct {
 	createCalled bool
 	created      chatsessions.CreateSessionRequest
 	createErr    error
 	sessionID    string
+
+	getSessionCalled bool
+	getSessionReq    chatsessions.GetSessionRequest
+	getSessionResult chatsessions.GetSessionResult
+	getSessionErr    error
+
+	setTargetCalled bool
+	setTargetReq    chatsessions.SetTargetRequest
+	setTargetResult chatsessions.SetTargetResult
+	setTargetErr    error
 }
 
 var _ chatsessions.Service = (*fakeChatSessionsService)(nil)
@@ -44,17 +55,28 @@ func (f *fakeChatSessionsService) CreateSession(_ context.Context, req chatsessi
 		ID:             id,
 		State:          chatsessions.SessionStateCreated,
 		SelectedTarget: req.InitialTarget,
+		WorkingRoot:    req.WorkingRoot,
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}}, nil
 }
 
-func (f *fakeChatSessionsService) GetSession(context.Context, chatsessions.GetSessionRequest) (chatsessions.GetSessionResult, error) {
-	return chatsessions.GetSessionResult{}, errors.New("fakeChatSessionsService: GetSession not implemented")
+func (f *fakeChatSessionsService) GetSession(_ context.Context, req chatsessions.GetSessionRequest) (chatsessions.GetSessionResult, error) {
+	f.getSessionCalled = true
+	f.getSessionReq = req
+	if f.getSessionErr != nil {
+		return chatsessions.GetSessionResult{}, f.getSessionErr
+	}
+	return f.getSessionResult, nil
 }
 
-func (f *fakeChatSessionsService) SetTarget(context.Context, chatsessions.SetTargetRequest) (chatsessions.SetTargetResult, error) {
-	return chatsessions.SetTargetResult{}, errors.New("fakeChatSessionsService: SetTarget not implemented")
+func (f *fakeChatSessionsService) SetTarget(_ context.Context, req chatsessions.SetTargetRequest) (chatsessions.SetTargetResult, error) {
+	f.setTargetCalled = true
+	f.setTargetReq = req
+	if f.setTargetErr != nil {
+		return chatsessions.SetTargetResult{}, f.setTargetErr
+	}
+	return f.setTargetResult, nil
 }
 
 func (f *fakeChatSessionsService) StartTurn(context.Context, chatsessions.StartTurnRequest) (chatsessions.StartTurnResult, error) {
@@ -207,6 +229,9 @@ func TestHandleSessionNewCreatesOneSessionAndReturnsProjectedPicker(t *testing.T
 	wantTarget := chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/factory-builder"}
 	if chatSessions.created.InitialTarget != wantTarget {
 		t.Fatalf("InitialTarget = %+v, want %+v", chatSessions.created.InitialTarget, wantTarget)
+	}
+	if chatSessions.created.WorkingRoot != "/work/project" {
+		t.Fatalf("WorkingRoot = %q, want the validated editor cwd /work/project", chatSessions.created.WorkingRoot)
 	}
 
 	wantIdentity := chatsessions.RequestIdentity{

@@ -353,7 +353,6 @@ func TestServeRespondsMethodNotFoundForEveryUnimplementedMethod(t *testing.T) {
 	methods := []string{
 		"session/load",
 		"session/resume",
-		"session/set_config_option",
 		"session/prompt",
 		"session/request_permission",
 		"totally/unrecognized_method",
