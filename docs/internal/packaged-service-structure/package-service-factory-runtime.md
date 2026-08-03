@@ -11,7 +11,6 @@ Factory Runtime should own:
 - Accepting correlated Workers results.
 - Live, orchestration-neutral observation.
 - Operator Work movement.
-- Opaque checkpoint capture/load/restore.
 - Private Petri and JavaScript execution.
 
 It should not own:
@@ -47,21 +46,6 @@ type Service interface {
         context.Context,
         AcceptDispatchResultRequest,
     ) (AcceptDispatchResultResult, error)
-
-    CaptureCheckpoint(
-        context.Context,
-        CaptureCheckpointRequest,
-    ) (CaptureCheckpointResult, error)
-
-    LoadCheckpoint(
-        context.Context,
-        LoadCheckpointRequest,
-    ) (LoadCheckpointResult, error)
-
-    RestoreCheckpoint(
-        context.Context,
-        RestoreCheckpointRequest,
-    ) (RestoreCheckpointResult, error)
 }
 ```
 
@@ -113,7 +97,7 @@ Their shapes are not all converged yet.
 - `dispatch_planning` is closest. Its single [Service](C:/Users/andre/work/portos/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/service.go:198) owns the outbox and Workers publication boundary.
 - `instance_host` still embeds the public `Lifecycle` contract and uses public hosted handles. Its contract should use private instance records and opaque IDs.
 - `orchestration` has one root service, but it still exposes JavaScript-specific methods and has roughly twenty direct implementation directories. Petri, JavaScript, scheduler, engine, tokens, metrics, replay hooks, and tooling should all move beneath its `internal/`.
-- `checkpoint_recovery` currently defines `CheckpointStore`, not a singular `Service`. `Capture`, `Load`, `Compatibility`, and `Restore` should be methods of its private `Service`; the store becomes an internal dependency.
+- `checkpoint_recovery` currently defines `CheckpointStore`, not a singular `Service`. `Capture`, `Load`, `Compatibility`, and `Restore` should be methods of its private `Service`; the store becomes an internal dependency. This subservice is permanently private and process-local: `CaptureCheckpoint`, `LoadCheckpoint`, and `RestoreCheckpoint` are deleted from the public root under DEC-L2-CKPT, and no durable storage engine backs it — see the PSS reconciliation in `docs/internal/projects/packaged-service-structure/README.md`.
 
 ## Logic still misplaced in transports/mappings
 
@@ -147,7 +131,6 @@ pkg/services/factory_runtime/
 ├── control.go
 ├── observation.go
 ├── dispatch.go
-├── checkpoint.go
 ├── errors.go
 │
 ├── wire/
