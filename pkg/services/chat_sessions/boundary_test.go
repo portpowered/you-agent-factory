@@ -37,6 +37,7 @@ func TestConsumer_ConstructsAndValidatesRepresentativeValues(t *testing.T) {
 	session := chatsessions.Session{
 		ID:             "session-1",
 		State:          chatsessions.SessionStateCreated,
+		Cwd:            "/workspace/project",
 		SelectedTarget: target,
 		CreatedAt:      now,
 		UpdatedAt:      now,
