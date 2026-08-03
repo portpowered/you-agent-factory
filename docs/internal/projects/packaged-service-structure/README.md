@@ -196,6 +196,64 @@ Structural changes remain exclusive: altering `root.BuildProcess`'s signature,
 restructuring the `profiles.go` provider sets, or changing the `wire_gen`
 regeneration contract are contract edits and still warrant a lease.
 
+## Runtime dispatch ownership reconciliation (PSS IMP-RUN-03 vs. L2 IMP-RUN-DISPATCH)
+
+**Status: reconciled.** This is a program-metadata/lease reconciliation record,
+not a dispatch implementation change and not a checkpoint-policy decision. It
+preserves D1, D2, and D3 above without modification.
+
+### Decision
+
+[`docs/internal/projects/acp-program/README.md`](../acp-program/README.md) §3
+already routes "Sealed Runtime dispatch operations" to **L2** for consumption by
+**L4**, and
+[`docs/internal/projects/root-consolidation/proposal.md`](../root-consolidation/proposal.md)
+§5 catalogs `IMP-RUN-DISPATCH` as the packet that implements `PlanDispatch` and
+`AcceptDispatchResult` against the sealed Workers execution contract
+(`CTR-WRK-EXEC`), returning the dispatch identity L4 associates with a Worker
+Session. This record makes that routing binding for PSS:
+
+- **L2 `IMP-RUN-DISPATCH` is the sole owner** of `PlanDispatch`,
+  `AcceptDispatchResult`, and the stable Runtime dispatch identity. **L4**
+  (`docs/internal/projects/acp-worker-events/proposal.md`) is a **consumer** of
+  that identity — it associates a Worker Session with a dispatch, it does not
+  implement dispatch planning.
+- This program's local plan item `IMP-RUN-03` ("Dispatch Planning private
+  subservice", [`plan.md`](../../../temp/projects/packaged-service-structure/plan.md)
+  Runtime sequence step 4) is **superseded**, not narrowed. It claims no
+  Factory Runtime implementation path. No coherent PSS-owned remainder exists:
+  the dispatch-planning behavior that step anticipated is already live on
+  current `main` (see Evidence below), delivered under prior dispatch-cutover
+  packets rather than under an `IMP-RUN-03` implementation packet, so retaining
+  `IMP-RUN-03` as a second, still-open dispatch contract would only duplicate
+  L2's sealed ownership.
+- No alternate dispatch operation, identity, service, or public transport
+  surface is introduced by this reconciliation.
+
+### Evidence (current `main`, verified 2026-08-02)
+
+- `pkg/services/factory_runtime/interfaces.go:85-98` declares `PlanDispatch`
+  and `AcceptDispatchResult` on the Runtime root contract.
+- `pkg/services/factory_runtime/internal/root.go:106-124` already delegates
+  both operations to the active runtime service (`ErrNotRunning` only when no
+  session is open) — neither returns `ErrCapabilityUnavailable`. This
+  corrects the root-consolidation proposal's E5 evidence, which was captured
+  against an earlier snapshot; only the three checkpoint methods
+  (`CaptureCheckpoint`, `LoadCheckpoint`, `RestoreCheckpoint`) still return
+  `ErrCapabilityUnavailable` today, consistent with `DEC-L2-CKPT`/D1.
+- `CTR-WRK-EXEC` (the sealed Workers execution contract `IMP-RUN-DISPATCH`
+  depends on per the L2 task catalog) has not landed: there is no sealed
+  `WorkstationExecutionService` root and no `CTR-WRK-EXEC` history on `main`.
+  L2 `IMP-RUN-DISPATCH` is therefore not yet dispatched; this reconciliation
+  assigns ownership prospectively and changes no implementation.
+- The committed ledger below (`path-lease-packet-manifest.json`) holds no
+  packet with an exclusive path under `pkg/services/factory_runtime/`, so PSS
+  holds no lease that could conflict with L2 `IMP-RUN-DISPATCH` admission; no
+  manifest edit is required to admit it once `CTR-WRK-EXEC` is satisfied and no
+  other lease holder overlaps it. See `internal/psslease` regression coverage
+  proving this ledger state passes and that an ambiguous/overlapping
+  dispatch-owner ledger is rejected.
+
 ## Required manifest follow-up
 
 D3 requires a `path-lease-packet-manifest.json` change that has **not** been

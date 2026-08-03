@@ -15,7 +15,7 @@ top-level Checkpoint service.
 | 1 | CTR-RUN — Runtime root contract invariants | Factory-terminal | Sealed peer surface for IMP-RUN unlock |
 | 2 | IMP-RUN-01 — Petri public-surface retirement | In progress / partial | Baseline-driven Petri boundary retirement |
 | 3 | IMP-RUN-02 — Instance Host private subservice | Planned | Depends on root contract + orchestration seams |
-| 4 | IMP-RUN-03 — Dispatch Planning private subservice | Planned | Workers command/result contract lock |
+| 4 | IMP-RUN-03 — Dispatch Planning private subservice | **Superseded** | Superseded by L2 `IMP-RUN-DISPATCH`; see reconciliation below |
 | 5 | Orchestration fold / engine-pipeline CLN | **Factory-terminal** | `CLN-RUN-FOLD-SERVICE` + `CLN-RUN-FOLD-ENGINE-PIPELINE` (#1602 / `a9d50a34b`); DEL-RUN-SERVICE (`655e4167e`) + DEL-RUN-ENGINE (#1637 / `6e48c875f`) terminal |
 | 6 | CUT-VIS-RUN / CUT-RUN-WRK / consumer-edge CUTs | Mixed | CUT-VIS-RUN + CUT-RUN-WRK terminal; CUT-RUN-REC admitted with FUN-runtime (`planner-wave-fun-run-cut-run-rec-20260728`) |
 | 7 | **Checkpoint/Recovery** (`IMP-RUN-04`, `checkpoint_recovery`) | **Factory-terminal** (PR #1580) | Durability ownership decided in [`dec-run-rec-durability.md`](dec-run-rec-durability.md). Opaque CheckpointStore + process-local adapter shipped under `factory_runtime/internal/services/checkpoint_recovery`. **Permanent** under D1 — the Recordings-backed durable checkpoint follow-on is cancelled, not deferred. |
@@ -43,6 +43,25 @@ instead of treating durability as an indefinite verbal hold.
 - No `checkpoint_recovery` implementation in DEC-RUN-REC-DURABILITY.
 - No top-level Checkpoint service promotion.
 - No Runtime second canonical event ledger.
+
+### Step 4 — Dispatch Planning (IMP-RUN-03) superseded by L2 IMP-RUN-DISPATCH
+
+**Decision owner:** [`docs/internal/projects/packaged-service-structure/README.md`](../../../internal/projects/packaged-service-structure/README.md)
+§ "Runtime dispatch ownership reconciliation" (accepted).
+
+L2's `IMP-RUN-DISPATCH` (`docs/internal/projects/root-consolidation/proposal.md`)
+is the sole owner of `PlanDispatch`, `AcceptDispatchResult`, and the stable
+Runtime dispatch identity L4 consumes. `IMP-RUN-03` claims no Factory Runtime
+implementation path going forward:
+
+- The dispatch-planning behavior this step anticipated is already implemented
+  on current `main` (`pkg/services/factory_runtime/internal/root.go`), shipped
+  under prior dispatch-cutover packets, not under an `IMP-RUN-03` implementation
+  packet.
+- No coherent PSS-owned remainder exists, so the packet is superseded rather
+  than retained as a duplicate dispatch contract.
+- This is a metadata/lease reconciliation; it changes no Runtime implementation
+  and preserves D1/D2/D3.
 
 ## Recordings implementation sequence (checkpoint bytes context)
 
