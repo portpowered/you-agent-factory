@@ -54,6 +54,21 @@ var errFactoryTargetUnavailable = errors.New("acp: session/prompt factory target
 // rather than silently proceeding with no bound Factory Session.
 var errEmptyFactorySessionIdentity = errors.New("acp: factory session start returned an empty session id")
 
+// dispatchOutcome carries what a Factory dispatch branch
+// (startFactorySessionForEpisode/invokeFactorySessionForEpisode) observed
+// about its own downstream call, decoupled from whatever *acpsdk.RequestError
+// classification or json.RawMessage response admitPromptTurn eventually
+// builds from it: the mapped ACP prompt outcome and the terminal
+// chatsessions.TurnState the admitted turn must be advanced to. terminal is
+// meaningful only when the branch returns a nil error -- a non-nil error
+// overrides it via terminalStateForFailure, since the branch's own
+// terminal choice is only ever a genuine downstream-published outcome
+// (completed/canceled/timed-out/failed), never a Go-level call failure.
+type dispatchOutcome struct {
+	outcome  protocol.PromptOutcome
+	terminal chatsessions.TurnState
+}
+
 // parseFactoryCommand inspects one validated prompt turn's content and
 // reports whether it is a "/factory <value>" command attempt. matched is
 // false only when the content is not an attempt at this command at all --
@@ -133,14 +148,12 @@ func (s *Server) handleSessionPrompt(ctx context.Context, env envelope.Envelope)
 // rejection and never reach StartTurn or (for the GetSession failures) leave
 // any effect at all.
 //
-// Once admitted, the turn's episode snapshot decides the one Factory effect
-// this story owns: when the episode has no Factory Session ID yet, start one
-// and bind the returned identity onto that exact episode/turn/version. When
-// the episode already carries a Factory Session ID (a later turn in the same
-// episode), invoke that exact bound session exactly once instead -- never a
-// second start. Either branch's published Factory Sessions outcome is then
-// mapped, deterministically and without fabrication, into the one final ACP
-// prompt response this call returns.
+// A successful admission is never left stranded in TurnStateAdmitted: it is
+// advanced to TurnStateRunning before any Factory effect, and dispatchFactoryTurn
+// guarantees an explicit terminal advancement (COMPLETED, CANCELED, or
+// FAILED) regardless of how the Factory dispatch and response mapping below
+// it turn out, clearing the session's active-turn/busy state in every case
+// so a later prompt can always be admitted.
 func (s *Server) admitPromptTurn(ctx context.Context, turn session.PromptTurn, reqIdentity chatsessions.RequestIdentity) (json.RawMessage, *acpsdk.RequestError) {
 	if s.chatSessions == nil {
 		return nil, classifyDependencyFailure(errSessionPromptUnavailable)
@@ -160,22 +173,94 @@ func (s *Server) admitPromptTurn(ctx context.Context, turn session.PromptTurn, r
 		return nil, classifyTurnAdmissionFailure(err)
 	}
 
-	var outcome protocol.PromptOutcome
-	if startResult.Episode.FactorySessionID == "" {
-		outcome, err = s.startFactorySessionForEpisode(ctx, startResult, turn)
-	} else {
-		outcome, err = s.invokeFactorySessionForEpisode(ctx, startResult, turn)
-	}
-	if err != nil {
+	if _, err := s.chatSessions.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: startResult.Session.ID,
+		TurnID:    startResult.Turn.ID,
+		Next:      chatsessions.TurnStateRunning,
+	}); err != nil {
 		return nil, classifyDependencyFailure(err)
 	}
 
-	resp := acpsdk.PromptResponse{StopReason: outcome.StopReason}
-	result, err := json.Marshal(resp)
-	if err != nil {
+	return s.dispatchFactoryTurn(ctx, startResult, turn)
+}
+
+// dispatchFactoryTurn runs the one Factory effect a running turn owns --
+// starting a fresh Factory Session for an unbound episode or invoking an
+// already-bound one -- maps its outcome into the final ACP prompt response,
+// and terminalizes the running turn on every path: COMPLETED when dispatch
+// and response mapping both succeed and the downstream outcome itself
+// reports a genuine completed status, CANCELED when the failure cause is
+// context.Canceled/context.DeadlineExceeded or the downstream outcome itself
+// reports canceled/timed-out, and FAILED for every other dispatch, terminal-
+// result, or response-mapping failure. The terminalizing AdvanceTurn call
+// always runs -- using the exact session/turn identity StartTurn admitted,
+// not a value derived from whatever failed -- so no admitted turn is ever
+// left stranded in a non-terminal state regardless of which step failed.
+func (s *Server) dispatchFactoryTurn(ctx context.Context, startResult chatsessions.StartTurnResult, turn session.PromptTurn) (json.RawMessage, *acpsdk.RequestError) {
+	var dispatched dispatchOutcome
+	var dispatchErr error
+	if startResult.Episode.FactorySessionID == "" {
+		dispatched, dispatchErr = s.startFactorySessionForEpisode(ctx, startResult, turn)
+	} else {
+		dispatched, dispatchErr = s.invokeFactorySessionForEpisode(ctx, startResult, turn)
+	}
+
+	terminal := dispatched.terminal
+	var result json.RawMessage
+	var rpcErr *acpsdk.RequestError
+	if dispatchErr != nil {
+		terminal = terminalStateForFailure(dispatchErr)
+		rpcErr = classifyDependencyFailure(dispatchErr)
+	} else {
+		resp := acpsdk.PromptResponse{StopReason: dispatched.outcome.StopReason}
+		marshaled, marshalErr := json.Marshal(resp)
+		if marshalErr != nil {
+			terminal = chatsessions.TurnStateFailed
+			rpcErr = classifyDependencyFailure(marshalErr)
+		} else {
+			result = marshaled
+		}
+	}
+
+	if _, err := s.chatSessions.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: startResult.Session.ID,
+		TurnID:    startResult.Turn.ID,
+		Next:      terminal,
+	}); err != nil {
 		return nil, classifyDependencyFailure(err)
 	}
-	return result, nil
+
+	return result, rpcErr
+}
+
+// terminalStateForFailure classifies a Factory dispatch or response-mapping
+// failure cause into the TurnState the admitted turn must terminalize to:
+// context.Canceled/context.DeadlineExceeded (a caller-cancelled or
+// deadline-exceeded request) advances to TurnStateCanceled; every other
+// cause advances to TurnStateFailed.
+func terminalStateForFailure(cause error) chatsessions.TurnState {
+	if errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
+		return chatsessions.TurnStateCanceled
+	}
+	return chatsessions.TurnStateFailed
+}
+
+// factoryInvocationTurnState maps one published Factory Session invocation's
+// terminal status to the TurnState an admitted turn terminalizes to when
+// InvokeFactoryTarget itself returns no Go error: a genuine published
+// completed outcome advances to TurnStateCompleted, a published
+// caller-canceled or timed-out outcome advances to TurnStateCanceled, and a
+// published failure -- or any other unmapped status -- safely advances to
+// TurnStateFailed rather than being reported as a false completion.
+func factoryInvocationTurnState(status factorysessions.InvocationTerminalStatus) chatsessions.TurnState {
+	switch status {
+	case factorysessions.InvocationTerminalStatusCompleted:
+		return chatsessions.TurnStateCompleted
+	case factorysessions.InvocationTerminalStatusCanceled, factorysessions.InvocationTerminalStatusTimedOut:
+		return chatsessions.TurnStateCanceled
+	default:
+		return chatsessions.TurnStateFailed
+	}
 }
 
 // startFactorySessionForEpisode starts exactly one Factory Session through
@@ -190,14 +275,18 @@ func (s *Server) admitPromptTurn(ctx context.Context, turn session.PromptTurn, r
 // attempted here. The returned outcome is protocol.MapFactoryStartOutcome's
 // deterministic projection of the shim's own published AsyncStartResult --
 // an asynchronous start has not itself reached a terminal outcome yet, so
-// this projection never carries fabricated primary-result text.
+// this projection never carries fabricated primary-result text. On success
+// the returned dispatchOutcome always terminalizes to TurnStateCompleted:
+// this branch's own responsibility -- dispatching and binding the async
+// start -- has genuinely completed, independent of the Factory Session's
+// own later, unobserved lifecycle.
 func (s *Server) startFactorySessionForEpisode(
 	ctx context.Context,
 	startResult chatsessions.StartTurnResult,
 	turn session.PromptTurn,
-) (protocol.PromptOutcome, error) {
+) (dispatchOutcome, error) {
 	if s.factoryTarget == nil {
-		return protocol.PromptOutcome{}, errFactoryTargetUnavailable
+		return dispatchOutcome{}, errFactoryTargetUnavailable
 	}
 
 	startReq := factorysessions.StartRequest{
@@ -220,10 +309,10 @@ func (s *Server) startFactorySessionForEpisode(
 
 	startOutcome, err := s.factoryTarget.StartFactoryTarget(ctx, startReq)
 	if err != nil {
-		return protocol.PromptOutcome{}, err
+		return dispatchOutcome{}, err
 	}
 	if startOutcome.SessionID == "" {
-		return protocol.PromptOutcome{}, errEmptyFactorySessionIdentity
+		return dispatchOutcome{}, errEmptyFactorySessionIdentity
 	}
 
 	if _, err := s.chatSessions.BindFactorySession(ctx, chatsessions.BindFactorySessionRequest{
@@ -233,10 +322,13 @@ func (s *Server) startFactorySessionForEpisode(
 		TurnID:           startResult.Turn.ID,
 		FactorySessionID: startOutcome.SessionID,
 	}); err != nil {
-		return protocol.PromptOutcome{}, err
+		return dispatchOutcome{}, err
 	}
 
-	return protocol.MapFactoryStartOutcome(startOutcome), nil
+	return dispatchOutcome{
+		outcome:  protocol.MapFactoryStartOutcome(startOutcome),
+		terminal: chatsessions.TurnStateCompleted,
+	}, nil
 }
 
 // invokeFactorySessionForEpisode invokes the given turn's already-bound
@@ -248,14 +340,20 @@ func (s *Server) startFactorySessionForEpisode(
 // The returned outcome is protocol.MapFactoryInvocationOutcome's
 // deterministic, safe projection of the shim's own published
 // InvocationResult -- its terminal status and only the "text" parts of its
-// primary result, never the raw result itself.
+// primary result, never the raw result itself. Unlike the start branch, this
+// call is synchronous: on success the returned dispatchOutcome terminalizes
+// to whatever factoryInvocationTurnState derives from the invocation's own
+// published terminal status, so a genuine Factory failure (InvocationResult
+// carrying InvocationTerminalStatusFailed) still terminalizes the Chat turn
+// to TurnStateFailed even though InvokeFactoryTarget itself returned no Go
+// error.
 func (s *Server) invokeFactorySessionForEpisode(
 	ctx context.Context,
 	startResult chatsessions.StartTurnResult,
 	turn session.PromptTurn,
-) (protocol.PromptOutcome, error) {
+) (dispatchOutcome, error) {
 	if s.factoryTarget == nil {
-		return protocol.PromptOutcome{}, errFactoryTargetUnavailable
+		return dispatchOutcome{}, errFactoryTargetUnavailable
 	}
 
 	requestID := startResult.Turn.ID
@@ -267,10 +365,13 @@ func (s *Server) invokeFactorySessionForEpisode(
 		SourceKind:      &sourceKind,
 	})
 	if err != nil {
-		return protocol.PromptOutcome{}, err
+		return dispatchOutcome{}, err
 	}
 
-	return protocol.MapFactoryInvocationOutcome(invokeResult), nil
+	return dispatchOutcome{
+		outcome:  protocol.MapFactoryInvocationOutcome(invokeResult),
+		terminal: factoryInvocationTurnState(invokeResult.Status),
+	}, nil
 }
 
 // promptContentToWorkParts converts validated ACP text prompt content into

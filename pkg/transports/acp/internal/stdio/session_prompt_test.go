@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"sync"
@@ -1076,4 +1077,241 @@ func TestHandleSessionPromptWithoutFactoryTargetCollaboratorAdmitsButFailsBound(
 	if !chatSessions.startTurnCalled {
 		t.Fatal("StartTurn was not called, want the turn admitted before the missing-collaborator failure")
 	}
+}
+
+// wantAdvanceTurnSequence asserts AdvanceTurn was called exactly once per
+// entry in want, in order, each against sessionID/turnID, ending with the
+// corresponding TurnState -- proving an admitted turn passes through the
+// legal RUNNING intermediate state on its way to an explicit terminal state,
+// never skipped and never left non-terminal.
+func wantAdvanceTurnSequence(t *testing.T, chatSessions *fakeChatSessionsService, sessionID, turnID string, want ...chatsessions.TurnState) {
+	t.Helper()
+	if len(chatSessions.advanceTurnReqs) != len(want) {
+		t.Fatalf("AdvanceTurn call count = %d, want %d (%v)", len(chatSessions.advanceTurnReqs), len(want), want)
+	}
+	for i, req := range chatSessions.advanceTurnReqs {
+		if req.SessionID != sessionID {
+			t.Fatalf("AdvanceTurn[%d] SessionID = %q, want %q", i, req.SessionID, sessionID)
+		}
+		if req.TurnID != turnID {
+			t.Fatalf("AdvanceTurn[%d] TurnID = %q, want %q", i, req.TurnID, turnID)
+		}
+		if req.Next != want[i] {
+			t.Fatalf("AdvanceTurn[%d] Next = %q, want %q", i, req.Next, want[i])
+		}
+	}
+}
+
+// TestHandleSessionPromptFirstTurnSuccessAdvancesRunningThenCompleted proves
+// a successful first-turn (start) admission advances the turn through
+// TurnStateRunning to TurnStateCompleted -- the branch's own dispatch and
+// bind work genuinely completed -- clearing the session's active-turn state
+// so a later prompt is never stranded behind it.
+func TestHandleSessionPromptFirstTurnSuccessAdvancesRunningThenCompleted(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.AsyncStartResult{SessionID: "fs-1", Status: "RUNNING"}}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "hello there"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr != nil {
+		t.Fatalf("handleSessionPrompt() error = %+v, want success", rpcErr)
+	}
+
+	wantAdvanceTurnSequence(t, chatSessions, "session-1", "turn-1", chatsessions.TurnStateRunning, chatsessions.TurnStateCompleted)
+}
+
+// TestHandleSessionPromptLaterTurnAdvancesByInvocationOutcome proves a later
+// (invoke) turn's terminal advancement tracks the Factory Session's own
+// published terminal status exactly -- completed advances to COMPLETED,
+// caller-canceled/timed-out both advance to CANCELED, and a genuine Factory
+// failure (or any unmapped future status) advances to FAILED -- even though
+// InvokeFactoryTarget itself returns no Go error and the ACP response still
+// carries its own (separately mapped, safe-fallback) stop reason.
+func TestHandleSessionPromptLaterTurnAdvancesByInvocationOutcome(t *testing.T) {
+	tests := []struct {
+		name   string
+		status factorysessions.InvocationTerminalStatus
+		want   chatsessions.TurnState
+	}{
+		{"completed", factorysessions.InvocationTerminalStatusCompleted, chatsessions.TurnStateCompleted},
+		{"canceled", factorysessions.InvocationTerminalStatusCanceled, chatsessions.TurnStateCanceled},
+		{"timed_out", factorysessions.InvocationTerminalStatusTimedOut, chatsessions.TurnStateCanceled},
+		{"failed", factorysessions.InvocationTerminalStatusFailed, chatsessions.TurnStateFailed},
+		{"unmapped_future_status", factorysessions.InvocationTerminalStatus("SOME_FUTURE_STATUS"), chatsessions.TurnStateFailed},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			chatSessions := &fakeChatSessionsService{
+				getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+				startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", "fs-already-bound"),
+			}
+			catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+			factoryTarget := &fakeFactoryTargetService{invokeResult: factorysessions.InvocationResult{Status: tc.status}}
+			server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+			env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+				promptTextParams("session-1", "a later message"))
+			if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr != nil {
+				t.Fatalf("handleSessionPrompt() error = %+v, want success (a Factory-level failure still yields a normal final ACP response)", rpcErr)
+			}
+
+			wantAdvanceTurnSequence(t, chatSessions, "session-1", "turn-2", chatsessions.TurnStateRunning, tc.want)
+		})
+	}
+}
+
+// TestHandleSessionPromptFactoryDispatchFailureAdvancesTurnToFailed proves a
+// Go-level Factory dispatch failure (start or invoke) both reports a bounded
+// internal error to the client and terminalizes the admitted turn to
+// TurnStateFailed, so a retried request is never blocked behind a stranded
+// non-terminal turn.
+func TestHandleSessionPromptFactoryDispatchFailureAdvancesTurnToFailed(t *testing.T) {
+	t.Run("start", func(t *testing.T) {
+		chatSessions := &fakeChatSessionsService{
+			getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+			startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
+		}
+		catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+		factoryTarget := &fakeFactoryTargetService{startErr: errors.New("factory sessions boom")}
+		server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+		env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+			promptTextParams("session-1", "hello there"))
+		if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr == nil {
+			t.Fatal("handleSessionPrompt() error = nil, want a bounded failure")
+		}
+
+		wantAdvanceTurnSequence(t, chatSessions, "session-1", "turn-1", chatsessions.TurnStateRunning, chatsessions.TurnStateFailed)
+	})
+
+	t.Run("invoke", func(t *testing.T) {
+		chatSessions := &fakeChatSessionsService{
+			getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+			startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", "fs-already-bound"),
+		}
+		catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+		factoryTarget := &fakeFactoryTargetService{invokeErr: errors.New("factory sessions boom")}
+		server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+		env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+			promptTextParams("session-1", "a later message"))
+		if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr == nil {
+			t.Fatal("handleSessionPrompt() error = nil, want a bounded failure")
+		}
+
+		wantAdvanceTurnSequence(t, chatSessions, "session-1", "turn-2", chatsessions.TurnStateRunning, chatsessions.TurnStateFailed)
+	})
+}
+
+// TestHandleSessionPromptFactoryDispatchCancellationAdvancesTurnToCanceled
+// proves a Factory dispatch failure whose cause is context.Canceled or
+// context.DeadlineExceeded terminalizes the admitted turn to
+// TurnStateCanceled (not TurnStateFailed) while still classifying the ACP
+// response as the request-cancelled outcome -- the cause remains discoverable
+// internally via errors.Is even though it never reaches the client's error
+// text.
+func TestHandleSessionPromptFactoryDispatchCancellationAdvancesTurnToCanceled(t *testing.T) {
+	tests := []struct {
+		name  string
+		cause error
+	}{
+		{"canceled", context.Canceled},
+		{"deadline_exceeded", context.DeadlineExceeded},
+		{"wrapped_canceled", fmt.Errorf("factory sessions: %w", context.Canceled)},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			chatSessions := &fakeChatSessionsService{
+				getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+				startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
+			}
+			catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+			factoryTarget := &fakeFactoryTargetService{startErr: tc.cause}
+			server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+			env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+				promptTextParams("session-1", "hello there"))
+			_, rpcErr := server.handleSessionPrompt(context.Background(), env)
+			if rpcErr == nil {
+				t.Fatal("handleSessionPrompt() error = nil, want the request-cancelled outcome")
+			}
+			if rpcErr.Code != acpsdk.NewRequestCancelled(nil).Code {
+				t.Fatalf("error code = %d, want the request-cancelled classification %d", rpcErr.Code, acpsdk.NewRequestCancelled(nil).Code)
+			}
+
+			wantAdvanceTurnSequence(t, chatSessions, "session-1", "turn-1", chatsessions.TurnStateRunning, chatsessions.TurnStateCanceled)
+		})
+	}
+}
+
+// TestHandleSessionPromptRunningTransitionFailureMakesNoFactoryDispatchCall
+// proves that when advancing a freshly admitted turn to TurnStateRunning
+// itself fails, the handler reports a bounded internal error and never
+// attempts a Factory dispatch call (StartFactoryTarget/InvokeFactoryTarget)
+// for a turn that is not actually confirmed running.
+func TestHandleSessionPromptRunningTransitionFailureMakesNoFactoryDispatchCall(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
+		advanceTurnErr:   errors.New("advance turn boom"),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.AsyncStartResult{SessionID: "fs-1"}}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "hello there"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure when the RUNNING transition fails")
+	}
+
+	if len(factoryTarget.startCalls) != 0 {
+		t.Fatalf("StartFactoryTarget call count = %d, want 0 when the turn never confirmed running", len(factoryTarget.startCalls))
+	}
+	if chatSessions.bindFactorySessionCalled {
+		t.Fatal("BindFactorySession was called, want no binding attempt when the turn never confirmed running")
+	}
+	if len(chatSessions.advanceTurnReqs) != 1 {
+		t.Fatalf("AdvanceTurn call count = %d, want exactly 1 (the failed RUNNING attempt, no terminal retry)", len(chatSessions.advanceTurnReqs))
+	}
+}
+
+// TestHandleSessionPromptTerminalTransitionFailurePropagatesBoundedError
+// proves that when the final terminalizing AdvanceTurn call itself fails
+// after a successful Factory dispatch, the handler reports that failure as a
+// bounded internal error instead of silently discarding it and returning the
+// dispatch's own successful response -- an unterminalized turn must never be
+// masked by an otherwise-successful outcome.
+func TestHandleSessionPromptTerminalTransitionFailurePropagatesBoundedError(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
+		advanceTurnErrs:  []error{nil, errors.New("terminal advance boom")},
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.AsyncStartResult{SessionID: "fs-1"}}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "hello there"))
+	result, rpcErr := server.handleSessionPrompt(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure when the terminal AdvanceTurn call fails")
+	}
+	if result != nil {
+		t.Fatalf("handleSessionPrompt() result = %q, want nil when terminalization fails", result)
+	}
+
+	if len(factoryTarget.startCalls) != 1 {
+		t.Fatalf("StartFactoryTarget call count = %d, want exactly 1 (the dispatch itself succeeded)", len(factoryTarget.startCalls))
+	}
+	if !chatSessions.bindFactorySessionCalled {
+		t.Fatal("BindFactorySession was not called, want the successful dispatch to still bind before terminalization is attempted")
+	}
+	wantAdvanceTurnSequence(t, chatSessions, "session-1", "turn-1", chatsessions.TurnStateRunning, chatsessions.TurnStateCompleted)
 }

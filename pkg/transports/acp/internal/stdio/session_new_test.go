@@ -63,6 +63,18 @@ type fakeChatSessionsService struct {
 	bindFactorySessionReq    chatsessions.BindFactorySessionRequest
 	bindFactorySessionResult chatsessions.BindFactorySessionResult
 	bindFactorySessionErr    error
+
+	advanceTurnCalled bool
+	advanceTurnReq    chatsessions.AdvanceTurnRequest
+	advanceTurnReqs   []chatsessions.AdvanceTurnRequest
+	// advanceTurnErrs, when non-empty, is consumed front-first across
+	// successive AdvanceTurn calls (one queued error per call, nil meaning
+	// that call succeeds) instead of the single static advanceTurnErr -- for
+	// fault-injection tests that need one specific AdvanceTurn call (e.g. the
+	// admission-time transition to RUNNING) to succeed while a later one
+	// (e.g. the terminal transition) fails, or vice versa.
+	advanceTurnErrs []error
+	advanceTurnErr  error
 }
 
 var _ chatsessions.Service = (*fakeChatSessionsService)(nil)
@@ -140,8 +152,24 @@ func (f *fakeChatSessionsService) BindFactorySession(_ context.Context, req chat
 	return f.bindFactorySessionResult, nil
 }
 
-func (f *fakeChatSessionsService) AdvanceTurn(context.Context, chatsessions.AdvanceTurnRequest) (chatsessions.AdvanceTurnResult, error) {
-	return chatsessions.AdvanceTurnResult{}, errors.New("fakeChatSessionsService: AdvanceTurn not implemented")
+func (f *fakeChatSessionsService) AdvanceTurn(_ context.Context, req chatsessions.AdvanceTurnRequest) (chatsessions.AdvanceTurnResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.advanceTurnCalled = true
+	f.advanceTurnReq = req
+	f.advanceTurnReqs = append(f.advanceTurnReqs, req)
+	if len(f.advanceTurnErrs) > 0 {
+		next := f.advanceTurnErrs[0]
+		f.advanceTurnErrs = f.advanceTurnErrs[1:]
+		if next != nil {
+			return chatsessions.AdvanceTurnResult{}, next
+		}
+		return chatsessions.AdvanceTurnResult{Turn: chatsessions.Turn{ID: req.TurnID, State: req.Next}}, nil
+	}
+	if f.advanceTurnErr != nil {
+		return chatsessions.AdvanceTurnResult{}, f.advanceTurnErr
+	}
+	return chatsessions.AdvanceTurnResult{Turn: chatsessions.Turn{ID: req.TurnID, State: req.Next}}, nil
 }
 
 func (f *fakeChatSessionsService) Attach(context.Context, chatsessions.AttachRequest) (chatsessions.AttachResult, error) {

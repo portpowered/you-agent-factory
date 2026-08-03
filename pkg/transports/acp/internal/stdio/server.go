@@ -7,14 +7,14 @@
 // (genuine, non-command) prompt, admission of exactly one version-guarded
 // Chat turn against the canonical Chat Sessions authority, followed by
 // starting (first turn in an episode) or invoking (later turns) the bound
-// Factory Session and mapping its published outcome, deterministically and
-// without fabrication, into the one final "session/prompt" response --
+// Factory Session, mapping its published outcome, deterministically and
+// without fabrication, into the one final "session/prompt" response, and
+// terminalizing the admitted turn on every outcome (COMPLETED, CANCELED, or
+// FAILED) so no admitted turn is ever left stranded non-terminal --
 // protocol-safe rejection of malformed input, unsupported methods, and
 // unsupported protocol versions, and deterministic termination on clean
 // EOF, context cancellation, a partial trailing frame, or a writer failure.
-// This transport slice does not yet terminalize the admitted Chat turn
-// itself after a downstream Factory failure (a later story's scope); every
-// other deferred ACP session and prompt behavior continues to receive
+// Every other deferred ACP session and prompt behavior continues to receive
 // method-not-found. It is internal to pkg/transports/acp; callers use the
 // package root's exported operations instead of this package directly.
 package stdio
