@@ -24,12 +24,15 @@ func (fake *operatorSettingsFake) ResolveACPAgentProfile(path string) (operators
 }
 
 // factoryDefinitionsFake is a focused Factory Definitions root fake
-// exercising only ListEffectiveFactories, the sole collaborator method the
-// Factory target-catalog operation depends on.
+// exercising only ListEffectiveFactories and ResolveNamedFactory, the
+// collaborator methods the Factory target-catalog operation depends on.
+// resolveNamedFactory is only exercised when a test supplies a
+// ClientWorkingRoot, since the operation only calls it in that case.
 type factoryDefinitionsFake struct {
 	factorydefinitions.Service
 
 	listEffectiveFactories func(context.Context, factorydefinitions.ListEffectiveFactoriesRequest) (factorydefinitions.ListEffectiveFactoriesResult, error)
+	resolveNamedFactory    func(context.Context, factorydefinitions.ResolveNamedFactoryRequest) (factorydefinitions.ResolveNamedFactoryResult, error)
 }
 
 func (fake *factoryDefinitionsFake) ListEffectiveFactories(
@@ -40,6 +43,16 @@ func (fake *factoryDefinitionsFake) ListEffectiveFactories(
 		return fake.listEffectiveFactories(ctx, request)
 	}
 	return factorydefinitions.ListEffectiveFactoriesResult{}, errUnexpectedCall
+}
+
+func (fake *factoryDefinitionsFake) ResolveNamedFactory(
+	ctx context.Context,
+	request factorydefinitions.ResolveNamedFactoryRequest,
+) (factorydefinitions.ResolveNamedFactoryResult, error) {
+	if fake.resolveNamedFactory != nil {
+		return fake.resolveNamedFactory(ctx, request)
+	}
+	return factorydefinitions.ResolveNamedFactoryResult{}, errUnexpectedCall
 }
 
 type unexpectedCallError struct{}

@@ -18,10 +18,21 @@ type FactoryTargetCatalogService interface {
 	// ResolveFactoryTargetCatalog returns the FACTORY targets that are both
 	// allowed by the effective ACP Agent profile and currently installed,
 	// plus exactly one current/default target drawn from that same set. It
-	// reports *FactoryTargetCatalogError when the effective profile cannot
-	// be resolved, the installed catalog cannot be read, or no requested or
-	// configured current target belongs to the allowed/installed
-	// intersection.
+	// reports *FactoryTargetCatalogError, unwrapping to one of this
+	// package's sentinel Factory target-catalog errors, when: the effective
+	// profile cannot be resolved or is invalid/empty
+	// (ErrFactoryTargetProfileUnavailable); the installed catalog or a
+	// canonical cross-root resolution cannot be read
+	// (ErrFactoryTargetCatalogUnavailable); a requested current target is
+	// not a well-formed unversioned factory:<ref>, including a version- or
+	// digest-pinned ref (ErrFactoryTargetReferenceMalformed); the allowed and
+	// installed sets share no target at all (ErrFactoryTargetCatalogEmpty);
+	// the resolved current/default target is unknown or not installed
+	// (ErrFactoryTargetNotInstalled); it is installed but outside the
+	// allowlist (ErrFactoryTargetNotAllowed); or it pins a project-local
+	// working root incompatible with a supplied ClientWorkingRoot
+	// (ErrFactoryTargetWorkingRootIncompatible). It never returns a partial
+	// choice list alongside an error.
 	ResolveFactoryTargetCatalog(ctx context.Context, req ResolveFactoryTargetCatalogRequest) (ResolveFactoryTargetCatalogResult, error)
 }
 

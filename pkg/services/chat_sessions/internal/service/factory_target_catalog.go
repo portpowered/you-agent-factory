@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"path/filepath"
+	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -9,6 +12,28 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
+
+// factoryTargetReferencePattern mirrors Operator Settings' local factory:
+// target-reference grammar (pkg/services/operator_settings/acp_agent_profile.go):
+// one or more lowercase kebab-case path segments separated by '/', with an
+// optional leading '@' scope marker on the first segment. It intentionally
+// has no room for a version or digest pin, so a version- or digest-pinned
+// reference is rejected the same way as any other malformed shape. Operator
+// Settings only validates profile-sourced references (its own AllowedTargets
+// and DefaultTarget); this package validates a caller-supplied CurrentTarget
+// the same way, since that value never passes through Operator Settings'
+// normalization.
+var factoryTargetReferencePattern = regexp.MustCompile(
+	`^@?[a-z0-9]+(?:-[a-z0-9]+)*(?:/[a-z0-9]+(?:-[a-z0-9]+)*)+$`,
+)
+
+func isWellFormedFactoryTargetReference(value string) bool {
+	if !strings.HasPrefix(value, operatorsettings.ACPFactoryTargetNamespace) {
+		return false
+	}
+	suffix := strings.TrimPrefix(value, operatorsettings.ACPFactoryTargetNamespace)
+	return factoryTargetReferencePattern.MatchString(suffix)
+}
 
 // ResolveFactoryTargetCatalog resolves the effective ACP Agent profile
 // through Operator Settings, reads the installed Factory catalog through
@@ -63,14 +88,54 @@ func (s *Service) ResolveFactoryTargetCatalog(
 	if current == "" {
 		current = profile.DefaultTarget
 	}
-	currentChoice, ok := choicesByValue[current]
-	if !ok {
+	if !isWellFormedFactoryTargetReference(current) {
 		return chatsessions.ResolveFactoryTargetCatalogResult{}, &chatsessions.FactoryTargetCatalogError{
 			Target: current,
-			Err:    chatsessions.ErrFactoryTargetCurrentUnavailable,
+			Err:    chatsessions.ErrFactoryTargetReferenceMalformed,
+		}
+	}
+	if len(choicesByValue) == 0 {
+		return chatsessions.ResolveFactoryTargetCatalogResult{}, &chatsessions.FactoryTargetCatalogError{
+			Err: chatsessions.ErrFactoryTargetCatalogEmpty,
 		}
 	}
 
+	bareName := strings.TrimPrefix(current, operatorsettings.ACPFactoryTargetNamespace)
+	if _, installedOK := installed[bareName]; !installedOK {
+		return chatsessions.ResolveFactoryTargetCatalogResult{}, &chatsessions.FactoryTargetCatalogError{
+			Target: current,
+			Err:    chatsessions.ErrFactoryTargetNotInstalled,
+		}
+	}
+	if !slices.Contains(profile.AllowedTargets, current) {
+		return chatsessions.ResolveFactoryTargetCatalogResult{}, &chatsessions.FactoryTargetCatalogError{
+			Target: current,
+			Err:    chatsessions.ErrFactoryTargetNotAllowed,
+		}
+	}
+
+	if clientRoot := strings.TrimSpace(req.ClientWorkingRoot); clientRoot != "" {
+		resolved, err := s.factoryDefinitions.ResolveNamedFactory(ctx, factorydefinitions.ResolveNamedFactoryRequest{
+			ProjectRoot: req.FactoryDiscovery.ProjectRoot,
+			GlobalRoot:  req.FactoryDiscovery.GlobalRoot,
+			Name:        bareName,
+		})
+		if err != nil {
+			return chatsessions.ResolveFactoryTargetCatalogResult{}, &chatsessions.FactoryTargetCatalogError{
+				Target: current,
+				Err:    chatsessions.ErrFactoryTargetCatalogUnavailable,
+			}
+		}
+		if resolved.Resolution.Source == factorydefinitions.NamedFactoryResolutionSourceProjectLocal &&
+			filepath.Clean(clientRoot) != filepath.Clean(resolved.Resolution.ProjectRoot) {
+			return chatsessions.ResolveFactoryTargetCatalogResult{}, &chatsessions.FactoryTargetCatalogError{
+				Target: current,
+				Err:    chatsessions.ErrFactoryTargetWorkingRootIncompatible,
+			}
+		}
+	}
+
+	currentChoice := choicesByValue[current]
 	return chatsessions.ResolveFactoryTargetCatalogResult{
 		Choices:       orderedFactoryTargetChoices(choicesByValue, currentChoice),
 		CurrentTarget: currentChoice.Value,
