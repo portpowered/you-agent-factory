@@ -9,8 +9,8 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 )
 
@@ -122,38 +122,6 @@ func (f *lifecycleControlFactory) AcceptDispatchResult(
 	return factory.AcceptDispatchResultResult{
 		Outcome:    factory.DispatchPlanOutcomeRetired,
 		DispatchID: req.DispatchID,
-	}, nil
-}
-
-func (f *lifecycleControlFactory) CaptureCheckpoint(
-	_ context.Context,
-	req factory.CaptureCheckpointRequest,
-) (factory.CaptureCheckpointResult, error) {
-	return factory.CaptureCheckpointResult{
-		Outcome: factory.CheckpointOutcomeCaptured,
-		Checkpoint: factory.Checkpoint{
-			CheckpointID: req.CheckpointID, SchemaVersion: 1, Payload: []byte(`{}`),
-		},
-	}, nil
-}
-
-func (f *lifecycleControlFactory) LoadCheckpoint(
-	_ context.Context,
-	req factory.LoadCheckpointRequest,
-) (factory.LoadCheckpointResult, error) {
-	return factory.LoadCheckpointResult{
-		Outcome:    factory.CheckpointOutcomeLoaded,
-		Checkpoint: factory.Checkpoint{CheckpointID: req.CheckpointID, SchemaVersion: 1, Payload: []byte(`{}`)},
-	}, nil
-}
-
-func (f *lifecycleControlFactory) RestoreCheckpoint(
-	_ context.Context,
-	req factory.RestoreCheckpointRequest,
-) (factory.RestoreCheckpointResult, error) {
-	return factory.RestoreCheckpointResult{
-		Outcome:      factory.CheckpointOutcomeRestored,
-		CheckpointID: req.Checkpoint.CheckpointID,
 	}, nil
 }
 

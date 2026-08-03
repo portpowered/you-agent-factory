@@ -138,6 +138,21 @@ proof**) and the lease matrix in [`plan.md`](plan.md).
 - A Recordings-backed durable store adapter remains follow-on work after
   Recordings durable log/cursor/retention exists.
 
+## Amendment — IMP-RUN-04 closed (ACP-L2-DEL-RUN-CKPT)
+
+`DEC-L2-CKPT` (`docs/internal/projects/root-consolidation/proposal.md` §4)
+decided the public Factory Runtime root's `CaptureCheckpoint`,
+`LoadCheckpoint`, and `RestoreCheckpoint` cannot be honestly implemented under
+`D1` and are deleted rather than implemented. That deletion has landed
+(`ACP-L2-DEL-RUN-CKPT-001`). `IMP-RUN-04` (this decision's gate) remains
+Factory-terminal via PR #1580 as recorded above; the **Recordings-backed
+durable checkpoint storage follow-on** described above is now **cancelled, not
+deferred**, consistent with `D1` in the PSS program README. The private
+process-local `CheckpointStore` and `checkpoint_recovery` implementation this
+decision authorized remain unchanged and permanent. See the full reconciliation
+record in
+[`docs/internal/projects/packaged-service-structure/README.md`](../projects/packaged-service-structure/README.md#checkpoint-deletion-reconciliation-pss-imp-run-04-vs-l2-dec-l2-ckptdel-run-ckpt).
+
 ## Related documents
 
 | Document | Role |

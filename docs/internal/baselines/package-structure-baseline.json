@@ -1410,17 +1410,7 @@
     {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/capture.go",
-      "target": "EnvelopeFromRootCheckpoint"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/capture.go",
       "target": "RestoreRuntimeOpaquePayload"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/capture.go",
-      "target": "RootCheckpointFromEnvelope"
     },
     {
       "rule": "service-root-exported-function",

@@ -20,7 +20,6 @@ const (
 	runtimeHTTPOperationControl      = transporterrors.OperationControl
 	runtimeHTTPOperationMoveWork     = transporterrors.OperationMoveWork
 	runtimeHTTPOperationDispatchPlan = transporterrors.OperationDispatchPlan
-	runtimeHTTPOperationCheckpoint   = transporterrors.OperationCheckpoint
 )
 
 // RootErrorResponse preserves the Runtime HTTP adapter's compatibility

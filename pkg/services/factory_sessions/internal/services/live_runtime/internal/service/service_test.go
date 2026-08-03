@@ -9,8 +9,8 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	liveruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime"
 	liveruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime/wire"
@@ -174,10 +174,10 @@ func (rootOnlyRuntime) Observe(context.Context, factoryruntime.ObserveRequest) (
 
 type testFactoryRuntime struct {
 	factoryruntime.Service
-	state           string
-	pauseCalls      int
-	resumeCalls     int
-	terminateCalls  int
+	state          string
+	pauseCalls     int
+	resumeCalls    int
+	terminateCalls int
 }
 
 func (f *testFactoryRuntime) Run(context.Context) error    { return nil }
@@ -223,33 +223,6 @@ func (f *testFactoryRuntime) AcceptDispatchResult(_ context.Context, req factory
 		Outcome:       factoryruntime.DispatchPlanOutcomeRetired,
 		DispatchID:    req.DispatchID,
 		CorrelationID: req.CorrelationID,
-	}, nil
-}
-func (f *testFactoryRuntime) CaptureCheckpoint(_ context.Context, req factoryruntime.CaptureCheckpointRequest) (factoryruntime.CaptureCheckpointResult, error) {
-	id := req.CheckpointID
-	if id == "" {
-		id = "checkpoint-stub"
-	}
-	return factoryruntime.CaptureCheckpointResult{
-		Outcome: factoryruntime.CheckpointOutcomeCaptured,
-		Checkpoint: factoryruntime.Checkpoint{
-			CheckpointID:  id,
-			SchemaVersion: 1,
-			StrategyKind:  "runtime",
-			Payload:       []byte(`{}`),
-		},
-	}, nil
-}
-func (f *testFactoryRuntime) LoadCheckpoint(_ context.Context, req factoryruntime.LoadCheckpointRequest) (factoryruntime.LoadCheckpointResult, error) {
-	if req.CheckpointID == "" {
-		return factoryruntime.LoadCheckpointResult{}, factoryruntime.ErrCheckpointNotFound
-	}
-	return factoryruntime.LoadCheckpointResult{}, factoryruntime.ErrCheckpointNotFound
-}
-func (f *testFactoryRuntime) RestoreCheckpoint(_ context.Context, req factoryruntime.RestoreCheckpointRequest) (factoryruntime.RestoreCheckpointResult, error) {
-	return factoryruntime.RestoreCheckpointResult{
-		Outcome:      factoryruntime.CheckpointOutcomeRestored,
-		CheckpointID: req.Checkpoint.CheckpointID,
 	}, nil
 }
 func (f *testFactoryRuntime) GetFactoryEvents(context.Context) ([]factorydefinitions.FactoryEvent, error) {

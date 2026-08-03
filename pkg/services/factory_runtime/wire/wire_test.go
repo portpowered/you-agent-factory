@@ -162,11 +162,6 @@ func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
 	if !errors.Is(err, factoryruntime.ErrUnknownDispatchCorrelation) {
 		t.Fatalf("AcceptDispatchResult(empty correlation) error = %v, want ErrUnknownDispatchCorrelation", err)
 	}
-
-	_, err = runtime.CaptureCheckpoint(ctx, factoryruntime.CaptureCheckpointRequest{CheckpointID: "checkpoint-1"})
-	if !errors.Is(err, factoryruntime.ErrCapabilityUnavailable) {
-		t.Fatalf("CaptureCheckpoint() error = %v, want ErrCapabilityUnavailable", err)
-	}
 }
 
 type newServiceInputs struct {

@@ -49,18 +49,6 @@ func (stub stubRuntimeRoot) AcceptDispatchResult(context.Context, factoryruntime
 	return factoryruntime.AcceptDispatchResultResult{}, factoryruntime.ErrNotRunning
 }
 
-func (stub stubRuntimeRoot) CaptureCheckpoint(context.Context, factoryruntime.CaptureCheckpointRequest) (factoryruntime.CaptureCheckpointResult, error) {
-	return factoryruntime.CaptureCheckpointResult{}, factoryruntime.ErrNotRunning
-}
-
-func (stub stubRuntimeRoot) LoadCheckpoint(context.Context, factoryruntime.LoadCheckpointRequest) (factoryruntime.LoadCheckpointResult, error) {
-	return factoryruntime.LoadCheckpointResult{}, factoryruntime.ErrNotRunning
-}
-
-func (stub stubRuntimeRoot) RestoreCheckpoint(context.Context, factoryruntime.RestoreCheckpointRequest) (factoryruntime.RestoreCheckpointResult, error) {
-	return factoryruntime.RestoreCheckpointResult{}, factoryruntime.ErrNotRunning
-}
-
 func constructedRuntimeCLIService(
 	t *testing.T,
 	runtime factoryruntime.Service,

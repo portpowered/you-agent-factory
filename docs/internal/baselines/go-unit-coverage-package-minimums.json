@@ -845,10 +845,6 @@
       "minimum": 82.30
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/checkpoint",
-      "minimum": 85.91
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/control",
       "minimum": 83.13
     },
@@ -862,7 +858,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/internal/errors",
-      "minimum": 96.42
+      "minimum": 96.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/observation",

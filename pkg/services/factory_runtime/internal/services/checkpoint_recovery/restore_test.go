@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	checkpointrecovery "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery"
 )
 
@@ -44,28 +43,9 @@ func TestRestoreRuntimeOpaquePayloadRejectsCorruptPayload(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			_, err := checkpointrecovery.RestoreRuntimeOpaquePayload(tc.payload)
-			if !errors.Is(err, factoryruntime.ErrCorruptCheckpoint) {
+			if !errors.Is(err, checkpointrecovery.ErrCorruptCheckpoint) {
 				t.Fatalf("RestoreRuntimeOpaquePayload() error = %v, want ErrCorruptCheckpoint", err)
 			}
 		})
-	}
-}
-
-func TestEnvelopeFromRootCheckpointRoundTripsOpaqueFields(t *testing.T) {
-	t.Parallel()
-
-	root := factoryruntime.Checkpoint{
-		CheckpointID:  "checkpoint-1",
-		SchemaVersion: checkpointrecovery.RuntimeOpaqueCheckpointSchemaVersion,
-		StrategyKind:  checkpointrecovery.RuntimeOpaqueCheckpointStrategyKind,
-		Payload:       []byte(`{"factoryState":"RUNNING"}`),
-	}
-	envelope := checkpointrecovery.EnvelopeFromRootCheckpoint(root)
-	roundTrip := checkpointrecovery.RootCheckpointFromEnvelope(envelope)
-	if roundTrip.CheckpointID != root.CheckpointID ||
-		roundTrip.SchemaVersion != root.SchemaVersion ||
-		roundTrip.StrategyKind != root.StrategyKind ||
-		string(roundTrip.Payload) != string(root.Payload) {
-		t.Fatalf("RootCheckpointFromEnvelope(EnvelopeFromRootCheckpoint()) = %#v, want %#v", roundTrip, root)
 	}
 }

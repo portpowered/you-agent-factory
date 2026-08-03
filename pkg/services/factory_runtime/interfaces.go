@@ -4,8 +4,8 @@ import (
 	"context"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontext "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/legacysnapshot"
+	factorycontext "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -42,8 +42,8 @@ type APIFactory interface {
 type LegacySnapshotProvider = legacysnapshot.Provider
 
 // Service is the singular Factory Runtime root contract and the only
-// cross-service runtime authority for control, observation, dispatch-plan, and
-// checkpoint slices published at this package root. Peers depend on this named
+// cross-service runtime authority for control, observation, and dispatch-plan
+// slices published at this package root. Peers depend on this named
 // interface rather than hosting bundles, run-loop engines, or JavaScript-only
 // strategy seams. A service may route these operations to a replaceable hosted
 // engine and therefore does not expose the engine run loop.
@@ -96,27 +96,6 @@ type Service interface {
 	// dispatch-plan failures, or ErrCapabilityUnavailable until the canonical
 	// result-ingress implementation lands.
 	AcceptDispatchResult(ctx context.Context, req AcceptDispatchResultRequest) (AcceptDispatchResultResult, error)
-
-	// CaptureCheckpoint captures a versioned Runtime execution checkpoint with
-	// opaque strategy payload bytes. Returns ErrNotRunning or ErrNotFound for
-	// typed availability failures. Does not claim Recordings immutable history
-	// ownership. Returns ErrCapabilityUnavailable until nested IMP-RUN packets
-	// provide canonical execution-state codec wiring.
-	CaptureCheckpoint(ctx context.Context, req CaptureCheckpointRequest) (CaptureCheckpointResult, error)
-
-	// LoadCheckpoint loads or inspects compatibility of a previously captured
-	// checkpoint without restoring it. Returns ErrCheckpointNotFound,
-	// ErrCorruptCheckpoint, ErrIncompatibleCheckpoint, ErrNotRunning, or
-	// ErrNotFound for typed failures, or ErrCapabilityUnavailable until the
-	// canonical checkpoint store implementation lands.
-	LoadCheckpoint(ctx context.Context, req LoadCheckpointRequest) (LoadCheckpointResult, error)
-
-	// RestoreCheckpoint restores a compatible opaque checkpoint into mutable
-	// Runtime execution state. Returns ErrCheckpointNotFound,
-	// ErrCorruptCheckpoint, ErrIncompatibleCheckpoint, ErrNotRunning, or
-	// ErrNotFound for typed failures, or ErrCapabilityUnavailable until the
-	// canonical mutable-state restore implementation lands.
-	RestoreCheckpoint(ctx context.Context, req RestoreCheckpointRequest) (RestoreCheckpointResult, error)
 }
 
 // Factory retains the migration-era engine and blocking run-loop surface for
