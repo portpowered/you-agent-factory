@@ -89,9 +89,9 @@ func TestWorkerExecutorRequestAdapterExecuteRecoversNonErrorPanic(t *testing.T) 
 
 	result, err := adapter.Execute(context.Background(), request)
 
-	panicErr, ok := AsWorkerExecutorPanicError(err)
-	if !ok || panicErr == nil {
-		t.Fatalf("AsWorkerExecutorPanicError(err) = (_, false), want true; err = %v", err)
+	var panicErr *WorkerExecutorPanicError
+	if !errors.As(err, &panicErr) || panicErr == nil {
+		t.Fatalf("errors.As(err, *WorkerExecutorPanicError) = false, want true; err = %v", err)
 	}
 	if panicErr.Cause != any("catastrophic failure") {
 		t.Fatalf("panicErr.Cause = %v, want %q", panicErr.Cause, "catastrophic failure")

@@ -2,7 +2,6 @@ package workers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -31,20 +30,8 @@ func (e *WorkerExecutorPanicError) Unwrap() error {
 	if e == nil {
 		return nil
 	}
-	if cause, ok := e.Cause.(error); ok {
-		return cause
-	}
-	return nil
-}
-
-// AsWorkerExecutorPanicError reports whether err contains a recovered
-// WorkerExecutor panic, exposing the original recovered cause.
-func AsWorkerExecutorPanicError(err error) (*WorkerExecutorPanicError, bool) {
-	var panicErr *WorkerExecutorPanicError
-	if errors.As(err, &panicErr) && panicErr != nil {
-		return panicErr, true
-	}
-	return nil, false
+	cause, _ := e.Cause.(error)
+	return cause
 }
 
 // NewWorkstationPoolBoundary constructs a Workers-owned pool boundary from
