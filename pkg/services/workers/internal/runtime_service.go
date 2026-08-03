@@ -37,6 +37,7 @@ type Service struct {
 	executorBuilder                   workerconstruction.Builder
 	providerCommandRunner             workers.CommandRunner
 	scriptCommandRunner               workers.CommandRunner
+	progressPublisher                 workers.ProgressPublisher
 	providerCommandInjected           bool
 	scriptCommandInjected             bool
 	providerLifecycles                *ownedProviderLifecycles
@@ -141,6 +142,7 @@ func New(
 	providersService providers.Service,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,
+	progressPublisher workers.ProgressPublisher,
 	agyPTYAllocator workers.PTYAllocator,
 	logger *zap.Logger,
 	verbose bool,
@@ -176,6 +178,9 @@ func New(
 	}
 	if providersService == nil && providerOverride == nil {
 		return nil, fmt.Errorf("construct Worker execution service: Providers service is required")
+	}
+	if progressPublisher == nil {
+		return nil, fmt.Errorf("construct Worker execution service: progress publisher is required")
 	}
 	if logger == nil {
 		return nil, fmt.Errorf("construct Worker execution service: logger is required")
@@ -233,6 +238,7 @@ func New(
 		executorBuilder:                   executorBuilder,
 		providerCommandRunner:             providerRunner,
 		scriptCommandRunner:               scriptRunner,
+		progressPublisher:                 progressPublisher,
 		providerCommandInjected:           providerCommandRunner != nil,
 		scriptCommandInjected:             scriptCommandRunner != nil,
 		logger:                            logger,

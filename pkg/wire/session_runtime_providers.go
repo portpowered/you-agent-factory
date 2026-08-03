@@ -853,6 +853,7 @@ func provideWorkersRuntimeFactory(
 			modelsScope,
 			providerCommandRunner,
 			scriptCommandRunner,
+			func(workers.ProgressFragment) {},
 			allocator,
 			logger,
 			verbose,

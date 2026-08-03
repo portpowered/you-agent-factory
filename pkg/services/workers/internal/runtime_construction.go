@@ -52,9 +52,15 @@ func buildExecutionFactories(
 	return scriptFactory, providerRunner, scriptRunner, nil
 }
 
-// WithCommandRunners returns an inert copy whose executor factories use the
-// supplied runtime-specific wrappers. Nil preserves the existing edge.
-func (s *Service) WithCommandRunners(providerRunner, scriptRunner workers.CommandRunner) (workers.RuntimeService, error) {
+// rebuiltForBuild returns an inert copy whose executor factories use the
+// supplied per-session-build command-runner overrides, and whose workstation
+// pool is reset so each session-build activation owns independent workstation
+// lifecycle state. Nil preserves the existing edge. This is the one seam
+// ACP-L2-CUT-RUN-WRK-RUNNERS is chartered to remove by folding session-build
+// runner selection into construction-time injection; it is deliberately kept
+// off the public RuntimeService contract and reachable only through the
+// Workers wire boundary (see wire.RebuildForSessionBuild).
+func (s *Service) rebuiltForBuild(providerRunner, scriptRunner workers.CommandRunner) (*Service, error) {
 	if s == nil || s.scriptFactory == nil {
 		return nil, fmt.Errorf("construct Worker runtime services: base service is required")
 	}
@@ -100,6 +106,25 @@ func (s *Service) WithCommandRunners(providerRunner, scriptRunner workers.Comman
 	return &clone, nil
 }
 
+// RebuildForSessionBuild returns a per-session-build clone of base with the
+// supplied command-runner overrides applied and an independent workstation
+// pool. It is the sole surviving replacement path for the provider/script
+// command runners, kept off the public RuntimeService contract and reachable
+// only through the Workers wire boundary. ACP-L2-CUT-RUN-WRK-RUNNERS is
+// chartered to remove this seam by folding session-build runner selection
+// into construction-time injection.
+func RebuildForSessionBuild(
+	base workers.RuntimeService,
+	providerRunner workers.CommandRunner,
+	scriptRunner workers.CommandRunner,
+) (workers.RuntimeService, error) {
+	service, ok := base.(*Service)
+	if !ok || service == nil {
+		return nil, fmt.Errorf("Workers runtime service has an unsupported implementation")
+	}
+	return service.rebuiltForBuild(providerRunner, scriptRunner)
+}
+
 func serviceCommandClock(s *Service) workers.Clock {
 	return workers.ClockFunc(func() time.Time {
 		if s != nil && s.clock != nil {
@@ -137,31 +162,6 @@ func rebuildExecutorBuilder(
 		workstationFiles,
 		decisionEnvelopes,
 	)
-}
-
-// WithProgressPublisher returns a runtime-specific copy that publishes
-// provider subprocess progress. An explicitly injected provider runner always
-// wins over the generated progress wrapper.
-func (s *Service) WithProgressPublisher(
-	runner workers.CommandRunner,
-	_ workers.ProgressPublisher,
-	_ bool,
-	_ logging.Logger,
-) (workers.RuntimeService, error) {
-	if s == nil {
-		return nil, fmt.Errorf("Worker execution service is required")
-	}
-	if s.ProviderCommandInjected() {
-		return s, nil
-	}
-	if runner == nil {
-		return s, nil
-	}
-	return s.WithCommandRunners(runner, nil)
-}
-
-func (s *Service) ProviderCommandInjected() bool {
-	return s != nil && s.providerCommandInjected
 }
 
 func (s *Service) ProviderCommandRunner() workers.CommandRunner {

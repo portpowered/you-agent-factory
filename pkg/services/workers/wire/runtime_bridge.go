@@ -31,6 +31,7 @@ func NewRuntimeWithSelection(
 	modelsScope models.RuntimeScopeRef,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,
+	progressPublisher workers.ProgressPublisher,
 	allocator workers.PTYAllocator,
 	logger *zap.Logger,
 	verbose bool,
@@ -69,6 +70,7 @@ func NewRuntimeWithSelection(
 		modelsScope,
 		providerCommandRunner,
 		scriptCommandRunner,
+		progressPublisher,
 		allocator,
 		logger,
 		verbose,
@@ -100,6 +102,18 @@ func NewRuntimeWithSelection(
 		providerRegistry,
 		providerRegistryRebinder,
 	)
+}
+
+// RebuildForSessionBuild returns a per-session-build clone of base with the
+// supplied command-runner overrides applied. It is the one seam
+// ACP-L2-CUT-RUN-WRK-RUNNERS is chartered to remove; RuntimeService itself
+// exposes no supported operation that replaces its constructed dependencies.
+func RebuildForSessionBuild(
+	base workers.RuntimeService,
+	providerRunner workers.CommandRunner,
+	scriptRunner workers.CommandRunner,
+) (workers.RuntimeService, error) {
+	return workersinternal.RebuildForSessionBuild(base, providerRunner, scriptRunner)
 }
 
 // BuildRuntimeExecutors invokes the concrete Workers runtime implementation.

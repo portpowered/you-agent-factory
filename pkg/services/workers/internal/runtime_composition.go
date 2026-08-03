@@ -35,6 +35,7 @@ func NewRuntime(
 	modelsScope models.RuntimeScopeRef,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,
+	progressPublisher workers.ProgressPublisher,
 	allocator workers.PTYAllocator,
 	logger *zap.Logger,
 	verbose bool,
@@ -67,6 +68,7 @@ func NewRuntime(
 		providersService,
 		providerCommandRunner,
 		scriptCommandRunner,
+		progressPublisher,
 		allocator,
 		logger,
 		verbose,
@@ -119,6 +121,7 @@ func NewRuntimeWithSelection(
 	modelsScope models.RuntimeScopeRef,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,
+	progressPublisher workers.ProgressPublisher,
 	allocator workers.PTYAllocator,
 	logger *zap.Logger,
 	verbose bool,
@@ -152,7 +155,7 @@ func NewRuntimeWithSelection(
 ) (workers.RuntimeService, error) {
 	runtimeService, err := NewRuntime(
 		sessions, modelService, providersService, modelsScope, providerCommandRunner, scriptCommandRunner,
-		allocator, logger, verbose, factoryRunnerID, runWorktree, invocationSkipPermissionsOverride,
+		progressPublisher, allocator, logger, verbose, factoryRunnerID, runWorktree, invocationSkipPermissionsOverride,
 		providerOverride, now, processEnvironment, currentWorkingDirectory, contentMaterializer, interpolation, executionPolicy,
 		factoryDocs, resolveSymlinks, executableLocator, executableInspector, executableFiles, operatingSystem,
 		worktreePreparer, agentRunHarness, retryRandom, workstationFiles, temporaryFiles, decisionEnvelopes,

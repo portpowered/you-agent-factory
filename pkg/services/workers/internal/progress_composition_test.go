@@ -8,7 +8,6 @@ import (
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -24,6 +23,8 @@ import (
 var testRetryRandom = platformrandom.SourceFunc(func(int64) (int64, error) {
 	return 0, nil
 })
+
+func testProgressPublisher(workers.ProgressFragment) {}
 
 type testProvidersService struct {
 	providers.Service
@@ -41,9 +42,9 @@ func (testProvidersService) Execute(context.Context, providers.ExecuteRequest) (
 
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
-	base := func(provider, script workers.CommandRunner, allocator workers.PTYAllocator, logger *zap.Logger, now func() time.Time) error {
+	base := func(provider, script workers.CommandRunner, publisher workers.ProgressPublisher, allocator workers.PTYAllocator, logger *zap.Logger, now func() time.Time) error {
 		_, err := New(
-			inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, provider, script, allocator,
+			inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, provider, script, publisher, allocator,
 			logger, false, "", "", nil, nil, now, os.Environ, os.Getwd, nil, nil, nil, nil,
 			testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", testFactoryWorktreePreparer{}, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 			testRetryRandom,
@@ -53,17 +54,19 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 		return err
 	}
 	validRunner := injectedProviderRunner{}
+	validPublisher := workers.ProgressPublisher(testProgressPublisher)
 	validAllocator := &workers.MockPTYAllocator{}
 	for _, testCase := range []struct {
 		name string
 		err  error
 		want string
 	}{
-		{name: "provider runner", err: base(nil, validRunner, validAllocator, zap.NewNop(), time.Now), want: "provider command runner is required"},
-		{name: "script runner", err: base(validRunner, nil, validAllocator, zap.NewNop(), time.Now), want: "script command runner is required"},
-		{name: "PTY allocator", err: base(validRunner, validRunner, nil, zap.NewNop(), time.Now), want: "Agy PTY allocator is required"},
-		{name: "logger", err: base(validRunner, validRunner, validAllocator, nil, time.Now), want: "logger is required"},
-		{name: "clock", err: base(validRunner, validRunner, validAllocator, zap.NewNop(), nil), want: "clock is required"},
+		{name: "provider runner", err: base(nil, validRunner, validPublisher, validAllocator, zap.NewNop(), time.Now), want: "provider command runner is required"},
+		{name: "script runner", err: base(validRunner, nil, validPublisher, validAllocator, zap.NewNop(), time.Now), want: "script command runner is required"},
+		{name: "progress publisher", err: base(validRunner, validRunner, nil, validAllocator, zap.NewNop(), time.Now), want: "progress publisher is required"},
+		{name: "PTY allocator", err: base(validRunner, validRunner, validPublisher, nil, zap.NewNop(), time.Now), want: "Agy PTY allocator is required"},
+		{name: "logger", err: base(validRunner, validRunner, validPublisher, validAllocator, nil, time.Now), want: "logger is required"},
+		{name: "clock", err: base(validRunner, validRunner, validPublisher, validAllocator, zap.NewNop(), nil), want: "clock is required"},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			if testCase.err == nil || !strings.Contains(testCase.err.Error(), testCase.want) {
@@ -72,7 +75,7 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 		})
 	}
 	_, err := New(
-		inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, validRunner, validRunner, validAllocator,
+		inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, validRunner, validRunner, validPublisher, validAllocator,
 		zap.NewNop(), false, "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
 		testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		testRetryRandom,
@@ -83,7 +86,7 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 		t.Fatalf("missing worktree preparer error = %v", err)
 	}
 	_, err = New(
-		inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, validRunner, validRunner, validAllocator,
+		inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, validRunner, validRunner, validPublisher, validAllocator,
 		zap.NewNop(), false, "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
 		testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", testFactoryWorktreePreparer{}, nil,
 		testRetryRandom,
@@ -94,7 +97,7 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 		t.Fatalf("missing agent-run harness error = %v", err)
 	}
 	_, err = New(
-		inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, validRunner, validRunner, validAllocator,
+		inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, validRunner, validRunner, validPublisher, validAllocator,
 		zap.NewNop(), false, "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
 		testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", testFactoryWorktreePreparer{}, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		nil,
@@ -105,7 +108,7 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 		t.Fatalf("missing retry random source error = %v", err)
 	}
 	_, err = New(
-		inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, validRunner, validRunner, validAllocator,
+		inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, validRunner, validRunner, validPublisher, validAllocator,
 		zap.NewNop(), false, "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
 		testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", testFactoryWorktreePreparer{}, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		testRetryRandom,
@@ -116,7 +119,7 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 		t.Fatalf("missing workstation filesystem error = %v", err)
 	}
 	_, err = New(
-		inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, validRunner, validRunner, validAllocator,
+		inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, validRunner, validRunner, validPublisher, validAllocator,
 		zap.NewNop(), false, "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
 		testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", testFactoryWorktreePreparer{}, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		testRetryRandom,
@@ -144,11 +147,6 @@ func TestNewInvocationRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 	}
 }
 
-func testWorkerService(t *testing.T, providerRunner workers.CommandRunner) *Service {
-	t.Helper()
-	return testWorkerServiceWithRunnerAndLogger(t, providerRunner, zap.NewNop())
-}
-
 func testWorkerServiceWithLogger(t *testing.T, logger *zap.Logger) *Service {
 	t.Helper()
 	return testWorkerServiceWithRunnerAndLogger(t, nil, logger)
@@ -165,6 +163,7 @@ func testWorkerServiceWithRunnerAndLogger(t *testing.T, providerRunner workers.C
 		testProvidersService{},
 		providerRunner,
 		injectedProviderRunner{},
+		workers.ProgressPublisher(testProgressPublisher),
 		&workers.MockPTYAllocator{},
 		logger,
 		false,
@@ -197,19 +196,22 @@ func testWorkerServiceWithRunnerAndLogger(t *testing.T, providerRunner workers.C
 	return service
 }
 
-// TestWithCommandRunnersPreservesInjectedLoggerForWorkstationPool proves the
+// TestRebuiltForBuildPreservesInjectedLoggerForWorkstationPool proves the
 // logger a runtime opening injects at construction keeps reaching the cloned
-// workstation pool through WithCommandRunners, the path every normal Factory
-// Runtime opening takes (factory_runtime/internal/runtime_build.go).
-func TestWithCommandRunnersPreservesInjectedLoggerForWorkstationPool(t *testing.T) {
+// workstation pool through rebuiltForBuild, the path every normal Factory
+// Runtime session-build activation takes (via wire.RebuildForSessionBuild,
+// factory_runtime/internal/runtime_build.go). rebuiltForBuild is deliberately
+// unexported and off the public RuntimeService contract; this test exercises
+// it directly from within the package.
+func TestRebuiltForBuildPreservesInjectedLoggerForWorkstationPool(t *testing.T) {
 	t.Parallel()
 
 	core, logs := observer.New(zapcore.InfoLevel)
 	service := testWorkerServiceWithLogger(t, zap.New(core))
 
-	runtime, err := service.WithCommandRunners(injectedProviderRunner{}, injectedProviderRunner{})
+	runtime, err := service.rebuiltForBuild(injectedProviderRunner{}, injectedProviderRunner{})
 	if err != nil {
-		t.Fatalf("WithCommandRunners() error = %v", err)
+		t.Fatalf("rebuiltForBuild() error = %v", err)
 	}
 
 	if _, err := runtime.StartWorkstationPool(
@@ -224,7 +226,7 @@ func TestWithCommandRunnersPreservesInjectedLoggerForWorkstationPool(t *testing.
 	entries := logs.FilterMessage("workers workstation pool start").All()
 	if len(entries) != 1 {
 		t.Fatalf(
-			"observed logs = %#v, want exactly one workstation pool start record surviving WithCommandRunners",
+			"observed logs = %#v, want exactly one workstation pool start record surviving rebuiltForBuild",
 			logs.All(),
 		)
 	}
@@ -393,38 +395,120 @@ func (testModelsService) InvokeLocal(context.Context, models.LocalInvocationRequ
 	return models.LocalInvocationResult{}, nil
 }
 
-func TestWithProgressInstallsDefaultRunner(t *testing.T) {
-	t.Parallel()
+// taggedCommandRunner is a distinguishable CommandRunner fake so construction
+// tests can assert exact instance retention rather than mere non-nilness.
+type taggedCommandRunner struct{ tag string }
 
-	got, err := testWorkerService(t, nil).WithProgressPublisher(
+func (taggedCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
+	return workers.CommandResult{}, nil
+}
+
+// recordingProgressPublisher returns a ProgressPublisher plus a counter
+// pointer, so tests can prove which exact publisher instance a Service
+// invokes without relying on function-value equality (Go func values are
+// only comparable to nil).
+func recordingProgressPublisher() (workers.ProgressPublisher, *int) {
+	calls := new(int)
+	return func(workers.ProgressFragment) { *calls++ }, calls
+}
+
+func newTestServiceWithDependencies(
+	t *testing.T,
+	providerRunner, scriptRunner workers.CommandRunner,
+	progressPublisher workers.ProgressPublisher,
+	logger *zap.Logger,
+) *Service {
+	t.Helper()
+	service, err := New(
+		inertCurrentRuntimeResolver{},
+		testModelsService{},
+		testProvidersService{},
+		providerRunner,
+		scriptRunner,
+		progressPublisher,
+		&workers.MockPTYAllocator{},
+		logger,
+		false,
+		"",
+		"",
 		nil,
-		func(workers.ProgressFragment) {},
-		true,
-		logging.NoopLogger{},
+		nil,
+		time.Now,
+		os.Environ,
+		os.Getwd,
+		nil,
+		nil,
+		nil,
+		nil,
+		testFactoryDocsLoader,
+		testResolveSymlinks,
+		platformprocess.HostExecutableLocator{},
+		platformfilesystem.Local{},
+		platformfilesystem.Local{},
+		"linux",
+		testFactoryWorktreePreparer{},
+		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
+		testRetryRandom,
+		platformfilesystem.Local{},
+		platformfilesystem.Local{},
 	)
 	if err != nil {
-		t.Fatalf("WithProgress() error = %v", err)
+		t.Fatalf("construct Worker service: %v", err)
 	}
-	if !got.ProviderCommandInjected() {
-		t.Fatal("WithProgress() did not install the progress-publishing provider runner")
+	return service
+}
+
+// TestNewRetainsExactSuppliedDependencies proves the runtime returned by New
+// retains the exact provider runner, script runner, and progress publisher
+// instances supplied at construction, with no supported operation to replace
+// them afterward.
+func TestNewRetainsExactSuppliedDependencies(t *testing.T) {
+	t.Parallel()
+
+	providerRunner := taggedCommandRunner{tag: "provider"}
+	scriptRunner := taggedCommandRunner{tag: "script"}
+	publisher, calls := recordingProgressPublisher()
+	service := newTestServiceWithDependencies(t, providerRunner, scriptRunner, publisher, zap.NewNop())
+
+	if service.ProviderCommandRunner() != workers.CommandRunner(providerRunner) {
+		t.Fatalf("ProviderCommandRunner() = %#v, want the exact supplied instance %#v", service.ProviderCommandRunner(), providerRunner)
+	}
+	if service.ScriptCommandRunner() != workers.CommandRunner(scriptRunner) {
+		t.Fatalf("ScriptCommandRunner() = %#v, want the exact supplied instance %#v", service.ScriptCommandRunner(), scriptRunner)
+	}
+	service.progressPublisher(workers.ProgressFragment{})
+	if *calls != 1 {
+		t.Fatalf("retained progress publisher calls = %d, want 1 (the exact supplied publisher was not retained)", *calls)
 	}
 }
 
-func TestWithProgressPreservesInjectedProviderRunner(t *testing.T) {
+// TestNewConstructsIndependentRuntimes proves two separately constructed
+// runtimes retain independent dependency identity: operating on one cannot
+// observe or affect the other's constructed dependencies.
+func TestNewConstructsIndependentRuntimes(t *testing.T) {
 	t.Parallel()
 
-	runner := injectedProviderRunner{}
-	service := testWorkerService(t, runner)
-	got, err := service.WithProgressPublisher(
-		nil,
-		func(workers.ProgressFragment) {},
-		true,
-		logging.NoopLogger{},
-	)
-	if err != nil {
-		t.Fatalf("WithProgress() error = %v", err)
+	firstProviderRunner := taggedCommandRunner{tag: "first-provider"}
+	secondProviderRunner := taggedCommandRunner{tag: "second-provider"}
+	firstPublisher, firstCalls := recordingProgressPublisher()
+	secondPublisher, secondCalls := recordingProgressPublisher()
+
+	first := newTestServiceWithDependencies(t, firstProviderRunner, injectedProviderRunner{}, firstPublisher, zap.NewNop())
+	second := newTestServiceWithDependencies(t, secondProviderRunner, injectedProviderRunner{}, secondPublisher, zap.NewNop())
+
+	if first.ProviderCommandRunner() == second.ProviderCommandRunner() {
+		t.Fatal("two independently constructed runtimes retained the same provider command runner instance")
 	}
-	if got != service {
-		t.Fatal("WithProgress() replaced the composition-selected provider runner")
+
+	second.progressPublisher(workers.ProgressFragment{})
+	if *firstCalls != 0 {
+		t.Fatalf("first runtime's progress publisher observed %d calls from the second runtime's activity, want 0", *firstCalls)
+	}
+	if *secondCalls != 1 {
+		t.Fatalf("second runtime's progress publisher calls = %d, want 1", *secondCalls)
+	}
+
+	if first.ProviderCommandRunner() != workers.CommandRunner(firstProviderRunner) {
+		t.Fatal("first runtime's provider command runner changed after constructing an unrelated second runtime")
 	}
 }
