@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
@@ -39,7 +40,7 @@ func newCodexConformanceRoot(
 	if err != nil {
 		return nil, err
 	}
-	return providerservice.New(catalog, executionService)
+	return providerservice.New(catalog, executionService, logging.NoopLogger{})
 }
 
 type codexConformanceState struct {

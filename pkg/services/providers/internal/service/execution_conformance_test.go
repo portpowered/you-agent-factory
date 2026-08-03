@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
@@ -45,7 +46,7 @@ func newConformanceRoot(
 	if err != nil {
 		return nil, err
 	}
-	return providerservice.New(catalogService, executionService)
+	return providerservice.New(catalogService, executionService, logging.NoopLogger{})
 }
 
 type streamingAdapter struct {

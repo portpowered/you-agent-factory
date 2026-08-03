@@ -441,6 +441,7 @@ func TestNewServiceRejectsMissingRequiredConstructionPorts(t *testing.T) {
 					nil,
 					nil,
 					nil,
+					nil,
 				)
 			},
 			want: "construct Providers: catalog is required",

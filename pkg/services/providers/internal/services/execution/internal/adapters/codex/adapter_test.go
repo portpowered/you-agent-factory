@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
@@ -254,7 +255,7 @@ func newCodexRoot(t *testing.T, effect codex.Effect) providers.Service {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root, err := providerservice.New(catalog, executionService)
+	root, err := providerservice.New(catalog, executionService, logging.NoopLogger{})
 	if err != nil {
 		t.Fatal(err)
 	}
