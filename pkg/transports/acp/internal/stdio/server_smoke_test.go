@@ -15,11 +15,13 @@ import (
 // stdin EOF over genuine os.Pipe stdio, which the table-driven
 // strings.Reader/bytes.Buffer cells elsewhere in this file cannot express --
 // only a real OS pipe exercises genuine blocking-read and EOF-on-close
-// semantics. There is nothing else in this repository that can exercise
-// pkg/transports/acp/internal/stdio through root.BuildProcess: this
-// transport is not yet wired into pkg/wire or any CLI command (that lands
-// with the later CLI-command story in this PRD), so a tests/functional/
-// scenario built on root.BuildProcess cannot reach it either.
+// semantics. pkg/wire now constructs this transport's Server through
+// provideACPServer and exposes it on the canonical *application.Process
+// (see pkg/wire/acp_transport_composition_test.go, which drives real
+// session/new and session/set_config_option calls through
+// root.BuildProcess); this cell still owns the genuine OS-pipe
+// blocking-read/EOF proof because no CLI command yet calls Serve, so no
+// tests/functional/ scenario exercises this transport over real OS stdio.
 //
 // Synchronization is entirely blocking-IO/channel based: the client's
 // bufio.Reader.ReadString('\n') call blocks until the server actually

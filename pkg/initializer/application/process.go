@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
+	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 )
 
 // ProviderRegistry is the narrow immutable provider identity projection
@@ -21,14 +22,16 @@ type ProcessLifecycle interface {
 }
 
 // Process is the inert, behavior-bearing process entrypoint assembled by
-// Wire. It retains only its command/lifecycle roles and immutable provider
-// authority, not runtime configuration, service graphs, or edge bundles; the
-// lazy Initializer owns runtime construction after CLI parsing.
+// Wire. It retains only its command/lifecycle roles, immutable provider
+// authority, and the production ACP server, not runtime configuration,
+// service graphs, or edge bundles; the lazy Initializer owns runtime
+// construction after CLI parsing.
 type Process struct {
 	commandFactory processcontract.CommandFactory
 	initializer    processcontract.Initializer
 	providers      ProviderRegistry
 	lifecycle      ProcessLifecycle
+	acpServer      acp.Server
 }
 
 func NewProcess(
@@ -36,6 +39,7 @@ func NewProcess(
 	initializer processcontract.Initializer,
 	providers ProviderRegistry,
 	lifecycle ProcessLifecycle,
+	acpServer acp.Server,
 ) (*Process, error) {
 	if providers == nil {
 		return nil, fmt.Errorf("construct application process: provider registry is required")
@@ -48,6 +52,7 @@ func NewProcess(
 		initializer:    initializer,
 		providers:      providers,
 		lifecycle:      lifecycle,
+		acpServer:      acpServer,
 	}, nil
 }
 
@@ -67,6 +72,17 @@ func (p *Process) ProviderRegistry() ProviderRegistry {
 		return nil
 	}
 	return p.providers
+}
+
+// ACPServer returns the production ACP stdio server Wire composed from this
+// same process's canonical Chat Sessions authority. It is exposed for
+// embedding and customer-scale verification; construction alone performs no
+// I/O, so returning it starts no connection.
+func (p *Process) ACPServer() acp.Server {
+	if p == nil {
+		return nil
+	}
+	return p.acpServer
 }
 
 // Execute constructs and runs one fresh command tree using invocation-local
