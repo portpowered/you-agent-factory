@@ -2,7 +2,6 @@ package service_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sync/atomic"
@@ -78,34 +77,21 @@ func newStore(t *testing.T, service responsestreamservice.Service) *responseeven
 	return store
 }
 
-func publish(t *testing.T, store *responseeventstore.SessionResponseEventStore, kind responseevents.Kind, dispatchID string) responseevents.FactoryResponseEvent {
-	t.Helper()
-	event, err := store.Publish(responseevents.FactoryResponseEvent{
-		DispatchID: dispatchID,
-		RunID:      "run-1",
-		Kind:       kind,
-		Phase:      responseevents.PhaseDelta,
-		Provenance: responseevents.Provenance{
-			Provider: "test", NativeEventType: "delta",
-			Delivery:       responseevents.DeliveryNativeStream,
-			Representation: responseevents.RepresentationDelta,
-			Fidelity:       responseevents.FidelityLossless,
-		},
-		Payload: json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"hello"}`),
-	})
-	if err != nil {
-		t.Fatalf("Publish: %v", err)
-	}
-	return event
-}
-
+// TestService_SubscribeReconnectsAfterKnownCursorWithOrderedFilteredEvents
+// publishes through publishThroughService (service.Publish), not the store's
+// own Publish directly: this store is bound to the injected Events root (see
+// newStore/NewEventStore), so a test that published straight to the store
+// would produce a session with retained local content Events never
+// observed, which now correctly surfaces as a gap under
+// substituteFromEvents' no-fallback delegation instead of silently masking
+// the mismatch. See mirror_test.go's own doc comment on this exact pitfall.
 func TestService_SubscribeReconnectsAfterKnownCursorWithOrderedFilteredEvents(t *testing.T) {
 	t.Parallel()
 	service := newService(t)
 	store := newStore(t, service)
-	first := publish(t, store, responseevents.KindMessage, "dispatch-1")
-	publish(t, store, responseevents.KindMessage, "dispatch-2")
-	third := publish(t, store, responseevents.KindMessage, "dispatch-1")
+	first := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
+	publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-2")
+	third := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
 
 	cursor, err := service.Subscribe(context.Background(), store, responsestreamservice.SubscriptionRequest{
 		AfterSequence: first.Sequence,
@@ -132,8 +118,8 @@ func TestService_StaleCursorSignalsGapAndPreservesFirstAvailableEvent(t *testing
 	if err := store.SetRetentionLimits(responseeventstore.RetentionLimits{MaxEvents: 1, MaxBytes: 1 << 20}); err != nil {
 		t.Fatalf("SetRetentionLimits: %v", err)
 	}
-	publish(t, store, responseevents.KindMessage, "dispatch-1")
-	retained := publish(t, store, responseevents.KindMessage, "dispatch-1")
+	publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
+	retained := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
 	cursor, err := service.Subscribe(context.Background(), store, responsestreamservice.SubscriptionRequest{})
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
@@ -157,7 +143,7 @@ func TestService_CancellationAndSlowSubscribersStayBounded(t *testing.T) {
 		t.Fatalf("Subscribe: %v", err)
 	}
 	for range 100 {
-		publish(t, store, responseevents.KindMessage, "dispatch-1")
+		publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
 	}
 	if got := store.SubscriberCount(); got != 1 {
 		t.Fatalf("SubscriberCount = %d, want 1", got)

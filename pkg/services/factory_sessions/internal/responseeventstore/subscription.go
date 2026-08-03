@@ -355,12 +355,23 @@ func (s *SessionResponseEventStore) eventsAfterLocked(afterSequence int64, dispa
 // content with the matching record read back from the injected Events root,
 // so a subscriber's delivered content is genuinely sourced from Events
 // rather than only from this store's own retained copy. It is a no-op when
-// no Events root is bound (see NewSessionResponseEventStoreWithEventsAuthority)
-// and falls back to the store's own retained content -- which PublishThroughAuthority
-// already guarantees is identical, since both are committed under the same
-// write lock as the originating Events.Append -- if the Events root cannot
-// serve the read (for example, mid-shutdown), so a transient Events read
-// failure never fails a subscriber's delivery.
+// no Events root is bound (see NewSessionResponseEventStoreWithEventsAuthority).
+//
+// When bound, this store's own retained copy still decides *which* sequences
+// remain deliverable (tiered importance retention, dispatch filtering, gap
+// bookkeeping -- Events has no equivalent for any of these), but it is never
+// used as a fallback source of *content*: a delivered real event whose
+// content Events cannot currently produce (a failed Read, a non-Progress
+// outcome, or a position Events has itself evicted from its own bounded FIFO
+// window even though this store's tiered policy still retains it) is
+// replaced with the same synthetic stream-gap marker this store already
+// publishes for its own retention gaps (eventsAuthorityGapEvent), never with
+// this store's local bytes. This is what makes "the compatibility surface
+// cannot emit bytes unavailable from its Events authority" true by
+// construction: Events' retention window can be smaller than this store's
+// own tiered window (for example a very long-lived, high-volume session),
+// and when it is, the affected records surface as an honest gap instead of
+// stale local content a direct Events reader could no longer observe.
 func (s *SessionResponseEventStore) substituteFromEvents(ctx context.Context, delivered []responseevents.FactoryResponseEvent) []responseevents.FactoryResponseEvent {
 	if s == nil || s.eventsService == nil || len(delivered) == 0 {
 		return delivered
@@ -389,30 +400,74 @@ func (s *SessionResponseEventStore) substituteFromEvents(ctx context.Context, de
 		From:  events.Cursor{Topic: s.eventsTopic, Position: events.AggregateSequence(minSeq - 1)},
 		Limit: int(maxSeq-minSeq) + 1,
 	})
-	if err != nil || result.Outcome != events.ReadOutcomeProgress {
-		return delivered
-	}
 
-	bySequence := make(map[int64]json.RawMessage, len(result.Records))
-	for _, record := range result.Records {
-		bySequence[int64(record.ID.Position)] = record.Payload
+	bySequence := make(map[int64]json.RawMessage, realCount)
+	if err == nil && result.Outcome == events.ReadOutcomeProgress {
+		for _, record := range result.Records {
+			bySequence[int64(record.ID.Position)] = record.Payload
+		}
 	}
 
 	substituted := make([]responseevents.FactoryResponseEvent, len(delivered))
 	for i, event := range delivered {
-		payload, ok := bySequence[event.Sequence]
-		if !ok {
+		if event.Sequence <= 0 {
 			substituted[i] = event
 			continue
 		}
+		payload, ok := bySequence[event.Sequence]
+		if !ok {
+			substituted[i] = s.eventsAuthorityGapEvent(event.Sequence)
+			continue
+		}
 		var fromEvents responseevents.FactoryResponseEvent
-		if err := json.Unmarshal(payload, &fromEvents); err != nil {
-			substituted[i] = event
+		if unmarshalErr := json.Unmarshal(payload, &fromEvents); unmarshalErr != nil {
+			substituted[i] = s.eventsAuthorityGapEvent(event.Sequence)
 			continue
 		}
 		substituted[i] = fromEvents
 	}
 	return substituted
+}
+
+// eventsAuthorityGapEventReason marks a synthetic stream-gap event produced
+// because the injected Events root could not currently produce content for a
+// sequence this store's own tiered retention still considers deliverable --
+// distinct from retentionGapReason, which marks a gap this store's own
+// retention policy created directly, so the two causes remain
+// distinguishable in the published gap payload.
+const eventsAuthorityGapEventReason = "events_authority_unavailable"
+
+// eventsAuthorityGapEvent synthesizes the same published stream-gap
+// vocabulary retentionGapEventLocked uses for this store's own retention
+// gaps, covering exactly one sequence the Events root could not produce
+// content for. It does not require s.mu: it reads only s.factorySessionID
+// (immutable after construction) and s.clock (safe for concurrent use), and
+// writes nothing.
+func (s *SessionResponseEventStore) eventsAuthorityGapEvent(sequence int64) responseevents.FactoryResponseEvent {
+	payload, _ := json.Marshal(responseevents.StreamGapPayload{
+		FromSequence:           sequence,
+		ToSequence:             sequence,
+		FirstAvailableSequence: sequence + 1,
+		Reason:                 eventsAuthorityGapEventReason,
+	})
+	identity := fmt.Sprintf("%s:%d:%d:%s", s.factorySessionID, sequence, sequence, eventsAuthorityGapEventReason)
+	return responseevents.FactoryResponseEvent{
+		SchemaVersion:    responseevents.SchemaVersionV1,
+		EventID:          uuid.NewSHA1(uuid.NameSpaceOID, []byte(identity)).String(),
+		Sequence:         0,
+		RecordedAt:       s.clock.Now().UTC(),
+		FactorySessionID: s.factorySessionID,
+		Kind:             responseevents.KindStreamGap,
+		Phase:            responseevents.PhaseUpdated,
+		Provenance: responseevents.Provenance{
+			Provider:        "you-agent-factory",
+			NativeEventType: "response.retention_gap",
+			Delivery:        responseevents.DeliverySynthesized,
+			Representation:  responseevents.RepresentationNotification,
+			Fidelity:        responseevents.FidelityLossy,
+		},
+		Payload: payload,
+	}
 }
 
 func (s *SessionResponseEventStore) firstAvailableSequenceLocked(afterSequence int64, dispatchID string) int64 {

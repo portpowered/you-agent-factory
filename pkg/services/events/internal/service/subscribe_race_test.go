@@ -90,6 +90,54 @@ func TestSubscribe_ConcurrentSubscribersObserveContiguousLiveHistory(t *testing.
 	}
 }
 
+// TestSubscribe_ConcurrentAppendDuringCancellationNeverPanics proves that a
+// context cancellation racing a concurrent Append targeting the same
+// subscriber never panics with a send on a closed channel. Before the fix,
+// subscriptionState.cancel closed the live subscriber's buffered channel
+// (liveSubscriber.terminate) before unregistering it from the topic's
+// subscriber map (Store.unregisterSubscriber); Append's
+// notifySubscribersLocked holds only the topic's own mutex while sending,
+// which does not serialize against that close, so a send arriving during the
+// close window would panic. Cancellation now unregisters (acquiring the same
+// topic mutex Append's send is performed under) strictly before closing the
+// channel, which serializes the two and makes the race unreachable. Many
+// rounds with unsynchronized goroutines are used because the panic is a
+// genuine timing race, not deterministically reproducible in one iteration;
+// this test crashing the process (a panic is never recovered by `go test`)
+// is itself the regression signal, no explicit assertion is needed to detect
+// it.
+func TestSubscribe_ConcurrentAppendDuringCancellationNeverPanics(t *testing.T) {
+	const rounds = 500
+	st := New()
+	topic := events.Topic("chat-session/cancel-append-race/events")
+
+	for i := range rounds {
+		subCtx, cancel := context.WithCancel(context.Background())
+		sub, err := st.Subscribe(subCtx, events.SubscribeRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 1})
+		if err != nil {
+			t.Fatalf("round %d: Subscribe() error = %v", i, err)
+		}
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func(seq int) {
+			defer wg.Done()
+			appendOne(t, st, context.Background(), topic, seq)
+		}(i + 1)
+		go func() {
+			defer wg.Done()
+			cancel()
+		}()
+
+		delivery := sub.Next(subCtx)
+		if delivery.Kind != events.DeliveryRecord && delivery.Kind != events.DeliveryCanceled {
+			t.Fatalf("round %d: Next().Kind = %v, want DeliveryRecord or DeliveryCanceled", i, delivery.Kind)
+		}
+		wg.Wait()
+		cancel()
+	}
+}
+
 // TestSubscribe_NoGoroutineLeakAcrossSubscribeNextAndClose proves that
 // Subscribe/Next/Close never leave a background goroutine running: this
 // Store's Subscribe spawns no goroutine of its own (Next performs its

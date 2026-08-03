@@ -240,10 +240,21 @@ func (s *subscriptionState) next(ctx context.Context) events.Delivery {
 // its topic so no future commit is ever offered to it again (proving
 // append-after-cancel cannot deliver), and closes the live buffer so every
 // later Next observes the same terminal kind. Only the first call has any
-// side effect (unregistering, logging); later calls just re-report the
-// already-persisted terminal kind, which -- because liveSubscriber.terminate
-// is itself first-kind-wins -- stays DeliveryCanceled even if the store
-// later also closes the topic.
+// side effect (unregistering, terminating, logging); later calls just
+// re-report the already-persisted terminal kind.
+//
+// Unregistration happens strictly before termination (closing s.sub.records).
+// unregisterSubscriber takes the owning topicState's mutex, the same mutex
+// Append holds for the entire duration of notifySubscribersLocked's send to
+// s.sub.records: acquiring it here therefore cannot return until any
+// concurrently in-flight deliver() call for this subscriber has already
+// completed, and once it returns the subscriber is no longer in
+// ts.subscribers so no future Append can start a new one. Only after that
+// happens is it safe to close s.sub.records -- reversing this order (closing
+// first, unregistering after, as an earlier revision did) leaves a window
+// where Append's notifySubscribersLocked can still be mid-send on a channel
+// this call is concurrently closing, which is a send-on-closed-channel
+// panic, not just a lost delivery.
 func (s *subscriptionState) cancel() events.Delivery {
 	s.mu.Lock()
 	first := !s.canceled
@@ -252,9 +263,11 @@ func (s *subscriptionState) cancel() events.Delivery {
 	s.catchup = nil
 	s.mu.Unlock()
 
-	s.sub.terminate(events.DeliveryCanceled)
 	if first {
 		s.store.unregisterSubscriber(s.topic, s.subID)
+	}
+	s.sub.terminate(events.DeliveryCanceled)
+	if first {
 		s.store.logSubscribeCanceled(s.topic)
 	}
 	return events.Delivery{Kind: s.sub.terminalKind()}

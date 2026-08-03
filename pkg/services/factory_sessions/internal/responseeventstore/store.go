@@ -41,8 +41,14 @@ type SessionResponseEventStore struct {
 	// sharing write-order identity with it. The local retained copy in
 	// events/eventSizes/droppedSequences is still authoritative for which
 	// sequences the tiered retention policy still considers live (Events has
-	// no equivalent importance-tiered eviction), and is used unchanged as a
-	// fallback if an Events read is ever unavailable.
+	// no equivalent importance-tiered eviction), but it is never used as a
+	// fallback source of content: when Events cannot currently produce a
+	// sequence's bytes (a failed/non-Progress Read, or a position Events'
+	// own bounded window has already evicted even though this store's
+	// tiered policy still retains it), substituteFromEvents (subscription.go)
+	// replaces that record with a synthetic stream-gap marker instead of
+	// this store's own bytes, so the compatibility surface can never emit
+	// content a direct Events reader could no longer observe.
 	eventsService events.Service
 	eventsTopic   events.Topic
 }

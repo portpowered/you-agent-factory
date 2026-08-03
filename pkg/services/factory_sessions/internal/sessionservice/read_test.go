@@ -115,7 +115,12 @@ func TestService_SubscribeFactoryResponseEvents_DelegatesReconnectPolicyToPrivat
 	if err != nil {
 		t.Fatalf("construct event store: %v", err)
 	}
-	first, err := store.Publish(responseevents.FactoryResponseEvent{
+	// Published through responseService.Publish (not store.Publish directly):
+	// this store is bound to the injected Events root (NewEventStore), so
+	// publishing straight to the store would retain local content Events
+	// never observed, which substituteFromEvents' no-fallback delegation now
+	// correctly surfaces as a gap instead of silently masking the mismatch.
+	first, err := responseService.Publish(store, responseevents.FactoryResponseEvent{
 		RunID: "run-1", Kind: responseevents.KindMessage, Phase: responseevents.PhaseDelta,
 		Provenance: responseevents.Provenance{
 			Provider: "test", NativeEventType: "delta", Delivery: responseevents.DeliveryNativeStream,
@@ -128,7 +133,7 @@ func TestService_SubscribeFactoryResponseEvents_DelegatesReconnectPolicyToPrivat
 	}
 	secondInput := first
 	secondInput.Payload = json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"second"}`)
-	second, err := store.Publish(secondInput)
+	second, err := responseService.Publish(store, secondInput)
 	if err != nil {
 		t.Fatalf("publish second: %v", err)
 	}

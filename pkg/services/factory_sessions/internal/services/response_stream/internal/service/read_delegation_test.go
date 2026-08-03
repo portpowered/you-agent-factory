@@ -113,9 +113,9 @@ func TestService_SubscribeDeliversContentReadBackFromEventsNotTheLocalStoreCopy(
 }
 
 // readFailingEventsService wraps a real events.Service, delegating Append
-// normally but always failing Read, to prove a transient Events read
-// failure degrades gracefully to the store's own already-guaranteed-identical
-// retained copy instead of failing or hanging a subscriber's delivery.
+// normally but always failing Read, to prove a failed Events read never
+// fails or hangs a subscriber's delivery and never falls back to the
+// store's own retained copy -- it must surface an honest gap instead.
 type readFailingEventsService struct {
 	inner events.Service
 }
@@ -140,12 +140,15 @@ func (r *readFailingEventsService) Subscribe(ctx context.Context, req events.Sub
 
 var _ events.Service = (*readFailingEventsService)(nil)
 
-// TestService_SubscribeFallsBackToStoreCopyWhenEventsReadFails proves a
-// transient failure reading back from the injected Events root never fails
-// or hangs a subscriber: delivery falls back to the store's own retained
-// copy, which PublishThroughAuthority already guarantees is identical to
-// what Events accepted (see TestService_ConcurrentPublishAndCompletionNeverDivergesFromEvents).
-func TestService_SubscribeFallsBackToStoreCopyWhenEventsReadFails(t *testing.T) {
+// TestService_SubscribeSurfacesGapWhenEventsReadFails proves a failure
+// reading back from the injected Events root never silently falls back to
+// the store's own retained copy: the compatibility surface must never emit
+// content a direct Events reader could not also observe (PR #1753 review
+// finding, 2026-08-03T16:05:34Z), so a failed Events read instead surfaces
+// the same published stream-gap vocabulary this store already uses for its
+// own retention gaps, and the failed sequence is never delivered as if it
+// had succeeded.
+func TestService_SubscribeSurfacesGapWhenEventsReadFails(t *testing.T) {
 	t.Parallel()
 
 	failing := &readFailingEventsService{inner: newTestEventsService(t)}
@@ -172,7 +175,119 @@ func TestService_SubscribeFallsBackToStoreCopyWhenEventsReadFails(t *testing.T) 
 	if len(delivered) != 1 {
 		t.Fatalf("Next() delivered %d events, want 1", len(delivered))
 	}
-	if delivered[0].DispatchID != "dispatch-1" {
-		t.Fatalf("delivered[0].DispatchID = %q, want %q (a failed Events read must fall back to the store's own retained copy, not drop the delivery)", delivered[0].DispatchID, "dispatch-1")
+	if delivered[0].Kind != responseevents.KindStreamGap {
+		t.Fatalf("delivered[0].Kind = %q, want %q (a failed Events read must surface an honest gap, not the store's own local content)", delivered[0].Kind, responseevents.KindStreamGap)
+	}
+	if delivered[0].DispatchID == "dispatch-1" {
+		t.Fatalf("delivered[0].DispatchID = %q: the original record's content must never be delivered when Events could not confirm it", delivered[0].DispatchID)
+	}
+}
+
+// gapReportingEventsService wraps a real events.Service, delegating Append
+// normally but always answering Read with ReadOutcomeGap, to simulate Events'
+// own bounded FIFO retention having evicted a position that this store's
+// separate, tiered (importance-based, not purely recency-based) local
+// retention policy still retains -- the scenario a real session exceeding
+// Events' fixed per-topic retention cap after a long enough mix of
+// high-priority and low-priority events would eventually reach. Simulating
+// the terminal Gap outcome directly (rather than actually publishing beyond
+// the cap) proves the exact same code path deterministically without an
+// impractically large/slow test.
+type gapReportingEventsService struct {
+	inner events.Service
+}
+
+func (g *gapReportingEventsService) Append(ctx context.Context, req events.AppendRequest) (events.AppendResult, error) {
+	return g.inner.Append(ctx, req)
+}
+
+func (g *gapReportingEventsService) AttachSource(ctx context.Context, req events.AttachSourceRequest) (events.AttachSourceResult, error) {
+	return g.inner.AttachSource(ctx, req)
+}
+
+func (g *gapReportingEventsService) Read(ctx context.Context, req events.ReadRequest) (events.ReadResult, error) {
+	return events.ReadResult{
+		Outcome: events.ReadOutcomeGap,
+		Gap: &events.GapFacts{
+			Topic:            req.Topic,
+			Requested:        req.From.Position,
+			EarliestRetained: req.From.Position + events.AggregateSequence(req.Limit) + 1,
+			Head:             req.From.Position + events.AggregateSequence(req.Limit) + 1,
+		},
+	}, nil
+}
+
+func (g *gapReportingEventsService) Subscribe(ctx context.Context, req events.SubscribeRequest) (events.Subscription, error) {
+	return g.inner.Subscribe(ctx, req)
+}
+
+var _ events.Service = (*gapReportingEventsService)(nil)
+
+// TestService_SubscribeSurfacesGapWhenEventsHasEvictedAStillLocallyRetainedRecord
+// proves the mixed-tier retention divergence the PR review flagged: this
+// store's own tiered retention can keep a record (for example a
+// final-semantic completed message) long after Events' fixed, purely-FIFO
+// per-topic window has evicted the same position. When that happens, the
+// compatibility surface must surface the same published gap vocabulary a
+// direct Events reader would observe, never the store's own stale bytes --
+// otherwise the two surfaces would deterministically disagree about what
+// exists, which is exactly what "delegates to Events" must rule out.
+func TestService_SubscribeSurfacesGapWhenEventsHasEvictedAStillLocallyRetainedRecord(t *testing.T) {
+	t.Parallel()
+
+	gapping := &gapReportingEventsService{inner: newTestEventsService(t)}
+	service, err := serviceWithEvents(t, gapping)
+	if err != nil {
+		t.Fatalf("construct response-stream service: %v", err)
+	}
+	store := newStore(t, service)
+
+	// A final-semantic completed message: exactly the retention tier this
+	// store's own local policy would keep even after many more (lower
+	// priority) events than Events' own bounded window retains.
+	published, err := store.Publish(responseevents.FactoryResponseEvent{
+		DispatchID: "dispatch-completed",
+		RunID:      "run-1",
+		Kind:       responseevents.KindMessage,
+		Phase:      responseevents.PhaseCompleted,
+		Provenance: responseevents.Provenance{
+			Provider: "test", NativeEventType: "message.completed",
+			Delivery:       responseevents.DeliveryNativeStream,
+			Representation: responseevents.RepresentationSnapshot,
+			Fidelity:       responseevents.FidelityLossless,
+		},
+		Payload: json.RawMessage(`{"role":"assistant","contentBlocks":[{"kind":"TEXT","text":"final"}]}`),
+	})
+	if err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+
+	// The store's own retained copy genuinely still has the record: only
+	// Events (via the double) reports it gone.
+	storeEvents := store.Events()
+	if len(storeEvents) != 1 || storeEvents[0].EventID != published.EventID {
+		t.Fatalf("store.Events() = %#v, want exactly the published completed-message record still retained locally", storeEvents)
+	}
+
+	subscribed, err := service.Subscribe(context.Background(), store, responsestreamservice.SubscriptionRequest{})
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer subscribed.Detach()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	delivered, err := subscribed.Next(ctx)
+	if err != nil {
+		t.Fatalf("Next: %v", err)
+	}
+	if len(delivered) != 1 {
+		t.Fatalf("Next() delivered %d events, want 1", len(delivered))
+	}
+	if delivered[0].Kind != responseevents.KindStreamGap {
+		t.Fatalf("delivered[0].Kind = %q, want %q (a record Events has evicted must surface as a gap even when this store's own tiered policy still retains it)", delivered[0].Kind, responseevents.KindStreamGap)
+	}
+	if delivered[0].EventID == published.EventID {
+		t.Fatalf("delivered[0].EventID = %q: a record Events cannot confirm must never be delivered under its original identity", delivered[0].EventID)
 	}
 }
