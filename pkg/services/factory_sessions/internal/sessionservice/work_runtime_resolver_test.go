@@ -110,6 +110,19 @@ func TestWorkRuntimeAdapterSubmitWorkRequestDelegatesToCanonicalRuntime(t *testi
 	}
 }
 
+type serviceOnlyRuntime struct {
+	factory.Service
+}
+
+func TestWorkRuntimeAdapterSubmitWorkRequestRejectsServiceOnlyRuntimeSafely(t *testing.T) {
+	adapter := workRuntimeAdapter{runtime: serviceOnlyRuntime{}}
+
+	_, err := adapter.SubmitWorkRequest(context.Background(), work.WorkRequest{RequestID: "request-1"})
+	if err == nil || !strings.Contains(err.Error(), "legacy Factory Runtime submission is required") {
+		t.Fatalf("SubmitWorkRequest() error = %v, want safe legacy-submission-required error", err)
+	}
+}
+
 type conflictingRootRuntime struct {
 	factory.Service
 }
