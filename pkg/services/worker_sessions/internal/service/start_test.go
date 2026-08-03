@@ -84,6 +84,32 @@ func TestStart_MismatchedNestedDispatchWorkstationName_RejectedBeforeEffects(t *
 	}
 }
 
+// TestStart_WhitespacePaddedNestedDispatchWorkstationName_RejectedBeforeEffects
+// proves the exact review-flagged shape is rejected: a nested dispatch route
+// that only matches the top-level route after trimming (but not as raw
+// values) is exactly what the real Workers boundary's validDispatch rejects
+// (it compares the untrimmed nested value against the trimmed top-level
+// name), so Start must reject it too, before any registry mutation or
+// Workers call, instead of accepting it and letting Workers reject it later.
+func TestStart_WhitespacePaddedNestedDispatchWorkstationName_RejectedBeforeEffects(t *testing.T) {
+	execution := succeedingExecution()
+	registry := newRegistryWithExecution(execution)
+	ctx := context.Background()
+
+	req := validStartRequest("worker-1", "dispatch-1")
+	req.Execution.Execution.Dispatch.WorkstationName = " review "
+
+	if _, err := registry.Start(ctx, req); !errors.Is(err, workersessions.ErrInvalidExecutionRequest) {
+		t.Fatalf("Start() error = %v, want ErrInvalidExecutionRequest", err)
+	}
+	if execution.callCount() != 0 {
+		t.Fatalf("Start() with whitespace-padded nested workstation name called Workers %d times, want 0", execution.callCount())
+	}
+	if _, err := registry.Get(ctx, workersessions.GetRequest{ID: "worker-1"}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("Get() after rejected Start() = %v, want ErrSessionNotFound (no registry mutation)", err)
+	}
+}
+
 func TestStart_ValidNewIdentity_ObservesStartingDuringInFlightHandoff(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})

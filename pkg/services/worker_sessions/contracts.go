@@ -153,11 +153,19 @@ func (req StartRequest) Validate() error {
 	if strings.TrimSpace(req.Execution.Execution.Dispatch.DispatchID) == "" {
 		return fmt.Errorf("%w: attempt (dispatch) id is required", ErrInvalidExecutionRequest)
 	}
-	nestedWorkstationName := strings.TrimSpace(req.Execution.Execution.Dispatch.WorkstationName)
-	if nestedWorkstationName == "" {
+	// The nested comparison intentionally compares the RAW (untrimmed)
+	// nested dispatch workstation name against the already-trimmed
+	// top-level workstationName, mirroring validDispatch in
+	// pkg/services/workers/internal/services/workstations/internal/service/service.go
+	// exactly: that function trims only the top-level name and requires
+	// dispatch.WorkstationName == name with no trimming applied to the
+	// nested value. Trimming both sides here would incorrectly accept a
+	// whitespace-padded nested name that the real Workers boundary rejects.
+	rawNestedWorkstationName := req.Execution.Execution.Dispatch.WorkstationName
+	if strings.TrimSpace(rawNestedWorkstationName) == "" {
 		return fmt.Errorf("%w: nested dispatch workstation name is required", ErrInvalidExecutionRequest)
 	}
-	if nestedWorkstationName != workstationName {
+	if rawNestedWorkstationName != workstationName {
 		return fmt.Errorf("%w: nested dispatch workstation name must match the top-level workstation name", ErrInvalidExecutionRequest)
 	}
 	return nil

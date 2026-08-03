@@ -46,6 +46,74 @@ func TestSafeDetail_WithEmptyFailureMetadata_FallsBackToGenericPlaceholder(t *te
 	}
 }
 
+// TestSafeDetail_WithUnrecognizedTypeValue_FallsBackToGenericPlaceholder
+// proves the exact review concern: WorkFailureType is an exported Go string
+// type, not a runtime-validated enum, so any string (including
+// attacker-controlled prompt/command/credential text) can be constructed and
+// attached as WorkFailureMetadata.Type. A value outside the whitelisted
+// constants must never be echoed into Detail.
+func TestSafeDetail_WithUnrecognizedTypeValue_FallsBackToGenericPlaceholder(t *testing.T) {
+	metadata := &workers.WorkFailureMetadata{
+		Family: workers.WorkFailureFamilyTerminal,
+		Type:   workers.WorkFailureType("codex exec summarize confidential acquisition memo"),
+	}
+	got := safeDetail(workersessions.FailureCauseWorkersExecutionFailure, metadata)
+	want := genericFailureDetail[workersessions.FailureCauseWorkersExecutionFailure]
+	if got != want {
+		t.Fatalf("safeDetail() = %q, want fixed generic placeholder %q (unrecognized Type must never be echoed)", got, want)
+	}
+	if strings.Contains(got, "confidential") {
+		t.Fatalf("safeDetail() leaked unrecognized Type text: %q", got)
+	}
+}
+
+// TestSafeDetail_WithUnrecognizedFamilyValue_FallsBackToGenericPlaceholder
+// mirrors TestSafeDetail_WithUnrecognizedTypeValue_FallsBackToGenericPlaceholder
+// for WorkFailureMetadata.Family.
+func TestSafeDetail_WithUnrecognizedFamilyValue_FallsBackToGenericPlaceholder(t *testing.T) {
+	metadata := &workers.WorkFailureMetadata{
+		Family: workers.WorkFailureFamily("password=hunter2"),
+		Type:   workers.WorkFailureTypeTimeout,
+	}
+	got := safeDetail(workersessions.FailureCauseWorkersExecutionFailure, metadata)
+	want := genericFailureDetail[workersessions.FailureCauseWorkersExecutionFailure]
+	if got != want {
+		t.Fatalf("safeDetail() = %q, want fixed generic placeholder %q (unrecognized Family must never be echoed)", got, want)
+	}
+	if strings.Contains(got, "hunter2") {
+		t.Fatalf("safeDetail() leaked unrecognized Family text: %q", got)
+	}
+}
+
+// TestClassifyTerminal_UnrecognizedFailureMetadataWithSensitiveText_NeverExposesItInDetail
+// proves the review's exact end-to-end scenario through classifyTerminal:
+// a WorkResult carrying an unrecognized (attacker-controlled-shaped)
+// WorkFailureMetadata.Type never surfaces that text in the committed
+// FailureCause.Detail.
+func TestClassifyTerminal_UnrecognizedFailureMetadataWithSensitiveText_NeverExposesItInDetail(t *testing.T) {
+	dispatchResult := workers.WorkstationDispatchResult{
+		Result: workers.WorkResult{
+			Outcome: workers.OutcomeFailed,
+			FailureMetadata: &workers.WorkFailureMetadata{
+				Type: workers.WorkFailureType("codex exec summarize confidential acquisition memo"),
+			},
+		},
+	}
+
+	terminal := classifyTerminal(nil, dispatchResult)
+
+	if terminal.Cause == nil {
+		t.Fatal("terminal cause = nil, want non-nil")
+	}
+	if strings.Contains(terminal.Cause.Detail, "confidential") {
+		t.Fatalf("terminal cause detail leaked unrecognized metadata text: %q", terminal.Cause.Detail)
+	}
+	want := genericFailureDetail[workersessions.FailureCauseWorkersExecutionFailure]
+	if terminal.Cause.Detail != want {
+		t.Fatalf("terminal cause detail = %q, want fixed generic placeholder %q", terminal.Cause.Detail, want)
+	}
+}
+
 // TestClassifyTerminal_FailureMetadataPresentAlongsideSensitiveRawText_UsesOnlyMetadata
 // proves classifyTerminal's Detail comes exclusively from the closed-
 // vocabulary FailureMetadata even when a sensitive/free-form WorkResult.Error

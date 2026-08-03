@@ -166,6 +166,50 @@ func TestCommitTerminal_AlreadyTerminalIdentity_IsAbsorbingAndDoesNotOverwrite(t
 	}
 }
 
+// TestCommitTerminal_MissingIdentity_DoesNotFabricateASession proves
+// commitTerminal never creates or terminalizes an identity that was never
+// reserved or transitioned to StateStarting: it must be a no-op that reports
+// committed=false and leaves the registry without that identity.
+func TestCommitTerminal_MissingIdentity_DoesNotFabricateASession(t *testing.T) {
+	r := newTestRegistry(t)
+
+	result := workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}
+	_, committed := r.commitTerminal("worker-1", workersessions.StateCompleted, result)
+	if committed {
+		t.Fatal("commitTerminal() on a missing identity committed = true, want false")
+	}
+
+	if _, err := r.Get(context.Background(), workersessions.GetRequest{ID: "worker-1"}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("Get() after commitTerminal() on a missing identity = %v, want ErrSessionNotFound (no session fabricated)", err)
+	}
+}
+
+// TestCommitTerminal_ReservedPredecessor_IsRejectedAndLeavesSessionUnchanged
+// proves commitTerminal requires the one allowed W2 predecessor,
+// StateStarting: an identity still in StateReserved (which never reached
+// Workers handoff) must not be terminalized.
+func TestCommitTerminal_ReservedPredecessor_IsRejectedAndLeavesSessionUnchanged(t *testing.T) {
+	r := newTestRegistry(t)
+	r.reserveIfAbsent("worker-1")
+
+	result := workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}
+	got, committed := r.commitTerminal("worker-1", workersessions.StateCompleted, result)
+	if committed {
+		t.Fatal("commitTerminal() from RESERVED committed = true, want false")
+	}
+	if got.State != workersessions.StateReserved {
+		t.Fatalf("commitTerminal() from RESERVED returned state = %q, want unchanged RESERVED", got.State)
+	}
+
+	session, err := r.Get(context.Background(), workersessions.GetRequest{ID: "worker-1"})
+	if err != nil {
+		t.Fatalf("Get() error = %v, want nil", err)
+	}
+	if session.State != workersessions.StateReserved {
+		t.Fatalf("Get() after rejected commitTerminal() state = %q, want unchanged RESERVED", session.State)
+	}
+}
+
 // TestCommitTerminal_ConcurrentCompetingOutcomes_OnlyOneWinsAndStateStaysAbsorbing
 // deterministically synchronizes several goroutines to reach commitTerminal
 // for the same identity at once with different, disagreeing outcomes and

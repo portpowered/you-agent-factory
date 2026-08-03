@@ -199,25 +199,27 @@ func (r *registry) transitionToStarting(id string) (workersessions.Session, erro
 }
 
 // commitTerminal stores the exactly-once terminal outcome for id and reports
-// whether this call is the one that committed it. The commit is conditional
-// on a non-terminal predecessor: if id is already in a terminal state (for
-// example because a duplicate or racing callback reaches commitTerminal for
-// the same identity), the existing terminal snapshot is left unchanged and
-// returned as-is, and committed reports false. This makes the terminal write
-// itself absorbing regardless of how many callers reach commitTerminal for
-// one identity, rather than relying solely on the current single-call Start
-// flow to make a second commit unreachable. Only the caller for which
-// committed is true may emit the terminal effect/log for this identity.
+// whether this call is the one that committed it. The commit requires the
+// one allowed W2 predecessor state, StateStarting: a missing identity, an
+// already-terminal identity (for example because a duplicate or racing
+// callback reaches commitTerminal for the same identity), or any other
+// nonterminal state (StateReserved, StatePaused) is left completely
+// unchanged and returned as-is, and committed reports false. This makes the
+// terminal write itself absorbing regardless of how many callers reach
+// commitTerminal for one identity, and prevents it from fabricating a
+// terminal outcome for an identity that never actually reached handoff.
+// Only the caller for which committed is true may emit the terminal
+// effect/log for this identity.
 func (r *registry) commitTerminal(id string, state workersessions.State, result workersessions.TerminalResult) (workersessions.Session, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if existing, exists := r.sessions[id]; exists && existing.State.Terminal() {
+	existing, exists := r.sessions[id]
+	if !exists || existing.State != workersessions.StateStarting {
 		return cloneSession(existing), false
 	}
 
-	session := r.sessions[id]
-	session.ID = id
+	session := existing
 	session.State = state
 	session.Result = cloneTerminalResult(&result)
 	r.sessions[id] = session
