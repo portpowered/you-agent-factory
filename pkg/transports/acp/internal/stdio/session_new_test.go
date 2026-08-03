@@ -222,12 +222,15 @@ type fakeFactoryTargetService struct {
 	mu sync.Mutex
 
 	startCalls  []factorysessions.StartRequest
-	startResult factorysessions.AsyncStartResult
+	startResult factorysessions.InvocationResult
 	startErr    error
 
 	invokeCalls  []invokeFactoryTargetCall
 	invokeResult factorysessions.InvocationResult
 	invokeErr    error
+
+	closeCalls []string
+	closeErr   error
 }
 
 type invokeFactoryTargetCall struct {
@@ -238,12 +241,12 @@ type invokeFactoryTargetCall struct {
 func (f *fakeFactoryTargetService) StartFactoryTarget(
 	_ context.Context,
 	request factorysessions.StartRequest,
-) (factorysessions.AsyncStartResult, error) {
+) (factorysessions.InvocationResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.startCalls = append(f.startCalls, request)
 	if f.startErr != nil {
-		return factorysessions.AsyncStartResult{}, f.startErr
+		return factorysessions.InvocationResult{}, f.startErr
 	}
 	return f.startResult, nil
 }
@@ -260,6 +263,13 @@ func (f *fakeFactoryTargetService) InvokeFactoryTarget(
 		return factorysessions.InvocationResult{}, f.invokeErr
 	}
 	return f.invokeResult, nil
+}
+
+func (f *fakeFactoryTargetService) CloseFactoryTarget(_ context.Context, sessionID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.closeCalls = append(f.closeCalls, sessionID)
+	return f.closeErr
 }
 
 func defaultTestCatalogResult() chatsessions.ResolveFactoryTargetCatalogResult {

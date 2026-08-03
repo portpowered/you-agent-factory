@@ -102,47 +102,6 @@ func TestMapFactoryInvocationOutcome_NeverSerializesRawResultFields(t *testing.T
 	}
 }
 
-func TestMapFactoryStartOutcome_NeverFabricatesText(t *testing.T) {
-	tests := []struct {
-		name   string
-		status string
-	}{
-		{"freshly started, still running", "RUNNING"},
-		{"queued", "QUEUED"},
-		{"empty status", ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := MapFactoryStartOutcome(factorysessions.AsyncStartResult{SessionID: "fs-1", Status: tt.status})
-			if got.StopReason != acpsdk.StopReasonEndTurn {
-				t.Errorf("MapFactoryStartOutcome(Status=%q).StopReason = %q, want end_turn safe fallback", tt.status, got.StopReason)
-			}
-			if len(got.Text) != 0 {
-				t.Errorf("MapFactoryStartOutcome(Status=%q).Text = %#v, want empty", tt.status, got.Text)
-			}
-		})
-	}
-}
-
-func TestMapFactoryStartOutcome_TerminalStatusMapping(t *testing.T) {
-	tests := []struct {
-		status string
-		want   acpsdk.StopReason
-	}{
-		{"CANCELED", acpsdk.StopReasonCancelled},
-		{"TIMED_OUT", acpsdk.StopReasonCancelled},
-		{"FAILED", acpsdk.StopReasonEndTurn},
-	}
-	for _, tt := range tests {
-		t.Run(tt.status, func(t *testing.T) {
-			got := MapFactoryStartOutcome(factorysessions.AsyncStartResult{Status: tt.status})
-			if got.StopReason != tt.want {
-				t.Errorf("MapFactoryStartOutcome(Status=%q).StopReason = %q, want %q", tt.status, got.StopReason, tt.want)
-			}
-		})
-	}
-}
-
 func TestMapFactoryOutcomes_AreDeterministic(t *testing.T) {
 	invocation := factorysessions.InvocationResult{
 		Status: factorysessions.InvocationTerminalStatusCompleted,
@@ -154,12 +113,5 @@ func TestMapFactoryOutcomes_AreDeterministic(t *testing.T) {
 	second := MapFactoryInvocationOutcome(invocation)
 	if !reflect.DeepEqual(first, second) {
 		t.Fatalf("MapFactoryInvocationOutcome() is not deterministic: %+v vs %+v", first, second)
-	}
-
-	start := factorysessions.AsyncStartResult{Status: "RUNNING"}
-	firstStart := MapFactoryStartOutcome(start)
-	secondStart := MapFactoryStartOutcome(start)
-	if !reflect.DeepEqual(firstStart, secondStart) {
-		t.Fatalf("MapFactoryStartOutcome() is not deterministic: %+v vs %+v", firstStart, secondStart)
 	}
 }

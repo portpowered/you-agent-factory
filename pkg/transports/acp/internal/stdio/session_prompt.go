@@ -54,6 +54,59 @@ var errFactoryTargetUnavailable = errors.New("acp: session/prompt factory target
 // rather than silently proceeding with no bound Factory Session.
 var errEmptyFactorySessionIdentity = errors.New("acp: factory session start returned an empty session id")
 
+// promptNotifier sends one outbound "session/update" JSON-RPC notification
+// on the connection a "session/prompt" call arrived on. It is carried
+// request-scoped through context.Context (see contextWithPromptNotifier),
+// not as an explicit parameter on handleSessionPrompt/dispatchRequest: the
+// only dispatched method that ever needs it is "session/prompt", so an
+// explicit parameter would force every other handler -- and every existing
+// test calling handleSessionPrompt directly -- to accept a capability they
+// never use.
+type promptNotifier func(acpsdk.SessionNotification) error
+
+// promptNotifierContextKey is the unexported context key promptNotifier is
+// carried under, so no other package can inject or observe it.
+type promptNotifierContextKey struct{}
+
+// contextWithPromptNotifier attaches notify to ctx for the duration of one
+// dispatched request.
+func contextWithPromptNotifier(ctx context.Context, notify promptNotifier) context.Context {
+	return context.WithValue(ctx, promptNotifierContextKey{}, notify)
+}
+
+// promptNotifierFromContext retrieves the promptNotifier attached by
+// contextWithPromptNotifier, or nil when ctx carries none -- for example
+// every existing unit test in this package that calls handleSessionPrompt
+// directly with context.Background().
+func promptNotifierFromContext(ctx context.Context) promptNotifier {
+	notify, _ := ctx.Value(promptNotifierContextKey{}).(promptNotifier)
+	return notify
+}
+
+// deliverPromptText sends text as exactly one "session/update"
+// agent_message_chunk notification -- the only mechanism this protocol
+// offers to deliver assistant text, since acpsdk.PromptResponse itself
+// carries none -- before the final "session/prompt" response is built. A nil
+// notify (no outbound notification capability attached to ctx) or empty text
+// is a no-op success. Supported text parts are newline-joined into one chunk
+// rather than emitted progressively: this transport slice delivers the
+// outcome's already-final, already-mapped text exactly once, not a live
+// token stream, so sending it as a single chunk is not the
+// fabricated/progressive streaming this L1 V1 slice excludes.
+func deliverPromptText(notify promptNotifier, sessionID string, text []string) error {
+	if notify == nil || len(text) == 0 {
+		return nil
+	}
+	return notify(acpsdk.SessionNotification{
+		SessionId: acpsdk.SessionId(sessionID),
+		Update: acpsdk.SessionUpdate{
+			AgentMessageChunk: &acpsdk.SessionUpdateAgentMessageChunk{
+				Content: acpsdk.TextBlock(strings.Join(text, "\n")),
+			},
+		},
+	})
+}
+
 // dispatchOutcome carries what a Factory dispatch branch
 // (startFactorySessionForEpisode/invokeFactorySessionForEpisode) observed
 // about its own downstream call, decoupled from whatever *acpsdk.RequestError
@@ -238,15 +291,18 @@ func turnStateStopReason(state chatsessions.TurnState) acpsdk.StopReason {
 // dispatchFactoryTurn runs the one Factory effect a running turn owns --
 // starting a fresh Factory Session for an unbound episode or invoking an
 // already-bound one -- maps its outcome into the final ACP prompt response,
-// and terminalizes the running turn on every path: COMPLETED when dispatch
-// and response mapping both succeed and the downstream outcome itself
-// reports a genuine completed status, CANCELED when the failure cause is
+// delivers any mapped text via deliverPromptText (the only ACP mechanism
+// that carries assistant text, since the response itself never does), and
+// terminalizes the running turn on every path: COMPLETED when dispatch and
+// response mapping both succeed and the downstream outcome itself reports a
+// genuine completed status, CANCELED when the failure cause is
 // context.Canceled/context.DeadlineExceeded or the downstream outcome itself
-// reports canceled/timed-out, and FAILED for every other dispatch, terminal-
-// result, or response-mapping failure. The terminalizing AdvanceTurn call
-// always runs -- using the exact session/turn identity StartTurn admitted,
-// not a value derived from whatever failed -- so no admitted turn is ever
-// left stranded in a non-terminal state regardless of which step failed.
+// reports canceled/timed-out, and FAILED for every other dispatch, text-
+// delivery, terminal-result, or response-mapping failure. The terminalizing
+// AdvanceTurn call always runs -- using the exact session/turn identity
+// StartTurn admitted, not a value derived from whatever failed -- so no
+// admitted turn is ever left stranded in a non-terminal state regardless of
+// which step failed.
 func (s *Server) dispatchFactoryTurn(ctx context.Context, startResult chatsessions.StartTurnResult, turn session.PromptTurn) (json.RawMessage, *acpsdk.RequestError) {
 	var dispatched dispatchOutcome
 	var dispatchErr error
@@ -262,6 +318,9 @@ func (s *Server) dispatchFactoryTurn(ctx context.Context, startResult chatsessio
 	if dispatchErr != nil {
 		terminal = terminalStateForFailure(dispatchErr)
 		rpcErr = classifyDependencyFailure(dispatchErr)
+	} else if notifyErr := deliverPromptText(promptNotifierFromContext(ctx), startResult.Session.ID, dispatched.outcome.Text); notifyErr != nil {
+		terminal = chatsessions.TurnStateFailed
+		rpcErr = classifyDependencyFailure(notifyErr)
 	} else {
 		resp := acpsdk.PromptResponse{StopReason: dispatched.outcome.StopReason}
 		marshaled, marshalErr := json.Marshal(resp)
@@ -321,16 +380,28 @@ func factoryInvocationTurnState(status factorysessions.InvocationTerminalStatus)
 // canonical Factory target (Source.FactoryID), the Chat Session's exact
 // editor working root, and the validated prompt content -- never a process
 // cwd or transport fallback. A blank returned Factory Session ID
-// (errEmptyFactorySessionIdentity) or a BindFactorySession failure is
-// returned unclassified for the caller to map; no second start is ever
-// attempted here. The returned outcome is protocol.MapFactoryStartOutcome's
-// deterministic projection of the shim's own published AsyncStartResult --
-// an asynchronous start has not itself reached a terminal outcome yet, so
-// this projection never carries fabricated primary-result text. On success
-// the returned dispatchOutcome always terminalizes to TurnStateCompleted:
-// this branch's own responsibility -- dispatching and binding the async
-// start -- has genuinely completed, independent of the Factory Session's
-// own later, unobserved lifecycle.
+// (errEmptyFactorySessionIdentity) is returned unclassified for the caller
+// to map; no second start is ever attempted here.
+//
+// StartFactoryTarget's underlying activation (OnDemandFactoryTargetService)
+// is synchronous under the hood: it already observes a genuine terminal
+// factorysessions.InvocationResult before returning, so this branch's
+// returned outcome is protocol.MapFactoryInvocationOutcome's deterministic
+// projection of that same real result -- both its ordered primary-result
+// text and its terminal status -- exactly like invokeFactorySessionForEpisode
+// projects a later turn's invocation, rather than a placeholder that always
+// reports success. The returned dispatchOutcome terminalizes to whatever
+// factoryInvocationTurnState derives from that published status, so a
+// first-turn start that itself completed the dispatch call but published a
+// FAILED or TIMED_OUT status still terminalizes the Chat turn accordingly
+// instead of always reporting COMPLETED.
+//
+// A BindFactorySession failure after a successful start is compensated by
+// closing the just-opened runtime (best-effort; a close failure is joined
+// into the returned error rather than discarded) so a live Factory Session
+// is never left both unbound and unreachable -- without this, a later retry
+// would leave the original runtime orphaned while opening a second one for
+// the still-unbound episode.
 func (s *Server) startFactorySessionForEpisode(
 	ctx context.Context,
 	startResult chatsessions.StartTurnResult,
@@ -373,12 +444,12 @@ func (s *Server) startFactorySessionForEpisode(
 		TurnID:           startResult.Turn.ID,
 		FactorySessionID: startOutcome.SessionID,
 	}); err != nil {
-		return dispatchOutcome{}, err
+		return dispatchOutcome{}, errors.Join(err, s.factoryTarget.CloseFactoryTarget(ctx, startOutcome.SessionID))
 	}
 
 	return dispatchOutcome{
-		outcome:  protocol.MapFactoryStartOutcome(startOutcome),
-		terminal: chatsessions.TurnStateCompleted,
+		outcome:  protocol.MapFactoryInvocationOutcome(startOutcome),
+		terminal: factoryInvocationTurnState(startOutcome.Status),
 	}, nil
 }
 

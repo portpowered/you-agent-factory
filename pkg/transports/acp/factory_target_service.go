@@ -13,8 +13,17 @@ import (
 // package states the exact shape it consumes; pkg/wire constructs the
 // concrete collaborator (the chat_sessions-owned Factory Sessions shim) and
 // injects it as this contract.
+//
+// StartFactoryTarget returns factorysessions.InvocationResult, not the
+// shared factorysessions.AsyncStartResult a genuinely asynchronous
+// factorysessions.Service.StartAsync publishes: every implementation this
+// transport consumes activates a runtime and dispatches the first turn's
+// content synchronously, so it already observes a genuine terminal
+// InvocationResult (including ordered primary-result text) before
+// returning, and this transport must not discard that observed result down
+// to a bare status string the way AsyncStartResult would force it to.
 type FactoryTargetService interface {
-	StartFactoryTarget(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error)
+	StartFactoryTarget(context.Context, factorysessions.StartRequest) (factorysessions.InvocationResult, error)
 	InvokeFactoryTarget(
 		context.Context,
 		string,

@@ -180,6 +180,23 @@ func (s *Server) serveConnection(ctx context.Context, connectionID identity.Conn
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
 	scanner.Split(scanCompleteLines)
 
+	// notify is this connection's one outbound "session/update" delivery
+	// capability, carried through each dispatched request's context (see
+	// contextWithPromptNotifier in session_prompt.go) rather than threaded as
+	// an explicit parameter -- the only dispatched method that ever uses it
+	// is "session/prompt", and adding a parameter every other handler and
+	// every existing unit test would have to accept for a capability they
+	// never use is exactly the kind of unnecessary plumbing a request-scoped
+	// context value avoids. Writing a notification line and writing this
+	// same request's eventual response line can never interleave with each
+	// other or with another request's lines: dispatchRequest runs to
+	// completion (and any notify call within it, synchronously) before this
+	// loop's single writeResponse call for the same line, and the next line
+	// is never read until that happens.
+	notify := func(n acpsdk.SessionNotification) error {
+		return writeNotification(out, n)
+	}
+
 	var notificationSeq uint64
 	for {
 		if err := ctx.Err(); err != nil {
@@ -202,7 +219,8 @@ func (s *Server) serveConnection(ctx context.Context, connectionID identity.Conn
 		}
 		raw := append(json.RawMessage(nil), line...)
 
-		env, result, rpcErr := s.dispatchRequest(ctx, connectionID, notificationSeq, raw)
+		reqCtx := contextWithPromptNotifier(ctx, notify)
+		env, result, rpcErr := s.dispatchRequest(reqCtx, connectionID, notificationSeq, raw)
 		if env.IsNotification {
 			notificationSeq++
 			continue
@@ -326,6 +344,40 @@ func writeResponse(out io.Writer, reqIdentity identity.RequestIdentity, result j
 	}
 
 	body, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	body = append(body, '\n')
+
+	n, err := out.Write(body)
+	if err != nil {
+		return err
+	}
+	if n != len(body) {
+		return io.ErrShortWrite
+	}
+	return nil
+}
+
+// notificationMessage is the wire shape of one JSON-RPC 2.0 notification: no
+// "id" member at all (not even null), matching NotificationMethods' contract
+// that a notification never has a response counterpart.
+type notificationMessage struct {
+	JSONRPC string                     `json:"jsonrpc"`
+	Method  string                     `json:"method"`
+	Params  acpsdk.SessionNotification `json:"params"`
+}
+
+// writeNotification serializes and writes exactly one complete
+// newline-terminated "session/update" JSON-RPC notification. A short write
+// is reported as io.ErrShortWrite rather than treated as success, matching
+// writeResponse's own short-write handling.
+func writeNotification(out io.Writer, params acpsdk.SessionNotification) error {
+	body, err := json.Marshal(notificationMessage{
+		JSONRPC: "2.0",
+		Method:  acpsdk.ClientMethodSessionUpdate,
+		Params:  params,
+	})
 	if err != nil {
 		return err
 	}

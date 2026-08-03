@@ -164,24 +164,25 @@ func (a *activatedFactoryRuntime) close(ctx context.Context) error {
 // service's already-resolved, already-opened runtime needs. Since
 // s.resolve/openActivatedRuntime already picked and opened the exact target
 // directory, this call needs no further source selection at all. The
-// returned AsyncStartResult carries this service's own generated identity
-// (never the opened runtime's shared internal constant session identity)
-// and the invocation's real published terminal status; it has no text/
-// content field to carry the real result text (AsyncStartResult itself
-// publishes none), matching factorysessions.AsyncStartResult's existing,
-// already-tested contract.
+// returned InvocationResult is the real, unmodified published invocation
+// outcome -- terminal status and ordered primary-result text included --
+// except SessionID, which this service substitutes with its own generated
+// identity (never the opened runtime's shared internal constant session
+// identity) so a later InvokeFactoryTarget/CancelFactoryTarget/
+// CloseFactoryTarget call against the returned identity resolves back to
+// this exact runtime.
 func (s *OnDemandFactoryTargetService) StartFactoryTarget(
 	ctx context.Context,
 	request factorysessions.StartRequest,
-) (factorysessions.AsyncStartResult, error) {
+) (factorysessions.InvocationResult, error) {
 	workingRoot, _ := request.Args["workingRoot"].(string)
 	config, err := s.resolve(ctx, request.Source.FactoryID, workingRoot)
 	if err != nil {
-		return factorysessions.AsyncStartResult{}, err
+		return factorysessions.InvocationResult{}, err
 	}
 	active, err := s.openActivatedRuntime(ctx, config)
 	if err != nil {
-		return factorysessions.AsyncStartResult{}, err
+		return factorysessions.InvocationResult{}, err
 	}
 
 	content, _ := request.Args["content"].([]work.WorkContentPart)
@@ -194,14 +195,15 @@ func (s *OnDemandFactoryTargetService) StartFactoryTarget(
 		SourceKind:      &sourceKind,
 	})
 	if err != nil {
-		return factorysessions.AsyncStartResult{}, errors.Join(err, active.close(ctx))
+		return factorysessions.InvocationResult{}, errors.Join(err, active.close(ctx))
 	}
 
 	wrapperID := s.generateID()
 	s.mu.Lock()
 	s.runtimes[wrapperID] = active
 	s.mu.Unlock()
-	return factorysessions.AsyncStartResult{SessionID: wrapperID, Status: string(result.Status)}, nil
+	result.SessionID = wrapperID
+	return result, nil
 }
 
 func (s *OnDemandFactoryTargetService) lookup(sessionID string) (*activatedFactoryRuntime, error) {

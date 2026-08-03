@@ -20,12 +20,14 @@ type PromptOutcome struct {
 }
 
 // MapFactoryInvocationOutcome is a total, deterministic mapping from one
-// completed Factory Session invocation (InvokeFactoryTarget) outcome to the
-// bounded ACP prompt outcome this transport returns. Text is projected only
-// from the invocation's published "text" primary-result parts, in the same
-// order they appear on result.PrimaryResult; an absent PrimaryResult or one
-// containing only unsupported part kinds (image/audio/JSON/binary) yields a
-// nil Text rather than fabricated content.
+// completed Factory Session invocation (InvokeFactoryTarget, or the
+// synchronous activation StartFactoryTarget's own on-demand implementation
+// performs for a first turn) outcome to the bounded ACP prompt outcome this
+// transport returns. Text is projected only from the invocation's published
+// "text" primary-result parts, in the same order they appear on
+// result.PrimaryResult; an absent PrimaryResult or one containing only
+// unsupported part kinds (image/audio/JSON/binary) yields a nil Text rather
+// than fabricated content.
 func MapFactoryInvocationOutcome(result factorysessions.InvocationResult) PromptOutcome {
 	return PromptOutcome{
 		StopReason: mapFactoryTerminalStatus(string(result.Status)),
@@ -33,32 +35,17 @@ func MapFactoryInvocationOutcome(result factorysessions.InvocationResult) Prompt
 	}
 }
 
-// MapFactoryStartOutcome is a total, deterministic mapping from one Factory
-// Session asynchronous start (StartFactoryTarget) outcome to the bounded ACP
-// prompt outcome this transport returns. An asynchronous start's published
-// result carries no primary-result content -- the invocation it begins has
-// not itself reached a terminal outcome yet -- so Text is always nil here;
-// only MapFactoryInvocationOutcome ever projects text, and only from an
-// invocation's own published result.
-func MapFactoryStartOutcome(result factorysessions.AsyncStartResult) PromptOutcome {
-	return PromptOutcome{StopReason: mapFactoryTerminalStatus(result.Status)}
-}
-
-// mapFactoryTerminalStatus is the shared total mapping both
-// MapFactoryInvocationOutcome and MapFactoryStartOutcome apply to their
-// respective published status vocabularies -- InvocationTerminalStatus
-// ("COMPLETED"/"CANCELED"/"FAILED"/"TIMED_OUT") and AsyncStartResult.Status
-// (a LifecycleStatus string, most often still "RUNNING" immediately after an
-// asynchronous start returns). A published completed outcome
-// ("COMPLETED"/"SUCCEEDED") maps to end_turn. A turn that stopped before
-// reaching a genuine completed or failed outcome -- caller-cancelled or
-// timed out -- maps to cancelled, the closest published ACP stop reason for
-// "did not run to natural completion" (ACP has no dedicated timeout
-// vocabulary). A published failure, a still-running/queued status observed
-// from an asynchronous start that has not reached a terminal outcome yet, or
-// any other unmapped status all fall back to end_turn -- the same documented
-// safe default this transport uses elsewhere for a Factory failure -- and
-// never disclose the underlying status, error code, or message.
+// mapFactoryTerminalStatus is the total mapping MapFactoryInvocationOutcome
+// applies to the published InvocationTerminalStatus vocabulary
+// ("COMPLETED"/"CANCELED"/"FAILED"/"TIMED_OUT"). A published completed
+// outcome ("COMPLETED"/"SUCCEEDED") maps to end_turn. A turn that stopped
+// before reaching a genuine completed or failed outcome -- caller-cancelled
+// or timed out -- maps to cancelled, the closest published ACP stop reason
+// for "did not run to natural completion" (ACP has no dedicated timeout
+// vocabulary). A published failure, or any other unmapped status, falls back
+// to end_turn -- the same documented safe default this transport uses
+// elsewhere for a Factory failure -- and never discloses the underlying
+// status, error code, or message.
 func mapFactoryTerminalStatus(status string) acpsdk.StopReason {
 	switch status {
 	case string(factorysessions.InvocationTerminalStatusCompleted), "SUCCEEDED":
