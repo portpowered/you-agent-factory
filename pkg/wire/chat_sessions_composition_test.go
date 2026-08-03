@@ -152,9 +152,14 @@ func TestProvideChatSessionsFactoryTargetCatalogServiceComposesThroughTheCanonic
 		t.Fatalf("provideOperatorSettingsService() error = %v", err)
 	}
 
+	factoryBuilderLocation := "/factories/@you/factory-builder"
 	factoryDefinitions := &staticFactoryDefinitionsService{
 		entries: []factorydefinitions.EffectiveFactoryCatalogEntry{
-			{Name: "@you/factory-builder", Definition: &factorydefinitions.FactoryConfig{Name: "Factory Builder"}},
+			{
+				Name:       "@you/factory-builder",
+				Location:   &factoryBuilderLocation,
+				Definition: &factorydefinitions.FactoryConfig{Name: "Factory Builder"},
+			},
 		},
 	}
 

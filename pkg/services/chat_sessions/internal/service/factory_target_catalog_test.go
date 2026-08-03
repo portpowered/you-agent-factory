@@ -41,9 +41,9 @@ func TestResolveFactoryTargetCatalogExactAllowlistFiltering(t *testing.T) {
 		AllowedTargets: []string{"factory:@you/factory-builder", "factory:@you/review"},
 	}
 	entries := []factorydefinitions.EffectiveFactoryCatalogEntry{
-		{Name: "@you/factory-builder", Definition: &factorydefinitions.FactoryConfig{Name: "Factory Builder"}},
-		{Name: "@you/review", Definition: &factorydefinitions.FactoryConfig{Name: "Review"}},
-		{Name: "@you/extra", Definition: &factorydefinitions.FactoryConfig{Name: "Extra"}},
+		installedFactoryEntry("@you/factory-builder", "Factory Builder"),
+		installedFactoryEntry("@you/review", "Review"),
+		installedFactoryEntry("@you/extra", "Extra"),
 	}
 	service := newTestService(t, profile, entries)
 
@@ -75,7 +75,7 @@ func TestResolveFactoryTargetCatalogMissingProfileDefaultsToFactoryBuilder(t *te
 	t.Parallel()
 
 	entries := []factorydefinitions.EffectiveFactoryCatalogEntry{
-		{Name: "@you/factory-builder", Definition: &factorydefinitions.FactoryConfig{Name: "Factory Builder"}},
+		installedFactoryEntry("@you/factory-builder", "Factory Builder"),
 	}
 	// A missing authored profile resolves to Operator Settings' safe default,
 	// which this fake models directly since ResolveACPAgentProfile itself
@@ -105,7 +105,7 @@ func TestResolveFactoryTargetCatalogExcludesAllowedButUninstalled(t *testing.T) 
 		AllowedTargets: []string{"factory:@you/factory-builder", "factory:@you/missing"},
 	}
 	entries := []factorydefinitions.EffectiveFactoryCatalogEntry{
-		{Name: "@you/factory-builder", Definition: &factorydefinitions.FactoryConfig{Name: "Factory Builder"}},
+		installedFactoryEntry("@you/factory-builder", "Factory Builder"),
 	}
 	service := newTestService(t, profile, entries)
 
@@ -129,8 +129,8 @@ func TestResolveFactoryTargetCatalogExcludesInstalledButDisallowed(t *testing.T)
 		AllowedTargets: []string{"factory:@you/factory-builder"},
 	}
 	entries := []factorydefinitions.EffectiveFactoryCatalogEntry{
-		{Name: "@you/factory-builder", Definition: &factorydefinitions.FactoryConfig{Name: "Factory Builder"}},
-		{Name: "@you/extra", Definition: &factorydefinitions.FactoryConfig{Name: "Extra"}},
+		installedFactoryEntry("@you/factory-builder", "Factory Builder"),
+		installedFactoryEntry("@you/extra", "Extra"),
 	}
 	service := newTestService(t, profile, entries)
 
@@ -150,9 +150,9 @@ func TestResolveFactoryTargetCatalogDeterministicOrderingAndDedup(t *testing.T) 
 	t.Parallel()
 
 	entries := []factorydefinitions.EffectiveFactoryCatalogEntry{
-		{Name: "@you/factory-builder", Definition: &factorydefinitions.FactoryConfig{Name: "Factory Builder"}},
-		{Name: "@you/review", Definition: &factorydefinitions.FactoryConfig{Name: "Review"}},
-		{Name: "@you/analysis", Definition: &factorydefinitions.FactoryConfig{Name: "Analysis"}},
+		installedFactoryEntry("@you/factory-builder", "Factory Builder"),
+		installedFactoryEntry("@you/review", "Review"),
+		installedFactoryEntry("@you/analysis", "Analysis"),
 	}
 	reorderedEntries := []factorydefinitions.EffectiveFactoryCatalogEntry{entries[2], entries[0], entries[1]}
 	duplicatedEntries := append(append([]factorydefinitions.EffectiveFactoryCatalogEntry{}, entries...), entries[1], entries[0])
@@ -234,8 +234,8 @@ func TestResolveFactoryTargetCatalogResultIsDetached(t *testing.T) {
 		AllowedTargets: []string{"factory:@you/factory-builder", "factory:@you/review"},
 	}
 	entries := []factorydefinitions.EffectiveFactoryCatalogEntry{
-		{Name: "@you/factory-builder", Definition: &factorydefinitions.FactoryConfig{Name: "Factory Builder"}},
-		{Name: "@you/review", Definition: &factorydefinitions.FactoryConfig{Name: "Review"}},
+		installedFactoryEntry("@you/factory-builder", "Factory Builder"),
+		installedFactoryEntry("@you/review", "Review"),
 	}
 	service := newTestService(t, profile, entries)
 

@@ -116,7 +116,7 @@ func TestResolveFactoryTargetCatalogLogsStartedAndFinishedSafely(t *testing.T) {
 		listEffectiveFactories: func(context.Context, factorydefinitions.ListEffectiveFactoriesRequest) (factorydefinitions.ListEffectiveFactoriesResult, error) {
 			return factorydefinitions.ListEffectiveFactoriesResult{
 				Entries: []factorydefinitions.EffectiveFactoryCatalogEntry{
-					{Name: "@you/factory-builder", Definition: &factorydefinitions.FactoryConfig{Name: "Factory Builder"}},
+					installedFactoryEntry("@you/factory-builder", "Factory Builder"),
 				},
 			}, nil
 		},
@@ -204,7 +204,7 @@ func TestResolveFactoryTargetCatalogUsesEachInjectedCollaboratorExactlyOnce(t *t
 			catalogCalls++
 			return factorydefinitions.ListEffectiveFactoriesResult{
 				Entries: []factorydefinitions.EffectiveFactoryCatalogEntry{
-					{Name: "@you/factory-builder", Definition: &factorydefinitions.FactoryConfig{Name: "Factory Builder"}},
+					installedFactoryEntry("@you/factory-builder", "Factory Builder"),
 				},
 			}, nil
 		},
@@ -250,7 +250,7 @@ func TestResolveFactoryTargetCatalogObservesLiveCollaboratorDrift(t *testing.T) 
 			}
 			return factorydefinitions.ListEffectiveFactoriesResult{
 				Entries: []factorydefinitions.EffectiveFactoryCatalogEntry{
-					{Name: "@you/factory-builder", Definition: &factorydefinitions.FactoryConfig{Name: "Factory Builder"}},
+					installedFactoryEntry("@you/factory-builder", "Factory Builder"),
 				},
 			}, nil
 		},
