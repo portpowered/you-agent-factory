@@ -70,6 +70,37 @@ func TestStore_StartTurn_FirstTurnActivatesSession(t *testing.T) {
 	}
 }
 
+// TestStore_StartTurn_ReturnsAdmittedEpisodeSnapshot proves StartTurnResult
+// carries the exact current TargetEpisode the turn was admitted into
+// (Number and Target), with a blank FactorySessionID for a brand-new
+// episode, so a caller can decide whether to start or reuse a Factory
+// Session without a second read.
+func TestStore_StartTurn_ReturnsAdmittedEpisodeSnapshot(t *testing.T) {
+	ctx := context.Background()
+	store, session := newStartTurnTestSession(t, time.Now())
+
+	result, err := store.StartTurn(ctx, chatsessions.StartTurnRequest{
+		RequestID:       startTurnRequestID("req-turn-1"),
+		SessionID:       session.ID,
+		ExpectedVersion: session.Version,
+	})
+	if err != nil {
+		t.Fatalf("StartTurn: %v", err)
+	}
+	if result.Episode.Number != session.TargetEpisode {
+		t.Fatalf("Episode.Number = %d, want %d", result.Episode.Number, session.TargetEpisode)
+	}
+	if result.Episode.Target != session.SelectedTarget {
+		t.Fatalf("Episode.Target = %+v, want %+v", result.Episode.Target, session.SelectedTarget)
+	}
+	if result.Episode.FactorySessionID != "" {
+		t.Fatalf("Episode.FactorySessionID = %q, want blank for a brand-new episode", result.Episode.FactorySessionID)
+	}
+	if result.Episode.State != chatsessions.TargetEpisodeStateOpen {
+		t.Fatalf("Episode.State = %v, want OPEN", result.Episode.State)
+	}
+}
+
 // TestStore_StartTurn_SecondAdmissionWhileActiveIsBusy proves a second
 // sequential admission while the first turn is non-terminal reports typed
 // *BusyError, creates no additional active turn, and leaves the accepted

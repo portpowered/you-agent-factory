@@ -64,6 +64,7 @@ var servicesSet = wire.NewSet(
 	provideOperatorSettingsIDGenerator,
 	provideChatSessionsFactoryTargetCatalogService,
 	provideACPServerFactoryDefinitions,
+	provideACPServerFactoryTarget,
 	provideACPServerResolveHomeDir,
 	provideACPServer,
 	provideOperatorConfigDecoder,

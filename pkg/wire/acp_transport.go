@@ -7,7 +7,9 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	chatsessionswire "github.com/portpowered/infinite-you/pkg/services/chat_sessions/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	acpwire "github.com/portpowered/infinite-you/pkg/transports/acp/wire"
 )
@@ -108,18 +110,31 @@ func provideACPServerResolveHomeDir() acpServerResolveHomeDir {
 	return os.UserHomeDir
 }
 
+// provideACPServerFactoryTarget constructs the consumer-owned Factory
+// Sessions shim the production ACP prompt-delegation consumer starts or
+// invokes a Factory Session through, from the same canonical
+// factorysessions.Service instance the rest of this graph composes -- so
+// production prompt delegation observes the one process-scoped Factory
+// Sessions authority instead of a second, independently constructed
+// instance. Construction alone performs no I/O.
+func provideACPServerFactoryTarget(factorySessions factorysessions.Service) acp.FactoryTargetService {
+	return chatsessionswire.NewFactoryTargetService(factorySessions)
+}
+
 // provideACPServer constructs the production ACP stdio Server from the same
-// canonical chatsessions.Service and chatsessions.FactoryTargetCatalogService
-// instances the rest of this graph composes, so the real "session/new",
-// "session/set_config_option", and "/factory" consumer observes the one
-// process-scoped Chat Sessions authority instead of a second, independently
+// canonical chatsessions.Service, chatsessions.FactoryTargetCatalogService,
+// and Factory Sessions shim instances the rest of this graph composes, so
+// the real "session/new", "session/set_config_option", "/factory", and
+// ordinary prompt-delegation consumer observes the one process-scoped Chat
+// Sessions and Factory Sessions authority instead of a second, independently
 // constructed instance. Construction alone performs no I/O; it starts no
 // goroutine, process, listener, session, or persistence.
 func provideACPServer(
 	logger logging.Logger,
 	chatSessions chatsessions.Service,
 	catalog chatsessions.FactoryTargetCatalogService,
+	factoryTarget acp.FactoryTargetService,
 	resolveHomeDir acpServerResolveHomeDir,
 ) acp.Server {
-	return acpwire.NewServer(logger, chatSessions, catalog, resolveHomeDir)
+	return acpwire.NewServer(logger, chatSessions, catalog, factoryTarget, resolveHomeDir)
 }

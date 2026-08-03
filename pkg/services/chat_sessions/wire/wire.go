@@ -8,6 +8,14 @@
 // injection of the singular Operator Settings and Factory Definitions
 // public service roots). Neither constructor is a dependency bag, service
 // locator, or alternate construction path for the other's root.
+//
+// It also re-publishes the package-private factorysessionsshim's narrow
+// Factory Session start/invoke/cancel/close contract as FactoryTargetService
+// so a consumer outside the chat_sessions tree (the ACP prompt-delegation
+// transport and its own wire graph) can construct and hold that
+// collaborator without importing the internal shim package itself, and
+// without the chat_sessions public root (chatsessions.Service) taking on a
+// Factory Sessions dependency.
 package wire
 
 import (
@@ -15,8 +23,10 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/factorysessionsshim"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/service"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
@@ -54,4 +64,20 @@ func NewFactoryTargetCatalogService(
 	logger logging.Logger,
 ) (chatsessions.FactoryTargetCatalogService, error) {
 	return internalservice.New(operatorSettings, factoryDefinitions, logger)
+}
+
+// FactoryTargetService is factorysessionsshim.FactoryTargetService,
+// re-published here so a caller outside the chat_sessions tree can declare a
+// field or parameter of this type without importing the internal shim
+// package directly.
+type FactoryTargetService = factorysessionsshim.FactoryTargetService
+
+// NewFactoryTargetService constructs the Factory Sessions shim over the
+// given public factory_sessions.Service root -- the one consumer-owned
+// bridge from Chat Sessions-adjacent transports to Factory Sessions'
+// start/invoke/cancel/close operations. It forwards the published
+// factory_sessions vocabulary unmodified; this package does not reinterpret
+// results or reach into Factory Sessions internals.
+func NewFactoryTargetService(service factorysessions.Service) FactoryTargetService {
+	return factorysessionsshim.New(service)
 }

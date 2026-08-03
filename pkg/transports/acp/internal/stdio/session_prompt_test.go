@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -11,6 +13,9 @@ import (
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
 )
@@ -474,7 +479,7 @@ func TestHandleSessionPromptEqualWireIDsAcrossConnectionsRemainDistinct(t *testi
 // configured reports a bounded internal failure rather than panicking or
 // dispatching a Factory effect.
 func TestHandleSessionPromptWithoutCollaboratorsReportsBoundedFailure(t *testing.T) {
-	server := New(nil, nil, nil, nil)
+	server := New(nil, nil, nil, nil, nil)
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams("session-1", "hello there"))
 
@@ -652,5 +657,197 @@ func TestFactoryFallbackAndSetConfigOptionProduceEquivalentEffects(t *testing.T)
 				t.Fatal("StartTurn was called via the /factory prompt fallback, want no prompt turn")
 			}
 		})
+	}
+}
+
+// admittedTurnResult builds a chatsessions.StartTurnResult matching what a
+// real StartTurn admission against sessionAt(id, target, version, root)
+// would return: the same Session identity/version/root, a newly admitted
+// Turn, and the current TargetEpisode snapshot (whose FactorySessionID is
+// factorySessionID -- blank for a brand-new, unbound episode).
+func admittedTurnResult(id, target string, version uint64, workingRoot, turnID, factorySessionID string) chatsessions.StartTurnResult {
+	targetRef := chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: target}
+	return chatsessions.StartTurnResult{
+		Session: chatsessions.Session{
+			ID: id, State: chatsessions.SessionStateActive,
+			SelectedTarget: targetRef, TargetEpisode: 1, ActiveTurnID: turnID,
+			Version: version, WorkingRoot: workingRoot,
+		},
+		Turn: chatsessions.Turn{
+			ID: turnID, Episode: 1, State: chatsessions.TurnStateAdmitted,
+		},
+		Episode: chatsessions.TargetEpisode{
+			Number: 1, State: chatsessions.TargetEpisodeStateOpen,
+			Target: targetRef, FactorySessionID: factorySessionID,
+		},
+	}
+}
+
+// TestHandleSessionPromptFirstTurnStartsFactorySessionWithExactTargetRootAndContent
+// proves the first admitted turn in an unbound episode calls
+// StartFactoryTarget exactly once through the consumer-owned shim, with the
+// episode's canonical Factory target, the session's exact editor working
+// root, and the validated prompt content -- never a process cwd or
+// substituted value.
+func TestHandleSessionPromptFirstTurnStartsFactorySessionWithExactTargetRootAndContent(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.AsyncStartResult{SessionID: "fs-1"}}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "hello there"))
+
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure: response mapping is not yet implemented")
+	}
+
+	if len(factoryTarget.startCalls) != 1 {
+		t.Fatalf("StartFactoryTarget call count = %d, want exactly 1", len(factoryTarget.startCalls))
+	}
+	got := factoryTarget.startCalls[0]
+	wantSource := factorysessions.Source{Kind: factoryruntime.WorkflowSourceKindFactoryID, FactoryID: "factory:@you/review"}
+	if !reflect.DeepEqual(got.Source, wantSource) {
+		t.Fatalf("StartFactoryTarget Source = %+v, want %+v", got.Source, wantSource)
+	}
+	if got.Args["workingRoot"] != "/work/project" {
+		t.Fatalf("StartFactoryTarget Args[workingRoot] = %v, want /work/project", got.Args["workingRoot"])
+	}
+	wantContent := []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello there"}}
+	gotContent, ok := got.Args["content"].([]work.WorkContentPart)
+	if !ok || !reflect.DeepEqual(gotContent, wantContent) {
+		t.Fatalf("StartFactoryTarget Args[content] = %#v, want %#v", got.Args["content"], wantContent)
+	}
+	if got.RequestID != "turn-1" {
+		t.Fatalf("StartFactoryTarget RequestID = %q, want the admitted turn id turn-1", got.RequestID)
+	}
+}
+
+// TestHandleSessionPromptFirstTurnBindsReturnedFactorySessionID proves a
+// successful Factory Session start binds the returned identity onto exactly
+// the admitted session/episode/turn/version.
+func TestHandleSessionPromptFirstTurnBindsReturnedFactorySessionID(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.AsyncStartResult{SessionID: "fs-1"}}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "hello there"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure: response mapping is not yet implemented")
+	}
+
+	if !chatSessions.bindFactorySessionCalled {
+		t.Fatal("BindFactorySession was not called, want exactly one binding attempt after a successful start")
+	}
+	want := chatsessions.BindFactorySessionRequest{
+		SessionID: "session-1", ExpectedVersion: 4, Episode: 1, TurnID: "turn-1", FactorySessionID: "fs-1",
+	}
+	if chatSessions.bindFactorySessionReq != want {
+		t.Fatalf("BindFactorySession request = %+v, want %+v", chatSessions.bindFactorySessionReq, want)
+	}
+}
+
+// TestHandleSessionPromptAlreadyBoundEpisodeMakesNoStartCall proves a later
+// turn in an episode that already carries a Factory Session ID makes zero
+// StartFactoryTarget and zero BindFactorySession calls: invoking the bound
+// session is story 003's scope, not this one's, and this story must never
+// start a second Factory Session for an already-started episode.
+func TestHandleSessionPromptAlreadyBoundEpisodeMakesNoStartCall(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", "fs-already-bound"),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.AsyncStartResult{SessionID: "fs-new"}}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "a later message"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure: invoke dispatch is not yet implemented")
+	}
+
+	if len(factoryTarget.startCalls) != 0 {
+		t.Fatalf("StartFactoryTarget call count = %d, want 0 for an already-bound episode", len(factoryTarget.startCalls))
+	}
+	if chatSessions.bindFactorySessionCalled {
+		t.Fatal("BindFactorySession was called, want no binding attempt for an already-bound episode")
+	}
+}
+
+// TestHandleSessionPromptFactoryStartFailureMakesNoBindCall proves a
+// StartFactoryTarget failure reports a bounded failure and never calls
+// BindFactorySession.
+func TestHandleSessionPromptFactoryStartFailureMakesNoBindCall(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{startErr: errors.New("factory sessions boom")}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "hello there"))
+	_, rpcErr := server.handleSessionPrompt(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure for a Factory start failure")
+	}
+	if chatSessions.bindFactorySessionCalled {
+		t.Fatal("BindFactorySession was called, want no binding attempt after a Factory start failure")
+	}
+}
+
+// TestHandleSessionPromptEmptyFactorySessionIdentityFailsSafely proves a
+// StartFactoryTarget success carrying a blank SessionID fails safely and
+// never calls BindFactorySession, rather than committing an empty identity.
+func TestHandleSessionPromptEmptyFactorySessionIdentityFailsSafely(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.AsyncStartResult{SessionID: ""}}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "hello there"))
+	_, rpcErr := server.handleSessionPrompt(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure for an empty returned Factory Session identity")
+	}
+	if chatSessions.bindFactorySessionCalled {
+		t.Fatal("BindFactorySession was called, want no binding attempt for an empty returned identity")
+	}
+}
+
+// TestHandleSessionPromptWithoutFactoryTargetCollaboratorAdmitsButFailsBound
+// proves a Server with no Factory Sessions collaborator still admits the
+// turn (StartTurn is called) before reporting a bounded failure, matching
+// every other dependency-unavailable path in this package.
+func TestHandleSessionPromptWithoutFactoryTargetCollaboratorAdmitsButFailsBound(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	server := newTestServer(chatSessions, catalog, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "hello there"))
+	_, rpcErr := server.handleSessionPrompt(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure with no Factory target collaborator")
+	}
+	if !chatSessions.startTurnCalled {
+		t.Fatal("StartTurn was not called, want the turn admitted before the missing-collaborator failure")
 	}
 }

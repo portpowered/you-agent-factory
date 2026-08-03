@@ -53,6 +53,7 @@ func (s *Store) StartTurn(_ context.Context, req chatsessions.StartTurnRequest) 
 	if err := turn.Validate(); err != nil {
 		return chatsessions.StartTurnResult{}, err
 	}
+	episode := record.episodes[len(record.episodes)-1]
 
 	updated := record.session
 	if updated.State == chatsessions.SessionStateCreated {
@@ -73,7 +74,7 @@ func (s *Store) StartTurn(_ context.Context, req chatsessions.StartTurnRequest) 
 	record.session = updated
 	s.sessions[req.SessionID] = record
 
-	return chatsessions.StartTurnResult{Session: updated, Turn: turn}, nil
+	return chatsessions.StartTurnResult{Session: updated, Turn: turn, Episode: episode}, nil
 }
 
 // AdvanceTurn moves one Turn to Next, enforcing the TurnState transition

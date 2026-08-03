@@ -14,6 +14,8 @@ import (
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 )
@@ -48,6 +50,11 @@ type fakeChatSessionsService struct {
 	startTurnReq    chatsessions.StartTurnRequest
 	startTurnResult chatsessions.StartTurnResult
 	startTurnErr    error
+
+	bindFactorySessionCalled bool
+	bindFactorySessionReq    chatsessions.BindFactorySessionRequest
+	bindFactorySessionResult chatsessions.BindFactorySessionResult
+	bindFactorySessionErr    error
 }
 
 var _ chatsessions.Service = (*fakeChatSessionsService)(nil)
@@ -108,6 +115,17 @@ func (f *fakeChatSessionsService) StartTurn(_ context.Context, req chatsessions.
 	return f.startTurnResult, nil
 }
 
+func (f *fakeChatSessionsService) BindFactorySession(_ context.Context, req chatsessions.BindFactorySessionRequest) (chatsessions.BindFactorySessionResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.bindFactorySessionCalled = true
+	f.bindFactorySessionReq = req
+	if f.bindFactorySessionErr != nil {
+		return chatsessions.BindFactorySessionResult{}, f.bindFactorySessionErr
+	}
+	return f.bindFactorySessionResult, nil
+}
+
 func (f *fakeChatSessionsService) AdvanceTurn(context.Context, chatsessions.AdvanceTurnRequest) (chatsessions.AdvanceTurnResult, error) {
 	return chatsessions.AdvanceTurnResult{}, errors.New("fakeChatSessionsService: AdvanceTurn not implemented")
 }
@@ -149,6 +167,59 @@ func (f *fakeFactoryTargetCatalogService) ResolveFactoryTargetCatalog(
 	return f.result, nil
 }
 
+// fakeFactoryTargetService is a minimal
+// acp.FactoryTargetService test double: it embeds the interface
+// unimplemented so a call to a capability beyond Start/Invoke reaches a nil
+// method value and panics, proving the consumer never dispatches to
+// Cancel/Close from the ordinary prompt-delegation path this package's
+// tests exercise. mu guards every field for concurrent/duplicate-delivery
+// tests.
+type fakeFactoryTargetService struct {
+	acp.FactoryTargetService
+
+	mu sync.Mutex
+
+	startCalls  []factorysessions.StartRequest
+	startResult factorysessions.AsyncStartResult
+	startErr    error
+
+	invokeCalls  []invokeFactoryTargetCall
+	invokeResult factorysessions.InvocationResult
+	invokeErr    error
+}
+
+type invokeFactoryTargetCall struct {
+	sessionID string
+	request   factorysessions.InvocationRequest
+}
+
+func (f *fakeFactoryTargetService) StartFactoryTarget(
+	_ context.Context,
+	request factorysessions.StartRequest,
+) (factorysessions.AsyncStartResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.startCalls = append(f.startCalls, request)
+	if f.startErr != nil {
+		return factorysessions.AsyncStartResult{}, f.startErr
+	}
+	return f.startResult, nil
+}
+
+func (f *fakeFactoryTargetService) InvokeFactoryTarget(
+	_ context.Context,
+	sessionID string,
+	request factorysessions.InvocationRequest,
+) (factorysessions.InvocationResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.invokeCalls = append(f.invokeCalls, invokeFactoryTargetCall{sessionID: sessionID, request: request})
+	if f.invokeErr != nil {
+		return factorysessions.InvocationResult{}, f.invokeErr
+	}
+	return f.invokeResult, nil
+}
+
 func defaultTestCatalogResult() chatsessions.ResolveFactoryTargetCatalogResult {
 	return chatsessions.ResolveFactoryTargetCatalogResult{
 		CurrentTarget: "factory:@you/factory-builder",
@@ -160,8 +231,20 @@ func defaultTestCatalogResult() chatsessions.ResolveFactoryTargetCatalogResult {
 }
 
 func newTestServer(chatSessions *fakeChatSessionsService, catalog *fakeFactoryTargetCatalogService, homeDir string) *Server {
+	return newTestServerWithFactoryTarget(chatSessions, catalog, nil, homeDir)
+}
+
+// newTestServerWithFactoryTarget is newTestServer plus an explicit Factory
+// Sessions delegation collaborator, for the ordinary-prompt-delegation tests
+// that need to observe or fail StartFactoryTarget/InvokeFactoryTarget calls.
+func newTestServerWithFactoryTarget(
+	chatSessions *fakeChatSessionsService,
+	catalog *fakeFactoryTargetCatalogService,
+	factoryTarget acp.FactoryTargetService,
+	homeDir string,
+) *Server {
 	resolveHomeDir := func() (string, error) { return homeDir, nil }
-	return New(nil, chatSessions, catalog, resolveHomeDir)
+	return New(nil, chatSessions, catalog, factoryTarget, resolveHomeDir)
 }
 
 func numberIdentityEnvelope(t *testing.T, connID identity.ConnectionID, wireID int64, method string, params string) envelope.Envelope {
@@ -413,7 +496,7 @@ func TestServeDispatchesSessionNewOverRealJSONRPCFraming(t *testing.T) {
 func TestServeRespondsMethodNotFoundForEveryUnimplementedMethodStillExcludesSessionNew(t *testing.T) {
 	input := `{"jsonrpc":"2.0","id":9,"method":"session/new","params":{"cwd":"/work/project","mcpServers":[]}}` + "\n"
 	out := &bytes.Buffer{}
-	server := New(nil, nil, nil, nil)
+	server := New(nil, nil, nil, nil, nil)
 	if err := server.Serve(context.Background(), strings.NewReader(input), out); err != nil {
 		t.Fatalf("Serve() error = %v", err)
 	}
@@ -428,7 +511,7 @@ func TestServeRespondsMethodNotFoundForEveryUnimplementedMethodStillExcludesSess
 }
 
 func TestHandleSessionNewWithoutCollaboratorsReportsBoundedFailure(t *testing.T) {
-	server := New(nil, nil, nil, nil)
+	server := New(nil, nil, nil, nil, nil)
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionNew, validSessionNewParams)
 
 	result, rpcErr := server.handleSessionNew(context.Background(), env)
@@ -506,7 +589,7 @@ func TestClassifyDependencyFailureMapsContextCauseToRequestCancelled(t *testing.
 func TestHandleSessionNewResolveHomeDirFailureReturnsNoEffect(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{}
 	catalog := &fakeFactoryTargetCatalogService{result: defaultTestCatalogResult()}
-	server := New(nil, chatSessions, catalog, func() (string, error) { return "", errors.New("resolve home dir boom") })
+	server := New(nil, chatSessions, catalog, nil, func() (string, error) { return "", errors.New("resolve home dir boom") })
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionNew, validSessionNewParams)
 	result, rpcErr := server.handleSessionNew(context.Background(), env)
@@ -527,7 +610,7 @@ func TestHandleSessionNewResolveHomeDirFailureReturnsNoEffect(t *testing.T) {
 func TestHandleSessionNewBlankHomeDirFailureReturnsNoEffect(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{}
 	catalog := &fakeFactoryTargetCatalogService{result: defaultTestCatalogResult()}
-	server := New(nil, chatSessions, catalog, func() (string, error) { return "", nil })
+	server := New(nil, chatSessions, catalog, nil, func() (string, error) { return "", nil })
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionNew, validSessionNewParams)
 	result, rpcErr := server.handleSessionNew(context.Background(), env)

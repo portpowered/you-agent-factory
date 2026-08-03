@@ -29,6 +29,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/negotiation"
@@ -55,17 +56,20 @@ var errNullInitializeParams = errors.New("acp: initialize params must not be nul
 //
 // chatSessions and catalog are the canonical Chat Sessions collaborators
 // "session/new", "session/set_config_option", the "/factory" fallback
-// command, and ordinary prompt turn admission dispatch to; resolveHomeDir
-// supplies the operator home directory used to derive the Operator Settings
-// document path and Factory discovery roots for a catalog resolution. Any of
-// the three may be nil, in which case a dispatched method reports a bounded
-// internal error instead of proceeding -- so a Server constructed for a
-// slice of this transport that never exercises them (for example the
-// "initialize"-only smoke tests in this package) never has to supply them.
+// command, and ordinary prompt turn admission dispatch to; factoryTarget is
+// the consumer-owned Factory Sessions shim an admitted ordinary prompt turn
+// starts or invokes against; resolveHomeDir supplies the operator home
+// directory used to derive the Operator Settings document path and Factory
+// discovery roots for a catalog resolution. Any of the four may be nil, in
+// which case a dispatched method reports a bounded internal error instead of
+// proceeding -- so a Server constructed for a slice of this transport that
+// never exercises them (for example the "initialize"-only smoke tests in
+// this package) never has to supply them.
 type Server struct {
 	logger         logging.Logger
 	chatSessions   chatsessions.Service
 	catalog        chatsessions.FactoryTargetCatalogService
+	factoryTarget  acp.FactoryTargetService
 	resolveHomeDir func() (string, error)
 }
 
@@ -76,12 +80,14 @@ func New(
 	logger logging.Logger,
 	chatSessions chatsessions.Service,
 	catalog chatsessions.FactoryTargetCatalogService,
+	factoryTarget acp.FactoryTargetService,
 	resolveHomeDir func() (string, error),
 ) *Server {
 	return &Server{
 		logger:         logging.EnsureLogger(logger),
 		chatSessions:   chatSessions,
 		catalog:        catalog,
+		factoryTarget:  factoryTarget,
 		resolveHomeDir: resolveHomeDir,
 	}
 }
