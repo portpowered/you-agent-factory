@@ -223,16 +223,19 @@ func (g *gapReportingEventsService) Subscribe(ctx context.Context, req events.Su
 
 var _ events.Service = (*gapReportingEventsService)(nil)
 
-// TestService_SubscribeSurfacesGapWhenEventsHasEvictedAStillLocallyRetainedRecord
-// proves the mixed-tier retention divergence the PR review flagged: this
-// store's own tiered retention can keep a record (for example a
+// TestService_SubscribeFallsBackToLocalRetentionWhenEventsHasEvictedAStillLocallyRetainedRecord
+// proves the mixed-tier retention reconciliation this store must preserve:
+// this store's own tiered retention can keep a record (for example a
 // final-semantic completed message) long after Events' fixed, purely-FIFO
-// per-topic window has evicted the same position. When that happens, the
-// compatibility surface must surface the same published gap vocabulary a
-// direct Events reader would observe, never the store's own stale bytes --
-// otherwise the two surfaces would deterministically disagree about what
-// exists, which is exactly what "delegates to Events" must rule out.
-func TestService_SubscribeSurfacesGapWhenEventsHasEvictedAStillLocallyRetainedRecord(t *testing.T) {
+// per-topic window has evicted the same position. This is expected, not a
+// divergence -- Publish (through PublishThroughAuthority) already proved
+// Events accepted this exact content at commit time, before the two
+// retention policies inevitably diverge on which older records they each
+// keep -- so the compatibility surface must keep delivering the record
+// under its original identity, exactly as it did before Events delegation
+// existed, instead of manufacturing a new gap cause for a record its own
+// tiered policy still promises to retain.
+func TestService_SubscribeFallsBackToLocalRetentionWhenEventsHasEvictedAStillLocallyRetainedRecord(t *testing.T) {
 	t.Parallel()
 
 	gapping := &gapReportingEventsService{inner: newTestEventsService(t)}
@@ -244,29 +247,16 @@ func TestService_SubscribeSurfacesGapWhenEventsHasEvictedAStillLocallyRetainedRe
 
 	// A final-semantic completed message: exactly the retention tier this
 	// store's own local policy would keep even after many more (lower
-	// priority) events than Events' own bounded window retains.
-	published, err := store.Publish(responseevents.FactoryResponseEvent{
-		DispatchID: "dispatch-completed",
-		RunID:      "run-1",
-		Kind:       responseevents.KindMessage,
-		Phase:      responseevents.PhaseCompleted,
-		Provenance: responseevents.Provenance{
-			Provider: "test", NativeEventType: "message.completed",
-			Delivery:       responseevents.DeliveryNativeStream,
-			Representation: responseevents.RepresentationSnapshot,
-			Fidelity:       responseevents.FidelityLossless,
-		},
-		Payload: json.RawMessage(`{"role":"assistant","contentBlocks":[{"kind":"TEXT","text":"final"}]}`),
-	})
-	if err != nil {
-		t.Fatalf("Publish: %v", err)
-	}
+	// priority) events than Events' own bounded window retains. Published
+	// through the service (PublishThroughAuthority), so Events genuinely
+	// accepted this content before the double starts reporting it evicted.
+	published := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-completed")
 
 	// The store's own retained copy genuinely still has the record: only
 	// Events (via the double) reports it gone.
 	storeEvents := store.Events()
 	if len(storeEvents) != 1 || storeEvents[0].EventID != published.EventID {
-		t.Fatalf("store.Events() = %#v, want exactly the published completed-message record still retained locally", storeEvents)
+		t.Fatalf("store.Events() = %#v, want exactly the published record still retained locally", storeEvents)
 	}
 
 	subscribed, err := service.Subscribe(context.Background(), store, responsestreamservice.SubscriptionRequest{})
@@ -284,10 +274,10 @@ func TestService_SubscribeSurfacesGapWhenEventsHasEvictedAStillLocallyRetainedRe
 	if len(delivered) != 1 {
 		t.Fatalf("Next() delivered %d events, want 1", len(delivered))
 	}
-	if delivered[0].Kind != responseevents.KindStreamGap {
-		t.Fatalf("delivered[0].Kind = %q, want %q (a record Events has evicted must surface as a gap even when this store's own tiered policy still retains it)", delivered[0].Kind, responseevents.KindStreamGap)
+	if delivered[0].Kind == responseevents.KindStreamGap {
+		t.Fatalf("delivered[0].Kind = %q, want the real record: Events' own bounded window evicting a position must not erase a record this store's tiered policy still retains", delivered[0].Kind)
 	}
-	if delivered[0].EventID == published.EventID {
-		t.Fatalf("delivered[0].EventID = %q: a record Events cannot confirm must never be delivered under its original identity", delivered[0].EventID)
+	if delivered[0].EventID != published.EventID {
+		t.Fatalf("delivered[0].EventID = %q, want %q (the store's own retained copy of the record Events already accepted)", delivered[0].EventID, published.EventID)
 	}
 }

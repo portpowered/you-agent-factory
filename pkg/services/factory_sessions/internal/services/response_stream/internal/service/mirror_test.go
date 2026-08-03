@@ -325,3 +325,65 @@ func TestService_ConcurrentPublishAndCompletionNeverDivergesFromEvents(t *testin
 		t.Fatalf("Events retained %d records, want exactly %d (every Publish call this test observed as accepted)", len(read.Records), accepted.Load())
 	}
 }
+
+// TestService_PublishNeverDivergesFromEventsWhenTheTopicIsNotAligned
+// reproduces the exact non-aligned-topic shape a real Events topic can carry
+// across two different store instances for the same session identity (for
+// example, a second SessionResponseEventStore created for a session whose
+// Events topic already has history from a prior store instance): the topic
+// already has a foreign record at position 1 before this test's store ever
+// publishes anything, so the store's own predicted sequenceHint (1) cannot
+// match what Events actually assigns (2). Publish must still succeed and the
+// store must retain the record under Events' real assigned position -- not
+// reject it and leave Events with a record the store never observed.
+func TestService_PublishNeverDivergesFromEventsWhenTheTopicIsNotAligned(t *testing.T) {
+	t.Parallel()
+
+	eventsService := newTestEventsService(t)
+	service, err := serviceWithEvents(t, eventsService)
+	if err != nil {
+		t.Fatalf("construct response-stream service: %v", err)
+	}
+	store := newStore(t, service)
+	topic := responseEventTopicForTest(store.FactorySessionID())
+
+	ctx := context.Background()
+	if _, err := eventsService.Append(ctx, events.AppendRequest{
+		Topic:          topic,
+		SourceType:     "factory-session-response-event",
+		SourceID:       events.SourceID(store.FactorySessionID()),
+		SourceSequence: 1,
+		SourceEventID:  "pre-existing-from-another-store-instance",
+		SchemaID:       "factory-response-event.v1",
+		Payload:        json.RawMessage(`{"foreign":"record"}`),
+	}); err != nil {
+		t.Fatalf("pre-populate topic with a foreign record: %v", err)
+	}
+
+	published := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
+	if published.Sequence != 2 {
+		t.Fatalf("published.Sequence = %d, want 2 (adopted from Events, not the store's own predicted hint of 1)", published.Sequence)
+	}
+	if store.LatestSequence() != 2 {
+		t.Fatalf("store.LatestSequence() = %d, want 2", store.LatestSequence())
+	}
+
+	read, err := eventsService.Read(ctx, events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 10})
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	if len(read.Records) != 2 {
+		t.Fatalf("Read() records = %d, want 2 (the pre-existing foreign record plus this test's publish)", len(read.Records))
+	}
+	if uint64(read.Records[1].ID.Position) != 2 || string(read.Records[1].SourceEventID) != published.EventID {
+		t.Fatalf("Events record at position 2 = %#v, want it to carry this store's published identity %q", read.Records[1], published.EventID)
+	}
+
+	stored, ok := store.EventAtSequence(2)
+	if !ok {
+		t.Fatalf("store.EventAtSequence(2) not found: the store never retained the record Events accepted at position 2")
+	}
+	if stored.EventID != published.EventID {
+		t.Fatalf("stored.EventID = %q, want %q: store and Events must observe the same record at the same position", stored.EventID, published.EventID)
+	}
+}

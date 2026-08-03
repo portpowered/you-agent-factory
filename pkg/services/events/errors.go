@@ -57,8 +57,4 @@ var (
 	// report the same condition as an expected result rather than an
 	// operation failure).
 	ErrUnresolvableCursor = fmt.Errorf("events: cursor cannot be resolved: %w", ErrOperationFailed)
-
-	// ErrClosed reports that Events has been shut down and no longer accepts
-	// new Append or Read calls.
-	ErrClosed = fmt.Errorf("events: service is closed: %w", ErrOperationFailed)
 )

@@ -171,7 +171,7 @@ func TestAppend_RejectedAfterCloseBeforeAnyStateChange(t *testing.T) {
 	}
 
 	_, err := st.Append(ctx, validAppendRequest())
-	if !errors.Is(err, events.ErrClosed) {
+	if !errors.Is(err, errClosed) {
 		t.Fatalf("Append() after Close error = %v, want ErrClosed", err)
 	}
 	if !errors.Is(err, events.ErrOperationFailed) {
@@ -189,7 +189,7 @@ func TestAppend_RejectedAfterCloseForATopicCreatedAfterwards(t *testing.T) {
 
 	req := validAppendRequest()
 	req.Topic = "chat-session/never-seen-before/events"
-	if _, err := st.Append(ctx, req); !errors.Is(err, events.ErrClosed) {
+	if _, err := st.Append(ctx, req); !errors.Is(err, errClosed) {
 		t.Fatalf("Append() on a brand-new topic after Close error = %v, want ErrClosed", err)
 	}
 }

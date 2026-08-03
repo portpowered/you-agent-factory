@@ -86,19 +86,34 @@ func TestSessionResponseEventStore_PublishThroughAuthorityNeverRetainsWhenCommit
 	}
 }
 
-func TestSessionResponseEventStore_PublishThroughAuthorityRejectsSequenceMismatchWithoutMutatingState(t *testing.T) {
+// TestSessionResponseEventStore_PublishThroughAuthorityAdoptsAuthorityAssignedSequenceOnMismatch
+// proves the store never rejects a record after the external authority
+// (commit) has already accepted it: when commit resolves to a position other
+// than the store's own predicted sequenceHint -- for example because the
+// authority's topic already carries history this store instance does not
+// know about -- the store adopts the authority's actual position instead of
+// rejecting and leaving the authority with a record this store never
+// retained.
+func TestSessionResponseEventStore_PublishThroughAuthorityAdoptsAuthorityAssignedSequenceOnMismatch(t *testing.T) {
 	t.Parallel()
 
 	store := newResponseEventStore("session-abc")
 
-	_, err := store.PublishThroughAuthority(samplePublishInput(), func(prepared responseevents.FactoryResponseEvent, sequenceHint int64) (int64, string, error) {
+	published, err := store.PublishThroughAuthority(samplePublishInput(), func(prepared responseevents.FactoryResponseEvent, sequenceHint int64) (int64, string, error) {
 		return sequenceHint + 1, "external-event-id", nil
 	})
-	if !errors.Is(err, responseeventstore.ErrSequenceMismatch) {
-		t.Fatalf("PublishThroughAuthority with wrong sequence error = %v, want ErrSequenceMismatch", err)
+	if err != nil {
+		t.Fatalf("PublishThroughAuthority: %v", err)
 	}
-	if store.LatestSequence() != 0 || len(store.Events()) != 0 {
-		t.Fatalf("rejected PublishThroughAuthority mutated state: latest=%d events=%d", store.LatestSequence(), len(store.Events()))
+	if published.Sequence != 2 || published.EventID != "external-event-id" {
+		t.Fatalf("published identity = (%d, %q), want (2, %q)", published.Sequence, published.EventID, "external-event-id")
+	}
+	if store.LatestSequence() != 2 {
+		t.Fatalf("LatestSequence() = %d, want 2 (adopted from the authority, not the store's own hint)", store.LatestSequence())
+	}
+	stored, ok := store.EventAtSequence(2)
+	if !ok || stored.EventID != "external-event-id" {
+		t.Fatalf("EventAtSequence(2) = %#v, %v, want the authority-identified record", stored, ok)
 	}
 }
 

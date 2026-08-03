@@ -12,9 +12,9 @@ import (
 // registers a topic in response to a rejected Read, and the terminal outcome
 // log fires only once a well-formed request has actually been evaluated
 // against topic state. Once Store.Close has taken effect, Read is rejected
-// with events.ErrClosed instead (checked per-topic, so a topic created after
-// Close observes the same rejection as one that existed before it), with the
-// same no-log-on-rejection behavior.
+// with an events.ErrOperationFailed-wrapped error instead (checked per-topic,
+// so a topic created after Close observes the same rejection as one that
+// existed before it), with the same no-log-on-rejection behavior.
 //
 // This Store treats every well-formed Topic as known and lazily materializes
 // its (empty) state on first use, the same way Append does; it never returns
@@ -36,7 +36,7 @@ func (st *Store) Read(ctx context.Context, req events.ReadRequest) (events.ReadR
 	ts.mu.Lock()
 	if ts.closed {
 		ts.mu.Unlock()
-		return events.ReadResult{}, events.ErrClosed
+		return events.ReadResult{}, errClosed
 	}
 	result := ts.readLocked(req)
 	ts.mu.Unlock()

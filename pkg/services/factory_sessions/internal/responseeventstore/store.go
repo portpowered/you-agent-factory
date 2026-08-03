@@ -311,22 +311,25 @@ func (s *SessionResponseEventStore) Publish(input responseevents.FactoryResponse
 // PublishThroughAuthority normalizes input exactly as Publish does, then --
 // while holding this store's write lock so no concurrent Close, Complete, or
 // other PublishThroughAuthority call can interleave -- calls commit with the
-// normalized event and the sequence commit must be given to be accepted as
-// this store's next record. commit is expected to submit the record to an
-// external identity/order authority (the injected Events root) and, only on
-// that authority's acceptance, return the exact sequence and event ID it
-// assigned; PublishThroughAuthority then retains the identical event under
-// that assigned identity before releasing the lock. Because the authority
-// call and this store's own retained-append happen inside one critical
-// section, the authority's decision and this store's retained state can
-// never diverge: the authority can never accept a record this store then
-// fails to retain (commit's returned sequence is validated but the retained
-// append itself cannot fail for a normalized, already-validated event), and
-// this store never retains a record the authority rejected (a commit error
-// leaves state completely untouched). A store that is closed or has
-// completed publication rejects the call before commit is ever invoked, so
-// the authority is never asked to accept a record this store has already
-// decided it will not retain.
+// normalized event and a predicted sequenceHint. commit is expected to
+// submit the record to an external identity/order authority (the injected
+// Events root) and, only on that authority's acceptance, return the exact
+// sequence and event ID it assigned; PublishThroughAuthority then retains
+// the identical event under that assigned identity before releasing the
+// lock. sequenceHint is only this store's own prediction of what the
+// authority will assign (its own next expected value): the authority is
+// free to assign a different position -- for example when its topic
+// already carries history from another store instance bound to the same
+// session identity -- and PublishThroughAuthority unconditionally adopts
+// whatever (sequence, eventID) commit actually returns rather than
+// rejecting a mismatch, so the authority's decision and this store's
+// retained state can never diverge once commit has succeeded: nothing
+// after a successful commit call can cause this store to reject a record
+// the authority already accepted. This store never retains a record the
+// authority rejected (a commit error leaves state completely untouched). A
+// store that is closed or has completed publication rejects the call
+// before commit is ever invoked, so the authority is never asked to accept
+// a record this store has already decided it will not retain.
 func (s *SessionResponseEventStore) PublishThroughAuthority(
 	input responseevents.FactoryResponseEvent,
 	commit func(prepared responseevents.FactoryResponseEvent, sequenceHint int64) (sequence int64, eventID string, err error),
@@ -367,23 +370,33 @@ func (s *SessionResponseEventStore) PublishThroughAuthority(
 		s.mu.Unlock()
 		return responseevents.FactoryResponseEvent{}, err
 	}
-	if sequence != sequenceHint {
-		s.mu.Unlock()
-		return responseevents.FactoryResponseEvent{}, fmt.Errorf("%w: got %d, want %d", ErrSequenceMismatch, sequence, sequenceHint)
-	}
 	eventID = strings.TrimSpace(eventID)
 	if eventID == "" {
 		s.mu.Unlock()
 		return responseevents.FactoryResponseEvent{}, errors.New("response event ID is required")
 	}
 
+	// From here on, commit has already told the external authority (Events)
+	// to accept this record under (sequence, eventID): nothing below may
+	// reject the call, or the authority's accepted record and this store's
+	// retained state would permanently diverge. sequence need not equal
+	// sequenceHint -- sequenceHint is only this store's own prediction, and
+	// the authority is free to assign a different position (for example
+	// when its topic already carries history from another store instance
+	// sharing the same session identity); this store unconditionally
+	// adopts whatever position the authority actually assigned rather than
+	// second-guessing it.
 	prepared.Sequence = sequence
 	prepared.EventID = eventID
 	stored := cloneEvent(prepared)
-	storedBytes, err := SerializedEventSize(stored)
-	if err != nil {
-		s.mu.Unlock()
-		return responseevents.FactoryResponseEvent{}, err
+	storedBytes, sizeErr := SerializedEventSize(stored)
+	if sizeErr != nil {
+		// stored differs from the value commit already marshaled and sent
+		// to Events only in its Sequence/EventID scalar fields, so encoding
+		// it again cannot fail in practice; degrade to the payload's own
+		// size for retention accounting rather than reject an
+		// already-accepted record.
+		storedBytes = len(stored.Payload)
 	}
 	s.nextSequence = sequence
 	s.events = append(s.events, stored)

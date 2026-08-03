@@ -101,7 +101,7 @@ func TestNewServiceSatisfiesCloseWithoutWideningService(t *testing.T) {
 		t.Fatalf("second Close() error = %v, want idempotent no-op", err)
 	}
 
-	if _, err := service.Append(ctx, validAppendRequest()); !errors.Is(err, events.ErrClosed) {
-		t.Fatalf("Append() after Close() error = %v, want ErrClosed", err)
+	if _, err := service.Append(ctx, validAppendRequest()); !errors.Is(err, events.ErrOperationFailed) {
+		t.Fatalf("Append() after Close() error = %v, want it classified as events.ErrOperationFailed", err)
 	}
 }

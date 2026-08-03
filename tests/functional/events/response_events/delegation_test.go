@@ -103,7 +103,10 @@ func TestFactoryResponseEventsSurviveTheEventsAuthoritativePublishPath(t *testin
 // is now proved at package/composition level instead, against a
 // retention-limited events.Service test double, in
 // pkg/services/factory_sessions/internal/responseeventstore/events_authority_subscription_test.go
-// (TestSessionResponseEventStoreSubscription_PartialEvictionDoesNotEraseNewerRetainedRecords).
-// This file keeps the happy-path, real-process delegation proof above
-// (TestFactoryResponseEventsSurviveTheEventsAuthoritativePublishPath), which
-// needs no retention override.
+// (TestSessionResponseEventStoreSubscription_PartialEvictionDoesNotEraseAnyRetainedRecord,
+// which now also proves the still-locally-retained-but-Events-evicted
+// positions are delivered from local fallback content instead of a
+// synthetic gap -- see substituteFromEvents' own doc comment in
+// subscription.go). This file keeps the happy-path, real-process delegation
+// proof above (TestFactoryResponseEventsSurviveTheEventsAuthoritativePublishPath),
+// which needs no retention override.

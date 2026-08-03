@@ -18,7 +18,7 @@ func classifyAppendError(err error) string {
 		return ""
 	case errors.Is(err, events.ErrEmptyPayload), errors.Is(err, events.ErrMalformedPayloadJSON):
 		return "invalid_payload"
-	case errors.Is(err, events.ErrClosed):
+	case errors.Is(err, events.ErrOperationFailed):
 		return "closed"
 	default:
 		return "validation"

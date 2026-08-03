@@ -359,19 +359,31 @@ func (s *SessionResponseEventStore) eventsAfterLocked(afterSequence int64, dispa
 //
 // When bound, this store's own retained copy still decides *which* sequences
 // remain deliverable (tiered importance retention, dispatch filtering, gap
-// bookkeeping -- Events has no equivalent for any of these), but it is never
-// used as a fallback source of *content*: a delivered real event whose
-// content Events cannot currently produce (a failed Read, a non-Progress
-// outcome, or a position Events has itself evicted from its own bounded FIFO
-// window even though this store's tiered policy still retains it) is
-// replaced with the same synthetic stream-gap marker this store already
-// publishes for its own retention gaps (eventsAuthorityGapEvent), never with
-// this store's local bytes. This is what makes "the compatibility surface
-// cannot emit bytes unavailable from its Events authority" true by
-// construction: Events' retention window can be smaller than this store's
-// own tiered window (for example a very long-lived, high-volume session),
-// and when it is, the affected records surface as an honest gap instead of
-// stale local content a direct Events reader could no longer observe.
+// bookkeeping -- Events has no equivalent for any of these). For a sequence
+// Events can currently produce, its content always wins over this store's
+// own retained bytes, proving delivery is genuinely read back from Events
+// (see TestSessionResponseEventStoreSubscription_DeliversContentReadBackFromEventsAuthority).
+// For a sequence Events cannot currently produce, this method distinguishes
+// two causes:
+//
+//   - Events' own bounded FIFO retention window has evicted the position
+//     (a confirmed events.ReadOutcomeGap for it) even though this store's
+//     own tiered policy still retains it. This is expected, not a
+//     divergence: PublishThroughAuthority already proved Events accepted
+//     this exact content at commit time, before this store's own tiered
+//     eviction and Events' own FIFO eviction inevitably diverge on *which*
+//     older records they each keep. Falling back to this store's own
+//     retained copy here is what preserves the compatibility surface's
+//     existing tiered retention/gap behavior instead of manufacturing a new
+//     gap cause for a record the compatibility policy still promises.
+//   - Any other reason (a failed Read, a non-Progress/non-Gap outcome, or a
+//     payload Events returned but this store could not decode) is a real
+//     operational failure, not an expected retention-policy difference: it
+//     is replaced with the same synthetic stream-gap marker this store
+//     already publishes for its own retention gaps
+//     (eventsAuthorityGapEvent), never with this store's local bytes, so a
+//     broken or misbehaving Events integration cannot be masked by silently
+//     falling back to local content.
 //
 // This read always runs against context.Background(), independent of any
 // caller-supplied context: by the time delivered is non-empty, the local
@@ -402,7 +414,7 @@ func (s *SessionResponseEventStore) substituteFromEvents(delivered []responseeve
 		return delivered
 	}
 
-	bySequence := s.readEventsAuthorityRange(context.Background(), minSeq, maxSeq)
+	bySequence, hardFailure := s.readEventsAuthorityRange(context.Background(), minSeq, maxSeq)
 
 	substituted := make([]responseevents.FactoryResponseEvent, len(delivered))
 	for i, event := range delivered {
@@ -412,7 +424,15 @@ func (s *SessionResponseEventStore) substituteFromEvents(delivered []responseeve
 		}
 		payload, ok := bySequence[event.Sequence]
 		if !ok {
-			substituted[i] = s.eventsAuthorityGapEvent(event.Sequence)
+			if hardFailure {
+				substituted[i] = s.eventsAuthorityGapEvent(event.Sequence)
+			} else {
+				// Events' own bounded retention has evicted this position,
+				// but this store's tiered policy still retains it: adopt
+				// the store's own copy instead of a synthetic gap (see the
+				// doc comment above).
+				substituted[i] = event
+			}
 			continue
 		}
 		var fromEvents responseevents.FactoryResponseEvent
@@ -442,8 +462,17 @@ func (s *SessionResponseEventStore) substituteFromEvents(delivered []responseeve
 // EarliestRetained-1 as a valid, non-gap cursor whose first returned record
 // is EarliestRetained, so only the positions Events has genuinely evicted
 // end up missing from the returned map.
-func (s *SessionResponseEventStore) readEventsAuthorityRange(ctx context.Context, minSeq, maxSeq int64) map[int64]json.RawMessage {
-	bySequence := make(map[int64]json.RawMessage, maxSeq-minSeq+1)
+//
+// The returned hardFailure reports whether the loop stopped because of a
+// real operational failure (a Read error, or an outcome other than Progress
+// or Gap) rather than because it fully resolved the requested range through
+// zero or more expected Gap recoveries: substituteFromEvents uses this to
+// tell "Events genuinely evicted this position from its own bounded window"
+// (not a hard failure -- every position in range was accounted for) apart
+// from "Events could not be read at all" (a hard failure), since only the
+// latter must never be masked by falling back to local content.
+func (s *SessionResponseEventStore) readEventsAuthorityRange(ctx context.Context, minSeq, maxSeq int64) (bySequence map[int64]json.RawMessage, hardFailure bool) {
+	bySequence = make(map[int64]json.RawMessage, maxSeq-minSeq+1)
 	from := events.AggregateSequence(minSeq - 1)
 	for int64(from) < maxSeq {
 		limit := int(maxSeq) - int(from)
@@ -453,7 +482,7 @@ func (s *SessionResponseEventStore) readEventsAuthorityRange(ctx context.Context
 			Limit: limit,
 		})
 		if err != nil {
-			return bySequence
+			return bySequence, true
 		}
 		switch result.Outcome {
 		case events.ReadOutcomeProgress:
@@ -465,20 +494,20 @@ func (s *SessionResponseEventStore) readEventsAuthorityRange(ctx context.Context
 				bySequence[position] = record.Payload
 			}
 			if result.Next.Position <= from {
-				return bySequence
+				return bySequence, false
 			}
 			from = result.Next.Position
 		case events.ReadOutcomeGap:
 			next := events.AggregateSequence(result.Gap.EarliestRetained) - 1
 			if next <= from {
-				return bySequence
+				return bySequence, false
 			}
 			from = next
 		default:
-			return bySequence
+			return bySequence, true
 		}
 	}
-	return bySequence
+	return bySequence, false
 }
 
 // eventsAuthorityGapEventReason marks a synthetic stream-gap event produced

@@ -6,6 +6,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"sync"
 
@@ -16,6 +17,13 @@ import (
 // defaultMaxRetainedPerTopic bounds retained records per topic when New is
 // constructed without an explicit policy.
 const defaultMaxRetainedPerTopic = 10_000
+
+// errClosed reports that Store.Close has taken effect and the Store no
+// longer accepts new Append or Read calls. It is intentionally unexported:
+// events.Service does not publish a closed-specific sentinel, so a caller
+// classifies this rejection the same way as any other operation failure,
+// with errors.Is(err, events.ErrOperationFailed).
+var errClosed = fmt.Errorf("events: service is closed: %w", events.ErrOperationFailed)
 
 // Store is the concurrency-safe, in-memory implementation of events.Service.
 // It grows one topicState per distinct events.Topic on first use; every
@@ -155,7 +163,8 @@ func (st *Store) topic(t events.Topic) *topicState {
 // record already buffered ahead of it) exactly once, and repeated or
 // concurrent calls to Close are safe no-ops once the first has taken effect.
 // Close performs no durable write. Once Close has taken effect, every later
-// Append or Read call is rejected with events.ErrClosed (checked per-topic,
+// Append or Read call is rejected with an events.ErrOperationFailed-wrapped
+// error (checked per-topic,
 // so a topic created after Close observes the same rejection as one that
 // existed before it); Subscribe and AttachSource keep their own existing
 // per-topic-closed answers (an immediately DeliveryClosed subscription, or

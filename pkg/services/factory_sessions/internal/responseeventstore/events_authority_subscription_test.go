@@ -231,20 +231,22 @@ func (g *gapReportingEventsService) Subscribe(ctx context.Context, req events.Su
 
 var _ events.Service = (*gapReportingEventsService)(nil)
 
-// TestSessionResponseEventStoreSubscription_PartialEvictionDoesNotEraseNewerRetainedRecords
-// proves that when only the oldest positions in a delivered batch have
-// fallen out of Events' own bounded retention window, substituteFromEvents
-// still delivers the real content Events retains for every newer position --
-// it must not collapse the whole batch into gaps just because Events' Read
-// is Gap-or-nothing for the exact call it answers (PR #1753 review finding
-// 1, 2026-08-03T18:01:32Z). This uses eventsstub.NewWithRetention, whose
-// Read boundary resolution mirrors the real Store's contract: a From naming
+// TestSessionResponseEventStoreSubscription_PartialEvictionDoesNotEraseAnyRetainedRecord
+// proves that when positions in a delivered batch have fallen out of Events'
+// own bounded retention window even though this store's own tiered policy
+// still retains them, substituteFromEvents falls back to this store's own
+// retained content for those positions instead of manufacturing a gap: it
+// must not collapse the whole batch into gaps just because Events' Read is
+// Gap-or-nothing for the exact call it answers (PR #1753 review finding 1,
+// 2026-08-03T18:01:32Z), and it must not turn a record this store's own
+// retention policy still promises into a new gap cause just because Events'
+// smaller, purely-FIFO window has moved past it (PR #1753 review finding,
+// 2026-08-03T21:41:28Z). This uses eventsstub.NewWithRetention, whose Read
+// boundary resolution mirrors the real Store's contract: a From naming
 // exactly EarliestRetained-1 is a valid, non-gap cursor whose first returned
 // record is EarliestRetained itself (PR #1753 review finding 1,
-// 2026-08-03T18:37:32Z fixed this boundary in the real implementation), so
-// every still-retained position -- including the earliest one -- is provably
-// real, and only the genuinely evicted positions surface as a gap.
-func TestSessionResponseEventStoreSubscription_PartialEvictionDoesNotEraseNewerRetainedRecords(t *testing.T) {
+// 2026-08-03T18:37:32Z fixed this boundary in the real implementation).
+func TestSessionResponseEventStoreSubscription_PartialEvictionDoesNotEraseAnyRetainedRecord(t *testing.T) {
 	t.Parallel()
 
 	eventsService := eventsstub.NewWithRetention(2)
@@ -272,36 +274,31 @@ func TestSessionResponseEventStoreSubscription_PartialEvictionDoesNotEraseNewerR
 		t.Fatalf("Next() delivered %d events, want 4", len(delivered))
 	}
 
-	// With a retention cap of 2, publishing 4 events leaves Events retaining
-	// positions 3 and 4: positions 1 and 2 have genuinely fallen out of the
-	// retained window, but 3 and 4 -- the full retained tail, including the
-	// earliest retained position -- are both provably deliverable as real
-	// content.
-	for i := range 2 {
-		if delivered[i].Kind != responseevents.KindStreamGap {
-			t.Fatalf("delivered[%d].Kind = %q, want %q (position %d is not recoverable from Events under a retention cap of 2)", i, delivered[i].Kind, responseevents.KindStreamGap, i+1)
-		}
-		if delivered[i].EventID == published[i].EventID {
-			t.Fatalf("delivered[%d].EventID = %q: a record Events cannot confirm must never be delivered under its original identity", i, delivered[i].EventID)
-		}
-	}
-	for i := 2; i < 4; i++ {
+	// With a retention cap of 2, Events itself only retains positions 3 and
+	// 4, but this store's own (much larger default) tiered retention still
+	// has all 4: every one of them must be delivered under its original
+	// identity, including the two Events has already evicted.
+	for i, event := range published {
 		if delivered[i].Kind == responseevents.KindStreamGap {
-			t.Fatalf("delivered[%d].Kind = %q, want the real event: Events still retains this position, so eviction of older positions must not erase it", i, delivered[i].Kind)
+			t.Fatalf("delivered[%d].Kind = %q, want the real event: this store's own retention still retains position %d even though Events' smaller window has evicted it", i, delivered[i].Kind, i+1)
 		}
-		if delivered[i].EventID != published[i].EventID {
-			t.Fatalf("delivered[%d].EventID = %q, want %q (real content Events still retains)", i, delivered[i].EventID, published[i].EventID)
+		if delivered[i].EventID != event.EventID {
+			t.Fatalf("delivered[%d].EventID = %q, want %q (this store's own retained copy of the record Events already accepted)", i, delivered[i].EventID, event.EventID)
 		}
 	}
 }
 
-// TestSessionResponseEventStoreSubscription_SurfacesGapWhenEventsAuthorityCannotProduceContent
-// proves substituteFromEvents never falls back to the store's own locally
-// retained bytes when the injected Events root cannot currently produce
-// content for an otherwise-deliverable record: it must surface the same
-// published stream-gap vocabulary the store already uses for its own
-// retention gaps instead (PR #1753 review finding, 2026-08-03T16:05:34Z).
-func TestSessionResponseEventStoreSubscription_SurfacesGapWhenEventsAuthorityCannotProduceContent(t *testing.T) {
+// TestSessionResponseEventStoreSubscription_FallsBackToLocalRetentionWhenEventsAuthorityCannotProduceContent
+// proves substituteFromEvents falls back to this store's own locally
+// retained bytes when the injected Events root reports a position evicted
+// from its own bounded window, even though this store's own tiered
+// retention policy still retains it: PublishThroughAuthority already proved
+// Events accepted this exact content at commit time, so this is an expected
+// retention-policy difference, not a divergence, and preserving the
+// original record is what keeps the compatibility surface's existing
+// tiered retention/gap behavior unchanged by Events delegation (PR #1753
+// review finding, 2026-08-03T21:41:28Z).
+func TestSessionResponseEventStoreSubscription_FallsBackToLocalRetentionWhenEventsAuthorityCannotProduceContent(t *testing.T) {
 	t.Parallel()
 
 	gapping := &gapReportingEventsService{inner: eventsstub.New()}
@@ -325,16 +322,15 @@ func TestSessionResponseEventStoreSubscription_SurfacesGapWhenEventsAuthorityCan
 	if len(delivered) != 1 {
 		t.Fatalf("Next() delivered %d events, want 1", len(delivered))
 	}
-	if delivered[0].Kind != responseevents.KindStreamGap {
-		t.Fatalf("delivered[0].Kind = %q, want %q (Events being unable to confirm a record must surface as a gap, never the store's own local bytes)", delivered[0].Kind, responseevents.KindStreamGap)
+	if delivered[0].Kind == responseevents.KindStreamGap {
+		t.Fatalf("delivered[0].Kind = %q, want the real record: Events evicting a position from its own bounded window must not erase a record this store's tiered policy still retains", delivered[0].Kind)
 	}
-	if delivered[0].EventID == published.EventID {
-		t.Fatalf("delivered[0].EventID = %q: a record Events cannot confirm must never be delivered under its original identity", delivered[0].EventID)
+	if delivered[0].EventID != published.EventID {
+		t.Fatalf("delivered[0].EventID = %q, want %q (this store's own retained copy of the record Events already accepted)", delivered[0].EventID, published.EventID)
 	}
 
 	// The store's own retained copy is untouched by the substitution: it
-	// still holds the original content, proving the gap is a delivery-time
-	// decision, not a mutation of retained state.
+	// still holds the original content.
 	storeEvents := store.Events()
 	if len(storeEvents) != 1 || storeEvents[0].EventID != published.EventID {
 		t.Fatalf("store.Events() = %#v, want the original published record still retained locally", storeEvents)

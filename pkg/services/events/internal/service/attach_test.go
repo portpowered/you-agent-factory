@@ -524,7 +524,7 @@ func TestAttachSource_CloseTearsDownActiveForwarding(t *testing.T) {
 		SourceEventID:  "evt-2",
 		SchemaID:       "worker.output.v1",
 		Payload:        json.RawMessage(`{"ok":true}`),
-	}); !errors.Is(err, events.ErrClosed) {
+	}); !errors.Is(err, errClosed) {
 		t.Fatalf("Append() after Close error = %v, want ErrClosed", err)
 	}
 

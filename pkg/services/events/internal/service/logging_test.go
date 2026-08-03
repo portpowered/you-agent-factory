@@ -185,7 +185,7 @@ func TestAppend_RejectedAfterCloseLogsClosedClassificationWithoutIntentLog(t *te
 	}
 	*calls = nil
 
-	if _, err := st.Append(ctx, validAppendRequest()); !errors.Is(err, events.ErrClosed) {
+	if _, err := st.Append(ctx, validAppendRequest()); !errors.Is(err, errClosed) {
 		t.Fatalf("Append() after Close error = %v, want ErrClosed", err)
 	}
 
@@ -269,7 +269,7 @@ func TestRead_RejectedAfterCloseLogsNothing(t *testing.T) {
 	}
 	*calls = nil
 
-	if _, err := st.Read(ctx, events.ReadRequest{Topic: readTestTopic, From: events.Cursor{Topic: readTestTopic}, Limit: 10}); !errors.Is(err, events.ErrClosed) {
+	if _, err := st.Read(ctx, events.ReadRequest{Topic: readTestTopic, From: events.Cursor{Topic: readTestTopic}, Limit: 10}); !errors.Is(err, errClosed) {
 		t.Fatalf("Read() after Close error = %v, want ErrClosed", err)
 	}
 	if len(*calls) != 0 {

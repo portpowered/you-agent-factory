@@ -116,8 +116,8 @@ func TestProvideApplicationProcessLifecycleSharesTheExactEventsInstance(t *testi
 		t.Fatalf("second ProcessLifecycle.Close() error = %v, want idempotent no-op", err)
 	}
 
-	if _, err := eventsService.Append(ctx, eventsWireTestAppendRequest()); !errors.Is(err, events.ErrClosed) {
-		t.Fatalf("Append() on the same events.Service after ProcessLifecycle.Close() error = %v, want ErrClosed (proves the closed instance and the append/read-observable instance are the same shared root, not an independent copy)", err)
+	if _, err := eventsService.Append(ctx, eventsWireTestAppendRequest()); !errors.Is(err, events.ErrOperationFailed) {
+		t.Fatalf("Append() on the same events.Service after ProcessLifecycle.Close() error = %v, want it classified as events.ErrOperationFailed (proves the closed instance and the append/read-observable instance are the same shared root, not an independent copy)", err)
 	}
 }
 
