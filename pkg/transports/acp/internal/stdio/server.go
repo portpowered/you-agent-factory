@@ -1,14 +1,15 @@
 // Package stdio implements the ACP agent-side JSON-RPC stdio server:
 // caller-owned stream serving, one-connection lifecycle, connection-scoped
 // identity assignment, newline-delimited JSON-RPC framing and dispatch for
-// the "initialize" method, protocol-safe rejection of malformed input,
-// unsupported methods, and unsupported protocol versions, and deterministic
-// termination on clean EOF, context cancellation, a partial trailing frame,
-// or a writer failure. Every method other than "initialize" -- including
-// deferred ACP session and prompt methods -- is not yet implemented by this
-// transport and receives method-not-found rather than being dispatched. It
-// is internal to pkg/transports/acp; callers use the package root's
-// exported operations instead of this package directly.
+// the "initialize" and "session/new" methods, protocol-safe rejection of
+// malformed input, unsupported methods, and unsupported protocol versions,
+// and deterministic termination on clean EOF, context cancellation, a
+// partial trailing frame, or a writer failure. Every method other than
+// "initialize" and "session/new" -- including deferred ACP session and
+// prompt methods -- is not yet implemented by this transport and receives
+// method-not-found rather than being dispatched. It is internal to
+// pkg/transports/acp; callers use the package root's exported operations
+// instead of this package directly.
 package stdio
 
 import (
@@ -22,6 +23,7 @@ import (
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/negotiation"
@@ -45,15 +47,37 @@ var errNullInitializeParams = errors.New("acp: initialize params must not be nul
 // goroutine, process, listener, session, or persistence; each Serve call
 // begins one connection-scoped invocation over the streams the caller
 // supplies for that call.
+//
+// chatSessions and catalog are the canonical Chat Sessions collaborators
+// "session/new" dispatches to; resolveHomeDir supplies the operator home
+// directory used to derive the Operator Settings document path and Factory
+// discovery roots for one session/new call's catalog resolution. Any of the
+// three may be nil, in which case "session/new" reports a bounded internal
+// error instead of dispatching -- so a Server constructed for a slice of
+// this transport that never exercises session/new (for example the
+// "initialize"-only smoke tests in this package) never has to supply them.
 type Server struct {
-	logger logging.Logger
+	logger         logging.Logger
+	chatSessions   chatsessions.Service
+	catalog        chatsessions.FactoryTargetCatalogService
+	resolveHomeDir func() (string, error)
 }
 
 // New constructs an inert stdio Server. Construction alone performs no
 // reads, writes, goroutine starts, process starts, endpoint binding,
 // session creation, or persistence.
-func New(logger logging.Logger) *Server {
-	return &Server{logger: logging.EnsureLogger(logger)}
+func New(
+	logger logging.Logger,
+	chatSessions chatsessions.Service,
+	catalog chatsessions.FactoryTargetCatalogService,
+	resolveHomeDir func() (string, error),
+) *Server {
+	return &Server{
+		logger:         logging.EnsureLogger(logger),
+		chatSessions:   chatSessions,
+		catalog:        catalog,
+		resolveHomeDir: resolveHomeDir,
+	}
 }
 
 // Serve begins one connection-scoped serving invocation over caller-owned
@@ -78,7 +102,7 @@ func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 	logger := logging.EnsureLogger(s.logger)
 	logger.Info("acp stdio connection started", "connectionId", string(connectionID))
 
-	err := serveConnection(ctx, connectionID, in, out)
+	err := s.serveConnection(ctx, connectionID, in, out)
 
 	logger.Info("acp stdio connection terminated",
 		"connectionId", string(connectionID),
@@ -137,7 +161,7 @@ func scanCompleteLines(data []byte, atEOF bool) (advance int, token []byte, err 
 // deliberate shutdown is never mistaken for a fault. A partial trailing
 // frame at EOF and a response write failure both end the connection with
 // their own error instead of being treated as success.
-func serveConnection(ctx context.Context, connectionID identity.ConnectionID, in io.Reader, out io.Writer) error {
+func (s *Server) serveConnection(ctx context.Context, connectionID identity.ConnectionID, in io.Reader, out io.Writer) error {
 	scanner := bufio.NewScanner(in)
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
 	scanner.Split(scanCompleteLines)
@@ -164,7 +188,7 @@ func serveConnection(ctx context.Context, connectionID identity.ConnectionID, in
 		}
 		raw := append(json.RawMessage(nil), line...)
 
-		env, result, rpcErr := dispatchRequest(connectionID, notificationSeq, raw)
+		env, result, rpcErr := s.dispatchRequest(ctx, connectionID, notificationSeq, raw)
 		if env.IsNotification {
 			notificationSeq++
 			continue
@@ -179,19 +203,20 @@ func serveConnection(ctx context.Context, connectionID identity.ConnectionID, in
 // connectionID. It returns the decoded envelope -- the zero Envelope, or an
 // Envelope carrying only a correlated Identity, for a message that never
 // successfully decoded -- alongside the outcome: a non-nil result for a
-// successful initialize exchange, or a bounded, protocol-safe
-// *acpsdk.RequestError for every rejection. An envelope.Decode failure is
-// classified by protocol.RejectEnvelope into a parse error (uncorrelated,
-// for unparseable JSON) or an invalid-request error (correlated to the
-// message's id when that id was itself syntactically valid); a decoded
-// envelope with valid params that Negotiate rejects becomes the richer
-// unsupported-protocol-version error unwrapped, and every other rejection
-// -- an unimplemented method, or params that fail to decode into the pinned
-// initialize request shape -- becomes method-not-found or invalid-params.
-// The only method this transport dispatches to an effect in this slice is
-// "initialize"; protocol-version policy is delegated entirely to the
-// existing V0 negotiation behavior rather than re-implemented here.
-func dispatchRequest(connectionID identity.ConnectionID, notificationSeq uint64, raw json.RawMessage) (envelope.Envelope, json.RawMessage, *acpsdk.RequestError) {
+// successful "initialize" or "session/new" exchange, or a bounded,
+// protocol-safe *acpsdk.RequestError for every rejection. An envelope.Decode
+// failure is classified by protocol.RejectEnvelope into a parse error
+// (uncorrelated, for unparseable JSON) or an invalid-request error
+// (correlated to the message's id when that id was itself syntactically
+// valid); a decoded "initialize" envelope with valid params that Negotiate
+// rejects becomes the richer unsupported-protocol-version error unwrapped,
+// and every other rejection -- an unimplemented method, or params that fail
+// to decode into the pinned request shape -- becomes method-not-found or
+// invalid-params. The only methods this transport dispatches to an effect in
+// this slice are "initialize" and "session/new"; protocol-version policy is
+// delegated entirely to the existing V0 negotiation behavior rather than
+// re-implemented here.
+func (s *Server) dispatchRequest(ctx context.Context, connectionID identity.ConnectionID, notificationSeq uint64, raw json.RawMessage) (envelope.Envelope, json.RawMessage, *acpsdk.RequestError) {
 	env, err := envelope.Decode(connectionID, notificationSeq, raw)
 	if err != nil {
 		rpcErr, wireID, hasID := protocol.RejectEnvelope(err)
@@ -208,16 +233,27 @@ func dispatchRequest(connectionID identity.ConnectionID, notificationSeq uint64,
 		return env, nil, nil
 	}
 
-	if env.Method != acpsdk.AgentMethodInitialize {
+	switch env.Method {
+	case acpsdk.AgentMethodInitialize:
+		result, rpcErr := dispatchInitialize(env.Params)
+		return env, result, rpcErr
+	case acpsdk.AgentMethodSessionNew:
+		result, rpcErr := s.handleSessionNew(ctx, env)
+		return env, result, rpcErr
+	default:
 		return env, nil, protocol.MethodNotFound(env.Method)
 	}
+}
 
-	if bytes.Equal(bytes.TrimSpace(env.Params), []byte("null")) {
-		return env, nil, protocol.SafeReject(errNullInitializeParams)
+// dispatchInitialize executes the "initialize" method against raw params,
+// negotiating the P0 text-first capability profile.
+func dispatchInitialize(params json.RawMessage) (json.RawMessage, *acpsdk.RequestError) {
+	if bytes.Equal(bytes.TrimSpace(params), []byte("null")) {
+		return nil, protocol.SafeReject(errNullInitializeParams)
 	}
 	var req acpsdk.InitializeRequest
-	if err := json.Unmarshal(env.Params, &req); err != nil {
-		return env, nil, protocol.SafeReject(err)
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, protocol.SafeReject(err)
 	}
 
 	resp, negotiateErr := negotiation.Negotiate(req)
@@ -226,14 +262,14 @@ func dispatchRequest(connectionID identity.ConnectionID, notificationSeq uint64,
 		if !ok {
 			reqErr = protocol.SafeReject(negotiateErr)
 		}
-		return env, nil, reqErr
+		return nil, reqErr
 	}
 
 	result, err := json.Marshal(resp)
 	if err != nil {
-		return env, nil, protocol.SafeReject(err)
+		return nil, protocol.SafeReject(err)
 	}
-	return env, result, nil
+	return result, nil
 }
 
 // rpcMessage is the wire shape of one JSON-RPC 2.0 response: exactly one of
