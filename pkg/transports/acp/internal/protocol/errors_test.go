@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	acpsdk "github.com/coder/acp-go-sdk"
+
+	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
 )
 
@@ -122,6 +125,96 @@ func TestSafeReject_RedactsSensitiveInternalCauses(t *testing.T) {
 		}
 		if strings.Contains(string(encoded), cause.Error()) {
 			t.Errorf("SafeReject() leaked the raw internal cause into serialized error %s", encoded)
+		}
+	}
+}
+
+func TestRejectEnvelope_ClassifiesInvalidJSONAsUncorrelatedParseError(t *testing.T) {
+	_, err := envelope.Decode("conn-1", 1, json.RawMessage(`{not json`))
+	if err == nil {
+		t.Fatal("envelope.Decode() error = nil, want a decode failure")
+	}
+
+	reqErr, id, hasID := RejectEnvelope(err)
+	if reqErr.Code != -32700 {
+		t.Errorf("RejectEnvelope() code = %d, want -32700 (parse error)", reqErr.Code)
+	}
+	if hasID {
+		t.Errorf("RejectEnvelope() recovered id %+v for unparseable JSON, want no recoverable id", id)
+	}
+}
+
+func TestRejectEnvelope_ClassifiesInvalidShapeAsCorrelatedInvalidRequest(t *testing.T) {
+	_, err := envelope.Decode("conn-1", 1, json.RawMessage(`{"jsonrpc":"1.0","id":7,"method":"session/prompt"}`))
+	if err == nil {
+		t.Fatal("envelope.Decode() error = nil, want a decode failure")
+	}
+
+	reqErr, id, hasID := RejectEnvelope(err)
+	if reqErr.Code != -32600 {
+		t.Errorf("RejectEnvelope() code = %d, want -32600 (invalid request)", reqErr.Code)
+	}
+	if !hasID {
+		t.Fatal("RejectEnvelope() recovered no id, want the request's valid numeric id")
+	}
+	gotID, err := id.MarshalJSON()
+	if err != nil {
+		t.Fatalf("id.MarshalJSON() error = %v", err)
+	}
+	if string(gotID) != "7" {
+		t.Errorf("RejectEnvelope() recovered id = %s, want 7", gotID)
+	}
+}
+
+func TestRejectEnvelope_InvalidShapeWithUnrecoverableIDIsUncorrelated(t *testing.T) {
+	_, err := envelope.Decode("conn-1", 1, json.RawMessage(`{"jsonrpc":"2.0","id":{},"method":"session/prompt"}`))
+	if err == nil {
+		t.Fatal("envelope.Decode() error = nil, want a decode failure")
+	}
+
+	reqErr, _, hasID := RejectEnvelope(err)
+	if reqErr.Code != -32600 {
+		t.Errorf("RejectEnvelope() code = %d, want -32600 (invalid request)", reqErr.Code)
+	}
+	if hasID {
+		t.Error("RejectEnvelope() recovered an id from a malformed id token, want no recoverable id")
+	}
+}
+
+func TestRejectEnvelope_FallsBackToSafeRejectForNonDecodeErrors(t *testing.T) {
+	cause := errors.New("acp: cwd is required")
+	reqErr, _, hasID := RejectEnvelope(cause)
+	if reqErr.Code != -32602 {
+		t.Errorf("RejectEnvelope() code = %d, want -32602 (invalid params, matching SafeReject)", reqErr.Code)
+	}
+	if hasID {
+		t.Error("RejectEnvelope() recovered an id for a non-DecodeError cause, want no recoverable id")
+	}
+}
+
+// TestParseErrorAndInvalidRequest_NeverCarrySensitiveData proves both
+// bounded constructors serialize only their fixed static reason label,
+// mirroring the redaction proofs already required of MethodNotFound and
+// SafeReject.
+func TestParseErrorAndInvalidRequest_NeverCarrySensitiveData(t *testing.T) {
+	for _, reqErr := range []*acpsdk.RequestError{ParseError(), InvalidRequest()} {
+		encoded, err := json.Marshal(reqErr)
+		if err != nil {
+			t.Fatalf("json.Marshal() error = %v", err)
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal(encoded, &decoded); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v", err)
+		}
+		data, ok := decoded["data"].(map[string]any)
+		if !ok {
+			t.Fatalf("encoded error %s has no object data field", encoded)
+		}
+		if len(data) != 1 {
+			t.Fatalf("encoded error data = %v, want exactly one static reason field", data)
+		}
+		if _, ok := data["reason"]; !ok {
+			t.Fatalf("encoded error data = %v, want a reason field", data)
 		}
 	}
 }

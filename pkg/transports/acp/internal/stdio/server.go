@@ -1,14 +1,15 @@
 // Package stdio implements the ACP agent-side JSON-RPC stdio server:
 // caller-owned stream serving, one-connection lifecycle, connection-scoped
-// identity assignment, and newline-delimited JSON-RPC framing and dispatch
-// for the "initialize" method. Every other method -- including deferred ACP
-// session and prompt methods -- is not yet implemented by this transport and
-// receives method-not-found rather than being dispatched. Finer-grained
-// protocol-error classification (parse error vs. invalid request vs.
-// invalid params) and shutdown semantics beyond clean EOF are added by
-// later stories in this slice. It is internal to pkg/transports/acp;
-// callers use the package root's exported operations instead of this
-// package directly.
+// identity assignment, newline-delimited JSON-RPC framing and dispatch for
+// the "initialize" method, and protocol-safe rejection of malformed input,
+// unsupported methods, and unsupported protocol versions. Every method
+// other than "initialize" -- including deferred ACP session and prompt
+// methods -- is not yet implemented by this transport and receives
+// method-not-found rather than being dispatched. Shutdown semantics beyond
+// clean EOF (mid-read cancellation, writer-failure termination guarantees,
+// and concurrent-lifecycle coverage) are added by a later story in this
+// slice. It is internal to pkg/transports/acp; callers use the package
+// root's exported operations instead of this package directly.
 package stdio
 
 import (
@@ -120,17 +121,33 @@ func serveConnection(connectionID identity.ConnectionID, in io.Reader, out io.Wr
 }
 
 // dispatchRequest decodes and executes one JSON-RPC message received on
-// connectionID. It returns the decoded envelope -- the zero Envelope for a
-// message that never successfully decoded -- alongside the outcome: a
-// non-nil result for a successful initialize exchange, or a bounded,
-// protocol-safe *acpsdk.RequestError for every rejection. The only method
-// this transport dispatches to an effect in this slice is "initialize";
-// protocol-version policy is delegated entirely to the existing V0
-// negotiation behavior rather than re-implemented here.
+// connectionID. It returns the decoded envelope -- the zero Envelope, or an
+// Envelope carrying only a correlated Identity, for a message that never
+// successfully decoded -- alongside the outcome: a non-nil result for a
+// successful initialize exchange, or a bounded, protocol-safe
+// *acpsdk.RequestError for every rejection. An envelope.Decode failure is
+// classified by protocol.RejectEnvelope into a parse error (uncorrelated,
+// for unparseable JSON) or an invalid-request error (correlated to the
+// message's id when that id was itself syntactically valid); a decoded
+// envelope with valid params that Negotiate rejects becomes the richer
+// unsupported-protocol-version error unwrapped, and every other rejection
+// -- an unimplemented method, or params that fail to decode into the pinned
+// initialize request shape -- becomes method-not-found or invalid-params.
+// The only method this transport dispatches to an effect in this slice is
+// "initialize"; protocol-version policy is delegated entirely to the
+// existing V0 negotiation behavior rather than re-implemented here.
 func dispatchRequest(connectionID identity.ConnectionID, notificationSeq uint64, raw json.RawMessage) (envelope.Envelope, json.RawMessage, *acpsdk.RequestError) {
 	env, err := envelope.Decode(connectionID, notificationSeq, raw)
 	if err != nil {
-		return envelope.Envelope{}, nil, protocol.SafeReject(err)
+		rpcErr, wireID, hasID := protocol.RejectEnvelope(err)
+		rejected := envelope.Envelope{}
+		if hasID {
+			// connectionID is always non-blank for a real connection, and
+			// wireID is already validated by envelope.Decode, so
+			// NewCorrelated can never fail here.
+			rejected.Identity, _ = identity.NewCorrelated(connectionID, wireID)
+		}
+		return rejected, nil, rpcErr
 	}
 	if env.IsNotification {
 		return env, nil, nil

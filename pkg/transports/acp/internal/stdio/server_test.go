@@ -340,8 +340,206 @@ func TestServeIsolatesConnectionsReusingTheSameWireID(t *testing.T) {
 	}
 }
 
-func TestServeRespondsMethodNotFoundForAnUnimplementedMethod(t *testing.T) {
-	input := `{"jsonrpc":"2.0","id":9,"method":"session/new","params":{}}` + "\n"
+// TestServeRespondsMethodNotFoundForEveryUnimplementedMethod covers every
+// deferred ACP session/prompt method already listed in
+// protocol.SupportedMethods (a forward-looking closed set for the whole
+// future method surface, not what this transport slice actually
+// implements -- see the Codebase Patterns entry on protocol.SupportedMethods)
+// plus a method this transport never expects at all, proving all of them
+// get method-not-found rather than being dispatched or hanging.
+func TestServeRespondsMethodNotFoundForEveryUnimplementedMethod(t *testing.T) {
+	methods := []string{
+		"session/new",
+		"session/load",
+		"session/resume",
+		"session/set_config_option",
+		"session/prompt",
+		"session/request_permission",
+		"totally/unrecognized_method",
+	}
+
+	for _, method := range methods {
+		t.Run(method, func(t *testing.T) {
+			input := fmt.Sprintf(`{"jsonrpc":"2.0","id":9,"method":%q,"params":{}}`, method) + "\n"
+
+			out := &bytes.Buffer{}
+			server := New(nil)
+			if err := server.Serve(context.Background(), strings.NewReader(input), out); err != nil {
+				t.Fatalf("Serve() error = %v", err)
+			}
+
+			resp := assertSingleResponseLine(t, out)
+			if string(resp.ID) != "9" {
+				t.Fatalf("id = %s, want 9", resp.ID)
+			}
+			if resp.Error == nil || resp.Error.Code != -32601 {
+				t.Fatalf("error = %+v, want method-not-found (-32601)", resp.Error)
+			}
+		})
+	}
+}
+
+// TestServeRespondsWithParseErrorForMalformedJSON proves input that never
+// parses as JSON at all gets a JSON-RPC parse error with a null id, since no
+// id could ever be recovered from input this broken.
+func TestServeRespondsWithParseErrorForMalformedJSON(t *testing.T) {
+	out := &bytes.Buffer{}
+	server := New(nil)
+	if err := server.Serve(context.Background(), strings.NewReader("{not json\n"), out); err != nil {
+		t.Fatalf("Serve() error = %v", err)
+	}
+
+	resp := assertSingleResponseLine(t, out)
+	if resp.Error == nil || resp.Error.Code != -32700 {
+		t.Fatalf("error = %+v, want parse error (-32700)", resp.Error)
+	}
+	if string(resp.ID) != "null" {
+		t.Fatalf("id = %s, want null for unparseable input", resp.ID)
+	}
+}
+
+// TestServeRespondsWithInvalidRequestForStructurallyInvalidShapes proves
+// input that parses as JSON but violates the JSON-RPC 2.0 request shape
+// this transport requires gets an invalid-request response, correlated to
+// the message's id only when that id token was itself syntactically valid.
+func TestServeRespondsWithInvalidRequestForStructurallyInvalidShapes(t *testing.T) {
+	cases := []struct {
+		name   string
+		line   string
+		wantID string
+	}{
+		{
+			name:   "wrong jsonrpc version with a valid id",
+			line:   `{"jsonrpc":"1.0","id":5,"method":"initialize","params":{"protocolVersion":1}}` + "\n",
+			wantID: "5",
+		},
+		{
+			name:   "missing method with a valid id",
+			line:   `{"jsonrpc":"2.0","id":6}` + "\n",
+			wantID: "6",
+		},
+		{
+			name:   "id-bearing session/cancel notification",
+			line:   `{"jsonrpc":"2.0","id":7,"method":"session/cancel","params":{"sessionId":"s"}}` + "\n",
+			wantID: "7",
+		},
+		{
+			name:   "malformed id shape has no recoverable id",
+			line:   `{"jsonrpc":"2.0","id":{},"method":"initialize","params":{"protocolVersion":1}}` + "\n",
+			wantID: "null",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out := &bytes.Buffer{}
+			server := New(nil)
+			if err := server.Serve(context.Background(), strings.NewReader(tc.line), out); err != nil {
+				t.Fatalf("Serve() error = %v", err)
+			}
+
+			resp := assertSingleResponseLine(t, out)
+			if resp.Error == nil || resp.Error.Code != -32600 {
+				t.Fatalf("error = %+v, want invalid-request (-32600)", resp.Error)
+			}
+			if string(resp.ID) != tc.wantID {
+				t.Fatalf("id = %s, want %s", resp.ID, tc.wantID)
+			}
+		})
+	}
+}
+
+// TestServeRespondsWithInvalidParamsForBadInitializeParams proves missing
+// and malformed initialize params both produce an invalid-params response
+// correlated to the original valid request id.
+func TestServeRespondsWithInvalidParamsForBadInitializeParams(t *testing.T) {
+	cases := []struct {
+		name string
+		line string
+	}{
+		{name: "missing params", line: `{"jsonrpc":"2.0","id":1,"method":"initialize"}` + "\n"},
+		{name: "malformed params type", line: `{"jsonrpc":"2.0","id":1,"method":"initialize","params":"not-an-object"}` + "\n"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out := &bytes.Buffer{}
+			server := New(nil)
+			if err := server.Serve(context.Background(), strings.NewReader(tc.line), out); err != nil {
+				t.Fatalf("Serve() error = %v", err)
+			}
+
+			resp := assertSingleResponseLine(t, out)
+			if resp.Error == nil || resp.Error.Code != -32602 {
+				t.Fatalf("error = %+v, want invalid-params (-32602)", resp.Error)
+			}
+			if string(resp.ID) != "1" {
+				t.Fatalf("id = %s, want 1", resp.ID)
+			}
+		})
+	}
+}
+
+// TestServeMapsUnsupportedProtocolVersionToCorrelatedFactsWithNoCapabilities
+// proves an unsupported protocol version request receives the existing
+// typed negotiation rejection unwrapped: an invalid-params response
+// correlated to the request id, carrying only the requested/supported
+// public version facts, and no result/capabilities alongside it.
+func TestServeMapsUnsupportedProtocolVersionToCorrelatedFactsWithNoCapabilities(t *testing.T) {
+	line := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":99}}` + "\n"
+
+	out := &bytes.Buffer{}
+	server := New(nil)
+	if err := server.Serve(context.Background(), strings.NewReader(line), out); err != nil {
+		t.Fatalf("Serve() error = %v", err)
+	}
+
+	resp := assertSingleResponseLine(t, out)
+	if string(resp.ID) != "1" {
+		t.Fatalf("id = %s, want 1", resp.ID)
+	}
+	if resp.Result != nil {
+		t.Fatalf("result = %s, want no result/capabilities alongside a rejection", resp.Result)
+	}
+	if resp.Error == nil || resp.Error.Code != -32602 {
+		t.Fatalf("error = %+v, want invalid-params (-32602)", resp.Error)
+	}
+	data, ok := resp.Error.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("error data = %#v, want an object carrying version facts", resp.Error.Data)
+	}
+	if data["reason"] != "unsupported_protocol_version" {
+		t.Fatalf("error data reason = %v, want unsupported_protocol_version", data["reason"])
+	}
+	if data["requestedVersion"] != float64(99) {
+		t.Fatalf("error data requestedVersion = %v, want 99", data["requestedVersion"])
+	}
+	if data["supportedVersion"] != float64(1) {
+		t.Fatalf("error data supportedVersion = %v, want 1", data["supportedVersion"])
+	}
+}
+
+// TestServeEmitsNoResponseForAValidNotification proves a well-formed
+// notification (no id, a method in envelope.NotificationMethods) never
+// receives any response -- success or error -- per JSON-RPC 2.0.
+func TestServeEmitsNoResponseForAValidNotification(t *testing.T) {
+	line := `{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"s"}}` + "\n"
+
+	out := &bytes.Buffer{}
+	server := New(nil)
+	if err := server.Serve(context.Background(), strings.NewReader(line), out); err != nil {
+		t.Fatalf("Serve() error = %v", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("output = %q, want no response for a valid notification", out.Bytes())
+	}
+}
+
+// TestServeContinuesProcessingAfterARecoverableRequestError proves a
+// request-level rejection does not end the connection: the next valid
+// framed request on the same connection still gets processed and answered.
+func TestServeContinuesProcessingAfterARecoverableRequestError(t *testing.T) {
+	input := "{not json\n" + initializeLine("1")
 
 	out := &bytes.Buffer{}
 	server := New(nil)
@@ -349,12 +547,75 @@ func TestServeRespondsMethodNotFoundForAnUnimplementedMethod(t *testing.T) {
 		t.Fatalf("Serve() error = %v", err)
 	}
 
-	resp := assertSingleResponseLine(t, out)
-	if string(resp.ID) != "9" {
-		t.Fatalf("id = %s, want 9", resp.ID)
+	lines := nonEmptyResponseLines(t, out)
+	if len(lines) != 2 {
+		t.Fatalf("got %d response lines, want 2 (one rejection, one recovered success): %q", len(lines), out.Bytes())
 	}
-	if resp.Error == nil || resp.Error.Code != -32601 {
-		t.Fatalf("error = %+v, want method-not-found (-32601)", resp.Error)
+
+	var first rpcMessage
+	if err := json.Unmarshal(lines[0], &first); err != nil {
+		t.Fatalf("unmarshal first response: %v", err)
+	}
+	if first.Error == nil || first.Error.Code != -32700 {
+		t.Fatalf("first response error = %+v, want parse error (-32700)", first.Error)
+	}
+
+	var second rpcMessage
+	if err := json.Unmarshal(lines[1], &second); err != nil {
+		t.Fatalf("unmarshal second response: %v", err)
+	}
+	if second.Error != nil {
+		t.Fatalf("second response error = %+v, want a successful result after recovering from the first rejection", second.Error)
+	}
+	if string(second.ID) != "1" {
+		t.Fatalf("second response id = %s, want 1", second.ID)
+	}
+	assertJSONEqualStrings(t, initializeSuccessResult, string(second.Result))
+}
+
+// TestServeErrorResponsesAndDiagnosticsNeverLeakSeededSensitiveSentinels
+// seeds a credential, an absolute filesystem path, a raw provider command,
+// and an internal topology sentinel into every request-level error class
+// this transport can produce -- malformed JSON, an unsupported method name,
+// and malformed initialize params -- then proves none of those sentinels
+// ever survive into the written response bytes or into the structured
+// start/terminal diagnostics, mirroring the redaction proofs already
+// required of protocol.MethodNotFound/SafeReject at the classification
+// layer, but now proven at the actual wire and logging boundary.
+func TestServeErrorResponsesAndDiagnosticsNeverLeakSeededSensitiveSentinels(t *testing.T) {
+	sentinels := []string{
+		"sk-live-credential-ABC123XYZ",
+		"/home/operator/.ssh/id_rsa",
+		"/usr/local/bin/agent --token=sk-live-credential-ABC123XYZ",
+		"internal-dispatch-node-7.factory.internal",
+	}
+
+	for _, sentinel := range sentinels {
+		lines := map[string]string{
+			"malformed JSON":              fmt.Sprintf(`{not json %s`, sentinel) + "\n",
+			"unsupported method name":     fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":%q,"params":{}}`, sentinel) + "\n",
+			"malformed initialize params": fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":%q}`, sentinel) + "\n",
+		}
+		for name, line := range lines {
+			t.Run(sentinel+"/"+name, func(t *testing.T) {
+				out := &bytes.Buffer{}
+				logger := &recordingLogger{}
+				server := New(logger)
+				if err := server.Serve(context.Background(), strings.NewReader(line), out); err != nil {
+					t.Fatalf("Serve() error = %v", err)
+				}
+				if strings.Contains(out.String(), sentinel) {
+					t.Fatalf("response leaked sentinel %q: %s", sentinel, out.Bytes())
+				}
+				for _, entry := range logger.entries {
+					for key, value := range entry.fields {
+						if text, ok := value.(string); ok && strings.Contains(text, sentinel) {
+							t.Fatalf("log field %q leaked sentinel %q: %v", key, sentinel, value)
+						}
+					}
+				}
+			})
+		}
 	}
 }
 
