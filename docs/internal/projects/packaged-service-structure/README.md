@@ -162,9 +162,10 @@ Consequences for PSS packets:
 
 - `FND-08` (`event-contract`, `pkg/services/recordings/events/kinds/`) stays
   Recordings-owned and is unaffected — event *kinds* are contract, not stream.
-- `PSS-I05` (`event-backbone`) must be re-scoped against D2 before dispatch. An
-  "event backbone convergence" that merges persistence with streaming
-  contradicts this split.
+- `PSS-I05` was re-scoped against D2 before dispatch (see "Applied manifest
+  narrowing — PSS-I05" below): the prior `event-backbone` lease class implied
+  an "event backbone convergence" that merges persistence with streaming,
+  contradicting this split.
 - `factory_sessions/internal/{responseeventstore,responsestream,cursors}` migrate
   into `pkg/services/events` under L1. **PSS packets must not touch those paths
   while L1 is active.**
@@ -290,7 +291,32 @@ exclusive" expressed directly, that requires a change-kind dimension in
 `internal/psslease` which does not exist today. Narrowing the paths is the
 change that fits the current mechanism.
 
-`PSS-I05` re-scoping under D2 is a second follow-up and is described above.
+## Applied manifest narrowing — PSS-I05
+
+D2 required a second `path-lease-packet-manifest.json` change, now **applied**:
+the committed ledger's `PSS-I05` packet no longer claims a combined
+persistence-and-streaming event backbone.
+
+| Packet | `leaseClass` | Prior exclusive paths | Applied exclusive paths |
+| --- | --- | --- | --- |
+| `PSS-I05` | Prior: `event-backbone`; Applied: `event-boundary-metadata` | `pkg/factory/contracts/` ; `docs/internal/projects/packaged-service-structure/event-backbone-convergence.md` | `docs/internal/projects/packaged-service-structure/event-boundary-d2-rescope.md` |
+
+- `PSS-I05` remains present exactly once, in its existing undispatched
+  `blocked` state with its `FND-08` prerequisite unchanged. The packet is
+  **narrowed, not deleted**, and `exclusivePaths` stays non-empty.
+- The retained path is a single dedicated PSS-owned metadata file
+  ([`event-boundary-d2-rescope.md`](./event-boundary-d2-rescope.md)) recording
+  the settled D2 boundary: Recordings keeps canonical JSONL history and
+  replay, `FND-08` keeps event kinds, and L1 Events keeps the process-local
+  stream and Factory Sessions response-event extraction. The packet claims no
+  `pkg/factory/contracts/` path and no other production service, Events,
+  Recordings, Factory Sessions, composition, or generated-code path.
+- `internal/psslease` regression coverage proves both halves: the re-scoped
+  ledger validates and admits `PSS-I05` as a lease-holding dispatch candidate
+  without mutating committed state, and a genuine equal or path-prefix
+  overlap on the retained metadata file while `PSS-I05` holds a lease is
+  rejected before activation, with both packet identities and the
+  conflicting path in the diagnostic.
 
 ## Planner state updates
 
