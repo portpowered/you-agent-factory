@@ -3,6 +3,7 @@ package envelope
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
@@ -111,6 +112,21 @@ func TestDecode_RejectsMalformedInput(t *testing.T) {
 				t.Fatalf("Decode(%s) recovered id = %s, want %s", tt.raw, gotID, tt.wantID)
 			}
 		})
+	}
+}
+
+func TestDecodeError_ErrorReturnsCauseMessage(t *testing.T) {
+	_, err := Decode("conn-1", 1, json.RawMessage(`{not json`))
+
+	var decodeErr *DecodeError
+	if !errors.As(err, &decodeErr) {
+		t.Fatalf("Decode error = %v (%T), want *DecodeError", err, err)
+	}
+	if got, want := decodeErr.Error(), decodeErr.Unwrap().Error(); got != want {
+		t.Fatalf("DecodeError.Error() = %q, want it to equal Unwrap().Error() = %q", got, want)
+	}
+	if !strings.HasPrefix(decodeErr.Error(), ErrInvalidJSON.Error()) {
+		t.Fatalf("DecodeError.Error() = %q, want it to start with %q", decodeErr.Error(), ErrInvalidJSON.Error())
 	}
 }
 
