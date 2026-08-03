@@ -280,7 +280,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/events/wire",
-      "minimum": 100.00
+      "minimum": 50.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",

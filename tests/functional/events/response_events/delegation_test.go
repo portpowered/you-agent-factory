@@ -93,10 +93,26 @@ func TestFactoryResponseEventsSurviveTheEventsAuthoritativePublishPath(t *testin
 	}
 }
 
+// eventsRetentionCapForDelegationTest is the tightened per-topic retention
+// cap used by TestFactoryResponseEventDeliveryDivergesWhenEventsRetentionIsTighterThanLocal.
+// Events' own Read contract (established by story 002:
+// pkg/services/events/internal/service/read.go's earliest>1 && from<earliest
+// check) can never resolve the position exactly at a gap's EarliestRetained
+// through any resumable cursor -- a From naming EarliestRetained-1 is itself
+// classified as Gap -- so under a cap of N, exactly N-1 of the most recent
+// positions are provably recoverable, not N. Using a cap of 3 (rather than
+// the minimum useful cap of 2) keeps that recoverable tail at 2 real events,
+// so this test demonstrably recovers more than a single trailing record.
+const eventsRetentionCapForDelegationTest = 3
+
 // TestFactoryResponseEventDeliveryDivergesWhenEventsRetentionIsTighterThanLocal
 // proves SubscribeFactoryResponseEvents genuinely reads delivered content
 // back through the injected Events root rather than only from Factory
-// Sessions' own locally retained copy. It runs the identical golden Codex
+// Sessions' own locally retained copy, and that a partial eviction only
+// surfaces a gap for the positions Events has genuinely lost -- it must not
+// collapse an entire batch into gaps just because a single Events Read call
+// is gap-or-nothing for the range it was asked about (PR #1753 review
+// finding 1, 2026-08-03T18:01:32Z). It runs the identical golden Codex
 // session twice through the exact customer-facing response-event HTTP
 // endpoint, changing only edges.EventsMaxRetainedRecordsPerTopic between
 // runs: with the production default, every published event is retained and
@@ -104,23 +120,30 @@ func TestFactoryResponseEventsSurviveTheEventsAuthoritativePublishPath(t *testin
 // per-topic retention tightened below the number of events this session
 // publishes -- while Factory Sessions' own response-event retention limits
 // stay at their large default, so this store's own tiered retention would
-// otherwise still consider every position deliverable -- delivery must
-// instead surface each of those positions as an explicit STREAM_GAP
-// reasoned "events_authority_unavailable" rather than falling back to this
-// store's local bytes. If Subscribe reverted to reading only its own local
-// copy -- the exact regression this test guards against -- the tightened
-// run would deliver identical real content to the baseline run and this
-// test would fail; a public HTTP contract test that only asserts ascending
+// otherwise still consider every position deliverable -- the oldest
+// positions must surface an explicit STREAM_GAP reasoned
+// "events_authority_unavailable" while the retained tail Events can still
+// produce must deliver the same real content as the baseline run. If
+// Subscribe reverted to reading only its own local copy -- one regression
+// this test guards against -- the tightened run would deliver identical
+// real content to the baseline run for the leading (evicted) positions too;
+// if a partial eviction instead erased the whole batch -- the regression
+// finding 1 identified -- the retained tail would incorrectly read back as
+// gaps as well. A public HTTP contract test that only asserts ascending
 // unique sequence numbers (as
 // TestFactoryResponseEventsSurviveTheEventsAuthoritativePublishPath does for
-// the write path) would not detect that regression on the read path, which
-// is exactly the coverage gap this test closes.
+// the write path) would not detect either regression on the read path,
+// which is exactly the coverage gap this test closes.
 func TestFactoryResponseEventDeliveryDivergesWhenEventsRetentionIsTighterThanLocal(t *testing.T) {
 	t.Parallel()
 
 	baseline := runCodexGoldenSessionAndListResponseEvents(t, 0)
-	if len(baseline) == 0 {
-		t.Fatal("baseline run (production default Events retention) produced zero public Factory response events")
+	if len(baseline) <= eventsRetentionCapForDelegationTest {
+		t.Fatalf(
+			"baseline run produced %d public Factory response events, want more than %d so the tightened run below has both a genuinely evicted leading position and a recoverable retained tail",
+			len(baseline),
+			eventsRetentionCapForDelegationTest,
+		)
 	}
 	assertResponseEventsAscendingSequence(t, baseline)
 	for _, event := range baseline {
@@ -132,7 +155,7 @@ func TestFactoryResponseEventDeliveryDivergesWhenEventsRetentionIsTighterThanLoc
 		}
 	}
 
-	tightened := runCodexGoldenSessionAndListResponseEvents(t, 2)
+	tightened := runCodexGoldenSessionAndListResponseEvents(t, eventsRetentionCapForDelegationTest)
 	if len(tightened) != len(baseline) {
 		t.Fatalf(
 			"tightened-Events-retention run delivered %d events, want %d (same total as baseline; substitution must replace content, not drop or duplicate positions)",
@@ -140,25 +163,50 @@ func TestFactoryResponseEventDeliveryDivergesWhenEventsRetentionIsTighterThanLoc
 			len(baseline),
 		)
 	}
+
+	// Under a per-topic cap of eventsRetentionCapForDelegationTest, exactly
+	// eventsRetentionCapForDelegationTest-1 of the most recent positions are
+	// recoverable (see the constant's doc comment); every earlier position
+	// must surface as a gap.
+	recoverableTail := eventsRetentionCapForDelegationTest - 1
+	gapCount := len(tightened) - recoverableTail
+
 	for index, event := range tightened {
-		if event.Kind != factoryapi.FactoryResponseEventKindStreamGap {
+		if index < gapCount {
+			if event.Kind != factoryapi.FactoryResponseEventKindStreamGap {
+				t.Fatalf(
+					"tightened-Events-retention run delivered real content at index %d (sequence %d, kind %s), want STREAM_GAP: this position has been evicted from Events under the tightened cap",
+					index,
+					event.Sequence,
+					event.Kind,
+				)
+			}
+			gapUnion, err := event.Payload.AsFactoryResponseEventStreamGapPayload()
+			if err != nil {
+				t.Fatalf("decode STREAM_GAP union payload at index %d: %v", index, err)
+			}
+			gapPayload, err := gapUnion.AsFactoryResponseEventStreamGapPayload0()
+			if err != nil {
+				t.Fatalf("decode STREAM_GAP payload at index %d: %v", index, err)
+			}
+			if gapPayload.Reason == nil || *gapPayload.Reason != "events_authority_unavailable" {
+				t.Fatalf("STREAM_GAP reason at index %d = %#v, want events_authority_unavailable", index, gapPayload.Reason)
+			}
+			continue
+		}
+
+		if event.Kind == factoryapi.FactoryResponseEventKindStreamGap {
 			t.Fatalf(
-				"tightened-Events-retention run delivered real content at index %d (sequence %d, kind %s); if Subscribe stopped reading through the injected Events root and reverted to this store's own locally retained copy, this event would still show real content instead of surfacing the gap Events' own tighter retention created",
+				"tightened-Events-retention run delivered STREAM_GAP at index %d (sequence %d), want the real retained content Events still has: one evicted older position must not erase the still-retained tail; if Subscribe stopped reading through the injected Events root and reverted to this store's own locally retained copy, or if a partial eviction still collapsed the whole batch, this position would not match the baseline run",
 				index,
 				event.Sequence,
-				event.Kind,
 			)
 		}
-		gapUnion, err := event.Payload.AsFactoryResponseEventStreamGapPayload()
-		if err != nil {
-			t.Fatalf("decode STREAM_GAP union payload at index %d: %v", index, err)
-		}
-		gapPayload, err := gapUnion.AsFactoryResponseEventStreamGapPayload0()
-		if err != nil {
-			t.Fatalf("decode STREAM_GAP payload at index %d: %v", index, err)
-		}
-		if gapPayload.Reason == nil || *gapPayload.Reason != "events_authority_unavailable" {
-			t.Fatalf("STREAM_GAP reason at index %d = %#v, want events_authority_unavailable", index, gapPayload.Reason)
+		if event.Kind != baseline[index].Kind || event.Sequence != baseline[index].Sequence {
+			t.Fatalf(
+				"tightened-Events-retention run at index %d = {sequence %d, kind %s}, want the same as baseline {sequence %d, kind %s}",
+				index, event.Sequence, event.Kind, baseline[index].Sequence, baseline[index].Kind,
+			)
 		}
 	}
 }

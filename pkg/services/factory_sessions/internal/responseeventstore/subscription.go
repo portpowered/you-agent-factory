@@ -241,7 +241,7 @@ func (s *Subscription) Next(ctx context.Context) ([]responseevents.FactoryRespon
 			return nil, ErrSubscriptionClosed
 		}
 		if len(result.events) > 0 {
-			result.events = s.store.substituteFromEvents(ctx, result.events)
+			result.events = s.store.substituteFromEvents(result.events)
 			s.advance(result.nextSequence)
 			return result.events, nil
 		}
@@ -256,7 +256,7 @@ func (s *Subscription) Next(ctx context.Context) ([]responseevents.FactoryRespon
 				return nil, ErrSubscriptionClosed
 			}
 			if len(result.events) > 0 {
-				result.events = s.store.substituteFromEvents(ctx, result.events)
+				result.events = s.store.substituteFromEvents(result.events)
 				s.advance(result.nextSequence)
 				return result.events, nil
 			}
@@ -297,7 +297,7 @@ func (s *Subscription) Drain() ([]responseevents.FactoryResponseEvent, error) {
 		return nil, ErrSubscriptionClosed
 	}
 	if len(result.events) > 0 {
-		result.events = s.store.substituteFromEvents(context.Background(), result.events)
+		result.events = s.store.substituteFromEvents(result.events)
 		s.advance(result.nextSequence)
 	}
 	return result.events, nil
@@ -372,7 +372,14 @@ func (s *SessionResponseEventStore) eventsAfterLocked(afterSequence int64, dispa
 // own tiered window (for example a very long-lived, high-volume session),
 // and when it is, the affected records surface as an honest gap instead of
 // stale local content a direct Events reader could no longer observe.
-func (s *SessionResponseEventStore) substituteFromEvents(ctx context.Context, delivered []responseevents.FactoryResponseEvent) []responseevents.FactoryResponseEvent {
+//
+// This read always runs against context.Background(), independent of any
+// caller-supplied context: by the time delivered is non-empty, the local
+// store has already decided these sequences are deliverable, and a caller's
+// cancellation racing with that decision must not turn real retained content
+// into a false authority gap (a canceled context is guaranteed to make
+// events.Service.Read fail).
+func (s *SessionResponseEventStore) substituteFromEvents(delivered []responseevents.FactoryResponseEvent) []responseevents.FactoryResponseEvent {
 	if s == nil || s.eventsService == nil || len(delivered) == 0 {
 		return delivered
 	}
@@ -395,18 +402,7 @@ func (s *SessionResponseEventStore) substituteFromEvents(ctx context.Context, de
 		return delivered
 	}
 
-	result, err := s.eventsService.Read(ctx, events.ReadRequest{
-		Topic: s.eventsTopic,
-		From:  events.Cursor{Topic: s.eventsTopic, Position: events.AggregateSequence(minSeq - 1)},
-		Limit: int(maxSeq-minSeq) + 1,
-	})
-
-	bySequence := make(map[int64]json.RawMessage, realCount)
-	if err == nil && result.Outcome == events.ReadOutcomeProgress {
-		for _, record := range result.Records {
-			bySequence[int64(record.ID.Position)] = record.Payload
-		}
-	}
+	bySequence := s.readEventsAuthorityRange(context.Background(), minSeq, maxSeq)
 
 	substituted := make([]responseevents.FactoryResponseEvent, len(delivered))
 	for i, event := range delivered {
@@ -427,6 +423,67 @@ func (s *SessionResponseEventStore) substituteFromEvents(ctx context.Context, de
 		substituted[i] = fromEvents
 	}
 	return substituted
+}
+
+// readEventsAuthorityRange reads every Events-authority position in
+// [minSeq, maxSeq] it can currently produce, resuming past any evicted
+// prefix instead of treating one evicted position as unavailability for the
+// entire requested range. events.Service.Read's Gap outcome is all-or-nothing
+// for the exact call it was made on (it reports Gap for the whole requested
+// range whenever the starting cursor itself is behind the earliest retained
+// position, even when later positions in that range remain retained), so a
+// single Read spanning an evicted low position would otherwise mark every
+// still-available newer position as unavailable too. This loop instead
+// re-issues Read starting exactly from the gap's own EarliestRetained
+// position, so only the positions Events has genuinely evicted end up
+// missing from the returned map, with one documented exception: the position
+// named by EarliestRetained itself cannot be targeted by any resumable
+// cursor -- events.Service.Read's own boundary contract (established by
+// story 002) classifies a From naming EarliestRetained-1 as Gap too (From
+// must be strictly less than the retained position it is asking for), so
+// resuming at EarliestRetained-1 would reproduce the identical Gap forever.
+// Resuming at EarliestRetained itself avoids that loop and recovers every
+// position after it, at the cost of that one exact position also reading
+// back as a gap -- a real, pre-existing property of the injected Events
+// root's own Read contract, not something this adapter can recover without
+// widening events.Service.
+func (s *SessionResponseEventStore) readEventsAuthorityRange(ctx context.Context, minSeq, maxSeq int64) map[int64]json.RawMessage {
+	bySequence := make(map[int64]json.RawMessage, maxSeq-minSeq+1)
+	from := events.AggregateSequence(minSeq - 1)
+	for int64(from) < maxSeq {
+		limit := int(maxSeq) - int(from)
+		result, err := s.eventsService.Read(ctx, events.ReadRequest{
+			Topic: s.eventsTopic,
+			From:  events.Cursor{Topic: s.eventsTopic, Position: from},
+			Limit: limit,
+		})
+		if err != nil {
+			return bySequence
+		}
+		switch result.Outcome {
+		case events.ReadOutcomeProgress:
+			for _, record := range result.Records {
+				position := int64(record.ID.Position)
+				if position > maxSeq {
+					continue
+				}
+				bySequence[position] = record.Payload
+			}
+			if result.Next.Position <= from {
+				return bySequence
+			}
+			from = result.Next.Position
+		case events.ReadOutcomeGap:
+			earliest := events.AggregateSequence(result.Gap.EarliestRetained)
+			if earliest <= from {
+				return bySequence
+			}
+			from = earliest
+		default:
+			return bySequence
+		}
+	}
+	return bySequence
 }
 
 // eventsAuthorityGapEventReason marks a synthetic stream-gap event produced
