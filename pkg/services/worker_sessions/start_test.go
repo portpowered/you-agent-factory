@@ -51,6 +51,22 @@ func TestStartRequest_Validate_RejectsBlankAttemptDispatchID(t *testing.T) {
 	}
 }
 
+func TestStartRequest_Validate_RejectsBlankNestedDispatchWorkstationName(t *testing.T) {
+	req := validStartRequestForContractTest()
+	req.Execution.Execution.Dispatch.WorkstationName = "   "
+	if err := req.Validate(); !errors.Is(err, workersessions.ErrInvalidExecutionRequest) {
+		t.Errorf("Validate() = %v, want ErrInvalidExecutionRequest", err)
+	}
+}
+
+func TestStartRequest_Validate_RejectsMismatchedNestedDispatchWorkstationName(t *testing.T) {
+	req := validStartRequestForContractTest()
+	req.Execution.Execution.Dispatch.WorkstationName = "other-route"
+	if err := req.Validate(); !errors.Is(err, workersessions.ErrInvalidExecutionRequest) {
+		t.Errorf("Validate() = %v, want ErrInvalidExecutionRequest", err)
+	}
+}
+
 func TestStartRequest_Validate_IsDeterministicAndDoesNotMutate(t *testing.T) {
 	req := validStartRequestForContractTest()
 	original := req

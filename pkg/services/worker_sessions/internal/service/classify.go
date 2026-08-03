@@ -24,22 +24,23 @@ func classifyTerminal(
 		// attempt could not be handed off (for example, an unavailable or
 		// misconfigured workstation pool). This is the only case that never
 		// reached the executor, so it is the only case classified from the
-		// dispatch error alone.
-		return failedTerminal(workersessions.FailureCauseStartFailure, redactDetail(rawDetail(dispatchErr)))
+		// dispatch error alone. No WorkResult exists yet, so there is no
+		// FailureMetadata to derive a safe Detail from.
+		return failedTerminal(workersessions.FailureCauseStartFailure, safeDetail(workersessions.FailureCauseStartFailure, nil))
 	}
 
 	switch workResult.Outcome {
 	case workers.OutcomeAccepted, workers.OutcomeContinue:
 		return workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}
 	default: // workers.OutcomeRejected, workers.OutcomeFailed
-		detail := redactDetail(failureRawDetail(workResult, dispatchErr))
-		if isExecutorPanicEvidence(dispatchErr, workResult) {
-			return failedTerminal(workersessions.FailureCauseExecutorPanic, detail)
+		kind := workersessions.FailureCauseWorkersExecutionFailure
+		switch {
+		case isExecutorPanicEvidence(dispatchErr, workResult):
+			kind = workersessions.FailureCauseExecutorPanic
+		case dispatchErr != nil:
+			kind = workersessions.FailureCauseAdapterFailure
 		}
-		if dispatchErr != nil {
-			return failedTerminal(workersessions.FailureCauseAdapterFailure, detail)
-		}
-		return failedTerminal(workersessions.FailureCauseWorkersExecutionFailure, detail)
+		return failedTerminal(kind, safeDetail(kind, workResult.FailureMetadata))
 	}
 }
 
@@ -47,9 +48,10 @@ func classifyTerminal(
 // WorkResult itself carries the Workers-established executor-panic
 // evidence. The WorkResult text is checked independently of the adapter
 // error so panic evidence is recognized even when the adapter error is nil.
-// Classification always inspects the raw, unredacted text: redaction only
-// governs what reaches the public FailureCause.Detail, never what Worker
-// Sessions itself is allowed to classify from.
+// Classification is the only place Worker Sessions inspects this raw,
+// free-form text: the result only ever selects a FailureCauseKind, and that
+// raw text itself is never attached to the public FailureCause.Detail (see
+// safeDetail).
 func isExecutorPanicEvidence(dispatchErr error, workResult workers.WorkResult) bool {
 	var panicErr *workers.WorkerExecutorPanicError
 	if errors.As(dispatchErr, &panicErr) {
@@ -72,19 +74,6 @@ func failedTerminal(kind workersessions.FailureCauseKind, detail string) workers
 		Outcome: workersessions.TerminalOutcomeFailed,
 		Cause:   &workersessions.FailureCause{Kind: kind, Detail: detail},
 	}
-}
-
-// failureRawDetail prefers the Workers-owned WorkResult.Error text and falls
-// back to the adapter error's message only when WorkResult carries none.
-// Neither Workers nor the adapter boundary establishes this text as free of
-// payloads, credentials, environment values, prompts, or raw provider
-// commands, so callers must pass the result through redactDetail before it
-// can reach the public FailureCause.Detail.
-func failureRawDetail(workResult workers.WorkResult, dispatchErr error) string {
-	if workResult.Error != "" {
-		return workResult.Error
-	}
-	return rawDetail(dispatchErr)
 }
 
 func rawDetail(err error) string {

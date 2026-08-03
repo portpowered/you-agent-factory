@@ -146,15 +146,17 @@ func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (
 		finalState = workersessions.StateCompleted
 	}
 
-	final := r.commitTerminal(req.ID, finalState, terminal)
-	r.logger.Info(
-		"worker session start terminal",
-		"sessionID", req.ID,
-		"attemptID", attemptID,
-		"outcome", string(finalState),
-		"state", string(finalState),
-		"cause", causeKindString(terminal.Cause),
-	)
+	final, committed := r.commitTerminal(req.ID, finalState, terminal)
+	if committed {
+		r.logger.Info(
+			"worker session start terminal",
+			"sessionID", req.ID,
+			"attemptID", attemptID,
+			"outcome", string(finalState),
+			"state", string(finalState),
+			"cause", causeKindString(terminal.Cause),
+		)
+	}
 
 	return workersessions.StartResult{Session: final}, nil
 }
@@ -196,19 +198,30 @@ func (r *registry) transitionToStarting(id string) (workersessions.Session, erro
 	return cloneSession(session), nil
 }
 
-// commitTerminal stores the exactly-once terminal outcome for req.ID and
-// returns a detached copy. Only the Start call that itself transitioned the
-// session to StateStarting ever reaches commitTerminal for that identity, so
-// no additional compare-and-swap is required for exactly-once commit.
-func (r *registry) commitTerminal(id string, state workersessions.State, result workersessions.TerminalResult) workersessions.Session {
+// commitTerminal stores the exactly-once terminal outcome for id and reports
+// whether this call is the one that committed it. The commit is conditional
+// on a non-terminal predecessor: if id is already in a terminal state (for
+// example because a duplicate or racing callback reaches commitTerminal for
+// the same identity), the existing terminal snapshot is left unchanged and
+// returned as-is, and committed reports false. This makes the terminal write
+// itself absorbing regardless of how many callers reach commitTerminal for
+// one identity, rather than relying solely on the current single-call Start
+// flow to make a second commit unreachable. Only the caller for which
+// committed is true may emit the terminal effect/log for this identity.
+func (r *registry) commitTerminal(id string, state workersessions.State, result workersessions.TerminalResult) (workersessions.Session, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	if existing, exists := r.sessions[id]; exists && existing.State.Terminal() {
+		return cloneSession(existing), false
+	}
+
 	session := r.sessions[id]
+	session.ID = id
 	session.State = state
 	session.Result = cloneTerminalResult(&result)
 	r.sessions[id] = session
-	return cloneSession(session)
+	return cloneSession(session), true
 }
 
 // cloneSession returns a detached copy of session: mutating the returned

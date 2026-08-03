@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
@@ -34,6 +35,52 @@ func TestStart_InvalidRequest_ReturnsTypedErrorAndMakesNoWorkersCall(t *testing.
 
 	if _, err := registry.Get(ctx, workersessions.GetRequest{ID: "worker-1"}); !errors.Is(err, workersessions.ErrSessionNotFound) {
 		t.Fatalf("Get() after invalid Start() = %v, want ErrSessionNotFound (no registry mutation)", err)
+	}
+}
+
+// TestStart_BlankNestedDispatchWorkstationName_RejectedBeforeEffects proves a
+// malformed resolved dispatch request (missing nested route) is rejected by
+// Start's own validation before any registry mutation or Workers call,
+// mirroring the identity invariant the Workers boundary itself enforces.
+func TestStart_BlankNestedDispatchWorkstationName_RejectedBeforeEffects(t *testing.T) {
+	execution := succeedingExecution()
+	registry := newRegistryWithExecution(execution)
+	ctx := context.Background()
+
+	req := validStartRequest("worker-1", "dispatch-1")
+	req.Execution.Execution.Dispatch.WorkstationName = "   "
+
+	if _, err := registry.Start(ctx, req); !errors.Is(err, workersessions.ErrInvalidExecutionRequest) {
+		t.Fatalf("Start() error = %v, want ErrInvalidExecutionRequest", err)
+	}
+	if execution.callCount() != 0 {
+		t.Fatalf("Start() with blank nested workstation name called Workers %d times, want 0", execution.callCount())
+	}
+	if _, err := registry.Get(ctx, workersessions.GetRequest{ID: "worker-1"}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("Get() after rejected Start() = %v, want ErrSessionNotFound (no registry mutation)", err)
+	}
+}
+
+// TestStart_MismatchedNestedDispatchWorkstationName_RejectedBeforeEffects
+// proves a resolved dispatch request whose nested route disagrees with the
+// top-level route is rejected before any registry mutation or Workers call,
+// instead of reaching Workers and being rejected there after effects.
+func TestStart_MismatchedNestedDispatchWorkstationName_RejectedBeforeEffects(t *testing.T) {
+	execution := succeedingExecution()
+	registry := newRegistryWithExecution(execution)
+	ctx := context.Background()
+
+	req := validStartRequest("worker-1", "dispatch-1")
+	req.Execution.Execution.Dispatch.WorkstationName = "other-route"
+
+	if _, err := registry.Start(ctx, req); !errors.Is(err, workersessions.ErrInvalidExecutionRequest) {
+		t.Fatalf("Start() error = %v, want ErrInvalidExecutionRequest", err)
+	}
+	if execution.callCount() != 0 {
+		t.Fatalf("Start() with mismatched nested workstation name called Workers %d times, want 0", execution.callCount())
+	}
+	if _, err := registry.Get(ctx, workersessions.GetRequest{ID: "worker-1"}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("Get() after rejected Start() = %v, want ErrSessionNotFound (no registry mutation)", err)
 	}
 }
 
@@ -372,7 +419,11 @@ func TestStart_FailedResultWithNonPanicAdapterError_MapsToAdapterFailureCause(t 
 	}
 }
 
-func TestStart_FailedResultWithBlankWorkResultError_FallsBackToAdapterErrorDetail(t *testing.T) {
+// TestStart_FailedResultWithBlankWorkResultError_UsesGenericAdapterFailureDetail
+// proves Detail never falls back to a raw adapter error message: with no
+// WorkResult.FailureMetadata available, Detail is the fixed generic
+// placeholder for the classified Kind, not the adapter error's own text.
+func TestStart_FailedResultWithBlankWorkResultError_UsesGenericAdapterFailureDetail(t *testing.T) {
 	adapterErr := errors.New("transport reset")
 	execution := &fakeExecution{
 		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
@@ -395,8 +446,40 @@ func TestStart_FailedResultWithBlankWorkResultError_FallsBackToAdapterErrorDetai
 	if got := result.Session.Result.Cause.Kind; got != workersessions.FailureCauseAdapterFailure {
 		t.Fatalf("Start() cause kind = %q, want ADAPTER_FAILURE", got)
 	}
-	if got := result.Session.Result.Cause.Detail; got != adapterErr.Error() {
-		t.Fatalf("Start() cause detail = %q, want fallback to adapter error %q", got, adapterErr.Error())
+	if got := result.Session.Result.Cause.Detail; got == adapterErr.Error() || got == "" {
+		t.Fatalf("Start() cause detail = %q, want a fixed generic placeholder, not the raw adapter error text", got)
+	}
+}
+
+// TestStart_FailedResultWithSensitivePromptOrCommandText_NeverExposesItInDetail
+// proves the exact review concern directly: raw WorkResult.Error/adapter
+// error text that looks like an ordinary sentence (no secret/token/path/URL
+// marker a blacklist could catch) containing a prompt or raw provider
+// command is still never attached to the public FailureCause.Detail, because
+// Detail is never built from that free-form text at all.
+func TestStart_FailedResultWithSensitivePromptOrCommandText_NeverExposesItInDetail(t *testing.T) {
+	sensitive := "codex exec summarize confidential acquisition memo for board review"
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			return workers.WorkstationDispatchResult{
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeFailed,
+					Error:      sensitive,
+				},
+			}, errors.New(sensitive)
+		},
+	}
+	registry := newRegistryWithExecution(execution)
+	ctx := context.Background()
+
+	result, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1"))
+	if err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+	if got := result.Session.Result.Cause.Detail; got == sensitive || strings.Contains(got, "confidential acquisition") {
+		t.Fatalf("Start() cause detail = %q, leaked raw prompt/command text", got)
 	}
 }
 

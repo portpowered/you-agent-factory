@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -118,5 +119,105 @@ func TestTransitionToStarting_UnreservedIdentity_ReturnsErrSessionNotStartable(t
 	r.mu.RUnlock()
 	if exists {
 		t.Fatal("transitionToStarting() on an unreserved identity must not create a session")
+	}
+}
+
+// TestCommitTerminal_AlreadyTerminalIdentity_IsAbsorbingAndDoesNotOverwrite
+// proves the review-flagged defect is fixed: a second commitTerminal call for
+// an identity that is already terminal never overwrites the first committed
+// outcome or its FailureCause, and reports it did not win the commit.
+func TestCommitTerminal_AlreadyTerminalIdentity_IsAbsorbingAndDoesNotOverwrite(t *testing.T) {
+	r := newTestRegistry(t)
+	r.reserveIfAbsent("worker-1")
+	if _, err := r.transitionToStarting("worker-1"); err != nil {
+		t.Fatalf("transitionToStarting() error = %v, want nil", err)
+	}
+
+	first := workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}
+	committedFirst, wonFirst := r.commitTerminal("worker-1", workersessions.StateCompleted, first)
+	if !wonFirst {
+		t.Fatal("first commitTerminal() committed = false, want true")
+	}
+	if committedFirst.State != workersessions.StateCompleted {
+		t.Fatalf("first commitTerminal() state = %q, want COMPLETED", committedFirst.State)
+	}
+
+	second := workersessions.TerminalResult{
+		Outcome: workersessions.TerminalOutcomeFailed,
+		Cause:   &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "late duplicate callback"},
+	}
+	committedSecond, wonSecond := r.commitTerminal("worker-1", workersessions.StateFailed, second)
+	if wonSecond {
+		t.Fatal("second commitTerminal() on an already-terminal identity committed = true, want false (absorbing)")
+	}
+	if committedSecond.State != workersessions.StateCompleted {
+		t.Fatalf("second commitTerminal() returned state = %q, want unchanged COMPLETED", committedSecond.State)
+	}
+	if committedSecond.Result == nil || committedSecond.Result.Outcome != workersessions.TerminalOutcomeCompleted || committedSecond.Result.Cause != nil {
+		t.Fatalf("second commitTerminal() returned result = %+v, want unchanged COMPLETED with nil Cause", committedSecond.Result)
+	}
+
+	got, err := r.Get(context.Background(), workersessions.GetRequest{ID: "worker-1"})
+	if err != nil {
+		t.Fatalf("Get() error = %v, want nil", err)
+	}
+	if got.State != workersessions.StateCompleted {
+		t.Fatalf("Get() after duplicate commitTerminal state = %q, want COMPLETED (unchanged)", got.State)
+	}
+}
+
+// TestCommitTerminal_ConcurrentCompetingOutcomes_OnlyOneWinsAndStateStaysAbsorbing
+// deterministically synchronizes several goroutines to reach commitTerminal
+// for the same identity at once with different, disagreeing outcomes and
+// causes. Exactly one may win the commit, and the resulting session must
+// remain a single valid, absorbing terminal snapshot no matter which
+// goroutine's outcome happened to win the race.
+func TestCommitTerminal_ConcurrentCompetingOutcomes_OnlyOneWinsAndStateStaysAbsorbing(t *testing.T) {
+	r := newTestRegistry(t)
+	r.reserveIfAbsent("worker-1")
+	if _, err := r.transitionToStarting("worker-1"); err != nil {
+		t.Fatalf("transitionToStarting() error = %v, want nil", err)
+	}
+
+	outcomes := []workersessions.TerminalResult{
+		{Outcome: workersessions.TerminalOutcomeCompleted},
+		{Outcome: workersessions.TerminalOutcomeFailed, Cause: &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "a"}},
+		{Outcome: workersessions.TerminalOutcomeFailed, Cause: &workersessions.FailureCause{Kind: workersessions.FailureCauseAdapterFailure, Detail: "b"}},
+	}
+	states := []workersessions.State{workersessions.StateCompleted, workersessions.StateFailed, workersessions.StateFailed}
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	wins := 0
+	ready := make(chan struct{})
+	wg.Add(len(outcomes))
+	for i := range outcomes {
+		go func(i int) {
+			defer wg.Done()
+			<-ready
+			_, committed := r.commitTerminal("worker-1", states[i], outcomes[i])
+			if committed {
+				mu.Lock()
+				wins++
+				mu.Unlock()
+			}
+		}(i)
+	}
+	close(ready)
+	wg.Wait()
+
+	if wins != 1 {
+		t.Fatalf("commitTerminal concurrent winners = %d, want exactly 1", wins)
+	}
+
+	got, err := r.Get(context.Background(), workersessions.GetRequest{ID: "worker-1"})
+	if err != nil {
+		t.Fatalf("Get() error = %v, want nil", err)
+	}
+	if err := got.Validate(); err != nil {
+		t.Fatalf("Get() after concurrent commitTerminal returned an invalid session: %v", err)
+	}
+	if !got.State.Terminal() {
+		t.Fatalf("Get() after concurrent commitTerminal state = %q, want a terminal state", got.State)
 	}
 }

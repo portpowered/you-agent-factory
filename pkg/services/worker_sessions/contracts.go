@@ -133,17 +133,32 @@ type StartRequest struct {
 
 // Validate reports whether req carries a non-empty stable identity and a
 // minimally well-formed resolved execution request: a named workstation
-// route and a non-empty attempt (dispatch) identity. Validate is pure and
-// does not mutate req, the registry, or call Workers.
+// route, a non-empty attempt (dispatch) identity, and a nested dispatch
+// workstation name that is non-empty and matches the top-level route. The
+// nested-name checks mirror the same dispatch identity invariant the Workers
+// boundary itself enforces (see validDispatch in
+// pkg/services/workers/internal/services/workstations/internal/service/service.go),
+// so Worker Sessions rejects a malformed resolved request before any
+// registry mutation or Workers call instead of allowing Workers to reject it
+// after effects have already happened. Validate is pure and does not mutate
+// req, the registry, or call Workers.
 func (req StartRequest) Validate() error {
 	if !validSessionID(req.ID) {
 		return ErrInvalidSessionID
 	}
-	if strings.TrimSpace(req.Execution.WorkstationName) == "" {
+	workstationName := strings.TrimSpace(req.Execution.WorkstationName)
+	if workstationName == "" {
 		return fmt.Errorf("%w: workstation name is required", ErrInvalidExecutionRequest)
 	}
 	if strings.TrimSpace(req.Execution.Execution.Dispatch.DispatchID) == "" {
 		return fmt.Errorf("%w: attempt (dispatch) id is required", ErrInvalidExecutionRequest)
+	}
+	nestedWorkstationName := strings.TrimSpace(req.Execution.Execution.Dispatch.WorkstationName)
+	if nestedWorkstationName == "" {
+		return fmt.Errorf("%w: nested dispatch workstation name is required", ErrInvalidExecutionRequest)
+	}
+	if nestedWorkstationName != workstationName {
+		return fmt.Errorf("%w: nested dispatch workstation name must match the top-level workstation name", ErrInvalidExecutionRequest)
 	}
 	return nil
 }
