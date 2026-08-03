@@ -5,6 +5,7 @@
 package service
 
 import (
+	"maps"
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -25,23 +26,33 @@ type Store struct {
 	topics              map[events.Topic]*topicState
 	maxRetainedPerTopic int
 	logger              logging.Logger
+	closed              bool
 }
 
-// topicState holds one topic's aggregate ordering, retained records, and
-// idempotency index. head is the position of the most recently accepted
-// record (0 when the topic has never accepted one) and advances only under
-// mu, in commit order, independent of retention: eviction may drop entries
-// from the front of records without ever resetting or renumbering head.
-// records is always contiguous in Position: records[i].ID.Position equals
-// the topic's earliest retained position plus i. identity maps each
-// accepted append's (sourceType, sourceID, sourceSequence, sourceEventID)
-// tuple to its originally accepted Record so a repeated append resolves to
-// the same Record regardless of whether that position is still retained.
+// topicState holds one topic's aggregate ordering, retained records,
+// idempotency index, and live subscriber registrations. head is the
+// position of the most recently accepted record (0 when the topic has never
+// accepted one) and advances only under mu, in commit order, independent of
+// retention: eviction may drop entries from the front of records without
+// ever resetting or renumbering head. records is always contiguous in
+// Position: records[i].ID.Position equals the topic's earliest retained
+// position plus i. identity maps each accepted append's (sourceType,
+// sourceID, sourceSequence, sourceEventID) tuple to its originally accepted
+// Record so a repeated append resolves to the same Record regardless of
+// whether that position is still retained. subscribers holds every
+// currently live registration keyed by an opaque per-topic id; Append offers
+// each newly committed record to every entry under the same lock that
+// commits it, and closed marks that this topic has been shut down (directly
+// via Store.Close, or pre-closed because the topic was first created after
+// the Store was already closed).
 type topicState struct {
-	mu       sync.Mutex
-	head     events.AggregateSequence
-	records  []events.Record
-	identity map[events.AppendIdentity]events.Record
+	mu          sync.Mutex
+	head        events.AggregateSequence
+	records     []events.Record
+	identity    map[events.AppendIdentity]events.Record
+	subscribers map[uint64]*liveSubscriber
+	nextSubID   uint64
+	closed      bool
 }
 
 // earliestLocked returns the oldest retained position for ts, or 0 when the
@@ -83,7 +94,10 @@ func NewWithRetention(maxRetainedPerTopic int, logger ...logging.Logger) *Store 
 // topic returns the topicState for t, creating it on first use. It takes the
 // store's read lock first so concurrent operations against already-known
 // topics never contend on the store-level lock; the write lock is only taken
-// to register a topic this Store has not seen before.
+// to register a topic this Store has not seen before. A topic created after
+// Close has already been called starts pre-closed, so a later Subscribe on
+// it observes DeliveryClosed instead of registering a live subscriber that
+// would never be shut down.
 func (st *Store) topic(t events.Topic) *topicState {
 	st.mu.RLock()
 	ts, ok := st.topics[t]
@@ -97,7 +111,56 @@ func (st *Store) topic(t events.Topic) *topicState {
 	if ts, ok = st.topics[t]; ok {
 		return ts
 	}
-	ts = &topicState{identity: make(map[events.AppendIdentity]events.Record)}
+	ts = &topicState{
+		identity:    make(map[events.AppendIdentity]events.Record),
+		subscribers: make(map[uint64]*liveSubscriber),
+		closed:      st.closed,
+	}
 	st.topics[t] = ts
 	return ts
+}
+
+// Close idempotently shuts down every topic this Store has ever created:
+// each active live subscriber observes DeliveryClosed (after draining any
+// record already buffered ahead of it) exactly once, and repeated or
+// concurrent calls to Close are safe no-ops once the first has taken effect.
+// Close performs no durable write; it does not reject later Append or Read
+// calls (that policy belongs to the canonical construction/shutdown wiring
+// added when Events is injected into the application lifecycle).
+func (st *Store) Close() {
+	st.mu.Lock()
+	if st.closed {
+		st.mu.Unlock()
+		return
+	}
+	st.closed = true
+	topics := make(map[events.Topic]*topicState, len(st.topics))
+	maps.Copy(topics, st.topics)
+	st.mu.Unlock()
+
+	for topic, ts := range topics {
+		ts.closeLocked(st, topic)
+	}
+	st.logStoreClosed()
+}
+
+// closeLocked marks ts closed and terminates every currently registered live
+// subscriber with DeliveryClosed exactly once, logging the topic-level
+// closure once it has taken effect. Safe to call more than once; only the
+// first call has any effect.
+func (ts *topicState) closeLocked(st *Store, topic events.Topic) {
+	ts.mu.Lock()
+	if ts.closed {
+		ts.mu.Unlock()
+		return
+	}
+	ts.closed = true
+	subs := ts.subscribers
+	ts.subscribers = make(map[uint64]*liveSubscriber)
+	ts.mu.Unlock()
+
+	for _, sub := range subs {
+		sub.terminate(events.DeliveryClosed)
+	}
+	st.logSubscribeTopicClosed(topic, len(subs))
 }

@@ -85,3 +85,78 @@ func (st *Store) logReadOutcome(req events.ReadRequest, result events.ReadResult
 	}
 	st.logger.Info("events read outcome", fields...)
 }
+
+// logSubscribeRejected records that a Subscribe call was rejected after its
+// starting cursor was evaluated against the topic (an unresolvable cursor
+// beyond the live head): safe topic/from/limit context plus the error
+// classification, never payload content.
+func (st *Store) logSubscribeRejected(req events.SubscribeRequest, err error) {
+	st.logger.Info("events subscribe outcome",
+		"topic", string(req.Topic),
+		"from", uint64(req.From.Position),
+		"limit", req.Limit,
+		"outcome", "rejected",
+		"error_class", classifySubscribeError(err),
+	)
+}
+
+// logSubscribeAccepted records that a Subscribe call was accepted: safe
+// topic/from/limit context only.
+func (st *Store) logSubscribeAccepted(req events.SubscribeRequest) {
+	st.logger.Info("events subscribe outcome",
+		"topic", string(req.Topic),
+		"from", uint64(req.From.Position),
+		"limit", req.Limit,
+		"outcome", "accepted",
+	)
+}
+
+// logSubscribeGap records that a new subscription's starting cursor named an
+// evicted position: safe topic/requested/earliest-retained/head facts, never
+// payload content.
+func (st *Store) logSubscribeGap(topic events.Topic, gap *events.GapFacts) {
+	st.logger.Info("events subscribe gap",
+		"topic", string(topic),
+		"requested", uint64(gap.Requested),
+		"earliest_retained", uint64(gap.EarliestRetained),
+		"head", uint64(gap.Head),
+	)
+}
+
+// logSubscribeBackpressure records that a live subscriber's bounded buffer
+// filled and the subscriber was terminated with DeliveryBackpressure: safe
+// topic context only, logged exactly once at the point of detection.
+func (st *Store) logSubscribeBackpressure(topic events.Topic) {
+	st.logger.Info("events subscribe backpressure", "topic", string(topic))
+}
+
+// logSubscribeCanceled records that a Subscription observation ended because
+// its context was canceled: safe topic context only.
+func (st *Store) logSubscribeCanceled(topic events.Topic) {
+	st.logger.Info("events subscribe canceled", "topic", string(topic))
+}
+
+// logSubscribeTopicClosed records that a topic's live subscribers were
+// terminated with DeliveryClosed: safe topic context and the number of
+// subscribers closed, logged exactly once per topic closure.
+func (st *Store) logSubscribeTopicClosed(topic events.Topic, subscriberCount int) {
+	st.logger.Info("events subscribe topic closed", "topic", string(topic), "subscriber_count", subscriberCount)
+}
+
+// logStoreClosed records the Store's own terminal shutdown outcome.
+func (st *Store) logStoreClosed() {
+	st.logger.Info("events store closed")
+}
+
+// classifySubscribeError maps a rejected Subscribe's error to a stable,
+// boundary-safe classification string, never err.Error() text.
+func classifySubscribeError(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, events.ErrUnresolvableCursor):
+		return "unresolvable_cursor"
+	default:
+		return "validation"
+	}
+}

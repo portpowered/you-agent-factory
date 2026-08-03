@@ -233,6 +233,158 @@ func TestRead_RejectedRequestLogsNothing(t *testing.T) {
 	}
 }
 
+func TestSubscribe_AcceptedLogsOutcomeWithoutPayload(t *testing.T) {
+	logger, calls := newCaptureLogger()
+	st := New(logger)
+
+	_, err := st.Subscribe(context.Background(), events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 10})
+	if err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+
+	if len(*calls) != 1 {
+		t.Fatalf("Subscribe() logged %d calls, want 1 (accepted outcome only): %+v", len(*calls), *calls)
+	}
+	if !hasKV((*calls)[0].kv, "outcome", "accepted") {
+		t.Fatalf("outcome log missing outcome=accepted: %+v", (*calls)[0].kv)
+	}
+}
+
+func TestSubscribe_UnresolvableCursorLogsRejectedOutcome(t *testing.T) {
+	logger, calls := newCaptureLogger()
+	st := New(logger)
+	ctx := context.Background()
+	appendOne(t, st, ctx, subscribeTestTopic, 1)
+	*calls = nil
+
+	_, err := st.Subscribe(ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic, Position: 99}, Limit: 10})
+	if !errors.Is(err, events.ErrUnresolvableCursor) {
+		t.Fatalf("Subscribe() error = %v, want ErrUnresolvableCursor", err)
+	}
+
+	if len(*calls) != 1 {
+		t.Fatalf("rejected Subscribe() logged %d calls, want 1: %+v", len(*calls), *calls)
+	}
+	if !hasKV((*calls)[0].kv, "outcome", "rejected") {
+		t.Fatalf("outcome log missing outcome=rejected: %+v", (*calls)[0].kv)
+	}
+	if !hasKV((*calls)[0].kv, "error_class", "unresolvable_cursor") {
+		t.Fatalf("outcome log missing error_class=unresolvable_cursor: %+v", (*calls)[0].kv)
+	}
+}
+
+func TestSubscribe_RejectedRequestLogsNothing(t *testing.T) {
+	logger, calls := newCaptureLogger()
+	st := New(logger)
+
+	_, err := st.Subscribe(context.Background(), events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 0})
+	if !errors.Is(err, events.ErrInvalidReadLimit) {
+		t.Fatalf("Subscribe() error = %v, want ErrInvalidReadLimit", err)
+	}
+	if len(*calls) != 0 {
+		t.Fatalf("rejected Subscribe() logged %d calls, want 0: %+v", len(*calls), *calls)
+	}
+}
+
+func TestSubscribe_GapLogsSafeFacts(t *testing.T) {
+	logger, calls := newCaptureLogger()
+	st := NewWithRetention(2, logger)
+	ctx := context.Background()
+	appendN(t, st, ctx, subscribeTestTopic, 5)
+	*calls = nil
+
+	_, err := st.Subscribe(ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic, Position: 1}, Limit: 10})
+	if err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+
+	var found bool
+	for _, call := range *calls {
+		if call.msg == "events subscribe gap" {
+			found = true
+			if !hasKV(call.kv, "earliest_retained", uint64(4)) {
+				t.Fatalf("gap log missing earliest_retained=4: %+v", call.kv)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("no gap log emitted: %+v", *calls)
+	}
+}
+
+func TestSubscribe_BackpressureLogsSafeTopicContextOnce(t *testing.T) {
+	logger, calls := newCaptureLogger()
+	st := New(logger)
+	ctx := context.Background()
+
+	sub, err := st.Subscribe(ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 1})
+	if err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+	*calls = nil
+
+	appendN(t, st, ctx, subscribeTestTopic, 5)
+
+	var backpressureLogs int
+	for _, call := range *calls {
+		if call.msg == "events subscribe backpressure" {
+			backpressureLogs++
+			if !hasKV(call.kv, "topic", string(subscribeTestTopic)) {
+				t.Fatalf("backpressure log missing topic: %+v", call.kv)
+			}
+		}
+	}
+	if backpressureLogs != 1 {
+		t.Fatalf("backpressure logged %d times, want exactly 1", backpressureLogs)
+	}
+
+	// Draining and repeated observation must not log backpressure again.
+	for range 5 {
+		sub.Next(ctx)
+	}
+	backpressureLogs = 0
+	for _, call := range *calls {
+		if call.msg == "events subscribe backpressure" {
+			backpressureLogs++
+		}
+	}
+	if backpressureLogs != 1 {
+		t.Fatalf("backpressure logged %d times after repeated Next(), want still exactly 1", backpressureLogs)
+	}
+}
+
+func TestSubscribe_CloseLogsTopicClosedAndStoreClosed(t *testing.T) {
+	logger, calls := newCaptureLogger()
+	st := New(logger)
+	ctx := context.Background()
+
+	if _, err := st.Subscribe(ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 10}); err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+	*calls = nil
+
+	st.Close()
+
+	var sawTopicClosed, sawStoreClosed bool
+	for _, call := range *calls {
+		switch call.msg {
+		case "events subscribe topic closed":
+			sawTopicClosed = true
+			if !hasKV(call.kv, "subscriber_count", 1) {
+				t.Fatalf("topic closed log missing subscriber_count=1: %+v", call.kv)
+			}
+		case "events store closed":
+			sawStoreClosed = true
+		}
+	}
+	if !sawTopicClosed {
+		t.Fatalf("no topic closed log emitted: %+v", *calls)
+	}
+	if !sawStoreClosed {
+		t.Fatalf("no store closed log emitted: %+v", *calls)
+	}
+}
+
 func TestValidAppendRequestPayloadNotJSONEncodedAsAnyOtherField(t *testing.T) {
 	// Guards the payload-leak assertion above: proves the fixture payload is
 	// distinct from every other fixture field so a false negative can't hide

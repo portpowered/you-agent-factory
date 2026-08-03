@@ -57,6 +57,7 @@ func (st *Store) Append(ctx context.Context, req events.AppendRequest) (result e
 	if len(ts.records) > st.maxRetainedPerTopic {
 		ts.records = ts.records[1:]
 	}
+	ts.notifySubscribersLocked(st, detached.Topic, stored)
 
 	result = events.AppendResult{Record: stored.Detached(), Outcome: events.AppendOutcomeAccepted}
 	return result, nil
