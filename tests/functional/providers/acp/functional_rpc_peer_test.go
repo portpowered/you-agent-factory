@@ -219,6 +219,12 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 		}
 		return p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": "functional ACP prompt failure"})
 	}
+	if p.mode == "cancelled-response" {
+		if err := p.update(`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"partial ACP answer before self-cancellation"}}`); err != nil {
+			return err
+		}
+		return p.respond(request.ID, json.RawMessage(`{"stopReason":"cancelled"}`))
+	}
 	for _, update := range []string{
 		`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"ACP root "}}`,
 		`{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"checking the Factory state"}}`,
