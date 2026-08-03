@@ -117,6 +117,35 @@ func TestRequestIdentityValidation(t *testing.T) {
 	}
 }
 
+func TestNewConnectionIDIsDistinctPerCall(t *testing.T) {
+	first := NewConnectionID()
+	second := NewConnectionID()
+
+	if first == "" || second == "" {
+		t.Fatalf("expected minted connection ids to be non-empty, got %q and %q", first, second)
+	}
+	if first == second {
+		t.Fatalf("expected distinct connection ids, got the same value %q twice", first)
+	}
+}
+
+func TestNewConnectionIDIsDistinctUnderConcurrentCalls(t *testing.T) {
+	const count = 100
+	ids := make(chan ConnectionID, count)
+	for range count {
+		go func() { ids <- NewConnectionID() }()
+	}
+
+	seen := make(map[ConnectionID]bool, count)
+	for range count {
+		id := <-ids
+		if seen[id] {
+			t.Fatalf("connection id %q minted more than once under concurrent calls", id)
+		}
+		seen[id] = true
+	}
+}
+
 func TestJSONRPCIDRejectsUnsupportedShapes(t *testing.T) {
 	cases := []struct {
 		name string
