@@ -201,3 +201,26 @@ func TestConnectionIDReflectsOnlyCorrelatedIdentities(t *testing.T) {
 		t.Fatalf("expected a minted identity to report itself as minted")
 	}
 }
+
+func TestWireIDReflectsOnlyCorrelatedIdentities(t *testing.T) {
+	wantID := NewStringJSONRPCID("req-7")
+	correlated, err := NewCorrelated(ConnectionID("conn-a"), wantID)
+	if err != nil {
+		t.Fatalf("NewCorrelated: %v", err)
+	}
+	gotID, ok := correlated.WireID()
+	if !ok {
+		t.Fatalf("expected a correlated identity to expose its wire id")
+	}
+	if !gotID.equal(wantID) {
+		t.Fatalf("WireID() = %+v, want %+v", gotID, wantID)
+	}
+
+	minted, err := NewMinted("permission-1")
+	if err != nil {
+		t.Fatalf("NewMinted: %v", err)
+	}
+	if _, ok := minted.WireID(); ok {
+		t.Fatalf("expected a minted identity to have no wire id")
+	}
+}

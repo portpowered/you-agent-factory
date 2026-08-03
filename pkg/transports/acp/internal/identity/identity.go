@@ -188,6 +188,16 @@ func (r RequestIdentity) IsMinted() bool {
 	return r.kind == requestIdentityKindMinted
 }
 
+// WireID returns the original JSON-RPC id this identity was correlated to,
+// and true only for a connection-correlated identity. A minted identity
+// never arrived as a JSON-RPC request and so has no wire id to return.
+func (r RequestIdentity) WireID() (JSONRPCID, bool) {
+	if r.kind != requestIdentityKindCorrelated {
+		return JSONRPCID{}, false
+	}
+	return r.jsonrpcID, true
+}
+
 type requestIdentityWire struct {
 	Kind         string          `json:"kind"`
 	ConnectionID string          `json:"connectionId,omitempty"`
