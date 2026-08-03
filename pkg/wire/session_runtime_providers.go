@@ -851,6 +851,7 @@ func provideWorkersRuntimeFactory(
 		modelsScope models.RuntimeScopeRef,
 		providerCommandRunner workers.CommandRunner,
 		scriptCommandRunner workers.CommandRunner,
+		progressPublisher workers.ProgressPublisher,
 		allocator workers.PTYAllocator,
 		logger *zap.Logger,
 		verbose bool,
@@ -876,6 +877,9 @@ func provideWorkersRuntimeFactory(
 		}
 		if allocator == nil {
 			allocator = defaultAllocator
+		}
+		if progressPublisher == nil {
+			progressPublisher = func(workers.ProgressFragment) {}
 		}
 		if configurator, ok := providersService.(providers.ACPConfiguration); ok {
 			if configuredErr := configurator.ConfigureACPIntegrations(context.Background(), projectACPIntegrations(acpIntegrations)); configuredErr != nil {
@@ -906,6 +910,7 @@ func provideWorkersRuntimeFactory(
 			modelsScope,
 			providerCommandRunner,
 			scriptCommandRunner,
+			progressPublisher,
 			allocator,
 			logger,
 			verbose,

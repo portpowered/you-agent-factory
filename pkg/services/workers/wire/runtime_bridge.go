@@ -31,6 +31,7 @@ func NewRuntimeWithSelection(
 	modelsScope models.RuntimeScopeRef,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,
+	progressPublisher workers.ProgressPublisher,
 	allocator workers.PTYAllocator,
 	logger *zap.Logger,
 	verbose bool,
@@ -69,6 +70,7 @@ func NewRuntimeWithSelection(
 		modelsScope,
 		providerCommandRunner,
 		scriptCommandRunner,
+		progressPublisher,
 		allocator,
 		logger,
 		verbose,
@@ -100,6 +102,20 @@ func NewRuntimeWithSelection(
 		providerRegistry,
 		providerRegistryRebinder,
 	)
+}
+
+// NewSessionBuildRuntime returns an independently constructed per-session-build
+// Workers runtime with its final provider/script command runners and progress
+// publisher supplied at construction. RuntimeService itself exposes no
+// supported operation that replaces its constructed dependencies; this
+// constructs a new, independent instance instead.
+func NewSessionBuildRuntime(
+	base workers.RuntimeService,
+	providerRunner workers.CommandRunner,
+	scriptRunner workers.CommandRunner,
+	progressPublisher workers.ProgressPublisher,
+) (workers.RuntimeService, error) {
+	return workersinternal.NewSessionBuildRuntime(base, providerRunner, scriptRunner, progressPublisher)
 }
 
 // BuildRuntimeExecutors invokes the concrete Workers runtime implementation.

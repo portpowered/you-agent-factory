@@ -5,16 +5,9 @@ import (
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
-	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
-	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
 )
 
 func buildExecutionFactories(
@@ -52,52 +45,128 @@ func buildExecutionFactories(
 	return scriptFactory, providerRunner, scriptRunner, nil
 }
 
-// WithCommandRunners returns an inert copy whose executor factories use the
-// supplied runtime-specific wrappers. Nil preserves the existing edge.
-func (s *Service) WithCommandRunners(providerRunner, scriptRunner workers.CommandRunner) (workers.RuntimeService, error) {
+// newSessionBuildRuntime constructs an independent Workers runtime for one
+// Factory Session build from base's own session-scoped construction
+// collaborators, with its own final provider/script command runners and
+// progress publisher supplied directly at construction. Nil arguments
+// preserve base's own value. Unlike the removed rebuiltForBuild, this calls
+// the real constructor with final dependencies instead of cloning and
+// mutating an existing instance: base's own fields are never touched, the
+// returned Service is independently immutable for its own lifetime, and it
+// naturally receives its own independent workstation pool the same way any
+// freshly constructed runtime does. Freshly rebound Providers services are
+// added to base's own shared lifecycle sink so every session-build
+// activation over one Factory Session still closes together, exactly once,
+// at session close -- the same accumulate-and-close-once semantics the
+// removed clone-based seam relied on.
+func (s *Service) newSessionBuildRuntime(
+	providerRunner, scriptRunner workers.CommandRunner,
+	progressPublisher workers.ProgressPublisher,
+) (*Service, error) {
 	if s == nil || s.scriptFactory == nil {
 		return nil, fmt.Errorf("construct Worker runtime services: base service is required")
 	}
-	clone := *s
-	var err error
+	resolvedProviderRunner := s.providerCommandRunner
+	providerCommandInjected := s.providerCommandInjected
+	providersService := s.providers
+	providerRegistry := s.providerRegistry
 	if providerRunner != nil {
-		clone.providerCommandRunner = providerRunner
-		clone.providerCommandInjected = true
+		resolvedProviderRunner = providerRunner
+		providerCommandInjected = true
 		reboundRegistry, reboundProviders, err := rebindProviderRegistry(s.providerRegistry, providerRunner, s.providerRegistryRebinder)
 		if err != nil {
 			return nil, err
 		}
-		if err := applyReboundProviderRegistry(&clone, reboundRegistry, reboundProviders); err != nil {
-			return nil, err
+		if reboundRegistry != nil {
+			providerRegistry = reboundRegistry
 		}
-		clone.providerLifecycles.Add(reboundProviders)
+		if reboundProviders != nil {
+			providersService = reboundProviders
+		}
 	}
+	resolvedScriptRunner := s.scriptCommandRunner
+	scriptCommandInjected := s.scriptCommandInjected
 	if scriptRunner != nil {
-		clone.scriptFactory, err = s.scriptFactory.WithCommandRunner(scriptRunner)
-		if err != nil {
-			return nil, err
-		}
-		clone.scriptCommandRunner = scriptRunner
-		clone.scriptCommandInjected = true
+		resolvedScriptRunner = scriptRunner
+		scriptCommandInjected = true
 	}
-	// Each opened Factory Runtime owns an independent workstation lifecycle.
-	// Sharing the process-level pool would couple route admission, cancellation,
-	// and terminal stop state across otherwise separate Factory Sessions.
-	clone.Root = clone.Root.ReplaceWorkstations(workstationswire.NewService(logging.NewZapLogger(s.logger, s.verbose)))
-	clone.executorBuilder = rebuildExecutorBuilder(
-		s.executorBuilder,
-		clone.providers,
-		clone.scriptFactory,
-		clone.interpolation,
-		clone.executionPolicy,
-		clone.factoryDocs,
-		clone.worktreePreparer,
-		clone.agentRunHarness,
-		clone.retryRandom,
-		clone.workstationFiles,
-		clone.decisionEnvelopes,
+	resolvedProgressPublisher := s.progressPublisher
+	if progressPublisher != nil {
+		resolvedProgressPublisher = progressPublisher
+	}
+	built, err := NewRuntimeWithSelection(
+		s.sessions,
+		s.models,
+		providersService,
+		s.modelsScope,
+		resolvedProviderRunner,
+		resolvedScriptRunner,
+		resolvedProgressPublisher,
+		s.allocator,
+		s.logger,
+		s.verbose,
+		s.factoryRunnerID,
+		s.runWorktree,
+		s.invocationSkipPermissionsOverride,
+		s.providerOverride,
+		s.clock,
+		s.processEnvironment,
+		s.currentWorkingDirectory,
+		nil,
+		s.interpolation,
+		s.executionPolicy,
+		s.factoryDocs,
+		s.resolveSymlinks,
+		s.executableLocator,
+		s.executableInspector,
+		s.executableFiles,
+		s.operatingSystem,
+		s.worktreePreparer,
+		s.agentRunHarness,
+		s.retryRandom,
+		s.workstationFiles,
+		s.temporaryFiles,
+		s.decisionEnvelopes,
+		providerCommandInjected,
+		scriptCommandInjected,
+		false,
+		providerRegistry,
+		s.providerRegistryRebinder,
 	)
-	return &clone, nil
+	if err != nil {
+		return nil, err
+	}
+	runtime, ok := built.(*Service)
+	if !ok || runtime == nil {
+		return nil, fmt.Errorf("construct Worker runtime services: unexpected runtime implementation")
+	}
+	if s.providerLifecycles != nil {
+		runtime.providerLifecycles = s.providerLifecycles
+	}
+	if providerRunner != nil && providersService != s.providers {
+		runtime.providerLifecycles.Add(providersService)
+	}
+	return runtime, nil
+}
+
+// NewSessionBuildRuntime returns an independently constructed Workers runtime
+// for one Factory Session build, with its final provider/script command
+// runners and progress publisher supplied at construction rather than
+// replaced on an existing instance. It is the sole surviving construction
+// path for per-session-build runner/publisher selection, kept off the public
+// RuntimeService contract and reachable only through the Workers wire
+// boundary.
+func NewSessionBuildRuntime(
+	base workers.RuntimeService,
+	providerRunner workers.CommandRunner,
+	scriptRunner workers.CommandRunner,
+	progressPublisher workers.ProgressPublisher,
+) (workers.RuntimeService, error) {
+	service, ok := base.(*Service)
+	if !ok || service == nil {
+		return nil, fmt.Errorf("Workers runtime service has an unsupported implementation")
+	}
+	return service.newSessionBuildRuntime(providerRunner, scriptRunner, progressPublisher)
 }
 
 func serviceCommandClock(s *Service) workers.Clock {
@@ -107,61 +176,6 @@ func serviceCommandClock(s *Service) workers.Clock {
 		}
 		return time.Now()
 	})
-}
-
-func rebuildExecutorBuilder(
-	current workerconstruction.Builder,
-	providersService providers.Service,
-	scriptFactory *workerexecutor.ScriptFactory,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
-	factoryDocs workers.FactoryDocsLoader,
-	worktreePreparer workers.FactoryWorktreePreparer,
-	agentRunHarness workeragentrun.HarnessAdapter,
-	retryRandom platformrandom.Source,
-	workstationFiles platformfilesystem.ReadFileInspector,
-	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
-) workerconstruction.Builder {
-	if existing, ok := current.(*workerconstruction.Service); ok {
-		return existing.WithExecutionFactories(providersService, scriptFactory)
-	}
-	return workerconstruction.New(
-		providersService,
-		scriptFactory,
-		interpolation,
-		executionPolicy,
-		factoryDocs,
-		worktreePreparer,
-		agentRunHarness,
-		retryRandom,
-		workstationFiles,
-		decisionEnvelopes,
-	)
-}
-
-// WithProgressPublisher returns a runtime-specific copy that publishes
-// provider subprocess progress. An explicitly injected provider runner always
-// wins over the generated progress wrapper.
-func (s *Service) WithProgressPublisher(
-	runner workers.CommandRunner,
-	_ workers.ProgressPublisher,
-	_ bool,
-	_ logging.Logger,
-) (workers.RuntimeService, error) {
-	if s == nil {
-		return nil, fmt.Errorf("Worker execution service is required")
-	}
-	if s.ProviderCommandInjected() {
-		return s, nil
-	}
-	if runner == nil {
-		return s, nil
-	}
-	return s.WithCommandRunners(runner, nil)
-}
-
-func (s *Service) ProviderCommandInjected() bool {
-	return s != nil && s.providerCommandInjected
 }
 
 func (s *Service) ProviderCommandRunner() workers.CommandRunner {

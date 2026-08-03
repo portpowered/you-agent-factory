@@ -37,6 +37,7 @@ type Service struct {
 	executorBuilder                   workerconstruction.Builder
 	providerCommandRunner             workers.CommandRunner
 	scriptCommandRunner               workers.CommandRunner
+	progressPublisher                 workers.ProgressPublisher
 	providerCommandInjected           bool
 	scriptCommandInjected             bool
 	providerLifecycles                *ownedProviderLifecycles
@@ -60,6 +61,11 @@ type Service struct {
 	workstationFiles                  platformfilesystem.ReadFileInspector
 	temporaryFiles                    platformfilesystem.TemporaryFileSystem
 	executableLocator                 platformprocess.ExecutableLocator
+	allocator                         workers.PTYAllocator
+	resolveSymlinks                   workers.ResolveExecutableSymlinks
+	executableInspector               platformfilesystem.PathInspector
+	executableFiles                   platformfilesystem.ReadOpener
+	operatingSystem                   workers.OperatingSystem
 	providerRegistry                  workers.ProviderRegistry
 	providerRegistryRebinder          ProviderRegistryRebinder
 	agentDispatchUsesRegisteredRunner bool
@@ -141,6 +147,7 @@ func New(
 	providersService providers.Service,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,
+	progressPublisher workers.ProgressPublisher,
 	agyPTYAllocator workers.PTYAllocator,
 	logger *zap.Logger,
 	verbose bool,
@@ -176,6 +183,9 @@ func New(
 	}
 	if providersService == nil && providerOverride == nil {
 		return nil, fmt.Errorf("construct Worker execution service: Providers service is required")
+	}
+	if progressPublisher == nil {
+		return nil, fmt.Errorf("construct Worker execution service: progress publisher is required")
 	}
 	if logger == nil {
 		return nil, fmt.Errorf("construct Worker execution service: logger is required")
@@ -233,6 +243,7 @@ func New(
 		executorBuilder:                   executorBuilder,
 		providerCommandRunner:             providerRunner,
 		scriptCommandRunner:               scriptRunner,
+		progressPublisher:                 progressPublisher,
 		providerCommandInjected:           providerCommandRunner != nil,
 		scriptCommandInjected:             scriptCommandRunner != nil,
 		logger:                            logger,
@@ -255,6 +266,11 @@ func New(
 		workstationFiles:                  workstationFiles,
 		temporaryFiles:                    temporaryFiles,
 		executableLocator:                 executableLocator,
+		allocator:                         agyPTYAllocator,
+		resolveSymlinks:                   resolveSymlinks,
+		executableInspector:               executableInspector,
+		executableFiles:                   executableFiles,
+		operatingSystem:                   operatingSystem,
 	}, nil
 }
 
@@ -388,7 +404,7 @@ func (s *Service) BuildModelInvocationExecutor(runtimeCfg interfaces.RuntimeConf
 		runtimeCfg, workerName, s.factoryRunnerID, workflowContext,
 		logging.NewZapLogger(s.logger, s.verbose),
 		s.invocationSkipPermissionsOverride, s.providerOverride,
-		nil, nil, nil, nil, s.clock, s.processEnvironment, s.currentWorkingDirectory,
+		s.progressPublisher, nil, nil, nil, s.clock, s.processEnvironment, s.currentWorkingDirectory,
 		s.runtimeRunnerDecorators(runtimeCfg, factoryCfg, nil, s.clock, s.providerOverride == nil, nil),
 	)
 	if err != nil {
