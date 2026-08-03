@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"sync"
 	"testing"
 
 	acpsdk "github.com/coder/acp-go-sdk"
@@ -264,14 +265,69 @@ func TestHandleSessionPromptFactoryCommandFailureNeverLeaksRawValueOrRoot(t *tes
 	}
 }
 
-// TestHandleSessionPromptNonCommandContentFallsThroughToMethodNotFound
-// proves ordinary prompt content -- anything not an exact "/factory
-// <value>" command attempt -- still receives method-not-found, exactly the
-// behavior "session/prompt" had before this command was recognized: this
-// story adds only the "/factory" fallback, not general prompt-turn
-// admission or Factory invocation.
-func TestHandleSessionPromptNonCommandContentFallsThroughToMethodNotFound(t *testing.T) {
+// TestHandleSessionPromptNonCommandContentAdmitsOneVersionGuardedTurn proves
+// ordinary prompt content -- anything not an exact "/factory <value>"
+// command attempt -- now reads the addressed Chat Session and calls its
+// canonical StartTurn exactly once with the full request identity, the real
+// session id, and the version observed from that read, and never reaches
+// the "/factory" changeTarget path or the Factory target catalog at all.
+// Downstream Factory dispatch is not yet implemented, so admission success
+// still reports a bounded (non-method-not-found) internal error rather than
+// fabricated success.
+func TestHandleSessionPromptNonCommandContentAdmitsOneVersionGuardedTurn(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project")}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	server := newTestServer(chatSessions, catalog, "/home/operator")
+
+	connID := identity.NewConnectionID()
+	env := numberIdentityEnvelope(t, connID, 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "hello there"))
+
+	result, rpcErr := server.handleSessionPrompt(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure: Factory dispatch is not yet implemented")
+	}
+	if rpcErr.Code == -32601 {
+		t.Fatal("error code = method-not-found (-32601), want ordinary prompt content to be admitted, not rejected as unsupported")
+	}
+	if result != nil {
+		t.Fatalf("handleSessionPrompt() result = %q, want nil", result)
+	}
+
+	if !chatSessions.getSessionCalled {
+		t.Fatal("GetSession was not called, want the addressed Chat Session to be read before admission")
+	}
+	if !chatSessions.startTurnCalled {
+		t.Fatal("StartTurn was not called, want exactly one version-guarded turn admission")
+	}
+	if chatSessions.setTargetCalled {
+		t.Fatal("SetTarget was called, want no target change for ordinary prompt content")
+	}
+	if len(catalog.calls) != 0 {
+		t.Fatalf("catalog resolved %d times, want 0 for ordinary prompt content", len(catalog.calls))
+	}
+
+	wantIdentity := chatsessions.RequestIdentity{
+		Kind:            chatsessions.RequestIdentityKindJSONRPCNumber,
+		ConnectionID:    string(connID),
+		JSONRPCNumberID: "1",
+	}
+	if chatSessions.startTurnReq.RequestID != wantIdentity {
+		t.Fatalf("StartTurn RequestID = %+v, want %+v", chatSessions.startTurnReq.RequestID, wantIdentity)
+	}
+	if chatSessions.startTurnReq.SessionID != "session-1" {
+		t.Fatalf("StartTurn SessionID = %q, want session-1", chatSessions.startTurnReq.SessionID)
+	}
+	if chatSessions.startTurnReq.ExpectedVersion != 3 {
+		t.Fatalf("StartTurn ExpectedVersion = %d, want the observed session version 3", chatSessions.startTurnReq.ExpectedVersion)
+	}
+}
+
+// TestHandleSessionPromptUnknownSessionRejectsWithNoStartTurnCall proves an
+// unknown session (GetSession's *chatsessions.NotFoundError) is rejected
+// before StartTurn is ever called, so no Factory effect can follow.
+func TestHandleSessionPromptUnknownSessionRejectsWithNoStartTurnCall(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{getSessionErr: &chatsessions.NotFoundError{Value: "Session", ID: "session-1"}}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
 	server := newTestServer(chatSessions, catalog, "/home/operator")
 
@@ -279,17 +335,155 @@ func TestHandleSessionPromptNonCommandContentFallsThroughToMethodNotFound(t *tes
 		promptTextParams("session-1", "hello there"))
 
 	result, rpcErr := server.handleSessionPrompt(context.Background(), env)
-	if rpcErr == nil || rpcErr.Code != -32601 {
-		t.Fatalf("error = %+v, want method-not-found (-32601) for non-command prompt content", rpcErr)
+	if rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a rejection for an unknown session")
+	}
+	if result != nil {
+		t.Fatalf("handleSessionPrompt() result = %q, want nil on rejection", result)
+	}
+	if chatSessions.startTurnCalled {
+		t.Fatal("StartTurn was called, want no admission for an unknown session")
+	}
+}
+
+// TestHandleSessionPromptStaleVersionRejectsWithProtocolSafeClassification
+// proves a stale expected version (StartTurn's *chatsessions.ConflictError)
+// is rejected with a bounded, protocol-safe classification.
+func TestHandleSessionPromptStaleVersionRejectsWithProtocolSafeClassification(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project"),
+		startTurnErr:     &chatsessions.ConflictError{Value: "Session", ID: "session-1", Expected: 3, Actual: 4},
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	server := newTestServer(chatSessions, catalog, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "hello there"))
+
+	result, rpcErr := server.handleSessionPrompt(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a rejection for a stale expected version")
+	}
+	if result != nil {
+		t.Fatalf("handleSessionPrompt() result = %q, want nil on rejection", result)
+	}
+}
+
+// TestHandleSessionPromptBusyRejectsSequentialAndConcurrentAdmission proves
+// that once a session has a non-terminal active turn, StartTurn's
+// *chatsessions.BusyError classifies as a bounded protocol-safe rejection
+// with no Factory effect, whether observed from a second sequential prompt
+// or from concurrent prompts racing against the same busy session.
+func TestHandleSessionPromptBusyRejectsSequentialAndConcurrentAdmission(t *testing.T) {
+	busyErr := &chatsessions.BusyError{Value: "Session", ID: "session-1", ActiveTurnID: "turn-1", ActiveTurnState: chatsessions.TurnStateAdmitted}
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project"),
+		startTurnErr:     busyErr,
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	server := newTestServer(chatSessions, catalog, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "hello there"))
+
+	result, rpcErr := server.handleSessionPrompt(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a rejection for a busy session")
+	}
+	if result != nil {
+		t.Fatalf("handleSessionPrompt() result = %q, want nil on rejection", result)
+	}
+
+	var wg sync.WaitGroup
+	errs := make([]*acpsdk.RequestError, 8)
+	for i := range errs {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			concurrentEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+				promptTextParams("session-1", "hello again"))
+			_, errs[i] = server.handleSessionPrompt(context.Background(), concurrentEnv)
+		}(i)
+	}
+	wg.Wait()
+	for i, e := range errs {
+		if e == nil {
+			t.Fatalf("concurrent handleSessionPrompt() call %d error = nil, want a rejection for a busy session", i)
+		}
+	}
+}
+
+// TestHandleSessionPromptDuplicateDeliveryRejectsSecondCall proves that
+// re-delivering the exact same request (same connection, same wire id, same
+// content) against an already-busy session is rejected the same way any
+// other busy admission attempt is, with no additional Factory effect.
+func TestHandleSessionPromptDuplicateDeliveryRejectsSecondCall(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project"),
+		startTurnErr:     &chatsessions.BusyError{Value: "Session", ID: "session-1", ActiveTurnID: "turn-1", ActiveTurnState: chatsessions.TurnStateAdmitted},
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	server := newTestServer(chatSessions, catalog, "/home/operator")
+
+	connID := identity.NewConnectionID()
+	env := numberIdentityEnvelope(t, connID, 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "hello there"))
+
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr == nil {
+		t.Fatal("first handleSessionPrompt() error = nil, want a rejection")
+	}
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr == nil {
+		t.Fatal("duplicate handleSessionPrompt() error = nil, want the redelivered request rejected the same way")
+	}
+	if chatSessions.startTurnReq.RequestID.ConnectionID != string(connID) {
+		t.Fatalf("StartTurn RequestID.ConnectionID = %q, want %q", chatSessions.startTurnReq.RequestID.ConnectionID, connID)
+	}
+}
+
+// TestHandleSessionPromptEqualWireIDsAcrossConnectionsRemainDistinct proves
+// the same bare JSON-RPC id (1) received on two different connections
+// converts to two distinct chatsessions.RequestIdentity values when
+// admitting an ordinary prompt turn, matching "session/new"'s existing
+// identity-collision-safety guarantee.
+func TestHandleSessionPromptEqualWireIDsAcrossConnectionsRemainDistinct(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project")}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	server := newTestServer(chatSessions, catalog, "/home/operator")
+
+	firstConn := identity.NewConnectionID()
+	firstEnv := numberIdentityEnvelope(t, firstConn, 1, acpsdk.AgentMethodSessionPrompt, promptTextParams("session-1", "hello there"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), firstEnv); rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want the bounded not-yet-implemented rejection")
+	}
+	firstIdentity := chatSessions.startTurnReq.RequestID
+
+	secondConn := identity.NewConnectionID()
+	secondEnv := numberIdentityEnvelope(t, secondConn, 1, acpsdk.AgentMethodSessionPrompt, promptTextParams("session-1", "hello there"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), secondEnv); rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want the bounded not-yet-implemented rejection")
+	}
+	secondIdentity := chatSessions.startTurnReq.RequestID
+
+	if firstIdentity == secondIdentity {
+		t.Fatalf("wire id 1 on two different connections converted to the same RequestIdentity %+v", firstIdentity)
+	}
+}
+
+// TestHandleSessionPromptWithoutCollaboratorsReportsBoundedFailure proves an
+// ordinary prompt against a Server with no chatSessions collaborator
+// configured reports a bounded internal failure rather than panicking or
+// dispatching a Factory effect.
+func TestHandleSessionPromptWithoutCollaboratorsReportsBoundedFailure(t *testing.T) {
+	server := New(nil, nil, nil, nil)
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "hello there"))
+
+	result, rpcErr := server.handleSessionPrompt(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure when collaborators are unset")
 	}
 	if result != nil {
 		t.Fatalf("handleSessionPrompt() result = %q, want nil", result)
-	}
-	if chatSessions.getSessionCalled || chatSessions.setTargetCalled || chatSessions.startTurnCalled {
-		t.Fatal("a Chat Sessions call was made, want no effect for non-command prompt content")
-	}
-	if len(catalog.calls) != 0 {
-		t.Fatalf("catalog resolved %d times, want 0 for non-command prompt content", len(catalog.calls))
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,11 +19,16 @@ import (
 )
 
 // fakeChatSessionsService is a minimal chatsessions.Service test double.
-// CreateSession, GetSession, and SetTarget are configurable and tracked --
-// the methods this package's session/new and session/set_config_option
-// handlers actually call. Every other method fails loudly: neither handler
-// calls them, and a call to one would itself be a defect worth catching.
+// CreateSession, GetSession, SetTarget, and StartTurn are configurable and
+// tracked -- the methods this package's session/new,
+// session/set_config_option, and session/prompt handlers actually call.
+// Every other method fails loudly: no handler calls them, and a call to one
+// would itself be a defect worth catching. mu guards every field so the
+// fake is safe under the concurrent/duplicate-delivery admission tests that
+// call it from multiple goroutines against the same instance.
 type fakeChatSessionsService struct {
+	mu sync.Mutex
+
 	createCalled bool
 	created      chatsessions.CreateSessionRequest
 	createErr    error
@@ -39,11 +45,16 @@ type fakeChatSessionsService struct {
 	setTargetErr    error
 
 	startTurnCalled bool
+	startTurnReq    chatsessions.StartTurnRequest
+	startTurnResult chatsessions.StartTurnResult
+	startTurnErr    error
 }
 
 var _ chatsessions.Service = (*fakeChatSessionsService)(nil)
 
 func (f *fakeChatSessionsService) CreateSession(_ context.Context, req chatsessions.CreateSessionRequest) (chatsessions.CreateSessionResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.createCalled = true
 	f.created = req
 	if f.createErr != nil {
@@ -65,6 +76,8 @@ func (f *fakeChatSessionsService) CreateSession(_ context.Context, req chatsessi
 }
 
 func (f *fakeChatSessionsService) GetSession(_ context.Context, req chatsessions.GetSessionRequest) (chatsessions.GetSessionResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.getSessionCalled = true
 	f.getSessionReq = req
 	if f.getSessionErr != nil {
@@ -74,6 +87,8 @@ func (f *fakeChatSessionsService) GetSession(_ context.Context, req chatsessions
 }
 
 func (f *fakeChatSessionsService) SetTarget(_ context.Context, req chatsessions.SetTargetRequest) (chatsessions.SetTargetResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.setTargetCalled = true
 	f.setTargetReq = req
 	if f.setTargetErr != nil {
@@ -82,9 +97,15 @@ func (f *fakeChatSessionsService) SetTarget(_ context.Context, req chatsessions.
 	return f.setTargetResult, nil
 }
 
-func (f *fakeChatSessionsService) StartTurn(context.Context, chatsessions.StartTurnRequest) (chatsessions.StartTurnResult, error) {
+func (f *fakeChatSessionsService) StartTurn(_ context.Context, req chatsessions.StartTurnRequest) (chatsessions.StartTurnResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.startTurnCalled = true
-	return chatsessions.StartTurnResult{}, errors.New("fakeChatSessionsService: StartTurn not implemented")
+	f.startTurnReq = req
+	if f.startTurnErr != nil {
+		return chatsessions.StartTurnResult{}, f.startTurnErr
+	}
+	return f.startTurnResult, nil
 }
 
 func (f *fakeChatSessionsService) AdvanceTurn(context.Context, chatsessions.AdvanceTurnRequest) (chatsessions.AdvanceTurnResult, error) {

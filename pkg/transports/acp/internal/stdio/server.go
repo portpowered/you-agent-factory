@@ -2,17 +2,19 @@
 // caller-owned stream serving, one-connection lifecycle, connection-scoped
 // identity assignment, newline-delimited JSON-RPC framing and dispatch for
 // the "initialize", "session/new", and "session/set_config_option" methods,
-// plus the "/factory <value>" fallback command recognized within
-// "session/prompt" (final-proposal.md §3), protocol-safe rejection of
-// malformed input, unsupported methods, and unsupported protocol versions,
-// and deterministic termination on clean EOF, context cancellation, a
-// partial trailing frame, or a writer failure. "session/prompt" content
-// other than the exact "/factory <value>" command -- including every other
-// deferred ACP session and prompt behavior -- is not yet implemented by
-// this transport and receives method-not-found rather than being
-// dispatched to any effect. It is internal to pkg/transports/acp; callers
-// use the package root's exported operations instead of this package
-// directly.
+// plus "session/prompt" -- both the "/factory <value>" fallback command
+// recognized within it (final-proposal.md §3) and, for every other
+// (genuine, non-command) prompt, admission of exactly one version-guarded
+// Chat turn against the canonical Chat Sessions authority -- protocol-safe
+// rejection of malformed input, unsupported methods, and unsupported
+// protocol versions, and deterministic termination on clean EOF, context
+// cancellation, a partial trailing frame, or a writer failure. An admitted
+// ordinary prompt turn's downstream Factory Session dispatch and terminal
+// response mapping are not yet implemented by this transport slice and
+// report a bounded internal error rather than fabricated success; every
+// other deferred ACP session and prompt behavior continues to receive
+// method-not-found. It is internal to pkg/transports/acp; callers use the
+// package root's exported operations instead of this package directly.
 package stdio
 
 import (
@@ -52,8 +54,8 @@ var errNullInitializeParams = errors.New("acp: initialize params must not be nul
 // supplies for that call.
 //
 // chatSessions and catalog are the canonical Chat Sessions collaborators
-// "session/new", "session/set_config_option", and the "/factory" fallback
-// command dispatch to; resolveHomeDir
+// "session/new", "session/set_config_option", the "/factory" fallback
+// command, and ordinary prompt turn admission dispatch to; resolveHomeDir
 // supplies the operator home directory used to derive the Operator Settings
 // document path and Factory discovery roots for a catalog resolution. Any of
 // the three may be nil, in which case a dispatched method reports a bounded
