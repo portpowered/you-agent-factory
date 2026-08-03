@@ -41,8 +41,13 @@ type Store struct {
 // a real event stream. attachments holds every currently connected
 // Attachment keyed by its own ID; it is independent of session, episodes,
 // and turns -- attaching or detaching one connection never reads or writes
-// any of those fields. control-intent state is added by a later story as
-// needed.
+// any of those fields. controls holds every ControlIntent ever requested for
+// this session, keyed by its own RequestIdentity -- RequestIdentity is a
+// plain comparable struct with Kind as an explicit discriminator, so equal
+// JSON-RPC ids from distinct ConnectionIDs (or against a bare TransportUUID)
+// are already distinct map keys with no risk of collision, retrieval, or
+// overwrite between them. A control intent already present here is never
+// removed, only replaced in place with its advanced value, mirroring turns.
 type sessionRecord struct {
 	session      chatsessions.Session
 	episodes     []chatsessions.TargetEpisode
@@ -50,6 +55,7 @@ type sessionRecord struct {
 	turns        map[string]chatsessions.Turn
 	turnSequence uint64
 	attachments  map[string]chatsessions.Attachment
+	controls     map[chatsessions.RequestIdentity]chatsessions.ControlIntent
 }
 
 // New constructs an empty Store from explicit dependencies. newID and now

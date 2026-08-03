@@ -61,6 +61,7 @@ func (s *Store) CreateSession(_ context.Context, req chatsessions.CreateSessionR
 		episodes:    []chatsessions.TargetEpisode{episode},
 		turns:       make(map[string]chatsessions.Turn),
 		attachments: make(map[string]chatsessions.Attachment),
+		controls:    make(map[chatsessions.RequestIdentity]chatsessions.ControlIntent),
 	}
 	return chatsessions.CreateSessionResult{Session: session}, nil
 }
