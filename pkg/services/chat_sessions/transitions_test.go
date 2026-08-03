@@ -490,28 +490,28 @@ func TestResolveControlIntentOutcome_TableDriven(t *testing.T) {
 	tests := []struct {
 		name              string
 		capturedTurnState TurnState
-		currentActiveID   string
+		mostRecentTurnID  string
 		want              ControlIntentState
 	}{
-		{"still current and running -> completed", TurnStateRunning, resolveOutcomeCapturedTurn, ControlIntentStateCompleted},
-		{"still current and admitted -> completed", TurnStateAdmitted, resolveOutcomeCapturedTurn, ControlIntentStateCompleted},
-		{"still current but already completed -> noop", TurnStateCompleted, resolveOutcomeCapturedTurn, ControlIntentStateNoop},
-		{"still current but already failed -> noop", TurnStateFailed, resolveOutcomeCapturedTurn, ControlIntentStateNoop},
-		{"still current but already canceled -> noop", TurnStateCanceled, resolveOutcomeCapturedTurn, ControlIntentStateNoop},
-		{"no longer current, captured was running -> superseded", TurnStateRunning, resolveOutcomeOtherTurn, ControlIntentStateSuperseded},
-		{"no longer current, captured was terminal -> superseded, not noop", TurnStateCompleted, resolveOutcomeOtherTurn, ControlIntentStateSuperseded},
-		{"no longer current, no active turn at all -> superseded", TurnStateRunning, "", ControlIntentStateSuperseded},
+		{"still most recent and running -> completed", TurnStateRunning, resolveOutcomeCapturedTurn, ControlIntentStateCompleted},
+		{"still most recent and admitted -> completed", TurnStateAdmitted, resolveOutcomeCapturedTurn, ControlIntentStateCompleted},
+		{"still most recent but already completed -> noop", TurnStateCompleted, resolveOutcomeCapturedTurn, ControlIntentStateNoop},
+		{"still most recent but already failed -> noop", TurnStateFailed, resolveOutcomeCapturedTurn, ControlIntentStateNoop},
+		{"still most recent but already canceled -> noop", TurnStateCanceled, resolveOutcomeCapturedTurn, ControlIntentStateNoop},
+		{"no longer most recent, captured was running -> superseded", TurnStateRunning, resolveOutcomeOtherTurn, ControlIntentStateSuperseded},
+		{"no longer most recent, captured was terminal -> superseded, not noop", TurnStateCompleted, resolveOutcomeOtherTurn, ControlIntentStateSuperseded},
+		{"no longer most recent, no turn admitted yet -> superseded", TurnStateRunning, "", ControlIntentStateSuperseded},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ResolveControlIntentOutcome(resolveOutcomeCapturedTurn, tt.capturedTurnState, tt.currentActiveID)
+			got, err := ResolveControlIntentOutcome(resolveOutcomeCapturedTurn, tt.capturedTurnState, tt.mostRecentTurnID)
 			if err != nil {
 				t.Fatalf("ResolveControlIntentOutcome(%q, %s, %q) returned error %v, want nil",
-					resolveOutcomeCapturedTurn, tt.capturedTurnState, tt.currentActiveID, err)
+					resolveOutcomeCapturedTurn, tt.capturedTurnState, tt.mostRecentTurnID, err)
 			}
 			if got != tt.want {
 				t.Fatalf("ResolveControlIntentOutcome(%q, %s, %q) = %v, want %v",
-					resolveOutcomeCapturedTurn, tt.capturedTurnState, tt.currentActiveID, got, tt.want)
+					resolveOutcomeCapturedTurn, tt.capturedTurnState, tt.mostRecentTurnID, got, tt.want)
 			}
 		})
 	}
@@ -528,12 +528,12 @@ func TestResolveControlIntentOutcome_TableDriven(t *testing.T) {
 }
 
 // An invalid captured TurnState is rejected with a typed error before any
-// outcome is selected, both when the captured turn is still current and when
-// an identity mismatch would otherwise resolve to SUPERSEDED -- the mismatch
-// must never hide the invalid captured state.
+// outcome is selected, both when the captured turn is still the most recent
+// one and when an identity mismatch would otherwise resolve to SUPERSEDED --
+// the mismatch must never hide the invalid captured state.
 func TestResolveControlIntentOutcome_InvalidCapturedStateRejected(t *testing.T) {
 	for _, state := range []TurnState{"", "BOGUS"} {
-		t.Run("still current: "+string(state), func(t *testing.T) {
+		t.Run("still most recent: "+string(state), func(t *testing.T) {
 			got, err := ResolveControlIntentOutcome(resolveOutcomeCapturedTurn, state, resolveOutcomeCapturedTurn)
 			if !errors.Is(err, ErrUnknownEnumValue) {
 				t.Fatalf("ResolveControlIntentOutcome(captured state %q): got %v, want ErrUnknownEnumValue", state, err)
@@ -543,7 +543,7 @@ func TestResolveControlIntentOutcome_InvalidCapturedStateRejected(t *testing.T) 
 			}
 		})
 
-		t.Run("no longer current: "+string(state), func(t *testing.T) {
+		t.Run("no longer most recent: "+string(state), func(t *testing.T) {
 			got, err := ResolveControlIntentOutcome(resolveOutcomeCapturedTurn, state, resolveOutcomeOtherTurn)
 			if !errors.Is(err, ErrUnknownEnumValue) {
 				t.Fatalf("ResolveControlIntentOutcome(captured state %q, mismatched id): got %v, want ErrUnknownEnumValue", state, err)
@@ -556,20 +556,20 @@ func TestResolveControlIntentOutcome_InvalidCapturedStateRejected(t *testing.T) 
 }
 
 // A blank capturedTurnID is invalid under ControlIntent.Validate() and must
-// reject the outcome before an identity comparison (still current or
+// reject the outcome before an identity comparison (still most recent or
 // mismatched) could otherwise resolve a meaningless outcome.
 func TestResolveControlIntentOutcome_BlankCapturedTurnIDRejected(t *testing.T) {
-	t.Run("still current", func(t *testing.T) {
+	t.Run("still most recent", func(t *testing.T) {
 		got, err := ResolveControlIntentOutcome("", TurnStateRunning, "")
 		if !errors.Is(err, ErrRequiredValue) {
-			t.Fatalf("ResolveControlIntentOutcome(blank captured id, still current): got %v, want ErrRequiredValue", err)
+			t.Fatalf("ResolveControlIntentOutcome(blank captured id, still most recent): got %v, want ErrRequiredValue", err)
 		}
 		if got != "" {
-			t.Fatalf("ResolveControlIntentOutcome(blank captured id, still current): got outcome %v, want zero value on error", got)
+			t.Fatalf("ResolveControlIntentOutcome(blank captured id, still most recent): got outcome %v, want zero value on error", got)
 		}
 	})
 
-	t.Run("no longer current", func(t *testing.T) {
+	t.Run("no longer most recent", func(t *testing.T) {
 		got, err := ResolveControlIntentOutcome("", TurnStateRunning, resolveOutcomeOtherTurn)
 		if !errors.Is(err, ErrRequiredValue) {
 			t.Fatalf("ResolveControlIntentOutcome(blank captured id, mismatched): got %v, want ErrRequiredValue", err)

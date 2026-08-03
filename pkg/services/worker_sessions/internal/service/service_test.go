@@ -10,10 +10,19 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func newRegistry() workersessions.Service {
-	return service.New(logging.NoopLogger{})
+	return newRegistryWithExecution(succeedingExecution())
+}
+
+func newRegistryWithExecution(execution workers.WorkstationExecutionService) workersessions.Service {
+	registry, err := service.New(execution, logging.NoopLogger{})
+	if err != nil {
+		panic(fmt.Sprintf("service.New() error = %v, want nil", err))
+	}
+	return registry
 }
 
 func TestReserve_ValidIdentity_StoresSessionInReservedState(t *testing.T) {

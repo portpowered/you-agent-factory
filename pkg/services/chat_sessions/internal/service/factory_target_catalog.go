@@ -36,6 +36,21 @@ func isWellFormedFactoryTargetReference(value string) bool {
 	return factoryTargetReferencePattern.MatchString(suffix)
 }
 
+// dependencyContextCause returns context.Canceled or context.DeadlineExceeded
+// when err is classifiable as one, and nil otherwise. It never returns err
+// itself: only these two safe, text-free sentinels are ever attached to a
+// public FactoryTargetCatalogError's Cause field, so an arbitrary dependency
+// error can never leak through it.
+func dependencyContextCause(err error) error {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return context.Canceled
+	case errors.Is(err, context.DeadlineExceeded):
+		return context.DeadlineExceeded
+	}
+	return nil
+}
+
 // ResolveFactoryTargetCatalog resolves the effective ACP Agent profile
 // through Operator Settings, reads the installed Factory catalog through
 // Factory Definitions, intersects the profile's allowlist with that catalog,
@@ -97,39 +112,14 @@ func (s *Service) resolveFactoryTargetCatalog(
 	profile, err := s.operatorSettings.ResolveACPAgentProfile(req.OperatorSettingsPath)
 	if err != nil {
 		return chatsessions.ResolveFactoryTargetCatalogResult{}, &chatsessions.FactoryTargetCatalogError{
-			Err: chatsessions.ErrFactoryTargetProfileUnavailable,
+			Err:   chatsessions.ErrFactoryTargetProfileUnavailable,
+			Cause: dependencyContextCause(err),
 		}
 	}
 
-	listing, err := s.factoryDefinitions.ListEffectiveFactories(ctx, factorydefinitions.ListEffectiveFactoriesRequest{
-		ProjectRoot: req.FactoryDiscovery.ProjectRoot,
-		GlobalRoot:  req.FactoryDiscovery.GlobalRoot,
-	})
+	installed, err := s.resolveInstalledFactories(ctx, req.FactoryDiscovery)
 	if err != nil {
-		return chatsessions.ResolveFactoryTargetCatalogResult{}, &chatsessions.FactoryTargetCatalogError{
-			Err: chatsessions.ErrFactoryTargetCatalogUnavailable,
-		}
-	}
-
-	installed := make(map[string]factorydefinitions.EffectiveFactoryCatalogEntry, len(listing.Entries))
-	for _, entry := range listing.Entries {
-		installed[entry.Name] = entry
-	}
-
-	choicesByValue := make(map[string]chatsessions.FactoryTargetCatalogChoice, len(profile.AllowedTargets))
-	for _, target := range profile.AllowedTargets {
-		if _, exists := choicesByValue[target]; exists {
-			continue
-		}
-		name := strings.TrimPrefix(target, operatorsettings.ACPFactoryTargetNamespace)
-		entry, ok := installed[name]
-		if !ok {
-			continue
-		}
-		choicesByValue[target] = chatsessions.FactoryTargetCatalogChoice{
-			Value: target,
-			Name:  factoryDisplayName(entry),
-		}
+		return chatsessions.ResolveFactoryTargetCatalogResult{}, err
 	}
 
 	current := req.CurrentTarget
@@ -144,6 +134,8 @@ func (s *Service) resolveFactoryTargetCatalog(
 			Err: chatsessions.ErrFactoryTargetReferenceMalformed,
 		}
 	}
+
+	choicesByValue := allowedInstalledChoices(profile.AllowedTargets, installed)
 	if len(choicesByValue) == 0 {
 		return chatsessions.ResolveFactoryTargetCatalogResult{}, &chatsessions.FactoryTargetCatalogError{
 			Err: chatsessions.ErrFactoryTargetCatalogEmpty,
@@ -164,25 +156,8 @@ func (s *Service) resolveFactoryTargetCatalog(
 		}
 	}
 
-	if clientRoot := strings.TrimSpace(req.ClientWorkingRoot); clientRoot != "" {
-		resolved, err := s.factoryDefinitions.ResolveNamedFactory(ctx, factorydefinitions.ResolveNamedFactoryRequest{
-			ProjectRoot: req.FactoryDiscovery.ProjectRoot,
-			GlobalRoot:  req.FactoryDiscovery.GlobalRoot,
-			Name:        bareName,
-		})
-		if err != nil {
-			return chatsessions.ResolveFactoryTargetCatalogResult{}, &chatsessions.FactoryTargetCatalogError{
-				Target: current,
-				Err:    chatsessions.ErrFactoryTargetCatalogUnavailable,
-			}
-		}
-		if resolved.Resolution.Source == factorydefinitions.NamedFactoryResolutionSourceProjectLocal &&
-			filepath.Clean(clientRoot) != filepath.Clean(resolved.Resolution.ProjectRoot) {
-			return chatsessions.ResolveFactoryTargetCatalogResult{}, &chatsessions.FactoryTargetCatalogError{
-				Target: current,
-				Err:    chatsessions.ErrFactoryTargetWorkingRootIncompatible,
-			}
-		}
+	if err := s.validateWorkingRootCompatibility(ctx, req, bareName, current); err != nil {
+		return chatsessions.ResolveFactoryTargetCatalogResult{}, err
 	}
 
 	currentChoice := choicesByValue[current]
@@ -190,6 +165,97 @@ func (s *Service) resolveFactoryTargetCatalog(
 		Choices:       orderedFactoryTargetChoices(choicesByValue, currentChoice),
 		CurrentTarget: currentChoice.Value,
 	}, nil
+}
+
+// resolveInstalledFactories reads the effective Factory catalog and returns
+// only entries that are actually installed (materialized to a filesystem
+// location), keyed by bare catalog name. A packaged definition that has not
+// been materialized carries a nil Location and is never treated as
+// installed, even though it is still effective/listable.
+func (s *Service) resolveInstalledFactories(
+	ctx context.Context,
+	discovery chatsessions.FactoryDiscoveryRoots,
+) (map[string]factorydefinitions.EffectiveFactoryCatalogEntry, error) {
+	listing, err := s.factoryDefinitions.ListEffectiveFactories(ctx, factorydefinitions.ListEffectiveFactoriesRequest{
+		ProjectRoot: discovery.ProjectRoot,
+		GlobalRoot:  discovery.GlobalRoot,
+	})
+	if err != nil {
+		return nil, &chatsessions.FactoryTargetCatalogError{
+			Err:   chatsessions.ErrFactoryTargetCatalogUnavailable,
+			Cause: dependencyContextCause(err),
+		}
+	}
+
+	installed := make(map[string]factorydefinitions.EffectiveFactoryCatalogEntry, len(listing.Entries))
+	for _, entry := range listing.Entries {
+		if entry.Location == nil {
+			continue
+		}
+		installed[entry.Name] = entry
+	}
+	return installed, nil
+}
+
+// allowedInstalledChoices intersects the profile's allowlist with the
+// installed catalog, deduplicating on target value and preserving each
+// installed entry's display name.
+func allowedInstalledChoices(
+	allowedTargets []string,
+	installed map[string]factorydefinitions.EffectiveFactoryCatalogEntry,
+) map[string]chatsessions.FactoryTargetCatalogChoice {
+	choicesByValue := make(map[string]chatsessions.FactoryTargetCatalogChoice, len(allowedTargets))
+	for _, target := range allowedTargets {
+		if _, exists := choicesByValue[target]; exists {
+			continue
+		}
+		name := strings.TrimPrefix(target, operatorsettings.ACPFactoryTargetNamespace)
+		entry, ok := installed[name]
+		if !ok {
+			continue
+		}
+		choicesByValue[target] = chatsessions.FactoryTargetCatalogChoice{
+			Value: target,
+			Name:  factoryDisplayName(entry),
+		}
+	}
+	return choicesByValue
+}
+
+// validateWorkingRootCompatibility rejects a project-local canonical
+// resolution whose project root disagrees with the caller's client working
+// root. It is a no-op when the caller supplies no client working root.
+func (s *Service) validateWorkingRootCompatibility(
+	ctx context.Context,
+	req chatsessions.ResolveFactoryTargetCatalogRequest,
+	bareName string,
+	current string,
+) error {
+	clientRoot := strings.TrimSpace(req.ClientWorkingRoot)
+	if clientRoot == "" {
+		return nil
+	}
+
+	resolved, err := s.factoryDefinitions.ResolveNamedFactory(ctx, factorydefinitions.ResolveNamedFactoryRequest{
+		ProjectRoot: req.FactoryDiscovery.ProjectRoot,
+		GlobalRoot:  req.FactoryDiscovery.GlobalRoot,
+		Name:        bareName,
+	})
+	if err != nil {
+		return &chatsessions.FactoryTargetCatalogError{
+			Target: current,
+			Err:    chatsessions.ErrFactoryTargetCatalogUnavailable,
+			Cause:  dependencyContextCause(err),
+		}
+	}
+	if resolved.Resolution.Source == factorydefinitions.NamedFactoryResolutionSourceProjectLocal &&
+		filepath.Clean(clientRoot) != filepath.Clean(resolved.Resolution.ProjectRoot) {
+		return &chatsessions.FactoryTargetCatalogError{
+			Target: current,
+			Err:    chatsessions.ErrFactoryTargetWorkingRootIncompatible,
+		}
+	}
+	return nil
 }
 
 // orderedFactoryTargetChoices returns current first, followed by every other

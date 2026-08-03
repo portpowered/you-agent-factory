@@ -1104,6 +1104,12 @@
       "evidence": "pkg/services/chat_sessions/internal/factorysessionsshim -\u003e pkg/services/factory_sessions"
     },
     {
+      "fromOwner": "chat_sessions",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "evidence": "pkg/services/chat_sessions/internal/service -\u003e pkg/platform/logging"
+    },
+    {
       "fromOwner": "edges",
       "toOwner": "automations",
       "class": "external_effect",
@@ -1685,6 +1691,12 @@
       "toOwner": "automations",
       "class": "construction",
       "evidence": "pkg/wire -\u003e pkg/services/automations"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "chat_sessions",
+      "class": "construction",
+      "evidence": "pkg/wire -\u003e pkg/services/chat_sessions/wire"
     },
     {
       "fromOwner": "wire",
@@ -2583,6 +2595,18 @@
     },
     {
       "packagePath": "pkg/services/chat_sessions/internal/factorysessionsshim",
+      "disposition": "retain",
+      "destination": "chat_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/chat_sessions/internal/service",
+      "disposition": "retain",
+      "destination": "chat_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/chat_sessions/wire",
       "disposition": "retain",
       "destination": "chat_sessions",
       "destinationKind": "owner"
