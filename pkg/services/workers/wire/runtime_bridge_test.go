@@ -24,6 +24,35 @@ func TestRuntimeBridgeNewMockCommandRunnerDecoratesNext(t *testing.T) {
 	}
 }
 
+func TestResolveTemplateFieldsResolvesTemplates(t *testing.T) {
+	t.Parallel()
+
+	resolved, err := ResolveTemplateFields(
+		"{{.Context.WorkDir}}/sub",
+		map[string]string{"NAME": "{{.Context.WorkDir}}"},
+		nil,
+		&workers.Context{WorkDirectory: "reviewer"},
+		"",
+	)
+	if err != nil {
+		t.Fatalf("ResolveTemplateFields() = %v", err)
+	}
+	if resolved.WorkingDirectory != "reviewer/sub" {
+		t.Fatalf("WorkingDirectory = %q, want reviewer/sub", resolved.WorkingDirectory)
+	}
+	if resolved.Env["NAME"] != "reviewer" {
+		t.Fatalf("Env[NAME] = %q, want reviewer", resolved.Env["NAME"])
+	}
+}
+
+func TestResolveTemplateFieldsPropagatesTemplateError(t *testing.T) {
+	t.Parallel()
+
+	if _, err := ResolveTemplateFields("{{.Bogus", nil, nil, &workers.Context{}, ""); err == nil {
+		t.Fatal("ResolveTemplateFields() with malformed template = nil error, want non-nil")
+	}
+}
+
 type stubRuntimeBridgeCommandRunner struct{}
 
 func (stubRuntimeBridgeCommandRunner) Run(

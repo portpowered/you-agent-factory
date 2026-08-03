@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestNewProviderRegistryProjectsProvidersAuthority(t *testing.T) {
@@ -35,6 +36,55 @@ func TestNewProviderRegistryProjectsProvidersAuthority(t *testing.T) {
 	err = registry.ValidateRunnerPrerequisites(nil, "cursor")
 	if !errors.Is(err, providers.ErrUnknownProvider) {
 		t.Fatalf("ValidateRunnerPrerequisites(cursor) = %v, want ErrUnknownProvider", err)
+	}
+}
+
+func TestNewProviderRegistryProjectsRunnerVocabulary(t *testing.T) {
+	t.Parallel()
+
+	registry, err := NewProviderRegistry(context.Background(), &registryProvidersFake{})
+	if err != nil {
+		t.Fatalf("NewProviderRegistry() = %v", err)
+	}
+
+	if !registry.UsesNativeRunner("codex") {
+		t.Fatalf("UsesNativeRunner(codex) = false, want true")
+	}
+
+	identities := registry.RunnerIdentities()
+	if len(identities) != 1 || identities[0] != "codex" {
+		t.Fatalf("RunnerIdentities() = %v, want [codex]", identities)
+	}
+
+	metadata, err := registry.RunnerMetadata("openai")
+	if err != nil {
+		t.Fatalf("RunnerMetadata(openai) = %v", err)
+	}
+	if metadata.ID != "codex" || metadata.DisplayName != "Codex" {
+		t.Fatalf("RunnerMetadata(openai) = %#v", metadata)
+	}
+
+	if _, err := registry.RunnerMetadata("cursor"); !errors.Is(err, providers.ErrUnknownProvider) {
+		t.Fatalf("RunnerMetadata(cursor) = %v, want ErrUnknownProvider", err)
+	}
+
+	selection, err := registry.ResolveRunnerSelection("codex", "", "")
+	if err != nil {
+		t.Fatalf("ResolveRunnerSelection(codex) = %v", err)
+	}
+	if selection.RunnerID != "codex" || selection.Source != workers.RunnerSelectionSourceWorkstation {
+		t.Fatalf("ResolveRunnerSelection(codex) = %#v", selection)
+	}
+}
+
+func TestNewProviderRegistryRejectsCanceledContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := NewProviderRegistry(ctx, &registryProvidersFake{}); err == nil {
+		t.Fatalf("NewProviderRegistry() with canceled context = nil error, want non-nil")
 	}
 }
 

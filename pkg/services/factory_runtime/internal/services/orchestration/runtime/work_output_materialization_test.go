@@ -137,6 +137,128 @@ func TestMaterializeWorkerOutputForDispatchNoopWithoutProposals(t *testing.T) {
 	}
 }
 
+func TestMaterializeWorkerOutputForDispatchFailsWithoutWorkService(t *testing.T) {
+	t.Parallel()
+
+	result := materializeWorkerOutputForDispatch(
+		context.Background(),
+		nil,
+		nil,
+		func() string { return "1" },
+		workerexecution.WorkstationDispatchRequest{
+			Execution: workerexecution.WorkstationExecutionRequest{
+				Dispatch: work.WorkDispatch{DispatchID: "dispatch-1"},
+			},
+		},
+		workerexecution.WorkResult{
+			Outcome: workerexecution.OutcomeAccepted,
+			RecordedOutputWork: []work.FactoryWorkItem{{
+				ID:          "agent-id",
+				WorkTypeID:  "task",
+				DisplayName: "proposal",
+			}},
+		},
+	)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("outcome = %q, want FAILED", result.Outcome)
+	}
+	if len(result.RecordedOutputWork) != 0 {
+		t.Fatalf("RecordedOutputWork = %#v, want empty when Work service is unavailable", result.RecordedOutputWork)
+	}
+	if !strings.Contains(result.Error, "Work service is required") {
+		t.Fatalf("error = %q, want Work-service-required detail", result.Error)
+	}
+}
+
+func TestMaterializeWorkerOutputForDispatchPreservesExistingErrorOnFailure(t *testing.T) {
+	t.Parallel()
+
+	result := materializeWorkerOutputForDispatch(
+		context.Background(),
+		testMaterializationService(),
+		&state.Net{WorkTypes: map[string]*state.WorkType{"task": {ID: "task"}}},
+		func() string { return "1" },
+		workerexecution.WorkstationDispatchRequest{
+			Execution: workerexecution.WorkstationExecutionRequest{
+				Dispatch: work.WorkDispatch{DispatchID: "dispatch-1"},
+			},
+		},
+		workerexecution.WorkResult{
+			Outcome: workerexecution.OutcomeAccepted,
+			Error:   "prior warning",
+			RecordedOutputWork: []work.FactoryWorkItem{{
+				ID:          "agent-id",
+				WorkTypeID:  "missing",
+				DisplayName: "bad",
+			}},
+		},
+	)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("outcome = %q, want FAILED", result.Outcome)
+	}
+	if !strings.Contains(result.Error, "prior warning") || !strings.Contains(result.Error, "worker output materialization") {
+		t.Fatalf("error = %q, want both prior warning and materialization detail preserved", result.Error)
+	}
+}
+
+func TestMaterializeWorkerOutputForDispatchAppliesFeedbackAndClassificationWithoutNet(t *testing.T) {
+	t.Parallel()
+
+	result := materializeWorkerOutputForDispatch(
+		context.Background(),
+		testMaterializationService(),
+		nil,
+		func() string { return "owned" },
+		workerexecution.WorkstationDispatchRequest{
+			Execution: workerexecution.WorkstationExecutionRequest{
+				Dispatch: work.WorkDispatch{DispatchID: "dispatch-1"},
+			},
+		},
+		workerexecution.WorkResult{
+			Outcome:                     workerexecution.OutcomeAccepted,
+			Feedback:                    "needs another pass",
+			SelectedClassificationLabel: "accepted",
+			RecordedOutputWork: []work.FactoryWorkItem{{
+				ID:          "agent-id",
+				WorkTypeID:  "any-type",
+				DisplayName: "proposal",
+				State:       "any-state",
+			}},
+		},
+	)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", result.Outcome)
+	}
+	if result.Feedback != "needs another pass" {
+		t.Fatalf("Feedback = %q, want propagated materialized feedback", result.Feedback)
+	}
+	if result.SelectedClassificationLabel != "accepted" {
+		t.Fatalf("SelectedClassificationLabel = %q, want propagated materialized classification", result.SelectedClassificationLabel)
+	}
+	if len(result.RecordedOutputWork) != 1 {
+		t.Fatalf("RecordedOutputWork = %#v, want a materialized item without a net's type/state restriction", result.RecordedOutputWork)
+	}
+}
+
+func TestValidStatesByTypeFromNetHandlesNilNet(t *testing.T) {
+	t.Parallel()
+
+	if got := validStatesByTypeFromNet(nil); got != nil {
+		t.Fatalf("validStatesByTypeFromNet(nil) = %#v, want nil", got)
+	}
+}
+
+func TestValidWorkTypesFromNetHandlesNilAndEmptyNet(t *testing.T) {
+	t.Parallel()
+
+	if got := validWorkTypesFromNet(nil); got != nil {
+		t.Fatalf("validWorkTypesFromNet(nil) = %#v, want nil", got)
+	}
+	if got := validWorkTypesFromNet(&state.Net{}); got != nil {
+		t.Fatalf("validWorkTypesFromNet(empty) = %#v, want nil", got)
+	}
+}
+
 func testMaterializationService() work.Service {
 	return workwire.NewRuntimeService(nil, nil, nil, nil)
 }
