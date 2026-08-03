@@ -41,8 +41,8 @@ import "context"
 // private topology.
 type Service interface {
 	// CreateSession creates a new Chat Session in SessionStateCreated with
-	// the given validated working root (Cwd) and initial selected target. A
-	// blank Cwd, an invalid RequestID, or an invalid InitialTarget reports a
+	// the given validated working root (WorkingRoot) and initial selected target. A
+	// blank WorkingRoot, an invalid RequestID, or an invalid InitialTarget reports a
 	// *ValidationError and creates no observable session.
 	CreateSession(ctx context.Context, req CreateSessionRequest) (CreateSessionResult, error)
 
@@ -104,11 +104,11 @@ type Service interface {
 // root, and initial target for a new Chat Session.
 type CreateSessionRequest struct {
 	RequestID RequestIdentity
-	// Cwd is the caller-supplied ACP editor working root. It must be
-	// non-blank; a blank Cwd is rejected with the same typed validation
+	// WorkingRoot is the caller-supplied ACP editor working root. It must be
+	// non-blank; a blank WorkingRoot is rejected with the same typed validation
 	// classification as any other required-value failure and creates no
 	// session.
-	Cwd           string
+	WorkingRoot   string
 	InitialTarget ChatTargetRef
 }
 

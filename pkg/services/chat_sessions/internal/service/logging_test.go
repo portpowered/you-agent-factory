@@ -72,7 +72,7 @@ func TestClassifyError_TableDriven(t *testing.T) {
 
 // TestStore_CreateSession_LogsStartAndAcceptedOutcomeWithoutUnsafeFields
 // proves a successful mutating operation emits a Debug start log and an Info
-// outcome log, and that neither ever carries the caller-supplied Cwd or raw
+// outcome log, and that neither ever carries the caller-supplied WorkingRoot or raw
 // JSON-RPC request identity value.
 func TestStore_CreateSession_LogsStartAndAcceptedOutcomeWithoutUnsafeFields(t *testing.T) {
 	logger, calls := newCaptureLogger()
@@ -84,7 +84,7 @@ func TestStore_CreateSession_LogsStartAndAcceptedOutcomeWithoutUnsafeFields(t *t
 		t.Fatalf("CreateSession: %v", err)
 	}
 
-	assertNoUnsafeFields(t, *calls, req.Cwd, req.RequestID.JSONRPCStringID)
+	assertNoUnsafeFields(t, *calls, req.WorkingRoot, req.RequestID.JSONRPCStringID)
 
 	if len(*calls) != 2 {
 		t.Fatalf("CreateSession logged %d calls, want 2 (start, outcome): %+v", len(*calls), *calls)
@@ -149,7 +149,7 @@ func TestStore_GetSession_LogsStartAndOutcome(t *testing.T) {
 		t.Fatalf("not-found outcome log missing error_class=not_found: %+v", (*calls)[1].kv)
 	}
 
-	assertNoUnsafeFields(t, *calls, created.Session.Cwd, "")
+	assertNoUnsafeFields(t, *calls, created.Session.WorkingRoot, "")
 }
 
 // TestStore_SetTarget_FailureLogsClassificationOnly proves a failed mutating
@@ -219,7 +219,7 @@ func TestStore_RequestControl_NeverLogsRawRequestIdentity(t *testing.T) {
 		t.Fatalf("RequestControl: %v", err)
 	}
 
-	assertNoUnsafeFields(t, *calls, created.Session.Cwd, rawControlRequestID)
+	assertNoUnsafeFields(t, *calls, created.Session.WorkingRoot, rawControlRequestID)
 	outcome := (*calls)[1]
 	if !hasKV(outcome.kv, "request_kind", string(chatsessions.RequestIdentityKindJSONRPCString)) {
 		t.Fatalf("outcome log missing safe request_kind field: %+v", outcome.kv)

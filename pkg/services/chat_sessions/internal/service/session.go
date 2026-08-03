@@ -16,7 +16,7 @@ const initialSessionVersion uint64 = 1
 const initialTargetEpisodeNumber uint64 = 1
 
 // CreateSession validates req in full before any state is touched, so an
-// invalid RequestID, Cwd, or InitialTarget creates no observable session.
+// invalid RequestID, WorkingRoot, or InitialTarget creates no observable session.
 // newID and now are only ever called while s.mu is held (see the write-lock
 // below), so CreateSession is safe under concurrent calls even when the
 // injected IDGenerator/Clock are not themselves safe for concurrent use --
@@ -30,9 +30,9 @@ func (s *Store) CreateSession(_ context.Context, req chatsessions.CreateSessionR
 	if err := req.RequestID.Validate(); err != nil {
 		return chatsessions.CreateSessionResult{}, err
 	}
-	if req.Cwd == "" {
+	if req.WorkingRoot == "" {
 		return chatsessions.CreateSessionResult{}, &chatsessions.ValidationError{
-			Value: "CreateSessionRequest", Field: "Cwd", Err: chatsessions.ErrRequiredValue,
+			Value: "CreateSessionRequest", Field: "WorkingRoot", Err: chatsessions.ErrRequiredValue,
 		}
 	}
 	if err := req.InitialTarget.Validate(); err != nil {
@@ -46,7 +46,7 @@ func (s *Store) CreateSession(_ context.Context, req chatsessions.CreateSessionR
 	session := chatsessions.Session{
 		ID:             s.newID(),
 		State:          chatsessions.SessionStateCreated,
-		Cwd:            req.Cwd,
+		WorkingRoot:    req.WorkingRoot,
 		SelectedTarget: req.InitialTarget,
 		TargetEpisode:  initialTargetEpisodeNumber,
 		Version:        initialSessionVersion,

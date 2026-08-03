@@ -29,7 +29,7 @@ func fixedClock(at time.Time) Clock {
 func validCreateRequest() chatsessions.CreateSessionRequest {
 	return chatsessions.CreateSessionRequest{
 		RequestID:     chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-1"},
-		Cwd:           "/workspace/project",
+		WorkingRoot:   "/workspace/project",
 		InitialTarget: chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
 	}
 }
@@ -50,8 +50,8 @@ func TestStore_CreateSession_Success(t *testing.T) {
 	if session.State != chatsessions.SessionStateCreated {
 		t.Fatalf("State = %v, want CREATED", session.State)
 	}
-	if session.Cwd != "/workspace/project" {
-		t.Fatalf("Cwd = %q, want /workspace/project", session.Cwd)
+	if session.WorkingRoot != "/workspace/project" {
+		t.Fatalf("WorkingRoot = %q, want /workspace/project", session.WorkingRoot)
 	}
 	if session.SelectedTarget.Ref != "factory:@you/review" {
 		t.Fatalf("SelectedTarget = %+v, want the requested initial target", session.SelectedTarget)
@@ -73,7 +73,7 @@ func TestStore_CreateSession_Success(t *testing.T) {
 	}
 }
 
-// TestStore_CreateSession_InvalidInputCreatesNoSession proves a blank Cwd,
+// TestStore_CreateSession_InvalidInputCreatesNoSession proves a blank WorkingRoot,
 // invalid RequestID, or invalid InitialTarget reports the existing typed
 // validation classification and leaves the Store empty.
 func TestStore_CreateSession_InvalidInputCreatesNoSession(t *testing.T) {
@@ -82,8 +82,8 @@ func TestStore_CreateSession_InvalidInputCreatesNoSession(t *testing.T) {
 		mutate  func(chatsessions.CreateSessionRequest) chatsessions.CreateSessionRequest
 		wantErr error
 	}{
-		{"blank cwd", func(r chatsessions.CreateSessionRequest) chatsessions.CreateSessionRequest {
-			r.Cwd = ""
+		{"blank working root", func(r chatsessions.CreateSessionRequest) chatsessions.CreateSessionRequest {
+			r.WorkingRoot = ""
 			return r
 		}, chatsessions.ErrRequiredValue},
 		{"invalid request identity", func(r chatsessions.CreateSessionRequest) chatsessions.CreateSessionRequest {
@@ -220,7 +220,7 @@ func TestStore_CreateSession_ConcurrentDifferentSessionsAreIndependent(t *testin
 				RequestID: chatsessions.RequestIdentity{
 					Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: fmt.Sprintf("conn-%d", i), JSONRPCStringID: "req-1",
 				},
-				Cwd:           fmt.Sprintf("/workspace/project-%d", i),
+				WorkingRoot:   fmt.Sprintf("/workspace/project-%d", i),
 				InitialTarget: chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
 			})
 		}(i)
@@ -233,9 +233,9 @@ func TestStore_CreateSession_ConcurrentDifferentSessionsAreIndependent(t *testin
 			t.Fatalf("CreateSession[%d]: unexpected error %v", i, err)
 		}
 		seenIDs[results[i].Session.ID]++
-		wantCwd := fmt.Sprintf("/workspace/project-%d", i)
-		if results[i].Session.Cwd != wantCwd {
-			t.Fatalf("CreateSession[%d]: Cwd = %q, want %q", i, results[i].Session.Cwd, wantCwd)
+		wantWorkingRoot := fmt.Sprintf("/workspace/project-%d", i)
+		if results[i].Session.WorkingRoot != wantWorkingRoot {
+			t.Fatalf("CreateSession[%d]: WorkingRoot = %q, want %q", i, results[i].Session.WorkingRoot, wantWorkingRoot)
 		}
 	}
 	for id, count := range seenIDs {

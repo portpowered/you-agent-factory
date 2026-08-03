@@ -33,7 +33,7 @@ func classifyError(err error) string {
 }
 
 // logStart records that op began for sessionID. Callers of the two logging
-// helpers in this file never pass a cwd, prompt content, raw JSON-RPC
+// helpers in this file never pass a working root, prompt content, raw JSON-RPC
 // identity, credential, provider command, or filesystem path as a field --
 // only operation names, entity identifiers, versions, and error
 // classifications cross this boundary.

@@ -25,7 +25,7 @@ func fixedClock(at time.Time) Clock {
 func validCreateRequest() chatsessions.CreateSessionRequest {
 	return chatsessions.CreateSessionRequest{
 		RequestID:     chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-1"},
-		Cwd:           "/workspace/project",
+		WorkingRoot:   "/workspace/project",
 		InitialTarget: chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
 	}
 }

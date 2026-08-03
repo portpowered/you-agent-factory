@@ -60,7 +60,7 @@ func TestProvideChatSessionsServiceConstructsAnIndependentServiceDirectly(t *tes
 	ctx := context.Background()
 	created, err := first.CreateSession(ctx, chatsessions.CreateSessionRequest{
 		RequestID:     chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-1", JSONRPCStringID: "req-1"},
-		Cwd:           "/workspace/project",
+		WorkingRoot:   "/workspace/project",
 		InitialTarget: chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
 	})
 	if err != nil {

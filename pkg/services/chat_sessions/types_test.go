@@ -281,7 +281,7 @@ func validSession() Session {
 	return Session{
 		ID:             "session-1",
 		State:          SessionStateActive,
-		Cwd:            "/workspace/project",
+		WorkingRoot:    "/workspace/project",
 		SelectedTarget: ChatTargetRef{Kind: ChatTargetKindFactory, Ref: "@you/review"},
 		TargetEpisode:  1,
 		ActiveTurnID:   "turn-1",
@@ -302,7 +302,7 @@ func TestSession_Validate(t *testing.T) {
 		{"blank id", func(s Session) Session { s.ID = ""; return s }, ErrRequiredValue},
 		{"unknown state", func(s Session) Session { s.State = "BOGUS"; return s }, ErrUnknownEnumValue},
 		{"invalid target", func(s Session) Session { s.SelectedTarget = ChatTargetRef{}; return s }, ErrUnknownEnumValue},
-		{"blank cwd", func(s Session) Session { s.Cwd = ""; return s }, ErrRequiredValue},
+		{"blank working root", func(s Session) Session { s.WorkingRoot = ""; return s }, ErrRequiredValue},
 		{"zero created at", func(s Session) Session { s.CreatedAt = time.Time{}; return s }, ErrRequiredValue},
 		{"zero updated at", func(s Session) Session { s.UpdatedAt = time.Time{}; return s }, ErrRequiredValue},
 		{"updated before created", func(s Session) Session {
