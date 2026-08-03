@@ -173,37 +173,8 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 		}
 		return p.scanner.Err()
 	}
-	if p.mode == "resource" {
-		var params struct {
-			Prompt []map[string]any `json:"prompt"`
-		}
-		if err := json.Unmarshal(request.Params, &params); err != nil {
-			return fmt.Errorf("decode resource prompt: %w", err)
-		}
-		found := false
-		for _, block := range params.Prompt {
-			found = found || (block["type"] == "resource_link" && block["uri"] == "https://example.test/fixture.png" && block["mimeType"] == "image/png")
-		}
-		if !found {
-			return p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": "ACP prompt omitted canonical resource link"})
-		}
-	}
-	if p.mode == "content" {
-		var params struct {
-			Prompt []map[string]any `json:"prompt"`
-		}
-		if err := json.Unmarshal(request.Params, &params); err != nil {
-			return fmt.Errorf("decode content prompt: %w", err)
-		}
-		want := os.Getenv("YOU_TEST_ACP_CONTENT_SENTINEL")
-		found := false
-		for _, block := range params.Prompt {
-			text, _ := block["text"].(string)
-			found = found || strings.Contains(text, want)
-		}
-		if want == "" || !found {
-			return p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": "ACP prompt omitted input Work content"})
-		}
+	if err := p.validatePromptPayload(request); err != nil {
+		return err
 	}
 	if p.mode == "model" && !p.modelSet {
 		return p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": "advertised model was not applied"})
@@ -218,12 +189,6 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 			return err
 		}
 		return p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": "functional ACP prompt failure"})
-	}
-	if p.mode == "cancelled-response" {
-		if err := p.update(`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"partial ACP answer before self-cancellation"}}`); err != nil {
-			return err
-		}
-		return p.respond(request.ID, json.RawMessage(`{"stopReason":"cancelled"}`))
 	}
 	for _, update := range []string{
 		`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"ACP root "}}`,
@@ -241,7 +206,19 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 	return p.respond(request.ID, json.RawMessage(`{"stopReason":"end_turn"}`))
 }
 
+// respondToPackagedPrompt handles the prompt() modes whose reply depends on
+// which packaged prompt or self-reported stop reason arrived, before
+// prompt()'s default multi-update turn runs. cancelled-response answers with
+// StopReasonCancelled after one partial update, without any session/cancel
+// notification ever having been sent -- a real ACP agent may self-report
+// cancellation this way.
 func (p *functionalRPCPeer) respondToPackagedPrompt(request rpcEnvelope) (bool, error) {
+	if p.mode == "cancelled-response" {
+		if err := p.update(`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"partial ACP answer before self-cancellation"}}`); err != nil {
+			return true, err
+		}
+		return true, p.respond(request.ID, json.RawMessage(`{"stopReason":"cancelled"}`))
+	}
 	responses := map[string][]string{
 		"tournament": {"candidate one", "candidate two", `{"winner":"B","rationale":"candidate two is stronger"}`},
 		"spawn":      {`["research climate","research cost"]`, "climate findings", "cost findings", "merged travel answer"},
@@ -259,6 +236,44 @@ func (p *functionalRPCPeer) respondToPackagedPrompt(request rpcEnvelope) (bool, 
 		return true, err
 	}
 	return true, p.respond(request.ID, json.RawMessage(`{"stopReason":"end_turn"}`))
+}
+
+// validatePromptPayload checks that the inbound session/prompt request
+// carried the exact content the "resource" and "content" modes each expect
+// the production ACP execution path to have populated, replying with an RPC
+// error (rather than returning err directly) so a mismatch surfaces through
+// the same functional Execute failure path as every other assertion in this
+// peer.
+func (p *functionalRPCPeer) validatePromptPayload(request rpcEnvelope) error {
+	if p.mode != "resource" && p.mode != "content" {
+		return nil
+	}
+	var params struct {
+		Prompt []map[string]any `json:"prompt"`
+	}
+	if err := json.Unmarshal(request.Params, &params); err != nil {
+		return fmt.Errorf("decode %s prompt: %w", p.mode, err)
+	}
+	if p.mode == "resource" {
+		found := false
+		for _, block := range params.Prompt {
+			found = found || (block["type"] == "resource_link" && block["uri"] == "https://example.test/fixture.png" && block["mimeType"] == "image/png")
+		}
+		if !found {
+			return p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": "ACP prompt omitted canonical resource link"})
+		}
+		return nil
+	}
+	want := os.Getenv("YOU_TEST_ACP_CONTENT_SENTINEL")
+	found := false
+	for _, block := range params.Prompt {
+		text, _ := block["text"].(string)
+		found = found || strings.Contains(text, want)
+	}
+	if want == "" || !found {
+		return p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": "ACP prompt omitted input Work content"})
+	}
+	return nil
 }
 
 func (p *functionalRPCPeer) assertUnsupportedClientMethods() error {

@@ -22,6 +22,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/internal/service/cancelwindow"
 )
 
 // Command is one configured stdio ACP launch command.
@@ -50,11 +51,21 @@ func New(integrations []providers.ACPIntegration, newCommand platformprocess.Com
 	return service, nil
 }
 
-func (service *Service) Execute(ctx context.Context, id providers.ID, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+// resolveDaemon resolves id (including an accepted alias) to its canonical
+// identity and owning daemon under a single read lock. ok mirrors
+// resolveLocked's own result; it does not additionally guarantee daemon is
+// non-nil, matching Execute's pre-existing behavior. Cancelable and
+// TryCancel additionally check for a nil daemon themselves.
+func (service *Service) resolveDaemon(id providers.ID) (target *daemon, canonical providers.ID, ok bool) {
 	service.mu.RLock()
-	canonical, ok := service.resolveLocked(id)
-	daemon := service.daemons[canonical]
+	canonical, ok = service.resolveLocked(id)
+	target = service.daemons[canonical]
 	service.mu.RUnlock()
+	return target, canonical, ok
+}
+
+func (service *Service) Execute(ctx context.Context, id providers.ID, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+	daemon, canonical, ok := service.resolveDaemon(id)
 	if !ok {
 		return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: fmt.Sprintf("ACP provider %q is unavailable", id)}
 	}
@@ -64,28 +75,19 @@ func (service *Service) Execute(ctx context.Context, id providers.ID, request pr
 // Cancelable reports whether attemptID names the exact attempt id's daemon
 // currently has an established session/prompt turn in flight for.
 func (service *Service) Cancelable(id providers.ID, attemptID string) bool {
-	service.mu.RLock()
-	canonical, ok := service.resolveLocked(id)
-	target := service.daemons[canonical]
-	service.mu.RUnlock()
-	if !ok || target == nil {
-		return false
-	}
-	return target.cancelable(attemptID)
+	target, _, ok := service.resolveDaemon(id)
+	return ok && target != nil && target.window.Live(attemptID)
 }
 
 // TryCancel atomically determines whether id/attemptID names the exact live
 // session/prompt turn and, only if so, delivers a session/cancel
 // notification and blocks (bounded by ctx) until that turn returns.
 func (service *Service) TryCancel(ctx context.Context, id providers.ID, attemptID string) (bool, error) {
-	service.mu.RLock()
-	canonical, ok := service.resolveLocked(id)
-	target := service.daemons[canonical]
-	service.mu.RUnlock()
+	target, _, ok := service.resolveDaemon(id)
 	if !ok || target == nil {
 		return false, nil
 	}
-	return target.tryCancel(ctx, attemptID)
+	return target.window.TryCancel(ctx, attemptID)
 }
 
 func (service *Service) Close(ctx context.Context) error {
@@ -218,8 +220,7 @@ type daemon struct {
 	tree        platformprocess.SubprocessTree
 	stderr      bytes.Buffer
 
-	sessionMu sync.Mutex
-	active    *cancelableSession
+	window cancelwindow.Window
 }
 
 func (daemon *daemon) execute(ctx context.Context, id providers.ID, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
@@ -279,10 +280,9 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 			string(session.SessionId),
 		)
 	}
-	cancelable := daemon.beginCancelable(request.AttemptID, session.SessionId, connection)
+	cancelable := daemon.window.Begin(request.AttemptID, session.SessionId, connection)
 	response, err := connection.Prompt(ctx, acpsdk.PromptRequest{SessionId: session.SessionId, Prompt: prompt})
-	cancelable.cancelled = err == nil && response.StopReason == acpsdk.StopReasonCancelled
-	daemon.endCancelable(cancelable)
+	daemon.window.End(cancelable, err == nil && response.StopReason == acpsdk.StopReasonCancelled)
 	if err != nil {
 		if ctx.Err() != nil {
 			cancelCtx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
