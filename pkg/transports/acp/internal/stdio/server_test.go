@@ -9,7 +9,9 @@ import (
 	"io"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
@@ -633,5 +635,350 @@ func assertJSONEqualStrings(t *testing.T, want, got string) {
 	}
 	if !reflect.DeepEqual(wantAny, gotAny) {
 		t.Fatalf("got %s, want %s", got, want)
+	}
+}
+
+// readerFunc adapts a function to io.Reader.
+type readerFunc func(p []byte) (int, error)
+
+func (f readerFunc) Read(p []byte) (int, error) { return f(p) }
+
+// TestServeReturnsContextErrorOnMidReadCancellation proves cancellation
+// unblocks Serve while the connection's read is genuinely parked waiting
+// for input that will never arrive, for a stream that itself supports
+// cancellation/closure: an io.Pipe's Read blocks until data is written or
+// the pipe is closed, and this test closes the read side once ctx is done
+// -- the same shape a real caller uses to make its context cancellable
+// (pairing WithCancel with a stream close), which is exactly the "stream
+// supports cancellation/closure" case this connection is required to
+// honor. Serve then reports ctx's own error rather than the raw
+// closed-pipe error it observes. Synchronization is entirely channel-based:
+// the wrapped reader closes readStarted the first time it is called, which
+// -- by Go's happens-before rule for goroutine creation -- can only happen
+// after Serve has actually begun reading, so cancel() is never raced
+// against Serve's own pre-check of an already-cancelled context. The single
+// terminal time.After is a hang-safety net, not a poll loop.
+func TestServeReturnsContextErrorOnMidReadCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	pr, pw := io.Pipe()
+	t.Cleanup(func() {
+		_ = pr.Close()
+		_ = pw.Close()
+	})
+	go func() {
+		<-ctx.Done()
+		_ = pr.Close()
+	}()
+
+	readStarted := make(chan struct{})
+	var signalOnce sync.Once
+	in := readerFunc(func(p []byte) (int, error) {
+		signalOnce.Do(func() { close(readStarted) })
+		return pr.Read(p)
+	})
+
+	server := New(nil)
+	done := make(chan error, 1)
+	go func() {
+		done <- server.Serve(ctx, in, &bytes.Buffer{})
+	}()
+
+	select {
+	case <-readStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve never started reading")
+	}
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Serve() error = %v, want context.Canceled", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve did not return after context cancellation")
+	}
+}
+
+// TestServeLogsCancelledOutcomeDistinctFromError proves a mid-connection
+// context cancellation is reported through its own "cancelled" outcome
+// label rather than the generic "error" label a real failure gets, so an
+// operator watching diagnostics can distinguish a deliberate shutdown from
+// a fault. As in TestServeReturnsContextErrorOnMidReadCancellation, it
+// closes the read stream once ctx is done to model a caller-owned stream
+// that supports cancellation/closure, and cancels only after Serve's read
+// has actually started, proving the connection was genuinely mid-flight
+// rather than pre-empted by the already-cancelled-context check
+// (TestServeRejectsAlreadyCancelledContext covers that separate path,
+// which never logs at all).
+func TestServeLogsCancelledOutcomeDistinctFromError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	pr, pw := io.Pipe()
+	t.Cleanup(func() {
+		_ = pr.Close()
+		_ = pw.Close()
+	})
+	go func() {
+		<-ctx.Done()
+		_ = pr.Close()
+	}()
+
+	readStarted := make(chan struct{})
+	var signalOnce sync.Once
+	in := readerFunc(func(p []byte) (int, error) {
+		signalOnce.Do(func() { close(readStarted) })
+		return pr.Read(p)
+	})
+
+	logger := &recordingLogger{}
+	server := New(logger)
+	done := make(chan error, 1)
+	go func() {
+		done <- server.Serve(ctx, in, &bytes.Buffer{})
+	}()
+
+	select {
+	case <-readStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve never started reading")
+	}
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Serve() error = %v, want context.Canceled", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve did not return after context cancellation")
+	}
+
+	if len(logger.entries) != 2 {
+		t.Fatalf("got %d log entries, want 2 (start and terminal)", len(logger.entries))
+	}
+	terminal := logger.entries[1]
+	if terminal.message != "acp stdio connection terminated" {
+		t.Fatalf("message = %q, want the connection-terminated message", terminal.message)
+	}
+	if outcome := terminal.fields["outcome"]; outcome != "cancelled" {
+		t.Fatalf("outcome = %v, want %q", outcome, "cancelled")
+	}
+}
+
+// TestServeRejectsPartialTrailingFrameAsProtocolFailure proves a
+// non-newline-terminated remainder at EOF is treated as a deterministic
+// protocol failure -- ending the connection with an error and writing no
+// response -- rather than being executed as a request the way
+// bufio.ScanLines' default final-token behavior would allow.
+func TestServeRejectsPartialTrailingFrameAsProtocolFailure(t *testing.T) {
+	partial := strings.TrimSuffix(initializeLine("1"), "\n")
+
+	out := &bytes.Buffer{}
+	server := New(nil)
+	err := server.Serve(context.Background(), strings.NewReader(partial), out)
+	if err == nil {
+		t.Fatal("Serve() error = nil, want a protocol failure for a partial trailing frame")
+	}
+	if !errors.Is(err, errPartialTrailingFrame) {
+		t.Fatalf("Serve() error = %v, want errPartialTrailingFrame", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("output = %q, want no response written for an unexecuted partial frame", out.Bytes())
+	}
+}
+
+// TestServeRejectsPartialTrailingFrameAfterACompleteLine proves a partial
+// trailing frame still ends the connection with a protocol failure even
+// after a preceding complete line was already answered -- the earlier
+// response is not undone, but the trailing partial content is never
+// dispatched.
+func TestServeRejectsPartialTrailingFrameAfterACompleteLine(t *testing.T) {
+	input := initializeLine("1") + `{"jsonrpc":"2.0","id":2,"method":"initialize"`
+
+	out := &bytes.Buffer{}
+	server := New(nil)
+	err := server.Serve(context.Background(), strings.NewReader(input), out)
+	if !errors.Is(err, errPartialTrailingFrame) {
+		t.Fatalf("Serve() error = %v, want errPartialTrailingFrame", err)
+	}
+
+	lines := nonEmptyResponseLines(t, out)
+	if len(lines) != 1 {
+		t.Fatalf("got %d response lines, want 1 (only the earlier complete line): %q", len(lines), out.Bytes())
+	}
+	var resp rpcMessage
+	if err := json.Unmarshal(lines[0], &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if string(resp.ID) != "1" {
+		t.Fatalf("id = %s, want 1", resp.ID)
+	}
+}
+
+// countingErrorWriter fails every Write with a fixed error and counts how
+// many times Write was called, so a test can prove the connection stops
+// writing after the first failure instead of retrying or continuing.
+type countingErrorWriter struct {
+	err   error
+	calls int
+}
+
+func (w *countingErrorWriter) Write(p []byte) (int, error) {
+	w.calls++
+	return 0, w.err
+}
+
+// TestServeSurfacesWriterFailureAndStopsFurtherWrites proves a write
+// failure is returned to the caller and ends the connection immediately --
+// a second framed request in the same input never gets an attempted
+// response write.
+func TestServeSurfacesWriterFailureAndStopsFurtherWrites(t *testing.T) {
+	wantErr := errors.New("acp test: simulated write failure")
+	writer := &countingErrorWriter{err: wantErr}
+
+	server := New(nil)
+	input := initializeLine("1") + initializeLine("2")
+	err := server.Serve(context.Background(), strings.NewReader(input), writer)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Serve() error = %v, want %v", err, wantErr)
+	}
+	if writer.calls != 1 {
+		t.Fatalf("writer was called %d times, want exactly 1 (no writes after the first failure)", writer.calls)
+	}
+}
+
+// shortWriter always writes one byte fewer than it was given, without
+// itself returning an error, mirroring a real short write.
+type shortWriter struct{}
+
+func (shortWriter) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	return len(p) - 1, nil
+}
+
+// TestServeTreatsShortWriteAsFailureNotSuccess proves a short write is
+// reported as io.ErrShortWrite and ends the connection, so a truncated
+// response can never be mistaken for a successful initialize exchange.
+func TestServeTreatsShortWriteAsFailureNotSuccess(t *testing.T) {
+	server := New(nil)
+	err := server.Serve(context.Background(), strings.NewReader(initializeLine("1")), shortWriter{})
+	if !errors.Is(err, io.ErrShortWrite) {
+		t.Fatalf("Serve() error = %v, want io.ErrShortWrite", err)
+	}
+}
+
+// syncRecordingLogger is recordingLogger's concurrency-safe twin: multiple
+// connections served concurrently on the same *Server share one logger, so
+// TestServeHandlesConcurrentConnectionsWithoutRaces needs a logger safe for
+// concurrent Info calls (recordingLogger itself is intentionally not
+// synchronized, since every other test in this file drives it from a
+// single goroutine).
+type syncRecordingLogger struct {
+	mu      sync.Mutex
+	entries []logEntry
+}
+
+func (l *syncRecordingLogger) Debug(msg string, keysAndValues ...any) {
+	l.record("debug", msg, keysAndValues...)
+}
+func (l *syncRecordingLogger) Info(msg string, keysAndValues ...any) {
+	l.record("info", msg, keysAndValues...)
+}
+func (l *syncRecordingLogger) Warn(msg string, keysAndValues ...any) {
+	l.record("warn", msg, keysAndValues...)
+}
+func (l *syncRecordingLogger) Error(msg string, keysAndValues ...any) {
+	l.record("error", msg, keysAndValues...)
+}
+func (l *syncRecordingLogger) Verbose(msg string, keysAndValues ...any) {
+	l.record("verbose", msg, keysAndValues...)
+}
+
+func (l *syncRecordingLogger) record(level, msg string, keysAndValues ...any) {
+	fields := map[string]any{}
+	for index := 0; index+1 < len(keysAndValues); index += 2 {
+		key, ok := keysAndValues[index].(string)
+		if !ok {
+			continue
+		}
+		fields[key] = keysAndValues[index+1]
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.entries = append(l.entries, logEntry{level: level, message: msg, fields: fields})
+}
+
+func (l *syncRecordingLogger) startedConnectionIDs() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var ids []string
+	for _, entry := range l.entries {
+		if entry.message != "acp stdio connection started" {
+			continue
+		}
+		if id, ok := entry.fields["connectionId"].(string); ok {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+var _ logging.Logger = (*syncRecordingLogger)(nil)
+
+// TestServeHandlesConcurrentConnectionsWithoutRaces runs many Serve
+// invocations concurrently on one shared *Server (exercising the shared
+// connection-id counter and logger under real concurrency; run with
+// `go test -race` to prove there is no data race) and asserts every
+// connection still gets its own distinct connection id and its own
+// correct, whole-frame initialize response -- concurrent connections never
+// observe each other's identity or output.
+func TestServeHandlesConcurrentConnectionsWithoutRaces(t *testing.T) {
+	const concurrency = 20
+
+	logger := &syncRecordingLogger{}
+	server := New(logger)
+
+	outs := make([]*bytes.Buffer, concurrency)
+	errs := make([]error, concurrency)
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+	for i := range concurrency {
+		outs[i] = &bytes.Buffer{}
+		go func(i int) {
+			defer wg.Done()
+			errs[i] = server.Serve(context.Background(), strings.NewReader(initializeLine("1")), outs[i])
+		}(i)
+	}
+	wg.Wait()
+
+	for i := range concurrency {
+		if errs[i] != nil {
+			t.Fatalf("connection %d: Serve() error = %v", i, errs[i])
+		}
+		resp := assertSingleResponseLine(t, outs[i])
+		if string(resp.ID) != "1" {
+			t.Fatalf("connection %d: id = %s, want 1", i, resp.ID)
+		}
+		if resp.Error != nil {
+			t.Fatalf("connection %d: error = %+v, want a successful result", i, resp.Error)
+		}
+		assertJSONEqualStrings(t, initializeSuccessResult, string(resp.Result))
+	}
+
+	ids := logger.startedConnectionIDs()
+	if len(ids) != concurrency {
+		t.Fatalf("got %d started-connection log entries, want %d", len(ids), concurrency)
+	}
+	seen := make(map[string]bool, concurrency)
+	for _, id := range ids {
+		if id == "" {
+			t.Fatal("got an empty connection id")
+		}
+		if seen[id] {
+			t.Fatalf("connection id %q was reused across concurrent connections", id)
+		}
+		seen[id] = true
 	}
 }

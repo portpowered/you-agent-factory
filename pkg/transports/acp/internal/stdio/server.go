@@ -1,15 +1,14 @@
 // Package stdio implements the ACP agent-side JSON-RPC stdio server:
 // caller-owned stream serving, one-connection lifecycle, connection-scoped
 // identity assignment, newline-delimited JSON-RPC framing and dispatch for
-// the "initialize" method, and protocol-safe rejection of malformed input,
-// unsupported methods, and unsupported protocol versions. Every method
-// other than "initialize" -- including deferred ACP session and prompt
-// methods -- is not yet implemented by this transport and receives
-// method-not-found rather than being dispatched. Shutdown semantics beyond
-// clean EOF (mid-read cancellation, writer-failure termination guarantees,
-// and concurrent-lifecycle coverage) are added by a later story in this
-// slice. It is internal to pkg/transports/acp; callers use the package
-// root's exported operations instead of this package directly.
+// the "initialize" method, protocol-safe rejection of malformed input,
+// unsupported methods, and unsupported protocol versions, and deterministic
+// termination on clean EOF, context cancellation, a partial trailing frame,
+// or a writer failure. Every method other than "initialize" -- including
+// deferred ACP session and prompt methods -- is not yet implemented by this
+// transport and receives method-not-found rather than being dispatched. It
+// is internal to pkg/transports/acp; callers use the package root's
+// exported operations instead of this package directly.
 package stdio
 
 import (
@@ -71,7 +70,7 @@ func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 	logger := logging.EnsureLogger(s.logger)
 	logger.Info("acp stdio connection started", "connectionId", string(connectionID))
 
-	err := serveConnection(connectionID, in, out)
+	err := serveConnection(ctx, connectionID, in, out)
 
 	logger.Info("acp stdio connection terminated",
 		"connectionId", string(connectionID),
@@ -85,23 +84,72 @@ func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 // that happens to mention sensitive request content can never reach a log
 // record through this label.
 func terminalOutcomeLabel(err error) string {
-	if err == nil {
+	switch {
+	case err == nil:
 		return "eof"
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return "cancelled"
+	default:
+		return "error"
 	}
-	return "error"
+}
+
+// errPartialTrailingFrame marks input that reaches EOF with a non-empty
+// remainder that was never terminated by a newline. Treating that remainder
+// as a final request -- the way bufio.ScanLines does by default -- would
+// execute less than the full message the client meant to send, so it is
+// instead a deterministic protocol failure that ends the connection.
+var errPartialTrailingFrame = errors.New("acp: stdio input ended with a partial trailing frame")
+
+// scanCompleteLines is a bufio.SplitFunc that only ever yields complete,
+// newline-terminated lines, unlike bufio.ScanLines' default behavior of
+// also yielding a final non-newline-terminated remainder at EOF.
+func scanCompleteLines(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if i := bytes.IndexByte(data, '\n'); i >= 0 {
+		return i + 1, data[:i], nil
+	}
+	if atEOF {
+		if len(bytes.TrimSpace(data)) > 0 {
+			return 0, nil, errPartialTrailingFrame
+		}
+		return len(data), nil, nil
+	}
+	return 0, nil, nil
 }
 
 // serveConnection reads line-delimited input to a clean EOF, treating every
 // complete non-empty line as one JSON-RPC 2.0 message. Each notification is
 // dispatched with no response ever written for it, and every other message
 // receives exactly one complete newline-terminated JSON-RPC response before
-// the next line is read, so no two responses can interleave.
-func serveConnection(connectionID identity.ConnectionID, in io.Reader, out io.Writer) error {
+// the next line is read, so no two responses can interleave. Context
+// cancellation is checked before every read: it stops accepting new work
+// immediately, and once a read fails or ends because the caller-owned
+// stream itself was closed or cancelled on the context's behalf, the
+// context's error is reported instead of the stream's raw error, so a
+// deliberate shutdown is never mistaken for a fault. A partial trailing
+// frame at EOF and a response write failure both end the connection with
+// their own error instead of being treated as success.
+func serveConnection(ctx context.Context, connectionID identity.ConnectionID, in io.Reader, out io.Writer) error {
 	scanner := bufio.NewScanner(in)
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+	scanner.Split(scanCompleteLines)
 
 	var notificationSeq uint64
-	for scanner.Scan() {
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		if !scanner.Scan() {
+			if err := scanner.Err(); err != nil {
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					return ctxErr
+				}
+				return err
+			}
+			return nil
+		}
+
 		line := scanner.Bytes()
 		if len(bytes.TrimSpace(line)) == 0 {
 			continue
@@ -117,7 +165,6 @@ func serveConnection(connectionID identity.ConnectionID, in io.Reader, out io.Wr
 			return err
 		}
 	}
-	return scanner.Err()
 }
 
 // dispatchRequest decodes and executes one JSON-RPC message received on
