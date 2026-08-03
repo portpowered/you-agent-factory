@@ -390,25 +390,32 @@ func TestService_PublishNeverDivergesFromEventsWhenTheTopicIsNotAligned(t *testi
 	// The publisher marshals the payload it sends to Events before Append
 	// assigns the real position, using its own predicted sequenceHint (1)
 	// rather than the position Events ends up assigning (2): the accepted
-	// Events record at position 2 therefore embeds a self-reported Sequence
-	// of 1, not 2. Decoding it directly documents this known, expected
-	// payload/position divergence for a non-aligned topic.
-	var rawEventsPayload responseevents.FactoryResponseEvent
-	if err := json.Unmarshal(read.Records[1].Payload, &rawEventsPayload); err != nil {
-		t.Fatalf("decode Events payload at position 2: %v", err)
+	// Events record at position 2's raw JSON payload therefore embeds a
+	// stale self-reported Sequence of 1, not 2. events.Service.Append is one
+	// round trip -- the payload can never be rewritten after acceptance to
+	// correct that prediction -- so responseeventstore.DecodeFactoryResponseEvent
+	// is the single authoritative decode boundary every reader of this topic
+	// (direct or through the compatibility surface) must use: it always
+	// derives Sequence from the record's own assigned aggregate Position,
+	// never from the payload's embedded field.
+	directlyDecoded, err := responseeventstore.DecodeFactoryResponseEvent(read.Records[1])
+	if err != nil {
+		t.Fatalf("DecodeFactoryResponseEvent: %v", err)
 	}
-	if rawEventsPayload.Sequence != 1 {
-		t.Fatalf("Events payload at position 2 embeds Sequence = %d, want 1 (the store's own pre-Append predicted hint)", rawEventsPayload.Sequence)
+	if directlyDecoded.Sequence != 2 || directlyDecoded.EventID != published.EventID {
+		t.Fatalf(
+			"a direct Events reader decoding the record at position 2 through the canonical decode boundary got %#v, want sequence 2 and eventID %q: it must observe the authority-assigned identity, not the payload's stale pre-Append hint",
+			directlyDecoded, published.EventID,
+		)
 	}
 
-	// The compatibility surface must never deliver that stale embedded
-	// hint: SubscribeFactoryResponseEvents' delivered identity must agree
-	// with the authority-assigned position (2) the store and Events both
-	// adopted, not the payload's self-reported pre-Append value (1). This
-	// is the regression PR #1753 round-11 review flagged
-	// (2026-08-03T22:32:00Z): substituteFromEvents previously returned the
-	// raw decoded payload unchanged, silently reintroducing sequence 1 for
-	// a record both the store and Events agree is positioned at 2.
+	// The compatibility surface must decode through the exact same
+	// authoritative boundary, so a direct Events reader and the
+	// compatibility surface always agree on identity for the same accepted
+	// record -- not just agree with the store's own bookkeeping. This is the
+	// regression PR #1753's round-11 review flagged (2026-08-03T22:51:32Z):
+	// repairing only the compatibility copy after the fact still left a
+	// direct Events reader observing the stale, unresolved payload sequence.
 	cursor, err := service.Subscribe(ctx, store, responsestreamservice.SubscriptionRequest{})
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
@@ -421,9 +428,15 @@ func TestService_PublishNeverDivergesFromEventsWhenTheTopicIsNotAligned(t *testi
 	if len(delivered) != 1 {
 		t.Fatalf("Next() delivered %d events, want 1", len(delivered))
 	}
+	if delivered[0].Sequence != directlyDecoded.Sequence || delivered[0].EventID != directlyDecoded.EventID {
+		t.Fatalf(
+			"delivered[0] = %#v, want it to agree with the direct Events decode %#v: a direct Events reader and the compatibility surface must observe the same underlying accepted response event identity and aggregate ordering",
+			delivered[0], directlyDecoded,
+		)
+	}
 	if delivered[0].Sequence != published.Sequence || delivered[0].EventID != published.EventID {
 		t.Fatalf(
-			"delivered[0] = %#v, want the authority-assigned identity (sequence %d, eventID %q): the compatibility surface must never deliver the payload's stale pre-Append sequence hint",
+			"delivered[0] = %#v, want the authority-assigned identity (sequence %d, eventID %q)",
 			delivered[0], published.Sequence, published.EventID,
 		)
 	}

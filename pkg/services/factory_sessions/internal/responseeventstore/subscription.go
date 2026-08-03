@@ -351,6 +351,35 @@ func (s *SessionResponseEventStore) eventsAfterLocked(afterSequence int64, dispa
 	return result
 }
 
+// DecodeFactoryResponseEvent is the single authoritative way to interpret a
+// Factory Session response event carried by an Events record on a session's
+// response-event topic (see responseEventTopic in the owning response_stream
+// service). events.Service.Append is one round trip: the publisher must
+// marshal a self-describing payload before Append assigns the record's real
+// aggregate position, so it can only ever predict that position beforehand
+// (see ResponseStream.Publish's sequenceHint) -- and an already-accepted
+// payload can never be rewritten afterward to correct a stale prediction on
+// a non-aligned topic (one whose Events aggregate positions and this store's
+// own session-local sequence numbering diverge, for example a second store
+// instance bound to a session topic that already carries history from a
+// prior instance). This function resolves that one-round-trip constraint
+// explicitly rather than masking it at any one caller's read boundary: it
+// never trusts the payload's own embedded Sequence field, and instead always
+// derives Sequence from the Events record's own assigned aggregate Position.
+// Every reader of this topic -- this store's own compatibility surface, and
+// any future direct Events consumer of the same topic -- must decode through
+// this function so they always observe one consistent identity for the same
+// accepted record, instead of each independently reconciling (or failing to
+// reconcile) the payload's stale predicted value.
+func DecodeFactoryResponseEvent(record events.Record) (responseevents.FactoryResponseEvent, error) {
+	var decoded responseevents.FactoryResponseEvent
+	if err := json.Unmarshal(record.Payload, &decoded); err != nil {
+		return responseevents.FactoryResponseEvent{}, err
+	}
+	decoded.Sequence = int64(record.ID.Position)
+	return decoded, nil
+}
+
 // substituteFromEvents replaces each real (non-gap) delivered event's
 // content with the matching record read back from the injected Events root,
 // so a subscriber's delivered content is genuinely sourced from Events
@@ -414,7 +443,7 @@ func (s *SessionResponseEventStore) substituteFromEvents(delivered []responseeve
 		return delivered
 	}
 
-	bySequence, hardFailure := s.readEventsAuthorityRange(context.Background(), minSeq, maxSeq)
+	byPosition, hardFailure := s.readEventsAuthorityRange(context.Background(), minSeq, maxSeq)
 
 	substituted := make([]responseevents.FactoryResponseEvent, len(delivered))
 	for i, event := range delivered {
@@ -422,7 +451,7 @@ func (s *SessionResponseEventStore) substituteFromEvents(delivered []responseeve
 			substituted[i] = event
 			continue
 		}
-		payload, ok := bySequence[event.Sequence]
+		record, ok := byPosition[event.Sequence]
 		if !ok {
 			if hardFailure {
 				substituted[i] = s.eventsAuthorityGapEvent(event.Sequence)
@@ -435,24 +464,11 @@ func (s *SessionResponseEventStore) substituteFromEvents(delivered []responseeve
 			}
 			continue
 		}
-		var fromEvents responseevents.FactoryResponseEvent
-		if unmarshalErr := json.Unmarshal(payload, &fromEvents); unmarshalErr != nil {
+		fromEvents, err := DecodeFactoryResponseEvent(record)
+		if err != nil {
 			substituted[i] = s.eventsAuthorityGapEvent(event.Sequence)
 			continue
 		}
-		// The publisher marshals this payload before Events assigns the
-		// record's aggregate position (it must predict a sequenceHint to
-		// encode a self-describing payload at all), so the payload's own
-		// embedded Sequence field can be stale whenever Events assigns a
-		// different position than that hint (a non-aligned topic; see
-		// TestService_PublishNeverDivergesFromEventsWhenTheTopicIsNotAligned).
-		// event.Sequence is this store's own retained Sequence for this
-		// position, which PublishThroughAuthority already set from the
-		// position Events actually returned (store.go's "sequence" return
-		// value, not the predicted hint), so it -- not the payload's
-		// self-reported field -- is the authoritative identity for the
-		// record positioned here.
-		fromEvents.Sequence = event.Sequence
 		substituted[i] = fromEvents
 	}
 	return substituted
@@ -484,8 +500,8 @@ func (s *SessionResponseEventStore) substituteFromEvents(delivered []responseeve
 // (not a hard failure -- every position in range was accounted for) apart
 // from "Events could not be read at all" (a hard failure), since only the
 // latter must never be masked by falling back to local content.
-func (s *SessionResponseEventStore) readEventsAuthorityRange(ctx context.Context, minSeq, maxSeq int64) (bySequence map[int64]json.RawMessage, hardFailure bool) {
-	bySequence = make(map[int64]json.RawMessage, maxSeq-minSeq+1)
+func (s *SessionResponseEventStore) readEventsAuthorityRange(ctx context.Context, minSeq, maxSeq int64) (byPosition map[int64]events.Record, hardFailure bool) {
+	byPosition = make(map[int64]events.Record, maxSeq-minSeq+1)
 	from := events.AggregateSequence(minSeq - 1)
 	for int64(from) < maxSeq {
 		limit := int(maxSeq) - int(from)
@@ -495,7 +511,7 @@ func (s *SessionResponseEventStore) readEventsAuthorityRange(ctx context.Context
 			Limit: limit,
 		})
 		if err != nil {
-			return bySequence, true
+			return byPosition, true
 		}
 		switch result.Outcome {
 		case events.ReadOutcomeProgress:
@@ -504,23 +520,23 @@ func (s *SessionResponseEventStore) readEventsAuthorityRange(ctx context.Context
 				if position > maxSeq {
 					continue
 				}
-				bySequence[position] = record.Payload
+				byPosition[position] = record
 			}
 			if result.Next.Position <= from {
-				return bySequence, false
+				return byPosition, false
 			}
 			from = result.Next.Position
 		case events.ReadOutcomeGap:
 			next := events.AggregateSequence(result.Gap.EarliestRetained) - 1
 			if next <= from {
-				return bySequence, false
+				return byPosition, false
 			}
 			from = next
 		default:
-			return bySequence, true
+			return byPosition, true
 		}
 	}
-	return bySequence, false
+	return byPosition, false
 }
 
 // eventsAuthorityGapEventReason marks a synthetic stream-gap event produced
