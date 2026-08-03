@@ -44,7 +44,7 @@ func TestServe_PipeSmoke_RealStdioInitializeExchangeAndCleanEOF(t *testing.T) {
 		_ = stdoutWrite.Close()
 	})
 
-	server := New(nil)
+	server := New(nil, nil, nil, nil)
 	serveErr := make(chan error, 1)
 	go func() {
 		serveErr <- server.Serve(context.Background(), stdinRead, stdoutWrite)
