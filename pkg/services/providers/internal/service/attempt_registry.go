@@ -21,6 +21,19 @@ type liveAttemptKey struct {
 	attemptID string
 }
 
+// liveAttemptControl is the control handle bound for one live attempt's
+// exact signal seam. Implementations report which actions have a truthful
+// signal for the attempt right now (supports) and, once claim has already
+// atomically proven that seam was live, deliver the signal and block until
+// the attempt observes its terminal behavior (signal). nativeAttemptControl
+// and acpAttemptControl are the two implementations; ControlAttempt and the
+// registry operate on the interface and do not need to know which kind a
+// given live identity bound.
+type liveAttemptControl interface {
+	supports(action providers.ControlAction) bool
+	signal()
+}
+
 // nativeAttemptControl is the control handle bound for one in-flight native
 // (non-ACP) provider attempt. cancel triggers the same context cancellation
 // the execution seam already force-terminates its adapter subprocess/PTY
@@ -34,6 +47,8 @@ type nativeAttemptControl struct {
 	cancel context.CancelFunc
 	done   <-chan struct{}
 }
+
+var _ liveAttemptControl = (*nativeAttemptControl)(nil)
 
 // supports reports whether action has a truthful native signal seam. Cancel
 // and Terminate both resolve to the one force-kill mechanism every native
@@ -57,10 +72,10 @@ func (control *nativeAttemptControl) signal() {
 }
 
 // liveAttemptEntry is the value held for one live identity. control is nil
-// for attempts with no truthful exact-attempt signal seam bound at Execute
-// time (for example, the ACP path in this packet).
+// only for a live identity with no signal handle bound at all; every
+// production Execute path in this packet binds one (see bindLiveAttempt).
 type liveAttemptEntry struct {
-	control *nativeAttemptControl
+	control liveAttemptControl
 }
 
 // liveAttemptRegistry correlates in-flight Execute calls with their canonical
@@ -82,7 +97,7 @@ func newLiveAttemptRegistry() *liveAttemptRegistry {
 // idempotent and safe to call from any terminal path, including a panic
 // unwind, exactly once per successful bind; it is a no-op once claim has
 // already removed key.
-func (registry *liveAttemptRegistry) bind(key liveAttemptKey, control *nativeAttemptControl) (func(), error) {
+func (registry *liveAttemptRegistry) bind(key liveAttemptKey, control liveAttemptControl) (func(), error) {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 
@@ -113,11 +128,13 @@ func (registry *liveAttemptRegistry) contains(key liveAttemptKey) bool {
 
 // claim atomically removes key from the live set and returns its control
 // handle, but only when key is currently live, bound a control handle, and
-// that handle truthfully supports action. It leaves key live and reports
-// ok=false for an unknown or already-terminal attempt, an attempt with no
-// exact-attempt signal seam (for example ACP in this packet), or an
-// unsupported action such as Pause, so no unintended side effect occurs and
-// a later valid control for the same identity can still succeed.
+// that handle truthfully supports action right now. It leaves key live and
+// reports ok=false for an unknown or already-terminal attempt, an attempt
+// with no exact-attempt signal seam, an attempt whose seam is not yet (or no
+// longer) truthfully live (for example an ACP attempt before its session/
+// prompt turn has started), or an unsupported action such as Pause, so no
+// unintended side effect occurs and a later valid control for the same
+// identity can still succeed.
 //
 // Because removal happens under the same mutex bind/release use, at most one
 // caller ever wins a given identity: a concurrent duplicate control and a
@@ -127,7 +144,7 @@ func (registry *liveAttemptRegistry) contains(key liveAttemptKey) bool {
 func (registry *liveAttemptRegistry) claim(
 	key liveAttemptKey,
 	action providers.ControlAction,
-) (*nativeAttemptControl, bool) {
+) (liveAttemptControl, bool) {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 

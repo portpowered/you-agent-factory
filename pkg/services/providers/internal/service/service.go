@@ -145,7 +145,8 @@ func (s *Service) Execute(
 				}
 			}
 			request.Provider = canonical
-			release, bindErr := s.bindLiveAttempt(canonical, request.AttemptID, nil)
+			control := &acpAttemptControl{acp: s.acp, canonical: canonical, attemptID: request.AttemptID}
+			release, bindErr := s.bindLiveAttempt(canonical, request.AttemptID, control)
 			if bindErr != nil {
 				return providers.ExecuteResult{}, bindErr
 			}
@@ -188,14 +189,12 @@ func (s *Service) Execute(
 // that exact identity before its controllable provider operation begins. A
 // collision with an already-live identity is reported through the same typed
 // ExecuteFailure model as any other Execute rejection, before any provider
-// side effect for the second request begins. control is the optional exact-
-// attempt signal handle a later ControlAttempt call can claim; it is nil for
-// paths with no truthful exact-attempt seam bound yet (the ACP path in this
-// packet).
+// side effect for the second request begins. control is the exact-attempt
+// signal handle a later ControlAttempt call can claim.
 func (s *Service) bindLiveAttempt(
 	canonical providers.ID,
 	attemptID string,
-	control *nativeAttemptControl,
+	control liveAttemptControl,
 ) (func(), error) {
 	release, err := s.attempts.bind(liveAttemptKey{provider: canonical, attemptID: attemptID}, control)
 	if err != nil {
@@ -208,12 +207,12 @@ func (s *Service) bindLiveAttempt(
 }
 
 // ControlAttempt routes a valid cancel or terminate request to the exact
-// live native provider attempt it names, when one is bound and truthfully
-// supports the requested action, and otherwise answers with the closed
-// deterministic unsupported outcome. It never signals a different live
-// attempt, never signals an ACP attempt (see the ACP-L2-IMP-PRV-CONTROL-003
-// packet for ACP control), and invokes no Worker cancellation method or
-// continuation behavior.
+// live native provider attempt it names, or a valid cancel request to the
+// exact live ACP attempt it names, when one is bound and truthfully
+// supports the requested action right now, and otherwise answers with the
+// closed deterministic unsupported outcome. It never signals a different
+// live attempt and invokes no Worker cancellation method or continuation
+// behavior.
 func (s *Service) ControlAttempt(
 	_ context.Context,
 	request providers.ControlAttemptRequest,

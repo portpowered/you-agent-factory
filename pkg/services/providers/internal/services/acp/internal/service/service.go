@@ -61,6 +61,32 @@ func (service *Service) Execute(ctx context.Context, id providers.ID, request pr
 	return daemon.execute(ctx, canonical, request)
 }
 
+// Cancelable reports whether attemptID names the exact attempt id's daemon
+// currently has an established session/prompt turn in flight for.
+func (service *Service) Cancelable(id providers.ID, attemptID string) bool {
+	service.mu.RLock()
+	canonical, ok := service.resolveLocked(id)
+	target := service.daemons[canonical]
+	service.mu.RUnlock()
+	if !ok || target == nil {
+		return false
+	}
+	return target.cancelable(attemptID)
+}
+
+// Cancel delivers a session/cancel notification to id/attemptID's exact
+// in-flight session/prompt turn and blocks until that turn returns.
+func (service *Service) Cancel(ctx context.Context, id providers.ID, attemptID string) error {
+	service.mu.RLock()
+	canonical, ok := service.resolveLocked(id)
+	target := service.daemons[canonical]
+	service.mu.RUnlock()
+	if !ok || target == nil {
+		return nil
+	}
+	return target.cancel(ctx, attemptID)
+}
+
 func (service *Service) Close(ctx context.Context) error {
 	service.mu.Lock()
 	daemons := service.daemons
@@ -190,6 +216,65 @@ type daemon struct {
 	finished    chan error
 	tree        platformprocess.SubprocessTree
 	stderr      bytes.Buffer
+
+	sessionMu sync.Mutex
+	active    *cancelableSession
+}
+
+// cancelableSession is the exact live session/prompt turn a session/cancel
+// notification can currently target. It exists only for the span between
+// the owning daemon.execute call issuing its session/prompt request and
+// that call returning.
+type cancelableSession struct {
+	attemptID  string
+	sessionID  acpsdk.SessionId
+	connection *acpsdk.ClientSideConnection
+	done       chan struct{}
+}
+
+// beginCancelable opens the cancelable window for one attempt's in-flight
+// session/prompt turn.
+func (daemon *daemon) beginCancelable(attemptID string, sessionID acpsdk.SessionId, connection *acpsdk.ClientSideConnection) *cancelableSession {
+	session := &cancelableSession{attemptID: attemptID, sessionID: sessionID, connection: connection, done: make(chan struct{})}
+	daemon.sessionMu.Lock()
+	daemon.active = session
+	daemon.sessionMu.Unlock()
+	return session
+}
+
+// endCancelable closes the cancelable window opened by beginCancelable and
+// unblocks any cancel call already waiting on it. Safe to call on every
+// daemon.execute exit path, including an unexpected terminal unwind.
+func (daemon *daemon) endCancelable(session *cancelableSession) {
+	close(session.done)
+	daemon.sessionMu.Lock()
+	if daemon.active == session {
+		daemon.active = nil
+	}
+	daemon.sessionMu.Unlock()
+}
+
+// cancelable reports, without any side effect, whether attemptID names the
+// currently open cancelable window.
+func (daemon *daemon) cancelable(attemptID string) bool {
+	daemon.sessionMu.Lock()
+	defer daemon.sessionMu.Unlock()
+	return daemon.active != nil && daemon.active.attemptID == attemptID
+}
+
+// cancel delivers a session/cancel notification to attemptID's exact
+// cancelable window and blocks until that window closes. It is a no-op if
+// attemptID is not (or is no longer) the open window.
+func (daemon *daemon) cancel(ctx context.Context, attemptID string) error {
+	daemon.sessionMu.Lock()
+	session := daemon.active
+	daemon.sessionMu.Unlock()
+	if session == nil || session.attemptID != attemptID {
+		return nil
+	}
+	err := session.connection.Cancel(ctx, acpsdk.CancelNotification{SessionId: session.sessionID})
+	<-session.done
+	return err
 }
 
 func (daemon *daemon) execute(ctx context.Context, id providers.ID, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
@@ -255,7 +340,10 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 			string(session.SessionId),
 		)
 	}
-	if _, err := connection.Prompt(ctx, acpsdk.PromptRequest{SessionId: session.SessionId, Prompt: prompt}); err != nil {
+	cancelable := daemon.beginCancelable(request.AttemptID, session.SessionId, connection)
+	response, err := connection.Prompt(ctx, acpsdk.PromptRequest{SessionId: session.SessionId, Prompt: prompt})
+	daemon.endCancelable(cancelable)
+	if err != nil {
 		if ctx.Err() != nil {
 			cancelCtx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 			_ = connection.Cancel(cancelCtx, acpsdk.CancelNotification{SessionId: session.SessionId})
@@ -264,7 +352,19 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 		daemon.invalidateDisconnected(context.Background())
 		return providers.ExecuteResult{}, withPartial(rpcFailure(ctx, "session/prompt", id, err, daemon.stderr.String(), request), client, id)
 	}
+	if response.StopReason == acpsdk.StopReasonCancelled {
+		return providers.ExecuteResult{}, withPartial(acpControlCanceledFailure(id), client, id)
+	}
 	return providers.ExecuteResult{Content: client.content(), SessionRef: &providers.SessionRef{Provider: id, Kind: providers.SessionIDKind, ID: string(session.SessionId)}, Diagnostics: &providers.ExecuteDiagnostics{Progress: completedPromptProgress(client.progressFacts()), Metadata: map[string]string{"execution_kind": "acp", "protocol_version": fmt.Sprint(initialized.ProtocolVersion), "model_config": modelConfig}}}, nil
+}
+
+// acpControlCanceledFailure reports the established canceled ExecuteFailure
+// for an ACP attempt whose session/prompt turn honored a session/cancel
+// notification and returned StopReasonCancelled instead of an RPC error,
+// consistent with the ExecuteFailureKindCanceled every other cancellation
+// path (native and ACP request-context cancellation) already normalizes to.
+func acpControlCanceledFailure(id providers.ID) error {
+	return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindCanceled, Message: fmt.Sprintf("ACP provider %q attempt was canceled", id)}
 }
 
 func completedPromptProgress(updates []providers.ExecuteProgress) []providers.ExecuteProgress {
