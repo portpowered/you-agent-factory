@@ -1147,6 +1147,10 @@
       "minimum": 78.78
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/testing/eventsstub",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session",
       "minimum": 74.40
     },
