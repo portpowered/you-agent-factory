@@ -52,14 +52,15 @@ func Guard(method string, validate func() error, effect func() error) error {
 // the connection/framing layer's responsibility to supply a value unique
 // per notification received on this connection (see envelope.Decode), and
 // GuardEnvelope has no state of its own to derive one from. A malformed
-// envelope -- invalid JSON, a missing method, an unsupported id shape, an
-// id-bearing notification, or a request method with no id -- is rejected
-// here, before the method is looked up against SupportedMethods and before
-// validate or effect is ever called, so a malformed message can never
-// reach dispatch under a request identity that was never actually
-// validated. A well-formed envelope is then dispatched exactly like Guard:
-// an unsupported method never calls validate or effect, and a validate
-// failure never calls effect.
+// envelope -- invalid JSON, valid JSON that is not a request object, a
+// missing method, an unsupported id shape, or an id-bearing notification --
+// is rejected here, before the method is looked up against SupportedMethods
+// and before validate or effect is ever called, so a malformed message can
+// never reach dispatch under a request identity that was never actually
+// validated. A message with no id is always well-formed (a notification,
+// regardless of method; see envelope.Decode) and is then dispatched exactly
+// like Guard: an unsupported method never calls validate or effect, and a
+// validate failure never calls effect.
 //
 // GuardEnvelope returns the decoded Envelope alongside the dispatch error
 // so a caller can tell whether a response is ever owed for this message:
