@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	acpsdk "github.com/coder/acp-go-sdk"
@@ -353,26 +354,61 @@ func (s *Server) dispatchFactoryTurn(ctx context.Context, startResult chatsessio
 		}
 	}
 
-	if _, err := s.chatSessions.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
-		SessionID: startResult.Session.ID,
-		TurnID:    startResult.Turn.ID,
-		Next:      terminal,
-	}); err != nil {
-		// The turn is still RUNNING (this transition never took effect). If
-		// the attempted terminal state was not already the safe FAILED
-		// fallback, make one recovery attempt at it -- RUNNING->FAILED is
-		// always a legal transition, so this is the one fallback guaranteed
-		// available regardless of which terminal state the primary attempt
-		// targeted. Without this, a failed terminal AdvanceTurn call would
-		// leave the session's ActiveTurnID set forever, stranding every
-		// later prompt behind a busy turn that already finished dispatching.
-		if terminal != chatsessions.TurnStateFailed {
-			s.recoverStrandedTurn(ctx, startResult.Session.ID, startResult.Turn.ID, chatsessions.TurnStateFailed)
-		}
+	if err := s.advanceTurnWithRecovery(ctx, startResult.Session.ID, startResult.Turn.ID, terminal); err != nil {
 		return nil, classifyDependencyFailure(err)
 	}
 
 	return result, rpcErr
+}
+
+// terminalRecoveryOrder lists every terminal TurnState in a fixed priority
+// order: FAILED, CANCELED, COMPLETED. RUNNING->{COMPLETED,CANCELED,FAILED}
+// are all legal transitions (see TurnState.CanTransitionTo), so this list is
+// exactly the set of fallback terminal states advanceTurnWithRecovery can
+// still try after its primary attempt fails, regardless of which of the
+// three the primary attempt targeted. FAILED and CANCELED are tried before
+// COMPLETED so a recovered turn is never fabricated as a genuine success --
+// COMPLETED is only ever used as a last-resort fallback (when both FAILED
+// and CANCELED are themselves the failed primary or also fail) purely to
+// avoid stranding the session's busy state entirely.
+var terminalRecoveryOrder = []chatsessions.TurnState{
+	chatsessions.TurnStateFailed,
+	chatsessions.TurnStateCanceled,
+	chatsessions.TurnStateCompleted,
+}
+
+// advanceTurnWithRecovery advances turnID to primary and, if that call
+// itself fails, retries every other state in terminalRecoveryOrder in turn
+// until one succeeds or all have been exhausted. This guarantees the turn
+// reaches some terminal state -- releasing the session's busy/active-turn
+// state -- as long as any single legal RUNNING->terminal transition still
+// succeeds, not only the specific one primary happened to target: a prior
+// version of this recovery only ever attempted FAILED as a fallback, which
+// left a turn stranded whenever the primary attempt's target was already
+// FAILED and that exact call failed. The original failure is what gets
+// returned to the caller regardless of whether a fallback attempt
+// succeeded, since that failure is what actually happened to the operation
+// the caller cares about (dispatch, notification delivery, or response
+// marshaling); only the turn's own busy/terminal bookkeeping is repaired
+// here.
+func (s *Server) advanceTurnWithRecovery(ctx context.Context, sessionID, turnID string, primary chatsessions.TurnState) error {
+	_, err := s.chatSessions.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: sessionID, TurnID: turnID, Next: primary,
+	})
+	if err == nil {
+		return nil
+	}
+	for _, fallback := range terminalRecoveryOrder {
+		if fallback == primary {
+			continue
+		}
+		if _, fallbackErr := s.chatSessions.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+			SessionID: sessionID, TurnID: turnID, Next: fallback,
+		}); fallbackErr == nil {
+			return err
+		}
+	}
+	return err
 }
 
 // terminalStateForFailure classifies a Factory dispatch or response-mapping
@@ -450,6 +486,18 @@ func factoryInvocationTurnState(status factorysessions.InvocationTerminalStatus)
 // (for example a transient version conflict) keeps the pending record and
 // the runtime open, so no later retry can ever lose track of it and start a
 // second Factory Session for the same episode.
+// factoryStartRequestID derives the stable idempotency key
+// startFactorySessionForEpisode passes as StartRequest.RequestID: the
+// session ID and episode number, both fixed for the life of one target
+// episode, never the admitted Turn's own ID (which is different on every
+// retry). This is what lets a retried start -- for example after a
+// successful StartFactoryTarget whose immediately-following
+// RecordPendingFactorySession call failed -- converge on the exact same
+// on-demand Factory Sessions activation instead of starting a second one.
+func factoryStartRequestID(sessionID string, episode uint64) string {
+	return fmt.Sprintf("%s/episode/%d", sessionID, episode)
+}
+
 func (s *Server) startFactorySessionForEpisode(
 	ctx context.Context,
 	startResult chatsessions.StartTurnResult,
@@ -462,7 +510,16 @@ func (s *Server) startFactorySessionForEpisode(
 	factorySessionID := startResult.Episode.PendingFactorySessionID
 	if factorySessionID == "" {
 		startReq := factorysessions.StartRequest{
-			RequestID: startResult.Turn.ID,
+			// A stable per-episode key, not the admitted Turn's own ID: a
+			// retry of this same still-unbound episode (whether the original
+			// RecordPendingFactorySession call below failed, or a genuinely
+			// distinct later turn observes the episode still unbound) reuses
+			// this exact RequestID, so ondemandtarget.Service.StartAsync's
+			// own request-scoped deduplication converges on the identical
+			// runtime instead of opening a second one -- see that method's
+			// doc comment. The Turn's own ID changes on every retry and
+			// would defeat this.
+			RequestID: factoryStartRequestID(startResult.Session.ID, startResult.Episode.Number),
 			Source: factorysessions.Source{
 				Kind:      factoryruntime.WorkflowSourceKindFactoryID,
 				FactoryID: startResult.Episode.Target.Ref,

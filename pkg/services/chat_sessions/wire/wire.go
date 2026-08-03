@@ -18,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/factorysessionsshim"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/service"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
@@ -66,13 +65,22 @@ func NewFactoryTargetCatalogService(
 // subpackage -- see NewFactoryTargetService.
 type FactoryTargetService = factorysessionsshim.FactoryTargetService
 
+// FactoryTargetExecutionService is the narrow start/invoke/cancel/close
+// execution dependency the shim actually forwards to (re-published for the
+// same reason as FactoryTargetService). Any concrete
+// factorysessions.Service -- the CLI daemon's full singleton, or a narrower,
+// consumer-owned activation like factory_sessions/wire's own
+// OnDemandFactoryTargetService that implements only these four methods --
+// satisfies it structurally.
+type FactoryTargetExecutionService = factorysessionsshim.FactoryTargetExecutionService
+
 // NewFactoryTargetService constructs the existing Chat Sessions-owned
-// Factory Sessions shim (factorysessionsshim.Shim) over the given
-// factorysessions.Service. It is a stateless, exactly-once-forwarding
-// adapter: this constructor performs no I/O and adds no behavior beyond what
+// Factory Sessions shim (factorysessionsshim.Shim) over the given execution
+// service. It is a stateless, exactly-once-forwarding adapter: this
+// constructor performs no I/O and adds no behavior beyond what
 // factorysessionsshim.New itself already does. pkg/wire is the only intended
 // caller (chat_sessions/internal/factorysessionsshim cannot be imported
 // directly outside this service's own tree).
-func NewFactoryTargetService(service factorysessions.Service) FactoryTargetService {
+func NewFactoryTargetService(service FactoryTargetExecutionService) FactoryTargetService {
 	return factorysessionsshim.New(service)
 }

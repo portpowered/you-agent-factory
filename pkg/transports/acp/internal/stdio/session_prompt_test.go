@@ -879,8 +879,8 @@ func TestHandleSessionPromptFirstTurnStartsFactorySessionWithExactTargetRootAndC
 	if _, ok := got.Args["content"]; ok {
 		t.Fatalf("StartFactoryTarget Args[content] = %#v, want no content key at all", got.Args["content"])
 	}
-	if got.RequestID != "turn-1" {
-		t.Fatalf("StartFactoryTarget RequestID = %q, want the admitted turn id turn-1", got.RequestID)
+	if got.RequestID != "session-1/episode/1" {
+		t.Fatalf("StartFactoryTarget RequestID = %q, want the stable per-episode key session-1/episode/1 (not the admitted turn id, which changes on every retry)", got.RequestID)
 	}
 
 	if len(factoryTarget.invokeCalls) != 1 {
@@ -1552,6 +1552,62 @@ func TestHandleSessionPromptRecordPendingFailureAfterStartMakesNoBindCall(t *tes
 	}
 }
 
+// TestHandleSessionPromptRetryAfterRecordPendingFailureReusesStableRequestID
+// proves that a later, uniquely identified prompt for the same still-unbound
+// episode (observed after a RecordPendingFactorySession failure left the
+// episode with no pending or bound identity at all) calls StartFactoryTarget
+// again with the exact same RequestID as the original attempt -- a stable key
+// derived only from the session and episode, never the admitted Turn's own
+// ID, which differs on every retry. This is what lets
+// ondemandtarget.Service.StartAsync's own request-scoped deduplication (see
+// that package's TestStartAsyncSameRequestIDConvergesOnASingleActivation)
+// converge the retry onto the exact same runtime instead of opening a second
+// one for the same episode; this test proves the transport's half of that
+// contract (the stable key), not the activation service's own dedup logic,
+// which is a different package's responsibility.
+func TestHandleSessionPromptRetryAfterRecordPendingFailureReusesStableRequestID(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResults: []chatsessions.StartTurnResult{
+			admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
+			admittedTurnResult("session-1", "factory:@you/review", 5, "/work/project", "turn-2", ""),
+		},
+		recordPendingFactorySessionErrs: []error{errors.New("record pending boom"), nil},
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{
+		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-1"},
+		invokeResult: factorysessions.InvocationResult{SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted},
+	}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "first message"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), firstEnv); rpcErr == nil {
+		t.Fatal("first handleSessionPrompt() error = nil, want a bounded failure from the injected RecordPendingFactorySession fault")
+	}
+
+	secondEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "second message"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), secondEnv); rpcErr != nil {
+		t.Fatalf("second handleSessionPrompt() error = %+v, want the retry to succeed", rpcErr)
+	}
+
+	if len(factoryTarget.startCalls) != 2 {
+		t.Fatalf("StartFactoryTarget call count = %d, want exactly 2 (the original attempt plus the retry)", len(factoryTarget.startCalls))
+	}
+	first, second := factoryTarget.startCalls[0], factoryTarget.startCalls[1]
+	if first.RequestID == "" || first.RequestID != second.RequestID {
+		t.Fatalf("StartFactoryTarget RequestID[0] = %q, RequestID[1] = %q, want the identical stable per-episode key on both calls", first.RequestID, second.RequestID)
+	}
+	if !chatSessions.bindFactorySessionCalled {
+		t.Fatal("BindFactorySession was not called, want the retry to bind after RecordPendingFactorySession succeeds the second time")
+	}
+	if chatSessions.bindFactorySessionReq.FactorySessionID != "fs-1" {
+		t.Fatalf("BindFactorySession FactorySessionID = %q, want fs-1", chatSessions.bindFactorySessionReq.FactorySessionID)
+	}
+}
+
 // TestHandleSessionPromptFirstTurnInvokeFailureMakesNoBindCall proves that
 // when the first turn's own follow-up InvokeFactoryTarget call (the one that
 // actually dispatches this turn's content into the just-started identity)
@@ -2143,5 +2199,63 @@ func TestHandleSessionPromptTerminalTransitionFailureRecoveryAdmitsLaterPrompt(t
 	// second call.
 	if len(factoryTarget.invokeCalls) != 2 {
 		t.Fatalf("InvokeFactoryTarget call count = %d, want exactly 2 (the first turn's dispatch plus the second turn's reuse)", len(factoryTarget.invokeCalls))
+	}
+}
+
+// TestHandleSessionPromptFailedTerminalTransitionFailureRecoveryAdmitsLaterPrompt
+// proves that when the *intended* terminal transition is already FAILED (a
+// genuine dispatch failure, not a downstream success) and that exact
+// AdvanceTurn(FAILED) call itself fails, recovery still releases the
+// session's busy state -- via the CANCELED fallback in terminalRecoveryOrder
+// -- instead of stranding the turn forever, which a version of this recovery
+// that only ever retried FAILED itself could never do. Proven against a real
+// chatsessions.Store (not a call-recording fake) so the recovered
+// RUNNING->CANCELED transition is a real, legal state change, and a later
+// uniquely identified prompt is genuinely admitted afterward.
+func TestHandleSessionPromptFailedTerminalTransitionFailureRecoveryAdmitsLaterPrompt(t *testing.T) {
+	store, err := chatsessionswire.NewService(sequentialIDGenerator("session"), fixedClock(time.Unix(0, 1)))
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	created, err := store.CreateSession(context.Background(), chatsessions.CreateSessionRequest{
+		RequestID:     chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-setup", JSONRPCNumberID: "0"},
+		WorkingRoot:   "/work/project",
+		InitialTarget: chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "@you/review"},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	// Call 1 is the ADMITTED->RUNNING transition (succeeds); call 2 is the
+	// terminal AdvanceTurn(FAILED) attempt this dispatch failure targets --
+	// inject the fault there so the primary terminal attempt is exactly the
+	// FAILED case round-4's review found unrecoverable.
+	faulty := &nthAdvanceTurnFailingChatSessions{
+		Service: store, failOnCall: 2, injectErr: errors.New("terminal advance boom"),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{
+		startResult: factorysessions.AsyncStartResult{SessionID: "fs-1"},
+		// The first turn's own dispatch fails (its intended terminal is
+		// therefore FAILED); the second turn's reuse of the already-pending
+		// identity succeeds, so this test can prove admission recovers
+		// without conflating it with a second genuine dispatch failure.
+		invokeErrs: []error{errors.New("dispatch boom"), nil},
+		invokeResult: factorysessions.InvocationResult{
+			SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted,
+		},
+	}
+	server := New(nil, faulty, catalog, factoryTarget, func() (string, error) { return "/home/operator", nil })
+
+	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams(created.Session.ID, "first message"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), firstEnv); rpcErr == nil {
+		t.Fatal("first handleSessionPrompt() error = nil, want a bounded failure from the injected dispatch fault")
+	}
+
+	secondEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams(created.Session.ID, "second message"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), secondEnv); rpcErr != nil {
+		t.Fatalf("second handleSessionPrompt() error = %+v, want the session admitted (not stranded busy) after a recovered FAILED-transition failure", rpcErr)
 	}
 }

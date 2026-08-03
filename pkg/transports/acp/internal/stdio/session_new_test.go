@@ -76,7 +76,14 @@ type fakeChatSessionsService struct {
 	recordPendingFactorySessionReq    chatsessions.RecordPendingFactorySessionRequest
 	recordPendingFactorySessionReqs   []chatsessions.RecordPendingFactorySessionRequest
 	recordPendingFactorySessionResult chatsessions.RecordPendingFactorySessionResult
-	recordPendingFactorySessionErr    error
+	// recordPendingFactorySessionErrs, when non-empty, is consumed front-first
+	// across successive RecordPendingFactorySession calls (one queued error
+	// per call, nil meaning that call succeeds) instead of the single static
+	// recordPendingFactorySessionErr -- for retry tests that need one
+	// specific record-pending attempt to fail while a later retry for the
+	// same still-unbound episode succeeds.
+	recordPendingFactorySessionErrs []error
+	recordPendingFactorySessionErr  error
 
 	advanceTurnCalled bool
 	advanceTurnReq    chatsessions.AdvanceTurnRequest
@@ -181,6 +188,14 @@ func (f *fakeChatSessionsService) RecordPendingFactorySession(_ context.Context,
 	f.recordPendingFactorySessionCalled = true
 	f.recordPendingFactorySessionReq = req
 	f.recordPendingFactorySessionReqs = append(f.recordPendingFactorySessionReqs, req)
+	if len(f.recordPendingFactorySessionErrs) > 0 {
+		next := f.recordPendingFactorySessionErrs[0]
+		f.recordPendingFactorySessionErrs = f.recordPendingFactorySessionErrs[1:]
+		if next != nil {
+			return chatsessions.RecordPendingFactorySessionResult{}, next
+		}
+		return f.recordPendingFactorySessionResult, nil
+	}
 	if f.recordPendingFactorySessionErr != nil {
 		return chatsessions.RecordPendingFactorySessionResult{}, f.recordPendingFactorySessionErr
 	}
@@ -263,6 +278,13 @@ type fakeFactoryTargetService struct {
 	invokeCalls  []invokeFactoryTargetCall
 	invokeResult factorysessions.InvocationResult
 	invokeErr    error
+	// invokeErrs, when non-empty, is consumed front-first across successive
+	// InvokeFactoryTarget calls (one queued error per call, nil meaning that
+	// call succeeds with invokeResult) instead of the single static
+	// invokeErr -- for tests that need one specific dispatch to fail while a
+	// later retry against the same (or a differently bound) identity
+	// succeeds.
+	invokeErrs []error
 
 	closeCalls []string
 	closeErr   error
@@ -294,6 +316,14 @@ func (f *fakeFactoryTargetService) InvokeFactoryTarget(
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.invokeCalls = append(f.invokeCalls, invokeFactoryTargetCall{sessionID: sessionID, request: request})
+	if len(f.invokeErrs) > 0 {
+		next := f.invokeErrs[0]
+		f.invokeErrs = f.invokeErrs[1:]
+		if next != nil {
+			return factorysessions.InvocationResult{}, next
+		}
+		return f.invokeResult, nil
+	}
 	if f.invokeErr != nil {
 		return factorysessions.InvocationResult{}, f.invokeErr
 	}

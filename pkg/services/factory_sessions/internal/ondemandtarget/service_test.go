@@ -132,11 +132,12 @@ func (f *fakeSessions) CloseFactorySession(_ context.Context, sessionID string) 
 func newTestService(t *testing.T, opener invocationRuntimeOpener, resolve RuntimeResolver, generateID factorysessions.SessionIDGenerator) *Service {
 	t.Helper()
 	return &Service{
-		factory:    opener,
-		resolve:    resolve,
-		generateID: generateID,
-		logger:     zap.NewNop(),
-		runtimes:   make(map[string]*activatedRuntime),
+		factory:           opener,
+		resolve:           resolve,
+		generateID:        generateID,
+		logger:            zap.NewNop(),
+		runtimes:          make(map[string]*activatedRuntime),
+		startsByRequestID: make(map[string]string),
 	}
 }
 
@@ -147,11 +148,12 @@ func newTestServiceWithObservedLogger(t *testing.T, opener invocationRuntimeOpen
 	t.Helper()
 	core, observed := observer.New(zapcore.DebugLevel)
 	return &Service{
-		factory:    opener,
-		resolve:    resolve,
-		generateID: generateID,
-		logger:     zap.New(core),
-		runtimes:   make(map[string]*activatedRuntime),
+		factory:           opener,
+		resolve:           resolve,
+		generateID:        generateID,
+		logger:            zap.New(core),
+		runtimes:          make(map[string]*activatedRuntime),
+		startsByRequestID: make(map[string]string),
 	}, observed
 }
 
@@ -234,6 +236,84 @@ func TestStartAsyncOpensRuntimeAndReturnsGeneratedIdentity(t *testing.T) {
 	}
 	if result.Status != string(factorysessions.LifecycleStatusRunning) {
 		t.Fatalf("result.Status = %q, want RUNNING (a fresh open, no terminal outcome yet)", result.Status)
+	}
+}
+
+// TestStartAsyncSameRequestIDConvergesOnASingleActivation proves that calling
+// StartAsync twice with the exact same non-blank RequestID opens exactly one
+// runtime and returns the identical generated SessionID both times, instead
+// of opening a second runtime for a repeated request. This is the mechanism
+// that makes a caller's retried start -- for example the ACP prompt
+// delegation transport's stable per-episode RequestID, retried after its own
+// post-start bookkeeping (RecordPendingFactorySession) fails -- safe: the
+// retry converges on the exact activation the original call already opened
+// rather than leaking a second one.
+func TestStartAsyncSameRequestIDConvergesOnASingleActivation(t *testing.T) {
+	sessions := &fakeSessions{}
+	opener := &fakeOpener{opened: roles.OpenedInvocationRuntime{
+		Sessions:  sessions,
+		Lifecycle: &fakeLifecycle{},
+	}}
+	resolve := func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+		return factorysessions.RuntimeOpeningRequest{}, nil
+	}
+	svc := newTestService(t, opener, resolve, sequentialIDs("wrapper"))
+
+	req := factorysessions.StartRequest{
+		RequestID: "session-1/episode/1",
+		Source:    factorysessions.Source{FactoryID: "@you/review"},
+		Args:      map[string]any{"workingRoot": "/work/project"},
+	}
+	first, err := svc.StartAsync(context.Background(), req)
+	if err != nil {
+		t.Fatalf("first StartAsync() error = %v", err)
+	}
+	second, err := svc.StartAsync(context.Background(), req)
+	if err != nil {
+		t.Fatalf("second StartAsync() error = %v", err)
+	}
+
+	if len(opener.calls) != 1 {
+		t.Fatalf("OpenInvocationRuntime call count = %d, want exactly 1 across both StartAsync calls", len(opener.calls))
+	}
+	if first.SessionID != second.SessionID {
+		t.Fatalf("SessionID[0] = %q, SessionID[1] = %q, want the identical converged identity", first.SessionID, second.SessionID)
+	}
+	if first.SessionID != "wrapper-1" {
+		t.Fatalf("SessionID = %q, want the generated wrapper identity from the one real activation", first.SessionID)
+	}
+}
+
+// TestStartAsyncBlankRequestIDOpensASeparateRuntimeEveryCall proves that a
+// caller who passes no RequestID at all (blank) gets no deduplication --
+// every such call opens its own runtime, matching this method's original,
+// pre-deduplication behavior for callers that never supply a stable key.
+func TestStartAsyncBlankRequestIDOpensASeparateRuntimeEveryCall(t *testing.T) {
+	sessions := &fakeSessions{}
+	opener := &fakeOpener{opened: roles.OpenedInvocationRuntime{
+		Sessions:  sessions,
+		Lifecycle: &fakeLifecycle{},
+	}}
+	resolve := func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+		return factorysessions.RuntimeOpeningRequest{}, nil
+	}
+	svc := newTestService(t, opener, resolve, sequentialIDs("wrapper"))
+
+	req := factorysessions.StartRequest{Source: factorysessions.Source{FactoryID: "@you/review"}}
+	first, err := svc.StartAsync(context.Background(), req)
+	if err != nil {
+		t.Fatalf("first StartAsync() error = %v", err)
+	}
+	second, err := svc.StartAsync(context.Background(), req)
+	if err != nil {
+		t.Fatalf("second StartAsync() error = %v", err)
+	}
+
+	if len(opener.calls) != 2 {
+		t.Fatalf("OpenInvocationRuntime call count = %d, want exactly 2 (no dedup key supplied)", len(opener.calls))
+	}
+	if first.SessionID == second.SessionID {
+		t.Fatalf("SessionID[0] = %q, SessionID[1] = %q, want two distinct generated identities", first.SessionID, second.SessionID)
 	}
 }
 

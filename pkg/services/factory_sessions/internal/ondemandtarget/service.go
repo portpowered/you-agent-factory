@@ -9,17 +9,21 @@
 // wraps runtimeopening.Factory as RuntimeOpeningFactory) so a caller outside
 // this service tree never imports this package directly.
 //
-// Service implements the full public factorysessions.Service interface (by
-// embedding it as a nil value and overriding only the handful of methods it
-// gives real behavior to -- StartAsync, InvokeFactorySession, Cancel,
-// CloseFactorySession -- the same "embed the interface, panic on anything
-// unimplemented" idiom this package's own tests already use for fakeSessions)
-// specifically so it can be handed, unmodified, to
-// chat_sessions/internal/factorysessionsshim.New: that existing,
-// consumer-owned shim is what the production ACP prompt-delegation consumer
-// actually calls, not this package's own methods directly. Every method
-// beyond those four is unreachable in production -- the shim never calls
-// them -- and exists only to satisfy the interface.
+// Service implements exactly StartAsync, InvokeFactorySession, Cancel, and
+// CloseFactorySession -- the narrow
+// chat_sessions/internal/factorysessionsshim.FactoryTargetExecutionService
+// contract that existing, consumer-owned shim actually forwards to, and
+// nothing more. Earlier iterations of this package embedded the full 30+
+// method public factorysessions.Service interface as a permanently-nil value
+// solely so this type could be handed to the shim's constructor, which then
+// required the literal Service type; every unimplemented method panicked if
+// ever reached. That made this type a partial, panic-capable stand-in for
+// the full aggregate root -- a real production risk if any future shim
+// expansion or root composition ever called one of the unimplemented
+// methods. factorysessionsshim.New now depends on the narrow
+// FactoryTargetExecutionService interface instead of the full Service, so
+// this type can be -- and now is -- a complete, non-panicking implementation
+// of exactly what it claims to support.
 package ondemandtarget
 
 import (
@@ -40,11 +44,6 @@ import (
 // a NamedResource (see pkg/initializer/lifecycle) whose Close tears down
 // every runtime it ever lazily activated.
 var _ io.Closer = (*Service)(nil)
-
-// Service also satisfies the full public factorysessions.Service so it can
-// be wrapped by the existing chat_sessions-owned factorysessionsshim.Shim
-// unmodified -- see this package's own doc comment.
-var _ factorysessions.Service = (*Service)(nil)
 
 // RuntimeResolver turns one canonical Factory target identity and editor
 // working root into the concrete Runtime Opening request that activating a
@@ -92,14 +91,6 @@ type invocationRuntimeOpener interface {
 // cached runtime (and the runtime's own DefaultSessionID) on every later
 // call. Callers must treat the returned identity as opaque.
 type Service struct {
-	// Service is embedded as a permanently nil interface value: every method
-	// this type does not itself override is satisfied only for the compiler
-	// (interface completeness), and panics if ever actually called. Only
-	// StartAsync, InvokeFactorySession, Cancel, and CloseFactorySession are
-	// overridden below -- the exact four methods
-	// chat_sessions/internal/factorysessionsshim.Shim forwards to.
-	factorysessions.Service
-
 	factory    invocationRuntimeOpener
 	effects    runtimeopening.ExternalEffects
 	resolve    RuntimeResolver
@@ -108,6 +99,18 @@ type Service struct {
 
 	mu       sync.Mutex
 	runtimes map[string]*activatedRuntime
+	// startsByRequestID indexes a non-blank StartRequest.RequestID onto the
+	// wrapper identity StartAsync opened for it, so a retried start for the
+	// same stable request identity (this service's caller uses a key derived
+	// from the session and episode, not the admitted Turn's own ID, so it is
+	// stable across a retry -- see startFactorySessionForEpisode's own doc
+	// comment) converges on the exact runtime already opened for it instead
+	// of opening a second one. This is what makes StartAsync idempotent under
+	// a stable per-episode key even when a caller's own post-start
+	// bookkeeping (for example chatsessions.Service.RecordPendingFactorySession)
+	// fails after a successful open: the caller's retry passes the same
+	// RequestID and observes the same SessionID back.
+	startsByRequestID map[string]string
 }
 
 // New constructs the on-demand activation over the given *runtimeopening.Factory.
@@ -132,12 +135,13 @@ func New(
 		return nil, errors.New("construct on-demand Factory target activation: logger is required")
 	}
 	return &Service{
-		factory:    factory,
-		effects:    effects,
-		resolve:    resolve,
-		generateID: generateID,
-		logger:     logger,
-		runtimes:   make(map[string]*activatedRuntime),
+		factory:           factory,
+		effects:           effects,
+		resolve:           resolve,
+		generateID:        generateID,
+		logger:            logger,
+		runtimes:          make(map[string]*activatedRuntime),
+		startsByRequestID: make(map[string]string),
 	}, nil
 }
 
@@ -246,6 +250,13 @@ func (s *Service) StartAsync(
 	ctx context.Context,
 	request factorysessions.StartRequest,
 ) (factorysessions.AsyncStartResult, error) {
+	if request.RequestID != "" {
+		if result, ok := s.existingStart(request.RequestID); ok {
+			s.logger.Info("on-demand Factory target start converged onto an existing activation for this request")
+			return result, nil
+		}
+	}
+
 	workingRoot, _ := request.Args["workingRoot"].(string)
 	config, err := s.resolve(ctx, request.Source.FactoryID, workingRoot)
 	if err != nil {
@@ -258,6 +269,18 @@ func (s *Service) StartAsync(
 
 	wrapperID := s.generateID()
 	s.mu.Lock()
+	if request.RequestID != "" {
+		if existing, ok := s.reconcileConcurrentStartLocked(request.RequestID); ok {
+			s.mu.Unlock()
+			// A concurrent StartAsync call for the exact same request
+			// identity already won and is still tracked: converge on it and
+			// close this now-redundant runtime instead of keeping two live
+			// activations for one logical start.
+			_ = active.close(context.WithoutCancel(ctx))
+			return existing, nil
+		}
+		s.startsByRequestID[request.RequestID] = wrapperID
+	}
 	s.runtimes[wrapperID] = active
 	s.mu.Unlock()
 	s.logger.Info("on-demand Factory target runtime ready",
@@ -266,6 +289,38 @@ func (s *Service) StartAsync(
 		SessionID: wrapperID,
 		Status:    string(factorysessions.LifecycleStatusRunning),
 	}, nil
+}
+
+// existingStart reports the still-tracked activation a prior StartAsync call
+// already opened for requestID, if any -- an orphaned index entry left by a
+// runtime that has since been evicted (CloseFactorySession/Close) reports
+// false, so a genuinely new activation proceeds rather than reporting a
+// SessionID that no longer resolves to anything.
+func (s *Service) existingStart(requestID string) (factorysessions.AsyncStartResult, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	wrapperID, ok := s.startsByRequestID[requestID]
+	if !ok {
+		return factorysessions.AsyncStartResult{}, false
+	}
+	if _, exists := s.runtimes[wrapperID]; !exists {
+		return factorysessions.AsyncStartResult{}, false
+	}
+	return factorysessions.AsyncStartResult{SessionID: wrapperID, Status: string(factorysessions.LifecycleStatusRunning)}, true
+}
+
+// reconcileConcurrentStartLocked reports the still-tracked activation
+// requestID resolved to while this goroutine's own openActivatedRuntime call
+// was in flight without holding s.mu -- must be called with s.mu held.
+func (s *Service) reconcileConcurrentStartLocked(requestID string) (factorysessions.AsyncStartResult, bool) {
+	wrapperID, ok := s.startsByRequestID[requestID]
+	if !ok {
+		return factorysessions.AsyncStartResult{}, false
+	}
+	if _, exists := s.runtimes[wrapperID]; !exists {
+		return factorysessions.AsyncStartResult{}, false
+	}
+	return factorysessions.AsyncStartResult{SessionID: wrapperID, Status: string(factorysessions.LifecycleStatusRunning)}, true
 }
 
 func (s *Service) lookup(sessionID string) (*activatedRuntime, error) {
