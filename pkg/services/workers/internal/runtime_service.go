@@ -405,7 +405,7 @@ func (s *Service) BuildModelInvocationExecutor(runtimeCfg interfaces.RuntimeConf
 		runtimeCfg, workerName, s.factoryRunnerID, workflowContext,
 		logging.NewZapLogger(s.logger, s.verbose),
 		s.invocationSkipPermissionsOverride, s.providerOverride,
-		nil, nil, nil, nil, s.clock, s.processEnvironment, s.currentWorkingDirectory,
+		s.progressPublisher, nil, nil, nil, s.clock, s.processEnvironment, s.currentWorkingDirectory,
 		s.runtimeRunnerDecorators(runtimeCfg, factoryCfg, nil, s.clock, s.providerOverride == nil, nil),
 	)
 	if err != nil {
