@@ -73,9 +73,6 @@ func NewService(
 	if eventIDs == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: response event ID generator is required")
 	}
-	if eventsService == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: Events root is required")
-	}
 	if sessionIDs == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: session ID generator is required")
 	}

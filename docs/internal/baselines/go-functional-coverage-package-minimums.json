@@ -1412,7 +1412,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire",
-      "minimum": 64.44
+      "minimum": 65.11
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts",
