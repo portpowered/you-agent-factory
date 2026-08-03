@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	checkpointrecovery "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery"
 	checkpointrecoverywire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/wire"
 )
@@ -45,7 +44,7 @@ func TestRecoveryRestoreRejectsMissingCheckpointIdentity(t *testing.T) {
 
 	recovery := checkpointrecoverywire.New()
 	_, err := recovery.Restore(checkpointrecovery.RestoreRequest{})
-	if !errors.Is(err, factoryruntime.ErrCheckpointNotFound) {
+	if !errors.Is(err, checkpointrecovery.ErrCheckpointNotFound) {
 		t.Fatalf("Restore() error = %v, want ErrCheckpointNotFound", err)
 	}
 }
@@ -60,7 +59,7 @@ func TestRecoveryRestoreRejectsCorruptEnvelope(t *testing.T) {
 			SchemaVersion: checkpointrecovery.RuntimeOpaqueCheckpointSchemaVersion,
 		},
 	})
-	if !errors.Is(err, factoryruntime.ErrCorruptCheckpoint) {
+	if !errors.Is(err, checkpointrecovery.ErrCorruptCheckpoint) {
 		t.Fatalf("Restore() error = %v, want ErrCorruptCheckpoint", err)
 	}
 }
@@ -76,7 +75,7 @@ func TestRecoveryRestoreRejectsIncompatibleSchema(t *testing.T) {
 			Payload:       []byte(`{"factoryState":"PAUSED"}`),
 		},
 	})
-	if !errors.Is(err, factoryruntime.ErrIncompatibleCheckpoint) {
+	if !errors.Is(err, checkpointrecovery.ErrIncompatibleCheckpoint) {
 		t.Fatalf("Restore() error = %v, want ErrIncompatibleCheckpoint", err)
 	}
 }
@@ -93,7 +92,7 @@ func TestRecoveryRestoreRejectsIncompatibleStrategyKind(t *testing.T) {
 			Payload:       []byte(`{"factoryState":"PAUSED"}`),
 		},
 	})
-	if !errors.Is(err, factoryruntime.ErrIncompatibleCheckpoint) {
+	if !errors.Is(err, checkpointrecovery.ErrIncompatibleCheckpoint) {
 		t.Fatalf("Restore() error = %v, want ErrIncompatibleCheckpoint", err)
 	}
 }
@@ -109,11 +108,11 @@ func TestRecoveryRestoreDoesNotPersistCorruptPayload(t *testing.T) {
 			Payload:       []byte(`{}`),
 		},
 	})
-	if !errors.Is(err, factoryruntime.ErrCorruptCheckpoint) {
+	if !errors.Is(err, checkpointrecovery.ErrCorruptCheckpoint) {
 		t.Fatalf("Restore() error = %v, want ErrCorruptCheckpoint", err)
 	}
 	_, err = recovery.Load(checkpointrecovery.LoadRequest{CheckpointID: "checkpoint-1"})
-	if !errors.Is(err, factoryruntime.ErrCheckpointNotFound) {
+	if !errors.Is(err, checkpointrecovery.ErrCheckpointNotFound) {
 		t.Fatalf("Load() after failed restore error = %v, want ErrCheckpointNotFound", err)
 	}
 }

@@ -125,38 +125,6 @@ func (f *lifecycleControlFactory) AcceptDispatchResult(
 	}, nil
 }
 
-func (f *lifecycleControlFactory) CaptureCheckpoint(
-	_ context.Context,
-	req factory.CaptureCheckpointRequest,
-) (factory.CaptureCheckpointResult, error) {
-	return factory.CaptureCheckpointResult{
-		Outcome: factory.CheckpointOutcomeCaptured,
-		Checkpoint: factory.Checkpoint{
-			CheckpointID: req.CheckpointID, SchemaVersion: 1, Payload: []byte(`{}`),
-		},
-	}, nil
-}
-
-func (f *lifecycleControlFactory) LoadCheckpoint(
-	_ context.Context,
-	req factory.LoadCheckpointRequest,
-) (factory.LoadCheckpointResult, error) {
-	return factory.LoadCheckpointResult{
-		Outcome:    factory.CheckpointOutcomeLoaded,
-		Checkpoint: factory.Checkpoint{CheckpointID: req.CheckpointID, SchemaVersion: 1, Payload: []byte(`{}`)},
-	}, nil
-}
-
-func (f *lifecycleControlFactory) RestoreCheckpoint(
-	_ context.Context,
-	req factory.RestoreCheckpointRequest,
-) (factory.RestoreCheckpointResult, error) {
-	return factory.RestoreCheckpointResult{
-		Outcome:      factory.CheckpointOutcomeRestored,
-		CheckpointID: req.Checkpoint.CheckpointID,
-	}, nil
-}
-
 func startReadyHostedHandle(
 	t *testing.T,
 	host *Host,

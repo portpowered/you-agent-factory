@@ -3,7 +3,6 @@ package internal
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
@@ -121,49 +120,6 @@ func (r *Root) AcceptDispatchResult(
 		return service.AcceptDispatchResult(ctx, req)
 	}
 	return factoryruntime.AcceptDispatchResultResult{}, factoryruntime.ErrNotRunning
-}
-
-func (r *Root) CaptureCheckpoint(
-	ctx context.Context,
-	req factoryruntime.CaptureCheckpointRequest,
-) (factoryruntime.CaptureCheckpointResult, error) {
-	if strings.TrimSpace(req.CheckpointID) == "" {
-		return factoryruntime.CaptureCheckpointResult{}, factoryruntime.ErrCheckpointNotFound
-	}
-	if r != nil && r.active != nil {
-		return r.active.CaptureCheckpoint(ctx, req)
-	}
-	return factoryruntime.CaptureCheckpointResult{}, factoryruntime.ErrCapabilityUnavailable
-}
-
-func (r *Root) LoadCheckpoint(ctx context.Context, req factoryruntime.LoadCheckpointRequest) (factoryruntime.LoadCheckpointResult, error) {
-	if strings.TrimSpace(req.CheckpointID) == "" {
-		return factoryruntime.LoadCheckpointResult{}, factoryruntime.ErrCheckpointNotFound
-	}
-	if r != nil && r.active != nil {
-		return r.active.LoadCheckpoint(ctx, req)
-	}
-	return factoryruntime.LoadCheckpointResult{}, factoryruntime.ErrCapabilityUnavailable
-}
-
-func (r *Root) RestoreCheckpoint(
-	ctx context.Context,
-	req factoryruntime.RestoreCheckpointRequest,
-) (factoryruntime.RestoreCheckpointResult, error) {
-	if strings.TrimSpace(req.Checkpoint.CheckpointID) == "" {
-		return factoryruntime.RestoreCheckpointResult{}, factoryruntime.ErrCheckpointNotFound
-	}
-	if r != nil && r.active != nil {
-		return r.active.RestoreCheckpoint(ctx, req)
-	}
-	switch {
-	case req.Checkpoint.SchemaVersion <= 0 || len(req.Checkpoint.Payload) == 0:
-		return factoryruntime.RestoreCheckpointResult{}, factoryruntime.ErrCorruptCheckpoint
-	case req.Checkpoint.SchemaVersion != 1:
-		return factoryruntime.RestoreCheckpointResult{}, factoryruntime.ErrIncompatibleCheckpoint
-	default:
-		return factoryruntime.RestoreCheckpointResult{}, factoryruntime.ErrCapabilityUnavailable
-	}
 }
 
 // BindActiveService attaches the hosted runtime delegate that serves published

@@ -4,13 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/rootobservation"
-	checkpointrecovery "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -278,131 +276,6 @@ func mapDispatchPlanningError(err error) error {
 	default:
 		return err
 	}
-}
-
-func (f *factoryImpl) CaptureCheckpoint(
-	_ context.Context,
-	req factory.CaptureCheckpointRequest,
-) (factory.CaptureCheckpointResult, error) {
-	checkpointID := strings.TrimSpace(req.CheckpointID)
-	if checkpointID == "" {
-		return factory.CaptureCheckpointResult{}, factory.ErrCheckpointNotFound
-	}
-	f.mu.RLock()
-	state := f.state
-	recovery := f.checkpointRecovery
-	f.mu.RUnlock()
-	if err := checkpointCaptureLifecycleError(state); err != nil {
-		return factory.CaptureCheckpointResult{}, err
-	}
-	if recovery == nil {
-		return factory.CaptureCheckpointResult{}, factory.ErrCapabilityUnavailable
-	}
-	payload, err := checkpointrecovery.EncodeRuntimeOpaquePayload(checkpointrecovery.ExecutionCaptureFacts{
-		FactoryState: string(state),
-	})
-	if err != nil {
-		return factory.CaptureCheckpointResult{}, err
-	}
-	captured, err := recovery.Capture(checkpointrecovery.CaptureRequest{
-		CheckpointID: checkpointID,
-		Payload:      payload,
-	})
-	if err != nil {
-		return factory.CaptureCheckpointResult{}, err
-	}
-	return factory.CaptureCheckpointResult{
-		Outcome:    factory.CheckpointOutcomeCaptured,
-		Checkpoint: checkpointrecovery.RootCheckpointFromEnvelope(captured.Envelope),
-	}, nil
-}
-
-func checkpointCaptureLifecycleError(state interfaces.FactoryState) error {
-	switch state {
-	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle:
-		return nil
-	case interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
-		return factory.ErrNotRunning
-	default:
-		return factory.ErrNotRunning
-	}
-}
-
-func (f *factoryImpl) LoadCheckpoint(_ context.Context, req factory.LoadCheckpointRequest) (factory.LoadCheckpointResult, error) {
-	checkpointID := strings.TrimSpace(req.CheckpointID)
-	if checkpointID == "" {
-		return factory.LoadCheckpointResult{}, factory.ErrCheckpointNotFound
-	}
-	f.mu.RLock()
-	recovery := f.checkpointRecovery
-	f.mu.RUnlock()
-	if recovery == nil {
-		return factory.LoadCheckpointResult{}, factory.ErrCapabilityUnavailable
-	}
-	loaded, err := recovery.Load(checkpointrecovery.LoadRequest{
-		CheckpointID:          checkpointID,
-		ExpectedSchemaVersion: req.ExpectedSchemaVersion,
-	})
-	if err != nil {
-		return factory.LoadCheckpointResult{}, err
-	}
-	return factory.LoadCheckpointResult{
-		Outcome:    factory.CheckpointOutcomeLoaded,
-		Checkpoint: checkpointrecovery.RootCheckpointFromEnvelope(loaded.Envelope),
-		Compatible: loaded.Compatible,
-	}, nil
-}
-
-func (f *factoryImpl) RestoreCheckpoint(
-	_ context.Context,
-	req factory.RestoreCheckpointRequest,
-) (factory.RestoreCheckpointResult, error) {
-	checkpointID := strings.TrimSpace(req.Checkpoint.CheckpointID)
-	if checkpointID == "" {
-		return factory.RestoreCheckpointResult{}, factory.ErrCheckpointNotFound
-	}
-	f.mu.RLock()
-	state := f.state
-	recovery := f.checkpointRecovery
-	f.mu.RUnlock()
-	if err := checkpointCaptureLifecycleError(state); err != nil {
-		return factory.RestoreCheckpointResult{}, err
-	}
-	if recovery == nil {
-		return factory.RestoreCheckpointResult{}, factory.ErrCapabilityUnavailable
-	}
-	restored, err := recovery.Restore(checkpointrecovery.RestoreRequest{
-		Envelope: checkpointrecovery.EnvelopeFromRootCheckpoint(req.Checkpoint),
-	})
-	if err != nil {
-		return factory.RestoreCheckpointResult{}, err
-	}
-	f.mu.Lock()
-	f.state = interfaces.FactoryState(restored.Facts.FactoryState)
-	f.mu.Unlock()
-	return factory.RestoreCheckpointResult{
-		Outcome:      factory.CheckpointOutcomeRestored,
-		CheckpointID: checkpointID,
-	}, nil
-}
-
-func (f *factoryImpl) unavailableRootCapability(invalid bool, invalidErr error, allowStopped bool) error {
-	f.mu.RLock()
-	state := f.state
-	f.mu.RUnlock()
-	switch state {
-	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle:
-	case interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
-		if !allowStopped {
-			return factory.ErrNotRunning
-		}
-	default:
-		return factory.ErrNotRunning
-	}
-	if invalid {
-		return invalidErr
-	}
-	return factory.ErrCapabilityUnavailable
 }
 
 func validObservationScope(scope factory.ObservationScope) bool {

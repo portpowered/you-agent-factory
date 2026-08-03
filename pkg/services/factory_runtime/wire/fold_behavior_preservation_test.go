@@ -180,15 +180,6 @@ func (foldNonWireRoot) PlanDispatch(context.Context, factoryruntime.PlanDispatch
 func (foldNonWireRoot) AcceptDispatchResult(context.Context, factoryruntime.AcceptDispatchResultRequest) (factoryruntime.AcceptDispatchResultResult, error) {
 	return factoryruntime.AcceptDispatchResultResult{}, nil
 }
-func (foldNonWireRoot) CaptureCheckpoint(context.Context, factoryruntime.CaptureCheckpointRequest) (factoryruntime.CaptureCheckpointResult, error) {
-	return factoryruntime.CaptureCheckpointResult{}, nil
-}
-func (foldNonWireRoot) LoadCheckpoint(context.Context, factoryruntime.LoadCheckpointRequest) (factoryruntime.LoadCheckpointResult, error) {
-	return factoryruntime.LoadCheckpointResult{}, nil
-}
-func (foldNonWireRoot) RestoreCheckpoint(context.Context, factoryruntime.RestoreCheckpointRequest) (factoryruntime.RestoreCheckpointResult, error) {
-	return factoryruntime.RestoreCheckpointResult{}, nil
-}
 
 func wireFoldServiceWithHostedRuntime(
 	t *testing.T,
@@ -350,25 +341,4 @@ func (s *foldHostedRuntimeStub) AcceptDispatchResult(
 		Outcome:    factoryruntime.DispatchPlanOutcomeRetired,
 		DispatchID: req.DispatchID,
 	}, nil
-}
-
-func (*foldHostedRuntimeStub) CaptureCheckpoint(
-	_ context.Context,
-	_ factoryruntime.CaptureCheckpointRequest,
-) (factoryruntime.CaptureCheckpointResult, error) {
-	return factoryruntime.CaptureCheckpointResult{}, factoryruntime.ErrCapabilityUnavailable
-}
-
-func (*foldHostedRuntimeStub) LoadCheckpoint(
-	_ context.Context,
-	_ factoryruntime.LoadCheckpointRequest,
-) (factoryruntime.LoadCheckpointResult, error) {
-	return factoryruntime.LoadCheckpointResult{}, factoryruntime.ErrCapabilityUnavailable
-}
-
-func (*foldHostedRuntimeStub) RestoreCheckpoint(
-	_ context.Context,
-	_ factoryruntime.RestoreCheckpointRequest,
-) (factoryruntime.RestoreCheckpointResult, error) {
-	return factoryruntime.RestoreCheckpointResult{}, factoryruntime.ErrCapabilityUnavailable
 }

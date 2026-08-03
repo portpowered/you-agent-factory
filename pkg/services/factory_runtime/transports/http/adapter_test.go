@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	runtimehttpcheckpoint "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/checkpoint"
 	runtimehttpcontrol "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/control"
 	runtimehttpdispatch "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/dispatch"
 	runtimehttpcommon "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/internal/common"
@@ -84,7 +83,6 @@ func TestOperationHandlers_RejectTypedNilRoot(t *testing.T) {
 		{name: "observation", isNil: func() bool { return runtimehttpobservation.NewHandler(typedNil) == nil }},
 		{name: "control", isNil: func() bool { return runtimehttpcontrol.NewHandler(typedNil) == nil }},
 		{name: "dispatch", isNil: func() bool { return runtimehttpdispatch.NewHandler(typedNil) == nil }},
-		{name: "checkpoint", isNil: func() bool { return runtimehttpcheckpoint.NewHandler(typedNil) == nil }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if !test.isNil() {
@@ -118,9 +116,6 @@ type runtimeRootFake struct {
 	moveWork             func(context.Context, factoryruntime.MoveWorkRequest) (factoryruntime.MoveWorkResult, error)
 	planDispatch         func(context.Context, factoryruntime.PlanDispatchRequest) (factoryruntime.PlanDispatchResult, error)
 	acceptDispatchResult func(context.Context, factoryruntime.AcceptDispatchResultRequest) (factoryruntime.AcceptDispatchResultResult, error)
-	captureCheckpoint    func(context.Context, factoryruntime.CaptureCheckpointRequest) (factoryruntime.CaptureCheckpointResult, error)
-	loadCheckpoint       func(context.Context, factoryruntime.LoadCheckpointRequest) (factoryruntime.LoadCheckpointResult, error)
-	restoreCheckpoint    func(context.Context, factoryruntime.RestoreCheckpointRequest) (factoryruntime.RestoreCheckpointResult, error)
 }
 
 var _ factoryruntime.Service = (*runtimeRootFake)(nil)
@@ -171,22 +166,4 @@ func (fake *runtimeRootFake) AcceptDispatchResult(ctx context.Context, req facto
 		return fake.acceptDispatchResult(ctx, req)
 	}
 	return factoryruntime.AcceptDispatchResultResult{}, nil
-}
-func (fake *runtimeRootFake) CaptureCheckpoint(ctx context.Context, req factoryruntime.CaptureCheckpointRequest) (factoryruntime.CaptureCheckpointResult, error) {
-	if fake.captureCheckpoint != nil {
-		return fake.captureCheckpoint(ctx, req)
-	}
-	return factoryruntime.CaptureCheckpointResult{}, nil
-}
-func (fake *runtimeRootFake) LoadCheckpoint(ctx context.Context, req factoryruntime.LoadCheckpointRequest) (factoryruntime.LoadCheckpointResult, error) {
-	if fake.loadCheckpoint != nil {
-		return fake.loadCheckpoint(ctx, req)
-	}
-	return factoryruntime.LoadCheckpointResult{}, nil
-}
-func (fake *runtimeRootFake) RestoreCheckpoint(ctx context.Context, req factoryruntime.RestoreCheckpointRequest) (factoryruntime.RestoreCheckpointResult, error) {
-	if fake.restoreCheckpoint != nil {
-		return fake.restoreCheckpoint(ctx, req)
-	}
-	return factoryruntime.RestoreCheckpointResult{}, nil
 }

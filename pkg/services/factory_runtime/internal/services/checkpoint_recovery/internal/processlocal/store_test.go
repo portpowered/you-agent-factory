@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	checkpointrecovery "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery"
 	checkpointrecoverywire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/wire"
 )
@@ -56,17 +55,17 @@ func TestStoreRejectsCorruptEnvelopesOnPut(t *testing.T) {
 		{
 			name:      "empty checkpoint id",
 			envelope:  checkpointrecovery.Envelope{SchemaVersion: 1, Payload: []byte("payload")},
-			wantError: factoryruntime.ErrCorruptCheckpoint,
+			wantError: checkpointrecovery.ErrCorruptCheckpoint,
 		},
 		{
 			name:      "non-positive schema version",
 			envelope:  checkpointrecovery.Envelope{CheckpointID: "checkpoint-1", Payload: []byte("payload")},
-			wantError: factoryruntime.ErrCorruptCheckpoint,
+			wantError: checkpointrecovery.ErrCorruptCheckpoint,
 		},
 		{
 			name:      "empty payload",
 			envelope:  checkpointrecovery.Envelope{CheckpointID: "checkpoint-1", SchemaVersion: 1},
-			wantError: factoryruntime.ErrCorruptCheckpoint,
+			wantError: checkpointrecovery.ErrCorruptCheckpoint,
 		},
 	}
 
@@ -88,12 +87,12 @@ func TestStoreReportsMissingCheckpointIdentity(t *testing.T) {
 	store := checkpointrecoverywire.NewProcessLocalCheckpointStore()
 
 	_, err := store.Get("")
-	if !errors.Is(err, factoryruntime.ErrCheckpointNotFound) {
+	if !errors.Is(err, checkpointrecovery.ErrCheckpointNotFound) {
 		t.Fatalf("Get(\"\") error = %v, want ErrCheckpointNotFound", err)
 	}
 
 	_, err = store.Get("missing-checkpoint")
-	if !errors.Is(err, factoryruntime.ErrCheckpointNotFound) {
+	if !errors.Is(err, checkpointrecovery.ErrCheckpointNotFound) {
 		t.Fatalf("Get(missing) error = %v, want ErrCheckpointNotFound", err)
 	}
 }

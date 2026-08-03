@@ -46,18 +46,6 @@ var (
 	// outside the published result-boundary vocabulary peers may submit.
 	ErrInvalidDispatchResultBoundary = dispatchplanning.ErrInvalidDispatchResultBoundary
 
-	// ErrCheckpointNotFound indicates capture/load/restore targeted a checkpoint
-	// identity that is not present in Runtime mutable checkpoint state.
-	ErrCheckpointNotFound = errors.New("factory runtime checkpoint not found")
-
-	// ErrCorruptCheckpoint indicates the checkpoint payload or envelope failed
-	// integrity or shape checks without exposing strategy codec internals.
-	ErrCorruptCheckpoint = errors.New("factory runtime checkpoint is corrupt")
-
-	// ErrIncompatibleCheckpoint indicates the checkpoint schema or opaque payload
-	// is incompatible with the Runtime restore surface.
-	ErrIncompatibleCheckpoint = errors.New("factory runtime checkpoint is incompatible")
-
 	// ErrCapabilityUnavailable indicates the root contract is published but its
 	// canonical runtime implementation belongs to a later implementation cut.
 	// Callers must not interpret this error as a successful no-op.

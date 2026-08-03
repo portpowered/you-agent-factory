@@ -99,18 +99,6 @@ func (wrapped *invocationScheduleFactory) AcceptDispatchResult(ctx context.Conte
 	return wrapped.runtimeService().AcceptDispatchResult(ctx, request)
 }
 
-func (wrapped *invocationScheduleFactory) CaptureCheckpoint(ctx context.Context, request factory.CaptureCheckpointRequest) (factory.CaptureCheckpointResult, error) {
-	return wrapped.runtimeService().CaptureCheckpoint(ctx, request)
-}
-
-func (wrapped *invocationScheduleFactory) LoadCheckpoint(ctx context.Context, request factory.LoadCheckpointRequest) (factory.LoadCheckpointResult, error) {
-	return wrapped.runtimeService().LoadCheckpoint(ctx, request)
-}
-
-func (wrapped *invocationScheduleFactory) RestoreCheckpoint(ctx context.Context, request factory.RestoreCheckpointRequest) (factory.RestoreCheckpointResult, error) {
-	return wrapped.runtimeService().RestoreCheckpoint(ctx, request)
-}
-
 func (wrapped *invocationScheduleFactory) SubmitWorkRequest(
 	ctx context.Context,
 	request work.WorkRequest,

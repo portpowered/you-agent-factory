@@ -69,33 +69,6 @@ func (f *executeObserverFactory) AcceptDispatchResult(_ context.Context, req fac
 		CorrelationID: req.CorrelationID,
 	}, nil
 }
-func (f *executeObserverFactory) CaptureCheckpoint(_ context.Context, req factory.CaptureCheckpointRequest) (factory.CaptureCheckpointResult, error) {
-	id := req.CheckpointID
-	if id == "" {
-		id = "checkpoint-stub"
-	}
-	return factory.CaptureCheckpointResult{
-		Outcome: factory.CheckpointOutcomeCaptured,
-		Checkpoint: factory.Checkpoint{
-			CheckpointID:  id,
-			SchemaVersion: 1,
-			StrategyKind:  "runtime",
-			Payload:       []byte(`{}`),
-		},
-	}, nil
-}
-func (f *executeObserverFactory) LoadCheckpoint(_ context.Context, req factory.LoadCheckpointRequest) (factory.LoadCheckpointResult, error) {
-	if req.CheckpointID == "" {
-		return factory.LoadCheckpointResult{}, factory.ErrCheckpointNotFound
-	}
-	return factory.LoadCheckpointResult{}, factory.ErrCheckpointNotFound
-}
-func (f *executeObserverFactory) RestoreCheckpoint(_ context.Context, req factory.RestoreCheckpointRequest) (factory.RestoreCheckpointResult, error) {
-	return factory.RestoreCheckpointResult{
-		Outcome:      factory.CheckpointOutcomeRestored,
-		CheckpointID: req.Checkpoint.CheckpointID,
-	}, nil
-}
 func (f *executeObserverFactory) MoveWork(context.Context, string, string, work.WorkStateChangeSource, string) (work.OperatorMoveResult, error) {
 	return work.OperatorMoveResult{}, nil
 }

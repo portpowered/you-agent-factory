@@ -11,7 +11,6 @@ import (
 	"net/http"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/checkpoint"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/control"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/dispatch"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/internal/common"
@@ -31,15 +30,10 @@ type SessionObserver = observation.SessionObserver
 // while the response shapes are owned by their operation packages.
 type runtimeControlHTTPResponse = control.RuntimeControlHTTPResponse
 type runtimeDispatchPlanHTTPResponse = dispatch.RuntimeDispatchPlanHTTPResponse
-type runtimeCheckpointHTTP = checkpoint.RuntimeCheckpointHTTP
-type runtimeCaptureCheckpointHTTPResponse = checkpoint.RuntimeCaptureCheckpointHTTPResponse
-type runtimeLoadCheckpointHTTPResponse = checkpoint.RuntimeLoadCheckpointHTTPResponse
-type runtimeRestoreCheckpointHTTPResponse = checkpoint.RuntimeRestoreCheckpointHTTPResponse
 
 type observationHandler = observation.Handler
 type controlHandler = control.Handler
 type dispatchHandler = dispatch.Handler
-type checkpointHandler = checkpoint.Handler
 
 // Adapter maps Factory Runtime HTTP operations through the accepted root
 // contract without importing Runtime internals or owning canonical state.
@@ -49,7 +43,6 @@ type Adapter struct {
 	*observationHandler
 	*controlHandler
 	*dispatchHandler
-	*checkpointHandler
 }
 
 // NewAdapter constructs the Factory Runtime HTTP adapter bound to the accepted
@@ -64,7 +57,6 @@ func NewAdapter(root RuntimeRoot) *Adapter {
 		observationHandler: observation.NewHandler(root),
 		controlHandler:     control.NewHandler(root),
 		dispatchHandler:    dispatch.NewHandler(root),
-		checkpointHandler:  checkpoint.NewHandler(root),
 	}
 }
 
@@ -141,8 +133,8 @@ func (a *Adapter) guardRuntimeRequestContext(w http.ResponseWriter, r *http.Requ
 }
 
 // OwnedHTTPOperationIDs lists the generated OpenAPI operationIds adapted by
-// this package. HTTP-RUN adds Runtime control, move-work, dispatch-plan, and
-// checkpoint slices without authoring new shared OpenAPI operations.
+// this package. HTTP-RUN adds Runtime control, move-work, and dispatch-plan
+// slices without authoring new shared OpenAPI operations.
 var OwnedHTTPOperationIDs = []string{
 	"getStatus",
 	"getStatusBySessionId",

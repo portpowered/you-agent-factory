@@ -218,51 +218,6 @@ func TestAdapter_ZeroValueDispatchOperationsFailClosed(t *testing.T) {
 	})
 }
 
-func TestAdapter_ZeroValueCheckpointOperationsFailClosed(t *testing.T) {
-	t.Parallel()
-	assertZeroValueOperationsFailClosed(t, []zeroValueOperation{
-		{
-			name: "capture checkpoint",
-			invoke: func(adapter *Adapter, recorder *httptest.ResponseRecorder) {
-				adapter.CaptureCheckpoint(
-					recorder,
-					httptest.NewRequest(
-						http.MethodPost,
-						"/runtime/checkpoint/capture",
-						strings.NewReader(`{"checkpointId":"checkpoint-1"}`),
-					),
-				)
-			},
-		},
-		{
-			name: "load checkpoint",
-			invoke: func(adapter *Adapter, recorder *httptest.ResponseRecorder) {
-				adapter.LoadCheckpoint(
-					recorder,
-					httptest.NewRequest(
-						http.MethodPost,
-						"/runtime/checkpoint/load",
-						strings.NewReader(`{"checkpointId":"checkpoint-1"}`),
-					),
-				)
-			},
-		},
-		{
-			name: "restore checkpoint",
-			invoke: func(adapter *Adapter, recorder *httptest.ResponseRecorder) {
-				adapter.RestoreCheckpoint(
-					recorder,
-					httptest.NewRequest(
-						http.MethodPost,
-						"/runtime/checkpoint/restore",
-						strings.NewReader(`{"checkpoint":{"checkpointId":"checkpoint-1"}}`),
-					),
-				)
-			},
-		},
-	})
-}
-
 type zeroValueOperation struct {
 	name        string
 	wantMessage string
@@ -308,24 +263,6 @@ func TestAcceptDispatchResult_RejectsInvalidJSON(t *testing.T) {
 	adapter := NewAdapter(&runtimeRootFake{})
 	rec := httptest.NewRecorder()
 	adapter.AcceptDispatchResult(rec, httptest.NewRequest(http.MethodPost, "/runtime/dispatch/accept-result", strings.NewReader("{")))
-	assertErrorResponse(t, rec, http.StatusBadRequest, "BAD_REQUEST", "invalid request payload")
-}
-
-func TestLoadCheckpoint_RejectsInvalidJSON(t *testing.T) {
-	t.Parallel()
-
-	adapter := NewAdapter(&runtimeRootFake{})
-	rec := httptest.NewRecorder()
-	adapter.LoadCheckpoint(rec, httptest.NewRequest(http.MethodPost, "/runtime/checkpoint/load", strings.NewReader("{")))
-	assertErrorResponse(t, rec, http.StatusBadRequest, "BAD_REQUEST", "invalid request payload")
-}
-
-func TestRestoreCheckpoint_RejectsInvalidJSON(t *testing.T) {
-	t.Parallel()
-
-	adapter := NewAdapter(&runtimeRootFake{})
-	rec := httptest.NewRecorder()
-	adapter.RestoreCheckpoint(rec, httptest.NewRequest(http.MethodPost, "/runtime/checkpoint/restore", strings.NewReader("{")))
 	assertErrorResponse(t, rec, http.StatusBadRequest, "BAD_REQUEST", "invalid request payload")
 }
 

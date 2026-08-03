@@ -27,7 +27,6 @@ const (
 	OperationControl
 	OperationMoveWork
 	OperationDispatchPlan
-	OperationCheckpoint
 )
 
 // RootErrorResponse maps published Runtime root sentinel failures to HTTP
@@ -80,16 +79,6 @@ func RootErrorResponse(err error, operation Operation) (int, factoryapi.ErrorRes
 		}
 		if stderrors.Is(err, factoryruntime.ErrInvalidDispatchResultBoundary) {
 			return badRequestErrorResponse("invalid dispatch result boundary")
-		}
-	case OperationCheckpoint:
-		if stderrors.Is(err, factoryruntime.ErrCheckpointNotFound) {
-			return notFoundErrorResponse("factory runtime checkpoint not found")
-		}
-		if stderrors.Is(err, factoryruntime.ErrCorruptCheckpoint) {
-			return badRequestErrorResponse("factory runtime checkpoint is corrupt")
-		}
-		if stderrors.Is(err, factoryruntime.ErrIncompatibleCheckpoint) {
-			return conflictErrorResponse("factory runtime checkpoint is incompatible")
 		}
 	}
 
