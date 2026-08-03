@@ -160,3 +160,95 @@ func classifySubscribeError(err error) string {
 		return "validation"
 	}
 }
+
+// logAttachIntent records that req passed request-shape validation and
+// AttachSource is about to evaluate it against source topic state. It fires
+// only once ctx.Err() and req.Validate() have both succeeded, mirroring
+// logAppendIntent's timing; a request rejected before that point (malformed,
+// self-attachment, incompatible cursor, canceled context) never produces
+// this log.
+func (st *Store) logAttachIntent(req events.AttachSourceRequest) {
+	st.logger.Debug("events attach intent",
+		"destination", string(req.Destination),
+		"source", string(req.Source),
+		"mode", attachModeLabel(req.Mode),
+	)
+}
+
+// logAttachOutcome records the terminal outcome of one AttachSource call:
+// safe destination/source/mode context plus either a rejected classification
+// or the accepted/already-attached outcome and resolved starting position.
+// It never logs a forwarded record's payload.
+func (st *Store) logAttachOutcome(req events.AttachSourceRequest, result events.AttachSourceResult, err error) {
+	fields := []any{
+		"destination", string(req.Destination),
+		"source", string(req.Source),
+		"mode", attachModeLabel(req.Mode),
+	}
+	if err != nil {
+		fields = append(fields, "outcome", "rejected", "error_class", classifyAttachError(err))
+		st.logger.Info("events attach outcome", fields...)
+		return
+	}
+
+	outcome := "accepted"
+	if result.Outcome == events.AttachOutcomeAlreadyAttached {
+		outcome = "already_attached"
+	}
+	fields = append(fields, "outcome", outcome, "start_at", uint64(result.StartAt.Position))
+	st.logger.Info("events attach outcome", fields...)
+}
+
+// logAttachGap records that a newly accepted attachment's starting position
+// had already been evicted from the source topic's retained window: safe
+// destination/source/requested/earliest-retained/head facts, logged exactly
+// once at attach time, never payload content.
+func (st *Store) logAttachGap(req events.AttachSourceRequest, gap *events.GapFacts) {
+	st.logger.Info("events attach gap",
+		"destination", string(req.Destination),
+		"source", string(req.Source),
+		"requested", uint64(gap.Requested),
+		"earliest_retained", uint64(gap.EarliestRetained),
+		"head", uint64(gap.Head),
+	)
+}
+
+// logAttachTopicClosed records that a topic's outgoing attachment
+// registrations were torn down by Store.Close(): safe topic context and the
+// number of attachments removed, logged exactly once per topic closure.
+func (st *Store) logAttachTopicClosed(topic events.Topic, attachmentCount int) {
+	st.logger.Info("events attach topic closed", "topic", string(topic), "attachment_count", attachmentCount)
+}
+
+// classifyAttachError maps a rejected AttachSource's error to a stable,
+// boundary-safe classification string, never err.Error() text.
+func classifyAttachError(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, events.ErrSelfAttachment):
+		return "self_attachment"
+	case errors.Is(err, events.ErrUnsupportedAttachMode):
+		return "unsupported_mode"
+	case errors.Is(err, events.ErrIncompatibleAttachmentCursor):
+		return "incompatible_cursor"
+	case errors.Is(err, events.ErrUnresolvableCursor):
+		return "unresolvable_cursor"
+	case errors.Is(err, events.ErrOperationFailed):
+		return "closed"
+	default:
+		return "validation"
+	}
+}
+
+// attachModeLabel maps mode to a stable log field value.
+func attachModeLabel(mode events.AttachMode) string {
+	switch mode {
+	case events.AttachModeRetainedThenLive:
+		return "retained_then_live"
+	case events.AttachModeLiveOnly:
+		return "live_only"
+	default:
+		return "unspecified"
+	}
+}

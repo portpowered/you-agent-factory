@@ -29,28 +29,35 @@ type Store struct {
 	closed              bool
 }
 
+var _ events.Service = (*Store)(nil)
+
 // topicState holds one topic's aggregate ordering, retained records,
-// idempotency index, and live subscriber registrations. head is the
-// position of the most recently accepted record (0 when the topic has never
-// accepted one) and advances only under mu, in commit order, independent of
-// retention: eviction may drop entries from the front of records without
-// ever resetting or renumbering head. records is always contiguous in
-// Position: records[i].ID.Position equals the topic's earliest retained
-// position plus i. identity maps each accepted append's (sourceType,
-// sourceID, sourceSequence, sourceEventID) tuple to its originally accepted
-// Record so a repeated append resolves to the same Record regardless of
-// whether that position is still retained. subscribers holds every
-// currently live registration keyed by an opaque per-topic id; Append offers
-// each newly committed record to every entry under the same lock that
-// commits it, and closed marks that this topic has been shut down (directly
-// via Store.Close, or pre-closed because the topic was first created after
-// the Store was already closed).
+// idempotency index, live subscriber registrations, and outgoing attachment
+// forwards. head is the position of the most recently accepted record (0
+// when the topic has never accepted one) and advances only under mu, in
+// commit order, independent of retention: eviction may drop entries from the
+// front of records without ever resetting or renumbering head. records is
+// always contiguous in Position: records[i].ID.Position equals the topic's
+// earliest retained position plus i. identity maps each accepted append's
+// (sourceType, sourceID, sourceSequence, sourceEventID) tuple to its
+// originally accepted Record so a repeated append resolves to the same
+// Record regardless of whether that position is still retained. subscribers
+// holds every currently live registration keyed by an opaque per-topic id;
+// attachments holds every topic currently attached to this one as a
+// forwarding destination, keyed by that destination Topic (at most one
+// attachment per distinct destination, which is what makes AttachSource
+// idempotent per (Destination, Source) pair). Append offers each newly
+// committed record to every subscriber and forwards it to every attached
+// destination under the same lock that commits it, and closed marks that
+// this topic has been shut down (directly via Store.Close, or pre-closed
+// because the topic was first created after the Store was already closed).
 type topicState struct {
 	mu          sync.Mutex
 	head        events.AggregateSequence
 	records     []events.Record
 	identity    map[events.AppendIdentity]events.Record
 	subscribers map[uint64]*liveSubscriber
+	attachments map[events.Topic]*attachmentForward
 	nextSubID   uint64
 	closed      bool
 }
@@ -114,6 +121,7 @@ func (st *Store) topic(t events.Topic) *topicState {
 	ts = &topicState{
 		identity:    make(map[events.AppendIdentity]events.Record),
 		subscribers: make(map[uint64]*liveSubscriber),
+		attachments: make(map[events.Topic]*attachmentForward),
 		closed:      st.closed,
 	}
 	st.topics[t] = ts
@@ -144,10 +152,12 @@ func (st *Store) Close() {
 	st.logStoreClosed()
 }
 
-// closeLocked marks ts closed and terminates every currently registered live
-// subscriber with DeliveryClosed exactly once, logging the topic-level
-// closure once it has taken effect. Safe to call more than once; only the
-// first call has any effect.
+// closeLocked marks ts closed, terminates every currently registered live
+// subscriber with DeliveryClosed exactly once, and tears down every outgoing
+// attachment forward registered on ts so no future commit (Close does not
+// itself reject later Append calls) is ever forwarded to a topic that
+// stopped being observed. Logs the topic-level closure once it has taken
+// effect. Safe to call more than once; only the first call has any effect.
 func (ts *topicState) closeLocked(st *Store, topic events.Topic) {
 	ts.mu.Lock()
 	if ts.closed {
@@ -157,10 +167,15 @@ func (ts *topicState) closeLocked(st *Store, topic events.Topic) {
 	ts.closed = true
 	subs := ts.subscribers
 	ts.subscribers = make(map[uint64]*liveSubscriber)
+	attachmentCount := len(ts.attachments)
+	ts.attachments = make(map[events.Topic]*attachmentForward)
 	ts.mu.Unlock()
 
 	for _, sub := range subs {
 		sub.terminate(events.DeliveryClosed)
 	}
 	st.logSubscribeTopicClosed(topic, len(subs))
+	if attachmentCount > 0 {
+		st.logAttachTopicClosed(topic, attachmentCount)
+	}
 }

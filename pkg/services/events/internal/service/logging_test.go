@@ -385,6 +385,170 @@ func TestSubscribe_CloseLogsTopicClosedAndStoreClosed(t *testing.T) {
 	}
 }
 
+func TestAttachSource_AcceptedLogsIntentAndOutcome(t *testing.T) {
+	logger, calls := newCaptureLogger()
+	st := New(logger)
+	source := events.Topic("factory-session/log-attach/response-events")
+	destination := events.Topic("chat-session/log-attach/events")
+
+	result, err := st.AttachSource(context.Background(), events.AttachSourceRequest{
+		Destination: destination,
+		Source:      source,
+		StartAt:     events.Cursor{Topic: source},
+		Mode:        events.AttachModeRetainedThenLive,
+	})
+	if err != nil {
+		t.Fatalf("AttachSource() error = %v", err)
+	}
+
+	if len(*calls) != 2 {
+		t.Fatalf("AttachSource() logged %d calls, want 2 (intent + outcome): %+v", len(*calls), *calls)
+	}
+	if (*calls)[0].level != "debug" || (*calls)[0].msg != "events attach intent" {
+		t.Fatalf("first call = %+v, want the debug attach intent log", (*calls)[0])
+	}
+	outcome := (*calls)[1]
+	if outcome.msg != "events attach outcome" {
+		t.Fatalf("second call msg = %q, want %q", outcome.msg, "events attach outcome")
+	}
+	if !hasKV(outcome.kv, "outcome", "accepted") {
+		t.Fatalf("outcome log missing outcome=accepted: %+v", outcome.kv)
+	}
+	if !hasKV(outcome.kv, "start_at", uint64(result.StartAt.Position)) {
+		t.Fatalf("outcome log missing start_at=%d: %+v", result.StartAt.Position, outcome.kv)
+	}
+	for _, call := range *calls {
+		for _, v := range call.kv {
+			if s, ok := v.(string); ok && s == `{"ok":true}` {
+				t.Fatalf("log call leaked payload content: %+v", call)
+			}
+		}
+	}
+}
+
+func TestAttachSource_AlreadyAttachedLogsOutcome(t *testing.T) {
+	logger, calls := newCaptureLogger()
+	st := New(logger)
+	source := events.Topic("factory-session/log-idem/response-events")
+	destination := events.Topic("chat-session/log-idem/events")
+	req := events.AttachSourceRequest{
+		Destination: destination,
+		Source:      source,
+		StartAt:     events.Cursor{Topic: source},
+		Mode:        events.AttachModeRetainedThenLive,
+	}
+	if _, err := st.AttachSource(context.Background(), req); err != nil {
+		t.Fatalf("AttachSource() first error = %v", err)
+	}
+	*calls = nil
+
+	if _, err := st.AttachSource(context.Background(), req); err != nil {
+		t.Fatalf("AttachSource() second error = %v", err)
+	}
+
+	if len(*calls) != 2 {
+		t.Fatalf("second AttachSource() logged %d calls, want 2 (intent + already-attached outcome, matching Append's duplicate-still-logs-intent precedent): %+v", len(*calls), *calls)
+	}
+	if !hasKV((*calls)[1].kv, "outcome", "already_attached") {
+		t.Fatalf("outcome log missing outcome=already_attached: %+v", (*calls)[1].kv)
+	}
+}
+
+func TestAttachSource_RejectedLogsClassificationOnlyWithoutIntentLog(t *testing.T) {
+	logger, calls := newCaptureLogger()
+	st := New(logger)
+	source := events.Topic("factory-session/log-reject/response-events")
+
+	_, err := st.AttachSource(context.Background(), events.AttachSourceRequest{
+		Destination: source,
+		Source:      source,
+		StartAt:     events.Cursor{Topic: source},
+		Mode:        events.AttachModeRetainedThenLive,
+	})
+	if !errors.Is(err, events.ErrSelfAttachment) {
+		t.Fatalf("AttachSource() error = %v, want ErrSelfAttachment", err)
+	}
+
+	if len(*calls) != 1 {
+		t.Fatalf("rejected AttachSource() logged %d calls, want 1 (outcome only, no intent log): %+v", len(*calls), *calls)
+	}
+	if !hasKV((*calls)[0].kv, "outcome", "rejected") {
+		t.Fatalf("outcome log missing outcome=rejected: %+v", (*calls)[0].kv)
+	}
+	if !hasKV((*calls)[0].kv, "error_class", "self_attachment") {
+		t.Fatalf("outcome log missing error_class=self_attachment: %+v", (*calls)[0].kv)
+	}
+}
+
+func TestAttachSource_GapLogsSafeFacts(t *testing.T) {
+	logger, calls := newCaptureLogger()
+	st := NewWithRetention(2, logger)
+	ctx := context.Background()
+	source := events.Topic("factory-session/log-gap/response-events")
+	destination := events.Topic("chat-session/log-gap/events")
+	appendN(t, st, ctx, source, 5)
+	*calls = nil
+
+	_, err := st.AttachSource(ctx, events.AttachSourceRequest{
+		Destination: destination,
+		Source:      source,
+		StartAt:     events.Cursor{Topic: source, Position: 1},
+		Mode:        events.AttachModeRetainedThenLive,
+	})
+	if err != nil {
+		t.Fatalf("AttachSource() error = %v", err)
+	}
+
+	var found bool
+	for _, call := range *calls {
+		if call.msg == "events attach gap" {
+			found = true
+			if !hasKV(call.kv, "earliest_retained", uint64(4)) {
+				t.Fatalf("gap log missing earliest_retained=4: %+v", call.kv)
+			}
+			if !hasKV(call.kv, "requested", uint64(1)) {
+				t.Fatalf("gap log missing requested=1: %+v", call.kv)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("no attach gap log emitted: %+v", *calls)
+	}
+}
+
+func TestAttachSource_CloseLogsAttachTopicClosed(t *testing.T) {
+	logger, calls := newCaptureLogger()
+	st := New(logger)
+	ctx := context.Background()
+	source := events.Topic("factory-session/log-close/response-events")
+	destination := events.Topic("chat-session/log-close/events")
+
+	if _, err := st.AttachSource(ctx, events.AttachSourceRequest{
+		Destination: destination,
+		Source:      source,
+		StartAt:     events.Cursor{Topic: source},
+		Mode:        events.AttachModeRetainedThenLive,
+	}); err != nil {
+		t.Fatalf("AttachSource() error = %v", err)
+	}
+	*calls = nil
+
+	st.Close()
+
+	var sawAttachClosed bool
+	for _, call := range *calls {
+		if call.msg == "events attach topic closed" {
+			sawAttachClosed = true
+			if !hasKV(call.kv, "attachment_count", 1) {
+				t.Fatalf("attach topic closed log missing attachment_count=1: %+v", call.kv)
+			}
+		}
+	}
+	if !sawAttachClosed {
+		t.Fatalf("no attach topic closed log emitted: %+v", *calls)
+	}
+}
+
 func TestValidAppendRequestPayloadNotJSONEncodedAsAnyOtherField(t *testing.T) {
 	// Guards the payload-leak assertion above: proves the fixture payload is
 	// distinct from every other fixture field so a false negative can't hide

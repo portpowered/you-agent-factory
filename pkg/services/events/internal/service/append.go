@@ -35,30 +35,50 @@ func (st *Store) Append(ctx context.Context, req events.AppendRequest) (result e
 
 	ts := st.topic(detached.Topic)
 	ts.mu.Lock()
-	defer ts.mu.Unlock()
+	stored, outcome := ts.commitLocked(st, detached.Topic, detached, identity)
+	ts.mu.Unlock()
 
+	// commitLocked's returned Record shares backing storage with ts's own
+	// retained/identity copy (and, for a forwarding destination, with every
+	// other attachment's view of the same commit): detach once more here so
+	// a caller mutating this specific returned Record can never corrupt the
+	// Store's canonical copy or another observer's independent view of it.
+	result = events.AppendResult{Record: stored.Detached(), Outcome: outcome}
+	return result, nil
+}
+
+// commitLocked stores req as the next accepted record for ts (assigning the
+// next aggregate position), or resolves to the existing accepted Record when
+// req's identity was already accepted. It evicts the oldest retained record
+// once the topic exceeds the store's retention cap, then notifies both live
+// subscribers and any topics attached to ts as a forwarding destination
+// under this same lock, so no observer can ever see one commit before
+// another and no aggregate position is skipped or duplicated across a
+// retained-then-live or attachment forwarding handoff. Callers hold ts.mu;
+// req must already carry a detached Payload (see AppendRequest.Detached and
+// Record.Detached), since commitLocked does not clone it a second time.
+func (ts *topicState) commitLocked(st *Store, topic events.Topic, req events.AppendRequest, identity events.AppendIdentity) (events.Record, events.AppendOutcome) {
 	if existing, ok := ts.identity[identity]; ok {
-		result = events.AppendResult{Record: existing.Detached(), Outcome: events.AppendOutcomeDuplicate}
-		return result, nil
+		return existing.Detached(), events.AppendOutcomeDuplicate
 	}
 
 	ts.head++
 	stored := events.Record{
-		ID:             events.RecordID{Topic: detached.Topic, Position: ts.head},
-		SourceType:     detached.SourceType,
-		SourceID:       detached.SourceID,
-		SourceSequence: detached.SourceSequence,
-		SourceEventID:  detached.SourceEventID,
-		SchemaID:       detached.SchemaID,
-		Payload:        detached.Payload,
+		ID:             events.RecordID{Topic: topic, Position: ts.head},
+		SourceType:     req.SourceType,
+		SourceID:       req.SourceID,
+		SourceSequence: req.SourceSequence,
+		SourceEventID:  req.SourceEventID,
+		SchemaID:       req.SchemaID,
+		Payload:        req.Payload,
 	}.Detached()
 	ts.records = append(ts.records, stored)
 	ts.identity[identity] = stored
 	if len(ts.records) > st.maxRetainedPerTopic {
 		ts.records = ts.records[1:]
 	}
-	ts.notifySubscribersLocked(st, detached.Topic, stored)
+	ts.notifySubscribersLocked(st, topic, stored)
+	ts.notifyAttachmentsLocked(st, stored)
 
-	result = events.AppendResult{Record: stored.Detached(), Outcome: events.AppendOutcomeAccepted}
-	return result, nil
+	return stored, events.AppendOutcomeAccepted
 }
