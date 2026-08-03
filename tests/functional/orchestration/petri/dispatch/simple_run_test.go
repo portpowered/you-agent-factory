@@ -560,6 +560,8 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 			Payload:    []byte(`{"title":"will panic at executor"}`),
 		})
 
+		// ProviderOverride (not ProviderCommandRunner) is required here; see the
+		// documented in-scope exception on panicInferenceProvider below.
 		provider := panicInferenceProvider{message: "simulated executor catastrophic panic"}
 		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
 			t,
@@ -1457,6 +1459,26 @@ func (r nonZeroExitScriptCommandRunner) Run(
 // panicInferenceProvider panics from Infer to exercise the Workers execution
 // boundary's WorkerExecutor panic recovery through the customer process
 // boundary rather than any internal Petri or Workers seam.
+//
+// backend-review construction-path exception: general-backend-standards.md §7
+// rule 3 / code-review-standards.md §9 prefer ProviderCommandRunner and other
+// command-runner edge mocks over custom in-process provider fakes. This cell
+// uses ProviderOverride instead because there is no CommandResult/exit-code
+// shape that can reach the WorkerExecutor recover() boundary this test
+// proves: ScriptWrapProvider.Execute converts CommandRunner.Run's
+// (CommandResult, error) return into an ordinary *ProviderError branch on
+// err != nil or ExitCode != 0
+// (pkg/services/providers/internal/services/execution/internal/provider/inference_provider.go:179-217),
+// and everything downstream of that (invocation.Executor.Execute at
+// pkg/services/workers/internal/services/workstations/invocation/executor.go:51)
+// only calls deterministic, non-panicking string/format helpers on the
+// result. A subprocess boundary cannot unwind the calling goroutine's stack,
+// so ProviderCommandRunner can only ever produce the ordinary failed-executor
+// path already covered by the "provider_command_exit_routes_to_failed_terminal"
+// subtest below, never a Go-level panic. An in-process Provider.Infer fake is
+// therefore the only way to exercise the recover() in
+// workerExecutorRequestAdapter.Execute
+// (pkg/services/workers/workstation_pool_boundary_impl.go).
 type panicInferenceProvider struct {
 	message string
 }
