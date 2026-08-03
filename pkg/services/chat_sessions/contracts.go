@@ -27,7 +27,9 @@ import "context"
 //   - *NotFoundError (ErrNotFound) when a session or subordinate entity
 //     (turn, attachment, control intent) does not exist.
 //   - *BusyError (ErrBusy) when a turn-admitting operation is rejected
-//     because the session already has a non-terminal active turn.
+//     because the session already has a non-terminal active turn. It carries
+//     the blocking turn's ActiveTurnID and ActiveTurnState so a caller does
+//     not need a follow-up read.
 //   - *ConflictError (ErrStaleVersion) when ExpectedVersion no longer
 //     matches the session's current version.
 //   - *TransitionError (ErrInvalidTransition) when an advancement requests a
@@ -84,7 +86,11 @@ type Service interface {
 	// ControlIntentState transition table. It reports *NotFoundError when
 	// the intent identified by SessionID and RequestID does not exist and
 	// *TransitionError when Next is not a legal transition from the
-	// intent's current state.
+	// intent's current state. When Next resolves a COMMITTED intent to a
+	// terminal outcome, an implementation determines that outcome with
+	// ResolveControlIntentOutcome against the intent's captured turn, not a
+	// caller-selected value, so completion can only ever complete, no-op, or
+	// supersede the captured turn -- never a later one.
 	AdvanceControl(ctx context.Context, req AdvanceControlRequest) (AdvanceControlResult, error)
 }
 

@@ -357,6 +357,16 @@ func (s TurnState) IsTerminal() bool {
 	}
 }
 
+// IsBusy reports whether s is a state (ADMITTED or RUNNING) that must block
+// admission of a new Turn on the same Session. It is the exact complement of
+// IsTerminal over TurnState's declared members: every declared value is
+// either busy or terminal, never both. Callers must validate an untrusted
+// TurnState before consulting IsBusy, since a zero or unknown value reports
+// false here rather than a typed invalid-state error.
+func (s TurnState) IsBusy() bool {
+	return s == TurnStateAdmitted || s == TurnStateRunning
+}
+
 // Turn is one admitted unit of work within a TargetEpisode.
 type Turn struct {
 	ID        string
