@@ -37,10 +37,10 @@ func (s *Store) StartTurn(_ context.Context, req chatsessions.StartTurnRequest) 
 			Expected: req.ExpectedVersion, Actual: record.session.Version,
 		}
 	}
-	if record.activeTurn != nil {
+	if active, ok := record.activeTurnValue(); ok {
 		return chatsessions.StartTurnResult{}, &chatsessions.BusyError{
 			Value: "Session", ID: req.SessionID,
-			ActiveTurnID: record.activeTurn.ID, ActiveTurnState: record.activeTurn.State,
+			ActiveTurnID: active.ID, ActiveTurnState: active.State,
 		}
 	}
 
@@ -69,7 +69,7 @@ func (s *Store) StartTurn(_ context.Context, req chatsessions.StartTurnRequest) 
 	}
 
 	record.turns[turn.ID] = turn
-	record.activeTurn = &turn
+	record.lastTurnID = turn.ID
 	record.session = updated
 	s.sessions[req.SessionID] = record
 
@@ -130,7 +130,6 @@ func (s *Store) AdvanceTurn(_ context.Context, req chatsessions.AdvanceTurnReque
 	record.turns[req.TurnID] = updated
 	record.turnSequence = nextTurnSequence
 	if releasesSession {
-		record.activeTurn = nil
 		record.session = updatedSession
 	}
 	s.sessions[req.SessionID] = record

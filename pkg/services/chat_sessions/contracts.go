@@ -81,7 +81,11 @@ type Service interface {
 	// ControlIntentStateRequested. It reports *NotFoundError when there is
 	// no active turn to target, *ConflictError when ExpectedVersion is
 	// stale, and a *ValidationError wrapping ErrUnsupportedControlAction
-	// when Action is declared vocabulary not executable in L1.
+	// when Action is declared vocabulary not executable in L1. Reusing a
+	// RequestID that already identifies a requested intent is idempotent: it
+	// returns that existing, immutable intent unchanged instead of
+	// recapturing the (possibly different) current active turn, target
+	// episode, or version.
 	RequestControl(ctx context.Context, req RequestControlRequest) (RequestControlResult, error)
 
 	// AdvanceControl moves a control intent to Next, enforcing the

@@ -268,6 +268,86 @@ func TestStore_RequestControl_StaleVersionConflictLeavesStateUnchanged(t *testin
 	}
 }
 
+// TestStore_RequestControl_DuplicateIdentityBeforeAdvancementIsIdempotent
+// proves reusing a RequestID that already identifies a REQUESTED intent
+// returns the existing intent unchanged rather than recapturing state --
+// even when the second call's own Action or ExpectedVersion differs from
+// what was originally captured.
+func TestStore_RequestControl_DuplicateIdentityBeforeAdvancementIsIdempotent(t *testing.T) {
+	ctx := context.Background()
+	store, session, turn := newActiveTurnTestSession(t, time.Now())
+	reqID := controlRequestID("conn-1", "1")
+
+	first, err := store.RequestControl(ctx, chatsessions.RequestControlRequest{
+		RequestID: reqID, SessionID: session.ID, ExpectedVersion: session.Version, Action: chatsessions.ControlActionCancel,
+	})
+	if err != nil {
+		t.Fatalf("RequestControl first: %v", err)
+	}
+
+	second, err := store.RequestControl(ctx, chatsessions.RequestControlRequest{
+		RequestID: reqID, SessionID: session.ID, ExpectedVersion: session.Version, Action: chatsessions.ControlActionCancel,
+	})
+	if err != nil {
+		t.Fatalf("RequestControl duplicate: %v", err)
+	}
+	if second.Intent != first.Intent {
+		t.Fatalf("duplicate RequestControl returned a different intent: got %+v, want %+v", second.Intent, first.Intent)
+	}
+	if second.Intent.TurnID != turn.ID {
+		t.Fatalf("duplicate RequestControl retargeted TurnID: got %q, want %q", second.Intent.TurnID, turn.ID)
+	}
+
+	store.mu.RLock()
+	controlCount := len(store.sessions[session.ID].controls)
+	store.mu.RUnlock()
+	if controlCount != 1 {
+		t.Fatalf("controls after duplicate request = %d, want 1", controlCount)
+	}
+}
+
+// TestStore_RequestControl_DuplicateIdentityAfterNewTurnNeverRetargets proves
+// AC5's "later work cannot become the target of an older intent" guarantee:
+// reusing a RequestID after its original intent advanced to COMMITTED and a
+// later turn started never rewrites the stored intent's captured turn,
+// target episode, or version to the newer facts -- the exact identity is
+// immutable once it has been used.
+func TestStore_RequestControl_DuplicateIdentityAfterNewTurnNeverRetargets(t *testing.T) {
+	ctx := context.Background()
+	store, session, turn := newActiveTurnTestSession(t, time.Now())
+	reqID := controlRequestID("conn-1", "1")
+	committed := committedControlIntent(t, ctx, store, session, reqID)
+
+	if _, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: session.ID, TurnID: turn.ID, Next: chatsessions.TurnStateCanceled,
+	}); err != nil {
+		t.Fatalf("AdvanceTurn to terminal: %v", err)
+	}
+	released, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	newTurn, err := store.StartTurn(ctx, chatsessions.StartTurnRequest{
+		RequestID: startTurnRequestID("req-turn-2"), SessionID: session.ID, ExpectedVersion: released.Session.Version,
+	})
+	if err != nil {
+		t.Fatalf("StartTurn second: %v", err)
+	}
+
+	replay, err := store.RequestControl(ctx, chatsessions.RequestControlRequest{
+		RequestID: reqID, SessionID: session.ID, ExpectedVersion: newTurn.Session.Version, Action: chatsessions.ControlActionCancel,
+	})
+	if err != nil {
+		t.Fatalf("RequestControl duplicate after new turn: %v", err)
+	}
+	if replay.Intent != committed {
+		t.Fatalf("duplicate RequestControl after new turn changed the stored intent: got %+v, want %+v", replay.Intent, committed)
+	}
+	if replay.Intent.TurnID == newTurn.Turn.ID {
+		t.Fatal("duplicate RequestControl after new turn retargeted TurnID to the new turn")
+	}
+}
+
 // TestStore_AdvanceControl_RequestedToCommitted proves the first legal
 // advancement (REQUESTED->COMMITTED) is a plain state transition, not routed
 // through ResolveControlIntentOutcome.
@@ -451,13 +531,19 @@ func TestStore_AdvanceControl_OldControlVersusNewTurnResolvesSuperseded(t *testi
 	}
 }
 
-// TestStore_AdvanceControl_CancelVersusTerminalResolvesSuperseded proves
-// AC6's deterministic "cancel-versus-terminal" race: when the captured turn
-// terminates on its own (with no successor turn yet admitted) before a
-// COMMITTED cancel resolves, the intent observes the release and resolves to
-// SUPERSEDED -- it is never left ambiguously COMPLETED against a turn that no
-// longer needs canceling.
-func TestStore_AdvanceControl_CancelVersusTerminalResolvesSuperseded(t *testing.T) {
+// TestStore_AdvanceControl_CancelVersusTerminalResolvesNoop proves AC6's
+// deterministic "cancel-versus-terminal" race through the public API alone:
+// when the captured turn terminates on its own (with no successor turn yet
+// admitted) before a COMMITTED cancel resolves, the intent observes there is
+// nothing left to cancel and resolves to NOOP -- distinct from SUPERSEDED,
+// which is reserved for a captured turn that a newer admitted turn has since
+// replaced (see TestStore_AdvanceControl_OldControlVersusNewTurnResolvesSuperseded).
+// Resolution reads Session.lastTurnID, which (unlike ActiveTurnID) is not
+// cleared when the captured turn terminates, only overwritten by the next
+// StartTurn -- so this same-turn, no-successor case is distinguishable from
+// the new-turn case entirely through public Store calls, without fabricating
+// private state.
+func TestStore_AdvanceControl_CancelVersusTerminalResolvesNoop(t *testing.T) {
 	ctx := context.Background()
 	store, session, turn := newActiveTurnTestSession(t, time.Now())
 	reqID := controlRequestID("conn-1", "1")
@@ -475,49 +561,11 @@ func TestStore_AdvanceControl_CancelVersusTerminalResolvesSuperseded(t *testing.
 	if err != nil {
 		t.Fatalf("AdvanceControl: %v", err)
 	}
-	if result.Intent.State != chatsessions.ControlIntentStateSuperseded {
-		t.Fatalf("Intent.State = %v, want SUPERSEDED", result.Intent.State)
-	}
-	if result.Intent.TurnID != intent.TurnID {
-		t.Fatalf("resolution retargeted intent: TurnID = %q, want unchanged %q", result.Intent.TurnID, intent.TurnID)
-	}
-}
-
-// TestStore_AdvanceControl_ResolvesNoopWhenCapturedTurnStillCurrentButTerminal
-// exercises ResolveControlIntentOutcome's NOOP branch (a captured turn that
-// is still the session's nominal ActiveTurnID yet already carries a terminal
-// state). This Store's own AdvanceTurn always clears ActiveTurnID in the
-// same atomic commit that marks a turn terminal (story 003), so this
-// bookkeeping shape cannot arise through the public API alone; the turn's
-// stored state is set directly to reach it, proving AdvanceControl still
-// routes every COMMITTED resolution through ResolveControlIntentOutcome
-// rather than special-casing COMPLETED/SUPERSEDED in its own code.
-func TestStore_AdvanceControl_ResolvesNoopWhenCapturedTurnStillCurrentButTerminal(t *testing.T) {
-	ctx := context.Background()
-	store, session, turn := newActiveTurnTestSession(t, time.Now())
-	reqID := controlRequestID("conn-1", "1")
-	intent := committedControlIntent(t, ctx, store, session, reqID)
-
-	store.mu.Lock()
-	record := store.sessions[session.ID]
-	terminalTurn := record.turns[turn.ID]
-	terminalTurn.State = chatsessions.TurnStateCompleted
-	terminalTurn.TerminalSequence = 1
-	record.turns[turn.ID] = terminalTurn
-	store.sessions[session.ID] = record
-	store.mu.Unlock()
-
-	result, err := store.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
-		SessionID: session.ID, RequestID: reqID, Next: chatsessions.ControlIntentStateCompleted,
-	})
-	if err != nil {
-		t.Fatalf("AdvanceControl: %v", err)
-	}
 	if result.Intent.State != chatsessions.ControlIntentStateNoop {
 		t.Fatalf("Intent.State = %v, want NOOP", result.Intent.State)
 	}
 	if result.Intent.TurnID != intent.TurnID {
-		t.Fatalf("NOOP resolution retargeted intent: TurnID = %q, want unchanged %q", result.Intent.TurnID, intent.TurnID)
+		t.Fatalf("resolution retargeted intent: TurnID = %q, want unchanged %q", result.Intent.TurnID, intent.TurnID)
 	}
 }
 

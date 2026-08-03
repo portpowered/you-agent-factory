@@ -104,6 +104,54 @@ func TestStore_CreateSession_LogsStartAndAcceptedOutcomeWithoutUnsafeFields(t *t
 	}
 }
 
+// TestStore_GetSession_LogsStartAndOutcome proves GetSession -- the sole
+// method that previously bypassed logStart/logOutcome -- logs a Debug start
+// and Info outcome for both a successful read and a *NotFoundError read,
+// with the same start/outcome shape as every other Store operation.
+func TestStore_GetSession_LogsStartAndOutcome(t *testing.T) {
+	logger, calls := newCaptureLogger()
+	store := New(sequentialIDs("session"), fixedClock(time.Now()), logger)
+
+	created, err := store.CreateSession(context.Background(), validCreateRequest())
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	*calls = nil // discard CreateSession's own log calls
+
+	if _, err := store.GetSession(context.Background(), chatsessions.GetSessionRequest{SessionID: created.Session.ID}); err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if len(*calls) != 2 {
+		t.Fatalf("GetSession logged %d calls, want 2 (start, outcome): %+v", len(*calls), *calls)
+	}
+	if (*calls)[0].level != "debug" {
+		t.Fatalf("first log level = %q, want debug (start)", (*calls)[0].level)
+	}
+	outcome := (*calls)[1]
+	if outcome.level != "info" {
+		t.Fatalf("second log level = %q, want info (outcome)", outcome.level)
+	}
+	if !hasKV(outcome.kv, "session_id", created.Session.ID) {
+		t.Fatalf("outcome log missing session_id=%q: %+v", created.Session.ID, outcome.kv)
+	}
+	if !hasKV(outcome.kv, "error_class", "") {
+		t.Fatalf("successful outcome log must carry an empty error_class: %+v", outcome.kv)
+	}
+
+	*calls = nil
+	if _, err := store.GetSession(context.Background(), chatsessions.GetSessionRequest{SessionID: "does-not-exist"}); err == nil {
+		t.Fatal("GetSession unknown session: got nil error, want *NotFoundError")
+	}
+	if len(*calls) != 2 {
+		t.Fatalf("GetSession (not found) logged %d calls, want 2 (start, outcome): %+v", len(*calls), *calls)
+	}
+	if !hasKV((*calls)[1].kv, "error_class", "not_found") {
+		t.Fatalf("not-found outcome log missing error_class=not_found: %+v", (*calls)[1].kv)
+	}
+
+	assertNoUnsafeFields(t, *calls, created.Session.Cwd, "")
+}
+
 // TestStore_SetTarget_FailureLogsClassificationOnly proves a failed mutating
 // operation's outcome log carries only the operation name, session ID, and
 // error classification -- never a partial/zero-value accepted field.

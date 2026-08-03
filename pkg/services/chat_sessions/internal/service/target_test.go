@@ -169,42 +169,56 @@ func TestStore_SetTarget_StaleVersionConflictLeavesStateUnchanged(t *testing.T) 
 
 // TestStore_SetTarget_BusyWhileTurnActive proves a target change while a
 // turn is non-terminal reports *BusyError, creates no episode, and leaves
-// the session unchanged.
+// the session unchanged. The turn is admitted and advanced through the
+// public StartTurn/AdvanceTurn API (not fabricated private state), and
+// advanced to RUNNING before the busy check: an earlier revision kept a
+// second, independently-mutable copy of the active turn that AdvanceTurn's
+// non-terminal path never refreshed, so a BusyError raised after a public
+// ADMITTED->RUNNING advancement reported the stale ADMITTED state instead of
+// the turn's live RUNNING state.
 func TestStore_SetTarget_BusyWhileTurnActive(t *testing.T) {
 	ctx := context.Background()
 	store, session := newSetTargetTestSession(t, time.Now())
 
-	activeTurn := &chatsessions.Turn{
-		ID:        "turn-1",
-		Episode:   session.TargetEpisode,
-		State:     chatsessions.TurnStateRunning,
-		RequestID: setTargetRequestID("req-turn"),
-	}
-	store.mu.Lock()
-	record := store.sessions[session.ID]
-	record.activeTurn = activeTurn
-	store.sessions[session.ID] = record
-	store.mu.Unlock()
-
-	_, err := store.SetTarget(ctx, chatsessions.SetTargetRequest{
-		RequestID:       setTargetRequestID("req-1"),
+	started, err := store.StartTurn(ctx, chatsessions.StartTurnRequest{
+		RequestID:       setTargetRequestID("req-turn"),
 		SessionID:       session.ID,
 		ExpectedVersion: session.Version,
+	})
+	if err != nil {
+		t.Fatalf("StartTurn: %v", err)
+	}
+	advanced, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: session.ID,
+		TurnID:    started.Turn.ID,
+		Next:      chatsessions.TurnStateRunning,
+	})
+	if err != nil {
+		t.Fatalf("AdvanceTurn to RUNNING: %v", err)
+	}
+
+	_, err = store.SetTarget(ctx, chatsessions.SetTargetRequest{
+		RequestID:       setTargetRequestID("req-1"),
+		SessionID:       session.ID,
+		ExpectedVersion: started.Session.Version,
 		Target:          otherTarget(),
 	})
 	var busy *chatsessions.BusyError
 	if !errors.As(err, &busy) {
 		t.Fatalf("SetTarget while active turn: got %v, want *BusyError", err)
 	}
-	if busy.ActiveTurnID != "turn-1" || busy.ActiveTurnState != chatsessions.TurnStateRunning {
-		t.Fatalf("BusyError = %+v, want ActiveTurnID=turn-1 ActiveTurnState=RUNNING", busy)
+	if busy.ActiveTurnID != started.Turn.ID || busy.ActiveTurnState != chatsessions.TurnStateRunning {
+		t.Fatalf("BusyError = %+v, want ActiveTurnID=%q ActiveTurnState=RUNNING", busy, started.Turn.ID)
+	}
+	if advanced.Turn.State != chatsessions.TurnStateRunning {
+		t.Fatalf("AdvanceTurn result state = %v, want RUNNING", advanced.Turn.State)
 	}
 
 	store.mu.RLock()
 	after := store.sessions[session.ID]
 	store.mu.RUnlock()
-	if after.session != session {
-		t.Fatalf("busy SetTarget mutated Session: got %+v, want %+v", after.session, session)
+	if after.session != started.Session {
+		t.Fatalf("busy SetTarget mutated Session: got %+v, want %+v", after.session, started.Session)
 	}
 	if len(after.episodes) != 1 {
 		t.Fatalf("busy SetTarget created %d episodes, want 1", len(after.episodes))

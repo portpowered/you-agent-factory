@@ -33,6 +33,15 @@ import (
 // InjectBundle is the single application-process injector. Callers provide
 // production defaults or functional overrides through the same typed inputs.
 func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process, error) {
+	logger, err := logging.NewDefaultLogger()
+	if err != nil {
+		return nil, err
+	}
+	loggingLogger := provideOperatorSettingsLogger(logger)
+	service, err := provideChatSessionsService(loggingLogger)
+	if err != nil {
+		return nil, err
+	}
 	cliObserver := provideCLIObserver(edges2)
 	namedPathFileSystem := provideFactoryDefinitionNamedPathFileSystem(edges2)
 	namedPathResolver, err := provideFactoryDefinitionNamedPathResolver(namedPathFileSystem)
@@ -89,11 +98,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	opener := provideBrowserOpener(edges2)
 	fileSystem := provideOperatorSettingsFileSystem(edges2)
 	createTemporaryFile := provideOperatorSettingsCreateTemporaryFile(edges2)
-	service, err := provideProvidersService(edges2)
+	providersService, err := provideProvidersService(edges2)
 	if err != nil {
 		return nil, err
 	}
-	providerRegistry, err := provideProviderRegistry(edges2, service)
+	providerRegistry, err := provideProviderRegistry(edges2, providersService)
 	if err != nil {
 		return nil, err
 	}
@@ -101,12 +110,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	configDecoder := provideOperatorConfigDecoder()
 	configEncoder := provideOperatorConfigEncoder()
 	idGenerator := provideOperatorSettingsIDGenerator(edges2)
-	logger, err := logging.NewDefaultLogger()
-	if err != nil {
-		return nil, err
-	}
-	loggingLogger := provideOperatorSettingsLogger(logger)
-	operatorsettingsService, err := provideOperatorSettingsService(fileSystem, createTemporaryFile, providerCatalog, configDecoder, configEncoder, idGenerator, service, loggingLogger)
+	operatorsettingsService, err := provideOperatorSettingsService(fileSystem, createTemporaryFile, providerCatalog, configDecoder, configEncoder, idGenerator, providersService, loggingLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -196,18 +200,18 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v24 := provideFactorySessionRuntimePersistenceFileSystem(edges2)
 	v25 := provideFactorySessionRuntimePersistenceStoreFactory(v24)
 	v26 := provideFactorySessionSyncWaitScheduler()
-	v27 := provideWorkerInvocationWithProgressFactory(service, edges2)
+	v27 := provideWorkerInvocationWithProgressFactory(providersService, edges2)
 	ptyAllocator, err := provideAgyPTYAllocator(edges2)
 	if err != nil {
 		return nil, err
 	}
 	v28 := provideWorkerCommandRunnerAdapter()
-	v29, err := provideProviderRegistryRebinder(service, edges2)
+	v29, err := provideProviderRegistryRebinder(providersService, edges2)
 	if err != nil {
 		return nil, err
 	}
 	workersMockCommandRunnerFactory := provideWorkersMockCommandRunnerFactory()
-	v30 := provideConductorInvocationWithProgressFactory(service, edges2)
+	v30 := provideConductorInvocationWithProgressFactory(providersService, edges2)
 	v31 := provideFactorySessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, v23, v25, v26, v19, responseEventIDGenerator, responseEventRetentionLimits, v27, ptyAllocator, v28, providerRegistry, v29, workersMockCommandRunnerFactory, v30, edges2)
 	v32 := provideRecordingsProjectionFactory()
 	storage := provideReplayArtifactStorage()
@@ -223,7 +227,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	source := provideWorkersRetryRandomSource(edges2)
 	readFileInspector := provideWorkersWorkstationFileSystem(edges2)
 	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
-	v41, err := provideWorkersRuntimeFactory(service, invocationInterpolationService, decisionEnvelopeService, workstationExecutionPolicyService, v39, v40, source, readFileInspector, temporaryFileSystem, ptyAllocator, edges2, providerRegistry, v29)
+	v41, err := provideWorkersRuntimeFactory(providersService, invocationInterpolationService, decisionEnvelopeService, workstationExecutionPolicyService, v39, v40, source, readFileInspector, temporaryFileSystem, ptyAllocator, edges2, providerRegistry, v29)
 	if err != nil {
 		return nil, err
 	}
@@ -297,7 +301,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v55 := provideReplayArtifactLoader(storage)
 	clockResolver := provideFactoryRuntimeClockResolver()
 	sessionLoggerFactory := provideFactoryRuntimeSessionLoggerFactory()
-	v56 := provideProviderFromCommandRunnerFactory(service, edges2, ptyAllocator)
+	v56 := provideProviderFromCommandRunnerFactory(providersService, edges2, ptyAllocator)
 	starter, err := provideAPIServerStarter(edges2)
 	if err != nil {
 		return nil, err
@@ -363,7 +367,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	v61 := provideFactorySessionContractFixtureReader(edges2)
 	v62 := provideStandaloneSessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, v23, v25, v26, v19, v61)
-	v63 := provideWorkerInvocationFactory(service, edges2)
+	v63 := provideWorkerInvocationFactory(providersService, edges2)
 	runtimeArtifactRootResolver := provideRuntimeArtifactRootResolver()
 	v64 := provideFactorySessionExecutionOpeningFileSystem(edges2)
 	v65, err := provideSessionExecutionOpeningFactory(v60, edges2, v62, v63, clockResolver, runtimeArtifactRootResolver, v28, v64, ptyAllocator, logger)
@@ -483,8 +487,9 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	acpService := provideACPCLIService(operatorsettingsService, service, idGenerator)
+	acpService := provideACPCLIService(operatorsettingsService, providersService, idGenerator)
 	commandOperations := cli.CommandOperations{
+		ChatSessions:                      service,
 		ObserveCLI:                        cliObserver,
 		NamedFactoryCatalog:               v,
 		CompleteFactoryNames:              factoryNamesOperation,
@@ -559,7 +564,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	processLifecycle, err := provideApplicationProcessLifecycle(service)
+	processLifecycle, err := provideApplicationProcessLifecycle(providersService)
 	if err != nil {
 		return nil, err
 	}

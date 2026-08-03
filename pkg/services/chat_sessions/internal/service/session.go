@@ -73,7 +73,11 @@ func (s *Store) CreateSession(_ context.Context, req chatsessions.CreateSessionR
 // GetSession returns a detached copy of the current Session state. It
 // reports *NotFoundError when SessionID does not identify an existing
 // session and creates no placeholder history for an unknown ID.
-func (s *Store) GetSession(_ context.Context, req chatsessions.GetSessionRequest) (chatsessions.GetSessionResult, error) {
+func (s *Store) GetSession(_ context.Context, req chatsessions.GetSessionRequest) (result chatsessions.GetSessionResult, err error) {
+	s.logStart("GetSession", req.SessionID)
+	defer func() {
+		s.logOutcome("GetSession", req.SessionID, err, "version", result.Session.Version, "target_episode", result.Session.TargetEpisode)
+	}()
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	record, ok := s.sessions[req.SessionID]

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
@@ -410,7 +411,8 @@ func TestNewCommandFactoryDoesNotInstallTransportDefaults(t *testing.T) {
 	t.Parallel()
 
 	factory := NewCommandFactory(CommandOperations{})
-	if factory.SubmitWork != nil ||
+	if factory.chatSessions != nil ||
+		factory.SubmitWork != nil ||
 		factory.SessionsCLI != nil ||
 		factory.ModelsCLI != nil ||
 		factory.FlattenFactoryConfig != nil ||
@@ -693,6 +695,59 @@ func (batchInputFileSystemFakeForFactoryTest) Stat(string) (fs.FileInfo, error) 
 
 func (batchInputFileSystemFakeForFactoryTest) ReadFile(string) ([]byte, error) {
 	return nil, fs.ErrNotExist
+}
+
+// fakeChatSessionsServiceForFactoryTest is a minimal chatsessions.Service
+// double used only to prove reference identity survives the
+// CommandOperations->CommandFactory composition boundary; no method needs
+// real behavior for that proof.
+type fakeChatSessionsServiceForFactoryTest struct{}
+
+func (fakeChatSessionsServiceForFactoryTest) CreateSession(context.Context, chatsessions.CreateSessionRequest) (chatsessions.CreateSessionResult, error) {
+	return chatsessions.CreateSessionResult{}, nil
+}
+func (fakeChatSessionsServiceForFactoryTest) GetSession(context.Context, chatsessions.GetSessionRequest) (chatsessions.GetSessionResult, error) {
+	return chatsessions.GetSessionResult{}, nil
+}
+func (fakeChatSessionsServiceForFactoryTest) SetTarget(context.Context, chatsessions.SetTargetRequest) (chatsessions.SetTargetResult, error) {
+	return chatsessions.SetTargetResult{}, nil
+}
+func (fakeChatSessionsServiceForFactoryTest) StartTurn(context.Context, chatsessions.StartTurnRequest) (chatsessions.StartTurnResult, error) {
+	return chatsessions.StartTurnResult{}, nil
+}
+func (fakeChatSessionsServiceForFactoryTest) AdvanceTurn(context.Context, chatsessions.AdvanceTurnRequest) (chatsessions.AdvanceTurnResult, error) {
+	return chatsessions.AdvanceTurnResult{}, nil
+}
+func (fakeChatSessionsServiceForFactoryTest) Attach(context.Context, chatsessions.AttachRequest) (chatsessions.AttachResult, error) {
+	return chatsessions.AttachResult{}, nil
+}
+func (fakeChatSessionsServiceForFactoryTest) Detach(context.Context, chatsessions.DetachRequest) (chatsessions.DetachResult, error) {
+	return chatsessions.DetachResult{}, nil
+}
+func (fakeChatSessionsServiceForFactoryTest) RequestControl(context.Context, chatsessions.RequestControlRequest) (chatsessions.RequestControlResult, error) {
+	return chatsessions.RequestControlResult{}, nil
+}
+func (fakeChatSessionsServiceForFactoryTest) AdvanceControl(context.Context, chatsessions.AdvanceControlRequest) (chatsessions.AdvanceControlResult, error) {
+	return chatsessions.AdvanceControlResult{}, nil
+}
+
+// TestNewCommandFactoryPreservesChatSessionsServiceIdentity proves the
+// canonically injected chatsessions.Service instance crosses the
+// CommandOperations->CommandFactory composition boundary by reference,
+// unwrapped and uncopied -- the same proof-of-identity shape Wire's
+// singleton providers guarantee for every other canonically injected
+// service in this graph.
+func TestNewCommandFactoryPreservesChatSessionsServiceIdentity(t *testing.T) {
+	t.Parallel()
+
+	service := fakeChatSessionsServiceForFactoryTest{}
+	factory := NewCommandFactory(CommandOperations{ChatSessions: service})
+	if factory.chatSessions == nil {
+		t.Fatal("injected ChatSessions service is missing from composed factory")
+	}
+	if factory.chatSessions != chatsessions.Service(service) {
+		t.Fatalf("factory.chatSessions = %#v, want the exact injected instance %#v", factory.chatSessions, service)
+	}
 }
 
 func TestMissingCommandOperationFailsExecutionWithRequiredEdgeError(t *testing.T) {

@@ -114,6 +114,58 @@ func TestStore_StartTurn_SecondAdmissionWhileActiveIsBusy(t *testing.T) {
 	}
 }
 
+// TestStore_StartTurn_BusyReportsLiveRunningState proves a second admission
+// against a turn already advanced to RUNNING reports *BusyError carrying the
+// turn's live RUNNING state, not the ADMITTED state it was created with. An
+// earlier revision cached a second, independently-mutable copy of the active
+// turn that AdvanceTurn's non-terminal path never refreshed, so this busy
+// check reported a stale ADMITTED state after a public ADMITTED->RUNNING
+// advancement.
+func TestStore_StartTurn_BusyReportsLiveRunningState(t *testing.T) {
+	ctx := context.Background()
+	store, session := newStartTurnTestSession(t, time.Now())
+
+	first, err := store.StartTurn(ctx, chatsessions.StartTurnRequest{
+		RequestID:       startTurnRequestID("req-turn-1"),
+		SessionID:       session.ID,
+		ExpectedVersion: session.Version,
+	})
+	if err != nil {
+		t.Fatalf("StartTurn first: %v", err)
+	}
+	advanced, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: session.ID,
+		TurnID:    first.Turn.ID,
+		Next:      chatsessions.TurnStateRunning,
+	})
+	if err != nil {
+		t.Fatalf("AdvanceTurn to RUNNING: %v", err)
+	}
+
+	_, err = store.StartTurn(ctx, chatsessions.StartTurnRequest{
+		RequestID:       startTurnRequestID("req-turn-2"),
+		SessionID:       session.ID,
+		ExpectedVersion: first.Session.Version,
+	})
+	var busy *chatsessions.BusyError
+	if !errors.As(err, &busy) {
+		t.Fatalf("StartTurn while running: got %v, want *BusyError", err)
+	}
+	if busy.ActiveTurnID != first.Turn.ID || busy.ActiveTurnState != chatsessions.TurnStateRunning {
+		t.Fatalf("BusyError = %+v, want ActiveTurnID=%q ActiveTurnState=RUNNING", busy, first.Turn.ID)
+	}
+	if advanced.Turn.State != chatsessions.TurnStateRunning {
+		t.Fatalf("AdvanceTurn result state = %v, want RUNNING", advanced.Turn.State)
+	}
+
+	store.mu.RLock()
+	record := store.sessions[session.ID]
+	store.mu.RUnlock()
+	if record.session.Version != first.Session.Version {
+		t.Fatalf("session mutated by busy StartTurn: version = %d, want %d", record.session.Version, first.Session.Version)
+	}
+}
+
 // TestStore_StartTurn_StaleVersionConflictLeavesStateUnchanged proves a
 // stale-version admission reports typed *ConflictError without creating a
 // turn or changing session state, timestamps, active-turn identity, or
@@ -144,8 +196,8 @@ func TestStore_StartTurn_StaleVersionConflictLeavesStateUnchanged(t *testing.T) 
 	if len(record.turns) != 0 {
 		t.Fatalf("stale StartTurn created %d turns, want 0", len(record.turns))
 	}
-	if record.activeTurn != nil {
-		t.Fatalf("stale StartTurn set an active turn: %+v", record.activeTurn)
+	if active, ok := record.activeTurnValue(); ok {
+		t.Fatalf("stale StartTurn set an active turn: %+v", active)
 	}
 }
 

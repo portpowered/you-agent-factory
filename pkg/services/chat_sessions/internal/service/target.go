@@ -38,10 +38,10 @@ func (s *Store) SetTarget(_ context.Context, req chatsessions.SetTargetRequest) 
 			Expected: req.ExpectedVersion, Actual: record.session.Version,
 		}
 	}
-	if record.activeTurn != nil {
+	if active, ok := record.activeTurnValue(); ok {
 		return chatsessions.SetTargetResult{}, &chatsessions.BusyError{
 			Value: "Session", ID: req.SessionID,
-			ActiveTurnID: record.activeTurn.ID, ActiveTurnState: record.activeTurn.State,
+			ActiveTurnID: active.ID, ActiveTurnState: active.State,
 		}
 	}
 
