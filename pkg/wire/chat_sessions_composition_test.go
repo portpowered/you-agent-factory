@@ -16,11 +16,12 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// TestProvideChatSessionsServiceIsUsableThroughInjectBundle proves the exact
-// provider function registered in this graph's servicesSet returns a
-// functional, independently isolated chat_sessions.Service, and that
-// InjectBundle itself still succeeds with that provider registered. No
-// consumer in this repository currently declares a dependency on
+// TestProvideChatSessionsServiceConstructsAnIndependentServiceDirectly proves
+// the exact provider function registered in this graph's servicesSet returns
+// a functional, independently isolated chat_sessions.Service, and that
+// InjectBundle itself still succeeds with that provider registered. This
+// test deliberately does NOT claim to prove InjectBundle-composed injection:
+// no consumer in this repository currently declares a dependency on
 // chatsessions.Service (the eventual real consumer is ACP transport
 // dispatch, which is explicitly out of this PRD's scope), so Wire's
 // generated InjectBundle body does not call provideChatSessionsService --
@@ -30,7 +31,7 @@ import (
 // lands. A forced, unread field on an unrelated transport's operations
 // struct would not make this any more "composed"; it would only add dead
 // state, which is why this test proves the provider directly instead.
-func TestProvideChatSessionsServiceIsUsableThroughInjectBundle(t *testing.T) {
+func TestProvideChatSessionsServiceConstructsAnIndependentServiceDirectly(t *testing.T) {
 	t.Parallel()
 
 	if _, err := InjectBundle(context.Background(), serviceedges.Edges{}); err != nil {
