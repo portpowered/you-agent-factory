@@ -1969,11 +1969,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/execute_contracts.go",
-      "target": "CloneSafeDiagnostics"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/workers/execution_context.go",
       "target": "ResolveProjectID"
     },

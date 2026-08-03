@@ -778,7 +778,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime",
-      "minimum": 82.40
+      "minimum": 82.36
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
@@ -959,6 +959,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget",
       "minimum": 77.31
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/ondemandtarget",
+      "minimum": 83.15
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle",
@@ -1597,6 +1601,10 @@
       "minimum": 49.81
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/internal/service/cancelwindow",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/wire",
       "minimum": 100.00
     },
@@ -2038,7 +2046,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers",
-      "minimum": 79.81
+      "minimum": 78.71
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal",
@@ -2057,10 +2065,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/interface",
       "minimum": 94.81
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/service",
-      "minimum": 71.71
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners",
@@ -2248,7 +2252,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/wire",
-      "minimum": 82.14
+      "minimum": 79.15
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/acp",

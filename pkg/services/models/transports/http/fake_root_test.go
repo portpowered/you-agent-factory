@@ -22,10 +22,6 @@ type rootFake struct {
 
 var _ models.Service = (*rootFake)(nil)
 
-func (fake *rootFake) ForRuntime(models.RuntimeBinding) (models.Service, error) {
-	return fake, nil
-}
-
 func (fake *rootFake) ListModels(ctx context.Context) (models.List, error) {
 	if fake.list != nil {
 		return fake.list(ctx)

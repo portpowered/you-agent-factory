@@ -70,6 +70,37 @@ func TestStore_StartTurn_FirstTurnActivatesSession(t *testing.T) {
 	}
 }
 
+// TestStore_StartTurn_ReturnsAdmittedEpisodeSnapshot proves StartTurnResult
+// carries the exact current TargetEpisode the turn was admitted into
+// (Number and Target), with a blank FactorySessionID for a brand-new
+// episode, so a caller can decide whether to start or reuse a Factory
+// Session without a second read.
+func TestStore_StartTurn_ReturnsAdmittedEpisodeSnapshot(t *testing.T) {
+	ctx := context.Background()
+	store, session := newStartTurnTestSession(t, time.Now())
+
+	result, err := store.StartTurn(ctx, chatsessions.StartTurnRequest{
+		RequestID:       startTurnRequestID("req-turn-1"),
+		SessionID:       session.ID,
+		ExpectedVersion: session.Version,
+	})
+	if err != nil {
+		t.Fatalf("StartTurn: %v", err)
+	}
+	if result.Episode.Number != session.TargetEpisode {
+		t.Fatalf("Episode.Number = %d, want %d", result.Episode.Number, session.TargetEpisode)
+	}
+	if result.Episode.Target != session.SelectedTarget {
+		t.Fatalf("Episode.Target = %+v, want %+v", result.Episode.Target, session.SelectedTarget)
+	}
+	if result.Episode.FactorySessionID != "" {
+		t.Fatalf("Episode.FactorySessionID = %q, want blank for a brand-new episode", result.Episode.FactorySessionID)
+	}
+	if result.Episode.State != chatsessions.TargetEpisodeStateOpen {
+		t.Fatalf("Episode.State = %v, want OPEN", result.Episode.State)
+	}
+}
+
 // TestStore_StartTurn_SecondAdmissionWhileActiveIsBusy proves a second
 // sequential admission while the first turn is non-terminal reports typed
 // *BusyError, creates no additional active turn, and leaves the accepted
@@ -300,6 +331,163 @@ func TestStore_StartTurn_SecondTurnAfterTerminalStaysActive(t *testing.T) {
 	store.mu.RUnlock()
 	if firstAfter != advanced.Turn {
 		t.Fatalf("first turn rewritten by second admission: got %+v, want %+v", firstAfter, advanced.Turn)
+	}
+}
+
+// TestStore_StartTurn_RedeliveredRequestIDWhileBusyReturnsSameTurn proves a
+// StartTurn call reusing a RequestID that already admitted a still-busy turn
+// returns that exact turn unchanged instead of reporting *BusyError or
+// admitting a second turn -- the caller (not the Store) decides how to react
+// to a non-ADMITTED returned Turn.State.
+func TestStore_StartTurn_RedeliveredRequestIDWhileBusyReturnsSameTurn(t *testing.T) {
+	ctx := context.Background()
+	store, session := newStartTurnTestSession(t, time.Now())
+	reqID := startTurnRequestID("req-turn-1")
+
+	first, err := store.StartTurn(ctx, chatsessions.StartTurnRequest{
+		RequestID:       reqID,
+		SessionID:       session.ID,
+		ExpectedVersion: session.Version,
+	})
+	if err != nil {
+		t.Fatalf("StartTurn first: %v", err)
+	}
+
+	replay, err := store.StartTurn(ctx, chatsessions.StartTurnRequest{
+		RequestID:       reqID,
+		SessionID:       session.ID,
+		ExpectedVersion: session.Version,
+	})
+	if err != nil {
+		t.Fatalf("StartTurn replay: %v", err)
+	}
+	if replay.Turn.ID != first.Turn.ID {
+		t.Fatalf("replay Turn.ID = %q, want the original turn %q", replay.Turn.ID, first.Turn.ID)
+	}
+	if replay.Turn.State != chatsessions.TurnStateAdmitted {
+		t.Fatalf("replay Turn.State = %v, want ADMITTED (unchanged)", replay.Turn.State)
+	}
+
+	store.mu.RLock()
+	turnCount := len(store.sessions[session.ID].turns)
+	store.mu.RUnlock()
+	if turnCount != 1 {
+		t.Fatalf("stored turn count = %d, want exactly 1 (no second turn admitted)", turnCount)
+	}
+}
+
+// TestStore_StartTurn_RedeliveredRequestIDAfterTerminalReturnsSameTurn proves
+// that once the originally admitted turn for a RequestID has terminalized
+// (releasing ActiveTurnID and the session's busy state), a StartTurn call
+// reusing that exact RequestID still returns the original, now-terminal turn
+// rather than admitting a fresh ADMITTED turn and letting a caller dispatch a
+// second Factory effect for content already executed once.
+func TestStore_StartTurn_RedeliveredRequestIDAfterTerminalReturnsSameTurn(t *testing.T) {
+	ctx := context.Background()
+	store, session := newStartTurnTestSession(t, time.Now())
+	reqID := startTurnRequestID("req-turn-1")
+
+	first, err := store.StartTurn(ctx, chatsessions.StartTurnRequest{
+		RequestID:       reqID,
+		SessionID:       session.ID,
+		ExpectedVersion: session.Version,
+	})
+	if err != nil {
+		t.Fatalf("StartTurn first: %v", err)
+	}
+	if _, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: session.ID,
+		TurnID:    first.Turn.ID,
+		Next:      chatsessions.TurnStateRunning,
+	}); err != nil {
+		t.Fatalf("AdvanceTurn to RUNNING: %v", err)
+	}
+	advanced, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: session.ID,
+		TurnID:    first.Turn.ID,
+		Next:      chatsessions.TurnStateCompleted,
+	})
+	if err != nil {
+		t.Fatalf("AdvanceTurn to terminal: %v", err)
+	}
+
+	replay, err := store.StartTurn(ctx, chatsessions.StartTurnRequest{
+		RequestID: reqID,
+		SessionID: session.ID,
+		// A version stale relative to the released session would fail
+		// *ConflictError for a genuinely new admission; the replay must
+		// short-circuit before that check is ever reached.
+		ExpectedVersion: session.Version,
+	})
+	if err != nil {
+		t.Fatalf("StartTurn replay after terminal: %v", err)
+	}
+	if replay.Turn.ID != first.Turn.ID {
+		t.Fatalf("replay Turn.ID = %q, want the original terminal turn %q", replay.Turn.ID, first.Turn.ID)
+	}
+	if replay.Turn.State != chatsessions.TurnStateCompleted {
+		t.Fatalf("replay Turn.State = %v, want COMPLETED (the original terminal state)", replay.Turn.State)
+	}
+	if replay.Turn != advanced.Turn {
+		t.Fatalf("replay Turn = %+v, want the exact original terminal turn %+v", replay.Turn, advanced.Turn)
+	}
+
+	store.mu.RLock()
+	turnCount := len(store.sessions[session.ID].turns)
+	store.mu.RUnlock()
+	if turnCount != 1 {
+		t.Fatalf("stored turn count = %d, want exactly 1 (no second turn admitted by the replay)", turnCount)
+	}
+}
+
+// TestStore_StartTurn_DistinctRequestIDAfterTerminalAdmitsNewTurn proves the
+// redelivery guard is scoped to an exact RequestID: a genuinely distinct
+// later request against the same session, submitted after the original turn
+// terminalized, still admits its own new turn.
+func TestStore_StartTurn_DistinctRequestIDAfterTerminalAdmitsNewTurn(t *testing.T) {
+	ctx := context.Background()
+	store, session := newStartTurnTestSession(t, time.Now())
+
+	first, err := store.StartTurn(ctx, chatsessions.StartTurnRequest{
+		RequestID:       startTurnRequestID("req-turn-1"),
+		SessionID:       session.ID,
+		ExpectedVersion: session.Version,
+	})
+	if err != nil {
+		t.Fatalf("StartTurn first: %v", err)
+	}
+	if _, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: session.ID,
+		TurnID:    first.Turn.ID,
+		Next:      chatsessions.TurnStateRunning,
+	}); err != nil {
+		t.Fatalf("AdvanceTurn to RUNNING: %v", err)
+	}
+	if _, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: session.ID,
+		TurnID:    first.Turn.ID,
+		Next:      chatsessions.TurnStateCompleted,
+	}); err != nil {
+		t.Fatalf("AdvanceTurn to terminal: %v", err)
+	}
+	released, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+
+	second, err := store.StartTurn(ctx, chatsessions.StartTurnRequest{
+		RequestID:       startTurnRequestID("req-turn-2"),
+		SessionID:       session.ID,
+		ExpectedVersion: released.Session.Version,
+	})
+	if err != nil {
+		t.Fatalf("StartTurn second: %v", err)
+	}
+	if second.Turn.ID == first.Turn.ID {
+		t.Fatal("distinct RequestID reused the first turn's ID")
+	}
+	if second.Turn.State != chatsessions.TurnStateAdmitted {
+		t.Fatalf("second Turn.State = %v, want ADMITTED", second.Turn.State)
 	}
 }
 

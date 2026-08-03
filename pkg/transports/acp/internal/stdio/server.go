@@ -2,17 +2,21 @@
 // caller-owned stream serving, one-connection lifecycle, connection-scoped
 // identity assignment, newline-delimited JSON-RPC framing and dispatch for
 // the "initialize", "session/new", and "session/set_config_option" methods,
-// plus the "/factory <value>" fallback command recognized within
-// "session/prompt" (final-proposal.md §3), protocol-safe rejection of
-// malformed input, unsupported methods, and unsupported protocol versions,
-// and deterministic termination on clean EOF, context cancellation, a
-// partial trailing frame, or a writer failure. "session/prompt" content
-// other than the exact "/factory <value>" command -- including every other
-// deferred ACP session and prompt behavior -- is not yet implemented by
-// this transport and receives method-not-found rather than being
-// dispatched to any effect. It is internal to pkg/transports/acp; callers
-// use the package root's exported operations instead of this package
-// directly.
+// plus "session/prompt" -- both the "/factory <value>" fallback command
+// recognized within it (final-proposal.md §3) and, for every other
+// (genuine, non-command) prompt, admission of exactly one version-guarded
+// Chat turn against the canonical Chat Sessions authority, followed by
+// starting (first turn in an episode) or invoking (later turns) the bound
+// Factory Session, mapping its published outcome, deterministically and
+// without fabrication, into the one final "session/prompt" response, and
+// terminalizing the admitted turn on every outcome (COMPLETED, CANCELED, or
+// FAILED) so no admitted turn is ever left stranded non-terminal --
+// protocol-safe rejection of malformed input, unsupported methods, and
+// unsupported protocol versions, and deterministic termination on clean
+// EOF, context cancellation, a partial trailing frame, or a writer failure.
+// Every other deferred ACP session and prompt behavior continues to receive
+// method-not-found. It is internal to pkg/transports/acp; callers use the
+// package root's exported operations instead of this package directly.
 package stdio
 
 import (
@@ -27,6 +31,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/negotiation"
@@ -52,18 +57,30 @@ var errNullInitializeParams = errors.New("acp: initialize params must not be nul
 // supplies for that call.
 //
 // chatSessions and catalog are the canonical Chat Sessions collaborators
-// "session/new", "session/set_config_option", and the "/factory" fallback
-// command dispatch to; resolveHomeDir
-// supplies the operator home directory used to derive the Operator Settings
-// document path and Factory discovery roots for a catalog resolution. Any of
-// the three may be nil, in which case a dispatched method reports a bounded
-// internal error instead of proceeding -- so a Server constructed for a
-// slice of this transport that never exercises them (for example the
-// "initialize"-only smoke tests in this package) never has to supply them.
+// "session/new", "session/set_config_option", the "/factory" fallback
+// command, and ordinary prompt turn admission dispatch to; factoryTarget is
+// the consumer-owned Factory Sessions shim an admitted ordinary prompt turn
+// starts or invokes against; resolveHomeDir supplies the operator home
+// directory used to derive the Operator Settings document path and Factory
+// discovery roots for a catalog resolution. Any of the four may be nil, in
+// which case a dispatched method reports a bounded internal error instead of
+// proceeding -- so a Server constructed for a slice of this transport that
+// never exercises them (for example the "initialize"-only smoke tests in
+// this package) never has to supply them.
+//
+// A Server instance holds no reconciliation state of its own for a started-
+// but-not-yet-bound Factory Session: that record lives on the episode itself
+// (TargetEpisode.PendingFactorySessionID, via
+// chatsessions.Service.RecordPendingFactorySession) under the singular Chat/
+// Factory Sessions authority, so the "retry after a post-start failure
+// cannot create a second Factory Session" guarantee survives this Server
+// being reconstructed, not just this one instance staying alive -- see
+// startFactorySessionForEpisode.
 type Server struct {
 	logger         logging.Logger
 	chatSessions   chatsessions.Service
 	catalog        chatsessions.FactoryTargetCatalogService
+	factoryTarget  acp.FactoryTargetService
 	resolveHomeDir func() (string, error)
 }
 
@@ -74,12 +91,14 @@ func New(
 	logger logging.Logger,
 	chatSessions chatsessions.Service,
 	catalog chatsessions.FactoryTargetCatalogService,
+	factoryTarget acp.FactoryTargetService,
 	resolveHomeDir func() (string, error),
 ) *Server {
 	return &Server{
 		logger:         logging.EnsureLogger(logger),
 		chatSessions:   chatSessions,
 		catalog:        catalog,
+		factoryTarget:  factoryTarget,
 		resolveHomeDir: resolveHomeDir,
 	}
 }
@@ -170,6 +189,23 @@ func (s *Server) serveConnection(ctx context.Context, connectionID identity.Conn
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
 	scanner.Split(scanCompleteLines)
 
+	// notify is this connection's one outbound "session/update" delivery
+	// capability, carried through each dispatched request's context (see
+	// contextWithPromptNotifier in session_prompt.go) rather than threaded as
+	// an explicit parameter -- the only dispatched method that ever uses it
+	// is "session/prompt", and adding a parameter every other handler and
+	// every existing unit test would have to accept for a capability they
+	// never use is exactly the kind of unnecessary plumbing a request-scoped
+	// context value avoids. Writing a notification line and writing this
+	// same request's eventual response line can never interleave with each
+	// other or with another request's lines: dispatchRequest runs to
+	// completion (and any notify call within it, synchronously) before this
+	// loop's single writeResponse call for the same line, and the next line
+	// is never read until that happens.
+	notify := func(n acpsdk.SessionNotification) error {
+		return writeNotification(out, n)
+	}
+
 	var notificationSeq uint64
 	for {
 		if err := ctx.Err(); err != nil {
@@ -192,7 +228,8 @@ func (s *Server) serveConnection(ctx context.Context, connectionID identity.Conn
 		}
 		raw := append(json.RawMessage(nil), line...)
 
-		env, result, rpcErr := s.dispatchRequest(ctx, connectionID, notificationSeq, raw)
+		reqCtx := contextWithPromptNotifier(ctx, notify)
+		env, result, rpcErr := s.dispatchRequest(reqCtx, connectionID, notificationSeq, raw)
 		if env.IsNotification {
 			notificationSeq++
 			continue
@@ -316,6 +353,40 @@ func writeResponse(out io.Writer, reqIdentity identity.RequestIdentity, result j
 	}
 
 	body, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	body = append(body, '\n')
+
+	n, err := out.Write(body)
+	if err != nil {
+		return err
+	}
+	if n != len(body) {
+		return io.ErrShortWrite
+	}
+	return nil
+}
+
+// notificationMessage is the wire shape of one JSON-RPC 2.0 notification: no
+// "id" member at all (not even null), matching NotificationMethods' contract
+// that a notification never has a response counterpart.
+type notificationMessage struct {
+	JSONRPC string                     `json:"jsonrpc"`
+	Method  string                     `json:"method"`
+	Params  acpsdk.SessionNotification `json:"params"`
+}
+
+// writeNotification serializes and writes exactly one complete
+// newline-terminated "session/update" JSON-RPC notification. A short write
+// is reported as io.ErrShortWrite rather than treated as success, matching
+// writeResponse's own short-write handling.
+func writeNotification(out io.Writer, params acpsdk.SessionNotification) error {
+	body, err := json.Marshal(notificationMessage{
+		JSONRPC: "2.0",
+		Method:  acpsdk.ClientMethodSessionUpdate,
+		Params:  params,
+	})
 	if err != nil {
 		return err
 	}

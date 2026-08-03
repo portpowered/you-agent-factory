@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -41,12 +42,53 @@ import (
 	"go.uber.org/zap"
 )
 
-func provideApplicationProcessLifecycle(service providers.Service) (initializerapplication.ProcessLifecycle, error) {
+// compositeProcessLifecycle aggregates every inert service that retains
+// resources lazily while commands execute into the single ProcessLifecycle
+// Process.Close reaches. Each closer runs even if an earlier one fails, and
+// every failure is joined into one returned error, so one resource's
+// teardown failure never masks or skips another's.
+type compositeProcessLifecycle struct {
+	closers []func(context.Context) error
+}
+
+func (c compositeProcessLifecycle) Close(ctx context.Context) error {
+	var result error
+	for _, closeFn := range c.closers {
+		if closeFn == nil {
+			continue
+		}
+		if err := closeFn(ctx); err != nil {
+			result = errors.Join(result, err)
+		}
+	}
+	return result
+}
+
+// provideApplicationProcessLifecycle composes the process-wide shutdown path
+// Process.Close reaches: the Providers lifecycle (executable/session
+// teardown) and the on-demand Factory Sessions activation the production ACP
+// prompt-delegation consumer lazily opens runtimes through (see
+// provideACPServerFactoryTarget) -- so every runtime that activation ever
+// opens is guaranteed a reachable, deterministic close on process shutdown,
+// not left open for the life of the process regardless of whether a
+// production ACP stdio entrypoint has been built yet.
+func provideApplicationProcessLifecycle(
+	service providers.Service,
+	factoryTarget *factorysessionwire.OnDemandFactoryTargetService,
+) (initializerapplication.ProcessLifecycle, error) {
 	lifecycle, ok := service.(providers.Lifecycle)
 	if !ok {
 		return nil, fmt.Errorf("construct application process: Providers lifecycle is required")
 	}
-	return lifecycle, nil
+	return compositeProcessLifecycle{closers: []func(context.Context) error{
+		lifecycle.Close,
+		func(context.Context) error {
+			if factoryTarget == nil {
+				return nil
+			}
+			return factoryTarget.Close()
+		},
+	}}, nil
 }
 
 func provideProvidersService(edges serviceedges.Edges) (providers.Service, error) {

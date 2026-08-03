@@ -22,10 +22,9 @@ import (
 )
 
 type recordingModelsService struct {
-	openRequests    []models.OpenRuntimeScopeRequest
-	closeRequests   []models.CloseRuntimeScopeRequest
-	forRuntimeCalls int
-	events          *[]string
+	openRequests  []models.OpenRuntimeScopeRequest
+	closeRequests []models.CloseRuntimeScopeRequest
+	events        *[]string
 }
 
 func (fake *recordingModelsService) OpenRuntimeScope(
@@ -52,11 +51,6 @@ func (fake *recordingModelsService) CloseRuntimeScope(
 		*fake.events = append(*fake.events, "models-close")
 	}
 	return models.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
-}
-
-func (fake *recordingModelsService) ForRuntime(models.RuntimeBinding) (models.Service, error) {
-	fake.forRuntimeCalls++
-	return fake, nil
 }
 
 func (fake *recordingModelsService) ListCatalog(
@@ -201,7 +195,7 @@ func (fake *recordingModelsService) InvokeLocal(
 	return models.LocalInvocationResult{}, models.ErrUnsupportedOperation
 }
 
-func TestBindModelsRuntimeScopeOpensDetachedScopeWithoutForRuntime(t *testing.T) {
+func TestBindModelsRuntimeScopeOpensDetachedScope(t *testing.T) {
 	t.Parallel()
 
 	fake := &recordingModelsService{}
@@ -223,9 +217,6 @@ func TestBindModelsRuntimeScopeOpensDetachedScopeWithoutForRuntime(t *testing.T)
 	}
 	if bind.Scope.IsZero() {
 		t.Fatal("bindModelsRuntimeScope() returned zero runtime scope")
-	}
-	if fake.forRuntimeCalls != 0 {
-		t.Fatalf("ForRuntime calls = %d, want 0", fake.forRuntimeCalls)
 	}
 	if len(fake.openRequests) != 1 {
 		t.Fatalf("OpenRuntimeScope requests = %d, want 1", len(fake.openRequests))
@@ -275,9 +266,6 @@ func TestAssembleRuntimeProductsCarriesModelsRootAndScopeIntoOpenedRuntime(t *te
 	}
 	if opened.application.HTTP.ModelsScope != scope {
 		t.Fatalf("opened HTTP Models scope = %q, want %q", opened.application.HTTP.ModelsScope, scope)
-	}
-	if root.forRuntimeCalls != 0 {
-		t.Fatalf("ForRuntime calls = %d, want 0", root.forRuntimeCalls)
 	}
 }
 

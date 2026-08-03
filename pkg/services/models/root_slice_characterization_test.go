@@ -100,10 +100,6 @@ func (*runtimeScopePeerService) GetModelReadiness(
 	return models.GetModelReadinessResult{}, models.ErrUnsupportedOperation
 }
 
-func (s *runtimeScopePeerService) ForRuntime(models.RuntimeBinding) (models.Service, error) {
-	return s, nil
-}
-
 func (*runtimeScopePeerService) ListModels(context.Context) (models.List, error) {
 	return models.List{Results: []models.Summary{}}, nil
 }

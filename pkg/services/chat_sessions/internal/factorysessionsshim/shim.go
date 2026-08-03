@@ -6,18 +6,22 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 )
 
-// Shim adapts the public factory_sessions.Service root to this package's own
-// FactoryTargetService contract. It is stateless: it holds only the injected
-// Service and forwards each call exactly once, with the original context,
-// identifiers, request, result, and error intact.
+// Shim adapts a FactoryTargetExecutionService (the narrow start/invoke/
+// cancel/close subset of the public factory_sessions.Service root this shim
+// actually calls) to this package's own FactoryTargetService contract. It is
+// stateless: it holds only the injected service and forwards each call
+// exactly once, with the original context, identifiers, request, result, and
+// error intact.
 type Shim struct {
-	service factorysessions.Service
+	service FactoryTargetExecutionService
 }
 
 var _ FactoryTargetService = (*Shim)(nil)
 
-// New constructs the Factory Sessions shim over the given public Service.
-func New(service factorysessions.Service) *Shim {
+// New constructs the Factory Sessions shim over the given execution service.
+// Any concrete factorysessions.Service (including the CLI daemon's full
+// singleton) already satisfies FactoryTargetExecutionService structurally.
+func New(service FactoryTargetExecutionService) *Shim {
 	return &Shim{service: service}
 }
 

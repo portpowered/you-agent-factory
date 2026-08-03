@@ -466,7 +466,6 @@
     "pkg/services/workers/internal",
     "pkg/services/workers/internal/diagnostics",
     "pkg/services/workers/internal/interface",
-    "pkg/services/workers/internal/service",
     "pkg/services/workers/internal/services/runners",
     "pkg/services/workers/internal/services/runners/inference",
     "pkg/services/workers/internal/services/runners/internal/inference",
@@ -2695,11 +2694,6 @@
     },
     {
       "packagePath": "pkg/services/workers/internal/interface",
-      "disposition": "move",
-      "destination": "workers/internal"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/service",
       "disposition": "move",
       "destination": "workers/internal"
     },

@@ -32,28 +32,6 @@ func materializeWorkerOutputForDispatch(
 	)
 }
 
-// materializeExecuteResultForDispatch is the post-Execute materialization path
-// used when Runtime already holds a correlated workers.ExecuteResult.
-func materializeExecuteResultForDispatch(
-	ctx context.Context,
-	workService work.Service,
-	net *state.Net,
-	idGenerator work.RequestIDGenerator,
-	dispatch work.WorkDispatch,
-	result workerexecution.WorkResult,
-	executeResult workerexecution.ExecuteResult,
-) workerexecution.WorkResult {
-	return applyMaterializedWorkerOutput(
-		ctx,
-		workService,
-		net,
-		idGenerator,
-		dispatch,
-		result,
-		executeResult.Output.Clone(),
-	)
-}
-
 func applyMaterializedWorkerOutput(
 	ctx context.Context,
 	workService work.Service,

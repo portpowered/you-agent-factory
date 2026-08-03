@@ -16,10 +16,6 @@ type peerModelsService struct {
 	unsupportedRuntimeScopePeer
 }
 
-func (peerModelsService) ForRuntime(models.RuntimeBinding) (models.Service, error) {
-	return peerModelsService{}, nil
-}
-
 func (peerModelsService) ListModels(context.Context) (models.List, error) {
 	return models.List{Results: nil}, nil
 }
@@ -66,12 +62,21 @@ func TestRootServiceAuthority_AggregateSurfaceRemainsOnSingularService(t *testin
 
 	service := peerModelsService{}
 
-	bound, err := service.ForRuntime(models.RuntimeBinding{CacheDirectory: "cache"})
-	if err != nil {
-		t.Fatalf("ForRuntime: %v", err)
+	var sealed models.Service = peerModelsService{}
+	if _, err := sealed.OpenRuntimeScope(context.Background(), models.OpenRuntimeScopeRequest{}); !errors.Is(
+		err, models.ErrUnsupportedOperation,
+	) {
+		t.Fatalf("OpenRuntimeScope = %v, want ErrUnsupportedOperation", err)
 	}
-	if bound == nil {
-		t.Fatal("ForRuntime returned nil Service view")
+	if _, err := service.AcquireLease(context.Background(), models.AcquireLeaseRequest{}); !errors.Is(
+		err, models.ErrHostRuntimeNotReady,
+	) {
+		t.Fatalf("AcquireLease = %v, want ErrHostRuntimeNotReady", err)
+	}
+	if err := service.ReleaseLease(context.Background(), models.ReleaseLeaseRequest{}); !errors.Is(
+		err, models.ErrHostLeaseNotFound,
+	) {
+		t.Fatalf("ReleaseLease = %v, want ErrHostLeaseNotFound", err)
 	}
 
 	list, err := service.ListModels(context.Background())
@@ -453,16 +458,6 @@ func TestRootContractSeal_OpenScopeNeedsNoConstructionEffects(t *testing.T) {
 func TestRootContractSeal_LegacyRequestValidationRemainsObservable(t *testing.T) {
 	t.Parallel()
 
-	if err := models.ValidateRuntimeBinding(models.RuntimeBinding{}); !errors.Is(
-		err, models.ErrInvalidRuntimeBinding,
-	) {
-		t.Fatalf("ValidateRuntimeBinding = %v, want ErrInvalidRuntimeBinding", err)
-	}
-	if err := models.ValidateRuntimeBinding(models.RuntimeBinding{
-		RuntimeConfig: func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
-	}); err != nil {
-		t.Fatalf("ValidateRuntimeBinding valid: %v", err)
-	}
 	validations := []struct {
 		name    string
 		invalid error

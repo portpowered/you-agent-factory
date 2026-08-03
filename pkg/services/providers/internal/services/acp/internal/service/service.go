@@ -22,6 +22,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/internal/service/cancelwindow"
 )
 
 // Command is one configured stdio ACP launch command.
@@ -50,15 +51,43 @@ func New(integrations []providers.ACPIntegration, newCommand platformprocess.Com
 	return service, nil
 }
 
-func (service *Service) Execute(ctx context.Context, id providers.ID, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+// resolveDaemon resolves id (including an accepted alias) to its canonical
+// identity and owning daemon under a single read lock. ok mirrors
+// resolveLocked's own result; it does not additionally guarantee daemon is
+// non-nil, matching Execute's pre-existing behavior. Cancelable and
+// TryCancel additionally check for a nil daemon themselves.
+func (service *Service) resolveDaemon(id providers.ID) (target *daemon, canonical providers.ID, ok bool) {
 	service.mu.RLock()
-	canonical, ok := service.resolveLocked(id)
-	daemon := service.daemons[canonical]
+	canonical, ok = service.resolveLocked(id)
+	target = service.daemons[canonical]
 	service.mu.RUnlock()
+	return target, canonical, ok
+}
+
+func (service *Service) Execute(ctx context.Context, id providers.ID, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+	daemon, canonical, ok := service.resolveDaemon(id)
 	if !ok {
 		return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: fmt.Sprintf("ACP provider %q is unavailable", id)}
 	}
 	return daemon.execute(ctx, canonical, request)
+}
+
+// Cancelable reports whether attemptID names the exact attempt id's daemon
+// currently has an established session/prompt turn in flight for.
+func (service *Service) Cancelable(id providers.ID, attemptID string) bool {
+	target, _, ok := service.resolveDaemon(id)
+	return ok && target != nil && target.window.Live(attemptID)
+}
+
+// TryCancel atomically determines whether id/attemptID names the exact live
+// session/prompt turn and, only if so, delivers a session/cancel
+// notification and blocks (bounded by ctx) until that turn returns.
+func (service *Service) TryCancel(ctx context.Context, id providers.ID, attemptID string) (bool, error) {
+	target, _, ok := service.resolveDaemon(id)
+	if !ok || target == nil {
+		return false, nil
+	}
+	return target.window.TryCancel(ctx, attemptID)
 }
 
 func (service *Service) Close(ctx context.Context) error {
@@ -190,6 +219,8 @@ type daemon struct {
 	finished    chan error
 	tree        platformprocess.SubprocessTree
 	stderr      bytes.Buffer
+
+	window cancelwindow.Window
 }
 
 func (daemon *daemon) execute(ctx context.Context, id providers.ID, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
@@ -214,13 +245,7 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 	if err != nil {
 		return providers.ExecuteResult{}, invalidFailure(err)
 	}
-	prompt := []acpsdk.ContentBlock{}
-	if text := strings.TrimSpace(request.SystemPrompt); text != "" {
-		prompt = append(prompt, acpsdk.TextBlock("System instructions:\n"+text))
-	}
-	prompt = append(prompt, acpsdk.TextBlock(request.UserMessage))
-	prompt = append(prompt, inputWorkBlocks(request.InputTokens, request.UserMessage)...)
-	prompt = append(prompt, resourceLinks(request.InputTokens, request.UserMessage)...)
+	prompt := promptBlocks(request)
 
 	if err := daemon.ensureStarted(ctx, id, cwd, requestEnvironment(request), request); err != nil {
 		return providers.ExecuteResult{}, err
@@ -255,7 +280,10 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 			string(session.SessionId),
 		)
 	}
-	if _, err := connection.Prompt(ctx, acpsdk.PromptRequest{SessionId: session.SessionId, Prompt: prompt}); err != nil {
+	response, err := daemon.promptWithWindow(request.AttemptID, session.SessionId, connection, func() (acpsdk.PromptResponse, error) {
+		return connection.Prompt(ctx, acpsdk.PromptRequest{SessionId: session.SessionId, Prompt: prompt})
+	})
+	if err != nil {
 		if ctx.Err() != nil {
 			cancelCtx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 			_ = connection.Cancel(cancelCtx, acpsdk.CancelNotification{SessionId: session.SessionId})
@@ -264,51 +292,33 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 		daemon.invalidateDisconnected(context.Background())
 		return providers.ExecuteResult{}, withPartial(rpcFailure(ctx, "session/prompt", id, err, daemon.stderr.String(), request), client, id)
 	}
+	if response.StopReason == acpsdk.StopReasonCancelled {
+		return providers.ExecuteResult{}, withPartial(acpControlCanceledFailure(id), client, id)
+	}
 	return providers.ExecuteResult{Content: client.content(), SessionRef: &providers.SessionRef{Provider: id, Kind: providers.SessionIDKind, ID: string(session.SessionId)}, Diagnostics: &providers.ExecuteDiagnostics{Progress: completedPromptProgress(client.progressFacts()), Metadata: map[string]string{"execution_kind": "acp", "protocol_version": fmt.Sprint(initialized.ProtocolVersion), "model_config": modelConfig}}}, nil
 }
 
-func completedPromptProgress(updates []providers.ExecuteProgress) []providers.ExecuteProgress {
-	result := []providers.ExecuteProgress{{Phase: "started", Metadata: map[string]string{"kind": "run", "native_type": "session/prompt"}}}
-	started := map[string]bool{}
-	items := map[string]map[string]bool{}
-	content := map[string]map[string]string{}
-	for _, update := range updates {
-		kind, itemID := update.Metadata["kind"], update.Metadata["item_id"]
-		if (kind == "message" || kind == "reasoning") && !started[kind] {
-			result = append(result, providers.ExecuteProgress{Phase: "started", Metadata: map[string]string{
-				"kind": kind, "item_id": itemID, "native_type": "acp/synthetic_start",
-			}})
-			started[kind] = true
-		}
-		if kind != "" && itemID != "" {
-			if items[kind] == nil {
-				items[kind] = map[string]bool{}
-			}
-			if content[kind] == nil {
-				content[kind] = map[string]string{}
-			}
-			items[kind][itemID] = update.Phase == "completed"
-			content[kind][itemID] += update.Detail
-		}
-		result = append(result, update)
-	}
-	for _, kind := range []string{"reasoning", "tool", "session", "message"} {
-		ids := make([]string, 0, len(items[kind]))
-		for itemID := range items[kind] {
-			ids = append(ids, itemID)
-		}
-		sort.Strings(ids)
-		for _, itemID := range ids {
-			completed := items[kind][itemID]
-			if completed {
-				continue
-			}
-			result = append(result, providers.ExecuteProgress{Phase: "completed", Detail: content[kind][itemID], Metadata: map[string]string{
-				"kind": kind, "item_id": itemID, "native_type": "session/prompt",
-			}})
-		}
-	}
-	return append(result, providers.ExecuteProgress{Phase: "completed", Metadata: map[string]string{"kind": "run", "native_type": "session/prompt"}})
+// promptWithWindow opens the cancelable window for attemptID, runs prompt,
+// and closes the window with the real recorded outcome - via defer, so an
+// unexpected prompt unwind (including a panic) still closes the window
+// instead of leaving it stale. A stale window would let a later execution
+// that reuses this same attempt ID bind at the root and have a racing
+// control claim, or hang indefinitely on, this dead session (see
+// cancelwindow's package doc). response/err are read by the deferred closure
+// only after the assignment below completes, so a normal return still
+// records the actual outcome.
+func (daemon *daemon) promptWithWindow(
+	attemptID string,
+	sessionID acpsdk.SessionId,
+	connection *acpsdk.ClientSideConnection,
+	prompt func() (acpsdk.PromptResponse, error),
+) (response acpsdk.PromptResponse, err error) {
+	cancelable := daemon.window.Begin(attemptID, sessionID, connection)
+	defer func() {
+		daemon.window.End(cancelable, err == nil && response.StopReason == acpsdk.StopReasonCancelled)
+	}()
+	response, err = prompt()
+	return response, err
 }
 
 func (daemon *daemon) ensureStarted(ctx context.Context, id providers.ID, cwd string, environment []string, request providers.ExecuteRequest) error {
@@ -554,6 +564,20 @@ func safeRPCMessage(err error) string {
 
 var renderedURL = regexp.MustCompile(`https?://[^\s\]\)]+`)
 
+// promptBlocks assembles one session/prompt turn's content blocks: an
+// optional system-instructions block, the user message, then any input Work
+// content and resource links derived from it.
+func promptBlocks(request providers.ExecuteRequest) []acpsdk.ContentBlock {
+	prompt := []acpsdk.ContentBlock{}
+	if text := strings.TrimSpace(request.SystemPrompt); text != "" {
+		prompt = append(prompt, acpsdk.TextBlock("System instructions:\n"+text))
+	}
+	prompt = append(prompt, acpsdk.TextBlock(request.UserMessage))
+	prompt = append(prompt, inputWorkBlocks(request.InputTokens, request.UserMessage)...)
+	prompt = append(prompt, resourceLinks(request.InputTokens, request.UserMessage)...)
+	return prompt
+}
+
 func inputWorkBlocks(values []any, renderedPrompt string) []acpsdk.ContentBlock {
 	blocks := make([]acpsdk.ContentBlock, 0)
 	seen := map[string]struct{}{}
@@ -734,19 +758,6 @@ func withPartial(err error, c *client, provider providers.ID) error {
 	return err
 }
 
-func failedPromptProgress(updates []providers.ExecuteProgress) []providers.ExecuteProgress {
-	progress := completedPromptProgress(updates)
-	if len(progress) > 0 {
-		progress = progress[:len(progress)-1]
-	}
-	for index := range progress {
-		if progress[index].Phase != "completed" || progress[index].Metadata["kind"] != "message" {
-			continue
-		}
-		progress[index].Metadata["partial"] = "true"
-	}
-	return progress
-}
 func safeACPStderr(value string, env map[string]string) string {
 	for name, secret := range env {
 		if sensitiveEnvironmentName(name) && len(secret) >= 4 {

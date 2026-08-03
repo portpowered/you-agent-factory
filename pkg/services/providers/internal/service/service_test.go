@@ -234,6 +234,12 @@ func (service *stubACPService) Execute(
 	return providers.ExecuteResult{Content: "acp result"}, nil
 }
 
+func (service *stubACPService) Cancelable(providers.ID, string) bool { return false }
+
+func (service *stubACPService) TryCancel(context.Context, providers.ID, string) (bool, error) {
+	return false, nil
+}
+
 func TestRootDelegatesTypedExecutionFailure(t *testing.T) {
 	t.Parallel()
 
