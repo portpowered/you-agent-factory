@@ -117,6 +117,35 @@ func TestRequestIdentityValidation(t *testing.T) {
 	}
 }
 
+func TestNewConnectionIDIsDistinctPerCall(t *testing.T) {
+	first := NewConnectionID()
+	second := NewConnectionID()
+
+	if first == "" || second == "" {
+		t.Fatalf("expected minted connection ids to be non-empty, got %q and %q", first, second)
+	}
+	if first == second {
+		t.Fatalf("expected distinct connection ids, got the same value %q twice", first)
+	}
+}
+
+func TestNewConnectionIDIsDistinctUnderConcurrentCalls(t *testing.T) {
+	const count = 100
+	ids := make(chan ConnectionID, count)
+	for range count {
+		go func() { ids <- NewConnectionID() }()
+	}
+
+	seen := make(map[ConnectionID]bool, count)
+	for range count {
+		id := <-ids
+		if seen[id] {
+			t.Fatalf("connection id %q minted more than once under concurrent calls", id)
+		}
+		seen[id] = true
+	}
+}
+
 func TestJSONRPCIDRejectsUnsupportedShapes(t *testing.T) {
 	cases := []struct {
 		name string
@@ -170,5 +199,28 @@ func TestConnectionIDReflectsOnlyCorrelatedIdentities(t *testing.T) {
 	}
 	if !minted.IsMinted() {
 		t.Fatalf("expected a minted identity to report itself as minted")
+	}
+}
+
+func TestWireIDReflectsOnlyCorrelatedIdentities(t *testing.T) {
+	wantID := NewStringJSONRPCID("req-7")
+	correlated, err := NewCorrelated(ConnectionID("conn-a"), wantID)
+	if err != nil {
+		t.Fatalf("NewCorrelated: %v", err)
+	}
+	gotID, ok := correlated.WireID()
+	if !ok {
+		t.Fatalf("expected a correlated identity to expose its wire id")
+	}
+	if !gotID.equal(wantID) {
+		t.Fatalf("WireID() = %+v, want %+v", gotID, wantID)
+	}
+
+	minted, err := NewMinted("permission-1")
+	if err != nil {
+		t.Fatalf("NewMinted: %v", err)
+	}
+	if _, ok := minted.WireID(); ok {
+		t.Fatalf("expected a minted identity to have no wire id")
 	}
 }

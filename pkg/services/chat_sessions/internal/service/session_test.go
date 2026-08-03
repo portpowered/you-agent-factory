@@ -35,7 +35,7 @@ func validCreateRequest() chatsessions.CreateSessionRequest {
 func TestStore_CreateSession_Success(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
-	store := New(sequentialIDs("session"), fixedClock(now))
+	store := NewStore(sequentialIDs("session"), fixedClock(now))
 
 	result, err := store.CreateSession(ctx, validCreateRequest())
 	if err != nil {
@@ -95,7 +95,7 @@ func TestStore_CreateSession_InvalidInputCreatesNoSession(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			store := New(sequentialIDs("session"), fixedClock(time.Now()))
+			store := NewStore(sequentialIDs("session"), fixedClock(time.Now()))
 
 			_, err := store.CreateSession(ctx, tt.mutate(validCreateRequest()))
 			if !errors.Is(err, tt.wantErr) {
@@ -115,7 +115,7 @@ func TestStore_CreateSession_InvalidInputCreatesNoSession(t *testing.T) {
 // Session cannot change what a later GetSession observes.
 func TestStore_CreateSession_ReturnsDetachedValue(t *testing.T) {
 	ctx := context.Background()
-	store := New(sequentialIDs("session"), fixedClock(time.Now()))
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()))
 
 	created, err := store.CreateSession(ctx, validCreateRequest())
 	if err != nil {
@@ -137,7 +137,7 @@ func TestStore_CreateSession_ReturnsDetachedValue(t *testing.T) {
 // collide on generated session identity.
 func TestStore_CreateSession_UniqueIDs(t *testing.T) {
 	ctx := context.Background()
-	store := New(sequentialIDs("session"), fixedClock(time.Now()))
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()))
 
 	first, err := store.CreateSession(ctx, validCreateRequest())
 	if err != nil {
@@ -154,7 +154,7 @@ func TestStore_CreateSession_UniqueIDs(t *testing.T) {
 
 func TestStore_GetSession_UnknownIDIsTypedNotFound(t *testing.T) {
 	ctx := context.Background()
-	store := New(sequentialIDs("session"), fixedClock(time.Now()))
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()))
 
 	_, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: "does-not-exist"})
 	if !errors.Is(err, chatsessions.ErrNotFound) {
@@ -181,8 +181,8 @@ func TestStore_GetSession_UnknownIDIsTypedNotFound(t *testing.T) {
 // other.
 func TestStore_InstancesShareNoState(t *testing.T) {
 	ctx := context.Background()
-	first := New(sequentialIDs("session"), fixedClock(time.Now()))
-	second := New(sequentialIDs("session"), fixedClock(time.Now()))
+	first := NewStore(sequentialIDs("session"), fixedClock(time.Now()))
+	second := NewStore(sequentialIDs("session"), fixedClock(time.Now()))
 
 	created, err := first.CreateSession(ctx, validCreateRequest())
 	if err != nil {

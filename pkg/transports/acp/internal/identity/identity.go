@@ -14,12 +14,25 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 )
 
 // ConnectionID identifies one JSON-RPC connection. The transport mints a
 // distinct ConnectionID per connection; it is never reused within a
 // process lifetime.
 type ConnectionID string
+
+// connectionSequence backs NewConnectionID with a process-lifetime-unique,
+// monotonically increasing counter, so minting never has to perform I/O or
+// depend on wall-clock or process entropy sources to stay collision-free.
+var connectionSequence atomic.Uint64
+
+// NewConnectionID mints a ConnectionID that is stable for the caller's
+// invocation and distinct from every other ConnectionID minted by this
+// process, including concurrent callers. It performs no I/O.
+func NewConnectionID() ConnectionID {
+	return ConnectionID(fmt.Sprintf("acp-conn-%d", connectionSequence.Add(1)))
+}
 
 // JSONRPCID is a JSON-RPC 2.0 request id: a JSON string or JSON number
 // token. ACP requests always carry a non-null id, so the null variant JSON-
@@ -173,6 +186,16 @@ func (r RequestIdentity) ConnectionID() (ConnectionID, bool) {
 // rather than a connection-correlated one.
 func (r RequestIdentity) IsMinted() bool {
 	return r.kind == requestIdentityKindMinted
+}
+
+// WireID returns the original JSON-RPC id this identity was correlated to,
+// and true only for a connection-correlated identity. A minted identity
+// never arrived as a JSON-RPC request and so has no wire id to return.
+func (r RequestIdentity) WireID() (JSONRPCID, bool) {
+	if r.kind != requestIdentityKindCorrelated {
+		return JSONRPCID{}, false
+	}
+	return r.jsonrpcID, true
 }
 
 type requestIdentityWire struct {

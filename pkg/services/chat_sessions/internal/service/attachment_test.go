@@ -14,7 +14,7 @@ import (
 // Attach/Detach calls.
 func newAttachTestSession(t *testing.T) (*Store, chatsessions.Session) {
 	t.Helper()
-	store := New(sequentialIDs("session"), fixedClock(time.Now()))
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()))
 	created, err := store.CreateSession(context.Background(), validCreateRequest())
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -151,7 +151,7 @@ func TestStore_Attach_UnknownSessionOrInvalidInputCreatesNoAttachment(t *testing
 	ctx := context.Background()
 
 	t.Run("unknown session", func(t *testing.T) {
-		store := New(sequentialIDs("session"), fixedClock(time.Now()))
+		store := NewStore(sequentialIDs("session"), fixedClock(time.Now()))
 		_, err := store.Attach(ctx, chatsessions.AttachRequest{SessionID: "does-not-exist", ConnectionID: "conn-a"})
 		var notFound *chatsessions.NotFoundError
 		if !errors.As(err, &notFound) {
@@ -181,7 +181,7 @@ func TestStore_Attach_UnknownSessionOrInvalidInputCreatesNoAttachment(t *testing
 // unknown SessionID reports *NotFoundError naming Session.
 func TestStore_Detach_UnknownSessionIsTypedNotFound(t *testing.T) {
 	ctx := context.Background()
-	store := New(sequentialIDs("session"), fixedClock(time.Now()))
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()))
 
 	_, err := store.Detach(ctx, chatsessions.DetachRequest{SessionID: "does-not-exist", AttachmentID: "attachment-1"})
 	var notFound *chatsessions.NotFoundError

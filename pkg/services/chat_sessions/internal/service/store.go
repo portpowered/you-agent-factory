@@ -90,11 +90,14 @@ func (record sessionRecord) activeTurnValue() (chatsessions.Turn, bool) {
 	return turn, ok
 }
 
-// New constructs an empty Store from explicit dependencies. newID and now
-// must be non-nil. logger is optional and defaults to a no-op logger when
-// omitted, matching the repository's optional-logger construction
-// convention rather than a mutable reinjection path.
-func New(newID IDGenerator, now Clock, logger ...logging.Logger) *Store {
+// NewStore constructs an empty Store from explicit dependencies. newID and
+// now must be non-nil. logger is optional and defaults to a no-op logger
+// when omitted, matching the repository's optional-logger construction
+// convention rather than a mutable reinjection path. Named NewStore (not
+// New) because this package also owns the unrelated FactoryTargetCatalog
+// Service's own New constructor (service.go); Go does not allow two
+// same-named top-level functions in one package.
+func NewStore(newID IDGenerator, now Clock, logger ...logging.Logger) *Store {
 	var provided logging.Logger
 	if len(logger) > 0 {
 		provided = logger[0]

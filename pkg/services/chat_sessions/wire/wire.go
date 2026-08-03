@@ -1,9 +1,13 @@
 // Package wire is the Chat Sessions service composition boundary.
 //
-// Wire performs construction only, returns the singular chatsessions.Service
-// root interface, and starts no lifecycle components. The in-memory Store
-// implementation stays a chat_sessions-private detail; peers depend on
-// Service rather than Store or its construction ports.
+// Wire performs construction only, starts no lifecycle components, and
+// composes both canonical Chat Sessions roots this package publishes:
+// chatsessions.Service (the in-memory session-state engine, backed by the
+// chat_sessions-private Store) and chatsessions.FactoryTargetCatalogService
+// (the Factory target-catalog operation, composed by direct single
+// injection of the singular Operator Settings and Factory Definitions
+// public service roots). Neither constructor is a dependency bag, service
+// locator, or alternate construction path for the other's root.
 package wire
 
 import (
@@ -12,6 +16,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/service"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
 // IDGenerator produces a new opaque, process-unique entity identity for
@@ -34,5 +40,18 @@ func NewService(newID IDGenerator, now Clock, logger ...logging.Logger) (chatses
 	if now == nil {
 		return nil, fmt.Errorf("construct chat sessions: clock is required")
 	}
-	return internalservice.New(newID, now, logger...), nil
+	return internalservice.NewStore(newID, now, logger...), nil
+}
+
+// NewFactoryTargetCatalogService constructs the Chat Sessions Factory
+// target-catalog root from the singular Operator Settings and Factory
+// Definitions public service roots. logger is the direct, required
+// operation-logging abstraction; callers with no operation logging pass
+// logging.NoopLogger{}.
+func NewFactoryTargetCatalogService(
+	operatorSettings operatorsettings.Service,
+	factoryDefinitions factorydefinitions.Service,
+	logger logging.Logger,
+) (chatsessions.FactoryTargetCatalogService, error) {
+	return internalservice.New(operatorSettings, factoryDefinitions, logger)
 }

@@ -62,6 +62,7 @@ var servicesSet = wire.NewSet(
 	provideChatSessionsService,
 	provideOperatorSettingsService,
 	provideOperatorSettingsIDGenerator,
+	provideChatSessionsFactoryTargetCatalogService,
 	provideOperatorConfigDecoder,
 	provideOperatorConfigEncoder,
 	provideSystemInitializationInspectPath,

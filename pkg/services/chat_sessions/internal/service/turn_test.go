@@ -19,7 +19,7 @@ func startTurnRequestID(id string) chatsessions.RequestIdentity {
 // for StartTurn calls.
 func newStartTurnTestSession(t *testing.T, now time.Time) (*Store, chatsessions.Session) {
 	t.Helper()
-	store := New(sequentialIDs("session"), fixedClock(now))
+	store := NewStore(sequentialIDs("session"), fixedClock(now))
 	created, err := store.CreateSession(context.Background(), validCreateRequest())
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -205,7 +205,7 @@ func TestStore_StartTurn_StaleVersionConflictLeavesStateUnchanged(t *testing.T) 
 // an unknown SessionID reports *NotFoundError and creates no turn.
 func TestStore_StartTurn_UnknownSessionIsTypedNotFound(t *testing.T) {
 	ctx := context.Background()
-	store := New(sequentialIDs("session"), fixedClock(time.Now()))
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()))
 
 	_, err := store.StartTurn(ctx, chatsessions.StartTurnRequest{
 		RequestID:       startTurnRequestID("req-turn-1"),

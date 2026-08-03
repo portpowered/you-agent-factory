@@ -76,7 +76,7 @@ func TestClassifyError_TableDriven(t *testing.T) {
 // JSON-RPC request identity value.
 func TestStore_CreateSession_LogsStartAndAcceptedOutcomeWithoutUnsafeFields(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	store := New(sequentialIDs("session"), fixedClock(time.Now()), logger)
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), logger)
 
 	req := validCreateRequest()
 	result, err := store.CreateSession(context.Background(), req)
@@ -110,7 +110,7 @@ func TestStore_CreateSession_LogsStartAndAcceptedOutcomeWithoutUnsafeFields(t *t
 // with the same start/outcome shape as every other Store operation.
 func TestStore_GetSession_LogsStartAndOutcome(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	store := New(sequentialIDs("session"), fixedClock(time.Now()), logger)
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), logger)
 
 	created, err := store.CreateSession(context.Background(), validCreateRequest())
 	if err != nil {
@@ -157,7 +157,7 @@ func TestStore_GetSession_LogsStartAndOutcome(t *testing.T) {
 // error classification -- never a partial/zero-value accepted field.
 func TestStore_SetTarget_FailureLogsClassificationOnly(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	store := New(sequentialIDs("session"), fixedClock(time.Now()), logger)
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), logger)
 
 	created, err := store.CreateSession(context.Background(), validCreateRequest())
 	if err != nil {
@@ -192,7 +192,7 @@ func TestStore_SetTarget_FailureLogsClassificationOnly(t *testing.T) {
 // JSON-RPC id value that identity carries.
 func TestStore_RequestControl_NeverLogsRawRequestIdentity(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	store := New(sequentialIDs("session"), fixedClock(time.Now()), logger)
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), logger)
 
 	created, err := store.CreateSession(context.Background(), validCreateRequest())
 	if err != nil {

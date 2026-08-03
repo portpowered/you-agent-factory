@@ -3,6 +3,7 @@ package envelope
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
@@ -48,20 +49,27 @@ func TestDecode_RejectsMalformedInput(t *testing.T) {
 	tests := []struct {
 		name string
 		raw  string
+		// wantInvalidJSON selects ErrInvalidJSON; when false the case wants
+		// ErrInvalidRequestShape instead.
+		wantInvalidJSON bool
+		// wantID is the raw JSON-RPC id token DecodeError.ID() should
+		// recover, or "" when no id should be recoverable.
+		wantID string
 	}{
-		{"invalid JSON", `{not json`},
-		{"wrong jsonrpc version", `{"jsonrpc":"1.0","id":1,"method":"session/prompt"}`},
-		{"missing jsonrpc version", `{"id":1,"method":"session/prompt"}`},
-		{"missing method", `{"jsonrpc":"2.0","id":1}`},
-		{"blank method", `{"jsonrpc":"2.0","id":1,"method":"   "}`},
-		{"missing id on a request method", `{"jsonrpc":"2.0","method":"session/prompt"}`},
-		{"null id on a request method", `{"jsonrpc":"2.0","id":null,"method":"session/prompt"}`},
-		{"object id", `{"jsonrpc":"2.0","id":{},"method":"session/prompt"}`},
-		{"array id", `{"jsonrpc":"2.0","id":[],"method":"session/prompt"}`},
-		{"boolean id", `{"jsonrpc":"2.0","id":true,"method":"session/prompt"}`},
-		{"id-bearing session/cancel notification", `{"jsonrpc":"2.0","id":1,"method":"session/cancel","params":{"sessionId":"s"}}`},
-		{"id-bearing session/update notification", `{"jsonrpc":"2.0","id":1,"method":"session/update","params":{"sessionId":"s","update":{}}}`},
-		{"null id-bearing session/cancel notification", `{"jsonrpc":"2.0","id":null,"method":"session/cancel","params":{"sessionId":"s"}}`},
+		{name: "invalid JSON", raw: `{not json`, wantInvalidJSON: true},
+		{name: "wrong jsonrpc version", raw: `{"jsonrpc":"1.0","id":1,"method":"session/prompt"}`, wantID: "1"},
+		{name: "missing jsonrpc version", raw: `{"id":1,"method":"session/prompt"}`, wantID: "1"},
+		{name: "missing method", raw: `{"jsonrpc":"2.0","id":1}`, wantID: "1"},
+		{name: "blank method", raw: `{"jsonrpc":"2.0","id":1,"method":"   "}`, wantID: "1"},
+		{name: "missing id on a request method", raw: `{"jsonrpc":"2.0","method":"session/prompt"}`},
+		{name: "null id on a request method", raw: `{"jsonrpc":"2.0","id":null,"method":"session/prompt"}`},
+		{name: "object id", raw: `{"jsonrpc":"2.0","id":{},"method":"session/prompt"}`},
+		{name: "array id", raw: `{"jsonrpc":"2.0","id":[],"method":"session/prompt"}`},
+		{name: "boolean id", raw: `{"jsonrpc":"2.0","id":true,"method":"session/prompt"}`},
+		{name: "id-bearing session/cancel notification", raw: `{"jsonrpc":"2.0","id":1,"method":"session/cancel","params":{"sessionId":"s"}}`, wantID: "1"},
+		{name: "id-bearing session/update notification", raw: `{"jsonrpc":"2.0","id":2,"method":"session/update","params":{"sessionId":"s","update":{}}}`, wantID: "2"},
+		{name: "id-bearing session/cancel notification with a string id", raw: `{"jsonrpc":"2.0","id":"req-9","method":"session/cancel","params":{"sessionId":"s"}}`, wantID: `"req-9"`},
+		{name: "null id-bearing session/cancel notification", raw: `{"jsonrpc":"2.0","id":null,"method":"session/cancel","params":{"sessionId":"s"}}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -72,7 +80,53 @@ func TestDecode_RejectsMalformedInput(t *testing.T) {
 			if !errors.Is(err, ErrMalformedEnvelope) {
 				t.Fatalf("Decode(%s) error = %v, want it to wrap ErrMalformedEnvelope", tt.raw, err)
 			}
+
+			gotInvalidJSON := errors.Is(err, ErrInvalidJSON)
+			gotInvalidShape := errors.Is(err, ErrInvalidRequestShape)
+			if gotInvalidJSON == gotInvalidShape {
+				t.Fatalf("Decode(%s) error = %v, want exactly one of ErrInvalidJSON/ErrInvalidRequestShape", tt.raw, err)
+			}
+			if gotInvalidJSON != tt.wantInvalidJSON {
+				t.Fatalf("Decode(%s) classified as ErrInvalidJSON = %v, want %v", tt.raw, gotInvalidJSON, tt.wantInvalidJSON)
+			}
+
+			var decodeErr *DecodeError
+			if !errors.As(err, &decodeErr) {
+				t.Fatalf("Decode(%s) error = %v (%T), want *DecodeError", tt.raw, err, err)
+			}
+			id, hasID := decodeErr.ID()
+			if tt.wantID == "" {
+				if hasID {
+					t.Fatalf("Decode(%s) recovered id %+v, want no recoverable id", tt.raw, id)
+				}
+				return
+			}
+			if !hasID {
+				t.Fatalf("Decode(%s) recovered no id, want %s", tt.raw, tt.wantID)
+			}
+			gotID, err := id.MarshalJSON()
+			if err != nil {
+				t.Fatalf("Decode(%s) recovered id failed to marshal: %v", tt.raw, err)
+			}
+			if string(gotID) != tt.wantID {
+				t.Fatalf("Decode(%s) recovered id = %s, want %s", tt.raw, gotID, tt.wantID)
+			}
 		})
+	}
+}
+
+func TestDecodeError_ErrorReturnsCauseMessage(t *testing.T) {
+	_, err := Decode("conn-1", 1, json.RawMessage(`{not json`))
+
+	var decodeErr *DecodeError
+	if !errors.As(err, &decodeErr) {
+		t.Fatalf("Decode error = %v (%T), want *DecodeError", err, err)
+	}
+	if got, want := decodeErr.Error(), decodeErr.Unwrap().Error(); got != want {
+		t.Fatalf("DecodeError.Error() = %q, want it to equal Unwrap().Error() = %q", got, want)
+	}
+	if !strings.HasPrefix(decodeErr.Error(), ErrInvalidJSON.Error()) {
+		t.Fatalf("DecodeError.Error() = %q, want it to start with %q", decodeErr.Error(), ErrInvalidJSON.Error())
 	}
 }
 

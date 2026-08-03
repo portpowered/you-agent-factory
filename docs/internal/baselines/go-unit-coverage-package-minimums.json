@@ -230,7 +230,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/service",
-      "minimum": 92.98
+      "minimum": 93.05
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/wire",
@@ -2267,6 +2267,14 @@
       "minimum": 88.43
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/stdio",
+      "minimum": 94.25
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/wire",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli",
       "minimum": 71.22
     },
@@ -2451,6 +2459,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot",
       "minimum": 87.50
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorytarget",
+      "minimum": 100.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/optional",
