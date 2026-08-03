@@ -94,6 +94,33 @@ func (f *nthAdvanceTurnFailingChatSessions) AdvanceTurn(ctx context.Context, req
 	return f.Service.AdvanceTurn(ctx, req)
 }
 
+// firstCallFailingBindFactorySession wraps a real chatsessions.Service and
+// injects injectErr into exactly the first call to BindFactorySession,
+// letting every later call pass through unmodified. It exists to prove that
+// the reconciliation record a failed first bind leaves behind
+// (Episode.PendingFactorySessionID, durably committed via
+// RecordPendingFactorySession) survives being observed by a brand-new
+// *Server instance sharing the same underlying chatsessions.Store -- not
+// just a later call against the same Server -- since that durability is
+// exactly what this finding requires.
+type firstCallFailingBindFactorySession struct {
+	chatsessions.Service
+	mu        sync.Mutex
+	injectErr error
+	triggered bool
+}
+
+func (f *firstCallFailingBindFactorySession) BindFactorySession(ctx context.Context, req chatsessions.BindFactorySessionRequest) (chatsessions.BindFactorySessionResult, error) {
+	f.mu.Lock()
+	if !f.triggered {
+		f.triggered = true
+		f.mu.Unlock()
+		return chatsessions.BindFactorySessionResult{}, f.injectErr
+	}
+	f.mu.Unlock()
+	return f.Service.BindFactorySession(ctx, req)
+}
+
 // promptTextParams builds a raw session/prompt params payload carrying one
 // text content block, the shape a client sends for a typed "/factory
 // <value>" command or an ordinary chat message alike.
@@ -813,13 +840,22 @@ func admittedTurnResult(id, target string, version uint64, workingRoot, turnID, 
 // episode's canonical Factory target, the session's exact editor working
 // root, and the validated prompt content -- never a process cwd or
 // substituted value.
+// TestHandleSessionPromptFirstTurnStartsFactorySessionWithExactTargetRootAndContent
+// proves the first admitted turn in an unbound episode starts a Factory
+// Session with the episode's canonical target and the session's exact
+// editor working root, then dispatches this turn's validated content into
+// the returned identity via the immediate follow-up InvokeFactoryTarget call
+// -- StartFactoryTarget carries no content of its own, since the shared
+// factorysessions.Service.StartAsync it forwards to has no dedicated content
+// field and cannot dispatch an ordinary packaged Factory at all (see
+// ondemandtarget.Service.StartAsync's own doc comment).
 func TestHandleSessionPromptFirstTurnStartsFactorySessionWithExactTargetRootAndContent(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{
 		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
 		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
 	}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
-	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.InvocationResult{SessionID: "fs-1"}}
+	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.AsyncStartResult{SessionID: "fs-1"}}
 	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
@@ -840,13 +876,26 @@ func TestHandleSessionPromptFirstTurnStartsFactorySessionWithExactTargetRootAndC
 	if got.Args["workingRoot"] != "/work/project" {
 		t.Fatalf("StartFactoryTarget Args[workingRoot] = %v, want /work/project", got.Args["workingRoot"])
 	}
-	wantContent := []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello there"}}
-	gotContent, ok := got.Args["content"].([]work.WorkContentPart)
-	if !ok || !reflect.DeepEqual(gotContent, wantContent) {
-		t.Fatalf("StartFactoryTarget Args[content] = %#v, want %#v", got.Args["content"], wantContent)
+	if _, ok := got.Args["content"]; ok {
+		t.Fatalf("StartFactoryTarget Args[content] = %#v, want no content key at all", got.Args["content"])
 	}
 	if got.RequestID != "turn-1" {
 		t.Fatalf("StartFactoryTarget RequestID = %q, want the admitted turn id turn-1", got.RequestID)
+	}
+
+	if len(factoryTarget.invokeCalls) != 1 {
+		t.Fatalf("InvokeFactoryTarget call count = %d, want exactly 1", len(factoryTarget.invokeCalls))
+	}
+	invoked := factoryTarget.invokeCalls[0]
+	if invoked.sessionID != "fs-1" {
+		t.Fatalf("InvokeFactoryTarget sessionID = %q, want the identity StartFactoryTarget just returned", invoked.sessionID)
+	}
+	wantContent := []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello there"}}
+	if !reflect.DeepEqual(invoked.request.Content, wantContent) {
+		t.Fatalf("InvokeFactoryTarget request.Content = %#v, want %#v", invoked.request.Content, wantContent)
+	}
+	if invoked.request.RequestID == nil || *invoked.request.RequestID != "turn-1" {
+		t.Fatalf("InvokeFactoryTarget request.RequestID = %v, want the admitted turn id turn-1", invoked.request.RequestID)
 	}
 }
 
@@ -859,7 +908,7 @@ func TestHandleSessionPromptFirstTurnBindsReturnedFactorySessionID(t *testing.T)
 		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
 	}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
-	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.InvocationResult{SessionID: "fs-1"}}
+	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.AsyncStartResult{SessionID: "fs-1"}}
 	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
@@ -892,7 +941,7 @@ func TestHandleSessionPromptLaterTurnInvokesBoundFactorySessionExactlyOnce(t *te
 		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", "fs-already-bound"),
 	}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
-	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.InvocationResult{SessionID: "fs-new"}}
+	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.AsyncStartResult{SessionID: "fs-new"}}
 	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
@@ -1013,21 +1062,27 @@ func TestHandleSessionPromptLaterTurnMapsInvocationOutcomeToFinalStopReason(t *t
 	}
 }
 
-// TestHandleSessionPromptFirstTurnMapsStartOutcomeToSafeFallback proves
-// handleSessionPrompt's final response for the first (start) turn in an
-// episode uses the documented end_turn safe fallback for a status outside
-// the mapped terminal vocabulary (here "RUNNING", which a real activation
-// never actually publishes back to this caller since it dispatches
-// synchronously, but which a still-total mapping must handle safely
-// regardless), and never leaks the returned Factory Session identity or any
-// other raw field into the response.
-func TestHandleSessionPromptFirstTurnMapsStartOutcomeToSafeFallback(t *testing.T) {
+// TestHandleSessionPromptFirstTurnResponseNeverLeaksFactorySessionIdentity
+// proves handleSessionPrompt's final response for the first (start) turn in
+// an episode is mapped from the follow-up InvokeFactoryTarget call's real
+// published outcome -- not the start call's own identity-only
+// AsyncStartResult, which carries no terminal status at all -- and never
+// leaks the returned Factory Session identity or any other raw invocation
+// field (message, error code) into the response.
+func TestHandleSessionPromptFirstTurnResponseNeverLeaksFactorySessionIdentity(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{
 		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
 		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
 	}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
-	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.InvocationResult{SessionID: "fs-secret-1", Status: "RUNNING"}}
+	factoryTarget := &fakeFactoryTargetService{
+		startResult: factorysessions.AsyncStartResult{SessionID: "fs-secret-1"},
+		invokeResult: factorysessions.InvocationResult{
+			SessionID: "fs-secret-1",
+			Status:    factorysessions.InvocationTerminalStatusCompleted,
+			Message:   "internal diagnostic detail",
+		},
+	}
 	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
@@ -1042,10 +1097,13 @@ func TestHandleSessionPromptFirstTurnMapsStartOutcomeToSafeFallback(t *testing.T
 		t.Fatalf("unmarshal response: %v", err)
 	}
 	if resp.StopReason != acpsdk.StopReasonEndTurn {
-		t.Fatalf("stopReason = %q, want end_turn safe fallback", resp.StopReason)
+		t.Fatalf("stopReason = %q, want end_turn from the real invoke outcome", resp.StopReason)
 	}
 	if strings.Contains(string(result), "fs-secret-1") {
 		t.Fatalf("response leaked the raw Factory Session identity: %s", result)
+	}
+	if strings.Contains(string(result), "internal diagnostic detail") {
+		t.Fatalf("response leaked the raw invocation message: %s", result)
 	}
 }
 
@@ -1290,7 +1348,7 @@ func TestHandleSessionPromptSequentialTurnsStartThenInvokeExactlyOnce(t *testing
 		},
 	}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
-	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.InvocationResult{SessionID: "fs-1"}}
+	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.AsyncStartResult{SessionID: "fs-1"}}
 	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
@@ -1301,8 +1359,15 @@ func TestHandleSessionPromptSequentialTurnsStartThenInvokeExactlyOnce(t *testing
 	if len(factoryTarget.startCalls) != 1 {
 		t.Fatalf("StartFactoryTarget call count after first turn = %d, want exactly 1", len(factoryTarget.startCalls))
 	}
-	if len(factoryTarget.invokeCalls) != 0 {
-		t.Fatalf("InvokeFactoryTarget call count after first turn = %d, want 0", len(factoryTarget.invokeCalls))
+	// The first turn's own content dispatches through the immediate
+	// follow-up InvokeFactoryTarget call StartFactoryTarget's own identity
+	// feeds into -- see startFactorySessionForEpisode's doc comment -- so
+	// one invoke call is already expected here, before the second turn.
+	if len(factoryTarget.invokeCalls) != 1 {
+		t.Fatalf("InvokeFactoryTarget call count after first turn = %d, want exactly 1 (the first turn's own content dispatch)", len(factoryTarget.invokeCalls))
+	}
+	if got := factoryTarget.invokeCalls[0].sessionID; got != "fs-1" {
+		t.Fatalf("InvokeFactoryTarget sessionID = %q, want the identity StartFactoryTarget just returned (fs-1)", got)
 	}
 
 	secondEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 2, acpsdk.AgentMethodSessionPrompt,
@@ -1313,10 +1378,10 @@ func TestHandleSessionPromptSequentialTurnsStartThenInvokeExactlyOnce(t *testing
 	if len(factoryTarget.startCalls) != 1 {
 		t.Fatalf("StartFactoryTarget call count after second turn = %d, want still exactly 1 (no second start)", len(factoryTarget.startCalls))
 	}
-	if len(factoryTarget.invokeCalls) != 1 {
-		t.Fatalf("InvokeFactoryTarget call count after second turn = %d, want exactly 1", len(factoryTarget.invokeCalls))
+	if len(factoryTarget.invokeCalls) != 2 {
+		t.Fatalf("InvokeFactoryTarget call count after second turn = %d, want exactly 2 (the first turn's dispatch plus the second turn's own invoke)", len(factoryTarget.invokeCalls))
 	}
-	if got := factoryTarget.invokeCalls[0].sessionID; got != "fs-1" {
+	if got := factoryTarget.invokeCalls[1].sessionID; got != "fs-1" {
 		t.Fatalf("InvokeFactoryTarget sessionID = %q, want the identity bound by the first turn's start (fs-1)", got)
 	}
 }
@@ -1443,7 +1508,7 @@ func TestHandleSessionPromptEmptyFactorySessionIdentityFailsSafely(t *testing.T)
 		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
 	}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
-	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.InvocationResult{SessionID: ""}}
+	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.AsyncStartResult{SessionID: ""}}
 	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
@@ -1473,7 +1538,7 @@ func TestHandleSessionPromptBindConflictClosesTheJustStartedRuntime(t *testing.T
 		},
 	}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
-	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.InvocationResult{SessionID: "fs-orphan-candidate"}}
+	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.AsyncStartResult{SessionID: "fs-orphan-candidate"}}
 	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
@@ -1502,17 +1567,25 @@ func TestHandleSessionPromptBindConflictClosesTheJustStartedRuntime(t *testing.T
 // StartFactoryTarget a second time -- so a bind failure can never cause two
 // Factory Sessions to exist for one episode.
 func TestHandleSessionPromptBindFailureRetryReusesPendingFactorySession(t *testing.T) {
+	secondTurn := admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", "")
+	// The real chatsessions.Store durably records the first turn's started
+	// (not yet committed) identity via RecordPendingFactorySession before
+	// the failed bind attempt; a later admitted turn's own fresh episode
+	// snapshot observes it through Episode.PendingFactorySessionID -- this
+	// fake does not run real Store logic, so the second canned result
+	// simulates exactly what that durable record produces.
+	secondTurn.Episode.PendingFactorySessionID = "fs-pending"
 	chatSessions := &fakeChatSessionsService{
 		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
 		startTurnResults: []chatsessions.StartTurnResult{
 			admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
-			admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", ""),
+			secondTurn,
 		},
 		bindFactorySessionErrs: []error{errors.New("bind failed: version race"), nil},
 	}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
 	factoryTarget := &fakeFactoryTargetService{
-		startResult:  factorysessions.InvocationResult{SessionID: "fs-pending"},
+		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-pending"},
 		invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted},
 	}
 	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
@@ -1535,11 +1608,16 @@ func TestHandleSessionPromptBindFailureRetryReusesPendingFactorySession(t *testi
 	if len(factoryTarget.startCalls) != 1 {
 		t.Fatalf("StartFactoryTarget call count = %d, want exactly 1 (the retry reuses the pending identity via invoke, never starting a second Factory Session)", len(factoryTarget.startCalls))
 	}
-	if len(factoryTarget.invokeCalls) != 1 {
-		t.Fatalf("InvokeFactoryTarget call count = %d, want exactly 1", len(factoryTarget.invokeCalls))
+	// The first (failed-bind) attempt already dispatches its own content via
+	// invoke right after starting, before the bind attempt that then fails;
+	// the retry's own invoke against the same pending identity is the second.
+	if len(factoryTarget.invokeCalls) != 2 {
+		t.Fatalf("InvokeFactoryTarget call count = %d, want exactly 2 (the first attempt's dispatch plus the retry's)", len(factoryTarget.invokeCalls))
 	}
-	if factoryTarget.invokeCalls[0].sessionID != "fs-pending" {
-		t.Fatalf("InvokeFactoryTarget sessionID = %q, want the pending identity from the first turn's start", factoryTarget.invokeCalls[0].sessionID)
+	for i, call := range factoryTarget.invokeCalls {
+		if call.sessionID != "fs-pending" {
+			t.Fatalf("InvokeFactoryTarget[%d] sessionID = %q, want fs-pending", i, call.sessionID)
+		}
 	}
 }
 
@@ -1589,15 +1667,14 @@ func wantAdvanceTurnSequence(t *testing.T, chatSessions *fakeChatSessionsService
 	}
 }
 
-// TestHandleSessionPromptFirstTurnAdvancesByStartOutcome proves a first-turn
-// (start) admission's terminal advancement tracks the underlying synchronous
-// activation's own published terminal status exactly, the same way a later
-// (invoke) turn's does -- not a hardcoded TurnStateCompleted regardless of
-// outcome. OnDemandFactoryTargetService.StartFactoryTarget dispatches its
-// content synchronously (via InvokeFactorySession) before returning, so a
-// first turn's published status is exactly as authoritative as a later
-// turn's.
-func TestHandleSessionPromptFirstTurnAdvancesByStartOutcome(t *testing.T) {
+// TestHandleSessionPromptFirstTurnAdvancesByInvokeOutcome proves a
+// first-turn (start) admission's terminal advancement tracks the follow-up
+// InvokeFactoryTarget call's own published terminal status exactly, the same
+// way a later (invoke) turn's does -- not a hardcoded TurnStateCompleted
+// regardless of outcome. StartFactoryTarget itself only opens the runtime
+// (AsyncStartResult carries no terminal status at all); this turn's actual
+// published outcome is entirely the immediate follow-up invoke's.
+func TestHandleSessionPromptFirstTurnAdvancesByInvokeOutcome(t *testing.T) {
 	tests := []struct {
 		name   string
 		status factorysessions.InvocationTerminalStatus
@@ -1616,7 +1693,10 @@ func TestHandleSessionPromptFirstTurnAdvancesByStartOutcome(t *testing.T) {
 				startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
 			}
 			catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
-			factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.InvocationResult{SessionID: "fs-1", Status: tc.status}}
+			factoryTarget := &fakeFactoryTargetService{
+				startResult:  factorysessions.AsyncStartResult{SessionID: "fs-1"},
+				invokeResult: factorysessions.InvocationResult{SessionID: "fs-1", Status: tc.status},
+			}
 			server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
 
 			env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
@@ -1768,7 +1848,7 @@ func TestHandleSessionPromptRunningTransitionFailureMakesNoFactoryDispatchCall(t
 		advanceTurnErr:   errors.New("advance turn boom"),
 	}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
-	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.InvocationResult{SessionID: "fs-1"}}
+	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.AsyncStartResult{SessionID: "fs-1"}}
 	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
@@ -1813,9 +1893,10 @@ func TestHandleSessionPromptRunningTransitionFailureRecoveryAdmitsLaterPrompt(t 
 		injectErr: errors.New("advance turn boom"),
 	}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
-	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.InvocationResult{
-		SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted,
-	}}
+	factoryTarget := &fakeFactoryTargetService{
+		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-1"},
+		invokeResult: factorysessions.InvocationResult{SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted},
+	}
 	server := New(nil, faulty, catalog, factoryTarget, func() (string, error) { return "/home/operator", nil })
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
@@ -1834,6 +1915,76 @@ func TestHandleSessionPromptRunningTransitionFailureRecoveryAdmitsLaterPrompt(t 
 	}
 }
 
+// TestHandleSessionPromptPendingFactorySessionSurvivesNewServerInstance
+// proves the reconciliation record a failed bind leaves behind is durable
+// Chat/Factory Sessions authority state, not this Server instance's own
+// memory: after an injected single-shot BindFactorySession failure on a
+// real chatsessions.Store, a brand-new *Server constructed over that same
+// store (simulating a transport restart) still observes the pending
+// identity through the second turn's own admitted episode snapshot and
+// invokes it instead of starting a second Factory Session.
+func TestHandleSessionPromptPendingFactorySessionSurvivesNewServerInstance(t *testing.T) {
+	store, err := chatsessionswire.NewService(sequentialIDGenerator("session"), fixedClock(time.Unix(0, 1)))
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	created, err := store.CreateSession(context.Background(), chatsessions.CreateSessionRequest{
+		RequestID:     chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-setup", JSONRPCNumberID: "0"},
+		WorkingRoot:   "/work/project",
+		InitialTarget: chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "@you/review"},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	faulty := &firstCallFailingBindFactorySession{
+		Service:   store,
+		injectErr: errors.New("bind failed: version race"),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{
+		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-pending"},
+		invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted},
+	}
+	firstServer := New(nil, faulty, catalog, factoryTarget, func() (string, error) { return "/home/operator", nil })
+
+	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams(created.Session.ID, "first message"))
+	if _, rpcErr := firstServer.handleSessionPrompt(context.Background(), firstEnv); rpcErr == nil {
+		t.Fatal("first handleSessionPrompt() error = nil, want a bounded failure when the injected bind fault fires")
+	}
+	if len(factoryTarget.closeCalls) != 0 {
+		t.Fatalf("CloseFactoryTarget call count = %d, want 0: a non-conflict bind failure must not abandon the pending runtime", len(factoryTarget.closeCalls))
+	}
+
+	// A brand-new Server, sharing only the underlying store (not the failed
+	// firstServer instance or its wrapper), stands in for a restarted
+	// transport process.
+	secondServer := New(nil, store, catalog, factoryTarget, func() (string, error) { return "/home/operator", nil })
+
+	secondEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams(created.Session.ID, "second message"))
+	if _, rpcErr := secondServer.handleSessionPrompt(context.Background(), secondEnv); rpcErr != nil {
+		t.Fatalf("second handleSessionPrompt() error = %+v, want success once the retried bind succeeds", rpcErr)
+	}
+
+	if len(factoryTarget.startCalls) != 1 {
+		t.Fatalf("StartFactoryTarget call count = %d, want exactly 1 (the new Server instance reuses the durably recorded pending identity via invoke, never starting a second Factory Session)", len(factoryTarget.startCalls))
+	}
+	// The first server's own attempt already dispatched via invoke right
+	// after starting, before its bind attempt failed; the second server's
+	// own invoke against the same durably-recorded pending identity is the
+	// second call.
+	if len(factoryTarget.invokeCalls) != 2 {
+		t.Fatalf("InvokeFactoryTarget call count = %d, want exactly 2 (the first attempt's dispatch plus the second server's)", len(factoryTarget.invokeCalls))
+	}
+	for i, call := range factoryTarget.invokeCalls {
+		if call.sessionID != "fs-pending" {
+			t.Fatalf("InvokeFactoryTarget[%d] sessionID = %q, want fs-pending", i, call.sessionID)
+		}
+	}
+}
+
 // TestHandleSessionPromptTerminalTransitionFailurePropagatesBoundedError
 // proves that when the final terminalizing AdvanceTurn call itself fails
 // after a successful Factory dispatch, the handler reports that failure as a
@@ -1848,9 +1999,10 @@ func TestHandleSessionPromptTerminalTransitionFailurePropagatesBoundedError(t *t
 		advanceTurnErrs:  []error{nil, errors.New("terminal advance boom"), nil},
 	}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
-	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.InvocationResult{
-		SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted,
-	}}
+	factoryTarget := &fakeFactoryTargetService{
+		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-1"},
+		invokeResult: factorysessions.InvocationResult{SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted},
+	}
 	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
@@ -1902,9 +2054,10 @@ func TestHandleSessionPromptTerminalTransitionFailureRecoveryAdmitsLaterPrompt(t
 		Service: store, failOnCall: 2, injectErr: errors.New("terminal advance boom"),
 	}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
-	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.InvocationResult{
-		SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted,
-	}}
+	factoryTarget := &fakeFactoryTargetService{
+		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-1"},
+		invokeResult: factorysessions.InvocationResult{SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted},
+	}
 	server := New(nil, faulty, catalog, factoryTarget, func() (string, error) { return "/home/operator", nil })
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
@@ -1921,7 +2074,11 @@ func TestHandleSessionPromptTerminalTransitionFailureRecoveryAdmitsLaterPrompt(t
 	if len(factoryTarget.startCalls) != 1 {
 		t.Fatalf("StartFactoryTarget call count = %d, want exactly 1 (the first turn's dispatch itself succeeded before its terminalization faulted)", len(factoryTarget.startCalls))
 	}
-	if len(factoryTarget.invokeCalls) != 1 {
-		t.Fatalf("InvokeFactoryTarget call count = %d, want exactly 1 (the second turn reuses the already-bound Factory Session instead of starting a second one)", len(factoryTarget.invokeCalls))
+	// The first turn's own content already dispatched via invoke right
+	// after its successful start; the second turn's own invoke against the
+	// already-bound Factory Session (reused, not a second start) is the
+	// second call.
+	if len(factoryTarget.invokeCalls) != 2 {
+		t.Fatalf("InvokeFactoryTarget call count = %d, want exactly 2 (the first turn's dispatch plus the second turn's reuse)", len(factoryTarget.invokeCalls))
 	}
 }

@@ -116,8 +116,30 @@ type Service interface {
 	// *FactorySessionConflictError when the episode already carries a
 	// different Factory Session identity -- in every failure case the
 	// stored session and episode history are left byte-for-byte unchanged,
-	// and no prior (non-current) episode is ever mutated.
+	// and no prior (non-current) episode is ever mutated. A successful
+	// commit also clears any PendingFactorySessionID recorded via
+	// RecordPendingFactorySession, since the pending record's purpose --
+	// letting a retry find the started-but-uncommitted identity -- is moot
+	// once that identity is durably committed.
 	BindFactorySession(ctx context.Context, req BindFactorySessionRequest) (BindFactorySessionResult, error)
+
+	// RecordPendingFactorySession durably records (or, with a blank
+	// FactorySessionID, clears) a Factory Session identity a caller started
+	// for SessionID's TargetEpisode numbered Episode but has not yet
+	// committed via BindFactorySession, under the same
+	// session/episode/turn/version guard BindFactorySession itself uses. It
+	// exists so "a Factory Session was already started for this
+	// still-unbound episode" is durable Chat/Factory Sessions authority
+	// state a later retry can observe and reuse (via the episode snapshot's
+	// PendingFactorySessionID), not state a caller's own transport instance
+	// must remember to survive a post-start failure. Unlike BindFactorySession
+	// this never advances Session.Version: it is incidental
+	// reconciliation bookkeeping, not a state transition other guarded
+	// callers need to observe as invalidating their own ExpectedVersion. It
+	// reports *NotFoundError for an unknown SessionID and *ConflictError
+	// when ExpectedVersion no longer matches or the session's active
+	// turn/episode has moved on.
+	RecordPendingFactorySession(ctx context.Context, req RecordPendingFactorySessionRequest) (RecordPendingFactorySessionResult, error)
 }
 
 // CreateSessionRequest carries the caller identity, initial target, and
@@ -271,5 +293,33 @@ type BindFactorySessionRequest struct {
 // BindFactorySessionResult carries the Session after a successful (or
 // idempotently converged) binding.
 type BindFactorySessionResult struct {
+	Session Session
+}
+
+// RecordPendingFactorySessionRequest identifies the exact session/episode/
+// turn/version snapshot a caller observed when it started a Factory Session,
+// plus the started (not yet committed) Factory Session identity to record --
+// or a blank FactorySessionID to explicitly clear a previously recorded
+// pending identity (for example after abandoning it in favor of a
+// different, already-committed identity).
+type RecordPendingFactorySessionRequest struct {
+	SessionID string
+	// ExpectedVersion is the session's version observed at admission --
+	// StartTurnResult.Session.Version -- not a value re-read afterward.
+	ExpectedVersion uint64
+	// Episode is the TargetEpisode number the admitted turn belongs to --
+	// StartTurnResult.Episode.Number.
+	Episode uint64
+	// TurnID is the admitted turn that started the Factory Session being
+	// recorded -- StartTurnResult.Turn.ID.
+	TurnID string
+	// FactorySessionID is the started-but-uncommitted identity to record, or
+	// blank to clear any previously recorded pending identity.
+	FactorySessionID string
+}
+
+// RecordPendingFactorySessionResult carries the Session after a successful
+// pending-identity record or clear.
+type RecordPendingFactorySessionResult struct {
 	Session Session
 }

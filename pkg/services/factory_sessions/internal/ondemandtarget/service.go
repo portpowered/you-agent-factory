@@ -8,6 +8,18 @@
 // exposes it as a thin construction wrapper (matching how that package already
 // wraps runtimeopening.Factory as RuntimeOpeningFactory) so a caller outside
 // this service tree never imports this package directly.
+//
+// Service implements the full public factorysessions.Service interface (by
+// embedding it as a nil value and overriding only the handful of methods it
+// gives real behavior to -- StartAsync, InvokeFactorySession, Cancel,
+// CloseFactorySession -- the same "embed the interface, panic on anything
+// unimplemented" idiom this package's own tests already use for fakeSessions)
+// specifically so it can be handed, unmodified, to
+// chat_sessions/internal/factorysessionsshim.New: that existing,
+// consumer-owned shim is what the production ACP prompt-delegation consumer
+// actually calls, not this package's own methods directly. Every method
+// beyond those four is unreachable in production -- the shim never calls
+// them -- and exists only to satisfy the interface.
 package ondemandtarget
 
 import (
@@ -22,13 +34,17 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // Service satisfies io.Closer so a process lifecycle plan can register it as
 // a NamedResource (see pkg/initializer/lifecycle) whose Close tears down
 // every runtime it ever lazily activated.
 var _ io.Closer = (*Service)(nil)
+
+// Service also satisfies the full public factorysessions.Service so it can
+// be wrapped by the existing chat_sessions-owned factorysessionsshim.Shim
+// unmodified -- see this package's own doc comment.
+var _ factorysessions.Service = (*Service)(nil)
 
 // RuntimeResolver turns one canonical Factory target identity and editor
 // working root into the concrete Runtime Opening request that activating a
@@ -76,6 +92,14 @@ type invocationRuntimeOpener interface {
 // cached runtime (and the runtime's own DefaultSessionID) on every later
 // call. Callers must treat the returned identity as opaque.
 type Service struct {
+	// Service is embedded as a permanently nil interface value: every method
+	// this type does not itself override is satisfied only for the compiler
+	// (interface completeness), and panics if ever actually called. Only
+	// StartAsync, InvokeFactorySession, Cancel, and CloseFactorySession are
+	// overridden below -- the exact four methods
+	// chat_sessions/internal/factorysessionsshim.Shim forwards to.
+	factorysessions.Service
+
 	factory    invocationRuntimeOpener
 	effects    runtimeopening.ExternalEffects
 	resolve    RuntimeResolver
@@ -132,16 +156,21 @@ type activatedRuntime struct {
 func (s *Service) openActivatedRuntime(
 	ctx context.Context,
 	factoryTargetID string,
-	workingRoot string,
 	config factorysessions.RuntimeOpeningRequest,
 ) (*activatedRuntime, error) {
+	// Structured logs here carry only the Factory target identity (a
+	// catalog reference, not private topology) and bounded outcome
+	// classifications -- never workingRoot (the caller's editor filesystem
+	// path) and never a raw error via zap.Error, since an underlying
+	// runtime-opening or lifecycle failure can embed a resolved filesystem
+	// path in its own message text.
 	s.logger.Info("activating on-demand Factory target runtime",
-		zap.String("factoryTargetId", factoryTargetID), zap.String("workingRoot", workingRoot))
+		zap.String("factoryTargetId", factoryTargetID))
 
 	opened, err := s.factory.OpenInvocationRuntime(ctx, &config, s.effects, s.logger)
 	if err != nil {
 		s.logger.Error("failed to open on-demand Factory target runtime",
-			zap.String("factoryTargetId", factoryTargetID), zap.Error(err))
+			zap.String("factoryTargetId", factoryTargetID))
 		return nil, fmt.Errorf("open Factory target runtime: %w", err)
 	}
 	runContext, cancel := context.WithCancel(context.WithoutCancel(ctx))
@@ -155,7 +184,7 @@ func (s *Service) openActivatedRuntime(
 	}
 	if err != nil {
 		s.logger.Error("failed to activate on-demand Factory target runtime",
-			zap.String("factoryTargetId", factoryTargetID), zap.Error(err))
+			zap.String("factoryTargetId", factoryTargetID))
 		return nil, errors.Join(fmt.Errorf("activate Factory target runtime: %w", err), active.close(ctx))
 	}
 	s.logger.Info("activated on-demand Factory target runtime", zap.String("factoryTargetId", factoryTargetID))
@@ -191,66 +220,52 @@ func (a *activatedRuntime) close(ctx context.Context) error {
 	return result
 }
 
-// StartFactoryTarget opens (and keeps open) exactly one Factory target
-// runtime for this request's Source.FactoryID and Args["workingRoot"], then
-// dispatches the requested content on it.
-//
-// This dispatches through InvokeFactorySession, the same synchronous,
-// non-JavaScript-workflow-specific call the CLI's own one-shot named
-// invocation already uses successfully, rather than StartAsync/Source:
-// StartAsync's Source vocabulary (FACTORY_ID/FACTORY_INLINE/WORKFLOW_FILE/
-// WORKFLOW_NAME/INLINE_WORKFLOW) only resolves named JavaScript workflow
-// factories -- confirmed by reading
+// StartAsync opens (and keeps open) exactly one Factory target runtime for
+// this request's Source.FactoryID and Args["workingRoot"], but dispatches no
+// content: this on-demand activation has no fixed pre-opened runtime the way
+// the CLI daemon's StartAsync semantics assume, and StartAsync's own Source
+// vocabulary (FACTORY_ID/FACTORY_INLINE/WORKFLOW_FILE/WORKFLOW_NAME/
+// INLINE_WORKFLOW) only resolves named JavaScript workflow factories --
+// confirmed by reading
 // internal/services/orchestration/javascript/source/lookup.go, whose
 // FACTORY_ID case rejects any target that "is not a JavaScript workflow
-// factory" -- so it cannot start an ordinary packaged Factory the way this
-// service's already-resolved, already-opened runtime needs. Since
-// s.resolve/openActivatedRuntime already picked and opened the exact target
-// directory, this call needs no further source selection at all. The
-// returned InvocationResult is the real, unmodified published invocation
-// outcome -- terminal status and ordered primary-result text included --
-// except SessionID, which this service substitutes with its own generated
+// factory" -- so it cannot itself dispatch an ordinary packaged Factory the
+// way this service's caller needs. This method's own job is narrower and
+// honest about it: open the runtime and report it RUNNING with no
+// fabricated terminal outcome; a caller that wants the first turn's actual
+// published outcome (including text) makes a separate, immediate
+// InvokeFactorySession call against the returned SessionID -- the same
+// synchronous, non-JavaScript-workflow-specific call every later turn
+// already uses (see chat_sessions/internal/factorysessionsshim.Shim, whose
+// unmodified StartFactoryTarget/InvokeFactoryTarget map directly onto these
+// two methods). The returned SessionID is this service's own generated
 // identity (never the opened runtime's shared internal constant session
-// identity) so a later InvokeFactoryTarget/CancelFactoryTarget/
-// CloseFactoryTarget call against the returned identity resolves back to
-// this exact runtime.
-func (s *Service) StartFactoryTarget(
+// identity), so a later InvokeFactorySession/Cancel/CloseFactorySession call
+// against it resolves back to this exact runtime.
+func (s *Service) StartAsync(
 	ctx context.Context,
 	request factorysessions.StartRequest,
-) (factorysessions.InvocationResult, error) {
+) (factorysessions.AsyncStartResult, error) {
 	workingRoot, _ := request.Args["workingRoot"].(string)
 	config, err := s.resolve(ctx, request.Source.FactoryID, workingRoot)
 	if err != nil {
-		return factorysessions.InvocationResult{}, err
+		return factorysessions.AsyncStartResult{}, err
 	}
-	active, err := s.openActivatedRuntime(ctx, request.Source.FactoryID, workingRoot, config)
+	active, err := s.openActivatedRuntime(ctx, request.Source.FactoryID, config)
 	if err != nil {
-		return factorysessions.InvocationResult{}, err
-	}
-
-	content, _ := request.Args["content"].([]work.WorkContentPart)
-	requestID := request.RequestID
-	sourceKind := factorysessions.InvocationInputSourceKindText
-	result, err := active.opened.Sessions.InvokeFactorySession(ctx, factorysessions.DefaultSessionID, factorysessions.InvocationRequest{
-		Content:         content,
-		ContentProvided: true,
-		RequestID:       &requestID,
-		SourceKind:      &sourceKind,
-	})
-	if err != nil {
-		s.logger.Error("on-demand Factory target dispatch failed",
-			zap.String("factoryTargetId", request.Source.FactoryID), zap.Error(err))
-		return factorysessions.InvocationResult{}, errors.Join(err, active.close(ctx))
+		return factorysessions.AsyncStartResult{}, err
 	}
 
 	wrapperID := s.generateID()
 	s.mu.Lock()
 	s.runtimes[wrapperID] = active
 	s.mu.Unlock()
-	result.SessionID = wrapperID
-	s.logger.Info("on-demand Factory target dispatch completed",
-		zap.String("factoryTargetId", request.Source.FactoryID), zap.String("status", string(result.Status)))
-	return result, nil
+	s.logger.Info("on-demand Factory target runtime ready",
+		zap.String("factoryTargetId", request.Source.FactoryID))
+	return factorysessions.AsyncStartResult{
+		SessionID: wrapperID,
+		Status:    string(factorysessions.LifecycleStatusRunning),
+	}, nil
 }
 
 func (s *Service) lookup(sessionID string) (*activatedRuntime, error) {
@@ -263,9 +278,9 @@ func (s *Service) lookup(sessionID string) (*activatedRuntime, error) {
 	return active, nil
 }
 
-// InvokeFactoryTarget synchronously invokes the exact runtime a prior
-// StartFactoryTarget call opened for sessionID.
-func (s *Service) InvokeFactoryTarget(
+// InvokeFactorySession synchronously invokes the exact runtime a prior
+// StartAsync call opened for sessionID.
+func (s *Service) InvokeFactorySession(
 	ctx context.Context,
 	sessionID string,
 	request factorysessions.InvocationRequest,
@@ -276,16 +291,17 @@ func (s *Service) InvokeFactoryTarget(
 	}
 	result, err := active.opened.Sessions.InvokeFactorySession(ctx, factorysessions.DefaultSessionID, request)
 	if err != nil {
-		s.logger.Error("on-demand Factory target invoke failed", zap.Error(err))
+		s.logger.Error("on-demand Factory target invoke failed")
 		return result, err
 	}
+	result.SessionID = sessionID
 	s.logger.Info("on-demand Factory target invoke completed", zap.String("status", string(result.Status)))
 	return result, nil
 }
 
-// CancelFactoryTarget cancels the exact runtime a prior StartFactoryTarget
-// call opened for sessionID.
-func (s *Service) CancelFactoryTarget(
+// Cancel cancels the exact runtime a prior StartAsync call opened for
+// sessionID.
+func (s *Service) Cancel(
 	ctx context.Context,
 	sessionID string,
 	request factorysessions.ControlRequest,
@@ -297,11 +313,11 @@ func (s *Service) CancelFactoryTarget(
 	return active.opened.Sessions.Cancel(ctx, factorysessions.DefaultSessionID, request)
 }
 
-// CloseFactoryTarget tears down and evicts the exact runtime a prior
-// StartFactoryTarget call opened for sessionID. Closing an unknown or
-// already-closed identity is a no-op success, matching the idempotent close
-// semantics factorysessions.Service.CloseFactorySession already documents.
-func (s *Service) CloseFactoryTarget(ctx context.Context, sessionID string) error {
+// CloseFactorySession tears down and evicts the exact runtime a prior
+// StartAsync call opened for sessionID. Closing an unknown or already-closed
+// identity is a no-op success, matching the idempotent close semantics
+// factorysessions.Service.CloseFactorySession already documents.
+func (s *Service) CloseFactorySession(ctx context.Context, sessionID string) error {
 	s.mu.Lock()
 	active, ok := s.runtimes[sessionID]
 	if ok {
@@ -313,7 +329,7 @@ func (s *Service) CloseFactoryTarget(ctx context.Context, sessionID string) erro
 	}
 	err := active.close(ctx)
 	if err != nil {
-		s.logger.Error("on-demand Factory target close failed", zap.Error(err))
+		s.logger.Error("on-demand Factory target close failed")
 	} else {
 		s.logger.Info("on-demand Factory target closed")
 	}
@@ -326,9 +342,9 @@ func (s *Service) CloseFactoryTarget(ctx context.Context, sessionID string) erro
 // process lifecycle plan can register this Service as a reachable,
 // deterministic unwind step for every runtime it ever lazily activated,
 // instead of leaving them open for the life of the process; construction
-// alone opens no runtime, so calling Close before any StartFactoryTarget
-// call is a no-op success. Close is idempotent: a runtime evicted by this
-// call or by an earlier CloseFactoryTarget call is never closed twice.
+// alone opens no runtime, so calling Close before any StartAsync call is a
+// no-op success. Close is idempotent: a runtime evicted by this call or by
+// an earlier CloseFactorySession call is never closed twice.
 func (s *Service) Close() error {
 	s.mu.Lock()
 	active := make([]*activatedRuntime, 0, len(s.runtimes))
@@ -345,7 +361,7 @@ func (s *Service) Close() error {
 		}
 	}
 	if result != nil {
-		s.logger.Error("on-demand Factory target close-all failed", zap.Error(result))
+		s.logger.Error("on-demand Factory target close-all failed", zap.Int("runtimeCount", len(active)))
 	} else if len(active) > 0 {
 		s.logger.Info("on-demand Factory target close-all completed", zap.Int("runtimeCount", len(active)))
 	}

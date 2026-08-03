@@ -559,7 +559,13 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	processLifecycle, err := provideApplicationProcessLifecycle(service)
+	wireAcpServerResolveHomeDir := provideACPServerResolveHomeDir()
+	v87 := provideACPServerFactoryTargetRuntimeResolver(wireAcpServerResolveHomeDir, v, defaultsResolver, runtimeArtifactRootResolver)
+	v88, err := provideACPServerFactoryTarget(v60, edges2, v87, v19, logger)
+	if err != nil {
+		return nil, err
+	}
+	processLifecycle, err := provideApplicationProcessLifecycle(service, v88)
 	if err != nil {
 		return nil, err
 	}
@@ -572,12 +578,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	wireAcpServerResolveHomeDir := provideACPServerResolveHomeDir()
-	factoryTargetRuntimeResolver := provideACPServerFactoryTargetRuntimeResolver(wireAcpServerResolveHomeDir, v, defaultsResolver, runtimeArtifactRootResolver)
-	factoryTargetService, err := provideACPServerFactoryTarget(v60, edges2, factoryTargetRuntimeResolver, v19, logger)
-	if err != nil {
-		return nil, err
-	}
+	factoryTargetService := provideACPServerFactoryTargetService(v88)
 	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, factoryTargetService, wireAcpServerResolveHomeDir)
 	process, err := application.NewProcess(commandFactory, initializer, providerRegistry, processLifecycle, server)
 	if err != nil {
@@ -607,6 +608,7 @@ var servicesSet = wire3.NewSet(
 	provideACPServerFactoryDefinitions,
 	provideACPServerFactoryTargetRuntimeResolver,
 	provideACPServerFactoryTarget,
+	provideACPServerFactoryTargetService,
 	provideACPServerResolveHomeDir,
 	provideACPServer,
 	provideOperatorConfigDecoder,

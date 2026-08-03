@@ -297,7 +297,18 @@ type TargetEpisode struct {
 	State            TargetEpisodeState
 	Target           ChatTargetRef
 	FactorySessionID string
-	StartedAt        time.Time
+	// PendingFactorySessionID records a Factory Session identity a caller
+	// has started for this episode but not yet committed via
+	// BindFactorySession -- the singular Chat/Factory Sessions authority's
+	// own record of a reconciliation-in-progress, so a retry after a
+	// post-start failure can observe and reuse it without depending on any
+	// one transport instance surviving. It is set by RecordPendingFactorySession
+	// and cleared once BindFactorySession commits (or a caller explicitly
+	// abandons it with a blank identity). Unlike FactorySessionID, it carries
+	// no consistency guarantee beyond "a caller told us it started this" and
+	// is never itself the committed binding.
+	PendingFactorySessionID string
+	StartedAt               time.Time
 	// ClosedAt is the episode's terminal time fact: unset while State is
 	// OPEN and set (never before StartedAt) once State is CLOSED.
 	ClosedAt *time.Time

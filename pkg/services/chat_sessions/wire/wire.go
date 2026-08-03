@@ -15,8 +15,10 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/factorysessionsshim"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/service"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
@@ -54,4 +56,23 @@ func NewFactoryTargetCatalogService(
 	logger logging.Logger,
 ) (chatsessions.FactoryTargetCatalogService, error) {
 	return internalservice.New(operatorSettings, factoryDefinitions, logger)
+}
+
+// FactoryTargetService is the Factory-target start/invoke/cancel/close
+// dependency the existing, consumer-owned Factory Sessions shim exposes.
+// Re-published here (an alias for factorysessionsshim.FactoryTargetService,
+// this shim's own private contract) exclusively for pkg/wire's use, per the
+// pkg-boundary rule that only pkg/wire may import a service's own wire
+// subpackage -- see NewFactoryTargetService.
+type FactoryTargetService = factorysessionsshim.FactoryTargetService
+
+// NewFactoryTargetService constructs the existing Chat Sessions-owned
+// Factory Sessions shim (factorysessionsshim.Shim) over the given
+// factorysessions.Service. It is a stateless, exactly-once-forwarding
+// adapter: this constructor performs no I/O and adds no behavior beyond what
+// factorysessionsshim.New itself already does. pkg/wire is the only intended
+// caller (chat_sessions/internal/factorysessionsshim cannot be imported
+// directly outside this service's own tree).
+func NewFactoryTargetService(service factorysessions.Service) FactoryTargetService {
+	return factorysessionsshim.New(service)
 }

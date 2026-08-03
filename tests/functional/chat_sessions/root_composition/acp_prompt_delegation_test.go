@@ -47,23 +47,7 @@ func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *t
 		t.Skip("integration test driving root.BuildProcess Factory Session dispatch")
 	}
 
-	// This story's on-demand activation deliberately keeps an opened Factory
-	// target runtime alive across turns (see OnDemandFactoryTargetService's
-	// own doc comment) rather than closing it after each dispatch, since
-	// nothing in this ACP prompt-delegation slice's scope observes an
-	// episode/session close signal yet. That means this test's runtime log
-	// file handle is still open when the test function returns, which on
-	// Windows can make t.TempDir()'s own automatic RemoveAll cleanup fail
-	// with "file in use" -- a real, already-known, documented limitation of
-	// this slice, not a bug this test should mask by suppressing it, but
-	// also not what this test is about proving. A manually managed home
-	// directory with a best-effort (error-tolerant) cleanup avoids that
-	// unrelated flake without hiding the underlying limitation.
-	home, err := os.MkdirTemp("", "acp-prompt-delegation-home-*")
-	if err != nil {
-		t.Fatalf("MkdirTemp(home) error = %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 
@@ -110,6 +94,7 @@ func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *t
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}
+	closeProcessCleanly(t, process)
 	server := process.ACPServer()
 	if server == nil {
 		t.Fatal("Process.ACPServer() returned a nil acp.Server")
@@ -168,11 +153,7 @@ func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(
 	// resolution, before any provider or workflow runs -- so it stays fast
 	// and runs even under -short, which is exactly the lane
 	// `make test-functional-coverage` uses.
-	home, err := os.MkdirTemp("", "acp-prompt-delegation-unresolvable-home-*")
-	if err != nil {
-		t.Fatalf("MkdirTemp(home) error = %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 
@@ -183,6 +164,7 @@ func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}
+	closeProcessCleanly(t, process)
 	server := process.ACPServer()
 	if server == nil {
 		t.Fatal("Process.ACPServer() returned a nil acp.Server")
@@ -258,6 +240,27 @@ func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(
 	}
 }
 
+// closeProcessCleanly registers a cleanup that closes process and fails the
+// test if that close reports an error. On-demand Factory Sessions activation
+// (see pkg/wire's compositeProcessLifecycle) keeps an opened Factory target
+// runtime's own log file handle open until Process.Close tears it down; this
+// runs before t.TempDir()'s own automatic cleanup (t.Cleanup callbacks run
+// LIFO, and this is always registered after the test's own t.TempDir() calls),
+// so the runtime is closed before its home directory is removed -- proving
+// this story's reachable close path actually works, not merely compiling,
+// instead of masking an unclosed runtime with a manually managed,
+// error-tolerant temp directory.
+func closeProcessCleanly(t *testing.T, process interface {
+	Close(context.Context) error
+}) {
+	t.Helper()
+	t.Cleanup(func() {
+		if err := process.Close(context.Background()); err != nil {
+			t.Errorf("Process.Close() error = %v, want clean teardown", err)
+		}
+	})
+}
+
 // assertPromptResponseStopReason decodes resp's Result as a real
 // acpsdk.PromptResponse and asserts its StopReason, proving the response is
 // the closed final-only shape this transport publishes, not just the
@@ -315,11 +318,7 @@ func TestACPPromptDelegationRedeliveredRequestMakesNoSecondFactoryDispatch(t *te
 func runPromptDeliveries(t *testing.T, homePrefix string, deliveries int) int32 {
 	t.Helper()
 
-	home, err := os.MkdirTemp("", "acp-prompt-delegation-"+homePrefix+"-home-*")
-	if err != nil {
-		t.Fatalf("MkdirTemp(home) error = %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 
@@ -338,6 +337,7 @@ func runPromptDeliveries(t *testing.T, homePrefix string, deliveries int) int32 
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}
+	closeProcessCleanly(t, process)
 	server := process.ACPServer()
 	if server == nil {
 		t.Fatal("Process.ACPServer() returned a nil acp.Server")
@@ -522,11 +522,7 @@ func TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch(t
 		t.Skip("integration test driving root.BuildProcess Factory Session dispatch")
 	}
 
-	home, err := os.MkdirTemp("", "acp-prompt-delegation-busy-home-*")
-	if err != nil {
-		t.Fatalf("MkdirTemp(home) error = %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 
@@ -545,6 +541,7 @@ func TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch(t
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}
+	closeProcessCleanly(t, process)
 	server := process.ACPServer()
 	if server == nil {
 		t.Fatal("Process.ACPServer() returned a nil acp.Server")

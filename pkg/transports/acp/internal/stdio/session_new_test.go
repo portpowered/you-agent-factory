@@ -72,6 +72,12 @@ type fakeChatSessionsService struct {
 	bindFactorySessionErrs []error
 	bindFactorySessionErr  error
 
+	recordPendingFactorySessionCalled bool
+	recordPendingFactorySessionReq    chatsessions.RecordPendingFactorySessionRequest
+	recordPendingFactorySessionReqs   []chatsessions.RecordPendingFactorySessionRequest
+	recordPendingFactorySessionResult chatsessions.RecordPendingFactorySessionResult
+	recordPendingFactorySessionErr    error
+
 	advanceTurnCalled bool
 	advanceTurnReq    chatsessions.AdvanceTurnRequest
 	advanceTurnReqs   []chatsessions.AdvanceTurnRequest
@@ -169,6 +175,18 @@ func (f *fakeChatSessionsService) BindFactorySession(_ context.Context, req chat
 	return f.bindFactorySessionResult, nil
 }
 
+func (f *fakeChatSessionsService) RecordPendingFactorySession(_ context.Context, req chatsessions.RecordPendingFactorySessionRequest) (chatsessions.RecordPendingFactorySessionResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.recordPendingFactorySessionCalled = true
+	f.recordPendingFactorySessionReq = req
+	f.recordPendingFactorySessionReqs = append(f.recordPendingFactorySessionReqs, req)
+	if f.recordPendingFactorySessionErr != nil {
+		return chatsessions.RecordPendingFactorySessionResult{}, f.recordPendingFactorySessionErr
+	}
+	return f.recordPendingFactorySessionResult, nil
+}
+
 func (f *fakeChatSessionsService) AdvanceTurn(_ context.Context, req chatsessions.AdvanceTurnRequest) (chatsessions.AdvanceTurnResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -239,7 +257,7 @@ type fakeFactoryTargetService struct {
 	mu sync.Mutex
 
 	startCalls  []factorysessions.StartRequest
-	startResult factorysessions.InvocationResult
+	startResult factorysessions.AsyncStartResult
 	startErr    error
 
 	invokeCalls  []invokeFactoryTargetCall
@@ -258,12 +276,12 @@ type invokeFactoryTargetCall struct {
 func (f *fakeFactoryTargetService) StartFactoryTarget(
 	_ context.Context,
 	request factorysessions.StartRequest,
-) (factorysessions.InvocationResult, error) {
+) (factorysessions.AsyncStartResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.startCalls = append(f.startCalls, request)
 	if f.startErr != nil {
-		return factorysessions.InvocationResult{}, f.startErr
+		return factorysessions.AsyncStartResult{}, f.startErr
 	}
 	return f.startResult, nil
 }

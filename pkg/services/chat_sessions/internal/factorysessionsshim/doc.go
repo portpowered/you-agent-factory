@@ -10,17 +10,23 @@
 // Factory Sessions sealing; it must not grow into a second session
 // authority.
 //
-// This adapter wraps the process-scoped factorysessions.Service singleton,
-// which stays permanently inert outside the CLI daemon's single
-// fixed-project bootstrap, and its StartFactoryTarget exposes only the
-// asynchronous AsyncStartResult status vocabulary. ACP L1 V1 ordinary prompt
+// This adapter's injected factorysessions.Service is not always the
+// process-scoped CLI-daemon singleton (which stays permanently inert outside
+// the CLI daemon's single fixed-project bootstrap): ACP L1 V1 ordinary prompt
 // delegation (pkg/transports/acp, wired through pkg/wire's
-// provideACPServerFactoryTarget) activates a distinct live runtime per
-// dynamically ACP-selected Factory target and needs the synchronous,
-// truthful InvocationResult its first turn actually observes; neither fits
-// this package's fixed-runtime, status-only shape, and extending this
-// package to cover both would grow it into exactly the second session
-// authority its own package comment above forbids. That flow therefore
-// depends on the dedicated factory_sessions/wire.OnDemandFactoryTargetService
-// instead of this adapter.
+// provideACPServerFactoryTargetService) instead supplies
+// factory_sessions/wire.OnDemandFactoryTargetService, a distinct live-runtime
+// activation per dynamically ACP-selected Factory target that also fully
+// implements factorysessions.Service. This adapter itself needed no change
+// to support that: it was always a stateless, exactly-once forwarder over
+// whatever factorysessions.Service its constructor is given, never a fixed
+// assumption about which one. The activation singleton owns the on-demand
+// per-target runtime-opening logic this adapter's own package cannot (it
+// would require importing factory_sessions' internal runtime-opening
+// machinery, which this package's own internal-package boundary forbids);
+// that division of ownership is why the activation lives in
+// factory_sessions/internal/ondemandtarget rather than here, not evidence of
+// a second, independent session authority -- pkg/wire composes exactly one
+// factorysessions.Service-satisfying value into this one shim per process,
+// the same as any other caller of New.
 package factorysessionsshim

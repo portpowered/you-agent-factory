@@ -26,7 +26,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"sync"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
@@ -68,29 +67,21 @@ var errNullInitializeParams = errors.New("acp: initialize params must not be nul
 // proceeding -- so a Server constructed for a slice of this transport that
 // never exercises them (for example the "initialize"-only smoke tests in
 // this package) never has to supply them.
+//
+// A Server instance holds no reconciliation state of its own for a started-
+// but-not-yet-bound Factory Session: that record lives on the episode itself
+// (TargetEpisode.PendingFactorySessionID, via
+// chatsessions.Service.RecordPendingFactorySession) under the singular Chat/
+// Factory Sessions authority, so the "retry after a post-start failure
+// cannot create a second Factory Session" guarantee survives this Server
+// being reconstructed, not just this one instance staying alive -- see
+// startFactorySessionForEpisode.
 type Server struct {
 	logger         logging.Logger
 	chatSessions   chatsessions.Service
 	catalog        chatsessions.FactoryTargetCatalogService
 	factoryTarget  acp.FactoryTargetService
 	resolveHomeDir func() (string, error)
-
-	// pendingFactoryStartsMu guards pendingFactoryStarts, the reconciliation
-	// record a first-turn dispatch consults so a BindFactorySession failure
-	// (for any reason other than a genuine different-identity conflict)
-	// never causes a later retry to start a second Factory Session for the
-	// same still-unbound episode -- see startFactorySessionForEpisode.
-	pendingFactoryStartsMu sync.Mutex
-	pendingFactoryStarts   map[pendingFactoryStartKey]string
-}
-
-// pendingFactoryStartKey identifies one Chat Session's target episode, the
-// granularity at which startFactorySessionForEpisode's reconciliation record
-// is tracked -- matching exactly what an episode's own FactorySessionID
-// binding is scoped to.
-type pendingFactoryStartKey struct {
-	sessionID string
-	episode   uint64
 }
 
 // New constructs an inert stdio Server. Construction alone performs no
@@ -104,42 +95,12 @@ func New(
 	resolveHomeDir func() (string, error),
 ) *Server {
 	return &Server{
-		logger:               logging.EnsureLogger(logger),
-		chatSessions:         chatSessions,
-		catalog:              catalog,
-		factoryTarget:        factoryTarget,
-		resolveHomeDir:       resolveHomeDir,
-		pendingFactoryStarts: make(map[pendingFactoryStartKey]string),
+		logger:         logging.EnsureLogger(logger),
+		chatSessions:   chatSessions,
+		catalog:        catalog,
+		factoryTarget:  factoryTarget,
+		resolveHomeDir: resolveHomeDir,
 	}
-}
-
-// lookupPendingFactoryStart reports the Factory Session identity a prior
-// admitted turn for key already started but never committed via
-// BindFactorySession, if any.
-func (s *Server) lookupPendingFactoryStart(key pendingFactoryStartKey) (string, bool) {
-	s.pendingFactoryStartsMu.Lock()
-	defer s.pendingFactoryStartsMu.Unlock()
-	id, ok := s.pendingFactoryStarts[key]
-	return id, ok
-}
-
-// setPendingFactoryStart records that sessionID is the Factory Session
-// identity a start for key produced, before the binding that would commit it
-// is attempted -- so a bind failure never loses track of an already-started
-// runtime.
-func (s *Server) setPendingFactoryStart(key pendingFactoryStartKey, sessionID string) {
-	s.pendingFactoryStartsMu.Lock()
-	defer s.pendingFactoryStartsMu.Unlock()
-	s.pendingFactoryStarts[key] = sessionID
-}
-
-// clearPendingFactoryStart removes key's reconciliation record, once its
-// Factory Session identity has either been committed via BindFactorySession
-// or abandoned (a different identity already won and this one was closed).
-func (s *Server) clearPendingFactoryStart(key pendingFactoryStartKey) {
-	s.pendingFactoryStartsMu.Lock()
-	defer s.pendingFactoryStartsMu.Unlock()
-	delete(s.pendingFactoryStarts, key)
 }
 
 // Serve begins one connection-scoped serving invocation over caller-owned

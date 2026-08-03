@@ -107,6 +107,13 @@ func (f *fakeService) BindFactorySession(_ context.Context, req chatsessions.Bin
 	return chatsessions.BindFactorySessionResult{Session: f.session}, nil
 }
 
+func (f *fakeService) RecordPendingFactorySession(_ context.Context, req chatsessions.RecordPendingFactorySessionRequest) (chatsessions.RecordPendingFactorySessionResult, error) {
+	if req.SessionID != f.session.ID {
+		return chatsessions.RecordPendingFactorySessionResult{}, &chatsessions.NotFoundError{Value: "Session", ID: req.SessionID}
+	}
+	return chatsessions.RecordPendingFactorySessionResult{Session: f.session}, nil
+}
+
 func (f *fakeService) Attach(_ context.Context, req chatsessions.AttachRequest) (chatsessions.AttachResult, error) {
 	if req.SessionID != f.session.ID {
 		return chatsessions.AttachResult{}, &chatsessions.NotFoundError{Value: "Session", ID: req.SessionID}

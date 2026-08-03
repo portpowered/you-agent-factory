@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	chatsessionswire "github.com/portpowered/infinite-you/pkg/services/chat_sessions/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -182,27 +183,21 @@ func provideACPServerFactoryTargetRuntimeResolver(
 // inert outside the CLI daemon bootstrap. Construction alone performs no
 // I/O and opens no runtime.
 //
-// The concrete *factorysessionwire.OnDemandFactoryTargetService this
-// constructs satisfies io.Closer: its Close tears down and evicts every
-// runtime it has lazily activated. No production caller currently reaches
-// it through this narrowed acp.FactoryTargetService return (which exposes
-// only per-identity CloseFactoryTarget, not the aggregate Close), because no
-// production ACP stdio entrypoint exists yet to run initializer.Process's
-// already-composed ACPServer() -- pkg/initializer/application/process.go's
-// ACPServer accessor is today consumed only by tests
-// (tests/functional/chat_sessions/root_composition). A future production
-// entrypoint that actually serves ACP over stdio must obtain this same
-// singleton as its concrete type (not just acp.FactoryTargetService) and
-// register it as a lifecycle.NamedResource in its own Plan (see
-// pkg/initializer/lifecycle) so every runtime it opens is guaranteed a
-// reachable, deterministic close on process shutdown.
+// This returns the concrete *factorysessionwire.OnDemandFactoryTargetService
+// (not the narrower acp.FactoryTargetService interface) precisely so a
+// second consumer -- provideApplicationProcessLifecycle -- can reach its
+// io.Closer-satisfying Close method and compose it into the process's own
+// reachable shutdown path; see provideACPServerFactoryTargetService for the
+// interface-narrowing adapter the ACP transport itself consumes. Wire's own
+// provider memoization guarantees both consumers observe this exact same
+// singleton, not two independently constructed activations.
 func provideACPServerFactoryTarget(
 	openRuntime *factorysessionwire.RuntimeOpeningFactory,
 	edges serviceedges.Edges,
 	resolveTarget factorysessionwire.FactoryTargetRuntimeResolver,
 	generateSessionID factorysessions.SessionIDGenerator,
 	logger *zap.Logger,
-) (acp.FactoryTargetService, error) {
+) (*factorysessionwire.OnDemandFactoryTargetService, error) {
 	return factorysessionwire.NewOnDemandFactoryTargetService(
 		openRuntime,
 		projectRuntimeOpeningExternalEffects(edges),
@@ -210,6 +205,30 @@ func provideACPServerFactoryTarget(
 		generateSessionID,
 		logger,
 	)
+}
+
+// provideACPServerFactoryTargetService wraps the on-demand Factory Sessions
+// activation singleton through the existing, consumer-owned Factory Sessions
+// shim (chat_sessions/wire.NewFactoryTargetService, a thin construction
+// wrapper over chat_sessions/internal/factorysessionsshim.New) rather than
+// exposing the activation singleton's own methods directly -- so the
+// production ACP prompt-delegation consumer's every Factory Session call
+// actually flows through that existing shim, not a second, independently
+// constructed peer contract. Wire's own provider memoization guarantees this
+// still shares the exact same activation singleton
+// provideApplicationProcessLifecycle reaches for shutdown (see
+// provideACPServerFactoryTarget), since both depend on the identical
+// *factorysessionwire.OnDemandFactoryTargetService type.
+//
+// pkg-boundary forbids pkg/transports/acp from importing another service's
+// wire subpackage, so it declares its own narrow acp.FactoryTargetService
+// interface (an exact structural match for
+// chatsessionswire.FactoryTargetService); only pkg/wire, exempt from that
+// rule, may compose the two.
+func provideACPServerFactoryTargetService(
+	target *factorysessionwire.OnDemandFactoryTargetService,
+) acp.FactoryTargetService {
+	return chatsessionswire.NewFactoryTargetService(target)
 }
 
 // provideACPServer constructs the production ACP stdio Server from the same
