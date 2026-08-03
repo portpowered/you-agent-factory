@@ -13,7 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"go.uber.org/zap"
 )
 
@@ -60,6 +59,7 @@ func NewRuntimeBuild(
 	baseLogger *zap.Logger,
 	runtimeFactory *RuntimeFactory,
 	workerExecution workers.RuntimeService,
+	sessionBuildFactory workers.SessionBuildFactory,
 	runtimeExecutorsFactory factory.WorkersRuntimeExecutorsFactory,
 	mockCommandRunnerFactory factory.WorkersMockCommandRunnerFactory,
 	progressFactory ProgressPublisherFactory,
@@ -100,12 +100,14 @@ func NewRuntimeBuild(
 		runtimeFactory.newID,
 		baseLogger,
 		func(ctx context.Context, spec runtimebuild.SessionBuildSpec) (*factoryhost.Bundle, error) {
+			if sessionBuildFactory == nil {
+				return nil, fmt.Errorf("Workers session-build runtime factory is required")
+			}
 			var progressPublisher workers.ProgressPublisher
 			if progressFactory != nil {
 				progressPublisher = progressFactory(spec.SessionID)
 			}
-			runtimeWorkers, err := workerswire.NewSessionBuildRuntime(
-				workerExecution,
+			runtimeWorkers, err := sessionBuildFactory(
 				spec.ProviderCommandRunner,
 				spec.CommandRunnerOverride,
 				progressPublisher,
