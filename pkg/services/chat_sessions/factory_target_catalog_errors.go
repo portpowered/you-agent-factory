@@ -44,10 +44,13 @@ var (
 
 // FactoryTargetCatalogError reports one Factory target-catalog resolution
 // failure. Target is the offending canonical target reference, empty when
-// the failure applies before any target is considered. Err is one of the
-// package sentinel errors so callers can use errors.Is without parsing
-// Error() text. Fields carry only safe identity facts: never a credential,
-// prompt, raw provider command, filesystem path, or private topology detail.
+// the failure applies before any target is considered, or when the target
+// has not yet passed lexical validation (ErrFactoryTargetReferenceMalformed
+// never populates Target, since a malformed value may itself be unsafe
+// caller-supplied input). Err is one of the package sentinel errors so
+// callers can use errors.Is without parsing Error() text. Fields carry only
+// safe identity facts: never a credential, prompt, raw provider command,
+// filesystem path, or private topology detail.
 type FactoryTargetCatalogError struct {
 	Target string
 	Err    error

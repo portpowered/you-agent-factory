@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -94,7 +95,53 @@ func TestResolveFactoryTargetCatalogRejectsMalformedCurrentTarget(t *testing.T) 
 				OperatorSettingsPath: "/operator.json",
 				CurrentTarget:        testCase.target,
 			})
-			assertFactoryTargetCatalogError(t, err, chatsessions.ErrFactoryTargetReferenceMalformed, testCase.target)
+			// A malformed CurrentTarget never appears in the public error's
+			// Target field or rendered message: the value has not passed
+			// lexical validation and may itself be unsafe caller-supplied
+			// input (a path, credential-like value, or control text).
+			assertFactoryTargetCatalogError(t, err, chatsessions.ErrFactoryTargetReferenceMalformed, "")
+			if strings.Contains(err.Error(), testCase.target) {
+				t.Fatalf("error message %q echoes the raw malformed CurrentTarget %q", err.Error(), testCase.target)
+			}
+		})
+	}
+}
+
+func TestResolveFactoryTargetCatalogMalformedCurrentTargetNeverLeaksHostileInput(t *testing.T) {
+	t.Parallel()
+
+	profile := operatorsettings.ACPAgentProfile{
+		DefaultTarget:  "factory:@you/factory-builder",
+		AllowedTargets: []string{"factory:@you/factory-builder"},
+	}
+	entries := []factorydefinitions.EffectiveFactoryCatalogEntry{
+		{Name: "@you/factory-builder", Definition: &factorydefinitions.FactoryConfig{Name: "Factory Builder"}},
+	}
+
+	cases := []struct {
+		name   string
+		target string
+	}{
+		{name: "filesystem path", target: "/etc/passwd"},
+		{name: "windows filesystem path", target: `C:\Users\victim\.ssh\id_rsa`},
+		{name: "credential-like value", target: "factory:token=sk-live-abcdef0123456789"},
+		{name: "control characters", target: "factory:@you/bad\x00\x1bref"},
+		{name: "shell metacharacters", target: "factory:@you/x`rm -rf /`"},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			service := newTestService(t, profile, entries)
+
+			_, err := service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
+				OperatorSettingsPath: "/operator.json",
+				CurrentTarget:        testCase.target,
+			})
+			assertFactoryTargetCatalogError(t, err, chatsessions.ErrFactoryTargetReferenceMalformed, "")
+			if strings.Contains(err.Error(), testCase.target) {
+				t.Fatalf("error message %q echoes the supplied hostile input %q", err.Error(), testCase.target)
+			}
 		})
 	}
 }

@@ -137,9 +137,11 @@ func (s *Service) resolveFactoryTargetCatalog(
 		current = profile.DefaultTarget
 	}
 	if !isWellFormedFactoryTargetReference(current) {
+		// current has not passed lexical validation: it may be arbitrary
+		// caller-supplied input (a path, credential-like value, or control
+		// text), so it is never copied into the public error's Target field.
 		return chatsessions.ResolveFactoryTargetCatalogResult{}, &chatsessions.FactoryTargetCatalogError{
-			Target: current,
-			Err:    chatsessions.ErrFactoryTargetReferenceMalformed,
+			Err: chatsessions.ErrFactoryTargetReferenceMalformed,
 		}
 	}
 	if len(choicesByValue) == 0 {
