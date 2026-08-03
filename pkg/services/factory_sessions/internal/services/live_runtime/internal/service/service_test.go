@@ -9,8 +9,8 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	liveruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime"
 	liveruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime/wire"
@@ -174,10 +174,10 @@ func (rootOnlyRuntime) Observe(context.Context, factoryruntime.ObserveRequest) (
 
 type testFactoryRuntime struct {
 	factoryruntime.Service
-	state           string
-	pauseCalls      int
-	resumeCalls     int
-	terminateCalls  int
+	state          string
+	pauseCalls     int
+	resumeCalls    int
+	terminateCalls int
 }
 
 func (f *testFactoryRuntime) Run(context.Context) error    { return nil }

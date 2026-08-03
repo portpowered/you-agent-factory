@@ -11,9 +11,9 @@ import (
 	"github.com/jonboulle/clockwork"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
-	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -37,6 +37,7 @@ type executeObserverFactory struct {
 	mu          sync.RWMutex
 	engineState *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 }
+
 func (f *executeObserverFactory) Run(ctx context.Context) error {
 	<-ctx.Done()
 	return ctx.Err()
@@ -118,22 +119,22 @@ func TestStartRejectsNilAndInvalidHostedInstance(t *testing.T) {
 
 type invalidHostedInstance struct{}
 
-func (*invalidHostedInstance) RuntimeService() factory.Service               { return nil }
-func (*invalidHostedInstance) Directory() string                             { return "" }
-func (*invalidHostedInstance) FolderDirectory() string                       { return "" }
-func (*invalidHostedInstance) BackendScope() string                          { return "" }
-func (*invalidHostedInstance) StartTime() time.Time                          { return time.Time{} }
-func (*invalidHostedInstance) LoadedRuntimeConfig() factory.LoadedConfig     { return nil }
-func (*invalidHostedInstance) CanonicalEvents() []interfaces.FactoryEvent    { return nil }
+func (*invalidHostedInstance) RuntimeService() factory.Service                        { return nil }
+func (*invalidHostedInstance) Directory() string                                      { return "" }
+func (*invalidHostedInstance) FolderDirectory() string                                { return "" }
+func (*invalidHostedInstance) BackendScope() string                                   { return "" }
+func (*invalidHostedInstance) StartTime() time.Time                                   { return time.Time{} }
+func (*invalidHostedInstance) LoadedRuntimeConfig() factory.LoadedConfig              { return nil }
+func (*invalidHostedInstance) CanonicalEvents() []interfaces.FactoryEvent             { return nil }
 func (*invalidHostedInstance) AddEventTypeRecorder(func(interfaces.FactoryEventType)) {}
-func (*invalidHostedInstance) StreamGeneration() string                      { return "" }
-func (*invalidHostedInstance) RuntimeLogger() *zap.Logger                    { return zap.NewNop() }
-func (*invalidHostedInstance) RuntimeMetrics() factory.MetricsEmitter        { return nil }
+func (*invalidHostedInstance) StreamGeneration() string                               { return "" }
+func (*invalidHostedInstance) RuntimeLogger() *zap.Logger                             { return zap.NewNop() }
+func (*invalidHostedInstance) RuntimeMetrics() factory.MetricsEmitter                 { return nil }
 func (*invalidHostedInstance) RuntimeDiagnostics() factory.RuntimeLogDiagnostics {
 	return factory.RuntimeLogDiagnostics{}
 }
-func (*invalidHostedInstance) RecordingLedger() recordings.Ledger            { return nil }
-func (*invalidHostedInstance) CloseArtifacts() error                         { return nil }
+func (*invalidHostedInstance) RecordingLedger() recordings.Ledger { return nil }
+func (*invalidHostedInstance) CloseArtifacts() error              { return nil }
 
 func TestStartStartsOneRunLoopAndWaitForStartObservesReadiness(t *testing.T) {
 	t.Parallel()
