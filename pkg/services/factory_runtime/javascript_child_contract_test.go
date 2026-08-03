@@ -41,24 +41,6 @@ func (p *rootOnlyPeer) PlanDispatch(_ context.Context, req factory.PlanDispatchR
 func (p *rootOnlyPeer) AcceptDispatchResult(_ context.Context, req factory.AcceptDispatchResultRequest) (factory.AcceptDispatchResultResult, error) {
 	return factory.AcceptDispatchResultResult{Outcome: factory.DispatchPlanOutcomeRetired, DispatchID: req.DispatchID}, p.err
 }
-func (p *rootOnlyPeer) CaptureCheckpoint(_ context.Context, req factory.CaptureCheckpointRequest) (factory.CaptureCheckpointResult, error) {
-	return factory.CaptureCheckpointResult{
-		Outcome: factory.CheckpointOutcomeCaptured,
-		Checkpoint: factory.Checkpoint{
-			CheckpointID: req.CheckpointID, SchemaVersion: 1, Payload: []byte(`{"opaque":true}`),
-		},
-	}, p.err
-}
-func (p *rootOnlyPeer) LoadCheckpoint(_ context.Context, req factory.LoadCheckpointRequest) (factory.LoadCheckpointResult, error) {
-	return factory.LoadCheckpointResult{
-		Outcome:    factory.CheckpointOutcomeLoaded,
-		Checkpoint: factory.Checkpoint{CheckpointID: req.CheckpointID, SchemaVersion: 1, Payload: []byte(`{}`)},
-	}, p.err
-}
-func (p *rootOnlyPeer) RestoreCheckpoint(_ context.Context, req factory.RestoreCheckpointRequest) (factory.RestoreCheckpointResult, error) {
-	return factory.RestoreCheckpointResult{Outcome: factory.CheckpointOutcomeRestored, CheckpointID: req.Checkpoint.CheckpointID}, p.err
-}
-
 func TestRootService_RootOnlyPeerReachesEverySlice(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -67,7 +49,6 @@ func TestRootService_RootOnlyPeerReachesEverySlice(t *testing.T) {
 	assertRootControlSlice(t, ctx, runtime)
 	assertRootObservationSlice(t, ctx, runtime)
 	assertRootDispatchSlice(t, ctx, runtime)
-	assertRootCheckpointSlice(t, ctx, runtime)
 }
 
 func assertRootControlSlice(t *testing.T, ctx context.Context, runtime factory.Service) {
@@ -97,20 +78,6 @@ func assertRootDispatchSlice(t *testing.T, ctx context.Context, runtime factory.
 	}
 }
 
-func assertRootCheckpointSlice(t *testing.T, ctx context.Context, runtime factory.Service) {
-	t.Helper()
-	captured, err := runtime.CaptureCheckpoint(ctx, factory.CaptureCheckpointRequest{CheckpointID: "checkpoint-1"})
-	if err != nil || captured.Outcome != factory.CheckpointOutcomeCaptured {
-		t.Fatalf("CaptureCheckpoint() = (%#v, %v)", captured, err)
-	}
-	if got, err := runtime.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "checkpoint-1"}); err != nil || got.Outcome != factory.CheckpointOutcomeLoaded {
-		t.Fatalf("LoadCheckpoint() = (%#v, %v)", got, err)
-	}
-	if got, err := runtime.RestoreCheckpoint(ctx, factory.RestoreCheckpointRequest{Checkpoint: captured.Checkpoint}); err != nil || got.Outcome != factory.CheckpointOutcomeRestored {
-		t.Fatalf("RestoreCheckpoint() = (%#v, %v)", got, err)
-	}
-}
-
 func TestRootService_RootOnlyPeerReturnsTypedFailures(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -128,10 +95,6 @@ func TestRootService_RootOnlyPeerReturnsTypedFailures(t *testing.T) {
 		}},
 		{"dispatch", factory.ErrUnknownDispatchCorrelation, func(runtime factory.Service) error {
 			_, err := runtime.AcceptDispatchResult(context.Background(), factory.AcceptDispatchResultRequest{})
-			return err
-		}},
-		{"checkpoint", factory.ErrCorruptCheckpoint, func(runtime factory.Service) error {
-			_, err := runtime.RestoreCheckpoint(context.Background(), factory.RestoreCheckpointRequest{})
 			return err
 		}},
 	}

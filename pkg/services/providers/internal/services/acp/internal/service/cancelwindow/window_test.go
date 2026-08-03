@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"sync"
 	"testing"
 	"time"
 
@@ -95,11 +96,13 @@ func TestWindowTryCancelDeliversNotificationAndBlocksUntilWindowCloses(t *testin
 	w := &Window{}
 	session := w.Begin("attempt-1", acpsdk.SessionId("session-1"), connection)
 
-	if !w.Live("attempt-1") {
-		t.Fatal("Live(attempt-1) = false, want true once Begin has run")
+	if _, ok := w.Claim("attempt-other"); ok {
+		t.Fatal("Claim(attempt-other) ok = true, want false for a different attempt id")
 	}
-	if w.Live("attempt-other") {
-		t.Fatal("Live(attempt-other) = true, want false for a different attempt id")
+
+	claimed, ok := w.Claim("attempt-1")
+	if !ok || claimed != session {
+		t.Fatalf("Claim(attempt-1) = (%v, %v), want the open session and true", claimed, ok)
 	}
 
 	type outcome struct {
@@ -108,7 +111,7 @@ func TestWindowTryCancelDeliversNotificationAndBlocksUntilWindowCloses(t *testin
 	}
 	tryCancelDone := make(chan outcome, 1)
 	go func() {
-		accepted, err := w.TryCancel(context.Background(), "attempt-1")
+		accepted, err := claimed.TryCancel(context.Background())
 		tryCancelDone <- outcome{accepted: accepted, err: err}
 	}()
 
@@ -132,60 +135,211 @@ func TestWindowTryCancelDeliversNotificationAndBlocksUntilWindowCloses(t *testin
 	if !result.accepted {
 		t.Fatal("TryCancel() accepted = false, want true when the turn's real outcome was cancellation")
 	}
-	if w.Live("attempt-1") {
-		t.Fatal("Live(attempt-1) = true after End, want false")
+	if _, ok := w.Claim("attempt-1"); ok {
+		t.Fatal("Claim(attempt-1) ok = true after End, want false")
 	}
 }
 
-func TestWindowTryCancelIsNoOpForMismatchedAttemptID(t *testing.T) {
+func TestWindowClaimIsNoOpForMismatchedAttemptID(t *testing.T) {
 	peer := newFakeSessionPeer()
 	connection := newPipedConnection(t, peer)
 
 	w := &Window{}
 	session := w.Begin("attempt-1", acpsdk.SessionId("session-1"), connection)
 
-	accepted, err := w.TryCancel(context.Background(), "attempt-other")
-	if err != nil {
-		t.Fatalf("TryCancel(mismatched) error = %v, want nil", err)
-	}
-	if accepted {
-		t.Fatal("TryCancel(mismatched) accepted = true, want false")
+	claimed, ok := w.Claim("attempt-other")
+	if ok || claimed != nil {
+		t.Fatalf("Claim(mismatched) = (%v, %v), want (nil, false)", claimed, ok)
 	}
 	select {
 	case notification := <-peer.received:
-		t.Fatalf("TryCancel(mismatched) sent a notification %#v, want none", notification)
+		t.Fatalf("Claim(mismatched) sent a notification %#v, want none", notification)
 	default:
 	}
 
 	w.End(session, false)
 }
 
-func TestWindowTryCancelIsNoOpBeforeWindowOpensAndAfterItCloses(t *testing.T) {
+func TestWindowClaimIsNoOpBeforeWindowOpensAndAfterItCloses(t *testing.T) {
 	peer := newFakeSessionPeer()
 	connection := newPipedConnection(t, peer)
 	w := &Window{}
 
-	accepted, err := w.TryCancel(context.Background(), "attempt-1")
-	if err != nil {
-		t.Fatalf("TryCancel(before window) error = %v, want nil", err)
-	}
-	if accepted {
-		t.Fatal("TryCancel(before window) accepted = true, want false")
+	claimed, ok := w.Claim("attempt-1")
+	if ok || claimed != nil {
+		t.Fatalf("Claim(before window) = (%v, %v), want (nil, false)", claimed, ok)
 	}
 
 	session := w.Begin("attempt-1", acpsdk.SessionId("session-1"), connection)
 	w.End(session, false)
 
-	accepted, err = w.TryCancel(context.Background(), "attempt-1")
-	if err != nil {
-		t.Fatalf("TryCancel(after window) error = %v, want nil", err)
-	}
-	if accepted {
-		t.Fatal("TryCancel(after window) accepted = true, want false")
+	claimed, ok = w.Claim("attempt-1")
+	if ok || claimed != nil {
+		t.Fatalf("Claim(after window) = (%v, %v), want (nil, false)", claimed, ok)
 	}
 	select {
 	case notification := <-peer.received:
-		t.Fatalf("TryCancel() outside the window sent a notification %#v, want none", notification)
+		t.Fatalf("Claim() outside the window sent a notification %#v, want none", notification)
+	default:
+	}
+}
+
+// TestWindowClaimPinsExactGenerationSoReusedAttemptIDCannotRedirectDelivery is
+// the deterministic ABA regression: claim generation A's session, let A
+// complete and fully close its window, open generation B with the identical
+// attemptID, then resume A's already-captured claim. Because TryCancel
+// operates only on the *Session pinned by Claim (never re-resolving via
+// Window.active/attemptID), A's stale delivery must report accepted=false,
+// err=nil and send nothing to B - B must receive zero notifications and stay
+// independently cancelable.
+func TestWindowClaimPinsExactGenerationSoReusedAttemptIDCannotRedirectDelivery(t *testing.T) {
+	peer := newFakeSessionPeer()
+	connection := newPipedConnection(t, peer)
+	w := &Window{}
+
+	sessionA := w.Begin("attempt-1", acpsdk.SessionId("session-A"), connection)
+	claimA, ok := w.Claim("attempt-1")
+	if !ok || claimA != sessionA {
+		t.Fatalf("Claim(A) = (%v, %v), want (sessionA, true)", claimA, ok)
+	}
+
+	// A completes normally (not via cancellation) and its window fully closes.
+	w.End(sessionA, false)
+	if _, ok := w.Claim("attempt-1"); ok {
+		t.Fatal("Claim(attempt-1) ok = true after A's End, want false: identity must be free for reuse")
+	}
+
+	// B opens, reusing the exact same attemptID string.
+	sessionB := w.Begin("attempt-1", acpsdk.SessionId("session-B"), connection)
+	t.Cleanup(func() { w.End(sessionB, false) })
+
+	// A's delayed signal now resumes against its already-captured claim.
+	accepted, err := claimA.TryCancel(context.Background())
+	if err != nil {
+		t.Fatalf("claimA.TryCancel() error = %v, want nil", err)
+	}
+	if accepted {
+		t.Fatal("claimA.TryCancel() accepted = true, want false: A already ended, must not reach B")
+	}
+	select {
+	case notification := <-peer.received:
+		t.Fatalf("claimA.TryCancel() sent a notification %#v, want none delivered to B", notification)
+	default:
+	}
+
+	// B must remain independently, correctly claimable/cancelable.
+	claimB, ok := w.Claim("attempt-1")
+	if !ok || claimB != sessionB {
+		t.Fatalf("Claim(B) = (%v, %v), want (sessionB, true)", claimB, ok)
+	}
+}
+
+// gatedWriter blocks the first Write call until release is closed, letting a
+// test pause a TryCancel goroutine at the exact instant it is inside its
+// outbound send - after it has already decided the generation was not yet
+// terminal - so a concurrent End can be attempted against that same window.
+// entered is closed once the blocked Write is reached, giving the test a
+// real synchronization point instead of a sleep.
+type gatedWriter struct {
+	w       io.Writer
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (g *gatedWriter) Write(p []byte) (int, error) {
+	g.once.Do(func() { close(g.entered) })
+	<-g.release
+	return g.w.Write(p)
+}
+
+// TestWindowEndReachesTerminalResultAndReleasesIdentityWhileATryCancelSendIsStuckPastTheSendBound
+// is the deterministic regression for the blocked-write liveness bug: an
+// earlier fix held session.mu across the outbound send itself, so a peer
+// that stopped reading mid-write (the acp-go-sdk connection does not honor
+// ctx once inside its synchronous io.Writer.Write call) left that mutex held
+// forever, and End - which must acquire the same mutex to record completion
+// - blocked indefinitely. That meant Window's active slot, the identity
+// reservation, and everything upstream that waits on daemon.execute
+// returning could hang forever on a single unresponsive peer. This test
+// pins TryCancel deep inside a send that is held open well past sendTimeout
+// (via gatedWriter, a real blocking primitive, not a sleep) and proves End
+// still reaches a defined terminal result and fully releases the window
+// promptly - including letting a same-identity Begin proceed immediately -
+// without ever waiting on that stuck send. It also proves that once the
+// stuck send is finally released, its late notification reaches only its
+// own session ID and never the replacement generation that reused the
+// identity in the meantime.
+func TestWindowEndReachesTerminalResultAndReleasesIdentityWhileATryCancelSendIsStuckPastTheSendBound(t *testing.T) {
+	peer := newFakeSessionPeer()
+	outboundReader, outboundWriter := io.Pipe()
+	gate := &gatedWriter{w: outboundWriter, entered: make(chan struct{}), release: make(chan struct{})}
+	go peer.run(outboundReader)
+	t.Cleanup(func() { _ = outboundWriter.Close() })
+	connection := acpsdk.NewClientSideConnection(noopClient{}, gate, io.MultiReader())
+
+	w := &Window{}
+	sessionA := w.Begin("attempt-1", acpsdk.SessionId("session-A"), connection)
+	claimedA, ok := w.Claim("attempt-1")
+	if !ok || claimedA != sessionA {
+		t.Fatalf("Claim(attempt-1) = (%v, %v), want the open session and true", claimedA, ok)
+	}
+
+	type outcome struct {
+		accepted bool
+		err      error
+	}
+	tryCancelDone := make(chan outcome, 1)
+	go func() {
+		accepted, err := claimedA.TryCancel(context.Background())
+		tryCancelDone <- outcome{accepted: accepted, err: err}
+	}()
+
+	// TryCancel has won ownership of A and is now blocked mid-send, well past
+	// what sendTimeout would bound if the SDK actually honored it.
+	<-gate.entered
+	time.Sleep(2 * sendTimeout)
+
+	endDone := make(chan struct{})
+	go func() {
+		// A's real Execute() outcome was not a cancellation - the daemon's
+		// own response raced ahead of the (still in-flight) cancel send.
+		w.End(sessionA, false)
+		close(endDone)
+	}()
+
+	select {
+	case <-endDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("End() did not reach a terminal result while TryCancel's send was stuck; a blocked peer write must never block End")
+	}
+
+	// The identity must be free for reuse immediately - not just eventually.
+	sessionB := w.Begin("attempt-1", acpsdk.SessionId("session-B"), connection)
+	claimedB, ok := w.Claim("attempt-1")
+	if !ok || claimedB != sessionB {
+		t.Fatalf("Claim(attempt-1) after A's End = (%v, %v), want the fresh session B and true", claimedB, ok)
+	}
+	w.End(sessionB, false)
+
+	// Now let A's long-stuck send finally land.
+	close(gate.release)
+
+	result := <-tryCancelDone
+	if result.err != nil {
+		t.Fatalf("TryCancel() error = %v, want nil", result.err)
+	}
+	if result.accepted {
+		t.Fatal("TryCancel() accepted = true, want false: End already recorded A's outcome before this call could observe cancellation")
+	}
+
+	notification := <-peer.received
+	if notification.SessionId != "session-A" {
+		t.Fatalf("late notification SessionId = %q, want session-A (A's own identity), never B's", notification.SessionId)
+	}
+	select {
+	case extra := <-peer.received:
+		t.Fatalf("received an unexpected second notification %#v, want exactly one (A's stale send, never one addressed to B)", extra)
 	default:
 	}
 }
@@ -208,6 +362,10 @@ func TestWindowTryCancelLosesRaceToNaturalCompletionReportsUnsupportedNotComplet
 
 	w := &Window{}
 	session := w.Begin("attempt-1", acpsdk.SessionId("session-1"), connection)
+	claimed, ok := w.Claim("attempt-1")
+	if !ok {
+		t.Fatal("Claim(attempt-1) ok = false, want true")
+	}
 
 	type outcome struct {
 		accepted bool
@@ -215,7 +373,7 @@ func TestWindowTryCancelLosesRaceToNaturalCompletionReportsUnsupportedNotComplet
 	}
 	tryCancelDone := make(chan outcome, 1)
 	go func() {
-		accepted, err := w.TryCancel(context.Background(), "attempt-1")
+		accepted, err := claimed.TryCancel(context.Background())
 		tryCancelDone <- outcome{accepted: accepted, err: err}
 	}()
 
@@ -246,6 +404,10 @@ func TestWindowTryCancelReturnsPromptlyWhenCallerContextEndsWhileWaiting(t *test
 	w := &Window{}
 	session := w.Begin("attempt-1", acpsdk.SessionId("session-1"), connection)
 	t.Cleanup(func() { w.End(session, false) })
+	claimed, ok := w.Claim("attempt-1")
+	if !ok {
+		t.Fatal("Claim(attempt-1) ok = false, want true")
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	type outcome struct {
@@ -254,7 +416,7 @@ func TestWindowTryCancelReturnsPromptlyWhenCallerContextEndsWhileWaiting(t *test
 	}
 	tryCancelDone := make(chan outcome, 1)
 	go func() {
-		accepted, err := w.TryCancel(ctx, "attempt-1")
+		accepted, err := claimed.TryCancel(ctx)
 		tryCancelDone <- outcome{accepted: accepted, err: err}
 	}()
 
@@ -295,13 +457,17 @@ func TestWindowTryCancelReturnsSendFailurePromptlyWithoutWaitingForDoneToClose(t
 
 	w := &Window{}
 	w.Begin("attempt-1", acpsdk.SessionId("session-1"), connection)
+	claimed, ok := w.Claim("attempt-1")
+	if !ok {
+		t.Fatal("Claim(attempt-1) ok = false, want true")
+	}
 
 	done := make(chan struct {
 		accepted bool
 		err      error
 	}, 1)
 	go func() {
-		accepted, err := w.TryCancel(context.Background(), "attempt-1")
+		accepted, err := claimed.TryCancel(context.Background())
 		done <- struct {
 			accepted bool
 			err      error

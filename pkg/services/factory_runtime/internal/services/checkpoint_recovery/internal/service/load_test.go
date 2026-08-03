@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	checkpointrecovery "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery"
 	checkpointrecoveryservice "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/service"
 	checkpointrecoverywire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/wire"
@@ -78,7 +77,7 @@ func TestRecoveryLoadRejectsMissingCheckpointIdentity(t *testing.T) {
 
 	recovery := checkpointrecoverywire.New()
 	_, err := recovery.Load(checkpointrecovery.LoadRequest{})
-	if !errors.Is(err, factoryruntime.ErrCheckpointNotFound) {
+	if !errors.Is(err, checkpointrecovery.ErrCheckpointNotFound) {
 		t.Fatalf("Load() error = %v, want ErrCheckpointNotFound", err)
 	}
 }
@@ -88,7 +87,7 @@ func TestRecoveryLoadRejectsMissingCheckpoint(t *testing.T) {
 
 	recovery := checkpointrecoverywire.New()
 	_, err := recovery.Load(checkpointrecovery.LoadRequest{CheckpointID: "missing"})
-	if !errors.Is(err, factoryruntime.ErrCheckpointNotFound) {
+	if !errors.Is(err, checkpointrecovery.ErrCheckpointNotFound) {
 		t.Fatalf("Load() error = %v, want ErrCheckpointNotFound", err)
 	}
 }
@@ -98,7 +97,7 @@ func TestRecoveryLoadRejectsCorruptStoredEnvelope(t *testing.T) {
 
 	recovery := checkpointrecoveryservice.New(corruptEnvelopeStore{})
 	_, err := recovery.Load(checkpointrecovery.LoadRequest{CheckpointID: "checkpoint-1"})
-	if !errors.Is(err, factoryruntime.ErrCorruptCheckpoint) {
+	if !errors.Is(err, checkpointrecovery.ErrCorruptCheckpoint) {
 		t.Fatalf("Load() error = %v, want ErrCorruptCheckpoint", err)
 	}
 }
@@ -110,5 +109,5 @@ func (corruptEnvelopeStore) Put(checkpointrecovery.Envelope) error {
 }
 
 func (corruptEnvelopeStore) Get(string) (checkpointrecovery.Envelope, error) {
-	return checkpointrecovery.Envelope{}, factoryruntime.ErrCorruptCheckpoint
+	return checkpointrecovery.Envelope{}, checkpointrecovery.ErrCorruptCheckpoint
 }

@@ -147,33 +147,6 @@ func (fs *SessionRuntime) AcceptDispatchResult(ctx context.Context, req factory.
 	return runtime.AcceptDispatchResult(ctx, req)
 }
 
-// CaptureCheckpoint routes checkpoint capture to the current replaceable runtime.
-func (fs *SessionRuntime) CaptureCheckpoint(ctx context.Context, req factory.CaptureCheckpointRequest) (factory.CaptureCheckpointResult, error) {
-	runtime := fs.currentRuntimeService()
-	if runtime == nil {
-		return factory.CaptureCheckpointResult{}, factory.ErrNotFound
-	}
-	return runtime.CaptureCheckpoint(ctx, req)
-}
-
-// LoadCheckpoint routes checkpoint loading to the current replaceable runtime.
-func (fs *SessionRuntime) LoadCheckpoint(ctx context.Context, req factory.LoadCheckpointRequest) (factory.LoadCheckpointResult, error) {
-	runtime := fs.currentRuntimeService()
-	if runtime == nil {
-		return factory.LoadCheckpointResult{}, factory.ErrNotFound
-	}
-	return runtime.LoadCheckpoint(ctx, req)
-}
-
-// RestoreCheckpoint routes checkpoint restoration to the current replaceable runtime.
-func (fs *SessionRuntime) RestoreCheckpoint(ctx context.Context, req factory.RestoreCheckpointRequest) (factory.RestoreCheckpointResult, error) {
-	runtime := fs.currentRuntimeService()
-	if runtime == nil {
-		return factory.RestoreCheckpointResult{}, factory.ErrNotFound
-	}
-	return runtime.RestoreCheckpoint(ctx, req)
-}
-
 func (fs *SessionRuntime) submitWorkFile(ctx context.Context) error {
 	workFile := fs.workFile
 	if fs.initialWorkFiles == nil {

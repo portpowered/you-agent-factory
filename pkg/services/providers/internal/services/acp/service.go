@@ -16,28 +16,40 @@ type Service interface {
 	Resolve(providers.ID) (providers.ID, bool)
 	Execute(context.Context, providers.ID, providers.ExecuteRequest) (providers.ExecuteResult, error)
 
-	// Cancelable reports, without any side effect, whether id/attemptID names
-	// the exact attempt this service currently has an established session/
-	// prompt turn in flight for -- the only ACP protocol state a session/
-	// cancel notification can truthfully target. It answers false before the
-	// session exists, after the turn has already returned, and for any other
-	// attempt or provider identity. It is a cheap, deliberately racy
-	// pre-filter (the turn can end at any moment after this call returns);
-	// callers that need a truthful accept/reject outcome must use TryCancel,
-	// which re-derives liveness atomically at the instant it acts instead of
-	// trusting an earlier Cancelable observation.
-	Cancelable(id providers.ID, attemptID string) bool
+	// Claim atomically captures the exact live execution generation named by
+	// id/attemptID, without any other side effect, when this service
+	// currently has an established session/prompt turn in flight for it --
+	// the only ACP protocol state a session/cancel notification can
+	// truthfully target. ok is false before the session exists, after the
+	// turn has already returned, and for any other attempt or provider
+	// identity. The returned Generation is an opaque capability: TryCancel
+	// delivers only to the exact generation it names, so a control that has
+	// claimed one generation can never be redirected to a later generation
+	// that reuses the identical id/attemptID strings, even if this attempt
+	// completes and a new one binds that identity before TryCancel runs.
+	Claim(id providers.ID, attemptID string) (generation Generation, ok bool)
 
-	// TryCancel atomically determines whether id/attemptID names the exact
-	// live session/prompt turn and, only if so, delivers a session/cancel
-	// protocol notification to it and blocks (bounded by ctx) until the turn
-	// returns. accepted is true only when the turn's real recorded outcome
-	// was that cancellation -- never merely because a matching identity was
-	// observed a moment earlier -- so a natural completion racing this call
-	// is reported as accepted=false, not a false positive. A non-nil err
-	// reports a genuine delivery failure or ctx ending before the turn's
+	// TryCancel delivers a session/cancel protocol notification to the exact
+	// generation named by generation (as previously captured by Claim) and
+	// blocks (bounded by ctx) until it observes that generation's real
+	// recorded terminal outcome. accepted is true only when the generation's
+	// real recorded outcome was that cancellation -- never merely because
+	// Claim observed it live a moment earlier -- so a natural completion
+	// racing this call, or a generation that has already ended by the time
+	// this call runs, is reported as accepted=false, not a false positive. A
+	// non-nil err reports a genuine delivery failure or ctx ending before the
 	// outcome could be observed; both are distinguishable from
-	// accepted=false, err=nil (unsupported/lost-the-race) and from each
-	// other (errors.Is against the returned error identifies which).
-	TryCancel(ctx context.Context, id providers.ID, attemptID string) (accepted bool, err error)
+	// accepted=false, err=nil (unsupported/lost-the-race/already-terminal)
+	// and from each other (errors.Is against the returned error identifies
+	// which).
+	TryCancel(ctx context.Context, generation Generation) (accepted bool, err error)
 }
+
+// Generation is an opaque capability naming one exact live ACP execution
+// generation, captured by Claim at the instant it observed that generation
+// live. Provider and attempt identity strings alone can never rediscover or
+// replace the generation a Generation value names: this is what lets a
+// claimed control retain authority over only the exact generation it was
+// claimed from, even after that generation ends and a later execution reuses
+// the same canonical provider and attempt ID.
+type Generation any

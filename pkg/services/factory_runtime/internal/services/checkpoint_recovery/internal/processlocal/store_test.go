@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	checkpointrecovery "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery"
 	checkpointrecoverywire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/wire"
 )
@@ -42,6 +41,52 @@ func TestStoreRoundTripsOpaqueEnvelopeByCheckpointID(t *testing.T) {
 	if string(gotAgain.Payload) != "opaque-payload" {
 		t.Fatalf("stored payload alias leaked mutation: %q", gotAgain.Payload)
 	}
+
+	got.Payload[0] = 'Y'
+	gotOnceMore, err := store.Get("checkpoint-1")
+	if err != nil {
+		t.Fatalf("Get() after returned-copy mutation error = %v", err)
+	}
+	if string(gotOnceMore.Payload) != "opaque-payload" {
+		t.Fatalf("returned payload alias leaked mutation into stored state: %q", gotOnceMore.Payload)
+	}
+}
+
+func TestStoreIsolatesIndependentlyConstructedStores(t *testing.T) {
+	t.Parallel()
+
+	storeA := checkpointrecoverywire.NewProcessLocalCheckpointStore()
+	storeB := checkpointrecoverywire.NewProcessLocalCheckpointStore()
+
+	if err := storeA.Put(checkpointrecovery.Envelope{
+		CheckpointID:  "checkpoint-1",
+		SchemaVersion: 1,
+		StrategyKind:  "opaque",
+		Payload:       []byte("store-a-payload"),
+	}); err != nil {
+		t.Fatalf("storeA.Put() error = %v", err)
+	}
+
+	if _, err := storeB.Get("checkpoint-1"); !errors.Is(err, checkpointrecovery.ErrCheckpointNotFound) {
+		t.Fatalf("storeB.Get() error = %v, want ErrCheckpointNotFound (store isolation violated)", err)
+	}
+
+	if err := storeB.Put(checkpointrecovery.Envelope{
+		CheckpointID:  "checkpoint-1",
+		SchemaVersion: 1,
+		StrategyKind:  "opaque",
+		Payload:       []byte("store-b-payload"),
+	}); err != nil {
+		t.Fatalf("storeB.Put() error = %v", err)
+	}
+
+	gotA, err := storeA.Get("checkpoint-1")
+	if err != nil {
+		t.Fatalf("storeA.Get() error = %v", err)
+	}
+	if string(gotA.Payload) != "store-a-payload" {
+		t.Fatalf("storeA.Get() payload = %q, want unaffected by storeB.Put (store isolation violated)", gotA.Payload)
+	}
 }
 
 func TestStoreRejectsCorruptEnvelopesOnPut(t *testing.T) {
@@ -56,17 +101,17 @@ func TestStoreRejectsCorruptEnvelopesOnPut(t *testing.T) {
 		{
 			name:      "empty checkpoint id",
 			envelope:  checkpointrecovery.Envelope{SchemaVersion: 1, Payload: []byte("payload")},
-			wantError: factoryruntime.ErrCorruptCheckpoint,
+			wantError: checkpointrecovery.ErrCorruptCheckpoint,
 		},
 		{
 			name:      "non-positive schema version",
 			envelope:  checkpointrecovery.Envelope{CheckpointID: "checkpoint-1", Payload: []byte("payload")},
-			wantError: factoryruntime.ErrCorruptCheckpoint,
+			wantError: checkpointrecovery.ErrCorruptCheckpoint,
 		},
 		{
 			name:      "empty payload",
 			envelope:  checkpointrecovery.Envelope{CheckpointID: "checkpoint-1", SchemaVersion: 1},
-			wantError: factoryruntime.ErrCorruptCheckpoint,
+			wantError: checkpointrecovery.ErrCorruptCheckpoint,
 		},
 	}
 
@@ -88,12 +133,12 @@ func TestStoreReportsMissingCheckpointIdentity(t *testing.T) {
 	store := checkpointrecoverywire.NewProcessLocalCheckpointStore()
 
 	_, err := store.Get("")
-	if !errors.Is(err, factoryruntime.ErrCheckpointNotFound) {
+	if !errors.Is(err, checkpointrecovery.ErrCheckpointNotFound) {
 		t.Fatalf("Get(\"\") error = %v, want ErrCheckpointNotFound", err)
 	}
 
 	_, err = store.Get("missing-checkpoint")
-	if !errors.Is(err, factoryruntime.ErrCheckpointNotFound) {
+	if !errors.Is(err, checkpointrecovery.ErrCheckpointNotFound) {
 		t.Fatalf("Get(missing) error = %v, want ErrCheckpointNotFound", err)
 	}
 }

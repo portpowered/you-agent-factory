@@ -106,45 +106,6 @@ func (f *rootControlObservationFake) AcceptDispatchResult(
 	}, nil
 }
 
-func (f *rootControlObservationFake) CaptureCheckpoint(
-	_ context.Context,
-	req factoryruntime.CaptureCheckpointRequest,
-) (factoryruntime.CaptureCheckpointResult, error) {
-	id := req.CheckpointID
-	if id == "" {
-		id = "checkpoint-stub"
-	}
-	return factoryruntime.CaptureCheckpointResult{
-		Outcome: factoryruntime.CheckpointOutcomeCaptured,
-		Checkpoint: factoryruntime.Checkpoint{
-			CheckpointID:  id,
-			SchemaVersion: 1,
-			StrategyKind:  "runtime",
-			Payload:       []byte(`{}`),
-		},
-	}, nil
-}
-
-func (f *rootControlObservationFake) LoadCheckpoint(
-	_ context.Context,
-	req factoryruntime.LoadCheckpointRequest,
-) (factoryruntime.LoadCheckpointResult, error) {
-	if req.CheckpointID == "" {
-		return factoryruntime.LoadCheckpointResult{}, factoryruntime.ErrCheckpointNotFound
-	}
-	return factoryruntime.LoadCheckpointResult{}, factoryruntime.ErrCheckpointNotFound
-}
-
-func (f *rootControlObservationFake) RestoreCheckpoint(
-	_ context.Context,
-	req factoryruntime.RestoreCheckpointRequest,
-) (factoryruntime.RestoreCheckpointResult, error) {
-	return factoryruntime.RestoreCheckpointResult{
-		Outcome:      factoryruntime.CheckpointOutcomeRestored,
-		CheckpointID: req.Checkpoint.CheckpointID,
-	}, nil
-}
-
 func (f *rootControlObservationFake) SubmitWorkRequest(
 	context.Context,
 	work.WorkRequest,
@@ -244,7 +205,7 @@ func boundaryDependencies(runtime factoryruntime.Service) liveruntime.Dependenci
 			return factorysessions.ProjectionContext{}, nil
 		},
 		SessionFactory: func(string) (factoryruntime.Service, error) { return runtime, nil },
-		StopSession:      func(string) error { return nil },
+		StopSession:    func(string) error { return nil },
 		ObserveControl: func(string, factorysessions.LifecycleControlKind, factorysessions.ControlRequest, factorysessions.LifecycleControlOutcome, factorysessions.LifecycleStatus, error) {
 		},
 	}

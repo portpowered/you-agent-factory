@@ -16,8 +16,6 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
-	checkpointrecovery "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery"
-	checkpointrecoverywire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/wire"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
@@ -47,20 +45,19 @@ type TickableFactory interface {
 
 // factoryImpl is the concrete Factory implementation.
 type factoryImpl struct {
-	engine             *engine.FactoryEngine
-	cfg                *runtimeConfig
-	topology           *state.Net
-	logger             logging.Logger
-	resultBuffer       *buffers.TypedBuffer[workerexecution.WorkResult]
-	dispatchFlow       *dispatchPlanningResultHook
-	dispatchPlan       dispatchplanning.Service
-	checkpointRecovery checkpointrecovery.Service
-	workers            workers.WorkstationPoolBoundary
-	eventHistory       recordings.RuntimeLedger
-	state              interfaces.FactoryState
-	startedAt          time.Time
-	clock              factory.Clock
-	mu                 sync.RWMutex
+	engine       *engine.FactoryEngine
+	cfg          *runtimeConfig
+	topology     *state.Net
+	logger       logging.Logger
+	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult]
+	dispatchFlow *dispatchPlanningResultHook
+	dispatchPlan dispatchplanning.Service
+	workers      workers.WorkstationPoolBoundary
+	eventHistory recordings.RuntimeLedger
+	state        interfaces.FactoryState
+	startedAt    time.Time
+	clock        factory.Clock
+	mu           sync.RWMutex
 	// completeCh is closed when Run() returns (either by termination or error).
 	// WaitToComplete() returns this channel.
 	completeCh           chan struct{}
@@ -199,7 +196,7 @@ func New(
 	)
 	impl := newFactoryImpl(
 		cfg, nil, effectiveLogger, resultBuffer,
-		dispatchResultHook, dispatchPlan, checkpointrecoverywire.New(), workersBoundary, effectiveEventHistory,
+		dispatchResultHook, dispatchPlan, workersBoundary, effectiveEventHistory,
 	)
 	var recordPetriMutations func([]interfaces.TokenMutationRecord) error
 	if cfg.petriMutationRecorder != nil {
@@ -450,7 +447,6 @@ func newFactoryImpl(
 	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult],
 	dispatchFlow *dispatchPlanningResultHook,
 	dispatchPlan dispatchplanning.Service,
-	checkpointRecovery checkpointrecovery.Service,
 	workersBoundary workers.WorkstationPoolBoundary,
 	eventHistory recordings.RuntimeLedger,
 ) *factoryImpl {
@@ -462,7 +458,6 @@ func newFactoryImpl(
 		resultBuffer:         resultBuffer,
 		dispatchFlow:         dispatchFlow,
 		dispatchPlan:         dispatchPlan,
-		checkpointRecovery:   checkpointRecovery,
 		workers:              workersBoundary,
 		eventHistory:         eventHistory,
 		state:                interfaces.FactoryStateIdle,
