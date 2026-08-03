@@ -1,0 +1,22 @@
+{
+  "formatVersion": "pss-path-lease-packet-manifest/v1",
+  "packets": [
+    {
+      "packetId": "PSS-I01",
+      "leaseClass": "root-wire-process",
+      "exclusivePaths": [
+        "pkg/root/process.go",
+        "pkg/wire/profiles.go",
+        "pkg/wire/wire.go"
+      ],
+      "state": "active"
+    },
+    {
+      "packetId": "PKT-STRUCTURAL-CONFLICT",
+      "exclusivePaths": [
+        "pkg/root/process.go"
+      ],
+      "state": "blocked"
+    }
+  ]
+}
