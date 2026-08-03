@@ -67,14 +67,22 @@ type Store struct {
 // removed or overwritten, only advanced in place via AdvanceControl, so a
 // reused RequestID can never retarget or rewrite an existing intent's
 // captured facts.
+// turnsByRequest indexes every admitted Turn by the RequestIdentity that
+// admitted it, independent of turns (which is keyed by Turn.ID) -- so
+// StartTurn can recognize a redelivered request (including one whose
+// originally admitted turn has since terminalized and released
+// ActiveTurnID) and return the existing turn instead of admitting a second
+// one and dispatching its effects again. Like controls, an entry here is
+// never removed or overwritten.
 type sessionRecord struct {
-	session      chatsessions.Session
-	episodes     []chatsessions.TargetEpisode
-	turns        map[string]chatsessions.Turn
-	lastTurnID   string
-	turnSequence uint64
-	attachments  map[string]chatsessions.Attachment
-	controls     map[chatsessions.RequestIdentity]chatsessions.ControlIntent
+	session        chatsessions.Session
+	episodes       []chatsessions.TargetEpisode
+	turns          map[string]chatsessions.Turn
+	turnsByRequest map[chatsessions.RequestIdentity]string
+	lastTurnID     string
+	turnSequence   uint64
+	attachments    map[string]chatsessions.Attachment
+	controls       map[chatsessions.RequestIdentity]chatsessions.ControlIntent
 }
 
 // activeTurnValue returns the session's current active Turn read live from

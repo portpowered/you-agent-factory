@@ -61,6 +61,12 @@ var (
 	// silently wrap to 0 instead of producing the next monotonic episode
 	// identity.
 	ErrTargetEpisodeNumberExhausted = errors.New("chat sessions: target episode number is exhausted")
+	// ErrFactorySessionAlreadyBound reports that BindFactorySession could
+	// not commit a Factory Session identity onto a TargetEpisode because
+	// that episode's binding is already committed to a different identity.
+	// It is distinct from ErrStaleVersion: the caller's ExpectedVersion was
+	// current, but a concurrent or earlier bind attempt already won.
+	ErrFactorySessionAlreadyBound = errors.New("chat sessions: target episode factory session is already bound to a different identity")
 )
 
 // ValidationError reports one Chat Sessions value-validation failure. Value
@@ -174,6 +180,31 @@ func (e *ConflictError) Error() string {
 // failure.
 func (e *ConflictError) Unwrap() error {
 	return ErrStaleVersion
+}
+
+// FactorySessionConflictError reports that BindFactorySession rejected a
+// commit attempt because the named session's target episode already carries
+// a different Factory Session identity than the one being bound. Bound is
+// the identity already committed; Attempted is the identity the rejected
+// call tried to commit instead. Neither value is sensitive: both are opaque
+// Factory Session identifiers, safe to cross a service boundary the same way
+// BusyError's ActiveTurnID already is.
+type FactorySessionConflictError struct {
+	SessionID string
+	Episode   uint64
+	Bound     string
+	Attempted string
+}
+
+func (e *FactorySessionConflictError) Error() string {
+	return fmt.Sprintf("chat sessions: session %q episode %d: %v: bound %q, attempted %q",
+		e.SessionID, e.Episode, ErrFactorySessionAlreadyBound, e.Bound, e.Attempted)
+}
+
+// Unwrap exposes ErrFactorySessionAlreadyBound so errors.Is/errors.As can
+// classify the failure.
+func (e *FactorySessionConflictError) Unwrap() error {
+	return ErrFactorySessionAlreadyBound
 }
 
 // TargetEpisodeNotClosedError reports that OpenNextTargetEpisode was invoked
