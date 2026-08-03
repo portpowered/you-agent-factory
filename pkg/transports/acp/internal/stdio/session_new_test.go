@@ -36,6 +36,8 @@ type fakeChatSessionsService struct {
 	setTargetReq    chatsessions.SetTargetRequest
 	setTargetResult chatsessions.SetTargetResult
 	setTargetErr    error
+
+	startTurnCalled bool
 }
 
 var _ chatsessions.Service = (*fakeChatSessionsService)(nil)
@@ -80,6 +82,7 @@ func (f *fakeChatSessionsService) SetTarget(_ context.Context, req chatsessions.
 }
 
 func (f *fakeChatSessionsService) StartTurn(context.Context, chatsessions.StartTurnRequest) (chatsessions.StartTurnResult, error) {
+	f.startTurnCalled = true
 	return chatsessions.StartTurnResult{}, errors.New("fakeChatSessionsService: StartTurn not implemented")
 }
 

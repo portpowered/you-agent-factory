@@ -2,14 +2,17 @@
 // caller-owned stream serving, one-connection lifecycle, connection-scoped
 // identity assignment, newline-delimited JSON-RPC framing and dispatch for
 // the "initialize", "session/new", and "session/set_config_option" methods,
-// protocol-safe rejection of malformed input, unsupported methods, and
-// unsupported protocol versions, and deterministic termination on clean EOF,
-// context cancellation, a partial trailing frame, or a writer failure. Every
-// method other than those three -- including deferred ACP session and prompt
-// methods -- is not yet implemented by this transport and receives
-// method-not-found rather than being dispatched. It is internal to
-// pkg/transports/acp; callers use the package root's exported operations
-// instead of this package directly.
+// plus the "/factory <value>" fallback command recognized within
+// "session/prompt" (final-proposal.md §3), protocol-safe rejection of
+// malformed input, unsupported methods, and unsupported protocol versions,
+// and deterministic termination on clean EOF, context cancellation, a
+// partial trailing frame, or a writer failure. "session/prompt" content
+// other than the exact "/factory <value>" command -- including every other
+// deferred ACP session and prompt behavior -- is not yet implemented by
+// this transport and receives method-not-found rather than being
+// dispatched to any effect. It is internal to pkg/transports/acp; callers
+// use the package root's exported operations instead of this package
+// directly.
 package stdio
 
 import (
@@ -49,7 +52,8 @@ var errNullInitializeParams = errors.New("acp: initialize params must not be nul
 // supplies for that call.
 //
 // chatSessions and catalog are the canonical Chat Sessions collaborators
-// "session/new" and "session/set_config_option" dispatch to; resolveHomeDir
+// "session/new", "session/set_config_option", and the "/factory" fallback
+// command dispatch to; resolveHomeDir
 // supplies the operator home directory used to derive the Operator Settings
 // document path and Factory discovery roots for a catalog resolution. Any of
 // the three may be nil, in which case a dispatched method reports a bounded
@@ -203,20 +207,23 @@ func (s *Server) serveConnection(ctx context.Context, connectionID identity.Conn
 // connectionID. It returns the decoded envelope -- the zero Envelope, or an
 // Envelope carrying only a correlated Identity, for a message that never
 // successfully decoded -- alongside the outcome: a non-nil result for a
-// successful "initialize", "session/new", or "session/set_config_option"
-// exchange, or a bounded, protocol-safe *acpsdk.RequestError for every
-// rejection. An envelope.Decode failure is classified by
-// protocol.RejectEnvelope into a parse error (uncorrelated, for unparseable
-// JSON) or an invalid-request error (correlated to the message's id when
-// that id was itself syntactically valid); a decoded "initialize" envelope
-// with valid params that Negotiate rejects becomes the richer
-// unsupported-protocol-version error unwrapped, and every other rejection --
-// an unimplemented method, or params that fail to decode into the pinned
-// request shape -- becomes method-not-found or invalid-params. The only
-// methods this transport dispatches to an effect in this slice are
-// "initialize", "session/new", and "session/set_config_option";
-// protocol-version policy is delegated entirely to the existing V0
-// negotiation behavior rather than re-implemented here.
+// successful "initialize", "session/new", "session/set_config_option", or
+// "/factory <value>"-recognized "session/prompt" exchange, or a bounded,
+// protocol-safe *acpsdk.RequestError for every rejection. An
+// envelope.Decode failure is classified by protocol.RejectEnvelope into a
+// parse error (uncorrelated, for unparseable JSON) or an invalid-request
+// error (correlated to the message's id when that id was itself
+// syntactically valid); a decoded "initialize" envelope with valid params
+// that Negotiate rejects becomes the richer unsupported-protocol-version
+// error unwrapped, and every other rejection -- an unimplemented method,
+// params that fail to decode into the pinned request shape, or
+// "session/prompt" content that is not the "/factory <value>" command --
+// becomes method-not-found or invalid-params. The only methods this
+// transport dispatches to an effect in this slice are "initialize",
+// "session/new", "session/set_config_option", and "session/prompt" (only
+// for its "/factory <value>" fallback command form); protocol-version
+// policy is delegated entirely to the existing V0 negotiation behavior
+// rather than re-implemented here.
 func (s *Server) dispatchRequest(ctx context.Context, connectionID identity.ConnectionID, notificationSeq uint64, raw json.RawMessage) (envelope.Envelope, json.RawMessage, *acpsdk.RequestError) {
 	env, err := envelope.Decode(connectionID, notificationSeq, raw)
 	if err != nil {
@@ -243,6 +250,9 @@ func (s *Server) dispatchRequest(ctx context.Context, connectionID identity.Conn
 		return env, result, rpcErr
 	case acpsdk.AgentMethodSessionSetConfigOption:
 		result, rpcErr := s.handleSessionSetConfigOption(ctx, env)
+		return env, result, rpcErr
+	case acpsdk.AgentMethodSessionPrompt:
+		result, rpcErr := s.handleSessionPrompt(ctx, env)
 		return env, result, rpcErr
 	default:
 		return env, nil, protocol.MethodNotFound(env.Method)
