@@ -22,6 +22,7 @@ type Service struct {
 	packagedACP []providers.ACPIntegration
 	lifecycles  []providers.Lifecycle
 	logger      logging.Logger
+	attempts    *liveAttemptRegistry
 }
 
 var _ providers.Service = (*Service)(nil)
@@ -74,6 +75,7 @@ func newService(
 		packagedACP: cloneACPIntegrations(packagedACP),
 		lifecycles:  append([]providers.Lifecycle(nil), lifecycles...),
 		logger:      logging.EnsureLogger(logger),
+		attempts:    newLiveAttemptRegistry(),
 	}, nil
 }
 
@@ -143,6 +145,11 @@ func (s *Service) Execute(
 				}
 			}
 			request.Provider = canonical
+			release, bindErr := s.bindLiveAttempt(canonical, request.AttemptID)
+			if bindErr != nil {
+				return providers.ExecuteResult{}, bindErr
+			}
+			defer release()
 			return s.acp.Execute(ctx, canonical, request)
 		}
 	}
@@ -163,7 +170,28 @@ func (s *Service) Execute(
 			Message: "Agy does not support a separate reasoning effort",
 		}
 	}
+	release, bindErr := s.bindLiveAttempt(canonicalProvider, request.AttemptID)
+	if bindErr != nil {
+		return providers.ExecuteResult{}, bindErr
+	}
+	defer release()
 	return s.execution.Execute(ctx, request)
+}
+
+// bindLiveAttempt registers canonical/attemptID as the one live execution for
+// that exact identity before its controllable provider operation begins. A
+// collision with an already-live identity is reported through the same typed
+// ExecuteFailure model as any other Execute rejection, before any provider
+// side effect for the second request begins.
+func (s *Service) bindLiveAttempt(canonical providers.ID, attemptID string) (func(), error) {
+	release, err := s.attempts.bind(liveAttemptKey{provider: canonical, attemptID: attemptID})
+	if err != nil {
+		return nil, providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindInvalidRequest,
+			Message: err.Error(),
+		}
+	}
+	return release, nil
 }
 
 // ControlAttempt answers every valid pause, cancel, or terminate request with
