@@ -69,14 +69,25 @@ func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *t
 	seedInstalledPackagedFactory(t, home, "@you/goal")
 	seedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
 
-	// ProviderOverride (an in-process Provider fake) rather than
-	// ProviderCommandRunner (a subprocess-shaped fake) is the same
-	// established pattern this exact packaged Factory's own functional tests
-	// already use for the @you/goal fixture elsewhere (see
-	// tests/functional/cli/named_invocation/named_invocation_test.go's
-	// TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatureInput),
-	// not a deviation this test introduces; both edges are equally real
-	// external-effect ports serviceedges.Edges accepts.
+	// ProviderOverride (an in-process workers.Provider fake) is used here
+	// instead of the standards-preferred ProviderCommandRunner
+	// (platformprocess.CommandRunner, a subprocess-launch-shaped fake).
+	// ProviderCommandRunner *can* drive this exact @you/goal fixture --
+	// tests/functional/cli/named_invocation/named_invocation_test.go already
+	// does, via testutil.NewProviderCommandRunner -- so the substitution here
+	// is not technical necessity, it is deliberately matching the simplest
+	// fake that reproduces the one outcome this test asserts on: a genuine
+	// published FAILED status from @you/goal's own goal loop, which needs a
+	// real child worker dispatch neither fake alone satisfies (see this
+	// file's doc comment). Swapping to ProviderCommandRunner would require
+	// discovering and queuing the exact raw subprocess Stdout bytes this
+	// Factory's execution adapter expects across however many dispatch
+	// rounds precede the real failure, coupling this test to that adapter's
+	// wire format for no additional coverage of the on-demand-activation
+	// behavior this test exists to prove; ProviderOverride's higher-level
+	// workers.InferenceResponse shape isolates this test from that coupling.
+	// Both edges are equally real external-effect ports serviceedges.Edges
+	// accepts.
 	provider := testutil.NewMockProvider(workers.InferenceResponse{Content: "acknowledged\n<COMPLETE>"})
 	// Factory Session runtime activations are counted through the shared
 	// FactorySessionIDGenerator edge. That generator is also consumed for
