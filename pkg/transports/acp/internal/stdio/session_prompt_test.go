@@ -276,9 +276,9 @@ func TestHandleSessionPromptFactoryCommandFailureNeverLeaksRawValueOrRoot(t *tes
 // canonical StartTurn exactly once with the full request identity, the real
 // session id, and the version observed from that read, and never reaches
 // the "/factory" changeTarget path or the Factory target catalog at all.
-// Downstream Factory dispatch is not yet implemented, so admission success
-// still reports a bounded (non-method-not-found) internal error rather than
-// fabricated success.
+// This Server has no Factory Sessions delegation collaborator configured
+// (newTestServer), so admission success still reports a bounded
+// (non-method-not-found) internal error rather than fabricated success.
 func TestHandleSessionPromptNonCommandContentAdmitsOneVersionGuardedTurn(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project")}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
@@ -290,7 +290,7 @@ func TestHandleSessionPromptNonCommandContentAdmitsOneVersionGuardedTurn(t *test
 
 	result, rpcErr := server.handleSessionPrompt(context.Background(), env)
 	if rpcErr == nil {
-		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure: Factory dispatch is not yet implemented")
+		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure: no Factory Sessions delegation collaborator is configured")
 	}
 	if rpcErr.Code == -32601 {
 		t.Fatal("error code = method-not-found (-32601), want ordinary prompt content to be admitted, not rejected as unsupported")
@@ -458,14 +458,14 @@ func TestHandleSessionPromptEqualWireIDsAcrossConnectionsRemainDistinct(t *testi
 	firstConn := identity.NewConnectionID()
 	firstEnv := numberIdentityEnvelope(t, firstConn, 1, acpsdk.AgentMethodSessionPrompt, promptTextParams("session-1", "hello there"))
 	if _, rpcErr := server.handleSessionPrompt(context.Background(), firstEnv); rpcErr == nil {
-		t.Fatal("handleSessionPrompt() error = nil, want the bounded not-yet-implemented rejection")
+		t.Fatal("handleSessionPrompt() error = nil, want the bounded missing-collaborator rejection")
 	}
 	firstIdentity := chatSessions.startTurnReq.RequestID
 
 	secondConn := identity.NewConnectionID()
 	secondEnv := numberIdentityEnvelope(t, secondConn, 1, acpsdk.AgentMethodSessionPrompt, promptTextParams("session-1", "hello there"))
 	if _, rpcErr := server.handleSessionPrompt(context.Background(), secondEnv); rpcErr == nil {
-		t.Fatal("handleSessionPrompt() error = nil, want the bounded not-yet-implemented rejection")
+		t.Fatal("handleSessionPrompt() error = nil, want the bounded missing-collaborator rejection")
 	}
 	secondIdentity := chatSessions.startTurnReq.RequestID
 
@@ -701,8 +701,8 @@ func TestHandleSessionPromptFirstTurnStartsFactorySessionWithExactTargetRootAndC
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams("session-1", "hello there"))
 
-	if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr == nil {
-		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure: response mapping is not yet implemented")
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr != nil {
+		t.Fatalf("handleSessionPrompt() error = %+v, want a successful final prompt response", rpcErr)
 	}
 
 	if len(factoryTarget.startCalls) != 1 {
@@ -740,8 +740,8 @@ func TestHandleSessionPromptFirstTurnBindsReturnedFactorySessionID(t *testing.T)
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams("session-1", "hello there"))
-	if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr == nil {
-		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure: response mapping is not yet implemented")
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr != nil {
+		t.Fatalf("handleSessionPrompt() error = %+v, want a successful final prompt response", rpcErr)
 	}
 
 	if !chatSessions.bindFactorySessionCalled {
@@ -773,8 +773,8 @@ func TestHandleSessionPromptLaterTurnInvokesBoundFactorySessionExactlyOnce(t *te
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams("session-1", "a later message"))
-	if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr == nil {
-		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure: response mapping is not yet implemented")
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr != nil {
+		t.Fatalf("handleSessionPrompt() error = %+v, want a successful final prompt response", rpcErr)
 	}
 
 	if len(factoryTarget.startCalls) != 0 {
@@ -835,6 +835,133 @@ func TestHandleSessionPromptInvokeFactoryTargetFailureMakesNoStartCall(t *testin
 	}
 }
 
+// TestHandleSessionPromptLaterTurnMapsInvocationOutcomeToFinalStopReason
+// proves handleSessionPrompt's final "session/prompt" response for a later
+// (invoke) turn carries only the deterministic ACP stop reason
+// protocol.MapFactoryInvocationOutcome derives from the published
+// InvocationResult terminal status -- completed, canceled, timed out, failed,
+// and an unmapped future status all included -- and never a fabricated or
+// raw result field.
+func TestHandleSessionPromptLaterTurnMapsInvocationOutcomeToFinalStopReason(t *testing.T) {
+	tests := []struct {
+		name   string
+		status factorysessions.InvocationTerminalStatus
+		want   acpsdk.StopReason
+	}{
+		{"completed", factorysessions.InvocationTerminalStatusCompleted, acpsdk.StopReasonEndTurn},
+		{"canceled", factorysessions.InvocationTerminalStatusCanceled, acpsdk.StopReasonCancelled},
+		{"timed_out", factorysessions.InvocationTerminalStatusTimedOut, acpsdk.StopReasonCancelled},
+		{"failed", factorysessions.InvocationTerminalStatusFailed, acpsdk.StopReasonEndTurn},
+		{"unmapped_future_status", factorysessions.InvocationTerminalStatus("SOME_FUTURE_STATUS"), acpsdk.StopReasonEndTurn},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			chatSessions := &fakeChatSessionsService{
+				getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+				startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", "fs-already-bound"),
+			}
+			catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+			factoryTarget := &fakeFactoryTargetService{invokeResult: factorysessions.InvocationResult{
+				Status: tc.status,
+				Message: "internal detail that must never reach the client: " +
+					"provider command /usr/local/bin/agent --token=sk-live-ABC123",
+			}}
+			server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+			env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+				promptTextParams("session-1", "a later message"))
+			result, rpcErr := server.handleSessionPrompt(context.Background(), env)
+			if rpcErr != nil {
+				t.Fatalf("handleSessionPrompt() error = %+v, want success", rpcErr)
+			}
+
+			var resp acpsdk.PromptResponse
+			if err := json.Unmarshal(result, &resp); err != nil {
+				t.Fatalf("unmarshal response: %v", err)
+			}
+			if resp.StopReason != tc.want {
+				t.Fatalf("stopReason = %q, want %q", resp.StopReason, tc.want)
+			}
+			if strings.Contains(string(result), "sk-live-ABC123") {
+				t.Fatalf("response leaked the raw invocation message: %s", result)
+			}
+		})
+	}
+}
+
+// TestHandleSessionPromptFirstTurnMapsStartOutcomeToSafeFallback proves
+// handleSessionPrompt's final response for the first (start) turn in an
+// episode always uses the documented end_turn safe fallback -- an
+// asynchronous start's own published result never itself carries a terminal
+// outcome -- and never leaks the returned Factory Session identity or any
+// other raw field into the response.
+func TestHandleSessionPromptFirstTurnMapsStartOutcomeToSafeFallback(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.AsyncStartResult{SessionID: "fs-secret-1", Status: "RUNNING"}}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "hello there"))
+	result, rpcErr := server.handleSessionPrompt(context.Background(), env)
+	if rpcErr != nil {
+		t.Fatalf("handleSessionPrompt() error = %+v, want success", rpcErr)
+	}
+
+	var resp acpsdk.PromptResponse
+	if err := json.Unmarshal(result, &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if resp.StopReason != acpsdk.StopReasonEndTurn {
+		t.Fatalf("stopReason = %q, want end_turn safe fallback", resp.StopReason)
+	}
+	if strings.Contains(string(result), "fs-secret-1") {
+		t.Fatalf("response leaked the raw Factory Session identity: %s", result)
+	}
+}
+
+// TestHandleSessionPromptFinalResponseCarriesOnlyStopReason proves the
+// handler's final "session/prompt" response for an admitted, mapped turn is
+// exactly the closed final-only shape this transport slice supports: a stop
+// reason and nothing else -- no fabricated content, chunk, or progress
+// field.
+func TestHandleSessionPromptFinalResponseCarriesOnlyStopReason(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", "fs-already-bound"),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{invokeResult: factorysessions.InvocationResult{
+		Status: factorysessions.InvocationTerminalStatusCompleted,
+		PrimaryResult: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "the answer"},
+		},
+	}}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "a later message"))
+	result, rpcErr := server.handleSessionPrompt(context.Background(), env)
+	if rpcErr != nil {
+		t.Fatalf("handleSessionPrompt() error = %+v, want success", rpcErr)
+	}
+
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal(result, &decoded); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if _, ok := decoded["stopReason"]; !ok {
+		t.Fatalf("response = %s, want a stopReason field", result)
+	}
+	delete(decoded, "stopReason")
+	if len(decoded) != 0 {
+		t.Fatalf("response carried unexpected fields %v, want only stopReason", decoded)
+	}
+}
+
 // TestHandleSessionPromptSequentialTurnsStartThenInvokeExactlyOnce proves the
 // full first-turn-starts / later-turn-invokes sequence across two real
 // handleSessionPrompt calls against the same session: the first turn's
@@ -856,8 +983,8 @@ func TestHandleSessionPromptSequentialTurnsStartThenInvokeExactlyOnce(t *testing
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams("session-1", "first message"))
-	if _, rpcErr := server.handleSessionPrompt(context.Background(), firstEnv); rpcErr == nil {
-		t.Fatal("handleSessionPrompt() (first turn) error = nil, want a bounded failure: response mapping is not yet implemented")
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), firstEnv); rpcErr != nil {
+		t.Fatalf("handleSessionPrompt() (first turn) error = %+v, want a successful final prompt response", rpcErr)
 	}
 	if len(factoryTarget.startCalls) != 1 {
 		t.Fatalf("StartFactoryTarget call count after first turn = %d, want exactly 1", len(factoryTarget.startCalls))
@@ -868,8 +995,8 @@ func TestHandleSessionPromptSequentialTurnsStartThenInvokeExactlyOnce(t *testing
 
 	secondEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 2, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams("session-1", "second message"))
-	if _, rpcErr := server.handleSessionPrompt(context.Background(), secondEnv); rpcErr == nil {
-		t.Fatal("handleSessionPrompt() (second turn) error = nil, want a bounded failure: response mapping is not yet implemented")
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), secondEnv); rpcErr != nil {
+		t.Fatalf("handleSessionPrompt() (second turn) error = %+v, want a successful final prompt response", rpcErr)
 	}
 	if len(factoryTarget.startCalls) != 1 {
 		t.Fatalf("StartFactoryTarget call count after second turn = %d, want still exactly 1 (no second start)", len(factoryTarget.startCalls))

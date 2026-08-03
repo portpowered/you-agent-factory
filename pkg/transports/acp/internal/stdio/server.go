@@ -5,13 +5,15 @@
 // plus "session/prompt" -- both the "/factory <value>" fallback command
 // recognized within it (final-proposal.md §3) and, for every other
 // (genuine, non-command) prompt, admission of exactly one version-guarded
-// Chat turn against the canonical Chat Sessions authority -- protocol-safe
-// rejection of malformed input, unsupported methods, and unsupported
-// protocol versions, and deterministic termination on clean EOF, context
-// cancellation, a partial trailing frame, or a writer failure. An admitted
-// ordinary prompt turn's downstream Factory Session dispatch and terminal
-// response mapping are not yet implemented by this transport slice and
-// report a bounded internal error rather than fabricated success; every
+// Chat turn against the canonical Chat Sessions authority, followed by
+// starting (first turn in an episode) or invoking (later turns) the bound
+// Factory Session and mapping its published outcome, deterministically and
+// without fabrication, into the one final "session/prompt" response --
+// protocol-safe rejection of malformed input, unsupported methods, and
+// unsupported protocol versions, and deterministic termination on clean
+// EOF, context cancellation, a partial trailing frame, or a writer failure.
+// This transport slice does not yet terminalize the admitted Chat turn
+// itself after a downstream Factory failure (a later story's scope); every
 // other deferred ACP session and prompt behavior continues to receive
 // method-not-found. It is internal to pkg/transports/acp; callers use the
 // package root's exported operations instead of this package directly.

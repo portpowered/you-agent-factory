@@ -41,14 +41,6 @@ var errMalformedFactoryCommand = errors.New("acp: malformed /factory command")
 // dependency failure.
 var errSessionPromptUnavailable = errors.New("acp: session/prompt collaborators are not configured")
 
-// errFactoryDelegationNotImplemented marks a validated, admitted ordinary
-// prompt turn whose downstream dispatch this transport slice does not yet
-// finish: mapping a Factory Session's outcome (start or invoke) into a final
-// ACP response is later stories' scope (004/005). It never reaches a client
-// verbatim -- classifyDependencyFailure maps it to the same bounded
-// internal-error response every other dependency failure receives.
-var errFactoryDelegationNotImplemented = errors.New("acp: factory session delegation is not yet implemented")
-
 // errFactoryTargetUnavailable marks a "session/prompt" call this Server was
 // never constructed with the Factory Sessions delegation collaborator to
 // serve. It never reaches a client verbatim -- classifyDependencyFailure
@@ -146,9 +138,9 @@ func (s *Server) handleSessionPrompt(ctx context.Context, env envelope.Envelope)
 // and bind the returned identity onto that exact episode/turn/version. When
 // the episode already carries a Factory Session ID (a later turn in the same
 // episode), invoke that exact bound session exactly once instead -- never a
-// second start. Either branch still reports the bounded not-yet-implemented
-// failure afterward, since mapping the Factory Session's outcome into a final
-// ACP response is a later story's scope.
+// second start. Either branch's published Factory Sessions outcome is then
+// mapped, deterministically and without fabrication, into the one final ACP
+// prompt response this call returns.
 func (s *Server) admitPromptTurn(ctx context.Context, turn session.PromptTurn, reqIdentity chatsessions.RequestIdentity) (json.RawMessage, *acpsdk.RequestError) {
 	if s.chatSessions == nil {
 		return nil, classifyDependencyFailure(errSessionPromptUnavailable)
@@ -168,17 +160,22 @@ func (s *Server) admitPromptTurn(ctx context.Context, turn session.PromptTurn, r
 		return nil, classifyTurnAdmissionFailure(err)
 	}
 
+	var outcome protocol.PromptOutcome
 	if startResult.Episode.FactorySessionID == "" {
-		if err := s.startFactorySessionForEpisode(ctx, startResult, turn); err != nil {
-			return nil, classifyDependencyFailure(err)
-		}
+		outcome, err = s.startFactorySessionForEpisode(ctx, startResult, turn)
 	} else {
-		if err := s.invokeFactorySessionForEpisode(ctx, startResult, turn); err != nil {
-			return nil, classifyDependencyFailure(err)
-		}
+		outcome, err = s.invokeFactorySessionForEpisode(ctx, startResult, turn)
+	}
+	if err != nil {
+		return nil, classifyDependencyFailure(err)
 	}
 
-	return nil, classifyDependencyFailure(errFactoryDelegationNotImplemented)
+	resp := acpsdk.PromptResponse{StopReason: outcome.StopReason}
+	result, err := json.Marshal(resp)
+	if err != nil {
+		return nil, classifyDependencyFailure(err)
+	}
+	return result, nil
 }
 
 // startFactorySessionForEpisode starts exactly one Factory Session through
@@ -190,14 +187,17 @@ func (s *Server) admitPromptTurn(ctx context.Context, turn session.PromptTurn, r
 // cwd or transport fallback. A blank returned Factory Session ID
 // (errEmptyFactorySessionIdentity) or a BindFactorySession failure is
 // returned unclassified for the caller to map; no second start is ever
-// attempted here.
+// attempted here. The returned outcome is protocol.MapFactoryStartOutcome's
+// deterministic projection of the shim's own published AsyncStartResult --
+// an asynchronous start has not itself reached a terminal outcome yet, so
+// this projection never carries fabricated primary-result text.
 func (s *Server) startFactorySessionForEpisode(
 	ctx context.Context,
 	startResult chatsessions.StartTurnResult,
 	turn session.PromptTurn,
-) error {
+) (protocol.PromptOutcome, error) {
 	if s.factoryTarget == nil {
-		return errFactoryTargetUnavailable
+		return protocol.PromptOutcome{}, errFactoryTargetUnavailable
 	}
 
 	startReq := factorysessions.StartRequest{
@@ -220,20 +220,23 @@ func (s *Server) startFactorySessionForEpisode(
 
 	startOutcome, err := s.factoryTarget.StartFactoryTarget(ctx, startReq)
 	if err != nil {
-		return err
+		return protocol.PromptOutcome{}, err
 	}
 	if startOutcome.SessionID == "" {
-		return errEmptyFactorySessionIdentity
+		return protocol.PromptOutcome{}, errEmptyFactorySessionIdentity
 	}
 
-	_, err = s.chatSessions.BindFactorySession(ctx, chatsessions.BindFactorySessionRequest{
+	if _, err := s.chatSessions.BindFactorySession(ctx, chatsessions.BindFactorySessionRequest{
 		SessionID:        startResult.Session.ID,
 		ExpectedVersion:  startResult.Session.Version,
 		Episode:          startResult.Episode.Number,
 		TurnID:           startResult.Turn.ID,
 		FactorySessionID: startOutcome.SessionID,
-	})
-	return err
+	}); err != nil {
+		return protocol.PromptOutcome{}, err
+	}
+
+	return protocol.MapFactoryStartOutcome(startOutcome), nil
 }
 
 // invokeFactorySessionForEpisode invokes the given turn's already-bound
@@ -242,24 +245,32 @@ func (s *Server) startFactorySessionForEpisode(
 // source kind, and the admitted turn's ID as the correlated request ID. It
 // never starts a second Factory Session for an already-bound episode -- an
 // unbound episode is startFactorySessionForEpisode's job, not this one's.
+// The returned outcome is protocol.MapFactoryInvocationOutcome's
+// deterministic, safe projection of the shim's own published
+// InvocationResult -- its terminal status and only the "text" parts of its
+// primary result, never the raw result itself.
 func (s *Server) invokeFactorySessionForEpisode(
 	ctx context.Context,
 	startResult chatsessions.StartTurnResult,
 	turn session.PromptTurn,
-) error {
+) (protocol.PromptOutcome, error) {
 	if s.factoryTarget == nil {
-		return errFactoryTargetUnavailable
+		return protocol.PromptOutcome{}, errFactoryTargetUnavailable
 	}
 
 	requestID := startResult.Turn.ID
 	sourceKind := factorysessions.InvocationInputSourceKindText
-	_, err := s.factoryTarget.InvokeFactoryTarget(ctx, startResult.Episode.FactorySessionID, factorysessions.InvocationRequest{
+	invokeResult, err := s.factoryTarget.InvokeFactoryTarget(ctx, startResult.Episode.FactorySessionID, factorysessions.InvocationRequest{
 		Content:         promptContentToWorkParts(turn.Content),
 		ContentProvided: true,
 		RequestID:       &requestID,
 		SourceKind:      &sourceKind,
 	})
-	return err
+	if err != nil {
+		return protocol.PromptOutcome{}, err
+	}
+
+	return protocol.MapFactoryInvocationOutcome(invokeResult), nil
 }
 
 // promptContentToWorkParts converts validated ACP text prompt content into
