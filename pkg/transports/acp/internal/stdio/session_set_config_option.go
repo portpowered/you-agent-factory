@@ -81,15 +81,17 @@ func (s *Server) handleSessionSetConfigOption(ctx context.Context, env envelope.
 // changeTarget executes the shared target-change sequence used by both
 // "session/set_config_option" and the "/factory" command fallback
 // (handleSessionPrompt in session_prompt.go): read the addressed Chat
-// Session, resolve the
-// requested value through the existing Factory target catalog using that
-// session's own WorkingRoot, and call Chat Sessions' SetTarget with the
-// canonical revalidated target, the caller's identity, the session id, and
-// the version observed from the read. Any failure -- an unknown session, a
-// stale version, a disallowed/uninstalled/malformed/root-incompatible
-// target, or a dependency fault -- returns before the next effect, so a
-// rejected change never mutates target, episode history, or session
-// version.
+// Session, resolve the requested value through the existing Factory target
+// catalog using that session's own WorkingRoot, project the refreshed picker
+// from that catalog result, and only once projection succeeds call Chat
+// Sessions' SetTarget with the canonical revalidated target, the caller's
+// identity, the session id, and the version observed from the read.
+// Projection runs before SetTarget precisely so a picker-projection failure
+// (e.g. an empty catalog) never mutates the session: any failure -- an
+// unknown session, a stale version, a disallowed/uninstalled/malformed/
+// root-incompatible target, a picker-projection failure, or a dependency
+// fault -- returns before the mutating effect, so a rejected change never
+// mutates target, episode history, or session version.
 func (s *Server) changeTarget(ctx context.Context, sessionID string, requestedValue string, reqIdentity chatsessions.RequestIdentity) (acpsdk.SessionConfigOption, *acpsdk.RequestError) {
 	if s.chatSessions == nil || s.catalog == nil || s.resolveHomeDir == nil {
 		return acpsdk.SessionConfigOption{}, classifyDependencyFailure(errSessionSetConfigOptionUnavailable)
@@ -128,6 +130,12 @@ func (s *Server) changeTarget(ctx context.Context, sessionID string, requestedVa
 		return acpsdk.SessionConfigOption{}, classifyTargetSelectionFailure(err)
 	}
 
+	option := factorytarget.FromCatalogResult(catalogResult)
+	configOption, err := option.ToSessionConfigOption()
+	if err != nil {
+		return acpsdk.SessionConfigOption{}, classifyDependencyFailure(err)
+	}
+
 	if _, err := s.chatSessions.SetTarget(ctx, chatsessions.SetTargetRequest{
 		RequestID:       reqIdentity,
 		SessionID:       getResult.Session.ID,
@@ -140,11 +148,6 @@ func (s *Server) changeTarget(ctx context.Context, sessionID string, requestedVa
 		return acpsdk.SessionConfigOption{}, classifyTargetSelectionFailure(err)
 	}
 
-	option := factorytarget.FromCatalogResult(catalogResult)
-	configOption, err := option.ToSessionConfigOption()
-	if err != nil {
-		return acpsdk.SessionConfigOption{}, classifyDependencyFailure(err)
-	}
 	return configOption, nil
 }
 

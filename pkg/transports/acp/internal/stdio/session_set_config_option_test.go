@@ -190,7 +190,7 @@ func TestChangeTargetBlankHomeDirFailureReturnsNoMutation(t *testing.T) {
 	}
 }
 
-func TestChangeTargetConfigProjectionFailureReturnsMutatedButUnprojectedFailure(t *testing.T) {
+func TestChangeTargetConfigProjectionFailureReturnsNoMutation(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project")}
 	catalog := &fakeFactoryTargetCatalogService{result: chatsessions.ResolveFactoryTargetCatalogResult{
 		CurrentTarget: "factory:@you/review",
@@ -207,6 +207,9 @@ func TestChangeTargetConfigProjectionFailureReturnsMutatedButUnprojectedFailure(
 	}
 	if result != nil {
 		t.Fatalf("handleSessionSetConfigOption() result = %q, want nil on rejection", result)
+	}
+	if chatSessions.setTargetCalled {
+		t.Fatal("SetTarget was called, want zero mutation calls when picker projection fails")
 	}
 }
 
