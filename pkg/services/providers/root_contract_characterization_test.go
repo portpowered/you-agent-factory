@@ -286,6 +286,7 @@ func TestProvidersRootServiceInterfaceCountAndSelectionMethods(t *testing.T) {
 
 	rootType := reflect.TypeOf((*providers.Service)(nil)).Elem()
 	wantMethods := []string{
+		"ControlAttempt",
 		"Execute",
 		"GetProvider",
 		"ListProviders",

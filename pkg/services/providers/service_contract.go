@@ -34,4 +34,10 @@ type Service interface {
 	// Successful results and typed failures may carry an optional detached
 	// SessionRef for the provider session observed during the attempt.
 	Execute(context.Context, ExecuteRequest) (ExecuteResult, error)
+	// ControlAttempt requests pause, cancel, or terminate for one identified
+	// provider attempt. Invalid provider, attempt, or action input fails with
+	// ErrInvalidID or ErrInvalidControlRequest before any outcome is produced.
+	// Valid requests return a typed completed or unsupported outcome as a
+	// successful result; unsupported is not encoded as an error.
+	ControlAttempt(context.Context, ControlAttemptRequest) (ControlAttemptResult, error)
 }
