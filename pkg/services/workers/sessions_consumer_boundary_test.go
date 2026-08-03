@@ -37,15 +37,10 @@ func TestSessionsConsumerCanNameWorkersRootContracts(t *testing.T) {
 	t.Parallel()
 
 	var _ workers.Service
-	var _ workers.ObservationSink
-	var _ workers.ExecuteRequest
-	var _ workers.ExecuteResult
-	var _ workers.ProviderContinuationRef
-	var _ workers.ProviderReference
 	var _ workers.PTYAllocator = rootPTYAllocator{}
 	var _ workers.PTYAllocator = (*workers.MockPTYAllocator)(nil)
 
-	// Legacy Runtime construction still names ProviderRegistry while Execute
-	// carries only detached provider references and opaque continuations.
+	// Legacy Runtime construction still names ProviderRegistry for runner
+	// selection and prerequisite validation.
 	var _ workers.ProviderRegistry = rootProviderRegistry{}
 }
