@@ -586,6 +586,7 @@ var servicesSet = wire3.NewSet(
 	provideOperatorSettingsLogger,
 	provideOperatorSettingsService,
 	provideOperatorSettingsIDGenerator,
+	provideChatSessionsFactoryTargetCatalogService,
 	provideOperatorConfigDecoder,
 	provideOperatorConfigEncoder,
 	provideSystemInitializationInspectPath,

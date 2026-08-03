@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -43,6 +44,53 @@ func isWellFormedFactoryTargetReference(value string) bool {
 // current collaborator state; nothing is persisted, cached, or reused across
 // calls.
 func (s *Service) ResolveFactoryTargetCatalog(
+	ctx context.Context,
+	req chatsessions.ResolveFactoryTargetCatalogRequest,
+) (chatsessions.ResolveFactoryTargetCatalogResult, error) {
+	s.logger.Info("chat_sessions.resolve_factory_target_catalog.started")
+	result, err := s.resolveFactoryTargetCatalog(ctx, req)
+	if err != nil {
+		s.logger.Warn(
+			"chat_sessions.resolve_factory_target_catalog.failed",
+			"reason", classifyFactoryTargetCatalogFailure(err),
+		)
+		return chatsessions.ResolveFactoryTargetCatalogResult{}, err
+	}
+	s.logger.Info(
+		"chat_sessions.resolve_factory_target_catalog.finished",
+		"choice_count", len(result.Choices),
+	)
+	return result, nil
+}
+
+// classifyFactoryTargetCatalogFailure returns a stable, safe reason label for
+// operation logs. It never echoes a raw target, path, or collaborator error
+// message, only the classification sentinel the failure unwraps to.
+func classifyFactoryTargetCatalogFailure(err error) string {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return "context_canceled"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "context_deadline_exceeded"
+	case errors.Is(err, chatsessions.ErrFactoryTargetProfileUnavailable):
+		return "profile_unavailable"
+	case errors.Is(err, chatsessions.ErrFactoryTargetCatalogUnavailable):
+		return "catalog_unavailable"
+	case errors.Is(err, chatsessions.ErrFactoryTargetReferenceMalformed):
+		return "reference_malformed"
+	case errors.Is(err, chatsessions.ErrFactoryTargetCatalogEmpty):
+		return "catalog_empty"
+	case errors.Is(err, chatsessions.ErrFactoryTargetNotInstalled):
+		return "target_not_installed"
+	case errors.Is(err, chatsessions.ErrFactoryTargetNotAllowed):
+		return "target_not_allowed"
+	case errors.Is(err, chatsessions.ErrFactoryTargetWorkingRootIncompatible):
+		return "working_root_incompatible"
+	}
+	return "operation_failed"
+}
+
+func (s *Service) resolveFactoryTargetCatalog(
 	ctx context.Context,
 	req chatsessions.ResolveFactoryTargetCatalogRequest,
 ) (chatsessions.ResolveFactoryTargetCatalogResult, error) {
