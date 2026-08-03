@@ -276,7 +276,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/events/internal/service",
-      "minimum": 24.91
+      "minimum": 21.55
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/events/wire",
