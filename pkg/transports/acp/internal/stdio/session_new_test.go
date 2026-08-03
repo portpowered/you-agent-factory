@@ -61,8 +61,16 @@ type fakeChatSessionsService struct {
 
 	bindFactorySessionCalled bool
 	bindFactorySessionReq    chatsessions.BindFactorySessionRequest
+	bindFactorySessionReqs   []chatsessions.BindFactorySessionRequest
 	bindFactorySessionResult chatsessions.BindFactorySessionResult
-	bindFactorySessionErr    error
+	// bindFactorySessionErrs, when non-empty, is consumed front-first across
+	// successive BindFactorySession calls (one queued error per call, nil
+	// meaning that call succeeds) instead of the single static
+	// bindFactorySessionErr -- for retry tests that need one specific bind
+	// attempt to fail while a later retry against the same pending identity
+	// succeeds.
+	bindFactorySessionErrs []error
+	bindFactorySessionErr  error
 
 	advanceTurnCalled bool
 	advanceTurnReq    chatsessions.AdvanceTurnRequest
@@ -146,6 +154,15 @@ func (f *fakeChatSessionsService) BindFactorySession(_ context.Context, req chat
 	defer f.mu.Unlock()
 	f.bindFactorySessionCalled = true
 	f.bindFactorySessionReq = req
+	f.bindFactorySessionReqs = append(f.bindFactorySessionReqs, req)
+	if len(f.bindFactorySessionErrs) > 0 {
+		next := f.bindFactorySessionErrs[0]
+		f.bindFactorySessionErrs = f.bindFactorySessionErrs[1:]
+		if next != nil {
+			return chatsessions.BindFactorySessionResult{}, next
+		}
+		return f.bindFactorySessionResult, nil
+	}
 	if f.bindFactorySessionErr != nil {
 		return chatsessions.BindFactorySessionResult{}, f.bindFactorySessionErr
 	}

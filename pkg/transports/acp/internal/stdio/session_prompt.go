@@ -413,7 +413,7 @@ func factoryInvocationTurnState(status factorysessions.InvocationTerminalStatus)
 // editor working root, and the validated prompt content -- never a process
 // cwd or transport fallback. A blank returned Factory Session ID
 // (errEmptyFactorySessionIdentity) is returned unclassified for the caller
-// to map; no second start is ever attempted here.
+// to map.
 //
 // StartFactoryTarget's underlying activation (OnDemandFactoryTargetService)
 // is synchronous under the hood: it already observes a genuine terminal
@@ -428,12 +428,25 @@ func factoryInvocationTurnState(status factorysessions.InvocationTerminalStatus)
 // FAILED or TIMED_OUT status still terminalizes the Chat turn accordingly
 // instead of always reporting COMPLETED.
 //
-// A BindFactorySession failure after a successful start is compensated by
-// closing the just-opened runtime (best-effort; a close failure is joined
-// into the returned error rather than discarded) so a live Factory Session
-// is never left both unbound and unreachable -- without this, a later retry
-// would leave the original runtime orphaned while opening a second one for
-// the still-unbound episode.
+// A start and its commit are not atomic against this transport's own
+// process -- BindFactorySession can fail after StartFactoryTarget already
+// succeeded -- so this method reconciles across separate calls via
+// pendingFactoryStarts, keyed by (session, episode): the first turn for an
+// episode that finds no pending record starts a fresh Factory Session and
+// records its identity as pending before attempting to bind it. A later
+// admitted turn for that same still-unbound episode (whether the original
+// bind is still failing, or a genuinely distinct retry request) finds the
+// pending record and dispatches its own content into that exact already-live
+// runtime via InvokeFactoryTarget instead of starting a second one, then
+// retries the bind. Once a bind succeeds the pending record is cleared. Only
+// a *chatsessions.FactorySessionConflictError -- a different identity
+// already won the episode -- abandons the pending runtime: it is closed
+// (best-effort; a close failure is joined into the returned error) and the
+// pending record is cleared, since the next call will observe the already-
+// bound episode and correctly invoke the winner instead. Every other bind
+// failure (for example a transient version conflict) keeps the pending
+// record and the runtime open, so no later retry can ever lose track of it
+// and start a second Factory Session for the same episode.
 func (s *Server) startFactorySessionForEpisode(
 	ctx context.Context,
 	startResult chatsessions.StartTurnResult,
@@ -443,45 +456,70 @@ func (s *Server) startFactorySessionForEpisode(
 		return dispatchOutcome{}, errFactoryTargetUnavailable
 	}
 
-	startReq := factorysessions.StartRequest{
-		RequestID: startResult.Turn.ID,
-		Source: factorysessions.Source{
-			Kind:      factoryruntime.WorkflowSourceKindFactoryID,
-			FactoryID: startResult.Episode.Target.Ref,
-		},
-		// StartRequest has no dedicated content/root fields; Args is the
-		// one JSON-compatible channel this published contract offers, so
-		// the validated prompt content (in the same work.WorkContentPart
-		// shape InvocationRequest.Content already uses) and the session's
-		// exact editor working root travel through it rather than being
-		// silently dropped or replaced by a process cwd.
-		Args: map[string]any{
-			"content":     promptContentToWorkParts(turn.Content),
-			"workingRoot": startResult.Session.WorkingRoot,
-		},
-	}
+	key := pendingFactoryStartKey{sessionID: startResult.Session.ID, episode: startResult.Episode.Number}
 
-	startOutcome, err := s.factoryTarget.StartFactoryTarget(ctx, startReq)
+	var outcome factorysessions.InvocationResult
+	var err error
+	if pendingID, ok := s.lookupPendingFactoryStart(key); ok {
+		requestID := startResult.Turn.ID
+		sourceKind := factorysessions.InvocationInputSourceKindText
+		outcome, err = s.factoryTarget.InvokeFactoryTarget(ctx, pendingID, factorysessions.InvocationRequest{
+			Content:         promptContentToWorkParts(turn.Content),
+			ContentProvided: true,
+			RequestID:       &requestID,
+			SourceKind:      &sourceKind,
+		})
+		if err == nil {
+			outcome.SessionID = pendingID
+		}
+	} else {
+		startReq := factorysessions.StartRequest{
+			RequestID: startResult.Turn.ID,
+			Source: factorysessions.Source{
+				Kind:      factoryruntime.WorkflowSourceKindFactoryID,
+				FactoryID: startResult.Episode.Target.Ref,
+			},
+			// StartRequest has no dedicated content/root fields; Args is the
+			// one JSON-compatible channel this published contract offers, so
+			// the validated prompt content (in the same work.WorkContentPart
+			// shape InvocationRequest.Content already uses) and the
+			// session's exact editor working root travel through it rather
+			// than being silently dropped or replaced by a process cwd.
+			Args: map[string]any{
+				"content":     promptContentToWorkParts(turn.Content),
+				"workingRoot": startResult.Session.WorkingRoot,
+			},
+		}
+		outcome, err = s.factoryTarget.StartFactoryTarget(ctx, startReq)
+	}
 	if err != nil {
 		return dispatchOutcome{}, err
 	}
-	if startOutcome.SessionID == "" {
+	if outcome.SessionID == "" {
 		return dispatchOutcome{}, errEmptyFactorySessionIdentity
 	}
+
+	s.setPendingFactoryStart(key, outcome.SessionID)
 
 	if _, err := s.chatSessions.BindFactorySession(ctx, chatsessions.BindFactorySessionRequest{
 		SessionID:        startResult.Session.ID,
 		ExpectedVersion:  startResult.Session.Version,
 		Episode:          startResult.Episode.Number,
 		TurnID:           startResult.Turn.ID,
-		FactorySessionID: startOutcome.SessionID,
+		FactorySessionID: outcome.SessionID,
 	}); err != nil {
-		return dispatchOutcome{}, errors.Join(err, s.factoryTarget.CloseFactoryTarget(ctx, startOutcome.SessionID))
+		var conflictErr *chatsessions.FactorySessionConflictError
+		if errors.As(err, &conflictErr) {
+			s.clearPendingFactoryStart(key)
+			return dispatchOutcome{}, errors.Join(err, s.factoryTarget.CloseFactoryTarget(ctx, outcome.SessionID))
+		}
+		return dispatchOutcome{}, err
 	}
+	s.clearPendingFactoryStart(key)
 
 	return dispatchOutcome{
-		outcome:  protocol.MapFactoryInvocationOutcome(startOutcome),
-		terminal: factoryInvocationTurnState(startOutcome.Status),
+		outcome:  protocol.MapFactoryInvocationOutcome(outcome),
+		terminal: factoryInvocationTurnState(outcome.Status),
 	}, nil
 }
 

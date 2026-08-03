@@ -1457,17 +1457,20 @@ func TestHandleSessionPromptEmptyFactorySessionIdentityFailsSafely(t *testing.T)
 	}
 }
 
-// TestHandleSessionPromptBindFailureClosesTheJustStartedRuntime proves that
-// when BindFactorySession fails after a successful StartFactoryTarget, the
-// handler compensates by closing the exact runtime identity StartFactoryTarget
-// just returned -- so a subsequent retry for the still-unbound episode never
-// leaves that runtime both orphaned (live, unbound, unreachable) and
-// duplicated by a second start.
-func TestHandleSessionPromptBindFailureClosesTheJustStartedRuntime(t *testing.T) {
+// TestHandleSessionPromptBindConflictClosesTheJustStartedRuntime proves that
+// when BindFactorySession fails with *chatsessions.FactorySessionConflictError
+// -- a different identity already won the episode -- the handler compensates
+// by closing the exact runtime identity StartFactoryTarget just returned and
+// abandons its pending-start reconciliation record, since the next call for
+// this episode will correctly observe and invoke the already-bound winner
+// instead of ever needing this loser again.
+func TestHandleSessionPromptBindConflictClosesTheJustStartedRuntime(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{
-		getSessionResult:      sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
-		startTurnResult:       admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
-		bindFactorySessionErr: errors.New("bind failed: version race"),
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
+		bindFactorySessionErr: &chatsessions.FactorySessionConflictError{
+			SessionID: "session-1", Episode: 4, Bound: "fs-winner", Attempted: "fs-orphan-candidate",
+		},
 	}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
 	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.InvocationResult{SessionID: "fs-orphan-candidate"}}
@@ -1488,6 +1491,56 @@ func TestHandleSessionPromptBindFailureClosesTheJustStartedRuntime(t *testing.T)
 	}
 
 	wantAdvanceTurnSequence(t, chatSessions, "session-1", "turn-1", chatsessions.TurnStateRunning, chatsessions.TurnStateFailed)
+}
+
+// TestHandleSessionPromptBindFailureRetryReusesPendingFactorySession proves
+// that when BindFactorySession fails for any reason *other* than a genuine
+// different-identity conflict (for example a transient version race), the
+// handler does not close the just-started runtime, and a later uniquely
+// identified retry for the same still-unbound episode dispatches through
+// InvokeFactoryTarget against that exact pending identity instead of calling
+// StartFactoryTarget a second time -- so a bind failure can never cause two
+// Factory Sessions to exist for one episode.
+func TestHandleSessionPromptBindFailureRetryReusesPendingFactorySession(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResults: []chatsessions.StartTurnResult{
+			admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
+			admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", ""),
+		},
+		bindFactorySessionErrs: []error{errors.New("bind failed: version race"), nil},
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{
+		startResult:  factorysessions.InvocationResult{SessionID: "fs-pending"},
+		invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted},
+	}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "first message"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), firstEnv); rpcErr == nil {
+		t.Fatal("first handleSessionPrompt() error = nil, want a bounded failure when BindFactorySession fails")
+	}
+	if len(factoryTarget.closeCalls) != 0 {
+		t.Fatalf("CloseFactoryTarget call count = %d, want 0: a non-conflict bind failure must not abandon the pending runtime", len(factoryTarget.closeCalls))
+	}
+
+	secondEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "second message"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), secondEnv); rpcErr != nil {
+		t.Fatalf("second handleSessionPrompt() error = %+v, want success once the retried bind succeeds", rpcErr)
+	}
+
+	if len(factoryTarget.startCalls) != 1 {
+		t.Fatalf("StartFactoryTarget call count = %d, want exactly 1 (the retry reuses the pending identity via invoke, never starting a second Factory Session)", len(factoryTarget.startCalls))
+	}
+	if len(factoryTarget.invokeCalls) != 1 {
+		t.Fatalf("InvokeFactoryTarget call count = %d, want exactly 1", len(factoryTarget.invokeCalls))
+	}
+	if factoryTarget.invokeCalls[0].sessionID != "fs-pending" {
+		t.Fatalf("InvokeFactoryTarget sessionID = %q, want the pending identity from the first turn's start", factoryTarget.invokeCalls[0].sessionID)
+	}
 }
 
 // TestHandleSessionPromptWithoutFactoryTargetCollaboratorAdmitsButFailsBound
