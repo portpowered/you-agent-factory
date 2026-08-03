@@ -786,7 +786,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime",
-      "minimum": 82.36
+      "minimum": 82.40
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
@@ -2062,7 +2062,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers",
-      "minimum": 78.71
+      "minimum": 79.81
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal",
@@ -2268,7 +2268,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/wire",
-      "minimum": 79.15
+      "minimum": 82.14
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/acp",
