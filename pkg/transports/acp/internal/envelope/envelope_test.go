@@ -57,11 +57,15 @@ func TestDecode_RejectsMalformedInput(t *testing.T) {
 		wantID string
 	}{
 		{name: "invalid JSON", raw: `{not json`, wantInvalidJSON: true},
+		{name: "valid JSON number, not a request object", raw: `1`},
+		{name: "valid JSON string, not a request object", raw: `"text"`},
+		{name: "valid JSON array, not a request object", raw: `[]`},
+		{name: "valid JSON object with wrong-typed method field", raw: `{"jsonrpc":"2.0","id":1,"method":123}`, wantID: "1"},
+		{name: "valid JSON object with wrong-typed method field and an invalid id shape", raw: `{"jsonrpc":"2.0","id":{},"method":123}`},
 		{name: "wrong jsonrpc version", raw: `{"jsonrpc":"1.0","id":1,"method":"session/prompt"}`, wantID: "1"},
 		{name: "missing jsonrpc version", raw: `{"id":1,"method":"session/prompt"}`, wantID: "1"},
 		{name: "missing method", raw: `{"jsonrpc":"2.0","id":1}`, wantID: "1"},
 		{name: "blank method", raw: `{"jsonrpc":"2.0","id":1,"method":"   "}`, wantID: "1"},
-		{name: "missing id on a request method", raw: `{"jsonrpc":"2.0","method":"session/prompt"}`},
 		{name: "null id on a request method", raw: `{"jsonrpc":"2.0","id":null,"method":"session/prompt"}`},
 		{name: "object id", raw: `{"jsonrpc":"2.0","id":{},"method":"session/prompt"}`},
 		{name: "array id", raw: `{"jsonrpc":"2.0","id":[],"method":"session/prompt"}`},
@@ -153,6 +157,33 @@ func TestDecode_AcceptsValidNotificationWithoutID(t *testing.T) {
 			}
 			if _, ok := env.Identity.ConnectionID(); ok {
 				t.Fatal("expected a notification's identity to have no correlated connection id")
+			}
+		})
+	}
+}
+
+// TestDecode_TreatsAnyNoIDMessageAsANotificationRegardlessOfMethod proves
+// JSON-RPC 2.0 notification status is determined solely by the absence of
+// an id: a method that is neither in NotificationMethods nor implemented by
+// this transport still decodes successfully with IsNotification true when
+// it carries no id, since a server must never send a response for a
+// message the client never attached an id to.
+func TestDecode_TreatsAnyNoIDMessageAsANotificationRegardlessOfMethod(t *testing.T) {
+	for _, method := range []string{"session/prompt", "totally/unrecognized"} {
+		t.Run(method, func(t *testing.T) {
+			raw := json.RawMessage(`{"jsonrpc":"2.0","method":"` + method + `"}`)
+			env, err := Decode("conn-1", 1, raw)
+			if err != nil {
+				t.Fatalf("Decode() unexpected error: %v", err)
+			}
+			if env.Method != method {
+				t.Fatalf("Method = %q, want %q", env.Method, method)
+			}
+			if !env.IsNotification {
+				t.Fatal("IsNotification = false, want true for any no-id message")
+			}
+			if !env.Identity.IsMinted() {
+				t.Fatal("expected a no-id message's identity to be minted, not connection-correlated")
 			}
 		})
 	}

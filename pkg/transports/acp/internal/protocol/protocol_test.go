@@ -110,13 +110,13 @@ func TestGuard_RepeatedInvalidInputIsDeterministic(t *testing.T) {
 func TestGuardEnvelope_MalformedEnvelopeNeverCallsValidateOrEffect(t *testing.T) {
 	validateCalled, effectCalled := false, false
 
-	env, err := GuardEnvelope("conn-1", 1, json.RawMessage(`{"jsonrpc":"2.0","method":"session/new"}`),
+	env, err := GuardEnvelope("conn-1", 1, json.RawMessage(`{"jsonrpc":"1.0","id":1,"method":"session/new"}`),
 		func(envelope.Envelope) error { validateCalled = true; return nil },
 		func() error { effectCalled = true; return nil },
 	)
 
 	if err == nil {
-		t.Fatal("GuardEnvelope() error = nil, want a bounded rejection for a malformed envelope (missing id on a request method)")
+		t.Fatal("GuardEnvelope() error = nil, want a bounded rejection for a malformed envelope (wrong jsonrpc version)")
 	}
 	if env.IsNotification {
 		t.Error("GuardEnvelope() returned IsNotification = true for a decode failure, want false")

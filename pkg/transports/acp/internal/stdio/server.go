@@ -32,6 +32,14 @@ import (
 // output stream.
 var ErrStreamsRequired = errors.New("acp: stdio serve requires input and output streams")
 
+// errNullInitializeParams marks an initialize request whose "params" member
+// is JSON null. json.Unmarshal treats a JSON null target as a no-op success
+// even for a non-pointer struct, so an unmarshal into acpsdk.InitializeRequest
+// would otherwise silently leave a zero-valued request -- a requested
+// protocol version of 0 -- and be misreported as an unsupported protocol
+// version by negotiation rather than as the missing params it actually is.
+var errNullInitializeParams = errors.New("acp: initialize params must not be null")
+
 // Server serves one ACP JSON-RPC agent-side connection at a time over
 // caller-owned stdio streams. Construction performs no I/O and starts no
 // goroutine, process, listener, session, or persistence; each Serve call
@@ -204,6 +212,9 @@ func dispatchRequest(connectionID identity.ConnectionID, notificationSeq uint64,
 		return env, nil, protocol.MethodNotFound(env.Method)
 	}
 
+	if bytes.Equal(bytes.TrimSpace(env.Params), []byte("null")) {
+		return env, nil, protocol.SafeReject(errNullInitializeParams)
+	}
 	var req acpsdk.InitializeRequest
 	if err := json.Unmarshal(env.Params, &req); err != nil {
 		return env, nil, protocol.SafeReject(err)

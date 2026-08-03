@@ -430,6 +430,21 @@ func TestServeRespondsWithInvalidRequestForStructurallyInvalidShapes(t *testing.
 			line:   `{"jsonrpc":"2.0","id":{},"method":"initialize","params":{"protocolVersion":1}}` + "\n",
 			wantID: "null",
 		},
+		{
+			name:   "valid JSON scalar, not a request object",
+			line:   `1` + "\n",
+			wantID: "null",
+		},
+		{
+			name:   "valid JSON string, not a request object",
+			line:   `"initialize"` + "\n",
+			wantID: "null",
+		},
+		{
+			name:   "valid JSON array, not a request object",
+			line:   `[]` + "\n",
+			wantID: "null",
+		},
 	}
 
 	for _, tc := range cases {
@@ -460,6 +475,7 @@ func TestServeRespondsWithInvalidParamsForBadInitializeParams(t *testing.T) {
 		line string
 	}{
 		{name: "missing params", line: `{"jsonrpc":"2.0","id":1,"method":"initialize"}` + "\n"},
+		{name: "null params", line: `{"jsonrpc":"2.0","id":1,"method":"initialize","params":null}` + "\n"},
 		{name: "malformed params type", line: `{"jsonrpc":"2.0","id":1,"method":"initialize","params":"not-an-object"}` + "\n"},
 	}
 
@@ -534,6 +550,36 @@ func TestServeEmitsNoResponseForAValidNotification(t *testing.T) {
 	}
 	if out.Len() != 0 {
 		t.Fatalf("output = %q, want no response for a valid notification", out.Bytes())
+	}
+}
+
+// TestServeEmitsNoResponseForAnUnsupportedNoIDMessage proves JSON-RPC 2.0
+// notification status is determined solely by the absence of an id: a
+// method that is neither a known notification nor implemented by this
+// transport ("initialize" is the only dispatched method) still receives no
+// response -- success or error -- when it carries no id, matching
+// TestServeEmitsNoResponseForAValidNotification's assertion for a known
+// notification method.
+func TestServeEmitsNoResponseForAnUnsupportedNoIDMessage(t *testing.T) {
+	cases := []struct {
+		name string
+		line string
+	}{
+		{name: "unimplemented ACP method with no id", line: `{"jsonrpc":"2.0","method":"session/prompt","params":{}}` + "\n"},
+		{name: "entirely unrecognized method with no id", line: `{"jsonrpc":"2.0","method":"totally/unrecognized"}` + "\n"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out := &bytes.Buffer{}
+			server := New(nil)
+			if err := server.Serve(context.Background(), strings.NewReader(tc.line), out); err != nil {
+				t.Fatalf("Serve() error = %v", err)
+			}
+			if out.Len() != 0 {
+				t.Fatalf("output = %q, want no response for an unsupported no-id message", out.Bytes())
+			}
+		})
 	}
 }
 
