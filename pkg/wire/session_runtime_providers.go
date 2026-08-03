@@ -20,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -41,12 +42,16 @@ import (
 	"go.uber.org/zap"
 )
 
-func provideApplicationProcessLifecycle(service providers.Service) (initializerapplication.ProcessLifecycle, error) {
-	lifecycle, ok := service.(providers.Lifecycle)
+func provideApplicationProcessLifecycle(service providers.Service, eventsService events.Service) (initializerapplication.ProcessLifecycle, error) {
+	providersLifecycle, ok := service.(providers.Lifecycle)
 	if !ok {
 		return nil, fmt.Errorf("construct application process: Providers lifecycle is required")
 	}
-	return lifecycle, nil
+	eventsLifecycleValue, ok := eventsService.(eventsLifecycle)
+	if !ok {
+		return nil, fmt.Errorf("construct application process: Events lifecycle is required")
+	}
+	return processLifecycleAggregate{providers: providersLifecycle, events: eventsLifecycleValue}, nil
 }
 
 func provideProvidersService(edges serviceedges.Edges) (providers.Service, error) {

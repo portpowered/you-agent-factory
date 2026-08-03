@@ -236,7 +236,9 @@ func TestSubscribe_StoreCloseTerminatesBlockedSubscriberWithClosed(t *testing.T)
 		result <- sub.Next(ctx)
 	}()
 
-	st.Close()
+	if err := st.Close(ctx); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
 
 	select {
 	case delivery := <-result:
@@ -259,7 +261,9 @@ func TestSubscribe_StoreCloseTerminatesBlockedSubscriberWithClosed(t *testing.T)
 func TestSubscribe_AfterStoreCloseObservesClosedWithoutRegistering(t *testing.T) {
 	st := New()
 	ctx := context.Background()
-	st.Close()
+	if err := st.Close(ctx); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
 
 	sub := mustSubscribe(t, st, ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 10})
 	delivery := sub.Next(ctx)
@@ -270,8 +274,13 @@ func TestSubscribe_AfterStoreCloseObservesClosedWithoutRegistering(t *testing.T)
 
 func TestSubscribe_CloseIsIdempotent(t *testing.T) {
 	st := New()
-	st.Close()
-	st.Close() // must not panic (double-close of already-closed channels/state)
+	ctx := context.Background()
+	if err := st.Close(ctx); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if err := st.Close(ctx); err != nil { // must not panic (double-close of already-closed channels/state)
+		t.Fatalf("second Close() error = %v", err)
+	}
 }
 
 func TestSubscribe_DeliveredRecordsAreDetached(t *testing.T) {

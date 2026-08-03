@@ -294,6 +294,34 @@ func TestRead_RejectsCanceledContextBeforeAnyStateChange(t *testing.T) {
 	}
 }
 
+func TestRead_RejectedAfterClose(t *testing.T) {
+	st := New()
+	ctx := context.Background()
+
+	if err := st.Close(ctx); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	_, err := st.Read(ctx, events.ReadRequest{Topic: readTestTopic, From: events.Cursor{Topic: readTestTopic}, Limit: 10})
+	if !errors.Is(err, events.ErrClosed) {
+		t.Fatalf("Read() after Close error = %v, want ErrClosed", err)
+	}
+}
+
+func TestRead_RejectedAfterCloseForATopicCreatedAfterwards(t *testing.T) {
+	st := New()
+	ctx := context.Background()
+
+	if err := st.Close(ctx); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	topic := events.Topic("chat-session/never-seen-before/events")
+	if _, err := st.Read(ctx, events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 10}); !errors.Is(err, events.ErrClosed) {
+		t.Fatalf("Read() on a brand-new topic after Close error = %v, want ErrClosed", err)
+	}
+}
+
 func TestRead_ReturnedRecordsAreDetached(t *testing.T) {
 	st := New()
 	ctx := context.Background()

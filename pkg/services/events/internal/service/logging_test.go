@@ -175,6 +175,32 @@ func TestAppend_CanceledContextLogsClassificationOnlyWithoutIntentLog(t *testing
 	}
 }
 
+func TestAppend_RejectedAfterCloseLogsClosedClassificationWithoutIntentLog(t *testing.T) {
+	logger, calls := newCaptureLogger()
+	st := New(logger)
+	ctx := context.Background()
+
+	if err := st.Close(ctx); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	*calls = nil
+
+	if _, err := st.Append(ctx, validAppendRequest()); !errors.Is(err, events.ErrClosed) {
+		t.Fatalf("Append() after Close error = %v, want ErrClosed", err)
+	}
+
+	if len(*calls) != 1 {
+		t.Fatalf("Append() after Close logged %d calls, want exactly 1 (outcome only, no intent log): %+v", len(*calls), *calls)
+	}
+	outcome := (*calls)[0]
+	if !hasKV(outcome.kv, "outcome", "rejected") {
+		t.Fatalf("outcome log missing outcome=rejected: %+v", outcome.kv)
+	}
+	if !hasKV(outcome.kv, "error_class", "closed") {
+		t.Fatalf("outcome log missing error_class=closed: %+v", outcome.kv)
+	}
+}
+
 func TestNew_DefaultsToNoopLoggerWhenOmitted(t *testing.T) {
 	st := New()
 	if _, err := st.Append(context.Background(), validAppendRequest()); err != nil {
@@ -230,6 +256,24 @@ func TestRead_RejectedRequestLogsNothing(t *testing.T) {
 	}
 	if len(*calls) != 0 {
 		t.Fatalf("rejected Read() logged %d calls, want 0 (no log side effect before validation succeeds): %+v", len(*calls), *calls)
+	}
+}
+
+func TestRead_RejectedAfterCloseLogsNothing(t *testing.T) {
+	logger, calls := newCaptureLogger()
+	st := New(logger)
+	ctx := context.Background()
+
+	if err := st.Close(ctx); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	*calls = nil
+
+	if _, err := st.Read(ctx, events.ReadRequest{Topic: readTestTopic, From: events.Cursor{Topic: readTestTopic}, Limit: 10}); !errors.Is(err, events.ErrClosed) {
+		t.Fatalf("Read() after Close error = %v, want ErrClosed", err)
+	}
+	if len(*calls) != 0 {
+		t.Fatalf("Read() after Close logged %d calls, want 0 (matches Read's existing no-log-on-rejection rule): %+v", len(*calls), *calls)
 	}
 }
 
@@ -363,7 +407,9 @@ func TestSubscribe_CloseLogsTopicClosedAndStoreClosed(t *testing.T) {
 	}
 	*calls = nil
 
-	st.Close()
+	if err := st.Close(ctx); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
 
 	var sawTopicClosed, sawStoreClosed bool
 	for _, call := range *calls {
@@ -533,7 +579,9 @@ func TestAttachSource_CloseLogsAttachTopicClosed(t *testing.T) {
 	}
 	*calls = nil
 
-	st.Close()
+	if err := st.Close(ctx); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
 
 	var sawAttachClosed bool
 	for _, call := range *calls {

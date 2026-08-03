@@ -13,10 +13,14 @@ import (
 // topic. A canceled context or a malformed request is rejected before any
 // aggregate state changes and before the accepted/duplicate outcome log is
 // emitted: the deferred log call only reports a real accepted or duplicate
-// outcome when err is nil. Every returned Record owns detached payload
-// bytes, so caller mutation of req.Payload after this call, or of one
-// returned Record's Payload, can never alter the Store's retained copy or a
-// later duplicate/read/delivery of the same record.
+// outcome when err is nil. Once Store.Close has taken effect, Append is
+// rejected with events.ErrClosed instead (checked per-topic, so a topic
+// created after Close observes the same rejection as one that existed
+// before it), also before any aggregate state change or intent log. Every
+// returned Record owns detached payload bytes, so caller mutation of
+// req.Payload after this call, or of one returned Record's Payload, can
+// never alter the Store's retained copy or a later duplicate/read/delivery
+// of the same record.
 func (st *Store) Append(ctx context.Context, req events.AppendRequest) (result events.AppendResult, err error) {
 	defer func() {
 		st.logAppendOutcome(req, result, err)
@@ -31,10 +35,15 @@ func (st *Store) Append(ctx context.Context, req events.AppendRequest) (result e
 
 	detached := req.Detached()
 	identity := detached.Identity()
-	st.logAppendIntent(detached)
 
 	ts := st.topic(detached.Topic)
 	ts.mu.Lock()
+	if ts.closed {
+		ts.mu.Unlock()
+		err = events.ErrClosed
+		return events.AppendResult{}, err
+	}
+	st.logAppendIntent(detached)
 	stored, outcome := ts.commitLocked(st, detached.Topic, detached, identity)
 	ts.mu.Unlock()
 

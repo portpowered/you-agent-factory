@@ -5,6 +5,7 @@
 package service
 
 import (
+	"context"
 	"maps"
 	"sync"
 
@@ -30,6 +31,16 @@ type Store struct {
 }
 
 var _ events.Service = (*Store)(nil)
+
+// closer is the exact Close(context.Context) error shutdown role Store
+// satisfies for canonical application construction. It is asserted
+// structurally rather than published as a second pkg/services/events
+// interface, keeping the service root to its one published Service contract.
+type closer interface {
+	Close(context.Context) error
+}
+
+var _ closer = (*Store)(nil)
 
 // topicState holds one topic's aggregate ordering, retained records,
 // idempotency index, live subscriber registrations, and outgoing attachment
@@ -132,14 +143,20 @@ func (st *Store) topic(t events.Topic) *topicState {
 // each active live subscriber observes DeliveryClosed (after draining any
 // record already buffered ahead of it) exactly once, and repeated or
 // concurrent calls to Close are safe no-ops once the first has taken effect.
-// Close performs no durable write; it does not reject later Append or Read
-// calls (that policy belongs to the canonical construction/shutdown wiring
-// added when Events is injected into the application lifecycle).
-func (st *Store) Close() {
+// Close performs no durable write. Once Close has taken effect, every later
+// Append or Read call is rejected with events.ErrClosed (checked per-topic,
+// so a topic created after Close observes the same rejection as one that
+// existed before it); Subscribe and AttachSource keep their own existing
+// per-topic-closed answers (an immediately DeliveryClosed subscription, or
+// events.ErrOperationFailed for a closed attachment source) unchanged. Close
+// gives canonical application construction a Close(context.Context) error
+// shutdown role it can fold into the process lifecycle without widening the
+// published events.Service contract; it never returns a non-nil error.
+func (st *Store) Close(context.Context) error {
 	st.mu.Lock()
 	if st.closed {
 		st.mu.Unlock()
-		return
+		return nil
 	}
 	st.closed = true
 	topics := make(map[events.Topic]*topicState, len(st.topics))
@@ -150,6 +167,7 @@ func (st *Store) Close() {
 		ts.closeLocked(st, topic)
 	}
 	st.logStoreClosed()
+	return nil
 }
 
 // closeLocked marks ts closed, terminates every currently registered live

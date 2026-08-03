@@ -162,6 +162,38 @@ func TestAppend_RejectsCanceledContextBeforeAnyStateChange(t *testing.T) {
 	}
 }
 
+func TestAppend_RejectedAfterCloseBeforeAnyStateChange(t *testing.T) {
+	st := New()
+	ctx := context.Background()
+
+	if err := st.Close(ctx); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	_, err := st.Append(ctx, validAppendRequest())
+	if !errors.Is(err, events.ErrClosed) {
+		t.Fatalf("Append() after Close error = %v, want ErrClosed", err)
+	}
+	if !errors.Is(err, events.ErrOperationFailed) {
+		t.Fatalf("Append() after Close error = %v, want it to also classify as ErrOperationFailed", err)
+	}
+}
+
+func TestAppend_RejectedAfterCloseForATopicCreatedAfterwards(t *testing.T) {
+	st := New()
+	ctx := context.Background()
+
+	if err := st.Close(ctx); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	req := validAppendRequest()
+	req.Topic = "chat-session/never-seen-before/events"
+	if _, err := st.Append(ctx, req); !errors.Is(err, events.ErrClosed) {
+		t.Fatalf("Append() on a brand-new topic after Close error = %v, want ErrClosed", err)
+	}
+}
+
 func TestAppend_CallerMutationOfRequestPayloadCannotAlterStoredRecord(t *testing.T) {
 	st := New()
 	ctx := context.Background()

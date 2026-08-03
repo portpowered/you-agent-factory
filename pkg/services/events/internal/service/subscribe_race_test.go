@@ -120,7 +120,9 @@ func TestSubscribe_NoGoroutineLeakAcrossSubscribeNextAndClose(t *testing.T) {
 		}
 	}
 
-	st.Close()
+	if err := st.Close(ctx); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
 	for _, sub := range subs {
 		if delivery := sub.Next(ctx); delivery.Kind != events.DeliveryClosed {
 			t.Fatalf("Next().Kind after Close() = %v, want DeliveryClosed", delivery.Kind)

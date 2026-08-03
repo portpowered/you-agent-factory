@@ -359,7 +359,9 @@ func TestAttachSource_ClosedSourceTopicIsRejected(t *testing.T) {
 	destination := events.Topic("chat-session/closed/events")
 	appendFixture(st, ctx, t, source, 1, "evt-1")
 
-	st.Close()
+	if err := st.Close(ctx); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
 
 	_, err := st.AttachSource(ctx, events.AttachSourceRequest{
 		Destination: destination,
@@ -370,8 +372,15 @@ func TestAttachSource_ClosedSourceTopicIsRejected(t *testing.T) {
 	if !errors.Is(err, events.ErrOperationFailed) {
 		t.Fatalf("AttachSource() error = %v, want ErrOperationFailed", err)
 	}
-	if destRecords := readAll(st, ctx, t, destination); len(destRecords) != 0 {
-		t.Fatalf("destination has %d records after AttachSource on a closed source, want 0", len(destRecords))
+	// Read itself also rejects after Close (story 005 shutdown scope), so
+	// the destination's record count is confirmed by inspecting the topic
+	// directly rather than through the now-rejecting public Read.
+	destTS := st.topic(destination)
+	destTS.mu.Lock()
+	destCount := len(destTS.records)
+	destTS.mu.Unlock()
+	if destCount != 0 {
+		t.Fatalf("destination has %d records after AttachSource on a closed source, want 0", destCount)
 	}
 }
 
@@ -396,15 +405,46 @@ func TestAttachSource_CloseTearsDownActiveForwarding(t *testing.T) {
 		t.Fatalf("destination has %d records before Close, want 1", len(before))
 	}
 
-	st.Close()
+	if err := st.Close(ctx); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
 
-	// Append does not itself reject after Close (that policy is out of this
-	// story's scope), but the attachment forward must have been torn down,
-	// so this later source commit is never forwarded to the destination.
-	appendFixture(st, ctx, t, source, 2, "evt-2")
+	// White-box: prove the source topic's outgoing attachment registration
+	// was itself torn down by Close, independent of the fact that Append
+	// also now rejects everything after Close (see
+	// TestAppend_RejectedAfterClose) -- this is what actually stops a later
+	// commit from ever reaching forwardRecord, not merely that Append never
+	// gets that far.
+	ts := st.topic(source)
+	ts.mu.Lock()
+	attachmentCount := len(ts.attachments)
+	ts.mu.Unlock()
+	if attachmentCount != 0 {
+		t.Fatalf("source topic has %d attachment registration(s) after Close, want 0 (forwarding must be torn down)", attachmentCount)
+	}
 
-	after := readAll(st, ctx, t, destination)
-	if len(after) != 1 {
-		t.Fatalf("destination has %d records after Close, want still 1 (forwarding must stop once the source topic is closed)", len(after))
+	// Append itself is now rejected after Close (story 005 shutdown scope),
+	// so a later source commit cannot reach forwarding at all.
+	if _, err := st.Append(ctx, events.AppendRequest{
+		Topic:          source,
+		SourceType:     "worker.tool",
+		SourceID:       "worker-1",
+		SourceSequence: 2,
+		SourceEventID:  "evt-2",
+		SchemaID:       "worker.output.v1",
+		Payload:        json.RawMessage(`{"ok":true}`),
+	}); !errors.Is(err, events.ErrClosed) {
+		t.Fatalf("Append() after Close error = %v, want ErrClosed", err)
+	}
+
+	// Read itself also rejects after Close (story 005 shutdown scope), so
+	// the destination's still-1-record state is confirmed by inspecting the
+	// topic directly rather than through the now-rejecting public Read.
+	destTS := st.topic(destination)
+	destTS.mu.Lock()
+	destCount := len(destTS.records)
+	destTS.mu.Unlock()
+	if destCount != 1 {
+		t.Fatalf("destination has %d records after Close, want still 1 (forwarding must stop once the source topic is closed)", destCount)
 	}
 }

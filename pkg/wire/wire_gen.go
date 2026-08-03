@@ -559,7 +559,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	processLifecycle, err := provideApplicationProcessLifecycle(service)
+	eventsService, err := provideEventsService(loggingLogger)
+	if err != nil {
+		return nil, err
+	}
+	processLifecycle, err := provideApplicationProcessLifecycle(service, eventsService)
 	if err != nil {
 		return nil, err
 	}
@@ -578,6 +582,7 @@ var apiSet = wire3.NewSet(http.NewAdapter, http.NewHandler, composition.NewHTTPB
 
 var servicesSet = wire3.NewSet(
 	provideProvidersService,
+	provideEventsService,
 	provideApplicationProcessLifecycle,
 	provideProviderRegistry,
 	provideProviderRegistryRebinder, wire3.Bind(new(application.ProviderRegistry), new(workers.ProviderRegistry)), provideFactorySessionProviderIdentityResolver, wire2.NewRequestPreparation, provideFactorySessionHTTPRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
