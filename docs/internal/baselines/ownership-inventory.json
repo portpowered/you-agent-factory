@@ -5124,14 +5124,6 @@
       "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
     },
     {
-      "packagePath": "pkg/services/workers/internal/service",
-      "disposition": "move",
-      "destination": "workers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/workers/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
-    },
-    {
       "packagePath": "pkg/services/workers/internal/services/runners",
       "disposition": "retain",
       "destination": "workers",

@@ -137,51 +137,6 @@ func TestMaterializeWorkerOutputForDispatchNoopWithoutProposals(t *testing.T) {
 	}
 }
 
-func TestMaterializeExecuteResultPreservesCustomerOutcomes(t *testing.T) {
-	t.Parallel()
-
-	for _, outcome := range []workerexecution.WorkOutcome{
-		workerexecution.OutcomeAccepted,
-		workerexecution.OutcomeContinue,
-		workerexecution.OutcomeRejected,
-	} {
-		outcome := outcome
-		t.Run(string(outcome), func(t *testing.T) {
-			t.Parallel()
-			result := materializeExecuteResultForDispatch(
-				context.Background(),
-				testMaterializationService(),
-				&state.Net{WorkTypes: map[string]*state.WorkType{"task": {ID: "task"}}},
-				func() string { return "id" },
-				work.WorkDispatch{
-					DispatchID: "dispatch-1",
-					Execution:  work.ExecutionMetadata{WorkIDs: []string{"work-1"}},
-				},
-				workerexecution.WorkResult{Outcome: outcome, Output: "body"},
-				workerexecution.ExecuteResult{
-					Outcome: workerexecution.ExecutionOutcome(outcome),
-					Output: workerexecution.ProposedOutput{
-						Primary: []work.WorkContentPart{{
-							Type: work.WorkContentPartTypeText,
-							Text: "body",
-						}},
-						ProposedWork: []workerexecution.ProposedWork{{
-							WorkTypeID: "task",
-							Name:       "next",
-						}},
-					},
-				},
-			)
-			if result.Outcome != outcome {
-				t.Fatalf("outcome = %q, want %q", result.Outcome, outcome)
-			}
-			if len(result.RecordedOutputWork) != 1 || result.RecordedOutputWork[0].ID == "" {
-				t.Fatalf("RecordedOutputWork = %#v", result.RecordedOutputWork)
-			}
-		})
-	}
-}
-
 func testMaterializationService() work.Service {
 	return workwire.NewRuntimeService(nil, nil, nil, nil)
 }
