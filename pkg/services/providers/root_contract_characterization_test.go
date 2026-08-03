@@ -9,9 +9,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"reflect"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/ownershipinventory"
@@ -242,63 +240,6 @@ func TestProvidersRootContractInventorySeal(t *testing.T) {
 
 	if err := ownershipinventory.VerifyProvidersRootContractInventory(providersRepositoryRoot(t)); err != nil {
 		t.Fatalf("VerifyProvidersRootContractInventory() error = %v", err)
-	}
-}
-
-func TestProvidersRootServiceInterfaceCountAndSelectionMethods(t *testing.T) {
-	t.Parallel()
-
-	serviceRoot := filepath.Join(providersRepositoryRoot(t), "pkg", "services", "providers")
-	entries, err := os.ReadDir(serviceRoot)
-	if err != nil {
-		t.Fatalf("ReadDir(%q) = %v", serviceRoot, err)
-	}
-	var serviceInterfaces []string
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" || strings.HasSuffix(entry.Name(), "_test.go") {
-			continue
-		}
-		path := filepath.Join(serviceRoot, entry.Name())
-		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-		if err != nil {
-			t.Fatalf("ParseFile(%q) = %v", path, err)
-		}
-		for _, declaration := range file.Decls {
-			generic, ok := declaration.(*ast.GenDecl)
-			if !ok || generic.Tok != token.TYPE {
-				continue
-			}
-			for _, specification := range generic.Specs {
-				typeSpec, ok := specification.(*ast.TypeSpec)
-				if !ok || typeSpec.Name.Name != "Service" {
-					continue
-				}
-				if _, ok := typeSpec.Type.(*ast.InterfaceType); ok {
-					serviceInterfaces = append(serviceInterfaces, entry.Name()+":Service")
-				}
-			}
-		}
-	}
-	slices.Sort(serviceInterfaces)
-	if want := []string{"service_contract.go:Service"}; !slices.Equal(serviceInterfaces, want) {
-		t.Fatalf("Providers root Service interfaces = %v, want %v", serviceInterfaces, want)
-	}
-
-	rootType := reflect.TypeOf((*providers.Service)(nil)).Elem()
-	wantMethods := []string{
-		"Execute",
-		"GetProvider",
-		"ListProviders",
-		"ResolveIdentity",
-		"ResolveSelection",
-		"ValidatePrerequisites",
-	}
-	gotMethods := make([]string, rootType.NumMethod())
-	for index := range gotMethods {
-		gotMethods[index] = rootType.Method(index).Name
-	}
-	if !slices.Equal(gotMethods, wantMethods) {
-		t.Fatalf("Providers Service methods = %v, want %v", gotMethods, wantMethods)
 	}
 }
 

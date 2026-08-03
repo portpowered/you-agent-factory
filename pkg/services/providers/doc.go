@@ -2,11 +2,15 @@
 //
 // Peer-facing root contract (source of truth for published slices):
 //   - Service — singular cross-service seam (catalog, availability/capabilities,
-//     and one-attempt Execute slices publish additively on this interface)
+//     one-attempt Execute, and attempt-control slices publish additively on
+//     this interface)
 //   - ID, Descriptor, SessionRef — Providers-owned identity vocabulary
 //   - Service.ResolveIdentity, Service.ResolveSelection,
 //     Service.ValidatePrerequisites — Providers-owned alias, selection, and
 //     prerequisite authority
+//   - Service.ControlAttempt — Providers-owned pause/cancel/terminate action
+//     vocabulary with a closed completed/unsupported outcome; every valid
+//     action currently answers with the canonical unsupported outcome
 //   - detached request, result, value, and typed-error contracts
 //
 // Construction/process-edge ports exist so Wire and owner constructors can

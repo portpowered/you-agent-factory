@@ -4,13 +4,14 @@ import (
 	"context"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 func TestServiceInternalDelegationCoverage(t *testing.T) {
 	catalog := internalCatalogStub{}
 	execution := internalExecutionStub{}
-	root, err := New(catalog, execution)
+	root, err := New(catalog, execution, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -29,10 +30,10 @@ func TestServiceInternalDelegationCoverage(t *testing.T) {
 	); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if root, err := New(nil, execution); err == nil || root != nil {
+	if root, err := New(nil, execution, logging.NoopLogger{}); err == nil || root != nil {
 		t.Fatalf("New(nil, execution) = (%v, %v), want error", root, err)
 	}
-	if root, err := New(catalog, nil); err == nil || root != nil {
+	if root, err := New(catalog, nil, logging.NoopLogger{}); err == nil || root != nil {
 		t.Fatalf("New(catalog, nil) = (%v, %v), want error", root, err)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
@@ -20,26 +21,31 @@ type Service struct {
 	acp         acp.Service
 	packagedACP []providers.ACPIntegration
 	lifecycles  []providers.Lifecycle
+	logger      logging.Logger
 }
 
 var _ providers.Service = (*Service)(nil)
 
 // New constructs an inert Providers root facade over its two private sibling
-// capabilities.
-func New(catalogService catalog.Service, executionService execution.Service) (providers.Service, error) {
-	return newService(catalogService, executionService, nil, nil)
+// capabilities. logger is the direct, required operation-logging
+// abstraction; callers with no operation logging pass logging.NoopLogger{}.
+func New(catalogService catalog.Service, executionService execution.Service, logger logging.Logger) (providers.Service, error) {
+	return newService(catalogService, executionService, nil, nil, logger, nil)
 }
 
 // NewWithACP constructs the production Providers root with its persistent ACP
-// subservice and exact lifecycle roles.
+// subservice and exact lifecycle roles. logger is the direct, required
+// operation-logging abstraction; callers with no operation logging pass
+// logging.NoopLogger{}.
 func NewWithACP(
 	catalogService catalog.Service,
 	executionService execution.Service,
 	acpService acp.Service,
 	packagedACP []providers.ACPIntegration,
+	logger logging.Logger,
 	lifecycles ...providers.Lifecycle,
 ) (providers.Service, error) {
-	return newService(catalogService, executionService, acpService, packagedACP, lifecycles...)
+	return newService(catalogService, executionService, acpService, packagedACP, logger, lifecycles)
 }
 
 func newService(
@@ -47,7 +53,8 @@ func newService(
 	executionService execution.Service,
 	acpService acp.Service,
 	packagedACP []providers.ACPIntegration,
-	lifecycles ...providers.Lifecycle,
+	logger logging.Logger,
+	lifecycles []providers.Lifecycle,
 ) (providers.Service, error) {
 	if catalogService == nil {
 		return nil, fmt.Errorf("construct Providers: catalog is required")
@@ -60,7 +67,14 @@ func newService(
 			return nil, fmt.Errorf("construct Providers: lifecycle %d is required", index)
 		}
 	}
-	return &Service{catalog: catalogService, execution: executionService, acp: acpService, packagedACP: cloneACPIntegrations(packagedACP), lifecycles: append([]providers.Lifecycle(nil), lifecycles...)}, nil
+	return &Service{
+		catalog:     catalogService,
+		execution:   executionService,
+		acp:         acpService,
+		packagedACP: cloneACPIntegrations(packagedACP),
+		lifecycles:  append([]providers.Lifecycle(nil), lifecycles...),
+		logger:      logging.EnsureLogger(logger),
+	}, nil
 }
 
 func (s *Service) ListProviders(
@@ -150,6 +164,46 @@ func (s *Service) Execute(
 		}
 	}
 	return s.execution.Execute(ctx, request)
+}
+
+// ControlAttempt answers every valid pause, cancel, or terminate request with
+// the canonical deterministic unsupported outcome for this packet. It invokes
+// no execution adapter, provider process, ACP operation, Worker cancellation
+// method, or continuation behavior.
+func (s *Service) ControlAttempt(
+	_ context.Context,
+	request providers.ControlAttemptRequest,
+) (providers.ControlAttemptResult, error) {
+	if err := request.Validate(); err != nil {
+		s.logger.Info(
+			"provider control attempt rejected",
+			"provider", string(request.Provider),
+			"attemptID", request.AttemptID,
+			"action", string(request.Action),
+			"outcome", "invalid",
+		)
+		return providers.ControlAttemptResult{}, err
+	}
+	s.logger.Info(
+		"provider control attempt accepted",
+		"provider", string(request.Provider),
+		"attemptID", request.AttemptID,
+		"action", string(request.Action),
+	)
+	result := providers.ControlAttemptResult{
+		Provider:  request.Provider,
+		AttemptID: request.AttemptID,
+		Action:    request.Action,
+		Outcome:   providers.ControlOutcomeUnsupported,
+	}
+	s.logger.Info(
+		"provider control attempt outcome",
+		"provider", string(request.Provider),
+		"attemptID", request.AttemptID,
+		"action", string(request.Action),
+		"outcome", string(result.Outcome),
+	)
+	return result, nil
 }
 
 func (s *Service) ConfigureACPIntegrations(ctx context.Context, configured []providers.ACPIntegration) error {

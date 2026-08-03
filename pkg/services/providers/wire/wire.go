@@ -15,6 +15,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -56,6 +57,7 @@ type wireOptions struct {
 	commandFactory       platformprocess.CommandFactory
 	executableLocator    platformprocess.ExecutableLocator
 	registrations        ProviderRegistrations
+	logger               logging.Logger
 }
 
 type registrationsOption struct {
@@ -161,6 +163,19 @@ func WithAgyPTY(platform AgyPTYPlatformDependencies) Option {
 	return agyPTYPlatformOption{platform: platform}
 }
 
+type loggerOption struct {
+	logger logging.Logger
+}
+
+func (o loggerOption) apply(opts *wireOptions) { opts.logger = o.logger }
+
+// WithLogger injects the safe structured logger the constructed root uses for
+// accepted-intent and terminal-outcome operation records, including
+// ControlAttempt. A nil or omitted logger falls back to logging.NoopLogger.
+func WithLogger(logger logging.Logger) Option {
+	return loggerOption{logger: logger}
+}
+
 // NewService constructs one inert Providers root over sibling Catalog and
 // Execution capabilities sharing the same private catalog identity authority.
 // Missing required composition inputs fail with a deterministic construction
@@ -197,6 +212,7 @@ func NewService(options ...Option) (providers.Service, error) {
 		acp,
 		config.commandFactory,
 		config.executableLocator,
+		config.logger,
 		config.registrations...,
 	)
 }
@@ -220,6 +236,7 @@ func newRoot(
 	acpIntegrations []providers.ACPIntegration,
 	commandFactory platformprocess.CommandFactory,
 	executableLocator platformprocess.ExecutableLocator,
+	logger logging.Logger,
 	externalRegistrations ...Registration,
 ) (providers.Service, error) {
 	if catalogService == nil {
@@ -255,7 +272,14 @@ func newRoot(
 	if err != nil {
 		return nil, err
 	}
-	return providerservice.NewWithACP(catalogService, executionService, acpService, acpIntegrations, acpService)
+	return providerservice.NewWithACP(
+		catalogService,
+		executionService,
+		acpService,
+		acpIntegrations,
+		logger,
+		acpService,
+	)
 }
 
 func registrationDescriptor(manifest Manifest) providers.Descriptor {

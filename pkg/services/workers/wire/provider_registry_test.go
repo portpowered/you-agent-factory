@@ -42,6 +42,13 @@ type registryProvidersFake struct{}
 
 var _ providers.Service = (*registryProvidersFake)(nil)
 
+func (*registryProvidersFake) ControlAttempt(
+	context.Context,
+	providers.ControlAttemptRequest,
+) (providers.ControlAttemptResult, error) {
+	return providers.ControlAttemptResult{}, nil
+}
+
 func (*registryProvidersFake) Execute(
 	context.Context,
 	providers.ExecuteRequest,

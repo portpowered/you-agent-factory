@@ -224,7 +224,7 @@ func newProcessForTest(
 	initializer startupcli.Initializer,
 ) *Process {
 	t.Helper()
-	process, err := NewProcess(factory, initializer, processTestProviderRegistry{}, processTestLifecycle{})
+	process, err := NewProcess(factory, initializer, processTestProviderRegistry{}, processTestLifecycle{}, processTestACPServer{})
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)
 	}
@@ -234,7 +234,7 @@ func newProcessForTest(
 func TestProcessRequiresAndExposesProviderRegistry(t *testing.T) {
 	t.Parallel()
 
-	if process, err := NewProcess(nil, nil, nil, nil); err == nil || process != nil {
+	if process, err := NewProcess(nil, nil, nil, nil, nil); err == nil || process != nil {
 		t.Fatalf("NewProcess(nil registry) = (%#v, %v), want construction failure", process, err)
 	}
 	if registry := (*Process)(nil).ProviderRegistry(); registry != nil {
@@ -242,7 +242,7 @@ func TestProcessRequiresAndExposesProviderRegistry(t *testing.T) {
 	}
 
 	want := processTestProviderRegistry{}
-	process, err := NewProcess(nil, nil, want, processTestLifecycle{})
+	process, err := NewProcess(nil, nil, want, processTestLifecycle{}, nil)
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)
 	}
@@ -251,11 +251,32 @@ func TestProcessRequiresAndExposesProviderRegistry(t *testing.T) {
 	}
 }
 
+func TestProcessExposesACPServer(t *testing.T) {
+	t.Parallel()
+
+	if server := (*Process)(nil).ACPServer(); server != nil {
+		t.Fatalf("nil Process.ACPServer() = %#v, want nil", server)
+	}
+
+	want := processTestACPServer{}
+	process, err := NewProcess(nil, nil, processTestProviderRegistry{}, processTestLifecycle{}, want)
+	if err != nil {
+		t.Fatalf("NewProcess() error = %v", err)
+	}
+	if got := process.ACPServer(); got != want {
+		t.Fatalf("ACPServer() = %#v, want %#v", got, want)
+	}
+}
+
 type processTestProviderRegistry struct{}
 
 type processTestLifecycle struct{}
 
 func (processTestLifecycle) Close(context.Context) error { return nil }
+
+type processTestACPServer struct{}
+
+func (processTestACPServer) Serve(context.Context, io.Reader, io.Writer) error { return nil }
 
 func (processTestProviderRegistry) CanonicalIdentity(identity string) (string, error) {
 	return identity, nil

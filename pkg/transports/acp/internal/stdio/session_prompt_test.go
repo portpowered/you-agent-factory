@@ -212,6 +212,29 @@ func TestHandleSessionPromptFactoryCommandWorkingRootIncompatibleRejects(t *test
 	}
 }
 
+func TestHandleSessionPromptFactoryCommandProjectionFailureRejectsWithNoMutation(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project")}
+	catalog := &fakeFactoryTargetCatalogService{result: chatsessions.ResolveFactoryTargetCatalogResult{
+		CurrentTarget: "factory:@you/review",
+		Choices:       nil,
+	}}
+	server := newTestServer(chatSessions, catalog, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "/factory factory:@you/review"))
+
+	result, rpcErr := server.handleSessionPrompt(context.Background(), env)
+	if rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a rejection when the catalog projects no picker choices")
+	}
+	if result != nil {
+		t.Fatalf("handleSessionPrompt() result = %q, want nil on rejection", result)
+	}
+	if chatSessions.setTargetCalled {
+		t.Fatal("SetTarget was called, want zero mutation calls when picker projection fails")
+	}
+}
+
 func TestHandleSessionPromptFactoryCommandFailureNeverLeaksRawValueOrRoot(t *testing.T) {
 	sensitiveTarget := "factory:@you/sk_live_should_never_leak"
 	sensitiveRoot := "/home/operator/should-never-leak"

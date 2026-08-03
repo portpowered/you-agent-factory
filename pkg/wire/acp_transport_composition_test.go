@@ -6,37 +6,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 )
-
-// ResolveNamedFactory extends the sibling staticFactoryDefinitionsService
-// fake (declared in chat_sessions_composition_test.go) with the one other
-// Factory Definitions collaborator method a "session/new" or
-// "session/set_config_option" call reaches: the working-root compatibility
-// check the Factory target-catalog operation performs whenever a caller
-// supplies a non-blank ClientWorkingRoot. A global-source resolution always
-// satisfies that check, matching the default ACP Agent profile's
-// "@you/factory-builder" default target, which every case in this file
-// selects.
-func (s *staticFactoryDefinitionsService) ResolveNamedFactory(
-	context.Context,
-	factorydefinitions.ResolveNamedFactoryRequest,
-) (factorydefinitions.ResolveNamedFactoryResult, error) {
-	return factorydefinitions.ResolveNamedFactoryResult{
-		Resolution: factorydefinitions.NamedFactoryResolution{
-			Source: factorydefinitions.NamedFactoryResolutionSourceGlobal,
-		},
-	}, nil
-}
 
 // rpcTestMessage is the minimal JSON-RPC 2.0 response shape this test reads
 // off the real ACP stdio Server's Serve output.
@@ -46,46 +28,98 @@ type rpcTestMessage struct {
 	Error  *acpsdk.RequestError `json:"error"`
 }
 
-// TestACPServerReachesCanonicalChatSessionsAuthorityThroughWireComposition
-// proves the exact provider chain this graph registers for the production
-// ACP consumer (provideACPServer, consuming the same provideChatSessionsService
-// and provideChatSessionsFactoryTargetCatalogService chain every other
-// canonical consumer composes through) actually reaches the one process-scoped
-// Chat Sessions authority: a real "session/new" call through the constructed
-// acp.Server creates a session that is directly observable on the exact
-// chatsessions.Service instance injected into that same server, and a real
-// "session/set_config_option" call against it performs one target mutation
-// through the live catalog -- not a second, independently constructed Chat
-// engine and not a hand-rolled transport double.
-func TestACPServerReachesCanonicalChatSessionsAuthorityThroughWireComposition(t *testing.T) {
-	t.Parallel()
+// TestACPServerReachesCanonicalChatSessionsAuthorityThroughRootBuildProcess
+// proves the production construction path, not a hand-replicated provider
+// chain: it seeds a real, isolated home directory with two real packaged
+// Factories, calls InjectBundle (the exact function root.BuildProcess
+// delegates to) to obtain the one canonical *application.Process, and drives
+// every assertion through Process.ACPServer() -- the same accessor a real
+// embedding entrypoint would use. Two separate Serve calls (distinct
+// connections) reusing the identical bare JSON-RPC id 1 produce two distinct
+// sessions, proving connection-scoped request identity; a third connection
+// mutates the first connection's session, proving both observe the one
+// process-scoped Chat Sessions authority Wire composed -- not a second,
+// independently constructed engine and not a hand-rolled transport double.
+func TestACPServerReachesCanonicalChatSessionsAuthorityThroughRootBuildProcess(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
-	if _, err := InjectBundle(context.Background(), serviceedges.Edges{}); err != nil {
+	seedInstalledPackagedFactories(t, home, "@you/goal", "@you/review")
+	seedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal", "factory:@you/review"})
+
+	process, err := InjectBundle(context.Background(), serviceedges.Edges{})
+	if err != nil {
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
-
-	logger, chatSessions, catalog := buildACPCompositionTestCollaborators(t)
-
-	home := t.TempDir()
-	resolveHomeDir := acpServerResolveHomeDir(func() (string, error) { return home, nil })
-	server := provideACPServer(logger, chatSessions, catalog, resolveHomeDir)
+	server := process.ACPServer()
 	if server == nil {
-		t.Fatal("provideACPServer() returned a nil acp.Server")
+		t.Fatal("Process.ACPServer() returned a nil acp.Server")
 	}
 
 	cwd := t.TempDir()
-	created, initialSession := assertSessionNewCreatesObservableSession(t, server, chatSessions, cwd)
-	assertSetConfigOptionMutatesTargetThroughTheSameAuthority(t, server, chatSessions, created, initialSession)
+	sessionA := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
+	sessionB := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
+	if sessionA == sessionB {
+		t.Fatalf("session/new on two distinct connections using the identical bare JSON-RPC id 1 produced the same sessionId %q, want request identity to be connection-scoped", sessionA)
+	}
+
+	assertSetConfigOptionFromAnotherConnectionMutatesTheSharedAuthority(t, server, sessionA, "factory:@you/review")
 }
 
-// buildACPCompositionTestCollaborators constructs the same canonical logger,
-// chatsessions.Service, and chatsessions.FactoryTargetCatalogService chain
-// pkg/wire's generated InjectBundle registers for the production ACP
-// consumer, with a real Operator Settings root and a focused Factory
-// Definitions double standing in for the one collaborator only constructible
-// from a live Factory Session (see staticFactoryDefinitionsService's doc
-// comment in the sibling chat_sessions_composition_test.go).
-func buildACPCompositionTestCollaborators(t *testing.T) (logging.Logger, chatsessions.Service, chatsessions.FactoryTargetCatalogService) {
+// seedInstalledPackagedFactories writes the real published JSON for each
+// named built-in packaged Factory directly under the global named-Factory
+// root derived from home, at <globalRoot>/<scope>/<name>/factory.json --
+// the exact layout
+// pkg/services/factory_definitions/internal/services/catalog/namedfactories
+// and the effective-catalog discovery both read. This reaches the same
+// production catalog code the rest of this graph composes, without
+// hand-rolling a Factory Definitions double.
+func seedInstalledPackagedFactories(t *testing.T, home string, names ...string) {
+	t.Helper()
+
+	globalRoot, err := factorydefinitions.NamedFactoriesRootForHome(home)
+	if err != nil {
+		t.Fatalf("NamedFactoriesRootForHome() error = %v", err)
+	}
+
+	definitions, err := providePackagedFactoryDefinitions()
+	if err != nil {
+		t.Fatalf("providePackagedFactoryDefinitions() error = %v", err)
+	}
+	catalog, err := providePackagedFactoryCatalog(definitions)
+	if err != nil {
+		t.Fatalf("providePackagedFactoryCatalog() error = %v", err)
+	}
+
+	for _, name := range names {
+		resolved, err := catalog.ResolveBuiltInPackagedFactory(
+			context.Background(),
+			factorydefinitions.ResolveBuiltInPackagedFactoryRequest{Name: name},
+		)
+		if err != nil {
+			t.Fatalf("ResolveBuiltInPackagedFactory(%q) error = %v", name, err)
+		}
+		scope, leaf, ok := strings.Cut(strings.TrimPrefix(name, "@"), "/")
+		if !ok {
+			t.Fatalf("packaged Factory name %q is not scoped as @scope/name", name)
+		}
+		factoryDir := filepath.Join(globalRoot, "@"+scope, leaf)
+		if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+			t.Fatalf("MkdirAll(%q) error = %v", factoryDir, err)
+		}
+		configPath := filepath.Join(factoryDir, "factory.json")
+		if err := os.WriteFile(configPath, resolved.Definition.JSON, 0o644); err != nil {
+			t.Fatalf("WriteFile(%q) error = %v", configPath, err)
+		}
+	}
+}
+
+// seedACPAgentProfile persists a real ACP Agent profile at the production
+// Operator Settings config path for home, through the same
+// operatorsettings.Service.UpdateACPAgentProfile production callers use, so
+// InjectBundle's real Operator Settings root resolves it unmodified.
+func seedACPAgentProfile(t *testing.T, home, defaultTarget string, allowedTargets []string) {
 	t.Helper()
 
 	zapLogger, err := logging.NewDefaultLogger()
@@ -94,25 +128,6 @@ func buildACPCompositionTestCollaborators(t *testing.T) (logging.Logger, chatses
 	}
 	logger := logging.NewZapLogger(zapLogger, false)
 
-	chatSessions, err := provideChatSessionsService(logger)
-	if err != nil {
-		t.Fatalf("provideChatSessionsService() error = %v", err)
-	}
-
-	factoryBuilderLocation := "/factories/@you/factory-builder"
-	factoryDefinitions := &staticFactoryDefinitionsService{
-		entries: []factorydefinitions.EffectiveFactoryCatalogEntry{
-			{
-				Name:       "@you/factory-builder",
-				Location:   &factoryBuilderLocation,
-				Definition: &factorydefinitions.FactoryConfig{Name: "Factory Builder"},
-			},
-		},
-	}
-	// A non-existent Operator Settings path resolves the built-in default ACP
-	// Agent profile (DefaultTarget "factory:@you/factory-builder"), matching
-	// the sole installed entry above, exactly like the sibling
-	// provideChatSessionsFactoryTargetCatalogService composition test does.
 	edges := serviceedges.Edges{}
 	files := provideOperatorSettingsFileSystem(edges)
 	providersRoot, err := provideProvidersService(edges)
@@ -123,7 +138,7 @@ func buildACPCompositionTestCollaborators(t *testing.T) (logging.Logger, chatses
 	if err != nil {
 		t.Fatalf("provideProviderRegistry() error = %v", err)
 	}
-	operatorSettings, err := provideOperatorSettingsService(
+	service, err := provideOperatorSettingsService(
 		files,
 		provideOperatorSettingsCreateTemporaryFile(edges),
 		provideOperatorSettingsProviderCatalog(providerRegistry),
@@ -136,25 +151,20 @@ func buildACPCompositionTestCollaborators(t *testing.T) (logging.Logger, chatses
 	if err != nil {
 		t.Fatalf("provideOperatorSettingsService() error = %v", err)
 	}
-	catalog, err := provideChatSessionsFactoryTargetCatalogService(operatorSettings, factoryDefinitions, logger)
-	if err != nil {
-		t.Fatalf("provideChatSessionsFactoryTargetCatalogService() error = %v", err)
+
+	configPath := operatorsettings.DefaultConfigPath(home)
+	if _, err := service.UpdateACPAgentProfile(context.Background(), configPath, operatorsettings.ACPAgentProfile{
+		DefaultTarget:  defaultTarget,
+		AllowedTargets: allowedTargets,
+	}); err != nil {
+		t.Fatalf("UpdateACPAgentProfile() error = %v", err)
 	}
-	return logger, chatSessions, catalog
 }
 
-// assertSessionNewCreatesObservableSession drives one real "session/new"
-// call through server and proves the created session is directly
-// observable on chatSessions -- the exact instance this test injected into
-// provideACPServer -- so the ACP boundary and the canonical Chat Sessions
-// authority are proven to be the one singular instance, not two
-// independently constructed engines.
-func assertSessionNewCreatesObservableSession(
-	t *testing.T,
-	server acp.Server,
-	chatSessions chatsessions.Service,
-	cwd string,
-) (acpsdk.NewSessionResponse, chatsessions.GetSessionResult) {
+// assertSessionNewReturnsDefaultTarget drives one real "session/new" call on
+// its own connection (a fresh Serve invocation) using the fixed bare
+// JSON-RPC id 1, and returns the created sessionId.
+func assertSessionNewReturnsDefaultTarget(t *testing.T, server acp.Server, cwd, wantCurrent string) string {
 	t.Helper()
 
 	var out bytes.Buffer
@@ -177,39 +187,30 @@ func assertSessionNewCreatesObservableSession(
 	if created.SessionId == "" {
 		t.Fatal("session/new result sessionId is blank")
 	}
-	if len(created.ConfigOptions) != 1 {
-		t.Fatalf("session/new result configOptions = %d, want exactly one Factory target picker option", len(created.ConfigOptions))
+	if len(created.ConfigOptions) != 1 || created.ConfigOptions[0].Select == nil {
+		t.Fatalf("session/new configOptions = %+v, want exactly one Factory target picker option", created.ConfigOptions)
 	}
-
-	getResult, err := chatSessions.GetSession(context.Background(), chatsessions.GetSessionRequest{
-		SessionID: string(created.SessionId),
-	})
-	if err != nil {
-		t.Fatalf("GetSession(%q) on the canonical instance error = %v, want the session the ACP server just created", created.SessionId, err)
+	if string(created.ConfigOptions[0].Select.CurrentValue) != wantCurrent {
+		t.Fatalf("session/new currentValue = %q, want %q", created.ConfigOptions[0].Select.CurrentValue, wantCurrent)
 	}
-	if getResult.Session.WorkingRoot != cwd {
-		t.Fatalf("created session WorkingRoot = %q, want the validated editor cwd %q", getResult.Session.WorkingRoot, cwd)
-	}
-	return created, getResult
+	return string(created.SessionId)
 }
 
-// assertSetConfigOptionMutatesTargetThroughTheSameAuthority drives one real
-// "session/set_config_option" call against the session created above and
-// proves it performed exactly one live-catalog-revalidated SetTarget
-// mutation, observable through the same canonical chatSessions instance.
-func assertSetConfigOptionMutatesTargetThroughTheSameAuthority(
-	t *testing.T,
-	server acp.Server,
-	chatSessions chatsessions.Service,
-	created acpsdk.NewSessionResponse,
-	initial chatsessions.GetSessionResult,
+// assertSetConfigOptionFromAnotherConnectionMutatesTheSharedAuthority drives
+// one real "session/set_config_option" call, on a third, independent Serve
+// connection reusing the same bare JSON-RPC id 1, addressing the session a
+// different connection created. Success is observable only if both
+// connections share the one process-scoped Chat Sessions authority Wire
+// composed through provideACPServer.
+func assertSetConfigOptionFromAnotherConnectionMutatesTheSharedAuthority(
+	t *testing.T, server acp.Server, sessionID, newTarget string,
 ) {
 	t.Helper()
 
 	var out bytes.Buffer
 	setConfigLine := fmt.Sprintf(
-		`{"jsonrpc":"2.0","id":2,"method":"session/set_config_option","params":{"sessionId":%q,"configId":"target","value":"factory:@you/factory-builder"}}`+"\n",
-		created.SessionId,
+		`{"jsonrpc":"2.0","id":1,"method":"session/set_config_option","params":{"sessionId":%q,"configId":"target","value":%q}}`+"\n",
+		sessionID, newTarget,
 	)
 	if err := server.Serve(context.Background(), strings.NewReader(setConfigLine), &out); err != nil {
 		t.Fatalf("Serve(session/set_config_option) error = %v", err)
@@ -218,18 +219,15 @@ func assertSetConfigOptionMutatesTargetThroughTheSameAuthority(
 	if resp.Error != nil {
 		t.Fatalf("session/set_config_option response error = %+v, want a successful result", resp.Error)
 	}
-
-	mutated, err := chatSessions.GetSession(context.Background(), chatsessions.GetSessionRequest{
-		SessionID: string(created.SessionId),
-	})
-	if err != nil {
-		t.Fatalf("GetSession() after set_config_option error = %v", err)
+	var mutated acpsdk.SetSessionConfigOptionResponse
+	if err := json.Unmarshal(resp.Result, &mutated); err != nil {
+		t.Fatalf("unmarshal session/set_config_option result: %v", err)
 	}
-	if mutated.Session.Version <= initial.Session.Version {
-		t.Fatalf("session version after set_config_option = %d, want strictly newer than %d", mutated.Session.Version, initial.Session.Version)
+	if len(mutated.ConfigOptions) != 1 || mutated.ConfigOptions[0].Select == nil {
+		t.Fatalf("session/set_config_option configOptions = %+v, want exactly one Factory target picker option", mutated.ConfigOptions)
 	}
-	if mutated.Session.TargetEpisode <= initial.Session.TargetEpisode {
-		t.Fatalf("target episode after set_config_option = %d, want strictly newer than %d", mutated.Session.TargetEpisode, initial.Session.TargetEpisode)
+	if string(mutated.ConfigOptions[0].Select.CurrentValue) != newTarget {
+		t.Fatalf("session/set_config_option currentValue = %q, want %q", mutated.ConfigOptions[0].Select.CurrentValue, newTarget)
 	}
 }
 
