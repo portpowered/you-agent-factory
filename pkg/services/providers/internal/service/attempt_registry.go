@@ -48,13 +48,18 @@ type liveAttemptControl interface {
 // the execution seam already force-terminates its adapter subprocess/PTY
 // session on (see the codex, claude, and agy adapters' shared reliance on
 // context cancellation reaching pkg/platform/process's immediate kill path,
-// and agypty's ctx.Done() select in session_run.go). done is closed only
-// after the bound Execute call has returned, so signal can block a control
-// caller until the controlled execution has actually observed its terminal
-// behavior instead of merely requesting it.
+// and agypty's ctx.Done() select in session_run.go). finish is called by the
+// bound Execute call as soon as it returns, recording cancelled - the
+// attempt's real recorded outcome - strictly before done closes, mirroring
+// acpAttemptControl/cancelwindow.Session.cancelled: a concurrent claim that
+// lands after Execute already returned but before the registry entry is
+// released still only ever observes the true recorded outcome once signal
+// waits on done, so a natural success can never be misreported as
+// ControlOutcomeCompleted merely because it won that race.
 type nativeAttemptControl struct {
-	cancel context.CancelFunc
-	done   <-chan struct{}
+	cancel    context.CancelFunc
+	done      chan struct{}
+	cancelled bool
 }
 
 var _ liveAttemptControl = (*nativeAttemptControl)(nil)
@@ -78,14 +83,29 @@ func (control *nativeAttemptControl) supports(action providers.ControlAction) bo
 // true. Native cancellation has no genuine-failure path of its own - cancel
 // is a plain context.CancelFunc - so signal only reports accepted=false,
 // err=ctx.Err() if the caller stops waiting before the execution returns.
+// The accepted result is grounded in control.cancelled (finish's recorded
+// outcome), not in the bare fact that done closed, so a claim that lands
+// after the attempt already succeeded naturally reports accepted=false
+// instead of a false completed.
 func (control *nativeAttemptControl) signal(ctx context.Context) (bool, error) {
 	control.cancel()
 	select {
 	case <-control.done:
-		return true, nil
+		return control.cancelled, nil
 	case <-ctx.Done():
 		return false, ctx.Err()
 	}
+}
+
+// finish records cancelled - whether the bound Execute call's own result
+// reflects genuine cancellation - and then closes done, in that order, so
+// any signal call unblocked by done can read cancelled without its own
+// synchronization (the channel close/receive already establishes the
+// happens-before). Must be called exactly once, synchronously, as soon as
+// the bound Execute call returns.
+func (control *nativeAttemptControl) finish(cancelled bool) {
+	control.cancelled = cancelled
+	close(control.done)
 }
 
 // liveAttemptEntry is the value held for one live identity. control is nil

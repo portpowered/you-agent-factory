@@ -280,9 +280,9 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 			string(session.SessionId),
 		)
 	}
-	cancelable := daemon.window.Begin(request.AttemptID, session.SessionId, connection)
-	response, err := connection.Prompt(ctx, acpsdk.PromptRequest{SessionId: session.SessionId, Prompt: prompt})
-	daemon.window.End(cancelable, err == nil && response.StopReason == acpsdk.StopReasonCancelled)
+	response, err := daemon.promptWithWindow(request.AttemptID, session.SessionId, connection, func() (acpsdk.PromptResponse, error) {
+		return connection.Prompt(ctx, acpsdk.PromptRequest{SessionId: session.SessionId, Prompt: prompt})
+	})
 	if err != nil {
 		if ctx.Err() != nil {
 			cancelCtx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -296,6 +296,29 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 		return providers.ExecuteResult{}, withPartial(acpControlCanceledFailure(id), client, id)
 	}
 	return providers.ExecuteResult{Content: client.content(), SessionRef: &providers.SessionRef{Provider: id, Kind: providers.SessionIDKind, ID: string(session.SessionId)}, Diagnostics: &providers.ExecuteDiagnostics{Progress: completedPromptProgress(client.progressFacts()), Metadata: map[string]string{"execution_kind": "acp", "protocol_version": fmt.Sprint(initialized.ProtocolVersion), "model_config": modelConfig}}}, nil
+}
+
+// promptWithWindow opens the cancelable window for attemptID, runs prompt,
+// and closes the window with the real recorded outcome - via defer, so an
+// unexpected prompt unwind (including a panic) still closes the window
+// instead of leaving it stale. A stale window would let a later execution
+// that reuses this same attempt ID bind at the root and have a racing
+// control claim, or hang indefinitely on, this dead session (see
+// cancelwindow's package doc). response/err are read by the deferred closure
+// only after the assignment below completes, so a normal return still
+// records the actual outcome.
+func (daemon *daemon) promptWithWindow(
+	attemptID string,
+	sessionID acpsdk.SessionId,
+	connection *acpsdk.ClientSideConnection,
+	prompt func() (acpsdk.PromptResponse, error),
+) (response acpsdk.PromptResponse, err error) {
+	cancelable := daemon.window.Begin(attemptID, sessionID, connection)
+	defer func() {
+		daemon.window.End(cancelable, err == nil && response.StopReason == acpsdk.StopReasonCancelled)
+	}()
+	response, err = prompt()
+	return response, err
 }
 
 func (daemon *daemon) ensureStarted(ctx context.Context, id providers.ID, cwd string, environment []string, request providers.ExecuteRequest) error {

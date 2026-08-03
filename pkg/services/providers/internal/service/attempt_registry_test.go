@@ -249,6 +249,62 @@ func TestLiveAttemptRegistry_ClaimIsExclusiveAmongConcurrentCallers(t *testing.T
 	}
 }
 
+// TestNativeAttemptControl_ClaimAfterNaturalSuccessButBeforeReleaseReportsUnsupported
+// proves the exact adapter-return-before-deregistration interleaving a
+// reviewer flagged: Execute can return with a natural success and call
+// control.finish(false) before its deferred release() has removed the
+// registry entry, leaving a narrow window where a concurrent claim() still
+// finds the identity live. Even though claim() wins that race (the identity
+// is still registered), signal() must ground its answer in the real recorded
+// outcome (finish's cancelled=false) rather than the bare fact that done is
+// closed, so the caller sees accepted=false/unsupported instead of a false
+// ControlOutcomeCompleted for an attempt that already succeeded on its own.
+func TestNativeAttemptControl_ClaimAfterNaturalSuccessButBeforeReleaseReportsUnsupported(t *testing.T) {
+	t.Parallel()
+
+	registry := newLiveAttemptRegistry()
+	key := liveAttemptKey{provider: providers.IDCodex, attemptID: "attempt-1"}
+	cancelCalls := 0
+	control := &nativeAttemptControl{cancel: func() { cancelCalls++ }, done: make(chan struct{})}
+
+	release, err := registry.bind(key, control)
+	if err != nil {
+		t.Fatalf("bind() error = %v, want nil", err)
+	}
+
+	// Model Execute returning naturally: finish(false) already ran (as it
+	// would synchronously right after s.execution.Execute returns), but the
+	// deferred release() has not yet run, so the registry still reports the
+	// identity live.
+	control.finish(false)
+	if !registry.contains(key) {
+		t.Fatal("contains() = false before release(), want the identity still live in the race window")
+	}
+
+	claimed, ok := registry.claim(key, providers.ControlActionCancel)
+	if !ok {
+		t.Fatal("claim() ok = false, want true: the identity is still registered in this window")
+	}
+
+	accepted, err := claimed.signal(context.Background())
+	if err != nil {
+		t.Fatalf("signal() error = %v, want nil", err)
+	}
+	if accepted {
+		t.Fatal("signal() accepted = true, want false: the attempt already succeeded naturally before this claim landed")
+	}
+	if cancelCalls != 1 {
+		t.Fatalf("cancel calls = %d, want 1 (signal must still invoke cancel even when it loses the race)", cancelCalls)
+	}
+
+	// The deferred release() the real Execute call would still run afterward
+	// must remain a safe no-op.
+	release()
+	if registry.contains(key) {
+		t.Fatal("contains() = true after release(), want the identity removed")
+	}
+}
+
 // TestLiveAttemptRegistry_ClaimRacingReleaseHasOneDeterministicWinnerAndAlwaysRemoves
 // proves the natural-completion-versus-control race story 004 requires:
 // registry.claim (a control call) and the release closure returned by bind

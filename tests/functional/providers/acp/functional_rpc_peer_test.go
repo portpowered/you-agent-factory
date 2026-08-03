@@ -67,7 +67,11 @@ func (p *functionalRPCPeer) serve() error {
 			}
 			authMethods := `[]`
 			if p.mode == "auth" {
-				authMethods = `[{"id":"login","name":"Agent login"}]`
+				// Advertises all three real ACP auth method shapes (default
+				// agent-handled, env_var, terminal) so the hint-building
+				// switch's env_var/terminal cases are exercised alongside the
+				// default agent case, not just the latter.
+				authMethods = `[{"id":"login","name":"Agent login"},{"type":"env_var","id":"env-login","name":"Env var login","vars":[]},{"type":"terminal","id":"terminal-login","name":"Terminal login"}]`
 			}
 			result := json.RawMessage(fmt.Sprintf(`{"protocolVersion":%d,"agentCapabilities":{},"authMethods":%s}`, version, authMethods))
 			if err := p.respond(request.ID, result); err != nil {

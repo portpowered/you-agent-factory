@@ -3,6 +3,7 @@ package acp_test
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -14,6 +15,42 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// TestACPCommandStartFailureMapsToDependencyFailure keeps a root.BuildProcess
+// cell for the case where the ACP command factory produces a non-nil,
+// lookup-eligible *exec.Cmd but the OS itself refuses to start it (here, a
+// command name no PATH entry can resolve), proving the observable,
+// caller-visible outcome the daemon's cmd.Start() failure path maps to: the
+// run fails with a dependency-kind error rather than hanging or panicking.
+func TestACPCommandStartFailureMapsToDependencyFailure(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP command start failure"}`))
+	writeACPWorker(t, dir, "cursor-acp")
+
+	_, listed, _, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(t, dir, serviceedges.Edges{
+		PlatformProcessCommandFactory: func(string, ...string) *exec.Cmd {
+			return exec.Command("you-agent-factory-acp-helper-does-not-exist-xyz")
+		},
+		ProvidersExecutableLocator: availableExecutableLocator{},
+	}, 20*time.Second)
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed work = %d, want 1", got)
+	}
+	for _, event := range responseEvents {
+		if event.Kind != "ERROR" || event.Phase != "FAILED" || event.Provenance.Provider != "cursor-acp" {
+			continue
+		}
+		payload, err := event.Payload.AsFactoryResponseEventErrorPayload()
+		if err != nil {
+			t.Fatalf("decode ACP error response: %v", err)
+		}
+		if payload.Message == "" {
+			t.Fatal("ACP command start failure produced an empty error message")
+		}
+		return
+	}
+	t.Fatalf("ACP response stream had no FAILED error event for the command start failure: %#v", responseEvents)
+}
 
 func TestACPFailureRedactsConfiguredSecretsFromStderr(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))

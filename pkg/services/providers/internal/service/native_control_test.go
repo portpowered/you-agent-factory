@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -469,5 +470,71 @@ func TestControlAttempt_ReturnsPromptlyWhenControlContextEndsBeforeAttemptReturn
 	close(releaseAttempt)
 	if !errors.Is(<-executeDone, providers.ErrExecuteCancelled) {
 		t.Fatal("Execute() did not observe cancellation")
+	}
+}
+
+// TestControlAttempt_PanicDuringNativeAttemptDoesNotHangSignalAndCleansUpRegistration
+// proves the panic/unexpected-unwind fix on the native attempt-completion
+// path: control.finish is invoked via a defer in executeNativeAttempt, so an
+// unexpected unwind (here, a panic reacting to cancellation instead of the
+// normal ErrExecuteCancelled return) still closes control.done. Without that
+// defer, a control already blocked in signal() waiting on done would hang
+// until its own ctx ended instead of observing the attempt's real (non-)
+// outcome, and the live registration would remain reachable rather than
+// being released.
+func TestControlAttempt_PanicDuringNativeAttemptDoesNotHangSignalAndCleansUpRegistration(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	calls := 0
+	root := mustControlCapableRootService(t, func(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+		calls++
+		if calls == 1 {
+			close(started)
+			<-ctx.Done()
+			panic("simulated unexpected unwind after cancellation")
+		}
+		return providers.ExecuteResult{}, nil
+	})
+
+	executeDone := make(chan struct{})
+	go func() {
+		defer close(executeDone)
+		defer func() { _ = recover() }()
+		_, _ = root.Execute(context.Background(), providers.ExecuteRequest{
+			Provider:  providers.IDCodex,
+			AttemptID: "panic-after-cancel",
+		})
+	}()
+	<-started
+
+	result, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
+		Provider:  providers.IDCodex,
+		AttemptID: "panic-after-cancel",
+		Action:    providers.ControlActionCancel,
+	})
+	if err != nil {
+		t.Fatalf("ControlAttempt() error = %v, want nil", err)
+	}
+	// A panic is not a recognized cancellation outcome (control.finish only
+	// records cancelled=true for a real ErrExecuteCancelled result), so this
+	// does not falsely claim completed - but critically, ControlAttempt must
+	// not hang: control.finish still runs and closes done even though
+	// Execute unwound through a panic instead of a normal return.
+	if result.Outcome != providers.ControlOutcomeUnsupported {
+		t.Fatalf("ControlAttempt() outcome = %q, want unsupported for a panicking attempt", result.Outcome)
+	}
+
+	select {
+	case <-executeDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Execute() goroutine did not unwind; a panicking attempt must not hang a claimed control")
+	}
+
+	if _, err := root.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:  providers.IDCodex,
+		AttemptID: "panic-after-cancel",
+	}); err != nil {
+		t.Fatalf("Execute() after panic unwind error = %v, want nil (identity must be released)", err)
 	}
 }

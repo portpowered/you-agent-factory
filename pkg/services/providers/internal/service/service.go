@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -172,23 +173,38 @@ func (s *Service) Execute(
 		}
 	}
 	attemptCtx, cancelAttempt := context.WithCancel(ctx)
-	done := make(chan struct{})
-	control := &nativeAttemptControl{cancel: cancelAttempt, done: done}
+	control := &nativeAttemptControl{cancel: cancelAttempt, done: make(chan struct{})}
 	release, bindErr := s.bindLiveAttempt(canonicalProvider, request.AttemptID, control)
 	if bindErr != nil {
 		cancelAttempt()
 		return providers.ExecuteResult{}, bindErr
 	}
-	// Declared release-then-close-then-cancelAttempt so LIFO defer order
-	// executes cancelAttempt, then release, then close(done): a concurrent
-	// ControlAttempt claim can only ever observe this registration while
-	// done is still open, never the reverse, so nativeAttemptControl.signal
-	// never sees a stale-already-closed done for an attempt it did not
-	// itself signal.
-	defer close(done)
 	defer release()
 	defer cancelAttempt()
-	return s.execution.Execute(attemptCtx, request)
+	return s.executeNativeAttempt(attemptCtx, control, request)
+}
+
+// executeNativeAttempt runs the bound native execution and records its real
+// outcome on control before returning - via defer, so an unexpected unwind
+// (including a panic) still closes control.done instead of leaving a
+// concurrent claimed signal() call blocked until its own ctx ends.
+// control.finish closes done itself, synchronously, right after Execute
+// returns and before this defer's caller's own deferred release/
+// cancelAttempt run. A concurrent ControlAttempt claim that lands in the
+// registry-release race window therefore still only ever observes the true
+// recorded outcome once it waits on done (see nativeAttemptControl.finish) -
+// a natural success can never be reported as ControlOutcomeCompleted merely
+// because a claim happened to land after Execute already returned.
+func (s *Service) executeNativeAttempt(
+	attemptCtx context.Context,
+	control *nativeAttemptControl,
+	request providers.ExecuteRequest,
+) (result providers.ExecuteResult, err error) {
+	defer func() {
+		control.finish(errors.Is(err, providers.ErrExecuteCancelled))
+	}()
+	result, err = s.execution.Execute(attemptCtx, request)
+	return result, err
 }
 
 // bindLiveAttempt registers canonical/attemptID as the one live execution for
