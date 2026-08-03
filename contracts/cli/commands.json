@@ -11585,6 +11585,197 @@
         "id": "you.submit.batch.handler",
         "operationId": "upsertWorkRequestBySessionId"
       }
+    },
+    "you.serve": {
+      "aliases": [],
+      "completeness": "authoritative",
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Host You as a protocol server for an external client. See `you serve acp --help` for the ACP stdio agent surface.",
+            "id": "you.serve.description"
+          },
+          "title": {
+            "canonicalEnglish": "Host You as a protocol server",
+            "id": "you.serve.title"
+          }
+        },
+        "examples": [
+          "you serve acp"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.serve",
+        "sourceHash": "b63f9b99d9afe98d39c79dd1cf6f06527cf7af5f60195c56e2ef7297b5c7dd59",
+        "visibility": "public"
+      },
+      "id": "you.serve",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.serve",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "serve",
+      "path": "you serve",
+      "runnable": false,
+      "usage": {
+        "line": "serve"
+      },
+      "visibility": "visible",
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "constraints": {
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ],
+        "runtime": [
+          "local"
+        ]
+      },
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      }
+    },
+    "you.serve.acp": {
+      "aliases": [],
+      "channels": {
+        "input": [
+          "cli",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "completeness": "authoritative",
+      "constraints": {
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ],
+        "runtime": [
+          "local"
+        ]
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Host You as an Agent Client Protocol (ACP) agent over stdio.\n\nACP clients (editors and IDEs) launch this command as a child process and exchange newline-delimited JSON-RPC on stdin and stdout. Diagnostics and sanitized startup or serve failures are written to stderr; stdout carries only complete ACP protocol frames.\n\nCleanly closing stdin (EOF) ends the connection successfully. This command hosts the same production ACP server the process composes through root.BuildProcess; it constructs no second service graph, Chat Sessions service, Factory Sessions service, or transport graph, and it does not start the HTTP or dashboard server.\n\nThis is distinct from `you workers acp add|delete`, which configures You's own use of external ACP-speaking provider agents, and from `you mcp serve`, which hosts the unrelated Model Context Protocol tool server.",
+            "id": "you.serve.acp.description"
+          },
+          "title": {
+            "canonicalEnglish": "Host You as an ACP agent over stdio",
+            "id": "you.serve.acp.title"
+          }
+        },
+        "examples": [
+          "you serve acp"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.serve.acp",
+        "sourceHash": "91a1458f9a0afe2f99c71237b17ae21e4cec1d52f213f235e16eceb79f2cb2ea",
+        "visibility": "public"
+      },
+      "exits": {
+        "you.serve.acp.exit.cancel": {
+          "code": 1,
+          "id": "you.serve.acp.exit.cancel",
+          "kind": "cancel"
+        },
+        "you.serve.acp.exit.failure": {
+          "code": 1,
+          "id": "you.serve.acp.exit.failure",
+          "kind": "failure"
+        },
+        "you.serve.acp.exit.success": {
+          "code": 0,
+          "id": "you.serve.acp.exit.success",
+          "kind": "success"
+        },
+        "you.serve.acp.exit.usage": {
+          "code": 1,
+          "id": "you.serve.acp.exit.usage",
+          "kind": "usage"
+        }
+      },
+      "handler": {
+        "id": "you.serve.acp.handler"
+      },
+      "id": "you.serve.acp",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.serve.acp",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "acp",
+      "outputs": {
+        "you.serve.acp.output.diagnostic": {
+          "channel": "stderr",
+          "format": "text",
+          "id": "you.serve.acp.output.diagnostic"
+        },
+        "you.serve.acp.output.protocol": {
+          "channel": "stdout",
+          "format": "json",
+          "id": "you.serve.acp.output.protocol"
+        }
+      },
+      "path": "you serve acp",
+      "runnable": true,
+      "sideEffects": {
+        "you.serve.acp.side-effect.process": {
+          "id": "you.serve.acp.side-effect.process",
+          "kind": "process"
+        }
+      },
+      "usage": {
+        "example": "  # Typical ACP host child-process launch.\n  you serve acp",
+        "line": "acp"
+      },
+      "visibility": "visible",
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      }
     }
   },
   "formatVersion": "1.0.0",

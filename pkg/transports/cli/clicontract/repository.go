@@ -231,7 +231,7 @@ func loadGeneratedManifests() ([]climanifest.Manifest, []climanifest.Manifest, e
 		generated.WorkFamilyManifest, generated.FactoryConfigInitFamilyManifest,
 		generated.WorkersFamilyManifest,
 		generated.ModelsDocsFamilyManifest, generated.RunSubmitFamilyManifest,
-		generated.MCPFamilyManifest,
+		generated.MCPFamilyManifest, generated.ServeFamilyManifest,
 	}
 	canonical := make([]climanifest.Manifest, 0, len(loaders))
 	for _, load := range loaders {
