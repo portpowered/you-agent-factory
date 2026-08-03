@@ -2,7 +2,9 @@ package factory_test
 
 import (
 	"context"
+	"os/exec"
 	"reflect"
+	"strings"
 	"testing"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -20,6 +22,35 @@ func TestServiceDoesNotExposeDeletedCheckpointMethods(t *testing.T) {
 		if _, ok := serviceType.MethodByName(forbidden); ok {
 			t.Fatalf("Service must not expose deleted checkpoint method %s", forbidden)
 		}
+	}
+}
+
+// TestExternalConsumerCannotCallDeletedCheckpointMethods is the required
+// external-consumer negative-compilation proof: it invokes the Go compiler
+// against testdata/checkpointdeletionproof, an external-consumer fixture that
+// calls svc.CaptureCheckpoint/LoadCheckpoint/RestoreCheckpoint on a
+// factory.Service, and asserts the build fails with an undefined-method
+// diagnostic naming each removed selector. The fixture lives under a
+// directory named "testdata" specifically so `go build ./...`, `go vet
+// ./...`, and normal package discovery never compile it as part of this
+// module; only this test compiles it, on purpose, expecting failure.
+func TestExternalConsumerCannotCallDeletedCheckpointMethods(t *testing.T) {
+	t.Parallel()
+
+	cmd := exec.Command("go", "build", "./testdata/checkpointdeletionproof")
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected compilation of testdata/checkpointdeletionproof to fail because CaptureCheckpoint/LoadCheckpoint/RestoreCheckpoint no longer exist on factory.Service, but the build succeeded")
+	}
+
+	got := string(output)
+	for _, forbidden := range []string{"CaptureCheckpoint", "LoadCheckpoint", "RestoreCheckpoint"} {
+		if !strings.Contains(got, forbidden) {
+			t.Errorf("expected compiler diagnostic naming removed method %s, got build output:\n%s", forbidden, got)
+		}
+	}
+	if !strings.Contains(got, "undefined") {
+		t.Errorf("expected an undefined-method compiler diagnostic, got build output:\n%s", got)
 	}
 }
 
