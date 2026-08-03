@@ -111,6 +111,25 @@ type Service struct {
 	// fails after a successful open: the caller's retry passes the same
 	// RequestID and observes the same SessionID back.
 	startsByRequestID map[string]string
+	// pendingStarts indexes a non-blank StartRequest.RequestID that is
+	// currently being started onto the in-flight pendingStart a genuinely
+	// concurrent second StartAsync call for the exact same RequestID must
+	// join rather than independently resolving and opening its own second
+	// runtime. Reserving this entry happens under s.mu before any I/O, so at
+	// most one goroutine ever performs the resolve/open work for one
+	// RequestID no matter how many callers race in with it.
+	pendingStarts map[string]*pendingStart
+}
+
+// pendingStart is the in-flight state a reserved-but-not-yet-published
+// StartAsync call publishes for other goroutines racing in with the same
+// RequestID to join. done is closed exactly once, by whichever goroutine
+// reserved the entry, after result/err are set; every joining goroutine
+// waits on done and then reads the identical result/err.
+type pendingStart struct {
+	done   chan struct{}
+	result factorysessions.AsyncStartResult
+	err    error
 }
 
 // New constructs the on-demand activation over the given *runtimeopening.Factory.
@@ -142,6 +161,7 @@ func New(
 		logger:            logger,
 		runtimes:          make(map[string]*activatedRuntime),
 		startsByRequestID: make(map[string]string),
+		pendingStarts:     make(map[string]*pendingStart),
 	}, nil
 }
 
@@ -250,13 +270,76 @@ func (s *Service) StartAsync(
 	ctx context.Context,
 	request factorysessions.StartRequest,
 ) (factorysessions.AsyncStartResult, error) {
-	if request.RequestID != "" {
-		if result, ok := s.existingStart(request.RequestID); ok {
-			s.logger.Info("on-demand Factory target start converged onto an existing activation for this request")
-			return result, nil
-		}
+	if request.RequestID == "" {
+		return s.startNewActivation(ctx, request)
 	}
 
+	result, err, joined := s.reserveOrJoinStart(request.RequestID)
+	if joined {
+		if err == nil {
+			s.logger.Info("on-demand Factory target start converged onto an existing activation for this request")
+		}
+		return result, err
+	}
+
+	result, err = s.startNewActivation(ctx, request)
+	s.finishPendingStart(request.RequestID, result, err)
+	return result, err
+}
+
+// reserveOrJoinStart reports (result, err, true) when requestID either
+// already has a completed, still-tracked activation (a genuine retry after
+// an earlier StartAsync call fully returned) or is currently being started by
+// another goroutine (a truly concurrent call, which blocks on that
+// goroutine's own pendingStart.done and returns its identical outcome
+// instead of independently resolving and opening a second runtime). It
+// reports (_, _, false) with a fresh pendingStarts[requestID] entry reserved
+// under s.mu when this call is the one that must actually perform the start;
+// the caller must then call finishPendingStart(requestID, ...) exactly once.
+func (s *Service) reserveOrJoinStart(requestID string) (factorysessions.AsyncStartResult, error, bool) {
+	s.mu.Lock()
+	if wrapperID, ok := s.startsByRequestID[requestID]; ok {
+		if _, exists := s.runtimes[wrapperID]; exists {
+			s.mu.Unlock()
+			return factorysessions.AsyncStartResult{SessionID: wrapperID, Status: string(factorysessions.LifecycleStatusRunning)}, nil, true
+		}
+	}
+	if pending, ok := s.pendingStarts[requestID]; ok {
+		s.mu.Unlock()
+		<-pending.done
+		return pending.result, pending.err, true
+	}
+	s.pendingStarts[requestID] = &pendingStart{done: make(chan struct{})}
+	s.mu.Unlock()
+	return factorysessions.AsyncStartResult{}, nil, false
+}
+
+// finishPendingStart records the outcome of a reserved start for requestID
+// (see reserveOrJoinStart) and wakes every goroutine that joined it while it
+// was in flight. It is a no-op if the reservation was somehow already
+// cleared, which should not happen since only this call ever removes it.
+func (s *Service) finishPendingStart(requestID string, result factorysessions.AsyncStartResult, err error) {
+	s.mu.Lock()
+	pending := s.pendingStarts[requestID]
+	delete(s.pendingStarts, requestID)
+	s.mu.Unlock()
+	if pending == nil {
+		return
+	}
+	pending.result = result
+	pending.err = err
+	close(pending.done)
+}
+
+// startNewActivation resolves and opens exactly one fresh Factory target
+// runtime for request, then publishes it under a validated generated
+// identity. Callers with a non-blank RequestID must route through
+// reserveOrJoinStart/finishPendingStart so a genuinely concurrent second
+// caller for the same RequestID never reaches this method independently.
+func (s *Service) startNewActivation(
+	ctx context.Context,
+	request factorysessions.StartRequest,
+) (factorysessions.AsyncStartResult, error) {
 	workingRoot, _ := request.Args["workingRoot"].(string)
 	config, err := s.resolve(ctx, request.Source.FactoryID, workingRoot)
 	if err != nil {
@@ -267,22 +350,11 @@ func (s *Service) StartAsync(
 		return factorysessions.AsyncStartResult{}, err
 	}
 
-	wrapperID := s.generateID()
-	s.mu.Lock()
-	if request.RequestID != "" {
-		if existing, ok := s.reconcileConcurrentStartLocked(request.RequestID); ok {
-			s.mu.Unlock()
-			// A concurrent StartAsync call for the exact same request
-			// identity already won and is still tracked: converge on it and
-			// close this now-redundant runtime instead of keeping two live
-			// activations for one logical start.
-			_ = active.close(context.WithoutCancel(ctx))
-			return existing, nil
-		}
-		s.startsByRequestID[request.RequestID] = wrapperID
+	wrapperID, err := s.publishActivation(request.RequestID, active)
+	if err != nil {
+		_ = active.close(context.WithoutCancel(ctx))
+		return factorysessions.AsyncStartResult{}, err
 	}
-	s.runtimes[wrapperID] = active
-	s.mu.Unlock()
 	s.logger.Info("on-demand Factory target runtime ready",
 		zap.String("factoryTargetId", request.Source.FactoryID))
 	return factorysessions.AsyncStartResult{
@@ -291,36 +363,28 @@ func (s *Service) StartAsync(
 	}, nil
 }
 
-// existingStart reports the still-tracked activation a prior StartAsync call
-// already opened for requestID, if any -- an orphaned index entry left by a
-// runtime that has since been evicted (CloseFactorySession/Close) reports
-// false, so a genuinely new activation proceeds rather than reporting a
-// SessionID that no longer resolves to anything.
-func (s *Service) existingStart(requestID string) (factorysessions.AsyncStartResult, bool) {
+// publishActivation validates and reserves a non-blank, non-colliding
+// generated wrapper identity for active, then publishes it into s.runtimes
+// (and, if requestID is non-blank, s.startsByRequestID). A blank identity or
+// one that collides with an already-tracked identity fails without mutating
+// either map, so a bad value from generateID can never overwrite -- and
+// thereby strand -- an existing activation; the caller is responsible for
+// closing active in that case.
+func (s *Service) publishActivation(requestID string, active *activatedRuntime) (string, error) {
+	wrapperID := s.generateID()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	wrapperID, ok := s.startsByRequestID[requestID]
-	if !ok {
-		return factorysessions.AsyncStartResult{}, false
+	if wrapperID == "" {
+		return "", errors.New("on-demand Factory target activation: generated session identity was blank")
 	}
-	if _, exists := s.runtimes[wrapperID]; !exists {
-		return factorysessions.AsyncStartResult{}, false
+	if _, exists := s.runtimes[wrapperID]; exists {
+		return "", fmt.Errorf("on-demand Factory target activation: generated session identity %q collided with an existing activation", wrapperID)
 	}
-	return factorysessions.AsyncStartResult{SessionID: wrapperID, Status: string(factorysessions.LifecycleStatusRunning)}, true
-}
-
-// reconcileConcurrentStartLocked reports the still-tracked activation
-// requestID resolved to while this goroutine's own openActivatedRuntime call
-// was in flight without holding s.mu -- must be called with s.mu held.
-func (s *Service) reconcileConcurrentStartLocked(requestID string) (factorysessions.AsyncStartResult, bool) {
-	wrapperID, ok := s.startsByRequestID[requestID]
-	if !ok {
-		return factorysessions.AsyncStartResult{}, false
+	s.runtimes[wrapperID] = active
+	if requestID != "" {
+		s.startsByRequestID[requestID] = wrapperID
 	}
-	if _, exists := s.runtimes[wrapperID]; !exists {
-		return factorysessions.AsyncStartResult{}, false
-	}
-	return factorysessions.AsyncStartResult{SessionID: wrapperID, Status: string(factorysessions.LifecycleStatusRunning)}, true
+	return wrapperID, nil
 }
 
 func (s *Service) lookup(sessionID string) (*activatedRuntime, error) {

@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -138,6 +140,7 @@ func newTestService(t *testing.T, opener invocationRuntimeOpener, resolve Runtim
 		logger:            zap.NewNop(),
 		runtimes:          make(map[string]*activatedRuntime),
 		startsByRequestID: make(map[string]string),
+		pendingStarts:     make(map[string]*pendingStart),
 	}
 }
 
@@ -154,6 +157,7 @@ func newTestServiceWithObservedLogger(t *testing.T, opener invocationRuntimeOpen
 		logger:            zap.New(core),
 		runtimes:          make(map[string]*activatedRuntime),
 		startsByRequestID: make(map[string]string),
+		pendingStarts:     make(map[string]*pendingStart),
 	}, observed
 }
 
@@ -334,6 +338,230 @@ func TestStartAsyncPropagatesResolveFailure(t *testing.T) {
 	if len(opener.calls) != 0 {
 		t.Fatalf("OpenInvocationRuntime call count = %d, want 0 after a resolve failure", len(opener.calls))
 	}
+}
+
+// TestStartAsyncConcurrentSameRequestIDOpensExactlyOneRuntime proves that
+// genuinely concurrent StartAsync calls for the exact same non-blank
+// RequestID -- not the sequential-call convergence
+// TestStartAsyncSameRequestIDConvergesOnASingleActivation already covers --
+// still open exactly one runtime. resolve blocks on a channel the test
+// controls, so every goroutine that reaches StartAsync while the first is
+// still resolving is forced to either join the in-flight reservation or, if
+// it arrives even earlier, race for the reservation itself under s.mu; only
+// the one goroutine that wins the reservation ever calls resolve/open.
+func TestStartAsyncConcurrentSameRequestIDOpensExactlyOneRuntime(t *testing.T) {
+	sessions := &fakeSessions{}
+	opener := &fakeOpener{opened: roles.OpenedInvocationRuntime{
+		Sessions:  sessions,
+		Lifecycle: &fakeLifecycle{},
+	}}
+	release := make(chan struct{})
+	var resolveCalls int32
+	resolve := func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+		atomic.AddInt32(&resolveCalls, 1)
+		<-release
+		return factorysessions.RuntimeOpeningRequest{}, nil
+	}
+	svc := newTestService(t, opener, resolve, sequentialIDs("wrapper"))
+
+	req := factorysessions.StartRequest{
+		RequestID: "session-1/episode/1",
+		Source:    factorysessions.Source{FactoryID: "@you/review"},
+	}
+
+	const callers = 8
+	results := make([]factorysessions.AsyncStartResult, callers)
+	errs := make([]error, callers)
+	var start sync.WaitGroup
+	start.Add(1)
+	var wg sync.WaitGroup
+	wg.Add(callers)
+	for i := range callers {
+		go func(i int) {
+			defer wg.Done()
+			start.Wait()
+			results[i], errs[i] = svc.StartAsync(context.Background(), req)
+		}(i)
+	}
+	start.Done()
+	// Give the goroutines that don't win the reservation a chance to reach
+	// the join-and-wait path before releasing the one real activation.
+	time.Sleep(20 * time.Millisecond)
+	close(release)
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("StartAsync()[%d] error = %v", i, err)
+		}
+	}
+	if got := atomic.LoadInt32(&resolveCalls); got != 1 {
+		t.Fatalf("resolve call count = %d, want exactly 1 across %d concurrent callers sharing one RequestID", got, callers)
+	}
+	if len(opener.calls) != 1 {
+		t.Fatalf("OpenInvocationRuntime call count = %d, want exactly 1", len(opener.calls))
+	}
+	first := results[0].SessionID
+	if first == "" {
+		t.Fatalf("SessionID[0] is blank, want the generated wrapper identity")
+	}
+	for i, r := range results {
+		if r.SessionID != first {
+			t.Fatalf("SessionID[%d] = %q, want the identical converged identity %q", i, r.SessionID, first)
+		}
+	}
+}
+
+// TestStartAsyncBlankGeneratedIdentityFailsWithoutPublishing proves that a
+// blank value from generateID fails StartAsync, closes the runtime it had
+// already opened, and leaves an unrelated prior activation addressable under
+// its own identity -- rather than publishing an empty map key that a later
+// caller could never look up.
+func TestStartAsyncBlankGeneratedIdentityFailsWithoutPublishing(t *testing.T) {
+	sessions := &fakeSessions{}
+	priorLifecycle := &fakeLifecycle{}
+	priorSessions := &fakeSessions{}
+	failingLifecycle := &fakeLifecycle{}
+	opener := &sequencedOpener{
+		results: []openResult{
+			{opened: roles.OpenedInvocationRuntime{Sessions: priorSessions, Lifecycle: priorLifecycle}},
+			{opened: roles.OpenedInvocationRuntime{Sessions: sessions, Lifecycle: failingLifecycle}},
+		},
+	}
+	resolve := func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+		return factorysessions.RuntimeOpeningRequest{}, nil
+	}
+	ids := []string{"wrapper-prior", ""}
+	n := 0
+	generateID := func() string {
+		id := ids[n]
+		n++
+		return id
+	}
+	svc := newTestService(t, opener, resolve, generateID)
+
+	prior, err := svc.StartAsync(context.Background(), factorysessions.StartRequest{
+		RequestID: "req-prior",
+		Source:    factorysessions.Source{FactoryID: "@you/review"},
+	})
+	if err != nil {
+		t.Fatalf("prior StartAsync() error = %v", err)
+	}
+
+	_, err = svc.StartAsync(context.Background(), factorysessions.StartRequest{
+		RequestID: "req-blank",
+		Source:    factorysessions.Source{FactoryID: "@you/review"},
+	})
+	if err == nil {
+		t.Fatalf("StartAsync() with a blank generated identity error = nil, want an error")
+	}
+	if failingLifecycle.stopCalls != 1 {
+		t.Fatalf("failing activation StopLifecycle calls = %d, want exactly 1 (closed once)", failingLifecycle.stopCalls)
+	}
+	if priorLifecycle.stopCalls != 0 {
+		t.Fatalf("prior activation StopLifecycle calls = %d, want 0 -- it must remain open", priorLifecycle.stopCalls)
+	}
+
+	again, err := svc.InvokeFactorySession(context.Background(), prior.SessionID, factorysessions.InvocationRequest{})
+	if err != nil {
+		t.Fatalf("InvokeFactorySession() on the prior activation error = %v, want it to remain addressable", err)
+	}
+	if len(priorSessions.invokeCalls) != 1 {
+		t.Fatalf("prior activation invoke calls = %v, want exactly one dispatch to the untouched prior runtime", priorSessions.invokeCalls)
+	}
+	_ = again
+}
+
+// TestStartAsyncCollidingGeneratedIdentityFailsWithoutOverwriting proves that
+// a generated wrapper identity colliding with an already-tracked one --
+// across two entirely distinct requests, not a retry of the same one --
+// fails StartAsync, closes the newly opened runtime, and leaves the original
+// activation's map entry (and therefore ownership) untouched rather than
+// letting the second request silently redirect callers of the first
+// request's SessionID to the second request's runtime.
+func TestStartAsyncCollidingGeneratedIdentityFailsWithoutOverwriting(t *testing.T) {
+	firstSessions := &fakeSessions{}
+	firstLifecycle := &fakeLifecycle{}
+	secondSessions := &fakeSessions{}
+	secondLifecycle := &fakeLifecycle{}
+	opener := &sequencedOpener{
+		results: []openResult{
+			{opened: roles.OpenedInvocationRuntime{Sessions: firstSessions, Lifecycle: firstLifecycle}},
+			{opened: roles.OpenedInvocationRuntime{Sessions: secondSessions, Lifecycle: secondLifecycle}},
+		},
+	}
+	resolve := func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+		return factorysessions.RuntimeOpeningRequest{}, nil
+	}
+	generateID := func() string { return "wrapper-collide" }
+	svc := newTestService(t, opener, resolve, generateID)
+
+	first, err := svc.StartAsync(context.Background(), factorysessions.StartRequest{
+		RequestID: "req-first",
+		Source:    factorysessions.Source{FactoryID: "@you/review"},
+	})
+	if err != nil {
+		t.Fatalf("first StartAsync() error = %v", err)
+	}
+	if first.SessionID != "wrapper-collide" {
+		t.Fatalf("first.SessionID = %q, want the generated identity", first.SessionID)
+	}
+
+	_, err = svc.StartAsync(context.Background(), factorysessions.StartRequest{
+		RequestID: "req-second",
+		Source:    factorysessions.Source{FactoryID: "@you/review"},
+	})
+	if err == nil {
+		t.Fatalf("second StartAsync() with a colliding generated identity error = nil, want an error")
+	}
+	if secondLifecycle.stopCalls != 1 {
+		t.Fatalf("colliding activation StopLifecycle calls = %d, want exactly 1 (closed once)", secondLifecycle.stopCalls)
+	}
+	if firstLifecycle.stopCalls != 0 {
+		t.Fatalf("original activation StopLifecycle calls = %d, want 0 -- it must remain open", firstLifecycle.stopCalls)
+	}
+
+	if _, err := svc.InvokeFactorySession(context.Background(), first.SessionID, factorysessions.InvocationRequest{}); err != nil {
+		t.Fatalf("InvokeFactorySession() on the original activation error = %v, want it to still resolve to the original runtime", err)
+	}
+	if len(firstSessions.invokeCalls) != 1 {
+		t.Fatalf("original activation invoke calls = %v, want exactly one dispatch to the untouched original runtime", firstSessions.invokeCalls)
+	}
+	if len(secondSessions.invokeCalls) != 0 {
+		t.Fatalf("colliding activation invoke calls = %v, want zero -- it was never published", secondSessions.invokeCalls)
+	}
+}
+
+// openResult is one fakeOpener call's canned outcome.
+type openResult struct {
+	opened roles.OpenedInvocationRuntime
+	err    error
+}
+
+// sequencedOpener is an invocationRuntimeOpener test double that returns a
+// distinct result for each successive OpenInvocationRuntime call, in order --
+// letting a test drive two calls that must return two independently
+// closeable runtimes instead of fakeOpener's single fixed result.
+type sequencedOpener struct {
+	mu      sync.Mutex
+	results []openResult
+	calls   []factorysessions.RuntimeOpeningRequest
+}
+
+func (f *sequencedOpener) OpenInvocationRuntime(
+	_ context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+	_ runtimeopening.ExternalEffects,
+	_ *zap.Logger,
+) (roles.OpenedInvocationRuntime, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, *request)
+	idx := len(f.calls) - 1
+	if idx >= len(f.results) {
+		return roles.OpenedInvocationRuntime{}, fmt.Errorf("sequencedOpener: no result configured for call %d", idx)
+	}
+	return f.results[idx].opened, f.results[idx].err
 }
 
 // TestInvokeFactorySessionReusesTheCachedRuntime proves InvokeFactorySession
