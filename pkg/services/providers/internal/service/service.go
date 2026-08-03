@@ -145,7 +145,7 @@ func (s *Service) Execute(
 				}
 			}
 			request.Provider = canonical
-			release, bindErr := s.bindLiveAttempt(canonical, request.AttemptID)
+			release, bindErr := s.bindLiveAttempt(canonical, request.AttemptID, nil)
 			if bindErr != nil {
 				return providers.ExecuteResult{}, bindErr
 			}
@@ -170,21 +170,34 @@ func (s *Service) Execute(
 			Message: "Agy does not support a separate reasoning effort",
 		}
 	}
-	release, bindErr := s.bindLiveAttempt(canonicalProvider, request.AttemptID)
+	attemptCtx, cancelAttempt := context.WithCancel(ctx)
+	done := make(chan struct{})
+	control := &nativeAttemptControl{cancel: cancelAttempt, done: done}
+	release, bindErr := s.bindLiveAttempt(canonicalProvider, request.AttemptID, control)
 	if bindErr != nil {
+		cancelAttempt()
 		return providers.ExecuteResult{}, bindErr
 	}
 	defer release()
-	return s.execution.Execute(ctx, request)
+	defer close(done)
+	defer cancelAttempt()
+	return s.execution.Execute(attemptCtx, request)
 }
 
 // bindLiveAttempt registers canonical/attemptID as the one live execution for
 // that exact identity before its controllable provider operation begins. A
 // collision with an already-live identity is reported through the same typed
 // ExecuteFailure model as any other Execute rejection, before any provider
-// side effect for the second request begins.
-func (s *Service) bindLiveAttempt(canonical providers.ID, attemptID string) (func(), error) {
-	release, err := s.attempts.bind(liveAttemptKey{provider: canonical, attemptID: attemptID})
+// side effect for the second request begins. control is the optional exact-
+// attempt signal handle a later ControlAttempt call can claim; it is nil for
+// paths with no truthful exact-attempt seam bound yet (the ACP path in this
+// packet).
+func (s *Service) bindLiveAttempt(
+	canonical providers.ID,
+	attemptID string,
+	control *nativeAttemptControl,
+) (func(), error) {
+	release, err := s.attempts.bind(liveAttemptKey{provider: canonical, attemptID: attemptID}, control)
 	if err != nil {
 		return nil, providers.ExecuteFailure{
 			Kind:    providers.ExecuteFailureKindInvalidRequest,
@@ -194,10 +207,13 @@ func (s *Service) bindLiveAttempt(canonical providers.ID, attemptID string) (fun
 	return release, nil
 }
 
-// ControlAttempt answers every valid pause, cancel, or terminate request with
-// the canonical deterministic unsupported outcome for this packet. It invokes
-// no execution adapter, provider process, ACP operation, Worker cancellation
-// method, or continuation behavior.
+// ControlAttempt routes a valid cancel or terminate request to the exact
+// live native provider attempt it names, when one is bound and truthfully
+// supports the requested action, and otherwise answers with the closed
+// deterministic unsupported outcome. It never signals a different live
+// attempt, never signals an ACP attempt (see the ACP-L2-IMP-PRV-CONTROL-003
+// packet for ACP control), and invokes no Worker cancellation method or
+// continuation behavior.
 func (s *Service) ControlAttempt(
 	_ context.Context,
 	request providers.ControlAttemptRequest,
@@ -218,11 +234,17 @@ func (s *Service) ControlAttempt(
 		"attemptID", request.AttemptID,
 		"action", string(request.Action),
 	)
+	outcome := providers.ControlOutcomeUnsupported
+	key := liveAttemptKey{provider: request.Provider, attemptID: request.AttemptID}
+	if control, claimed := s.attempts.claim(key, request.Action); claimed {
+		control.signal()
+		outcome = providers.ControlOutcomeCompleted
+	}
 	result := providers.ControlAttemptResult{
 		Provider:  request.Provider,
 		AttemptID: request.AttemptID,
 		Action:    request.Action,
-		Outcome:   providers.ControlOutcomeUnsupported,
+		Outcome:   outcome,
 	}
 	s.logger.Info(
 		"provider control attempt outcome",
