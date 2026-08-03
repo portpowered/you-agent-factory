@@ -229,6 +229,14 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/service",
+      "minimum": 92.59
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/wire",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/edges",
       "minimum": 71.65
     },
@@ -2451,6 +2459,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot",
       "minimum": 87.50
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorytarget",
+      "minimum": 100.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/optional",
