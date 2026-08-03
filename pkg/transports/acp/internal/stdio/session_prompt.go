@@ -245,10 +245,31 @@ func (s *Server) admitPromptTurn(ctx context.Context, turn session.PromptTurn, r
 		TurnID:    startResult.Turn.ID,
 		Next:      chatsessions.TurnStateRunning,
 	}); err != nil {
+		// The turn is still ADMITTED (this transition never took effect), so
+		// the only legal terminal fallback from here is CANCELED -- see
+		// TurnState.CanTransitionTo. Without this recovery attempt, a failed
+		// ADMITTED->RUNNING transition would leave the session's
+		// ActiveTurnID set forever, stranding every later prompt behind a
+		// busy turn that never actually started running.
+		s.recoverStrandedTurn(ctx, startResult.Session.ID, startResult.Turn.ID, chatsessions.TurnStateCanceled)
 		return nil, classifyDependencyFailure(err)
 	}
 
 	return s.dispatchFactoryTurn(ctx, startResult, turn)
+}
+
+// recoverStrandedTurn makes one best-effort attempt to move turnID to
+// fallback after its primary terminalizing AdvanceTurn call already failed,
+// so that failure alone can never strand the session's busy/active-turn
+// state forever. Its own outcome is intentionally not surfaced to the
+// caller: the caller already has the primary failure to report, and no
+// further fallback is attempted beyond this single recovery call.
+func (s *Server) recoverStrandedTurn(ctx context.Context, sessionID, turnID string, fallback chatsessions.TurnState) {
+	_, _ = s.chatSessions.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: sessionID,
+		TurnID:    turnID,
+		Next:      fallback,
+	})
 }
 
 // respondToRedeliveredTurn classifies a StartTurn result that identified an
@@ -337,6 +358,17 @@ func (s *Server) dispatchFactoryTurn(ctx context.Context, startResult chatsessio
 		TurnID:    startResult.Turn.ID,
 		Next:      terminal,
 	}); err != nil {
+		// The turn is still RUNNING (this transition never took effect). If
+		// the attempted terminal state was not already the safe FAILED
+		// fallback, make one recovery attempt at it -- RUNNING->FAILED is
+		// always a legal transition, so this is the one fallback guaranteed
+		// available regardless of which terminal state the primary attempt
+		// targeted. Without this, a failed terminal AdvanceTurn call would
+		// leave the session's ActiveTurnID set forever, stranding every
+		// later prompt behind a busy turn that already finished dispatching.
+		if terminal != chatsessions.TurnStateFailed {
+			s.recoverStrandedTurn(ctx, startResult.Session.ID, startResult.Turn.ID, chatsessions.TurnStateFailed)
+		}
 		return nil, classifyDependencyFailure(err)
 	}
 

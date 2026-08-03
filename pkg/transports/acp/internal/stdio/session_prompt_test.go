@@ -7,19 +7,92 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	chatsessionswire "github.com/portpowered/infinite-you/pkg/services/chat_sessions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
 )
+
+// sequentialIDGenerator returns a chatsessionswire.IDGenerator that produces
+// prefix-1, prefix-2, ... on successive calls, for tests that construct a
+// real chatsessions.Store and need deterministic, human-readable identities.
+func sequentialIDGenerator(prefix string) chatsessionswire.IDGenerator {
+	n := 0
+	return func() string {
+		n++
+		return prefix + "-" + strconv.Itoa(n)
+	}
+}
+
+// fixedClock returns a chatsessionswire.Clock that always reports at, for
+// tests that construct a real chatsessions.Store and do not exercise
+// timestamp behavior.
+func fixedClock(at time.Time) chatsessionswire.Clock {
+	return func() time.Time { return at }
+}
+
+// firstCallFailingChatSessions wraps a real chatsessions.Service and injects
+// injectErr into exactly the first call to the named method, letting every
+// other call (including every later call to that same method) pass through
+// unmodified. It exists to prove recovery behavior against the real
+// chatsessions.Store's own state machine, not a call-recording fake that
+// cannot itself strand or release busy state.
+type firstCallFailingChatSessions struct {
+	chatsessions.Service
+	mu        sync.Mutex
+	method    string
+	injectErr error
+	triggered bool
+}
+
+func (f *firstCallFailingChatSessions) AdvanceTurn(ctx context.Context, req chatsessions.AdvanceTurnRequest) (chatsessions.AdvanceTurnResult, error) {
+	if f.method == "AdvanceTurn" {
+		f.mu.Lock()
+		if !f.triggered {
+			f.triggered = true
+			f.mu.Unlock()
+			return chatsessions.AdvanceTurnResult{}, f.injectErr
+		}
+		f.mu.Unlock()
+	}
+	return f.Service.AdvanceTurn(ctx, req)
+}
+
+// nthAdvanceTurnFailingChatSessions wraps a real chatsessions.Service and
+// injects injectErr into exactly the failOnCall'th call to AdvanceTurn
+// (1-indexed) across the whole wrapped instance's lifetime, letting every
+// other call pass through unmodified. It exists to prove that a single
+// injected terminal-transition failure -- followed by this transport's own
+// recovery attempt -- does not strand the session busy for a later prompt.
+type nthAdvanceTurnFailingChatSessions struct {
+	chatsessions.Service
+	mu         sync.Mutex
+	failOnCall int
+	injectErr  error
+	calls      int
+}
+
+func (f *nthAdvanceTurnFailingChatSessions) AdvanceTurn(ctx context.Context, req chatsessions.AdvanceTurnRequest) (chatsessions.AdvanceTurnResult, error) {
+	f.mu.Lock()
+	f.calls++
+	fail := f.calls == f.failOnCall
+	f.mu.Unlock()
+	if fail {
+		return chatsessions.AdvanceTurnResult{}, f.injectErr
+	}
+	return f.Service.AdvanceTurn(ctx, req)
+}
 
 // promptTextParams builds a raw session/prompt params payload carrying one
 // text content block, the shape a client sends for a typed "/factory
@@ -1630,9 +1703,11 @@ func TestHandleSessionPromptFactoryDispatchCancellationAdvancesTurnToCanceled(t 
 
 // TestHandleSessionPromptRunningTransitionFailureMakesNoFactoryDispatchCall
 // proves that when advancing a freshly admitted turn to TurnStateRunning
-// itself fails, the handler reports a bounded internal error and never
-// attempts a Factory dispatch call (StartFactoryTarget/InvokeFactoryTarget)
-// for a turn that is not actually confirmed running.
+// itself fails, the handler reports a bounded internal error, never attempts
+// a Factory dispatch call (StartFactoryTarget/InvokeFactoryTarget) for a
+// turn that is not actually confirmed running, and makes one recovery
+// AdvanceTurn(CANCELED) attempt -- the one legal terminal transition from
+// ADMITTED -- so the session's busy state is not stranded forever.
 func TestHandleSessionPromptRunningTransitionFailureMakesNoFactoryDispatchCall(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{
 		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
@@ -1655,8 +1730,54 @@ func TestHandleSessionPromptRunningTransitionFailureMakesNoFactoryDispatchCall(t
 	if chatSessions.bindFactorySessionCalled {
 		t.Fatal("BindFactorySession was called, want no binding attempt when the turn never confirmed running")
 	}
-	if len(chatSessions.advanceTurnReqs) != 1 {
-		t.Fatalf("AdvanceTurn call count = %d, want exactly 1 (the failed RUNNING attempt, no terminal retry)", len(chatSessions.advanceTurnReqs))
+	wantAdvanceTurnSequence(t, chatSessions, "session-1", "turn-1",
+		chatsessions.TurnStateRunning, chatsessions.TurnStateCanceled)
+}
+
+// TestHandleSessionPromptRunningTransitionFailureRecoveryAdmitsLaterPrompt
+// proves the RUNNING-transition recovery attempt actually releases the
+// session's busy state against the real chatsessions.Store (not just the
+// call-recording fake): after an injected single-shot AdvanceTurn failure,
+// a later uniquely identified prompt on the same session is admitted and
+// dispatches, instead of being rejected as busy forever.
+func TestHandleSessionPromptRunningTransitionFailureRecoveryAdmitsLaterPrompt(t *testing.T) {
+	store, err := chatsessionswire.NewService(sequentialIDGenerator("session"), fixedClock(time.Unix(0, 1)))
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	created, err := store.CreateSession(context.Background(), chatsessions.CreateSessionRequest{
+		RequestID:     chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-setup", JSONRPCNumberID: "0"},
+		WorkingRoot:   "/work/project",
+		InitialTarget: chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "@you/review"},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	faulty := &firstCallFailingChatSessions{
+		Service:   store,
+		method:    "AdvanceTurn",
+		injectErr: errors.New("advance turn boom"),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.InvocationResult{
+		SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted,
+	}}
+	server := New(nil, faulty, catalog, factoryTarget, func() (string, error) { return "/home/operator", nil })
+
+	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams(created.Session.ID, "first message"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), firstEnv); rpcErr == nil {
+		t.Fatal("first handleSessionPrompt() error = nil, want a bounded failure from the injected RUNNING-transition fault")
+	}
+
+	secondEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams(created.Session.ID, "second message"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), secondEnv); rpcErr != nil {
+		t.Fatalf("second handleSessionPrompt() error = %+v, want the session admitted (not stranded busy)", rpcErr)
+	}
+	if len(factoryTarget.startCalls) != 1 {
+		t.Fatalf("StartFactoryTarget call count = %d, want exactly 1 (only the second, successfully admitted turn dispatches)", len(factoryTarget.startCalls))
 	}
 }
 
@@ -1665,12 +1786,13 @@ func TestHandleSessionPromptRunningTransitionFailureMakesNoFactoryDispatchCall(t
 // after a successful Factory dispatch, the handler reports that failure as a
 // bounded internal error instead of silently discarding it and returning the
 // dispatch's own successful response -- an unterminalized turn must never be
-// masked by an otherwise-successful outcome.
+// masked by an otherwise-successful outcome -- and makes one recovery
+// AdvanceTurn(FAILED) attempt so the session's busy state is not stranded.
 func TestHandleSessionPromptTerminalTransitionFailurePropagatesBoundedError(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{
 		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
 		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
-		advanceTurnErrs:  []error{nil, errors.New("terminal advance boom")},
+		advanceTurnErrs:  []error{nil, errors.New("terminal advance boom"), nil},
 	}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
 	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.InvocationResult{
@@ -1694,5 +1816,59 @@ func TestHandleSessionPromptTerminalTransitionFailurePropagatesBoundedError(t *t
 	if !chatSessions.bindFactorySessionCalled {
 		t.Fatal("BindFactorySession was not called, want the successful dispatch to still bind before terminalization is attempted")
 	}
-	wantAdvanceTurnSequence(t, chatSessions, "session-1", "turn-1", chatsessions.TurnStateRunning, chatsessions.TurnStateCompleted)
+	wantAdvanceTurnSequence(t, chatSessions, "session-1", "turn-1",
+		chatsessions.TurnStateRunning, chatsessions.TurnStateCompleted, chatsessions.TurnStateFailed)
+}
+
+// TestHandleSessionPromptTerminalTransitionFailureRecoveryAdmitsLaterPrompt
+// proves the terminal-transition recovery attempt actually releases the
+// session's busy state against the real chatsessions.Store: after an
+// injected single-shot terminal AdvanceTurn failure, a later uniquely
+// identified prompt on the same session is admitted and dispatches, instead
+// of being rejected as busy forever. Because the first turn's dispatch (and
+// its BindFactorySession) already succeeded before its terminalization
+// faulted, the episode is already bound by the time the second turn is
+// admitted, so the second turn correctly takes the invoke branch -- proving
+// not just that admission recovers, but that recovery never causes a second
+// Factory Session to be started for the same episode.
+func TestHandleSessionPromptTerminalTransitionFailureRecoveryAdmitsLaterPrompt(t *testing.T) {
+	store, err := chatsessionswire.NewService(sequentialIDGenerator("session"), fixedClock(time.Unix(0, 1)))
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	created, err := store.CreateSession(context.Background(), chatsessions.CreateSessionRequest{
+		RequestID:     chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCNumber, ConnectionID: "conn-setup", JSONRPCNumberID: "0"},
+		WorkingRoot:   "/work/project",
+		InitialTarget: chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "@you/review"},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	faulty := &nthAdvanceTurnFailingChatSessions{
+		Service: store, failOnCall: 2, injectErr: errors.New("terminal advance boom"),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.InvocationResult{
+		SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted,
+	}}
+	server := New(nil, faulty, catalog, factoryTarget, func() (string, error) { return "/home/operator", nil })
+
+	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams(created.Session.ID, "first message"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), firstEnv); rpcErr == nil {
+		t.Fatal("first handleSessionPrompt() error = nil, want a bounded failure from the injected terminal-transition fault")
+	}
+
+	secondEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams(created.Session.ID, "second message"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), secondEnv); rpcErr != nil {
+		t.Fatalf("second handleSessionPrompt() error = %+v, want the session admitted (not stranded busy)", rpcErr)
+	}
+	if len(factoryTarget.startCalls) != 1 {
+		t.Fatalf("StartFactoryTarget call count = %d, want exactly 1 (the first turn's dispatch itself succeeded before its terminalization faulted)", len(factoryTarget.startCalls))
+	}
+	if len(factoryTarget.invokeCalls) != 1 {
+		t.Fatalf("InvokeFactoryTarget call count = %d, want exactly 1 (the second turn reuses the already-bound Factory Session instead of starting a second one)", len(factoryTarget.invokeCalls))
+	}
 }
