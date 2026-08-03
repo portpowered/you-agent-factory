@@ -386,4 +386,45 @@ func TestService_PublishNeverDivergesFromEventsWhenTheTopicIsNotAligned(t *testi
 	if stored.EventID != published.EventID {
 		t.Fatalf("stored.EventID = %q, want %q: store and Events must observe the same record at the same position", stored.EventID, published.EventID)
 	}
+
+	// The publisher marshals the payload it sends to Events before Append
+	// assigns the real position, using its own predicted sequenceHint (1)
+	// rather than the position Events ends up assigning (2): the accepted
+	// Events record at position 2 therefore embeds a self-reported Sequence
+	// of 1, not 2. Decoding it directly documents this known, expected
+	// payload/position divergence for a non-aligned topic.
+	var rawEventsPayload responseevents.FactoryResponseEvent
+	if err := json.Unmarshal(read.Records[1].Payload, &rawEventsPayload); err != nil {
+		t.Fatalf("decode Events payload at position 2: %v", err)
+	}
+	if rawEventsPayload.Sequence != 1 {
+		t.Fatalf("Events payload at position 2 embeds Sequence = %d, want 1 (the store's own pre-Append predicted hint)", rawEventsPayload.Sequence)
+	}
+
+	// The compatibility surface must never deliver that stale embedded
+	// hint: SubscribeFactoryResponseEvents' delivered identity must agree
+	// with the authority-assigned position (2) the store and Events both
+	// adopted, not the payload's self-reported pre-Append value (1). This
+	// is the regression PR #1753 round-11 review flagged
+	// (2026-08-03T22:32:00Z): substituteFromEvents previously returned the
+	// raw decoded payload unchanged, silently reintroducing sequence 1 for
+	// a record both the store and Events agree is positioned at 2.
+	cursor, err := service.Subscribe(ctx, store, responsestreamservice.SubscriptionRequest{})
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer cursor.Detach()
+	delivered, err := cursor.Next(ctx)
+	if err != nil {
+		t.Fatalf("Next: %v", err)
+	}
+	if len(delivered) != 1 {
+		t.Fatalf("Next() delivered %d events, want 1", len(delivered))
+	}
+	if delivered[0].Sequence != published.Sequence || delivered[0].EventID != published.EventID {
+		t.Fatalf(
+			"delivered[0] = %#v, want the authority-assigned identity (sequence %d, eventID %q): the compatibility surface must never deliver the payload's stale pre-Append sequence hint",
+			delivered[0], published.Sequence, published.EventID,
+		)
+	}
 }

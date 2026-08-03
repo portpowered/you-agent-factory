@@ -440,6 +440,19 @@ func (s *SessionResponseEventStore) substituteFromEvents(delivered []responseeve
 			substituted[i] = s.eventsAuthorityGapEvent(event.Sequence)
 			continue
 		}
+		// The publisher marshals this payload before Events assigns the
+		// record's aggregate position (it must predict a sequenceHint to
+		// encode a self-describing payload at all), so the payload's own
+		// embedded Sequence field can be stale whenever Events assigns a
+		// different position than that hint (a non-aligned topic; see
+		// TestService_PublishNeverDivergesFromEventsWhenTheTopicIsNotAligned).
+		// event.Sequence is this store's own retained Sequence for this
+		// position, which PublishThroughAuthority already set from the
+		// position Events actually returned (store.go's "sequence" return
+		// value, not the predicted hint), so it -- not the payload's
+		// self-reported field -- is the authoritative identity for the
+		// record positioned here.
+		fromEvents.Sequence = event.Sequence
 		substituted[i] = fromEvents
 	}
 	return substituted
