@@ -59,7 +59,11 @@ var _ closer = (*Store)(nil)
 // earliest retained position plus i. identity maps each accepted append's
 // (sourceType, sourceID, sourceSequence, sourceEventID) tuple to its
 // originally accepted Record so a repeated append resolves to the same
-// Record regardless of whether that position is still retained. subscribers
+// Record; identity is pruned in lockstep with records eviction (see
+// topicState.commitLocked), so idempotency detection is bounded by the same
+// retention policy as retained records and does not grow without bound --
+// once a position has been evicted, repeating its identity is accepted as a
+// new record rather than resolved as a duplicate. subscribers
 // holds every currently live registration keyed by an opaque per-topic id;
 // attachments holds every topic currently attached to this one as a
 // forwarding destination, keyed by that destination Topic (at most one

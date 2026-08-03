@@ -357,6 +357,44 @@ func TestAttachSource_EvictedStartAtIsRejectedWithoutPartialForwarding(t *testin
 	}
 }
 
+// TestAttachSource_StartAtExactlyBeforeEarliestRetainedIsAcceptedAndForwarded
+// proves the earliest still-retained source record is always reachable
+// through a resumable StartAt cursor: a StartAt naming exactly
+// EarliestRetained-1 must be accepted and that record forwarded, not
+// rejected as evicted (PR #1753 review finding 1, 2026-08-03T18:37:32Z).
+func TestAttachSource_StartAtExactlyBeforeEarliestRetainedIsAcceptedAndForwarded(t *testing.T) {
+	st := NewWithRetention(2)
+	ctx := context.Background()
+	source := events.Topic("factory-session/boundary/response-events")
+	destination := events.Topic("chat-session/boundary/events")
+
+	appendFixture(st, ctx, t, source, 1, "evt-1")
+	appendFixture(st, ctx, t, source, 2, "evt-2")
+	appendFixture(st, ctx, t, source, 3, "evt-3")
+	appendFixture(st, ctx, t, source, 4, "evt-4") // retention cap 2 -> records 3,4 retained
+
+	result, err := st.AttachSource(ctx, events.AttachSourceRequest{
+		Destination: destination,
+		Source:      source,
+		StartAt:     events.Cursor{Topic: source, Position: 2}, // EarliestRetained(3) - 1
+		Mode:        events.AttachModeRetainedThenLive,
+	})
+	if err != nil {
+		t.Fatalf("AttachSource() error = %v, want acceptance (StartAt=2 is EarliestRetained-1, not evicted)", err)
+	}
+	if result.Outcome != events.AttachOutcomeAccepted {
+		t.Fatalf("Outcome = %v, want AttachOutcomeAccepted", result.Outcome)
+	}
+
+	destRecords := readAll(st, ctx, t, destination)
+	if len(destRecords) != 2 {
+		t.Fatalf("destination has %d records, want 2 (positions 3 and 4 are both still retained and must both forward)", len(destRecords))
+	}
+	if destRecords[0].SourceSequence != 3 || destRecords[1].SourceSequence != 4 {
+		t.Fatalf("destination records = %+v, want SourceSequence 3 then 4", destRecords)
+	}
+}
+
 func TestAttachSource_IndirectCycleIsRejectedWithoutDeadlock(t *testing.T) {
 	st := New()
 	ctx := context.Background()

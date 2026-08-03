@@ -62,7 +62,11 @@ func (ts *topicState) readLocked(req events.ReadRequest) events.ReadResult {
 		}
 	case from > head:
 		return events.ReadResult{Outcome: events.ReadOutcomeInvalidCursor}
-	case earliest > 1 && from < earliest:
+	case earliest > 1 && from+1 < earliest:
+		// from+1 == earliest is not a gap: that cursor asks to start reading
+		// after from, so its first record is exactly the earliest retained
+		// position, which is still available. Only a from that skips past
+		// earliest (from+1 < earliest) has genuinely lost history.
 		return events.ReadResult{
 			Outcome: events.ReadOutcomeGap,
 			Gap:     &events.GapFacts{Topic: topic, Requested: from, EarliestRetained: earliest, Head: head},

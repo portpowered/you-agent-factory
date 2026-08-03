@@ -101,7 +101,11 @@ func (st *Store) AttachSource(ctx context.Context, req events.AttachSourceReques
 			err = events.ErrUnresolvableCursor
 			return events.AttachSourceResult{}, err
 		}
-		if earliest := srcTS.earliestLocked(); earliest > 1 && req.StartAt.Position < earliest {
+		// req.StartAt.Position+1 == earliest is not evicted: that cursor's
+		// first forwarded record is exactly the still-retained earliest
+		// position (see topicState.readLocked's identical boundary). Only a
+		// StartAt that skips past earliest has genuinely lost history.
+		if earliest := srcTS.earliestLocked(); earliest > 1 && req.StartAt.Position+1 < earliest {
 			srcTS.mu.Unlock()
 			err = events.ErrUnresolvableCursor
 			return events.AttachSourceResult{}, err

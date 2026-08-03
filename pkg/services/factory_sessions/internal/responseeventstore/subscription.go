@@ -434,19 +434,14 @@ func (s *SessionResponseEventStore) substituteFromEvents(delivered []responseeve
 // position, even when later positions in that range remain retained), so a
 // single Read spanning an evicted low position would otherwise mark every
 // still-available newer position as unavailable too. This loop instead
-// re-issues Read starting exactly from the gap's own EarliestRetained
-// position, so only the positions Events has genuinely evicted end up
-// missing from the returned map, with one documented exception: the position
-// named by EarliestRetained itself cannot be targeted by any resumable
-// cursor -- events.Service.Read's own boundary contract (established by
-// story 002) classifies a From naming EarliestRetained-1 as Gap too (From
-// must be strictly less than the retained position it is asking for), so
-// resuming at EarliestRetained-1 would reproduce the identical Gap forever.
-// Resuming at EarliestRetained itself avoids that loop and recovers every
-// position after it, at the cost of that one exact position also reading
-// back as a gap -- a real, pre-existing property of the injected Events
-// root's own Read contract, not something this adapter can recover without
-// widening events.Service.
+// re-issues Read starting exactly from one position before the gap's own
+// EarliestRetained (From is exclusive: it reports records strictly after the
+// cursor), so the position named by EarliestRetained itself is recovered
+// along with everything after it -- events.Service.Read's own boundary
+// contract (established by story 002) treats a From naming exactly
+// EarliestRetained-1 as a valid, non-gap cursor whose first returned record
+// is EarliestRetained, so only the positions Events has genuinely evicted
+// end up missing from the returned map.
 func (s *SessionResponseEventStore) readEventsAuthorityRange(ctx context.Context, minSeq, maxSeq int64) map[int64]json.RawMessage {
 	bySequence := make(map[int64]json.RawMessage, maxSeq-minSeq+1)
 	from := events.AggregateSequence(minSeq - 1)
@@ -474,11 +469,11 @@ func (s *SessionResponseEventStore) readEventsAuthorityRange(ctx context.Context
 			}
 			from = result.Next.Position
 		case events.ReadOutcomeGap:
-			earliest := events.AggregateSequence(result.Gap.EarliestRetained)
-			if earliest <= from {
+			next := events.AggregateSequence(result.Gap.EarliestRetained) - 1
+			if next <= from {
 				return bySequence
 			}
-			from = earliest
+			from = next
 		default:
 			return bySequence
 		}

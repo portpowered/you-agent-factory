@@ -158,6 +158,31 @@ func TestRead_GapFromStartOfStreamWhenEarliestRecordEvicted(t *testing.T) {
 	}
 }
 
+// TestRead_FromExactlyBeforeEarliestRetainedIsNotAGap proves the earliest
+// still-retained record is always reachable through a resumable cursor: a
+// From naming exactly EarliestRetained-1 must return that record as
+// ReadOutcomeProgress, not fabricate a gap for a position Events still
+// retains (PR #1753 review finding 1, 2026-08-03T18:37:32Z).
+func TestRead_FromExactlyBeforeEarliestRetainedIsNotAGap(t *testing.T) {
+	st := NewWithRetention(2)
+	ctx := context.Background()
+	appendN(t, st, ctx, readTestTopic, 5) // retains only positions 4,5; evicts 1-3
+
+	result, err := st.Read(ctx, events.ReadRequest{Topic: readTestTopic, From: events.Cursor{Topic: readTestTopic, Position: 3}, Limit: 10})
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	if result.Outcome != events.ReadOutcomeProgress {
+		t.Fatalf("Outcome = %v, want ReadOutcomeProgress (From=3 is EarliestRetained-1, not a gap)", result.Outcome)
+	}
+	if err := result.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if len(result.Records) != 2 || result.Records[0].ID.Position != 4 || result.Records[1].ID.Position != 5 {
+		t.Fatalf("Records = %+v, want positions 4,5 (the earliest retained record must be reachable, not skipped)", result.Records)
+	}
+}
+
 func TestRead_StartOfStreamIsNotAGapWhenNothingEvicted(t *testing.T) {
 	st := NewWithRetention(10)
 	ctx := context.Background()
@@ -198,7 +223,16 @@ func TestRead_RetentionEvictsOldestWithoutRenumberingHead(t *testing.T) {
 	}
 }
 
-func TestRead_DuplicateIdentityStillResolvesAfterEviction(t *testing.T) {
+// TestRead_DuplicateIdentityIsAcceptedAsNewAfterEviction proves idempotency
+// state is bounded by the same explicit retention policy as retained
+// records: once a record's position has been evicted, ts.identity no longer
+// holds its entry (see topicState.commitLocked), so repeating that identity
+// is accepted as a new record instead of resolving as a duplicate forever.
+// Retaining full accepted records/payloads in ts.identity indefinitely,
+// unbounded by the declared retention policy, is the hidden second
+// retention path this test guards against (PR #1753 review finding 2,
+// 2026-08-03T18:37:32Z).
+func TestRead_DuplicateIdentityIsAcceptedAsNewAfterEviction(t *testing.T) {
 	st := NewWithRetention(1)
 	ctx := context.Background()
 
@@ -222,11 +256,36 @@ func TestRead_DuplicateIdentityStillResolvesAfterEviction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Append() repeat error = %v", err)
 	}
-	if repeatResult.Outcome != events.AppendOutcomeDuplicate {
-		t.Fatalf("Outcome = %v, want AppendOutcomeDuplicate even after eviction", repeatResult.Outcome)
+	if repeatResult.Outcome != events.AppendOutcomeAccepted {
+		t.Fatalf("Outcome = %v, want AppendOutcomeAccepted (identity was evicted, so idempotency detection no longer applies)", repeatResult.Outcome)
 	}
-	if repeatResult.Record.ID != firstResult.Record.ID {
-		t.Fatalf("repeat Record.ID = %+v, want %+v", repeatResult.Record.ID, firstResult.Record.ID)
+	if repeatResult.Record.ID == firstResult.Record.ID {
+		t.Fatalf("repeat Record.ID = %+v, want a new position distinct from the evicted original %+v", repeatResult.Record.ID, firstResult.Record.ID)
+	}
+}
+
+// TestRead_IdentityIndexStaysBoundedByRetentionPolicy proves the bounded
+// retention policy applies to all retained state, not just the readable
+// records slice: appending well beyond the retention cap must not leave
+// ts.identity growing without bound (PR #1753 review finding 2,
+// 2026-08-03T18:37:32Z).
+func TestRead_IdentityIndexStaysBoundedByRetentionPolicy(t *testing.T) {
+	const retentionCap = 5
+	st := NewWithRetention(retentionCap)
+	ctx := context.Background()
+	appendN(t, st, ctx, readTestTopic, retentionCap*20)
+
+	ts := st.topic(readTestTopic)
+	ts.mu.Lock()
+	recordCount := len(ts.records)
+	identityCount := len(ts.identity)
+	ts.mu.Unlock()
+
+	if recordCount != retentionCap {
+		t.Fatalf("len(records) = %d, want %d", recordCount, retentionCap)
+	}
+	if identityCount != retentionCap {
+		t.Fatalf("len(identity) = %d, want %d (identity must stay bounded by the same retention policy as records, not grow with every append)", identityCount, retentionCap)
 	}
 }
 

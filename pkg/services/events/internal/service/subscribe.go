@@ -98,7 +98,10 @@ func (ts *topicState) catchupLocked(topic events.Topic, from events.AggregateSeq
 
 	var gap *events.GapFacts
 	startAfter := from
-	if earliest > 1 && from < earliest {
+	// from+1 == earliest is not a gap (see topicState.readLocked): that
+	// starting point's first record is exactly the still-retained earliest
+	// position, so only from+1 < earliest has genuinely lost history.
+	if earliest > 1 && from+1 < earliest {
 		gap = &events.GapFacts{Topic: topic, Requested: from, EarliestRetained: earliest, Head: head}
 		startAfter = earliest - 1
 	}

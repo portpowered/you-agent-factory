@@ -316,10 +316,11 @@ var _ events.Service = (*gapReportingEventsService)(nil)
 // 1, 2026-08-03T18:01:32Z). This uses the real Events implementation (not a
 // hand-rolled double) bound to a tight per-topic retention cap, so it also
 // exercises the real Store's own Read boundary contract: a From naming
-// EarliestRetained-1 is itself classified as Gap, so the position exactly at
-// EarliestRetained is never recoverable through any resumable cursor and is
-// expected to read back as a gap alongside the genuinely evicted position --
-// only the positions strictly after EarliestRetained are provably real.
+// exactly EarliestRetained-1 is a valid, non-gap cursor whose first returned
+// record is EarliestRetained itself (PR #1753 review finding 1,
+// 2026-08-03T18:37:32Z fixed this boundary), so every still-retained
+// position -- including the earliest one -- is provably real, and only the
+// genuinely evicted positions surface as a gap.
 func TestSessionResponseEventStoreSubscription_PartialEvictionDoesNotEraseNewerRetainedRecords(t *testing.T) {
 	t.Parallel()
 
@@ -352,12 +353,11 @@ func TestSessionResponseEventStoreSubscription_PartialEvictionDoesNotEraseNewerR
 	}
 
 	// With a retention cap of 2, publishing 4 events leaves Events retaining
-	// only positions 3 and 4: positions 1 and 2 have genuinely fallen out of
-	// the retained window, and position 3 -- EarliestRetained -- is the one
-	// position the underlying Read contract can never target through a
-	// resumable cursor (see the doc comment above). Only position 4 is
-	// provably deliverable as real content.
-	for i := range 3 {
+	// positions 3 and 4: positions 1 and 2 have genuinely fallen out of the
+	// retained window, but 3 and 4 -- the full retained tail, including the
+	// earliest retained position -- are both provably deliverable as real
+	// content.
+	for i := range 2 {
 		if delivered[i].Kind != responseevents.KindStreamGap {
 			t.Fatalf("delivered[%d].Kind = %q, want %q (position %d is not recoverable from Events under a retention cap of 2)", i, delivered[i].Kind, responseevents.KindStreamGap, i+1)
 		}
@@ -365,11 +365,13 @@ func TestSessionResponseEventStoreSubscription_PartialEvictionDoesNotEraseNewerR
 			t.Fatalf("delivered[%d].EventID = %q: a record Events cannot confirm must never be delivered under its original identity", i, delivered[i].EventID)
 		}
 	}
-	if delivered[3].Kind == responseevents.KindStreamGap {
-		t.Fatalf("delivered[3].Kind = %q, want the real event: Events still retains this position, so eviction of older positions must not erase it", delivered[3].Kind)
-	}
-	if delivered[3].EventID != published[3].EventID {
-		t.Fatalf("delivered[3].EventID = %q, want %q (real content Events still retains)", delivered[3].EventID, published[3].EventID)
+	for i := 2; i < 4; i++ {
+		if delivered[i].Kind == responseevents.KindStreamGap {
+			t.Fatalf("delivered[%d].Kind = %q, want the real event: Events still retains this position, so eviction of older positions must not erase it", i, delivered[i].Kind)
+		}
+		if delivered[i].EventID != published[i].EventID {
+			t.Fatalf("delivered[%d].EventID = %q, want %q (real content Events still retains)", i, delivered[i].EventID, published[i].EventID)
+		}
 	}
 }
 

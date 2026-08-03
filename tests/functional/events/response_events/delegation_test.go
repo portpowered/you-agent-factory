@@ -95,14 +95,15 @@ func TestFactoryResponseEventsSurviveTheEventsAuthoritativePublishPath(t *testin
 
 // eventsRetentionCapForDelegationTest is the tightened per-topic retention
 // cap used by TestFactoryResponseEventDeliveryDivergesWhenEventsRetentionIsTighterThanLocal.
-// Events' own Read contract (established by story 002:
-// pkg/services/events/internal/service/read.go's earliest>1 && from<earliest
-// check) can never resolve the position exactly at a gap's EarliestRetained
-// through any resumable cursor -- a From naming EarliestRetained-1 is itself
-// classified as Gap -- so under a cap of N, exactly N-1 of the most recent
-// positions are provably recoverable, not N. Using a cap of 3 (rather than
-// the minimum useful cap of 2) keeps that recoverable tail at 2 real events,
-// so this test demonstrably recovers more than a single trailing record.
+// Under a cap of N, all N of the most recent positions are provably
+// recoverable, including the earliest retained one: Events' own Read
+// contract (established by story 002:
+// pkg/services/events/internal/service/read.go) treats a From naming
+// exactly EarliestRetained-1 as a valid, non-gap cursor whose first returned
+// record is EarliestRetained itself (fixed by PR #1753 review finding 1,
+// 2026-08-03T18:37:32Z). Using a cap of 3 (rather than the minimum useful
+// cap of 1) keeps the recoverable tail at 3 real events, so this test
+// demonstrably recovers more than a single trailing record.
 const eventsRetentionCapForDelegationTest = 3
 
 // TestFactoryResponseEventDeliveryDivergesWhenEventsRetentionIsTighterThanLocal
@@ -164,11 +165,11 @@ func TestFactoryResponseEventDeliveryDivergesWhenEventsRetentionIsTighterThanLoc
 		)
 	}
 
-	// Under a per-topic cap of eventsRetentionCapForDelegationTest, exactly
-	// eventsRetentionCapForDelegationTest-1 of the most recent positions are
+	// Under a per-topic cap of eventsRetentionCapForDelegationTest, all
+	// eventsRetentionCapForDelegationTest of the most recent positions are
 	// recoverable (see the constant's doc comment); every earlier position
 	// must surface as a gap.
-	recoverableTail := eventsRetentionCapForDelegationTest - 1
+	recoverableTail := eventsRetentionCapForDelegationTest
 	gapCount := len(tightened) - recoverableTail
 
 	for index, event := range tightened {

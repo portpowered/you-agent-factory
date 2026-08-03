@@ -134,6 +134,32 @@ func TestSubscribe_GapReportsEvictedStartingPositionThenResumes(t *testing.T) {
 	}
 }
 
+// TestSubscribe_FromExactlyBeforeEarliestRetainedIsNotAGap proves the
+// earliest still-retained record is always reachable through a resumable
+// Subscribe cursor: a From naming exactly EarliestRetained-1 must deliver
+// that record directly, not fabricate a DeliveryGap for a position Events
+// still retains (PR #1753 review finding 1, 2026-08-03T18:37:32Z).
+func TestSubscribe_FromExactlyBeforeEarliestRetainedIsNotAGap(t *testing.T) {
+	st := NewWithRetention(2)
+	ctx := context.Background()
+	appendN(t, st, ctx, subscribeTestTopic, 5) // retains only positions 4,5; evicts 1-3
+
+	sub := mustSubscribe(t, st, ctx, events.SubscribeRequest{
+		Topic: subscribeTestTopic,
+		From:  events.Cursor{Topic: subscribeTestTopic, Position: 3},
+		Limit: 10,
+	})
+
+	first := sub.Next(ctx)
+	if first.Kind != events.DeliveryRecord || first.Record.ID.Position != 4 {
+		t.Fatalf("Next() = %+v, want DeliveryRecord at position 4 (From=3 is EarliestRetained-1, not a gap)", first)
+	}
+	second := sub.Next(ctx)
+	if second.Kind != events.DeliveryRecord || second.Record.ID.Position != 5 {
+		t.Fatalf("Next() = %+v, want DeliveryRecord at position 5", second)
+	}
+}
+
 func TestSubscribe_UnresolvableCursorAheadOfHeadReturnsError(t *testing.T) {
 	st := New()
 	ctx := context.Background()
