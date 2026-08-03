@@ -30,13 +30,22 @@ type Store struct {
 // episodes is the session's full, consecutively numbered TargetEpisode
 // history ordered by Number, index 0 being Number 1; it is never rewritten
 // in place, only replaced with a new slice on rollover. activeTurn is the
-// session's current non-terminal Turn, or nil when no turn is active; later
-// stories (003+) populate it via StartTurn/AdvanceTurn. attachments and
-// control-intent state are added by later stories as needed.
+// session's current non-terminal Turn, or nil when no turn is active.
+// turns holds every Turn ever admitted for this session, keyed by Turn.ID,
+// so AdvanceTurn can locate a turn by identity regardless of whether it is
+// still active; a turn already present here is never removed, only replaced
+// in place with its advanced value. turnSequence is a private, per-session
+// monotonic counter used solely to give each newly terminal Turn a distinct,
+// non-zero TerminalSequence -- it is unrelated to and never written into the
+// public Session.StreamHead, since this in-memory engine does not wire into
+// a real event stream. attachments and control-intent state are added by
+// later stories as needed.
 type sessionRecord struct {
-	session    chatsessions.Session
-	episodes   []chatsessions.TargetEpisode
-	activeTurn *chatsessions.Turn
+	session      chatsessions.Session
+	episodes     []chatsessions.TargetEpisode
+	activeTurn   *chatsessions.Turn
+	turns        map[string]chatsessions.Turn
+	turnSequence uint64
 }
 
 // New constructs an empty Store from explicit dependencies. newID and now

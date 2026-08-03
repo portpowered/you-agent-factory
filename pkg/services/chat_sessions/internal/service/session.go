@@ -56,7 +56,11 @@ func (s *Store) CreateSession(_ context.Context, req chatsessions.CreateSessionR
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.sessions[session.ID] = sessionRecord{session: session, episodes: []chatsessions.TargetEpisode{episode}}
+	s.sessions[session.ID] = sessionRecord{
+		session:  session,
+		episodes: []chatsessions.TargetEpisode{episode},
+		turns:    make(map[string]chatsessions.Turn),
+	}
 	return chatsessions.CreateSessionResult{Session: session}, nil
 }
 

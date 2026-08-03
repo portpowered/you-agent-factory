@@ -2588,6 +2588,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/chat_sessions/internal/service",
+      "disposition": "retain",
+      "destination": "chat_sessions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/edges",
       "disposition": "retain",
       "destination": "edges",
