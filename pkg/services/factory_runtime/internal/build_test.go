@@ -16,6 +16,7 @@ import (
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
 	factoryruntimeorchestrationowner "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"go.uber.org/zap"
@@ -55,6 +56,7 @@ func TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities(t *testing.T
 			return nil, nil
 		},
 		testRuntimeWorkers{},
+		testRuntimeWorkerSessionsFactory(t),
 		nil,
 	)
 	if err != nil {
@@ -95,6 +97,7 @@ func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 			return nil, nil
 		},
 		testRuntimeWorkers{},
+		testRuntimeWorkerSessionsFactory(t),
 		nil,
 	)
 	if err != nil {
@@ -136,6 +139,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 			return nil, nil
 		},
 		testRuntimeWorkers{},
+		testRuntimeWorkerSessionsFactory(t),
 		nil,
 	)
 	if err != nil {
@@ -177,6 +181,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 			return nil, nil
 		},
 		testRuntimeWorkers{},
+		testRuntimeWorkerSessionsFactory(t),
 		nil,
 	)
 	if err != nil {
@@ -220,6 +225,50 @@ func (testRuntimeWorkers) CancelWorkstationDispatch(
 	workers.WorkstationDispatchCancelRequest,
 ) (workers.WorkstationDispatchCancelResult, error) {
 	return workers.WorkstationDispatchCancelResult{}, nil
+}
+
+func testRuntimeWorkerSessionsFactory(t *testing.T) factory.WorkerSessionsFactory {
+	t.Helper()
+	return func(execution workers.WorkstationExecutionService) (workersessions.Service, error) {
+		return &stubWorkerSessionsService{execution: execution}, nil
+	}
+}
+
+// stubWorkerSessionsService is a minimal workersessions.Service double for
+// build-composition tests: Start hands the request straight to the resolved
+// Workers execution boundary, mirroring the real cutover seam's shape
+// without pulling in the peer worker_sessions implementation package.
+type stubWorkerSessionsService struct {
+	execution workers.WorkstationExecutionService
+}
+
+func (s *stubWorkerSessionsService) Reserve(context.Context, workersessions.ReserveRequest) (workersessions.Session, error) {
+	return workersessions.Session{}, nil
+}
+
+func (s *stubWorkerSessionsService) Get(context.Context, workersessions.GetRequest) (workersessions.Session, error) {
+	return workersessions.Session{}, nil
+}
+
+func (s *stubWorkerSessionsService) List(context.Context, workersessions.ListRequest) (workersessions.ListResult, error) {
+	return workersessions.ListResult{}, nil
+}
+
+func (s *stubWorkerSessionsService) Start(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
+	handoff := workers.WorkstationDispatchRequest{
+		WorkstationName: req.Execution.WorkstationName,
+		Execution:       req.Execution.Execution,
+	}
+	dispatchResult, dispatchErr := s.execution.DispatchWorkstation(ctx, handoff)
+	return workersessions.StartResult{
+		Session:     workersessions.Session{ID: req.ID, State: workersessions.StateCompleted},
+		Dispatch:    dispatchResult,
+		DispatchErr: dispatchErr,
+	}, nil
+}
+
+func (s *stubWorkerSessionsService) PublishRecord(context.Context, workersessions.PublishRecordRequest) (workersessions.PublishRecordResult, error) {
+	return workersessions.PublishRecordResult{}, nil
 }
 
 func loadedFactoryFixture(dir string) (interfaces.MutableLoadedFactorySource, error) {

@@ -27,6 +27,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -38,6 +39,7 @@ type testFactoryConfig struct {
 	scheduler                 scheduler.Scheduler
 	workerExecutors           map[string]workers.WorkerExecutor
 	workerService             workers.WorkstationExecutionService
+	workerSessions            workersessions.Service
 	runtimeConfig             interfaces.RuntimeDefinitionLookup
 	workflowContext           *factory_context.FactoryContext
 	runtimeMode               interfaces.RuntimeMode
@@ -65,8 +67,12 @@ func newTestFactory(opts ...testFactoryOption) (factory.Factory, error) {
 	if workerService == nil {
 		workerService = &testWorkstationBoundary{}
 	}
+	workerSessionsService := cfg.workerSessions
+	if workerSessionsService == nil {
+		workerSessionsService = &fakeWorkerSessionsService{execution: workerService}
+	}
 	return New(
-		cfg.net, cfg.scheduler, cfg.workerExecutors, workerService, cfg.runtimeConfig,
+		cfg.net, cfg.scheduler, cfg.workerExecutors, workerService, workerSessionsService, cfg.runtimeConfig,
 		cfg.workflowContext, cfg.runtimeMode, cfg.logger, cfg.clock,
 		cfg.inlineDispatch, cfg.eventHistory, nil,
 		nil, nil, cfg.submissionHooks,
@@ -113,6 +119,49 @@ func withWorkerExecutor(workerType string, executor workers.WorkerExecutor) test
 
 func withWorkerService(service workers.WorkstationExecutionService) testFactoryOption {
 	return func(cfg *testFactoryConfig) { cfg.workerService = service }
+}
+
+func withWorkerSessions(service workersessions.Service) testFactoryOption {
+	return func(cfg *testFactoryConfig) { cfg.workerSessions = service }
+}
+
+// fakeWorkerSessionsService is the default test double for the W4 Runtime
+// dispatch cutover seam: Start hands the resolved request straight to the
+// configured Workers execution boundary and reports the raw result, mirroring
+// the shape worker_sessions.Service.Start returns once it reaches handoff.
+// worker_sessions' own state-machine/Events behavior is exercised in its own
+// package tests; Runtime's tests only need this seam's integration contract.
+type fakeWorkerSessionsService struct {
+	execution workers.WorkstationExecutionService
+}
+
+func (s *fakeWorkerSessionsService) Reserve(context.Context, workersessions.ReserveRequest) (workersessions.Session, error) {
+	return workersessions.Session{}, nil
+}
+
+func (s *fakeWorkerSessionsService) Get(context.Context, workersessions.GetRequest) (workersessions.Session, error) {
+	return workersessions.Session{}, nil
+}
+
+func (s *fakeWorkerSessionsService) List(context.Context, workersessions.ListRequest) (workersessions.ListResult, error) {
+	return workersessions.ListResult{}, nil
+}
+
+func (s *fakeWorkerSessionsService) Start(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
+	handoff := workers.WorkstationDispatchRequest{
+		WorkstationName: req.Execution.WorkstationName,
+		Execution:       req.Execution.Execution,
+	}
+	dispatchResult, dispatchErr := s.execution.DispatchWorkstation(ctx, handoff)
+	return workersessions.StartResult{
+		Session:     workersessions.Session{ID: req.ID, State: workersessions.StateCompleted},
+		Dispatch:    dispatchResult,
+		DispatchErr: dispatchErr,
+	}, nil
+}
+
+func (s *fakeWorkerSessionsService) PublishRecord(context.Context, workersessions.PublishRecordRequest) (workersessions.PublishRecordResult, error) {
+	return workersessions.PublishRecordResult{}, nil
 }
 
 type testWorkstationBoundary struct {

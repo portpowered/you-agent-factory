@@ -20,20 +20,21 @@ import (
 // record/replay should record events in the format of the schemas defined in the api package.
 // the API should respond with the serialized json payloads of those openapi.yaml based schemas.
 const (
-	eventIDRunRequest              = "factory-event/run-started"
-	eventIDRunResponse             = "factory-event/run-finished"
-	eventIDInitialStructure        = "factory-event/initial-structure/0"
-	eventIDFactoryChangePrefix     = "factory-event/factory-change"
-	eventIDWorkRequestPrefix       = "factory-event/work-request"
-	eventIDRelationshipPrefix      = "factory-event/relationship-change"
-	eventIDDispatchCreatedPrefix   = "factory-event/dispatch-created"
-	eventIDDispatchCompletedPrefix = "factory-event/dispatch-completed"
-	eventIDStateChangePrefix       = "factory-event/factory-state-change"
-	eventIDWorkStateChangePrefix   = "factory-event/work-state-change"
-	failureReasonWorkerError       = "worker_error"
-	failureReasonUnknown           = "workstation_failed"
-	failureMessageUnavailable      = "Workstation failed without a reported error message."
-	eventHistoryStreamBufferSize   = 64
+	eventIDRunRequest                       = "factory-event/run-started"
+	eventIDRunResponse                      = "factory-event/run-finished"
+	eventIDInitialStructure                 = "factory-event/initial-structure/0"
+	eventIDFactoryChangePrefix              = "factory-event/factory-change"
+	eventIDWorkRequestPrefix                = "factory-event/work-request"
+	eventIDRelationshipPrefix               = "factory-event/relationship-change"
+	eventIDDispatchCreatedPrefix            = "factory-event/dispatch-created"
+	eventIDDispatchCompletedPrefix          = "factory-event/dispatch-completed"
+	eventIDDispatchWorkerSessionAssocPrefix = "factory-event/dispatch-worker-session-association"
+	eventIDStateChangePrefix                = "factory-event/factory-state-change"
+	eventIDWorkStateChangePrefix            = "factory-event/work-state-change"
+	failureReasonWorkerError                = "worker_error"
+	failureReasonUnknown                    = "workstation_failed"
+	failureMessageUnavailable               = "Workstation failed without a reported error message."
+	eventHistoryStreamBufferSize            = 64
 )
 
 type eventHistorySubscription struct {
@@ -433,6 +434,29 @@ func (h *FactoryEventHistory) RecordWorkstationRequest(tick int, record interfac
 			Inputs:                   dispatchConsumedWorkRefsFromTokens(inputTokens),
 			Resources:                h.dispatchResourcesPtr(inputTokens),
 			Metadata:                 dispatchRequestEventMetadataPtr(record.Dispatch.Execution.ReplayKey, runnerSelection),
+		},
+	))
+}
+
+// RecordDispatchWorkerSessionAssociation records the canonical, stable
+// dispatch-to-Worker-Session identity association. Callers must commit this
+// record before any event that depends on it (the Worker Session's own
+// opening or output records) can be observed.
+func (h *FactoryEventHistory) RecordDispatchWorkerSessionAssociation(tick int, dispatchID string, workerSessionID string, eventTime time.Time) {
+	if h == nil || dispatchID == "" || workerSessionID == "" {
+		return
+	}
+	eventTime = interfaces.CanonicalEventTime(eventTime)
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+		fmt.Sprintf("%s/%s", eventIDDispatchWorkerSessionAssocPrefix, dispatchID),
+		interfaces.FactoryEventContext{
+			Tick:       tick,
+			EventTime:  eventTime,
+			DispatchID: stringPtr(dispatchID),
+		},
+		interfaces.DispatchWorkerSessionAssociationEventPayload{
+			WorkerSessionID: workerSessionID,
 		},
 	))
 }
