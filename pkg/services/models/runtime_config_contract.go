@@ -92,13 +92,6 @@ type CloseRuntimeScopeResult struct {
 	Closed bool
 }
 
-// RuntimeOpeningRequest carries the Models-owned per-runtime-opening
-// selections assembled by the process-scoped composition boundary alongside
-// the sibling FactoryDefinitions, Workers, and Recordings opening requests.
-type RuntimeOpeningRequest struct {
-	CacheDirectory string
-}
-
 const (
 	RuntimeModelLocalityLocal  = "LOCAL"
 	RuntimeModelLocalityCloud  = "CLOUD"

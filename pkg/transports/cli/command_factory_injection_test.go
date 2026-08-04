@@ -529,10 +529,6 @@ func (compositionModelsRootForFactoryTest) CancelInvocation(context.Context, mod
 	return modelinference.CancelInvocationResult{}, modelinference.ErrUnsupportedOperation
 }
 
-func (compositionModelsRootForFactoryTest) ForRuntime(modelinference.RuntimeBinding) (modelinference.Service, error) {
-	return nil, modelinference.ErrUnsupportedOperation
-}
-
 func (compositionModelsRootForFactoryTest) InspectRuntime(context.Context, string) (modelinference.Runtime, error) {
 	return modelinference.Runtime{}, modelinference.ErrUnsupportedOperation
 }
