@@ -109,6 +109,7 @@ type fakeSessions struct {
 	closeCalls []string
 	closeErr   error
 	closeErrs  []error
+	close      func(context.Context, string) error
 }
 
 func (f *fakeSessions) InvokeFactorySession(
@@ -137,16 +138,22 @@ func (f *fakeSessions) Cancel(
 	return f.cancelResult, f.cancelErr
 }
 
-func (f *fakeSessions) CloseFactorySession(_ context.Context, sessionID string) error {
+func (f *fakeSessions) CloseFactorySession(ctx context.Context, sessionID string) error {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.closeCalls = append(f.closeCalls, sessionID)
+	close := f.close
 	if len(f.closeErrs) > 0 {
 		err := f.closeErrs[0]
 		f.closeErrs = f.closeErrs[1:]
+		f.mu.Unlock()
 		return err
 	}
-	return f.closeErr
+	err := f.closeErr
+	f.mu.Unlock()
+	if close != nil {
+		return close(ctx, sessionID)
+	}
+	return err
 }
 
 func newTestService(t *testing.T, opener invocationRuntimeOpener, resolve RuntimeResolver, generateID factorysessions.SessionIDGenerator) *Service {

@@ -283,13 +283,11 @@ func (a *activatedRuntime) close(ctx context.Context) (*activeInvocation, error)
 	a.closing = true
 	a.mu.Unlock()
 
-	// Keep the caller's cancellation/deadline while waiting for a provider
-	// invocation to finish. cleanup intentionally continues with a detached
-	// context so a caller that times out does not strand already-started
-	// runtime cleanup, but the control itself reports that bounded failure and
-	// remains retryable.
+	// Cleanup is synchronous, so it must keep the caller's cancellation and
+	// deadline as well. A timed-out control leaves this activation mapped and
+	// retryable; a later retry resumes only cleanup phases that did not finish.
 	invocation, cancelErr := a.cancelInvocation(ctx)
-	result := errors.Join(cancelErr, a.cleanup(context.WithoutCancel(ctx)))
+	result := errors.Join(cancelErr, a.cleanup(ctx))
 	if result == nil {
 		a.mu.Lock()
 		a.closed = true
