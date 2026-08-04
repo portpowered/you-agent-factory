@@ -84,6 +84,45 @@ func TestServiceReturnsCanonicalSessionNotFound(t *testing.T) {
 	}
 }
 
+type submitWorkFactory struct {
+	factory.Factory
+	factory.Service
+	request work.WorkRequest
+	result  work.WorkRequestSubmitResult
+	err     error
+}
+
+func (f *submitWorkFactory) SubmitWorkRequest(_ context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	f.request = request
+	return f.result, f.err
+}
+
+func TestWorkRuntimeAdapterSubmitWorkRequestDelegatesToCanonicalRuntime(t *testing.T) {
+	canonical := &submitWorkFactory{result: work.WorkRequestSubmitResult{RequestID: "request-1"}}
+	adapter := workRuntimeAdapter{runtime: canonical}
+
+	got, err := adapter.SubmitWorkRequest(context.Background(), work.WorkRequest{RequestID: "request-1"})
+	if err != nil {
+		t.Fatalf("SubmitWorkRequest() error = %v, want nil", err)
+	}
+	if got.RequestID != "request-1" || canonical.request.RequestID != "request-1" {
+		t.Fatalf("SubmitWorkRequest() = %#v, request = %#v, want delegated round trip", got, canonical.request)
+	}
+}
+
+type serviceOnlyRuntime struct {
+	factory.Service
+}
+
+func TestWorkRuntimeAdapterSubmitWorkRequestRejectsServiceOnlyRuntimeSafely(t *testing.T) {
+	adapter := workRuntimeAdapter{runtime: serviceOnlyRuntime{}}
+
+	_, err := adapter.SubmitWorkRequest(context.Background(), work.WorkRequest{RequestID: "request-1"})
+	if err == nil || !strings.Contains(err.Error(), "legacy Factory Runtime submission is required") {
+		t.Fatalf("SubmitWorkRequest() error = %v, want safe legacy-submission-required error", err)
+	}
+}
+
 type conflictingRootRuntime struct {
 	factory.Service
 }

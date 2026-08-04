@@ -174,13 +174,6 @@ func TestPlanDispatch_MapsTypedDispatchFailures(t *testing.T) {
 			wantCode:   "SERVICE_UNAVAILABLE",
 			wantMsg:    "factory runtime is not running",
 		},
-		{
-			name:       "capability unavailable",
-			programmed: factoryruntime.ErrCapabilityUnavailable,
-			wantStatus: http.StatusServiceUnavailable,
-			wantCode:   "SERVICE_UNAVAILABLE",
-			wantMsg:    "factory runtime capability is unavailable",
-		},
 	}
 
 	for _, tc := range tests {

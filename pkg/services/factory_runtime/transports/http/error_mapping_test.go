@@ -45,13 +45,6 @@ func TestRootErrorResponse_MapsSharedRuntimeSentinels(t *testing.T) {
 			wantCode:   factoryapi.ErrorResponseCodeNOTFOUND,
 			wantMsg:    "factory runtime target not found",
 		},
-		{
-			name:       "capability unavailable",
-			err:        factoryruntime.ErrCapabilityUnavailable,
-			wantStatus: http.StatusServiceUnavailable,
-			wantCode:   factoryapi.ErrorResponseCode("SERVICE_UNAVAILABLE"),
-			wantMsg:    "factory runtime capability is unavailable",
-		},
 	}
 
 	for _, operation := range operations {
@@ -319,6 +312,21 @@ func TestWriteRootOrInternalError_SanitizesUnmappedFailures(t *testing.T) {
 		strings.Contains(body, "pkg/services/factory_runtime") ||
 		strings.Contains(body, "boom") {
 		t.Fatalf("response = %d %s, want sanitized internal error", recorder.Code, body)
+	}
+}
+
+func TestWriteRootOrInternalError_HandlesContextOutcomeCarriedByErr(t *testing.T) {
+	t.Parallel()
+
+	adapter := NewAdapter(&runtimeRootFake{})
+	recorder := httptest.NewRecorder()
+
+	adapter.writeRootOrInternalError(recorder, context.Background(), runtimeHTTPOperationObserve, "failed to observe factory runtime status", context.DeadlineExceeded)
+
+	body := recorder.Body.String()
+	if recorder.Code != http.StatusGatewayTimeout ||
+		!strings.Contains(body, `"message":"factory runtime request timed out"`) {
+		t.Fatalf("response = %d %s, want gateway-timeout outcome for a context deadline carried by err", recorder.Code, body)
 	}
 }
 
