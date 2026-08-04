@@ -21,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -66,22 +67,29 @@ func (c compositeProcessLifecycle) Close(ctx context.Context) error {
 
 // provideApplicationProcessLifecycle composes the process-wide shutdown path
 // Process.Close reaches: the Providers lifecycle (executable/session
-// teardown) and the on-demand Factory Sessions activation the production ACP
-// prompt-delegation consumer lazily opens runtimes through (see
-// provideACPServerFactoryTarget) -- so every runtime that activation ever
-// opens is guaranteed a reachable, deterministic close on process shutdown,
-// not left open for the life of the process regardless of whether a
-// production ACP stdio entrypoint has been built yet.
+// teardown), the singular Events root (pkg/wire/events_providers.go), and the
+// on-demand Factory Sessions activation the production ACP prompt-delegation
+// consumer lazily opens runtimes through (see provideACPServerFactoryTarget)
+// -- so every runtime that activation ever opens is guaranteed a reachable,
+// deterministic close on process shutdown, not left open for the life of the
+// process regardless of whether a production ACP stdio entrypoint has been
+// built yet.
 func provideApplicationProcessLifecycle(
 	service providers.Service,
+	eventsService events.Service,
 	factoryTarget *factorysessionwire.OnDemandFactoryTargetService,
 ) (initializerapplication.ProcessLifecycle, error) {
 	lifecycle, ok := service.(providers.Lifecycle)
 	if !ok {
 		return nil, fmt.Errorf("construct application process: Providers lifecycle is required")
 	}
+	eventsLifecycleValue, ok := eventsService.(eventsLifecycle)
+	if !ok {
+		return nil, fmt.Errorf("construct application process: Events lifecycle is required")
+	}
 	return compositeProcessLifecycle{closers: []func(context.Context) error{
 		lifecycle.Close,
+		eventsLifecycleValue.Close,
 		func(context.Context) error {
 			if factoryTarget == nil {
 				return nil
@@ -525,10 +533,11 @@ func provideFactorySessionsService(
 	invocationInputFiles factorysessionwire.InvocationInputReader,
 	initialWorkFiles factorysessionwire.InitialWorkReader,
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
+	eventsService events.Service,
 ) (factorysessions.Service, error) {
 	return factorysessionwire.NewService(func() factoryruntime.JavaScriptCheckpointStore {
 		return factoryruntimewire.NewJavaScriptCheckpointStore()
-	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, responseEventRetentionLimits, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks)
+	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, responseEventRetentionLimits, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks, eventsService)
 }
 
 func provideOrchestrationJavaScriptExecution(
@@ -562,6 +571,7 @@ func provideFactorySessionExecutionFactory(
 	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	conductorInvocationWithProgress factorysessionwire.ConductorInvocationWithProgressFactory,
 	edges serviceedges.Edges,
+	eventsService events.Service,
 ) factorysessionwire.FactorySessionExecutionFactory {
 	return func(
 		projectRoot string,
@@ -629,6 +639,7 @@ func provideFactorySessionExecutionFactory(
 			liveChildInvocation,
 			responseEventIDs,
 			responseEventRetentionLimits,
+			eventsService,
 		)
 	}
 }

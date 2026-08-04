@@ -183,7 +183,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v21 := provideFactorySessionInvocationInputReader(edges2)
 	v22 := provideFactorySessionInitialWorkReader(edges2)
 	logicalTargetResolveSymlinks := provideFactorySessionResolveLogicalTargetSymlinks(edges2)
-	factorysessionsService, err := provideFactorySessionsService(sessionResultProjectionOperation, invocationInterpolationService, invocationWorkTypeService, ttsObservabilityService, responseEventIDGenerator, responseEventRetentionLimits, v19, homeDirectoryResolver, v20, namedPathResolver, v21, v22, logicalTargetResolveSymlinks)
+	eventsService, err := provideEventsService(loggingLogger)
+	if err != nil {
+		return nil, err
+	}
+	factorysessionsService, err := provideFactorySessionsService(sessionResultProjectionOperation, invocationInterpolationService, invocationWorkTypeService, ttsObservabilityService, responseEventIDGenerator, responseEventRetentionLimits, v19, homeDirectoryResolver, v20, namedPathResolver, v21, v22, logicalTargetResolveSymlinks, eventsService)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +212,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	workersMockCommandRunnerFactory := provideWorkersMockCommandRunnerFactory()
 	v30 := provideConductorInvocationWithProgressFactory(service, edges2)
-	v31 := provideFactorySessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, v23, v25, v26, v19, responseEventIDGenerator, responseEventRetentionLimits, v27, ptyAllocator, v28, providerRegistry, v29, workersMockCommandRunnerFactory, v30, edges2)
+	v31 := provideFactorySessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, v23, v25, v26, v19, responseEventIDGenerator, responseEventRetentionLimits, v27, ptyAllocator, v28, providerRegistry, v29, workersMockCommandRunnerFactory, v30, edges2, eventsService)
 	v32 := provideRecordingsProjectionFactory()
 	storage := provideReplayArtifactStorage()
 	v33 := provideRecordingsFactory(edges2, v5, storage)
@@ -577,7 +581,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	processLifecycle, err := provideApplicationProcessLifecycle(service, v83)
+	processLifecycle, err := provideApplicationProcessLifecycle(service, eventsService, v83)
 	if err != nil {
 		return nil, err
 	}
@@ -596,6 +600,7 @@ var apiSet = wire3.NewSet(http.NewAdapter, http.NewHandler, composition.NewHTTPB
 
 var servicesSet = wire3.NewSet(
 	provideProvidersService,
+	provideEventsService,
 	provideApplicationProcessLifecycle,
 	provideProviderRegistry,
 	provideProviderRegistryRebinder, wire3.Bind(new(application.ProviderRegistry), new(workers.ProviderRegistry)), provideFactorySessionProviderIdentityResolver, wire2.NewRequestPreparation, provideFactorySessionHTTPRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,

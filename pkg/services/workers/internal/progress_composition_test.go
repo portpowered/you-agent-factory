@@ -147,18 +147,73 @@ func TestNewInvocationRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 	}
 }
 
-// TestNewRuntimeConstructionPreservesInjectedLoggerForWorkstationPool proves
-// the logger supplied at construction keeps reaching a freshly constructed
-// runtime's workstation pool. Every Factory Session build reaches its Workers
-// runtime through this same construction path (workers.SessionBuildFactory,
-// reached via the Workers wire construction boundary from
-// factory_runtime/internal/runtime_build.go), so this generic construction
-// proof also covers session-build construction.
-func TestNewRuntimeConstructionPreservesInjectedLoggerForWorkstationPool(t *testing.T) {
+func testWorkerServiceWithLogger(t *testing.T, logger *zap.Logger) *Service {
+	t.Helper()
+	return testWorkerServiceWithRunnerAndLogger(t, nil, logger)
+}
+
+func testWorkerServiceWithRunnerAndLogger(t *testing.T, providerRunner workers.CommandRunner, logger *zap.Logger) *Service {
+	t.Helper()
+	if providerRunner == nil {
+		providerRunner = injectedProviderRunner{}
+	}
+	service, err := New(
+		inertCurrentRuntimeResolver{},
+		testModelsService{},
+		testProvidersService{},
+		providerRunner,
+		injectedProviderRunner{},
+		workers.ProgressPublisher(testProgressPublisher),
+		&workers.MockPTYAllocator{},
+		logger,
+		false,
+		"",
+		"",
+		nil,
+		nil,
+		time.Now,
+		os.Environ,
+		os.Getwd,
+		nil,
+		nil,
+		nil,
+		nil,
+		testFactoryDocsLoader,
+		testResolveSymlinks,
+		platformprocess.HostExecutableLocator{},
+		platformfilesystem.Local{},
+		platformfilesystem.Local{},
+		"linux",
+		testFactoryWorktreePreparer{},
+		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
+		testRetryRandom,
+		platformfilesystem.Local{},
+		platformfilesystem.Local{},
+	)
+	if err != nil {
+		t.Fatalf("construct Worker service: %v", err)
+	}
+	return service
+}
+
+// TestNewSessionBuildRuntimePreservesInjectedLoggerForWorkstationPool proves
+// the logger a runtime opening injects at construction keeps reaching the
+// freshly constructed per-build workstation pool through
+// newSessionBuildRuntime, the path every normal Factory Runtime session-build
+// activation takes (via wire.NewSessionBuildRuntime,
+// factory_runtime/internal/runtime_build.go). newSessionBuildRuntime is
+// deliberately unexported and off the public RuntimeService contract; this
+// test exercises it directly from within the package.
+func TestNewSessionBuildRuntimePreservesInjectedLoggerForWorkstationPool(t *testing.T) {
 	t.Parallel()
 
 	core, logs := observer.New(zapcore.InfoLevel)
-	runtime := newTestFullRuntimeService(t, zap.New(core))
+	service := testWorkerServiceWithLogger(t, zap.New(core))
+
+	runtime, err := service.newSessionBuildRuntime(injectedProviderRunner{}, injectedProviderRunner{}, nil)
+	if err != nil {
+		t.Fatalf("newSessionBuildRuntime() error = %v", err)
+	}
 
 	if _, err := runtime.StartWorkstationPool(
 		context.Background(),
@@ -172,7 +227,7 @@ func TestNewRuntimeConstructionPreservesInjectedLoggerForWorkstationPool(t *test
 	entries := logs.FilterMessage("workers workstation pool start").All()
 	if len(entries) != 1 {
 		t.Fatalf(
-			"observed logs = %#v, want exactly one workstation pool start record surviving construction",
+			"observed logs = %#v, want exactly one workstation pool start record surviving newSessionBuildRuntime",
 			logs.All(),
 		)
 	}

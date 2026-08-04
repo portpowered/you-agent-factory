@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
@@ -166,6 +167,10 @@ func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *test
 	adaptRunner := provideWorkerCommandRunnerAdapter()
 	mockRunnerFactory := provideWorkersMockCommandRunnerFactory()
 	conductorInvocation := provideConductorInvocationWithProgressFactory(providersService, edges)
+	eventsService, err := eventswire.NewService()
+	if err != nil {
+		t.Fatalf("construct events service: %v", err)
+	}
 	factory := provideFactorySessionExecutionFactory(
 		workflows,
 		provideOrchestrationJavaScriptExecution(provideFactoryRuntimeIDGenerator(edges), workflows),
@@ -183,6 +188,7 @@ func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *test
 		mockRunnerFactory,
 		conductorInvocation,
 		edges,
+		eventsService,
 	)
 
 	provider := wireTestProvider{}
@@ -259,7 +265,12 @@ func TestProvideApplicationProcessLifecycle_ComposesProvidersAndFactoryTargetClo
 		t.Fatalf("NewOnDemandFactoryTargetService() error = %v", err)
 	}
 
-	lifecycle, err := provideApplicationProcessLifecycle(providersService, factoryTarget)
+	eventsService, err := eventswire.NewService()
+	if err != nil {
+		t.Fatalf("construct events service: %v", err)
+	}
+
+	lifecycle, err := provideApplicationProcessLifecycle(providersService, eventsService, factoryTarget)
 	if err != nil {
 		t.Fatalf("provideApplicationProcessLifecycle() error = %v", err)
 	}
@@ -276,7 +287,12 @@ func TestProvideApplicationProcessLifecycle_ComposesProvidersAndFactoryTargetClo
 		t.Fatalf("composed ProcessLifecycle.Close() error = %v, want nil", err)
 	}
 
-	nilFactoryLifecycle, err := provideApplicationProcessLifecycle(providersService, nil)
+	secondEventsService, err := eventswire.NewService()
+	if err != nil {
+		t.Fatalf("construct second events service: %v", err)
+	}
+
+	nilFactoryLifecycle, err := provideApplicationProcessLifecycle(providersService, secondEventsService, nil)
 	if err != nil {
 		t.Fatalf("provideApplicationProcessLifecycle(nil factoryTarget) error = %v", err)
 	}
@@ -292,7 +308,7 @@ func TestProvideApplicationProcessLifecycle_ComposesProvidersAndFactoryTargetClo
 func TestProvideApplicationProcessLifecycle_RequiresProvidersLifecycle(t *testing.T) {
 	t.Parallel()
 
-	_, err := provideApplicationProcessLifecycle(nonLifecycleProvidersService{}, nil)
+	_, err := provideApplicationProcessLifecycle(nonLifecycleProvidersService{}, nil, nil)
 	if err == nil {
 		t.Fatal("provideApplicationProcessLifecycle() error = nil, want a construction error for a non-Lifecycle providers.Service")
 	}
