@@ -1,0 +1,97 @@
+package wire
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/portpowered/infinite-you/internal/testpath"
+	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	"go.uber.org/zap"
+)
+
+// TestProvideRecordingReplayArtifactsFactoryClassifiesPortableRecording
+// proves the canonical Wire-composed RecordingReplayArtifacts capability reads
+// a portable Factory Session recording without the caller assembling raw
+// reader or decoder effects.
+func TestProvideRecordingReplayArtifactsFactoryClassifiesPortableRecording(t *testing.T) {
+	t.Parallel()
+
+	path := testpath.MustRepoPathFromCaller(
+		t,
+		0,
+		"pkg", "services", "recordings", "internal", "artifacts", "testdata", "valid-v2.json",
+	)
+	loadReplay := provideReplayArtifactLoader(platformreplay.Local{})
+	replayFiles := provideFactorySessionReplayRecordingReader(serviceedges.Edges{})
+	capability := provideRecordingReplayArtifactsFactory(
+		serviceedges.Edges{},
+		provideLiveRecordingTargetPlanner(),
+		platformreplay.Local{},
+		loadReplay,
+		replayFiles,
+		zap.NewNop(),
+	)()
+
+	result, err := capability.LoadReplayInput(recordings.LoadReplayInputRequest{Path: path})
+	if err != nil {
+		t.Fatalf("LoadReplayInput() error = %v", err)
+	}
+	if result.Legacy != nil {
+		t.Fatal("Legacy = non-nil, want nil for a portable recording")
+	}
+	if result.Portable == nil {
+		t.Fatal("Portable = nil, want decoded portable recording")
+	}
+	if got := result.Portable.Session.ID; got != "session-js-001" {
+		t.Fatalf("Portable.Session.ID = %q, want session-js-001", got)
+	}
+}
+
+// TestProvideRecordingReplayArtifactsFactoryDelegatesLegacyArtifact proves
+// the same canonical capability falls back to the existing legacy loader for
+// a file that is not a portable recording.
+func TestProvideRecordingReplayArtifactsFactoryDelegatesLegacyArtifact(t *testing.T) {
+	t.Parallel()
+
+	overrideCalled := false
+	edges := serviceedges.Edges{
+		FactorySessionReplayRecordingReader: func(path string) ([]byte, error) {
+			overrideCalled = true
+			return os.ReadFile(path)
+		},
+	}
+	loadReplay := recordings.ReplayArtifactLoader(func(path string) (*recordings.ReplayArtifact, error) {
+		return &recordings.ReplayArtifact{SchemaVersion: "legacy"}, nil
+	})
+	replayFiles := provideFactorySessionReplayRecordingReader(edges)
+	capability := provideRecordingReplayArtifactsFactory(
+		edges,
+		provideLiveRecordingTargetPlanner(),
+		platformreplay.Local{},
+		loadReplay,
+		replayFiles,
+		zap.NewNop(),
+	)()
+
+	tempFile := filepath.Join(t.TempDir(), "legacy-replay.json")
+	if err := os.WriteFile(tempFile, []byte(`{"schemaVersion":"legacy"}`), 0o600); err != nil {
+		t.Fatalf("write legacy replay fixture: %v", err)
+	}
+
+	result, err := capability.LoadReplayInput(recordings.LoadReplayInputRequest{Path: tempFile})
+	if err != nil {
+		t.Fatalf("LoadReplayInput() error = %v", err)
+	}
+	if !overrideCalled {
+		t.Fatal("Factory Session replay recording reader edge override was not used")
+	}
+	if result.Portable != nil {
+		t.Fatal("Portable = non-nil, want nil for a legacy artifact")
+	}
+	if result.Legacy == nil || result.Legacy.SchemaVersion != "legacy" {
+		t.Fatalf("Legacy = %#v, want decoded legacy artifact", result.Legacy)
+	}
+}

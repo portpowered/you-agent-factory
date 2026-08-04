@@ -101,7 +101,7 @@ type (
 	FactorySessionExecutionFactory         = runtimeopening.FactorySessionExecutionFactory
 	ConductorInvocationWithProgressFactory = runtimeopening.ConductorInvocationWithProgressFactory
 	RecordingsProjectionFactory            = runtimeopening.RecordingsProjectionFactory
-	RecordingLifecycleFactory              = runtimeopening.RecordingLifecycleFactory
+	RecordingReplayArtifactsFactory        = runtimeopening.RecordingReplayArtifactsFactory
 	RuntimeLedgerFactory                   = runtimeopening.RuntimeLedgerFactory
 	ReplayClockFactory                     = runtimeopening.ReplayClockFactory
 	WorkersRuntimeFactory                  = runtimeopening.WorkersRuntimeFactory
@@ -154,7 +154,7 @@ type RuntimeOpeningDependencies struct {
 	FactorySessionsService           factorysessions.Service
 	FactorySessionExecutionFactory   FactorySessionExecutionFactory
 	RecordingsProjectionFactory      RecordingsProjectionFactory
-	RecordingLifecycleFactory        RecordingLifecycleFactory
+	RecordingReplayArtifactsFactory  RecordingReplayArtifactsFactory
 	RuntimeLedgerFactory             RuntimeLedgerFactory
 	RuntimeRecorderFactory           recordings.RuntimeRecorderFactory
 	ReplayClockFactory               ReplayClockFactory
@@ -173,7 +173,6 @@ type RuntimeOpeningDependencies struct {
 	LoadFactory                      factorydefinitions.LoadedFactoryLoader
 	NewLoadedFactory                 factorydefinitions.LoadedFactorySourceFactory
 	DecodeReplayConfig               factorydefinitions.ReplayRuntimeConfigDecoder
-	LoadReplay                       recordings.ReplayArtifactLoader
 	CaptureLoadedFactorySnapshot     factorydefinitions.LoadedFactorySnapshotCapturer
 	ResolveClock                     factoryruntime.ClockResolver
 	NewSessionLogger                 factoryruntime.SessionLoggerFactory
@@ -183,7 +182,6 @@ type RuntimeOpeningDependencies struct {
 	EnsureOperatorBackendScope       operatorsettings.BackendScopeEnsurer
 	GenerateRuntimeInstanceID        factorysessions.RuntimeInstanceIDGenerator
 	ResolveHome                      factorysessions.HomeDirectoryResolver
-	ReplayFiles                      ReplayRecordingReader
 	ProviderIdentities               factorysessions.ProviderIdentityResolver
 }
 
@@ -193,7 +191,7 @@ func NewRuntimeOpeningFactory(deps RuntimeOpeningDependencies) (*RuntimeOpeningF
 		deps.FactoryDefinitionValidator, deps.NamedPaths, deps.DurableExecutionFactory,
 		deps.WorkerExecutionFactory, deps.ModelService, deps.WorkFactory, deps.AutomationFactory,
 		deps.FactorySessionsService, deps.FactorySessionExecutionFactory,
-		deps.RecordingsProjectionFactory, deps.RecordingLifecycleFactory, deps.RuntimeLedgerFactory,
+		deps.RecordingsProjectionFactory, deps.RecordingReplayArtifactsFactory, deps.RuntimeLedgerFactory,
 		deps.RuntimeRecorderFactory, deps.ReplayClockFactory, deps.ReplayExecutionFactory,
 		deps.WorkersRuntimeFactory, deps.WorkersRuntimeExecutorsFactory,
 		deps.WorkersMockCommandRunnerFactory, deps.AutomationHostedSourcesFactory,
@@ -201,11 +199,11 @@ func NewRuntimeOpeningFactory(deps RuntimeOpeningDependencies) (*RuntimeOpeningF
 		deps.FactoryScaffoldInitializer, deps.EditableFactoryValidator,
 		deps.InitialFactorySnapshotFactory, deps.FactoryRuntimeAssembler,
 		work.MaterializationService(deps.ContentMaterializer),
-		deps.LoadFactory, deps.NewLoadedFactory, deps.DecodeReplayConfig, deps.LoadReplay,
+		deps.LoadFactory, deps.NewLoadedFactory, deps.DecodeReplayConfig,
 		deps.CaptureLoadedFactorySnapshot, deps.ResolveClock, deps.NewSessionLogger,
 		deps.AdaptWorkerCommandRunner, deps.ProviderFromCommandRunnerFactory, deps.ProcessRuntimeFactory,
 		deps.EnsureOperatorBackendScope,
-		deps.GenerateRuntimeInstanceID, deps.ResolveHome, deps.ReplayFiles,
+		deps.GenerateRuntimeInstanceID, deps.ResolveHome,
 		deps.ProviderIdentities,
 	)
 }

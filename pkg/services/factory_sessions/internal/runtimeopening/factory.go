@@ -8,7 +8,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -35,7 +34,7 @@ type Factory struct {
 	factorySessionsService           factorysessions.Service
 	factorySessionExecutionFactory   FactorySessionExecutionFactory
 	recordingsProjectionFactory      RecordingsProjectionFactory
-	recordingLifecycleFactory        RecordingLifecycleFactory
+	recordingReplayArtifactsFactory  RecordingReplayArtifactsFactory
 	runtimeLedgerFactory             RuntimeLedgerFactory
 	runtimeRecorderFactory           recordings.RuntimeRecorderFactory
 	replayClockFactory               ReplayClockFactory
@@ -59,7 +58,6 @@ type Factory struct {
 	loadFactory                      factorydefinitions.LoadedFactoryLoader
 	newLoadedFactory                 factorydefinitions.LoadedFactorySourceFactory
 	decodeReplayConfig               factorydefinitions.ReplayRuntimeConfigDecoder
-	loadReplay                       recordings.ReplayArtifactLoader
 	captureLoadedFactorySnapshot     factorydefinitions.LoadedFactorySnapshotCapturer
 	resolveClock                     factoryruntime.ClockResolver
 	newSessionLogger                 factoryruntime.SessionLoggerFactory
@@ -69,7 +67,6 @@ type Factory struct {
 	ensureOperatorBackendScope       operatorsettings.BackendScopeEnsurer
 	generateRuntimeInstanceID        factorysessions.RuntimeInstanceIDGenerator
 	resolveHome                      factorysessions.HomeDirectoryResolver
-	replayFiles                      fileeffects.ReplayRecordingReader
 	providerIdentities               factorysessions.ProviderIdentityResolver
 }
 
@@ -89,7 +86,7 @@ func NewFactory(
 	factorySessionsService factorysessions.Service,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	recordingsProjectionFactory RecordingsProjectionFactory,
-	recordingLifecycleFactory RecordingLifecycleFactory,
+	recordingReplayArtifactsFactory RecordingReplayArtifactsFactory,
 	runtimeLedgerFactory RuntimeLedgerFactory,
 	runtimeRecorderFactory recordings.RuntimeRecorderFactory,
 	replayClockFactory ReplayClockFactory,
@@ -108,7 +105,6 @@ func NewFactory(
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	loadReplay recordings.ReplayArtifactLoader,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	resolveClock factoryruntime.ClockResolver,
 	newSessionLogger factoryruntime.SessionLoggerFactory,
@@ -118,7 +114,6 @@ func NewFactory(
 	ensureOperatorBackendScope operatorsettings.BackendScopeEnsurer,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
-	replayFiles fileeffects.ReplayRecordingReader,
 	providerIdentities factorysessions.ProviderIdentityResolver,
 ) (*Factory, error) {
 	if workflowPreview == nil {
@@ -148,8 +143,8 @@ func NewFactory(
 	if namedPaths == nil {
 		return nil, fmt.Errorf("named Factory path resolver is required")
 	}
-	if replayFiles == nil {
-		return nil, fmt.Errorf("Factory Session replay recording reader is required")
+	if recordingReplayArtifactsFactory == nil {
+		return nil, fmt.Errorf("Factory Session replay/artifact capability factory is required")
 	}
 	if factorySessionsService == nil {
 		return nil, fmt.Errorf("Factory Sessions service is required")
@@ -166,7 +161,7 @@ func NewFactory(
 		factorySessionsService:           factorySessionsService,
 		factorySessionExecutionFactory:   factorySessionExecutionFactory,
 		recordingsProjectionFactory:      recordingsProjectionFactory,
-		recordingLifecycleFactory:        recordingLifecycleFactory,
+		recordingReplayArtifactsFactory:  recordingReplayArtifactsFactory,
 		runtimeLedgerFactory:             runtimeLedgerFactory,
 		runtimeRecorderFactory:           runtimeRecorderFactory,
 		replayClockFactory:               replayClockFactory,
@@ -190,7 +185,6 @@ func NewFactory(
 		loadFactory:                      loadFactory,
 		newLoadedFactory:                 newLoadedFactory,
 		decodeReplayConfig:               decodeReplayConfig,
-		loadReplay:                       loadReplay,
 		captureLoadedFactorySnapshot:     captureLoadedFactorySnapshot,
 		resolveClock:                     resolveClock,
 		newSessionLogger:                 newSessionLogger,
@@ -200,7 +194,6 @@ func NewFactory(
 		ensureOperatorBackendScope:       ensureOperatorBackendScope,
 		generateRuntimeInstanceID:        generateRuntimeInstanceID,
 		resolveHome:                      resolveHome,
-		replayFiles:                      replayFiles,
 		providerIdentities:               providerIdentities,
 	}, nil
 }
@@ -221,7 +214,7 @@ func (f *Factory) openRuntime(
 		f.factorySessionsService,
 		f.factorySessionExecutionFactory,
 		f.recordingsProjectionFactory,
-		f.recordingLifecycleFactory,
+		f.recordingReplayArtifactsFactory,
 		f.runtimeLedgerFactory,
 		f.runtimeRecorderFactory,
 		f.replayClockFactory,
@@ -245,7 +238,6 @@ func (f *Factory) openRuntime(
 		f.loadFactory,
 		f.newLoadedFactory,
 		f.decodeReplayConfig,
-		f.loadReplay,
 		f.captureLoadedFactorySnapshot,
 		f.resolveClock,
 		f.newSessionLogger,
@@ -255,7 +247,6 @@ func (f *Factory) openRuntime(
 		f.ensureOperatorBackendScope,
 		f.generateRuntimeInstanceID,
 		f.resolveHome,
-		f.replayFiles,
 		f.providerIdentities,
 	)
 }
