@@ -72,6 +72,44 @@ func TestCommandEffectRejectsUnsupportedReasoningEffortBeforeDispatch(t *testing
 	}
 }
 
+func TestCommandEffectRendersResumeSessionBeforeFreshSessionFlags(t *testing.T) {
+	t.Parallel()
+
+	platformRunner := testutil.NewProviderCommandRunner()
+	effect := codex.NewCommandEffect(workers.AdaptCommandRunner(platformRunner))
+	if effect == nil {
+		t.Fatal("NewCommandEffect() returned nil")
+	}
+
+	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:        providers.IDCodex,
+		AttemptID:       "resume-dispatch",
+		Model:           "gpt-5.6-luna",
+		ReasoningEffort: "xhigh",
+		UserMessage:     "continue the prior turn",
+		ResumeSession: &providers.SessionRef{
+			Provider: providers.IDCodex,
+			Kind:     providers.SessionIDKind,
+			ID:       "thread-previous",
+		},
+	}, func([]byte) error { return nil })
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	request := platformRunner.LastRequest()
+	want := []string{
+		"exec",
+		"--json",
+		"--model", "gpt-5.6-luna",
+		"--config", `model_reasoning_effort="xhigh"`,
+		"resume", "thread-previous",
+		"-",
+	}
+	if !reflect.DeepEqual(request.Args, want) {
+		t.Fatalf("command args = %#v, want %#v - a continued attempt must resume the exact referenced session instead of starting a fresh one", request.Args, want)
+	}
+}
+
 func TestCommandEffectRendersLunaXHighReasoningEffort(t *testing.T) {
 	t.Parallel()
 

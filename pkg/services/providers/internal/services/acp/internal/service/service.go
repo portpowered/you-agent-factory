@@ -261,20 +261,9 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 	connection := daemon.connection
 	initialized := daemon.initialized
 
-	session, err := connection.NewSession(ctx, acpsdk.NewSessionRequest{Cwd: cwd, McpServers: []acpsdk.McpServer{}})
+	session, err := daemon.openSession(ctx, id, cwd, initialized, request)
 	if err != nil {
-		var requestErr *acpsdk.RequestError
-		if errors.As(err, &requestErr) && requestErr.Code == -32000 {
-			// The current connection cannot serve work until the operator
-			// authenticates. No login operation is exposed through this service,
-			// so retaining the process only leaves an unusable daemon (and its
-			// working directory) alive. Close it now and let a later execution
-			// establish a fresh authenticated connection.
-			_ = daemon.stopLocked(context.Background())
-			return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindAuthentication, Message: "ACP authentication required" + authenticationMethodHint(initialized.AuthMethods)}
-		}
-		daemon.invalidateDisconnected(ctx)
-		return providers.ExecuteResult{}, rpcFailure(ctx, "session/new", id, err, daemon.stderr.String(), request)
+		return providers.ExecuteResult{}, err
 	}
 	daemon.client.setSessionID(string(session.SessionId))
 	modelConfig, err := applyAdvertisedModel(ctx, connection, session, request.Model)
@@ -302,6 +291,64 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 		return providers.ExecuteResult{}, withPartial(acpControlCanceledFailure(id), client, id)
 	}
 	return providers.ExecuteResult{Content: client.content(), SessionRef: &providers.SessionRef{Provider: id, Kind: providers.SessionIDKind, ID: string(session.SessionId)}, Diagnostics: &providers.ExecuteDiagnostics{Progress: completedPromptProgress(client.progressFacts()), Metadata: map[string]string{"execution_kind": "acp", "protocol_version": fmt.Sprint(initialized.ProtocolVersion), "model_config": modelConfig}}}, nil
+}
+
+// openSession opens the exact session a request names: request.ResumeSession
+// resumes the referenced Provider Session through the native ACP
+// session/load method with its exact opaque id forwarded unchanged, and its
+// absence starts an ordinary fresh session/new. openSession never falls back
+// from a requested resume to a fresh session - a session/load failure is
+// returned as-is so a continuation can never silently adopt a different
+// Provider Session.
+func (daemon *daemon) openSession(
+	ctx context.Context,
+	id providers.ID,
+	cwd string,
+	initialized acpsdk.InitializeResponse,
+	request providers.ExecuteRequest,
+) (acpsdk.NewSessionResponse, error) {
+	connection := daemon.connection
+	if request.ResumeSession != nil {
+		if resumeID := strings.TrimSpace(request.ResumeSession.ID); resumeID != "" {
+			loaded, err := connection.LoadSession(ctx, acpsdk.LoadSessionRequest{SessionId: acpsdk.SessionId(resumeID), Cwd: cwd, McpServers: []acpsdk.McpServer{}})
+			if err != nil {
+				return acpsdk.NewSessionResponse{}, daemon.sessionOpenFailure(ctx, id, "session/load", err, initialized, request)
+			}
+			return acpsdk.NewSessionResponse{Meta: loaded.Meta, ConfigOptions: loaded.ConfigOptions, Modes: loaded.Modes, SessionId: acpsdk.SessionId(resumeID)}, nil
+		}
+	}
+	session, err := connection.NewSession(ctx, acpsdk.NewSessionRequest{Cwd: cwd, McpServers: []acpsdk.McpServer{}})
+	if err != nil {
+		return acpsdk.NewSessionResponse{}, daemon.sessionOpenFailure(ctx, id, "session/new", err, initialized, request)
+	}
+	return session, nil
+}
+
+// sessionOpenFailure normalizes a session/new or session/load failure. An
+// authentication-required failure closes the unusable daemon so a later
+// execution establishes a fresh authenticated connection; every other
+// failure is reported through the same rpcFailure normalization every other
+// ACP RPC failure in this service uses.
+func (daemon *daemon) sessionOpenFailure(
+	ctx context.Context,
+	id providers.ID,
+	method string,
+	err error,
+	initialized acpsdk.InitializeResponse,
+	request providers.ExecuteRequest,
+) error {
+	var requestErr *acpsdk.RequestError
+	if errors.As(err, &requestErr) && requestErr.Code == -32000 {
+		// The current connection cannot serve work until the operator
+		// authenticates. No login operation is exposed through this service,
+		// so retaining the process only leaves an unusable daemon (and its
+		// working directory) alive. Close it now and let a later execution
+		// establish a fresh authenticated connection.
+		_ = daemon.stopLocked(context.Background())
+		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindAuthentication, Message: "ACP authentication required" + authenticationMethodHint(initialized.AuthMethods)}
+	}
+	daemon.invalidateDisconnected(ctx)
+	return rpcFailure(ctx, method, id, err, daemon.stderr.String(), request)
 }
 
 // promptWithWindow opens the cancelable window for attemptID, runs prompt,

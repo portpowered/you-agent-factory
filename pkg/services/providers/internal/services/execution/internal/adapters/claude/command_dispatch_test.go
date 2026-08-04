@@ -47,6 +47,43 @@ func TestCommandEffectRendersProviderNeutralReasoningEffort(t *testing.T) {
 	}
 }
 
+func TestCommandEffectRendersResumeSessionFlag(t *testing.T) {
+	t.Parallel()
+
+	runner := testutil.NewProviderCommandRunner()
+	effect := claude.NewCommandEffect(workers.AdaptCommandRunner(runner))
+	if effect == nil {
+		t.Fatal("NewCommandEffect() returned nil")
+	}
+
+	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:    providers.IDClaude,
+		AttemptID:   "claude-resume-dispatch",
+		Model:       "claude-model",
+		UserMessage: "continue the prior turn",
+		ResumeSession: &providers.SessionRef{
+			Provider: providers.IDClaude,
+			Kind:     providers.SessionIDKind,
+			ID:       "session-previous",
+		},
+	}, func([]byte) error { return nil })
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	want := []string{
+		"-p",
+		"--model", "claude-model",
+		"--resume", "session-previous",
+		"--verbose",
+		"--output-format", "stream-json",
+		"--include-partial-messages",
+		"continue the prior turn",
+	}
+	if got := runner.LastRequest().Args; !reflect.DeepEqual(got, want) {
+		t.Fatalf("command args = %#v, want %#v - a continued attempt must resume the exact referenced session instead of starting a fresh one", got, want)
+	}
+}
+
 func TestCommandEffectRejectsUnsupportedReasoningEffort(t *testing.T) {
 	t.Parallel()
 

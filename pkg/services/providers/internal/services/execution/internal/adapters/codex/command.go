@@ -67,6 +67,11 @@ func buildCommand(request providers.ExecuteRequest) (workers.CommandRequest, err
 	if effort != "" {
 		args = append(args, "--config", `model_reasoning_effort="`+effort+`"`)
 	}
+	if request.ResumeSession != nil {
+		if sessionID := strings.TrimSpace(request.ResumeSession.ID); sessionID != "" {
+			args = append(args, "resume", sessionID)
+		}
+	}
 	args = append(args, "-")
 	return commanddispatch.WorkersCommand(request, workers.CommandRequest{
 		Command: string(providers.IDCodex),
