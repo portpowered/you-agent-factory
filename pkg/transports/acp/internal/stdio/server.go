@@ -197,41 +197,40 @@ func scanCompleteLines(data []byte, atEOF bool) (advance int, token []byte, err 
 //
 // The read loop itself (readConnectionLines) runs on its own goroutine,
 // tracked by readGroup, precisely because its underlying scanner.Scan call
-// is an ordinary blocking read this method has no way to interrupt except by
-// closing the caller-owned stream, which it does not own. Running it
-// concurrently is what lets this method itself return as soon as
+// is an ordinary blocking read this method cannot otherwise interrupt.
+// Running it concurrently is what lets this method itself react as soon as
 // promptGroup's own Failed() channel reports a dispatched "session/prompt"
 // response write failure -- the exact "output already broken, but input is
 // still open with nothing more coming" case a synchronous read loop would
-// otherwise block on forever. When that happens, readConnectionLines'
-// goroutine is simply abandoned still blocked in its own Scan call: it is
-// tied to the caller-owned stream's own lifetime (closed, in a real ACP
-// agent process, by the same process shutdown that ends this connection),
-// never to this method's return. A partial trailing frame at EOF, and a
-// response write failure on the read loop itself or on a dispatched
-// "session/prompt" (surfaced through promptGroup.Failed/Wait), both end the
-// connection with their own error instead of being treated as success.
-// Every outstanding "session/prompt" tracked by promptGroup is always
-// awaited (promptGroup.Wait, deferred) before this method returns, even on
-// the early-return failure path, so Serve never returns while a response it
-// may still write is in flight -- only the abandoned read loop goroutine,
-// which is blocked purely inside Scan with no line of its own left to act
-// on, is exempted from that wait.
+// otherwise block on forever. When that happens, this method calls
+// closeInputForShutdown(in) to unblock readConnectionLines' own blocked Scan
+// call -- exactly the same "close the stream to interrupt a pending read"
+// technique runServeACP (pkg/transports/cli/root_serve.go) already applies
+// from the caller side on context cancellation, applied here from inside the
+// connection itself, since a dispatched write failure is a decision this
+// method makes on its own, not one the caller's context reflects -- and then
+// waits for readGroup to actually finish before returning. So every
+// connection goroutine this method starts, including the read loop, has
+// always fully returned by the time Serve itself returns; no goroutine is
+// ever abandoned mid-read. If in does not support Close (readInputCloser
+// returns ok=false), this method still waits for readGroup, matching the
+// existing contract that a caller-owned stream without a way to interrupt a
+// pending read may leave a blocking call parked until that stream itself
+// unblocks it (see runServeACP's own doc comment for the same limitation on
+// the context-cancellation path).
 //
-// Being abandoned inside a blocked Scan call is the *only* thing that
-// goroutine is ever allowed to still be doing once this method returns.
-// dispatchGate (pkg/platform/taskgroup.Gate) enforces that: every unit of
-// dispatch work readConnectionLines is about to issue for an
-// already-scanned line -- a synchronous response write, a "session/cancel"
-// forward, or registering a "session/prompt" onto promptGroup -- first calls
-// dispatchGate.Enter, and dispatchGate.Close (deferred here, before
-// promptGroup.Wait so it runs first) blocks until any such in-flight unit
-// finishes being issued before permanently closing the gate. So if Scan
-// unblocks with new input after this method has already committed to
-// returning, dispatchConnectionLine's Enter call simply fails and that line
-// is never acted on -- it can never reach a "session/cancel" forward, a
-// fresh response write, or a new promptGroup registration after Serve has
-// decided to end the connection.
+// A partial trailing frame at EOF, and a response write failure on the read
+// loop itself or on a dispatched "session/prompt" (surfaced through
+// promptGroup.Failed/Wait), both end the connection with their own error
+// instead of being treated as success. Every outstanding "session/prompt"
+// tracked by promptGroup is always awaited (promptGroup.Wait, deferred)
+// before this method returns, so Serve never returns while a response it may
+// still write is in flight.
+//
+// Because readGroup is always joined before this method returns, no request,
+// notification, response write, or new "session/prompt" registration can
+// ever happen after Serve returns: the goroutine that could have issued one
+// has, by construction, already finished.
 func (s *Server) serveConnection(ctx context.Context, connectionID identity.ConnectionID, in io.Reader, out io.Writer) error {
 	scanner := bufio.NewScanner(in)
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
@@ -259,25 +258,35 @@ func (s *Server) serveConnection(ctx context.Context, connectionID identity.Conn
 	var promptGroup taskgroup.Group
 	defer promptGroup.Wait()
 
-	// dispatchGate must close before promptGroup is awaited: closing it
-	// first blocks until any dispatch that was still being issued (see
-	// dispatchConnectionLine) has finished issuing -- including, for a
-	// "session/prompt" line, its promptGroup.Go registration -- so the
-	// subsequent promptGroup.Wait sees every task that will ever be
-	// registered on this connection.
-	var dispatchGate taskgroup.Gate
-	defer dispatchGate.Close()
-
 	var readGroup taskgroup.Group
 	readGroup.Go(func() error {
-		return s.readConnectionLines(ctx, scanner, connectionID, writeResponseLocked, notify, &promptGroup, &dispatchGate)
+		return s.readConnectionLines(ctx, scanner, connectionID, writeResponseLocked, notify, &promptGroup)
 	})
 
 	select {
 	case <-promptGroup.Failed():
+		closeInputForShutdown(in)
+		<-readGroup.Done()
 		return promptGroup.Err()
 	case <-readGroup.Done():
 		return readGroup.Wait()
+	}
+}
+
+// closeInputForShutdown closes in if it supports Close, ignoring the result.
+// It is the connection-internal counterpart to runServeACP's own
+// context.AfterFunc-triggered close (pkg/transports/cli/root_serve.go): both
+// exist for the same reason -- a blocking Scan call on a caller-owned stream
+// has no way to be interrupted except by closing that stream -- applied here
+// when the connection itself decides to end because a dispatched
+// "session/prompt" response write already failed, rather than because the
+// caller's context was cancelled. A stream that does not support Close (its
+// dynamic type has no Close method) is left exactly as it was; the read loop
+// blocked on it can only unblock the same way it always could, when the
+// caller-owned stream itself is closed by other means.
+func closeInputForShutdown(in io.Reader) {
+	if closer, ok := in.(io.Closer); ok {
+		_ = closer.Close()
 	}
 }
 
@@ -286,11 +295,11 @@ func (s *Server) serveConnection(ctx context.Context, connectionID identity.Conn
 // ctx.Err() and promptGroup.Failed() before every blocking Scan call, so a
 // deliberate shutdown or an already-reported dispatched-prompt write failure
 // stops this loop from reading further input as soon as it is between two
-// reads -- though only serveConnection's own concurrent select, not this
-// check, can react while a Scan call already in flight is still blocked. For
-// a line Scan does return, dispatchGate gates the actual dispatch (see
-// dispatchConnectionLine) so a connection shutdown decided while Scan was
-// blocked can never race with that line reaching a handler.
+// reads. A Scan call already in flight when that happens can only return
+// once closeInputForShutdown (called by serveConnection's own concurrent
+// select) has closed the underlying stream, at which point Scan reports that
+// closure as its own error and this loop returns without acting on the
+// closure as if it were a real line.
 func (s *Server) readConnectionLines(
 	ctx context.Context,
 	scanner *bufio.Scanner,
@@ -298,7 +307,6 @@ func (s *Server) readConnectionLines(
 	writeResponseLocked func(identity.RequestIdentity, json.RawMessage, *acpsdk.RequestError) error,
 	notify promptNotifier,
 	promptGroup *taskgroup.Group,
-	dispatchGate *taskgroup.Gate,
 ) error {
 	var notificationSeq uint64
 	for {
@@ -327,16 +335,7 @@ func (s *Server) readConnectionLines(
 		}
 		raw := append(json.RawMessage(nil), line...)
 
-		release, ok := dispatchGate.Enter()
-		if !ok {
-			// The connection is already shutting down (see serveConnection's
-			// doc comment): this line arrived after that decision was made,
-			// so it must never reach a handler, a response write, or a new
-			// promptGroup registration.
-			return promptGroup.Err()
-		}
 		stop, err := s.dispatchConnectionLine(ctx, connectionID, raw, &notificationSeq, notify, writeResponseLocked, promptGroup)
-		release()
 		if stop {
 			return err
 		}
@@ -346,11 +345,8 @@ func (s *Server) readConnectionLines(
 // dispatchConnectionLine decodes and dispatches exactly one already-scanned,
 // non-empty JSON-RPC line: a malformed-envelope rejection, a
 // "session/cancel" forward, an asynchronous "session/prompt" registration,
-// or a synchronous request dispatch and response write. Called only while
-// the caller holds an Enter'd dispatchGate slot, so every branch here is
-// guaranteed to finish being issued before serveConnection's deferred
-// dispatchGate.Close can complete. stop reports whether the read loop must
-// end, carrying err as its result when it does.
+// or a synchronous request dispatch and response write. stop reports whether
+// the read loop must end, carrying err as its result when it does.
 func (s *Server) dispatchConnectionLine(
 	ctx context.Context,
 	connectionID identity.ConnectionID,
