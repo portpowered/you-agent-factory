@@ -261,7 +261,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/cli/serve_acp/serve_acp_prompt_test.go::TestServeACP_RootBuildProcessCompletesOneFactoryPrompt",
+          "test": "tests/functional/transport/acp/stdio/cli_serve_acp_prompt_test.go::TestServeACP_RootBuildProcessCompletesOneFactoryPrompt",
           "boundary": "cli"
         }
       ]

@@ -14,6 +14,7 @@ mcp	Canonical you mcp serve install path, preview tool catalog, scope boundaries
 workstations	Workstation kinds, route fields, runtime step behavior, and scoped execution settings.	workstation
 workers	Worker types, model providers, script workers, and worker configuration.	
 providers	ACP agent setup, custom provider lifecycle, Factory selection, validation, and JavaScript usage.	acp
+serve-acp	Canonical you serve acp ACP-agent host command, stdio channel contract, clean shutdown, and minimal client configuration.	
 resources	Resource capacity, bounded concurrency, and workstation resource requirements.	
 models	Local and hosted model setup for workers and CLI model commands.	
 batch-inputs	Batch input files, request shape, dependencies, and validation.	batch-work

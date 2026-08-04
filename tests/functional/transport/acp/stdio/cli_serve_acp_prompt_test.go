@@ -1,32 +1,25 @@
-package serve_acp_test
+package stdio_test
 
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
@@ -63,6 +56,12 @@ type rpcFrame struct {
 // fixture shaped like a real provider (Codex-shaped stdout), so the terminal
 // prompt response's mapped text is exactly the fixture's own literal answer
 // rather than a fabricated or coincidental value.
+//
+// This is the "you serve acp" transport-mechanics sibling of
+// tests/functional/chat_sessions/root_composition/acp_server_composition_test.go,
+// which drives Process.ACPServer() directly rather than the CLI command
+// tree; both share support.SeedACPAgentProfile instead of each owning a
+// private copy of that fixture-seeding helper.
 func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test driving you serve acp through root.BuildProcess")
@@ -73,22 +72,15 @@ func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 
 	seedFixtureFactory(t, home)
-	seedACPAgentProfile(t, home, fixtureFactoryTargetID, []string{fixtureFactoryTargetID})
+	support.SeedACPAgentProfile(t, home, fixtureFactoryTargetID, []string{fixtureFactoryTargetID})
 
 	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
 		Stdout: []byte(fixtureFinalAnswerText),
 	})
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{
+	process := support.BuildProcess(t, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-	t.Cleanup(func() {
-		if err := process.Close(context.Background()); err != nil {
-			t.Errorf("Process.Close() error = %v, want clean teardown", err)
-		}
-	})
+	support.CleanupProcess(t, process)
 
 	cwd := t.TempDir()
 	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
@@ -108,22 +100,15 @@ func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 		_ = stdoutWrite.Close()
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-
 	var stderr bytes.Buffer
-	serveErr := make(chan error, 1)
-	go func() {
-		serveErr <- process.Execute(root.Input{
-			Args:             []string{"you", "serve", "acp"},
-			Env:              environment,
-			Stdin:            stdinRead,
-			Stdout:           stdoutWrite,
-			Stderr:           &stderr,
-			Context:          ctx,
-			WorkingDirectory: cwd,
-		})
-	}()
+	command := support.StartProcessCommand(t, process, root.Input{
+		Args:             []string{"you", "serve", "acp"},
+		Env:              environment,
+		Stdin:            stdinRead,
+		Stdout:           stdoutWrite,
+		Stderr:           &stderr,
+		WorkingDirectory: cwd,
+	})
 
 	stdout := bufio.NewReader(stdoutRead)
 
@@ -186,13 +171,14 @@ func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 		t.Fatalf("close stdin: %v", err)
 	}
 	select {
-	case execErr := <-serveErr:
-		if execErr != nil {
-			t.Fatalf("Process.Execute(serve acp) error = %v after clean stdin EOF; stderr=%s", execErr, stderr.String())
+	case <-command.Done():
+		if err := command.Err(); err != nil {
+			t.Fatalf("Process.Execute(serve acp) error = %v after clean stdin EOF; stderr=%s", err, stderr.String())
 		}
-	case <-time.After(10 * time.Second):
+	case <-time.After(5 * time.Second):
 		t.Fatal("Process.Execute(serve acp) did not return after stdin EOF")
 	}
+	command.AcceptError()
 
 	if got := runner.CallCount(); got != 1 {
 		t.Fatalf("provider command call count = %d, want exactly 1", got)
@@ -372,46 +358,5 @@ func seedFixtureFactory(t *testing.T, home string) {
 		0o644,
 	); err != nil {
 		t.Fatalf("write %s: %v", workstationConfigPath, err)
-	}
-}
-
-// seedACPAgentProfile persists a real ACP Agent profile at the production
-// Operator Settings config path for home, through the same
-// operatorsettings.Service.UpdateACPAgentProfile production callers use, so
-// root.BuildProcess's real Operator Settings root resolves it unmodified.
-// This mirrors the identical helper in
-// tests/functional/chat_sessions/root_composition/acp_server_composition_test.go.
-func seedACPAgentProfile(t *testing.T, home, defaultTarget string, allowedTargets []string) {
-	t.Helper()
-
-	providersRoot, err := providerswire.NewService()
-	if err != nil {
-		t.Fatalf("providerswire.NewService() error = %v", err)
-	}
-	service, err := settingswire.NewServiceFromConfigDocument(
-		settingswire.NewConfigDocumentService(
-			platformfilesystem.Local{},
-			func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
-				return os.CreateTemp(dir, pattern)
-			},
-			globalconfigmapping.Decode,
-			globalconfigmapping.Encode,
-			nil,
-			&sync.Mutex{},
-		),
-		providersRoot,
-		func() string { return "00000000-0000-4000-8000-000000000004" },
-		logging.NoopLogger{},
-	)
-	if err != nil {
-		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
-	}
-
-	configPath := operatorsettings.DefaultConfigPath(home)
-	if _, err := service.UpdateACPAgentProfile(context.Background(), configPath, operatorsettings.ACPAgentProfile{
-		DefaultTarget:  defaultTarget,
-		AllowedTargets: allowedTargets,
-	}); err != nil {
-		t.Fatalf("UpdateACPAgentProfile() error = %v", err)
 	}
 }

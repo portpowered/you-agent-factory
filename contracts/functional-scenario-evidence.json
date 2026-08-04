@@ -2,12 +2,6 @@
   "formatVersion": 1,
   "declarations": [
     {
-      "test": "tests/functional/cli/serve_acp/serve_acp_prompt_test.go::TestServeACP_RootBuildProcessCompletesOneFactoryPrompt",
-      "stableIds": [
-        "cli/you.serve.acp"
-      ]
-    },
-    {
       "test": "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddDeleteAndUnifiedListOneSettingsBackedCatalogEntry",
       "stableIds": [
         "cli/you.workers.acp.add",
@@ -27,6 +21,12 @@
       "stableIds": [
         "rest/getFactorySessionResults",
         "rest/invokeFactorySessionBySessionId"
+      ]
+    },
+    {
+      "test": "tests/functional/transport/acp/stdio/cli_serve_acp_prompt_test.go::TestServeACP_RootBuildProcessCompletesOneFactoryPrompt",
+      "stableIds": [
+        "cli/you.serve.acp"
       ]
     },
     {

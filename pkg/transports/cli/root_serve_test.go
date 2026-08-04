@@ -5,11 +5,14 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	acpwire "github.com/portpowered/infinite-you/pkg/transports/acp/wire"
+	"github.com/spf13/pflag"
 )
 
 // fakeACPServer records every Serve invocation without performing any real
@@ -76,28 +79,42 @@ func TestServeFamily_VisibleInRootHelpAndDistinctFromWorkersAcpAndMcpServe(t *te
 	}
 }
 
-func TestServeACPCommand_HelpDescribesStdioProtocolAndStderrDiagnostics(t *testing.T) {
-	manifest, err := generated.ServeFamilyManifest()
-	if err != nil {
-		t.Fatalf("ServeFamilyManifest() error = %v", err)
-	}
-	record, err := manifest.CommandByID("you.serve.acp")
-	if err != nil {
-		t.Fatalf("CommandByID(you.serve.acp) error = %v", err)
-	}
-	if !record.Runnable {
-		t.Fatal("you.serve.acp manifest record must be runnable")
-	}
-	if record.Visibility != "visible" {
-		t.Fatalf("visibility = %q, want visible", record.Visibility)
+// TestServeACPCommand_HelpRendersManifestExamplesAndNoLocalFlags executes the
+// real --help path (not a manifest-text read) so a drift between the
+// authoritative manifest and the projected runtime command tree -- for
+// example a missing Examples section, the way a hand-built cobra.Command
+// that only copies Use/Short/Long would silently produce -- fails this test.
+func TestServeACPCommand_HelpRendersManifestExamplesAndNoLocalFlags(t *testing.T) {
+	var stdout bytes.Buffer
+	root := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI}).NewCommand(nil, nil, nil)
+	root.SetOut(&stdout)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"serve", "acp", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute serve acp --help: %v", err)
 	}
 
-	long := record.Documentation.Documentation.Description.CanonicalEnglish
-	for _, want := range []string{"stdin", "stdout", "stderr", "JSON-RPC"} {
-		if !strings.Contains(long, want) {
-			t.Fatalf("you serve acp help text missing %q:\n%s", want, long)
+	got := stdout.String()
+	for _, want := range []string{
+		"stdin", "stdout", "stderr", "JSON-RPC",
+		"Examples:",
+		"you serve acp",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("you serve acp --help missing %q:\n%s", want, got)
 		}
 	}
+
+	acpCmd, _, err := root.Find([]string{"serve", "acp"})
+	if err != nil {
+		t.Fatalf("find %q: %v", "you serve acp", err)
+	}
+	acpCmd.LocalFlags().VisitAll(func(flag *pflag.Flag) {
+		if flag.Name != "help" {
+			t.Fatalf("you serve acp declares no manifest inputs but has local flag %q", flag.Name)
+		}
+	})
 }
 
 func TestServeACPCommand_DispatchesToInjectedACPServerWithExactStreamsAndContext(t *testing.T) {
@@ -179,26 +196,56 @@ func TestServeACPCommand_CancellationPropagatesFromProcessContext(t *testing.T) 
 	}
 }
 
-func TestServeACPCommand_StartupFailureReportsSanitizedDiagnosticOnStderr(t *testing.T) {
-	fake := &fakeACPServer{serveErr: errors.New("acp: stdio input ended with a partial trailing frame")}
+// TestServeACPCommand_CancellationClosesStdinToUnblockRealServerMidRead
+// proves the production regression this story's review caught: the real
+// stdio.Server's Serve only checks ctx.Err() between reads (see
+// pkg/transports/acp/internal/stdio/server_test.go's
+// TestServeReturnsContextErrorOnMidReadCancellation, which requires its own
+// caller-side goroutine to close the pipe on cancellation), so a command
+// that merely forwards a cancellable context without also closing stdin
+// would hang forever once the read is already blocked. This test exercises
+// the real production wire.NewServer implementation (not a fake) with stdin
+// left open and never written to, and asserts cancellation unblocks it
+// within a small bounded time instead of hanging.
+func TestServeACPCommand_CancellationClosesStdinToUnblockRealServerMidRead(t *testing.T) {
+	server := acpwire.NewServer(nil, nil, nil, nil, nil)
 	factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI})
-	factory.acpServer = fake
+	factory.acpServer = server
+
+	stdinRead, stdinWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("stdin pipe: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = stdinRead.Close()
+		_ = stdinWrite.Close()
+	})
 
 	root := factory.NewCommand(nil, nil, nil)
-	root.SetIn(strings.NewReader(""))
-	var stdout, stderr bytes.Buffer
-	root.SetOut(&stdout)
-	root.SetErr(&stderr)
+	root.SetIn(stdinRead)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	root.SetContext(ctx)
 	root.SetArgs([]string{"serve", "acp"})
 
-	if err := root.Execute(); err == nil {
-		t.Fatal("Execute() error = nil, want a non-nil serve failure")
-	}
-	if stdout.Len() != 0 {
-		t.Fatalf("failure must not contaminate stdout, got %q", stdout.String())
-	}
-	if !strings.Contains(stderr.String(), "partial trailing frame") {
-		t.Fatalf("stderr = %q, want it to carry the serve failure diagnostic", stderr.String())
+	done := make(chan error, 1)
+	go func() { done <- root.Execute() }()
+
+	// Give Execute a moment to reach the blocking read before cancelling, so
+	// this test actually exercises a mid-read cancellation rather than a
+	// pre-cancelled context short-circuit.
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Execute() error = %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Execute() did not return after cancellation while stdin remained open and idle")
 	}
 }
 
@@ -217,5 +264,56 @@ func TestServeACPCommand_MissingACPServerFailsWithoutPanicking(t *testing.T) {
 	}
 	if stdout.Len() != 0 {
 		t.Fatalf("failure must not contaminate stdout, got %q", stdout.String())
+	}
+}
+
+// TestServeACPCommand_ServeFailuresAreSanitizedOnStderr proves every
+// non-cancellation Serve failure category is replaced with a fixed,
+// payload-free stderr diagnostic: since a Serve error can originate from
+// arbitrary decoded request content, nothing about its own message text is
+// safe to print verbatim. Each case injects a distinct sensitive sentinel a
+// real failure of that category could plausibly carry and asserts it never
+// reaches stdout or stderr.
+func TestServeACPCommand_ServeFailuresAreSanitizedOnStderr(t *testing.T) {
+	cases := []struct {
+		name     string
+		sentinel string
+	}{
+		{"startup", "startup failure referencing provider command --api-key sk-live-SENTINEL-1"},
+		{"framing", "framing failure decoding prompt content: SENTINEL-PROMPT-please ignore prior instructions"},
+		{"reader", "reader failure at unsafe path /home/operator/.ssh/SENTINEL-id_rsa"},
+		{"writer", "writer failure writing private topology host SENTINEL-internal-dispatch.local"},
+		{"unknown", "unclassified failure SENTINEL-credential=hunter2"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &fakeACPServer{serveErr: errors.New(tc.sentinel)}
+			factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI})
+			factory.acpServer = fake
+
+			root := factory.NewCommand(nil, nil, nil)
+			root.SetIn(strings.NewReader(""))
+			var stdout, stderr bytes.Buffer
+			root.SetOut(&stdout)
+			root.SetErr(&stderr)
+			root.SetArgs([]string{"serve", "acp"})
+
+			err := root.Execute()
+			if err == nil {
+				t.Fatal("Execute() error = nil, want a non-nil serve failure")
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("failure must not contaminate stdout, got %q", stdout.String())
+			}
+			if strings.Contains(err.Error(), "SENTINEL") {
+				t.Fatalf("returned error leaked the sensitive sentinel: %v", err)
+			}
+			if strings.Contains(stderr.String(), "SENTINEL") {
+				t.Fatalf("stderr leaked the sensitive sentinel: %q", stderr.String())
+			}
+			if stderr.Len() == 0 {
+				t.Fatal("stderr must still carry a bounded, actionable diagnostic")
+			}
+		})
 	}
 }
