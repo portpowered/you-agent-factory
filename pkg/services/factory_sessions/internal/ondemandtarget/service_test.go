@@ -98,6 +98,7 @@ type fakeSessions struct {
 	invokeCalls  []string
 	invokeResult factorysessions.InvocationResult
 	invokeErr    error
+	invoke       func(context.Context, string, factorysessions.InvocationRequest) (factorysessions.InvocationResult, error)
 
 	cancelCalls    []string
 	cancelContexts []context.Context
@@ -107,15 +108,23 @@ type fakeSessions struct {
 
 	closeCalls []string
 	closeErr   error
+	closeErrs  []error
+	close      func(context.Context, string) error
 }
 
 func (f *fakeSessions) InvokeFactorySession(
-	_ context.Context, sessionID string, _ factorysessions.InvocationRequest,
+	ctx context.Context, sessionID string, request factorysessions.InvocationRequest,
 ) (factorysessions.InvocationResult, error) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.invokeCalls = append(f.invokeCalls, sessionID)
-	return f.invokeResult, f.invokeErr
+	invoke := f.invoke
+	result := f.invokeResult
+	err := f.invokeErr
+	f.mu.Unlock()
+	if invoke != nil {
+		return invoke(ctx, sessionID, request)
+	}
+	return result, err
 }
 
 func (f *fakeSessions) Cancel(
@@ -129,11 +138,22 @@ func (f *fakeSessions) Cancel(
 	return f.cancelResult, f.cancelErr
 }
 
-func (f *fakeSessions) CloseFactorySession(_ context.Context, sessionID string) error {
+func (f *fakeSessions) CloseFactorySession(ctx context.Context, sessionID string) error {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.closeCalls = append(f.closeCalls, sessionID)
-	return f.closeErr
+	close := f.close
+	if len(f.closeErrs) > 0 {
+		err := f.closeErrs[0]
+		f.closeErrs = f.closeErrs[1:]
+		f.mu.Unlock()
+		return err
+	}
+	err := f.closeErr
+	f.mu.Unlock()
+	if close != nil {
+		return close(ctx, sessionID)
+	}
+	return err
 }
 
 func newTestService(t *testing.T, opener invocationRuntimeOpener, resolve RuntimeResolver, generateID factorysessions.SessionIDGenerator) *Service {
@@ -144,6 +164,7 @@ func newTestService(t *testing.T, opener invocationRuntimeOpener, resolve Runtim
 		generateID:        generateID,
 		logger:            zap.NewNop(),
 		runtimes:          make(map[string]*activatedRuntime),
+		controls:          make(map[string]*activationControl),
 		startsByRequestID: make(map[string]string),
 		pendingStarts:     make(map[string]*pendingStart),
 	}
@@ -161,6 +182,7 @@ func newTestServiceWithObservedLogger(t *testing.T, opener invocationRuntimeOpen
 		generateID:        generateID,
 		logger:            zap.New(core),
 		runtimes:          make(map[string]*activatedRuntime),
+		controls:          make(map[string]*activationControl),
 		startsByRequestID: make(map[string]string),
 		pendingStarts:     make(map[string]*pendingStart),
 	}, observed

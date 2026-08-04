@@ -237,9 +237,9 @@ func connectionIDAt(t *testing.T, logger *recordingLogger, index int) string {
 // text-first agent capability profile (mirrors
 // internal/testutil/acpfixtures/testdata/initialization.json's accepted
 // case): the pinned protocol version, an empty authentication-method list,
-// and exactly the capabilities negotiation.Negotiate advertises -- no
-// deferred capability.
-const initializeSuccessResult = `{"protocolVersion":1,"authMethods":[],"agentCapabilities":{"_meta":{"portpowered.infinite-you/attachment-resume":true},"auth":{},"loadSession":true,"mcpCapabilities":{},"promptCapabilities":{},"sessionCapabilities":{"resume":{}}}}`
+// and exactly the capabilities negotiation.Negotiate advertises, including
+// attachment resume and the executable session/close capability.
+const initializeSuccessResult = `{"protocolVersion":1,"authMethods":[],"agentCapabilities":{"_meta":{"portpowered.infinite-you/attachment-resume":true},"auth":{},"loadSession":true,"mcpCapabilities":{},"promptCapabilities":{},"sessionCapabilities":{"close":{},"resume":{}}}}`
 
 // initializeLine builds one complete newline-terminated JSON-RPC initialize
 // request line carrying rawID as its id token (e.g. "1" or `"req-abc"`).

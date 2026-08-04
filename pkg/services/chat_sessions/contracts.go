@@ -47,7 +47,10 @@ type Service interface {
 	CreateSession(ctx context.Context, req CreateSessionRequest) (CreateSessionResult, error)
 
 	// GetSession returns the current state of one Chat Session. It reports
-	// *NotFoundError when SessionID does not identify an existing session.
+	// *NotFoundError when SessionID does not identify an existing session. Its
+	// result carries MostRecentTurnID so a control consumer can verify that an
+	// already-captured turn remains authoritative without substituting a
+	// session's currently active turn.
 	GetSession(ctx context.Context, req GetSessionRequest) (GetSessionResult, error)
 
 	// SetTarget changes a Chat Session's selected target, opening a new
@@ -57,7 +60,12 @@ type Service interface {
 
 	// StartTurn admits a new Turn in TurnStateAdmitted against the session's
 	// current target episode. It reports *BusyError when a non-terminal turn
-	// is already active and *ConflictError when ExpectedVersion is stale.
+	// is already active or when an unresolved COMMITTED control intent fences
+	// admission of a successor turn, and *ConflictError when ExpectedVersion is
+	// stale. The fence remains in effect after its captured turn terminalizes:
+	// callers must resolve the captured control to its immutable outcome before
+	// admitting a replacement, so that an older control can never reach newer
+	// work.
 	StartTurn(ctx context.Context, req StartTurnRequest) (StartTurnResult, error)
 
 	// AdvanceTurn moves an admitted or running Turn to Next, enforcing the
@@ -110,7 +118,10 @@ type Service interface {
 	// terminal outcome, an implementation determines that outcome with
 	// ResolveControlIntentOutcome against the intent's captured turn, not a
 	// caller-selected value, so completion can only ever complete, no-op, or
-	// supersede the captured turn -- never a later one.
+	// supersede the captured turn -- never a later one. A completed CLOSE
+	// intent atomically terminalizes the captured episode, active turn, and
+	// Chat Session with the intent; callers must advance it only after the
+	// captured Factory Session close succeeds.
 	AdvanceControl(ctx context.Context, req AdvanceControlRequest) (AdvanceControlResult, error)
 
 	// BindFactorySession commits a returned Factory Session identity onto
@@ -238,10 +249,14 @@ type GetSessionRequest struct {
 // needs to resolve the session's currently bound FactorySessionID
 // independent of admitting a turn, for example forwarding an out-of-band
 // session/cancel notification to the exact Factory Session identity a prior
-// turn captured.
+// turn captured. MostRecentTurnID remains set after a turn terminalizes and
+// changes only when a successor is admitted, so a CLOSE control can verify
+// its immutable target even when normal completion races its downstream
+// close.
 type GetSessionResult struct {
-	Session Session
-	Episode TargetEpisode
+	Session          Session
+	Episode          TargetEpisode
+	MostRecentTurnID string
 }
 
 // SetTargetRequest carries the caller identity, target session, expected

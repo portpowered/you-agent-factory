@@ -23,6 +23,7 @@ var SupportedMethods = map[string]bool{
 	"session/load":               true,
 	"session/resume":             true,
 	"session/cancel":             true,
+	"session/close":              true,
 	"session/set_config_option":  true,
 	"session/prompt":             true,
 	"session/update":             true,

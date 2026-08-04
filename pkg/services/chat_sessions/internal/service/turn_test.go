@@ -279,6 +279,36 @@ func TestStore_StartTurn_InvalidRequestIdentityCreatesNoMutation(t *testing.T) {
 	}
 }
 
+// TestStore_StartTurn_GeneratedInvalidTurnLeavesSessionUnchanged proves an
+// invalid injected ID is rejected before turn admission mutates the session.
+func TestStore_StartTurn_GeneratedInvalidTurnLeavesSessionUnchanged(t *testing.T) {
+	ctx := context.Background()
+	ids := []string{"session-valid", ""}
+	store := NewStore(func() string {
+		id := ids[0]
+		ids = ids[1:]
+		return id
+	}, fixedClock(time.Now()), nil, nil)
+	created, err := store.CreateSession(ctx, validCreateRequest())
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	_, err = store.StartTurn(ctx, chatsessions.StartTurnRequest{
+		RequestID: startTurnRequestID("invalid-generated-turn"), SessionID: created.Session.ID, ExpectedVersion: created.Session.Version,
+	})
+	if !errors.Is(err, chatsessions.ErrRequiredValue) {
+		t.Fatalf("StartTurn with invalid generated ID: got %v, want ErrRequiredValue", err)
+	}
+	current, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: created.Session.ID})
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if current.Session != created.Session || current.MostRecentTurnID != "" {
+		t.Fatalf("invalid generated turn changed session: got %#v, want %#v", current, created)
+	}
+}
+
 // TestStore_StartTurn_SecondTurnAfterTerminalStaysActive proves a session
 // already ACTIVE (its first turn already terminated) admits a second turn
 // without an illegal ACTIVE->ACTIVE self-transition.
@@ -331,6 +361,88 @@ func TestStore_StartTurn_SecondTurnAfterTerminalStaysActive(t *testing.T) {
 	store.mu.RUnlock()
 	if firstAfter != advanced.Turn {
 		t.Fatalf("first turn rewritten by second admission: got %+v, want %+v", firstAfter, advanced.Turn)
+	}
+}
+
+// TestStore_StartTurn_CommittedControlFencesReplacementUntilResolved proves
+// that the captured-control fence survives the captured turn's terminal
+// transition. A would-be successor remains rejected until the committed
+// intent resolves, so it cannot become a target for an older control.
+func TestStore_StartTurn_CommittedControlFencesReplacementUntilResolved(t *testing.T) {
+	ctx := context.Background()
+	store, session := newStartTurnTestSession(t, time.Now())
+
+	first, err := store.StartTurn(ctx, chatsessions.StartTurnRequest{
+		RequestID:       startTurnRequestID("req-turn-1"),
+		SessionID:       session.ID,
+		ExpectedVersion: session.Version,
+	})
+	if err != nil {
+		t.Fatalf("StartTurn first: %v", err)
+	}
+	requested, err := store.RequestControl(ctx, chatsessions.RequestControlRequest{
+		RequestID:       controlRequestID("conn-1", "req-control-1"),
+		SessionID:       session.ID,
+		ExpectedVersion: first.Session.Version,
+		Action:          chatsessions.ControlActionCancel,
+	})
+	if err != nil {
+		t.Fatalf("RequestControl: %v", err)
+	}
+	if _, err := store.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
+		SessionID: session.ID, RequestID: requested.Intent.RequestID, Next: chatsessions.ControlIntentStateCommitted,
+	}); err != nil {
+		t.Fatalf("AdvanceControl REQUESTED->COMMITTED: %v", err)
+	}
+	if _, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: session.ID, TurnID: first.Turn.ID, Next: chatsessions.TurnStateCanceled,
+	}); err != nil {
+		t.Fatalf("AdvanceTurn to CANCELED: %v", err)
+	}
+
+	released, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession after terminal turn: %v", err)
+	}
+	_, err = store.StartTurn(ctx, chatsessions.StartTurnRequest{
+		RequestID:       startTurnRequestID("req-turn-2"),
+		SessionID:       session.ID,
+		ExpectedVersion: released.Session.Version,
+	})
+	var busy *chatsessions.BusyError
+	if !errors.As(err, &busy) {
+		t.Fatalf("StartTurn while control is committed: got %v, want *BusyError", err)
+	}
+	if busy.ActiveTurnID != first.Turn.ID || busy.ActiveTurnState != chatsessions.TurnStateCanceled {
+		t.Fatalf("BusyError = %+v, want captured terminal turn %q CANCELED", busy, first.Turn.ID)
+	}
+
+	store.mu.RLock()
+	record := store.sessions[session.ID]
+	store.mu.RUnlock()
+	if len(record.turns) != 1 || record.session != released.Session || record.session.ActiveTurnID != "" {
+		t.Fatalf("fenced StartTurn mutated state: session=%+v turns=%d, want unchanged released session and one turn", record.session, len(record.turns))
+	}
+
+	resolved, err := store.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
+		SessionID: session.ID, RequestID: requested.Intent.RequestID, Next: chatsessions.ControlIntentStateCompleted,
+	})
+	if err != nil {
+		t.Fatalf("AdvanceControl COMMITTED->outcome: %v", err)
+	}
+	if resolved.Intent.State != chatsessions.ControlIntentStateNoop {
+		t.Fatalf("resolved intent state = %s, want NOOP", resolved.Intent.State)
+	}
+	second, err := store.StartTurn(ctx, chatsessions.StartTurnRequest{
+		RequestID:       startTurnRequestID("req-turn-2"),
+		SessionID:       session.ID,
+		ExpectedVersion: released.Session.Version,
+	})
+	if err != nil {
+		t.Fatalf("StartTurn after control resolution: %v", err)
+	}
+	if second.Turn.ID == first.Turn.ID {
+		t.Fatal("StartTurn after control resolution reused the captured turn")
 	}
 }
 

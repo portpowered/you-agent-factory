@@ -39,18 +39,17 @@ func Negotiate(req acpsdk.InitializeRequest) (acpsdk.InitializeResponse, error) 
 // p0AgentCapabilities is the exhaustive, honest set of agent capabilities
 // this transport implements. Every field left at its zero value is a
 // deliberate L1 V0 scope cut (deferred: plans, filesystem callbacks,
-// terminals, fork, authentication, client-supplied MCP servers,
-// image/audio/embedded-context prompt content, and session/close, which
-// protocol.SupportedMethods does not list and no session validator
-// implements), not an oversight, and it does not vary with what the client
-// advertises: unsupported capabilities are never optimistically claimed
-// just because a client could use them.
+// terminals, fork, authentication, client-supplied MCP servers, and
+// image/audio/embedded-context prompt content), not an oversight, and it
+// does not vary with what the client advertises: unsupported capabilities are
+// never optimistically claimed just because a client could use them.
 func p0AgentCapabilities() acpsdk.AgentCapabilities {
 	return acpsdk.AgentCapabilities{
 		Meta:        session.AttachmentResumeCapabilityMetadata(),
 		LoadSession: true,
 		SessionCapabilities: acpsdk.SessionCapabilities{
 			Resume: &acpsdk.SessionResumeCapabilities{},
+			Close:  &acpsdk.SessionCloseCapabilities{},
 		},
 	}
 }

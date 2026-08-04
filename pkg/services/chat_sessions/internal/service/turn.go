@@ -11,10 +11,13 @@ import (
 // unknown SessionID, *ConflictError when ExpectedVersion no longer matches
 // the session's current version (checked before the busy check, matching
 // SetTarget's ordering), and *BusyError while a non-terminal turn is already
-// active -- in every failure case no turn is created and the stored session
-// and turn state are left byte-for-byte unchanged. On success it moves a
-// CREATED session to ACTIVE on its first turn and leaves an already-ACTIVE
-// session's State unchanged.
+// active or a COMMITTED control intent remains unresolved. The latter is the
+// captured-control admission fence: it continues to block a successor after
+// its captured turn terminalizes until AdvanceControl records COMPLETED,
+// NOOP, or SUPERSEDED. In every failure case no turn is created and the
+// stored session and turn state are left byte-for-byte unchanged. On success
+// it moves a CREATED session to ACTIVE on its first turn and leaves an
+// already-ACTIVE session's State unchanged.
 //
 // Reusing a RequestID that already identifies an admitted turn is treated as
 // an idempotent retry, the same way RequestControl treats a reused control
@@ -58,10 +61,19 @@ func (s *Store) StartTurn(_ context.Context, req chatsessions.StartTurnRequest) 
 			Expected: req.ExpectedVersion, Actual: record.session.Version,
 		}
 	}
+	if record.session.State.IsTerminal() {
+		return chatsessions.StartTurnResult{}, record.session.State.CanTransitionTo(chatsessions.SessionStateActive)
+	}
 	if active, ok := record.activeTurnValue(); ok {
 		return chatsessions.StartTurnResult{}, &chatsessions.BusyError{
 			Value: "Session", ID: req.SessionID,
 			ActiveTurnID: active.ID, ActiveTurnState: active.State,
+		}
+	}
+	if fenced, ok := record.committedControlTurn(); ok {
+		return chatsessions.StartTurnResult{}, &chatsessions.BusyError{
+			Value: "Session", ID: req.SessionID,
+			ActiveTurnID: fenced.ID, ActiveTurnState: fenced.State,
 		}
 	}
 
@@ -103,8 +115,10 @@ func (s *Store) StartTurn(_ context.Context, req chatsessions.StartTurnRequest) 
 // table. It reports *NotFoundError when SessionID or TurnID does not
 // identify an existing turn and the turn's own *TransitionError when Next is
 // not a legal transition from its current state; on either failure the
-// stored turn and session are left byte-for-byte unchanged. Reaching a
-// terminal Next records that terminal state on the turn (assigning it a
+// stored turn and session are left byte-for-byte unchanged. Repeating a turn's
+// exact terminal state is an idempotent success, so a completed close/control
+// race cannot turn a truthful prompt result into a transport failure. Reaching
+// a terminal Next records that terminal state on the turn (assigning it a
 // distinct, non-zero TerminalSequence from the session's private turn
 // sequence counter), clears the session's ActiveTurnID, and advances the
 // session's version so later guarded callers observe the release.
@@ -123,6 +137,9 @@ func (s *Store) AdvanceTurn(_ context.Context, req chatsessions.AdvanceTurnReque
 	turn, ok := record.turns[req.TurnID]
 	if !ok {
 		return chatsessions.AdvanceTurnResult{}, &chatsessions.NotFoundError{Value: "Turn", ID: req.TurnID}
+	}
+	if turn.State.IsTerminal() && turn.State == req.Next {
+		return chatsessions.AdvanceTurnResult{Turn: turn}, nil
 	}
 	if err := turn.State.CanTransitionTo(req.Next); err != nil {
 		return chatsessions.AdvanceTurnResult{}, err

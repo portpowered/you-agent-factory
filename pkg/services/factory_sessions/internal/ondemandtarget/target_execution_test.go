@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -67,23 +69,32 @@ func TestInvokeFactorySessionUnknownIdentityReportsSessionNotFound(t *testing.T)
 	}
 }
 
-// ctxKey is a private context key type for a test-only value, used to prove
-// Cancel forwards the caller's original context rather than substituting or
-// dropping it.
-type ctxKey string
-
-// TestCancelForwardsContextAndControlRequestToTheCapturedRuntime proves
-// Cancel forwards the exact caller context and ControlRequest to the
-// captured runtime's own Cancel call (against its DefaultSessionID, exactly
-// like InvokeFactorySession already does) and returns its lifecycle result or
-// error unchanged -- without reclassifying the outcome.
-func TestCancelForwardsContextAndControlRequestToTheCapturedRuntime(t *testing.T) {
-	cancelResult := factorysessions.LifecycleControlResult{
-		Operation: factorysessions.LifecycleControlKind("CANCEL"),
-		Outcome:   factorysessions.LifecycleControlOutcome("APPLIED"),
-	}
-	sessions := &fakeSessions{cancelResult: cancelResult}
-	opener := &fakeOpener{opened: roles.OpenedInvocationRuntime{Sessions: sessions, Lifecycle: &fakeLifecycle{}}}
+// TestCancelInterruptsOnlyTheActiveInvocation proves Cancel owns the
+// request-scoped context of the captured target's active invocation, waits
+// for it to terminalize as CANCELED, and replaces the stopped runtime under
+// the same opaque target identity for a later prompt. It intentionally does
+// not delegate to factorysessions.Service.Cancel: that contract addresses
+// durable sessions, while this on-demand runtime is a live target whose
+// provider work is governed by the runtime lifecycle.
+func TestCancelInterruptsOnlyTheActiveInvocation(t *testing.T) {
+	startedSignal := make(chan struct{})
+	invocationCount := 0
+	sessions := &fakeSessions{invoke: func(ctx context.Context, _ string, _ factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
+		invocationCount++
+		if invocationCount == 1 {
+			close(startedSignal)
+			<-ctx.Done()
+			return factorysessions.InvocationResult{}, ctx.Err()
+		}
+		return factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}, nil
+	}}
+	lifecycle := &fakeLifecycle{}
+	replacementSessions := &fakeSessions{invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}}
+	replacementLifecycle := &fakeLifecycle{}
+	opener := &sequencedOpener{results: []openResult{
+		{opened: roles.OpenedInvocationRuntime{Sessions: sessions, Lifecycle: lifecycle}},
+		{opened: roles.OpenedInvocationRuntime{Sessions: replacementSessions, Lifecycle: replacementLifecycle}},
+	}}
 	resolve := func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
 		return factorysessions.RuntimeOpeningRequest{}, nil
 	}
@@ -94,23 +105,51 @@ func TestCancelForwardsContextAndControlRequestToTheCapturedRuntime(t *testing.T
 		t.Fatalf("StartAsync() error = %v", err)
 	}
 
-	ctx := context.WithValue(context.Background(), ctxKey("trace"), "trace-1")
-	request := factorysessions.ControlRequest{RequestID: "control-1", Reason: "user requested"}
-	result, err := svc.Cancel(ctx, started.SessionID, request)
+	requestID := "turn-1"
+	invokeResult := make(chan struct {
+		result factorysessions.InvocationResult
+		err    error
+	}, 1)
+	go func() {
+		result, err := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{RequestID: &requestID})
+		invokeResult <- struct {
+			result factorysessions.InvocationResult
+			err    error
+		}{result: result, err: err}
+	}()
+	select {
+	case <-startedSignal:
+	case <-time.After(5 * time.Second):
+		t.Fatal("active invocation did not start")
+	}
+
+	result, err := svc.Cancel(context.Background(), started.SessionID, factorysessions.ControlRequest{RequestID: "control-1", Reason: "user requested"})
 	if err != nil {
 		t.Fatalf("Cancel() error = %v", err)
 	}
-	if result != cancelResult {
-		t.Fatalf("Cancel() result = %+v, want the captured runtime's own result %+v unchanged", result, cancelResult)
+	if result.SessionID != started.SessionID || result.Operation != factorysessions.LifecycleControlCancel || result.Outcome != factorysessions.LifecycleControlOutcomeAccepted {
+		t.Fatalf("Cancel() result = %+v, want accepted cancellation for %q", result, started.SessionID)
 	}
-	if len(sessions.cancelRequests) != 1 || sessions.cancelRequests[0] != request {
-		t.Fatalf("captured runtime cancel requests = %v, want exactly the original ControlRequest %+v", sessions.cancelRequests, request)
+	got := <-invokeResult
+	if got.err != nil {
+		t.Fatalf("canceled InvokeFactorySession() error = %v, want published canceled result", got.err)
 	}
-	if len(sessions.cancelContexts) != 1 || sessions.cancelContexts[0].Value(ctxKey("trace")) != "trace-1" {
-		t.Fatal("captured runtime Cancel did not receive the original caller context")
+	if got.result.Status != factorysessions.InvocationTerminalStatusCanceled || got.result.ErrorCode != string(factorysessions.InvocationErrorCodeCanceled) || got.result.SessionID != started.SessionID || got.result.RequestID != requestID {
+		t.Fatalf("canceled InvokeFactorySession() result = %+v, want the published canceled outcome for %q", got.result, started.SessionID)
 	}
-	if sessions.cancelCalls[0] != factorysessions.DefaultSessionID {
-		t.Fatalf("Cancel() dispatched sessionID = %q, want the runtime's own DefaultSessionID", sessions.cancelCalls[0])
+	if lifecycle.stopCalls != 1 {
+		t.Fatalf("StopLifecycle calls = %d, want 1 because cancellation stops the captured provider runtime", lifecycle.stopCalls)
+	}
+
+	second, err := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{})
+	if err != nil || second.Status != factorysessions.InvocationTerminalStatusCompleted {
+		t.Fatalf("later InvokeFactorySession() = (%+v, %v), want completed invocation through the replacement runtime", second, err)
+	}
+	if len(opener.calls) != 2 {
+		t.Fatalf("OpenInvocationRuntime calls = %d, want the original and replacement runtime", len(opener.calls))
+	}
+	if len(replacementSessions.invokeCalls) != 1 || replacementLifecycle.stopCalls != 0 {
+		t.Fatalf("replacement runtime = (invoke calls %v, StopLifecycle calls %d), want one later invocation and no close", replacementSessions.invokeCalls, replacementLifecycle.stopCalls)
 	}
 }
 
@@ -183,18 +222,19 @@ func TestInvokeAndCancelIsolationBetweenMultipleStartedTargets(t *testing.T) {
 	if _, err := svc.InvokeFactorySession(context.Background(), first.SessionID, factorysessions.InvocationRequest{}); err != nil {
 		t.Fatalf("InvokeFactorySession(first) error = %v", err)
 	}
-	if _, err := svc.Cancel(context.Background(), second.SessionID, factorysessions.ControlRequest{}); err != nil {
+	canceled, err := svc.Cancel(context.Background(), second.SessionID, factorysessions.ControlRequest{})
+	if err != nil {
 		t.Fatalf("Cancel(second) error = %v", err)
+	}
+	if canceled.SessionID != second.SessionID || canceled.Outcome != factorysessions.LifecycleControlOutcomeNoOp {
+		t.Fatalf("Cancel(second) result = %+v, want a no-op scoped to the inactive second target", canceled)
 	}
 
 	if len(firstSessions.invokeCalls) != 1 {
 		t.Fatalf("first target invoke calls = %v, want exactly 1", firstSessions.invokeCalls)
 	}
-	if len(firstSessions.cancelCalls) != 0 {
-		t.Fatalf("first target cancel calls = %v, want zero -- cancel targeted the second activation", firstSessions.cancelCalls)
-	}
-	if len(secondSessions.cancelCalls) != 1 {
-		t.Fatalf("second target cancel calls = %v, want exactly 1", secondSessions.cancelCalls)
+	if len(firstSessions.cancelCalls) != 0 || len(secondSessions.cancelCalls) != 0 {
+		t.Fatalf("durable session cancel calls = (%v, %v), want none -- an inactive live target has no invocation context to interrupt", firstSessions.cancelCalls, secondSessions.cancelCalls)
 	}
 	if len(secondSessions.invokeCalls) != 0 {
 		t.Fatalf("second target invoke calls = %v, want zero -- invoke targeted the first activation", secondSessions.invokeCalls)
@@ -227,6 +267,405 @@ func TestCloseFactorySessionTearsDownAndEvicts(t *testing.T) {
 
 	if _, err := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{}); !errors.Is(err, factorysessions.ErrSessionNotFound) {
 		t.Fatalf("InvokeFactorySession() after close error = %v, want ErrSessionNotFound", err)
+	}
+}
+
+// TestCloseFactorySessionFailureRetainsCapturedTargetForRetry proves a failed
+// close keeps the exact opaque target tracked and retries only the unfinished
+// downstream close. The second request is therefore a real retry, never an
+// idempotent success for a target that was silently discarded after failure.
+func TestCloseFactorySessionFailureRetainsCapturedTargetForRetry(t *testing.T) {
+	closeFailure := errors.New("close provider session failed")
+	sessions := &fakeSessions{closeErrs: []error{closeFailure, nil}}
+	lifecycle := &fakeLifecycle{}
+	opener := &fakeOpener{opened: roles.OpenedInvocationRuntime{Sessions: sessions, Lifecycle: lifecycle}}
+	svc := newTestService(t, opener, func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+		return factorysessions.RuntimeOpeningRequest{}, nil
+	}, sequentialIDs("wrapper"))
+
+	started, err := svc.StartAsync(context.Background(), factorysessions.StartRequest{})
+	if err != nil {
+		t.Fatalf("StartAsync() error = %v", err)
+	}
+	if err := svc.CloseFactorySession(context.Background(), started.SessionID); !errors.Is(err, closeFailure) {
+		t.Fatalf("first CloseFactorySession() error = %v, want close failure", err)
+	}
+	if _, err := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{}); err == nil {
+		t.Fatal("InvokeFactorySession() after failed close error = nil, want the retained target to reject new work while closing")
+	}
+	if len(sessions.closeCalls) != 1 || lifecycle.stopCalls != 1 {
+		t.Fatalf("first close effects = (sessions %d, lifecycle %d), want (1, 1)", len(sessions.closeCalls), lifecycle.stopCalls)
+	}
+
+	if err := svc.CloseFactorySession(context.Background(), started.SessionID); err != nil {
+		t.Fatalf("retry CloseFactorySession() error = %v", err)
+	}
+	if len(sessions.closeCalls) != 2 || lifecycle.stopCalls != 1 {
+		t.Fatalf("retry close effects = (sessions %d, lifecycle %d), want (2, 1): retry only the failed session close", len(sessions.closeCalls), lifecycle.stopCalls)
+	}
+	if _, err := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{}); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("InvokeFactorySession() after successful retry error = %v, want ErrSessionNotFound", err)
+	}
+}
+
+// TestCancelFailureRetainsCapturedTargetForSameIdentityRetry proves a failed
+// cancel neither reports the interrupted prompt as canceled nor loses its
+// target behind a no-op. Redelivery of the same immutable control can finish
+// cleanup, replace the runtime, and only then publish cancellation.
+func TestCancelFailureRetainsCapturedTargetForSameIdentityRetry(t *testing.T) {
+	startedSignal := make(chan struct{})
+	closeFailure := errors.New("close provider session failed")
+	sessions := &fakeSessions{
+		closeErrs: []error{closeFailure, nil},
+		invoke: func(ctx context.Context, _ string, _ factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
+			close(startedSignal)
+			<-ctx.Done()
+			return factorysessions.InvocationResult{}, ctx.Err()
+		},
+	}
+	replacementSessions := &fakeSessions{invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}}
+	opener := &sequencedOpener{results: []openResult{
+		{opened: roles.OpenedInvocationRuntime{Sessions: sessions, Lifecycle: &fakeLifecycle{}}},
+		{opened: roles.OpenedInvocationRuntime{Sessions: replacementSessions, Lifecycle: &fakeLifecycle{}}},
+	}}
+	svc := newTestService(t, opener, func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+		return factorysessions.RuntimeOpeningRequest{}, nil
+	}, sequentialIDs("wrapper"))
+
+	started, err := svc.StartAsync(context.Background(), factorysessions.StartRequest{})
+	if err != nil {
+		t.Fatalf("StartAsync() error = %v", err)
+	}
+	invokeResult := make(chan error, 1)
+	go func() {
+		_, invokeErr := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{})
+		invokeResult <- invokeErr
+	}()
+	<-startedSignal
+
+	control := factorysessions.ControlRequest{RequestID: "cancel-retry"}
+	if _, err := svc.Cancel(context.Background(), started.SessionID, control); !errors.Is(err, closeFailure) {
+		t.Fatalf("first Cancel() error = %v, want close failure", err)
+	}
+	if err := <-invokeResult; !errors.Is(err, errCancellationIncomplete) {
+		t.Fatalf("interrupted InvokeFactorySession() error = %v, want incomplete-cancel failure rather than a false canceled result", err)
+	}
+	if len(sessions.closeCalls) != 1 || len(opener.calls) != 1 {
+		t.Fatalf("first cancel effects = (close %d, opens %d), want (1, 1)", len(sessions.closeCalls), len(opener.calls))
+	}
+
+	retried, err := svc.Cancel(context.Background(), started.SessionID, control)
+	if err != nil {
+		t.Fatalf("retry Cancel() error = %v", err)
+	}
+	if retried.Outcome != factorysessions.LifecycleControlOutcomeAccepted {
+		t.Fatalf("retry Cancel() outcome = %q, want ACCEPTED", retried.Outcome)
+	}
+	if len(sessions.closeCalls) != 2 || len(opener.calls) != 2 {
+		t.Fatalf("retry cancel effects = (close %d, opens %d), want (2, 2)", len(sessions.closeCalls), len(opener.calls))
+	}
+	if result, err := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{}); err != nil || result.Status != factorysessions.InvocationTerminalStatusCompleted {
+		t.Fatalf("InvokeFactorySession() after successful retry = (%+v, %v), want replacement completion", result, err)
+	}
+}
+
+// TestConcurrentCancelAndCloseLeavesNoReplacementRuntime proves lifecycle
+// control is serialized by opaque target identity, rather than only by the
+// activation each caller observed. Close waits for Cancel's replacement and
+// then closes that replacement, so success never leaves a live successor
+// behind the captured Factory Session ID.
+func TestConcurrentCancelAndCloseLeavesNoReplacementRuntime(t *testing.T) {
+	invocationStarted := make(chan struct{})
+	replacementOpening := make(chan struct{})
+	releaseReplacement := make(chan struct{})
+	originalSessions := &fakeSessions{invoke: func(ctx context.Context, _ string, _ factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
+		close(invocationStarted)
+		<-ctx.Done()
+		return factorysessions.InvocationResult{}, ctx.Err()
+	}}
+	originalLifecycle := &fakeLifecycle{}
+	replacementLifecycle := &fakeLifecycle{}
+	var openerMu sync.Mutex
+	openCount := 0
+	opener := &funcOpener{open: func(context.Context, *factorysessions.RuntimeOpeningRequest, runtimeopening.ExternalEffects, *zap.Logger) (roles.OpenedInvocationRuntime, error) {
+		openerMu.Lock()
+		openCount++
+		call := openCount
+		openerMu.Unlock()
+		if call == 1 {
+			return roles.OpenedInvocationRuntime{Sessions: originalSessions, Lifecycle: originalLifecycle}, nil
+		}
+		if call == 2 {
+			close(replacementOpening)
+			<-releaseReplacement
+			return roles.OpenedInvocationRuntime{Sessions: &fakeSessions{}, Lifecycle: replacementLifecycle}, nil
+		}
+		return roles.OpenedInvocationRuntime{}, fmt.Errorf("unexpected runtime open %d", call)
+	}}
+	svc := newTestService(t, opener, func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+		return factorysessions.RuntimeOpeningRequest{}, nil
+	}, sequentialIDs("wrapper"))
+
+	started, err := svc.StartAsync(context.Background(), factorysessions.StartRequest{})
+	if err != nil {
+		t.Fatalf("StartAsync() error = %v", err)
+	}
+	invokeDone := make(chan error, 1)
+	go func() {
+		_, err := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{})
+		invokeDone <- err
+	}()
+	select {
+	case <-invocationStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("invocation did not start")
+	}
+
+	cancelDone := make(chan error, 1)
+	go func() {
+		_, err := svc.Cancel(context.Background(), started.SessionID, factorysessions.ControlRequest{RequestID: "cancel"})
+		cancelDone <- err
+	}()
+	select {
+	case <-replacementOpening:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Cancel did not reach replacement opening")
+	}
+
+	closeDone := make(chan error, 1)
+	go func() { closeDone <- svc.CloseFactorySession(context.Background(), started.SessionID) }()
+	close(releaseReplacement)
+
+	if err := <-cancelDone; err != nil {
+		t.Fatalf("Cancel() error = %v", err)
+	}
+	if err := <-closeDone; err != nil {
+		t.Fatalf("CloseFactorySession() error = %v", err)
+	}
+	if err := <-invokeDone; err != nil {
+		t.Fatalf("interrupted InvokeFactorySession() error = %v, want canceled result", err)
+	}
+	if originalLifecycle.stopCalls != 1 || replacementLifecycle.stopCalls != 1 {
+		t.Fatalf("StopLifecycle calls = (%d, %d), want both original and replacement closed once", originalLifecycle.stopCalls, replacementLifecycle.stopCalls)
+	}
+	openerMu.Lock()
+	gotOpenCount := openCount
+	openerMu.Unlock()
+	if gotOpenCount != 2 {
+		t.Fatalf("OpenInvocationRuntime calls = %d, want original plus one replacement", gotOpenCount)
+	}
+	if _, err := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{}); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("InvokeFactorySession() after successful close error = %v, want ErrSessionNotFound", err)
+	}
+}
+
+// TestCancelRespectsCallerCancellationWhileInvocationIgnoresCancellation
+// proves a non-cooperative provider cannot make control handling wait
+// forever: the caller's context remains live in cancelInvocation.
+func TestCancelRespectsCallerCancellationWhileInvocationIgnoresCancellation(t *testing.T) {
+	invocationStarted := make(chan struct{})
+	providerCanceled := make(chan struct{})
+	releaseInvocation := make(chan struct{})
+	sessions := &fakeSessions{invoke: func(ctx context.Context, _ string, _ factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
+		close(invocationStarted)
+		<-ctx.Done()
+		close(providerCanceled)
+		<-releaseInvocation
+		return factorysessions.InvocationResult{}, ctx.Err()
+	}}
+	svc := newTestService(t, &fakeOpener{opened: roles.OpenedInvocationRuntime{Sessions: sessions, Lifecycle: &fakeLifecycle{}}}, func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+		return factorysessions.RuntimeOpeningRequest{}, nil
+	}, sequentialIDs("wrapper"))
+	started, err := svc.StartAsync(context.Background(), factorysessions.StartRequest{})
+	if err != nil {
+		t.Fatalf("StartAsync() error = %v", err)
+	}
+	invokeDone := make(chan error, 1)
+	go func() {
+		_, err := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{})
+		invokeDone <- err
+	}()
+	select {
+	case <-invocationStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("invocation did not start")
+	}
+
+	controlContext, cancelControl := context.WithCancel(context.Background())
+	cancelDone := make(chan error, 1)
+	go func() {
+		_, err := svc.Cancel(controlContext, started.SessionID, factorysessions.ControlRequest{RequestID: "cancel"})
+		cancelDone <- err
+	}()
+	select {
+	case <-providerCanceled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Cancel did not signal the provider invocation")
+	}
+	cancelControl()
+	select {
+	case err := <-cancelDone:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Cancel() error = %v, want context.Canceled", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Cancel did not honor the caller cancellation")
+	}
+
+	close(releaseInvocation)
+	if err := <-invokeDone; !errors.Is(err, errCancellationIncomplete) {
+		t.Fatalf("InvokeFactorySession() error = %v, want incomplete cancellation after failed owner control", err)
+	}
+}
+
+// TestCancelRespectsCallerCancellationDuringCleanupAndRetries proves a
+// synchronous cleanup collaborator cannot outlive the caller's bound. The
+// failed target remains mapped so the same captured control can complete only
+// its unfinished cleanup and then publish a replacement runtime.
+func TestCancelRespectsCallerCancellationDuringCleanupAndRetries(t *testing.T) {
+	invocationStarted := make(chan struct{})
+	cleanupStarted := make(chan struct{})
+	cleanupAttempts := 0
+	originalSessions := &fakeSessions{
+		invoke: func(ctx context.Context, _ string, _ factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
+			close(invocationStarted)
+			<-ctx.Done()
+			return factorysessions.InvocationResult{}, ctx.Err()
+		},
+		close: func(ctx context.Context, _ string) error {
+			cleanupAttempts++
+			if cleanupAttempts == 1 {
+				close(cleanupStarted)
+				<-ctx.Done()
+				return ctx.Err()
+			}
+			return nil
+		},
+	}
+	replacementSessions := &fakeSessions{invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}}
+	originalLifecycle := &fakeLifecycle{}
+	opener := &sequencedOpener{results: []openResult{
+		{opened: roles.OpenedInvocationRuntime{Sessions: originalSessions, Lifecycle: originalLifecycle}},
+		{opened: roles.OpenedInvocationRuntime{Sessions: replacementSessions, Lifecycle: &fakeLifecycle{}}},
+	}}
+	svc := newTestService(t, opener, func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+		return factorysessions.RuntimeOpeningRequest{}, nil
+	}, sequentialIDs("wrapper"))
+
+	started, err := svc.StartAsync(context.Background(), factorysessions.StartRequest{})
+	if err != nil {
+		t.Fatalf("StartAsync() error = %v", err)
+	}
+	invokeDone := make(chan error, 1)
+	go func() {
+		_, invokeErr := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{})
+		invokeDone <- invokeErr
+	}()
+	select {
+	case <-invocationStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("invocation did not start")
+	}
+
+	controlContext, cancelControl := context.WithCancel(context.Background())
+	cancelDone := make(chan error, 1)
+	control := factorysessions.ControlRequest{RequestID: "cancel-cleanup-retry"}
+	go func() {
+		_, cancelErr := svc.Cancel(controlContext, started.SessionID, control)
+		cancelDone <- cancelErr
+	}()
+	select {
+	case <-cleanupStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Cancel did not reach cleanup")
+	}
+	cancelControl()
+	select {
+	case err := <-cancelDone:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Cancel() error = %v, want context.Canceled", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Cancel did not honor caller cancellation during cleanup")
+	}
+	if err := <-invokeDone; !errors.Is(err, errCancellationIncomplete) {
+		t.Fatalf("interrupted InvokeFactorySession() error = %v, want incomplete cancellation", err)
+	}
+	if len(originalSessions.closeCalls) != 1 || originalLifecycle.stopCalls != 1 {
+		t.Fatalf("failed cancel cleanup effects = (close %d, stop %d), want (1, 1)", len(originalSessions.closeCalls), originalLifecycle.stopCalls)
+	}
+	if _, err := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{}); err == nil {
+		t.Fatal("InvokeFactorySession() after canceled cleanup error = nil, want retained closing target to reject work")
+	}
+
+	result, err := svc.Cancel(context.Background(), started.SessionID, control)
+	if err != nil {
+		t.Fatalf("retry Cancel() error = %v", err)
+	}
+	if result.Outcome != factorysessions.LifecycleControlOutcomeAccepted {
+		t.Fatalf("retry Cancel() outcome = %q, want ACCEPTED", result.Outcome)
+	}
+	if len(originalSessions.closeCalls) != 2 || originalLifecycle.stopCalls != 1 || len(opener.calls) != 2 {
+		t.Fatalf("retry cancel effects = (close %d, stop %d, opens %d), want (2, 1, 2)", len(originalSessions.closeCalls), originalLifecycle.stopCalls, len(opener.calls))
+	}
+}
+
+// TestCloseRespectsCallerCancellationDuringCleanupAndRetries proves close
+// returns when its downstream cleanup observes caller cancellation, retains
+// the exact target, and lets a retry finish only the outstanding cleanup.
+func TestCloseRespectsCallerCancellationDuringCleanupAndRetries(t *testing.T) {
+	cleanupStarted := make(chan struct{})
+	cleanupAttempts := 0
+	sessions := &fakeSessions{close: func(ctx context.Context, _ string) error {
+		cleanupAttempts++
+		if cleanupAttempts == 1 {
+			close(cleanupStarted)
+			<-ctx.Done()
+			return ctx.Err()
+		}
+		return nil
+	}}
+	lifecycle := &fakeLifecycle{}
+	svc := newTestService(t, &fakeOpener{opened: roles.OpenedInvocationRuntime{Sessions: sessions, Lifecycle: lifecycle}}, func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+		return factorysessions.RuntimeOpeningRequest{}, nil
+	}, sequentialIDs("wrapper"))
+
+	started, err := svc.StartAsync(context.Background(), factorysessions.StartRequest{})
+	if err != nil {
+		t.Fatalf("StartAsync() error = %v", err)
+	}
+	closeContext, cancelClose := context.WithCancel(context.Background())
+	closeDone := make(chan error, 1)
+	go func() { closeDone <- svc.CloseFactorySession(closeContext, started.SessionID) }()
+	select {
+	case <-cleanupStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("CloseFactorySession did not reach cleanup")
+	}
+	cancelClose()
+	select {
+	case err := <-closeDone:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("CloseFactorySession() error = %v, want context.Canceled", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("CloseFactorySession did not honor caller cancellation during cleanup")
+	}
+	if len(sessions.closeCalls) != 1 || lifecycle.stopCalls != 1 {
+		t.Fatalf("failed close cleanup effects = (close %d, stop %d), want (1, 1)", len(sessions.closeCalls), lifecycle.stopCalls)
+	}
+	if _, err := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{}); err == nil {
+		t.Fatal("InvokeFactorySession() after canceled cleanup error = nil, want retained closing target to reject work")
+	}
+
+	if err := svc.CloseFactorySession(context.Background(), started.SessionID); err != nil {
+		t.Fatalf("retry CloseFactorySession() error = %v", err)
+	}
+	if len(sessions.closeCalls) != 2 || lifecycle.stopCalls != 1 {
+		t.Fatalf("retry close effects = (close %d, stop %d), want (2, 1)", len(sessions.closeCalls), lifecycle.stopCalls)
+	}
+	if _, err := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{}); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("InvokeFactorySession() after successful retry error = %v, want ErrSessionNotFound", err)
 	}
 }
 
@@ -464,11 +903,15 @@ func TestServiceSatisfiesPublishedTargetExecutionCapability(t *testing.T) {
 		t.Fatalf("invoke calls = %v, want exactly 1 dispatched to the captured runtime", sessions.invokeCalls)
 	}
 
-	if _, err := client.Cancel(context.Background(), started.SessionID, factorysessions.ControlRequest{}); err != nil {
+	cancelled, err := client.Cancel(context.Background(), started.SessionID, factorysessions.ControlRequest{})
+	if err != nil {
 		t.Fatalf("Cancel() via TargetExecutionService error = %v", err)
 	}
-	if len(sessions.cancelCalls) != 1 {
-		t.Fatalf("cancel calls = %v, want exactly 1 forwarded to the captured runtime", sessions.cancelCalls)
+	if cancelled.SessionID != started.SessionID || cancelled.Outcome != factorysessions.LifecycleControlOutcomeNoOp {
+		t.Fatalf("Cancel() via TargetExecutionService result = %+v, want a no-op scoped to a completed target", cancelled)
+	}
+	if len(sessions.cancelCalls) != 0 {
+		t.Fatalf("durable session cancel calls = %v, want none -- this target cancels only a live invocation context", sessions.cancelCalls)
 	}
 
 	if err := client.CloseFactorySession(context.Background(), started.SessionID); err != nil {

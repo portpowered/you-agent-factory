@@ -300,6 +300,23 @@ func ValidateCancel(req acpsdk.CancelNotification) (CancelParams, error) {
 	return CancelParams{SessionID: SessionID(req.SessionId)}, nil
 }
 
+// CloseParams is the closed L1 V0 shape of a validated session/close
+// request. It keeps the ACP SDK request type at the transport boundary.
+type CloseParams struct {
+	SessionID SessionID
+}
+
+// ValidateClose validates a session/close request before it can capture a
+// Chat control intent or reach Factory Sessions. The pinned SDK's generated
+// Validate method deliberately accepts the zero value, so this compatibility
+// gate supplies the required session identity check itself.
+func ValidateClose(req acpsdk.CloseSessionRequest) (CloseParams, error) {
+	if req.SessionId == "" {
+		return CloseParams{}, errors.New("acp: sessionId is required")
+	}
+	return CloseParams{SessionID: SessionID(req.SessionId)}, nil
+}
+
 // ConfigOptionValue is the closed L1 V0 shape of a validated
 // session/set_config_option request: a session and config-option identity
 // plus exactly one of a boolean or select value-id payload.

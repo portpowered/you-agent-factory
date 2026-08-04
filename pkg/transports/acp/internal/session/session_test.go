@@ -344,6 +344,21 @@ func TestValidateCancel(t *testing.T) {
 	}
 }
 
+func TestValidateClose(t *testing.T) {
+	got, err := ValidateClose(acpsdk.CloseSessionRequest{SessionId: "sess-1"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.SessionID != "sess-1" {
+		t.Fatalf("SessionID = %q, want sess-1", got.SessionID)
+	}
+	roundTrip(t, got)
+
+	if _, err := ValidateClose(acpsdk.CloseSessionRequest{}); err == nil {
+		t.Fatal("expected an error for a missing sessionId")
+	}
+}
+
 func TestValidateSetConfigOption(t *testing.T) {
 	t.Run("accepts a boolean payload", func(t *testing.T) {
 		req := acpsdk.SetSessionConfigOptionRequest{
