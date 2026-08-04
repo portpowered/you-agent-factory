@@ -1362,6 +1362,52 @@ func TestLiveDrainTurnUpdatesSubscribeFailureIsNoOp(t *testing.T) {
 	}
 }
 
+// TestWaitForLiveStreamHead covers the live subscription's delivery guard:
+// a record must not be notified until the response bridge has advanced the
+// Chat Session stream head to cover its aggregate position. The canceled
+// case uses the invocation-owned context's explicit completion signal rather
+// than waiting for the guard's retry interval.
+func TestWaitForLiveStreamHead(t *testing.T) {
+	t.Run("returns current version once stream head covers record", func(t *testing.T) {
+		factoryTarget := &fakeFactoryTargetService{}
+		server, _ := newStreamingTestServer(t, factoryTarget)
+		chatSessions := server.chatSessions.(*fakeChatSessionsService)
+		chatSessions.getSessionResult.Session.Version = 7
+		chatSessions.getSessionResult.Session.StreamHead = 3
+
+		version, ready := server.waitForLiveStreamHead(context.Background(), streamingTestSessionID, 3)
+
+		if !ready || version != 7 {
+			t.Fatalf("waitForLiveStreamHead() = (%d, %v), want (7, true)", version, ready)
+		}
+	})
+
+	t.Run("stops when session lookup fails", func(t *testing.T) {
+		factoryTarget := &fakeFactoryTargetService{}
+		server, _ := newStreamingTestServer(t, factoryTarget)
+		server.chatSessions.(*fakeChatSessionsService).getSessionErr = errors.New("get session failed")
+
+		version, ready := server.waitForLiveStreamHead(context.Background(), streamingTestSessionID, 1)
+
+		if ready || version != 0 {
+			t.Fatalf("waitForLiveStreamHead() = (%d, %v), want (0, false)", version, ready)
+		}
+	})
+
+	t.Run("stops when turn completes before stream head advances", func(t *testing.T) {
+		factoryTarget := &fakeFactoryTargetService{}
+		server, _ := newStreamingTestServer(t, factoryTarget)
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		version, ready := server.waitForLiveStreamHead(ctx, streamingTestSessionID, 1)
+
+		if ready || version != 0 {
+			t.Fatalf("waitForLiveStreamHead() = (%d, %v), want (0, false)", version, ready)
+		}
+	})
+}
+
 // TestLiveDrainTurnUpdatesVersionFailureStopsOnRecordDelivery proves a
 // genuine GetSession failure while re-reading the session's current version
 // for a delivered record stops the live drain rather than dispatching
