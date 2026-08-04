@@ -149,6 +149,19 @@ func (f *fakeEventsAppender) Read(_ context.Context, req events.ReadRequest) (ev
 	}
 }
 
+// stubAppender is a bare EventsAppender double that delegates every Append
+// call to fn, used to force Sequence's less common outcome and error paths
+// (an underlying Events failure, or an outcome value Sequence does not
+// otherwise expect) without teaching fakeEventsAppender itself about
+// injected failures.
+type stubAppender struct {
+	fn func(context.Context, events.AppendRequest) (events.AppendResult, error)
+}
+
+func (s stubAppender) Append(ctx context.Context, req events.AppendRequest) (events.AppendResult, error) {
+	return s.fn(ctx, req)
+}
+
 // setRetentionLimit caps how many records topic keeps retained, lazily
 // creating the topic's state if no record has been committed to it yet, and
 // returns f for call chaining in test setup.
@@ -727,5 +740,162 @@ func TestStore_Sequence_ConcurrentChildNeverObservesTornParentState(t *testing.T
 		// child's Sequence call ran, which is the expected, safe outcome.
 	default:
 		t.Fatalf("child Sequence: got %v, want nil (won the race) or ErrNotFound (lost the race)", childErr)
+	}
+}
+
+// TestStore_Sequence_CancelledContextIsRejected proves Sequence checks
+// ctx.Err() before taking the Store lock or attempting any Events append, so
+// a caller racing a cancellation never observes a partial commit.
+func TestStore_Sequence_CancelledContextIsRejected(t *testing.T) {
+	store, session, appender := newSequencingTestSession(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := store.Sequence(ctx, sequenceRequest(session.ID, 1, "")); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Sequence(cancelled ctx): got %v, want context.Canceled", err)
+	}
+	if got := appender.commitCount(chatsessions.EventsTopic(session.ID)); got != 0 {
+		t.Fatalf("commit count after cancelled context = %d, want 0", got)
+	}
+}
+
+// TestStore_Sequence_AssignedItemFailingValidationIsRejected proves Sequence
+// validates the SequencedItem envelope it assembles (including the ItemID
+// its own IDGenerator minted) before ever attempting an Events append, by
+// wiring a generator that mints a blank ItemID.
+func TestStore_Sequence_AssignedItemFailingValidationIsRejected(t *testing.T) {
+	ctx := context.Background()
+	appender := newFakeEventsAppender()
+	calls := 0
+	blankAfterFirst := func() string {
+		calls++
+		if calls == 1 {
+			return "session-1"
+		}
+		return ""
+	}
+	store := NewStore(blankAfterFirst, fixedClock(time.Now())).WithEventsAppender(appender)
+	created, err := store.CreateSession(ctx, validCreateRequest())
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	if _, err := store.Sequence(ctx, sequenceRequest(created.Session.ID, 1, "")); !errors.Is(err, chatsessions.ErrRequiredValue) {
+		t.Fatalf("Sequence(blank minted ItemID): got %v, want ErrRequiredValue", err)
+	}
+	if got := appender.commitCount(chatsessions.EventsTopic(created.Session.ID)); got != 0 {
+		t.Fatalf("commit count after invalid assigned item = %d, want 0", got)
+	}
+}
+
+// TestStore_Sequence_AppendFailurePropagatesWithoutIndexingItem proves an
+// error reported by the injected EventsAppender itself (as opposed to a
+// non-error Duplicate/Accepted outcome) surfaces unchanged from Sequence, and
+// that the failed item's identity is never recorded as a valid ParentItemID
+// for a later Sequence call.
+func TestStore_Sequence_AppendFailurePropagatesWithoutIndexingItem(t *testing.T) {
+	ctx := context.Background()
+	appendErr := errors.New("events store unavailable")
+	appender := stubAppender{fn: func(context.Context, events.AppendRequest) (events.AppendResult, error) {
+		return events.AppendResult{}, appendErr
+	}}
+	store := NewStore(sequentialIDs("id"), fixedClock(time.Now())).WithEventsAppender(appender)
+	created, err := store.CreateSession(ctx, validCreateRequest())
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	if _, err := store.Sequence(ctx, sequenceRequest(created.Session.ID, 1, "")); !errors.Is(err, appendErr) {
+		t.Fatalf("Sequence(append failure): got %v, want %v", err, appendErr)
+	}
+}
+
+// TestStore_Sequence_UnexpectedAppendOutcomeIsReportedAsError proves Sequence
+// treats any events.AppendOutcome other than Accepted or Duplicate as an
+// error rather than silently returning a zero-value success, guarding
+// against Events ever widening its outcome vocabulary without Sequence being
+// updated to handle it.
+func TestStore_Sequence_UnexpectedAppendOutcomeIsReportedAsError(t *testing.T) {
+	ctx := context.Background()
+	const bogusOutcome = events.AppendOutcome(99)
+	appender := stubAppender{fn: func(_ context.Context, req events.AppendRequest) (events.AppendResult, error) {
+		return events.AppendResult{
+			Record: events.Record{
+				ID:             events.RecordID{Topic: req.Topic, Position: 1},
+				SourceType:     req.SourceType,
+				SourceID:       req.SourceID,
+				SourceSequence: req.SourceSequence,
+				SourceEventID:  req.SourceEventID,
+				SchemaID:       req.SchemaID,
+				Payload:        req.Payload,
+			},
+			Outcome: bogusOutcome,
+		}, nil
+	}}
+	store := NewStore(sequentialIDs("id"), fixedClock(time.Now())).WithEventsAppender(appender)
+	created, err := store.CreateSession(ctx, validCreateRequest())
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	if _, err := store.Sequence(ctx, sequenceRequest(created.Session.ID, 1, "")); err == nil {
+		t.Fatal("Sequence(unexpected outcome): got nil error, want a reported error")
+	}
+}
+
+// TestEqualJSON table-drives equalJSON's structural-equivalence and
+// malformed-input fallback branches directly, since contradictedField only
+// ever calls it against already-validated (therefore always well-formed)
+// payloads -- Sequence's own request path never exercises the fallback.
+func TestEqualJSON(t *testing.T) {
+	tests := []struct {
+		name string
+		a, b json.RawMessage
+		want bool
+	}{
+		{
+			name: "identical bytes",
+			a:    json.RawMessage(`{"text":"hello"}`),
+			b:    json.RawMessage(`{"text":"hello"}`),
+			want: true,
+		},
+		{
+			name: "structurally equal despite whitespace and key order",
+			a:    json.RawMessage(`{"a":1,"b":2}`),
+			b:    json.RawMessage(`{ "b": 2, "a": 1 }`),
+			want: true,
+		},
+		{
+			name: "structurally different",
+			a:    json.RawMessage(`{"text":"hello"}`),
+			b:    json.RawMessage(`{"text":"goodbye"}`),
+			want: false,
+		},
+		{
+			name: "a malformed falls back to byte comparison (equal bytes)",
+			a:    json.RawMessage(`{not-json`),
+			b:    json.RawMessage(`{not-json`),
+			want: true,
+		},
+		{
+			name: "a malformed falls back to byte comparison (different bytes)",
+			a:    json.RawMessage(`{not-json`),
+			b:    json.RawMessage(`{"text":"hello"}`),
+			want: false,
+		},
+		{
+			name: "b malformed falls back to byte comparison",
+			a:    json.RawMessage(`{"text":"hello"}`),
+			b:    json.RawMessage(`{also-not-json`),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := equalJSON(tt.a, tt.b); got != tt.want {
+				t.Fatalf("equalJSON(%s, %s) = %v, want %v", tt.a, tt.b, got, tt.want)
+			}
+		})
 	}
 }
