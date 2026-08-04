@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -15,13 +16,14 @@ import (
 )
 
 // lifecycleRuntimeRecorder adapts Factory Runtime's focused recording port to
-// the session's Recordings root without becoming a second lifecycle owner.
+// the session's Recordings-owned RecordingLifecycle capability without
+// becoming a second lifecycle owner.
 type lifecycleRuntimeRecorder struct {
 	mu            sync.Mutex
-	service       recordings.Service
-	recordingID   recordings.RecordingID
+	lifecycle     recordings.RecordingLifecycle
+	recordingID   recordings.LifecycleRecordingID
 	scope         recordings.CanonicalEventScope
-	target        recordings.RecordingArtifactReference
+	target        recordings.LifecycleArtifactReference
 	flushInterval time.Duration
 	now           func() time.Time
 	startedAt     time.Time
@@ -29,6 +31,7 @@ type lifecycleRuntimeRecorder struct {
 	seen          map[string]struct{}
 	nextSequence  recordings.CanonicalEventSequence
 	finalizeErr   error
+	stopErr       error
 	pending       []pendingRuntimeRecording
 }
 
@@ -38,9 +41,10 @@ type pendingRuntimeRecording struct {
 }
 
 var _ recordings.RuntimeRecorder = (*lifecycleRuntimeRecorder)(nil)
+var _ recordings.RuntimeRecordingBinder = (*lifecycleRuntimeRecorder)(nil)
 
 // NewLifecycleRuntimeRecorder prepares a runtime recorder whose lifecycle is
-// activated only when Factory Sessions binds the composed Recordings root.
+// activated only when Factory Sessions binds a RecordingLifecycle capability.
 func NewLifecycleRuntimeRecorder(
 	flushInterval time.Duration,
 	loaded factorydefinitions.LoadedFactorySource,
@@ -76,7 +80,7 @@ func NewLifecycleRuntimeRecorder(
 		return nil, err
 	}
 	return &lifecycleRuntimeRecorder{
-		target:        recordings.RecordingArtifactReference(recordPath),
+		target:        recordings.LifecycleArtifactReference(recordPath),
 		flushInterval: flushInterval,
 		now:           now,
 		startedAt:     recordedAt,
@@ -85,40 +89,45 @@ func NewLifecycleRuntimeRecorder(
 	}, nil
 }
 
-func (recorder *lifecycleRuntimeRecorder) BindRecordingService(
-	service recordings.Service,
+// BindRecordingLifecycle implements recordings.RuntimeRecordingBinder by
+// binding this runtime recorder to an already-constructed RecordingLifecycle
+// capability rather than the broad Recordings Service.
+func (recorder *lifecycleRuntimeRecorder) BindRecordingLifecycle(
+	lifecycle recordings.RecordingLifecycle,
 	scope recordings.CanonicalEventScope,
 ) error {
 	if recorder == nil {
 		return nil
 	}
-	if service == nil {
-		return fmt.Errorf("Recordings root service is required")
+	if lifecycle == nil {
+		return fmt.Errorf("Recordings lifecycle capability is required")
 	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
-	if recorder.service != nil {
-		if recorder.service == service && recorder.scope == scope {
+	if recorder.lifecycle != nil {
+		if recorder.lifecycle == lifecycle && recorder.scope == scope {
 			return nil
 		}
 		return recordings.ErrRecordingBindingConflict
 	}
-	started, err := service.StartRecording(recordings.StartRecordingRequest{
-		Enabled: true,
-		Scope:   scope,
-		Target: recordings.RecordingTargetRequest{
-			Artifact: recorder.target,
-		},
+	result, err := lifecycle.Begin(recordings.BeginRecordingRequest{
+		Enabled:       true,
+		Scope:         recordings.LifecycleScope{FactorySessionID: scope.FactorySessionID},
+		Artifact:      recorder.target,
 		FlushInterval: recorder.flushInterval,
 	})
 	if err != nil {
 		return err
 	}
-	recorder.service = service
-	recorder.recordingID = started.Status.RecordingID
+	recorder.lifecycle = lifecycle
+	recorder.recordingID = result.Status.RecordingID
 	recorder.scope = scope
 	if err := recorder.recordEventLocked(recorder.initialEvent); err != nil {
-		return fmt.Errorf("record initial Factory snapshot: %w", err)
+		appendErr := fmt.Errorf("record initial Factory snapshot: %w", err)
+		recorder.stopErr = recorder.lifecycle.Stop(recordings.StopLifecycleRequest{
+			RecordingID: recorder.recordingID,
+		})
+		return errors.Join(appendErr, recorder.stopErr)
 	}
 	for _, pending := range recorder.pending {
 		if pending.event != nil {
@@ -145,10 +154,10 @@ func (recorder *lifecycleRuntimeRecorder) Stop() {
 	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
-	if recorder.service == nil {
+	if recorder.lifecycle == nil {
 		return
 	}
-	_, _ = recorder.service.StopRecording(recordings.StopRecordingRequest{
+	recorder.stopErr = recorder.lifecycle.Stop(recordings.StopLifecycleRequest{
 		RecordingID: recorder.recordingID,
 	})
 }
@@ -159,7 +168,7 @@ func (recorder *lifecycleRuntimeRecorder) RecordEvent(event factoryruntime.Facto
 	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
-	if recorder.service == nil {
+	if recorder.lifecycle == nil {
 		event.Payload = append([]byte(nil), event.Payload...)
 		recorder.pending = append(recorder.pending, pendingRuntimeRecording{event: &event})
 		return
@@ -172,8 +181,8 @@ func (recorder *lifecycleRuntimeRecorder) RecordEvent(event factoryruntime.Facto
 func (recorder *lifecycleRuntimeRecorder) recordEventLocked(
 	event factoryruntime.FactoryEvent,
 ) error {
-	if recorder.service == nil {
-		return fmt.Errorf("Recordings root service is not bound")
+	if recorder.lifecycle == nil {
+		return fmt.Errorf("Recordings lifecycle capability is not bound")
 	}
 	if _, exists := recorder.seen[event.Id]; exists {
 		return nil
@@ -183,9 +192,9 @@ func (recorder *lifecycleRuntimeRecorder) recordEventLocked(
 	canonical.Scope = recorder.scope
 	canonical.Sequence = recorder.nextSequence
 	canonical.Cursor.Sequence = recorder.nextSequence
-	result, err := recorder.service.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
+	result, err := recorder.lifecycle.AppendEvent(recordings.AppendLifecycleEventRequest{
 		RecordingID: recorder.recordingID,
-		Event:       canonical,
+		Event:       lifecycleEventFromCanonical(canonical),
 	})
 	if err != nil {
 		return err
@@ -201,7 +210,7 @@ func (recorder *lifecycleRuntimeRecorder) RecordError(err error) {
 	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
-	if recorder.service == nil {
+	if recorder.lifecycle == nil {
 		recorder.pending = append(recorder.pending, pendingRuntimeRecording{err: err})
 		return
 	}
@@ -209,12 +218,12 @@ func (recorder *lifecycleRuntimeRecorder) RecordError(err error) {
 }
 
 func (recorder *lifecycleRuntimeRecorder) recordErrorLocked(code, operation string, cause error) {
-	if recorder.service == nil || cause == nil {
+	if recorder.lifecycle == nil || cause == nil {
 		return
 	}
-	_, _ = recorder.service.RecordRecordingError(recordings.RecordRecordingErrorRequest{
+	_, _ = recorder.lifecycle.RecordFailure(recordings.RecordLifecycleFailureRequest{
 		RecordingID: recorder.recordingID,
-		Failure: recordings.RecordingFailure{
+		Failure: recordings.LifecycleFailure{
 			Code:       code,
 			Message:    operation + ": " + cause.Error(),
 			RecordedAt: recorder.now().UTC(),
@@ -233,22 +242,26 @@ func (recorder *lifecycleRuntimeRecorder) Flush() error {
 	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
-	if recorder.service == nil {
-		return fmt.Errorf("Recordings root service is not bound")
+	if recorder.lifecycle == nil {
+		return fmt.Errorf("Recordings lifecycle capability is not bound")
 	}
-	_, err := recorder.service.FlushRecording(recordings.FlushRecordingRequest{
+	_, err := recorder.lifecycle.Flush(recordings.FlushLifecycleRequest{
 		RecordingID: recorder.recordingID,
 	})
 	return err
 }
 
+// Err reports the last preserved cleanup or finalize failure. Stop failures
+// surface here even before Finalize runs, so startup callers that must stop
+// periodic work on an early failure (before finish) can still observe and
+// join the cleanup cause rather than discarding it.
 func (recorder *lifecycleRuntimeRecorder) Err() error {
 	if recorder == nil {
 		return nil
 	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
-	return recorder.finalizeErr
+	return errors.Join(recorder.stopErr, recorder.finalizeErr)
 }
 
 func (recorder *lifecycleRuntimeRecorder) Finalize(finishedAt time.Time) error {
@@ -257,8 +270,8 @@ func (recorder *lifecycleRuntimeRecorder) Finalize(finishedAt time.Time) error {
 	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
-	if recorder.service == nil {
-		return fmt.Errorf("Recordings root service is not bound")
+	if recorder.lifecycle == nil {
+		return fmt.Errorf("Recordings lifecycle capability is not bound")
 	}
 	if recorder.finalizeErr != nil {
 		return recorder.finalizeErr
@@ -266,9 +279,26 @@ func (recorder *lifecycleRuntimeRecorder) Finalize(finishedAt time.Time) error {
 	if err := recorder.recordEventLocked(factoryruntime.RunFinishedFactoryEvent(recorder.startedAt, finishedAt)); err != nil {
 		recorder.recordErrorLocked("terminal_metadata_failed", "record terminal Factory event", err)
 	}
-	_, recorder.finalizeErr = recorder.service.FinishRecording(recordings.FinishRecordingRequest{
+	_, recorder.finalizeErr = recorder.lifecycle.Finish(recordings.FinishLifecycleRequest{
 		RecordingID: recorder.recordingID,
 		FinishedAt:  finishedAt,
 	})
 	return recorder.finalizeErr
+}
+
+func lifecycleEventFromCanonical(event recordings.CanonicalEvent) recordings.LifecycleEvent {
+	return recordings.LifecycleEvent{
+		ID:          string(event.ID),
+		Sequence:    int64(event.Sequence),
+		FactoryTick: event.FactoryTick,
+		Scope:       recordings.LifecycleScope{FactorySessionID: event.Scope.FactorySessionID},
+		Cursor: recordings.LifecycleEventCursor{
+			StreamGenerationID: event.Cursor.StreamGenerationID,
+			Sequence:           int64(event.Cursor.Sequence),
+		},
+		RecordedAt:    event.RecordedAt,
+		Kind:          string(event.Kind),
+		Payload:       event.Payload,
+		SourceContext: event.SourceContext,
+	}
 }

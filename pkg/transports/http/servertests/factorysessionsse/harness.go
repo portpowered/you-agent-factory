@@ -18,11 +18,12 @@ import (
 )
 
 const (
-	defaultFactorySessionSSEHarnessTimeout   = 5 * time.Second
-	factorySessionSSEBackendScopeHeader      = "X-Factory-Session-Backend-Scope-Id"
-	factorySessionSSELogicalSessionKeyHeader = "X-Factory-Session-Logical-Session-Key-Id"
-	factorySessionSSEFactorySessionHeader    = "X-Factory-Session-Factory-Session-Id"
-	factorySessionSSEStreamGenerationHeader  = "X-Factory-Session-Stream-Generation-Id"
+	defaultFactorySessionSSEHarnessTimeout    = 5 * time.Second
+	factorySessionSSEBackendScopeHeader       = "X-Factory-Session-Backend-Scope-Id"
+	factorySessionSSELogicalSessionKeyHeader  = "X-Factory-Session-Logical-Session-Key-Id"
+	factorySessionSSEFactorySessionHeader     = "X-Factory-Session-Factory-Session-Id"
+	factorySessionSSEStreamGenerationHeader   = "X-Factory-Session-Stream-Generation-Id"
+	factorySessionSSERetainedEventCountHeader = "X-Factory-Session-Retained-Event-Count"
 )
 
 var (

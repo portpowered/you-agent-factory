@@ -121,6 +121,45 @@ func TestServeRejectsAlreadyCancelledContext(t *testing.T) {
 	}
 }
 
+// writerFunc adapts a function to io.Writer.
+type writerFunc func(p []byte) (int, error)
+
+func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
+
+// TestServeRejectsContextCancelledBetweenReads proves the read loop's own
+// per-iteration ctx.Err() check (distinct from Serve's one-time pre-check in
+// TestServeRejectsAlreadyCancelledContext, and from the mid-read cancellation
+// in TestServeReturnsContextErrorOnMidReadCancellation) actually stops a
+// second line from ever being read once the context is cancelled between two
+// requests on the same connection. It cancels ctx from inside the response
+// write for the first line -- synchronous with serveConnection's own
+// goroutine, so no timing or extra synchronization is needed -- and asserts
+// only that first response was written before Serve returns ctx's error.
+func TestServeRejectsContextCancelledBetweenReads(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	in := strings.NewReader(
+		`{"jsonrpc":"2.0","id":1,"method":"unknown/method"}` + "\n" +
+			`{"jsonrpc":"2.0","id":2,"method":"unknown/method"}` + "\n",
+	)
+
+	var buf bytes.Buffer
+	writeCount := 0
+	out := writerFunc(func(p []byte) (int, error) {
+		writeCount++
+		cancel()
+		return buf.Write(p)
+	})
+
+	server := New(nil, nil, nil, nil, nil, nil, nil)
+	err := server.Serve(ctx, in, out)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Serve() error = %v, want context.Canceled", err)
+	}
+	if writeCount != 1 {
+		t.Fatalf("write count = %d, want exactly 1 (second line must never be read once ctx is cancelled)", writeCount)
+	}
+}
+
 func TestServeMintsDistinctConnectionIDsPerInvocation(t *testing.T) {
 	logger := &recordingLogger{}
 	server := New(logger, nil, nil, nil, nil, nil, nil)
@@ -888,6 +927,55 @@ func TestServeSurfacesWriterFailureAndStopsFurtherWrites(t *testing.T) {
 	}
 	if writer.calls != 1 {
 		t.Fatalf("writer was called %d times, want exactly 1 (no writes after the first failure)", writer.calls)
+	}
+}
+
+// TestServeAsyncPromptResponseWriteFailureEndsConnectionWithoutInputEOF
+// proves a "session/prompt" response write failure -- discovered only
+// asynchronously, on the dispatched prompt's own goroutine, after
+// serveConnection's read loop has already gone back to waiting for the next
+// line -- ends Serve with that write error immediately, instead of leaving
+// Serve blocked forever waiting for more input that never arrives. The
+// input pipe here is deliberately never closed and never written to again
+// after the one "session/prompt" line: before serveConnection additionally
+// selected on promptGroup's own Failed() signal concurrently with its
+// blocking read, this exact "output already broken, input still open with
+// nothing more coming" case had no way to unblock Serve. This server has no
+// chat_sessions/factory_sessions collaborators configured, so the dispatched
+// prompt fails fast with a bounded internal-error response instead of
+// blocking on a real Factory call -- the only thing this test needs is that
+// some response gets written and that write itself fails.
+func TestServeAsyncPromptResponseWriteFailureEndsConnectionWithoutInputEOF(t *testing.T) {
+	wantErr := errors.New("acp test: simulated async write failure")
+	writer := &countingErrorWriter{err: wantErr}
+
+	server := New(nil, nil, nil, nil, nil, nil, nil)
+
+	pr, pw := io.Pipe()
+	t.Cleanup(func() {
+		_ = pr.Close()
+		_ = pw.Close()
+	})
+
+	done := make(chan error, 1)
+	go func() { done <- server.Serve(context.Background(), pr, writer) }()
+
+	promptLine := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"session/prompt","params":%s}`+"\n",
+		promptTextParams("session-1", "hello"))
+	if _, err := pw.Write([]byte(promptLine)); err != nil {
+		t.Fatalf("write session/prompt line: %v", err)
+	}
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, wantErr) {
+			t.Fatalf("Serve() error = %v, want %v", err, wantErr)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve did not return after the dispatched prompt's response write failed, despite input remaining open with no EOF")
+	}
+	if writer.calls != 1 {
+		t.Fatalf("writer was called %d times, want exactly 1", writer.calls)
 	}
 }
 

@@ -38,8 +38,8 @@ func TestLifecycleRuntimeRecorderAcceptsRuntimeRootFinishedEvent(t *testing.T) {
 	)
 	recorder := newLifecycleRecorderForTest(t, startedAt, "runtime-root-finished.json")
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-runtime-root"}
-	if err := recorder.BindRecordingService(root, scope); err != nil {
-		t.Fatalf("BindRecordingService: %v", err)
+	if err := recorder.BindRecordingLifecycle(root.(recordings.RecordingLifecycle), scope); err != nil {
+		t.Fatalf("BindRecordingLifecycle: %v", err)
 	}
 
 	runtimeEvent := factoryruntime.FactoryEvent{
@@ -56,7 +56,7 @@ func TestLifecycleRuntimeRecorderAcceptsRuntimeRootFinishedEvent(t *testing.T) {
 	}
 
 	status, err := root.QueryRecordingStatus(recordings.RecordingStatusRequest{
-		RecordingID: recorder.recordingID,
+		RecordingID: recordings.RecordingID(recorder.recordingID),
 	})
 	if err != nil {
 		t.Fatalf("QueryRecordingStatus: %v", err)
@@ -66,7 +66,7 @@ func TestLifecycleRuntimeRecorderAcceptsRuntimeRootFinishedEvent(t *testing.T) {
 	}
 
 	built, err := root.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{
-		RecordingID: recorder.recordingID,
+		RecordingID: recordings.RecordingID(recorder.recordingID),
 	})
 	if err != nil {
 		t.Fatalf("BuildPortableArtifact: %v", err)

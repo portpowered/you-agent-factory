@@ -5,7 +5,7 @@ package stdio
 // aggregate topic in order, projecting each record, and delivering it before
 // the V1 fallback (deliverPromptUpdates). It intentionally does not
 // implement the producer side itself -- the Chat Sessions-owned
-// factorysessionsshim.BridgeFactoryResponseEvents/RunWithResponseBridge
+// responsebridge.Service.Run
 // (invoked through the injected acp.ResponseBridge collaborator; see
 // response_bridge.go and dispatchFactoryTurn's two Factory dispatch branches
 // in session_prompt.go) owns calling chatsessions.Service.Sequence and
@@ -28,6 +28,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
+	"time"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
@@ -44,6 +46,13 @@ import (
 // streamTurnUpdates loops until Read reports ReadOutcomeAtHead.
 const retainedReadBatchLimit = 64
 
+// liveStreamHeadPollInterval bounds how long a live subscriber waits between
+// observing a sequenced event and observing the producer's accompanying
+// StreamHead advancement. Sequence commits the event before AdvanceStreamHead
+// makes it deliverable, so the tiny wait is necessary to avoid notifying a
+// record whose attachment cursor cannot yet be persisted.
+const liveStreamHeadPollInterval = time.Millisecond
+
 // attachmentCache remembers one connection's already-registered
 // chatsessions.Attachment per Chat Session for the lifetime of one
 // serveConnection invocation, so a later turn on the same session reuses the
@@ -55,10 +64,10 @@ const retainedReadBatchLimit = 64
 // contextWithAttachmentCache), mirroring the existing promptNotifier
 // pattern in session_prompt.go, rather than as an explicit parameter every
 // handler and existing test would otherwise have to accept. It needs no
-// synchronization of its own: serveConnection dispatches every request on
-// one connection strictly sequentially (see its own doc comment), so no two
-// goroutines ever observe the same attachmentCache instance concurrently.
+// synchronization so the connection's asynchronous prompt execution cannot
+// race a live drain or another session's prompt while reusing this cache.
 type attachmentCache struct {
+	mu        sync.Mutex
 	bySession map[string]chatsessions.Attachment
 }
 
@@ -88,6 +97,8 @@ func (c *attachmentCache) get(sessionID string) (attachment chatsessions.Attachm
 	if c == nil {
 		return chatsessions.Attachment{}, false
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	attachment, ok = c.bySession[sessionID]
 	return attachment, ok
 }
@@ -99,6 +110,8 @@ func (c *attachmentCache) set(sessionID string, a chatsessions.Attachment) {
 	if c == nil {
 		return
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.bySession == nil {
 		c.bySession = make(map[string]chatsessions.Attachment)
 	}
@@ -127,7 +140,13 @@ func (s *Server) detachAttachments(ctx context.Context, cache *attachmentCache) 
 	}
 	detachCtx := context.WithoutCancel(ctx)
 	logger := logging.EnsureLogger(s.logger)
+	cache.mu.Lock()
+	attachments := make(map[string]chatsessions.Attachment, len(cache.bySession))
 	for sessionID, attachment := range cache.bySession {
+		attachments[sessionID] = attachment
+	}
+	cache.mu.Unlock()
+	for sessionID, attachment := range attachments {
 		if _, err := s.chatSessions.Detach(detachCtx, chatsessions.DetachRequest{
 			SessionID:    sessionID,
 			AttachmentID: attachment.ID,
@@ -299,7 +318,7 @@ func (s *Server) streamTurnUpdates(
 // delivers each record through notify as soon as the subscription observes
 // it -- genuine mid-generation delivery, running concurrently with the
 // in-flight Factory invocation dispatchFactoryInvocation wraps (see
-// acp.ResponseBridge and factorysessionsshim.RunWithResponseBridge's own doc
+// acp.ResponseBridge and responsebridge.Service.Run's own doc
 // comments). ctx is the bridge-derived context RunWithResponseBridge cancels
 // once invoke returns, so Subscription.Next(ctx) unblocks and this method
 // returns as soon as the turn's dispatch itself completes.
@@ -360,8 +379,8 @@ func (s *Server) liveDrainTurnUpdates(ctx context.Context, connectionID, session
 		delivery := subscription.Next(ctx)
 		switch delivery.Kind {
 		case events.DeliveryRecord:
-			version, versionErr := s.currentSessionVersion(ctx, sessionID, sessionVersion)
-			if versionErr != nil {
+			version, ready := s.waitForLiveStreamHead(ctx, sessionID, delivery.Record.ID.Position)
+			if !ready {
 				return deliveredMessage
 			}
 			stop, delivered, drainErr := s.drainRecords(ctx, sessionID, version, &attachment, []events.Record{delivery.Record}, notify)
@@ -384,6 +403,43 @@ func (s *Server) liveDrainTurnUpdates(ctx context.Context, connectionID, session
 			// this best-effort drain the same way: streamTurnUpdates' own
 			// post-invocation sweep is the guaranteed-correct backstop.
 			return deliveredMessage
+		}
+	}
+}
+
+// waitForLiveStreamHead returns the latest session version only after the
+// sequenced record at position is covered by Session.StreamHead. Events are
+// visible immediately after Sequence, while AdvanceStreamHead is a following
+// optimistic operation, so a subscription can otherwise receive a record in
+// the short interval where acknowledging it is impossible. Crucially, this
+// waits before notifying the client: if the turn finishes before the head
+// advances, the retained post-invocation drain delivers the record once
+// instead of redelivering an already-notified record.
+func (s *Server) waitForLiveStreamHead(
+	ctx context.Context,
+	sessionID string,
+	position events.AggregateSequence,
+) (uint64, bool) {
+	for {
+		current, err := s.chatSessions.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: sessionID})
+		if err != nil {
+			return 0, false
+		}
+		if current.Session.StreamHead >= uint64(position) {
+			return current.Session.Version, true
+		}
+
+		timer := time.NewTimer(liveStreamHeadPollInterval)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			return 0, false
+		case <-timer.C:
 		}
 	}
 }
@@ -482,12 +538,7 @@ func (s *Server) drainRecords(
 		// time -- directly violating this transport's "at most once per
 		// attachment" delivery guarantee. Matches detachAttachments' identical
 		// "must finish despite ctx already being canceled" idiom.
-		ackResult, ackErr := s.chatSessions.AcknowledgeAttachment(context.WithoutCancel(ctx), chatsessions.AcknowledgeAttachmentRequest{
-			SessionID:       sessionID,
-			AttachmentID:    attachment.ID,
-			ExpectedVersion: sessionVersion,
-			AfterSequence:   rec.ID.Position,
-		})
+		ackResult, ackErr := s.acknowledgeDeliveredPosition(ctx, sessionID, attachment.ID, sessionVersion, rec.ID.Position)
 		if ackErr != nil {
 			var posErr *chatsessions.AttachmentPositionError
 			if errors.As(ackErr, &posErr) {
@@ -499,6 +550,42 @@ func (s *Server) drainRecords(
 		cache.set(sessionID, *attachment)
 	}
 	return false, deliveredMessage, nil
+}
+
+// acknowledgeDeliveredPosition persists a position already handed to the
+// client. The response bridge can advance StreamHead again between the live
+// drain's head observation and this acknowledgement, making only the
+// optimistic ExpectedVersion stale. Refresh and retry that benign conflict so
+// a delivered record is not replayed by the retained catch-up drain. Other
+// failures retain drainRecords' existing behavior.
+func (s *Server) acknowledgeDeliveredPosition(
+	ctx context.Context,
+	sessionID, attachmentID string,
+	expectedVersion uint64,
+	position events.AggregateSequence,
+) (chatsessions.AcknowledgeAttachmentResult, error) {
+	ackCtx := context.WithoutCancel(ctx)
+	for {
+		result, err := s.chatSessions.AcknowledgeAttachment(ackCtx, chatsessions.AcknowledgeAttachmentRequest{
+			SessionID:       sessionID,
+			AttachmentID:    attachmentID,
+			ExpectedVersion: expectedVersion,
+			AfterSequence:   position,
+		})
+		if err == nil {
+			return result, nil
+		}
+
+		var conflict *chatsessions.ConflictError
+		if !errors.As(err, &conflict) {
+			return chatsessions.AcknowledgeAttachmentResult{}, err
+		}
+		current, getErr := s.chatSessions.GetSession(ackCtx, chatsessions.GetSessionRequest{SessionID: sessionID})
+		if getErr != nil {
+			return chatsessions.AcknowledgeAttachmentResult{}, getErr
+		}
+		expectedVersion = current.Session.Version
+	}
 }
 
 // deliverReadTimeGap projects and delivers one read-time retention gap that

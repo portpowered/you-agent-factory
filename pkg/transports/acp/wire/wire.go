@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/stdio"
 )
@@ -21,19 +22,14 @@ import (
 // binding, session creation, or persistence.
 //
 // chatSessions and catalog are the canonical Chat Sessions collaborators
-// "session/new" dispatches to, factoryTarget is the consumer-owned Factory
-// Sessions shim ordinary prompt delegation starts or invokes against,
-// eventsService is the canonical Events collaborator an admitted prompt
-// turn drains chat-session/<id>/events through before falling back to V1
-// synchronous final text, and resolveHomeDir resolves the operator home
-// directory that call uses to derive the Operator Settings document path
-// and Factory discovery roots. This package injects exactly the instances
-// its caller supplies; it never resolves them itself.
+// "session/new" dispatches to. factoryTarget is Factory Sessions' own
+// target-execution capability and eventsService is the canonical aggregate
+// stream ordinary prompt delivery drains. This package only injects them.
 func NewServer(
 	logger logging.Logger,
 	chatSessions chatsessions.Service,
 	catalog chatsessions.FactoryTargetCatalogService,
-	factoryTarget acp.FactoryTargetService,
+	factoryTarget factorysessions.TargetExecutionService,
 	eventsService events.Service,
 	resolveHomeDir func() (string, error),
 	responseBridge acp.ResponseBridge,

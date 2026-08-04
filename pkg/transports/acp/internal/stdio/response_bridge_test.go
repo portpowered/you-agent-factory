@@ -8,10 +8,8 @@ import (
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
-	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 )
 
@@ -40,7 +38,7 @@ func TestDispatchFactoryInvocation_NilResponseBridgeCallsInvokeDirectly(t *testi
 func TestDispatchFactoryInvocation_NilChatSessionsOrFactoryTargetSkipsBridge(t *testing.T) {
 	bridgeCalled := false
 	bridge := func(
-		context.Context, chatsessions.Service, acp.FactoryTargetService, string, uint64, string,
+		context.Context, factorysessions.TargetExecutionService, string, uint64, string,
 		func(context.Context),
 		func(context.Context) (factorysessions.InvocationResult, error),
 	) (factorysessions.InvocationResult, error) {
@@ -68,8 +66,7 @@ func TestDispatchFactoryInvocation_CallsInjectedResponseBridge(t *testing.T) {
 	var gotLiveDrainNonNil bool
 	bridge := func(
 		ctx context.Context,
-		_ chatsessions.Service,
-		_ acp.FactoryTargetService,
+		_ factorysessions.TargetExecutionService,
 		chatSessionID string,
 		sessionVersion uint64,
 		factorySessionID string,
@@ -148,8 +145,7 @@ func TestHandleSessionPromptLiveDrainDeliversRecordBeforeInvokeReturns(t *testin
 
 	server.responseBridge = func(
 		ctx context.Context,
-		_ chatsessions.Service,
-		_ acp.FactoryTargetService,
+		_ factorysessions.TargetExecutionService,
 		chatSessionID string,
 		_ uint64,
 		_ string,
@@ -165,6 +161,14 @@ func TestHandleSessionPromptLiveDrainDeliversRecordBeforeInvokeReturns(t *testin
 
 		eventsSvc.waitForSubscriber(t)
 		eventsSvc.seed(t, chatSessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("live hello"))
+		// A real response bridge advances the session head immediately after it
+		// sequences this record. Model that producer commit explicitly so this
+		// test keeps proving live delivery rather than a fake-only event-store
+		// shortcut that never makes the event acknowledgeable.
+		chatSessions := server.chatSessions.(*fakeChatSessionsService)
+		chatSessions.mu.Lock()
+		chatSessions.getSessionResult.Session.StreamHead = 1
+		chatSessions.mu.Unlock()
 
 		select {
 		case <-liveDelivered:

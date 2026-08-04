@@ -229,9 +229,17 @@ type GetSessionRequest struct {
 	SessionID string
 }
 
-// GetSessionResult carries the current Session state.
+// GetSessionResult carries the current Session state and the immutable
+// snapshot of its current TargetEpisode (Session.TargetEpisode's own
+// numbered episode) -- the same episode shape StartTurnResult.Episode
+// already exposes for an admission, but reachable here for a caller that
+// needs to resolve the session's currently bound FactorySessionID
+// independent of admitting a turn, for example forwarding an out-of-band
+// session/cancel notification to the exact Factory Session identity a prior
+// turn captured.
 type GetSessionResult struct {
 	Session Session
+	Episode TargetEpisode
 }
 
 // SetTargetRequest carries the caller identity, target session, expected

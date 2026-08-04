@@ -215,7 +215,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v31 := provideFactorySessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, v23, v25, v26, v19, responseEventIDGenerator, responseEventRetentionLimits, v27, ptyAllocator, v28, providerRegistry, v29, workersMockCommandRunnerFactory, v30, edges2, eventsService)
 	v32 := provideRecordingsProjectionFactory()
 	storage := provideReplayArtifactStorage()
-	v33 := provideRecordingsFactory(edges2, v5, storage)
+	v33 := provideRecordingLifecycleFactory(edges2, v5, storage)
 	v34 := provideRuntimeLedgerFactory()
 	v35 := provideLoadedFactorySnapshotCapturer()
 	v36 := provideRuntimeRecorderFactory(v35)
@@ -329,7 +329,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		FactorySessionsService:           factorysessionsService,
 		FactorySessionExecutionFactory:   v31,
 		RecordingsProjectionFactory:      v32,
-		RecordingsFactory:                v33,
+		RecordingLifecycleFactory:        v33,
 		RuntimeLedgerFactory:             v34,
 		RuntimeRecorderFactory:           v36,
 		ReplayClockFactory:               v37,
@@ -503,9 +503,10 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	factoryTargetService := provideACPServerFactoryTargetService(v83)
-	responseBridge := provideACPServerResponseBridge()
-	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, factoryTargetService, eventsService, wireAcpServerResolveHomeDir, responseBridge)
+	targetExecutionService := provideACPServerFactoryTargetService(v83)
+	v84 := provideChatSessionsResponseBridge(chatsessionsService)
+	responseBridge := provideACPServerResponseBridge(v84)
+	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, targetExecutionService, eventsService, wireAcpServerResolveHomeDir, responseBridge)
 	commandOperations := cli.CommandOperations{
 		ObserveCLI:                        cliObserver,
 		NamedFactoryCatalog:               v,
@@ -557,23 +558,23 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	stdioOpener := stdio.NewOpener()
-	v84 := provideFixtureStdioApplicationBuilder(stdioRunnerBuilder, runnerFactory, stdioOpener, v69, workflowPreviewOperation)
+	v85 := provideFixtureStdioApplicationBuilder(stdioRunnerBuilder, runnerFactory, stdioOpener, v69, workflowPreviewOperation)
 	openedStdioRunnerBuilder, err := application.NewOpenedStdioRunnerBuilder(managedRunnerFactory)
 	if err != nil {
 		return nil, err
 	}
-	v85 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, v69)
-	v86, err := wire2.NewStdioOpeningService(v65, v84, v85)
+	v86 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, v69)
+	v87, err := wire2.NewStdioOpeningService(v65, v85, v86)
 	if err != nil {
 		return nil, err
 	}
-	processStdioApplicationOpener, err := provideStdioApplicationOpener(v86)
+	processStdioApplicationOpener, err := provideStdioApplicationOpener(v87)
 	if err != nil {
 		return nil, err
 	}
-	v87 := provideSystemInitializationInspectPath(edges2)
-	v88 := provideSystemInitializationLegacyFactoryMigrationFileSystem(edges2)
-	systeminitializationService, err := provideSystemInitializationService(v47, packagedInstallationFileSystem, packagedFactoryCatalogOperations, configLoader, backendScopeEnsurer, v87, v88)
+	v88 := provideSystemInitializationInspectPath(edges2)
+	v89 := provideSystemInitializationLegacyFactoryMigrationFileSystem(edges2)
+	systeminitializationService, err := provideSystemInitializationService(v47, packagedInstallationFileSystem, packagedFactoryCatalogOperations, configLoader, backendScopeEnsurer, v88, v89)
 	if err != nil {
 		return nil, err
 	}
@@ -617,6 +618,7 @@ var servicesSet = wire3.NewSet(
 	provideACPServerFactoryTarget,
 	provideACPServerFactoryTargetService,
 	provideACPServerResolveHomeDir,
+	provideChatSessionsResponseBridge,
 	provideACPServerResponseBridge,
 	provideACPServer,
 	provideOperatorConfigDecoder,
@@ -685,7 +687,7 @@ var servicesSet = wire3.NewSet(
 	provideFactorySessionExecutionFactory,
 	provideConductorInvocationWithProgressFactory,
 	provideRecordingsProjectionFactory,
-	provideRecordingsFactory,
+	provideRecordingLifecycleFactory,
 	provideRuntimeLedgerFactory,
 	provideReplayArtifactStorage,
 	provideRuntimeRecorderFactory,

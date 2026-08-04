@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -20,11 +21,27 @@ import (
 // required directly injected workers.WorkstationExecutionService.
 var ErrMissingExecution = errors.New("worker sessions: execution service is required")
 
+// ErrMissingEventsAppender reports that New was constructed without the one
+// required directly injected EventsAppender.
+var ErrMissingEventsAppender = errors.New("worker sessions: events appender is required")
+
+// EventsAppender is the narrow Events dependency Start's before-handoff
+// publication barrier needs: commit one source-native record into a topic's
+// aggregate ordering. registry depends on this port rather than the full
+// events.Service so a caller wiring only this package's own tests never has
+// to satisfy Read/Subscribe/AttachSource too. Any events.Service value
+// already satisfies this interface structurally.
+type EventsAppender interface {
+	Append(context.Context, events.AppendRequest) (events.AppendResult, error)
+}
+
 type registry struct {
-	mu        sync.RWMutex
-	sessions  map[string]workersessions.Session
-	execution workers.WorkstationExecutionService
-	logger    logging.Logger
+	mu           sync.RWMutex
+	sessions     map[string]workersessions.Session
+	publications map[string]*publication
+	execution    workers.WorkstationExecutionService
+	events       EventsAppender
+	logger       logging.Logger
 }
 
 // Compile-time proof that production registry seals the W1+W2 root contract
@@ -34,16 +51,23 @@ var _ workersessions.Service = (*registry)(nil)
 
 // New constructs the process-local Worker Session registry from the one
 // directly injected workers.WorkstationExecutionService that Start hands
-// attempts to. A nil logger falls back to logging.NoopLogger. A nil
-// execution is rejected: Start has no meaningful behavior without it.
-func New(execution workers.WorkstationExecutionService, logger logging.Logger) (workersessions.Service, error) {
+// attempts to and the one directly injected EventsAppender Start's
+// before-handoff publication barrier commits through. A nil logger falls
+// back to logging.NoopLogger. A nil execution or nil eventsAppender is
+// rejected: Start has no meaningful behavior without either.
+func New(execution workers.WorkstationExecutionService, eventsAppender EventsAppender, logger logging.Logger) (workersessions.Service, error) {
 	if execution == nil {
 		return nil, ErrMissingExecution
 	}
+	if eventsAppender == nil {
+		return nil, ErrMissingEventsAppender
+	}
 	return &registry{
-		sessions:  make(map[string]workersessions.Session),
-		execution: execution,
-		logger:    logging.EnsureLogger(logger),
+		sessions:     make(map[string]workersessions.Session),
+		publications: make(map[string]*publication),
+		execution:    execution,
+		events:       eventsAppender,
+		logger:       logging.EnsureLogger(logger),
 	}, nil
 }
 
@@ -61,6 +85,7 @@ func (r *registry) Reserve(_ context.Context, req workersessions.ReserveRequest)
 	}
 	session := workersessions.Session{ID: req.ID, State: workersessions.StateReserved}
 	r.sessions[req.ID] = session
+	r.publications[req.ID] = &publication{}
 	r.logger.Info("worker session reserve", "sessionID", req.ID, "outcome", "reserved")
 	return session, nil
 }
@@ -133,6 +158,24 @@ func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (
 		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "not_startable")
 		return workersessions.StartResult{}, err
 	}
+
+	if publishErr := r.publishOpeningRecord(ctx, req.ID, attemptID); publishErr != nil {
+		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "event_publication_failed")
+		terminal := failedTerminal(workersessions.FailureCauseEventPublicationFailure, safeDetail(workersessions.FailureCauseEventPublicationFailure, nil))
+		final, committed := r.commitTerminal(req.ID, workersessions.StateFailed, terminal)
+		if committed {
+			r.logger.Info(
+				"worker session start terminal",
+				"sessionID", req.ID,
+				"attemptID", attemptID,
+				"outcome", string(workersessions.StateFailed),
+				"state", string(workersessions.StateFailed),
+				"cause", causeKindString(terminal.Cause),
+			)
+			r.publishTerminalRecordOrLog(ctx, req.ID, attemptID, workersessions.StateFailed, terminal)
+		}
+		return workersessions.StartResult{Session: final}, nil
+	}
 	r.logger.Info("worker session start", "sessionID", req.ID, "attemptID", attemptID, "outcome", "handoff", "state", string(workersessions.StateStarting))
 
 	handoff := workers.WorkstationDispatchRequest{
@@ -157,6 +200,7 @@ func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (
 			"state", string(finalState),
 			"cause", causeKindString(terminal.Cause),
 		)
+		r.publishTerminalRecordOrLog(ctx, req.ID, attemptID, finalState, terminal)
 	}
 
 	return workersessions.StartResult{Session: final}, nil
@@ -177,6 +221,7 @@ func (r *registry) reserveIfAbsent(id string) {
 		return
 	}
 	r.sessions[id] = workersessions.Session{ID: id, State: workersessions.StateReserved}
+	r.publications[id] = &publication{}
 }
 
 // transitionToStarting atomically moves id from StateReserved to

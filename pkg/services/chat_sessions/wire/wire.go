@@ -11,15 +11,13 @@
 package wire
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/factorysessionsshim"
+	"github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/responsebridge"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/service"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
@@ -76,63 +74,12 @@ func NewFactoryTargetCatalogService(
 	return internalservice.New(operatorSettings, factoryDefinitions, logger)
 }
 
-// FactoryTargetService is the Factory-target start/invoke/cancel/close
-// dependency the existing, consumer-owned Factory Sessions shim exposes.
-// Re-published here (an alias for factorysessionsshim.FactoryTargetService,
-// this shim's own private contract) exclusively for pkg/wire's use, per the
-// pkg-boundary rule that only pkg/wire may import a service's own wire
-// subpackage -- see NewFactoryTargetService.
-type FactoryTargetService = factorysessionsshim.FactoryTargetService
+// ResponseBridge is the Chat Sessions-owned producer bridge that sequences
+// Factory Session response events onto a Chat Session aggregate stream.
+type ResponseBridge = responsebridge.Service
 
-// FactoryTargetExecutionService is the narrow start/invoke/cancel/close
-// execution dependency the shim actually forwards to (re-published for the
-// same reason as FactoryTargetService). Any concrete
-// factorysessions.Service -- the CLI daemon's full singleton, or a narrower,
-// consumer-owned activation like factory_sessions/wire's own
-// OnDemandFactoryTargetService that implements only these four methods --
-// satisfies it structurally.
-type FactoryTargetExecutionService = factorysessionsshim.FactoryTargetExecutionService
-
-// NewFactoryTargetService constructs the existing Chat Sessions-owned
-// Factory Sessions shim (factorysessionsshim.Shim) over the given execution
-// service. It is a stateless, exactly-once-forwarding adapter: this
-// constructor performs no I/O and adds no behavior beyond what
-// factorysessionsshim.New itself already does. pkg/wire is the only intended
-// caller (chat_sessions/internal/factorysessionsshim cannot be imported
-// directly outside this service's own tree).
-func NewFactoryTargetService(service FactoryTargetExecutionService) FactoryTargetService {
-	return factorysessionsshim.New(service)
-}
-
-// FactoryResponseEventSubscriber is the Factory Sessions response-event
-// subscription dependency RunWithResponseBridge subscribes through,
-// re-published here (an alias for factorysessionsshim.ResponseEventSubscriber)
-// exclusively for pkg/wire's use, matching FactoryTargetService's own
-// re-publishing convention.
-type FactoryResponseEventSubscriber = factorysessionsshim.ResponseEventSubscriber
-
-// RunWithResponseBridge starts subscribing to one Factory Session's
-// response-event stream (through subscriber) and sequencing every event it
-// observes onto one Chat Session's aggregate stream (through chatSessions),
-// concurrently with invoke; it also runs liveDrain (the ACP transport's own
-// genuine mid-generation consumer loop) concurrently with the same invoke
-// call. It returns invoke's own result and error unchanged once invoke
-// itself returns. Re-published here (delegating to
-// factorysessionsshim.RunWithResponseBridge, this service's own internal
-// implementation, which is also the one place that owns both goroutines and
-// their join channels) exclusively for pkg/wire's use, the same reason
-// NewFactoryTargetService is: a caller outside this service's own tree (in
-// particular the ACP transport) only ever holds plain function values of
-// this shape, never a raw concurrency primitive of its own.
-func RunWithResponseBridge(
-	ctx context.Context,
-	chatSessions chatsessions.Service,
-	subscriber FactoryResponseEventSubscriber,
-	chatSessionID string,
-	sessionVersion uint64,
-	factorySessionID string,
-	liveDrain func(context.Context),
-	invoke func(context.Context) (factorysessions.InvocationResult, error),
-) (factorysessions.InvocationResult, error) {
-	return factorysessionsshim.RunWithResponseBridge(ctx, chatSessions, subscriber, chatSessionID, sessionVersion, factorySessionID, liveDrain, invoke)
+// NewResponseBridge constructs the response-event bridge over the canonical
+// Chat Sessions sequence/head-advance capability.
+func NewResponseBridge(sequencer responsebridge.Sequencer) *ResponseBridge {
+	return responsebridge.New(sequencer)
 }

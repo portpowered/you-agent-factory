@@ -101,6 +101,10 @@
       "minimum": 81.81
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/taskgroup",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/root",
       "minimum": 62.50
     },
@@ -237,7 +241,7 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/factorysessionsshim",
+      "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/responsebridge",
       "exception": {
         "kind": "measurement",
         "justification": "The active functional coverage profile contains no measurable statements for this package.",
