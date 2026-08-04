@@ -2,11 +2,17 @@ package stdio
 
 import (
 	"context"
+	"sync"
 	"testing"
+	"time"
+
+	acpsdk "github.com/coder/acp-go-sdk"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
+	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 )
 
 func TestDispatchFactoryInvocation_NilResponseBridgeCallsInvokeDirectly(t *testing.T) {
@@ -19,7 +25,7 @@ func TestDispatchFactoryInvocation_NilResponseBridgeCallsInvokeDirectly(t *testi
 		return wantResult, nil
 	}
 
-	result, err := server.dispatchFactoryInvocation(context.Background(), "session-1", 1, "factory-1", invoke)
+	result, _, err := server.dispatchFactoryInvocation(context.Background(), "conn-1", "session-1", 1, "factory-1", invoke)
 	if err != nil {
 		t.Fatalf("dispatchFactoryInvocation() error = %v, want nil", err)
 	}
@@ -35,6 +41,7 @@ func TestDispatchFactoryInvocation_NilChatSessionsOrFactoryTargetSkipsBridge(t *
 	bridgeCalled := false
 	bridge := func(
 		context.Context, chatsessions.Service, acp.FactoryTargetService, string, uint64, string,
+		func(context.Context),
 		func(context.Context) (factorysessions.InvocationResult, error),
 	) (factorysessions.InvocationResult, error) {
 		bridgeCalled = true
@@ -46,7 +53,7 @@ func TestDispatchFactoryInvocation_NilChatSessionsOrFactoryTargetSkipsBridge(t *
 		return factorysessions.InvocationResult{}, nil
 	}
 
-	if _, err := server.dispatchFactoryInvocation(context.Background(), "session-1", 1, "factory-1", invoke); err != nil {
+	if _, _, err := server.dispatchFactoryInvocation(context.Background(), "conn-1", "session-1", 1, "factory-1", invoke); err != nil {
 		t.Fatalf("dispatchFactoryInvocation() error = %v, want nil", err)
 	}
 	if bridgeCalled {
@@ -58,6 +65,7 @@ func TestDispatchFactoryInvocation_CallsInjectedResponseBridge(t *testing.T) {
 	var gotChatSessionID string
 	var gotSessionVersion uint64
 	var gotFactorySessionID string
+	var gotLiveDrainNonNil bool
 	bridge := func(
 		ctx context.Context,
 		_ chatsessions.Service,
@@ -65,11 +73,13 @@ func TestDispatchFactoryInvocation_CallsInjectedResponseBridge(t *testing.T) {
 		chatSessionID string,
 		sessionVersion uint64,
 		factorySessionID string,
+		liveDrain func(context.Context),
 		invoke func(context.Context) (factorysessions.InvocationResult, error),
 	) (factorysessions.InvocationResult, error) {
 		gotChatSessionID = chatSessionID
 		gotSessionVersion = sessionVersion
 		gotFactorySessionID = factorySessionID
+		gotLiveDrainNonNil = liveDrain != nil
 		return invoke(ctx)
 	}
 
@@ -85,7 +95,7 @@ func TestDispatchFactoryInvocation_CallsInjectedResponseBridge(t *testing.T) {
 		return factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}, nil
 	}
 
-	if _, err := server.dispatchFactoryInvocation(context.Background(), "session-1", 7, "factory-1", invoke); err != nil {
+	if _, _, err := server.dispatchFactoryInvocation(context.Background(), "conn-1", "session-1", 7, "factory-1", invoke); err != nil {
 		t.Fatalf("dispatchFactoryInvocation() error = %v, want nil", err)
 	}
 	if invokeCalls != 1 {
@@ -94,5 +104,98 @@ func TestDispatchFactoryInvocation_CallsInjectedResponseBridge(t *testing.T) {
 	if gotChatSessionID != "session-1" || gotSessionVersion != 7 || gotFactorySessionID != "factory-1" {
 		t.Errorf("bridge called with (%q, %d, %q), want (%q, %d, %q)",
 			gotChatSessionID, gotSessionVersion, gotFactorySessionID, "session-1", uint64(7), "factory-1")
+	}
+	if !gotLiveDrainNonNil {
+		t.Error("dispatchFactoryInvocation passed a nil liveDrain to the injected responseBridge, want a non-nil callback")
+	}
+}
+
+// TestHandleSessionPromptLiveDrainDeliversRecordBeforeInvokeReturns proves
+// genuine mid-generation delivery through the full handleSessionPrompt path:
+// a record seeded onto the Chat Session topic only after the live drain's
+// events.Service.Subscribe call is already listening is delivered through
+// notify strictly before the wrapped Factory invoke call returns -- not
+// merely "fully retained by the time the turn finishes," which is what
+// streamTurnUpdates' own pre-existing post-invocation sweep already proved
+// (see TestStreamTurnUpdatesDeliversSeededMessageAndSuppressesV1Fallback,
+// which pre-seeds the record before dispatch starts at all). The fake
+// responseBridge here plays the same role RunWithResponseBridge plays in
+// production: it starts s.liveDrainTurnUpdates (via the injected liveDrain
+// callback) concurrently with invoke, and only calls invoke once the seeded
+// record has actually been observed and notified -- so a passing assertion
+// here is only possible if liveDrainTurnUpdates genuinely delivered the
+// record while the Factory dispatch was still in flight.
+func TestHandleSessionPromptLiveDrainDeliversRecordBeforeInvokeReturns(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{invokeResult: fallbackInvokeResult("v1 fallback text")}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget, "turn-1")
+
+	liveDelivered := make(chan struct{})
+	var mu sync.Mutex
+	var notified []acpsdk.SessionNotification
+	notify := func(n acpsdk.SessionNotification) error {
+		mu.Lock()
+		notified = append(notified, n)
+		mu.Unlock()
+		if n.Update.AgentMessageChunk != nil {
+			select {
+			case <-liveDelivered:
+			default:
+				close(liveDelivered)
+			}
+		}
+		return nil
+	}
+
+	server.responseBridge = func(
+		ctx context.Context,
+		_ chatsessions.Service,
+		_ acp.FactoryTargetService,
+		chatSessionID string,
+		_ uint64,
+		_ string,
+		liveDrain func(context.Context),
+		invoke func(context.Context) (factorysessions.InvocationResult, error),
+	) (factorysessions.InvocationResult, error) {
+		drainCtx, cancel := context.WithCancel(ctx)
+		drainDone := make(chan struct{})
+		go func() {
+			defer close(drainDone)
+			liveDrain(drainCtx)
+		}()
+
+		eventsSvc.waitForSubscriber(t)
+		eventsSvc.seed(t, chatSessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("live hello"))
+
+		select {
+		case <-liveDelivered:
+		case <-time.After(2 * time.Second):
+			t.Fatal("liveDrain never delivered the seeded record before invoke ran")
+		}
+
+		result, err := invoke(ctx)
+		cancel()
+		<-drainDone
+		return result, err
+	}
+
+	ctx := contextWithAttachmentCache(contextWithPromptNotifier(context.Background(), notify), &attachmentCache{})
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams(streamingTestSessionID, "hello"))
+
+	if _, rpcErr := server.handleSessionPrompt(ctx, env); rpcErr != nil {
+		t.Fatalf("handleSessionPrompt() error = %+v, want success", rpcErr)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(notified) != 1 {
+		t.Fatalf("notify call count = %d, want exactly 1 (live delivery only, no post-invocation or V1 duplicate)", len(notified))
+	}
+	chunk := notified[0].Update.AgentMessageChunk
+	if chunk == nil {
+		t.Fatal("notification Update.AgentMessageChunk = nil, want a populated chunk")
+	}
+	if chunk.Content.Text == nil || chunk.Content.Text.Text != "live hello" {
+		t.Fatalf("notification chunk text = %+v, want %q", chunk.Content.Text, "live hello")
 	}
 }

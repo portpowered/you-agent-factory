@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
@@ -20,15 +21,17 @@ import (
 
 // fakeEventsService is a minimal events.Service test double, matching this
 // package's existing fake convention (fakeChatSessionsService,
-// fakeFactoryTargetService): only Read is implemented, since
-// streamTurnUpdates is the one caller in this package that ever reaches an
-// events.Service. Embedding the interface unimplemented means a call to any
-// other method reaches a nil method value and panics, proving this
-// package's streaming code never dispatches to Append/AttachSource/
-// Subscribe. It is backed by an in-memory, per-topic append-only record
-// log with real events.AggregateSequence positions, so drainRecords'
-// pagination and at-head/progress handling run against real Cursor/
-// ReadResult semantics instead of a hand-simplified shortcut.
+// fakeFactoryTargetService): Read and Subscribe are implemented (the two
+// callers in this package that ever reach an events.Service --
+// streamTurnUpdates uses only Read, liveDrainTurnUpdates uses only
+// Subscribe). Embedding the interface unimplemented for the rest means a
+// call to Append/AttachSource reaches a nil method value and panics, proving
+// this package's streaming code never dispatches to either. It is backed by
+// an in-memory, per-topic append-only record log with real
+// events.AggregateSequence positions, so drainRecords' pagination and
+// at-head/progress handling (via Read) and liveDrainTurnUpdates' delivery
+// loop (via Subscribe) both run against real Cursor/ReadResult/Delivery
+// semantics instead of a hand-simplified shortcut.
 //
 // This package deliberately does not wire a real events.Service/
 // chatsessions.Service pair here (pkg/boundary forbids a transport test
@@ -44,6 +47,19 @@ type fakeEventsService struct {
 	mu             sync.Mutex
 	records        map[events.Topic][]events.Record
 	evictedThrough map[events.Topic]events.AggregateSequence
+	// cond wakes every blocked Subscription.Next call once seedRaw appends a
+	// new record or a caller's context is canceled (see the small watcher
+	// goroutine Subscribe spawns per wait to bridge ctx.Done into a
+	// Broadcast). Lazily initialized by ensureCond so a fakeEventsService
+	// literal that never calls Subscribe (the overwhelming majority of this
+	// package's tests) pays no cost for it.
+	cond *sync.Cond
+	// subscribed is closed the first time Subscribe is called, letting a test
+	// deterministically wait for a live drain's Subscribe call to actually
+	// register before seeding a record it expects that drain to observe.
+	// Lazily initialized (see ensureSubscribedChan) so either Subscribe or a
+	// test's own waitForSubscriber call can safely be first.
+	subscribed chan struct{}
 }
 
 var _ events.Service = (*fakeEventsService)(nil)
@@ -147,6 +163,102 @@ func (f *fakeEventsService) seedRaw(sessionID string, payload json.RawMessage) {
 		ID:      events.RecordID{Topic: topic, Position: position},
 		Payload: payload,
 	})
+	if f.cond != nil {
+		f.cond.Broadcast()
+	}
+}
+
+// ensureCond lazily initializes cond under f.mu, safe to call from Subscribe
+// or seedRaw regardless of call order.
+func (f *fakeEventsService) ensureCond() {
+	if f.cond == nil {
+		f.cond = sync.NewCond(&f.mu)
+	}
+}
+
+// ensureSubscribedChan lazily initializes and returns subscribed under f.mu,
+// safe to call from Subscribe or waitForSubscriber regardless of call order.
+func (f *fakeEventsService) ensureSubscribedChan() chan struct{} {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.subscribed == nil {
+		f.subscribed = make(chan struct{})
+	}
+	return f.subscribed
+}
+
+// waitForSubscriber blocks until Subscribe has been called at least once,
+// letting a test deterministically know a live drain is already listening
+// before it seeds a record the drain is expected to observe -- without a
+// fixed sleep.
+func (f *fakeEventsService) waitForSubscriber(t *testing.T) {
+	t.Helper()
+	select {
+	case <-f.ensureSubscribedChan():
+	case <-time.After(2 * time.Second):
+		t.Fatal("fakeEventsService: no Subscribe call observed within timeout")
+	}
+}
+
+// Subscribe returns a Subscription (a plain, blocking func(ctx) Delivery --
+// see events.Subscription's own doc comment) that replays req.Topic's
+// already-recorded events strictly in order starting after req.From, then
+// blocks until seedRaw appends a new one or ctx is done. It mirrors Read's
+// own retention-gap boundary (earliest > 1 && position+1 < earliest) so a
+// test can exercise DeliveryGap the same way it exercises
+// events.ReadOutcomeGap via markEvictedThrough.
+func (f *fakeEventsService) Subscribe(_ context.Context, req events.SubscribeRequest) (events.Subscription, error) {
+	f.mu.Lock()
+	f.ensureCond()
+	f.mu.Unlock()
+
+	subscribed := f.ensureSubscribedChan()
+	select {
+	case <-subscribed:
+	default:
+		close(subscribed)
+	}
+
+	topic := req.Topic
+	position := req.From.Position
+	return events.Subscription(func(ctx context.Context) events.Delivery {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		for {
+			all := f.records[topic]
+			head := events.AggregateSequence(len(all))
+			earliest := f.evictedThrough[topic] + 1
+			switch {
+			case earliest > 1 && position+1 < earliest:
+				gap := &events.GapFacts{Topic: topic, Requested: position, EarliestRetained: earliest, Head: head}
+				position = earliest - 1
+				return events.Delivery{Kind: events.DeliveryGap, Gap: gap}
+			case position < head:
+				rec := all[int(position)]
+				position = rec.ID.Position
+				return events.Delivery{Kind: events.DeliveryRecord, Record: rec, Cursor: events.Cursor{Topic: topic, Position: rec.ID.Position}}
+			}
+
+			if ctx.Err() != nil {
+				return events.Delivery{Kind: events.DeliveryCanceled}
+			}
+			waitDone := make(chan struct{})
+			go func() {
+				select {
+				case <-ctx.Done():
+					f.mu.Lock()
+					f.cond.Broadcast()
+					f.mu.Unlock()
+				case <-waitDone:
+				}
+			}()
+			f.cond.Wait()
+			close(waitDone)
+			if ctx.Err() != nil {
+				return events.Delivery{Kind: events.DeliveryCanceled}
+			}
+		}
+	}), nil
 }
 
 const streamingTestSessionID = "session-1"

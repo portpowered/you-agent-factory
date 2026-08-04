@@ -2,19 +2,26 @@ package stdio
 
 // prompt_stream.go implements the ACP-L1-V2-T03 consumer side of
 // chat-session streaming: attaching to a Chat Session, draining its
-// aggregate topic in order, projecting each record, and delivering it
-// before the V1 fallback (deliverPromptUpdates). It intentionally does not
-// implement the producer side -- nothing in this repository yet calls
-// chatsessions.Service.Sequence (and its required follow-up
-// chatsessions.Service.AdvanceStreamHead) to put a Factory response
-// workers.Draft onto chat-session/<id>/events in the first place. That
-// production bridge is out of this transport-owned story's scope (the
-// governing PRD's own top-level acceptance criteria bar this package from
-// adding "Factory Sessions event logic"), so until a future story delivers
-// it, streamTurnUpdates always observes an empty topic in production and
-// every real turn keeps falling back to the unchanged V1 synchronous final
-// text below. Test fixtures exercise the streaming path directly by calling
-// Sequence/AdvanceStreamHead themselves, standing in for that future bridge.
+// aggregate topic in order, projecting each record, and delivering it before
+// the V1 fallback (deliverPromptUpdates). It intentionally does not
+// implement the producer side itself -- the Chat Sessions-owned
+// factorysessionsshim.BridgeFactoryResponseEvents/RunWithResponseBridge
+// (invoked through the injected acp.ResponseBridge collaborator; see
+// response_bridge.go and dispatchFactoryTurn's two Factory dispatch branches
+// in session_prompt.go) owns calling chatsessions.Service.Sequence and
+// chatsessions.Service.AdvanceStreamHead to put a Factory response
+// workers.Draft onto chat-session/<id>/events in the first place, since that
+// is Factory Sessions event logic this package's own governing PRD bars it
+// from adding. This file provides two consumers of that topic:
+// liveDrainTurnUpdates (Subscribe-based, run concurrently with the in-flight
+// Factory invocation via the same injected collaborator, for genuine
+// mid-generation delivery) and streamTurnUpdates (Read-based, run strictly
+// after the invocation and its response-event bridge have both fully
+// returned, the guaranteed-correct retained catch-up and duplicate-suppression
+// backstop for whatever the live drain did not manage to observe). Both
+// share the exact same attachment cursor and AcknowledgeAttachment
+// mechanism, so neither ever skips or duplicates a record relative to the
+// other regardless of how far the live drain gets before it is stopped.
 
 import (
 	"context"
@@ -270,22 +277,121 @@ func (s *Server) streamTurnUpdates(
 	}
 }
 
+// liveDrainTurnUpdates subscribes to sessionID's chat-session events topic
+// (through events.Service.Subscribe, not the Read-based polling
+// streamTurnUpdates uses) from this connection's attachment cursor, and
+// delivers each record through notify as soon as the subscription observes
+// it -- genuine mid-generation delivery, running concurrently with the
+// in-flight Factory invocation dispatchFactoryInvocation wraps (see
+// acp.ResponseBridge and factorysessionsshim.RunWithResponseBridge's own doc
+// comments). ctx is the bridge-derived context RunWithResponseBridge cancels
+// once invoke returns, so Subscription.Next(ctx) unblocks and this method
+// returns as soon as the turn's dispatch itself completes.
+//
+// This is the live counterpart to streamTurnUpdates' post-invocation retained
+// catch-up, not a replacement for it: both share the exact same attachment
+// cursor and AcknowledgeAttachment mechanism (ensureAttachment, drainRecords,
+// deliverReadTimeGap), and both persist the advanced cursor into this
+// connection's attachmentCache immediately after each record. Whatever this
+// call does not manage to observe and acknowledge before ctx is canceled --
+// the ordinary case once invoke returns and the surrounding bridge stops this
+// drain, and also any record dropped by a version conflict racing the
+// concurrent Factory response-event bridge's own AdvanceStreamHead calls
+// (see currentSessionVersion's own doc comment) -- is still delivered
+// afterward by streamTurnUpdates' own call, resuming from wherever this call's
+// last successful AcknowledgeAttachment left the cached position. No record
+// is ever skipped or duplicated regardless of how far this live drain gets.
+//
+// Like the Factory response-event bridge it runs alongside, a failure here is
+// never propagated as the turn's own failure: it is additive, best-effort
+// streaming layered onto the guaranteed-correct post-invocation sweep, so
+// this method simply stops rather than surfacing an error to its caller
+// (RunWithResponseBridge, which does not itself check a return value -- see
+// that function's own signature). s.events == nil, no attachment (blank
+// connectionID or an Attach failure), or a Subscribe failure are all silent
+// no-ops, matching streamTurnUpdates' own s.events == nil convention.
+//
+// It returns whether at least one agent_message_chunk was delivered here --
+// dispatchFactoryInvocation threads this back out (see its own liveDelivered
+// return value) so deliverPromptUpdates' V1 final-text suppression decision
+// accounts for a message this live drain already delivered, not only what
+// the post-invocation streamTurnUpdates sweep itself observes. Without this,
+// a message delivered live but not re-observed by the post-invocation sweep
+// (the ordinary case, since both share one cursor -- see this method's own
+// doc comment above) would incorrectly still fall back to a duplicate V1
+// final-text notification.
+func (s *Server) liveDrainTurnUpdates(ctx context.Context, connectionID, sessionID string, sessionVersion uint64, notify promptNotifier) (deliveredMessage bool) {
+	if s.events == nil {
+		return false
+	}
+
+	attachment, ok, err := s.ensureAttachment(ctx, connectionID, sessionID)
+	if err != nil || !ok {
+		return false
+	}
+
+	topic := chatsessions.EventsTopic(sessionID)
+	subscription, err := s.events.Subscribe(ctx, events.SubscribeRequest{
+		Topic: topic,
+		From:  events.Cursor{Topic: topic, Position: events.AggregateSequence(attachment.AfterSequence)},
+		Limit: retainedReadBatchLimit,
+	})
+	if err != nil {
+		return false
+	}
+
+	for {
+		delivery := subscription.Next(ctx)
+		switch delivery.Kind {
+		case events.DeliveryRecord:
+			version, versionErr := s.currentSessionVersion(ctx, sessionID, sessionVersion)
+			if versionErr != nil {
+				return deliveredMessage
+			}
+			stop, delivered, drainErr := s.drainRecords(ctx, sessionID, version, &attachment, []events.Record{delivery.Record}, notify)
+			deliveredMessage = deliveredMessage || delivered
+			if drainErr != nil || stop {
+				return deliveredMessage
+			}
+		case events.DeliveryGap:
+			version, versionErr := s.currentSessionVersion(ctx, sessionID, sessionVersion)
+			if versionErr != nil {
+				return deliveredMessage
+			}
+			stop, gapErr := s.deliverReadTimeGap(ctx, sessionID, version, &attachment, delivery.Gap, notify)
+			if gapErr != nil || stop {
+				return deliveredMessage
+			}
+		default:
+			// events.DeliveryClosed, events.DeliveryCanceled,
+			// events.DeliveryBackpressure, and any unrecognized kind all end
+			// this best-effort drain the same way: streamTurnUpdates' own
+			// post-invocation sweep is the guaranteed-correct backstop.
+			return deliveredMessage
+		}
+	}
+}
+
 // deliverPromptUpdates delivers startResult's turn output to the connection
 // that admitted it: it first drains any canonical chat-session records
 // available for startResult.Session.ID through streamTurnUpdates, and only
-// when that drain delivered no canonical agent_message_chunk falls back to
-// the V1 synchronous final text built from fallbackText (dispatched.outcome.Text
-// in dispatchFactoryTurn) via deliverPromptText -- so a turn whose canonical
-// message output was already streamed never also emits a duplicate final-only
-// notification, while a turn with no canonical message output (including
-// every turn today, since no production caller sequences Factory Draft
-// records onto the chat-session topic yet -- see prompt_stream.go's package
-// doc) keeps its existing V1 behavior unchanged.
+// when neither that drain nor the live drain dispatchFactoryInvocation already
+// ran concurrently with the Factory invocation (liveDelivered) delivered a
+// canonical agent_message_chunk falls back to the V1 synchronous final text
+// built from fallbackText (dispatched.outcome.Text in dispatchFactoryTurn) via
+// deliverPromptText -- so a turn whose canonical message output was already
+// streamed, live or in retained catch-up, never also emits a duplicate
+// final-only notification, while a turn with no canonical message output
+// keeps its existing V1 behavior unchanged. liveDelivered must reflect
+// dispatchOutcome.liveDelivered, not be recomputed here: the live drain's own
+// delivery already happened inside dispatchFactoryInvocation, entirely
+// before this method is ever called (see dispatchFactoryTurn).
 func (s *Server) deliverPromptUpdates(
 	ctx context.Context,
 	startResult chatsessions.StartTurnResult,
 	sessionVersion uint64,
 	reqIdentity chatsessions.RequestIdentity,
+	liveDelivered bool,
 	fallbackText []string,
 ) error {
 	notify := promptNotifierFromContext(ctx)
@@ -294,7 +400,7 @@ func (s *Server) deliverPromptUpdates(
 	if err != nil {
 		return err
 	}
-	if deliveredMessage {
+	if deliveredMessage || liveDelivered {
 		return nil
 	}
 	return deliverPromptText(notify, startResult.Session.ID, fallbackText)

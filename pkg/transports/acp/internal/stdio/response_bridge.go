@@ -9,24 +9,50 @@ import (
 // dispatchFactoryInvocation calls invoke -- one of the two
 // factorysessions.Service.InvokeFactorySession-forwarding calls
 // startFactorySessionForEpisode/invokeFactorySessionForEpisode make -- and
-// returns its result and error unchanged. When s.responseBridge,
-// s.chatSessions, and s.factoryTarget are all configured, it instead calls
-// s.responseBridge with invoke: the injected collaborator (see
-// acp.ResponseBridge's own doc comment) starts the Chat Sessions-owned
-// Factory response-event bridge concurrently with invoke and still returns
-// invoke's own result and error unchanged, streaming being purely additive.
-// This method itself starts no goroutine and owns no concurrency primitive:
-// it only ever holds and calls the one plain function value pkg/wire
-// injected.
+// returns its result, error, and liveDelivered=false unchanged. When
+// s.responseBridge, s.chatSessions, and s.factoryTarget are all configured, it
+// instead calls s.responseBridge with invoke and a liveDrain closure over
+// s.liveDrainTurnUpdates: the injected collaborator (see acp.ResponseBridge's
+// own doc comment) starts the Chat Sessions-owned Factory response-event
+// bridge AND this transport's own genuine mid-generation consumer loop both
+// concurrently with invoke, and still returns invoke's own result and error
+// unchanged -- both are purely additive. This method itself starts no
+// goroutine and owns no concurrency primitive: it only ever holds and calls
+// the one plain function value pkg/wire injected, and only ever supplies
+// liveDrain as a plain callback for that collaborator to run.
+//
+// liveDelivered reports whether the liveDrain callback itself observed and
+// delivered at least one canonical agent_message_chunk before invoke
+// returned (see dispatchOutcome's own doc comment for why this must be
+// threaded through to deliverPromptUpdates' V1 suppression decision). Writing
+// to it from inside the liveDrain closure -- which s.responseBridge runs on a
+// goroutine it owns, never one this method spawns itself -- is race-free
+// without its own synchronization: s.responseBridge only returns once that
+// goroutine has fully joined (see RunWithResponseBridge's own doc comment),
+// and that join's happens-before guarantee is what makes reading liveDelivered
+// after s.responseBridge returns safe.
+//
+// connectionID is threaded through from dispatchFactoryTurn's own
+// reqIdentity so liveDrainTurnUpdates can call ensureAttachment exactly the
+// way the post-invocation streamTurnUpdates call already does; notify is read
+// from ctx (promptNotifierFromContext), matching deliverPromptUpdates' own
+// convention, since liveDrain runs against the bridge-derived context
+// RunWithResponseBridge passes it, not necessarily this ctx directly.
 func (s *Server) dispatchFactoryInvocation(
 	ctx context.Context,
-	chatSessionID string,
+	connectionID, chatSessionID string,
 	sessionVersion uint64,
 	factorySessionID string,
 	invoke func(context.Context) (factorysessions.InvocationResult, error),
-) (factorysessions.InvocationResult, error) {
+) (result factorysessions.InvocationResult, liveDelivered bool, err error) {
 	if s.responseBridge == nil || s.chatSessions == nil || s.factoryTarget == nil {
-		return invoke(ctx)
+		result, err = invoke(ctx)
+		return result, false, err
 	}
-	return s.responseBridge(ctx, s.chatSessions, s.factoryTarget, chatSessionID, sessionVersion, factorySessionID, invoke)
+	notify := promptNotifierFromContext(ctx)
+	liveDrain := func(drainCtx context.Context) {
+		liveDelivered = s.liveDrainTurnUpdates(drainCtx, connectionID, chatSessionID, sessionVersion, notify)
+	}
+	result, err = s.responseBridge(ctx, s.chatSessions, s.factoryTarget, chatSessionID, sessionVersion, factorySessionID, liveDrain, invoke)
+	return result, liveDelivered, err
 }

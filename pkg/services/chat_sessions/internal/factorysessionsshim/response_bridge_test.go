@@ -277,7 +277,7 @@ func TestRunWithResponseBridge_ReturnsInvokeResultAndErrorUnchanged(t *testing.T
 		return wantResult, wantErr
 	}
 
-	result, err := RunWithResponseBridge(context.Background(), sequencer, subscriber, "chat-1", 5, "factory-1", invoke)
+	result, err := RunWithResponseBridge(context.Background(), sequencer, subscriber, "chat-1", 5, "factory-1", nil, invoke)
 
 	if invokeCalls != 1 {
 		t.Fatalf("invoke called %d times, want 1", invokeCalls)
@@ -299,7 +299,7 @@ func TestRunWithResponseBridge_BridgeFailureNeverPropagatesToInvokeResult(t *tes
 		return wantResult, nil
 	}
 
-	result, err := RunWithResponseBridge(context.Background(), sequencer, subscriber, "chat-1", 5, "factory-1", invoke)
+	result, err := RunWithResponseBridge(context.Background(), sequencer, subscriber, "chat-1", 5, "factory-1", nil, invoke)
 	if err != nil {
 		t.Fatalf("error = %v, want nil (a bridge failure must never propagate)", err)
 	}
@@ -326,11 +326,82 @@ func TestRunWithResponseBridge_StopsBridgeAfterInvokeReturns(t *testing.T) {
 		return factorysessions.InvocationResult{}, nil
 	}
 
-	_, _ = RunWithResponseBridge(context.Background(), sequencer, subscriber, "chat-1", 5, "factory-1", invoke)
+	_, _ = RunWithResponseBridge(context.Background(), sequencer, subscriber, "chat-1", 5, "factory-1", nil, invoke)
 
 	select {
 	case <-bridgeStopped:
 	case <-time.After(time.Second):
 		t.Fatal("bridge goroutine never observed cancellation after invoke returned; it may have leaked")
+	}
+}
+
+// TestRunWithResponseBridge_RunsLiveDrainConcurrentlyWithInvoke proves
+// liveDrain actually starts before invoke returns, not only after -- the
+// genuine mid-generation delivery behavior this parameter exists for, as
+// distinct from the pre-existing Factory response-event bridge which runs
+// concurrently but on the producer side only.
+func TestRunWithResponseBridge_RunsLiveDrainConcurrentlyWithInvoke(t *testing.T) {
+	cursor := &factorysessions.ResponseEventCursor{
+		NextEvents: func(ctx context.Context) ([]factorysessions.FactoryResponseEvent, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+		DrainEvents:  func() ([]factorysessions.FactoryResponseEvent, error) { return nil, nil },
+		DetachCursor: func() {},
+	}
+	subscriber := &fakeSubscriber{cursor: cursor}
+	sequencer := &fakeSequencer{}
+
+	liveDrainStarted := make(chan struct{})
+	liveDrain := func(ctx context.Context) {
+		close(liveDrainStarted)
+		<-ctx.Done()
+	}
+
+	invoke := func(ctx context.Context) (factorysessions.InvocationResult, error) {
+		select {
+		case <-liveDrainStarted:
+		case <-time.After(time.Second):
+			t.Error("liveDrain never started before invoke returned")
+		}
+		return factorysessions.InvocationResult{}, nil
+	}
+
+	if _, err := RunWithResponseBridge(context.Background(), sequencer, subscriber, "chat-1", 5, "factory-1", liveDrain, invoke); err != nil {
+		t.Fatalf("RunWithResponseBridge() error = %v, want nil", err)
+	}
+}
+
+// TestRunWithResponseBridge_StopsLiveDrainAfterInvokeReturns mirrors
+// TestRunWithResponseBridge_StopsBridgeAfterInvokeReturns for the liveDrain
+// goroutine: it must never outlive RunWithResponseBridge itself.
+func TestRunWithResponseBridge_StopsLiveDrainAfterInvokeReturns(t *testing.T) {
+	cursor := &factorysessions.ResponseEventCursor{
+		NextEvents: func(ctx context.Context) ([]factorysessions.FactoryResponseEvent, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+		DrainEvents:  func() ([]factorysessions.FactoryResponseEvent, error) { return nil, nil },
+		DetachCursor: func() {},
+	}
+	subscriber := &fakeSubscriber{cursor: cursor}
+	sequencer := &fakeSequencer{}
+
+	drainStopped := make(chan struct{})
+	liveDrain := func(ctx context.Context) {
+		<-ctx.Done()
+		close(drainStopped)
+	}
+
+	invoke := func(ctx context.Context) (factorysessions.InvocationResult, error) {
+		return factorysessions.InvocationResult{}, nil
+	}
+
+	_, _ = RunWithResponseBridge(context.Background(), sequencer, subscriber, "chat-1", 5, "factory-1", liveDrain, invoke)
+
+	select {
+	case <-drainStopped:
+	case <-time.After(time.Second):
+		t.Fatal("liveDrain goroutine never observed cancellation after invoke returned; it may have leaked")
 	}
 }

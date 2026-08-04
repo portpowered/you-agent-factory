@@ -114,14 +114,16 @@ type FactoryResponseEventSubscriber = factorysessionsshim.ResponseEventSubscribe
 // RunWithResponseBridge starts subscribing to one Factory Session's
 // response-event stream (through subscriber) and sequencing every event it
 // observes onto one Chat Session's aggregate stream (through chatSessions),
-// concurrently with invoke, and returns invoke's own result and error
-// unchanged once invoke itself returns. Re-published here (delegating to
+// concurrently with invoke; it also runs liveDrain (the ACP transport's own
+// genuine mid-generation consumer loop) concurrently with the same invoke
+// call. It returns invoke's own result and error unchanged once invoke
+// itself returns. Re-published here (delegating to
 // factorysessionsshim.RunWithResponseBridge, this service's own internal
-// implementation, which is also the one place that owns this bridge's
-// goroutine and join channel) exclusively for pkg/wire's use, the same
-// reason NewFactoryTargetService is: a caller outside this service's own
-// tree (in particular the ACP transport) only ever holds a plain function
-// value of this shape, never a raw concurrency primitive of its own.
+// implementation, which is also the one place that owns both goroutines and
+// their join channels) exclusively for pkg/wire's use, the same reason
+// NewFactoryTargetService is: a caller outside this service's own tree (in
+// particular the ACP transport) only ever holds plain function values of
+// this shape, never a raw concurrency primitive of its own.
 func RunWithResponseBridge(
 	ctx context.Context,
 	chatSessions chatsessions.Service,
@@ -129,7 +131,8 @@ func RunWithResponseBridge(
 	chatSessionID string,
 	sessionVersion uint64,
 	factorySessionID string,
+	liveDrain func(context.Context),
 	invoke func(context.Context) (factorysessions.InvocationResult, error),
 ) (factorysessions.InvocationResult, error) {
-	return factorysessionsshim.RunWithResponseBridge(ctx, chatSessions, subscriber, chatSessionID, sessionVersion, factorySessionID, invoke)
+	return factorysessionsshim.RunWithResponseBridge(ctx, chatSessions, subscriber, chatSessionID, sessionVersion, factorySessionID, liveDrain, invoke)
 }

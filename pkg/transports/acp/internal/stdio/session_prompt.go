@@ -132,11 +132,18 @@ func deliverPromptText(notify promptNotifier, sessionID string, text []string) e
 // version-guarded calls (BindFactorySession, and deliverPromptUpdates' later
 // AcknowledgeAttachment calls) run. See currentSessionVersion's own doc
 // comment for why a single fresh read is safe here without its own retry
-// loop.
+// loop. liveDelivered reports whether dispatchFactoryInvocation's own
+// liveDrain callback (see its own doc comment) already delivered at least
+// one canonical agent_message_chunk concurrently with the invocation itself;
+// deliverPromptUpdates combines it with its own post-invocation streamTurnUpdates
+// result to decide whether the V1 synchronous final-text fallback must be
+// suppressed, since a message delivered live is never re-observed by that
+// later sweep (both share one attachment cursor).
 type dispatchOutcome struct {
 	outcome        protocol.PromptOutcome
 	terminal       chatsessions.TurnState
 	sessionVersion uint64
+	liveDelivered  bool
 }
 
 // parseFactoryCommand inspects one validated prompt turn's content and
@@ -350,9 +357,9 @@ func (s *Server) dispatchFactoryTurn(
 	var dispatched dispatchOutcome
 	var dispatchErr error
 	if startResult.Episode.FactorySessionID == "" {
-		dispatched, dispatchErr = s.startFactorySessionForEpisode(ctx, startResult, turn)
+		dispatched, dispatchErr = s.startFactorySessionForEpisode(ctx, startResult, turn, reqIdentity.ConnectionID)
 	} else {
-		dispatched, dispatchErr = s.invokeFactorySessionForEpisode(ctx, startResult, turn)
+		dispatched, dispatchErr = s.invokeFactorySessionForEpisode(ctx, startResult, turn, reqIdentity.ConnectionID)
 	}
 
 	terminal := dispatched.terminal
@@ -361,7 +368,7 @@ func (s *Server) dispatchFactoryTurn(
 	if dispatchErr != nil {
 		terminal = terminalStateForFailure(dispatchErr)
 		rpcErr = classifyDependencyFailure(dispatchErr)
-	} else if notifyErr := s.deliverPromptUpdates(ctx, startResult, dispatched.sessionVersion, reqIdentity, dispatched.outcome.Text); notifyErr != nil {
+	} else if notifyErr := s.deliverPromptUpdates(ctx, startResult, dispatched.sessionVersion, reqIdentity, dispatched.liveDelivered, dispatched.outcome.Text); notifyErr != nil {
 		terminal = chatsessions.TurnStateFailed
 		rpcErr = classifyDependencyFailure(notifyErr)
 	} else {
@@ -523,6 +530,7 @@ func (s *Server) startFactorySessionForEpisode(
 	ctx context.Context,
 	startResult chatsessions.StartTurnResult,
 	turn session.PromptTurn,
+	connectionID string,
 ) (dispatchOutcome, error) {
 	if s.factoryTarget == nil {
 		return dispatchOutcome{}, errFactoryTargetUnavailable
@@ -575,7 +583,7 @@ func (s *Server) startFactorySessionForEpisode(
 
 	requestID := startResult.Turn.ID
 	sourceKind := factorysessions.InvocationInputSourceKindText
-	outcome, err := s.dispatchFactoryInvocation(ctx, startResult.Session.ID, startResult.Session.Version, factorySessionID,
+	outcome, liveDelivered, err := s.dispatchFactoryInvocation(ctx, connectionID, startResult.Session.ID, startResult.Session.Version, factorySessionID,
 		func(invokeCtx context.Context) (factorysessions.InvocationResult, error) {
 			return s.factoryTarget.InvokeFactoryTarget(invokeCtx, factorySessionID, factorysessions.InvocationRequest{
 				Content:         promptContentToWorkParts(turn.Content),
@@ -599,6 +607,7 @@ func (s *Server) startFactorySessionForEpisode(
 		outcome:        protocol.MapFactoryInvocationOutcome(outcome),
 		terminal:       factoryInvocationTurnState(outcome.Status),
 		sessionVersion: bindResult.Session.Version,
+		liveDelivered:  liveDelivered,
 	}, nil
 }
 
@@ -665,6 +674,7 @@ func (s *Server) invokeFactorySessionForEpisode(
 	ctx context.Context,
 	startResult chatsessions.StartTurnResult,
 	turn session.PromptTurn,
+	connectionID string,
 ) (dispatchOutcome, error) {
 	if s.factoryTarget == nil {
 		return dispatchOutcome{}, errFactoryTargetUnavailable
@@ -672,7 +682,7 @@ func (s *Server) invokeFactorySessionForEpisode(
 
 	requestID := startResult.Turn.ID
 	sourceKind := factorysessions.InvocationInputSourceKindText
-	invokeResult, err := s.dispatchFactoryInvocation(ctx, startResult.Session.ID, startResult.Session.Version, startResult.Episode.FactorySessionID,
+	invokeResult, liveDelivered, err := s.dispatchFactoryInvocation(ctx, connectionID, startResult.Session.ID, startResult.Session.Version, startResult.Episode.FactorySessionID,
 		func(invokeCtx context.Context) (factorysessions.InvocationResult, error) {
 			return s.factoryTarget.InvokeFactoryTarget(invokeCtx, startResult.Episode.FactorySessionID, factorysessions.InvocationRequest{
 				Content:         promptContentToWorkParts(turn.Content),
@@ -695,6 +705,7 @@ func (s *Server) invokeFactorySessionForEpisode(
 		outcome:        protocol.MapFactoryInvocationOutcome(invokeResult),
 		terminal:       factoryInvocationTurnState(invokeResult.Status),
 		sessionVersion: sessionVersion,
+		liveDelivered:  liveDelivered,
 	}, nil
 }
 

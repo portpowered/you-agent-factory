@@ -272,8 +272,9 @@ func provideACPServerResponseBridge() acp.ResponseBridge {
 		chatSessionID string,
 		sessionVersion uint64,
 		factorySessionID string,
+		liveDrain func(context.Context),
 		invoke func(context.Context) (factorysessions.InvocationResult, error),
 	) (factorysessions.InvocationResult, error) {
-		return chatsessionswire.RunWithResponseBridge(ctx, chatSessions, subscriber, chatSessionID, sessionVersion, factorySessionID, invoke)
+		return chatsessionswire.RunWithResponseBridge(ctx, chatSessions, subscriber, chatSessionID, sessionVersion, factorySessionID, liveDrain, invoke)
 	}
 }

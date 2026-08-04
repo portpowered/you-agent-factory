@@ -74,23 +74,32 @@ type ResponseEventSubscriber interface {
 // returns when ctx is done, or when a Sequence or AdvanceStreamHead call
 // itself fails.
 // RunWithResponseBridge starts BridgeFactoryResponseEvents concurrently with
-// invoke and returns invoke's own result and error unchanged once invoke
-// itself returns. This is the one place that actually owns the bridge's
-// goroutine, join channel, and derived cancellation: callers (in particular
-// the ACP transport, which only ever holds a plain function value of this
-// exact shape) never need their own concurrency primitives to run streaming
-// alongside a synchronous Factory dispatch call.
+// invoke, and also starts liveDrain (the ACP transport's own genuine
+// mid-generation consumer loop -- see acp.ResponseBridge's own doc comment;
+// a nil liveDrain is a no-op, matching a construction that never wired one)
+// concurrently with the same invoke call, returning invoke's own result and
+// error unchanged once invoke itself returns. This is the one place that
+// actually owns both goroutines, their join channels, and their shared
+// derived cancellation: callers (in particular the ACP transport, which only
+// ever holds plain function values of this exact shape) never need their own
+// concurrency primitives to run producer and consumer streaming alongside a
+// synchronous Factory dispatch call.
 //
-// Once invoke returns, RunWithResponseBridge stops the bridge and waits for
-// it to actually exit before returning: in the ordinary case (a real Factory
-// response-event subscription that already closed on its own once the run
-// it accompanies terminalized -- see BridgeFactoryResponseEvents' own doc
-// comment) this cancellation is a no-op that simply confirms the bridge
-// already stopped, but it guarantees the bridge goroutine can never outlive
-// this call. A bridge failure (including this stop-triggered cancellation)
-// is never propagated as invoke's own result or error: it is additive,
-// best-effort streaming plumbing layered onto whatever invoke itself
-// already does, not a new failure mode for invoke's caller.
+// Once invoke returns, RunWithResponseBridge stops both background
+// operations and waits for them to actually exit before returning: in the
+// ordinary case (a real Factory response-event subscription that already
+// closed on its own once the run it accompanies terminalized -- see
+// BridgeFactoryResponseEvents' own doc comment -- and a liveDrain that has
+// already drained everything committed so far) this cancellation is a no-op
+// that simply confirms both already stopped, but it guarantees neither
+// goroutine can ever outlive this call. A failure in either background
+// operation (including this stop-triggered cancellation) is never propagated
+// as invoke's own result or error: both are additive, best-effort streaming
+// plumbing layered onto whatever invoke itself already does, not a new
+// failure mode for invoke's caller. liveDrain's own doc comment documents why
+// this is safe: whatever it does not manage to deliver before cancellation is
+// still delivered afterward by the transport's own post-invocation retained
+// catch-up sweep, resuming from the same shared attachment cursor.
 func RunWithResponseBridge(
 	ctx context.Context,
 	sequencer Sequencer,
@@ -98,19 +107,30 @@ func RunWithResponseBridge(
 	chatSessionID string,
 	sessionVersion uint64,
 	factorySessionID string,
+	liveDrain func(context.Context),
 	invoke func(context.Context) (factorysessions.InvocationResult, error),
 ) (factorysessions.InvocationResult, error) {
 	bridgeCtx, cancel := context.WithCancel(ctx)
-	done := make(chan struct{})
+
+	bridgeDone := make(chan struct{})
 	go func() {
-		defer close(done)
+		defer close(bridgeDone)
 		_ = BridgeFactoryResponseEvents(bridgeCtx, sequencer, subscriber, chatSessionID, sessionVersion, factorySessionID)
+	}()
+
+	drainDone := make(chan struct{})
+	go func() {
+		defer close(drainDone)
+		if liveDrain != nil {
+			liveDrain(bridgeCtx)
+		}
 	}()
 
 	result, err := invoke(ctx)
 
 	cancel()
-	<-done
+	<-bridgeDone
+	<-drainDone
 
 	return result, err
 }

@@ -1035,6 +1035,7 @@ func TestHandleSessionPromptLaterTurnCallsResponseBridgeAroundInvokeFactoryTarge
 		chatSessionID string,
 		sessionVersion uint64,
 		factorySessionID string,
+		_ func(context.Context),
 		invoke func(context.Context) (factorysessions.InvocationResult, error),
 	) (factorysessions.InvocationResult, error) {
 		bridgeCalls++
