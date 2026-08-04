@@ -30,6 +30,7 @@ func NewHandlerFromRoot(binding RootBinding, logger *zap.Logger) *Adapter {
 	}
 	return NewHandler(Dependencies{
 		SessionsRoot:    binding.Sessions,
+		LiveControl:     binding.Sessions,
 		SessionRequests: binding.Prepare,
 	}, logger)
 }

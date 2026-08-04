@@ -58,9 +58,10 @@ type RuntimeBinding struct {
 // typed errors; peers must not import the private identity subservice.
 // The published live-control slice uses OpenRequest/OpenResult,
 // ReadProjection, SessionProjection, ControlRequest, LifecycleControlResult,
-// ErrSessionNotFound, and *ControlError on these Service methods; peers must
-// not import private live-runtime registry or host types and must not depend
-// on a second peer-facing live-session interface.
+// ErrSessionNotFound, and *ControlError through LiveControlService; peers
+// that only manage live sessions depend on that narrow capability rather than
+// this broader aggregate and never import private live-runtime registry or
+// host types.
 // The published durable-execution slice uses DurableStartRequest,
 // DurableAsyncStartResult, DurableResumeRequest, DurableControlRequest,
 // DurableControlResult, DurableInspectResult, *DurableValidationError,
@@ -86,9 +87,9 @@ type RuntimeBinding struct {
 // ForRuntime; peers supply already-constructed peer root capabilities through
 // plain binding inputs without downcasting or bundling nested opening
 // interfaces. Binding stays inert during construction characterization.
-// The process-scoped root uses ForRuntime to create an isolated runtime view; a
-// bound view serves the remaining application operations. Peers must depend on
-// Service rather than introducing a second peer-facing session authority.
+// The process-scoped root uses ForRuntime to create an isolated runtime view;
+// a bound view serves the remaining application operations. Peers that need
+// operations outside an owner-published narrow capability depend on Service.
 type Service interface {
 	StartAsync(context.Context, StartRequest) (AsyncStartResult, error)
 	StartSync(context.Context, StartRequest) (SyncStartResult, error)
@@ -154,8 +155,32 @@ type Service interface {
 //   - *ControlError for rejected lifecycle transitions (Outcome InvalidState or
 //     TerminalSession), without nested live-runtime imports
 //
-// Live-control operations remain methods on Service; this file does not publish
-// a separate peer-facing live-session interface.
+// Live-control operations remain methods on Service and are also exposed as
+// the narrow LiveControlService capability for peers that need no other
+// Factory Sessions behavior.
+
+// LiveControlService is the owner-published Factory Sessions capability for
+// opening, listing, reading, pausing, resuming, and closing live Factory
+// Sessions. It uses the existing public request, projection, result, and
+// typed-error vocabulary, so the authoritative Service satisfies it
+// structurally without an adapter, duplicate registry, or second construction
+// path.
+//
+// A peer that receives only this capability cannot access durable execution,
+// invocation, response-event streaming, inspection, or runtime-opening
+// operations through its dependency.
+type LiveControlService interface {
+	OpenFactorySession(context.Context, LiveControlOpenRequest) (*LiveControlOpenResult, error)
+	ListFactorySessions(context.Context) ([]LiveControlListItem, error)
+	GetFactorySession(context.Context, string) (LiveControlSnapshot, error)
+	PauseLiveFactorySession(context.Context, string, LiveControlRequest) (LiveControlResult, error)
+	ResumeLiveFactorySession(context.Context, string, LiveControlRequest) (LiveControlResult, error)
+	CloseFactorySession(context.Context, string) error
+}
+
+// Service satisfies LiveControlService structurally. This assertion keeps the
+// narrow public capability synchronized with its authoritative implementation.
+var _ LiveControlService = (Service)(nil)
 
 // LiveControlOpenRequest is the plain root open request for live session control.
 // It is the published name for OpenRequest on the live-control slice.

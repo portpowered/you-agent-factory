@@ -21,6 +21,7 @@ import (
 // Sessions and their session-scoped Factory and Work resources.
 type Adapter struct {
 	sessionsRoot       factorysessions.Service
+	liveControl        factorysessions.LiveControlService
 	sessionEvents      SessionEventAPI
 	runtime            apisurface.RuntimeAPI
 	factoryStatus      apisurface.FactoryStatusAPI
@@ -45,6 +46,7 @@ type Adapter struct {
 // adapter. They are supplied by the already-opened runtime composition.
 type Dependencies struct {
 	SessionsRoot       factorysessions.Service
+	LiveControl        factorysessions.LiveControlService
 	SessionEvents      SessionEventAPI
 	Runtime            apisurface.RuntimeAPI
 	FactoryStatus      apisurface.FactoryStatusAPI
@@ -88,8 +90,9 @@ func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
 		logger = zap.NewNop()
 	}
 	return &Adapter{
-		sessionsRoot: deps.SessionsRoot, sessionEvents: deps.SessionEvents,
-		runtime: deps.Runtime, factoryStatus: deps.FactoryStatus,
+		sessionsRoot: deps.SessionsRoot, liveControl: deps.LiveControl,
+		sessionEvents: deps.SessionEvents,
+		runtime:       deps.Runtime, factoryStatus: deps.FactoryStatus,
 		sessions:           deps.Sessions,
 		invocation:         deps.Invocation,
 		factoryDefinitions: deps.FactoryDefinitions, factoryValidation: deps.FactoryValidation,

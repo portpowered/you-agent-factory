@@ -9,6 +9,81 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 )
 
+func TestLiveControlCapability_OpenListReadPreservesCanonicalIdentity(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "sess-live-control-discovery"
+	target := factorysessions.Target{
+		Ref:        factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		FactoryDir: "/tmp/factory",
+		FolderPath: "/tmp",
+		Project:    "demo",
+	}
+	session := &livesession.LiveSession{
+		ID: sessionID,
+		SessionState: livesession.SessionState{
+			FactoryDir: target.FactoryDir,
+			FolderPath: target.FolderPath,
+		},
+		Project: target.Project,
+		Target:  target.Ref,
+	}
+	host := &liveRuntimeEffectHost{
+		openTestHost: openTestHost{
+			targets:        []factorysessions.Target{target},
+			openSessionID:  sessionID,
+			requireSession: session,
+			sessionIDs:     []string{sessionID},
+			sessions:       map[string]*livesession.LiveSession{sessionID: session},
+		},
+	}
+	gateway := newLiveRuntimeCompositionGateway(t, host)
+
+	// The client receives only the owner-published capability. All lifecycle
+	// interactions below must stay inside that narrow boundary.
+	var client factorysessions.LiveControlService = gateway
+	ctx := context.Background()
+
+	opened, err := client.OpenFactorySession(ctx, factorysessions.LiveControlOpenRequest{
+		FolderPath: target.FolderPath,
+	})
+	if err != nil {
+		t.Fatalf("OpenFactorySession: %v", err)
+	}
+	if opened == nil || opened.SessionID != sessionID {
+		t.Fatalf("open result = %#v, want session id %q", opened, sessionID)
+	}
+	if opened.Session == nil || opened.Session.ID != sessionID || opened.Session.Target != target.Ref {
+		t.Fatalf("open session summary = %#v, want canonical identity and target %#v", opened.Session, target.Ref)
+	}
+
+	listed, err := client.ListFactorySessions(ctx)
+	if err != nil {
+		t.Fatalf("ListFactorySessions: %v", err)
+	}
+	if len(listed) != 1 {
+		t.Fatalf("ListFactorySessions count = %d, want 1", len(listed))
+	}
+	if listed[0].Context.FactorySessionID != opened.SessionID ||
+		listed[0].Context.Session == nil || listed[0].Context.Session.ID != opened.SessionID {
+		t.Fatalf("listed projection = %#v, want canonical identity %q", listed[0], opened.SessionID)
+	}
+
+	read, err := client.GetFactorySession(ctx, opened.SessionID)
+	if err != nil {
+		t.Fatalf("GetFactorySession: %v", err)
+	}
+	if read.Context.FactorySessionID != opened.SessionID ||
+		read.Context.Session == nil || read.Context.Session.ID != opened.SessionID {
+		t.Fatalf("read projection = %#v, want canonical identity %q", read, opened.SessionID)
+	}
+
+	_, err = client.GetFactorySession(ctx, "missing-live-session")
+	if !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("GetFactorySession missing = %v, want errors.Is ErrSessionNotFound", err)
+	}
+}
+
 func TestService_LiveOpenRecordsCanonicalIdentityThroughLiveRuntimeOwner(t *testing.T) {
 	t.Parallel()
 

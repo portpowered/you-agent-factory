@@ -42,6 +42,7 @@ func (*runtimeRole) SubscribeFactoryEvents(
 
 type definitionRole struct{ factorydefinitions.Service }
 type sessionRole struct{ factorysessions.Service }
+type sessionRootRole struct{ factorysessions.Service }
 
 func (*sessionRole) GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error) {
 	return factorysessions.SessionProjection{
@@ -104,9 +105,11 @@ func TestHandlerBindsOpenedRolesWithoutReconstructingStableGraph(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
+	sessions := &sessionRole{}
 	opened := factorysessions.RuntimeHTTPServices{
 		FactoryRuntime: &runtimeRole{}, FactoryDefinitions: &definitionRole{},
-		FactorySessions: &sessionRole{}, Work: &workRole{}, Models: &modelRole{},
+		FactorySessions: sessions, LiveControl: sessions,
+		Work: &workRole{}, Models: &modelRole{},
 		Workers: &workerRole{}, ProviderSessions: &providerSessionRole{},
 	}
 	opened.Logger = zap.NewNop()
@@ -123,7 +126,7 @@ func TestHandlerBindsOpenedRolesWithoutReconstructingStableGraph(t *testing.T) {
 	}
 }
 
-func TestHandlerBindsSessionsRootAtApplicationEdge(t *testing.T) {
+func TestHandlerBindsLiveControlAtApplicationEdge(t *testing.T) {
 	t.Parallel()
 
 	mappings, err := mappingcomposition.NewHTTPBinder(statusProjectorRole{}, &contentPreparationRole{})
@@ -145,7 +148,8 @@ func TestHandlerBindsSessionsRootAtApplicationEdge(t *testing.T) {
 	}
 	opened := factorysessions.RuntimeHTTPServices{
 		FactoryRuntime: &runtimeRole{}, FactoryDefinitions: &definitionRole{},
-		FactorySessions: &sessionRole{}, Work: &workRole{}, Models: &modelRole{},
+		FactorySessions: &sessionRootRole{}, LiveControl: &sessionRole{},
+		Work: &workRole{}, Models: &modelRole{},
 		Workers: &workerRole{}, ProviderSessions: &providerSessionRole{},
 		Logger: zap.NewNop(),
 	}
@@ -186,7 +190,7 @@ func TestHandlerBindRejectsRuntimeWithoutLegacyHTTPRole(t *testing.T) {
 
 	bound, err := handler.Bind(factorysessions.RuntimeHTTPServices{
 		FactoryRuntime:     &runtimeWithoutAPIRole{},
-		FactoryDefinitions: &definitionRole{}, FactorySessions: &sessionRole{},
+		FactoryDefinitions: &definitionRole{}, FactorySessions: &sessionRole{}, LiveControl: &sessionRole{},
 		Work: &workRole{}, Models: &modelRole{}, Workers: &workerRole{},
 		ProviderSessions: &providerSessionRole{}, Logger: zap.NewNop(),
 	})

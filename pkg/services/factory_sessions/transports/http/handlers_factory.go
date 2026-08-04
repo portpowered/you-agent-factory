@@ -139,11 +139,11 @@ func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessi
 		return
 	}
 
-	if s.sessionsRoot != nil {
+	if s.liveControl != nil {
 		if s.guardSessionsRequestContext(w, r) {
 			return
 		}
-		projection, err := s.sessionsRoot.GetFactorySession(r.Context(), decodeGetFactorySessionRequest(sessionID))
+		projection, err := s.liveControl.GetFactorySession(r.Context(), decodeGetFactorySessionRequest(sessionID))
 		if err != nil {
 			if s.writeSessionsRootError(w, string(sessionID), err) {
 				return
@@ -369,11 +369,11 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.sessionsRoot != nil {
+	if s.liveControl != nil {
 		if s.guardSessionsRequestContext(w, r) {
 			return
 		}
-		result, err := s.sessionsRoot.OpenFactorySession(r.Context(), factorysession.OpenRequestFromAPI(req))
+		result, err := s.liveControl.OpenFactorySession(r.Context(), factorysession.OpenRequestFromAPI(req))
 		if err != nil {
 			s.writeOpenFactorySessionRejected(w, err)
 			return
@@ -432,11 +432,11 @@ func (s *Server) writeOpenFactorySessionRejected(w http.ResponseWriter, err erro
 }
 
 func (s *Server) CloseFactorySession(w http.ResponseWriter, r *http.Request, sessionID string) {
-	if s.sessionsRoot != nil {
+	if s.liveControl != nil {
 		if s.guardSessionsRequestContext(w, r) {
 			return
 		}
-		if err := s.sessionsRoot.CloseFactorySession(r.Context(), sessionID); err != nil {
+		if err := s.liveControl.CloseFactorySession(r.Context(), sessionID); err != nil {
 			if s.writeSessionsRootError(w, sessionID, err) {
 				return
 			}
@@ -698,7 +698,7 @@ func (s *Server) mergeScopedFactorySessionList(
 	var durable scopedDurableReader
 
 	if s.sessionsRoot != nil {
-		live = ReadProjectionSessionListReader{Reader: s.sessionsRoot}
+		live = ReadProjectionSessionListReader{Reader: s.liveControl}
 		durable = s.sessionsRoot
 	} else {
 		live = s.liveSessionLister
