@@ -67,3 +67,28 @@ func provideRecordingLifecycleFactory(
 		return lifecycle
 	}
 }
+
+// provideRecordingReplayArtifactsFactory narrows the Recordings root
+// constructed by provideRecordingsFactory down to the narrow
+// RecordingReplayArtifacts capability, so callers that only need to load
+// finalized replay facts and read, export, decode, or validate existing
+// portable artifacts receive that capability explicitly at Wire composition
+// time instead of depending on the broad Service.
+func provideRecordingReplayArtifactsFactory(
+	edges serviceedges.Edges,
+	targets recordings.LiveRecordingTargetPlanner,
+	storage platformreplay.Storage,
+) func(recordings.Ledger, recordings.ProjectionService) recordings.RecordingReplayArtifacts {
+	serviceFactory := provideRecordingsFactory(edges, targets, storage)
+	return func(
+		ledger recordings.Ledger,
+		projection recordings.ProjectionService,
+	) recordings.RecordingReplayArtifacts {
+		service := serviceFactory(ledger, projection)
+		replayArtifacts, ok := service.(recordings.RecordingReplayArtifacts)
+		if !ok {
+			panic("construct Recordings: service does not expose the replay/artifact capability")
+		}
+		return replayArtifacts
+	}
+}
