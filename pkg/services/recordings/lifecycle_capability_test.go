@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -470,6 +471,188 @@ func TestRecordingLifecycle_DetachedResultsAndFailureFacts(t *testing.T) {
 	}
 	if len(status.Status.Failures) != 1 || status.Status.Failures[0].Code != "boundary_failed" {
 		t.Fatalf("Status() Failures = %#v, want independent copy with Code=boundary_failed", status.Status.Failures)
+	}
+}
+
+func beginFinishLifecycleRecording(
+	t *testing.T, lifecycle recordings.RecordingLifecycle,
+	recordingID recordings.LifecycleRecordingID, scope recordings.LifecycleScope,
+) {
+	t.Helper()
+	if _, err := lifecycle.Begin(recordings.BeginRecordingRequest{
+		Enabled:     true,
+		RecordingID: recordingID,
+		Scope:       scope,
+		Artifact:    recordings.LifecycleArtifactReference("artifact://" + string(recordingID)),
+	}); err != nil {
+		t.Fatalf("Begin() error = %v", err)
+	}
+}
+
+func appendFinishLifecycleEvent(
+	t *testing.T, lifecycle recordings.RecordingLifecycle,
+	recordingID recordings.LifecycleRecordingID, event recordings.LifecycleEvent,
+) {
+	t.Helper()
+	if _, err := lifecycle.AppendEvent(recordings.AppendLifecycleEventRequest{
+		RecordingID: recordingID, Event: event,
+	}); err != nil {
+		t.Fatalf("AppendEvent(%s) error = %v", event.ID, err)
+	}
+}
+
+// TestRecordingLifecycle_FinishRetryAfterEarlierFailure proves that Finish
+// still attempts and can succeed at the final flush after an earlier active
+// flush failure, while preserving the earlier failure cause in the terminal
+// status and error.
+func TestRecordingLifecycle_FinishRetryAfterEarlierFailure(t *testing.T) {
+	t.Parallel()
+	writer, lifecycle := newCapturingRecordingLifecycle(t)
+	const recordingID recordings.LifecycleRecordingID = "finish-retry"
+	scope := recordings.LifecycleScope{FactorySessionID: "session-finish-retry"}
+	beginFinishLifecycleRecording(t, lifecycle, recordingID, scope)
+
+	event := validLifecycleEvent(scope, 0)
+	appendFinishLifecycleEvent(t, lifecycle, recordingID, event)
+
+	writer.armFailure()
+	if _, err := lifecycle.Flush(recordings.FlushLifecycleRequest{RecordingID: recordingID}); err == nil {
+		t.Fatal("Flush() error = nil, want write failure")
+	}
+
+	finished, err := lifecycle.Finish(recordings.FinishLifecycleRequest{
+		RecordingID: recordingID,
+		FinishedAt:  time.Now().UTC(),
+	})
+	if err == nil {
+		t.Fatal("Finish() error = nil, want the earlier active-flush failure preserved")
+	}
+	if finished.Status.State != recordings.LifecycleStateFailed {
+		t.Fatalf("Finish() State = %q, want FAILED (earlier cause preserved)", finished.Status.State)
+	}
+	if finished.Status.FlushedThrough == nil || finished.Status.FlushedThrough.Sequence != event.Sequence {
+		t.Fatalf(
+			"Finish() FlushedThrough = %#v, want retried final flush at sequence %d",
+			finished.Status.FlushedThrough, event.Sequence,
+		)
+	}
+	if len(finished.Status.Failures) != 1 {
+		t.Fatalf("Finish() Failures = %#v, want exactly the earlier active-flush failure", finished.Status.Failures)
+	}
+}
+
+// TestRecordingLifecycle_FinishFailedFinalFlushIsRepeatable proves that a
+// failed final flush returns a failed terminal status with a matchable
+// error, that repeating Finish returns the identical terminal outcome
+// without re-running the flush or duplicating failures, and that appending
+// after finish is rejected with a typed terminal error.
+func TestRecordingLifecycle_FinishFailedFinalFlushIsRepeatable(t *testing.T) {
+	t.Parallel()
+	writeErr := errors.New("final storage unavailable")
+	lifecycle := newTestRecordingLifecycleWithWriter(t, func(string, []byte) error { return writeErr })
+	const recordingID recordings.LifecycleRecordingID = "finish-failed"
+	scope := recordings.LifecycleScope{FactorySessionID: "session-finish-failed"}
+	beginFinishLifecycleRecording(t, lifecycle, recordingID, scope)
+	appendFinishLifecycleEvent(t, lifecycle, recordingID, validLifecycleEvent(scope, 0))
+
+	firstFinishedAt := time.Now().UTC()
+	first, firstErr := lifecycle.Finish(recordings.FinishLifecycleRequest{
+		RecordingID: recordingID, FinishedAt: firstFinishedAt,
+	})
+	if !errors.Is(firstErr, writeErr) {
+		t.Fatalf("Finish() error = %v, want to wrap %v", firstErr, writeErr)
+	}
+	if first.Status.State != recordings.LifecycleStateFailed || first.Status.FinalizedAt == nil ||
+		len(first.Status.Failures) != 1 {
+		t.Fatalf("Finish() status = %#v, want FAILED with one recorded failure", first.Status)
+	}
+
+	repeated, repeatedErr := lifecycle.Finish(recordings.FinishLifecycleRequest{
+		RecordingID: recordingID, FinishedAt: firstFinishedAt.Add(time.Hour),
+	})
+	if !errors.Is(repeatedErr, writeErr) {
+		t.Fatalf("Finish(repeat) error = %v, want to wrap %v", repeatedErr, writeErr)
+	}
+	if repeated.Status.FinalizedAt == nil || !repeated.Status.FinalizedAt.Equal(*first.Status.FinalizedAt) ||
+		len(repeated.Status.Failures) != 1 {
+		t.Fatalf("Finish(repeat) status = %#v, want identical terminal outcome as %#v", repeated.Status, first.Status)
+	}
+
+	assertFinishLifecycleRejectsAppend(t, lifecycle, recordingID, scope)
+}
+
+func assertFinishLifecycleRejectsAppend(
+	t *testing.T, lifecycle recordings.RecordingLifecycle,
+	recordingID recordings.LifecycleRecordingID, scope recordings.LifecycleScope,
+) {
+	t.Helper()
+	_, err := lifecycle.AppendEvent(recordings.AppendLifecycleEventRequest{
+		RecordingID: recordingID, Event: lifecycleWorkEvent(scope, 1),
+	})
+	if err == nil {
+		t.Fatal("AppendEvent() after finish error = nil, want typed terminal rejection")
+	}
+	var lifecycleErr *recordings.LifecycleError
+	if !errors.As(err, &lifecycleErr) || lifecycleErr.Kind != recordings.LifecycleErrorTerminal {
+		t.Fatalf("AppendEvent() after finish error = %v, want LifecycleErrorTerminal", err)
+	}
+	if !errors.Is(err, recordings.ErrRecordingWriteRejected) {
+		t.Fatalf("AppendEvent() after finish error does not unwrap to ErrRecordingWriteRejected: %v", err)
+	}
+}
+
+// TestRecordingLifecycle_FinishConcurrentSingleFlight proves that concurrent
+// Finish calls perform exactly one final flush and return the identical
+// terminal outcome, without sleeps, by blocking the first flush write until
+// both callers are in flight.
+func TestRecordingLifecycle_FinishConcurrentSingleFlight(t *testing.T) {
+	t.Parallel()
+	writeStarted := make(chan struct{})
+	releaseWrite := make(chan struct{})
+	var writes int32
+	lifecycle := newTestRecordingLifecycleWithWriter(t, func(string, []byte) error {
+		if atomic.AddInt32(&writes, 1) == 1 {
+			close(writeStarted)
+		}
+		<-releaseWrite
+		return nil
+	})
+	const recordingID recordings.LifecycleRecordingID = "finish-concurrent"
+	scope := recordings.LifecycleScope{FactorySessionID: "session-finish-concurrent"}
+	beginFinishLifecycleRecording(t, lifecycle, recordingID, scope)
+	appendFinishLifecycleEvent(t, lifecycle, recordingID, validLifecycleEvent(scope, 0))
+
+	finishedAt := time.Now().UTC()
+	type finishOutcome struct {
+		result recordings.RecordingLifecycleResult
+		err    error
+	}
+	outcomes := make(chan finishOutcome, 2)
+	for range 2 {
+		go func() {
+			result, err := lifecycle.Finish(recordings.FinishLifecycleRequest{
+				RecordingID: recordingID, FinishedAt: finishedAt,
+			})
+			outcomes <- finishOutcome{result, err}
+		}()
+	}
+	<-writeStarted
+	close(releaseWrite)
+
+	first := <-outcomes
+	second := <-outcomes
+	if first.err != nil || second.err != nil {
+		t.Fatalf("Finish() concurrent errors = (%v, %v), want nil", first.err, second.err)
+	}
+	if first.result.Status.FinalizedAt == nil || second.result.Status.FinalizedAt == nil ||
+		!first.result.Status.FinalizedAt.Equal(*second.result.Status.FinalizedAt) {
+		t.Fatalf(
+			"Finish() concurrent statuses = (%#v, %#v), want identical FinalizedAt",
+			first.result.Status, second.result.Status,
+		)
+	}
+	if atomic.LoadInt32(&writes) != 1 {
+		t.Fatalf("final writes = %d, want exactly one (single-flight)", writes)
 	}
 }
 
