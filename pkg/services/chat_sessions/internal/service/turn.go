@@ -115,8 +115,10 @@ func (s *Store) StartTurn(_ context.Context, req chatsessions.StartTurnRequest) 
 // table. It reports *NotFoundError when SessionID or TurnID does not
 // identify an existing turn and the turn's own *TransitionError when Next is
 // not a legal transition from its current state; on either failure the
-// stored turn and session are left byte-for-byte unchanged. Reaching a
-// terminal Next records that terminal state on the turn (assigning it a
+// stored turn and session are left byte-for-byte unchanged. Repeating a turn's
+// exact terminal state is an idempotent success, so a completed close/control
+// race cannot turn a truthful prompt result into a transport failure. Reaching
+// a terminal Next records that terminal state on the turn (assigning it a
 // distinct, non-zero TerminalSequence from the session's private turn
 // sequence counter), clears the session's ActiveTurnID, and advances the
 // session's version so later guarded callers observe the release.
@@ -135,6 +137,9 @@ func (s *Store) AdvanceTurn(_ context.Context, req chatsessions.AdvanceTurnReque
 	turn, ok := record.turns[req.TurnID]
 	if !ok {
 		return chatsessions.AdvanceTurnResult{}, &chatsessions.NotFoundError{Value: "Turn", ID: req.TurnID}
+	}
+	if turn.State.IsTerminal() && turn.State == req.Next {
+		return chatsessions.AdvanceTurnResult{Turn: turn}, nil
 	}
 	if err := turn.State.CanTransitionTo(req.Next); err != nil {
 		return chatsessions.AdvanceTurnResult{}, err

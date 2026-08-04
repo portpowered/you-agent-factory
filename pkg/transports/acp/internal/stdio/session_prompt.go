@@ -813,6 +813,9 @@ func (s *Server) startFactorySessionForEpisode(
 
 	bindResult, err := s.bindStartedFactorySession(ctx, startResult, factorySessionID)
 	if err != nil {
+		if reconciled, closed := s.reconcileCanceledCloseAfterBindFailure(ctx, startResult, outcome, liveDelivered, err); closed {
+			return reconciled, nil
+		}
 		return dispatchOutcome{}, err
 	}
 
