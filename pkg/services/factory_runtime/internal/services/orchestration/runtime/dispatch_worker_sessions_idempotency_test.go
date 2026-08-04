@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,6 +12,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
+	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -321,29 +325,71 @@ func TestFactoryImpl_WorkerSessionCompletionRacesExplicitAcceptanceAndCanonicalR
 		ResultOutcome: factory.DispatchResultOutcomeSuccess,
 	}
 
-	// Neither completion path starts until both goroutines are waiting on the
-	// same barrier. The boundary send unblocks the actual Worker Sessions
-	// callback path; the other contender is the public Runtime operation.
-	release := make(chan struct{})
-	callbackDelivered := make(chan struct{})
+	runTerminalAcceptanceRace(t, impl, boundary, request, terminal)
+	if err := <-runDone; err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	assertTerminalRaceLiveState(t, runtime, liveLedger, request, terminal)
+	replayed := reloadCanonicalRuntimeLedger(t, liveLedger.CanonicalEvents(), recordedAt, terminal.DispatchID)
+	assertTerminalRaceReplayState(t, replayed, request, terminal)
+	replayedRuntime := reconstructTerminalReplayAuthority(t, replayed)
+
+	eventsBeforeDuplicate := replayed.ledger.CanonicalEvents()
+	projectionBeforeDuplicate := replayed.projection
+	duplicate, err := replayedRuntime.AcceptDispatchResult(t.Context(), replayed.terminal)
+	requireNoRootErr(t, err, "AcceptDispatchResult(after replay)")
+	if duplicate.Outcome != factory.DispatchPlanOutcomeDuplicateIdempotent {
+		t.Fatalf("terminal redelivery outcome = %q, want DUPLICATE_IDEMPOTENT", duplicate.Outcome)
+	}
+	if eventsAfterDuplicate := replayed.ledger.CanonicalEvents(); !reflect.DeepEqual(eventsBeforeDuplicate, eventsAfterDuplicate) {
+		t.Fatalf("replay terminal redelivery changed canonical events:\n before=%#v\n after=%#v", eventsBeforeDuplicate, eventsAfterDuplicate)
+	}
+	projectionAfterDuplicate, err := recordingswire.NewProjectionService().ReconstructFactoryWorldState(
+		replayed.ledger.CanonicalEvents(),
+		maxCanonicalTick(replayed.ledger.CanonicalEvents()),
+	)
+	requireNoRootErr(t, err, "reconstruct replay projection after duplicate")
+	if !reflect.DeepEqual(projectionBeforeDuplicate, projectionAfterDuplicate) {
+		t.Fatalf("replay terminal redelivery changed reconstructed projection:\n before=%#v\n after=%#v", projectionBeforeDuplicate, projectionAfterDuplicate)
+	}
+}
+
+func runTerminalAcceptanceRace(
+	t *testing.T,
+	impl *factoryImpl,
+	boundary *controlledWorkstationBoundary,
+	request workers.WorkstationDispatchRequest,
+	terminal factory.AcceptDispatchResultRequest,
+) {
+	t.Helper()
+	acceptance := newTerminalAcceptanceBarrierPlanner(impl.dispatchPlan)
+	impl.dispatchPlan = acceptance
+	impl.dispatchFlow.planner = acceptance
+
+	callbackDelivered := make(chan struct{}, 1)
 	explicitDelivered := make(chan struct {
 		result factory.AcceptDispatchResultResult
 		err    error
 	}, 1)
 	go func() {
-		<-release
 		boundary.results <- completedWorkersResult(request)
-		close(callbackDelivered)
+		callbackDelivered <- struct{}{}
 	}()
 	go func() {
-		<-release
 		result, acceptErr := impl.AcceptDispatchResult(t.Context(), terminal)
 		explicitDelivered <- struct {
 			result factory.AcceptDispatchResultResult
 			err    error
 		}{result: result, err: acceptErr}
 	}()
-	close(release)
+
+	// Both arrivals are observed at Runtime's shared terminal acceptance
+	// operation before either completion path may retire the dispatch.
+	<-acceptance.arrived
+	<-acceptance.arrived
+	close(acceptance.release)
+	assertTerminalAcceptanceRace(t, []terminalAcceptanceCall{<-acceptance.calls, <-acceptance.calls})
 
 	explicit := <-explicitDelivered
 	requireNoRootErr(t, explicit.err, "AcceptDispatchResult(racing)")
@@ -352,20 +398,64 @@ func TestFactoryImpl_WorkerSessionCompletionRacesExplicitAcceptanceAndCanonicalR
 		t.Fatalf("racing AcceptDispatchResult outcome = %q, want RETIRED or DUPLICATE_IDEMPOTENT", explicit.result.Outcome)
 	}
 	<-callbackDelivered
-	if err := <-runDone; err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+}
 
-	assertTerminalRaceLiveState(t, runtime, liveLedger, request, terminal)
-	replayed := reloadCanonicalRuntimeLedger(t, liveLedger.CanonicalEvents(), recordedAt)
-	assertTerminalRaceReplayState(t, replayed, request, terminal)
+type terminalAcceptanceCall struct {
+	result dispatchplanning.RetirementResult
+	err    error
+}
 
-	duplicate, err := impl.AcceptDispatchResult(t.Context(), terminal)
-	requireNoRootErr(t, err, "AcceptDispatchResult(after replay)")
-	if duplicate.Outcome != factory.DispatchPlanOutcomeDuplicateIdempotent {
-		t.Fatalf("terminal redelivery outcome = %q, want DUPLICATE_IDEMPOTENT", duplicate.Outcome)
+// terminalAcceptanceBarrierPlanner parks callers immediately before the
+// Runtime-owned terminal acceptance operation. It embeds the production
+// planner, so after release both contenders execute the real Retire logic.
+type terminalAcceptanceBarrierPlanner struct {
+	dispatchplanning.Service
+
+	arrived chan struct{}
+	release chan struct{}
+	calls   chan terminalAcceptanceCall
+}
+
+func newTerminalAcceptanceBarrierPlanner(
+	inner dispatchplanning.Service,
+) *terminalAcceptanceBarrierPlanner {
+	return &terminalAcceptanceBarrierPlanner{
+		Service: inner,
+		arrived: make(chan struct{}, 2),
+		release: make(chan struct{}),
+		calls:   make(chan terminalAcceptanceCall, 2),
 	}
-	assertTerminalRaceLiveState(t, runtime, liveLedger, request, terminal)
+}
+
+func (p *terminalAcceptanceBarrierPlanner) Retire(
+	ctx context.Context,
+	terminal dispatchplanning.TerminalResult,
+) (dispatchplanning.RetirementResult, error) {
+	p.arrived <- struct{}{}
+	<-p.release
+	result, err := p.Service.Retire(ctx, terminal)
+	p.calls <- terminalAcceptanceCall{result: result, err: err}
+	return result, err
+}
+
+func assertTerminalAcceptanceRace(t *testing.T, calls []terminalAcceptanceCall) {
+	t.Helper()
+	retired := 0
+	duplicates := 0
+	for _, call := range calls {
+		requireNoRootErr(t, call.err, "Retire(racing completion)")
+		switch call.result.Outcome {
+		case dispatchplanning.RetirementOutcomeRetired:
+			retired++
+		case dispatchplanning.RetirementOutcomeDuplicateIdempotent:
+			duplicates++
+		default:
+			t.Fatalf("terminal retirement outcome = %q, want RETIRED or DUPLICATE_IDEMPOTENT", call.result.Outcome)
+		}
+	}
+	if retired != 1 || duplicates != 1 {
+		t.Fatalf("terminal retirement outcomes = retired:%d duplicates:%d, want exactly one of each", retired, duplicates)
+	}
 }
 
 func assertTerminalRaceLiveState(
@@ -411,9 +501,8 @@ func reloadCanonicalRuntimeLedger(
 	t *testing.T,
 	events []interfaces.FactoryEvent,
 	recordedAt time.Time,
-) interface {
-	CanonicalEvents() []interfaces.FactoryEvent
-} {
+	dispatchID string,
+) *canonicalTerminalReplay {
 	t.Helper()
 
 	// The JSON round trip is the persistence boundary: replay is loaded from
@@ -433,25 +522,257 @@ func reloadCanonicalRuntimeLedger(
 	for _, event := range loaded {
 		replayLedger.AppendRecordedEvent(event)
 	}
-	if _, err := recordingswire.NewProjectionService().ReconstructFactoryWorldState(
+	projection, err := recordingswire.NewProjectionService().ReconstructFactoryWorldState(
 		replayLedger.CanonicalEvents(),
 		maxCanonicalTick(replayLedger.CanonicalEvents()),
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatalf("reconstruct fresh canonical replay projection: %v", err)
 	}
-	return replayLedger
+	return &canonicalTerminalReplay{
+		ledger:     replayLedger,
+		projection: projection,
+		terminal:   terminalReplayResultFromCanonicalEvents(t, replayLedger.CanonicalEvents(), dispatchID),
+	}
+}
+
+type canonicalTerminalReplay struct {
+	ledger     recordings.RuntimeEventLedger
+	projection interfaces.FactoryWorldState
+	terminal   factory.AcceptDispatchResultRequest
 }
 
 func assertTerminalRaceReplayState(
 	t *testing.T,
-	ledger interface {
-		CanonicalEvents() []interfaces.FactoryEvent
-	},
+	replay *canonicalTerminalReplay,
 	request workers.WorkstationDispatchRequest,
 	terminal factory.AcceptDispatchResultRequest,
 ) {
 	t.Helper()
-	assertTerminalRaceCanonicalFacts(t, ledger.CanonicalEvents(), request, terminal)
+	if !reflect.DeepEqual(replay.terminal, terminal) {
+		t.Fatalf("replayed terminal result = %#v, want canonical live result %#v", replay.terminal, terminal)
+	}
+	assertTerminalRaceCanonicalFacts(t, replay.ledger.CanonicalEvents(), request, terminal)
+	assertTerminalRaceReplayProjection(t, replay.projection, request, terminal)
+}
+
+func assertTerminalRaceReplayProjection(
+	t *testing.T,
+	projection interfaces.FactoryWorldState,
+	request workers.WorkstationDispatchRequest,
+	terminal factory.AcceptDispatchResultRequest,
+) {
+	t.Helper()
+
+	var completion *interfaces.FactoryWorldDispatchCompletion
+	for index := range projection.CompletedDispatches {
+		candidate := &projection.CompletedDispatches[index]
+		if candidate.DispatchID == terminal.DispatchID {
+			completion = candidate
+			break
+		}
+	}
+	if completion == nil {
+		t.Fatalf("replayed projection completed dispatches = %#v, want dispatch %q", projection.CompletedDispatches, terminal.DispatchID)
+	}
+	if completion.Result.Outcome != "ACCEPTED" || !containsCanonicalWorkID(&completion.WorkItemIDs, terminal.WorkID) {
+		t.Fatalf("replayed completion = %#v, want accepted terminal result with Work lineage %q", completion, terminal.WorkID)
+	}
+	if item, ok := projection.WorkItemsByID[terminal.WorkID]; !ok || item.PlaceID != "task:done" || item.State != "done" {
+		t.Fatalf("replayed materialized Work = (%#v, %t), want %q at task:done", item, ok, terminal.WorkID)
+	}
+	if request.Execution.Dispatch.DispatchID != terminal.DispatchID || terminal.CorrelationID != terminal.DispatchID {
+		t.Fatalf("replayed dispatch/correlation identity = (%q, %q), want stable dispatch-derived correlation", request.Execution.Dispatch.DispatchID, terminal.CorrelationID)
+	}
+}
+
+// reconstructTerminalReplayAuthority builds a new Factory Runtime authority
+// from detached canonical replay facts. The full Petri marking is already the
+// Recordings projection above; this narrowly restores the Runtime planner's
+// terminal tombstone so a new process classifies repeated delivery without
+// re-emitting Work or canonical dispatch effects.
+func reconstructTerminalReplayAuthority(
+	t *testing.T,
+	replay *canonicalTerminalReplay,
+) *factoryImpl {
+	t.Helper()
+
+	plan := terminalReplayPlanFromCanonicalEvents(t, replay.ledger.CanonicalEvents(), replay.terminal)
+	readOnlyLedger := replayReadOnlyRuntimeLedger{RuntimeEventLedger: replay.ledger}
+	replayedFactory, err := newTestFactory(
+		withNet(buildSimpleNet()),
+		withWorkerService(&testWorkstationBoundary{}),
+		withWorkerExecutor("mock", &passExecutor{}),
+		withFactoryEventHistory(readOnlyLedger),
+		withLogger(logging.NoopLogger{}),
+	)
+	requireNoRootErr(t, err, "New(replay terminal authority)")
+	replayed := replayedFactory.(*factoryImpl)
+
+	// Restoring an already-terminal dispatch must not call Worker Sessions or
+	// append another association. A no-op publisher reconstructs the planner's
+	// accepted outbox intent from the persisted dispatch request, then Retire
+	// restores its persisted terminal tombstone.
+	planner := dispatchplanningwire.New(func(context.Context, workers.WorkstationDispatchRequest) error {
+		return nil
+	}, nil)
+	replayed.dispatchPlan = planner
+	replayed.dispatchFlow.planner = planner
+	planned, err := replayed.PlanDispatch(t.Context(), plan)
+	requireNoRootErr(t, err, "PlanDispatch(reconstruct replay terminal authority)")
+	if planned.Outcome != factory.DispatchPlanOutcomeAccepted {
+		t.Fatalf("replayed PlanDispatch outcome = %q, want ACCEPTED", planned.Outcome)
+	}
+	retired, err := planner.Retire(t.Context(), dispatchplanning.TerminalResult{
+		DispatchID:    replay.terminal.DispatchID,
+		CorrelationID: replay.terminal.CorrelationID,
+		WorkID:        replay.terminal.WorkID,
+		Outcome:       terminalResultOutcomeForReplay(t, replay.terminal.ResultOutcome),
+	})
+	requireNoRootErr(t, err, "Retire(reconstruct replay terminal authority)")
+	if retired.Outcome != dispatchplanning.RetirementOutcomeRetired {
+		t.Fatalf("replayed retirement outcome = %q, want RETIRED", retired.Outcome)
+	}
+	replayed.state = interfaces.FactoryStateCompleted
+	return replayed
+}
+
+func terminalReplayResultFromCanonicalEvents(
+	t *testing.T,
+	events []interfaces.FactoryEvent,
+	dispatchID string,
+) factory.AcceptDispatchResultRequest {
+	t.Helper()
+
+	var workID, workerSessionID string
+	var response workers.DispatchResponseEventPayload
+	foundResponse := false
+	for _, event := range events {
+		if event.Context.DispatchID == nil || *event.Context.DispatchID != dispatchID {
+			continue
+		}
+		switch event.Type {
+		case interfaces.FactoryEventTypeDispatchRequest:
+			if event.Context.WorkIDs != nil && len(*event.Context.WorkIDs) == 1 {
+				workID = (*event.Context.WorkIDs)[0]
+			}
+		case interfaces.FactoryEventTypeDispatchWorkerSessionAssoc:
+			var association interfaces.DispatchWorkerSessionAssociationEventPayload
+			requireNoRootErr(t, event.DecodePayload(&association), "decode replay Worker Session association")
+			workerSessionID = association.WorkerSessionID
+		case interfaces.FactoryEventTypeDispatchResponse:
+			requireNoRootErr(t, event.DecodePayload(&response), "decode replay terminal dispatch response")
+			foundResponse = true
+		}
+	}
+	if workID == "" || workerSessionID != dispatchID || !foundResponse {
+		t.Fatalf(
+			"replayed terminal facts = work:%q workerSession:%q response:%t, want canonical dispatch %q",
+			workID,
+			workerSessionID,
+			foundResponse,
+			dispatchID,
+		)
+	}
+	return factory.AcceptDispatchResultRequest{
+		DispatchID: dispatchID,
+		// Scheduler-originated dispatches intentionally use DispatchID as their
+		// stable correlation identity. That identity is reconstructed from the
+		// canonical dispatch envelope, not retained from the live factory.
+		CorrelationID: dispatchID,
+		WorkID:        workID,
+		ResultOutcome: replayDispatchResultOutcome(t, response.Outcome),
+	}
+}
+
+func replayDispatchResultOutcome(
+	t *testing.T,
+	outcome workers.WorkOutcome,
+) factory.DispatchResultOutcome {
+	t.Helper()
+	switch outcome {
+	case workers.OutcomeAccepted, workers.OutcomeContinue, workers.OutcomeRejected:
+		return factory.DispatchResultOutcomeSuccess
+	case workers.OutcomeFailed:
+		return factory.DispatchResultOutcomeFailure
+	default:
+		t.Fatalf("replayed terminal Workers outcome = %q, want terminal outcome", outcome)
+		return ""
+	}
+}
+
+func terminalResultOutcomeForReplay(
+	t *testing.T,
+	outcome factory.DispatchResultOutcome,
+) dispatchplanning.TerminalResultOutcome {
+	t.Helper()
+	switch outcome {
+	case factory.DispatchResultOutcomeSuccess:
+		return dispatchplanning.TerminalResultOutcomeSuccess
+	case factory.DispatchResultOutcomeFailure:
+		return dispatchplanning.TerminalResultOutcomeFailure
+	case factory.DispatchResultOutcomeCancelled:
+		return dispatchplanning.TerminalResultOutcomeCancelled
+	default:
+		t.Fatalf("replayed Runtime outcome = %q, want terminal outcome", outcome)
+		return ""
+	}
+}
+
+func terminalReplayPlanFromCanonicalEvents(
+	t *testing.T,
+	events []interfaces.FactoryEvent,
+	terminal factory.AcceptDispatchResultRequest,
+) factory.PlanDispatchRequest {
+	t.Helper()
+
+	var request interfaces.DispatchRequestEventPayload
+	for _, event := range events {
+		if event.Type != interfaces.FactoryEventTypeDispatchRequest || event.Context.DispatchID == nil ||
+			*event.Context.DispatchID != terminal.DispatchID {
+			continue
+		}
+		requireNoRootErr(t, event.DecodePayload(&request), "decode replay dispatch request")
+		break
+	}
+	if request.TransitionID == "" || request.Metadata == nil || request.Metadata.ReplayKey == nil ||
+		*request.Metadata.ReplayKey == "" {
+		t.Fatalf("replayed dispatch request = %#v, want transition and replay key", request)
+	}
+	transition := buildSimpleNet().Transitions[request.TransitionID]
+	if transition == nil || transition.WorkerType == "" {
+		t.Fatalf("replayed transition %q has no Worker type in fresh Factory definition", request.TransitionID)
+	}
+	return factory.PlanDispatchRequest{
+		DispatchID:      terminal.DispatchID,
+		CorrelationID:   terminal.CorrelationID,
+		WorkIDs:         []string{terminal.WorkID},
+		WorkstationName: request.TransitionID,
+		WorkerType:      transition.WorkerType,
+		ReplayKey:       *request.Metadata.ReplayKey,
+	}
+}
+
+// replayReadOnlyRuntimeLedger makes construction of the fresh Factory Runtime
+// side-effect free. Its embedded real ledger remains the single canonical
+// source, while constructor-only recording calls cannot append a second run or
+// structure event to the persisted replay history.
+type replayReadOnlyRuntimeLedger struct {
+	recordings.RuntimeEventLedger
+}
+
+func (replayReadOnlyRuntimeLedger) AddEventRecorder(func(interfaces.FactoryEvent)) {}
+
+func (replayReadOnlyRuntimeLedger) RecordRunRequest() {}
+
+func (replayReadOnlyRuntimeLedger) RecordInitialStructure() {}
+
+func (replayReadOnlyRuntimeLedger) RecordSessionLifecycleFromFactoryConfig(
+	string,
+	*interfaces.FactoryConfig,
+	int,
+	time.Time,
+) {
 }
 
 func assertTerminalRaceCanonicalFacts(
