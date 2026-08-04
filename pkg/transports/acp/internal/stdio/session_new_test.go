@@ -238,6 +238,18 @@ func (f *fakeChatSessionsService) AdvanceControl(context.Context, chatsessions.A
 	return chatsessions.AdvanceControlResult{}, errors.New("fakeChatSessionsService: AdvanceControl not implemented")
 }
 
+func (f *fakeChatSessionsService) Sequence(context.Context, chatsessions.SequenceRequest) (chatsessions.SequenceResult, error) {
+	return chatsessions.SequenceResult{}, errors.New("fakeChatSessionsService: Sequence not implemented")
+}
+
+func (f *fakeChatSessionsService) AdvanceStreamHead(context.Context, chatsessions.AdvanceStreamHeadRequest) (chatsessions.AdvanceStreamHeadResult, error) {
+	return chatsessions.AdvanceStreamHeadResult{}, errors.New("fakeChatSessionsService: AdvanceStreamHead not implemented")
+}
+
+func (f *fakeChatSessionsService) AcknowledgeAttachment(context.Context, chatsessions.AcknowledgeAttachmentRequest) (chatsessions.AcknowledgeAttachmentResult, error) {
+	return chatsessions.AcknowledgeAttachmentResult{}, errors.New("fakeChatSessionsService: AcknowledgeAttachment not implemented")
+}
+
 // fakeFactoryTargetCatalogService is a minimal
 // chatsessions.FactoryTargetCatalogService test double.
 type fakeFactoryTargetCatalogService struct {

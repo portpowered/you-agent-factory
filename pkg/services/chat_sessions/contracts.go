@@ -140,6 +140,56 @@ type Service interface {
 	// when ExpectedVersion no longer matches or the session's active
 	// turn/episode has moved on.
 	RecordPendingFactorySession(ctx context.Context, req RecordPendingFactorySessionRequest) (RecordPendingFactorySessionResult, error)
+
+	// Sequence is SessionID's one session-owned serialization point for
+	// committing source-native records onto EventsTopic(SessionID). It
+	// assigns a stable, non-empty ItemID before appending the complete
+	// envelope (SequencedItem) to Events, in successful commit order --
+	// independent of source timestamps, source sequence across producers, or
+	// goroutine start order. A non-blank ParentItemID is accepted only when
+	// it already identifies an item this exact session has sequenced;
+	// otherwise Sequence reports *NotFoundError and commits nothing. Reusing
+	// the same (SourceType, SourceID, SourceSequence, SourceEventID) tuple is
+	// idempotent: it returns the originally assigned ItemID, ParentItemID,
+	// and aggregate position with SequenceOutcomeDuplicate instead of a
+	// second committed record. It reports *NotFoundError when SessionID does
+	// not identify an existing session.
+	Sequence(ctx context.Context, req SequenceRequest) (SequenceResult, error)
+
+	// AdvanceStreamHead advances SessionID's StreamHead to AggregateSequence
+	// -- the position a prior accepted Sequence call committed -- under an
+	// optimistic-version guard. When StreamHead already stands at or beyond
+	// AggregateSequence, the call is an idempotent no-op: it reports
+	// AdvanceStreamHeadOutcomeAlreadyCurrent and leaves the session,
+	// including its Version, byte-for-byte unchanged, regardless of
+	// ExpectedVersion. Otherwise it reports *ConflictError when
+	// ExpectedVersion no longer matches the session's current version and
+	// exposes no partially committed head update: StreamHead, Version, and
+	// UpdatedAt advance together or not at all. A successful advancement
+	// never changes SelectedTarget, TargetEpisode, ActiveTurnID, or any
+	// attachment, control, or episode state. It reports *NotFoundError when
+	// SessionID does not identify an existing session.
+	AdvanceStreamHead(ctx context.Context, req AdvanceStreamHeadRequest) (AdvanceStreamHeadResult, error)
+
+	// AcknowledgeAttachment advances one Attachment's own AfterSequence
+	// delivery cursor to AfterSequence under an optimistic session-version
+	// guard. When AfterSequence already stands at or beyond the requested
+	// position, the call is an idempotent no-op: it reports
+	// AcknowledgeAttachmentOutcomeAlreadyCurrent and leaves the attachment
+	// unchanged, so a retried or stale (including backward-moving)
+	// acknowledgement can never regress the cursor. It reports
+	// *AttachmentPositionError when the requested position exceeds the
+	// session's current StreamHead, *ConflictError when ExpectedVersion no
+	// longer matches the session's current version, and
+	// *AttachmentRetentionGapError when Events retention has evicted part of
+	// the range between the attachment's current position and the requested
+	// one -- in every failure case the attachment and session are left
+	// byte-for-byte unchanged. A successful acknowledgement never changes
+	// any other attachment, Session.StreamHead, Session.Version, or any
+	// ControlIntent. It reports *NotFoundError when SessionID does not
+	// identify an existing session or AttachmentID does not identify an
+	// existing attachment on that session.
+	AcknowledgeAttachment(ctx context.Context, req AcknowledgeAttachmentRequest) (AcknowledgeAttachmentResult, error)
 }
 
 // CreateSessionRequest carries the caller identity, initial target, and

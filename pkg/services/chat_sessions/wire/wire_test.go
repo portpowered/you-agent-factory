@@ -8,7 +8,24 @@ import (
 	"time"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 )
+
+// stubEventsAppender is a minimal EventsAppender double for tests that
+// construct a Service but do not themselves exercise Sequence.
+type stubEventsAppender struct{}
+
+func (stubEventsAppender) Append(context.Context, events.AppendRequest) (events.AppendResult, error) {
+	return events.AppendResult{}, nil
+}
+
+// stubEventsReader is a minimal EventsReader double for tests that construct
+// a Service but do not themselves exercise AcknowledgeAttachment.
+type stubEventsReader struct{}
+
+func (stubEventsReader) Read(context.Context, events.ReadRequest) (events.ReadResult, error) {
+	return events.ReadResult{}, nil
+}
 
 func sequentialIDs(prefix string) IDGenerator {
 	n := 0
@@ -31,16 +48,30 @@ func validCreateRequest() chatsessions.CreateSessionRequest {
 }
 
 func TestNewService_RequiresIDGenerator(t *testing.T) {
-	service, err := NewService(nil, fixedClock(time.Now()))
+	service, err := NewService(nil, fixedClock(time.Now()), stubEventsAppender{}, stubEventsReader{})
 	if err == nil || service != nil {
 		t.Fatalf("NewService(nil id generator) = (%v, %v), want construction failure", service, err)
 	}
 }
 
 func TestNewService_RequiresClock(t *testing.T) {
-	service, err := NewService(sequentialIDs("session"), nil)
+	service, err := NewService(sequentialIDs("session"), nil, stubEventsAppender{}, stubEventsReader{})
 	if err == nil || service != nil {
 		t.Fatalf("NewService(nil clock) = (%v, %v), want construction failure", service, err)
+	}
+}
+
+func TestNewService_RequiresEventsAppender(t *testing.T) {
+	service, err := NewService(sequentialIDs("session"), fixedClock(time.Now()), nil, stubEventsReader{})
+	if err == nil || service != nil {
+		t.Fatalf("NewService(nil events appender) = (%v, %v), want construction failure", service, err)
+	}
+}
+
+func TestNewService_RequiresEventsReader(t *testing.T) {
+	service, err := NewService(sequentialIDs("session"), fixedClock(time.Now()), stubEventsAppender{}, nil)
+	if err == nil || service != nil {
+		t.Fatalf("NewService(nil events reader) = (%v, %v), want construction failure", service, err)
 	}
 }
 
@@ -50,7 +81,7 @@ func TestNewService_RequiresClock(t *testing.T) {
 // detail.
 func TestNewService_ConstructsAWorkingService(t *testing.T) {
 	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
-	service, err := NewService(sequentialIDs("session"), fixedClock(now))
+	service, err := NewService(sequentialIDs("session"), fixedClock(now), stubEventsAppender{}, stubEventsReader{})
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
@@ -80,11 +111,11 @@ func TestNewService_ConstructsAWorkingService(t *testing.T) {
 // Service instances are fully isolated, matching the process-scoped-owner
 // guarantee the canonical provider must uphold.
 func TestNewService_InstancesShareNoState(t *testing.T) {
-	first, err := NewService(sequentialIDs("session"), fixedClock(time.Now()))
+	first, err := NewService(sequentialIDs("session"), fixedClock(time.Now()), stubEventsAppender{}, stubEventsReader{})
 	if err != nil {
 		t.Fatalf("NewService (first): %v", err)
 	}
-	second, err := NewService(sequentialIDs("session"), fixedClock(time.Now()))
+	second, err := NewService(sequentialIDs("session"), fixedClock(time.Now()), stubEventsAppender{}, stubEventsReader{})
 	if err != nil {
 		t.Fatalf("NewService (second): %v", err)
 	}

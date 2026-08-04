@@ -3,19 +3,23 @@ package chatsessions_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 )
 
 // fakeService is a compile-time-only demonstration that Service is usable by
 // an external consumer using nothing but the package's public contracts. It
 // is not a candidate production implementation.
 type fakeService struct {
-	session chatsessions.Session
-	turn    chatsessions.Turn
-	intent  chatsessions.ControlIntent
+	session                 chatsessions.Session
+	turn                    chatsessions.Turn
+	intent                  chatsessions.ControlIntent
+	sequenceCount           int
+	attachmentAfterSequence uint64
 }
 
 var _ chatsessions.Service = (*fakeService)(nil)
@@ -121,6 +125,55 @@ func (f *fakeService) Attach(_ context.Context, req chatsessions.AttachRequest) 
 	return chatsessions.AttachResult{Attachment: chatsessions.Attachment{
 		ID: "attachment-1", SessionID: req.SessionID, ConnectionID: req.ConnectionID, Interactive: req.Interactive,
 	}}, nil
+}
+
+// Sequence is a minimal fake: it assigns a sequential ItemID and never
+// reports a duplicate, since none of this fake's own tests exercise
+// idempotency or parent-linkage.
+func (f *fakeService) Sequence(_ context.Context, req chatsessions.SequenceRequest) (chatsessions.SequenceResult, error) {
+	if req.SessionID != f.session.ID {
+		return chatsessions.SequenceResult{}, &chatsessions.NotFoundError{Value: "Session", ID: req.SessionID}
+	}
+	f.sequenceCount++
+	return chatsessions.SequenceResult{
+		SessionID:         req.SessionID,
+		ItemID:            fmt.Sprintf("item-%d", f.sequenceCount),
+		ParentItemID:      req.ParentItemID,
+		AggregateSequence: events.AggregateSequence(f.sequenceCount),
+		Outcome:           chatsessions.SequenceOutcomeAccepted,
+	}, nil
+}
+
+// AdvanceStreamHead is a minimal fake: it advances StreamHead unconditionally
+// when it is behind AggregateSequence, since none of this fake's own tests
+// exercise version conflicts.
+func (f *fakeService) AdvanceStreamHead(_ context.Context, req chatsessions.AdvanceStreamHeadRequest) (chatsessions.AdvanceStreamHeadResult, error) {
+	if req.SessionID != f.session.ID {
+		return chatsessions.AdvanceStreamHeadResult{}, &chatsessions.NotFoundError{Value: "Session", ID: req.SessionID}
+	}
+	if f.session.StreamHead >= uint64(req.AggregateSequence) {
+		return chatsessions.AdvanceStreamHeadResult{Session: f.session, Outcome: chatsessions.AdvanceStreamHeadOutcomeAlreadyCurrent}, nil
+	}
+	f.session.StreamHead = uint64(req.AggregateSequence)
+	f.session.Version++
+	return chatsessions.AdvanceStreamHeadResult{Session: f.session, Outcome: chatsessions.AdvanceStreamHeadOutcomeAdvanced}, nil
+}
+
+// AcknowledgeAttachment is a minimal fake: it advances the single tracked
+// attachment's AfterSequence unconditionally when it is behind
+// req.AfterSequence, since none of this fake's own tests exercise version
+// conflicts or retention gaps.
+func (f *fakeService) AcknowledgeAttachment(_ context.Context, req chatsessions.AcknowledgeAttachmentRequest) (chatsessions.AcknowledgeAttachmentResult, error) {
+	if req.SessionID != f.session.ID || req.AttachmentID != "attachment-1" {
+		return chatsessions.AcknowledgeAttachmentResult{}, &chatsessions.NotFoundError{Value: "Attachment", ID: req.AttachmentID}
+	}
+	attachment := chatsessions.Attachment{ID: "attachment-1", SessionID: f.session.ID, ConnectionID: "conn-2", AfterSequence: f.attachmentAfterSequence}
+	if f.attachmentAfterSequence >= uint64(req.AfterSequence) {
+		return chatsessions.AcknowledgeAttachmentResult{Attachment: attachment, Outcome: chatsessions.AcknowledgeAttachmentOutcomeAlreadyCurrent}, nil
+	}
+	f.attachmentAfterSequence = uint64(req.AfterSequence)
+	attachment.AfterSequence = f.attachmentAfterSequence
+	return chatsessions.AcknowledgeAttachmentResult{Attachment: attachment, Outcome: chatsessions.AcknowledgeAttachmentOutcomeAdvanced}, nil
 }
 
 func (f *fakeService) Detach(_ context.Context, req chatsessions.DetachRequest) (chatsessions.DetachResult, error) {

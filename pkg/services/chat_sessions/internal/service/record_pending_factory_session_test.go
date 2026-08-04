@@ -136,7 +136,7 @@ func TestStore_RecordPendingFactorySession_TurnNoLongerActiveIsTypedConflict(t *
 // recording against an unknown SessionID reports *NotFoundError.
 func TestStore_RecordPendingFactorySession_UnknownSessionIsTypedNotFound(t *testing.T) {
 	ctx := context.Background()
-	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()))
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil)
 
 	_, err := store.RecordPendingFactorySession(ctx, chatsessions.RecordPendingFactorySessionRequest{
 		SessionID: "does-not-exist", ExpectedVersion: 1, Episode: 1, TurnID: "turn-1", FactorySessionID: "fs-pending-1",

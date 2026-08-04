@@ -488,7 +488,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	acpService := provideACPCLIService(operatorsettingsService, service, idGenerator)
-	chatsessionsService, err := provideChatSessionsService(loggingLogger)
+	chatsessionsService, err := provideChatSessionsService(eventsService, loggingLogger)
 	if err != nil {
 		return nil, err
 	}

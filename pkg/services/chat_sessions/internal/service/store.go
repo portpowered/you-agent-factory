@@ -1,11 +1,13 @@
 package service
 
 import (
+	"context"
 	"sync"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 )
 
 var _ chatsessions.Service = (*Store)(nil)
@@ -19,15 +21,66 @@ type IDGenerator func() string
 // caller can supply a deterministic clock under test.
 type Clock func() time.Time
 
+// EventsAppender is the narrow Events dependency the sequencer needs: commit
+// one source-native record into a topic's aggregate ordering. Store depends
+// on this port rather than the full events.Service so a caller wiring only
+// the sequencer's own tests never has to satisfy Read/Subscribe/AttachSource
+// too. Any events.Service value already satisfies this interface
+// structurally.
+type EventsAppender interface {
+	Append(context.Context, events.AppendRequest) (events.AppendResult, error)
+}
+
+// EventsReader is the narrow Events dependency AcknowledgeAttachment needs:
+// read a bounded slice of a topic's aggregate ordering to detect whether the
+// range between an attachment's current position and its requested new
+// position has fallen outside Events' retention window. Store depends on
+// this port rather than the full events.Service for the same reason
+// EventsAppender is narrow -- a caller wiring only tests that never call
+// AcknowledgeAttachment never has to satisfy it. Any events.Service value
+// already satisfies this interface structurally.
+type EventsReader interface {
+	Read(context.Context, events.ReadRequest) (events.ReadResult, error)
+}
+
 // Store is the synchronized in-memory implementation of the L1 V1 Chat
 // Sessions engine. The zero value is not usable; construct with New.
 type Store struct {
 	mu       sync.RWMutex
 	sessions map[string]sessionRecord
 
-	newID  IDGenerator
-	now    Clock
-	logger logging.Logger
+	newID          IDGenerator
+	now            Clock
+	eventsAppender EventsAppender
+	eventsReader   EventsReader
+	logger         logging.Logger
+}
+
+// sequencedSourceIdentity is the (SourceType, SourceID, SourceSequence,
+// SourceEventID) tuple Sequence committed for one aggregate position within
+// one session. AdvanceStreamHead consults sessionRecord.sequencedPositions
+// (keyed by that same aggregate position) against this exact tuple before
+// ever advancing StreamHead, so a caller can never move StreamHead to a
+// position this session's sequencer did not actually commit for the stated
+// source identity -- including a position that belongs to a different
+// session's own topic, or one committed for a different source tuple.
+type sequencedSourceIdentity struct {
+	SourceType     events.SourceType
+	SourceID       events.SourceID
+	SourceSequence events.SourceSequence
+	SourceEventID  events.SourceEventID
+}
+
+// sequencedRecord is what Sequence stores per sequencedSourceIdentity in
+// sessionRecord.sequencedBySource on a newly accepted commit: the exact
+// assigned item and the SchemaID and aggregate position Events committed it
+// under. Sequence consults this before minting any new ItemID so a
+// duplicate/contradictory retry of an already-known identity never consumes
+// (and discards) a fresh identity from the injected IDGenerator.
+type sequencedRecord struct {
+	Item     chatsessions.SequencedItem
+	SchemaID events.SchemaID
+	Position events.AggregateSequence
 }
 
 // sessionRecord is the Store-owned mutable aggregate for one Chat Session.
@@ -74,15 +127,40 @@ type Store struct {
 // ActiveTurnID) and return the existing turn instead of admitting a second
 // one and dispatching its effects again. Like controls, an entry here is
 // never removed or overwritten.
+// sequencedItemIDs holds the ItemID of every aggregate record this session's
+// sequencer has ever assigned, independent of turns, episodes, attachments,
+// and controls. Sequence consults it to validate a child record's
+// ParentItemID (accepted only when the parent's ItemID is already a member)
+// and adds to it only on a newly accepted record -- a duplicate resolution
+// never inserts a second time, since the ItemID it resolves to is already a
+// member from the original accepted call.
+// sequencedPositions holds, for every aggregate position this session's
+// sequencer has ever committed, the exact source identity tuple Sequence
+// committed it under. AdvanceStreamHead is the sole reader: it rejects any
+// requested AggregateSequence that is not a member here under the caller's
+// exact stated source identity, so StreamHead can never advance to a
+// fabricated, uncommitted, or cross-session position. Like
+// sequencedItemIDs, it is written only on a newly accepted Sequence record.
+// sequencedBySource is the reverse of sequencedPositions, keyed by source
+// identity instead of aggregate position: Sequence consults it first, before
+// minting any ItemID, so a duplicate or contradictory retry of an
+// already-known (SourceType, SourceID, SourceSequence, SourceEventID) tuple
+// resolves entirely from this session's own local state -- never consuming a
+// fresh identity from the injected IDGenerator, and never issuing another
+// Events append. Like sequencedItemIDs and sequencedPositions, it is written
+// only on a newly accepted Sequence record and never removed or overwritten.
 type sessionRecord struct {
-	session        chatsessions.Session
-	episodes       []chatsessions.TargetEpisode
-	turns          map[string]chatsessions.Turn
-	turnsByRequest map[chatsessions.RequestIdentity]string
-	lastTurnID     string
-	turnSequence   uint64
-	attachments    map[string]chatsessions.Attachment
-	controls       map[chatsessions.RequestIdentity]chatsessions.ControlIntent
+	session            chatsessions.Session
+	episodes           []chatsessions.TargetEpisode
+	turns              map[string]chatsessions.Turn
+	turnsByRequest     map[chatsessions.RequestIdentity]string
+	lastTurnID         string
+	turnSequence       uint64
+	attachments        map[string]chatsessions.Attachment
+	controls           map[chatsessions.RequestIdentity]chatsessions.ControlIntent
+	sequencedItemIDs   map[string]struct{}
+	sequencedPositions map[events.AggregateSequence]sequencedSourceIdentity
+	sequencedBySource  map[sequencedSourceIdentity]sequencedRecord
 }
 
 // activeTurnValue returns the session's current active Turn read live from
@@ -99,21 +177,29 @@ func (record sessionRecord) activeTurnValue() (chatsessions.Turn, bool) {
 }
 
 // NewStore constructs an empty Store from explicit dependencies. newID and
-// now must be non-nil. logger is optional and defaults to a no-op logger
-// when omitted, matching the repository's optional-logger construction
-// convention rather than a mutable reinjection path. Named NewStore (not
-// New) because this package also owns the unrelated FactoryTargetCatalog
+// now must be non-nil; eventsAppender and eventsReader may be nil for a
+// Store a caller knows will never exercise Sequence or AcknowledgeAttachment
+// (most existing Store tests predate the sequencer and never call either).
+// logger is optional and defaults to a no-op logger when omitted. Every
+// dependency is injected directly here, once, through this one canonical
+// constructor -- general-backend-standards.md §2 forbids a secondary
+// injector such as a post-construction `With<X>` mutator, so callers that do
+// need Sequence/AcknowledgeAttachment must supply both events ports up
+// front rather than attaching them afterward. Named NewStore (not New)
+// because this package also owns the unrelated FactoryTargetCatalog
 // Service's own New constructor (service.go); Go does not allow two
 // same-named top-level functions in one package.
-func NewStore(newID IDGenerator, now Clock, logger ...logging.Logger) *Store {
+func NewStore(newID IDGenerator, now Clock, eventsAppender EventsAppender, eventsReader EventsReader, logger ...logging.Logger) *Store {
 	var provided logging.Logger
 	if len(logger) > 0 {
 		provided = logger[0]
 	}
 	return &Store{
-		sessions: make(map[string]sessionRecord),
-		newID:    newID,
-		now:      now,
-		logger:   logging.EnsureLogger(provided),
+		sessions:       make(map[string]sessionRecord),
+		newID:          newID,
+		now:            now,
+		eventsAppender: eventsAppender,
+		eventsReader:   eventsReader,
+		logger:         logging.EnsureLogger(provided),
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 )
 
 // initialSessionVersion is the Version a newly created Session carries. A
@@ -67,12 +68,15 @@ func (s *Store) CreateSession(_ context.Context, req chatsessions.CreateSessionR
 	}
 
 	s.sessions[session.ID] = sessionRecord{
-		session:        session,
-		episodes:       []chatsessions.TargetEpisode{episode},
-		turns:          make(map[string]chatsessions.Turn),
-		turnsByRequest: make(map[chatsessions.RequestIdentity]string),
-		attachments:    make(map[string]chatsessions.Attachment),
-		controls:       make(map[chatsessions.RequestIdentity]chatsessions.ControlIntent),
+		session:            session,
+		episodes:           []chatsessions.TargetEpisode{episode},
+		turns:              make(map[string]chatsessions.Turn),
+		turnsByRequest:     make(map[chatsessions.RequestIdentity]string),
+		attachments:        make(map[string]chatsessions.Attachment),
+		controls:           make(map[chatsessions.RequestIdentity]chatsessions.ControlIntent),
+		sequencedItemIDs:   make(map[string]struct{}),
+		sequencedPositions: make(map[events.AggregateSequence]sequencedSourceIdentity),
+		sequencedBySource:  make(map[sequencedSourceIdentity]sequencedRecord),
 	}
 	return chatsessions.CreateSessionResult{Session: session}, nil
 }

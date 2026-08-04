@@ -18,7 +18,7 @@ func controlRequestID(connID, id string) chatsessions.RequestIdentity {
 // calls.
 func newActiveTurnTestSession(t *testing.T, now time.Time) (*Store, chatsessions.Session, chatsessions.Turn) {
 	t.Helper()
-	store := NewStore(sequentialIDs("session"), fixedClock(now))
+	store := NewStore(sequentialIDs("session"), fixedClock(now), nil, nil)
 	created, err := store.CreateSession(context.Background(), validCreateRequest())
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -212,7 +212,7 @@ func TestStore_RequestControl_UnsupportedActionCreatesNoMutation(t *testing.T) {
 // creates no control intent.
 func TestStore_RequestControl_NoActiveTurnIsNotFound(t *testing.T) {
 	ctx := context.Background()
-	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()))
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil)
 	created, err := store.CreateSession(ctx, validCreateRequest())
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)

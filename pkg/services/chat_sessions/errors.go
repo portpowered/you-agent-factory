@@ -67,6 +67,35 @@ var (
 	// It is distinct from ErrStaleVersion: the caller's ExpectedVersion was
 	// current, but a concurrent or earlier bind attempt already won.
 	ErrFactorySessionAlreadyBound = errors.New("chat sessions: target episode factory session is already bound to a different identity")
+	// ErrSequencedIdentityContradiction reports that Sequence was called
+	// again with an already-accepted (SourceType, SourceID, SourceSequence,
+	// SourceEventID) identity tuple, but ParentItemID, Kind, SchemaID, or
+	// Payload contradicts the record originally committed for that exact
+	// tuple. Sequence rejects the reused tuple deterministically instead of
+	// silently returning the stale, contradicted identity.
+	ErrSequencedIdentityContradiction = errors.New("chat sessions: reused source identity contradicts originally sequenced record")
+	// ErrAttachmentBeyondStreamHead reports that AcknowledgeAttachment was
+	// asked to advance an Attachment's AfterSequence past the session's
+	// current StreamHead -- a position no Sequence call has committed yet,
+	// so no attachment can legitimately claim to have observed it.
+	ErrAttachmentBeyondStreamHead = errors.New("chat sessions: requested attachment position is beyond the session's stream head")
+	// ErrAttachmentRetentionGap reports that AcknowledgeAttachment's
+	// requested AfterSequence spans a range between the attachment's current
+	// position and the requested one that Events retention has since
+	// evicted, so the attachment cannot have genuinely observed it.
+	ErrAttachmentRetentionGap = errors.New("chat sessions: requested attachment position spans an evicted retention gap")
+	// ErrUncommittedStreamPosition reports that AdvanceStreamHead was asked
+	// to advance StreamHead to an AggregateSequence this session's sequencer
+	// never actually committed for the exact stated (SourceType, SourceID,
+	// SourceSequence, SourceEventID) tuple -- either the position was never
+	// assigned by Sequence for this session at all, or it was assigned to a
+	// different source identity (including one sequenced in another
+	// session). AdvanceStreamHead's contract is "the position a prior
+	// accepted Sequence call committed for this exact source identity";
+	// trusting an unvalidated position would let StreamHead advance to
+	// fabricated or cross-session state, which AcknowledgeAttachment would
+	// then trust as proof of a range no attachment ever actually observed.
+	ErrUncommittedStreamPosition = errors.New("chat sessions: requested stream head position was not committed by the stated source identity for this session")
 )
 
 // ValidationError reports one Chat Sessions value-validation failure. Value
@@ -205,6 +234,108 @@ func (e *FactorySessionConflictError) Error() string {
 // classify the failure.
 func (e *FactorySessionConflictError) Unwrap() error {
 	return ErrFactorySessionAlreadyBound
+}
+
+// SequencedIdentityConflictError reports one Sequence call that reused an
+// already-accepted (SourceType, SourceID, SourceSequence, SourceEventID)
+// identity tuple with a Field whose value contradicts the record originally
+// committed for that exact tuple. SourceType/SourceID/SourceSequence/
+// SourceEventID are opaque source identity values, safe to cross a service
+// boundary the same way BusyError's ActiveTurnID already is.
+type SequencedIdentityConflictError struct {
+	SessionID      string
+	SourceType     string
+	SourceID       string
+	SourceSequence uint64
+	SourceEventID  string
+	// Field names the contradicted request field: "ParentItemID", "Kind",
+	// "SchemaID", or "Payload".
+	Field string
+}
+
+func (e *SequencedIdentityConflictError) Error() string {
+	return fmt.Sprintf("chat sessions: session %q source identity (%s, %s, %d, %s): %s: %v",
+		e.SessionID, e.SourceType, e.SourceID, e.SourceSequence, e.SourceEventID, e.Field, ErrSequencedIdentityContradiction)
+}
+
+// Unwrap exposes ErrSequencedIdentityContradiction so errors.Is/errors.As
+// can classify the failure.
+func (e *SequencedIdentityConflictError) Unwrap() error {
+	return ErrSequencedIdentityContradiction
+}
+
+// AttachmentPositionError reports that AcknowledgeAttachment rejected a
+// requested AfterSequence because it names a position beyond the session's
+// current StreamHead. StreamHead is the session's actual bound at rejection
+// time; neither the attachment nor the session is mutated.
+type AttachmentPositionError struct {
+	SessionID    string
+	AttachmentID string
+	Requested    uint64
+	StreamHead   uint64
+}
+
+func (e *AttachmentPositionError) Error() string {
+	return fmt.Sprintf("chat sessions: session %q attachment %q: requested position %d exceeds stream head %d: %v",
+		e.SessionID, e.AttachmentID, e.Requested, e.StreamHead, ErrAttachmentBeyondStreamHead)
+}
+
+// Unwrap exposes ErrAttachmentBeyondStreamHead so errors.Is/errors.As can
+// classify the failure.
+func (e *AttachmentPositionError) Unwrap() error {
+	return ErrAttachmentBeyondStreamHead
+}
+
+// AttachmentRetentionGapError reports that AcknowledgeAttachment rejected a
+// requested AfterSequence because Events retention no longer retains the
+// full range between the attachment's current position and the requested
+// one -- the attachment cannot have genuinely observed records that no
+// longer exist to prove delivery of. EarliestRetained and Head are the
+// Events-reported retained bounds at rejection time; neither the attachment
+// nor the session is mutated.
+type AttachmentRetentionGapError struct {
+	SessionID        string
+	AttachmentID     string
+	Requested        uint64
+	EarliestRetained uint64
+	Head             uint64
+}
+
+func (e *AttachmentRetentionGapError) Error() string {
+	return fmt.Sprintf("chat sessions: session %q attachment %q: requested position %d: %v: earliest retained %d, head %d",
+		e.SessionID, e.AttachmentID, e.Requested, ErrAttachmentRetentionGap, e.EarliestRetained, e.Head)
+}
+
+// Unwrap exposes ErrAttachmentRetentionGap so errors.Is/errors.As can
+// classify the failure.
+func (e *AttachmentRetentionGapError) Unwrap() error {
+	return ErrAttachmentRetentionGap
+}
+
+// UncommittedStreamPositionError reports that AdvanceStreamHead rejected a
+// requested AggregateSequence because this session's sequencer never
+// committed that exact position for the stated source identity tuple.
+// Neither the session nor any attachment is mutated. SourceType/SourceID/
+// SourceSequence/SourceEventID are opaque source identity values, safe to
+// cross a service boundary the same way BusyError's ActiveTurnID already is.
+type UncommittedStreamPositionError struct {
+	SessionID         string
+	AggregateSequence uint64
+	SourceType        string
+	SourceID          string
+	SourceSequence    uint64
+	SourceEventID     string
+}
+
+func (e *UncommittedStreamPositionError) Error() string {
+	return fmt.Sprintf("chat sessions: session %q: position %d source identity (%s, %s, %d, %s): %v",
+		e.SessionID, e.AggregateSequence, e.SourceType, e.SourceID, e.SourceSequence, e.SourceEventID, ErrUncommittedStreamPosition)
+}
+
+// Unwrap exposes ErrUncommittedStreamPosition so errors.Is/errors.As can
+// classify the failure.
+func (e *UncommittedStreamPositionError) Unwrap() error {
+	return ErrUncommittedStreamPosition
 }
 
 // TargetEpisodeNotClosedError reports that OpenNextTargetEpisode was invoked
