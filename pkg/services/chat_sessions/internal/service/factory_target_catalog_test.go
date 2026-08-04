@@ -26,7 +26,7 @@ func newTestService(t *testing.T, profile operatorsettings.ACPAgentProfile, entr
 		},
 	}
 
-	service, err := chatsessionsservice.New(settings, definitions.CatalogPathsService(), logging.NoopLogger{})
+	service, err := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New: unexpected error: %v", err)
 	}
@@ -280,20 +280,30 @@ func (fake *operatorSettingsFake) ResolveACPAgentProfile(path string) (operators
 // ResolveNamedFactory, the collaborator operations the Factory
 // target-catalog operation depends on. resolveNamedFactory is only
 // exercised when a test supplies a ClientWorkingRoot, since the operation
-// only calls it in that case. CatalogPathsService converts the fake into
-// the factorydefinitions.CatalogPathsService struct New requires; a field
-// a test leaves unset stays nil and panics if the operation under test
-// unexpectedly invokes it.
+// only calls it in that case. It embeds the nil
+// factorydefinitions.CatalogPathsService interface to satisfy the contract;
+// ResolveCurrentFactoryLocation is never exercised by this operation, and a
+// test that leaves listEffectiveFactories or resolveNamedFactory unset
+// panics if the operation under test unexpectedly invokes it.
 type factoryDefinitionsFake struct {
+	factorydefinitions.CatalogPathsService
+
 	listEffectiveFactories func(context.Context, factorydefinitions.ListEffectiveFactoriesRequest) (factorydefinitions.ListEffectiveFactoriesResult, error)
 	resolveNamedFactory    func(context.Context, factorydefinitions.ResolveNamedFactoryRequest) (factorydefinitions.ResolveNamedFactoryResult, error)
 }
 
-func (fake *factoryDefinitionsFake) CatalogPathsService() factorydefinitions.CatalogPathsService {
-	return factorydefinitions.CatalogPathsService{
-		ListEffectiveFactories: fake.listEffectiveFactories,
-		ResolveNamedFactory:    fake.resolveNamedFactory,
-	}
+func (fake *factoryDefinitionsFake) ListEffectiveFactories(
+	ctx context.Context,
+	request factorydefinitions.ListEffectiveFactoriesRequest,
+) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+	return fake.listEffectiveFactories(ctx, request)
+}
+
+func (fake *factoryDefinitionsFake) ResolveNamedFactory(
+	ctx context.Context,
+	request factorydefinitions.ResolveNamedFactoryRequest,
+) (factorydefinitions.ResolveNamedFactoryResult, error) {
+	return fake.resolveNamedFactory(ctx, request)
 }
 
 type unexpectedCallError struct{}

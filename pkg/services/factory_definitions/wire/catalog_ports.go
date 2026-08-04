@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"fmt"
+	"io/fs"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -10,10 +11,25 @@ import (
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
 )
 
+// NamedPathFileSystem is the exact filesystem effect used to resolve and
+// persist Current Factory pointers and canonical named Factory paths. It is
+// a pure construction-time effect port -- every production and test
+// consumer reaches it only to build a factorydefinitions.NamedPathResolver
+// through NewPathResolver, never as a standalone peer-service dependency --
+// so it is published here rather than at the Factory Definitions service
+// root, matching this package's convention of exposing focused construction
+// providers rather than owner-level contracts.
+type NamedPathFileSystem interface {
+	ReadFile(string) ([]byte, error)
+	Stat(string) (fs.FileInfo, error)
+	MkdirAll(string, fs.FileMode) error
+	WriteFile(string, []byte, fs.FileMode) error
+}
+
 // NewPathResolver constructs the catalog-owned named-path resolver from the
 // exact filesystem port used by Factory Definitions Wire composition.
 func NewPathResolver(
-	fileSystem factorydefinitions.NamedPathFileSystem,
+	fileSystem NamedPathFileSystem,
 ) (factorydefinitions.NamedPathResolver, error) {
 	return catalogwire.NewPathResolver(fileSystem)
 }
@@ -87,7 +103,7 @@ func NewCatalogPathsService(
 	logger logging.Logger,
 ) (factorydefinitions.CatalogPathsService, error) {
 	if namedFactoryCatalog == nil {
-		return factorydefinitions.CatalogPathsService{}, fmt.Errorf("named Factory catalog is required")
+		return nil, fmt.Errorf("named Factory catalog is required")
 	}
 	resolveNamedFactory := func(
 		ctx context.Context,
@@ -112,11 +128,7 @@ func NewCatalogPathsService(
 		logger,
 	)
 	if err != nil {
-		return factorydefinitions.CatalogPathsService{}, err
+		return nil, err
 	}
-	return factorydefinitions.CatalogPathsService{
-		ListEffectiveFactories:        impl.ListEffectiveFactories,
-		ResolveNamedFactory:           impl.ResolveNamedFactory,
-		ResolveCurrentFactoryLocation: impl.ResolveCurrentFactoryLocation,
-	}, nil
+	return impl, nil
 }

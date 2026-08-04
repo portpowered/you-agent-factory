@@ -17,6 +17,39 @@ import (
 
 var errCollaboratorUnavailable = errors.New("collaborator unavailable")
 
+// TestNewRejectsMissingFactoryDefinitions proves construction fails fast
+// when the narrow Factory Definitions catalog/path capability is nil,
+// instead of deferring the failure to an operation-time nil-interface panic
+// the first time ResolveFactoryTargetCatalog invokes it.
+func TestNewRejectsMissingFactoryDefinitions(t *testing.T) {
+	t.Parallel()
+
+	settings := &operatorSettingsFake{}
+	service, err := chatsessionsservice.New(settings, nil, logging.NoopLogger{})
+	if err == nil {
+		t.Fatal("New with nil factory definitions capability = nil error, want error")
+	}
+	if service != nil {
+		t.Fatalf("New with nil factory definitions capability returned a non-nil service: %#v", service)
+	}
+}
+
+// TestNewRejectsMissingOperatorSettings proves construction fails fast when
+// the Operator Settings root is nil, matching the same fail-fast contract as
+// TestNewRejectsMissingFactoryDefinitions for the other required collaborator.
+func TestNewRejectsMissingOperatorSettings(t *testing.T) {
+	t.Parallel()
+
+	definitions := &factoryDefinitionsFake{}
+	service, err := chatsessionsservice.New(nil, definitions, logging.NoopLogger{})
+	if err == nil {
+		t.Fatal("New with nil operator settings root = nil error, want error")
+	}
+	if service != nil {
+		t.Fatalf("New with nil operator settings root returned a non-nil service: %#v", service)
+	}
+}
+
 func TestResolveFactoryTargetCatalogRejectsEmptyProfile(t *testing.T) {
 	t.Parallel()
 
@@ -26,7 +59,7 @@ func TestResolveFactoryTargetCatalogRejectsEmptyProfile(t *testing.T) {
 		},
 	}
 	definitions := &factoryDefinitionsFake{}
-	service, err := chatsessionsservice.New(settings, definitions.CatalogPathsService(), logging.NoopLogger{})
+	service, err := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New: unexpected error: %v", err)
 	}
@@ -56,7 +89,7 @@ func TestResolveFactoryTargetCatalogRejectsInvalidProfileNormalization(t *testin
 		},
 	}
 	definitions := &factoryDefinitionsFake{}
-	service, err := chatsessionsservice.New(settings, definitions.CatalogPathsService(), logging.NoopLogger{})
+	service, err := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New: unexpected error: %v", err)
 	}
@@ -275,7 +308,7 @@ func TestResolveFactoryTargetCatalogRejectsUninstalledTargetAfterPriorSuccess(t 
 			return factorydefinitions.ListEffectiveFactoriesResult{Entries: installed}, nil
 		},
 	}
-	service, err := chatsessionsservice.New(settings, definitions.CatalogPathsService(), logging.NoopLogger{})
+	service, err := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New: unexpected error: %v", err)
 	}
@@ -333,7 +366,7 @@ func TestResolveFactoryTargetCatalogRejectsIncompatiblePinnedWorkingRoot(t *test
 			}, nil
 		},
 	}
-	service, err := chatsessionsservice.New(settings, definitions.CatalogPathsService(), logging.NoopLogger{})
+	service, err := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New: unexpected error: %v", err)
 	}
@@ -379,7 +412,7 @@ func TestResolveFactoryTargetCatalogAllowsCompatiblePinnedWorkingRoot(t *testing
 			}, nil
 		},
 	}
-	service, err := chatsessionsservice.New(settings, definitions.CatalogPathsService(), logging.NoopLogger{})
+	service, err := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New: unexpected error: %v", err)
 	}
@@ -419,7 +452,7 @@ func TestResolveFactoryTargetCatalogWrapsCanonicalResolutionDependencyFailure(t 
 			return factorydefinitions.ResolveNamedFactoryResult{}, errCollaboratorUnavailable
 		},
 	}
-	service, err := chatsessionsservice.New(settings, definitions.CatalogPathsService(), logging.NoopLogger{})
+	service, err := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New: unexpected error: %v", err)
 	}
@@ -456,7 +489,7 @@ func TestResolveFactoryTargetCatalogPreservesProfileDependencyContextCause(t *te
 				},
 			}
 			definitions := &factoryDefinitionsFake{}
-			service, err := chatsessionsservice.New(settings, definitions.CatalogPathsService(), spy)
+			service, err := chatsessionsservice.New(settings, definitions, spy)
 			if err != nil {
 				t.Fatalf("New: unexpected error: %v", err)
 			}
@@ -504,7 +537,7 @@ func TestResolveFactoryTargetCatalogPreservesCatalogListingDependencyContextCaus
 					return factorydefinitions.ListEffectiveFactoriesResult{}, testCase.cause
 				},
 			}
-			service, err := chatsessionsservice.New(settings, definitions.CatalogPathsService(), spy)
+			service, err := chatsessionsservice.New(settings, definitions, spy)
 			if err != nil {
 				t.Fatalf("New: unexpected error: %v", err)
 			}
@@ -558,7 +591,7 @@ func TestResolveFactoryTargetCatalogPreservesCanonicalResolutionDependencyContex
 					return factorydefinitions.ResolveNamedFactoryResult{}, testCase.cause
 				},
 			}
-			service, err := chatsessionsservice.New(settings, definitions.CatalogPathsService(), spy)
+			service, err := chatsessionsservice.New(settings, definitions, spy)
 			if err != nil {
 				t.Fatalf("New: unexpected error: %v", err)
 			}
@@ -596,7 +629,7 @@ func TestResolveFactoryTargetCatalogWrapsInstalledCatalogDependencyFailure(t *te
 			return factorydefinitions.ListEffectiveFactoriesResult{}, errCollaboratorUnavailable
 		},
 	}
-	service, err := chatsessionsservice.New(settings, definitions.CatalogPathsService(), logging.NoopLogger{})
+	service, err := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New: unexpected error: %v", err)
 	}
@@ -740,7 +773,7 @@ func TestResolveFactoryTargetCatalogLogsStartedAndFinishedSafely(t *testing.T) {
 			}, nil
 		},
 	}
-	service, err := chatsessionsservice.New(settings, definitions.CatalogPathsService(), spy)
+	service, err := chatsessionsservice.New(settings, definitions, spy)
 	if err != nil {
 		t.Fatalf("New: unexpected error: %v", err)
 	}
@@ -783,7 +816,7 @@ func TestResolveFactoryTargetCatalogLogsFailureReasonWithoutLeakingValues(t *tes
 			return factorydefinitions.ListEffectiveFactoriesResult{}, nil
 		},
 	}
-	service, err := chatsessionsservice.New(settings, definitions.CatalogPathsService(), spy)
+	service, err := chatsessionsservice.New(settings, definitions, spy)
 	if err != nil {
 		t.Fatalf("New: unexpected error: %v", err)
 	}
@@ -828,7 +861,7 @@ func TestResolveFactoryTargetCatalogUsesEachInjectedCollaboratorExactlyOnce(t *t
 			}, nil
 		},
 	}
-	service, err := chatsessionsservice.New(settings, definitions.CatalogPathsService(), nil)
+	service, err := chatsessionsservice.New(settings, definitions, nil)
 	if err != nil {
 		t.Fatalf("New: unexpected error: %v", err)
 	}
@@ -874,7 +907,7 @@ func TestResolveFactoryTargetCatalogObservesLiveCollaboratorDrift(t *testing.T) 
 			}, nil
 		},
 	}
-	service, err := chatsessionsservice.New(settings, definitions.CatalogPathsService(), nil)
+	service, err := chatsessionsservice.New(settings, definitions, nil)
 	if err != nil {
 		t.Fatalf("New: unexpected error: %v", err)
 	}

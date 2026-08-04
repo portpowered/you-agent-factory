@@ -4,6 +4,7 @@ package wire
 
 import (
 	"fmt"
+	"io/fs"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
@@ -34,7 +35,12 @@ func NewService(deps catalog.Dependencies) (catalog.Service, error) {
 // NewPathResolver constructs the catalog-owned named-path resolver from the
 // exact filesystem port used by catalog composition.
 func NewPathResolver(
-	fileSystem factorydefinitions.NamedPathFileSystem,
+	fileSystem interface {
+		ReadFile(string) ([]byte, error)
+		Stat(string) (fs.FileInfo, error)
+		MkdirAll(string, fs.FileMode) error
+		WriteFile(string, []byte, fs.FileMode) error
+	},
 ) (factorydefinitions.NamedPathResolver, error) {
 	return catalognamedpaths.New(fileSystem)
 }

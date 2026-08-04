@@ -116,13 +116,13 @@ func TestPackageOwnsOnlyTheEdgeAggregator(t *testing.T) {
 	t.Parallel()
 
 	localModelEffectTypes := map[string]struct{}{
-		"PullMetric": {},
+		"PullMetric":           {},
 		"AssetMakeDirectories": {}, "AssetInspectPath": {},
 		"AssetResolveHomeDirectory": {}, "AssetWriteFile": {}, "AssetRenamePath": {},
 		"AssetRemovePath": {}, "AssetReadFile": {}, "AssetReadDirectory": {},
 		"AssetCreateFile": {}, "AssetOpenFile": {},
 		"HostProcessStartSpec": {},
-		"RuntimeInspectFile": {},
+		"RuntimeInspectFile":   {},
 		"RuntimeTempDirectory": {}, "RuntimeCreateTempFile": {},
 	}
 	entries, err := os.ReadDir(".")
@@ -241,7 +241,7 @@ func TestEdgesAggregateExactOwnerTypes(t *testing.T) {
 		"FactoryDefinitionRequiredToolVersionProbe":       {typeName: "factorydefinitions.RequiredToolVersionProbe", effect: "probe declarative Factory Definition tool versions"},
 		"FactoryDefinitionPersistenceFileSystem":          {typeName: "factorydefinitions.PersistenceFileSystem", effect: "stage and publish persisted Factory Definition directories"},
 		"FactoryDefinitionDirectoryReplacementStore":      {typeName: "factorydefinitions.DirectoryReplacementStore", effect: "atomically replace persisted Factory Definition directories"},
-		"FactoryDefinitionNamedPathFileSystem":            {typeName: "factorydefinitions.NamedPathFileSystem", effect: "resolve and persist Current Factory named paths"},
+		"FactoryDefinitionNamedPathFileSystem":            {typeName: "factorydefinitionswire.NamedPathFileSystem", effect: "resolve and persist Current Factory named paths"},
 		"FactoryDefinitionNamedFactoryCatalogFileSystem":  {typeName: "factorydefinitions.NamedFactoryCatalogFileSystem", effect: "inspect and delete persisted named Factory catalog entries"},
 		"FactoryDefinitionPackagedInstallationFileSystem": {typeName: "factorydefinitions.PackagedInstallationFileSystem", effect: "inspect packaged Factory installation targets"},
 		"FactoryDefinitionAuthoredReaderFileSystem":       {typeName: "factorydefinitions.AuthoredLayoutReaderFileSystem", effect: "read authored Factory Definition layouts"},

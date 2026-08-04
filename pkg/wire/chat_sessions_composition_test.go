@@ -91,18 +91,19 @@ func TestProvideChatSessionsServiceConstructsAnIndependentServiceDirectly(t *tes
 // root, real canonical logger, direct single injection, no dependency bag)
 // with a focused double standing in for the narrow Factory Definitions
 // catalog/path capability, matching the same fake-collaborator convention
-// used by pkg/services/chat_sessions/internal/service's own unit tests.
+// used by pkg/services/chat_sessions/internal/service's own unit tests. It
+// embeds the nil factorydefinitions.CatalogPathsService interface to satisfy
+// the contract; ResolveNamedFactory and ResolveCurrentFactoryLocation are
+// never exercised by this composition test.
 type staticFactoryDefinitionsService struct {
+	factorydefinitions.CatalogPathsService
+
 	mu      sync.Mutex
 	calls   int
 	entries []factorydefinitions.EffectiveFactoryCatalogEntry
 }
 
-func (s *staticFactoryDefinitionsService) CatalogPathsService() factorydefinitions.CatalogPathsService {
-	return factorydefinitions.CatalogPathsService{ListEffectiveFactories: s.listEffectiveFactories}
-}
-
-func (s *staticFactoryDefinitionsService) listEffectiveFactories(
+func (s *staticFactoryDefinitionsService) ListEffectiveFactories(
 	context.Context,
 	factorydefinitions.ListEffectiveFactoriesRequest,
 ) (factorydefinitions.ListEffectiveFactoriesResult, error) {
@@ -185,7 +186,7 @@ func TestProvideChatSessionsFactoryTargetCatalogServiceComposesThroughTheCanonic
 		},
 	}
 
-	catalog, err := provideChatSessionsFactoryTargetCatalogService(operatorSettings, factoryDefinitions.CatalogPathsService(), logger)
+	catalog, err := provideChatSessionsFactoryTargetCatalogService(operatorSettings, factoryDefinitions, logger)
 	if err != nil {
 		t.Fatalf("provideChatSessionsFactoryTargetCatalogService() error = %v", err)
 	}
