@@ -175,3 +175,15 @@
 | --- | ---: | ---: | ---: | ---: | --- |
 | `github.com/portpowered/infinite-you/pkg/config` | 3 | 3 | 100.0 | 66.66 | — |
 | `github.com/portpowered/infinite-you/pkg/service` | 0 | 0 | 0.0 | — | measurement: no measurable statements (owner=backend-quality; deadline=2027-07-15; removalGate=profile reports measurable statements) |
+
+## Functional test timings
+
+- Capture status: complete
+- Total wall-clock duration: 5.000s
+- Package elapsed total: 7.500s (functional-test packages run concurrently, so this total can exceed wall-clock duration)
+- Package count: 2
+
+| Package | Elapsed (s) | Outcome |
+| --- | ---: | --- |
+| `github.com/portpowered/infinite-you/tests/functional/transport/cli/process` | 3.000 | pass |
+| `github.com/portpowered/infinite-you/tests/functional/workers/inference/openai` | 4.500 | pass |

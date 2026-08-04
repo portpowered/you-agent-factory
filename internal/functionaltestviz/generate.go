@@ -29,6 +29,10 @@ type GenerateConfig struct {
 	// CoverageSummaryPath is the required gocoveragecheck coverage-summary JSON
 	// path. Relative paths are used as given (process-relative).
 	CoverageSummaryPath string
+	// TimingSummaryPath is the required gocoveragecheck functional-timing-summary
+	// JSON path, captured from the same coverage run. Relative paths are used
+	// as given (process-relative).
+	TimingSummaryPath string
 	// OutputPath is the Markdown destination. Empty defaults to
 	// RepositoryRoot/DefaultOutputPath. Parent directories are created as needed.
 	OutputPath string
@@ -48,7 +52,7 @@ func Generate(cfg GenerateConfig) error {
 		return fmt.Errorf("parse functional test metadata from %s: %w", normalized.FunctionalRoot, err)
 	}
 
-	inputs, err := AssembleCatalogInputs(records, normalized.CoverageSummaryPath)
+	inputs, err := AssembleCatalogInputs(records, normalized.CoverageSummaryPath, normalized.TimingSummaryPath)
 	if err != nil {
 		return err
 	}
@@ -104,6 +108,11 @@ func normalizeGenerateConfig(cfg GenerateConfig) (GenerateConfig, error) {
 		return GenerateConfig{}, fmt.Errorf("coverage-summary path is required")
 	}
 
+	timingPath := strings.TrimSpace(cfg.TimingSummaryPath)
+	if timingPath == "" {
+		return GenerateConfig{}, fmt.Errorf("timing-summary path is required")
+	}
+
 	outputPath := strings.TrimSpace(cfg.OutputPath)
 	if outputPath == "" {
 		outputPath = filepath.Join(absRoot, filepath.FromSlash(DefaultOutputPath))
@@ -113,6 +122,7 @@ func normalizeGenerateConfig(cfg GenerateConfig) (GenerateConfig, error) {
 		RepositoryRoot:      absRoot,
 		FunctionalRoot:      functionalRoot,
 		CoverageSummaryPath: coveragePath,
+		TimingSummaryPath:   timingPath,
 		OutputPath:          outputPath,
 	}, nil
 }
