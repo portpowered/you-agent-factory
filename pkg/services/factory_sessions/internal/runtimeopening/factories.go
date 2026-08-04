@@ -147,4 +147,5 @@ type WorkerExecutionFactory func(
 	work.Service,
 	WorkersRuntimeFactory,
 	[]operatorsettings.ACPIntegration,
-) (workers.RuntimeService, error)
+	func(workers.RuntimeService) bool,
+) (workers.RuntimeService, workers.SessionBuildFactory, error)
