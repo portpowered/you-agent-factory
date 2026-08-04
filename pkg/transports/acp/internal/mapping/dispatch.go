@@ -20,7 +20,7 @@ import (
 // keeps this copy honest against draftvalidation's own
 // TestACPL1OutcomeParity_MatchesLegalPairsExactly.
 var legalPhasesByKind = map[workers.Kind][]workers.Phase{
-	workers.KindSession:    {workers.PhaseStarted, workers.PhaseCompleted, workers.PhaseFailed, workers.PhaseCanceled},
+	workers.KindSession:    {workers.PhaseStarted, workers.PhaseUpdated, workers.PhaseCompleted, workers.PhaseFailed, workers.PhaseCanceled},
 	workers.KindRun:        {workers.PhaseStarted, workers.PhaseCompleted, workers.PhaseFailed, workers.PhaseCanceled},
 	workers.KindTurn:       {workers.PhaseStarted, workers.PhaseCompleted, workers.PhaseFailed, workers.PhaseCanceled},
 	workers.KindMessage:    {workers.PhaseStarted, workers.PhaseDelta, workers.PhaseCompleted},
@@ -36,28 +36,23 @@ var legalPhasesByKind = map[workers.Kind][]workers.Phase{
 
 // Project is the one exhaustive dispatch entry point over every current
 // workers.Kind/workers.Phase pair: it routes a legal pair to its declared
-// outcome -- MESSAGE_CHUNK, THOUGHT_CHUNK, USAGE_UPDATE, or GAP_NOTICE
-// project onto the matching Project* function; NO_OUTPUT kinds (SESSION,
-// RUN, TURN, TOOL, FILE_CHANGE, PLAN, PROGRESS) and ERROR (declared
-// ERROR_OUT_OF_BAND -- surfaced through a different channel than
-// session/update notifications, which this pure projector does not own)
-// both resolve to (nil, nil) -- and rejects every unknown Kind or
-// Kind/Phase pair that response-draft validation would also have rejected,
-// returning (nil, ErrMalformedRecord) rather than silently classifying it.
+// outcome -- MESSAGE_CHUNK, THOUGHT_CHUNK, USAGE_UPDATE, SESSION_INFO_UPDATE,
+// or GAP_NOTICE project onto the matching Project* function; NO_OUTPUT kinds
+// (RUN, TURN, TOOL, FILE_CHANGE, PLAN, PROGRESS), SESSION's lifecycle phases
+// (STARTED/COMPLETED/FAILED/CANCELED), and ERROR (declared ERROR_OUT_OF_BAND
+// -- surfaced through a different channel than session/update notifications,
+// which this pure projector does not own) all resolve to (nil, nil) -- and
+// Project rejects every unknown Kind or Kind/Phase pair that response-draft
+// validation would also have rejected, returning (nil, ErrMalformedRecord)
+// rather than silently classifying it.
 //
-// SESSION deserves the same note final-proposal.md §6.2 makes about PLAN:
-// the doc's projection table lists "Title/time change -> session_info_update"
-// as an intended L1 capability, but workers.SessionPayload carries no title
-// or other ACP-supported customer metadata field, and workers.Kind has no
-// separate value for a metadata change distinct from session lifecycle --
-// only KindSession's lifecycle phases (STARTED/COMPLETED/FAILED/CANCELED)
-// exist today, and draftvalidation already declares all of them NO_OUTPUT.
-// Adding a title/time source fact would mean inventing a new taxonomy
-// member, which conflicts with this PRD's own top-level "no new event
-// taxonomy" acceptance criterion. L1 therefore declares session_info_update
-// out of scope here as a deliberate scope cut, not a missing case --
-// identical in kind to PLAN's scope cut, not because the dispatch is
-// incomplete.
+// SESSION/UPDATED is the one KindSession phase that is not lifecycle-only:
+// it is the source representation for final-proposal.md §6.2's "Title/time
+// change -> session_info_update" -- see workers.SessionPayload.Title and
+// ProjectSessionInfoUpdate. It routes through the same case as SESSION's
+// lifecycle phases because ProjectSessionInfoUpdate itself resolves
+// STARTED/COMPLETED/FAILED/CANCELED to (nil, nil), keeping this switch's
+// dispatch key purely Kind-based like every other case.
 func Project(draft workers.Draft) (*acpsdk.SessionUpdate, error) {
 	if !isLegalKindPhase(draft.Kind, draft.Phase) {
 		return nil, fmt.Errorf(
@@ -67,6 +62,8 @@ func Project(draft workers.Draft) (*acpsdk.SessionUpdate, error) {
 	}
 
 	switch draft.Kind {
+	case workers.KindSession:
+		return ProjectSessionInfoUpdate(draft)
 	case workers.KindMessage:
 		return ProjectMessage(draft)
 	case workers.KindReasoning:

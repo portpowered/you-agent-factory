@@ -30,6 +30,9 @@ func ProjectStreamGap(draft workers.Draft) (*acpsdk.SessionUpdate, error) {
 	if err := json.Unmarshal(draft.Payload, &gap); err != nil {
 		return nil, fmt.Errorf("%w: payload must decode as StreamGapPayload: %v", ErrMalformedRecord, err)
 	}
+	if err := validateStreamGapPayload(gap); err != nil {
+		return nil, err
+	}
 
 	chunk := &acpsdk.SessionUpdateAgentThoughtChunk{Content: acpsdk.TextBlock(gapNoticeText(gap))}
 	if gap.AffectedItemID != "" {
@@ -37,6 +40,42 @@ func ProjectStreamGap(draft workers.Draft) (*acpsdk.SessionUpdate, error) {
 		chunk.MessageId = &id
 	}
 	return &acpsdk.SessionUpdate{AgentThoughtChunk: chunk}, nil
+}
+
+// validateStreamGapPayload rejects a decodable-but-structurally-invalid
+// StreamGapPayload rather than letting it fall through to gapNoticeText and
+// render fabricated content. An item-scoped gap (AffectedItemID set) needs
+// no numeric bounds. A retention-scoped gap (AffectedItemID empty -- this
+// includes the zero-valued StreamGapPayload{} an empty JSON object `{}`
+// decodes to) must declare a genuine resumable position: sequence 0 is a
+// reserved sentinel that never names a real published record (see
+// responseeventstore.retentionGapEventLocked's own "sequence zero is
+// reserved" doc comment), so FirstAvailableSequence <= 0 can only mean the
+// payload never declared where history resumes, and gapNoticeText would
+// otherwise render the nonsensical "... history resumes at sequence 0."
+// FromSequence == 0 is deliberately accepted on its own: production's own
+// compaction-fallback gap (fragmentmap.streamGapPayloadFromCompaction, for a
+// compaction fragment with no detailed summary) legitimately reports
+// {FromSequence: 0, ToSequence: 0, FirstAvailableSequence: 1} when the exact
+// evicted range is unknown, and that must keep projecting rather than start
+// failing the turn's whole update drain.
+func validateStreamGapPayload(gap workers.StreamGapPayload) error {
+	if gap.AffectedItemID != "" {
+		return nil
+	}
+	if gap.FirstAvailableSequence <= 0 {
+		return fmt.Errorf(
+			"%w: retention-scoped StreamGapPayload requires a positive firstAvailableSequence (the resumable position after the gap)",
+			ErrMalformedRecord,
+		)
+	}
+	if gap.FromSequence < 0 || gap.ToSequence < 0 || gap.ToSequence < gap.FromSequence || gap.FirstAvailableSequence <= gap.ToSequence {
+		return fmt.Errorf(
+			"%w: retention-scoped StreamGapPayload requires non-negative fromSequence <= toSequence < firstAvailableSequence",
+			ErrMalformedRecord,
+		)
+	}
+	return nil
 }
 
 // gapNoticeText renders the bounded, safe description of a gap: for an

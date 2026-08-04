@@ -41,29 +41,59 @@ import (
 type fakeEventsService struct {
 	events.Service
 
-	mu      sync.Mutex
-	records map[events.Topic][]events.Record
+	mu             sync.Mutex
+	records        map[events.Topic][]events.Record
+	evictedThrough map[events.Topic]events.AggregateSequence
 }
 
 var _ events.Service = (*fakeEventsService)(nil)
 
+// Read mirrors the real Store.Read's own outcome decision
+// (pkg/services/events/internal/service/read.go), including its "from+1 ==
+// earliest is not a gap" boundary, so a test that calls markEvictedThrough
+// exercises streamTurnUpdates against the same events.ReadOutcomeGap/
+// events.GapFacts shape production Read would report, not a
+// hand-simplified stand-in.
 func (f *fakeEventsService) Read(_ context.Context, req events.ReadRequest) (events.ReadResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	all := f.records[req.Topic]
 	head := events.AggregateSequence(len(all))
-	retained := events.RetainedRange{Topic: req.Topic, Earliest: 1, Head: head}
+	earliest := f.evictedThrough[req.Topic] + 1
+	retained := events.RetainedRange{Topic: req.Topic, Earliest: earliest, Head: head}
 
-	if req.From.Position >= head {
+	from := req.From.Position
+	switch {
+	case from == head:
 		return events.ReadResult{Outcome: events.ReadOutcomeAtHead, Next: req.From, Retained: retained}, nil
+	case from > head:
+		return events.ReadResult{Outcome: events.ReadOutcomeInvalidCursor}, nil
+	case earliest > 1 && from+1 < earliest:
+		return events.ReadResult{
+			Outcome: events.ReadOutcomeGap,
+			Gap:     &events.GapFacts{Topic: req.Topic, Requested: from, EarliestRetained: earliest, Head: head},
+		}, nil
 	}
 
-	start := int(req.From.Position)
+	start := int(from)
 	end := min(start+req.Limit, len(all))
 	page := all[start:end]
 	next := events.Cursor{Topic: req.Topic, Position: page[len(page)-1].ID.Position}
 	return events.ReadResult{Records: page, Next: next, Retained: retained, Outcome: events.ReadOutcomeProgress}, nil
+}
+
+// markEvictedThrough simulates retention having evicted every position up
+// to and including through on sessionID's topic, so a later Read from a
+// cursor at or before through observes events.ReadOutcomeGap the same way a
+// real Events retention policy would report it.
+func (f *fakeEventsService) markEvictedThrough(sessionID string, through events.AggregateSequence) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.evictedThrough == nil {
+		f.evictedThrough = make(map[events.Topic]events.AggregateSequence)
+	}
+	f.evictedThrough[chatsessions.EventsTopic(sessionID)] = through
 }
 
 // seed appends one (kind, phase, payload) record onto sessionID's
@@ -545,6 +575,79 @@ func TestStreamTurnUpdatesDeliversStreamGapRecordBeforeSubsequentCatchUp(t *test
 	msgChunk := (*notified)[1].Update.AgentMessageChunk
 	if msgChunk == nil || msgChunk.Content.Text == nil || msgChunk.Content.Text.Text != "after the gap" {
 		t.Fatalf("notification[1] = %+v, want the message that followed the gap, verbatim", (*notified)[1])
+	}
+}
+
+// TestStreamTurnUpdatesRecoversFromReadTimeRetentionGap proves story 004's
+// AC4 for a retention gap events.Read itself detects
+// (events.ReadOutcomeGap/events.GapFacts) -- distinct from
+// TestStreamTurnUpdatesDeliversStreamGapRecordBeforeSubsequentCatchUp's
+// producer-committed STREAM_GAP record: a fresh attachment whose cursor
+// sits before positions Events has already evicted receives an explicit
+// gap notice bounding exactly the evicted range before catch-up resumes at
+// the first retained record, the evicted records' own content is never
+// fabricated or silently skipped past, and the attachment's cursor genuinely
+// advances past the gap rather than getting stuck retrying it.
+func TestStreamTurnUpdatesRecoversFromReadTimeRetentionGap(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{invokeResult: fallbackInvokeResult("v1 fallback text")}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget, "turn-1", "turn-2")
+	connID := identity.NewConnectionID()
+
+	eventsSvc.seed(t, streamingTestSessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("one"))
+	eventsSvc.seed(t, streamingTestSessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("two"))
+	eventsSvc.seed(t, streamingTestSessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("three"))
+	eventsSvc.seed(t, streamingTestSessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("four"))
+	eventsSvc.markEvictedThrough(streamingTestSessionID, 2)
+
+	notify, notified := captureNotifier()
+	ctx := contextWithAttachmentCache(contextWithPromptNotifier(context.Background(), notify), &attachmentCache{})
+	env := numberIdentityEnvelope(t, connID, 1, acpsdk.AgentMethodSessionPrompt, promptTextParams(streamingTestSessionID, "hello"))
+	if _, rpcErr := server.handleSessionPrompt(ctx, env); rpcErr != nil {
+		t.Fatalf("handleSessionPrompt() error = %+v, want success", rpcErr)
+	}
+
+	if len(*notified) != 3 {
+		t.Fatalf("notify call count = %d, want exactly 3 (gap notice, then the two retained messages)", len(*notified))
+	}
+
+	gapChunk := (*notified)[0].Update.AgentThoughtChunk
+	if gapChunk == nil {
+		t.Fatalf("notification[0] = %+v, want the read-time gap notice delivered before catch-up", (*notified)[0])
+	}
+	wantGapText := "Records from sequence 1 to 2 are unavailable; history resumes at sequence 3. Reason: retention eviction"
+	if gapChunk.Content.Text == nil || gapChunk.Content.Text.Text != wantGapText {
+		t.Fatalf("gap notice text = %+v, want %q", gapChunk.Content.Text, wantGapText)
+	}
+
+	wantTexts := []string{"three", "four"}
+	for i, want := range wantTexts {
+		msgChunk := (*notified)[i+1].Update.AgentMessageChunk
+		if msgChunk == nil || msgChunk.Content.Text == nil || msgChunk.Content.Text.Text != want {
+			t.Fatalf("notification[%d] = %+v, want retained message %q (evicted records 1-2 must never be fabricated)", i+1, (*notified)[i+1], want)
+		}
+	}
+
+	// Reuse the same attachmentCache instance for a second turn (mirroring
+	// TestStreamTurnUpdatesReusesAttachmentCursorAcrossTurns): if the gap
+	// recovery had left the cursor unresolved -- stuck at 0, or somewhere
+	// inside the evicted range -- this second turn would either redeliver
+	// the gap notice/retained records again or fail outright, rather than
+	// observing only the newly seeded fifth record.
+	cache := attachmentCacheFromContext(ctx)
+	eventsSvc.seed(t, streamingTestSessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("five"))
+
+	secondNotify, secondNotified := captureNotifier()
+	secondCtx := contextWithAttachmentCache(contextWithPromptNotifier(context.Background(), secondNotify), cache)
+	secondEnv := numberIdentityEnvelope(t, connID, 2, acpsdk.AgentMethodSessionPrompt, promptTextParams(streamingTestSessionID, "hello again"))
+	if _, rpcErr := server.handleSessionPrompt(secondCtx, secondEnv); rpcErr != nil {
+		t.Fatalf("second handleSessionPrompt() error = %+v, want success", rpcErr)
+	}
+	if len(*secondNotified) != 1 {
+		t.Fatalf("second turn notify call count = %d, want exactly 1 (only the newly seeded fifth record)", len(*secondNotified))
+	}
+	fifthChunk := (*secondNotified)[0].Update.AgentMessageChunk
+	if fifthChunk == nil || fifthChunk.Content.Text == nil || fifthChunk.Content.Text.Text != "five" {
+		t.Fatalf("second turn notification = %+v, want only %q", (*secondNotified)[0], "five")
 	}
 }
 

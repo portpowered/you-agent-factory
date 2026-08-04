@@ -15,30 +15,68 @@ const (
 	outcomeMessageChunk dispatchOutcome = "MESSAGE_CHUNK"
 	outcomeThoughtChunk dispatchOutcome = "THOUGHT_CHUNK"
 	outcomeUsageUpdate  dispatchOutcome = "USAGE_UPDATE"
+	outcomeSessionInfo  dispatchOutcome = "SESSION_INFO_UPDATE"
 	outcomeNoUpdate     dispatchOutcome = "NO_UPDATE"
 )
 
+// dispatchPair is a comparable (Kind, Phase) pair used to key
+// declaredDispatchOutcomes.
+type dispatchPair struct {
+	Kind  workers.Kind
+	Phase workers.Phase
+}
+
 // declaredDispatchOutcomes assigns exactly one Project outcome family to
-// every current workers.Kind, matching
-// draftvalidation.declaredACPL1Outcomes' per-Kind families:
-// MESSAGE->MESSAGE_CHUNK, REASONING->THOUGHT_CHUNK, USAGE->USAGE_UPDATE,
-// STREAM_GAP->THOUGHT_CHUNK (this package's chosen gap representation, see
-// gap.go), everything else -- including ERROR, declared ERROR_OUT_OF_BAND
-// upstream -- resolves to NO_UPDATE from this pure record->SessionUpdate
-// projector.
-var declaredDispatchOutcomes = map[workers.Kind]dispatchOutcome{
-	workers.KindSession:    outcomeNoUpdate,
-	workers.KindRun:        outcomeNoUpdate,
-	workers.KindTurn:       outcomeNoUpdate,
-	workers.KindMessage:    outcomeMessageChunk,
-	workers.KindReasoning:  outcomeThoughtChunk,
-	workers.KindTool:       outcomeNoUpdate,
-	workers.KindFileChange: outcomeNoUpdate,
-	workers.KindPlan:       outcomeNoUpdate,
-	workers.KindProgress:   outcomeNoUpdate,
-	workers.KindUsage:      outcomeUsageUpdate,
-	workers.KindError:      outcomeNoUpdate,
-	workers.KindStreamGap:  outcomeThoughtChunk,
+// every legal workers.Kind/Phase pair, matching
+// draftvalidation.declaredACPL1Outcomes: MESSAGE->MESSAGE_CHUNK,
+// REASONING->THOUGHT_CHUNK, USAGE->USAGE_UPDATE, STREAM_GAP->THOUGHT_CHUNK
+// (this package's chosen gap representation, see gap.go),
+// SESSION/PhaseUpdated->SESSION_INFO_UPDATE (see session.go; every other
+// SESSION phase is a lifecycle transition), everything else -- including
+// ERROR, declared ERROR_OUT_OF_BAND upstream -- resolves to NO_UPDATE from
+// this pure record->SessionUpdate projector. Keyed by pair rather than Kind
+// alone because SESSION is the one Kind whose outcome varies by phase.
+var declaredDispatchOutcomes = map[dispatchPair]dispatchOutcome{
+	{workers.KindSession, workers.PhaseStarted}:   outcomeNoUpdate,
+	{workers.KindSession, workers.PhaseUpdated}:   outcomeSessionInfo,
+	{workers.KindSession, workers.PhaseCompleted}: outcomeNoUpdate,
+	{workers.KindSession, workers.PhaseFailed}:    outcomeNoUpdate,
+	{workers.KindSession, workers.PhaseCanceled}:  outcomeNoUpdate,
+
+	{workers.KindRun, workers.PhaseStarted}:   outcomeNoUpdate,
+	{workers.KindRun, workers.PhaseCompleted}: outcomeNoUpdate,
+	{workers.KindRun, workers.PhaseFailed}:    outcomeNoUpdate,
+	{workers.KindRun, workers.PhaseCanceled}:  outcomeNoUpdate,
+
+	{workers.KindTurn, workers.PhaseStarted}:   outcomeNoUpdate,
+	{workers.KindTurn, workers.PhaseCompleted}: outcomeNoUpdate,
+	{workers.KindTurn, workers.PhaseFailed}:    outcomeNoUpdate,
+	{workers.KindTurn, workers.PhaseCanceled}:  outcomeNoUpdate,
+
+	{workers.KindMessage, workers.PhaseStarted}:   outcomeMessageChunk,
+	{workers.KindMessage, workers.PhaseDelta}:     outcomeMessageChunk,
+	{workers.KindMessage, workers.PhaseCompleted}: outcomeMessageChunk,
+
+	{workers.KindReasoning, workers.PhaseStarted}:   outcomeThoughtChunk,
+	{workers.KindReasoning, workers.PhaseDelta}:     outcomeThoughtChunk,
+	{workers.KindReasoning, workers.PhaseCompleted}: outcomeThoughtChunk,
+
+	{workers.KindTool, workers.PhaseStarted}:   outcomeNoUpdate,
+	{workers.KindTool, workers.PhaseDelta}:     outcomeNoUpdate,
+	{workers.KindTool, workers.PhaseCompleted}: outcomeNoUpdate,
+	{workers.KindTool, workers.PhaseFailed}:    outcomeNoUpdate,
+	{workers.KindTool, workers.PhaseCanceled}:  outcomeNoUpdate,
+
+	{workers.KindFileChange, workers.PhaseUpdated}: outcomeNoUpdate,
+	{workers.KindPlan, workers.PhaseUpdated}:       outcomeNoUpdate,
+	{workers.KindProgress, workers.PhaseUpdated}:   outcomeNoUpdate,
+
+	{workers.KindUsage, workers.PhaseUpdated}: outcomeUsageUpdate,
+
+	{workers.KindError, workers.PhaseUpdated}: outcomeNoUpdate,
+	{workers.KindError, workers.PhaseFailed}:  outcomeNoUpdate,
+
+	{workers.KindStreamGap, workers.PhaseUpdated}: outcomeThoughtChunk,
 }
 
 // allKinds and allPhases are the complete current enum vocabularies,
@@ -64,8 +102,12 @@ var allPhases = []workers.Phase{
 func TestProjectDispatch_HandlesEveryCurrentPair(t *testing.T) {
 	t.Parallel()
 
-	if len(declaredDispatchOutcomes) != len(allKinds) {
-		t.Fatalf("declaredDispatchOutcomes has %d kinds, want %d (one per allKinds entry)", len(declaredDispatchOutcomes), len(allKinds))
+	wantLegalPairs := 0
+	for _, phases := range legalPhasesByKind {
+		wantLegalPairs += len(phases)
+	}
+	if len(declaredDispatchOutcomes) != wantLegalPairs {
+		t.Fatalf("declaredDispatchOutcomes has %d pairs, want %d (one per legalPhasesByKind entry)", len(declaredDispatchOutcomes), wantLegalPairs)
 	}
 
 	for _, kind := range allKinds {
@@ -84,7 +126,7 @@ func TestProjectDispatch_HandlesEveryCurrentPair(t *testing.T) {
 					t.Fatalf("Project() unexpected err = %v", err)
 				}
 
-				switch declaredDispatchOutcomes[kind] {
+				switch declaredDispatchOutcomes[dispatchPair{Kind: kind, Phase: phase}] {
 				case outcomeNoUpdate:
 					requireNoUpdate(t, update)
 				case outcomeMessageChunk:
@@ -99,8 +141,12 @@ func TestProjectDispatch_HandlesEveryCurrentPair(t *testing.T) {
 					if update == nil || update.UsageUpdate == nil {
 						t.Fatalf("Project() update = %+v, want a populated UsageUpdate", update)
 					}
+				case outcomeSessionInfo:
+					if update == nil || update.SessionInfoUpdate == nil {
+						t.Fatalf("Project() update = %+v, want a populated SessionInfoUpdate", update)
+					}
 				default:
-					t.Fatalf("no declared dispatch outcome for kind %q", kind)
+					t.Fatalf("no declared dispatch outcome for kind %q phase %q", kind, phase)
 				}
 			})
 		}
@@ -117,6 +163,12 @@ func fixturePayloadFor(t *testing.T, kind workers.Kind, phase workers.Phase) jso
 	t.Helper()
 
 	switch kind {
+	case workers.KindSession:
+		if phase == workers.PhaseUpdated {
+			title := "Renamed session"
+			return mustMarshal(t, workers.SessionPayload{Title: &title})
+		}
+		return json.RawMessage(`{}`)
 	case workers.KindMessage:
 		if phase == workers.PhaseDelta {
 			return mustMarshal(t, workers.MessageDeltaPayload{ContentBlockKind: workers.ContentBlockText, TextDelta: "hi"})

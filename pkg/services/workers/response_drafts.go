@@ -129,6 +129,11 @@ type ContentBlock struct {
 type SessionPayload struct {
 	Status       string        `json:"status,omitempty"`
 	Capabilities *Capabilities `json:"capabilities,omitempty"`
+	// Title carries a mid-lifecycle Chat Session display-title change (only
+	// meaningful with Phase == PhaseUpdated; lifecycle phases leave it nil).
+	// A nil Title declares no title change, matching acp-go-sdk's own
+	// "set to null to clear" nullable-Title convention for session_info_update.
+	Title *string `json:"title,omitempty"`
 }
 type RunPayload struct {
 	Status string `json:"status,omitempty"`

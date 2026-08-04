@@ -48,6 +48,39 @@ func TestProjectStreamGap(t *testing.T) {
 			draft:   gapDraft(json.RawMessage(`{"fromSequence":"not-a-number"}`)),
 			wantErr: true,
 		},
+		{
+			name:    "empty retention payload is rejected rather than fabricating a resumes-at-sequence-0 notice",
+			draft:   gapDraft(json.RawMessage(`{}`)),
+			wantErr: true,
+		},
+		{
+			name: "retention payload with a non-positive firstAvailableSequence is rejected",
+			draft: gapDraft(mustMarshal(t, workers.StreamGapPayload{
+				FromSequence: 1, ToSequence: 2, FirstAvailableSequence: 0,
+			})),
+			wantErr: true,
+		},
+		{
+			name: "retention payload with inverted bounds is rejected",
+			draft: gapDraft(mustMarshal(t, workers.StreamGapPayload{
+				FromSequence: 9, ToSequence: 5, FirstAvailableSequence: 10,
+			})),
+			wantErr: true,
+		},
+		{
+			name: "retention payload whose first-available position does not exceed toSequence is rejected",
+			draft: gapDraft(mustMarshal(t, workers.StreamGapPayload{
+				FromSequence: 1, ToSequence: 3, FirstAvailableSequence: 3,
+			})),
+			wantErr: true,
+		},
+		{
+			name: "retention payload with an unknown fromSequence floor of zero is accepted, matching production's compaction-fallback gap",
+			draft: gapDraft(mustMarshal(t, workers.StreamGapPayload{
+				FromSequence: 0, ToSequence: 0, FirstAvailableSequence: 1, Reason: "compaction",
+			})),
+			wantText: "Records from sequence 0 to 0 are unavailable; history resumes at sequence 1. Reason: compaction",
+		},
 	}
 
 	for _, tt := range cases {

@@ -27,6 +27,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/mapping"
 )
 
@@ -129,13 +130,15 @@ func (s *Server) detachAttachments(ctx context.Context, cache *attachmentCache) 
 	}
 }
 
-// errStreamGapEncountered marks a retained read that observed a Chat
-// Session aggregate stream position Events has already evicted, or a
-// cursor Events could not resolve at all. It never reaches a client
-// verbatim -- classifyDependencyFailure maps it to a bounded internal-error
-// response the same way it maps every other dependency failure -- and
-// streamTurnUpdates never fabricates the missing records in its place.
-var errStreamGapEncountered = errors.New("acp: chat session stream retained history was evicted before this attachment observed it")
+// errStreamGapEncountered marks a cursor events.Read could not resolve at
+// all (events.ReadOutcomeInvalidCursor) -- a foreign or otherwise
+// unresolvable position, distinct from an ordinary retention gap
+// (events.ReadOutcomeGap), which streamTurnUpdates instead recovers from by
+// delivering an explicit gap notice and resuming retained catch-up (see
+// deliverReadTimeGap). It never reaches a client verbatim --
+// classifyDependencyFailure maps it to a bounded internal-error response the
+// same way it maps every other dependency failure.
+var errStreamGapEncountered = errors.New("acp: chat session stream cursor could not be resolved")
 
 // errMalformedSequencedEnvelope marks a committed Events record on a Chat
 // Session's aggregate topic whose payload does not decode as the
@@ -240,8 +243,17 @@ func (s *Server) streamTurnUpdates(
 		switch read.Outcome {
 		case events.ReadOutcomeAtHead:
 			return deliveredMessage, nil
-		case events.ReadOutcomeGap, events.ReadOutcomeInvalidCursor:
+		case events.ReadOutcomeInvalidCursor:
 			return deliveredMessage, errStreamGapEncountered
+		case events.ReadOutcomeGap:
+			stop, gapErr := s.deliverReadTimeGap(ctx, sessionID, sessionVersion, &attachment, read.Gap, notify)
+			if gapErr != nil {
+				return deliveredMessage, gapErr
+			}
+			if stop {
+				return deliveredMessage, nil
+			}
+			cursor = events.Cursor{Topic: topic, Position: events.AggregateSequence(read.Gap.EarliestRetained) - 1}
 		case events.ReadOutcomeProgress:
 			stop, delivered, drainErr := s.drainRecords(ctx, sessionID, sessionVersion, &attachment, read.Records, notify)
 			deliveredMessage = deliveredMessage || delivered
@@ -351,4 +363,72 @@ func (s *Server) drainRecords(
 		cache.set(sessionID, *attachment)
 	}
 	return false, deliveredMessage, nil
+}
+
+// deliverReadTimeGap projects and delivers one read-time retention gap that
+// events.Read itself detected (events.ReadOutcomeGap) -- distinct from a
+// producer-committed workers.KindStreamGap record, which drainRecords
+// already handles like any other sequenced item -- then advances the
+// attachment's cursor past the evicted range so the caller's next Read call
+// resumes retained catch-up starting at gap.EarliestRetained. The evicted
+// range is exactly (gap.Requested, gap.EarliestRetained): read.go's own
+// "from+1 == earliest is not a gap" invariant guarantees
+// gap.EarliestRetained-1 is always >= gap.Requested+1 >= 1 whenever this
+// outcome occurs, so it is always a valid already-assigned
+// AcknowledgeAttachment position. stop reports the same StreamHead-lag case
+// drainRecords documents: AcknowledgeAttachment rejected the advance because
+// the session's StreamHead has not yet caught up, so the caller should stop
+// this call's drain without treating it as a failure.
+func (s *Server) deliverReadTimeGap(
+	ctx context.Context,
+	sessionID string,
+	sessionVersion uint64,
+	attachment *chatsessions.Attachment,
+	gap *events.GapFacts,
+	notify promptNotifier,
+) (stop bool, err error) {
+	payload, marshalErr := json.Marshal(workers.StreamGapPayload{
+		FromSequence:           int64(gap.Requested) + 1,
+		ToSequence:             int64(gap.EarliestRetained) - 1,
+		FirstAvailableSequence: int64(gap.EarliestRetained),
+		Reason:                 "retention eviction",
+	})
+	if marshalErr != nil {
+		return false, marshalErr
+	}
+
+	update, projErr := mapping.ProjectStreamGap(workers.Draft{
+		Kind:    workers.KindStreamGap,
+		Phase:   workers.PhaseUpdated,
+		Payload: payload,
+	})
+	if projErr != nil {
+		return false, projErr
+	}
+	if update != nil && notify != nil {
+		if notifyErr := notify(acpsdk.SessionNotification{
+			SessionId: acpsdk.SessionId(sessionID),
+			Update:    *update,
+		}); notifyErr != nil {
+			return false, notifyErr
+		}
+	}
+
+	resumeAt := events.AggregateSequence(gap.EarliestRetained) - 1
+	ackResult, ackErr := s.chatSessions.AcknowledgeAttachment(ctx, chatsessions.AcknowledgeAttachmentRequest{
+		SessionID:       sessionID,
+		AttachmentID:    attachment.ID,
+		ExpectedVersion: sessionVersion,
+		AfterSequence:   resumeAt,
+	})
+	if ackErr != nil {
+		var posErr *chatsessions.AttachmentPositionError
+		if errors.As(ackErr, &posErr) {
+			return true, nil
+		}
+		return false, ackErr
+	}
+	*attachment = ackResult.Attachment
+	attachmentCacheFromContext(ctx).set(sessionID, *attachment)
+	return false, nil
 }
