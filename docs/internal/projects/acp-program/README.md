@@ -89,8 +89,14 @@ the 45-method `factory_sessions.Service`. Shims:
 - live in the consumer package, never the provider;
 - import only the provider's public root, never its `internal/` tree;
 - change no behavior;
-- are registered as deletion candidates in L2's catalog at the moment they are
-  created, so they cannot rot silently.
+- are entered as **active** in the [canonical ACP consumer-owned shim
+  register](../root-consolidation/proposal.md#canonical-acp-consumer-owned-shim-register)
+  at the moment they are created, so they cannot rot silently.
+
+Each new register entry must identify the consumer, adapted public provider root
+or capability, active status, the L2 or L3 retirement owner and exact
+milestone, and the evidence that will be needed to verify retirement. A new
+L1/L4 consumer-owned shim without that entry is a review defect.
 
 Additive root operations are exempt: adding one deliberate operation to a root
 is preferred over a shim that reaches around it.

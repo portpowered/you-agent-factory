@@ -59,11 +59,19 @@ Worker Sessions control plane.
 
 ### Existing code this lane consumes unchanged
 
-- `pkg/services/factory_sessions` through a thin consumer-owned shim (D4). The
-  root is 45 methods with three parallel pause/resume families; L1 does not seal
-  it and does not depend on it being sealed.
+- `pkg/services/factory_sessions` through the owner-published
+  `factory_sessions.TargetExecutionService`. The former Chat Sessions
+  consumer-owned shim is retained as retired history in the [canonical ACP
+  consumer-owned shim
+  register](../root-consolidation/proposal.md#canonical-acp-consumer-owned-shim-register);
+  L1 does not seal the broader Factory Sessions root.
 - `pkg/services/workers/response_drafts.go` as the normalized vocabulary owner.
   L1 introduces no taxonomy.
+
+If L1 creates a future consumer-owned shim, it must add an active entry to that
+canonical register when the shim is created, with the consumer, adapted public
+root or capability, retirement owner and exact L2/L3 milestone, and retirement
+evidence required by D4.
 - `github.com/coder/acp-go-sdk v0.13.5`, already a direct dependency. It
   supports `session/new`, `prompt`, `cancel`, `load`, `resume`, `close`,
   `set_config_option`, and `request_permission`. Protocol version 1.
@@ -503,7 +511,7 @@ sequenceDiagram
     participant C as ACP Client
     participant A as ACP Transport
     participant Chat as Chat Sessions
-    participant FS as Factory Sessions (via shim)
+    participant FS as Factory Sessions (TargetExecutionService)
     participant Ev as Events
 
     C->>A: session/prompt(sessionId, content)
@@ -531,7 +539,7 @@ sequenceDiagram
     participant C as ACP Client
     participant A as ACP Transport
     participant Chat as Chat Sessions
-    participant FS as Factory Sessions (via shim)
+    participant FS as Factory Sessions (TargetExecutionService)
 
     C->>A: session/cancel(sessionId)
     A->>Chat: CancelActiveTurn(requestIdentity)
@@ -562,8 +570,12 @@ as its actual inputs exist.
 
 **V0 — contracts.** `chat_sessions`, `events`, and ACP compatibility contracts
 plus representative fixtures. Additive `ResolveACPAgentProfile` /
-`UpdateACPAgentProfile` on the Operator Settings root. The `factory_sessions`
-shim, registered as an L2 deletion candidate.
+`UpdateACPAgentProfile` on the Operator Settings root. The former
+`chat_sessions` Factory Sessions shim is recorded as retired history in the
+[canonical ACP consumer-owned shim
+register](../root-consolidation/proposal.md#canonical-acp-consumer-owned-shim-register),
+after direct consumption of `factory_sessions.TargetExecutionService` replaced
+it.
 
 **V1 — one Chat Session runs one Factory.** Chat store and versioning, target
 catalog, ACP stdio framing and initialize, `session/new`, picker,
@@ -594,7 +606,7 @@ flowchart TD
     O01[settings profile] --> C02[target selection]
     D01[factory catalog] --> C02
     C01 --> C02
-    SH[factory_sessions shim] --> C03[prompt delegation]
+    FS[Factory Sessions TargetExecutionService] --> C03[prompt delegation]
     C02 --> C03
     T01[stdio + initialize] --> T02[new/picker/prompt mapping]
     C03 --> T02
