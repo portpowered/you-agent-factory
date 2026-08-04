@@ -468,7 +468,21 @@ func (s *Server) drainRecords(
 			}
 		}
 
-		ackResult, ackErr := s.chatSessions.AcknowledgeAttachment(ctx, chatsessions.AcknowledgeAttachmentRequest{
+		// context.WithoutCancel: this record was already handed to notify above
+		// -- the client has already received it -- so the acknowledgement that
+		// persists its cursor position must still complete even if ctx is
+		// canceled for a reason unrelated to this specific record (concretely:
+		// liveDrainTurnUpdates runs against a bridge-derived ctx that
+		// RunWithResponseBridge cancels the instant the wrapped Factory
+		// invocation returns, which can race a still-in-flight
+		// AcknowledgeAttachment call for a record notify already delivered).
+		// Without this, that race leaves the cursor unadvanced past an
+		// already-delivered record, and the guaranteed-correct
+		// streamTurnUpdates catch-up sweep that follows redelivers it a second
+		// time -- directly violating this transport's "at most once per
+		// attachment" delivery guarantee. Matches detachAttachments' identical
+		// "must finish despite ctx already being canceled" idiom.
+		ackResult, ackErr := s.chatSessions.AcknowledgeAttachment(context.WithoutCancel(ctx), chatsessions.AcknowledgeAttachmentRequest{
 			SessionID:       sessionID,
 			AttachmentID:    attachment.ID,
 			ExpectedVersion: sessionVersion,
@@ -537,7 +551,11 @@ func (s *Server) deliverReadTimeGap(
 	}
 
 	resumeAt := events.AggregateSequence(gap.EarliestRetained) - 1
-	ackResult, ackErr := s.chatSessions.AcknowledgeAttachment(ctx, chatsessions.AcknowledgeAttachmentRequest{
+	// context.WithoutCancel: see drainRecords' identical comment -- the gap
+	// notice was already handed to notify above, so this acknowledgement must
+	// still complete despite ctx being canceled for a reason unrelated to
+	// this specific record.
+	ackResult, ackErr := s.chatSessions.AcknowledgeAttachment(context.WithoutCancel(ctx), chatsessions.AcknowledgeAttachmentRequest{
 		SessionID:       sessionID,
 		AttachmentID:    attachment.ID,
 		ExpectedVersion: sessionVersion,

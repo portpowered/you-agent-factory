@@ -85,10 +85,22 @@ import (
 //
 // Zero agent_thought_chunk/usage_update/session_info_update notifications
 // remain accurate for this fixture: @you/goal's single provider call
-// produces no REASONING/USAGE/SESSION response events, so this cell cannot
-// yet prove that half of AC3's "ordered message, thought, usage, and
-// session-info updates" -- doing so needs a fixture (or harness support)
-// that actually publishes those kinds, left for a follow-up iteration.
+// produces no REASONING/USAGE/SESSION response events, so this cell alone
+// cannot prove any of that half of AC3's "ordered message, thought, usage,
+// and session-info updates".
+//
+// A sibling cell, acp_streaming_usage_composition_test.go's
+// TestACPServeCommandStreamsUsageUpdateThroughRootBuildProcess, now closes
+// part of that gap: it uses a different fixture (an ACP-EXECUTION worker,
+// not @you/goal's decision-envelope AGENT_RUN shape) to prove a genuine
+// usage_update notification delivered through this exact production graph.
+// The remaining gap -- agent_thought_chunk and session_info_update -- is not
+// a fixture limitation; that sibling cell's own doc comment documents two
+// real, already-confirmed, pre-existing defects in a different, out-of-scope
+// service (pkg/services/factory_sessions) that make both currently
+// unobservable through this production graph regardless of what any fixture
+// publishes, with precise file/function citations for whichever future
+// iteration picks up Factory Sessions work.
 func TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test driving root.BuildProcess through the you serve acp CLI command")
@@ -112,7 +124,7 @@ func TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText(
 	})
 
 	cwd := t.TempDir()
-	stdin, stdout := startServeACPHarness(t, home, cwd, runner)
+	stdin, stdout := startServeACPHarness(t, home, cwd, serviceedges.Edges{ProviderCommandRunner: runner})
 
 	sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)
 	if sessionID == "" {
@@ -135,19 +147,21 @@ func TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText(
 }
 
 // startServeACPHarness builds the real *application.Process against home and
-// runner, then drives the real "you serve acp" Cobra command through
-// Process.Execute over a pair of OS pipes, in a background goroutine, exactly
-// the entrypoint the published you binary runs. It registers cleanup that
-// cancels the invocation's context and closes stdin, then waits (bounded by a
-// fixed terminal deadline, not a retry loop) for Execute to actually return.
-// It returns the pipe ends the caller writes requests to and reads responses/
+// edges (the one external provider effect this cell's caller supplies --
+// either a decision-envelope ProviderCommandRunner fixture or an ACP-execution
+// PlatformProcessCommandFactory/ProvidersExecutableLocator pair, see
+// acp_streaming_usage_composition_test.go's usage-update sibling cell), then
+// drives the real "you serve acp" Cobra command through Process.Execute over a
+// pair of OS pipes, in a background goroutine, exactly the entrypoint the
+// published you binary runs. It registers cleanup that cancels the
+// invocation's context and closes stdin, then waits (bounded by a fixed
+// terminal deadline, not a retry loop) for Execute to actually return. It
+// returns the pipe ends the caller writes requests to and reads responses/
 // notifications from.
-func startServeACPHarness(t *testing.T, home, cwd string, runner *support.ShapedProviderCommandRunner) (*os.File, *bufio.Reader) {
+func startServeACPHarness(t *testing.T, home, cwd string, edges serviceedges.Edges) (*os.File, *bufio.Reader) {
 	t.Helper()
 
-	buildProcess, err := root.BuildProcess(context.Background(), serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	})
+	buildProcess, err := root.BuildProcess(context.Background(), edges)
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}
