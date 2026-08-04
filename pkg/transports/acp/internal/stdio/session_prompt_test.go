@@ -3173,6 +3173,13 @@ func TestHandleSessionCancelDependencyFailureLeavesTurnRunningAndRetryable(t *te
 	if len(advances) != 2 || advances[1].Intent.State != chatsessions.ControlIntentStateCompleted {
 		t.Fatalf("control advances = %#v, want COMMITTED then COMPLETED after retry", advances)
 	}
+	retried, err := base.GetSession(context.Background(), chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession after retried cancel: %v", err)
+	}
+	if retried.Session.State != chatsessions.SessionStateActive || retried.Session.ActiveTurnID != turn.ID {
+		t.Fatalf("retried cancel fabricated terminal Chat state: Session=%#v, want the still-running captured prompt to remain authoritative until its own result arrives", retried.Session)
+	}
 }
 
 // serveUntilAsyncWriteFailureWithReaderStillOpen drives a Server through

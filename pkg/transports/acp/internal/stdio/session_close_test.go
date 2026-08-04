@@ -399,6 +399,17 @@ func TestHandleSessionCloseDependencyFailureLeavesLifecycleRetryable(t *testing.
 	if len(closeCalls) != 2 || closeCalls[0] != "fs-close-failure" || closeCalls[1] != "fs-close-failure" {
 		t.Fatalf("CloseFactorySession calls = %#v, want two retries for only the captured target", closeCalls)
 	}
+	closed, err := base.GetSession(context.Background(), chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession after retried close: %v", err)
+	}
+	if closed.Session.State != chatsessions.SessionStateClosed || closed.Episode.State != chatsessions.TargetEpisodeStateClosed || closed.Session.ActiveTurnID != "" {
+		t.Fatalf("retried close Chat lifecycle = Session=%#v Episode=%#v, want terminally closed captured lifecycle", closed.Session, closed.Episode)
+	}
+	_, advances = chatSessions.snapshotControls()
+	if len(advances) != 2 || advances[1].Intent.State != chatsessions.ControlIntentStateCompleted {
+		t.Fatalf("control advances after retry = %#v, want COMMITTED then COMPLETED", advances)
+	}
 }
 
 var _ factorysessions.TargetExecutionService = (*fakeFactoryTargetService)(nil)

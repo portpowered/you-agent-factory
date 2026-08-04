@@ -43,6 +43,8 @@ import (
 // every runtime it ever lazily activated.
 var _ io.Closer = (*Service)(nil)
 
+var errCancellationIncomplete = errors.New("on-demand Factory target cancellation did not complete")
+
 // RuntimeResolver turns one canonical Factory target identity and editor
 // working root into the concrete Runtime Opening request that activating a
 // live, project-bound Factory Sessions runtime for that exact target needs.
@@ -178,8 +180,14 @@ type activatedRuntime struct {
 	mu         sync.Mutex
 	invocation *activeInvocation
 	closing    bool
-	closeOnce  sync.Once
-	closeErr   error
+	closed     bool
+
+	closeMu          sync.Mutex
+	sessionClosed    bool
+	workerStopped    bool
+	lifecycleStopped bool
+	runtimeWaited    bool
+	artifactsClosed  bool
 
 	factoryTargetID string
 	config          factorysessions.RuntimeOpeningRequest
@@ -192,9 +200,12 @@ type activatedRuntime struct {
 // the exact request context that reached the provider without exposing the
 // runtime's private lifecycle internals to ACP.
 type activeInvocation struct {
-	cancel   context.CancelFunc
-	done     chan struct{}
-	canceled bool
+	cancel context.CancelFunc
+	done   chan struct{}
+
+	cancelRequested bool
+	cancelOutcome   chan bool
+	cancelOnce      sync.Once
 }
 
 func (s *Service) openActivatedRuntime(
@@ -235,49 +246,84 @@ func (s *Service) openActivatedRuntime(
 	if err != nil {
 		s.logger.Error("failed to activate on-demand Factory target runtime",
 			zap.String("factoryTargetId", factoryTargetID))
-		return nil, errors.Join(fmt.Errorf("activate Factory target runtime: %w", err), active.close(ctx))
+		_, closeErr := active.close(ctx)
+		return nil, errors.Join(fmt.Errorf("activate Factory target runtime: %w", err), closeErr)
 	}
 	s.logger.Info("activated on-demand Factory target runtime", zap.String("factoryTargetId", factoryTargetID))
 	return active, nil
 }
 
-func (a *activatedRuntime) close(ctx context.Context) error {
-	a.closeOnce.Do(func() {
-		a.mu.Lock()
-		a.closing = true
-		a.mu.Unlock()
+// close serializes cleanup attempts and retains the runtime after a failure
+// so its captured owner can retry the same target. It returns the interrupted
+// invocation, if any; the caller resolves that invocation only after its
+// complete control operation (including a cancel replacement) succeeds.
+func (a *activatedRuntime) close(ctx context.Context) (*activeInvocation, error) {
+	a.closeMu.Lock()
+	defer a.closeMu.Unlock()
 
-		cleanupContext := context.WithoutCancel(ctx)
-		var result error
-		if _, err := a.cancelInvocation(cleanupContext); err != nil {
+	a.mu.Lock()
+	if a.closed {
+		a.mu.Unlock()
+		return nil, nil
+	}
+	a.closing = true
+	a.mu.Unlock()
+
+	invocation, cancelErr := a.cancelInvocation(context.WithoutCancel(ctx))
+	result := errors.Join(cancelErr, a.cleanup(context.WithoutCancel(ctx)))
+	if result == nil {
+		a.mu.Lock()
+		a.closed = true
+		a.mu.Unlock()
+	}
+	return invocation, result
+}
+
+// cleanup retries only the runtime cleanup steps that have not yet
+// succeeded. Repeating a failed close must not replay already-successful
+// lifecycle effects or silently convert the original failure into success.
+func (a *activatedRuntime) cleanup(ctx context.Context) error {
+	var result error
+	if a.opened.Sessions != nil && !a.sessionClosed {
+		if err := a.opened.Sessions.CloseFactorySession(ctx, factorysessions.DefaultSessionID); err != nil &&
+			!errors.Is(err, factorysessions.ErrSessionNotFound) {
 			result = errors.Join(result, err)
+		} else {
+			a.sessionClosed = true
 		}
-		if a.opened.Sessions != nil {
-			if err := a.opened.Sessions.CloseFactorySession(cleanupContext, factorysessions.DefaultSessionID); err != nil &&
-				!errors.Is(err, factorysessions.ErrSessionNotFound) {
-				result = errors.Join(result, err)
-			}
+	}
+	if a.stopWorker != nil && !a.workerStopped {
+		if err := a.stopWorker(ctx); err != nil {
+			result = errors.Join(result, err)
+		} else {
+			a.workerStopped = true
 		}
-		if a.stopWorker != nil {
-			result = errors.Join(result, a.stopWorker(cleanupContext))
+	}
+	if a.opened.Lifecycle != nil && !a.lifecycleStopped {
+		if err := a.opened.Lifecycle.StopLifecycle(ctx); err != nil {
+			result = errors.Join(result, err)
+		} else {
+			a.lifecycleStopped = true
 		}
-		if a.opened.Lifecycle != nil {
-			result = errors.Join(result, a.opened.Lifecycle.StopLifecycle(cleanupContext))
+	}
+	if a.cancel != nil {
+		a.cancel()
+	}
+	if a.opened.Lifecycle != nil && !a.runtimeWaited {
+		if err := a.opened.Lifecycle.WaitForRuntime(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			result = errors.Join(result, err)
+		} else {
+			a.runtimeWaited = true
 		}
-		if a.cancel != nil {
-			a.cancel()
+	}
+	if a.opened.CloseArtifacts != nil && !a.artifactsClosed {
+		if err := a.opened.CloseArtifacts(); err != nil {
+			result = errors.Join(result, err)
+		} else {
+			a.artifactsClosed = true
 		}
-		if a.opened.Lifecycle != nil {
-			if err := a.opened.Lifecycle.WaitForRuntime(cleanupContext); err != nil && !errors.Is(err, context.Canceled) {
-				result = errors.Join(result, err)
-			}
-		}
-		if a.opened.CloseArtifacts != nil {
-			result = errors.Join(result, a.opened.CloseArtifacts())
-		}
-		a.closeErr = result
-	})
-	return a.closeErr
+	}
+	return result
 }
 
 // beginInvocation registers the per-request cancellation context before the
@@ -294,40 +340,50 @@ func (a *activatedRuntime) beginInvocation(ctx context.Context) (context.Context
 		return nil, nil, errors.New("on-demand Factory target already has an active invocation")
 	}
 	invocationContext, cancel := context.WithCancel(ctx)
-	invocation := &activeInvocation{cancel: cancel, done: make(chan struct{})}
+	invocation := &activeInvocation{
+		cancel:        cancel,
+		done:          make(chan struct{}),
+		cancelOutcome: make(chan bool, 1),
+	}
 	a.invocation = invocation
 	return invocationContext, invocation, nil
 }
 
-// beginCancellation marks a live invocation as canceled and prevents another
-// one from starting on this runtime while Cancel closes it. A completed target
-// has no active invocation to cancel, so its caller receives a no-op and the
-// runtime remains available for later work.
+// beginCancellation prevents another invocation from starting while Cancel
+// closes this runtime. A retry after a failed close remains actionable even
+// though its original invocation has already stopped; only a normally
+// completed, still-running runtime is a true no-op.
 func (a *activatedRuntime) beginCancellation() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.closing || a.invocation == nil {
+	if a.invocation == nil && !a.closing {
 		return false
 	}
 	a.closing = true
-	a.invocation.canceled = true
-	a.invocation.cancel()
+	if a.invocation != nil {
+		a.invocation.cancelRequested = true
+		a.invocation.cancel()
+	}
 	return true
 }
 
-// finishInvocation clears a completed invocation and returns whether this
-// target's Cancel or Close path, rather than the caller's request context,
-// caused it to stop.
-func (a *activatedRuntime) finishInvocation(invocation *activeInvocation) bool {
+// finishInvocation clears a completed invocation and waits for the owning
+// Cancel or Close operation to report whether all of its cleanup succeeded.
+// A raw provider context cancellation is not itself a truthful ACP canceled
+// result when the owner control failed and remains retryable.
+func (a *activatedRuntime) finishInvocation(invocation *activeInvocation) (bool, bool) {
 	a.mu.Lock()
 	if a.invocation == invocation {
 		a.invocation = nil
 	}
-	canceled := invocation.canceled
+	cancelRequested := invocation.cancelRequested
 	close(invocation.done)
 	a.mu.Unlock()
 	invocation.cancel()
-	return canceled
+	if !cancelRequested {
+		return false, false
+	}
+	return <-invocation.cancelOutcome, true
 }
 
 // cancelInvocation signals the exact active invocation and waits for its
@@ -335,24 +391,33 @@ func (a *activatedRuntime) finishInvocation(invocation *activeInvocation) bool {
 // closed until the captured prompt has observed cancellation, so a later
 // prompt cannot inherit an in-flight provider operation. It reports false
 // when a normally completed turn has already cleared the active invocation.
-func (a *activatedRuntime) cancelInvocation(ctx context.Context) (bool, error) {
+func (a *activatedRuntime) cancelInvocation(ctx context.Context) (*activeInvocation, error) {
 	a.mu.Lock()
 	invocation := a.invocation
 	if invocation == nil {
 		a.mu.Unlock()
-		return false, nil
+		return nil, nil
 	}
-	invocation.canceled = true
+	invocation.cancelRequested = true
 	invocation.cancel()
 	done := invocation.done
 	a.mu.Unlock()
 
 	select {
 	case <-done:
-		return true, nil
+		return invocation, nil
 	case <-ctx.Done():
-		return true, ctx.Err()
+		return invocation, ctx.Err()
 	}
+}
+
+func (a *activatedRuntime) resolveCancellation(invocation *activeInvocation, succeeded bool) {
+	if invocation == nil {
+		return
+	}
+	invocation.cancelOnce.Do(func() {
+		invocation.cancelOutcome <- succeeded
+	})
 }
 
 // StartAsync opens (and keeps open) exactly one Factory target runtime for
@@ -463,7 +528,7 @@ func (s *Service) startNewActivation(
 
 	wrapperID, err := s.publishActivation(request.RequestID, active)
 	if err != nil {
-		_ = active.close(context.WithoutCancel(ctx))
+		_, _ = active.close(context.WithoutCancel(ctx))
 		return factorysessions.AsyncStartResult{}, err
 	}
 	s.logger.Info("on-demand Factory target runtime ready",
@@ -524,7 +589,8 @@ func (s *Service) InvokeFactorySession(
 		return factorysessions.InvocationResult{}, err
 	}
 	result, err := active.opened.Sessions.InvokeFactorySession(invocationContext, factorysessions.DefaultSessionID, request)
-	if active.finishInvocation(invocation) {
+	canceled, cancellationRequested := active.finishInvocation(invocation)
+	if canceled {
 		if request.RequestID != nil && result.RequestID == "" {
 			result.RequestID = *request.RequestID
 		}
@@ -535,6 +601,10 @@ func (s *Service) InvokeFactorySession(
 		result.SessionID = sessionID
 		s.logger.Info("on-demand Factory target invoke canceled")
 		return result, nil
+	}
+	if cancellationRequested {
+		s.logger.Error("on-demand Factory target cancellation did not complete")
+		return result, errCancellationIncomplete
 	}
 	if err != nil {
 		s.logger.Error("on-demand Factory target invoke failed")
@@ -585,19 +655,24 @@ func (s *Service) Cancel(
 			Status:    factorysessions.LifecycleStatusRunning,
 		}, nil
 	}
-	if err := active.close(ctx); err != nil {
+	invocation, closeErr := active.close(ctx)
+	if closeErr != nil {
+		active.resolveCancellation(invocation, false)
 		s.logger.Error("on-demand Factory target cancel failed")
-		return factorysessions.LifecycleControlResult{}, err
+		return factorysessions.LifecycleControlResult{}, closeErr
 	}
 	replacement, err := s.openActivatedRuntime(ctx, active.factoryTargetID, active.config)
 	if err != nil {
+		active.resolveCancellation(invocation, false)
 		s.logger.Error("on-demand Factory target reset failed")
 		return factorysessions.LifecycleControlResult{}, err
 	}
 	if !s.replaceActivation(sessionID, active, replacement) {
-		_ = replacement.close(context.WithoutCancel(ctx))
+		_, _ = replacement.close(context.WithoutCancel(ctx))
+		active.resolveCancellation(invocation, false)
 		return factorysessions.LifecycleControlResult{}, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, sessionID)
 	}
+	active.resolveCancellation(invocation, true)
 	s.logger.Info("on-demand Factory target cancel completed", zap.String("outcome", string(factorysessions.LifecycleControlOutcomeAccepted)))
 	return factorysessions.LifecycleControlResult{
 		SessionID: sessionID,
@@ -622,32 +697,46 @@ func (s *Service) replaceActivation(sessionID string, current, replacement *acti
 	return true
 }
 
+// removeActivation evicts sessionID only if it still resolves to current, so
+// a concurrent replacement can never be removed by an older close attempt.
+func (s *Service) removeActivation(sessionID string, current *activatedRuntime) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.runtimes[sessionID] != current {
+		return false
+	}
+	delete(s.runtimes, sessionID)
+	return true
+}
+
 // CloseFactorySession tears down and evicts the exact runtime a prior
 // StartAsync call opened for sessionID. Closing an unknown or already-closed
 // identity is a no-op success, matching the idempotent close semantics
 // factorysessions.Service.CloseFactorySession already documents.
 func (s *Service) CloseFactorySession(ctx context.Context, sessionID string) error {
-	s.mu.Lock()
-	active, ok := s.runtimes[sessionID]
-	if ok {
-		delete(s.runtimes, sessionID)
-	}
-	s.mu.Unlock()
-	if !ok {
+	active, err := s.lookup(sessionID)
+	if errors.Is(err, factorysessions.ErrSessionNotFound) {
 		return nil
 	}
-	err := active.close(ctx)
+	if err != nil {
+		return err
+	}
+	invocation, err := active.close(ctx)
+	active.resolveCancellation(invocation, err == nil)
 	if err != nil {
 		s.logger.Error("on-demand Factory target close failed")
 	} else {
+		s.removeActivation(sessionID, active)
 		s.logger.Info("on-demand Factory target closed")
 	}
 	return err
 }
 
-// Close tears down and evicts every runtime this Service has opened and not
-// yet closed, aggregating every individual close failure into one returned
-// error rather than stopping at the first. It satisfies io.Closer so a
+// Close tears down every runtime this Service has opened and evicts only
+// those that closed successfully, retaining a failed target for a truthful
+// retry rather than losing it behind an idempotent no-op. It aggregates every
+// individual close failure into one returned error rather than stopping at
+// the first. It satisfies io.Closer so a
 // process lifecycle plan can register this Service as a reachable,
 // deterministic unwind step for every runtime it ever lazily activated,
 // instead of leaving them open for the life of the process; construction
@@ -656,18 +745,21 @@ func (s *Service) CloseFactorySession(ctx context.Context, sessionID string) err
 // an earlier CloseFactorySession call is never closed twice.
 func (s *Service) Close() error {
 	s.mu.Lock()
-	active := make([]*activatedRuntime, 0, len(s.runtimes))
+	active := make(map[string]*activatedRuntime, len(s.runtimes))
 	for sessionID, runtime := range s.runtimes {
-		active = append(active, runtime)
-		delete(s.runtimes, sessionID)
+		active[sessionID] = runtime
 	}
 	s.mu.Unlock()
 
 	var result error
-	for _, runtime := range active {
-		if err := runtime.close(context.WithoutCancel(context.Background())); err != nil {
+	for sessionID, runtime := range active {
+		invocation, err := runtime.close(context.WithoutCancel(context.Background()))
+		runtime.resolveCancellation(invocation, err == nil)
+		if err != nil {
 			result = errors.Join(result, err)
+			continue
 		}
+		s.removeActivation(sessionID, runtime)
 	}
 	if result != nil {
 		s.logger.Error("on-demand Factory target close-all failed", zap.Int("runtimeCount", len(active)))

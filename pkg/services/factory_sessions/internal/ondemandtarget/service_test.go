@@ -108,6 +108,7 @@ type fakeSessions struct {
 
 	closeCalls []string
 	closeErr   error
+	closeErrs  []error
 }
 
 func (f *fakeSessions) InvokeFactorySession(
@@ -140,6 +141,11 @@ func (f *fakeSessions) CloseFactorySession(_ context.Context, sessionID string) 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.closeCalls = append(f.closeCalls, sessionID)
+	if len(f.closeErrs) > 0 {
+		err := f.closeErrs[0]
+		f.closeErrs = f.closeErrs[1:]
+		return err
+	}
 	return f.closeErr
 }
 
