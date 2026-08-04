@@ -29,8 +29,8 @@
 //     resolved provider cannot continue returns the closed unsupported
 //     outcome as a successful result, and a valid reference reaches the
 //     matching adapter with provider, kind, and session identity unchanged.
-//     Ordinary Execute rejects any request that already carries a resume
-//     reference - continuation is requested exclusively through Continue
+//     Ordinary Execute does not expose a resume reference - continuation is
+//     requested exclusively through Continue
 //   - detached request, result, value, and typed-error contracts
 //
 // Construction/process-edge ports exist so Wire and owner constructors can

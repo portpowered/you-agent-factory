@@ -46,7 +46,7 @@ type Service interface {
 	// provider adapter is invoked; a reference the resolved provider cannot
 	// continue returns the typed unsupported outcome as a successful result
 	// instead of starting a fresh attempt. Provider continuation is requested
-	// exclusively through Continue - Execute rejects any request that already
-	// carries a resume reference.
+	// exclusively through Continue - Execute does not expose a resume
+	// reference.
 	Continue(context.Context, ContinueRequest) (ContinueResult, error)
 }

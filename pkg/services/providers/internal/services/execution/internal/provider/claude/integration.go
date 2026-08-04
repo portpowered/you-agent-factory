@@ -82,7 +82,7 @@ func (i *Integration) Invoke(
 		}
 		return writer.Close(ctx, inference.FailedCompletion(failure))
 	}
-	result, err := i.providers.Execute(ctx, executeRequestFromInvocation(request))
+	result, err := i.executeInvocation(ctx, request)
 	if errors.Is(ctx.Err(), context.Canceled) && !errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return ctx.Err()
 	}
@@ -126,10 +126,28 @@ func executeRequestFromInvocation(request inference.InvocationRequest) providers
 		WorkerType:         workerNameFromExecution(execution),
 		WorkstationName:    workstationNameFromExecution(execution),
 	}
-	if session := requestedSession(request); session != nil {
-		executeRequest.ResumeSession = session
-	}
 	return executeRequest
+}
+
+func (i *Integration) executeInvocation(
+	ctx context.Context,
+	request inference.InvocationRequest,
+) (providers.ExecuteResult, error) {
+	attempt := executeRequestFromInvocation(request)
+	if reference := requestedSession(request); reference != nil {
+		continued, err := i.providers.Continue(ctx, providers.ContinueRequest{Reference: *reference, Attempt: attempt})
+		if err != nil {
+			return providers.ExecuteResult{}, err
+		}
+		if continued.Outcome != providers.ContinuationOutcomeResumed {
+			return providers.ExecuteResult{}, providers.ExecuteFailure{
+				Kind:    providers.ExecuteFailureKindInvalidRequest,
+				Message: "Claude cannot continue the requested Provider Session",
+			}
+		}
+		return continued.Result, nil
+	}
+	return i.providers.Execute(ctx, attempt)
 }
 
 func workerNameFromExecution(execution workers.ProviderInferenceRequest) string {

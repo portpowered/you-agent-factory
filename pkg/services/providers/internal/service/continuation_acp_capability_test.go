@@ -50,6 +50,15 @@ func (s *negotiatedCapabilityACPService) Execute(
 	return providers.ExecuteResult{Content: "acp resumed reply"}, nil
 }
 
+func (s *negotiatedCapabilityACPService) Continue(
+	ctx context.Context,
+	id providers.ID,
+	request providers.ExecuteRequest,
+	_ providers.SessionRef,
+) (providers.ExecuteResult, error) {
+	return s.Execute(ctx, id, request)
+}
+
 func (s *negotiatedCapabilityACPService) Claim(providers.ID, string) (acp.Generation, bool) {
 	return nil, false
 }
@@ -64,7 +73,7 @@ func (s *negotiatedCapabilityACPService) NegotiatedCapabilities(
 	return acpsdk.AgentCapabilities{LoadSession: s.loadSession}, s.known
 }
 
-var _ acp.Service = (*negotiatedCapabilityACPService)(nil)
+var _ acp.ContinuationService = (*negotiatedCapabilityACPService)(nil)
 
 func mustNegotiatedCapabilityRootService(
 	t *testing.T,

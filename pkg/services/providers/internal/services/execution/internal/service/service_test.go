@@ -105,19 +105,25 @@ func TestNewRejectsInvalidRegistrationSets(t *testing.T) {
 	}
 }
 
-func TestExecuteValidatesThenResolvesCanonicalAdapterExactlyOnce(t *testing.T) {
+func TestContinueValidatesThenResolvesCanonicalAdapterExactlyOnce(t *testing.T) {
 	t.Parallel()
 
 	catalogService := mustCatalog(t)
 	calls := 0
-	var received providers.ExecuteRequest
+	var received execution.ContinuationRequest
 	executionService, err := executionwire.NewService(
 		catalogService,
 		execution.Registration{
 			Provider: providers.IDCodex,
 			Attempt: func(
 				_ context.Context,
-				request providers.ExecuteRequest,
+				_ providers.ExecuteRequest,
+			) (providers.ExecuteResult, error) {
+				return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency}
+			},
+			Continue: func(
+				_ context.Context,
+				request execution.ContinuationRequest,
 			) (providers.ExecuteResult, error) {
 				calls++
 				received = request.Clone()
@@ -140,31 +146,37 @@ func TestExecuteValidatesThenResolvesCanonicalAdapterExactlyOnce(t *testing.T) {
 		SystemPrompt:     "system",
 		UserMessage:      "user",
 		OutputSchema:     `{"type":"string"}`,
-		ResumeSession:    resume,
 		WorkingDirectory: "C:/workspace",
 		Worktree:         "C:/workspace/tree",
 	}
 
-	result, err := executionService.Execute(context.Background(), request)
+	continuation, ok := executionService.(execution.ContinuationService)
+	if !ok {
+		t.Fatal("NewService() result does not implement ContinuationService")
+	}
+	result, err := continuation.Continue(context.Background(), execution.ContinuationRequest{
+		ExecuteRequest: request,
+		ResumeSession:  resume,
+	})
 	if err != nil {
-		t.Fatalf("Execute() = %v", err)
+		t.Fatalf("Continue() = %v", err)
 	}
 	if result.Content != "done" {
-		t.Fatalf("Execute().Content = %q, want done", result.Content)
+		t.Fatalf("Continue().Content = %q, want done", result.Content)
 	}
 	if calls != 1 {
 		t.Fatalf("adapter calls = %d, want 1", calls)
 	}
-	want := request.Clone()
+	want := execution.ContinuationRequest{ExecuteRequest: request.Clone(), ResumeSession: resume}.Clone()
 	want.Provider = providers.IDCodex
 	if !reflect.DeepEqual(received, want) {
 		t.Fatalf("adapter request = %#v, want %#v", received, want)
 	}
-	if received.ResumeSession == request.ResumeSession {
+	if received.ResumeSession == resume {
 		t.Fatal("adapter received caller-owned ResumeSession pointer")
 	}
-	if request.ResumeSession.ID != "session-1" {
-		t.Fatalf("caller ResumeSession.ID = %q, want session-1", request.ResumeSession.ID)
+	if resume.ID != "session-1" {
+		t.Fatalf("caller ResumeSession.ID = %q, want session-1", resume.ID)
 	}
 }
 
@@ -203,14 +215,6 @@ func TestExecuteRejectsInvalidRequestBeforeCatalogOrAdapterIO(t *testing.T) {
 	invalidRequests := []providers.ExecuteRequest{
 		{AttemptID: "attempt-1"},
 		{Provider: providers.IDCodex},
-		{
-			Provider:  providers.IDCodex,
-			AttemptID: "attempt-1",
-			ResumeSession: &providers.SessionRef{
-				Provider: providers.IDCodex,
-				Kind:     providers.SessionIDKind,
-			},
-		},
 	}
 
 	for _, request := range invalidRequests {
@@ -792,6 +796,22 @@ func TestExecuteNormalizesDiagnosticEdgeValues(t *testing.T) {
 					},
 				}, nil
 			},
+			Continue: func(
+				_ context.Context,
+				request execution.ContinuationRequest,
+			) (providers.ExecuteResult, error) {
+				return providers.ExecuteResult{
+					Content: "diagnostic",
+					Diagnostics: &providers.ExecuteDiagnostics{
+						DurationMillis: -1,
+						Progress: []providers.ExecuteProgress{{
+							Detail:   "resume " + request.ResumeSession.ID + " \xff",
+							Metadata: nil,
+						}},
+						Metadata: metadata,
+					},
+				}, nil
+			},
 		},
 	)
 	if err != nil {
@@ -807,11 +827,17 @@ func TestExecuteNormalizesDiagnosticEdgeValues(t *testing.T) {
 	if executeErr != nil || plain.Content != "plain" || plain.Diagnostics != nil {
 		t.Fatalf("plain Execute() = (%#v, %v)", plain, executeErr)
 	}
-	result, executeErr := executionService.Execute(
+	continuation, ok := executionService.(execution.ContinuationService)
+	if !ok {
+		t.Fatal("NewService() result does not implement ContinuationService")
+	}
+	result, executeErr := continuation.Continue(
 		context.Background(),
-		providers.ExecuteRequest{
-			Provider:  providers.IDCodex,
-			AttemptID: "diagnostic",
+		execution.ContinuationRequest{
+			ExecuteRequest: providers.ExecuteRequest{
+				Provider:  providers.IDCodex,
+				AttemptID: "diagnostic",
+			},
 			ResumeSession: &providers.SessionRef{
 				Provider: providers.IDCodex,
 				Kind:     providers.SessionIDKind,

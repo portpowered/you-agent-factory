@@ -187,13 +187,13 @@ func TestAdapter_ExecuteMapsExecuteFailedFromFakeRoot(t *testing.T) {
 	}
 }
 
-func TestAdapter_ExecuteDecodesResumeSession(t *testing.T) {
+func TestAdapter_ExecuteRejectsResumeSession(t *testing.T) {
 	t.Parallel()
 
-	var invoked providers.ExecuteRequest
+	invoked := false
 	fake := &rootFake{
 		execute: func(_ context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
-			invoked = request
+			invoked = true
 			return providers.ExecuteResult{Content: "ok"}, nil
 		},
 	}
@@ -206,13 +206,10 @@ func TestAdapter_ExecuteDecodesResumeSession(t *testing.T) {
 			"resumeSession":{"provider":"codex","kind":"session_id","id":"session-prev"}
 		}`),
 	})
-	if err != nil {
-		t.Fatalf("Execute error = %v", err)
+	if !errors.Is(err, ErrInvalidExecuteRequest) {
+		t.Fatalf("Execute error = %v, want ErrInvalidExecuteRequest", err)
 	}
-	if invoked.ResumeSession == nil ||
-		invoked.ResumeSession.Provider != providers.IDCodex ||
-		invoked.ResumeSession.Kind != providers.SessionIDKind ||
-		invoked.ResumeSession.ID != "session-prev" {
-		t.Fatalf("ResumeSession = %#v", invoked.ResumeSession)
+	if invoked {
+		t.Fatal("Providers.Execute was invoked for a rejected continuation input")
 	}
 }

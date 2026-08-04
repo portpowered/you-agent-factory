@@ -67,14 +67,14 @@ func newClaudeConformanceAdapter(plan executiontest.Plan) executiontest.Adapter 
 
 func (state *claudeConformanceState) execute(
 	ctx context.Context,
-	request providers.ExecuteRequest,
+	request execution.ContinuationRequest,
 	observe func([]byte) error,
 ) (claude.EffectResult, error) {
 	state.mu.Lock()
 	state.observation.Calls++
 	state.observation.Requests = append(
 		state.observation.Requests,
-		request.Clone(),
+		request.ExecuteRequest.Clone(),
 	)
 	state.mu.Unlock()
 	state.startOnce.Do(func() { close(state.started) })
@@ -84,7 +84,7 @@ func (state *claudeConformanceState) execute(
 		state.mu.Unlock()
 	}()
 	if state.plan.MutateRequest {
-		request.ResumeSession.ID = "claude-effect-mutated"
+		request.UserMessage = "claude-effect-mutated"
 	}
 	if state.plan.WaitForContext {
 		<-ctx.Done()

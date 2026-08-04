@@ -20,7 +20,7 @@ import (
 func TestRootContinueResumesExactSessionThroughNativeAdapter(t *testing.T) {
 	t.Parallel()
 
-	var received providers.ExecuteRequest
+	var received execution.ContinuationRequest
 	catalogService, err := catalogwire.NewService()
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
@@ -30,6 +30,9 @@ func TestRootContinueResumesExactSessionThroughNativeAdapter(t *testing.T) {
 		execution.Registration{
 			Provider: providers.IDCodex,
 			Attempt: func(_ context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+				return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency}
+			},
+			Continue: func(_ context.Context, request execution.ContinuationRequest) (providers.ExecuteResult, error) {
 				received = request.Clone()
 				return providers.ExecuteResult{Content: "resumed reply"}, nil
 			},
@@ -98,14 +101,28 @@ func TestRootContinueRejectsUnknownProvider(t *testing.T) {
 	}
 }
 
-func TestRootExecuteRejectsRequestCarryingResumeSession(t *testing.T) {
+func TestRootContinueRejectsUnsupportedSessionKindBeforeAdapterDispatch(t *testing.T) {
 	t.Parallel()
 
+	adapterCalls := 0
 	catalogService, err := catalogwire.NewService()
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
-	executionService, err := executionwire.NewService(catalogService)
+	executionService, err := executionwire.NewService(
+		catalogService,
+		execution.Registration{
+			Provider: providers.IDCodex,
+			Attempt: func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+				adapterCalls++
+				return providers.ExecuteResult{}, nil
+			},
+			Continue: func(context.Context, execution.ContinuationRequest) (providers.ExecuteResult, error) {
+				adapterCalls++
+				return providers.ExecuteResult{}, nil
+			},
+		},
+	)
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
@@ -114,15 +131,23 @@ func TestRootExecuteRejectsRequestCarryingResumeSession(t *testing.T) {
 		t.Fatalf("New() = %v", err)
 	}
 
-	session := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "session-1"}
-	_, err = root.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:      providers.IDCodex,
-		AttemptID:     "attempt-1",
-		ResumeSession: &session,
+	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: "external-session-id", ID: "foreign-1"}
+	_, err = root.Continue(context.Background(), providers.ContinueRequest{
+		Reference: reference,
+		Attempt:   providers.ExecuteRequest{Provider: providers.IDCodex, AttemptID: "attempt-1"},
 	})
-	var failure providers.ExecuteFailure
-	if !errors.As(err, &failure) || failure.Kind != providers.ExecuteFailureKindInvalidRequest {
-		t.Fatalf("Execute(with ResumeSession) error = %#v, want ExecuteFailureKindInvalidRequest", err)
+	if !errors.Is(err, providers.ErrInvalidContinuationRequest) {
+		t.Fatalf("Continue(unsupported kind) error = %v, want ErrInvalidContinuationRequest", err)
+	}
+	var failure providers.ContinuationFailure
+	if !errors.As(err, &failure) || failure.Kind != providers.ContinuationFailureKindInvalid {
+		t.Fatalf("Continue(unsupported kind) error = %#v, want invalid ContinuationFailure", err)
+	}
+	if failure.Reference != reference {
+		t.Fatalf("ContinuationFailure.Reference = %#v, want %#v", failure.Reference, reference)
+	}
+	if adapterCalls != 0 {
+		t.Fatalf("adapter calls = %d, want 0 for rejected continuation kind", adapterCalls)
 	}
 }
 
@@ -236,6 +261,9 @@ func TestRootContinueStaleWhenProviderReportsSessionNotFound(t *testing.T) {
 		execution.Registration{
 			Provider: providers.IDCodex,
 			Attempt: func(_ context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+				return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency}
+			},
+			Continue: func(_ context.Context, request execution.ContinuationRequest) (providers.ExecuteResult, error) {
 				adapterCalls++
 				if request.ResumeSession == nil {
 					t.Fatalf("adapter received request with nil ResumeSession, want the continued reference")
@@ -290,6 +318,9 @@ func TestRootContinueConcurrentAttemptsAreIndependent(t *testing.T) {
 		execution.Registration{
 			Provider: providers.IDCodex,
 			Attempt: func(_ context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+				return providers.ExecuteResult{Content: request.AttemptID}, nil
+			},
+			Continue: func(_ context.Context, request execution.ContinuationRequest) (providers.ExecuteResult, error) {
 				return providers.ExecuteResult{Content: request.AttemptID}, nil
 			},
 		},
@@ -351,6 +382,9 @@ func TestRootContinueConcurrentStaleAndResumedAttemptsStayIndependent(t *testing
 		execution.Registration{
 			Provider: providers.IDCodex,
 			Attempt: func(_ context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+				return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency}
+			},
+			Continue: func(_ context.Context, request execution.ContinuationRequest) (providers.ExecuteResult, error) {
 				if request.ResumeSession != nil && strings.HasSuffix(request.ResumeSession.ID, "-stale") {
 					return providers.ExecuteResult{}, providers.ExecuteFailure{
 						Kind:    providers.ExecuteFailureKindSessionNotFound,

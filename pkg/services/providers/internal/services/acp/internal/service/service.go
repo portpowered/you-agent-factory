@@ -41,9 +41,9 @@ type Service struct {
 	locator      platformprocess.ExecutableLocator
 }
 
-var _ acp.Service = (*Service)(nil)
+var _ acp.ContinuationService = (*Service)(nil)
 
-func New(integrations []providers.ACPIntegration, newCommand platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) (acp.Service, error) {
+func New(integrations []providers.ACPIntegration, newCommand platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) (acp.ContinuationService, error) {
 	service := &Service{newCommand: newCommand, locator: locator}
 	if err := service.Configure(context.Background(), integrations); err != nil {
 		return nil, err
@@ -69,7 +69,22 @@ func (service *Service) Execute(ctx context.Context, id providers.ID, request pr
 	if !ok {
 		return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: fmt.Sprintf("ACP provider %q is unavailable", id)}
 	}
-	return daemon.execute(ctx, canonical, request)
+	return daemon.execute(ctx, canonical, request, nil)
+}
+
+// Continue resumes the exact private Providers session reference without
+// permitting an ordinary Execute caller to select a prior session.
+func (service *Service) Continue(
+	ctx context.Context,
+	id providers.ID,
+	request providers.ExecuteRequest,
+	reference providers.SessionRef,
+) (providers.ExecuteResult, error) {
+	daemon, canonical, ok := service.resolveDaemon(id)
+	if !ok {
+		return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: fmt.Sprintf("ACP provider %q is unavailable", id)}
+	}
+	return daemon.execute(ctx, canonical, request, &reference)
 }
 
 // NegotiatedCapabilities returns id's daemon's last successfully negotiated
@@ -263,7 +278,12 @@ func (daemon *daemon) recordNegotiated(capabilities acpsdk.AgentCapabilities) {
 	daemon.negotiatedMu.Unlock()
 }
 
-func (daemon *daemon) execute(ctx context.Context, id providers.ID, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+func (daemon *daemon) execute(
+	ctx context.Context,
+	id providers.ID,
+	request providers.ExecuteRequest,
+	resume *providers.SessionRef,
+) (providers.ExecuteResult, error) {
 	executionCtx, cancelExecution := context.WithCancel(ctx)
 	stopLifecycleWatch := context.AfterFunc(daemon.lifecycle, cancelExecution)
 	defer func() {
@@ -295,7 +315,7 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 	connection := daemon.connection
 	initialized := daemon.initialized
 
-	session, err := daemon.openSession(ctx, id, cwd, initialized, request)
+	session, err := daemon.openSession(ctx, id, cwd, initialized, request, resume)
 	if err != nil {
 		return providers.ExecuteResult{}, err
 	}
@@ -327,8 +347,7 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 	return providers.ExecuteResult{Content: client.content(), SessionRef: &providers.SessionRef{Provider: id, Kind: providers.SessionIDKind, ID: string(session.SessionId)}, Diagnostics: &providers.ExecuteDiagnostics{Progress: completedPromptProgress(client.progressFacts()), Metadata: map[string]string{"execution_kind": "acp", "protocol_version": fmt.Sprint(initialized.ProtocolVersion), "model_config": modelConfig}}}, nil
 }
 
-// openSession opens the exact session a request names: request.ResumeSession
-// resumes the referenced Provider Session through the native ACP
+// openSession resumes the exact private Provider Session reference through the native ACP
 // session/load method with its exact opaque id forwarded unchanged, and its
 // absence starts an ordinary fresh session/new. openSession never falls back
 // from a requested resume to a fresh session - a session/load failure is
@@ -340,10 +359,11 @@ func (daemon *daemon) openSession(
 	cwd string,
 	initialized acpsdk.InitializeResponse,
 	request providers.ExecuteRequest,
+	resume *providers.SessionRef,
 ) (acpsdk.NewSessionResponse, error) {
 	connection := daemon.connection
-	if request.ResumeSession != nil {
-		if resumeID := strings.TrimSpace(request.ResumeSession.ID); resumeID != "" {
+	if resume != nil {
+		if resumeID := strings.TrimSpace(resume.ID); resumeID != "" {
 			loaded, err := connection.LoadSession(ctx, acpsdk.LoadSessionRequest{SessionId: acpsdk.SessionId(resumeID), Cwd: cwd, McpServers: []acpsdk.McpServer{}})
 			if err != nil {
 				return acpsdk.NewSessionResponse{}, daemon.sessionOpenFailure(ctx, id, "session/load", err, initialized, request)

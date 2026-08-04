@@ -35,13 +35,13 @@ func TestCommandEffectRoutesDispatchContextThroughMockWorkerRunner(t *testing.T)
 		t.Fatal("NewCommandEffect() returned nil")
 	}
 
-	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 		Provider:        providers.IDCodex,
 		AttemptID:       "mock-dispatch",
 		UserMessage:     "perform work",
 		WorkerType:      "mocked-worker",
 		WorkstationName: "mock-process",
-	}, func([]byte) error { return nil })
+	}}, func([]byte) error { return nil })
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -55,12 +55,12 @@ func TestCommandEffectRejectsUnsupportedReasoningEffortBeforeDispatch(t *testing
 
 	platformRunner := testutil.NewProviderCommandRunner()
 	effect := codex.NewCommandEffect(workers.AdaptCommandRunner(platformRunner))
-	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 		Provider:        providers.IDCodex,
 		AttemptID:       "invalid-effort-dispatch",
 		ReasoningEffort: "extreme",
 		UserMessage:     "perform work",
-	}, func([]byte) error { return nil })
+	}}, func([]byte) error { return nil })
 	var failure execution.AttemptFailure
 	if !errors.As(err, &failure) ||
 		failure.NativeError == nil ||
@@ -81,12 +81,14 @@ func TestCommandEffectRendersResumeSessionBeforeFreshSessionFlags(t *testing.T) 
 		t.Fatal("NewCommandEffect() returned nil")
 	}
 
-	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:        providers.IDCodex,
-		AttemptID:       "resume-dispatch",
-		Model:           "gpt-5.6-luna",
-		ReasoningEffort: "xhigh",
-		UserMessage:     "continue the prior turn",
+	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{
+		ExecuteRequest: providers.ExecuteRequest{
+			Provider:        providers.IDCodex,
+			AttemptID:       "resume-dispatch",
+			Model:           "gpt-5.6-luna",
+			ReasoningEffort: "xhigh",
+			UserMessage:     "continue the prior turn",
+		},
 		ResumeSession: &providers.SessionRef{
 			Provider: providers.IDCodex,
 			Kind:     providers.SessionIDKind,
@@ -119,13 +121,13 @@ func TestCommandEffectRendersLunaXHighReasoningEffort(t *testing.T) {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
 
-	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 		Provider:        providers.IDCodex,
 		AttemptID:       "luna-xhigh-dispatch",
 		Model:           "gpt-5.6-luna",
 		ReasoningEffort: "xhigh",
 		UserMessage:     "perform work",
-	}, func([]byte) error { return nil })
+	}}, func([]byte) error { return nil })
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}

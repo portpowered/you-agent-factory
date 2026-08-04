@@ -10,6 +10,7 @@ import (
 	"time"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	claude "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 )
 
@@ -78,7 +79,7 @@ func TestClaudeRootNormalizesFailureStagesAndSuppressesResults(t *testing.T) {
 			var cleanups atomic.Int32
 			effect := claude.EffectFunc(func(
 				_ context.Context,
-				_ providers.ExecuteRequest,
+				_ execution.ContinuationRequest,
 				observe func([]byte) error,
 			) (claude.EffectResult, error) {
 				defer cleanups.Add(1)
@@ -139,7 +140,7 @@ func TestClaudeRootCancellationAndDeadlineReachEffectAndCleanUpOnce(t *testing.T
 			var cleanups atomic.Int32
 			effect := claude.EffectFunc(func(
 				ctx context.Context,
-				_ providers.ExecuteRequest,
+				_ execution.ContinuationRequest,
 				_ func([]byte) error,
 			) (claude.EffectResult, error) {
 				close(started)
@@ -187,7 +188,7 @@ func TestClaudeRootFailureSuppressesPreviouslyObservedSuccess(t *testing.T) {
 
 	effect := claude.EffectFunc(func(
 		_ context.Context,
-		_ providers.ExecuteRequest,
+		_ execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (claude.EffectResult, error) {
 		if err := observe(claudeSuccessStream()); err != nil {
@@ -213,7 +214,7 @@ func TestClaudeRootCarriesObservedSessionOnParseFailure(t *testing.T) {
 
 	effect := claude.EffectFunc(func(
 		_ context.Context,
-		_ providers.ExecuteRequest,
+		_ execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (claude.EffectResult, error) {
 		return claude.EffectResult{}, observe([]byte(

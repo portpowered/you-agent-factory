@@ -128,12 +128,6 @@ func (s *Service) Execute(
 	ctx context.Context,
 	request providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
-	if request.ResumeSession != nil {
-		return providers.ExecuteResult{}, providers.ExecuteFailure{
-			Kind:    providers.ExecuteFailureKindInvalidRequest,
-			Message: "ordinary execution does not accept a resume session; call Continue to resume a Provider Session",
-		}
-	}
 	if err := request.Validate(); err != nil {
 		return providers.ExecuteResult{}, providers.ExecuteFailure{
 			Kind:    providers.ExecuteFailureKindInvalidRequest,
@@ -202,6 +196,71 @@ func (s *Service) dispatch(
 	return s.executeNativeAttempt(attemptCtx, control, request)
 }
 
+// dispatchContinuation routes one validated continuation through the same
+// provider selection and live-attempt barriers as Execute while carrying its
+// exact session reference only through private Providers services.
+func (s *Service) dispatchContinuation(
+	ctx context.Context,
+	request providers.ExecuteRequest,
+	reference providers.SessionRef,
+) (providers.ExecuteResult, error) {
+	if s.acp != nil {
+		if canonical, ok := s.acp.Resolve(request.Provider); ok {
+			if request.ReasoningEffort != "" {
+				return providers.ExecuteResult{}, providers.ExecuteFailure{
+					Kind: providers.ExecuteFailureKindInvalidRequest,
+					Message: fmt.Sprintf(
+						"ACP provider %q selects reasoning effort through its exact advertised model id; omit reasoningEffort and choose the intended model",
+						canonical,
+					),
+				}
+			}
+			request.Provider = canonical
+			control := &acpAttemptControl{acp: s.acp, canonical: canonical, attemptID: request.AttemptID}
+			release, bindErr := s.bindLiveAttempt(canonical, request.AttemptID, control)
+			if bindErr != nil {
+				return providers.ExecuteResult{}, bindErr
+			}
+			defer release()
+			continuation, ok := s.acp.(acp.ContinuationService)
+			if !ok {
+				return providers.ExecuteResult{}, providers.ExecuteFailure{
+					Kind:    providers.ExecuteFailureKindDependency,
+					Message: "ACP provider continuation is unavailable",
+				}
+			}
+			return continuation.Continue(ctx, canonical, request, reference)
+		}
+	}
+	canonicalProvider, err := s.catalog.ResolveProviderID(request.Provider)
+	if err != nil {
+		return providers.ExecuteResult{}, err
+	}
+	request.Provider = canonicalProvider
+	if request.Provider == providers.IDClaude && request.ReasoningEffort == "minimal" {
+		return providers.ExecuteResult{}, providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindInvalidRequest,
+			Message: `Claude does not support reasoning effort "minimal"`,
+		}
+	}
+	if request.Provider == providers.IDAntigravity && request.ReasoningEffort != "" {
+		return providers.ExecuteResult{}, providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindInvalidRequest,
+			Message: "Agy does not support a separate reasoning effort",
+		}
+	}
+	attemptCtx, cancelAttempt := context.WithCancel(ctx)
+	control := &nativeAttemptControl{cancel: cancelAttempt, done: make(chan struct{})}
+	release, bindErr := s.bindLiveAttempt(canonicalProvider, request.AttemptID, control)
+	if bindErr != nil {
+		cancelAttempt()
+		return providers.ExecuteResult{}, bindErr
+	}
+	defer release()
+	defer cancelAttempt()
+	return s.executeNativeContinuation(attemptCtx, control, request, reference)
+}
+
 // executeNativeAttempt runs the bound native execution and records its real
 // outcome on control before returning - via defer, so an unexpected unwind
 // (including a panic) still closes control.done instead of leaving a
@@ -223,6 +282,28 @@ func (s *Service) executeNativeAttempt(
 	}()
 	result, err = s.execution.Execute(attemptCtx, request)
 	return result, err
+}
+
+func (s *Service) executeNativeContinuation(
+	attemptCtx context.Context,
+	control *nativeAttemptControl,
+	request providers.ExecuteRequest,
+	reference providers.SessionRef,
+) (result providers.ExecuteResult, err error) {
+	defer func() {
+		control.finish(errors.Is(err, providers.ErrExecuteCancelled))
+	}()
+	continuation, ok := s.execution.(execution.ContinuationService)
+	if !ok {
+		return providers.ExecuteResult{}, providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindDependency,
+			Message: "provider continuation adapter is unavailable",
+		}
+	}
+	return continuation.Continue(attemptCtx, execution.ContinuationRequest{
+		ExecuteRequest: request,
+		ResumeSession:  &reference,
+	})
 }
 
 // bindLiveAttempt registers canonical/attemptID as the one live execution for
@@ -254,7 +335,7 @@ func (s *Service) bindLiveAttempt(
 // closed unsupported outcome without invoking any provider adapter, binding
 // a live attempt, or starting a fresh execution. A valid reference reaches
 // its adapter through the identical dispatch path Execute uses, with
-// Reference forwarded unchanged as the attempt's resume session.
+// Reference forwarded unchanged through the private continuation seam.
 func (s *Service) Continue(
 	ctx context.Context,
 	request providers.ContinueRequest,
@@ -269,7 +350,7 @@ func (s *Service) Continue(
 	}
 	reference := request.Reference.Clone()
 	s.logger.Info(
-		"provider continuation accepted",
+		"provider continuation received",
 		"provider", string(reference.Provider),
 		"kind", reference.Kind,
 	)
@@ -301,9 +382,8 @@ func (s *Service) Continue(
 	attempt := request.Attempt.Clone()
 	attempt.Provider = canonical
 	attempt.ReasoningEffort, _ = providers.ReasoningEffort(attempt.ReasoningEffort).Canonical()
-	attempt.ResumeSession = &reference
 
-	result, err := s.dispatch(ctx, attempt)
+	result, err := s.dispatchContinuation(ctx, attempt, reference)
 	if err != nil {
 		if stale := staleContinuationFailure(err, reference); stale != nil {
 			s.logger.Info(
@@ -350,6 +430,13 @@ func (s *Service) Continue(
 func (s *Service) resolveContinuationProvider(
 	reference providers.SessionRef,
 ) (canonical providers.ID, supported bool, err error) {
+	if reference.Kind != providers.SessionIDKind {
+		return "", false, providers.ContinuationFailure{
+			Kind:      providers.ContinuationFailureKindInvalid,
+			Message:   fmt.Sprintf("provider continuation session kind %q is not supported", reference.Kind),
+			Reference: reference.Clone(),
+		}
+	}
 	if s.acp != nil {
 		if resolved, ok := s.acp.Resolve(reference.Provider); ok {
 			for _, integration := range s.acp.Integrations() {
@@ -378,8 +465,8 @@ func (s *Service) resolveContinuationProvider(
 // staleContinuationFailure translates a dispatch failure whose resolved
 // provider reported the exact requested reference id as not found (an
 // ExecuteFailureKindSessionNotFound declared failure - never produced by
-// ordinary Execute, since only a continuation dispatch ever carries
-// ResumeSession) into the typed stale continuation failure. It returns nil
+// ordinary Execute, since only a continuation dispatch has a prior session
+// reference) into the typed stale continuation failure. It returns nil
 // for any other dispatch failure, which Continue reports unchanged.
 func staleContinuationFailure(err error, reference providers.SessionRef) *providers.ContinuationFailure {
 	var declared providers.ExecuteFailure

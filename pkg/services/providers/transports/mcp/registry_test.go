@@ -81,6 +81,9 @@ func TestDiscoverTools_RepresentativeSchemaFields(t *testing.T) {
 			t.Fatalf("execute input missing %q", field)
 		}
 	}
+	if _, ok := executeProps["resumeSession"]; ok {
+		t.Fatal("execute input must not expose resumeSession; use the Providers continuation operation")
+	}
 }
 
 func TestDiscoverTools_OutputSchemasDocumentSharedErrorEnvelope(t *testing.T) {

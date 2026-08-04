@@ -118,7 +118,7 @@ func TestPromptCancelledStopReasonMapsToExecuteFailureKindCanceled(t *testing.T)
 }
 
 // TestContinuationResumesExactSessionThroughSessionLoad proves a request
-// carrying ResumeSession reaches the ACP peer through session/load with the
+// carried through the private continuation boundary reaches the ACP peer through session/load with the
 // exact opaque session id forwarded unchanged, and the returned result
 // preserves that exact id - never a new one session/new would have minted.
 // The helper peer in "resume" mode does not implement session/new at all, so
@@ -134,18 +134,18 @@ func TestContinuationResumesExactSessionThroughSessionLoad(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = serviceValue.Close(context.Background()) })
 
-	result, err := serviceValue.Execute(context.Background(), "cursor-acp", providers.ExecuteRequest{
+	reference := providers.SessionRef{
+		Provider: "cursor-acp",
+		Kind:     providers.SessionIDKind,
+		ID:       "resume-target-session",
+	}
+	result, err := serviceValue.Continue(context.Background(), "cursor-acp", providers.ExecuteRequest{
 		Provider:           "cursor-acp",
 		AttemptID:          "attempt-resume",
 		UserMessage:        "continue the prior turn",
 		WorkingDirectory:   t.TempDir(),
 		ProcessEnvironment: append(os.Environ(), protocolHelperEnvironment+"=resume"),
-		ResumeSession: &providers.SessionRef{
-			Provider: "cursor-acp",
-			Kind:     providers.SessionIDKind,
-			ID:       "resume-target-session",
-		},
-	})
+	}, reference)
 	if err != nil {
 		t.Fatalf("Execute() error = %v, want nil - the peer only implements session/load in resume mode", err)
 	}
@@ -173,18 +173,18 @@ func TestContinuationSessionLoadFailureDoesNotFallBackToFreshSession(t *testing.
 	}
 	t.Cleanup(func() { _ = serviceValue.Close(context.Background()) })
 
-	_, err = serviceValue.Execute(context.Background(), "cursor-acp", providers.ExecuteRequest{
+	reference := providers.SessionRef{
+		Provider: "cursor-acp",
+		Kind:     providers.SessionIDKind,
+		ID:       "stale-session",
+	}
+	_, err = serviceValue.Continue(context.Background(), "cursor-acp", providers.ExecuteRequest{
 		Provider:           "cursor-acp",
 		AttemptID:          "attempt-resume-not-found",
 		UserMessage:        "continue the prior turn",
 		WorkingDirectory:   t.TempDir(),
 		ProcessEnvironment: append(os.Environ(), protocolHelperEnvironment+"=resume-not-found"),
-		ResumeSession: &providers.SessionRef{
-			Provider: "cursor-acp",
-			Kind:     providers.SessionIDKind,
-			ID:       "stale-session",
-		},
-	})
+	}, reference)
 	var failure providers.ExecuteFailure
 	if !errors.As(err, &failure) {
 		t.Fatalf("Execute() error = %v (%T), want ExecuteFailure - a session/load failure must be reported, not silently retried as a fresh session", err, err)

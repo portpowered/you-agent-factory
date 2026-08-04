@@ -127,9 +127,6 @@ func runDetachedSuccess(t *testing.T, subject Subject) {
 		t.Fatalf("Execute(success) error = %v", err)
 	}
 	assertSuccess(t, provider, result, true)
-	if request.ResumeSession.ID != conformanceSessionID {
-		t.Fatalf("caller session = %#v, want unchanged", request.ResumeSession)
-	}
 	assertObservation(t, adapter, 1, 1, wantRequest)
 
 	result.SessionRef.ID = "caller-mutated"
@@ -286,7 +283,7 @@ func runContextFailure(t *testing.T, subject Subject, deadline bool) {
 		outcome <- executeOutcome{result: result, err: err}
 	}()
 	awaitStarted(t, adapter.Started)
-	request.ResumeSession.ID = "caller-mutated-in-flight"
+	request.UserMessage = "caller-mutated-in-flight"
 	if !deadline {
 		cancel()
 	}
@@ -380,14 +377,9 @@ func subjectProvider(subject Subject) providers.ID {
 	return providers.IDCodex
 }
 
-// executeConformance runs request through the Providers root exactly as a
-// caller would: an ordinary request (ResumeSession nil) goes through
-// Execute, and a request carrying a resume reference goes through Continue -
-// ordinary Execute no longer accepts one - splitting it into the typed
-// Reference plus the remaining attempt input right at the point of the call,
-// so a caller mutating its own ResumeSession pointer after this call starts
-// still exercises the identical detach-before-adapter-starts ordering an
-// ordinary Execute request does.
+// executeConformance runs an ordinary request through the published Providers
+// root. Continuation is proven separately through Service.Continue because
+// Execute intentionally has no caller-populable session reference.
 func executeConformance(
 	t *testing.T,
 	root providers.Service,
@@ -395,23 +387,7 @@ func executeConformance(
 	request providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
 	t.Helper()
-	if request.ResumeSession == nil {
-		return root.Execute(ctx, request)
-	}
-	reference := *request.ResumeSession
-	attempt := request
-	attempt.ResumeSession = nil
-	continued, err := root.Continue(ctx, providers.ContinueRequest{
-		Reference: reference,
-		Attempt:   attempt,
-	})
-	if err != nil {
-		return providers.ExecuteResult{}, err
-	}
-	if continued.Outcome != providers.ContinuationOutcomeResumed {
-		t.Fatalf("Continue() outcome = %q, want resumed", continued.Outcome)
-	}
-	return continued.Result, nil
+	return root.Execute(ctx, request)
 }
 
 func conformanceRequest(provider providers.ID) providers.ExecuteRequest {
@@ -423,11 +399,6 @@ func conformanceRequest(provider providers.ID) providers.ExecuteRequest {
 		OutputSchema:     `{"type":"string"}`,
 		WorkingDirectory: "C:/conformance",
 		Worktree:         "C:/conformance/tree",
-		ResumeSession: &providers.SessionRef{
-			Provider: provider,
-			Kind:     providers.SessionIDKind,
-			ID:       conformanceSessionID,
-		},
 	}
 }
 
@@ -515,9 +486,6 @@ func assertObservation(
 	for index, request := range observation.Requests {
 		if !reflect.DeepEqual(request, wantRequest) {
 			t.Fatalf("adapter request[%d] = %#v, want %#v", index, request, wantRequest)
-		}
-		if request.ResumeSession == wantRequest.ResumeSession {
-			t.Fatalf("adapter request[%d] retained caller SessionRef pointer", index)
 		}
 	}
 }

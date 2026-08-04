@@ -15,18 +15,19 @@ const (
 	failureStageFinalParse = "final_parse"
 )
 
-func normalizeValidationFailure(request providers.ExecuteRequest) error {
+func normalizeValidationFailure(request providers.ExecuteRequest, extraSecrets ...string) error {
 	return normalizeDeclaredFailure(providers.ExecuteFailure{
 		Kind: providers.ExecuteFailureKindInvalidRequest,
-	}, request)
+	}, request, extraSecrets...)
 }
 
 func normalizeContextFailure(
 	ctx context.Context,
 	request providers.ExecuteRequest,
+	extraSecrets ...string,
 ) error {
 	if err := ctx.Err(); err != nil {
-		return normalizeAttemptFailure(ctx, err, request)
+		return normalizeAttemptFailure(ctx, err, request, extraSecrets...)
 	}
 	return nil
 }
@@ -35,6 +36,7 @@ func normalizeAttemptFailure(
 	ctx context.Context,
 	attemptErr error,
 	request providers.ExecuteRequest,
+	extraSecrets ...string,
 ) (normalized error) {
 	lifecycle, hasLifecycle := attemptFailureAs(attemptErr)
 	failureSession := sessionRefFromAttemptFailure(attemptErr, lifecycle, hasLifecycle)
@@ -44,7 +46,7 @@ func normalizeAttemptFailure(
 		}
 		if failure, ok := executeFailureAs(normalized); ok {
 			failure.SessionRef = failureSession
-			normalized = normalizeDeclaredFailure(failure, request)
+			normalized = normalizeDeclaredFailure(failure, request, extraSecrets...)
 		}
 	}()
 	signals := []error{ctx.Err()}
@@ -59,30 +61,30 @@ func normalizeAttemptFailure(
 	if containsError(signals, context.DeadlineExceeded) {
 		return normalizeDeclaredFailure(providers.ExecuteFailure{
 			Kind: providers.ExecuteFailureKindTimeout,
-		}, request)
+		}, request, extraSecrets...)
 	}
 	if containsError(signals, context.Canceled) {
 		return normalizeDeclaredFailure(providers.ExecuteFailure{
 			Kind: providers.ExecuteFailureKindCanceled,
-		}, request)
+		}, request, extraSecrets...)
 	}
 	if hasLifecycle && lifecycle.Declared != nil {
-		return normalizeDeclaredFailure(lifecycle.Declared.Clone(), request)
+		return normalizeDeclaredFailure(lifecycle.Declared.Clone(), request, extraSecrets...)
 	}
 	if declared, ok := executeFailureAs(attemptErr); ok {
-		return normalizeDeclaredFailure(declared, request)
+		return normalizeDeclaredFailure(declared, request, extraSecrets...)
 	}
 	if errors.Is(attemptErr, context.DeadlineExceeded) ||
 		errors.Is(attemptErr, providers.ErrExecuteTimeout) {
 		return normalizeDeclaredFailure(providers.ExecuteFailure{
 			Kind: providers.ExecuteFailureKindTimeout,
-		}, request)
+		}, request, extraSecrets...)
 	}
 	if errors.Is(attemptErr, context.Canceled) ||
 		errors.Is(attemptErr, providers.ErrExecuteCancelled) {
 		return normalizeDeclaredFailure(providers.ExecuteFailure{
 			Kind: providers.ExecuteFailureKindCanceled,
-		}, request)
+		}, request, extraSecrets...)
 	}
 	// Stream lifecycle failures describe an unusable provider response, not a
 	// caller validation failure. Classify them as dependency failures so the
@@ -92,12 +94,12 @@ func normalizeAttemptFailure(
 		return normalizeDeclaredFailure(providers.ExecuteFailure{
 			Kind:        providers.ExecuteFailureKindDependency,
 			Diagnostics: lifecycleStageDiagnostics(lifecycle, hasLifecycle),
-		}, request)
+		}, request, extraSecrets...)
 	}
 	return normalizeDeclaredFailure(providers.ExecuteFailure{
 		Kind:        providers.ExecuteFailureKindUnknown,
 		Diagnostics: lifecycleStageDiagnostics(lifecycle, hasLifecycle),
-	}, request)
+	}, request, extraSecrets...)
 }
 
 func sessionRefFromAttemptFailure(
@@ -122,6 +124,7 @@ func sessionRefFromAttemptFailure(
 func normalizeDeclaredFailure(
 	failure providers.ExecuteFailure,
 	request providers.ExecuteRequest,
+	extraSecrets ...string,
 ) error {
 	failure = failure.Clone()
 	if err := validateSessionRef(failure.SessionRef, request.Provider); err != nil {
@@ -134,12 +137,13 @@ func normalizeDeclaredFailure(
 		failure.Message,
 		maxDiagnosticRunes,
 		request,
+		extraSecrets...,
 	)
 	if failure.Message == "" {
 		failure.Message = defaultFailureMessage(failure.Kind)
 	}
 	if failure.Diagnostics != nil {
-		diagnostics := normalizeDiagnostics(*failure.Diagnostics, request)
+		diagnostics := normalizeDiagnostics(*failure.Diagnostics, request, extraSecrets...)
 		failure.Diagnostics = &diagnostics
 	}
 	return failure

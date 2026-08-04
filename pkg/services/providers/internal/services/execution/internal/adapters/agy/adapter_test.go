@@ -14,6 +14,7 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
+	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	agy "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
@@ -155,10 +156,10 @@ func TestAgyRootPreservesRequestAndFinalStdout(t *testing.T) {
 	var received providers.ExecuteRequest
 	effect := agy.EffectFunc(func(
 		_ context.Context,
-		got providers.ExecuteRequest,
+		got execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (agy.EffectResult, error) {
-		received = got.Clone()
+		received = got.ExecuteRequest.Clone()
 		if err := observe([]byte(content)); err != nil {
 			return agy.EffectResult{}, err
 		}
@@ -213,7 +214,7 @@ func TestAgyRootCancellationAndDeadlineReachEffectAndCleanUpOnce(t *testing.T) {
 			var cleanups atomic.Int32
 			effect := agy.EffectFunc(func(
 				ctx context.Context,
-				_ providers.ExecuteRequest,
+				_ execution.ContinuationRequest,
 				_ func([]byte) error,
 			) (agy.EffectResult, error) {
 				close(started)

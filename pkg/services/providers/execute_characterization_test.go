@@ -153,9 +153,8 @@ func TestExecuteContract_Characterization_TypedFailures(t *testing.T) {
 
 // Continue implements the published Providers Service continuation slice for
 // executePeerFake using only Providers root contracts: a supported reference
-// resumes through the exact same Execute path a fresh attempt uses, with
-// Reference forwarded unchanged as the attempt's resume session, proving the
-// contract's success outcome is reachable purely from the root package.
+// resumes through its explicit continuation operation, while ordinary Execute
+// remains incapable of selecting a prior session.
 func (fake *executePeerFake) Continue(
 	ctx context.Context,
 	request providers.ContinueRequest,
@@ -174,9 +173,7 @@ func (fake *executePeerFake) Continue(
 		}, nil
 	}
 	reference := request.Reference.Clone()
-	attempt := request.Attempt.Clone()
-	attempt.ResumeSession = &reference
-	result, err := fake.Execute(ctx, attempt)
+	result, err := fake.Execute(ctx, request.Attempt.Clone())
 	if err != nil {
 		return providers.ContinueResult{}, err
 	}
@@ -283,19 +280,6 @@ func TestContinuationContract_Characterization_ValidationFailuresPrecedeOutcome(
 	})
 	if !errors.Is(err, providers.ErrInvalidContinuationRequest) {
 		t.Fatalf("Continue(blank id) error = %v, want ErrInvalidContinuationRequest", err)
-	}
-
-	existingSession := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "other-session"}
-	_, err = root.Continue(context.Background(), providers.ContinueRequest{
-		Reference: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "prior-session"},
-		Attempt: providers.ExecuteRequest{
-			Provider:      providers.IDCodex,
-			AttemptID:     "attempt-1",
-			ResumeSession: &existingSession,
-		},
-	})
-	if !errors.Is(err, providers.ErrInvalidContinuationRequest) {
-		t.Fatalf("Continue(attempt with its own resume session) error = %v, want ErrInvalidContinuationRequest", err)
 	}
 
 	_, err = root.Continue(context.Background(), providers.ContinueRequest{

@@ -10,6 +10,7 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
+	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	codex "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 )
@@ -17,25 +18,27 @@ import (
 func TestCodexRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {
 	t.Parallel()
 
-	request := providers.ExecuteRequest{
-		Provider:         providers.IDCodex,
-		AttemptID:        "attempt-codex-success",
-		SystemPrompt:     "system contract",
-		UserMessage:      "perform the accepted work",
-		OutputSchema:     `{"type":"object"}`,
-		WorkingDirectory: "C:/factory",
-		Worktree:         "C:/factory/tree",
+	request := execution.ContinuationRequest{
+		ExecuteRequest: providers.ExecuteRequest{
+			Provider:         providers.IDCodex,
+			AttemptID:        "attempt-codex-success",
+			SystemPrompt:     "system contract",
+			UserMessage:      "perform the accepted work",
+			OutputSchema:     `{"type":"object"}`,
+			WorkingDirectory: "C:/factory",
+			Worktree:         "C:/factory/tree",
+		},
 		ResumeSession: &providers.SessionRef{
 			Provider: providers.IDCodex,
 			Kind:     providers.SessionIDKind,
 			ID:       "session-previous",
 		},
 	}
-	var received providers.ExecuteRequest
+	var received execution.ContinuationRequest
 	stream := codexSuccessStream()
 	effect := codex.EffectFunc(func(
 		_ context.Context,
-		got providers.ExecuteRequest,
+		got execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (codex.EffectResult, error) {
 		received = got.Clone()
@@ -51,8 +54,7 @@ func TestCodexRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {
 	})
 	root := newCodexRoot(t, effect)
 
-	attempt := request
-	attempt.ResumeSession = nil
+	attempt := request.ExecuteRequest.Clone()
 	continued, err := root.Continue(t.Context(), providers.ContinueRequest{
 		Reference: *request.ResumeSession,
 		Attempt:   attempt,
@@ -81,8 +83,8 @@ func TestCodexRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {
 func assertCodexSuccessResult(
 	t *testing.T,
 	result providers.ExecuteResult,
-	received providers.ExecuteRequest,
-	request providers.ExecuteRequest,
+	received execution.ContinuationRequest,
+	request execution.ContinuationRequest,
 ) {
 	t.Helper()
 	if !reflect.DeepEqual(received, request) {
@@ -131,7 +133,7 @@ func TestCodexDecoderFinalizesUnterminatedRecordOnce(t *testing.T) {
 	)
 	effect := codex.EffectFunc(func(
 		_ context.Context,
-		_ providers.ExecuteRequest,
+		_ execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (codex.EffectResult, error) {
 		for _, chunk := range splitEvery(stream, 3) {

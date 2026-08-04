@@ -10,6 +10,7 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
+	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	claude "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 )
@@ -17,25 +18,27 @@ import (
 func TestClaudeRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {
 	t.Parallel()
 
-	request := providers.ExecuteRequest{
-		Provider:         providers.IDClaude,
-		AttemptID:        "attempt-claude-success",
-		SystemPrompt:     "system contract",
-		UserMessage:      "perform the accepted work",
-		OutputSchema:     `{"type":"object"}`,
-		WorkingDirectory: "C:/factory",
-		Worktree:         "C:/factory/tree",
+	request := execution.ContinuationRequest{
+		ExecuteRequest: providers.ExecuteRequest{
+			Provider:         providers.IDClaude,
+			AttemptID:        "attempt-claude-success",
+			SystemPrompt:     "system contract",
+			UserMessage:      "perform the accepted work",
+			OutputSchema:     `{"type":"object"}`,
+			WorkingDirectory: "C:/factory",
+			Worktree:         "C:/factory/tree",
+		},
 		ResumeSession: &providers.SessionRef{
 			Provider: providers.IDClaude,
 			Kind:     providers.SessionIDKind,
 			ID:       "session-previous",
 		},
 	}
-	var received providers.ExecuteRequest
+	var received execution.ContinuationRequest
 	stream := claudeSuccessStream()
 	effect := claude.EffectFunc(func(
 		_ context.Context,
-		got providers.ExecuteRequest,
+		got execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (claude.EffectResult, error) {
 		received = got.Clone()
@@ -51,8 +54,7 @@ func TestClaudeRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {
 	})
 	root := newClaudeRoot(t, effect)
 
-	attempt := request
-	attempt.ResumeSession = nil
+	attempt := request.ExecuteRequest.Clone()
 	continued, err := root.Continue(t.Context(), providers.ContinueRequest{
 		Reference: *request.ResumeSession,
 		Attempt:   attempt,
@@ -129,7 +131,7 @@ func TestClaudeStreamDeltaPreservesWhitespace(t *testing.T) {
 	})
 	effect := claude.EffectFunc(func(
 		_ context.Context,
-		_ providers.ExecuteRequest,
+		_ execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (claude.EffectResult, error) {
 		return claude.EffectResult{}, observe(stream)
@@ -159,8 +161,8 @@ func TestClaudeStreamDeltaPreservesWhitespace(t *testing.T) {
 func assertClaudeSuccessResult(
 	t *testing.T,
 	result providers.ExecuteResult,
-	received providers.ExecuteRequest,
-	request providers.ExecuteRequest,
+	received execution.ContinuationRequest,
+	request execution.ContinuationRequest,
 ) {
 	t.Helper()
 	if !reflect.DeepEqual(received, request) {
@@ -212,7 +214,7 @@ func TestClaudeDecoderFinalizesUnterminatedRecordOnce(t *testing.T) {
 	)
 	effect := claude.EffectFunc(func(
 		_ context.Context,
-		_ providers.ExecuteRequest,
+		_ execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (claude.EffectResult, error) {
 		for _, chunk := range splitEvery(stream, 3) {
@@ -240,7 +242,7 @@ func TestClaudeDecoderMapsMixedTextAndToolProgress(t *testing.T) {
 	stream := claudeToolStream()
 	effect := claude.EffectFunc(func(
 		_ context.Context,
-		_ providers.ExecuteRequest,
+		_ execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (claude.EffectResult, error) {
 		return claude.EffectResult{}, observe(stream)

@@ -56,6 +56,13 @@ type Service interface {
 	TryCancel(ctx context.Context, generation Generation) (accepted bool, err error)
 }
 
+// ContinuationService is the private ACP extension that receives a session
+// reference only after the Providers root has validated a Continue request.
+type ContinuationService interface {
+	Service
+	Continue(context.Context, providers.ID, providers.ExecuteRequest, providers.SessionRef) (providers.ExecuteResult, error)
+}
+
 // Generation is an opaque capability naming one exact live ACP execution
 // generation, captured by Claim at the instant it observed that generation
 // live. Provider and attempt identity strings alone can never rediscover or

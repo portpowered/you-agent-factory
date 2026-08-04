@@ -23,13 +23,13 @@ func TestCommandEffectRendersProviderNeutralReasoningEffort(t *testing.T) {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
 
-	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 		Provider:        providers.IDClaude,
 		AttemptID:       "claude-xhigh-dispatch",
 		Model:           "claude-model",
 		ReasoningEffort: "xhigh",
 		UserMessage:     "perform work",
-	}, func([]byte) error { return nil })
+	}}, func([]byte) error { return nil })
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -56,11 +56,13 @@ func TestCommandEffectRendersResumeSessionFlag(t *testing.T) {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
 
-	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:    providers.IDClaude,
-		AttemptID:   "claude-resume-dispatch",
-		Model:       "claude-model",
-		UserMessage: "continue the prior turn",
+	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{
+		ExecuteRequest: providers.ExecuteRequest{
+			Provider:    providers.IDClaude,
+			AttemptID:   "claude-resume-dispatch",
+			Model:       "claude-model",
+			UserMessage: "continue the prior turn",
+		},
 		ResumeSession: &providers.SessionRef{
 			Provider: providers.IDClaude,
 			Kind:     providers.SessionIDKind,
@@ -98,12 +100,12 @@ func TestCommandEffectRejectsUnsupportedReasoningEffort(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			runner := testutil.NewProviderCommandRunner()
 			effect := claude.NewCommandEffect(workers.AdaptCommandRunner(runner))
-			_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+			_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 				Provider:        providers.IDClaude,
 				AttemptID:       "claude-invalid-effort-dispatch",
 				ReasoningEffort: test.effort,
 				UserMessage:     "perform work",
-			}, func([]byte) error { return nil })
+			}}, func([]byte) error { return nil })
 			var failure execution.AttemptFailure
 			if !errors.As(err, &failure) ||
 				failure.NativeError == nil ||

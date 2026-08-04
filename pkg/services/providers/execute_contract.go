@@ -33,10 +33,9 @@ const (
 	ExecuteFailureKindDependency     ExecuteFailureKind = "dependency"
 	ExecuteFailureKindUnknown        ExecuteFailureKind = "unknown"
 	// ExecuteFailureKindSessionNotFound reports that a resolved provider did
-	// not recognize the exact requested ResumeSession id as a live Provider
-	// Session. Ordinary Execute never produces this kind: Execute rejects any
-	// request that carries ResumeSession before dispatch, so only a
-	// Continue-triggered attempt can ever observe it. Continue translates this
+	// not recognize the exact requested Provider Session id as live. Ordinary
+	// Execute never produces this kind: only a private Continue-triggered
+	// attempt can observe a prior session. Continue translates this
 	// kind into the typed stale continuation failure before returning to its
 	// caller, so this kind never reaches a Continue caller directly either.
 	ExecuteFailureKindSessionNotFound ExecuteFailureKind = "session_not_found"
@@ -93,23 +92,17 @@ func sentinelForExecuteFailureKind(kind ExecuteFailureKind) error {
 // exactly one normalized native attempt per call; callers own selection,
 // retry, throttle, and scheduling policy.
 type ExecuteRequest struct {
-	Provider        ID
-	AttemptID       string
-	WorkerType      string
-	WorkstationName string
-	Model           string
-	ReasoningEffort string
-	SkipPermissions bool
-	SystemPrompt    string
-	UserMessage     string
-	InputTokens     []any
-	OutputSchema    string
-	// ResumeSession is populated internally by Continue for a continued
-	// attempt. Ordinary Execute calls must leave this nil; Execute rejects any
-	// request that carries one with ExecuteFailureKindInvalidRequest, since
-	// provider-session continuation is requested exclusively through
-	// Service.Continue.
-	ResumeSession      *SessionRef
+	Provider           ID
+	AttemptID          string
+	WorkerType         string
+	WorkstationName    string
+	Model              string
+	ReasoningEffort    string
+	SkipPermissions    bool
+	SystemPrompt       string
+	UserMessage        string
+	InputTokens        []any
+	OutputSchema       string
 	WorkingDirectory   string
 	Worktree           string
 	EnvVars            map[string]string
@@ -127,11 +120,6 @@ func (request ExecuteRequest) Validate() error {
 	}
 	if _, ok := ReasoningEffort(request.ReasoningEffort).Canonical(); !ok {
 		return fmt.Errorf("%w: unsupported reasoning effort %q", ErrExecuteFailed, request.ReasoningEffort)
-	}
-	if request.ResumeSession != nil {
-		if err := request.ResumeSession.Validate(); err != nil {
-			return fmt.Errorf("%w", err)
-		}
 	}
 	return nil
 }
@@ -159,10 +147,6 @@ func (request ExecuteRequest) Clone() ExecuteRequest {
 	}
 	if request.InputTokens != nil {
 		cloned.InputTokens = append([]any(nil), request.InputTokens...)
-	}
-	if request.ResumeSession != nil {
-		resume := request.ResumeSession.Clone()
-		cloned.ResumeSession = &resume
 	}
 	return cloned
 }
@@ -311,8 +295,8 @@ type ControlAttemptResult struct {
 
 // ErrInvalidContinuationRequest reports that a continuation request is
 // malformed: a blank provider, session kind, or session identity in Reference,
-// an Attempt that already carries its own ResumeSession, or an otherwise
-// invalid Attempt. It is returned before any provider adapter is invoked.
+// or an otherwise invalid Attempt. It is returned before any provider adapter
+// is invoked.
 var ErrInvalidContinuationRequest = errors.New("provider continuation request is invalid")
 
 // ErrContinuationForeign reports that a continuation request names an Attempt
@@ -389,30 +373,22 @@ func sentinelForContinuationFailureKind(kind ContinuationFailureKind) error {
 // ContinueRequest identifies the exact prior Provider Session to resume -
 // provider identity, provider-specific session kind, and exact opaque session
 // identity, carried by Reference - and the next attempt input to run against
-// that continued session. Attempt.Provider must equal Reference.Provider and
-// Attempt.ResumeSession must be nil; continuation is requested exclusively
-// through this contract, never through the ordinary Execute vocabulary.
+// that continued session. Attempt.Provider must equal Reference.Provider;
+// continuation is requested exclusively through this contract, never through
+// the ordinary Execute vocabulary.
 type ContinueRequest struct {
 	Reference SessionRef
 	Attempt   ExecuteRequest
 }
 
 // Validate checks that Reference is a complete session identity, that Attempt
-// carries no ordinary-execution resume reference and is itself valid, and
-// that Attempt names the same provider as Reference - all before any provider
-// adapter is invoked.
+// is itself valid, and that Attempt names the same provider as Reference - all
+// before any provider adapter is invoked.
 func (request ContinueRequest) Validate() error {
 	if err := request.Reference.Validate(); err != nil {
 		return ContinuationFailure{
 			Kind:      ContinuationFailureKindInvalid,
 			Message:   err.Error(),
-			Reference: request.Reference,
-		}
-	}
-	if request.Attempt.ResumeSession != nil {
-		return ContinuationFailure{
-			Kind:      ContinuationFailureKindInvalid,
-			Message:   "attempt input must not carry its own resume session",
 			Reference: request.Reference,
 		}
 	}
