@@ -259,6 +259,37 @@ func TestResolveFactoryTargetCatalogResultIsDetached(t *testing.T) {
 	}
 }
 
+// TestResolveFactoryTargetCatalogDisplayNameFallsBackToCanonicalName proves
+// an entry with no Factory Definition (packaged-only, never materialized)
+// still resolves to a non-empty, stable display name: the catalog entry's
+// own canonical Name, not an empty string.
+func TestResolveFactoryTargetCatalogDisplayNameFallsBackToCanonicalName(t *testing.T) {
+	t.Parallel()
+
+	profile := operatorsettings.ACPAgentProfile{
+		DefaultTarget:  "factory:@you/factory-builder",
+		AllowedTargets: []string{"factory:@you/factory-builder"},
+	}
+	location := "/factories/@you/factory-builder"
+	entries := []factorydefinitions.EffectiveFactoryCatalogEntry{
+		{Name: "@you/factory-builder", Location: &location},
+	}
+	service := newTestService(t, profile, entries)
+
+	result, err := service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
+		OperatorSettingsPath: "/operator.json",
+	})
+	if err != nil {
+		t.Fatalf("ResolveFactoryTargetCatalog: unexpected error: %v", err)
+	}
+	if len(result.Choices) != 1 {
+		t.Fatalf("Choices = %+v, want exactly 1", result.Choices)
+	}
+	if result.Choices[0].Name != "@you/factory-builder" {
+		t.Fatalf("Choices[0].Name = %q, want the fallback canonical name %q", result.Choices[0].Name, "@you/factory-builder")
+	}
+}
+
 // operatorSettingsFake is a focused Operator Settings root fake exercising
 // only ResolveACPAgentProfile, the sole collaborator method the Factory
 // target-catalog operation depends on.

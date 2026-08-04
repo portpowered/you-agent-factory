@@ -60,6 +60,14 @@ type fakeEventsService struct {
 	// Lazily initialized (see ensureSubscribedChan) so either Subscribe or a
 	// test's own waitForSubscriber call can safely be first.
 	subscribed chan struct{}
+	// readErr, when set, fails every Read call with this exact error -- for
+	// tests proving streamTurnUpdates propagates a genuine Events.Read
+	// dependency failure instead of swallowing it.
+	readErr error
+	// subscribeErr, when set, fails every Subscribe call with this exact
+	// error -- for tests proving liveDrainTurnUpdates' own best-effort
+	// no-op convention on a Subscribe failure.
+	subscribeErr error
 }
 
 var _ events.Service = (*fakeEventsService)(nil)
@@ -73,6 +81,10 @@ var _ events.Service = (*fakeEventsService)(nil)
 func (f *fakeEventsService) Read(_ context.Context, req events.ReadRequest) (events.ReadResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	if f.readErr != nil {
+		return events.ReadResult{}, f.readErr
+	}
 
 	all := f.records[req.Topic]
 	head := events.AggregateSequence(len(all))
@@ -209,6 +221,10 @@ func (f *fakeEventsService) waitForSubscriber(t *testing.T) {
 // events.ReadOutcomeGap via markEvictedThrough.
 func (f *fakeEventsService) Subscribe(_ context.Context, req events.SubscribeRequest) (events.Subscription, error) {
 	f.mu.Lock()
+	if f.subscribeErr != nil {
+		f.mu.Unlock()
+		return nil, f.subscribeErr
+	}
 	f.ensureCond()
 	f.mu.Unlock()
 
@@ -940,5 +956,467 @@ func TestStreamTurnUpdatesConcurrentIndependentAttachmentsRaceFree(t *testing.T)
 		if got != recordCount {
 			t.Fatalf("connection %d notify count = %d, want exactly %d", i, got, recordCount)
 		}
+	}
+}
+
+// The tests below close CI's Backend Unit Coverage gap for this package by
+// exercising the dependency-failure and no-attachment branches of
+// attachmentCache, ensureAttachment, streamTurnUpdates, drainRecords,
+// deliverReadTimeGap, and liveDrainTurnUpdates that the tests above -- all
+// built around a working attachment and a healthy Events/Chat Sessions pair
+// -- never reach.
+
+// TestAttachmentCacheGetOnNilCacheReportsNotOk proves a nil *attachmentCache
+// (attachmentCacheFromContext's own documented no-cache-attached case) never
+// panics and always reports ok=false.
+func TestAttachmentCacheGetOnNilCacheReportsNotOk(t *testing.T) {
+	var cache *attachmentCache
+	attachment, ok := cache.get("session-x")
+	if ok {
+		t.Fatalf("get() on a nil cache = (%+v, %v), want ok=false", attachment, ok)
+	}
+}
+
+// TestAttachmentCacheSetOnNilCacheIsNoOp proves set on a nil *attachmentCache
+// is a safe no-op, matching a nil promptNotifier's own no-op convention.
+func TestAttachmentCacheSetOnNilCacheIsNoOp(t *testing.T) {
+	var cache *attachmentCache
+	cache.set("session-x", chatsessions.Attachment{ID: "attachment-1"})
+}
+
+// TestDetachAttachmentsContinuesAfterOneDetachFailure proves a Detach
+// failure for one cached attachment is logged, not propagated, and does not
+// stop the remaining sessions in cache from being released -- detachCalls
+// still records the attempt even though it failed.
+func TestDetachAttachmentsContinuesAfterOneDetachFailure(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, _ := newStreamingTestServer(t, factoryTarget)
+	chatSessions := server.chatSessions.(*fakeChatSessionsService)
+	chatSessions.detachErr = errors.New("detach failed")
+
+	cache := &attachmentCache{}
+	if _, ok, err := server.ensureAttachment(contextWithAttachmentCache(context.Background(), cache), "conn-a", streamingTestSessionID); err != nil || !ok {
+		t.Fatalf("ensureAttachment() = %v, %v, want a registered attachment", ok, err)
+	}
+
+	server.detachAttachments(context.Background(), cache)
+
+	if len(chatSessions.detachCalls) != 1 {
+		t.Fatalf("detach call count = %d, want exactly 1 despite the failure", len(chatSessions.detachCalls))
+	}
+}
+
+// TestEnsureAttachmentBlankConnectionIDReportsNotOk proves a blank
+// connectionID (a request identity with no connection pairing) never
+// attaches and reports ok=false rather than failing the turn.
+func TestEnsureAttachmentBlankConnectionIDReportsNotOk(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, _ := newStreamingTestServer(t, factoryTarget)
+
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	attachment, ok, err := server.ensureAttachment(ctx, "", streamingTestSessionID)
+	if err != nil || ok {
+		t.Fatalf("ensureAttachment(blank connectionID) = %+v, %v, %v, want ok=false, err=nil", attachment, ok, err)
+	}
+}
+
+// TestEnsureAttachmentPropagatesAttachFailure proves a genuine Factory
+// Sessions Attach failure is returned to the caller, not swallowed like the
+// no-attachment (ok=false) case.
+func TestEnsureAttachmentPropagatesAttachFailure(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, _ := newStreamingTestServer(t, factoryTarget)
+	wantErr := errors.New("attach failed")
+	server.chatSessions.(*fakeChatSessionsService).attachErr = wantErr
+
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	_, ok, err := server.ensureAttachment(ctx, "conn-a", streamingTestSessionID)
+	if !errors.Is(err, wantErr) || ok {
+		t.Fatalf("ensureAttachment() = ok=%v err=%v, want ok=false and the exact Attach failure %v", ok, err, wantErr)
+	}
+}
+
+// TestStreamTurnUpdatesPropagatesEnsureAttachmentFailure proves a genuine
+// Attach failure reaching streamTurnUpdates through ensureAttachment is
+// returned as this call's own error.
+func TestStreamTurnUpdatesPropagatesEnsureAttachmentFailure(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, _ := newStreamingTestServer(t, factoryTarget)
+	wantErr := errors.New("attach failed")
+	server.chatSessions.(*fakeChatSessionsService).attachErr = wantErr
+
+	notify, _ := captureNotifier()
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	delivered, err := server.streamTurnUpdates(ctx, "conn-a", streamingTestSessionID, 1, notify)
+	if delivered || !errors.Is(err, wantErr) {
+		t.Fatalf("streamTurnUpdates() = %v, %v, want delivered=false and the exact Attach failure %v", delivered, err, wantErr)
+	}
+}
+
+// TestStreamTurnUpdatesNoAttachmentIsNoOp proves a blank connectionID (no
+// attachment ever registered) is a silent, successful no-op -- the same
+// convention s.events == nil already has.
+func TestStreamTurnUpdatesNoAttachmentIsNoOp(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+	eventsSvc.seed(t, streamingTestSessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("unreachable"))
+
+	notify, notified := captureNotifier()
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	delivered, err := server.streamTurnUpdates(ctx, "", streamingTestSessionID, 1, notify)
+	if delivered || err != nil || len(*notified) != 0 {
+		t.Fatalf("streamTurnUpdates(blank connectionID) = %v, %v, notified=%d, want false, nil, 0", delivered, err, len(*notified))
+	}
+}
+
+// TestStreamTurnUpdatesStopsOnCanceledContext proves the drain loop's own
+// ctx.Err() check reports a canceled context rather than issuing a doomed
+// Read call.
+func TestStreamTurnUpdatesStopsOnCanceledContext(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, _ := newStreamingTestServer(t, factoryTarget)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	ctx = contextWithAttachmentCache(ctx, &attachmentCache{})
+
+	notify, _ := captureNotifier()
+	_, err := server.streamTurnUpdates(ctx, "conn-a", streamingTestSessionID, 1, notify)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("streamTurnUpdates(canceled ctx) error = %v, want context.Canceled", err)
+	}
+}
+
+// TestStreamTurnUpdatesPropagatesReadFailure proves a genuine Events.Read
+// dependency failure is returned as this call's own error.
+func TestStreamTurnUpdatesPropagatesReadFailure(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+	wantErr := errors.New("read failed")
+	eventsSvc.readErr = wantErr
+
+	notify, _ := captureNotifier()
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	_, err := server.streamTurnUpdates(ctx, "conn-a", streamingTestSessionID, 1, notify)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("streamTurnUpdates() error = %v, want the exact Read failure %v", err, wantErr)
+	}
+}
+
+// TestStreamTurnUpdatesReportsInvalidCursorAsStreamGapError proves a cursor
+// events.Read cannot resolve at all (events.ReadOutcomeInvalidCursor)
+// surfaces as errStreamGapEncountered, distinct from an ordinary retention
+// gap.
+func TestStreamTurnUpdatesReportsInvalidCursorAsStreamGapError(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, _ := newStreamingTestServer(t, factoryTarget)
+
+	cache := &attachmentCache{}
+	cache.set(streamingTestSessionID, chatsessions.Attachment{ID: "attachment-1", AfterSequence: 999})
+
+	notify, _ := captureNotifier()
+	ctx := contextWithAttachmentCache(context.Background(), cache)
+	_, err := server.streamTurnUpdates(ctx, "conn-a", streamingTestSessionID, 1, notify)
+	if !errors.Is(err, errStreamGapEncountered) {
+		t.Fatalf("streamTurnUpdates() error = %v, want errStreamGapEncountered", err)
+	}
+}
+
+// gapEventsService wraps a *fakeEventsService's Read to always report
+// events.ReadOutcomeGap on the first call, then delegates every later call
+// unchanged -- letting a test deterministically reach streamTurnUpdates'
+// deliverReadTimeGap branch without needing retention-eviction bookkeeping
+// beyond what markEvictedThrough already provides.
+func seedRetentionGap(t *testing.T, eventsSvc *fakeEventsService, sessionID string) {
+	t.Helper()
+	eventsSvc.seed(t, sessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("evicted"))
+	eventsSvc.markEvictedThrough(sessionID, 1)
+	eventsSvc.seed(t, sessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("retained"))
+}
+
+// TestStreamTurnUpdatesPropagatesDeliverReadTimeGapNotifierFailure proves a
+// notifier failure while delivering a read-time retention gap notice is
+// returned as this call's own error, matching drainRecords' identical
+// notifier-failure convention for an ordinary record.
+func TestStreamTurnUpdatesPropagatesDeliverReadTimeGapNotifierFailure(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+	seedRetentionGap(t, eventsSvc, streamingTestSessionID)
+
+	wantErr := errors.New("notify failed")
+	notify := func(acpsdk.SessionNotification) error { return wantErr }
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	_, err := server.streamTurnUpdates(ctx, "conn-a", streamingTestSessionID, 1, notify)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("streamTurnUpdates() error = %v, want the exact notifier failure %v", err, wantErr)
+	}
+}
+
+// TestStreamTurnUpdatesStopsWhenGapAcknowledgeLagsStreamHead proves a
+// *chatsessions.AttachmentPositionError acknowledging a read-time gap's
+// resume position is the same non-error "stop" case drainRecords documents,
+// not a failure.
+func TestStreamTurnUpdatesStopsWhenGapAcknowledgeLagsStreamHead(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+	seedRetentionGap(t, eventsSvc, streamingTestSessionID)
+	server.chatSessions.(*fakeChatSessionsService).acknowledgeAttachmentPositionErr = true
+
+	notify, notified := captureNotifier()
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	delivered, err := server.streamTurnUpdates(ctx, "conn-a", streamingTestSessionID, 1, notify)
+	if err != nil || delivered {
+		t.Fatalf("streamTurnUpdates() = %v, %v, want delivered=false, err=nil (StreamHead-lag stop)", delivered, err)
+	}
+	if len(*notified) != 1 {
+		t.Fatalf("notify call count = %d, want exactly 1 (the gap notice, delivered before the lagging acknowledge)", len(*notified))
+	}
+}
+
+// TestStreamTurnUpdatesPropagatesGapAcknowledgeGenericFailure proves a
+// genuine (non-*AttachmentPositionError) AcknowledgeAttachment failure while
+// resolving a read-time gap is returned as this call's own error.
+func TestStreamTurnUpdatesPropagatesGapAcknowledgeGenericFailure(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+	seedRetentionGap(t, eventsSvc, streamingTestSessionID)
+	wantErr := errors.New("acknowledge failed")
+	server.chatSessions.(*fakeChatSessionsService).acknowledgeAttachmentErr = wantErr
+
+	notify, _ := captureNotifier()
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	_, err := server.streamTurnUpdates(ctx, "conn-a", streamingTestSessionID, 1, notify)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("streamTurnUpdates() error = %v, want the exact acknowledge failure %v", err, wantErr)
+	}
+}
+
+// TestStreamTurnUpdatesStopsWhenRecordAcknowledgeLagsStreamHead proves a
+// *chatsessions.AttachmentPositionError acknowledging an ordinary record is
+// the same non-error "stop" case, not a failure: the record was already
+// delivered, but the session's StreamHead has not yet advanced past it.
+func TestStreamTurnUpdatesStopsWhenRecordAcknowledgeLagsStreamHead(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+	eventsSvc.seed(t, streamingTestSessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("hello"))
+	server.chatSessions.(*fakeChatSessionsService).acknowledgeAttachmentPositionErr = true
+
+	notify, notified := captureNotifier()
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	delivered, err := server.streamTurnUpdates(ctx, "conn-a", streamingTestSessionID, 1, notify)
+	if err != nil || !delivered {
+		t.Fatalf("streamTurnUpdates() = %v, %v, want delivered=true (already notified), err=nil (StreamHead-lag stop)", delivered, err)
+	}
+	if len(*notified) != 1 {
+		t.Fatalf("notify call count = %d, want exactly 1", len(*notified))
+	}
+}
+
+// TestDrainRecordsPropagatesGenericAcknowledgeFailure proves a genuine
+// (non-*AttachmentPositionError) AcknowledgeAttachment failure for an
+// ordinary record is returned as this call's own error.
+func TestDrainRecordsPropagatesGenericAcknowledgeFailure(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+	eventsSvc.seed(t, streamingTestSessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("hello"))
+	wantErr := errors.New("acknowledge failed")
+	server.chatSessions.(*fakeChatSessionsService).acknowledgeAttachmentErr = wantErr
+
+	notify, _ := captureNotifier()
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	_, err := server.streamTurnUpdates(ctx, "conn-a", streamingTestSessionID, 1, notify)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("streamTurnUpdates() error = %v, want the exact acknowledge failure %v", err, wantErr)
+	}
+}
+
+// TestDrainRecordsRejectsIllegalKindPhaseProjection proves a record that
+// decodes fine as a chatsessions.SequencedItem envelope but whose
+// Kind/Phase pair mapping.Project itself declares illegal (rather than the
+// envelope itself being malformed JSON, which
+// TestStreamTurnUpdatesMalformedRecordFailsEachIndependentAttachmentTheSameWay
+// already covers) fails the drain with mapping's own error, not a panic or
+// a silently skipped record.
+func TestDrainRecordsRejectsIllegalKindPhaseProjection(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+	eventsSvc.seed(t, streamingTestSessionID, workers.KindMessage, workers.PhaseFailed, assistantMessagePayload("illegal"))
+
+	notify, _ := captureNotifier()
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	delivered, err := server.streamTurnUpdates(ctx, "conn-a", streamingTestSessionID, 1, notify)
+	if delivered || err == nil {
+		t.Fatalf("streamTurnUpdates() = %v, %v, want delivered=false and a projection error", delivered, err)
+	}
+}
+
+// TestLiveDrainTurnUpdatesNoEventsIsNoOp proves a Server constructed without
+// the Events collaborator reports no live delivery rather than panicking.
+func TestLiveDrainTurnUpdatesNoEventsIsNoOp(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, _ := newStreamingTestServer(t, factoryTarget)
+	server.events = nil
+
+	notify, _ := captureNotifier()
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	if delivered := server.liveDrainTurnUpdates(ctx, "conn-a", streamingTestSessionID, 1, notify); delivered {
+		t.Fatalf("liveDrainTurnUpdates(no events) = %v, want false", delivered)
+	}
+}
+
+// TestLiveDrainTurnUpdatesNoAttachmentIsNoOp proves a blank connectionID
+// (ensureAttachment reports ok=false) is a silent no-op, matching
+// streamTurnUpdates' own convention.
+func TestLiveDrainTurnUpdatesNoAttachmentIsNoOp(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, _ := newStreamingTestServer(t, factoryTarget)
+
+	notify, _ := captureNotifier()
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	if delivered := server.liveDrainTurnUpdates(ctx, "", streamingTestSessionID, 1, notify); delivered {
+		t.Fatalf("liveDrainTurnUpdates(blank connectionID) = %v, want false", delivered)
+	}
+}
+
+// TestLiveDrainTurnUpdatesSubscribeFailureIsNoOp proves a genuine
+// Events.Subscribe failure is a silent no-op: the guaranteed-correct
+// post-invocation streamTurnUpdates sweep is the backstop for whatever this
+// best-effort live drain could not start.
+func TestLiveDrainTurnUpdatesSubscribeFailureIsNoOp(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+	eventsSvc.subscribeErr = errors.New("subscribe failed")
+
+	notify, _ := captureNotifier()
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	if delivered := server.liveDrainTurnUpdates(ctx, "conn-a", streamingTestSessionID, 1, notify); delivered {
+		t.Fatalf("liveDrainTurnUpdates(subscribe failure) = %v, want false", delivered)
+	}
+}
+
+// TestLiveDrainTurnUpdatesVersionFailureStopsOnRecordDelivery proves a
+// genuine GetSession failure while re-reading the session's current version
+// for a delivered record stops the live drain rather than dispatching
+// drainRecords against a stale/unknown version.
+func TestLiveDrainTurnUpdatesVersionFailureStopsOnRecordDelivery(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+	chatSessions := server.chatSessions.(*fakeChatSessionsService)
+
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	notify, _ := captureNotifier()
+
+	// Prime the attachment and Subscribe registration before injecting the
+	// GetSession failure, matching this fake's existing sequencing
+	// convention elsewhere in this file (ensure Subscribe has already
+	// observed the request before the drain can reach a delivery).
+	drainDone := make(chan bool, 1)
+	go func() {
+		drainDone <- server.liveDrainTurnUpdates(ctx, "conn-a", streamingTestSessionID, 1, notify)
+	}()
+	eventsSvc.waitForSubscriber(t)
+	chatSessions.getSessionErr = errors.New("get session failed")
+	eventsSvc.seed(t, streamingTestSessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("hello"))
+
+	select {
+	case delivered := <-drainDone:
+		if delivered {
+			t.Fatalf("liveDrainTurnUpdates(version failure) = %v, want false", delivered)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("liveDrainTurnUpdates did not stop after a GetSession failure")
+	}
+}
+
+// TestLiveDrainTurnUpdatesDeliversGapThenStopsOnCancel proves a retention
+// gap observed mid-subscription is delivered as a gap notice (the same
+// deliverReadTimeGap path streamTurnUpdates' own retained catch-up uses),
+// and the drain loop continues rather than treating a successful gap
+// delivery as terminal.
+func TestLiveDrainTurnUpdatesDeliversGapThenStopsOnCancel(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+	seedRetentionGap(t, eventsSvc, streamingTestSessionID)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ctx = contextWithAttachmentCache(ctx, &attachmentCache{})
+	notify, notified := captureNotifier()
+
+	drainDone := make(chan bool, 1)
+	go func() {
+		drainDone <- server.liveDrainTurnUpdates(ctx, "conn-a", streamingTestSessionID, 1, notify)
+	}()
+
+	select {
+	case <-drainDone:
+		t.Fatal("liveDrainTurnUpdates returned before the retained record was ever delivered")
+	case <-time.After(50 * time.Millisecond):
+	}
+	cancel()
+
+	select {
+	case <-drainDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("liveDrainTurnUpdates did not stop after ctx was canceled")
+	}
+
+	if len(*notified) == 0 {
+		t.Fatal("notify call count = 0, want at least the gap notice delivered before cancellation")
+	}
+}
+
+// TestLiveDrainTurnUpdatesVersionFailureStopsOnGap proves a genuine
+// GetSession failure while re-reading the session's current version for an
+// observed gap stops the live drain the same way it does for an ordinary
+// record.
+func TestLiveDrainTurnUpdatesVersionFailureStopsOnGap(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+	chatSessions := server.chatSessions.(*fakeChatSessionsService)
+
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	notify, _ := captureNotifier()
+
+	drainDone := make(chan bool, 1)
+	go func() {
+		drainDone <- server.liveDrainTurnUpdates(ctx, "conn-a", streamingTestSessionID, 1, notify)
+	}()
+	eventsSvc.waitForSubscriber(t)
+	chatSessions.getSessionErr = errors.New("get session failed")
+	seedRetentionGap(t, eventsSvc, streamingTestSessionID)
+
+	select {
+	case delivered := <-drainDone:
+		if delivered {
+			t.Fatalf("liveDrainTurnUpdates(version failure on gap) = %v, want false", delivered)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("liveDrainTurnUpdates did not stop after a GetSession failure")
+	}
+}
+
+// TestLiveDrainTurnUpdatesGapAcknowledgeFailureStopsDrain proves a genuine
+// deliverReadTimeGap failure (a notifier failure while delivering the gap
+// notice) stops the live drain the same way it stops streamTurnUpdates.
+func TestLiveDrainTurnUpdatesGapAcknowledgeFailureStopsDrain(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+	seedRetentionGap(t, eventsSvc, streamingTestSessionID)
+
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	notify := func(acpsdk.SessionNotification) error { return errors.New("notify failed") }
+
+	drainDone := make(chan bool, 1)
+	go func() {
+		drainDone <- server.liveDrainTurnUpdates(ctx, "conn-a", streamingTestSessionID, 1, notify)
+	}()
+
+	select {
+	case delivered := <-drainDone:
+		if delivered {
+			t.Fatalf("liveDrainTurnUpdates(gap notify failure) = %v, want false", delivered)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("liveDrainTurnUpdates did not stop after a gap notifier failure")
 	}
 }

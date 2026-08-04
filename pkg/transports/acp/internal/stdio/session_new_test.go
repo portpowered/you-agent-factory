@@ -121,11 +121,26 @@ type fakeChatSessionsService struct {
 	// results.
 	attachments      map[string]chatsessions.Attachment
 	nextAttachmentID int
+	// attachErr, when set, fails every Attach call -- for tests proving
+	// ensureAttachment/streamTurnUpdates propagate a genuine Factory Sessions
+	// Attach failure rather than treating it like the ordinary "no attachment
+	// yet" (ok=false) case.
+	attachErr error
 	// detachCalls records every Detach call this fake observed, in order --
 	// disconnect-cleanup tests assert both which attachments were released
 	// and that a turn-mutating method was never reached alongside them.
 	detachCalls []chatsessions.DetachRequest
 	detachErr   error
+	// acknowledgeAttachmentErr, when set, fails every AcknowledgeAttachment
+	// call with this exact error -- for tests proving drainRecords/
+	// deliverReadTimeGap propagate a genuine (non-*AttachmentPositionError)
+	// AcknowledgeAttachment failure instead of swallowing it.
+	acknowledgeAttachmentErr error
+	// acknowledgeAttachmentPositionErr, when true, fails every
+	// AcknowledgeAttachment call with a *chatsessions.AttachmentPositionError
+	// -- the StreamHead-lag case drainRecords/deliverReadTimeGap treat as a
+	// non-error "stop" rather than a failure.
+	acknowledgeAttachmentPositionErr bool
 }
 
 var _ chatsessions.Service = (*fakeChatSessionsService)(nil)
@@ -267,6 +282,9 @@ func (f *fakeChatSessionsService) AdvanceTurn(_ context.Context, req chatsession
 func (f *fakeChatSessionsService) Attach(_ context.Context, req chatsessions.AttachRequest) (chatsessions.AttachResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.attachErr != nil {
+		return chatsessions.AttachResult{}, f.attachErr
+	}
 	if req.Resume && req.Interactive {
 		for id, existing := range f.attachments {
 			if existing.Detached && existing.Interactive {
@@ -334,6 +352,14 @@ func (f *fakeChatSessionsService) AdvanceStreamHead(context.Context, chatsession
 func (f *fakeChatSessionsService) AcknowledgeAttachment(_ context.Context, req chatsessions.AcknowledgeAttachmentRequest) (chatsessions.AcknowledgeAttachmentResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.acknowledgeAttachmentPositionErr {
+		return chatsessions.AcknowledgeAttachmentResult{}, &chatsessions.AttachmentPositionError{
+			SessionID: req.SessionID, AttachmentID: req.AttachmentID, Requested: uint64(req.AfterSequence),
+		}
+	}
+	if f.acknowledgeAttachmentErr != nil {
+		return chatsessions.AcknowledgeAttachmentResult{}, f.acknowledgeAttachmentErr
+	}
 	attachment, ok := f.attachments[req.AttachmentID]
 	if !ok {
 		return chatsessions.AcknowledgeAttachmentResult{}, &chatsessions.NotFoundError{Value: "Attachment", ID: req.AttachmentID}

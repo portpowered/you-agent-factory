@@ -30,6 +30,10 @@ type recordingFactorySessionsService struct {
 
 	closeCalls []closeCall
 	closeErr   error
+
+	subscribeCalls  []subscribeCall
+	subscribeResult *factorysessions.ResponseEventCursor
+	subscribeErr    error
 }
 
 type startCall struct {
@@ -52,6 +56,11 @@ type cancelCall struct {
 type closeCall struct {
 	ctx       context.Context
 	sessionID string
+}
+
+type subscribeCall struct {
+	ctx context.Context
+	req factorysessions.ResponseEventSubscriptionRequest
 }
 
 func (fake *recordingFactorySessionsService) StartAsync(
@@ -85,16 +94,25 @@ func (fake *recordingFactorySessionsService) CloseFactorySession(ctx context.Con
 	return fake.closeErr
 }
 
+func (fake *recordingFactorySessionsService) SubscribeFactoryResponseEvents(
+	ctx context.Context,
+	req factorysessions.ResponseEventSubscriptionRequest,
+) (*factorysessions.ResponseEventCursor, error) {
+	fake.subscribeCalls = append(fake.subscribeCalls, subscribeCall{ctx: ctx, req: req})
+	return fake.subscribeResult, fake.subscribeErr
+}
+
 // assertNoOtherCalls fails the test unless every recorded call slice other
 // than the named target operation is empty, proving the shim delegated to
 // exactly one Factory Sessions capability.
 func assertNoOtherCalls(t *testing.T, fake *recordingFactorySessionsService, target string) {
 	t.Helper()
 	counts := map[string]int{
-		"start":  len(fake.startCalls),
-		"invoke": len(fake.invokeCalls),
-		"cancel": len(fake.cancelCalls),
-		"close":  len(fake.closeCalls),
+		"start":     len(fake.startCalls),
+		"invoke":    len(fake.invokeCalls),
+		"cancel":    len(fake.cancelCalls),
+		"close":     len(fake.closeCalls),
+		"subscribe": len(fake.subscribeCalls),
 	}
 	for name, count := range counts {
 		if name == target {
@@ -276,6 +294,51 @@ func TestShimClose(t *testing.T) {
 				t.Fatalf("CloseFactoryTarget() error = %v, want the exact same error value %v", err, tt.err)
 			}
 			assertNoOtherCalls(t, fake, "close")
+		})
+	}
+}
+
+func TestShimSubscribeFactoryResponseEvents(t *testing.T) {
+	tests := []struct {
+		name   string
+		result *factorysessions.ResponseEventCursor
+		err    error
+	}{
+		{
+			name:   "success",
+			result: &factorysessions.ResponseEventCursor{},
+		},
+		{
+			name: "provider error",
+			err:  errors.New("subscribe failed"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &recordingFactorySessionsService{subscribeResult: tt.result, subscribeErr: tt.err}
+			shim := New(fake)
+			ctx := context.WithValue(context.Background(), ctxProbeKey{}, "subscribe-"+tt.name)
+			request := factorysessions.ResponseEventSubscriptionRequest{SessionID: "session-1"}
+
+			got, err := shim.SubscribeFactoryResponseEvents(ctx, request)
+
+			if len(fake.subscribeCalls) != 1 {
+				t.Fatalf("SubscribeFactoryResponseEvents call count = %d, want 1", len(fake.subscribeCalls))
+			}
+			if fake.subscribeCalls[0].ctx != ctx {
+				t.Fatalf("SubscribeFactoryResponseEvents ctx = %#v, want the exact ctx passed in", fake.subscribeCalls[0].ctx)
+			}
+			if !reflect.DeepEqual(fake.subscribeCalls[0].req, request) {
+				t.Fatalf("SubscribeFactoryResponseEvents request = %#v, want %#v", fake.subscribeCalls[0].req, request)
+			}
+			if err != tt.err {
+				t.Fatalf("SubscribeFactoryResponseEvents() error = %v, want the exact same error value %v", err, tt.err)
+			}
+			if got != tt.result {
+				t.Fatalf("SubscribeFactoryResponseEvents() result = %#v, want the exact same pointer %#v", got, tt.result)
+			}
+			assertNoOtherCalls(t, fake, "subscribe")
 		})
 	}
 }
