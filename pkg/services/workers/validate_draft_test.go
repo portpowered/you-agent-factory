@@ -19,7 +19,7 @@ func legalKindPhasePairs() []struct {
 		Kind  Kind
 		Phase Phase
 	}{
-		{KindSession, PhaseStarted}, {KindSession, PhaseCompleted}, {KindSession, PhaseFailed}, {KindSession, PhaseCanceled},
+		{KindSession, PhaseStarted}, {KindSession, PhaseUpdated}, {KindSession, PhaseCompleted}, {KindSession, PhaseFailed}, {KindSession, PhaseCanceled},
 		{KindRun, PhaseStarted}, {KindRun, PhaseCompleted}, {KindRun, PhaseFailed}, {KindRun, PhaseCanceled},
 		{KindTurn, PhaseStarted}, {KindTurn, PhaseCompleted}, {KindTurn, PhaseFailed}, {KindTurn, PhaseCanceled},
 		{KindMessage, PhaseStarted}, {KindMessage, PhaseDelta}, {KindMessage, PhaseCompleted},

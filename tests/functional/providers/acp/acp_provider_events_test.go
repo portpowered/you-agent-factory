@@ -151,8 +151,20 @@ func assertResponseEventsStayOutOfFactoryReplay(t *testing.T, events []factoryap
 
 func assertACPResponseEventSequence(t *testing.T, events []factoryapi.FactoryResponseEvent) {
 	t.Helper()
-	want := []string{"PLAN", "USAGE", "FILE_CHANGE", "MESSAGE", "RUN"}
-	got := make([]string, 0, len(events))
+	want := []struct {
+		kind  string
+		phase string
+	}{
+		{kind: "REASONING", phase: "STARTED"},
+		{kind: "REASONING", phase: "DELTA"},
+		{kind: "PLAN", phase: "UPDATED"},
+		{kind: "USAGE", phase: "UPDATED"},
+		{kind: "FILE_CHANGE", phase: "UPDATED"},
+		{kind: "REASONING", phase: "COMPLETED"},
+		{kind: "MESSAGE", phase: "COMPLETED"},
+		{kind: "RUN", phase: "COMPLETED"},
+	}
+	got := make([]factoryapi.FactoryResponseEvent, 0, len(events))
 	var previous int64
 	for _, event := range events {
 		if event.Provenance.Provider != "cursor-acp" {
@@ -162,7 +174,7 @@ func assertACPResponseEventSequence(t *testing.T, events []factoryapi.FactoryRes
 			t.Fatalf("response event sequence = %d after %d", event.Sequence, previous)
 		}
 		previous = event.Sequence
-		got = append(got, string(event.Kind))
+		got = append(got, event)
 		if event.ProviderSessionRef == nil || *event.ProviderSessionRef != "acp-session-functional-1" {
 			t.Fatalf("response event ProviderSessionRef = %#v", event.ProviderSessionRef)
 		}
@@ -171,15 +183,15 @@ func assertACPResponseEventSequence(t *testing.T, events []factoryapi.FactoryRes
 		t.Fatalf("ACP response event kinds = %v, want %v (all events: %#v)", got, want, events)
 	}
 	for index := range want {
-		if got[index] != want[index] {
-			t.Fatalf("ACP response event kinds = %v, want %v", got, want)
+		if string(got[index].Kind) != want[index].kind || string(got[index].Phase) != want[index].phase {
+			t.Fatalf("ACP response events[%d] = %s/%s, want %s/%s", index, got[index].Kind, got[index].Phase, want[index].kind, want[index].phase)
 		}
 	}
-	message := events[len(events)-2]
+	message := got[len(got)-2]
 	if message.Kind != "MESSAGE" || message.Phase != "COMPLETED" || message.Provenance.Representation != "SNAPSHOT" {
 		t.Fatalf("authoritative ACP response event = %#v, want completed MESSAGE snapshot", message)
 	}
-	final := events[len(events)-1]
+	final := got[len(got)-1]
 	if final.Kind != "RUN" || final.Phase != "COMPLETED" {
 		t.Fatalf("terminal ACP response event = %#v, want completed RUN", final)
 	}

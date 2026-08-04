@@ -22,10 +22,11 @@ func MapProgressFragment(fragment factorysessions.ProgressFragment) responsestre
 		kind = responsestream.EventKindStreamFailed
 	}
 	eventType := responsestream.EventType(nativeType)
-	if kind == responsestream.EventKindProgressFragment {
-		// Providers reports native phase names (for example message.completed)
-		// while the bounded response stream accepts only its small semantic enum.
-		// Preserve the native value separately for canonical projection.
+	if kind == responsestream.EventKindProgressFragment && !preservesProgressPhase(fragment) {
+		// MESSAGE progress is coalesced into one terminal customer-facing
+		// snapshot by the runner. Other generic progress remains bounded too.
+		// REASONING and SESSION metadata need their declared phases below so
+		// they can reach their canonical customer-facing projections.
 		eventType = responsestream.EventTypeProgress
 	}
 	return responsestream.Event{
@@ -37,6 +38,20 @@ func MapProgressFragment(fragment factorysessions.ProgressFragment) responsestre
 		ExternalEventType:  firstNonEmpty(fragment.ExternalEventType, nativeType),
 		Metadata:           cloneStringMap(fragment.Metadata),
 	}
+}
+
+func preservesProgressPhase(fragment factorysessions.ProgressFragment) bool {
+	switch strings.ToLower(strings.TrimSpace(fragment.Metadata["kind"])) {
+	case "reasoning":
+		switch strings.ToLower(strings.TrimSpace(fragment.Type)) {
+		case "started", "start", "delta", "completed", "complete":
+			return true
+		}
+	case "session":
+		return strings.EqualFold(strings.TrimSpace(fragment.Type), "updated")
+	default:
+	}
+	return false
 }
 
 func firstNonEmpty(values ...string) string {

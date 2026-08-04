@@ -21,6 +21,7 @@
         "protocolVersion": 1,
         "authMethods": [],
         "agentCapabilities": {
+	          "_meta": {"portpowered.infinite-you/attachment-resume": true},
           "auth": {},
           "loadSession": true,
           "mcpCapabilities": {},

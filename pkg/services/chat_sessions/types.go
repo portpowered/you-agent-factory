@@ -436,6 +436,11 @@ type Attachment struct {
 	// attachment; zero is a valid "nothing delivered yet" value.
 	AfterSequence uint64
 	Interactive   bool
+	// Detached reports that Detach marked this attachment inactive: no
+	// connection is currently reading from it, but its ID and AfterSequence
+	// delivery cursor are preserved so a later Attach carrying Resume can
+	// reactivate it under a new ConnectionID (see AttachRequest.Resume).
+	Detached bool
 }
 
 // Validate reports whether the Attachment carries its required identities.

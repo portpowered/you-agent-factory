@@ -229,6 +229,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/responsebridge",
+      "minimum": 87.20
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/service",
       "minimum": 93.05
     },
@@ -2277,6 +2281,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity",
       "minimum": 73.97
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/mapping",
+      "minimum": 99.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/negotiation",

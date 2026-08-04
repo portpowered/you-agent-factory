@@ -7,7 +7,9 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	chatsessionswire "github.com/portpowered/infinite-you/pkg/services/chat_sessions/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -141,20 +143,51 @@ func provideACPServerFactoryTargetService(
 }
 
 // provideACPServer constructs the production ACP stdio Server from the same
-// canonical chatsessions.Service, chatsessions.FactoryTargetCatalogService,
-// and Factory Sessions-owned target-execution capability instances the rest
-// of this graph composes, so the real "session/new",
-// "session/set_config_option", "/factory", and ordinary prompt-delegation
-// consumer observes the one process-scoped Chat Sessions and Factory
-// Sessions authority instead of a second, independently constructed
-// instance. Construction alone performs no I/O; it starts no goroutine,
-// process, listener, session, or persistence.
+// canonical chatsessions.Service, Events service, and Factory Sessions-owned
+// target-execution capability instances the rest of this graph composes.
 func provideACPServer(
 	logger logging.Logger,
 	chatSessions chatsessions.Service,
 	catalog chatsessions.FactoryTargetCatalogService,
 	factoryTarget factorysessions.TargetExecutionService,
+	eventsService events.Service,
 	resolveHomeDir acpServerResolveHomeDir,
+	responseBridge acp.ResponseBridge,
 ) acp.Server {
-	return acpwire.NewServer(logger, chatSessions, catalog, factoryTarget, resolveHomeDir)
+	return acpwire.NewServer(logger, chatSessions, catalog, factoryTarget, eventsService, resolveHomeDir, responseBridge)
+}
+
+// provideACPServerResponseBridge constructs the production response-bridge
+// collaborator the ACP prompt-delegation consumer calls around its
+// synchronous Factory dispatch call (see dispatchFactoryTurn's two Factory
+// dispatch branches in pkg/transports/acp/internal/stdio/session_prompt.go):
+// a thin closure with exactly acp.ResponseBridge's signature that forwards
+// to the Chat Sessions-owned response bridge, the owning service's own
+// translation/drain-loop/concurrency implementation. pkg/wire composes this
+// closure (construction only, no I/O, no goroutine); the ACP transport never
+// implements Factory response-event translation, and the ACP transport
+// package that calls the constructed closure never holds a raw concurrency
+// primitive of its own either.
+func provideACPServerResponseBridge(bridge *chatsessionswire.ResponseBridge) acp.ResponseBridge {
+	return func(
+		ctx context.Context,
+		chatSessionID string,
+		sessionVersion uint64,
+		factorySessionID string,
+		liveDrain func(context.Context),
+		invoke func(context.Context) (factorysessions.InvocationResult, error),
+	) (factorysessions.InvocationResult, error) {
+		return bridge.Run(ctx, chatSessionID, sessionVersion, factorySessionID, liveDrain, invoke)
+	}
+}
+
+// provideChatSessionsResponseBridge constructs the Chat Sessions-owned
+// response-event bridge over the singular production Chat Sessions and
+// Factory Sessions services, plus the canonical logging abstraction.
+func provideChatSessionsResponseBridge(
+	chatSessions chatsessions.Service,
+	factoryTarget factorysessions.TargetExecutionService,
+	logger logging.Logger,
+) *chatsessionswire.ResponseBridge {
+	return chatsessionswire.NewResponseBridge(chatSessions, factoryTarget, logger)
 }

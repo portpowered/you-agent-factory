@@ -67,13 +67,27 @@ type Service interface {
 	AdvanceTurn(ctx context.Context, req AdvanceTurnRequest) (AdvanceTurnResult, error)
 
 	// Attach registers one connection's delivery position against a Chat
-	// Session's event stream. It reports *NotFoundError when SessionID does
-	// not identify an existing session.
+	// Session's event stream, or -- when AttachRequest.Resume and
+	// AttachRequest.Interactive are both true -- reactivates a detached
+	// interactive attachment selected by AttachRequest.ResumeAttachmentID. A
+	// no-identity resume remains valid only when exactly one detached interactive
+	// attachment exists; an ambiguous selection is rejected rather than giving
+	// one consumer another consumer's delivery cursor. Reactivation preserves the
+	// attachment's already-advanced AfterSequence delivery cursor instead of
+	// starting a reconnecting client over from zero (see AttachRequest.Resume's
+	// own doc comment). It reports *NotFoundError when SessionID does not identify
+	// an existing session.
 	Attach(ctx context.Context, req AttachRequest) (AttachResult, error)
 
-	// Detach removes one previously attached connection. It reports
-	// *NotFoundError when AttachmentID does not identify an existing
-	// attachment on the session.
+	// Detach marks one previously attached connection's Attachment as
+	// detached (Attachment.Detached) rather than removing it: the
+	// attachment's ID and AfterSequence delivery cursor both survive so a
+	// later Attach carrying Resume can reactivate it. It never mutates any
+	// turn, control intent, or the session's own StreamHead -- it only ever
+	// affects the named attachment. Detaching an already-detached attachment
+	// is idempotent. It reports *NotFoundError when SessionID does not
+	// identify an existing session or AttachmentID does not identify an
+	// attachment ever registered on that session.
 	Detach(ctx context.Context, req DetachRequest) (DetachResult, error)
 
 	// RequestControl atomically captures the session's current active turn,
@@ -276,19 +290,38 @@ type AdvanceTurnResult struct {
 }
 
 // AttachRequest carries the target session, connecting connection identity,
-// and whether the attachment is the interactive leader.
+// whether the attachment is the interactive leader, and whether Attach
+// should try to resume a previously detached interactive attachment (see
+// Attach's own doc comment) instead of always minting a fresh one.
 type AttachRequest struct {
 	SessionID    string
 	ConnectionID string
 	Interactive  bool
+	// Resume requests that Attach reactivate a detached interactive attachment
+	// under this request's ConnectionID instead of creating a fresh one. When
+	// ResumeAttachmentID is present, it selects that exact stored attachment;
+	// otherwise Resume only succeeds when there is exactly one detached
+	// interactive attachment. Resume only ever takes effect when Interactive
+	// is also true; it has no effect when no detached interactive attachment
+	// exists, so it is safe to set for a session's first-ever attachment.
+	Resume bool
+	// ResumeAttachmentID is the opaque durable identity of the caller's prior
+	// detached Attachment. It is required to disambiguate a Resume when more
+	// than one interactive attachment is detached for the same Chat Session.
+	// The identity is service-owned and is never derived from a connection-local
+	// cursor or from another attachment's position.
+	ResumeAttachmentID string
 }
 
-// AttachResult carries the newly registered Attachment.
+// AttachResult carries the registered Attachment: either newly created, or
+// -- when AttachRequest.Resume matched one unambiguous detached interactive
+// attachment -- that same attachment reactivated under its original ID and
+// delivery cursor.
 type AttachResult struct {
 	Attachment Attachment
 }
 
-// DetachRequest identifies the attachment to remove.
+// DetachRequest identifies the attachment to detach.
 type DetachRequest struct {
 	SessionID    string
 	AttachmentID string

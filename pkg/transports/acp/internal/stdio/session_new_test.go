@@ -15,6 +15,7 @@ import (
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 )
@@ -37,8 +38,17 @@ type fakeChatSessionsService struct {
 
 	getSessionCalled bool
 	getSessionReq    chatsessions.GetSessionRequest
+	getSessionReqs   []chatsessions.GetSessionRequest
 	getSessionResult chatsessions.GetSessionResult
-	getSessionErr    error
+	// getSessionResults, when non-empty, is consumed front-first across
+	// successive GetSession calls (one queued result per call) instead of
+	// the single static getSessionResult -- for tests where a later
+	// GetSession call (for example currentSessionVersion's fresh re-read
+	// after a dispatch that may have advanced Session.Version concurrently)
+	// must observe a different session snapshot than the admission-time
+	// call did.
+	getSessionResults []chatsessions.GetSessionResult
+	getSessionErr     error
 
 	setTargetCalled bool
 	setTargetReq    chatsessions.SetTargetRequest
@@ -95,6 +105,50 @@ type fakeChatSessionsService struct {
 	// (e.g. the terminal transition) fails, or vice versa.
 	advanceTurnErrs []error
 	advanceTurnErr  error
+
+	// attachments and nextAttachmentID back a working, in-memory Attach/
+	// AcknowledgeAttachment pair (unlike every other method below, which
+	// fails loudly): streaming tests in prompt_stream_test.go need a real,
+	// stateful attachment cursor to drive streamTurnUpdates/drainRecords
+	// against, without pulling in the real chatsessions.Service
+	// implementation (pkg/boundary forbids a transport test constructing a
+	// product service directly -- see prompt_stream_test.go's own doc
+	// comment). This intentionally does not enforce ExpectedVersion or
+	// StreamHead the way the real Store does; those guards are chat_sessions'
+	// own responsibility and are already covered by that service's own test
+	// suite. This fake only needs to prove this transport package calls
+	// Attach/AcknowledgeAttachment correctly and reacts correctly to their
+	// results.
+	attachments      map[string]chatsessions.Attachment
+	nextAttachmentID int
+	// attachErr, when set, fails every Attach call -- for tests proving
+	// ensureAttachment/streamTurnUpdates propagate a genuine Factory Sessions
+	// Attach failure rather than treating it like the ordinary "no attachment
+	// yet" (ok=false) case.
+	attachErr error
+	// detachCalls records every Detach call this fake observed, in order --
+	// disconnect-cleanup tests assert both which attachments were released
+	// and that a turn-mutating method was never reached alongside them.
+	detachCalls []chatsessions.DetachRequest
+	detachErr   error
+	// acknowledgeAttachmentErr, when set, fails every AcknowledgeAttachment
+	// call with this exact error -- for tests proving drainRecords/
+	// deliverReadTimeGap propagate a genuine (non-*AttachmentPositionError)
+	// AcknowledgeAttachment failure instead of swallowing it.
+	acknowledgeAttachmentErr error
+	// acknowledgeAttachmentErrs, when non-empty, is consumed front-first
+	// across successive AcknowledgeAttachment calls. A nil entry permits that
+	// call to succeed, so retry tests can model one stale optimistic version
+	// followed by a successful refreshed acknowledgement.
+	acknowledgeAttachmentErrs []error
+	// acknowledgeAttachmentReqs records each attempt so retry tests can prove
+	// the refreshed session version reaches the next acknowledgement.
+	acknowledgeAttachmentReqs []chatsessions.AcknowledgeAttachmentRequest
+	// acknowledgeAttachmentPositionErr, when true, fails every
+	// AcknowledgeAttachment call with a *chatsessions.AttachmentPositionError
+	// -- the StreamHead-lag case drainRecords/deliverReadTimeGap treat as a
+	// non-error "stop" rather than a failure.
+	acknowledgeAttachmentPositionErr bool
 }
 
 var _ chatsessions.Service = (*fakeChatSessionsService)(nil)
@@ -127,8 +181,14 @@ func (f *fakeChatSessionsService) GetSession(_ context.Context, req chatsessions
 	defer f.mu.Unlock()
 	f.getSessionCalled = true
 	f.getSessionReq = req
+	f.getSessionReqs = append(f.getSessionReqs, req)
 	if f.getSessionErr != nil {
 		return chatsessions.GetSessionResult{}, f.getSessionErr
+	}
+	if len(f.getSessionResults) > 0 {
+		next := f.getSessionResults[0]
+		f.getSessionResults = f.getSessionResults[1:]
+		return next, nil
 	}
 	return f.getSessionResult, nil
 }
@@ -221,12 +281,78 @@ func (f *fakeChatSessionsService) AdvanceTurn(_ context.Context, req chatsession
 	return chatsessions.AdvanceTurnResult{Turn: chatsessions.Turn{ID: req.TurnID, State: req.Next}}, nil
 }
 
-func (f *fakeChatSessionsService) Attach(context.Context, chatsessions.AttachRequest) (chatsessions.AttachResult, error) {
-	return chatsessions.AttachResult{}, errors.New("fakeChatSessionsService: Attach not implemented")
+// Attach mirrors the real resume policy: select the stored identity or sole candidate; reject a tie.
+func (f *fakeChatSessionsService) Attach(_ context.Context, req chatsessions.AttachRequest) (chatsessions.AttachResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.attachErr != nil {
+		return chatsessions.AttachResult{}, f.attachErr
+	}
+	if req.Resume && req.Interactive {
+		if req.ResumeAttachmentID != "" {
+			existing, found := f.attachments[req.ResumeAttachmentID]
+			if !found || !existing.Detached || !existing.Interactive {
+				return chatsessions.AttachResult{}, &chatsessions.NotFoundError{Value: "Attachment", ID: req.ResumeAttachmentID}
+			}
+			existing.ConnectionID = req.ConnectionID
+			existing.Detached = false
+			f.attachments[req.ResumeAttachmentID] = existing
+			return chatsessions.AttachResult{Attachment: existing}, nil
+		}
+		var resumed chatsessions.Attachment
+		candidates := 0
+		for _, existing := range f.attachments {
+			if existing.Detached && existing.Interactive {
+				resumed = existing
+				candidates++
+			}
+		}
+		if candidates > 1 {
+			return chatsessions.AttachResult{}, &chatsessions.AttachmentResumeAmbiguityError{SessionID: req.SessionID, CandidateCount: candidates}
+		}
+		if candidates == 1 {
+			resumed.ConnectionID = req.ConnectionID
+			resumed.Detached = false
+			f.attachments[resumed.ID] = resumed
+			return chatsessions.AttachResult{Attachment: resumed}, nil
+		}
+	}
+
+	f.nextAttachmentID++
+	attachment := chatsessions.Attachment{
+		ID:           fmt.Sprintf("attachment-%d", f.nextAttachmentID),
+		SessionID:    req.SessionID,
+		ConnectionID: req.ConnectionID,
+		Interactive:  req.Interactive,
+	}
+	if f.attachments == nil {
+		f.attachments = make(map[string]chatsessions.Attachment)
+	}
+	f.attachments[attachment.ID] = attachment
+	return chatsessions.AttachResult{Attachment: attachment}, nil
 }
 
-func (f *fakeChatSessionsService) Detach(context.Context, chatsessions.DetachRequest) (chatsessions.DetachResult, error) {
-	return chatsessions.DetachResult{}, errors.New("fakeChatSessionsService: Detach not implemented")
+// Detach mirrors the real chatsessions.Service.Detach contract closely
+// enough for disconnect-cleanup and reconnect tests: it marks the named
+// attachment Detached in place (preserving its ID and AfterSequence for a
+// later Resume, exactly like the real Store -- see Attach above) rather than
+// removing it, and reports *chatsessions.NotFoundError for an attachment ID
+// this fake never registered, matching the real Service's own
+// unknown-attachment behavior.
+func (f *fakeChatSessionsService) Detach(_ context.Context, req chatsessions.DetachRequest) (chatsessions.DetachResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.detachCalls = append(f.detachCalls, req)
+	if f.detachErr != nil {
+		return chatsessions.DetachResult{}, f.detachErr
+	}
+	attachment, ok := f.attachments[req.AttachmentID]
+	if !ok {
+		return chatsessions.DetachResult{}, &chatsessions.NotFoundError{Value: "Attachment", ID: req.AttachmentID}
+	}
+	attachment.Detached = true
+	f.attachments[req.AttachmentID] = attachment
+	return chatsessions.DetachResult{}, nil
 }
 
 func (f *fakeChatSessionsService) RequestControl(context.Context, chatsessions.RequestControlRequest) (chatsessions.RequestControlResult, error) {
@@ -245,8 +371,35 @@ func (f *fakeChatSessionsService) AdvanceStreamHead(context.Context, chatsession
 	return chatsessions.AdvanceStreamHeadResult{}, errors.New("fakeChatSessionsService: AdvanceStreamHead not implemented")
 }
 
-func (f *fakeChatSessionsService) AcknowledgeAttachment(context.Context, chatsessions.AcknowledgeAttachmentRequest) (chatsessions.AcknowledgeAttachmentResult, error) {
-	return chatsessions.AcknowledgeAttachmentResult{}, errors.New("fakeChatSessionsService: AcknowledgeAttachment not implemented")
+func (f *fakeChatSessionsService) AcknowledgeAttachment(_ context.Context, req chatsessions.AcknowledgeAttachmentRequest) (chatsessions.AcknowledgeAttachmentResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.acknowledgeAttachmentReqs = append(f.acknowledgeAttachmentReqs, req)
+	if len(f.acknowledgeAttachmentErrs) > 0 {
+		next := f.acknowledgeAttachmentErrs[0]
+		f.acknowledgeAttachmentErrs = f.acknowledgeAttachmentErrs[1:]
+		if next != nil {
+			return chatsessions.AcknowledgeAttachmentResult{}, next
+		}
+	}
+	if f.acknowledgeAttachmentPositionErr {
+		return chatsessions.AcknowledgeAttachmentResult{}, &chatsessions.AttachmentPositionError{
+			SessionID: req.SessionID, AttachmentID: req.AttachmentID, Requested: uint64(req.AfterSequence),
+		}
+	}
+	if f.acknowledgeAttachmentErr != nil {
+		return chatsessions.AcknowledgeAttachmentResult{}, f.acknowledgeAttachmentErr
+	}
+	attachment, ok := f.attachments[req.AttachmentID]
+	if !ok {
+		return chatsessions.AcknowledgeAttachmentResult{}, &chatsessions.NotFoundError{Value: "Attachment", ID: req.AttachmentID}
+	}
+	if attachment.AfterSequence >= uint64(req.AfterSequence) {
+		return chatsessions.AcknowledgeAttachmentResult{Attachment: attachment, Outcome: chatsessions.AcknowledgeAttachmentOutcomeAlreadyCurrent}, nil
+	}
+	attachment.AfterSequence = uint64(req.AfterSequence)
+	f.attachments[req.AttachmentID] = attachment
+	return chatsessions.AcknowledgeAttachmentResult{Attachment: attachment, Outcome: chatsessions.AcknowledgeAttachmentOutcomeAdvanced}, nil
 }
 
 // fakeFactoryTargetCatalogService is a minimal
@@ -303,6 +456,9 @@ type fakeFactoryTargetService struct {
 
 	cancelCalls []cancelFactoryTargetCall
 	cancelErr   error
+
+	responseCursor *factorysessions.ResponseEventCursor
+	responseErr    error
 	// cancelEntered, when non-nil, is closed the instant the first Cancel
 	// call is recorded, so a test can deterministically wait, with no sleep,
 	// until cancellation has genuinely reached this fake rather than merely
@@ -391,6 +547,15 @@ func (f *fakeFactoryTargetService) CloseFactorySession(_ context.Context, sessio
 	return f.closeErr
 }
 
+func (f *fakeFactoryTargetService) SubscribeFactoryResponseEvents(
+	_ context.Context,
+	_ factorysessions.ResponseEventSubscriptionRequest,
+) (*factorysessions.ResponseEventCursor, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.responseCursor, f.responseErr
+}
+
 func defaultTestCatalogResult() chatsessions.ResolveFactoryTargetCatalogResult {
 	return chatsessions.ResolveFactoryTargetCatalogResult{
 		CurrentTarget: "factory:@you/factory-builder",
@@ -415,7 +580,23 @@ func newTestServerWithFactoryTarget(
 	homeDir string,
 ) *Server {
 	resolveHomeDir := func() (string, error) { return homeDir, nil }
-	return New(nil, chatSessions, catalog, factoryTarget, resolveHomeDir)
+	return New(nil, chatSessions, catalog, factoryTarget, nil, resolveHomeDir, nil)
+}
+
+// newTestServerWithResponseBridge is newTestServerWithFactoryTarget plus an
+// explicit acp.ResponseBridge collaborator, for tests that need to observe
+// dispatchFactoryInvocation actually reaching the injected response bridge
+// (rather than calling InvokeFactorySession directly, the responseBridge==nil
+// no-op path every other test in this package already exercises).
+func newTestServerWithResponseBridge(
+	chatSessions *fakeChatSessionsService,
+	catalog *fakeFactoryTargetCatalogService,
+	factoryTarget factorysessions.TargetExecutionService,
+	homeDir string,
+	responseBridge acp.ResponseBridge,
+) *Server {
+	resolveHomeDir := func() (string, error) { return homeDir, nil }
+	return New(nil, chatSessions, catalog, factoryTarget, nil, resolveHomeDir, responseBridge)
 }
 
 func numberIdentityEnvelope(t *testing.T, connID identity.ConnectionID, wireID int64, method string, params string) envelope.Envelope {
@@ -667,7 +848,7 @@ func TestServeDispatchesSessionNewOverRealJSONRPCFraming(t *testing.T) {
 func TestServeRespondsMethodNotFoundForEveryUnimplementedMethodStillExcludesSessionNew(t *testing.T) {
 	input := `{"jsonrpc":"2.0","id":9,"method":"session/new","params":{"cwd":"/work/project","mcpServers":[]}}` + "\n"
 	out := &bytes.Buffer{}
-	server := New(nil, nil, nil, nil, nil)
+	server := New(nil, nil, nil, nil, nil, nil, nil)
 	if err := server.Serve(context.Background(), strings.NewReader(input), out); err != nil {
 		t.Fatalf("Serve() error = %v", err)
 	}
@@ -682,7 +863,7 @@ func TestServeRespondsMethodNotFoundForEveryUnimplementedMethodStillExcludesSess
 }
 
 func TestHandleSessionNewWithoutCollaboratorsReportsBoundedFailure(t *testing.T) {
-	server := New(nil, nil, nil, nil, nil)
+	server := New(nil, nil, nil, nil, nil, nil, nil)
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionNew, validSessionNewParams)
 
 	result, rpcErr := server.handleSessionNew(context.Background(), env)
@@ -760,7 +941,7 @@ func TestClassifyDependencyFailureMapsContextCauseToRequestCancelled(t *testing.
 func TestHandleSessionNewResolveHomeDirFailureReturnsNoEffect(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{}
 	catalog := &fakeFactoryTargetCatalogService{result: defaultTestCatalogResult()}
-	server := New(nil, chatSessions, catalog, nil, func() (string, error) { return "", errors.New("resolve home dir boom") })
+	server := New(nil, chatSessions, catalog, nil, nil, func() (string, error) { return "", errors.New("resolve home dir boom") }, nil)
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionNew, validSessionNewParams)
 	result, rpcErr := server.handleSessionNew(context.Background(), env)
@@ -781,7 +962,7 @@ func TestHandleSessionNewResolveHomeDirFailureReturnsNoEffect(t *testing.T) {
 func TestHandleSessionNewBlankHomeDirFailureReturnsNoEffect(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{}
 	catalog := &fakeFactoryTargetCatalogService{result: defaultTestCatalogResult()}
-	server := New(nil, chatSessions, catalog, nil, func() (string, error) { return "", nil })
+	server := New(nil, chatSessions, catalog, nil, nil, func() (string, error) { return "", nil }, nil)
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionNew, validSessionNewParams)
 	result, rpcErr := server.handleSessionNew(context.Background(), env)

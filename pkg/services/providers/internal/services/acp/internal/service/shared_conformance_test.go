@@ -124,6 +124,12 @@ func TestSharedConformanceCorpusSessionUpdateMatchesInboundMapper(t *testing.T) 
 				if got.Detail != *want.Title {
 					t.Errorf("progress detail = %q, want %q", got.Detail, *want.Title)
 				}
+				if got.Phase != "updated" {
+					t.Errorf("progress phase = %q, want updated for a session title change", got.Phase)
+				}
+				if got.Metadata["title_present"] != "true" {
+					t.Errorf("title_present = %q, want true for a title-bearing update", got.Metadata["title_present"])
+				}
 			}
 		})
 	}

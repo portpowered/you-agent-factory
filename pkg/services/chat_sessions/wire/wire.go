@@ -16,8 +16,10 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/responsebridge"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/service"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
@@ -72,4 +74,20 @@ func NewFactoryTargetCatalogService(
 	logger logging.Logger,
 ) (chatsessions.FactoryTargetCatalogService, error) {
 	return internalservice.New(operatorSettings, factoryDefinitions, logger)
+}
+
+// ResponseBridge is the Chat Sessions-owned producer bridge that sequences
+// Factory Session response events onto a Chat Session aggregate stream.
+type ResponseBridge = responsebridge.Service
+
+// NewResponseBridge constructs the response-event bridge over the canonical
+// Chat Sessions sequence/head-advance and Factory Sessions target-execution
+// capabilities. Its logger is the direct, required operation-logging
+// abstraction; callers that do not need output pass logging.NoopLogger{}.
+func NewResponseBridge(
+	sequencer responsebridge.Sequencer,
+	factoryTarget factorysessions.TargetExecutionService,
+	logger logging.Logger,
+) *ResponseBridge {
+	return responsebridge.New(sequencer, factoryTarget, logger)
 }

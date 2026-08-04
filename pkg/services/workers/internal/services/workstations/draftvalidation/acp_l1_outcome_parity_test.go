@@ -16,6 +16,7 @@ const (
 	acpOutcomeMessageChunk   acpOutcome = "MESSAGE_CHUNK"
 	acpOutcomeThoughtChunk   acpOutcome = "THOUGHT_CHUNK"
 	acpOutcomeUsageUpdate    acpOutcome = "USAGE_UPDATE"
+	acpOutcomeSessionInfo    acpOutcome = "SESSION_INFO_UPDATE"
 	acpOutcomeGapNotice      acpOutcome = "GAP_NOTICE"
 	acpOutcomeErrorOutOfBand acpOutcome = "ERROR_OUT_OF_BAND"
 	acpOutcomeNoOutput       acpOutcome = "NO_OUTPUT"
@@ -40,6 +41,7 @@ type acpOutcomeDeclaration struct {
 // Kind/Phase pair, matching the pairs declared by allowedPhasesByKind.
 var declaredACPL1Outcomes = []acpOutcomeDeclaration{
 	{KindSession, PhaseStarted, acpOutcomeNoOutput},
+	{KindSession, PhaseUpdated, acpOutcomeSessionInfo},
 	{KindSession, PhaseCompleted, acpOutcomeNoOutput},
 	{KindSession, PhaseFailed, acpOutcomeNoOutput},
 	{KindSession, PhaseCanceled, acpOutcomeNoOutput},
@@ -163,33 +165,68 @@ func TestACPL1OutcomeParity_MatchesLegalPairsExactly(t *testing.T) {
 }
 
 // TestACPL1OutcomeParity_DeclaresExpectedOutcomeFamilies proves the outcome
-// assigned to each Kind matches the required ACP L1 treatment across every
-// phase that Kind allows.
+// assigned to each Kind/Phase pair matches the required ACP L1 treatment.
+// Every Kind maps to one uniform outcome across all of its legal phases
+// except KindSession, whose PhaseUpdated is the one phase that is not a
+// lifecycle transition (see workers.SessionPayload.Title and
+// mapping.ProjectSessionInfoUpdate): wantOutcomeByPair is therefore keyed by
+// (Kind, Phase), written out independently of declaredACPL1Outcomes, so this
+// test still catches an accidental miscategorization rather than only
+// restating the production declaration back at itself.
 func TestACPL1OutcomeParity_DeclaresExpectedOutcomeFamilies(t *testing.T) {
 	t.Parallel()
 
-	wantOutcomeByKind := map[Kind]acpOutcome{
-		KindSession:    acpOutcomeNoOutput,
-		KindRun:        acpOutcomeNoOutput,
-		KindTurn:       acpOutcomeNoOutput,
-		KindMessage:    acpOutcomeMessageChunk,
-		KindReasoning:  acpOutcomeThoughtChunk,
-		KindTool:       acpOutcomeNoOutput,
-		KindFileChange: acpOutcomeNoOutput,
-		KindPlan:       acpOutcomeNoOutput,
-		KindProgress:   acpOutcomeNoOutput,
-		KindUsage:      acpOutcomeUsageUpdate,
-		KindError:      acpOutcomeErrorOutOfBand,
-		KindStreamGap:  acpOutcomeGapNotice,
+	wantOutcomeByPair := map[kindPhase]acpOutcome{
+		{KindSession, PhaseStarted}:   acpOutcomeNoOutput,
+		{KindSession, PhaseUpdated}:   acpOutcomeSessionInfo,
+		{KindSession, PhaseCompleted}: acpOutcomeNoOutput,
+		{KindSession, PhaseFailed}:    acpOutcomeNoOutput,
+		{KindSession, PhaseCanceled}:  acpOutcomeNoOutput,
+
+		{KindRun, PhaseStarted}:   acpOutcomeNoOutput,
+		{KindRun, PhaseCompleted}: acpOutcomeNoOutput,
+		{KindRun, PhaseFailed}:    acpOutcomeNoOutput,
+		{KindRun, PhaseCanceled}:  acpOutcomeNoOutput,
+
+		{KindTurn, PhaseStarted}:   acpOutcomeNoOutput,
+		{KindTurn, PhaseCompleted}: acpOutcomeNoOutput,
+		{KindTurn, PhaseFailed}:    acpOutcomeNoOutput,
+		{KindTurn, PhaseCanceled}:  acpOutcomeNoOutput,
+
+		{KindMessage, PhaseStarted}:   acpOutcomeMessageChunk,
+		{KindMessage, PhaseDelta}:     acpOutcomeMessageChunk,
+		{KindMessage, PhaseCompleted}: acpOutcomeMessageChunk,
+
+		{KindReasoning, PhaseStarted}:   acpOutcomeThoughtChunk,
+		{KindReasoning, PhaseDelta}:     acpOutcomeThoughtChunk,
+		{KindReasoning, PhaseCompleted}: acpOutcomeThoughtChunk,
+
+		{KindTool, PhaseStarted}:   acpOutcomeNoOutput,
+		{KindTool, PhaseDelta}:     acpOutcomeNoOutput,
+		{KindTool, PhaseCompleted}: acpOutcomeNoOutput,
+		{KindTool, PhaseFailed}:    acpOutcomeNoOutput,
+		{KindTool, PhaseCanceled}:  acpOutcomeNoOutput,
+
+		{KindFileChange, PhaseUpdated}: acpOutcomeNoOutput,
+		{KindPlan, PhaseUpdated}:       acpOutcomeNoOutput,
+		{KindProgress, PhaseUpdated}:   acpOutcomeNoOutput,
+
+		{KindUsage, PhaseUpdated}: acpOutcomeUsageUpdate,
+
+		{KindError, PhaseUpdated}: acpOutcomeErrorOutOfBand,
+		{KindError, PhaseFailed}:  acpOutcomeErrorOutOfBand,
+
+		{KindStreamGap, PhaseUpdated}: acpOutcomeGapNotice,
 	}
 
 	if len(declaredACPL1Outcomes) == 0 {
 		t.Fatalf("declaredACPL1Outcomes must not be empty")
 	}
 	for _, decl := range declaredACPL1Outcomes {
-		want, ok := wantOutcomeByKind[decl.Kind]
+		pair := kindPhase{Kind: decl.Kind, Phase: decl.Phase}
+		want, ok := wantOutcomeByPair[pair]
 		if !ok {
-			t.Fatalf("declaration for unexpected kind %q", decl.Kind)
+			t.Fatalf("declaration for unexpected kind %q phase %q", decl.Kind, decl.Phase)
 		}
 		if decl.Outcome != want {
 			t.Fatalf("kind %q phase %q outcome = %q, want %q", decl.Kind, decl.Phase, decl.Outcome, want)

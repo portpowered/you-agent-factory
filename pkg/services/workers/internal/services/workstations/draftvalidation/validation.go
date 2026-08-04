@@ -22,7 +22,7 @@ func validationError(field, message string) error {
 }
 
 var allowedPhasesByKind = map[Kind][]Phase{
-	KindSession:    {PhaseStarted, PhaseCompleted, PhaseFailed, PhaseCanceled},
+	KindSession:    {PhaseStarted, PhaseUpdated, PhaseCompleted, PhaseFailed, PhaseCanceled},
 	KindRun:        {PhaseStarted, PhaseCompleted, PhaseFailed, PhaseCanceled},
 	KindTurn:       {PhaseStarted, PhaseCompleted, PhaseFailed, PhaseCanceled},
 	KindMessage:    {PhaseStarted, PhaseDelta, PhaseCompleted},

@@ -29,5 +29,7 @@
 // is now consumed directly from Factory Sessions' own owner-published
 // factorysessions.TargetExecutionService capability (see
 // pkg/services/factory_sessions), retiring the former
-// internal/factorysessionsshim stopgap at L3 Factory Sessions sealing.
+// internal/factorysessionsshim target-execution stopgap at L3 Factory Sessions
+// sealing. Chat Session response-event sequencing remains in the separate
+// internal/responsebridge owner.
 package chatsessions

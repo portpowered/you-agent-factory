@@ -1,8 +1,9 @@
 // Package stdio implements the ACP agent-side JSON-RPC stdio server:
 // caller-owned stream serving, one-connection lifecycle, connection-scoped
 // identity assignment, newline-delimited JSON-RPC framing and dispatch for
-// the "initialize", "session/new", and "session/set_config_option" methods,
-// plus "session/prompt" -- both the "/factory <value>" fallback command
+// the "initialize", "session/new", "session/load", "session/resume", and
+// "session/set_config_option" methods, plus "session/prompt" -- both the
+// "/factory <value>" fallback command
 // recognized within it (final-proposal.md §3) and, for every other
 // (genuine, non-command) prompt, admission of exactly one version-guarded
 // Chat turn against the canonical Chat Sessions authority, followed by
@@ -29,6 +30,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"sync"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
@@ -36,7 +38,9 @@ import (
 	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
 	"github.com/portpowered/infinite-you/pkg/platform/taskgroup"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/negotiation"
@@ -64,14 +68,10 @@ var errNullInitializeParams = errors.New("acp: initialize params must not be nul
 // chatSessions and catalog are the canonical Chat Sessions collaborators
 // "session/new", "session/set_config_option", the "/factory" fallback
 // command, and ordinary prompt turn admission dispatch to; factoryTarget is
-// the Factory Sessions-owned target-execution capability an admitted
-// ordinary prompt turn starts or invokes against; resolveHomeDir supplies
-// the operator home directory used to derive the Operator Settings document
-// path and Factory discovery roots for a catalog resolution. Any of the
-// four may be nil, in which case a dispatched method reports a bounded
-// internal error instead of proceeding -- so a Server constructed for a
-// slice of this transport that never exercises them (for example the
-// "initialize"-only smoke tests in this package) never has to supply them.
+// the Factory Sessions-owned target-execution capability an admitted prompt
+// starts or invokes against; events is the canonical aggregate stream an
+// admitted turn drains before falling back to V1 final text. A narrowly
+// constructed Server may omit events, in which case streaming is a no-op.
 //
 // A Server instance holds no reconciliation state of its own for a started-
 // but-not-yet-bound Factory Session: that record lives on the episode itself
@@ -86,25 +86,85 @@ type Server struct {
 	chatSessions   chatsessions.Service
 	catalog        chatsessions.FactoryTargetCatalogService
 	factoryTarget  factorysessions.TargetExecutionService
+	events         events.Service
 	resolveHomeDir func() (string, error)
+	responseBridge acp.ResponseBridge
+}
+
+// promptFlightRegistry coalesces duplicate session/prompt requests for the
+// lifetime of one connection. Prompt processing is asynchronous so a later
+// line can carry a session/cancel notification while the Factory call is in
+// flight. That also means an immediate redelivery of the same JSON-RPC
+// request can otherwise observe the turn before its first handler has moved
+// it out of ADMITTED. A flight lets that redelivery await the original
+// response instead of racing another admission or Factory dispatch.
+//
+// The key is RequestIdentity's JSON representation, which includes both the
+// connection identifier and JSON-RPC id. This keeps identical ids on
+// independent connections distinct, as RequestIdentity itself requires.
+type promptFlightRegistry struct {
+	mu        sync.Mutex
+	byRequest map[string]*promptFlight
+}
+
+type promptFlight struct {
+	done   chan struct{}
+	result json.RawMessage
+	rpcErr *acpsdk.RequestError
+}
+
+func (r *promptFlightRegistry) start(req identity.RequestIdentity) (*promptFlight, bool) {
+	keyBytes, err := json.Marshal(req)
+	if err != nil {
+		// envelope.Decode already constructs a valid correlated identity for
+		// every request. Keeping a defensive, per-flight fallback prevents an
+		// unforeseen marshal problem from accidentally coalescing unrelated
+		// requests.
+		return &promptFlight{done: make(chan struct{})}, true
+	}
+	key := string(keyBytes)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if existing := r.byRequest[key]; existing != nil {
+		return existing, false
+	}
+	flight := &promptFlight{done: make(chan struct{})}
+	if r.byRequest == nil {
+		r.byRequest = make(map[string]*promptFlight)
+	}
+	r.byRequest[key] = flight
+	return flight, true
+}
+
+func (f *promptFlight) finish(result json.RawMessage, rpcErr *acpsdk.RequestError) {
+	f.result = result
+	f.rpcErr = rpcErr
+	close(f.done)
 }
 
 // New constructs an inert stdio Server. Construction alone performs no
 // reads, writes, goroutine starts, process starts, endpoint binding,
-// session creation, or persistence.
+// session creation, or persistence. responseBridge may be nil, in which case
+// an admitted prompt turn's Factory dispatch never starts the response
+// bridge (see runResponseBridge in response_bridge.go) and behaves exactly
+// as it did before that collaborator existed.
 func New(
 	logger logging.Logger,
 	chatSessions chatsessions.Service,
 	catalog chatsessions.FactoryTargetCatalogService,
 	factoryTarget factorysessions.TargetExecutionService,
+	eventsService events.Service,
 	resolveHomeDir func() (string, error),
+	responseBridge acp.ResponseBridge,
 ) *Server {
 	return &Server{
 		logger:         logging.EnsureLogger(logger),
 		chatSessions:   chatSessions,
 		catalog:        catalog,
 		factoryTarget:  factoryTarget,
+		events:         eventsService,
 		resolveHomeDir: resolveHomeDir,
+		responseBridge: responseBridge,
 	}
 }
 
@@ -255,12 +315,19 @@ func (s *Server) serveConnection(ctx context.Context, connectionID identity.Conn
 		return writeNotification(safeOut, n)
 	}
 
+	// Attachments are connection-scoped even though prompts execute
+	// concurrently, so every dispatched prompt receives this same safe cache.
+	attachments := &attachmentCache{}
+	promptFlights := &promptFlightRegistry{}
 	var promptGroup taskgroup.Group
-	defer promptGroup.Wait()
+	defer func() {
+		_ = promptGroup.Wait()
+		s.detachAttachments(ctx, attachments)
+	}()
 
 	var readGroup taskgroup.Group
 	readGroup.Go(func() error {
-		return s.readConnectionLines(ctx, scanner, connectionID, writeResponseLocked, notify, &promptGroup)
+		return s.readConnectionLines(ctx, scanner, connectionID, writeResponseLocked, notify, attachments, promptFlights, &promptGroup)
 	})
 
 	select {
@@ -306,6 +373,8 @@ func (s *Server) readConnectionLines(
 	connectionID identity.ConnectionID,
 	writeResponseLocked func(identity.RequestIdentity, json.RawMessage, *acpsdk.RequestError) error,
 	notify promptNotifier,
+	attachments *attachmentCache,
+	promptFlights *promptFlightRegistry,
 	promptGroup *taskgroup.Group,
 ) error {
 	var notificationSeq uint64
@@ -335,7 +404,7 @@ func (s *Server) readConnectionLines(
 		}
 		raw := append(json.RawMessage(nil), line...)
 
-		stop, err := s.dispatchConnectionLine(ctx, connectionID, raw, &notificationSeq, notify, writeResponseLocked, promptGroup)
+		stop, err := s.dispatchConnectionLine(ctx, connectionID, raw, &notificationSeq, notify, attachments, writeResponseLocked, promptFlights, promptGroup)
 		if stop {
 			return err
 		}
@@ -353,10 +422,12 @@ func (s *Server) dispatchConnectionLine(
 	raw json.RawMessage,
 	notificationSeq *uint64,
 	notify promptNotifier,
+	attachments *attachmentCache,
 	writeResponseLocked func(identity.RequestIdentity, json.RawMessage, *acpsdk.RequestError) error,
+	promptFlights *promptFlightRegistry,
 	promptGroup *taskgroup.Group,
 ) (stop bool, err error) {
-	reqCtx := contextWithPromptNotifier(ctx, notify)
+	reqCtx := contextWithAttachmentCache(contextWithPromptNotifier(ctx, notify), attachments)
 	env, decodeErr := envelope.Decode(connectionID, *notificationSeq, raw)
 	if decodeErr != nil {
 		rpcErr, wireID, hasID := protocol.RejectEnvelope(decodeErr)
@@ -382,7 +453,7 @@ func (s *Server) dispatchConnectionLine(
 	}
 
 	if env.Method == acpsdk.AgentMethodSessionPrompt {
-		s.dispatchAsyncSessionPrompt(reqCtx, env, promptGroup, writeResponseLocked)
+		s.dispatchAsyncSessionPrompt(reqCtx, env, promptFlights, promptGroup, writeResponseLocked)
 		return false, nil
 	}
 
@@ -409,11 +480,18 @@ func (s *Server) dispatchConnectionLine(
 func (s *Server) dispatchAsyncSessionPrompt(
 	ctx context.Context,
 	env envelope.Envelope,
+	flights *promptFlightRegistry,
 	group *taskgroup.Group,
 	writeResponseLocked func(identity.RequestIdentity, json.RawMessage, *acpsdk.RequestError) error,
 ) {
+	flight, leader := flights.start(env.Identity)
 	group.Go(func() error {
+		if !leader {
+			<-flight.done
+			return writeResponseLocked(env.Identity, flight.result, flight.rpcErr)
+		}
 		result, rpcErr := s.handleSessionPrompt(ctx, env)
+		flight.finish(result, rpcErr)
 		return writeResponseLocked(env.Identity, result, rpcErr)
 	})
 }
@@ -435,6 +513,10 @@ func (s *Server) dispatchRequest(ctx context.Context, env envelope.Envelope) (js
 		return dispatchInitialize(env.Params)
 	case acpsdk.AgentMethodSessionNew:
 		return s.handleSessionNew(ctx, env)
+	case acpsdk.AgentMethodSessionLoad:
+		return s.handleSessionLoad(ctx, env)
+	case acpsdk.AgentMethodSessionResume:
+		return s.handleSessionResume(ctx, env)
 	case acpsdk.AgentMethodSessionSetConfigOption:
 		return s.handleSessionSetConfigOption(ctx, env)
 	case acpsdk.AgentMethodSessionPrompt:

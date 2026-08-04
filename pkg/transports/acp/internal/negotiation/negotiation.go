@@ -6,6 +6,8 @@ package negotiation
 
 import (
 	acpsdk "github.com/coder/acp-go-sdk"
+
+	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
 )
 
 // SupportedProtocolVersion is the single ACP protocol version this L1 V0
@@ -45,6 +47,7 @@ func Negotiate(req acpsdk.InitializeRequest) (acpsdk.InitializeResponse, error) 
 // just because a client could use them.
 func p0AgentCapabilities() acpsdk.AgentCapabilities {
 	return acpsdk.AgentCapabilities{
+		Meta:        session.AttachmentResumeCapabilityMetadata(),
 		LoadSession: true,
 		SessionCapabilities: acpsdk.SessionCapabilities{
 			Resume: &acpsdk.SessionResumeCapabilities{},

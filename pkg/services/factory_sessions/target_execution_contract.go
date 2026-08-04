@@ -25,6 +25,7 @@ type TargetExecutionService interface {
 	InvokeFactorySession(context.Context, string, InvocationRequest) (InvocationResult, error)
 	Cancel(context.Context, string, ControlRequest) (LifecycleControlResult, error)
 	CloseFactorySession(context.Context, string) error
+	SubscribeFactoryResponseEvents(context.Context, ResponseEventSubscriptionRequest) (*ResponseEventCursor, error)
 }
 
 // Service satisfies TargetExecutionService structurally; this assertion

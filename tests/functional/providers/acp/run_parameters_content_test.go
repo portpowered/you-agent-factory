@@ -89,6 +89,9 @@ type stableResponseEvent struct {
 	ItemID     string `json:"itemId"`
 }
 
+// assertGoldenResponseStream pins the exact response-event order produced by
+// the scripted ACP peer, including REASONING and title-bearing SESSION
+// metadata before the terminal MESSAGE and RUN records.
 func assertGoldenResponseStream(t *testing.T, events []factoryapi.FactoryResponseEvent) {
 	t.Helper()
 	var lines []string

@@ -70,6 +70,8 @@ var servicesSet = wire.NewSet(
 	provideACPServerFactoryTarget,
 	provideACPServerFactoryTargetService,
 	provideACPServerResolveHomeDir,
+	provideChatSessionsResponseBridge,
+	provideACPServerResponseBridge,
 	provideACPServer,
 	provideOperatorConfigDecoder,
 	provideOperatorConfigEncoder,

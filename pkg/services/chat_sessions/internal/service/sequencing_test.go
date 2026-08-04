@@ -190,6 +190,7 @@ func sequenceRequest(sessionID string, sourceSeq events.SourceSequence, parentIt
 		SourceEventID:  events.SourceEventID("event-" + strconv.FormatUint(uint64(sourceSeq), 10)),
 		SchemaID:       "worker.output.v1",
 		Kind:           workers.KindMessage,
+		Phase:          workers.PhaseCompleted,
 		ParentItemID:   parentItemID,
 		Payload:        json.RawMessage(`{"text":"hello"}`),
 	}
@@ -390,6 +391,14 @@ func TestStore_Sequence_InvalidRequestIsRejected(t *testing.T) {
 			wantErr: chatsessions.ErrUnknownEnumValue,
 		},
 		{
+			name: "unknown phase",
+			mutate: func(r chatsessions.SequenceRequest) chatsessions.SequenceRequest {
+				r.Phase = "BOGUS"
+				return r
+			},
+			wantErr: chatsessions.ErrUnknownEnumValue,
+		},
+		{
 			name: "empty payload",
 			mutate: func(r chatsessions.SequenceRequest) chatsessions.SequenceRequest {
 				r.Payload = nil
@@ -449,101 +458,115 @@ func TestStore_Sequence_DuplicateSourceTupleReturnsOriginalIdentity(t *testing.T
 
 // TestStore_Sequence_ContradictoryDuplicateIsRejected table-drives every way a reused
 // source identity tuple can disagree with the originally committed record.
+type contradictoryDuplicateCase struct {
+	name      string
+	mutate    func(chatsessions.SequenceRequest) chatsessions.SequenceRequest
+	wantField string
+}
+
+var contradictoryDuplicateCases = []contradictoryDuplicateCase{
+	{
+		name: "contradictory parent",
+		mutate: func(r chatsessions.SequenceRequest) chatsessions.SequenceRequest {
+			r.ParentItemID = "some-other-parent"
+			return r
+		},
+		wantField: "ParentItemID",
+	},
+	{
+		name: "contradictory kind",
+		mutate: func(r chatsessions.SequenceRequest) chatsessions.SequenceRequest {
+			r.Kind = workers.KindTool
+			return r
+		},
+		wantField: "Kind",
+	},
+	{
+		name: "contradictory phase",
+		mutate: func(r chatsessions.SequenceRequest) chatsessions.SequenceRequest {
+			r.Phase = workers.PhaseStarted
+			return r
+		},
+		wantField: "Phase",
+	},
+	{
+		name: "contradictory schema",
+		mutate: func(r chatsessions.SequenceRequest) chatsessions.SequenceRequest {
+			r.SchemaID = "worker.output.v2"
+			return r
+		},
+		wantField: "SchemaID",
+	},
+	{
+		name: "contradictory payload",
+		mutate: func(r chatsessions.SequenceRequest) chatsessions.SequenceRequest {
+			r.Payload = json.RawMessage(`{"text":"goodbye"}`)
+			return r
+		},
+		wantField: "Payload",
+	},
+}
+
 func TestStore_Sequence_ContradictoryDuplicateIsRejected(t *testing.T) {
 	ctx := context.Background()
-	topic := func(session chatsessions.Session) events.Topic { return chatsessions.EventsTopic(session.ID) }
+	for _, tt := range contradictoryDuplicateCases {
+		t.Run(tt.name, func(t *testing.T) {
+			runContradictoryDuplicateCase(t, ctx, tt)
+		})
+	}
+}
 
-	tests := []struct {
-		name      string
-		mutate    func(chatsessions.SequenceRequest) chatsessions.SequenceRequest
-		wantField string
-	}{
-		{
-			name: "contradictory parent",
-			mutate: func(r chatsessions.SequenceRequest) chatsessions.SequenceRequest {
-				r.ParentItemID = "some-other-parent"
-				return r
-			},
-			wantField: "ParentItemID",
-		},
-		{
-			name: "contradictory kind",
-			mutate: func(r chatsessions.SequenceRequest) chatsessions.SequenceRequest {
-				r.Kind = workers.KindTool
-				return r
-			},
-			wantField: "Kind",
-		},
-		{
-			name: "contradictory schema",
-			mutate: func(r chatsessions.SequenceRequest) chatsessions.SequenceRequest {
-				r.SchemaID = "worker.output.v2"
-				return r
-			},
-			wantField: "SchemaID",
-		},
-		{
-			name: "contradictory payload",
-			mutate: func(r chatsessions.SequenceRequest) chatsessions.SequenceRequest {
-				r.Payload = json.RawMessage(`{"text":"goodbye"}`)
-				return r
-			},
-			wantField: "Payload",
-		},
+func runContradictoryDuplicateCase(t *testing.T, ctx context.Context, tt contradictoryDuplicateCase) {
+	t.Helper()
+	topic := func(session chatsessions.Session) events.Topic { return chatsessions.EventsTopic(session.ID) }
+	store, session, appender := newSequencingTestSession(t)
+
+	original := sequenceRequest(session.ID, 1, "")
+	first, err := store.Sequence(ctx, original)
+	if err != nil {
+		t.Fatalf("Sequence (first): %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			store, session, appender := newSequencingTestSession(t)
+	retry := tt.mutate(sequenceRequest(session.ID, 1, ""))
+	if tt.wantField == "ParentItemID" {
+		// The contradictory ParentItemID must itself already name a
+		// sequenced item in this session, otherwise the earlier
+		// parent-lookup check (a distinct rejection path) would fire
+		// instead of the contradiction check this test targets.
+		altParent, err := store.Sequence(ctx, sequenceRequest(session.ID, 2, ""))
+		if err != nil {
+			t.Fatalf("Sequence (alternate parent): %v", err)
+		}
+		retry.ParentItemID = altParent.ItemID
+	}
 
-			original := sequenceRequest(session.ID, 1, "")
-			first, err := store.Sequence(ctx, original)
-			if err != nil {
-				t.Fatalf("Sequence (first): %v", err)
-			}
+	_, err = store.Sequence(ctx, retry)
+	var conflict *chatsessions.SequencedIdentityConflictError
+	if !errors.As(err, &conflict) {
+		t.Fatalf("Sequence(%s): got %v, want *SequencedIdentityConflictError", tt.name, err)
+	}
+	if !errors.Is(err, chatsessions.ErrSequencedIdentityContradiction) {
+		t.Fatalf("Sequence(%s): got %v, want errors.Is ErrSequencedIdentityContradiction", tt.name, err)
+	}
+	if conflict.Field != tt.wantField {
+		t.Fatalf("conflict.Field = %q, want %q", conflict.Field, tt.wantField)
+	}
 
-			retry := tt.mutate(sequenceRequest(session.ID, 1, ""))
-			if tt.wantField == "ParentItemID" {
-				// The contradictory ParentItemID must itself already name a
-				// sequenced item in this session, otherwise the earlier
-				// parent-lookup check (a distinct rejection path) would fire
-				// instead of the contradiction check this test targets.
-				altParent, err := store.Sequence(ctx, sequenceRequest(session.ID, 2, ""))
-				if err != nil {
-					t.Fatalf("Sequence (alternate parent): %v", err)
-				}
-				retry.ParentItemID = altParent.ItemID
-			}
-
-			_, err = store.Sequence(ctx, retry)
-			var conflict *chatsessions.SequencedIdentityConflictError
-			if !errors.As(err, &conflict) {
-				t.Fatalf("Sequence(%s): got %v, want *SequencedIdentityConflictError", tt.name, err)
-			}
-			if !errors.Is(err, chatsessions.ErrSequencedIdentityContradiction) {
-				t.Fatalf("Sequence(%s): got %v, want errors.Is ErrSequencedIdentityContradiction", tt.name, err)
-			}
-			if conflict.Field != tt.wantField {
-				t.Fatalf("conflict.Field = %q, want %q", conflict.Field, tt.wantField)
-			}
-
-			if got := appender.commitCount(topic(session)); got < 1 {
-				t.Fatalf("commit count = %d, want at least 1 (original record untouched)", got)
-			}
-			storedRecord := appender.topics[topic(session)].identity[events.AppendIdentity{
-				SourceType:     original.SourceType,
-				SourceID:       original.SourceID,
-				SourceSequence: original.SourceSequence,
-				SourceEventID:  original.SourceEventID,
-			}]
-			var storedItem chatsessions.SequencedItem
-			if err := json.Unmarshal(storedRecord.Payload, &storedItem); err != nil {
-				t.Fatalf("unmarshal stored envelope: %v", err)
-			}
-			if storedItem.ItemID != first.ItemID {
-				t.Fatalf("stored envelope ItemID = %q, want original %q (not replaced)", storedItem.ItemID, first.ItemID)
-			}
-		})
+	if got := appender.commitCount(topic(session)); got < 1 {
+		t.Fatalf("commit count = %d, want at least 1 (original record untouched)", got)
+	}
+	storedRecord := appender.topics[topic(session)].identity[events.AppendIdentity{
+		SourceType:     original.SourceType,
+		SourceID:       original.SourceID,
+		SourceSequence: original.SourceSequence,
+		SourceEventID:  original.SourceEventID,
+	}]
+	var storedItem chatsessions.SequencedItem
+	if err := json.Unmarshal(storedRecord.Payload, &storedItem); err != nil {
+		t.Fatalf("unmarshal stored envelope: %v", err)
+	}
+	if storedItem.ItemID != first.ItemID {
+		t.Fatalf("stored envelope ItemID = %q, want original %q (not replaced)", storedItem.ItemID, first.ItemID)
 	}
 }
 

@@ -7,8 +7,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
 // stubEventsAppender is a minimal EventsAppender double for tests that
@@ -127,5 +131,56 @@ func TestNewService_InstancesShareNoState(t *testing.T) {
 	}
 	if _, err := second.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: created.Session.ID}); !errors.Is(err, chatsessions.ErrNotFound) {
 		t.Fatalf("second Service observed the first Service's session: got %v, want ErrNotFound", err)
+	}
+}
+
+// stubOperatorSettingsService is a minimal Operator Settings root double.
+// NewFactoryTargetCatalogService is a pure delegating constructor that calls
+// no method on either injected root before returning, so a structurally
+// satisfying zero value is enough to prove the delegation.
+type stubOperatorSettingsService struct {
+	operatorsettings.Service
+}
+
+// stubFactoryDefinitionsService is a minimal Factory Definitions root
+// double, for the same reason as stubOperatorSettingsService.
+type stubFactoryDefinitionsService struct {
+	factorydefinitions.Service
+}
+
+func (stubFactoryDefinitionsService) ResolveCurrentFactoryLocation(
+	context.Context,
+	factorydefinitions.ResolveCurrentFactoryLocationRequest,
+) (factorydefinitions.ResolveCurrentFactoryLocationResult, error) {
+	return factorydefinitions.ResolveCurrentFactoryLocationResult{}, nil
+}
+
+// TestNewFactoryTargetCatalogService_ConstructsFromInjectedRoots proves this
+// package's NewFactoryTargetCatalogService is the thin delegation its doc
+// comment claims: it forwards the injected Operator Settings and Factory
+// Definitions roots straight through to internalservice.New and returns a
+// working, non-nil catalog service.
+func TestNewFactoryTargetCatalogService_ConstructsFromInjectedRoots(t *testing.T) {
+	service, err := NewFactoryTargetCatalogService(stubOperatorSettingsService{}, stubFactoryDefinitionsService{}, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("NewFactoryTargetCatalogService: unexpected error: %v", err)
+	}
+	if service == nil {
+		t.Fatal("NewFactoryTargetCatalogService returned a nil service with a nil error")
+	}
+}
+
+// stubResponseBridgeSequencer is structurally sufficient because bridge
+// construction stores, but does not invoke, its injected collaborator.
+type stubResponseBridgeSequencer struct{ chatsessions.Service }
+
+type stubResponseBridgeFactoryTarget struct {
+	factorysessions.TargetExecutionService
+}
+
+func TestNewResponseBridgeConstructsFromInjectedSequencer(t *testing.T) {
+	bridge := NewResponseBridge(stubResponseBridgeSequencer{}, stubResponseBridgeFactoryTarget{}, logging.NoopLogger{})
+	if bridge == nil {
+		t.Fatal("NewResponseBridge returned nil")
 	}
 }

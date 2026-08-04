@@ -485,7 +485,12 @@ func semanticProgress(fragment responsestream.Event) (responseevents.Kind, respo
 	case "run":
 		return responseevents.KindRun, phase, responseevents.RunPayload{Status: strings.ToLower(string(phase))}
 	case "session":
-		return responseevents.KindSession, phase, responseevents.SessionPayload{Status: strings.ToLower(string(phase))}
+		payload := responseevents.SessionPayload{Status: strings.ToLower(string(phase))}
+		if phase == responseevents.PhaseUpdated && strings.EqualFold(metadata["title_present"], "true") {
+			title := fragment.Payload
+			payload.Title = &title
+		}
+		return responseevents.KindSession, phase, payload
 	case "message":
 		if phase == responseevents.PhaseDelta {
 			return responseevents.KindMessage, phase, responseevents.MessageDeltaPayload{ContentBlockIndex: 0, ContentBlockKind: responseevents.ContentBlockText, TextDelta: fragment.Payload}

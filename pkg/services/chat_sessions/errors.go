@@ -84,6 +84,11 @@ var (
 	// position and the requested one that Events retention has since
 	// evicted, so the attachment cannot have genuinely observed it.
 	ErrAttachmentRetentionGap = errors.New("chat sessions: requested attachment position spans an evicted retention gap")
+	// ErrAmbiguousAttachmentResume reports that Attach received an interactive
+	// Resume request without a ResumeAttachmentID while several detached
+	// interactive attachments exist. Choosing one would let a reconnecting
+	// consumer inherit another consumer's delivery cursor.
+	ErrAmbiguousAttachmentResume = errors.New("chat sessions: resume identity is ambiguous across detached attachments")
 	// ErrUncommittedStreamPosition reports that AdvanceStreamHead was asked
 	// to advance StreamHead to an AggregateSequence this session's sequencer
 	// never actually committed for the exact stated (SourceType, SourceID,
@@ -310,6 +315,25 @@ func (e *AttachmentRetentionGapError) Error() string {
 // classify the failure.
 func (e *AttachmentRetentionGapError) Unwrap() error {
 	return ErrAttachmentRetentionGap
+}
+
+// AttachmentResumeAmbiguityError reports that an identity-less interactive
+// resume could match more than one detached Attachment. CandidateCount is a
+// count only: no other consumer's opaque attachment identity is disclosed.
+type AttachmentResumeAmbiguityError struct {
+	SessionID      string
+	CandidateCount int
+}
+
+func (e *AttachmentResumeAmbiguityError) Error() string {
+	return fmt.Sprintf("chat sessions: session %q has %d detached interactive attachments: %v",
+		e.SessionID, e.CandidateCount, ErrAmbiguousAttachmentResume)
+}
+
+// Unwrap exposes ErrAmbiguousAttachmentResume so callers can reject an
+// ambiguous reconnect without parsing error text.
+func (e *AttachmentResumeAmbiguityError) Unwrap() error {
+	return ErrAmbiguousAttachmentResume
 }
 
 // UncommittedStreamPositionError reports that AdvanceStreamHead rejected a
