@@ -155,6 +155,21 @@ type Service interface {
 	// second committed record. It reports *NotFoundError when SessionID does
 	// not identify an existing session.
 	Sequence(ctx context.Context, req SequenceRequest) (SequenceResult, error)
+
+	// AdvanceStreamHead advances SessionID's StreamHead to AggregateSequence
+	// -- the position a prior accepted Sequence call committed -- under an
+	// optimistic-version guard. When StreamHead already stands at or beyond
+	// AggregateSequence, the call is an idempotent no-op: it reports
+	// AdvanceStreamHeadOutcomeAlreadyCurrent and leaves the session,
+	// including its Version, byte-for-byte unchanged, regardless of
+	// ExpectedVersion. Otherwise it reports *ConflictError when
+	// ExpectedVersion no longer matches the session's current version and
+	// exposes no partially committed head update: StreamHead, Version, and
+	// UpdatedAt advance together or not at all. A successful advancement
+	// never changes SelectedTarget, TargetEpisode, ActiveTurnID, or any
+	// attachment, control, or episode state. It reports *NotFoundError when
+	// SessionID does not identify an existing session.
+	AdvanceStreamHead(ctx context.Context, req AdvanceStreamHeadRequest) (AdvanceStreamHeadResult, error)
 }
 
 // CreateSessionRequest carries the caller identity, initial target, and

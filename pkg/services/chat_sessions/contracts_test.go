@@ -143,6 +143,21 @@ func (f *fakeService) Sequence(_ context.Context, req chatsessions.SequenceReque
 	}, nil
 }
 
+// AdvanceStreamHead is a minimal fake: it advances StreamHead unconditionally
+// when it is behind AggregateSequence, since none of this fake's own tests
+// exercise version conflicts.
+func (f *fakeService) AdvanceStreamHead(_ context.Context, req chatsessions.AdvanceStreamHeadRequest) (chatsessions.AdvanceStreamHeadResult, error) {
+	if req.SessionID != f.session.ID {
+		return chatsessions.AdvanceStreamHeadResult{}, &chatsessions.NotFoundError{Value: "Session", ID: req.SessionID}
+	}
+	if f.session.StreamHead >= uint64(req.AggregateSequence) {
+		return chatsessions.AdvanceStreamHeadResult{Session: f.session, Outcome: chatsessions.AdvanceStreamHeadOutcomeAlreadyCurrent}, nil
+	}
+	f.session.StreamHead = uint64(req.AggregateSequence)
+	f.session.Version++
+	return chatsessions.AdvanceStreamHeadResult{Session: f.session, Outcome: chatsessions.AdvanceStreamHeadOutcomeAdvanced}, nil
+}
+
 func (f *fakeService) Detach(_ context.Context, req chatsessions.DetachRequest) (chatsessions.DetachResult, error) {
 	if req.AttachmentID != "attachment-1" {
 		return chatsessions.DetachResult{}, &chatsessions.NotFoundError{Value: "Attachment", ID: req.AttachmentID}

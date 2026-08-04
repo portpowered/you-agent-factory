@@ -242,6 +242,10 @@ func (f *fakeChatSessionsService) Sequence(context.Context, chatsessions.Sequenc
 	return chatsessions.SequenceResult{}, errors.New("fakeChatSessionsService: Sequence not implemented")
 }
 
+func (f *fakeChatSessionsService) AdvanceStreamHead(context.Context, chatsessions.AdvanceStreamHeadRequest) (chatsessions.AdvanceStreamHeadResult, error) {
+	return chatsessions.AdvanceStreamHeadResult{}, errors.New("fakeChatSessionsService: AdvanceStreamHead not implemented")
+}
+
 // fakeFactoryTargetCatalogService is a minimal
 // chatsessions.FactoryTargetCatalogService test double.
 type fakeFactoryTargetCatalogService struct {
