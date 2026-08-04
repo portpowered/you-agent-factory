@@ -72,9 +72,7 @@ type InvocationTarget struct {
 // HostedLiveInvocation is the live runtime surface used by hosted CLI invocations.
 type HostedLiveInvocation struct {
 	Sessions Service
-	Invoker  interface {
-		InvokeFactorySession(context.Context, string, InvocationRequest) (interfaces.FactoryInvocationResult, error)
-	}
+	Invoker  InvocationService
 }
 
 // FactoryInvocationOutcome is the detached result of one Factory invocation.

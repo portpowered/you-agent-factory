@@ -10,6 +10,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 type hostedLiveSessionsFake struct {
@@ -215,7 +216,7 @@ func (executionMethodsStub) ListSessions(context.Context, factorysessions.ListSe
 }
 
 type hostedInvokerFake struct {
-	result factorydefinitions.FactoryInvocationResult
+	result factorysessions.InvocationResult
 	err    error
 }
 
@@ -223,9 +224,9 @@ func (fake *hostedInvokerFake) InvokeFactorySession(
 	_ context.Context,
 	sessionID string,
 	_ factorysessions.InvocationRequest,
-) (factorydefinitions.FactoryInvocationResult, error) {
+) (factorysessions.InvocationResult, error) {
 	if sessionID != factorysessions.DefaultSessionID {
-		return factorydefinitions.FactoryInvocationResult{}, factorysessions.ErrSessionNotFound
+		return factorysessions.InvocationResult{}, factorysessions.ErrSessionNotFound
 	}
 	return fake.result, fake.err
 }
@@ -261,8 +262,17 @@ func TestInvokeFactoryUsesHostedLiveRuntimeForPetriFactory(t *testing.T) {
 			},
 		},
 	}
-	wantResult := factorydefinitions.FactoryInvocationResult{
-		Status: factorydefinitions.InvocationTerminalStatusCompleted,
+	wantResult := factorysessions.InvocationResult{
+		RequestID: "request-1", TraceID: "trace-1",
+		Status: factorysessions.InvocationTerminalStatusCompleted,
+		PrimaryResult: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
+			Text: "completed response",
+		}},
+		SessionID: factorysessions.DefaultSessionID,
+		WorkID:    "work-1",
+		WorkName:  "task",
+		WorkState: "completed",
 	}
 	sessions := newHostedLiveSessionsFake(petriProjection)
 	invoker := &hostedInvokerFake{result: wantResult}
@@ -282,8 +292,13 @@ func TestInvokeFactoryUsesHostedLiveRuntimeForPetriFactory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InvokeFactory() error = %v", err)
 	}
-	if outcome.Result.Status != wantResult.Status {
-		t.Fatalf("result status = %q, want %q", outcome.Result.Status, wantResult.Status)
+	if outcome.Result.RequestID != wantResult.RequestID ||
+		outcome.Result.TraceID != wantResult.TraceID ||
+		outcome.Result.Status != factorydefinitions.InvocationTerminalStatus(wantResult.Status) ||
+		outcome.Result.SessionID != wantResult.SessionID ||
+		outcome.Result.WorkID != wantResult.WorkID ||
+		len(outcome.Result.PrimaryResult) != 1 || outcome.Result.PrimaryResult[0].Text != "completed response" {
+		t.Fatalf("result = %#v, want converted owner-published invocation outcome %#v", outcome.Result, wantResult)
 	}
 }
 
@@ -331,8 +346,8 @@ func TestInvokeFactoryHostedLiveRuntimePreservesResultWhenTrailingEventReadFails
 			},
 		},
 	}
-	wantResult := factorydefinitions.FactoryInvocationResult{
-		Status:    factorydefinitions.InvocationTerminalStatusFailed,
+	wantResult := factorysessions.InvocationResult{
+		Status:    factorysessions.InvocationTerminalStatusFailed,
 		ErrorCode: "WORK_REJECTED",
 		Message:   "deterministic worker rejection",
 	}
@@ -357,7 +372,7 @@ func TestInvokeFactoryHostedLiveRuntimePreservesResultWhenTrailingEventReadFails
 	if err != nil {
 		t.Fatalf("InvokeFactory() error = %v, want nil (trailing event read failure must not suppress the determined result)", err)
 	}
-	if outcome.Result.Status != wantResult.Status {
+	if outcome.Result.Status != factorydefinitions.InvocationTerminalStatus(wantResult.Status) {
 		t.Fatalf("result status = %q, want %q", outcome.Result.Status, wantResult.Status)
 	}
 	if outcome.Result.ErrorCode != wantResult.ErrorCode {

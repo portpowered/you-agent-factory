@@ -1,7 +1,6 @@
 package composition
 
 import (
-	"context"
 	"fmt"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -62,28 +61,8 @@ func (binder *HTTPBinder) Bind(
 		Runtime:            NewRuntimeAPI(legacyObservation, definitions),
 		FactoryStatus:      newFactoryStatusAPI(runtime, sessions),
 		Sessions:           NewLiveSessionAPI(liveControl, sessions),
-		Invocation:         NewInvocationAPI(rootInvocationAdapter{root: sessions}),
+		Invocation:         NewInvocationAPI(sessions),
 		FactoryDefinitions: NewFactoryDefinitionAPI(definitions),
 		Durable:            durable,
-	}, nil
-}
-
-type rootInvocationAdapter struct{ root factorysessions.Service }
-
-func (adapter rootInvocationAdapter) InvokeFactorySession(
-	ctx context.Context,
-	sessionID string,
-	request factorysessions.InvocationRequest,
-) (factorydefinitions.FactoryInvocationResult, error) {
-	result, err := adapter.root.InvokeFactorySession(ctx, sessionID, request)
-	if err != nil {
-		return factorydefinitions.FactoryInvocationResult{}, err
-	}
-	return factorydefinitions.FactoryInvocationResult{
-		RequestID: result.RequestID, TraceID: result.TraceID,
-		Status:        factorydefinitions.InvocationTerminalStatus(result.Status),
-		PrimaryResult: result.PrimaryResult, ErrorCode: result.ErrorCode,
-		Message: result.Message, SessionID: result.SessionID, WorkID: result.WorkID,
-		WorkName: result.WorkName, WorkState: result.WorkState,
 	}, nil
 }

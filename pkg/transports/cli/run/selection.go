@@ -7,7 +7,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -29,10 +28,9 @@ type DirectJavaScriptRunOperation interface {
 	Open(context.Context, factorysessions.DirectJavaScriptRunRequest) (factorysessions.DirectJavaScriptApplication, error)
 }
 
-// SessionInvoker is the exact live invocation role consumed by mapping tests.
-type SessionInvoker interface {
-	InvokeFactorySession(context.Context, string, factorysessions.InvocationRequest) (factorydefinitions.FactoryInvocationResult, error)
-}
+// SessionInvoker retains the historical CLI name while using the Factory
+// Sessions-owned one-shot invocation capability directly.
+type SessionInvoker = factorysessions.InvocationService
 
 // SelectionFactory binds one parsed CLI RunConfig to the exact run operations
 // already selected by Wire. It does not construct services or lifecycle state.
