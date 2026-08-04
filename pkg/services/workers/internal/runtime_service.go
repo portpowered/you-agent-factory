@@ -88,19 +88,25 @@ type ownedProviderLifecycles struct {
 	closed     bool
 }
 
-func (owned *ownedProviderLifecycles) Add(service providers.Service) {
+// Add registers service for close-together shutdown and reports whether
+// registration succeeded. It returns false, without registering service, once
+// the sink has already closed -- callers that receive false own service and
+// must release it themselves; the sink will never close a late arrival.
+func (owned *ownedProviderLifecycles) Add(service providers.Service) bool {
 	if owned == nil {
-		return
+		return false
 	}
 	lifecycle, ok := service.(providers.Lifecycle)
 	if !ok {
-		return
+		return true
 	}
 	owned.mu.Lock()
 	defer owned.mu.Unlock()
-	if !owned.closed {
-		owned.lifecycles = append(owned.lifecycles, lifecycle)
+	if owned.closed {
+		return false
 	}
+	owned.lifecycles = append(owned.lifecycles, lifecycle)
+	return true
 }
 
 func (owned *ownedProviderLifecycles) Close(ctx context.Context) error {
