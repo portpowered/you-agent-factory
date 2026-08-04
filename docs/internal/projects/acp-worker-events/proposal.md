@@ -44,8 +44,12 @@ Sessions exists), provider daemon pooling (§4.9), and anything in L2 or L3.
 | `workers.Kind` / `Phase` / `Draft` / `ToolPayload` | existing | vocabulary (lane map §3) |
 
 Where an L2 seal has not landed when a task begins, that task uses a thin
-consumer-owned shim per D4 and registers it as an L2 deletion candidate. L4
-never blocks on L2 completion.
+consumer-owned shim per D4. At the same time it is created, L4 must enter it as
+active in the [canonical ACP consumer-owned shim
+register](../root-consolidation/proposal.md#canonical-acp-consumer-owned-shim-register),
+including its consumer, adapted public provider root or capability, retirement
+owner and exact L2/L3 milestone, and the evidence required to verify its future
+retirement. L4 never blocks on L2 completion.
 
 ## 3. Worker Sessions contract
 
@@ -142,7 +146,9 @@ The boundary is **not** removed in this lane. `workers.Service.Execute` is
 currently dead in production (no `workers.ExecuteRequest` construction exists
 outside the Workers package); whether to finish that cutover or delete it is an
 L2 decision under D5, not an L4 task. L4 targets whichever surface L2 has
-sealed, through a shim if necessary.
+sealed, through a shim registered in the [canonical ACP consumer-owned shim
+register](../root-consolidation/proposal.md#canonical-acp-consumer-owned-shim-register)
+if necessary.
 
 ### 4.3 Cancellation routes through the boundary, not context
 
