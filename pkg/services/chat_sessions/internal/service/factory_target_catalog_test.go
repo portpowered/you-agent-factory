@@ -282,7 +282,7 @@ func (fake *operatorSettingsFake) ResolveACPAgentProfile(path string) (operators
 // supplies a ClientWorkingRoot, since the operation only calls it in that
 // case.
 type factoryDefinitionsFake struct {
-	chatsessionsservice.FactoryDefinitionsCatalogPaths
+	factorydefinitions.CatalogPathsService
 
 	listEffectiveFactories func(context.Context, factorydefinitions.ListEffectiveFactoriesRequest) (factorydefinitions.ListEffectiveFactoriesResult, error)
 	resolveNamedFactory    func(context.Context, factorydefinitions.ResolveNamedFactoryRequest) (factorydefinitions.ResolveNamedFactoryResult, error)

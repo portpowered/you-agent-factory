@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -66,30 +67,6 @@ func ResolveCurrent(
 	return catalogwire.ResolveCurrent(paths, rootDir)
 }
 
-// CatalogPathsService is Factory Definitions' narrow, stateless, read-only
-// capability for available Factory target metadata and named/current Factory
-// location resolution. It intentionally excludes authoring, compilation,
-// validation, snapshot, distribution, runtime, and session operations; peers
-// that need only catalog and path reads depend on this interface instead of
-// the full factorydefinitions.Service root.
-//
-// This capability is published here, at the Wire composition boundary,
-// rather than at the crowded factory_definitions root: the root package
-// already carries pre-existing, deletion-only service-root-interface-count
-// debt (docs/internal/baselines/package-structure-baseline.json), and that
-// baseline is a strict ratchet -- new entries and count increases are
-// rejected outright, so a new root-level bundling interface is not an option
-// here. Peers depend on this type through their own locally declared narrow
-// interface (see pkg/services/chat_sessions/internal/service's
-// FactoryDefinitionsCatalogPaths), which this concrete implementation
-// satisfies structurally without either side needing to import the other's
-// wire subpackage.
-type CatalogPathsService interface {
-	ListEffectiveFactories(context.Context, factorydefinitions.ListEffectiveFactoriesRequest) (factorydefinitions.ListEffectiveFactoriesResult, error)
-	ResolveNamedFactory(context.Context, factorydefinitions.ResolveNamedFactoryRequest) (factorydefinitions.ResolveNamedFactoryResult, error)
-	ResolveCurrentFactoryLocation(context.Context, factorydefinitions.ResolveCurrentFactoryLocationRequest) (factorydefinitions.ResolveCurrentFactoryLocationResult, error)
-}
-
 // NewCatalogPathsService constructs the narrow, read-only Factory
 // Definitions catalog/path capability from the exact already-composed
 // effective-catalog, named-path, and current-directory collaborators used by
@@ -107,7 +84,10 @@ func NewCatalogPathsService(
 	namedPaths factorydefinitions.NamedPathResolver,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
 	logger logging.Logger,
-) (CatalogPathsService, error) {
+) (factorydefinitions.CatalogPathsService, error) {
+	if namedPaths == nil {
+		return nil, fmt.Errorf("named Factory path resolver is required")
+	}
 	resolveNamedFactory := func(
 		ctx context.Context,
 		request factorydefinitions.ResolveNamedFactoryRequest,

@@ -32,3 +32,15 @@ type ResolveCurrentFactoryLocationRequest struct {
 type ResolveCurrentFactoryLocationResult struct {
 	FactoryDir string
 }
+
+// CatalogPathsService is Factory Definitions' narrow, stateless, read-only
+// capability for available Factory target metadata and named/current Factory
+// location resolution. It intentionally excludes authoring, compilation,
+// validation, snapshot, distribution, runtime, and session operations; peers
+// that need only catalog and path reads should depend on this interface
+// instead of the full Service root.
+type CatalogPathsService interface {
+	ListEffectiveFactories(context.Context, ListEffectiveFactoriesRequest) (ListEffectiveFactoriesResult, error)
+	ResolveNamedFactory(context.Context, ResolveNamedFactoryRequest) (ResolveNamedFactoryResult, error)
+	ResolveCurrentFactoryLocation(context.Context, ResolveCurrentFactoryLocationRequest) (ResolveCurrentFactoryLocationResult, error)
+}

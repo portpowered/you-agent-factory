@@ -92,7 +92,7 @@ func TestProvideChatSessionsServiceConstructsAnIndependentServiceDirectly(t *tes
 // catalog/path capability, matching the same fake-collaborator convention
 // used by pkg/services/chat_sessions/internal/service's own unit tests.
 type staticFactoryDefinitionsService struct {
-	factorydefinitionswire.CatalogPathsService
+	factorydefinitions.CatalogPathsService
 
 	mu      sync.Mutex
 	calls   int

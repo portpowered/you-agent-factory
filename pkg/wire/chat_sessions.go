@@ -4,7 +4,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	chatsessionswire "github.com/portpowered/infinite-you/pkg/services/chat_sessions/wire"
-	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
@@ -17,7 +17,7 @@ import (
 // direct constructor parameter.
 func provideChatSessionsFactoryTargetCatalogService(
 	operatorSettings operatorsettings.Service,
-	catalogPaths factorydefinitionswire.CatalogPathsService,
+	catalogPaths factorydefinitions.CatalogPathsService,
 	logger logging.Logger,
 ) (chatsessions.FactoryTargetCatalogService, error) {
 	return chatsessionswire.NewFactoryTargetCatalogService(operatorSettings, catalogPaths, logger)

@@ -379,3 +379,18 @@ func TestCatalogPathsServiceListEffectiveFactoriesForwardsResult(t *testing.T) {
 		t.Fatalf("ListEffectiveFactories result = %+v, want the collaborator's result", got)
 	}
 }
+
+// TestNewCatalogPathsServiceRejectsMissingNamedPathResolver proves the public
+// Wire constructor validates namedPaths itself before capturing it into the
+// resolveNamedFactory closure. A closure value is never nil even when it
+// closes over a nil collaborator, so the internal constructor's own
+// resolveNamedFactory-is-nil check cannot catch a nil namedPaths passed at
+// this boundary; the public constructor must reject it directly.
+func TestNewCatalogPathsServiceRejectsMissingNamedPathResolver(t *testing.T) {
+	t.Parallel()
+
+	_, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, nil, resolveCurrentDirFromPaths(nil), logging.NoopLogger{})
+	if err == nil {
+		t.Fatal("NewCatalogPathsService(nil namedPaths) error = nil, want a validation error")
+	}
+}
