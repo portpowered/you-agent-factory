@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -297,64 +298,114 @@ func NewWorkerExecution(
 	if workService == nil {
 		return nil, nil, fmt.Errorf("Work service is required")
 	}
-	now := clock.Now
-	frozenACPIntegrations := append([]operatorconfig.ACPIntegration(nil), acpIntegrations...)
-	contentMaterializer := work.ContentMaterializeFunc(workService.MaterializeContentURL)
+	fixed := sessionBuildFixedRuntimeInputs{
+		state:                   state,
+		modelService:            modelService,
+		modelsScope:             modelsScope,
+		providerCommandRunner:   providerCommandRunner,
+		scriptCommandRunner:     scriptCommandRunner,
+		progressPublisher:       progressPublisher,
+		ptyAllocator:            ptyAllocator,
+		logger:                  logger,
+		verbose:                 runtimeRequest.Verbose,
+		runnerID:                workerRequest.RunnerID,
+		worktree:                workerRequest.Worktree,
+		skipPermissionsOverride: workerRequest.InvocationSkipPermissionsOverride,
+		providerOverride:        providerOverride,
+		now:                     clock.Now,
+		contentMaterializer:     work.ContentMaterializeFunc(workService.MaterializeContentURL),
+		acpIntegrations:         append([]operatorconfig.ACPIntegration(nil), acpIntegrations...),
+	}
 	base, err := factory(
-		state,
-		modelService,
-		modelsScope,
-		providerCommandRunner,
-		scriptCommandRunner,
-		progressPublisher,
-		ptyAllocator,
-		logger,
-		runtimeRequest.Verbose,
-		workerRequest.RunnerID,
-		workerRequest.Worktree,
-		workerRequest.InvocationSkipPermissionsOverride,
-		providerOverride,
-		now,
-		contentMaterializer,
-		frozenACPIntegrations,
+		fixed.state,
+		fixed.modelService,
+		fixed.modelsScope,
+		fixed.providerCommandRunner,
+		fixed.scriptCommandRunner,
+		fixed.progressPublisher,
+		fixed.ptyAllocator,
+		fixed.logger,
+		fixed.verbose,
+		fixed.runnerID,
+		fixed.worktree,
+		fixed.skipPermissionsOverride,
+		fixed.providerOverride,
+		fixed.now,
+		fixed.contentMaterializer,
+		fixed.acpIntegrations,
 	)
 	if err != nil {
 		return nil, nil, err
 	}
-	sessionBuildFactory := workers.SessionBuildFactory(func(
+	return base, newSessionBuildFactory(fixed, factory, registerSessionBuildRuntime), nil
+}
+
+// sessionBuildFixedRuntimeInputs carries the resolved construction inputs a
+// SessionBuildFactory closure reuses, unchanged, for every later Factory
+// Session build through the same canonical Workers wire construction
+// boundary -- the exact values NewWorkerExecution itself resolved, not
+// values read back off an already-built RuntimeService.
+type sessionBuildFixedRuntimeInputs struct {
+	state                   roles.CurrentRuntimeResolver
+	modelService            models.Service
+	modelsScope             models.RuntimeScopeRef
+	providerCommandRunner   workers.CommandRunner
+	scriptCommandRunner     workers.CommandRunner
+	progressPublisher       workers.ProgressPublisher
+	ptyAllocator            workers.PTYAllocator
+	logger                  *zap.Logger
+	verbose                 bool
+	runnerID                string
+	worktree                string
+	skipPermissionsOverride *bool
+	providerOverride        workers.Provider
+	now                     func() time.Time
+	contentMaterializer     work.ContentMaterializer
+	acpIntegrations         []operatorconfig.ACPIntegration
+}
+
+// newSessionBuildFactory returns the SessionBuildFactory closure
+// NewWorkerExecution hands to its caller. A nil per-build argument preserves
+// the matching fixed input instead of falling back to a zero value.
+func newSessionBuildFactory(
+	fixed sessionBuildFixedRuntimeInputs,
+	factory WorkersRuntimeFactory,
+	registerSessionBuildRuntime func(workers.RuntimeService) bool,
+) workers.SessionBuildFactory {
+	return func(
 		buildProviderCommandRunner workers.CommandRunner,
 		buildScriptCommandRunner workers.CommandRunner,
 		buildProgressPublisher workers.ProgressPublisher,
 	) (workers.RuntimeService, error) {
 		resolvedProviderCommandRunner := buildProviderCommandRunner
 		if resolvedProviderCommandRunner == nil {
-			resolvedProviderCommandRunner = providerCommandRunner
+			resolvedProviderCommandRunner = fixed.providerCommandRunner
 		}
 		resolvedScriptCommandRunner := buildScriptCommandRunner
 		if resolvedScriptCommandRunner == nil {
-			resolvedScriptCommandRunner = scriptCommandRunner
+			resolvedScriptCommandRunner = fixed.scriptCommandRunner
 		}
 		resolvedProgressPublisher := buildProgressPublisher
 		if resolvedProgressPublisher == nil {
-			resolvedProgressPublisher = progressPublisher
+			resolvedProgressPublisher = fixed.progressPublisher
 		}
 		built, err := factory(
-			state,
-			modelService,
-			modelsScope,
+			fixed.state,
+			fixed.modelService,
+			fixed.modelsScope,
 			resolvedProviderCommandRunner,
 			resolvedScriptCommandRunner,
 			resolvedProgressPublisher,
-			ptyAllocator,
-			logger,
-			runtimeRequest.Verbose,
-			workerRequest.RunnerID,
-			workerRequest.Worktree,
-			workerRequest.InvocationSkipPermissionsOverride,
-			providerOverride,
-			now,
-			contentMaterializer,
-			frozenACPIntegrations,
+			fixed.ptyAllocator,
+			fixed.logger,
+			fixed.verbose,
+			fixed.runnerID,
+			fixed.worktree,
+			fixed.skipPermissionsOverride,
+			fixed.providerOverride,
+			fixed.now,
+			fixed.contentMaterializer,
+			fixed.acpIntegrations,
 		)
 		if err != nil {
 			return nil, err
@@ -367,8 +418,7 @@ func NewWorkerExecution(
 			)
 		}
 		return built, nil
-	})
-	return base, sessionBuildFactory, nil
+	}
 }
 
 func resolveDefinitionPath(

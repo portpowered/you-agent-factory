@@ -87,6 +87,19 @@ func TestRootBuildProcessRoutesProviderAndScriptWorkThroughInjectedRunnerInstanc
 	})
 	scriptRunner := support.NewRecordingCommandRunner(runnerIdentityScriptOutput)
 
+	// RunFactoryToCompletionWithEdgesAndResponseEvents waits for BOTH the
+	// provider-backed and script-backed dispatches through
+	// support.WaitForSessionTerminalStatus, a short HTTP polling loop. This
+	// scenario cannot substitute a single deterministic edge/event wait for
+	// that readiness signal: the injected runner CallCount()/dispatch-output
+	// observations below prove a runner was invoked, not that the resulting
+	// terminal Factory Event and public Work projection have been recorded for
+	// BOTH of two independently scheduled workstations, and the captured
+	// response-event stream's own terminal marker
+	// (support.waitForTerminalResponseEvent) only observes the FIRST terminal
+	// RUN/ERROR event, not the second, independent script dispatch. Polling
+	// the public status projection is this harness's only existing
+	// cross-dispatch completion signal.
 	_, listed, factoryEvents, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
 		t,
 		dir,
@@ -126,7 +139,9 @@ func TestRootBuildProcessRoutesProviderAndScriptWorkThroughInjectedRunnerInstanc
 	}
 
 	assertRunnerIdentityScriptDispatchOutput(t, factoryEvents, runnerIdentityScriptOutput)
-	assertRunnerIdentityResponseEventsIncludeProgress(t, responseEvents)
+	assertRunnerIdentityProviderResponseEventSequence(t, responseEvents)
+	assertRunnerIdentityDispatchSequence(t, factoryEvents, listed, "provider-task", factoryapi.WorkOutcomeAccepted)
+	assertRunnerIdentityDispatchSequence(t, factoryEvents, listed, "script-task", factoryapi.WorkOutcomeAccepted)
 }
 
 // TestRootBuildProcessRunnerFailureRoutesToFailedDispatchThroughInjectedInstance
@@ -161,6 +176,12 @@ func TestRootBuildProcessRunnerFailureRoutesToFailedDispatchThroughInjectedInsta
 		exitCode: 1,
 	}
 
+	// See the identical justification comment in
+	// TestRootBuildProcessRoutesProviderAndScriptWorkThroughInjectedRunnerInstances:
+	// this scenario also has two independently scheduled dispatches, so the
+	// public status projection polled by
+	// RunFactoryToCompletionWithEdgesAndResponseEvents remains the only
+	// existing cross-dispatch completion signal available to this harness.
 	_, listed, factoryEvents, _ := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
 		t,
 		dir,
@@ -200,6 +221,8 @@ func TestRootBuildProcessRunnerFailureRoutesToFailedDispatchThroughInjectedInsta
 	}
 
 	assertRunnerIdentityFailedDispatchCount(t, factoryEvents, 2)
+	assertRunnerIdentityDispatchSequence(t, factoryEvents, listed, "provider-task", factoryapi.WorkOutcomeFailed)
+	assertRunnerIdentityDispatchSequence(t, factoryEvents, listed, "script-task", factoryapi.WorkOutcomeFailed)
 }
 
 // runnerIdentityFailingScriptCommandRunner is a minimal script-worker
@@ -346,20 +369,169 @@ func assertRunnerIdentityScriptDispatchOutput(
 	t.Fatalf("Factory Event history has no dispatch response with script-tagged output %q", want)
 }
 
-func assertRunnerIdentityResponseEventsIncludeProgress(
+// runnerIdentityExpectedNativeStreamEvents is the exact, ordered kind/phase
+// sequence the codex/success golden fixture (loadRunnerIdentityCodexGoldenCase)
+// produces from its single native provider stream: run.started, then the one
+// MCP tool call's started/completed pair, then run.completed, then the final
+// message snapshot. These five events all derive from sequential records in
+// one native stream and are observed in this exact order across repeated runs.
+var runnerIdentityExpectedNativeStreamEvents = []runnerIdentityKindPhase{
+	{Kind: factoryapi.FactoryResponseEventKindRun, Phase: factoryapi.FactoryResponseEventPhaseStarted},
+	{Kind: factoryapi.FactoryResponseEventKindTool, Phase: factoryapi.FactoryResponseEventPhaseStarted},
+	{Kind: factoryapi.FactoryResponseEventKindTool, Phase: factoryapi.FactoryResponseEventPhaseCompleted},
+	{Kind: factoryapi.FactoryResponseEventKindRun, Phase: factoryapi.FactoryResponseEventPhaseCompleted},
+	{Kind: factoryapi.FactoryResponseEventKindMessage, Phase: factoryapi.FactoryResponseEventPhaseCompleted},
+}
+
+type runnerIdentityKindPhase struct {
+	Kind  factoryapi.FactoryResponseEventKind
+	Phase factoryapi.FactoryResponseEventPhase
+}
+
+// assertRunnerIdentityProviderResponseEventSequence proves both exactly-once
+// progress delivery and the relevant ordered response-event sequence for the
+// provider dispatch. The dispatch's own generic "work started" PROGRESS
+// marker is published from the Factory Session progress publisher
+// independently of the provider's native stream fragments, so its position
+// relative to the native-stream events is not itself ordered by any public
+// contract -- repeated runs of this exact scenario observe it at every
+// position from first to last. Its COUNT (exactly one) is what proves
+// exactly-once delivery; the five native-stream events (which share one
+// ordered source) are asserted in their exact relative sequence with the
+// PROGRESS marker filtered out.
+func assertRunnerIdentityProviderResponseEventSequence(
 	t *testing.T,
 	events []factoryapi.FactoryResponseEvent,
 ) {
 	t.Helper()
 
+	if got, want := len(events), len(runnerIdentityExpectedNativeStreamEvents)+1; got != want {
+		t.Fatalf("captured Response Events = %#v, want exactly %d events (got %d)", events, want, got)
+	}
+
+	progressCount := 0
+	nativeStream := make([]runnerIdentityKindPhase, 0, len(runnerIdentityExpectedNativeStreamEvents))
 	for _, event := range events {
 		if event.Kind == factoryapi.FactoryResponseEventKindProgress {
-			return
+			progressCount++
+			if event.Phase != factoryapi.FactoryResponseEventPhaseUpdated {
+				t.Fatalf("PROGRESS response event phase = %q, want %q", event.Phase, factoryapi.FactoryResponseEventPhaseUpdated)
+			}
+			continue
+		}
+		nativeStream = append(nativeStream, runnerIdentityKindPhase{Kind: event.Kind, Phase: event.Phase})
+	}
+	if progressCount != 1 {
+		t.Fatalf(
+			"captured Response Events = %#v, want exactly 1 PROGRESS event delivered through "+
+				"the session progress publisher supplied to this Workers construction, got %d",
+			events,
+			progressCount,
+		)
+	}
+	if len(nativeStream) != len(runnerIdentityExpectedNativeStreamEvents) {
+		t.Fatalf(
+			"non-PROGRESS Response Events = %#v, want exactly %d native-stream events",
+			nativeStream,
+			len(runnerIdentityExpectedNativeStreamEvents),
+		)
+	}
+	for i, want := range runnerIdentityExpectedNativeStreamEvents {
+		if nativeStream[i] != want {
+			t.Fatalf(
+				"non-PROGRESS Response Events at ordered index %d = %+v, want %+v (full ordered sequence = %#v)",
+				i,
+				nativeStream[i],
+				want,
+				events,
+			)
 		}
 	}
-	t.Fatalf(
-		"captured Response Events = %#v, want at least one PROGRESS event delivered through "+
-			"the session progress publisher supplied to this Workers construction",
-		events,
-	)
+}
+
+// assertRunnerIdentityDispatchSequence proves the relevant terminal dispatch
+// sequence for one work type: the DISPATCH_REQUEST Factory Event for its
+// dispatch precedes the matching DISPATCH_RESPONSE in the canonical event
+// ledger (not merely that a terminal outcome was eventually counted), and
+// that response carries the expected outcome.
+func assertRunnerIdentityDispatchSequence(
+	t *testing.T,
+	factoryEvents []factoryapi.FactoryEvent,
+	listed factoryapi.ListWorkResponse,
+	workType string,
+	wantOutcome factoryapi.WorkOutcome,
+) {
+	t.Helper()
+
+	workID := runnerIdentityWorkIDForType(t, listed, workType)
+
+	var dispatchID string
+	for _, observation := range support.ObserveDispatchEvents(t, factoryEvents) {
+		if support.DispatchObservationIncludesWork(observation, workID) {
+			dispatchID = observation.DispatchID
+			break
+		}
+	}
+	if dispatchID == "" {
+		t.Fatalf("%s: no dispatch observation includes work %q", workType, workID)
+	}
+
+	requestIndex, responseIndex := -1, -1
+	var responseOutcome factoryapi.WorkOutcome
+	for i, event := range factoryEvents {
+		if event.Context.DispatchId == nil || *event.Context.DispatchId != dispatchID {
+			continue
+		}
+		switch event.Type {
+		case factoryapi.FactoryEventTypeDispatchRequest:
+			if requestIndex == -1 {
+				requestIndex = i
+			}
+		case factoryapi.FactoryEventTypeDispatchResponse:
+			if responseIndex == -1 {
+				responseIndex = i
+				response, err := event.Payload.AsDispatchResponseEventPayload()
+				if err != nil {
+					t.Fatalf("%s: decode DISPATCH_RESPONSE: %v", workType, err)
+				}
+				responseOutcome = response.Outcome
+			}
+		}
+	}
+	if requestIndex == -1 || responseIndex == -1 {
+		t.Fatalf(
+			"%s: dispatch %q missing DISPATCH_REQUEST (index %d) or DISPATCH_RESPONSE (index %d) event",
+			workType,
+			dispatchID,
+			requestIndex,
+			responseIndex,
+		)
+	}
+	if requestIndex >= responseIndex {
+		t.Fatalf(
+			"%s: DISPATCH_REQUEST at Factory Event index %d did not precede DISPATCH_RESPONSE at index %d",
+			workType,
+			requestIndex,
+			responseIndex,
+		)
+	}
+	if responseOutcome != wantOutcome {
+		t.Fatalf("%s: dispatch outcome = %q, want %q", workType, responseOutcome, wantOutcome)
+	}
+}
+
+func runnerIdentityWorkIDForType(
+	t *testing.T,
+	listed factoryapi.ListWorkResponse,
+	workType string,
+) string {
+	t.Helper()
+
+	for _, item := range listed.Results {
+		if item.WorkTypeName != nil && *item.WorkTypeName == workType && item.WorkId != nil {
+			return *item.WorkId
+		}
+	}
+	t.Fatalf("no listed Work item found for work type %q", workType)
+	return ""
 }
