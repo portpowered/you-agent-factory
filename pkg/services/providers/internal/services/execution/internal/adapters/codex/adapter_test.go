@@ -51,19 +51,31 @@ func TestCodexRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {
 	})
 	root := newCodexRoot(t, effect)
 
-	result, err := root.Execute(t.Context(), request)
+	attempt := request
+	attempt.ResumeSession = nil
+	continued, err := root.Continue(t.Context(), providers.ContinueRequest{
+		Reference: *request.ResumeSession,
+		Attempt:   attempt,
+	})
 	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
+		t.Fatalf("Continue() error = %v", err)
 	}
+	if continued.Outcome != providers.ContinuationOutcomeResumed {
+		t.Fatalf("Continue().Outcome = %q, want resumed", continued.Outcome)
+	}
+	result := continued.Result
 	assertCodexSuccessResult(t, result, received, request)
 
 	result.SessionRef.ID = "caller-mutated"
 	result.Diagnostics.Progress[2].Metadata["caller"] = "mutated"
-	second, err := root.Execute(t.Context(), request)
+	secondContinued, err := root.Continue(t.Context(), providers.ContinueRequest{
+		Reference: *request.ResumeSession,
+		Attempt:   attempt,
+	})
 	if err != nil {
-		t.Fatalf("second Execute() error = %v", err)
+		t.Fatalf("second Continue() error = %v", err)
 	}
-	assertRepeatedCodexResultDetached(t, second)
+	assertRepeatedCodexResultDetached(t, secondContinued.Result)
 }
 
 func assertCodexSuccessResult(

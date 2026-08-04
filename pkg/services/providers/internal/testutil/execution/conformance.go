@@ -122,7 +122,7 @@ func runDetachedSuccess(t *testing.T, subject Subject) {
 	request := conformanceRequest(provider)
 	wantRequest := request.Clone()
 
-	result, err := root.Execute(t.Context(), request)
+	result, err := executeConformance(t, root, t.Context(), request)
 	if err != nil {
 		t.Fatalf("Execute(success) error = %v", err)
 	}
@@ -134,7 +134,7 @@ func runDetachedSuccess(t *testing.T, subject Subject) {
 
 	result.SessionRef.ID = "caller-mutated"
 	result.Diagnostics.Metadata["safe"] = "caller-mutated"
-	later, err := root.Execute(t.Context(), conformanceRequest(provider))
+	later, err := executeConformance(t, root, t.Context(), conformanceRequest(provider))
 	if err != nil {
 		t.Fatalf("second Execute(success) error = %v", err)
 	}
@@ -149,7 +149,7 @@ func runSessionlessSuccess(t *testing.T, subject Subject) {
 		Result: successResult(provider, false, nil),
 	})
 	request := conformanceRequest(provider)
-	result, err := root.Execute(t.Context(), request)
+	result, err := executeConformance(t, root, t.Context(), request)
 	if err != nil {
 		t.Fatalf("Execute(sessionless success) error = %v", err)
 	}
@@ -175,7 +175,7 @@ func runProgressSuccess(t *testing.T, subject Subject) {
 		Result: successResult(provider, true, progress),
 	})
 	request := conformanceRequest(provider)
-	result, err := root.Execute(t.Context(), request)
+	result, err := executeConformance(t, root, t.Context(), request)
 	if err != nil {
 		t.Fatalf("Execute(progress success) error = %v", err)
 	}
@@ -212,7 +212,7 @@ func runDeclaredFailure(t *testing.T, subject Subject) {
 	adapter, root := newSubjectRoot(t, subject, Plan{
 		Failure: nativeFailure,
 	})
-	result, err := root.Execute(t.Context(), request)
+	result, err := executeConformance(t, root, t.Context(), request)
 	failure := assertFailure(
 		t,
 		result,
@@ -246,7 +246,7 @@ func runParseFailure(t *testing.T, subject Subject) {
 			FinalParseError: errors.New("raw native parse payload"),
 		},
 	})
-	result, err := root.Execute(t.Context(), request)
+	result, err := executeConformance(t, root, t.Context(), request)
 	failure := assertFailure(
 		t,
 		result,
@@ -282,7 +282,7 @@ func runContextFailure(t *testing.T, subject Subject, deadline bool) {
 	outcome := make(chan executeOutcome, 1)
 	wantRequest := request.Clone()
 	go func() {
-		result, err := root.Execute(ctx, request)
+		result, err := executeConformance(t, root, ctx, request)
 		outcome <- executeOutcome{result: result, err: err}
 	}()
 	awaitStarted(t, adapter.Started)
@@ -316,7 +316,7 @@ func runPreTerminatedContext(t *testing.T, subject Subject, deadline bool) {
 	cancel()
 
 	request := conformanceRequest(provider)
-	result, err := root.Execute(ctx, request)
+	result, err := executeConformance(t, root, ctx, request)
 	assertFailure(t, result, err, wantSentinel, wantKind)
 	assertObservation(t, adapter, 0, 0, providers.ExecuteRequest{})
 }
@@ -332,7 +332,7 @@ func runLateSuccessAfterCancellation(t *testing.T, subject Subject) {
 	ctx, cancel := context.WithCancel(t.Context())
 	outcome := make(chan executeOutcome, 1)
 	go func() {
-		result, err := root.Execute(ctx, request)
+		result, err := executeConformance(t, root, ctx, request)
 		outcome <- executeOutcome{result: result, err: err}
 	}()
 	awaitStarted(t, adapter.Started)
@@ -378,6 +378,40 @@ func subjectProvider(subject Subject) providers.ID {
 		return subject.Provider
 	}
 	return providers.IDCodex
+}
+
+// executeConformance runs request through the Providers root exactly as a
+// caller would: an ordinary request (ResumeSession nil) goes through
+// Execute, and a request carrying a resume reference goes through Continue -
+// ordinary Execute no longer accepts one - splitting it into the typed
+// Reference plus the remaining attempt input right at the point of the call,
+// so a caller mutating its own ResumeSession pointer after this call starts
+// still exercises the identical detach-before-adapter-starts ordering an
+// ordinary Execute request does.
+func executeConformance(
+	t *testing.T,
+	root providers.Service,
+	ctx context.Context,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	t.Helper()
+	if request.ResumeSession == nil {
+		return root.Execute(ctx, request)
+	}
+	reference := *request.ResumeSession
+	attempt := request
+	attempt.ResumeSession = nil
+	continued, err := root.Continue(ctx, providers.ContinueRequest{
+		Reference: reference,
+		Attempt:   attempt,
+	})
+	if err != nil {
+		return providers.ExecuteResult{}, err
+	}
+	if continued.Outcome != providers.ContinuationOutcomeResumed {
+		t.Fatalf("Continue() outcome = %q, want resumed", continued.Outcome)
+	}
+	return continued.Result, nil
 }
 
 func conformanceRequest(provider providers.ID) providers.ExecuteRequest {

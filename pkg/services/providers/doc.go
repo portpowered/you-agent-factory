@@ -20,6 +20,17 @@
 //     Pause, ACP Terminate, ACP attempts before or after that turn is in
 //     flight, and unknown/already-terminal/mismatched attempts answer with
 //     the canonical unsupported outcome
+//   - Service.Continue — Providers-owned provider-session continuation
+//     contract. ContinueRequest.Reference names the exact provider,
+//     provider-specific session kind, and opaque Provider Session identity
+//     to resume; a malformed or foreign reference (Attempt names a
+//     different provider than Reference) fails with a typed
+//     ContinuationFailure before any provider adapter runs, a reference the
+//     resolved provider cannot continue returns the closed unsupported
+//     outcome as a successful result, and a valid reference reaches the
+//     matching adapter with provider, kind, and session identity unchanged.
+//     Ordinary Execute rejects any request that already carries a resume
+//     reference - continuation is requested exclusively through Continue
 //   - detached request, result, value, and typed-error contracts
 //
 // Construction/process-edge ports exist so Wire and owner constructors can

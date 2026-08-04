@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -127,6 +128,12 @@ func (s *Service) Execute(
 	ctx context.Context,
 	request providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
+	if request.ResumeSession != nil {
+		return providers.ExecuteResult{}, providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindInvalidRequest,
+			Message: "ordinary execution does not accept a resume session; call Continue to resume a Provider Session",
+		}
+	}
 	if err := request.Validate(); err != nil {
 		return providers.ExecuteResult{}, providers.ExecuteFailure{
 			Kind:    providers.ExecuteFailureKindInvalidRequest,
@@ -134,6 +141,17 @@ func (s *Service) Execute(
 		}
 	}
 	request.ReasoningEffort, _ = providers.ReasoningEffort(request.ReasoningEffort).Canonical()
+	return s.dispatch(ctx, request)
+}
+
+// dispatch runs one normalized attempt for an already-validated request,
+// resolving it to the exact ACP or native adapter its canonical provider
+// names. Execute and Continue share this path so a continued attempt reaches
+// its adapter through the identical routing an ordinary attempt uses.
+func (s *Service) dispatch(
+	ctx context.Context,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
 	if s.acp != nil {
 		if canonical, ok := s.acp.Resolve(request.Provider); ok {
 			if request.ReasoningEffort != "" {
@@ -226,6 +244,119 @@ func (s *Service) bindLiveAttempt(
 		}
 	}
 	return release, nil
+}
+
+// Continue resolves the exact provider ContinueRequest.Reference names and
+// resumes it for one continued attempt. A malformed or foreign reference
+// fails validation before this method inspects any catalog or ACP state. An
+// unknown provider fails with the same typed error GetProvider/Execute use.
+// A resolved provider or session kind that cannot continue returns the
+// closed unsupported outcome without invoking any provider adapter, binding
+// a live attempt, or starting a fresh execution. A valid reference reaches
+// its adapter through the identical dispatch path Execute uses, with
+// Reference forwarded unchanged as the attempt's resume session.
+func (s *Service) Continue(
+	ctx context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		s.logger.Info(
+			"provider continuation rejected",
+			"provider", string(request.Reference.Provider),
+			"kind", request.Reference.Kind,
+		)
+		return providers.ContinueResult{}, err
+	}
+	reference := request.Reference.Clone()
+	s.logger.Info(
+		"provider continuation accepted",
+		"provider", string(reference.Provider),
+		"kind", reference.Kind,
+	)
+
+	canonical, supported, err := s.resolveContinuationProvider(reference)
+	if err != nil {
+		s.logger.Info(
+			"provider continuation outcome",
+			"provider", string(reference.Provider),
+			"kind", reference.Kind,
+			"outcome", "failed",
+		)
+		return providers.ContinueResult{}, err
+	}
+	reference.Provider = canonical
+	if !supported {
+		s.logger.Info(
+			"provider continuation outcome",
+			"provider", string(canonical),
+			"kind", reference.Kind,
+			"outcome", "unsupported",
+		)
+		return providers.ContinueResult{
+			Reference: reference,
+			Outcome:   providers.ContinuationOutcomeUnsupported,
+		}, nil
+	}
+
+	attempt := request.Attempt.Clone()
+	attempt.Provider = canonical
+	attempt.ReasoningEffort, _ = providers.ReasoningEffort(attempt.ReasoningEffort).Canonical()
+	attempt.ResumeSession = &reference
+
+	result, err := s.dispatch(ctx, attempt)
+	if err != nil {
+		s.logger.Info(
+			"provider continuation outcome",
+			"provider", string(canonical),
+			"kind", reference.Kind,
+			"outcome", "failed",
+		)
+		return providers.ContinueResult{}, err
+	}
+	s.logger.Info(
+		"provider continuation outcome",
+		"provider", string(canonical),
+		"kind", reference.Kind,
+		"outcome", "resumed",
+	)
+	return providers.ContinueResult{
+		Reference: reference,
+		Outcome:   providers.ContinuationOutcomeResumed,
+		Result:    result,
+	}, nil
+}
+
+// resolveContinuationProvider returns the canonical provider identity for
+// reference.Provider and whether that resolved provider truthfully
+// advertises CapabilitySessionResume, without invoking any provider adapter
+// or catalog readiness probe. err is the same typed error ListProviders/
+// GetProvider/Execute use for an unknown provider.
+func (s *Service) resolveContinuationProvider(
+	reference providers.SessionRef,
+) (canonical providers.ID, supported bool, err error) {
+	if s.acp != nil {
+		if resolved, ok := s.acp.Resolve(reference.Provider); ok {
+			for _, integration := range s.acp.Integrations() {
+				if integration.Name == resolved {
+					return resolved, descriptorHasCapability(acpDescriptor(integration), providers.CapabilitySessionResume), nil
+				}
+			}
+			return resolved, false, nil
+		}
+	}
+	resolved, err := s.catalog.ResolveProviderID(reference.Provider)
+	if err != nil {
+		return "", false, err
+	}
+	descriptor, err := s.catalog.RegistrationProvider(resolved)
+	if err != nil {
+		return "", false, err
+	}
+	return resolved, descriptorHasCapability(descriptor, providers.CapabilitySessionResume), nil
+}
+
+func descriptorHasCapability(descriptor providers.Descriptor, capability providers.Capability) bool {
+	return slices.Contains(descriptor.Capabilities, capability)
 }
 
 // ControlAttempt routes a valid cancel or terminate request to the exact

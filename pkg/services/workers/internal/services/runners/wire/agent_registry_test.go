@@ -226,6 +226,28 @@ func (fake *agentProvidersFake) Execute(
 	return fake.result, nil
 }
 
+func (fake *agentProvidersFake) Continue(
+	_ context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	fake.calls.Add(1)
+	fake.mu.Lock()
+	fake.request = request.Attempt.Clone()
+	fake.request.ResumeSession = &request.Reference
+	fake.mu.Unlock()
+	if request.Attempt.UserMessage == agentFixtureExecutionFailure {
+		return providers.ContinueResult{}, errors.New("deterministic fixture failure")
+	}
+	return providers.ContinueResult{
+		Reference: request.Reference,
+		Outcome:   providers.ContinuationOutcomeResumed,
+		Result:    fake.result,
+	}, nil
+}
+
 func (fake *blockingAgentProvidersFake) Execute(
 	_ context.Context,
 	request providers.ExecuteRequest,
@@ -237,6 +259,27 @@ func (fake *blockingAgentProvidersFake) Execute(
 	fake.request = request.Clone()
 	fake.mu.Unlock()
 	return fake.result, nil
+}
+
+func (fake *blockingAgentProvidersFake) Continue(
+	_ context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	fake.calls.Add(1)
+	close(fake.entered)
+	<-fake.release
+	fake.mu.Lock()
+	fake.request = request.Attempt.Clone()
+	fake.request.ResumeSession = &request.Reference
+	fake.mu.Unlock()
+	return providers.ContinueResult{
+		Reference: request.Reference,
+		Outcome:   providers.ContinuationOutcomeResumed,
+		Result:    fake.result,
+	}, nil
 }
 
 func (*agentProvidersFake) ListProviders(

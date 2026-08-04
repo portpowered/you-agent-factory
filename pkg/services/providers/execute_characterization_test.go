@@ -151,6 +151,241 @@ func TestExecuteContract_Characterization_TypedFailures(t *testing.T) {
 	}
 }
 
+// Continue implements the published Providers Service continuation slice for
+// executePeerFake using only Providers root contracts: a supported reference
+// resumes through the exact same Execute path a fresh attempt uses, with
+// Reference forwarded unchanged as the attempt's resume session, proving the
+// contract's success outcome is reachable purely from the root package.
+func (fake *executePeerFake) Continue(
+	ctx context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	descriptor, ok := fake.providers[request.Reference.Provider]
+	if !ok {
+		return providers.ContinueResult{}, providers.ErrUnknownProvider
+	}
+	if !hasCapability(descriptor, providers.CapabilitySessionResume) {
+		return providers.ContinueResult{
+			Reference: request.Reference,
+			Outcome:   providers.ContinuationOutcomeUnsupported,
+		}, nil
+	}
+	reference := request.Reference.Clone()
+	attempt := request.Attempt.Clone()
+	attempt.ResumeSession = &reference
+	result, err := fake.Execute(ctx, attempt)
+	if err != nil {
+		return providers.ContinueResult{}, err
+	}
+	return providers.ContinueResult{
+		Reference: reference,
+		Outcome:   providers.ContinuationOutcomeResumed,
+		Result:    result,
+	}, nil
+}
+
+func TestContinuationContract_Characterization_ResumedVersusUnsupported(t *testing.T) {
+	t.Parallel()
+
+	resumable := providers.Descriptor{
+		ID:           providers.IDCodex,
+		Availability: providers.AvailabilitySelectable,
+		Readiness:    providers.ReadinessReady,
+		Capabilities: []providers.Capability{providers.CapabilitySessionResume},
+	}
+	unresumable := providers.Descriptor{
+		ID:           providers.IDClaude,
+		Availability: providers.AvailabilitySelectable,
+		Readiness:    providers.ReadinessReady,
+	}
+	var root providers.Service = newExecutePeerFake("cancel-attempt", resumable, unresumable)
+
+	resumed, err := root.Continue(context.Background(), providers.ContinueRequest{
+		Reference: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "prior-session"},
+		Attempt: providers.ExecuteRequest{
+			Provider:    providers.IDCodex,
+			AttemptID:   "attempt-continue",
+			UserMessage: "continue",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Continue(resumable) error = %v, want nil", err)
+	}
+	if resumed.Outcome != providers.ContinuationOutcomeResumed {
+		t.Fatalf("Continue(resumable).Outcome = %q, want resumed", resumed.Outcome)
+	}
+	if resumed.Reference.Provider != providers.IDCodex ||
+		resumed.Reference.Kind != providers.SessionIDKind ||
+		resumed.Reference.ID != "prior-session" {
+		t.Fatalf("Continue(resumable).Reference = %#v, want the exact continued reference", resumed.Reference)
+	}
+	if resumed.Result.Content != "continue-result" {
+		t.Fatalf("Continue(resumable).Result.Content = %q, want continue-result", resumed.Result.Content)
+	}
+
+	unsupported, err := root.Continue(context.Background(), providers.ContinueRequest{
+		Reference: providers.SessionRef{Provider: providers.IDClaude, Kind: providers.SessionIDKind, ID: "prior-session"},
+		Attempt: providers.ExecuteRequest{
+			Provider:  providers.IDClaude,
+			AttemptID: "attempt-unsupported",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Continue(unresumable) error = %v, want nil", err)
+	}
+	if unsupported.Outcome != providers.ContinuationOutcomeUnsupported {
+		t.Fatalf("Continue(unresumable).Outcome = %q, want unsupported", unsupported.Outcome)
+	}
+	if (unsupported.Result != providers.ExecuteResult{}) {
+		t.Fatalf("Continue(unresumable).Result = %#v, want zero value when unsupported", unsupported.Result)
+	}
+	if resumed.Outcome == unsupported.Outcome {
+		t.Fatal("resumed and unsupported outcomes must be distinguishable typed values")
+	}
+}
+
+func TestContinuationContract_Characterization_ValidationFailuresPrecedeOutcome(t *testing.T) {
+	t.Parallel()
+
+	root := newExecutePeerFake("cancel-attempt", providers.Descriptor{
+		ID:           providers.IDCodex,
+		Availability: providers.AvailabilitySelectable,
+		Readiness:    providers.ReadinessReady,
+		Capabilities: []providers.Capability{providers.CapabilitySessionResume},
+	})
+
+	_, err := root.Continue(context.Background(), providers.ContinueRequest{
+		Reference: providers.SessionRef{Kind: providers.SessionIDKind, ID: "prior-session"},
+		Attempt:   providers.ExecuteRequest{Provider: providers.IDCodex, AttemptID: "attempt-1"},
+	})
+	if !errors.Is(err, providers.ErrInvalidContinuationRequest) {
+		t.Fatalf("Continue(blank provider) error = %v, want ErrInvalidContinuationRequest", err)
+	}
+	var failure providers.ContinuationFailure
+	if !errors.As(err, &failure) || failure.Kind != providers.ContinuationFailureKindInvalid {
+		t.Fatalf("Continue(blank provider) error = %#v, want ContinuationFailureKindInvalid", err)
+	}
+
+	_, err = root.Continue(context.Background(), providers.ContinueRequest{
+		Reference: providers.SessionRef{Provider: providers.IDCodex, ID: "prior-session"},
+		Attempt:   providers.ExecuteRequest{Provider: providers.IDCodex, AttemptID: "attempt-1"},
+	})
+	if !errors.Is(err, providers.ErrInvalidContinuationRequest) {
+		t.Fatalf("Continue(blank kind) error = %v, want ErrInvalidContinuationRequest", err)
+	}
+
+	_, err = root.Continue(context.Background(), providers.ContinueRequest{
+		Reference: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind},
+		Attempt:   providers.ExecuteRequest{Provider: providers.IDCodex, AttemptID: "attempt-1"},
+	})
+	if !errors.Is(err, providers.ErrInvalidContinuationRequest) {
+		t.Fatalf("Continue(blank id) error = %v, want ErrInvalidContinuationRequest", err)
+	}
+
+	existingSession := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "other-session"}
+	_, err = root.Continue(context.Background(), providers.ContinueRequest{
+		Reference: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "prior-session"},
+		Attempt: providers.ExecuteRequest{
+			Provider:      providers.IDCodex,
+			AttemptID:     "attempt-1",
+			ResumeSession: &existingSession,
+		},
+	})
+	if !errors.Is(err, providers.ErrInvalidContinuationRequest) {
+		t.Fatalf("Continue(attempt with its own resume session) error = %v, want ErrInvalidContinuationRequest", err)
+	}
+
+	_, err = root.Continue(context.Background(), providers.ContinueRequest{
+		Reference: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "prior-session"},
+		Attempt:   providers.ExecuteRequest{Provider: providers.IDClaude, AttemptID: "attempt-1"},
+	})
+	if !errors.Is(err, providers.ErrContinuationForeign) {
+		t.Fatalf("Continue(mismatched attempt provider) error = %v, want ErrContinuationForeign", err)
+	}
+	if !errors.As(err, &failure) || failure.Kind != providers.ContinuationFailureKindForeign {
+		t.Fatalf("Continue(mismatched attempt provider) error = %#v, want ContinuationFailureKindForeign", err)
+	}
+}
+
+func TestContinuationFailure_ErrorAndUnwrapBranching(t *testing.T) {
+	t.Parallel()
+
+	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "prior-session"}
+	cases := []struct {
+		kind providers.ContinuationFailureKind
+		want error
+	}{
+		{providers.ContinuationFailureKindInvalid, providers.ErrInvalidContinuationRequest},
+		{providers.ContinuationFailureKindForeign, providers.ErrContinuationForeign},
+		{providers.ContinuationFailureKindStale, providers.ErrContinuationStale},
+	}
+	for _, testCase := range cases {
+		failure := providers.ContinuationFailure{Kind: testCase.kind, Reference: reference}
+		if !errors.Is(failure, testCase.want) {
+			t.Fatalf("ContinuationFailure{Kind: %q}.Unwrap() mismatch, want errors.Is(%v)", testCase.kind, testCase.want)
+		}
+		if failure.Error() != testCase.want.Error() {
+			t.Fatalf("ContinuationFailure{Kind: %q}.Error() = %q, want %q", testCase.kind, failure.Error(), testCase.want.Error())
+		}
+		withMessage := providers.ContinuationFailure{Kind: testCase.kind, Message: "detail", Reference: reference}
+		if withMessage.Error() != testCase.want.Error()+": detail" {
+			t.Fatalf("ContinuationFailure{Kind: %q}.Error() with message = %q", testCase.kind, withMessage.Error())
+		}
+	}
+}
+
+func TestContinuationContract_Characterization_CloningDetachesReferencesAndResults(t *testing.T) {
+	t.Parallel()
+
+	session := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "prior-session"}
+	request := providers.ContinueRequest{
+		Reference: session,
+		Attempt: providers.ExecuteRequest{
+			Provider:  providers.IDCodex,
+			AttemptID: "attempt-1",
+			EnvVars:   map[string]string{"KEY": "value"},
+		},
+	}
+	cloned := request.Clone()
+	if cloned.Reference != request.Reference {
+		t.Fatalf("ContinueRequest.Clone().Reference = %#v, want %#v", cloned.Reference, request.Reference)
+	}
+	cloned.Attempt.EnvVars["KEY"] = "mutated"
+	if request.Attempt.EnvVars["KEY"] != "value" {
+		t.Fatal("ContinueRequest.Clone() shares Attempt.EnvVars backing map")
+	}
+
+	sessionRef := &providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "result-session"}
+	result := providers.ContinueResult{
+		Reference: session,
+		Outcome:   providers.ContinuationOutcomeResumed,
+		Result: providers.ExecuteResult{
+			Content:    "hello",
+			SessionRef: sessionRef,
+		},
+	}
+	clonedResult := result.Clone()
+	if clonedResult.Reference != result.Reference || clonedResult.Outcome != result.Outcome {
+		t.Fatalf("ContinueResult.Clone() = %#v, want %#v", clonedResult, result)
+	}
+	if clonedResult.Result.SessionRef == result.Result.SessionRef {
+		t.Fatal("ContinueResult.Clone() shares Result.SessionRef pointer")
+	}
+
+	failure := providers.ContinuationFailure{
+		Kind:      providers.ContinuationFailureKindStale,
+		Message:   "no longer live",
+		Reference: session,
+	}
+	clonedFailure := failure.Clone()
+	if clonedFailure != failure {
+		t.Fatalf("ContinuationFailure.Clone() = %#v, want %#v", clonedFailure, failure)
+	}
+}
+
 func TestExecuteRequestReasoningEffortValidation(t *testing.T) {
 	t.Parallel()
 

@@ -3,6 +3,7 @@ package providers_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"sort"
 	"testing"
 
@@ -82,6 +83,36 @@ func (fake *catalogPeerFake) GetProvider(
 		return providers.GetProviderResult{}, providers.ErrProviderUnavailable
 	}
 	return providers.GetProviderResult{Provider: descriptor.Clone()}, nil
+}
+
+// Continue implements the published Providers Service continuation slice for
+// catalogPeerFake using only Providers root contracts: a known provider that
+// advertises CapabilitySessionResume echoes the closed unsupported outcome
+// only when the fake descriptor omits that capability, and otherwise reports
+// a generic failure - executePeerFake overrides this with a fuller resumed
+// path.
+func (fake *catalogPeerFake) Continue(
+	_ context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	descriptor, ok := fake.providers[request.Reference.Provider]
+	if !ok {
+		return providers.ContinueResult{}, providers.ErrUnknownProvider
+	}
+	if !hasCapability(descriptor, providers.CapabilitySessionResume) {
+		return providers.ContinueResult{
+			Reference: request.Reference,
+			Outcome:   providers.ContinuationOutcomeUnsupported,
+		}, nil
+	}
+	return providers.ContinueResult{}, providers.ErrExecuteFailed
+}
+
+func hasCapability(descriptor providers.Descriptor, capability providers.Capability) bool {
+	return slices.Contains(descriptor.Capabilities, capability)
 }
 
 func hasMissingPrerequisite(prerequisites []providers.Prerequisite) bool {

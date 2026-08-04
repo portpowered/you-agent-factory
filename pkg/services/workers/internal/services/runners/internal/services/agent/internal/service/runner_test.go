@@ -265,6 +265,22 @@ func (fake *providersFake) Execute(
 	return providers.ExecuteResult{Content: "ok"}, nil
 }
 
+func (fake *providersFake) Continue(
+	_ context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	fake.request = request.Attempt.Clone()
+	fake.request.ResumeSession = &request.Reference
+	return providers.ContinueResult{
+		Reference: request.Reference,
+		Outcome:   providers.ContinuationOutcomeResumed,
+		Result:    providers.ExecuteResult{Content: "ok"},
+	}, nil
+}
+
 func (*providersFake) ListProviders(
 	context.Context,
 	providers.ListProvidersRequest,
@@ -284,6 +300,16 @@ func (fake *failingProvidersFake) Execute(
 	providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
 	return providers.ExecuteResult{}, fake.failure
+}
+
+func (fake *failingProvidersFake) Continue(
+	_ context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	return providers.ContinueResult{}, fake.failure
 }
 
 func (fake *failingProvidersFake) ListProviders(
