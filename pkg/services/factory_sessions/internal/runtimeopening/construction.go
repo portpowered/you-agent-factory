@@ -51,7 +51,7 @@ func PrepareRuntime(
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	replayInputs recordings.ReplayInputCapability,
+	replayArtifacts recordings.RecordingReplayArtifacts,
 	replayClockFactory ReplayClockFactory,
 	hostedPollersFactory AutomationHostedSourcesFactory,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
@@ -122,7 +122,7 @@ func PrepareRuntime(
 		loadFactory,
 		newLoadedFactory,
 		decodeReplayConfig,
-		replayInputs,
+		replayArtifacts,
 		captureLoadedFactorySnapshot,
 		newSessionLogger,
 	)

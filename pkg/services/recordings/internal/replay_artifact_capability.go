@@ -9,6 +9,19 @@ import (
 
 var _ recordings.RecordingReplayArtifacts = (*combinedService)(nil)
 
+// LoadReplayInput is intentionally unavailable on the finalized-recording
+// view. Factory Sessions uses the phase-aware RecordingReplayArtifacts
+// capability constructed before a runtime ledger exists; once that capability
+// binds this combined service, finalized-recording operations delegate here.
+func (service *combinedService) LoadReplayInput(
+	request recordings.LoadReplayInputRequest,
+) (recordings.LoadReplayInputResult, error) {
+	return recordings.LoadReplayInputResult{}, &recordings.ReplayInputError{
+		Kind:    recordings.ReplayInputErrorRead,
+		Message: "replay input loading requires the phase-aware Recordings capability",
+	}
+}
+
 // LoadReplay implements recordings.RecordingReplayArtifacts by adapting the
 // existing LoadReplayRecording operation to the root-owned replay/artifact
 // vocabulary.

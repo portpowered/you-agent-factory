@@ -13,9 +13,13 @@ import (
 // can fake it without implementing the rest of Service.
 //
 // Every identity, replay-fact, artifact, request, result, diagnostic, and
-// typed-error type used by this capability is defined directly in this file
-// rather than aliased from recordings/internal/contracts.
+// typed-error type used by this capability is defined directly at the
+// Recordings root rather than aliased from recordings/internal/contracts.
 type RecordingReplayArtifacts interface {
+	// LoadReplayInput reads one caller-selected replay input and classifies it
+	// as either a portable JavaScript Factory Session recording or a legacy
+	// embedded-Factory replay artifact.
+	LoadReplayInput(LoadReplayInputRequest) (LoadReplayInputResult, error)
 	// LoadReplay selects one finalized recording's detached canonical replay
 	// facts by opaque recording identity.
 	LoadReplay(LoadReplayRequest) (LoadReplayResult, error)
@@ -40,6 +44,31 @@ type RecordingReplayArtifacts interface {
 	// its public reference.
 	ReadArtifact(context.Context, ReadArtifactRequest) (ReadArtifactResult, error)
 }
+
+// RecordingReplayArtifactsRuntime is the per-Factory-Session phase-aware
+// view of RecordingReplayArtifacts. It first loads replay input before the
+// runtime ledger exists, then binds the same capability to the completed
+// Recordings runtime state so its finalized-recording operations delegate to
+// the canonical implementation. Factory Sessions only receive this narrow
+// contract, never the broad Recordings Service.
+type RecordingReplayArtifactsRuntime interface {
+	RecordingReplayArtifacts
+	BindRecordingLifecycle(Ledger, ProjectionService) (RecordingLifecycle, error)
+}
+
+// RecordingReplayArtifactsRuntimeBuilder constructs the canonical narrow
+// capability and lifecycle view for one runtime ledger and projection. It is
+// selected once by Wire; the runtime phase supplies only request-scoped
+// Recordings state.
+type RecordingReplayArtifactsRuntimeBuilder func(
+	Ledger,
+	ProjectionService,
+) (RecordingReplayArtifacts, RecordingLifecycle, error)
+
+// RecordingReplayArtifactsFactory constructs one phase-aware narrow
+// capability for each Factory Session runtime opening. Construction is inert;
+// the returned capability performs I/O only when an operation is invoked.
+type RecordingReplayArtifactsFactory func() RecordingReplayArtifactsRuntime
 
 // ReplayRecordingID is the Recordings-owned identity of one recording,
 // published for peers that only consume RecordingReplayArtifacts.

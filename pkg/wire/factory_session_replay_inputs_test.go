@@ -12,12 +12,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// TestProvideFactorySessionReplayInputsClassifiesPortableRecording proves the
-// Wire-composed ReplayInputCapability -- built from the existing replay
-// artifact loader and the Factory Session replay recording reader -- reads a
-// real portable JavaScript Factory Session recording from disk and decodes
-// it, without the caller assembling the raw reader and decoder itself.
-func TestProvideFactorySessionReplayInputsClassifiesPortableRecording(t *testing.T) {
+// TestProvideRecordingReplayArtifactsFactoryClassifiesPortableRecording
+// proves the canonical Wire-composed RecordingReplayArtifacts capability reads
+// a portable Factory Session recording without the caller assembling raw
+// reader or decoder effects.
+func TestProvideRecordingReplayArtifactsFactoryClassifiesPortableRecording(t *testing.T) {
 	t.Parallel()
 
 	path := testpath.MustRepoPathFromCaller(
@@ -27,7 +26,14 @@ func TestProvideFactorySessionReplayInputsClassifiesPortableRecording(t *testing
 	)
 	loadReplay := provideReplayArtifactLoader(platformreplay.Local{})
 	replayFiles := provideFactorySessionReplayRecordingReader(serviceedges.Edges{})
-	capability := provideFactorySessionReplayInputs(loadReplay, replayFiles, zap.NewNop())
+	capability := provideRecordingReplayArtifactsFactory(
+		serviceedges.Edges{},
+		provideLiveRecordingTargetPlanner(),
+		platformreplay.Local{},
+		loadReplay,
+		replayFiles,
+		zap.NewNop(),
+	)()
 
 	result, err := capability.LoadReplayInput(recordings.LoadReplayInputRequest{Path: path})
 	if err != nil {
@@ -44,10 +50,10 @@ func TestProvideFactorySessionReplayInputsClassifiesPortableRecording(t *testing
 	}
 }
 
-// TestProvideFactorySessionReplayInputsDelegatesLegacyArtifact proves the
-// same Wire-composed capability falls back to the existing legacy replay
-// artifact loader for a file that is not a portable recording.
-func TestProvideFactorySessionReplayInputsDelegatesLegacyArtifact(t *testing.T) {
+// TestProvideRecordingReplayArtifactsFactoryDelegatesLegacyArtifact proves
+// the same canonical capability falls back to the existing legacy loader for
+// a file that is not a portable recording.
+func TestProvideRecordingReplayArtifactsFactoryDelegatesLegacyArtifact(t *testing.T) {
 	t.Parallel()
 
 	overrideCalled := false
@@ -61,7 +67,14 @@ func TestProvideFactorySessionReplayInputsDelegatesLegacyArtifact(t *testing.T) 
 		return &recordings.ReplayArtifact{SchemaVersion: "legacy"}, nil
 	})
 	replayFiles := provideFactorySessionReplayRecordingReader(edges)
-	capability := provideFactorySessionReplayInputs(loadReplay, replayFiles, zap.NewNop())
+	capability := provideRecordingReplayArtifactsFactory(
+		edges,
+		provideLiveRecordingTargetPlanner(),
+		platformreplay.Local{},
+		loadReplay,
+		replayFiles,
+		zap.NewNop(),
+	)()
 
 	tempFile := filepath.Join(t.TempDir(), "legacy-replay.json")
 	if err := os.WriteFile(tempFile, []byte(`{"schemaVersion":"legacy"}`), 0o600); err != nil {

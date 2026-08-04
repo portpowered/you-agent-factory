@@ -43,6 +43,45 @@ func TestReplayInputLoaderClassifiesPortableRecording(t *testing.T) {
 	}
 }
 
+func TestRecordingReplayArtifactsRuntimeConstructionIsInert(t *testing.T) {
+	t.Parallel()
+
+	built := false
+	factory := recordingswire.NewRecordingReplayArtifactsFactory(
+		func(string) ([]byte, error) {
+			t.Fatal("replay input reader called during construction")
+			return nil, nil
+		},
+		func(string) (*recordings.ReplayArtifact, error) {
+			t.Fatal("legacy replay loader called during construction")
+			return nil, nil
+		},
+		zap.NewNop(),
+		func(
+			recordings.Ledger,
+			recordings.ProjectionService,
+		) (recordings.RecordingReplayArtifacts, recordings.RecordingLifecycle, error) {
+			built = true
+			return nil, nil, nil
+		},
+	)
+	capability := factory()
+	if capability == nil {
+		t.Fatal("factory() = nil, want phase-aware capability")
+	}
+	if built {
+		t.Fatal("runtime artifact builder called during construction")
+	}
+	_, err := capability.LoadReplay(recordings.LoadReplayRequest{RecordingID: "not-bound"})
+	var typed *recordings.ReplayArtifactError
+	if !errors.As(err, &typed) || typed.Kind != recordings.ReplayArtifactErrorUnavailable {
+		t.Fatalf("LoadReplay() error = %v, want unavailable typed error before binding", err)
+	}
+	if built {
+		t.Fatal("runtime artifact builder called by an unbound artifact operation")
+	}
+}
+
 func TestReplayInputLoaderDelegatesLegacyArtifact(t *testing.T) {
 	t.Parallel()
 

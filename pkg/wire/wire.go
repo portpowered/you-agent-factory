@@ -147,7 +147,7 @@ var servicesSet = wire.NewSet(
 	provideFactorySessionExecutionFactory,
 	provideConductorInvocationWithProgressFactory,
 	provideRecordingsProjectionFactory,
-	provideRecordingLifecycleFactory,
+	provideRecordingReplayArtifactsFactory,
 	provideRuntimeLedgerFactory,
 	provideReplayArtifactStorage,
 	provideRuntimeRecorderFactory,
@@ -212,7 +212,6 @@ var servicesSet = wire.NewSet(
 	provideLoadedFactorySourceFactory,
 	provideLoadedFactoryLoader,
 	provideReplayArtifactLoader,
-	provideFactorySessionReplayInputs,
 	provideReplayRuntimeConfigDecoder,
 	factorysessionwire.NewRuntimeOpeningFactory,
 )

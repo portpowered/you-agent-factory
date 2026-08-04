@@ -41,32 +41,11 @@ func NewReplayArtifactLoader(
 	}
 }
 
-// NewReplayInputLoader constructs the ReplayInputCapability selected by
-// process-graph composition, composing the existing portable-recording
-// decoder/validator with the existing legacy replay artifact loader behind
-// one Recordings-owned capability so callers no longer combine a raw file
-// reader, the aliased portable-recording decoder/validator, and the legacy
-// loader themselves. logger is the repository's injected structured logging
-// abstraction; LoadReplayInput never logs the replay input's decoded
-// payload, only stable identifiers and outcome classification.
-func NewReplayInputLoader(
-	readFile recordings.RecordingReadFile,
-	loadLegacy recordings.ReplayArtifactLoader,
-	logger *zap.Logger,
-) recordings.ReplayInputCapability {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
-	return &replayInputLoader{readFile: readFile, loadLegacy: loadLegacy, logger: logger}
-}
-
 type replayInputLoader struct {
 	readFile   recordings.RecordingReadFile
 	loadLegacy recordings.ReplayArtifactLoader
 	logger     *zap.Logger
 }
-
-var _ recordings.ReplayInputCapability = (*replayInputLoader)(nil)
 
 func (loader *replayInputLoader) LoadReplayInput(
 	request recordings.LoadReplayInputRequest,
@@ -135,6 +114,14 @@ func (loader *replayInputLoader) LoadReplayInput(
 	}
 	loader.logger.Info("loaded legacy replay artifact")
 	return recordings.LoadReplayInputResult{Legacy: artifact}, nil
+}
+
+func newReplayInputLoader(
+	readFile recordings.RecordingReadFile,
+	loadLegacy recordings.ReplayArtifactLoader,
+	logger *zap.Logger,
+) *replayInputLoader {
+	return &replayInputLoader{readFile: readFile, loadLegacy: loadLegacy, logger: logger}
 }
 
 // toReplayInputDiagnostic maps the existing portable-recording diagnostic

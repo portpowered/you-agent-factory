@@ -520,6 +520,12 @@ type narrowReplayArtifactsFake struct {
 
 var _ recordings.RecordingReplayArtifacts = (*narrowReplayArtifactsFake)(nil)
 
+func (fake *narrowReplayArtifactsFake) LoadReplayInput(
+	recordings.LoadReplayInputRequest,
+) (recordings.LoadReplayInputResult, error) {
+	return recordings.LoadReplayInputResult{Legacy: &recordings.ReplayArtifact{SchemaVersion: "narrow-fake"}}, nil
+}
+
 func (fake *narrowReplayArtifactsFake) LoadReplay(
 	request recordings.LoadReplayRequest,
 ) (recordings.LoadReplayResult, error) {

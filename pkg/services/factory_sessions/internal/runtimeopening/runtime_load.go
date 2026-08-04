@@ -32,7 +32,7 @@ func LoadRuntime(
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	replayInputs recording.ReplayInputCapability,
+	replayArtifacts recording.RecordingReplayArtifacts,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	newSessionLogger factoryruntime.SessionLoggerFactory,
 ) (RuntimeLoad, error) {
@@ -50,10 +50,10 @@ func LoadRuntime(
 	}
 	var legacyArtifact *factorydefinitions.ReplayArtifact
 	if replayPath != "" {
-		if replayInputs == nil {
-			return RuntimeLoad{}, fmt.Errorf("Factory Session replay input capability is required")
+		if replayArtifacts == nil {
+			return RuntimeLoad{}, fmt.Errorf("Factory Session replay/artifact capability is required")
 		}
-		result, err := replayInputs.LoadReplayInput(recording.LoadReplayInputRequest{Path: replayPath})
+		result, err := replayArtifacts.LoadReplayInput(recording.LoadReplayInputRequest{Path: replayPath})
 		if err != nil {
 			var inputErr *recording.ReplayInputError
 			if errors.As(err, &inputErr) && inputErr.Kind == recording.ReplayInputErrorLegacy {

@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
+	"go.uber.org/zap"
 )
 
 type recordingLifecycleFactoryLedger struct {
@@ -34,26 +36,34 @@ func (binder *fakeRuntimeRecordingBinder) BindRecordingLifecycle(
 	return nil
 }
 
-// TestProvideRecordingLifecycleFactoryBindsTheExactWireProducedInstance
-// proves the narrow RecordingLifecycle capability Wire composes for the live
-// runtime-opening path is produced explicitly at the Wire boundary -- not
-// discovered later from a broader Recordings Service -- and is the exact
-// instance a runtime recorder binds to, backed by real Recordings JSONL
-// composition rather than a stub.
-func TestProvideRecordingLifecycleFactoryBindsTheExactWireProducedInstance(t *testing.T) {
+// TestProvideRecordingReplayArtifactsFactoryBindsTheRuntimeCapability proves
+// canonical Wire composition creates one phase-aware Recordings capability:
+// runtime opening can use it before a ledger exists, and its same instance
+// later exposes the real finalized-recording operations after binding.
+func TestProvideRecordingReplayArtifactsFactoryBindsTheRuntimeCapability(t *testing.T) {
 	t.Parallel()
 
-	factory := provideRecordingLifecycleFactory(
+	factory := provideRecordingReplayArtifactsFactory(
 		serviceedges.Edges{},
 		provideLiveRecordingTargetPlanner(),
 		platformreplay.Local{},
+		func(string) (*recordings.ReplayArtifact, error) { return nil, fmt.Errorf("legacy loader is not used") },
+		nil,
+		zap.NewNop(),
 	)
-	lifecycle := factory(
+	capability := factory()
+	if capability == nil {
+		t.Fatal("provideRecordingReplayArtifactsFactory() returned nil capability")
+	}
+	lifecycle, err := capability.BindRecordingLifecycle(
 		&recordingLifecycleFactoryLedger{},
 		recordingswire.NewProjectionService(),
 	)
+	if err != nil {
+		t.Fatalf("BindRecordingLifecycle() error = %v", err)
+	}
 	if lifecycle == nil {
-		t.Fatal("provideRecordingLifecycleFactory() returned nil lifecycle")
+		t.Fatal("BindRecordingLifecycle() returned nil lifecycle")
 	}
 
 	binder := &fakeRuntimeRecordingBinder{}
@@ -71,7 +81,14 @@ func TestProvideRecordingLifecycleFactoryBindsTheExactWireProducedInstance(t *te
 		t.Fatalf("bound scope = %#v, want %#v", binder.gotScope, scope)
 	}
 
-	exerciseWireProducedRecordingLifecycle(t, binder.gotLifecycle, scope)
+	recordingID := exerciseWireProducedRecordingLifecycle(t, binder.gotLifecycle, scope)
+	replay, err := capability.LoadReplay(recordings.LoadReplayRequest{RecordingID: recordings.ReplayRecordingID(recordingID)})
+	if err != nil {
+		t.Fatalf("same capability LoadReplay() error = %v", err)
+	}
+	if replay.Replay.RecordingID != recordings.ReplayRecordingID(recordingID) {
+		t.Fatalf("same capability replay ID = %q, want %q", replay.Replay.RecordingID, recordingID)
+	}
 }
 
 // exerciseWireProducedRecordingLifecycle proves the exact instance bound to
@@ -81,7 +98,7 @@ func exerciseWireProducedRecordingLifecycle(
 	t *testing.T,
 	lifecycle recordings.RecordingLifecycle,
 	scope recordings.CanonicalEventScope,
-) {
+) recordings.LifecycleRecordingID {
 	t.Helper()
 
 	recordingID := recordings.LifecycleRecordingID("wire-lifecycle-factory-recording")
@@ -139,4 +156,5 @@ func exerciseWireProducedRecordingLifecycle(
 	if finished.Status.State != recordings.LifecycleStateFinalized {
 		t.Fatalf("Finish() State = %v, want LifecycleStateFinalized", finished.Status.State)
 	}
+	return recordingID
 }
