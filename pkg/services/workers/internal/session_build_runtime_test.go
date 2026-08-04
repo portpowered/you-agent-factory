@@ -169,6 +169,90 @@ func TestNewSessionBuildRuntimeSharesProviderLifecycleSink(t *testing.T) {
 	}
 }
 
+// TestNewSessionBuildRuntimeReleasesReboundProvidersWhenBaseClosesBeforeAdoption
+// proves the deterministic fix for the post-merge finding on this seam: if
+// base.Close races ahead of adoption -- closing the shared provider lifecycle
+// sink after a Providers instance has been freshly rebound for this build but
+// before newSessionBuildRuntime registers it -- the rebound instance is
+// released immediately instead of leaked, and no runtime backed by the
+// already-closed sink is ever returned. Synchronization is via unbuffered
+// channels (no sleeps): the fake rebinder blocks until signalled, letting the
+// test deterministically land base.Close() in the exact window between
+// rebind and adoption.
+func TestNewSessionBuildRuntimeReleasesReboundProvidersWhenBaseClosesBeforeAdoption(t *testing.T) {
+	t.Parallel()
+
+	base := newTestServiceWithDependencies(t, injectedProviderRunner{}, injectedProviderRunner{}, workers.ProgressPublisher(testProgressPublisher), zap.NewNop())
+	base.providerLifecycles = &ownedProviderLifecycles{}
+	base.providerRegistry = fakeProviderRegistry{}
+
+	closed := new(int)
+	rebinderEntered := make(chan struct{})
+	proceed := make(chan struct{})
+	base.providerRegistryRebinder = func(workers.CommandRunner) (workers.ProviderRegistry, providers.Service, error) {
+		close(rebinderEntered)
+		<-proceed
+		return nil, lifecycleTrackedProvidersService{closed: closed}, nil
+	}
+
+	type buildResult struct {
+		runtime *Service
+		err     error
+	}
+	resultCh := make(chan buildResult, 1)
+	go func() {
+		runtime, err := base.newSessionBuildRuntime(taggedCommandRunner{tag: "blocked-build"}, nil, nil)
+		resultCh <- buildResult{runtime: runtime, err: err}
+	}()
+
+	<-rebinderEntered
+	if err := base.Close(context.Background()); err != nil {
+		t.Fatalf("base.Close() error = %v", err)
+	}
+	close(proceed)
+
+	result := <-resultCh
+	if result.err == nil {
+		t.Fatal("newSessionBuildRuntime() error = nil, want an error because base already closed before adoption")
+	}
+	if result.runtime != nil {
+		t.Fatal("newSessionBuildRuntime() returned a non-nil runtime backed by an already-closed provider lifecycle sink")
+	}
+	if *closed != 1 {
+		t.Fatalf("rebound Providers service closed %d times, want exactly 1 (released instead of leaked)", *closed)
+	}
+}
+
+// TestNewSessionBuildRuntimeReleasesReboundProvidersWhenConstructionFailsAfterRebind
+// proves the other half of the post-merge finding: a construction failure
+// that happens after a Providers instance was already rebound (here, forced
+// by clearing base's required Factory docs loader) still releases that
+// rebound instance instead of leaking it.
+func TestNewSessionBuildRuntimeReleasesReboundProvidersWhenConstructionFailsAfterRebind(t *testing.T) {
+	t.Parallel()
+
+	base := newTestServiceWithDependencies(t, injectedProviderRunner{}, injectedProviderRunner{}, workers.ProgressPublisher(testProgressPublisher), zap.NewNop())
+	base.providerLifecycles = &ownedProviderLifecycles{}
+	base.providerRegistry = fakeProviderRegistry{}
+	base.factoryDocs = nil
+
+	closed := new(int)
+	base.providerRegistryRebinder = func(workers.CommandRunner) (workers.ProviderRegistry, providers.Service, error) {
+		return nil, lifecycleTrackedProvidersService{closed: closed}, nil
+	}
+
+	runtime, err := base.newSessionBuildRuntime(taggedCommandRunner{tag: "build"}, nil, nil)
+	if err == nil {
+		t.Fatal("newSessionBuildRuntime() error = nil, want a construction error (nil Factory docs loader)")
+	}
+	if runtime != nil {
+		t.Fatal("newSessionBuildRuntime() returned a non-nil runtime after a construction failure")
+	}
+	if *closed != 1 {
+		t.Fatalf("rebound Providers service closed %d times after a construction failure, want exactly 1 (released instead of leaked)", *closed)
+	}
+}
+
 // fakeProviderRegistry is a minimal, non-nil workers.ProviderRegistry
 // implementation with no registered runners, used only to make
 // rebindProviderRegistry treat base as already having a current registry to
