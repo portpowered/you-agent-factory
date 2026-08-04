@@ -84,6 +84,7 @@ func (s *Store) Sequence(ctx context.Context, req chatsessions.SequenceRequest) 
 		ItemID:       s.newID(),
 		ParentItemID: req.ParentItemID,
 		Kind:         req.Kind,
+		Phase:        req.Phase,
 		Payload:      req.Payload,
 	}
 	if err := item.Validate(); err != nil {
@@ -174,8 +175,8 @@ func resolveSequencedDuplicate(req chatsessions.SequenceRequest, originalSchemaI
 // alter a source-native payload's insignificant whitespace or
 // HTML-sensitive characters before Events ever sees it. That would break
 // the "stores the assigned identities and source-native payload verbatim"
-// contract. The scalar fields (ItemID, ParentItemID, Kind) still go through
-// json.Marshal individually, so their own string escaping stays standard;
+// contract. The scalar fields (ItemID, ParentItemID, Kind, Phase) still go
+// through json.Marshal individually, so their own string escaping stays standard;
 // only the payload's bytes are required -- and guaranteed here -- to survive
 // byte-for-byte unchanged.
 func marshalSequencedItemEnvelope(item chatsessions.SequencedItem) ([]byte, error) {
@@ -186,6 +187,10 @@ func marshalSequencedItemEnvelope(item chatsessions.SequencedItem) ([]byte, erro
 	kind, err := json.Marshal(item.Kind)
 	if err != nil {
 		return nil, fmt.Errorf("kind: %w", err)
+	}
+	phase, err := json.Marshal(item.Phase)
+	if err != nil {
+		return nil, fmt.Errorf("phase: %w", err)
 	}
 
 	var buf bytes.Buffer
@@ -201,6 +206,8 @@ func marshalSequencedItemEnvelope(item chatsessions.SequencedItem) ([]byte, erro
 	}
 	buf.WriteString(`,"kind":`)
 	buf.Write(kind)
+	buf.WriteString(`,"phase":`)
+	buf.Write(phase)
 	buf.WriteString(`,"payload":`)
 	buf.Write(item.Payload)
 	buf.WriteByte('}')
@@ -220,6 +227,8 @@ func contradictedField(req chatsessions.SequenceRequest, originalSchemaID events
 		return "ParentItemID", true
 	case req.Kind != original.Kind:
 		return "Kind", true
+	case req.Phase != original.Phase:
+		return "Phase", true
 	case req.SchemaID != originalSchemaID:
 		return "SchemaID", true
 	case !equalJSON(req.Payload, original.Payload):

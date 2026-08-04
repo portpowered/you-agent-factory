@@ -11,6 +11,7 @@ package wire
 import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/stdio"
 )
@@ -21,17 +22,20 @@ import (
 //
 // chatSessions and catalog are the canonical Chat Sessions collaborators
 // "session/new" dispatches to, factoryTarget is the consumer-owned Factory
-// Sessions shim ordinary prompt delegation starts or invokes against, and
-// resolveHomeDir resolves the operator home directory that call uses to
-// derive the Operator Settings document path and Factory discovery roots.
-// This package injects exactly the instances its caller supplies; it never
-// resolves them itself.
+// Sessions shim ordinary prompt delegation starts or invokes against,
+// eventsService is the canonical Events collaborator an admitted prompt
+// turn drains chat-session/<id>/events through before falling back to V1
+// synchronous final text, and resolveHomeDir resolves the operator home
+// directory that call uses to derive the Operator Settings document path
+// and Factory discovery roots. This package injects exactly the instances
+// its caller supplies; it never resolves them itself.
 func NewServer(
 	logger logging.Logger,
 	chatSessions chatsessions.Service,
 	catalog chatsessions.FactoryTargetCatalogService,
 	factoryTarget acp.FactoryTargetService,
+	eventsService events.Service,
 	resolveHomeDir func() (string, error),
 ) acp.Server {
-	return stdio.New(logger, chatSessions, catalog, factoryTarget, resolveHomeDir)
+	return stdio.New(logger, chatSessions, catalog, factoryTarget, eventsService, resolveHomeDir)
 }

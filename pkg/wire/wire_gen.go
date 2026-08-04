@@ -504,7 +504,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	factoryTargetService := provideACPServerFactoryTargetService(v83)
-	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, factoryTargetService, wireAcpServerResolveHomeDir)
+	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, factoryTargetService, eventsService, wireAcpServerResolveHomeDir)
 	commandOperations := cli.CommandOperations{
 		ObserveCLI:                        cliObserver,
 		NamedFactoryCatalog:               v,

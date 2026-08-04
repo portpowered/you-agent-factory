@@ -312,7 +312,7 @@ func (r *readStartSignal) Close() error {
 // left open and never written to, and asserts cancellation unblocks it
 // within a small bounded time instead of hanging.
 func TestServeACPCommand_CancellationClosesStdinToUnblockRealServerMidRead(t *testing.T) {
-	server := acpwire.NewServer(nil, nil, nil, nil, nil)
+	server := acpwire.NewServer(nil, nil, nil, nil, nil, nil)
 	factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI})
 	factory.acpServer = server
 

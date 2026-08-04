@@ -118,9 +118,20 @@ func deliverPromptText(notify promptNotifier, sessionID string, text []string) e
 // overrides it via terminalStateForFailure, since the branch's own
 // terminal choice is only ever a genuine downstream-published outcome
 // (completed/canceled/timed-out/failed), never a Go-level call failure.
+// sessionVersion is the Chat Session's own version as of the last Chat
+// Sessions mutation this branch itself performed -- startResult.Session.Version
+// for invokeFactorySessionForEpisode (which performs no further Chat
+// Sessions mutation), or the BindFactorySession result's Session.Version for
+// startFactorySessionForEpisode (whose RecordPendingFactorySession/
+// BindFactorySession calls advance the session past what StartTurn/AdvanceTurn
+// already observed). deliverPromptUpdates' AcknowledgeAttachment calls must
+// use this current value, not startResult.Session.Version, or a fresh-episode
+// turn's own Bind advancing Version out from under it would spuriously fail
+// every such turn's streaming drain with a stale-version conflict.
 type dispatchOutcome struct {
-	outcome  protocol.PromptOutcome
-	terminal chatsessions.TurnState
+	outcome        protocol.PromptOutcome
+	terminal       chatsessions.TurnState
+	sessionVersion uint64
 }
 
 // parseFactoryCommand inspects one validated prompt turn's content and
@@ -256,7 +267,7 @@ func (s *Server) admitPromptTurn(ctx context.Context, turn session.PromptTurn, r
 		return nil, classifyDependencyFailure(err)
 	}
 
-	return s.dispatchFactoryTurn(ctx, startResult, turn)
+	return s.dispatchFactoryTurn(ctx, startResult, turn, reqIdentity)
 }
 
 // recoverStrandedTurn makes one best-effort attempt to move turnID to
@@ -313,19 +324,24 @@ func turnStateStopReason(state chatsessions.TurnState) acpsdk.StopReason {
 // dispatchFactoryTurn runs the one Factory effect a running turn owns --
 // starting a fresh Factory Session for an unbound episode or invoking an
 // already-bound one -- maps its outcome into the final ACP prompt response,
-// delivers any mapped text via deliverPromptText (the only ACP mechanism
-// that carries assistant text, since the response itself never does), and
-// terminalizes the running turn on every path: COMPLETED when dispatch and
-// response mapping both succeed and the downstream outcome itself reports a
-// genuine completed status, CANCELED when the failure cause is
+// delivers canonical chat-session updates and/or V1 fallback text via
+// deliverPromptUpdates (see its own doc comment for the suppression rule),
+// and terminalizes the running turn on every path: COMPLETED when dispatch
+// and response mapping both succeed and the downstream outcome itself
+// reports a genuine completed status, CANCELED when the failure cause is
 // context.Canceled/context.DeadlineExceeded or the downstream outcome itself
-// reports canceled/timed-out, and FAILED for every other dispatch, text-
+// reports canceled/timed-out, and FAILED for every other dispatch, update-
 // delivery, terminal-result, or response-mapping failure. The terminalizing
 // AdvanceTurn call always runs -- using the exact session/turn identity
 // StartTurn admitted, not a value derived from whatever failed -- so no
 // admitted turn is ever left stranded in a non-terminal state regardless of
 // which step failed.
-func (s *Server) dispatchFactoryTurn(ctx context.Context, startResult chatsessions.StartTurnResult, turn session.PromptTurn) (json.RawMessage, *acpsdk.RequestError) {
+func (s *Server) dispatchFactoryTurn(
+	ctx context.Context,
+	startResult chatsessions.StartTurnResult,
+	turn session.PromptTurn,
+	reqIdentity chatsessions.RequestIdentity,
+) (json.RawMessage, *acpsdk.RequestError) {
 	var dispatched dispatchOutcome
 	var dispatchErr error
 	if startResult.Episode.FactorySessionID == "" {
@@ -340,7 +356,7 @@ func (s *Server) dispatchFactoryTurn(ctx context.Context, startResult chatsessio
 	if dispatchErr != nil {
 		terminal = terminalStateForFailure(dispatchErr)
 		rpcErr = classifyDependencyFailure(dispatchErr)
-	} else if notifyErr := deliverPromptText(promptNotifierFromContext(ctx), startResult.Session.ID, dispatched.outcome.Text); notifyErr != nil {
+	} else if notifyErr := s.deliverPromptUpdates(ctx, startResult, dispatched.sessionVersion, reqIdentity, dispatched.outcome.Text); notifyErr != nil {
 		terminal = chatsessions.TurnStateFailed
 		rpcErr = classifyDependencyFailure(notifyErr)
 	} else {
@@ -565,13 +581,14 @@ func (s *Server) startFactorySessionForEpisode(
 	}
 	outcome.SessionID = factorySessionID
 
-	if _, err := s.chatSessions.BindFactorySession(ctx, chatsessions.BindFactorySessionRequest{
+	bindResult, err := s.chatSessions.BindFactorySession(ctx, chatsessions.BindFactorySessionRequest{
 		SessionID:        startResult.Session.ID,
 		ExpectedVersion:  startResult.Session.Version,
 		Episode:          startResult.Episode.Number,
 		TurnID:           startResult.Turn.ID,
 		FactorySessionID: factorySessionID,
-	}); err != nil {
+	})
+	if err != nil {
 		var conflictErr *chatsessions.FactorySessionConflictError
 		if errors.As(err, &conflictErr) {
 			_, clearErr := s.chatSessions.RecordPendingFactorySession(ctx, chatsessions.RecordPendingFactorySessionRequest{
@@ -586,8 +603,9 @@ func (s *Server) startFactorySessionForEpisode(
 	}
 
 	return dispatchOutcome{
-		outcome:  protocol.MapFactoryInvocationOutcome(outcome),
-		terminal: factoryInvocationTurnState(outcome.Status),
+		outcome:        protocol.MapFactoryInvocationOutcome(outcome),
+		terminal:       factoryInvocationTurnState(outcome.Status),
+		sessionVersion: bindResult.Session.Version,
 	}, nil
 }
 
@@ -629,8 +647,9 @@ func (s *Server) invokeFactorySessionForEpisode(
 	}
 
 	return dispatchOutcome{
-		outcome:  protocol.MapFactoryInvocationOutcome(invokeResult),
-		terminal: factoryInvocationTurnState(invokeResult.Status),
+		outcome:        protocol.MapFactoryInvocationOutcome(invokeResult),
+		terminal:       factoryInvocationTurnState(invokeResult.Status),
+		sessionVersion: startResult.Session.Version,
 	}, nil
 }
 

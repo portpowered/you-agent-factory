@@ -31,6 +31,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
@@ -60,13 +61,18 @@ var errNullInitializeParams = errors.New("acp: initialize params must not be nul
 // "session/new", "session/set_config_option", the "/factory" fallback
 // command, and ordinary prompt turn admission dispatch to; factoryTarget is
 // the consumer-owned Factory Sessions shim an admitted ordinary prompt turn
-// starts or invokes against; resolveHomeDir supplies the operator home
+// starts or invokes against; events is the canonical Events collaborator an
+// admitted prompt turn drains chat-session/<id>/events through (see
+// streamTurnUpdates in prompt_stream.go) before falling back to V1
+// synchronous final text; resolveHomeDir supplies the operator home
 // directory used to derive the Operator Settings document path and Factory
-// discovery roots for a catalog resolution. Any of the four may be nil, in
+// discovery roots for a catalog resolution. Any of the five may be nil, in
 // which case a dispatched method reports a bounded internal error instead of
-// proceeding -- so a Server constructed for a slice of this transport that
-// never exercises them (for example the "initialize"-only smoke tests in
-// this package) never has to supply them.
+// proceeding (or, for events specifically, streamTurnUpdates degrades to a
+// streaming no-op rather than failing the turn -- see its own doc comment)
+// -- so a Server constructed for a slice of this transport that never
+// exercises them (for example the "initialize"-only smoke tests in this
+// package) never has to supply them.
 //
 // A Server instance holds no reconciliation state of its own for a started-
 // but-not-yet-bound Factory Session: that record lives on the episode itself
@@ -81,6 +87,7 @@ type Server struct {
 	chatSessions   chatsessions.Service
 	catalog        chatsessions.FactoryTargetCatalogService
 	factoryTarget  acp.FactoryTargetService
+	events         events.Service
 	resolveHomeDir func() (string, error)
 }
 
@@ -92,6 +99,7 @@ func New(
 	chatSessions chatsessions.Service,
 	catalog chatsessions.FactoryTargetCatalogService,
 	factoryTarget acp.FactoryTargetService,
+	eventsService events.Service,
 	resolveHomeDir func() (string, error),
 ) *Server {
 	return &Server{
@@ -99,6 +107,7 @@ func New(
 		chatSessions:   chatSessions,
 		catalog:        catalog,
 		factoryTarget:  factoryTarget,
+		events:         eventsService,
 		resolveHomeDir: resolveHomeDir,
 	}
 }
@@ -206,6 +215,13 @@ func (s *Server) serveConnection(ctx context.Context, connectionID identity.Conn
 		return writeNotification(out, n)
 	}
 
+	// attachments is this connection's one chatsessions.Attachment cache
+	// (see attachmentCache's own doc comment): reused across every
+	// "session/prompt" call on this connection so a later turn resumes the
+	// same delivery cursor instead of a fresh, later-arriving attachment
+	// silently observing the same records again.
+	attachments := &attachmentCache{}
+
 	var notificationSeq uint64
 	for {
 		if err := ctx.Err(); err != nil {
@@ -228,7 +244,7 @@ func (s *Server) serveConnection(ctx context.Context, connectionID identity.Conn
 		}
 		raw := append(json.RawMessage(nil), line...)
 
-		reqCtx := contextWithPromptNotifier(ctx, notify)
+		reqCtx := contextWithAttachmentCache(contextWithPromptNotifier(ctx, notify), attachments)
 		env, result, rpcErr := s.dispatchRequest(reqCtx, connectionID, notificationSeq, raw)
 		if env.IsNotification {
 			notificationSeq++

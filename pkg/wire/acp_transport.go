@@ -10,6 +10,7 @@ import (
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	chatsessionswire "github.com/portpowered/infinite-you/pkg/services/chat_sessions/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -233,18 +234,20 @@ func provideACPServerFactoryTargetService(
 
 // provideACPServer constructs the production ACP stdio Server from the same
 // canonical chatsessions.Service, chatsessions.FactoryTargetCatalogService,
-// and Factory Sessions shim instances the rest of this graph composes, so
-// the real "session/new", "session/set_config_option", "/factory", and
-// ordinary prompt-delegation consumer observes the one process-scoped Chat
-// Sessions and Factory Sessions authority instead of a second, independently
-// constructed instance. Construction alone performs no I/O; it starts no
-// goroutine, process, listener, session, or persistence.
+// events.Service, and Factory Sessions shim instances the rest of this graph
+// composes, so the real "session/new", "session/set_config_option",
+// "/factory", and ordinary prompt-delegation consumer observes the one
+// process-scoped Chat Sessions, Events, and Factory Sessions authority
+// instead of a second, independently constructed instance. Construction
+// alone performs no I/O; it starts no goroutine, process, listener, session,
+// or persistence.
 func provideACPServer(
 	logger logging.Logger,
 	chatSessions chatsessions.Service,
 	catalog chatsessions.FactoryTargetCatalogService,
 	factoryTarget acp.FactoryTargetService,
+	eventsService events.Service,
 	resolveHomeDir acpServerResolveHomeDir,
 ) acp.Server {
-	return acpwire.NewServer(logger, chatSessions, catalog, factoryTarget, resolveHomeDir)
+	return acpwire.NewServer(logger, chatSessions, catalog, factoryTarget, eventsService, resolveHomeDir)
 }

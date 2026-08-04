@@ -270,6 +270,7 @@ func identitySequenceRequest(sessionID string, sourceSeq int, parentItemID strin
 		SourceEventID:  events.SourceEventID("event-" + n),
 		SchemaID:       "worker.output.v1",
 		Kind:           workers.KindMessage,
+		Phase:          workers.PhaseCompleted,
 		ParentItemID:   parentItemID,
 		Payload:        json.RawMessage(`{"text":"message-` + n + `"}`),
 	}

@@ -649,7 +649,7 @@ func TestHandleSessionPromptEqualWireIDsAcrossConnectionsRemainDistinct(t *testi
 // configured reports a bounded internal failure rather than panicking or
 // dispatching a Factory effect.
 func TestHandleSessionPromptWithoutCollaboratorsReportsBoundedFailure(t *testing.T) {
-	server := New(nil, nil, nil, nil, nil)
+	server := New(nil, nil, nil, nil, nil, nil)
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams("session-1", "hello there"))
 
@@ -2035,7 +2035,7 @@ func TestHandleSessionPromptRunningTransitionFailureRecoveryAdmitsLaterPrompt(t 
 		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-1"},
 		invokeResult: factorysessions.InvocationResult{SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted},
 	}
-	server := New(nil, faulty, catalog, factoryTarget, func() (string, error) { return "/home/operator", nil })
+	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil })
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "first message"))
@@ -2084,7 +2084,7 @@ func TestHandleSessionPromptPendingFactorySessionSurvivesNewServerInstance(t *te
 		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-pending"},
 		invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted},
 	}
-	firstServer := New(nil, faulty, catalog, factoryTarget, func() (string, error) { return "/home/operator", nil })
+	firstServer := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil })
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "first message"))
@@ -2098,7 +2098,7 @@ func TestHandleSessionPromptPendingFactorySessionSurvivesNewServerInstance(t *te
 	// A brand-new Server, sharing only the underlying store (not the failed
 	// firstServer instance or its wrapper), stands in for a restarted
 	// transport process.
-	secondServer := New(nil, store, catalog, factoryTarget, func() (string, error) { return "/home/operator", nil })
+	secondServer := New(nil, store, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil })
 
 	secondEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "second message"))
@@ -2196,7 +2196,7 @@ func TestHandleSessionPromptTerminalTransitionFailureRecoveryAdmitsLaterPrompt(t
 		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-1"},
 		invokeResult: factorysessions.InvocationResult{SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted},
 	}
-	server := New(nil, faulty, catalog, factoryTarget, func() (string, error) { return "/home/operator", nil })
+	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil })
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "first message"))
@@ -2264,7 +2264,7 @@ func TestHandleSessionPromptFailedTerminalTransitionFailureRecoveryAdmitsLaterPr
 			SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted,
 		},
 	}
-	server := New(nil, faulty, catalog, factoryTarget, func() (string, error) { return "/home/operator", nil })
+	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil })
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "first message"))

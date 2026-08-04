@@ -47,6 +47,13 @@ type SequenceRequest struct {
 	SourceEventID  events.SourceEventID
 	SchemaID       events.SchemaID
 	Kind           workers.Kind
+	// Phase names the source-native workers.Phase this record was produced
+	// in. It travels alongside Kind as its own envelope field (not folded
+	// into Payload) for the same reason Kind does: a later reader must be
+	// able to route the record -- reconstructing the workers.Draft a
+	// downstream projector like the ACP transport's mapping.Project expects
+	// -- without parsing Payload's source-native shape first.
+	Phase workers.Phase
 	// ParentItemID names the already-sequenced aggregate item this record is
 	// a child of, or is blank for a record with no parent.
 	ParentItemID string
@@ -82,6 +89,9 @@ func (r SequenceRequest) Validate() error {
 	if err := r.Kind.Validate(); err != nil {
 		return newValidationError("SequenceRequest", "Kind", ErrUnknownEnumValue)
 	}
+	if err := r.Phase.Validate(); err != nil {
+		return newValidationError("SequenceRequest", "Phase", ErrUnknownEnumValue)
+	}
 	if len(r.Payload) == 0 {
 		return newValidationError("SequenceRequest", "Payload", ErrRequiredValue)
 	}
@@ -101,6 +111,7 @@ type SequencedItem struct {
 	ItemID       string          `json:"itemId"`
 	ParentItemID string          `json:"parentItemId,omitempty"`
 	Kind         workers.Kind    `json:"kind"`
+	Phase        workers.Phase   `json:"phase"`
 	Payload      json.RawMessage `json:"payload"`
 }
 
@@ -112,6 +123,9 @@ func (i SequencedItem) Validate() error {
 	}
 	if err := i.Kind.Validate(); err != nil {
 		return newValidationError("SequencedItem", "Kind", ErrUnknownEnumValue)
+	}
+	if err := i.Phase.Validate(); err != nil {
+		return newValidationError("SequencedItem", "Phase", ErrUnknownEnumValue)
 	}
 	if len(i.Payload) == 0 {
 		return newValidationError("SequencedItem", "Payload", ErrRequiredValue)
