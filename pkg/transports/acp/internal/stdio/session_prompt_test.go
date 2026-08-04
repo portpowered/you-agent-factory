@@ -52,6 +52,15 @@ func (stubEventsAppender) Append(context.Context, events.AppendRequest) (events.
 	return events.AppendResult{}, nil
 }
 
+// stubEventsReader is a minimal chatsessionswire.EventsReader double for
+// tests that construct a real chatsessions.Store but do not themselves
+// exercise AcknowledgeAttachment.
+type stubEventsReader struct{}
+
+func (stubEventsReader) Read(context.Context, events.ReadRequest) (events.ReadResult, error) {
+	return events.ReadResult{}, nil
+}
+
 // firstCallFailingChatSessions wraps a real chatsessions.Service and injects
 // injectErr into exactly the first call to the named method, letting every
 // other call (including every later call to that same method) pass through
@@ -2003,7 +2012,7 @@ func TestHandleSessionPromptRunningTransitionFailureMakesNoFactoryDispatchCall(t
 // a later uniquely identified prompt on the same session is admitted and
 // dispatches, instead of being rejected as busy forever.
 func TestHandleSessionPromptRunningTransitionFailureRecoveryAdmitsLaterPrompt(t *testing.T) {
-	store, err := chatsessionswire.NewService(sequentialIDGenerator("session"), fixedClock(time.Unix(0, 1)), stubEventsAppender{})
+	store, err := chatsessionswire.NewService(sequentialIDGenerator("session"), fixedClock(time.Unix(0, 1)), stubEventsAppender{}, stubEventsReader{})
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -2053,7 +2062,7 @@ func TestHandleSessionPromptRunningTransitionFailureRecoveryAdmitsLaterPrompt(t 
 // identity through the second turn's own admitted episode snapshot and
 // invokes it instead of starting a second Factory Session.
 func TestHandleSessionPromptPendingFactorySessionSurvivesNewServerInstance(t *testing.T) {
-	store, err := chatsessionswire.NewService(sequentialIDGenerator("session"), fixedClock(time.Unix(0, 1)), stubEventsAppender{})
+	store, err := chatsessionswire.NewService(sequentialIDGenerator("session"), fixedClock(time.Unix(0, 1)), stubEventsAppender{}, stubEventsReader{})
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -2166,7 +2175,7 @@ func TestHandleSessionPromptTerminalTransitionFailurePropagatesBoundedError(t *t
 // not just that admission recovers, but that recovery never causes a second
 // Factory Session to be started for the same episode.
 func TestHandleSessionPromptTerminalTransitionFailureRecoveryAdmitsLaterPrompt(t *testing.T) {
-	store, err := chatsessionswire.NewService(sequentialIDGenerator("session"), fixedClock(time.Unix(0, 1)), stubEventsAppender{})
+	store, err := chatsessionswire.NewService(sequentialIDGenerator("session"), fixedClock(time.Unix(0, 1)), stubEventsAppender{}, stubEventsReader{})
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -2223,7 +2232,7 @@ func TestHandleSessionPromptTerminalTransitionFailureRecoveryAdmitsLaterPrompt(t
 // RUNNING->CANCELED transition is a real, legal state change, and a later
 // uniquely identified prompt is genuinely admitted afterward.
 func TestHandleSessionPromptFailedTerminalTransitionFailureRecoveryAdmitsLaterPrompt(t *testing.T) {
-	store, err := chatsessionswire.NewService(sequentialIDGenerator("session"), fixedClock(time.Unix(0, 1)), stubEventsAppender{})
+	store, err := chatsessionswire.NewService(sequentialIDGenerator("session"), fixedClock(time.Unix(0, 1)), stubEventsAppender{}, stubEventsReader{})
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}

@@ -31,6 +31,18 @@ type EventsAppender interface {
 	Append(context.Context, events.AppendRequest) (events.AppendResult, error)
 }
 
+// EventsReader is the narrow Events dependency AcknowledgeAttachment needs:
+// read a bounded slice of a topic's aggregate ordering to detect whether the
+// range between an attachment's current position and its requested new
+// position has fallen outside Events' retention window. Store depends on
+// this port rather than the full events.Service for the same reason
+// EventsAppender is narrow -- a caller wiring only tests that never call
+// AcknowledgeAttachment never has to satisfy it. Any events.Service value
+// already satisfies this interface structurally.
+type EventsReader interface {
+	Read(context.Context, events.ReadRequest) (events.ReadResult, error)
+}
+
 // Store is the synchronized in-memory implementation of the L1 V1 Chat
 // Sessions engine. The zero value is not usable; construct with New.
 type Store struct {
@@ -40,6 +52,7 @@ type Store struct {
 	newID          IDGenerator
 	now            Clock
 	eventsAppender EventsAppender
+	eventsReader   EventsReader
 	logger         logging.Logger
 }
 
@@ -50,6 +63,16 @@ type Store struct {
 // before s is shared across goroutines.
 func (s *Store) WithEventsAppender(appender EventsAppender) *Store {
 	s.eventsAppender = appender
+	return s
+}
+
+// WithEventsReader sets the Events read port AcknowledgeAttachment uses to
+// detect a retention gap between an attachment's current and requested
+// position, and returns s for construction chaining. It mutates s in place
+// (see WithEventsAppender) and is intended to be called once during
+// construction wiring, before s is shared across goroutines.
+func (s *Store) WithEventsReader(reader EventsReader) *Store {
+	s.eventsReader = reader
 	return s
 }
 

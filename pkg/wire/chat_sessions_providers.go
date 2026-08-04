@@ -12,10 +12,11 @@ import (
 
 // provideChatSessionsService constructs the singular canonical
 // chat_sessions.Service instance through its focused wire provider,
-// threading the same canonical events.Service instance in as its Sequence
-// operation's EventsAppender dependency. It is the one construction path to
-// a Service value in production code: no alternate constructor, dependency
-// bag, or secondary injector exists.
+// threading the same canonical events.Service instance in as both its
+// Sequence operation's EventsAppender dependency and its
+// AcknowledgeAttachment operation's EventsReader dependency. It is the one
+// construction path to a Service value in production code: no alternate
+// constructor, dependency bag, or secondary injector exists.
 func provideChatSessionsService(eventsService events.Service, logger logging.Logger) (chatsessions.Service, error) {
-	return chatsessionswire.NewService(uuid.NewString, time.Now, eventsService, logger)
+	return chatsessionswire.NewService(uuid.NewString, time.Now, eventsService, eventsService, logger)
 }

@@ -34,12 +34,18 @@ type Clock = internalservice.Clock
 // events.Service value satisfies this interface structurally.
 type EventsAppender = internalservice.EventsAppender
 
+// EventsReader is the narrow Events dependency the constructed Service's
+// AcknowledgeAttachment operation reads through to detect a retention gap
+// between an attachment's current and requested position. Any
+// events.Service value satisfies this interface structurally.
+type EventsReader = internalservice.EventsReader
+
 // NewService constructs the singular in-memory Chat Sessions root from
-// explicit construction ports. newID, now, and eventsAppender are required;
-// logger is optional and defaults to a no-op logger when omitted. This is
-// the one canonical constructor for chatsessions.Service: production code
-// has no alternate path to a Service value.
-func NewService(newID IDGenerator, now Clock, eventsAppender EventsAppender, logger ...logging.Logger) (chatsessions.Service, error) {
+// explicit construction ports. newID, now, eventsAppender, and eventsReader
+// are required; logger is optional and defaults to a no-op logger when
+// omitted. This is the one canonical constructor for chatsessions.Service:
+// production code has no alternate path to a Service value.
+func NewService(newID IDGenerator, now Clock, eventsAppender EventsAppender, eventsReader EventsReader, logger ...logging.Logger) (chatsessions.Service, error) {
 	if newID == nil {
 		return nil, fmt.Errorf("construct chat sessions: id generator is required")
 	}
@@ -49,7 +55,10 @@ func NewService(newID IDGenerator, now Clock, eventsAppender EventsAppender, log
 	if eventsAppender == nil {
 		return nil, fmt.Errorf("construct chat sessions: events appender is required")
 	}
-	return internalservice.NewStore(newID, now, logger...).WithEventsAppender(eventsAppender), nil
+	if eventsReader == nil {
+		return nil, fmt.Errorf("construct chat sessions: events reader is required")
+	}
+	return internalservice.NewStore(newID, now, logger...).WithEventsAppender(eventsAppender).WithEventsReader(eventsReader), nil
 }
 
 // NewFactoryTargetCatalogService constructs the Chat Sessions Factory

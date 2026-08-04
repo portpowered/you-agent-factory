@@ -74,6 +74,16 @@ var (
 	// tuple. Sequence rejects the reused tuple deterministically instead of
 	// silently returning the stale, contradicted identity.
 	ErrSequencedIdentityContradiction = errors.New("chat sessions: reused source identity contradicts originally sequenced record")
+	// ErrAttachmentBeyondStreamHead reports that AcknowledgeAttachment was
+	// asked to advance an Attachment's AfterSequence past the session's
+	// current StreamHead -- a position no Sequence call has committed yet,
+	// so no attachment can legitimately claim to have observed it.
+	ErrAttachmentBeyondStreamHead = errors.New("chat sessions: requested attachment position is beyond the session's stream head")
+	// ErrAttachmentRetentionGap reports that AcknowledgeAttachment's
+	// requested AfterSequence spans a range between the attachment's current
+	// position and the requested one that Events retention has since
+	// evicted, so the attachment cannot have genuinely observed it.
+	ErrAttachmentRetentionGap = errors.New("chat sessions: requested attachment position spans an evicted retention gap")
 )
 
 // ValidationError reports one Chat Sessions value-validation failure. Value
@@ -240,6 +250,54 @@ func (e *SequencedIdentityConflictError) Error() string {
 // can classify the failure.
 func (e *SequencedIdentityConflictError) Unwrap() error {
 	return ErrSequencedIdentityContradiction
+}
+
+// AttachmentPositionError reports that AcknowledgeAttachment rejected a
+// requested AfterSequence because it names a position beyond the session's
+// current StreamHead. StreamHead is the session's actual bound at rejection
+// time; neither the attachment nor the session is mutated.
+type AttachmentPositionError struct {
+	SessionID    string
+	AttachmentID string
+	Requested    uint64
+	StreamHead   uint64
+}
+
+func (e *AttachmentPositionError) Error() string {
+	return fmt.Sprintf("chat sessions: session %q attachment %q: requested position %d exceeds stream head %d: %v",
+		e.SessionID, e.AttachmentID, e.Requested, e.StreamHead, ErrAttachmentBeyondStreamHead)
+}
+
+// Unwrap exposes ErrAttachmentBeyondStreamHead so errors.Is/errors.As can
+// classify the failure.
+func (e *AttachmentPositionError) Unwrap() error {
+	return ErrAttachmentBeyondStreamHead
+}
+
+// AttachmentRetentionGapError reports that AcknowledgeAttachment rejected a
+// requested AfterSequence because Events retention no longer retains the
+// full range between the attachment's current position and the requested
+// one -- the attachment cannot have genuinely observed records that no
+// longer exist to prove delivery of. EarliestRetained and Head are the
+// Events-reported retained bounds at rejection time; neither the attachment
+// nor the session is mutated.
+type AttachmentRetentionGapError struct {
+	SessionID        string
+	AttachmentID     string
+	Requested        uint64
+	EarliestRetained uint64
+	Head             uint64
+}
+
+func (e *AttachmentRetentionGapError) Error() string {
+	return fmt.Sprintf("chat sessions: session %q attachment %q: requested position %d: %v: earliest retained %d, head %d",
+		e.SessionID, e.AttachmentID, e.Requested, ErrAttachmentRetentionGap, e.EarliestRetained, e.Head)
+}
+
+// Unwrap exposes ErrAttachmentRetentionGap so errors.Is/errors.As can
+// classify the failure.
+func (e *AttachmentRetentionGapError) Unwrap() error {
+	return ErrAttachmentRetentionGap
 }
 
 // TargetEpisodeNotClosedError reports that OpenNextTargetEpisode was invoked

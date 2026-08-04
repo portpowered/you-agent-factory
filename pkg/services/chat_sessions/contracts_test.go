@@ -15,10 +15,11 @@ import (
 // an external consumer using nothing but the package's public contracts. It
 // is not a candidate production implementation.
 type fakeService struct {
-	session       chatsessions.Session
-	turn          chatsessions.Turn
-	intent        chatsessions.ControlIntent
-	sequenceCount int
+	session                 chatsessions.Session
+	turn                    chatsessions.Turn
+	intent                  chatsessions.ControlIntent
+	sequenceCount           int
+	attachmentAfterSequence uint64
 }
 
 var _ chatsessions.Service = (*fakeService)(nil)
@@ -156,6 +157,23 @@ func (f *fakeService) AdvanceStreamHead(_ context.Context, req chatsessions.Adva
 	f.session.StreamHead = uint64(req.AggregateSequence)
 	f.session.Version++
 	return chatsessions.AdvanceStreamHeadResult{Session: f.session, Outcome: chatsessions.AdvanceStreamHeadOutcomeAdvanced}, nil
+}
+
+// AcknowledgeAttachment is a minimal fake: it advances the single tracked
+// attachment's AfterSequence unconditionally when it is behind
+// req.AfterSequence, since none of this fake's own tests exercise version
+// conflicts or retention gaps.
+func (f *fakeService) AcknowledgeAttachment(_ context.Context, req chatsessions.AcknowledgeAttachmentRequest) (chatsessions.AcknowledgeAttachmentResult, error) {
+	if req.SessionID != f.session.ID || req.AttachmentID != "attachment-1" {
+		return chatsessions.AcknowledgeAttachmentResult{}, &chatsessions.NotFoundError{Value: "Attachment", ID: req.AttachmentID}
+	}
+	attachment := chatsessions.Attachment{ID: "attachment-1", SessionID: f.session.ID, ConnectionID: "conn-2", AfterSequence: f.attachmentAfterSequence}
+	if f.attachmentAfterSequence >= uint64(req.AfterSequence) {
+		return chatsessions.AcknowledgeAttachmentResult{Attachment: attachment, Outcome: chatsessions.AcknowledgeAttachmentOutcomeAlreadyCurrent}, nil
+	}
+	f.attachmentAfterSequence = uint64(req.AfterSequence)
+	attachment.AfterSequence = f.attachmentAfterSequence
+	return chatsessions.AcknowledgeAttachmentResult{Attachment: attachment, Outcome: chatsessions.AcknowledgeAttachmentOutcomeAdvanced}, nil
 }
 
 func (f *fakeService) Detach(_ context.Context, req chatsessions.DetachRequest) (chatsessions.DetachResult, error) {

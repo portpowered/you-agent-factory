@@ -246,6 +246,10 @@ func (f *fakeChatSessionsService) AdvanceStreamHead(context.Context, chatsession
 	return chatsessions.AdvanceStreamHeadResult{}, errors.New("fakeChatSessionsService: AdvanceStreamHead not implemented")
 }
 
+func (f *fakeChatSessionsService) AcknowledgeAttachment(context.Context, chatsessions.AcknowledgeAttachmentRequest) (chatsessions.AcknowledgeAttachmentResult, error) {
+	return chatsessions.AcknowledgeAttachmentResult{}, errors.New("fakeChatSessionsService: AcknowledgeAttachment not implemented")
+}
+
 // fakeFactoryTargetCatalogService is a minimal
 // chatsessions.FactoryTargetCatalogService test double.
 type fakeFactoryTargetCatalogService struct {

@@ -25,7 +25,9 @@ func classifyError(err error) string {
 	case errors.Is(err, chatsessions.ErrInvalidTransition):
 		return "invalid_transition"
 	case errors.Is(err, chatsessions.ErrTargetEpisodeNotClosed),
-		errors.Is(err, chatsessions.ErrTargetEpisodeNumberExhausted):
+		errors.Is(err, chatsessions.ErrTargetEpisodeNumberExhausted),
+		errors.Is(err, chatsessions.ErrAttachmentBeyondStreamHead),
+		errors.Is(err, chatsessions.ErrAttachmentRetentionGap):
 		return "invariant_violation"
 	default:
 		return "validation"

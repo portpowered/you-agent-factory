@@ -170,6 +170,26 @@ type Service interface {
 	// attachment, control, or episode state. It reports *NotFoundError when
 	// SessionID does not identify an existing session.
 	AdvanceStreamHead(ctx context.Context, req AdvanceStreamHeadRequest) (AdvanceStreamHeadResult, error)
+
+	// AcknowledgeAttachment advances one Attachment's own AfterSequence
+	// delivery cursor to AfterSequence under an optimistic session-version
+	// guard. When AfterSequence already stands at or beyond the requested
+	// position, the call is an idempotent no-op: it reports
+	// AcknowledgeAttachmentOutcomeAlreadyCurrent and leaves the attachment
+	// unchanged, so a retried or stale (including backward-moving)
+	// acknowledgement can never regress the cursor. It reports
+	// *AttachmentPositionError when the requested position exceeds the
+	// session's current StreamHead, *ConflictError when ExpectedVersion no
+	// longer matches the session's current version, and
+	// *AttachmentRetentionGapError when Events retention has evicted part of
+	// the range between the attachment's current position and the requested
+	// one -- in every failure case the attachment and session are left
+	// byte-for-byte unchanged. A successful acknowledgement never changes
+	// any other attachment, Session.StreamHead, Session.Version, or any
+	// ControlIntent. It reports *NotFoundError when SessionID does not
+	// identify an existing session or AttachmentID does not identify an
+	// existing attachment on that session.
+	AcknowledgeAttachment(ctx context.Context, req AcknowledgeAttachmentRequest) (AcknowledgeAttachmentResult, error)
 }
 
 // CreateSessionRequest carries the caller identity, initial target, and

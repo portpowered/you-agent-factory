@@ -30,6 +30,14 @@ type fakeTopicState struct {
 	head     events.AggregateSequence
 	identity map[events.AppendIdentity]events.Record
 	commits  []events.AppendRequest
+	// records holds every still-retained Record in commit order, used by
+	// Read. retentionLimit, when nonzero, caps how many records this fake
+	// keeps: an Append past the cap evicts the oldest records and advances
+	// the topic's earliest-retained position, simulating Events' own
+	// bounded-retention eviction deterministically (no wall-clock or
+	// wait-for-eviction needed in a test).
+	records        []events.Record
+	retentionLimit int
 }
 
 func newFakeEventsAppender() *fakeEventsAppender {
@@ -70,7 +78,90 @@ func (f *fakeEventsAppender) Append(ctx context.Context, req events.AppendReques
 	}.Detached()
 	ts.identity[identity] = record
 	ts.commits = append(ts.commits, detached)
+	ts.records = append(ts.records, record)
+	if ts.retentionLimit > 0 && len(ts.records) > ts.retentionLimit {
+		evict := len(ts.records) - ts.retentionLimit
+		ts.records = ts.records[evict:]
+	}
 	return events.AppendResult{Record: record.Detached(), Outcome: events.AppendOutcomeAccepted}, nil
+}
+
+// Read is a minimal, concurrency-safe EventsReader double over the same
+// retained-records state Append maintains. It reports ReadOutcomeGap when
+// From names a position before the oldest still-retained record (per
+// retentionLimit eviction), ReadOutcomeAtHead when From already names the
+// topic's live head, ReadOutcomeInvalidCursor when From names a position
+// beyond the live head, and ReadOutcomeProgress otherwise -- mirroring the
+// real Events Store's outcome contract closely enough for
+// AcknowledgeAttachment's gap-detection tests without depending on
+// events/internal/service.
+func (f *fakeEventsAppender) Read(_ context.Context, req events.ReadRequest) (events.ReadResult, error) {
+	if err := req.Validate(); err != nil {
+		return events.ReadResult{}, err
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	ts, ok := f.topics[req.Topic]
+	if !ok {
+		return events.ReadResult{}, events.ErrUnknownTopic
+	}
+
+	var earliest events.AggregateSequence
+	if len(ts.records) > 0 {
+		earliest = ts.records[0].ID.Position
+	}
+	head := ts.head
+	from := req.From.Position
+
+	switch {
+	case from > head:
+		return events.ReadResult{Outcome: events.ReadOutcomeInvalidCursor}, nil
+	case earliest > 0 && from+1 < earliest:
+		return events.ReadResult{
+			Outcome: events.ReadOutcomeGap,
+			Gap: &events.GapFacts{
+				Topic:            req.Topic,
+				Requested:        from + 1,
+				EarliestRetained: earliest,
+				Head:             head,
+			},
+		}, nil
+	case from == head:
+		return events.ReadResult{
+			Outcome:  events.ReadOutcomeAtHead,
+			Next:     events.Cursor{Topic: req.Topic, Position: head},
+			Retained: events.RetainedRange{Topic: req.Topic, Earliest: earliest, Head: head},
+		}, nil
+	default:
+		startIdx := max(int(from-earliest+1), 0)
+		end := min(startIdx+req.Limit, len(ts.records))
+		recs := make([]events.Record, end-startIdx)
+		copy(recs, ts.records[startIdx:end])
+		last := recs[len(recs)-1]
+		return events.ReadResult{
+			Records:  recs,
+			Next:     events.Cursor{Topic: req.Topic, Position: last.ID.Position},
+			Retained: events.RetainedRange{Topic: req.Topic, Earliest: earliest, Head: head},
+			Outcome:  events.ReadOutcomeProgress,
+		}, nil
+	}
+}
+
+// setRetentionLimit caps how many records topic keeps retained, lazily
+// creating the topic's state if no record has been committed to it yet, and
+// returns f for call chaining in test setup.
+func (f *fakeEventsAppender) setRetentionLimit(topic events.Topic, limit int) *fakeEventsAppender {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	ts, ok := f.topics[topic]
+	if !ok {
+		ts = &fakeTopicState{identity: make(map[events.AppendIdentity]events.Record)}
+		f.topics[topic] = ts
+	}
+	ts.retentionLimit = limit
+	return f
 }
 
 func (f *fakeEventsAppender) commitCount(topic events.Topic) int {
@@ -84,11 +175,12 @@ func (f *fakeEventsAppender) commitCount(topic events.Topic) int {
 }
 
 // newSequencingTestSession constructs a Store wired to a fresh
-// fakeEventsAppender and one created Session ready for Sequence calls.
+// fakeEventsAppender (also serving as the Store's EventsReader, since it
+// implements both) and one created Session ready for Sequence calls.
 func newSequencingTestSession(t *testing.T) (*Store, chatsessions.Session, *fakeEventsAppender) {
 	t.Helper()
 	appender := newFakeEventsAppender()
-	store := NewStore(sequentialIDs("id"), fixedClock(time.Now())).WithEventsAppender(appender)
+	store := NewStore(sequentialIDs("id"), fixedClock(time.Now())).WithEventsAppender(appender).WithEventsReader(appender)
 	created, err := store.CreateSession(context.Background(), validCreateRequest())
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
