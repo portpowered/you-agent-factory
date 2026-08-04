@@ -258,9 +258,26 @@ func (f *fakeChatSessionsService) AdvanceTurn(_ context.Context, req chatsession
 	return chatsessions.AdvanceTurnResult{Turn: chatsessions.Turn{ID: req.TurnID, State: req.Next}}, nil
 }
 
+// Attach mirrors the real chatsessions.Service.Attach contract's Resume
+// behavior (see that Store method's own doc comment): when req.Resume and
+// req.Interactive are both true and this fake already holds a detached
+// interactive attachment, it reactivates that same attachment (its ID and
+// AfterSequence survive) under the new ConnectionID instead of minting a
+// fresh one.
 func (f *fakeChatSessionsService) Attach(_ context.Context, req chatsessions.AttachRequest) (chatsessions.AttachResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if req.Resume && req.Interactive {
+		for id, existing := range f.attachments {
+			if existing.Detached && existing.Interactive {
+				existing.ConnectionID = req.ConnectionID
+				existing.Detached = false
+				f.attachments[id] = existing
+				return chatsessions.AttachResult{Attachment: existing}, nil
+			}
+		}
+	}
+
 	f.nextAttachmentID++
 	attachment := chatsessions.Attachment{
 		ID:           fmt.Sprintf("attachment-%d", f.nextAttachmentID),
@@ -276,10 +293,11 @@ func (f *fakeChatSessionsService) Attach(_ context.Context, req chatsessions.Att
 }
 
 // Detach mirrors the real chatsessions.Service.Detach contract closely
-// enough for disconnect-cleanup tests: it removes the named attachment from
-// the same attachments map Attach/AcknowledgeAttachment share and reports
-// *chatsessions.NotFoundError for an attachment ID this fake never
-// registered (or already removed), matching the real Service's own
+// enough for disconnect-cleanup and reconnect tests: it marks the named
+// attachment Detached in place (preserving its ID and AfterSequence for a
+// later Resume, exactly like the real Store -- see Attach above) rather than
+// removing it, and reports *chatsessions.NotFoundError for an attachment ID
+// this fake never registered, matching the real Service's own
 // unknown-attachment behavior.
 func (f *fakeChatSessionsService) Detach(_ context.Context, req chatsessions.DetachRequest) (chatsessions.DetachResult, error) {
 	f.mu.Lock()
@@ -288,10 +306,12 @@ func (f *fakeChatSessionsService) Detach(_ context.Context, req chatsessions.Det
 	if f.detachErr != nil {
 		return chatsessions.DetachResult{}, f.detachErr
 	}
-	if _, ok := f.attachments[req.AttachmentID]; !ok {
+	attachment, ok := f.attachments[req.AttachmentID]
+	if !ok {
 		return chatsessions.DetachResult{}, &chatsessions.NotFoundError{Value: "Attachment", ID: req.AttachmentID}
 	}
-	delete(f.attachments, req.AttachmentID)
+	attachment.Detached = true
+	f.attachments[req.AttachmentID] = attachment
 	return chatsessions.DetachResult{}, nil
 }
 

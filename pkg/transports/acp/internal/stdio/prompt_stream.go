@@ -155,12 +155,27 @@ var errMalformedSequencedEnvelope = errors.New("acp: chat session aggregate reco
 
 // ensureAttachment returns this connection's already-registered Attachment
 // for sessionID, reusing attachmentCacheFromContext(ctx) when a prior turn
-// on this same connection already attached, or registers a new one via
+// on this same connection already attached, or registers one via
 // chatSessions.Attach otherwise. connectionID identifies the caller for a
 // freshly registered Attachment; a blank connectionID (a request identity
 // with no connection pairing, such as a transport-minted RequestIdentity)
 // never attaches and reports ok=false so a caller can safely skip streaming
 // for this turn rather than fail it outright.
+//
+// Every Attach call here requests Resume: true, so a connection that is the
+// first to touch sessionID since an earlier connection's Detach (see
+// detachAttachments) reactivates that earlier connection's own interactive
+// attachment -- with its original ID and already-advanced AfterSequence
+// delivery cursor -- instead of starting over at position zero; a session
+// with no detached interactive attachment (its first-ever attach, or one
+// whose interactive attachment is still actively connected elsewhere) is
+// unaffected, since AttachRequest.Resume only ever reactivates a match and
+// otherwise creates an ordinary fresh attachment. This is what lets a
+// reconnecting client -- whether it reaches this transport again through
+// "session/load"/"session/resume" (see handleSessionLoad/handleSessionResume
+// in session_load.go, which call this same method eagerly) or simply issues
+// its next "session/prompt" on the same known session id -- resume
+// delivery from where its previous connection left off.
 func (s *Server) ensureAttachment(ctx context.Context, connectionID, sessionID string) (attachment chatsessions.Attachment, ok bool, err error) {
 	cache := attachmentCacheFromContext(ctx)
 	if a, cached := cache.get(sessionID); cached {
@@ -174,6 +189,7 @@ func (s *Server) ensureAttachment(ctx context.Context, connectionID, sessionID s
 		SessionID:    sessionID,
 		ConnectionID: connectionID,
 		Interactive:  true,
+		Resume:       true,
 	})
 	if err != nil {
 		return chatsessions.Attachment{}, false, err

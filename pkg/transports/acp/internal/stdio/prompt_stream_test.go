@@ -835,7 +835,17 @@ func TestDetachAttachmentsCompletesAfterContextCancellation(t *testing.T) {
 // still observes every currently retained record exactly once, in order,
 // with its original sequencer-assigned ItemID: detaching one consumer never
 // corrupts the shared topic or session for the next one.
-func TestStreamTurnUpdatesReconnectAfterDetachReplaysRetainedHistoryOnce(t *testing.T) {
+// TestStreamTurnUpdatesReconnectAfterDetachResumesWithoutReplayingAcknowledgedHistory
+// proves a reconnecting connection (a fresh attachmentCache and connection
+// id, exactly what a new "session/load"/"session/resume" or "session/prompt"
+// call on a brand-new connection observes) resumes from its previous
+// connection's last acknowledged position instead of replaying already-
+// delivered history from position zero: ensureAttachment's Resume request
+// (see prompt_stream.go) reactivates the detached interactive attachment
+// Detach left behind, so the second connection's streamTurnUpdates call
+// observes zero notifications for the record the first connection already
+// acknowledged, and exactly one for a record committed afterward.
+func TestStreamTurnUpdatesReconnectAfterDetachResumesWithoutReplayingAcknowledgedHistory(t *testing.T) {
 	factoryTarget := &fakeFactoryTargetService{}
 	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
 	chatSessions := server.chatSessions.(*fakeChatSessionsService)
@@ -851,6 +861,7 @@ func TestStreamTurnUpdatesReconnectAfterDetachReplaysRetainedHistoryOnce(t *test
 	if len(*firstNotified) != 1 {
 		t.Fatalf("first connection notify count = %d, want exactly 1", len(*firstNotified))
 	}
+	firstAttachment, _ := firstCache.get(streamingTestSessionID)
 
 	server.detachAttachments(context.Background(), firstCache)
 	if len(chatSessions.detachCalls) != 1 {
@@ -862,11 +873,29 @@ func TestStreamTurnUpdatesReconnectAfterDetachReplaysRetainedHistoryOnce(t *test
 	if _, err := server.streamTurnUpdates(secondCtx, "conn-second", streamingTestSessionID, 1, secondNotify); err != nil {
 		t.Fatalf("reconnecting connection streamTurnUpdates() error = %v, want success", err)
 	}
-	if len(*secondNotified) != 1 {
-		t.Fatalf("reconnecting connection notify count = %d, want exactly 1 (the retained record, replayed once)", len(*secondNotified))
+	if len(*secondNotified) != 0 {
+		t.Fatalf("reconnecting connection notify count = %d, want exactly 0 (the already-acknowledged record must not replay)", len(*secondNotified))
 	}
-	if got := notificationItemID(t, (*secondNotified)[0]); got != "item-1" {
-		t.Fatalf("reconnecting connection notification item id = %q, want the original %q", got, "item-1")
+	secondAttachment, ok := attachmentCacheFromContext(secondCtx).get(streamingTestSessionID)
+	if !ok {
+		t.Fatal("reconnecting connection never registered an attachment")
+	}
+	if secondAttachment.ID != firstAttachment.ID {
+		t.Fatalf("reconnecting connection attachment ID = %q, want the original attachment %q reactivated", secondAttachment.ID, firstAttachment.ID)
+	}
+	if secondAttachment.AfterSequence != firstAttachment.AfterSequence {
+		t.Fatalf("reconnecting connection AfterSequence = %d, want preserved %d", secondAttachment.AfterSequence, firstAttachment.AfterSequence)
+	}
+
+	eventsSvc.seedItem(t, streamingTestSessionID, "item-2", "", workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("after reconnect"))
+	if _, err := server.streamTurnUpdates(secondCtx, "conn-second", streamingTestSessionID, 1, secondNotify); err != nil {
+		t.Fatalf("reconnecting connection streamTurnUpdates() (second call) error = %v, want success", err)
+	}
+	if len(*secondNotified) != 1 {
+		t.Fatalf("reconnecting connection notify count after a later record = %d, want exactly 1", len(*secondNotified))
+	}
+	if got := notificationItemID(t, (*secondNotified)[0]); got != "item-2" {
+		t.Fatalf("reconnecting connection notification item id = %q, want the later record %q", got, "item-2")
 	}
 }
 

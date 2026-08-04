@@ -350,10 +350,10 @@ func TestServeIsolatesConnectionsReusingTheSameWireID(t *testing.T) {
 // expects at all, proving all of them get method-not-found rather than
 // being dispatched or hanging. "session/prompt" is excluded: it is now
 // dispatched (for "/factory <value>" only), covered in session_prompt_test.go.
+// "session/load" and "session/resume" are excluded the same way: they are
+// now dispatched too, covered in session_load_test.go.
 func TestServeRespondsMethodNotFoundForEveryUnimplementedMethod(t *testing.T) {
 	methods := []string{
-		"session/load",
-		"session/resume",
 		"session/request_permission",
 		"totally/unrecognized_method",
 	}

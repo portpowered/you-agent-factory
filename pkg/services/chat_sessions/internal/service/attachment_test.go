@@ -65,9 +65,11 @@ func TestStore_Attach_ReturnsDetachedValueWithUniqueID(t *testing.T) {
 }
 
 // TestStore_Attach_TwoAttachmentsRemainIndependent proves two attachments to
-// the same session with matching other fields remain distinct, and attaching
-// or detaching one does not change the other attachment or the session's
-// stream head, episode history, turns, or version.
+// the same session with matching other fields remain distinct, and detaching
+// one marks only that attachment Detached (preserving its ID and delivery
+// cursor for a later Resume -- see Detach's own doc comment) without
+// changing the other attachment or the session's stream head, episode
+// history, turns, or version.
 func TestStore_Attach_TwoAttachmentsRemainIndependent(t *testing.T) {
 	ctx := context.Background()
 	store, session := newAttachTestSession(t)
@@ -91,8 +93,15 @@ func TestStore_Attach_TwoAttachmentsRemainIndependent(t *testing.T) {
 	store.mu.RLock()
 	record := store.sessions[session.ID]
 	store.mu.RUnlock()
-	if _, ok := record.attachments[first.Attachment.ID]; ok {
-		t.Fatal("detached attachment still present")
+	detachedFirst, ok := record.attachments[first.Attachment.ID]
+	if !ok {
+		t.Fatal("detached attachment was removed, want preserved with Detached=true")
+	}
+	if !detachedFirst.Detached {
+		t.Fatal("detached attachment Detached = false, want true")
+	}
+	if detachedFirst.AfterSequence != first.Attachment.AfterSequence || detachedFirst.ID != first.Attachment.ID {
+		t.Fatalf("detached attachment identity/cursor changed: got %+v, want ID/AfterSequence matching %+v", detachedFirst, first.Attachment)
 	}
 	remaining, ok := record.attachments[second.Attachment.ID]
 	if !ok {
@@ -112,10 +121,13 @@ func TestStore_Attach_TwoAttachmentsRemainIndependent(t *testing.T) {
 	}
 }
 
-// TestStore_Detach_UnknownOrRemovedIsTypedNotFound proves detaching an
-// unknown or already-removed attachment reports *NotFoundError and performs
-// no additional mutation.
-func TestStore_Detach_UnknownOrRemovedIsTypedNotFound(t *testing.T) {
+// TestStore_Detach_UnknownIsTypedNotFoundAndAlreadyDetachedIsIdempotent
+// proves detaching an unknown attachment reports *NotFoundError, and that
+// detaching an already-detached attachment a second time succeeds
+// idempotently (Detach marks Detached rather than removing the attachment --
+// see its own doc comment) instead of reporting NotFound the way removal
+// once did.
+func TestStore_Detach_UnknownIsTypedNotFoundAndAlreadyDetachedIsIdempotent(t *testing.T) {
 	ctx := context.Background()
 	store, session := newAttachTestSession(t)
 
@@ -136,12 +148,18 @@ func TestStore_Detach_UnknownOrRemovedIsTypedNotFound(t *testing.T) {
 		t.Fatalf("Detach: %v", err)
 	}
 
-	_, err = store.Detach(ctx, chatsessions.DetachRequest{SessionID: session.ID, AttachmentID: attached.Attachment.ID})
-	if !errors.As(err, &notFound) {
-		t.Fatalf("Detach already-removed attachment: got %v, want *NotFoundError", err)
+	if _, err := store.Detach(ctx, chatsessions.DetachRequest{SessionID: session.ID, AttachmentID: attached.Attachment.ID}); err != nil {
+		t.Fatalf("Detach (already detached, idempotent repeat): got %v, want nil error", err)
 	}
-	if notFound.Value != "Attachment" || notFound.ID != attached.Attachment.ID {
-		t.Fatalf("NotFoundError = %+v, want Value=Attachment ID=%s", notFound, attached.Attachment.ID)
+
+	store.mu.RLock()
+	stored, ok := store.sessions[session.ID].attachments[attached.Attachment.ID]
+	store.mu.RUnlock()
+	if !ok {
+		t.Fatal("repeated Detach removed the attachment, want preserved")
+	}
+	if !stored.Detached {
+		t.Fatal("repeated Detach: Detached = false, want true")
 	}
 }
 
@@ -196,8 +214,10 @@ func TestStore_Detach_UnknownSessionIsTypedNotFound(t *testing.T) {
 
 // TestStore_Attach_ConcurrentAttachAndDetachRaceFree proves concurrent
 // attach/detach operations against one session are race-free, produce
-// unique accepted identities, and settle on exactly the attachments that
-// were never detached.
+// unique accepted identities, and settle with exactly the requested subset
+// marked Detached -- every attachment stays present (Detach preserves
+// rather than removes; see its own doc comment), so this proves no
+// concurrent Detach call corrupts or drops a different attachment's record.
 func TestStore_Attach_ConcurrentAttachAndDetachRaceFree(t *testing.T) {
 	ctx := context.Background()
 	store, session := newAttachTestSession(t)
@@ -246,17 +266,25 @@ func TestStore_Attach_ConcurrentAttachAndDetachRaceFree(t *testing.T) {
 	store.mu.RLock()
 	record := store.sessions[session.ID]
 	store.mu.RUnlock()
-	if len(record.attachments) != n-len(toDetach) {
-		t.Fatalf("remaining attachments = %d, want %d", len(record.attachments), n-len(toDetach))
+	if len(record.attachments) != n {
+		t.Fatalf("remaining attachments = %d, want %d (Detach preserves, never removes)", len(record.attachments), n)
 	}
 	for _, id := range toDetach {
-		if _, ok := record.attachments[id]; ok {
-			t.Fatalf("detached attachment %q still present", id)
+		attachment, ok := record.attachments[id]
+		if !ok {
+			t.Fatalf("detached attachment %q missing, want preserved", id)
+		}
+		if !attachment.Detached {
+			t.Fatalf("detached attachment %q Detached = false, want true", id)
 		}
 	}
 	for _, id := range ids[n/2:] {
-		if _, ok := record.attachments[id]; !ok {
+		attachment, ok := record.attachments[id]
+		if !ok {
 			t.Fatalf("non-detached attachment %q missing", id)
+		}
+		if attachment.Detached {
+			t.Fatalf("non-detached attachment %q Detached = true, want false", id)
 		}
 	}
 }
