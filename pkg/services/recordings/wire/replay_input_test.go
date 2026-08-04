@@ -1,26 +1,20 @@
 package wire_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testpath"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 )
-
-type portableReplayInputExpectation struct {
-	name, fixture, sessionID, schemaVersion, sourceRef, resultStatus string
-	eventIDs                                                         []string
-	secretsRedacted                                                  int64
-	artifactCount                                                    int
-	resultPresent                                                    bool
-}
 
 func TestReplayInputLoaderClassifiesPortableRecording(t *testing.T) {
 	t.Parallel()
@@ -36,7 +30,7 @@ func TestReplayInputLoaderClassifiesPortableRecording(t *testing.T) {
 			t.Fatal("legacy loader must not be called for a portable recording")
 			return nil, nil
 		},
-		zap.NewNop(),
+		logging.NoopLogger{},
 	)
 	result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: path})
 	if err != nil {
@@ -51,207 +45,6 @@ func TestReplayInputLoaderClassifiesPortableRecording(t *testing.T) {
 	if got := result.Portable.Session.ID; got != "session-js-001" {
 		t.Fatalf("Portable.Session.ID = %q, want session-js-001", got)
 	}
-	if got := result.Portable.Redaction.SecretsRedacted; got != 2 {
-		t.Fatalf("Portable.Redaction.SecretsRedacted = %d, want 2", got)
-	}
-	if got := result.Portable.Events[1].ArtifactIDs[0]; got != "artifact-1" {
-		t.Fatalf("Portable.Events[1].ArtifactIDs[0] = %q, want artifact-1", got)
-	}
-
-	result.Portable.Events[1].ArtifactIDs[0] = "mutated"
-	second, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: path})
-	if err != nil {
-		t.Fatalf("LoadReplayInput() second read = %v", err)
-	}
-	if second.Portable == nil || second.Portable.Events[1].ArtifactIDs[0] != "artifact-1" {
-		t.Fatalf("LoadReplayInput() second read = %#v, want detached portable event values", second.Portable)
-	}
-}
-
-// TestReplayInputLoaderPreservesSupportedPortableRecordingSchemas proves the
-// narrow capability preserves the compatibility, identity, canonical event,
-// result, and redaction facts of every previously supported portable
-// recording schema without exposing the compatibility document type.
-func TestReplayInputLoaderPreservesSupportedPortableRecordingSchemas(t *testing.T) {
-	t.Parallel()
-
-	cases := []portableReplayInputExpectation{
-		{
-			name: "version one", fixture: "valid-v1.json", sessionID: "session-historical-001", schemaVersion: "1",
-			sourceRef: "workflow/historical.js", eventIDs: []string{"event-historical-1"}, secretsRedacted: 0,
-		},
-		{
-			name: "version two", fixture: "valid-v2.json", sessionID: "session-js-001", schemaVersion: "2",
-			sourceRef: "workflow/example.js", resultStatus: "FINAL", eventIDs: []string{"event-1", "event-2"},
-			secretsRedacted: 2, artifactCount: 1, resultPresent: true,
-		},
-	}
-	for _, testCase := range cases {
-		t.Run(testCase.name, func(t *testing.T) {
-			path := portableRecordingFixturePath(t, testCase.fixture)
-			loader := recordingswire.NewReplayInputLoader(recordings.RecordingReadFile(os.ReadFile), nil, zap.NewNop())
-			result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: path})
-			if err != nil {
-				t.Fatalf("LoadReplayInput: %v", err)
-			}
-			assertPortableReplayInputFacts(t, result, testCase)
-		})
-	}
-}
-
-// TestReplayInputLoaderMapsPortableValidationDiagnostics proves portable
-// recording validation failures remain directly owned, matchable capability
-// outcomes with no partial replay facts.
-func TestReplayInputLoaderMapsPortableValidationDiagnostics(t *testing.T) {
-	t.Parallel()
-	fixture, err := os.ReadFile(portableRecordingFixturePath(t, "valid-v2.json"))
-	if err != nil {
-		t.Fatalf("ReadFile fixture: %v", err)
-	}
-
-	cases := []struct {
-		name, from, to, area, path string
-		code                       recordings.ReplayInputDiagnosticCode
-		versions                   []string
-	}{
-		{
-			name: "unknown field", from: "\n}", to: ",\"unexpected\":true\n}",
-			code: recordings.ReplayInputDiagnosticMalformed, area: "document", path: "",
-		},
-		{
-			name: "unsupported compatibility", from: `"replayCompatibilityVersion": "1"`, to: `"replayCompatibilityVersion": "999"`,
-			code: recordings.ReplayInputDiagnosticUnsupportedVersion, area: "compatibility", path: "replayCompatibilityVersion", versions: []string{"1"},
-		},
-		{
-			name: "invalid identity", from: `"id": "session-js-001"`, to: `"id": ""`,
-			code: recordings.ReplayInputDiagnosticInvalidIdentity, area: "session", path: "session.id",
-		},
-		{
-			name: "invalid summary", from: `"status": "FINAL"`, to: `"status": "UNKNOWN"`,
-			code: recordings.ReplayInputDiagnosticInvalidSummary, area: "result", path: "result.status",
-		},
-		{
-			name: "invalid digest", from: "sha256:1111111111111111111111111111111111111111111111111111111111111111", to: "not-a-digest",
-			code: recordings.ReplayInputDiagnosticInvalidDigest, area: "digest", path: "source.hash",
-		},
-	}
-	for _, testCase := range cases {
-		t.Run(testCase.name, func(t *testing.T) {
-			payload := strings.Replace(string(fixture), testCase.from, testCase.to, 1)
-			if payload == string(fixture) {
-				t.Fatalf("fixture did not contain replacement %q", testCase.from)
-			}
-			loader := recordingswire.NewReplayInputLoader(
-				func(string) ([]byte, error) { return []byte(payload), nil },
-				nil,
-				zap.NewNop(),
-			)
-			result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "portable-recording.json"})
-			assertReplayInputDiagnostic(t, err, testCase.code, testCase.area, testCase.path, testCase.versions)
-			if result.Portable != nil || result.Legacy != nil {
-				t.Fatalf("LoadReplayInput() result = %#v, want no partial replay input", result)
-			}
-		})
-	}
-}
-
-func TestRecordingReplayArtifactsRuntimeConstructionIsInert(t *testing.T) {
-	t.Parallel()
-
-	built := false
-	factory := recordingswire.NewRecordingReplayArtifactsFactory(
-		func(string) ([]byte, error) {
-			t.Fatal("replay input reader called during construction")
-			return nil, nil
-		},
-		func(string) (*recordings.ReplayArtifact, error) {
-			t.Fatal("legacy replay loader called during construction")
-			return nil, nil
-		},
-		zap.NewNop(),
-		func(
-			recordings.Ledger,
-			recordings.ProjectionService,
-		) (recordings.RecordingReplayArtifacts, recordings.RecordingLifecycle, error) {
-			built = true
-			return nil, nil, nil
-		},
-	)
-	capability := factory()
-	if capability == nil {
-		t.Fatal("factory() = nil, want phase-aware capability")
-	}
-	if built {
-		t.Fatal("runtime artifact builder called during construction")
-	}
-	_, err := capability.LoadReplay(recordings.LoadReplayRequest{RecordingID: "not-bound"})
-	var typed *recordings.ReplayArtifactError
-	if !errors.As(err, &typed) || typed.Kind != recordings.ReplayArtifactErrorUnavailable {
-		t.Fatalf("LoadReplay() error = %v, want unavailable typed error before binding", err)
-	}
-	if built {
-		t.Fatal("runtime artifact builder called by an unbound artifact operation")
-	}
-}
-
-// TestRecordingReplayArtifactsRuntimeBindsAndForwardsOperations proves that
-// the same phase-aware capability used for runtime opening becomes the
-// canonical finalized-recording capability after binding. Each public
-// operation is observed through its returned result rather than implementation
-// topology.
-func TestRecordingReplayArtifactsRuntimeBindsAndForwardsOperations(t *testing.T) {
-	t.Parallel()
-
-	artifacts := &phaseReplayArtifactsStub{}
-	lifecycle := &phaseRecordingLifecycleStub{}
-	builderCalls := 0
-	capability := recordingswire.NewRecordingReplayArtifactsFactory(
-		nil,
-		nil,
-		nil,
-		func(
-			recordings.Ledger,
-			recordings.ProjectionService,
-		) (recordings.RecordingReplayArtifacts, recordings.RecordingLifecycle, error) {
-			builderCalls++
-			return artifacts, lifecycle, nil
-		},
-	)()
-
-	bound, err := capability.BindRecordingLifecycle(nil, nil)
-	if err != nil || bound != lifecycle || builderCalls != 1 {
-		t.Fatalf("BindRecordingLifecycle() = (%#v, %v), builder calls %d; want lifecycle once", bound, err, builderCalls)
-	}
-	if _, err := capability.LoadReplay(recordings.LoadReplayRequest{RecordingID: "recording-1"}); err != nil {
-		t.Fatalf("LoadReplay() error = %v", err)
-	}
-	if _, err := capability.BuildArtifact(recordings.BuildArtifactRequest{RecordingID: "recording-1"}); err != nil {
-		t.Fatalf("BuildArtifact() error = %v", err)
-	}
-	if _, err := capability.ValidateArtifact(recordings.ValidateArtifactRequest{}); err != nil {
-		t.Fatalf("ValidateArtifact() error = %v", err)
-	}
-	if _, err := capability.EncodeArtifact(recordings.EncodeArtifactRequest{}); err != nil {
-		t.Fatalf("EncodeArtifact() error = %v", err)
-	}
-	if _, err := capability.DecodeArtifact(recordings.DecodeArtifactRequest{Payload: []byte(`{}`)}); err != nil {
-		t.Fatalf("DecodeArtifact() error = %v", err)
-	}
-	if _, err := capability.SummarizeArtifact(recordings.SummarizeArtifactRequest{}); err != nil {
-		t.Fatalf("SummarizeArtifact() error = %v", err)
-	}
-	if _, err := capability.ExportArtifact(context.Background(), recordings.ExportArtifactRequest{RecordingID: "recording-1"}); err != nil {
-		t.Fatalf("ExportArtifact() error = %v", err)
-	}
-	if _, err := capability.ReadArtifact(context.Background(), recordings.ReadArtifactRequest{RecordingID: "recording-1"}); err != nil {
-		t.Fatalf("ReadArtifact() error = %v", err)
-	}
-	if got := strings.Join(artifacts.calls, ","); got != "load,build,validate,encode,decode,summarize,export,read" {
-		t.Fatalf("forwarded operations = %q, want every finalized-recording operation once", got)
-	}
-	if _, err := capability.BindRecordingLifecycle(nil, nil); err == nil || builderCalls != 1 {
-		t.Fatalf("second BindRecordingLifecycle() = %v, builder calls %d; want one-time binding", err, builderCalls)
-	}
 }
 
 func TestReplayInputLoaderDelegatesLegacyArtifact(t *testing.T) {
@@ -259,17 +52,14 @@ func TestReplayInputLoaderDelegatesLegacyArtifact(t *testing.T) {
 
 	requestedPath := ""
 	tempFile := writeTempReplayInputFile(t, `{"schemaVersion":"legacy"}`)
-	want := &recordings.ReplayArtifact{
-		SchemaVersion: "legacy",
-		Events:        []recordings.FactoryEvent{{Id: "legacy-event"}},
-	}
+	want := &recordings.ReplayArtifact{SchemaVersion: "legacy"}
 	loader := recordingswire.NewReplayInputLoader(
 		recordings.RecordingReadFile(os.ReadFile),
 		func(path string) (*recordings.ReplayArtifact, error) {
 			requestedPath = path
 			return want, nil
 		},
-		zap.NewNop(),
+		logging.NoopLogger{},
 	)
 	result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: tempFile})
 	if err != nil {
@@ -278,19 +68,8 @@ func TestReplayInputLoaderDelegatesLegacyArtifact(t *testing.T) {
 	if result.Portable != nil {
 		t.Fatal("Portable = non-nil, want nil for a legacy artifact")
 	}
-	if result.Legacy == nil || result.Legacy.SchemaVersion != want.SchemaVersion {
-		t.Fatalf("Legacy = %#v, want detached legacy artifact with schema %q", result.Legacy, want.SchemaVersion)
-	}
-	if got := string(result.Legacy.Events[0].EventJSON); got == "" {
-		t.Fatal("Legacy.Events[0].EventJSON = empty, want complete detached event envelope")
-	}
-	result.Legacy.Events[0].EventJSON[0] = 'x'
-	second, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: tempFile})
-	if err != nil {
-		t.Fatalf("LoadReplayInput() second legacy read = %v", err)
-	}
-	if second.Legacy == nil || second.Legacy.Events[0].EventJSON[0] != '{' {
-		t.Fatalf("LoadReplayInput() second legacy read = %#v, want detached event bytes", second.Legacy)
+	if result.Legacy != want {
+		t.Fatalf("Legacy = %v, want %v", result.Legacy, want)
 	}
 	if requestedPath != tempFile {
 		t.Fatalf("legacy loader path = %q, want %q", requestedPath, tempFile)
@@ -300,7 +79,7 @@ func TestReplayInputLoaderDelegatesLegacyArtifact(t *testing.T) {
 func TestReplayInputLoaderRejectsMissingReader(t *testing.T) {
 	t.Parallel()
 
-	loader := recordingswire.NewReplayInputLoader(nil, nil, zap.NewNop())
+	loader := recordingswire.NewReplayInputLoader(nil, nil, logging.NoopLogger{})
 	if _, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "recording.json"}); err == nil {
 		t.Fatal("missing reader error = nil")
 	}
@@ -318,7 +97,7 @@ func TestReplayInputLoaderWrapsReadFailure(t *testing.T) {
 			return nil, want
 		},
 		nil,
-		zap.NewNop(),
+		logging.NoopLogger{},
 	)
 	_, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "recording.json"})
 	if !errors.Is(err, want) {
@@ -330,7 +109,7 @@ func TestReplayInputLoaderRejectsMissingLegacyLoader(t *testing.T) {
 	t.Parallel()
 
 	tempFile := writeTempReplayInputFile(t, `{"schemaVersion":"legacy"}`)
-	loader := recordingswire.NewReplayInputLoader(recordings.RecordingReadFile(os.ReadFile), nil, zap.NewNop())
+	loader := recordingswire.NewReplayInputLoader(recordings.RecordingReadFile(os.ReadFile), nil, logging.NoopLogger{})
 	if _, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: tempFile}); err == nil {
 		t.Fatal("missing legacy loader error = nil")
 	}
@@ -349,7 +128,7 @@ func TestReplayInputLoaderPropagatesMalformedPortableRecording(t *testing.T) {
 			t.Fatal("legacy loader must not be called for a portable recording payload")
 			return nil, nil
 		},
-		zap.NewNop(),
+		logging.NoopLogger{},
 	)
 	result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: tempFile})
 	if err == nil {
@@ -358,48 +137,311 @@ func TestReplayInputLoaderPropagatesMalformedPortableRecording(t *testing.T) {
 	if result.Portable != nil || result.Legacy != nil {
 		t.Fatalf("result = %+v, want zero-value result on failure", result)
 	}
-	var typed *recordings.ReplayInputError
-	if !errors.As(err, &typed) {
-		t.Fatalf("LoadReplayInput() error = %T, want *recordings.ReplayInputError", err)
+}
+
+func TestReplayInputLoaderRejectsTrailingPortableDocumentWithoutLegacyFallback(t *testing.T) {
+	t.Parallel()
+
+	path := testpath.MustRepoPathFromCaller(
+		t,
+		0,
+		"pkg", "services", "recordings", "internal", "artifacts", "testdata", "valid-v2.json",
+	)
+	valid, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read valid portable recording: %v", err)
 	}
-	if typed.Kind != recordings.ReplayInputErrorPortable {
-		t.Fatalf("ReplayInputError.Kind = %q, want %q", typed.Kind, recordings.ReplayInputErrorPortable)
+	loader := recordingswire.NewReplayInputLoader(
+		func(string) ([]byte, error) { return append(valid, []byte("\n{}")...), nil },
+		func(string) (*recordings.ReplayArtifact, error) {
+			t.Fatal("legacy loader must not be called for a trailing portable document")
+			return nil, nil
+		},
+		logging.NoopLogger{},
+	)
+
+	result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "recording.json"})
+	if err == nil {
+		t.Fatal("trailing portable recording error = nil")
 	}
-	if typed.Diagnostic == nil {
-		t.Fatal("ReplayInputError.Diagnostic = nil, want unsupported-version diagnostic")
+	if result.Portable != nil || result.Legacy != nil {
+		t.Fatalf("result = %#v, want zero result", result)
 	}
-	if typed.Diagnostic.Code != recordings.ReplayInputDiagnosticUnsupportedVersion {
-		t.Fatalf(
-			"ReplayInputError.Diagnostic.Code = %q, want %q",
-			typed.Diagnostic.Code,
-			recordings.ReplayInputDiagnosticUnsupportedVersion,
-		)
+	var inputErr *recordings.ReplayInputError
+	if !errors.As(err, &inputErr) || inputErr.Family != recordings.ReplayInputFamilyPortable {
+		t.Fatalf("error = %v, want portable ReplayInputError", err)
 	}
-	if typed.Diagnostic.Area == "" || typed.Diagnostic.Message == "" || len(typed.Diagnostic.SupportedVersions) == 0 {
-		t.Fatalf("ReplayInputError.Diagnostic = %#v, want structured supported-version facts", typed.Diagnostic)
+	if inputErr.Diagnostic.Code != recordings.ReplayArtifactDiagnosticMalformed {
+		t.Fatalf("diagnostic = %#v, want malformed portable diagnostic", inputErr.Diagnostic)
 	}
 }
 
-func TestReplayInputLoaderLogsIntentAndFailureWithoutInputPathOrPayload(t *testing.T) {
+func TestReplayInputLoaderClassifiesLegacyLoaderFailure(t *testing.T) {
 	t.Parallel()
 
-	core, observed := observer.New(zap.InfoLevel)
-	loader := recordingswire.NewReplayInputLoader(nil, nil, zap.New(core))
-	if _, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "private/replay.json"}); err == nil {
-		t.Fatal("LoadReplayInput() error = nil, want reader configuration error")
+	path := writeTempReplayInputFile(t, `{"schemaVersion":"legacy"}`)
+	want := errors.New("legacy replay unavailable")
+	loader := recordingswire.NewReplayInputLoader(
+		recordings.RecordingReadFile(os.ReadFile),
+		func(string) (*recordings.ReplayArtifact, error) { return nil, want },
+		logging.NoopLogger{},
+	)
+	result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: path})
+	if result.Portable != nil || result.Legacy != nil {
+		t.Fatalf("result = %#v, want zero result on legacy load failure", result)
+	}
+	if !errors.Is(err, want) {
+		t.Fatalf("LoadReplayInput() error = %v, want wrapped %v", err, want)
+	}
+	var inputErr *recordings.ReplayInputError
+	if !errors.As(err, &inputErr) || inputErr.Family != recordings.ReplayInputFamilyLegacy {
+		t.Fatalf("LoadReplayInput() error = %v, want legacy ReplayInputError", err)
+	}
+}
+
+func TestReplayInputLoaderPublishesDetachedSafeDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	loader := recordingswire.NewReplayInputLoader(
+		func(string) ([]byte, error) {
+			return []byte(`{"recordingKind":"` + recordings.KindJavaScriptFactorySession + `","replayCompatibilityVersion":"99"}`), nil
+		},
+		nil,
+		logging.NoopLogger{},
+	)
+
+	_, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: `C:\\private\\customer-recording.json`})
+	first := requireReplayInputDiagnostic(t, err)
+	if first.Code != recordings.ReplayArtifactDiagnosticUnsupportedVersion ||
+		first.Area != "compatibility" ||
+		first.Path != "replayCompatibilityVersion" ||
+		len(first.SupportedVersions) == 0 {
+		t.Fatalf("diagnostic = %#v, want detached supported-version facts", first)
+	}
+	first.Path = "mutated"
+	first.SupportedVersions[0] = "mutated"
+
+	_, err = loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: `C:\\private\\customer-recording.json`})
+	second := requireReplayInputDiagnostic(t, err)
+	if second.Path == "mutated" || second.SupportedVersions[0] == "mutated" {
+		t.Fatalf("later diagnostic observed caller mutation: %#v", second)
+	}
+}
+
+func TestReplayInputLoaderMapsPortableValidationAreasToOwnedDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	path := testpath.MustRepoPathFromCaller(
+		t,
+		0,
+		"pkg", "services", "recordings", "internal", "artifacts", "testdata", "valid-v2.json",
+	)
+	validPayload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read valid portable recording: %v", err)
+	}
+	valid, err := recordings.DecodePortableRecording(bytes.NewReader(validPayload))
+	if err != nil {
+		t.Fatalf("decode valid portable recording: %v", err)
 	}
 
-	entries := observed.All()
-	if len(entries) != 2 {
-		t.Fatalf("log entry count = %d, want 2", len(entries))
+	testCases := []struct {
+		name     string
+		mutate   func(*recordings.PortableRecording)
+		wantCode recordings.ReplayArtifactDiagnosticCode
+	}{
+		{
+			name:     "identity",
+			mutate:   func(recording *recordings.PortableRecording) { recording.Session.ID = "" },
+			wantCode: recordings.ReplayArtifactDiagnosticInvalidIdentity,
+		},
+		{
+			name:     "summary",
+			mutate:   func(recording *recordings.PortableRecording) { recording.Session.Status = "UNSUPPORTED" },
+			wantCode: recordings.ReplayArtifactDiagnosticInvalidSummary,
+		},
+		{
+			name:     "integrity",
+			mutate:   func(recording *recordings.PortableRecording) { recording.Source.Hash = "invalid" },
+			wantCode: recordings.ReplayArtifactDiagnosticInvalidIntegrity,
+		},
 	}
-	if entries[0].Message != "loading replay input" || entries[1].Message != "replay input reader is not configured" {
-		t.Fatalf("log messages = %q, %q", entries[0].Message, entries[1].Message)
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			recording := valid
+			testCase.mutate(&recording)
+			payload, err := json.Marshal(recording)
+			if err != nil {
+				t.Fatalf("marshal portable recording: %v", err)
+			}
+			loader := recordingswire.NewReplayInputLoader(
+				func(string) ([]byte, error) { return payload, nil },
+				nil,
+				logging.NoopLogger{},
+			)
+			result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "recording.json"})
+			if result.Portable != nil || result.Legacy != nil {
+				t.Fatalf("LoadReplayInput() result = %#v, want zero result", result)
+			}
+			if diagnostic := requireReplayInputDiagnostic(t, err); diagnostic.Code != testCase.wantCode {
+				t.Fatalf("diagnostic = %#v, want code %q", diagnostic, testCase.wantCode)
+			}
+		})
+	}
+}
+
+func TestReplayInputLoaderLogsSafeIntentAndTerminalOutcomes(t *testing.T) {
+	t.Parallel()
+
+	const privatePath = `C:\\customer\\private\\recording.json`
+	const privatePayload = "customer-token-should-not-appear"
+	const privateError = "reader failed with customer-token-should-not-appear"
+	validPortable := testpath.MustRepoPathFromCaller(
+		t,
+		0,
+		"pkg", "services", "recordings", "internal", "artifacts", "testdata", "valid-v2.json",
+	)
+
+	testCases := []struct {
+		name       string
+		readFile   recordings.RecordingReadFile
+		loadLegacy recordings.ReplayArtifactLoader
+		wantResult string
+		wantClass  string
+		wantFamily string
+	}{
+		{
+			name: "portable success",
+			readFile: func(string) ([]byte, error) {
+				return os.ReadFile(validPortable)
+			},
+			wantResult: "success",
+			wantFamily: string(recordings.ReplayInputFamilyPortable),
+		},
+		{
+			name: "validation failure",
+			readFile: func(string) ([]byte, error) {
+				return []byte(`{"recordingKind":"` + recordings.KindJavaScriptFactorySession + `","unknown":"` + privatePayload + `"}`), nil
+			},
+			wantResult: "validation_failure",
+			wantClass:  string(recordings.ReplayArtifactDiagnosticMalformed),
+		},
+		{
+			name: "dependency failure",
+			readFile: func(string) ([]byte, error) {
+				return nil, errors.New(privateError)
+			},
+			wantResult: "dependency_failure",
+			wantClass:  "read_failure",
+		},
+		{
+			name: "cancellation",
+			readFile: func(string) ([]byte, error) {
+				return nil, context.Canceled
+			},
+			wantResult: "canceled",
+			wantClass:  "read_failure",
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			logger := &capturingReplayInputLogger{}
+			loader := recordingswire.NewReplayInputLoader(
+				testCase.readFile,
+				testCase.loadLegacy,
+				logger,
+			)
+			_, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: privatePath})
+			if err != nil {
+				diagnostic := requireReplayInputDiagnostic(t, err)
+				serialized := fmt.Sprint(diagnostic)
+				for _, unsafeValue := range []string{privatePath, privatePayload, privateError} {
+					if strings.Contains(serialized, unsafeValue) {
+						t.Fatalf("safe replay-input diagnostic leaked %q: %#v", unsafeValue, diagnostic)
+					}
+				}
+			}
+			assertReplayInputLogs(
+				t,
+				logger.entries,
+				testCase.wantResult,
+				testCase.wantClass,
+				testCase.wantFamily,
+				privatePath,
+				privatePayload,
+				privateError,
+			)
+		})
+	}
+}
+
+func requireReplayInputDiagnostic(t *testing.T, err error) *recordings.ReplayArtifactDiagnostic {
+	t.Helper()
+	var inputErr *recordings.ReplayInputError
+	if !errors.As(err, &inputErr) {
+		t.Fatalf("error = %v, want ReplayInputError", err)
+	}
+	diagnostic := inputErr.Diagnostic
+	return &diagnostic
+}
+
+type replayInputLogEntry struct {
+	message string
+	fields  map[string]any
+}
+
+type capturingReplayInputLogger struct {
+	entries []replayInputLogEntry
+}
+
+func (logger *capturingReplayInputLogger) Debug(string, ...any)   {}
+func (logger *capturingReplayInputLogger) Warn(string, ...any)    {}
+func (logger *capturingReplayInputLogger) Error(string, ...any)   {}
+func (logger *capturingReplayInputLogger) Verbose(string, ...any) {}
+
+func (logger *capturingReplayInputLogger) Info(message string, fields ...any) {
+	entry := replayInputLogEntry{message: message, fields: make(map[string]any, len(fields)/2)}
+	for index := 0; index+1 < len(fields); index += 2 {
+		entry.fields[fields[index].(string)] = fields[index+1]
+	}
+	logger.entries = append(logger.entries, entry)
+}
+
+func assertReplayInputLogs(
+	t *testing.T,
+	entries []replayInputLogEntry,
+	wantOutcome string,
+	wantClass string,
+	wantFamily string,
+	forbidden ...string,
+) {
+	t.Helper()
+	if len(entries) != 2 {
+		t.Fatalf("log entries = %#v, want accepted intent and one terminal outcome", entries)
+	}
+	if entries[0].message != "recordings replay input accepted" ||
+		entries[0].fields["operation"] != "load_replay_input" ||
+		entries[0].fields["input_source"] != "filesystem_path" {
+		t.Fatalf("intent log = %#v, want safe replay-input intent", entries[0])
+	}
+	if entries[1].message != "recordings replay input outcome" ||
+		entries[1].fields["operation"] != "load_replay_input" ||
+		entries[1].fields["outcome"] != wantOutcome {
+		t.Fatalf("outcome log = %#v, want outcome=%q class=%q family=%q", entries[1], wantOutcome, wantClass, wantFamily)
+	}
+	if wantClass == "" && entries[1].fields["error_class"] != nil ||
+		wantClass != "" && entries[1].fields["error_class"] != wantClass {
+		t.Fatalf("outcome error_class = %#v, want %q", entries[1].fields["error_class"], wantClass)
+	}
+	if wantFamily == "" && entries[1].fields["replay_family"] != nil ||
+		wantFamily != "" && entries[1].fields["replay_family"] != wantFamily {
+		t.Fatalf("outcome replay_family = %#v, want %q", entries[1].fields["replay_family"], wantFamily)
 	}
 	for _, entry := range entries {
-		for _, field := range entry.Context {
-			if field.Key == "path" || field.Key == "payload" || field.String == "private/replay.json" {
-				t.Fatalf("log field = %#v, must not expose replay input path or payload", field)
+		serialized := entry.message + " " + fmt.Sprint(entry.fields)
+		for _, value := range forbidden {
+			if strings.Contains(serialized, value) {
+				t.Fatalf("safe replay-input log leaked %q: %s", value, serialized)
 			}
 		}
 	}
@@ -416,176 +458,4 @@ func writeTempReplayInputFile(t *testing.T, contents string) string {
 		t.Fatalf("write temp replay input file: %v", err)
 	}
 	return file.Name()
-}
-
-func portableRecordingFixturePath(t *testing.T, fixture string) string {
-	t.Helper()
-	return testpath.MustRepoPathFromCaller(
-		t,
-		0,
-		"pkg", "services", "recordings", "internal", "artifacts", "testdata", fixture,
-	)
-}
-
-func assertPortableReplayInputFacts(
-	t *testing.T,
-	result recordings.LoadReplayInputResult,
-	want portableReplayInputExpectation,
-) {
-	t.Helper()
-	if result.Legacy != nil || result.Portable == nil {
-		t.Fatalf("LoadReplayInput() = %#v, want only a portable result", result)
-	}
-	portable := result.Portable
-	if portable.RecordingKind != recordings.KindJavaScriptFactorySession ||
-		portable.SchemaVersion != want.schemaVersion ||
-		portable.ReplayCompatibilityVersion != "1" ||
-		portable.Session.ID != want.sessionID ||
-		portable.Source.Ref != want.sourceRef {
-		t.Fatalf("LoadReplayInput() portable facts = %#v, want supported schema facts", portable)
-	}
-	if len(portable.Artifacts) != want.artifactCount || len(portable.Events) != len(want.eventIDs) {
-		t.Fatalf(
-			"LoadReplayInput() artifacts/events = (%d, %d), want (%d, %d)",
-			len(portable.Artifacts),
-			len(portable.Events),
-			want.artifactCount,
-			len(want.eventIDs),
-		)
-	}
-	for index, eventID := range want.eventIDs {
-		if portable.Events[index].ID != eventID || portable.Events[index].Sequence != int64(index) {
-			t.Fatalf("LoadReplayInput() Events[%d] = %#v, want ID %q in canonical order", index, portable.Events[index], eventID)
-		}
-	}
-	if portable.Redaction.SecretsRedacted != want.secretsRedacted ||
-		!portable.Redaction.RuntimeStateOmitted ||
-		!portable.Redaction.CheckpointBodiesOmitted ||
-		!portable.Redaction.ProviderTranscriptsOmitted ||
-		!portable.Redaction.ChildDispatchesOmitted {
-		t.Fatalf("LoadReplayInput() Redaction = %#v, want preserved privacy facts", portable.Redaction)
-	}
-	if !want.resultPresent {
-		if portable.Result != nil {
-			t.Fatalf("LoadReplayInput() Result = %#v, want no result for historical schema", portable.Result)
-		}
-		return
-	}
-	if portable.Result == nil || portable.Result.Status != want.resultStatus || portable.Result.Mode != "final" {
-		t.Fatalf("LoadReplayInput() Result = %#v, want status %q", portable.Result, want.resultStatus)
-	}
-}
-
-func assertReplayInputDiagnostic(
-	t *testing.T,
-	err error,
-	wantCode recordings.ReplayInputDiagnosticCode,
-	wantArea, wantPath string,
-	wantVersions []string,
-) {
-	t.Helper()
-	var typed *recordings.ReplayInputError
-	if !errors.As(err, &typed) || typed.Kind != recordings.ReplayInputErrorPortable || typed.Diagnostic == nil {
-		t.Fatalf("LoadReplayInput() error = %v, want a portable validation error with diagnostic", err)
-	}
-	diagnostic := typed.Diagnostic
-	if diagnostic.Code != wantCode || diagnostic.Area != wantArea || diagnostic.Path != wantPath || diagnostic.Message == "" {
-		t.Fatalf(
-			"diagnostic = %#v, want code %q, area %q, path %q, and safe message",
-			diagnostic,
-			wantCode,
-			wantArea,
-			wantPath,
-		)
-	}
-	if len(diagnostic.SupportedVersions) != len(wantVersions) {
-		t.Fatalf("diagnostic supported versions = %#v, want %#v", diagnostic.SupportedVersions, wantVersions)
-	}
-	for index, version := range wantVersions {
-		if diagnostic.SupportedVersions[index] != version {
-			t.Fatalf("diagnostic supported versions = %#v, want %#v", diagnostic.SupportedVersions, wantVersions)
-		}
-	}
-}
-
-type phaseReplayArtifactsStub struct {
-	calls []string
-}
-
-func (stub *phaseReplayArtifactsStub) LoadReplayInput(recordings.LoadReplayInputRequest) (recordings.LoadReplayInputResult, error) {
-	return recordings.LoadReplayInputResult{}, nil
-}
-
-func (stub *phaseReplayArtifactsStub) LoadReplay(request recordings.LoadReplayRequest) (recordings.LoadReplayResult, error) {
-	stub.calls = append(stub.calls, "load")
-	return recordings.LoadReplayResult{Replay: recordings.ReplayFacts{RecordingID: request.RecordingID}}, nil
-}
-
-func (stub *phaseReplayArtifactsStub) BuildArtifact(recordings.BuildArtifactRequest) (recordings.BuildArtifactResult, error) {
-	stub.calls = append(stub.calls, "build")
-	return recordings.BuildArtifactResult{}, nil
-}
-
-func (stub *phaseReplayArtifactsStub) ValidateArtifact(recordings.ValidateArtifactRequest) (recordings.ValidateArtifactResult, error) {
-	stub.calls = append(stub.calls, "validate")
-	return recordings.ValidateArtifactResult{}, nil
-}
-
-func (stub *phaseReplayArtifactsStub) EncodeArtifact(recordings.EncodeArtifactRequest) (recordings.EncodeArtifactResult, error) {
-	stub.calls = append(stub.calls, "encode")
-	return recordings.EncodeArtifactResult{}, nil
-}
-
-func (stub *phaseReplayArtifactsStub) DecodeArtifact(recordings.DecodeArtifactRequest) (recordings.DecodeArtifactResult, error) {
-	stub.calls = append(stub.calls, "decode")
-	return recordings.DecodeArtifactResult{}, nil
-}
-
-func (stub *phaseReplayArtifactsStub) SummarizeArtifact(recordings.SummarizeArtifactRequest) (recordings.SummarizeArtifactResult, error) {
-	stub.calls = append(stub.calls, "summarize")
-	return recordings.SummarizeArtifactResult{}, nil
-}
-
-func (stub *phaseReplayArtifactsStub) ExportArtifact(context.Context, recordings.ExportArtifactRequest) (recordings.ExportArtifactResult, error) {
-	stub.calls = append(stub.calls, "export")
-	return recordings.ExportArtifactResult{}, nil
-}
-
-func (stub *phaseReplayArtifactsStub) ReadArtifact(context.Context, recordings.ReadArtifactRequest) (recordings.ReadArtifactResult, error) {
-	stub.calls = append(stub.calls, "read")
-	return recordings.ReadArtifactResult{}, nil
-}
-
-type phaseRecordingLifecycleStub struct{}
-
-func (*phaseRecordingLifecycleStub) Begin(recordings.BeginRecordingRequest) (recordings.RecordingLifecycleResult, error) {
-	return recordings.RecordingLifecycleResult{}, nil
-}
-
-func (*phaseRecordingLifecycleStub) Bind(recordings.BindLifecycleRequest) (recordings.RecordingLifecycleResult, error) {
-	return recordings.RecordingLifecycleResult{}, nil
-}
-
-func (*phaseRecordingLifecycleStub) AppendEvent(recordings.AppendLifecycleEventRequest) (recordings.RecordingLifecycleResult, error) {
-	return recordings.RecordingLifecycleResult{}, nil
-}
-
-func (*phaseRecordingLifecycleStub) RecordFailure(recordings.RecordLifecycleFailureRequest) (recordings.RecordingLifecycleResult, error) {
-	return recordings.RecordingLifecycleResult{}, nil
-}
-
-func (*phaseRecordingLifecycleStub) Flush(recordings.FlushLifecycleRequest) (recordings.RecordingLifecycleResult, error) {
-	return recordings.RecordingLifecycleResult{}, nil
-}
-
-func (*phaseRecordingLifecycleStub) Stop(recordings.StopLifecycleRequest) error {
-	return nil
-}
-
-func (*phaseRecordingLifecycleStub) Finish(recordings.FinishLifecycleRequest) (recordings.RecordingLifecycleResult, error) {
-	return recordings.RecordingLifecycleResult{}, nil
-}
-
-func (*phaseRecordingLifecycleStub) Status(recordings.LifecycleStatusRequest) (recordings.RecordingLifecycleResult, error) {
-	return recordings.RecordingLifecycleResult{}, nil
 }

@@ -3,6 +3,7 @@ package run
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -166,6 +167,7 @@ type Operation struct {
 	invocationMode       bool
 	recordPath           resolvedRunRecordPath
 	hostedLiveInvocation *factorysessions.HostedLiveInvocation
+	historicalReplay     *factorysessions.HistoricalReplayInspection
 }
 
 // Open resolves run inputs and opens invocation-local runtime state without
@@ -254,6 +256,11 @@ func openHostedRuntime(
 	)
 	openingRequest := buildRuntimeRequest(runtimeCfg, mockWorkersConfig, onBound)
 	openingRequest.Completion = hostedInvocationCompletion(operation)
+	var historicalReplay *factorysessions.HistoricalReplayInspection
+	openingRequest.Ports.HistoricalReplayBound = func(inspection factorysessions.HistoricalReplayInspection) {
+		inspectionCopy := inspection
+		historicalReplay = &inspectionCopy
+	}
 	if invocationMode && operation != nil {
 		openingRequest.Ports.RuntimeHTTPServicesBound = func(http factorysessions.RuntimeHTTPServices) {
 			operation.hostedLiveInvocation = &factorysessions.HostedLiveInvocation{
@@ -275,12 +282,13 @@ func openHostedRuntime(
 	}
 	if operation != nil {
 		operation.runner = factorySvc
+		operation.historicalReplay = historicalReplay
 		return operation, nil
 	}
 
 	return &Operation{
 		cfg: cfg, logger: logger, runner: factorySvc, recordPath: recordPath,
-		prepareWorkTarget: prepareWorkTarget,
+		prepareWorkTarget: prepareWorkTarget, historicalReplay: historicalReplay,
 	}, nil
 }
 
@@ -344,6 +352,15 @@ func (operation *Operation) Run(ctx context.Context) error {
 	if operation == nil {
 		return fmt.Errorf("run local operation: operation is required")
 	}
+	if operation.historicalReplay != nil {
+		if operation.runner == nil {
+			return fmt.Errorf("run historical replay: runtime runner is required")
+		}
+		if err := operation.runner.Run(ctx); err != nil {
+			return err
+		}
+		return emitHistoricalReplayInspection(operation.cfg.Output, *operation.historicalReplay)
+	}
 	if operation.invocationMode {
 		if operation.runner != nil {
 			return operation.runner.Run(ctx)
@@ -362,6 +379,66 @@ func (operation *Operation) Run(ctx context.Context) error {
 		operation.prepareWorkTarget,
 		operation.recordPath,
 	)
+}
+
+func emitHistoricalReplayInspection(
+	output io.Writer,
+	inspection factorysessions.HistoricalReplayInspection,
+) error {
+	if output == nil {
+		return nil
+	}
+	if _, err := fmt.Fprintf(
+		output,
+		"Replayed Factory Session: %s\nSource: %s\nStatus: %s\nResult: %s\n",
+		inspection.Session.SessionID,
+		inspection.Session.ResolvedSource.SourceRef,
+		inspection.Session.Status,
+		inspection.Result.ResultStatus,
+	); err != nil {
+		return fmt.Errorf("write historical replay inspection: %w", err)
+	}
+	if inspection.Checkpoint != nil {
+		if _, err := fmt.Fprintf(
+			output,
+			"Checkpoint: %s (%s)\n",
+			inspection.Checkpoint.ID,
+			inspection.Checkpoint.Summary,
+		); err != nil {
+			return fmt.Errorf("write historical replay inspection: %w", err)
+		}
+	}
+	if _, err := fmt.Fprintf(
+		output,
+		"Artifacts: %d\nEvents: %d\nRedaction: runtimeStateOmitted=%t checkpointBodiesOmitted=%t providerTranscriptsOmitted=%t childDispatchesOmitted=%t secretsRedacted=%d\n",
+		len(inspection.Artifacts.Artifacts),
+		len(inspection.Events.Events),
+		inspection.Redaction.RuntimeStateOmitted,
+		inspection.Redaction.CheckpointBodiesOmitted,
+		inspection.Redaction.ProviderTranscriptsOmitted,
+		inspection.Redaction.ChildDispatchesOmitted,
+		inspection.Redaction.SecretsRedacted,
+	); err != nil {
+		return fmt.Errorf("write historical replay inspection: %w", err)
+	}
+	for _, artifact := range inspection.Artifacts.Artifacts {
+		if _, err := fmt.Fprintf(output, "Artifact: %s (%s)\n", artifact.ID, artifact.Kind); err != nil {
+			return fmt.Errorf("write historical replay inspection: %w", err)
+		}
+	}
+	for index, event := range inspection.Events.Events {
+		var summary struct {
+			ID   string `json:"id"`
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(event, &summary); err != nil {
+			return fmt.Errorf("write historical replay inspection: decode event %d: %w", index, err)
+		}
+		if _, err := fmt.Fprintf(output, "Event %d: %s (%s)\n", index, summary.Type, summary.ID); err != nil {
+			return fmt.Errorf("write historical replay inspection: %w", err)
+		}
+	}
+	return nil
 }
 
 func (operation *Operation) runInvocation(ctx context.Context) error {

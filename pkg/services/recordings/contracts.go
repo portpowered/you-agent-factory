@@ -326,6 +326,7 @@ const (
 	PortableRecordingCodeInvalidDigest            = recordingcontracts.PortableRecordingCodeInvalidDigest
 	PortableRecordingCodeInvalidIdentity          = recordingcontracts.PortableRecordingCodeInvalidIdentity
 	PortableRecordingCodeInvalidSummary           = recordingcontracts.PortableRecordingCodeInvalidSummary
+	PortableRecordingCodeInvalidOrder             = recordingcontracts.PortableRecordingCodeInvalidOrder
 	PortableRecordingCodeMalformedContract        = recordingcontracts.PortableRecordingCodeMalformedContract
 	PortableRecordingCodeUnsupportedVersion       = recordingcontracts.PortableRecordingCodeUnsupportedVersion
 	RecordingActive                               = recordingcontracts.RecordingActive

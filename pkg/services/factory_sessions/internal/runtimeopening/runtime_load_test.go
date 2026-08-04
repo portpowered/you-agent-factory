@@ -1,16 +1,21 @@
 package runtimeopening
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testpath"
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
@@ -18,9 +23,16 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 )
+
+type runtimeLoadPortableFailureCase struct {
+	name     string
+	payload  []byte
+	readErr  error
+	wantCode recordings.ReplayArtifactDiagnosticCode
+}
 
 func TestLoadRuntimePreservesValidatedPortableRecording(t *testing.T) {
 	path := testpath.MustRepoPathFromCaller(
@@ -32,7 +44,9 @@ func TestLoadRuntimePreservesValidatedPortableRecording(t *testing.T) {
 	var loggerSessionID string
 	var loggerFolderPath string
 	var loggerFactoryDir string
-	replayInputs := recordingswire.NewReplayInputLoader(recordings.RecordingReadFile(os.ReadFile), nil, zap.NewNop())
+	replayInputs := recordingswire.NewReplayInputLoader(
+		recordings.RecordingReadFile(os.ReadFile), nil, logging.NoopLogger{},
+	)
 	loaded, err := LoadRuntime(
 		t.TempDir(),
 		"",
@@ -58,293 +72,49 @@ func TestLoadRuntimePreservesValidatedPortableRecording(t *testing.T) {
 	if loaded.PortableRecording == nil {
 		t.Fatal("portable recording = nil")
 	}
+	if loaded.HistoricalReplay == nil {
+		t.Fatal("historical replay = nil")
+	}
 	if got := loaded.PortableRecording.Session.ID; got != "session-js-001" {
 		t.Fatalf("session id = %q, want session-js-001", got)
 	}
-	if got := loaded.PortableRecording.Source; got.Ref != "workflow/example.js" || got.Hash == "" {
-		t.Fatalf("portable source = %#v, want preserved source reference and hash", got)
-	}
-	if got := loaded.PortableRecording.Events; len(got) != 2 || got[0].ID != "event-1" || got[1].ID != "event-2" {
-		t.Fatalf("portable events = %#v, want canonical event summaries in order", got)
-	}
-	if got := loaded.PortableRecording.Result; got == nil || got.Status != "FINAL" || len(got.ArtifactIDs) != 1 || got.ArtifactIDs[0] != "artifact-1" {
-		t.Fatalf("portable result = %#v, want preserved result availability", got)
-	}
-	if got := loaded.PortableRecording.Redaction; !got.RuntimeStateOmitted || !got.CheckpointBodiesOmitted || got.SecretsRedacted != 2 {
-		t.Fatalf("portable redaction = %#v, want preserved redaction metadata", got)
+	if loaded.PortableRecording.SchemaVersion != "2" ||
+		loaded.PortableRecording.ReplayCompatibilityVersion != "1" ||
+		loaded.PortableRecording.Source.Ref != "workflow/example.js" ||
+		len(loaded.PortableRecording.Artifacts) != 1 ||
+		len(loaded.PortableRecording.Events) != 2 ||
+		loaded.PortableRecording.Events[0].Sequence != 0 ||
+		loaded.PortableRecording.Events[1].Sequence != 1 ||
+		loaded.PortableRecording.Result == nil ||
+		loaded.PortableRecording.Result.Status != "FINAL" ||
+		!loaded.PortableRecording.Redaction.RuntimeStateOmitted ||
+		!loaded.PortableRecording.Redaction.CheckpointBodiesOmitted ||
+		!loaded.PortableRecording.Redaction.ProviderTranscriptsOmitted ||
+		!loaded.PortableRecording.Redaction.ChildDispatchesOmitted ||
+		loaded.PortableRecording.Redaction.SecretsRedacted != 2 {
+		t.Fatalf("portable recording = %#v, want validated compatibility, summaries, order, and redaction facts", loaded.PortableRecording)
 	}
 	if loaded.ReplayArtifact != nil || loaded.LoadedFactoryCfg != nil {
 		t.Fatal("portable recording mixed with Factory-event replay state")
+	}
+	if loaded.HistoricalReplay.Session.SessionID != "session-js-001" ||
+		loaded.HistoricalReplay.Session.ResolvedSource.SourceRef != "workflow/example.js" ||
+		loaded.HistoricalReplay.Result.ResultStatus != factorysessions.ResultStatusFinal ||
+		len(loaded.HistoricalReplay.Artifacts.Artifacts) != 1 ||
+		loaded.HistoricalReplay.Artifacts.Artifacts[0].ID != "artifact-1" ||
+		len(loaded.HistoricalReplay.Events.Events) != 2 ||
+		!loaded.HistoricalReplay.Redaction.RuntimeStateOmitted ||
+		!loaded.HistoricalReplay.Redaction.CheckpointBodiesOmitted ||
+		!loaded.HistoricalReplay.Redaction.ProviderTranscriptsOmitted ||
+		!loaded.HistoricalReplay.Redaction.ChildDispatchesOmitted ||
+		loaded.HistoricalReplay.Redaction.SecretsRedacted != 2 {
+		t.Fatalf("historical replay = %#v, want public session, result, artifact, and ordered event facts", loaded.HistoricalReplay)
 	}
 	if loggerSessionID != "~default" || loggerFolderPath != rootDir || loggerFactoryDir == "" {
 		t.Fatalf(
 			"logger identity = (%q, %q, %q), want injected session and directories",
 			loggerSessionID, loggerFolderPath, loggerFactoryDir,
 		)
-	}
-}
-
-// TestLoadRuntimePreservesLegacyReplayInputsAndMetadataWarning proves the
-// migrated runtime-opening lane retains the established legacy runtime
-// configuration, event, replay-clock, and checkout-divergence behavior after
-// Recordings returns its directly owned detached replay input.
-func TestLoadRuntimePreservesLegacyReplayInputsAndMetadataWarning(t *testing.T) {
-	t.Parallel()
-
-	recordedAt := time.Date(2026, time.August, 4, 14, 0, 0, 0, time.UTC)
-	recordedSnapshot := runtimeLoadSnapshot(t, "sha256:recorded")
-	currentSnapshot := runtimeLoadSnapshot(t, "sha256:current")
-	legacy := &recordings.ReplayArtifact{
-		SchemaVersion: "agent-factory.replay.v1",
-		RecordedAt:    recordedAt,
-		Factory:       recordedSnapshot,
-		Events: []recordings.FactoryEvent{{
-			Id:      "legacy-event-1",
-			Payload: json.RawMessage(`{"requestId":"request-1"}`),
-		}},
-		Diagnostics: recordings.ReplayDiagnostics{Notes: []string{"recorded diagnostics"}},
-		WallClock: &recordings.ReplayWallClockMetadata{
-			StartedAt:  recordedAt,
-			FinishedAt: recordedAt.Add(time.Minute),
-		},
-	}
-	replayArtifacts := recordingswire.NewRecordingReplayArtifactsFactory(
-		func(string) ([]byte, error) { return []byte(`{"schemaVersion":"legacy"}`), nil },
-		func(path string) (*recordings.ReplayArtifact, error) {
-			if path != "legacy-replay.json" {
-				t.Fatalf("legacy artifact path = %q, want legacy-replay.json", path)
-			}
-			return legacy, nil
-		},
-		zap.NewNop(),
-		nil,
-	)()
-	core, observed := observer.New(zap.InfoLevel)
-	current := &runtimeLoadFactorySource{factoryDir: "current-factory", config: &factorydefinitions.FactoryConfig{}}
-	var decodedSnapshot *factorydefinitions.FactorySnapshot
-	var decodedFactoryDir string
-	loaded, err := LoadRuntime(
-		"current-factory",
-		"runtime-base",
-		"legacy-replay.json",
-		operatorconfig.ResolvedDefaults{},
-		nil,
-		RuntimeRoot{FactoryRootDir: "factory-root", BaseLogger: zap.New(core)},
-		func(dir string, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-			if dir != "current-factory" {
-				t.Fatalf("current Factory directory = %q, want current-factory", dir)
-			}
-			return current, nil
-		},
-		func(
-			factoryDir string,
-			factoryConfig *factorydefinitions.FactoryConfig,
-			runtimeDefinitions factorydefinitions.RuntimeDefinitionLookup,
-			_ []factorydefinitions.PortableBundledFileReplacement,
-		) (factorydefinitions.MutableLoadedFactorySource, error) {
-			decodedFactoryDir = factoryDir
-			if factoryConfig == nil || runtimeDefinitions == nil {
-				t.Fatal("embedded replay configuration was not passed to the loaded-source factory")
-			}
-			return &runtimeLoadFactorySource{factoryDir: factoryDir, config: factoryConfig}, nil
-		},
-		func(snapshot *factorydefinitions.FactorySnapshot) (factorydefinitions.ReplayRuntimeConfig, error) {
-			decodedSnapshot = snapshot
-			return &runtimeLoadFactorySource{factoryDir: "recorded-factory", config: &factorydefinitions.FactoryConfig{}}, nil
-		},
-		replayArtifacts,
-		func(
-			source factorydefinitions.FactorySnapshotSource,
-			factoryDir string,
-			_ map[string]string,
-		) (*factorydefinitions.FactorySnapshot, error) {
-			if source != current || factoryDir != "current-factory" {
-				t.Fatalf("current snapshot source = (%#v, %q), want current Factory", source, factoryDir)
-			}
-			return currentSnapshot, nil
-		},
-		func(base *zap.Logger, _, _, _ string) *zap.Logger { return base },
-	)
-	if err != nil {
-		t.Fatalf("LoadRuntime() error = %v", err)
-	}
-	assertRuntimeLoadLegacyOutput(t, loaded, legacy, recordedSnapshot, decodedSnapshot, decodedFactoryDir, recordedAt)
-	assertRuntimeLoadMetadataWarning(t, observed)
-}
-
-func assertRuntimeLoadLegacyOutput(
-	t testing.TB,
-	loaded RuntimeLoad,
-	legacy *recordings.ReplayArtifact,
-	recordedSnapshot, decodedSnapshot *factorydefinitions.FactorySnapshot,
-	decodedFactoryDir string,
-	recordedAt time.Time,
-) {
-	t.Helper()
-	if decodedSnapshot == nil || string(*decodedSnapshot) != string(*recordedSnapshot) {
-		t.Fatalf("embedded replay snapshot = %v, want recorded snapshot", decodedSnapshot)
-	}
-	if decodedFactoryDir != "recorded-factory" || loaded.LoadedFactoryCfg == nil || loaded.LoadedFactoryCfg.RuntimeBaseDir() != "runtime-base" {
-		t.Fatalf("loaded legacy Factory config = (%q, %#v), want recorded config and runtime base", decodedFactoryDir, loaded.LoadedFactoryCfg)
-	}
-	if loaded.PortableRecording != nil || loaded.ReplayArtifact == nil {
-		t.Fatalf("runtime load = %#v, want only legacy replay state", loaded)
-	}
-	if got := loaded.ReplayArtifact; got.SchemaVersion != legacy.SchemaVersion || !got.RecordedAt.Equal(recordedAt) || len(got.Events) != 1 || got.Events[0].Id != "legacy-event-1" {
-		t.Fatalf("legacy replay facts = %#v, want preserved schema, time, and events", got)
-	}
-	if got := loaded.ReplayArtifact.Diagnostics.Notes; len(got) != 1 || got[0] != "recorded diagnostics" {
-		t.Fatalf("legacy diagnostics = %#v, want preserved diagnostics", got)
-	}
-	if got := loaded.ReplayArtifact.WallClock; got == nil || !got.StartedAt.Equal(recordedAt) || !got.FinishedAt.Equal(recordedAt.Add(time.Minute)) {
-		t.Fatalf("legacy replay clock input = %#v, want preserved wall clock", got)
-	}
-}
-
-func assertRuntimeLoadMetadataWarning(t testing.TB, observed *observer.ObservedLogs) {
-	t.Helper()
-	metadataWarnings := observed.FilterMessage("replay artifact metadata differs from current checkout").All()
-	if len(metadataWarnings) != 1 {
-		t.Fatalf("metadata warning count = %d, want 1", len(metadataWarnings))
-	}
-	fields := metadataWarnings[0].ContextMap()
-	if fields["category"] != recordings.DivergenceCategoryConfigMismatch || fields["metadata_key"] != "factory_hash" || fields["artifact"] != "sha256:recorded" || fields["current"] != "sha256:current" {
-		t.Fatalf("metadata warning fields = %#v, want recorded/current Factory hash mismatch", fields)
-	}
-}
-
-// TestLoadRuntimeRejectsReplayInputFailuresBeforeConfigConstruction proves
-// missing and invalid replay input never reaches Factory configuration,
-// provider, runtime, or active-session construction. It also preserves the
-// direct, structured diagnostics supplied by the Recordings capability.
-func TestLoadRuntimeRejectsReplayInputFailuresBeforeConfigConstruction(t *testing.T) {
-	t.Parallel()
-
-	valid := runtimeLoadPortableFixture(t)
-	cases := []runtimeLoadFailureCase{
-		{name: "missing", readErr: os.ErrNotExist, kind: recordings.ReplayInputErrorRead},
-		{
-			name: "malformed", payload: []byte(`{"recordingKind":"` + recordings.KindJavaScriptFactorySession + `","unknown":true}`),
-			kind: recordings.ReplayInputErrorPortable, diagnosticCode: recordings.ReplayInputDiagnosticMalformed, area: "document",
-		},
-		{
-			name: "unsupported compatibility", payload: runtimeLoadMutatePortableFixture(t, valid, func(document map[string]any) {
-				document["replayCompatibilityVersion"] = "99"
-			}),
-			kind: recordings.ReplayInputErrorPortable, diagnosticCode: recordings.ReplayInputDiagnosticUnsupportedVersion,
-			area: "compatibility", path: "replayCompatibilityVersion",
-		},
-		{
-			name: "invalid identity", payload: runtimeLoadMutatePortableFixture(t, valid, func(document map[string]any) {
-				document["session"].(map[string]any)["id"] = ""
-			}),
-			kind: recordings.ReplayInputErrorPortable, diagnosticCode: recordings.ReplayInputDiagnosticInvalidIdentity,
-			area: "session", path: "session.id",
-		},
-		{
-			name: "invalid summary", payload: runtimeLoadMutatePortableFixture(t, valid, func(document map[string]any) {
-				document["result"].(map[string]any)["status"] = "UNKNOWN"
-			}),
-			kind: recordings.ReplayInputErrorPortable, diagnosticCode: recordings.ReplayInputDiagnosticInvalidSummary,
-			area: "result", path: "result.status",
-		},
-		{
-			name: "invalid digest", payload: runtimeLoadMutatePortableFixture(t, valid, func(document map[string]any) {
-				document["source"].(map[string]any)["hash"] = "sha256:not-a-digest"
-			}),
-			kind: recordings.ReplayInputErrorPortable, diagnosticCode: recordings.ReplayInputDiagnosticInvalidDigest,
-			area: "digest", path: "source.hash",
-		},
-	}
-
-	for _, testCase := range cases {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-			assertRuntimeLoadRejectsReplayInput(t, testCase)
-		})
-	}
-}
-
-type runtimeLoadFailureCase struct {
-	name           string
-	payload        []byte
-	readErr        error
-	kind           recordings.ReplayInputErrorKind
-	diagnosticCode recordings.ReplayInputDiagnosticCode
-	area           string
-	path           string
-}
-
-func assertRuntimeLoadRejectsReplayInput(t testing.TB, testCase runtimeLoadFailureCase) {
-	t.Helper()
-	constructed := false
-	replayArtifacts := recordingswire.NewRecordingReplayArtifactsFactory(
-		func(path string) ([]byte, error) {
-			if path != "replay.json" {
-				t.Fatalf("replay path = %q, want replay.json", path)
-			}
-			return testCase.payload, testCase.readErr
-		},
-		func(string) (*recordings.ReplayArtifact, error) {
-			t.Fatal("legacy loader must not be called for missing or portable replay input")
-			return nil, nil
-		},
-		zap.NewNop(),
-		nil,
-	)()
-	_, err := LoadRuntime(
-		"factory", "", "replay.json", operatorconfig.ResolvedDefaults{}, nil,
-		RuntimeRoot{FactoryRootDir: "factory-root", BaseLogger: zap.NewNop()},
-		func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-			constructed = true
-			return nil, errors.New("Factory configuration must not load")
-		},
-		func(string, *factorydefinitions.FactoryConfig, factorydefinitions.RuntimeDefinitionLookup, []factorydefinitions.PortableBundledFileReplacement) (factorydefinitions.MutableLoadedFactorySource, error) {
-			constructed = true
-			return nil, errors.New("replay Factory configuration must not construct")
-		},
-		func(*factorydefinitions.FactorySnapshot) (factorydefinitions.ReplayRuntimeConfig, error) {
-			constructed = true
-			return nil, errors.New("replay Factory configuration must not decode")
-		},
-		replayArtifacts,
-		nil,
-		func(base *zap.Logger, _, _, _ string) *zap.Logger { return base },
-	)
-	assertRuntimeLoadRejectedInput(t, err, constructed, testCase)
-}
-
-func assertRuntimeLoadRejectedInput(
-	t testing.TB,
-	err error,
-	constructed bool,
-	testCase runtimeLoadFailureCase,
-) {
-	t.Helper()
-	if err == nil {
-		t.Fatal("LoadRuntime() error = nil, want replay input failure")
-	}
-	if constructed {
-		t.Fatal("invalid replay input constructed Factory runtime configuration")
-	}
-	if !strings.HasPrefix(err.Error(), "load portable replay: ") {
-		t.Fatalf("LoadRuntime() error = %q, want portable replay context", err)
-	}
-	var typed *recordings.ReplayInputError
-	if !errors.As(err, &typed) || typed.Kind != testCase.kind {
-		t.Fatalf("LoadRuntime() error = %v, want replay input kind %q", err, testCase.kind)
-	}
-	if testCase.diagnosticCode == "" {
-		if typed.Diagnostic != nil {
-			t.Fatalf("read failure diagnostic = %#v, want nil", typed.Diagnostic)
-		}
-		return
-	}
-	if typed.Diagnostic == nil || typed.Diagnostic.Code != testCase.diagnosticCode || typed.Diagnostic.Area != testCase.area || typed.Diagnostic.Path != testCase.path {
-		t.Fatalf("replay diagnostic = %#v, want (%q, %q, %q)", typed.Diagnostic, testCase.diagnosticCode, testCase.area, testCase.path)
-	}
-	if testCase.diagnosticCode == recordings.ReplayInputDiagnosticUnsupportedVersion && len(typed.Diagnostic.SupportedVersions) == 0 {
-		t.Fatal("unsupported-version diagnostic omitted supported versions")
 	}
 }
 
@@ -372,7 +142,7 @@ func TestLoadRuntimePropagatesReplayInputFailure(t *testing.T) {
 			t.Fatalf("path = %q, want recording.json", path)
 		}
 		return nil, want
-	}, nil, zap.NewNop())
+	}, nil, logging.NoopLogger{})
 	_, err := LoadRuntime(
 		t.TempDir(), "", "recording.json", operatorconfig.ResolvedDefaults{}, nil, root,
 		nil, nil, nil, replayInputs, nil,
@@ -381,85 +151,342 @@ func TestLoadRuntimePropagatesReplayInputFailure(t *testing.T) {
 	if !errors.Is(err, want) {
 		t.Fatalf("LoadRuntime() error = %v, want %v", err, want)
 	}
-	if !strings.HasPrefix(err.Error(), "load portable replay: ") {
-		t.Fatalf("LoadRuntime() error = %q, want portable replay context", err)
+	var inputErr *recordings.ReplayInputError
+	if !errors.As(err, &inputErr) ||
+		inputErr.Diagnostic.Code != recordings.ReplayArtifactDiagnosticDependencyFailure {
+		t.Fatalf("LoadRuntime() error = %v, want Recordings-owned safe dependency diagnostic", err)
 	}
 }
 
 func TestLoadRuntimePreservesLegacyReplayFailureContext(t *testing.T) {
 	t.Parallel()
 
-	root := RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: zap.NewNop()}
-	legacyCause := errors.New("legacy artifact cannot be decoded")
+	path := filepath.Join(t.TempDir(), "legacy-replay.json")
+	if err := os.WriteFile(path, []byte(`{"schemaVersion":"legacy"}`), 0o600); err != nil {
+		t.Fatalf("write legacy replay fixture: %v", err)
+	}
+	want := errors.New("legacy replay unavailable")
 	replayInputs := recordingswire.NewReplayInputLoader(
-		func(string) ([]byte, error) { return []byte(`{"schemaVersion":"legacy"}`), nil },
-		func(string) (*recordings.ReplayArtifact, error) { return nil, legacyCause },
-		zap.NewNop(),
+		recordings.RecordingReadFile(os.ReadFile),
+		func(string) (*recordings.ReplayArtifact, error) { return nil, want },
+		logging.NoopLogger{},
 	)
-	_, err := LoadRuntime(
-		t.TempDir(), "", "recording.json", operatorconfig.ResolvedDefaults{}, nil, root,
+	loaded, err := LoadRuntime(
+		t.TempDir(), "", path, operatorconfig.ResolvedDefaults{}, nil,
+		RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: zap.NewNop()},
 		nil, nil, nil, replayInputs, nil,
 		func(base *zap.Logger, _, _, _ string) *zap.Logger { return base },
 	)
-	if !errors.Is(err, legacyCause) {
-		t.Fatalf("LoadRuntime() error = %v, want legacy cause %v", err, legacyCause)
+	if !errors.Is(err, want) {
+		t.Fatalf("LoadRuntime() error = %v, want wrapped %v", err, want)
 	}
-	if !strings.HasPrefix(err.Error(), "load factory config: load replay artifact: ") {
-		t.Fatalf("LoadRuntime() error = %q, want established legacy factory-config context", err)
+	if got, wantText := err.Error(), "load factory config: load replay artifact: legacy replay unavailable"; got != wantText {
+		t.Fatalf("LoadRuntime() error = %q, want %q", got, wantText)
+	}
+	if loaded.PortableRecording != nil || loaded.ReplayArtifact != nil || loaded.LoadedFactoryCfg != nil || loaded.SessionLogger != nil {
+		t.Fatalf("LoadRuntime() result = %#v, want zero result on legacy load failure", loaded)
 	}
 }
 
-func TestLegacyReplayArtifactFromInputPreservesCompatibilityFacts(t *testing.T) {
+func TestLoadRuntimePreservesLegacyReplayInputs(t *testing.T) {
 	t.Parallel()
 
-	recordedAt := time.Date(2026, time.August, 4, 12, 0, 0, 0, time.UTC)
-	input := &recordings.ReplayInputLegacyArtifact{
-		SchemaVersion:       "legacy.v1",
-		RecordedAt:          recordedAt,
-		FactorySnapshotJSON: []byte(`{"id":"factory-legacy"}`),
-		DiagnosticsJSON:     []byte(`{"notes":["captured"]}`),
-		Events: []recordings.ReplayInputLegacyEvent{
-			{EventJSON: []byte(`{"id":"event-legacy","context":{},"payload":{},"schemaVersion":"agent-factory.event.v1","type":"RUN_REQUEST"}`)},
+	artifact := &recordings.ReplayArtifact{
+		SchemaVersion: "legacy",
+		Events:        []factorydefinitions.FactoryEvent{{}},
+		Factory:       runtimeLoadFactorySnapshot(t),
+		WallClock: &factorydefinitions.ReplayWallClockMetadata{
+			StartedAt:  time.Date(2026, time.July, 20, 2, 0, 0, 0, time.UTC),
+			FinishedAt: time.Date(2026, time.July, 20, 2, 5, 0, 0, time.UTC),
 		},
-		WallClock: &recordings.ReplayInputWallClockMetadata{StartedAt: recordedAt},
 	}
+	capability := recordingswire.NewReplayInputLoader(
+		func(path string) ([]byte, error) {
+			if path != "legacy-replay.json" {
+				t.Fatalf("read path = %q, want legacy-replay.json", path)
+			}
+			return []byte(`{"schemaVersion":"legacy"}`), nil
+		},
+		func(path string) (*recordings.ReplayArtifact, error) {
+			if path != "legacy-replay.json" {
+				t.Fatalf("legacy path = %q, want legacy-replay.json", path)
+			}
+			return artifact, nil
+		},
+		logging.NoopLogger{},
+	)
 
-	artifact, err := legacyReplayArtifactFromInput(input)
+	loaded, err := LoadRuntime(
+		t.TempDir(),
+		"runtime-base",
+		"legacy-replay.json",
+		operatorconfig.ResolvedDefaults{},
+		nil,
+		RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: zap.NewNop()},
+		nil,
+		factorydefinitionswire.LoadedFactorySourceFactory(),
+		factorydefinitionswire.ReplayRuntimeConfigDecoder(),
+		capability,
+		nil,
+		func(base *zap.Logger, _, _, _ string) *zap.Logger { return base },
+	)
 	if err != nil {
-		t.Fatalf("legacyReplayArtifactFromInput() error = %v", err)
+		t.Fatalf("LoadRuntime: %v", err)
 	}
-	if artifact.SchemaVersion != input.SchemaVersion || !artifact.RecordedAt.Equal(recordedAt) {
-		t.Fatalf("legacy artifact identity = (%q, %v), want (%q, %v)", artifact.SchemaVersion, artifact.RecordedAt, input.SchemaVersion, recordedAt)
+	if loaded.PortableRecording != nil || loaded.LoadedFactoryCfg == nil || loaded.ReplayArtifact != artifact {
+		t.Fatalf("LoadRuntime() = %#v, want only reconstructed legacy runtime inputs", loaded)
 	}
-	if artifact.Factory == nil || string(*artifact.Factory) != string(input.FactorySnapshotJSON) {
-		t.Fatalf("legacy artifact Factory = %v, want detached decoded Factory snapshot", artifact.Factory)
+	if got := loaded.LoadedFactoryCfg.RuntimeBaseDir(); got != "runtime-base" {
+		t.Fatalf("runtime base dir = %q, want runtime-base", got)
 	}
-	if len(artifact.Events) != 1 || artifact.Events[0].Id != "event-legacy" {
-		t.Fatalf("legacy artifact Events = %#v, want decoded legacy event", artifact.Events)
+	if len(loaded.ReplayArtifact.Events) != 1 ||
+		loaded.ReplayArtifact.WallClock == nil ||
+		!loaded.ReplayArtifact.WallClock.StartedAt.Equal(artifact.WallClock.StartedAt) {
+		t.Fatalf("legacy replay facts = %#v, want events and replay-clock metadata", loaded.ReplayArtifact)
 	}
-	if len(artifact.Diagnostics.Notes) != 1 || artifact.Diagnostics.Notes[0] != "captured" {
-		t.Fatalf("legacy artifact Diagnostics = %#v, want preserved diagnostics", artifact.Diagnostics)
+}
+
+func TestLoadRuntimeRejectsPortableFailureMatrixBeforeFactoryConstruction(t *testing.T) {
+	t.Parallel()
+
+	validPayload := runtimeLoadPortablePayload(t, nil)
+	readFailure := errors.New("portable reader unavailable")
+	testCases := []runtimeLoadPortableFailureCase{
+		{
+			name:     "missing input",
+			readErr:  os.ErrNotExist,
+			wantCode: recordings.ReplayArtifactDiagnosticDependencyFailure,
+		},
+		{
+			name:     "portable read failure",
+			readErr:  readFailure,
+			wantCode: recordings.ReplayArtifactDiagnosticDependencyFailure,
+		},
+		{
+			name:     "malformed JSON",
+			payload:  []byte(`{"recordingKind":"you.factory-session.javascript.recording","schemaVersion":`),
+			wantCode: recordings.ReplayArtifactDiagnosticMalformed,
+		},
+		{
+			name:     "trailing document",
+			payload:  append(validPayload, []byte("\n{}")...),
+			wantCode: recordings.ReplayArtifactDiagnosticMalformed,
+		},
+		{
+			name: "unsupported compatibility version",
+			payload: runtimeLoadPortablePayload(t, func(recording *recordings.PortableRecording) {
+				recording.ReplayCompatibilityVersion = "99"
+			}),
+			wantCode: recordings.ReplayArtifactDiagnosticUnsupportedVersion,
+		},
+		{
+			name: "invalid identity",
+			payload: runtimeLoadPortablePayload(t, func(recording *recordings.PortableRecording) {
+				recording.Session.ID = ""
+			}),
+			wantCode: recordings.ReplayArtifactDiagnosticInvalidIdentity,
+		},
+		{
+			name: "invalid summary",
+			payload: runtimeLoadPortablePayload(t, func(recording *recordings.PortableRecording) {
+				recording.Session.Status = "UNSUPPORTED"
+			}),
+			wantCode: recordings.ReplayArtifactDiagnosticInvalidSummary,
+		},
+		{
+			name: "invalid event order",
+			payload: runtimeLoadPortablePayload(t, func(recording *recordings.PortableRecording) {
+				recording.Events[1].Sequence = recording.Events[0].Sequence
+			}),
+			wantCode: recordings.ReplayArtifactDiagnosticInvalidOrder,
+		},
+		{
+			name: "invalid integrity",
+			payload: runtimeLoadPortablePayload(t, func(recording *recordings.PortableRecording) {
+				recording.Source.Hash = "invalid"
+			}),
+			wantCode: recordings.ReplayArtifactDiagnosticInvalidIntegrity,
+		},
 	}
-	if artifact.WallClock == nil || !artifact.WallClock.StartedAt.Equal(recordedAt) {
-		t.Fatalf("legacy artifact WallClock = %#v, want preserved replay clock metadata", artifact.WallClock)
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			assertPortableRuntimeFailureBeforeFactoryConstruction(t, testCase)
+		})
 	}
-	input.FactorySnapshotJSON[0] = 'x'
-	input.Events[0].EventJSON[0] = 'x'
-	if string(*artifact.Factory) != `{"id":"factory-legacy"}` || artifact.Events[0].Id != "event-legacy" {
-		t.Fatalf("legacy artifact observed mutation from replay-input value: %#v", artifact)
+}
+
+func assertPortableRuntimeFailureBeforeFactoryConstruction(
+	t *testing.T,
+	testCase runtimeLoadPortableFailureCase,
+) {
+	t.Helper()
+
+	loadFactoryCalls := 0
+	decodeReplayConfigCalls := 0
+	newLoadedFactoryCalls := 0
+	capability := recordingswire.NewReplayInputLoader(
+		func(path string) ([]byte, error) {
+			if path != "portable-replay.json" {
+				t.Fatalf("read path = %q, want portable-replay.json", path)
+			}
+			return testCase.payload, testCase.readErr
+		},
+		func(string) (*recordings.ReplayArtifact, error) {
+			t.Fatal("legacy loader must not be called for portable replay failures")
+			return nil, nil
+		},
+		logging.NoopLogger{},
+	)
+
+	loaded, err := LoadRuntime(
+		t.TempDir(), "", "portable-replay.json", operatorconfig.ResolvedDefaults{}, nil,
+		RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: zap.NewNop()},
+		func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			loadFactoryCalls++
+			return nil, errors.New("Factory loading must not start")
+		},
+		func(string, *factorydefinitions.FactoryConfig, factorydefinitions.RuntimeDefinitionLookup, []factorydefinitions.PortableBundledFileReplacement) (factorydefinitions.MutableLoadedFactorySource, error) {
+			newLoadedFactoryCalls++
+			return nil, errors.New("legacy Factory reconstruction must not start")
+		},
+		func(*factorydefinitions.FactorySnapshot) (factorydefinitions.ReplayRuntimeConfig, error) {
+			decodeReplayConfigCalls++
+			return nil, errors.New("legacy Factory decoding must not start")
+		},
+		capability,
+		nil,
+		func(base *zap.Logger, _, _, _ string) *zap.Logger { return base },
+	)
+	if err == nil {
+		t.Fatal("LoadRuntime() error = nil")
 	}
+	if !strings.HasPrefix(err.Error(), "load portable replay: ") {
+		t.Fatalf("LoadRuntime() error = %q, want portable replay context", err)
+	}
+	var inputErr *recordings.ReplayInputError
+	if !errors.As(err, &inputErr) ||
+		inputErr.Family != recordings.ReplayInputFamilyPortable ||
+		inputErr.Diagnostic.Code != testCase.wantCode {
+		t.Fatalf("LoadRuntime() error = %v, want portable diagnostic %q", err, testCase.wantCode)
+	}
+	if loaded.PortableRecording != nil || loaded.ReplayArtifact != nil || loaded.LoadedFactoryCfg != nil || loaded.SessionLogger != nil {
+		t.Fatalf("LoadRuntime() result = %#v, want zero result", loaded)
+	}
+	if loadFactoryCalls != 0 || decodeReplayConfigCalls != 0 || newLoadedFactoryCalls != 0 {
+		t.Fatalf(
+			"Factory replay construction calls = load:%d decode:%d new:%d, want zero before input validation",
+			loadFactoryCalls,
+			decodeReplayConfigCalls,
+			newLoadedFactoryCalls,
+		)
+	}
+}
+
+func TestLoadRuntimePreservesLegacyTypedDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	failure := &recordings.ReplayArtifactError{
+		Kind: recordings.ReplayArtifactErrorForeign,
+		Diagnostic: recordings.ReplayArtifactDiagnostic{
+			Code:    recordings.ReplayArtifactDiagnosticForeignReference,
+			Area:    "artifact",
+			Path:    "reference",
+			Message: "artifact reference does not belong to the selected recording",
+		},
+		Cause: recordings.ErrForeignPortableArtifact,
+	}
+	capability := recordingswire.NewReplayInputLoader(
+		func(string) ([]byte, error) { return []byte(`{"schemaVersion":"legacy"}`), nil },
+		func(string) (*recordings.ReplayArtifact, error) { return nil, failure },
+		logging.NoopLogger{},
+	)
+
+	loaded, err := LoadRuntime(
+		t.TempDir(), "", "legacy-replay.json", operatorconfig.ResolvedDefaults{}, nil,
+		RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: zap.NewNop()},
+		nil, nil, nil, capability, nil,
+		func(base *zap.Logger, _, _, _ string) *zap.Logger { return base },
+	)
+	if !errors.Is(err, recordings.ErrForeignPortableArtifact) {
+		t.Fatalf("LoadRuntime() error = %v, want ErrForeignPortableArtifact", err)
+	}
+	if got, want := err.Error(), "load factory config: load replay artifact: reference: artifact reference does not belong to the selected recording"; got != want {
+		t.Fatalf("LoadRuntime() error = %q, want %q", got, want)
+	}
+	var inputErr *recordings.ReplayInputError
+	if !errors.As(err, &inputErr) ||
+		inputErr.Family != recordings.ReplayInputFamilyLegacy ||
+		inputErr.Diagnostic.Code != recordings.ReplayArtifactDiagnosticForeignReference {
+		t.Fatalf("LoadRuntime() error = %v, want legacy foreign-reference diagnostic", err)
+	}
+	if loaded.PortableRecording != nil || loaded.ReplayArtifact != nil || loaded.LoadedFactoryCfg != nil || loaded.SessionLogger != nil {
+		t.Fatalf("LoadRuntime() result = %#v, want zero result", loaded)
+	}
+}
+
+func runtimeLoadPortablePayload(
+	t *testing.T,
+	mutate func(*recordings.PortableRecording),
+) []byte {
+	t.Helper()
+
+	path := testpath.MustRepoPathFromCaller(
+		t,
+		0,
+		"pkg", "services", "recordings", "internal", "artifacts", "testdata", "valid-v2.json",
+	)
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read valid portable recording: %v", err)
+	}
+	if mutate == nil {
+		return payload
+	}
+	recording, err := recordings.DecodePortableRecording(bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("decode valid portable recording: %v", err)
+	}
+	mutate(&recording)
+	payload, err = json.Marshal(recording)
+	if err != nil {
+		t.Fatalf("marshal portable recording: %v", err)
+	}
+	return payload
+}
+
+func runtimeLoadFactorySnapshot(t *testing.T) *factorydefinitions.FactorySnapshot {
+	t.Helper()
+
+	config, err := factorymapping.FactoryConfigFromOpenAPIJSON([]byte(factoryfixtures.CrossPathValidAlphaFactoryJSON))
+	if err != nil {
+		t.Fatalf("decode Factory fixture: %v", err)
+	}
+	snapshot, err := factorydefinitionswire.FactorySnapshotCapturer()(t.TempDir(), config, nil, "", nil)
+	if err != nil {
+		t.Fatalf("capture Factory snapshot: %v", err)
+	}
+	return snapshot
 }
 
 func TestClockForReplayPreservesOverridesAndInjectedDefaults(t *testing.T) {
 	explicit := clockwork.NewFakeClockAt(time.Date(2026, time.July, 20, 1, 0, 0, 0, time.UTC))
 	replay := clockwork.NewFakeClockAt(time.Date(2026, time.July, 20, 2, 0, 0, 0, time.UTC))
 	fallback := clockwork.NewFakeClockAt(time.Date(2026, time.July, 20, 3, 0, 0, 0, time.UTC))
-	artifact := &factorydefinitions.ReplayArtifact{}
+	artifact := &factorydefinitions.ReplayArtifact{
+		WallClock: &factorydefinitions.ReplayWallClockMetadata{
+			StartedAt: time.Date(2026, time.July, 20, 2, 0, 0, 0, time.UTC),
+		},
+	}
 
 	selected, err := clockForReplay(
 		explicit,
 		artifact,
-		func(*factorydefinitions.ReplayArtifact) recordings.Clock { return replay },
+		func(got *factorydefinitions.ReplayArtifact) recordings.Clock {
+			if got != artifact || got.WallClock == nil || !got.WallClock.StartedAt.Equal(replay.Now()) {
+				t.Fatalf("replay clock input = %#v, want legacy artifact wall-clock metadata", got)
+			}
+			return replay
+		},
 		func(clock factoryruntime.Clock) factoryruntime.Clock {
 			if clock == nil {
 				return fallback
@@ -474,7 +501,12 @@ func TestClockForReplayPreservesOverridesAndInjectedDefaults(t *testing.T) {
 	selected, err = clockForReplay(
 		nil,
 		artifact,
-		func(*factorydefinitions.ReplayArtifact) recordings.Clock { return replay },
+		func(got *factorydefinitions.ReplayArtifact) recordings.Clock {
+			if got != artifact || got.WallClock == nil || !got.WallClock.StartedAt.Equal(replay.Now()) {
+				t.Fatalf("replay clock input = %#v, want legacy artifact wall-clock metadata", got)
+			}
+			return replay
+		},
 		func(clock factoryruntime.Clock) factoryruntime.Clock {
 			if clock == nil {
 				return fallback
@@ -582,95 +614,4 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 	if preset := got.Presets["review"]; preset.ModelProvider != "cursor" {
 		t.Fatalf("review preset = %#v, want canonical cursor identity", preset)
 	}
-}
-
-func runtimeLoadSnapshot(t testing.TB, factoryHash string) *factorydefinitions.FactorySnapshot {
-	t.Helper()
-	snapshot, err := factorydefinitions.NewFactorySnapshot(map[string]any{
-		"metadata": map[string]string{"factory_hash": factoryHash},
-	})
-	if err != nil {
-		t.Fatalf("new Factory snapshot: %v", err)
-	}
-	return snapshot
-}
-
-func runtimeLoadPortableFixture(t testing.TB) []byte {
-	t.Helper()
-	path := testpath.MustRepoPathFromCaller(
-		t,
-		0,
-		"pkg", "services", "recordings", "internal", "artifacts", "testdata", "valid-v2.json",
-	)
-	payload, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read portable replay fixture: %v", err)
-	}
-	return payload
-}
-
-func runtimeLoadMutatePortableFixture(
-	t testing.TB,
-	payload []byte,
-	mutate func(map[string]any),
-) []byte {
-	t.Helper()
-	var document map[string]any
-	if err := json.Unmarshal(payload, &document); err != nil {
-		t.Fatalf("decode portable replay fixture: %v", err)
-	}
-	mutate(document)
-	updated, err := json.Marshal(document)
-	if err != nil {
-		t.Fatalf("encode portable replay fixture: %v", err)
-	}
-	return updated
-}
-
-// runtimeLoadFactorySource is the minimal Factory Definitions runtime source
-// needed to observe LoadRuntime's legacy replay adaptation without activating
-// a Factory Runtime or touching authored Factory storage.
-type runtimeLoadFactorySource struct {
-	factoryDir     string
-	runtimeBaseDir string
-	config         *factorydefinitions.FactoryConfig
-}
-
-func (source *runtimeLoadFactorySource) FactoryDir() string {
-	return source.factoryDir
-}
-
-func (source *runtimeLoadFactorySource) RuntimeBaseDir() string {
-	if source.runtimeBaseDir != "" {
-		return source.runtimeBaseDir
-	}
-	return source.factoryDir
-}
-
-func (source *runtimeLoadFactorySource) FactoryConfig() *factorydefinitions.FactoryConfig {
-	return source.config
-}
-
-func (source *runtimeLoadFactorySource) Worker(string) (*factorydefinitions.FactoryWorkerConfig, bool) {
-	return nil, false
-}
-
-func (source *runtimeLoadFactorySource) Workstation(string) (*factorydefinitions.FactoryWorkstationConfig, bool) {
-	return nil, false
-}
-
-func (source *runtimeLoadFactorySource) WorkstationByID(string) (*factorydefinitions.FactoryWorkstationConfig, bool) {
-	return nil, false
-}
-
-func (source *runtimeLoadFactorySource) SetRuntimeBaseDir(path string) {
-	source.runtimeBaseDir = path
-}
-
-func (source *runtimeLoadFactorySource) PortableBundledFileReplacements() []factorydefinitions.PortableBundledFileReplacement {
-	return nil
-}
-
-func (source *runtimeLoadFactorySource) MutateWorkers(func(*factorydefinitions.FactoryWorkerConfig) error) error {
-	return nil
 }

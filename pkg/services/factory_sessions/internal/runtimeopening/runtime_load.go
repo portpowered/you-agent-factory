@@ -1,13 +1,13 @@
 package runtimeopening
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
 	operatordefaultsruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/operatordefaults"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -19,7 +19,8 @@ import (
 type RuntimeLoad struct {
 	LoadedFactoryCfg  factorydefinitions.MutableLoadedFactorySource
 	ReplayArtifact    *factorydefinitions.ReplayArtifact
-	PortableRecording *recording.ReplayInputPortableRecording
+	PortableRecording *recording.PortableRecording
+	HistoricalReplay  *recordingreplay.RecordingReplayProjection
 	SessionLogger     *zap.Logger
 }
 
@@ -33,7 +34,7 @@ func LoadRuntime(
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	replayArtifacts recording.RecordingReplayArtifacts,
+	replayInputs recording.ReplayInputLoader,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	newSessionLogger factoryruntime.SessionLoggerFactory,
 ) (RuntimeLoad, error) {
@@ -51,27 +52,29 @@ func LoadRuntime(
 	}
 	var legacyArtifact *factorydefinitions.ReplayArtifact
 	if replayPath != "" {
-		if replayArtifacts == nil {
-			return RuntimeLoad{}, fmt.Errorf("Factory Session replay/artifact capability is required")
+		if replayInputs == nil {
+			return RuntimeLoad{}, fmt.Errorf("Factory Session replay input capability is required")
 		}
-		result, err := replayArtifacts.LoadReplayInput(recording.LoadReplayInputRequest{Path: replayPath})
+		result, err := replayInputs.LoadReplayInput(recording.LoadReplayInputRequest{Path: replayPath})
 		if err != nil {
 			var inputErr *recording.ReplayInputError
-			if errors.As(err, &inputErr) && inputErr.Kind == recording.ReplayInputErrorLegacy {
+			if errors.As(err, &inputErr) && inputErr.Family == recording.ReplayInputFamilyLegacy {
 				return RuntimeLoad{}, fmt.Errorf("load factory config: %w", err)
 			}
 			return RuntimeLoad{}, fmt.Errorf("load portable replay: %w", err)
 		}
 		if result.Portable != nil {
+			projection, err := recordingreplay.ReplayRecording(*result.Portable)
+			if err != nil {
+				return RuntimeLoad{}, fmt.Errorf("load portable replay: inspect historical recording: %w", err)
+			}
 			return RuntimeLoad{
 				PortableRecording: result.Portable,
+				HistoricalReplay:  &projection,
 				SessionLogger:     logger,
 			}, nil
 		}
-		legacyArtifact, err = legacyReplayArtifactFromInput(result.Legacy)
-		if err != nil {
-			return RuntimeLoad{}, fmt.Errorf("load factory config: %w", err)
-		}
+		legacyArtifact = result.Legacy
 	}
 
 	logger.Info("loading factory config", zap.String("dir", dir))
@@ -111,47 +114,6 @@ func LoadRuntime(
 		ReplayArtifact:   artifact,
 		SessionLogger:    logger,
 	}, nil
-}
-
-// legacyReplayArtifactFromInput reconstructs the existing Factory Definitions
-// compatibility value at the Factory Sessions boundary. Recordings returns a
-// directly owned detached input value; only this established runtime adapter
-// needs the legacy Factory Definitions representation.
-func legacyReplayArtifactFromInput(
-	input *recording.ReplayInputLegacyArtifact,
-) (*factorydefinitions.ReplayArtifact, error) {
-	if input == nil {
-		return nil, nil
-	}
-	artifact := &factorydefinitions.ReplayArtifact{
-		SchemaVersion: input.SchemaVersion,
-		RecordedAt:    input.RecordedAt,
-		Events:        make([]factorydefinitions.FactoryEvent, len(input.Events)),
-	}
-	for index, event := range input.Events {
-		if err := json.Unmarshal(event.EventJSON, &artifact.Events[index]); err != nil {
-			return nil, fmt.Errorf("decode legacy replay event %d: %w", index, err)
-		}
-	}
-	if len(input.FactorySnapshotJSON) > 0 {
-		var snapshot factorydefinitions.FactorySnapshot
-		if err := json.Unmarshal(input.FactorySnapshotJSON, &snapshot); err != nil {
-			return nil, fmt.Errorf("decode legacy Factory snapshot: %w", err)
-		}
-		artifact.Factory = &snapshot
-	}
-	if len(input.DiagnosticsJSON) > 0 {
-		if err := json.Unmarshal(input.DiagnosticsJSON, &artifact.Diagnostics); err != nil {
-			return nil, fmt.Errorf("decode legacy replay diagnostics: %w", err)
-		}
-	}
-	if input.WallClock != nil {
-		artifact.WallClock = &factorydefinitions.ReplayWallClockMetadata{
-			StartedAt:  input.WallClock.StartedAt,
-			FinishedAt: input.WallClock.FinishedAt,
-		}
-	}
-	return artifact, nil
 }
 
 func loadRuntimeConfig(

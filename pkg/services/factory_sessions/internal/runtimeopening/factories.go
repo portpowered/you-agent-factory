@@ -79,11 +79,11 @@ type ConductorInvocationWithProgressFactory = func(
 
 type RecordingsProjectionFactory = func() recordings.ProjectionService
 
-// RecordingReplayArtifactsFactory constructs the phase-aware Recordings
-// capability used by runtime opening. The capability loads replay input before
-// the runtime ledger exists and then binds the same narrow instance to the
-// completed ledger and projection for lifecycle and artifact operations.
-type RecordingReplayArtifactsFactory = recordings.RecordingReplayArtifactsFactory
+// RecordingLifecycleFactory constructs the Recordings-owned narrow lifecycle
+// capability bound to the runtime recorder while opening a Factory Session
+// runtime. Wire supplies this factory directly so this path never discovers
+// the capability from a broader Recordings Service at call time.
+type RecordingLifecycleFactory = func(recordings.Ledger, recordings.ProjectionService) recordings.RecordingLifecycle
 
 type RuntimeLedgerFactory = func() factoryruntime.RuntimeLedgerFactory
 

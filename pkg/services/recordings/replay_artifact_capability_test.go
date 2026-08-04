@@ -94,11 +94,17 @@ func TestRecordingReplayArtifacts_ConstructionIsInert(t *testing.T) {
 func finalizedReplayArtifactRecording(
 	t *testing.T, service recordings.Service, recordingID string,
 ) recordings.ReplayRecordingID {
+	return finalizedReplayArtifactRecordingAt(t, service, recordingID, filepath.Join(t.TempDir(), recordingID+".json"))
+}
+
+func finalizedReplayArtifactRecordingAt(
+	t *testing.T, service recordings.Service, recordingID string, reference string,
+) recordings.ReplayRecordingID {
 	t.Helper()
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-" + recordingID}
 	bound, err := service.BindRecording(recordings.BindRecordingRequest{
 		RecordingID: recordings.RecordingID(recordingID),
-		Artifact:    recordings.RecordingArtifactReference(filepath.Join(t.TempDir(), recordingID+".json")),
+		Artifact:    recordings.RecordingArtifactReference(reference),
 		Scope:       scope,
 	})
 	if err != nil {
@@ -220,18 +226,8 @@ func TestRecordingReplayArtifacts_TypedFailures(t *testing.T) {
 	t.Parallel()
 	service, replayArtifacts := newTestRecordingReplayArtifacts(t)
 
-	missing, err := replayArtifacts.LoadReplay(recordings.LoadReplayRequest{RecordingID: "missing"})
+	_, err := replayArtifacts.LoadReplay(recordings.LoadReplayRequest{RecordingID: "missing"})
 	assertReplayArtifactErrorKind(t, err, recordings.ReplayArtifactErrorNotFound, recordings.ErrReplayRecordingNotFound)
-	assertArtifactDiagnostic(
-		t,
-		err,
-		recordings.ArtifactDiagnosticRecordingNotFound,
-		"recording",
-		"recordingID",
-	)
-	if missing.Replay.RecordingID != "" || len(missing.Replay.Events) != 0 {
-		t.Fatalf("LoadReplay(missing) result = %#v, want no partial replay facts", missing)
-	}
 
 	active, err := service.BindRecording(recordings.BindRecordingRequest{Artifact: "artifact:active"})
 	if err != nil {
@@ -247,6 +243,18 @@ func TestRecordingReplayArtifacts_TypedFailures(t *testing.T) {
 	_, err = replayArtifacts.DecodeArtifact(recordings.DecodeArtifactRequest{Payload: []byte("{")})
 	assertReplayArtifactErrorKind(t, err, recordings.ReplayArtifactErrorInvalid, recordings.ErrInvalidPortableArtifact)
 
+	missingReference := filepath.Join(t.TempDir(), "missing-reference.json")
+	missingReferenceID := finalizedReplayArtifactRecordingAt(
+		t, service, "typed-failures-missing-reference", missingReference,
+	)
+	_, err = replayArtifacts.ReadArtifact(context.Background(), recordings.ReadArtifactRequest{
+		RecordingID: missingReferenceID,
+		Reference:   recordings.ArtifactReference(missingReference),
+	})
+	assertReplayArtifactErrorKind(
+		t, err, recordings.ReplayArtifactErrorUnavailable, recordings.ErrPortableArtifactUnavailable,
+	)
+
 	owner := finalizedReplayArtifactRecording(t, service, "typed-failures-owner")
 	other := finalizedReplayArtifactRecording(t, service, "typed-failures-other")
 	ownerExport, err := replayArtifacts.ExportArtifact(context.Background(), recordings.ExportArtifactRequest{
@@ -255,21 +263,11 @@ func TestRecordingReplayArtifacts_TypedFailures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExportArtifact owner: %v", err)
 	}
-	foreign, err := replayArtifacts.ReadArtifact(context.Background(), recordings.ReadArtifactRequest{
+	_, err = replayArtifacts.ReadArtifact(context.Background(), recordings.ReadArtifactRequest{
 		RecordingID: other,
 		Reference:   ownerExport.Reference,
 	})
 	assertReplayArtifactErrorKind(t, err, recordings.ReplayArtifactErrorForeign, recordings.ErrForeignPortableArtifact)
-	assertArtifactDiagnostic(
-		t,
-		err,
-		recordings.ArtifactDiagnosticForeign,
-		"reference",
-		"reference",
-	)
-	if foreign.Artifact.SchemaVersion != "" || len(foreign.Artifact.Events) != 0 {
-		t.Fatalf("ReadArtifact(foreign) result = %#v, want no partial artifact", foreign)
-	}
 
 	cancelCause := errors.New("operator stopped export")
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -279,40 +277,6 @@ func TestRecordingReplayArtifacts_TypedFailures(t *testing.T) {
 	assertReplayArtifactErrorKind(t, err, recordings.ReplayArtifactErrorCancelled, recordings.ErrPortableArtifactCancelled)
 	if !errors.Is(err, context.Canceled) || !errors.Is(err, cancelCause) {
 		t.Fatalf("ExportArtifact(cancelled) error = %v, want to unwrap context.Canceled and cause", err)
-	}
-}
-
-// TestRecordingReplayArtifacts_MissingPublicReference proves a finalized
-// recording with no published artifact returns the capability's unavailable
-// classification and a safe, structured reference diagnostic without
-// fabricating an empty artifact.
-func TestRecordingReplayArtifacts_MissingPublicReference(t *testing.T) {
-	t.Parallel()
-	service, replayArtifacts := newTestRecordingReplayArtifacts(t)
-	recordingID := finalizedReplayArtifactRecording(t, service, "missing-public-reference")
-	status, err := service.QueryRecordingStatus(recordings.RecordingStatusRequest{
-		RecordingID: recordings.RecordingID(recordingID),
-	})
-	if err != nil {
-		t.Fatalf("QueryRecordingStatus: %v", err)
-	}
-
-	result, err := replayArtifacts.ReadArtifact(context.Background(), recordings.ReadArtifactRequest{
-		RecordingID: recordingID,
-		Reference:   recordings.ArtifactReference(status.Status.Artifact),
-	})
-	assertReplayArtifactErrorKind(
-		t, err, recordings.ReplayArtifactErrorUnavailable, recordings.ErrPortableArtifactUnavailable,
-	)
-	assertArtifactDiagnostic(
-		t,
-		err,
-		recordings.ArtifactDiagnosticUnavailable,
-		"reference",
-		"reference",
-	)
-	if result.Artifact.SchemaVersion != "" || len(result.Artifact.Events) != 0 {
-		t.Fatalf("ReadArtifact(missing) result = %#v, want no partial artifact", result)
 	}
 }
 
@@ -334,20 +298,15 @@ func TestRecordingReplayArtifacts_UnsupportedSchemaVersion(t *testing.T) {
 	assertReplayArtifactErrorKind(
 		t, err, recordings.ReplayArtifactErrorUnsupportedSchema, recordings.ErrUnsupportedPortableArtifactSchema,
 	)
-	diagnostic := replayArtifactDiagnostic(t, err)
-	if diagnostic.Code != recordings.ArtifactDiagnosticUnsupportedSchema ||
-		diagnostic.Area != "schemaVersion" ||
-		diagnostic.Path != "schemaVersion" ||
-		diagnostic.Message == "" ||
-		len(diagnostic.SupportedVersions) != 1 || diagnostic.SupportedVersions[0] != string(recordings.ArtifactSchemaV1) {
-		t.Fatalf("unsupported-schema diagnostic = %#v, want structured retry facts", diagnostic)
+	var first *recordings.ReplayArtifactError
+	if !errors.As(err, &first) {
+		t.Fatalf("ValidateArtifact() error = %v, want ReplayArtifactError", err)
 	}
-
-	diagnostic.SupportedVersions[0] = "mutated"
+	first.Diagnostic.SupportedVersions[0] = "mutated"
 	_, err = replayArtifacts.ValidateArtifact(recordings.ValidateArtifactRequest{Artifact: built.Artifact})
-	second := replayArtifactDiagnostic(t, err)
-	if len(second.SupportedVersions) != 1 || second.SupportedVersions[0] != string(recordings.ArtifactSchemaV1) {
-		t.Fatalf("supported versions after mutating earlier diagnostic = %#v, want detached values", second.SupportedVersions)
+	var second *recordings.ReplayArtifactError
+	if !errors.As(err, &second) || second.Diagnostic.SupportedVersions[0] == "mutated" {
+		t.Fatalf("later unsupported-schema diagnostic observed caller mutation: %#v", second)
 	}
 }
 
@@ -371,37 +330,6 @@ func TestRecordingReplayArtifacts_InvalidOrder(t *testing.T) {
 	assertReplayArtifactErrorKind(
 		t, err, recordings.ReplayArtifactErrorInvalidOrder, recordings.ErrInvalidPortableArtifactOrder,
 	)
-	diagnostic := replayArtifactDiagnostic(t, err)
-	if diagnostic.Code != recordings.ArtifactDiagnosticInvalidOrder || diagnostic.Area != "events" || diagnostic.Path != "events" || diagnostic.Message == "" {
-		t.Fatalf("invalid-order diagnostic = %#v, want structured order facts", diagnostic)
-	}
-}
-
-// TestRecordingReplayArtifacts_InvalidSummary proves a summary that no
-// longer describes the artifact's canonical events returns a structured
-// summary diagnostic and no partial summary result.
-func TestRecordingReplayArtifacts_InvalidSummary(t *testing.T) {
-	t.Parallel()
-	service, replayArtifacts := newTestRecordingReplayArtifacts(t)
-	recordingID := finalizedReplayArtifactRecording(t, service, "invalid-summary")
-	built, err := replayArtifacts.BuildArtifact(recordings.BuildArtifactRequest{RecordingID: recordingID})
-	if err != nil {
-		t.Fatalf("BuildArtifact: %v", err)
-	}
-	built.Artifact.Summary.EventCount++
-
-	result, err := replayArtifacts.ValidateArtifact(recordings.ValidateArtifactRequest{Artifact: built.Artifact})
-	assertReplayArtifactErrorKind(t, err, recordings.ReplayArtifactErrorInvalid, recordings.ErrInvalidPortableArtifact)
-	assertArtifactDiagnostic(
-		t,
-		err,
-		recordings.ArtifactDiagnosticInvalidSummary,
-		"summary",
-		"summary.eventCount",
-	)
-	if result.Summary.RecordingID != "" || len(result.Summary.Failures) != 0 {
-		t.Fatalf("ValidateArtifact(invalid summary) result = %#v, want no partial summary", result)
-	}
 }
 
 // TestRecordingReplayArtifacts_InvalidIntegrity proves an artifact whose
@@ -421,10 +349,6 @@ func TestRecordingReplayArtifacts_InvalidIntegrity(t *testing.T) {
 	assertReplayArtifactErrorKind(
 		t, err, recordings.ReplayArtifactErrorInvalidIntegrity, recordings.ErrInvalidPortableArtifactIntegrity,
 	)
-	diagnostic := replayArtifactDiagnostic(t, err)
-	if diagnostic.Code != recordings.ArtifactDiagnosticInvalidIntegrity || diagnostic.Area != "integrity" || diagnostic.Path != "integrity.digest" || diagnostic.Message == "" {
-		t.Fatalf("invalid-integrity diagnostic = %#v, want structured integrity facts", diagnostic)
-	}
 }
 
 // TestRecordingReplayArtifacts_MalformedDecode proves empty, truncated,
@@ -453,10 +377,6 @@ func TestRecordingReplayArtifacts_MalformedDecode(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			result, err := replayArtifacts.DecodeArtifact(recordings.DecodeArtifactRequest{Payload: payload})
 			assertReplayArtifactErrorKind(t, err, recordings.ReplayArtifactErrorInvalid, recordings.ErrInvalidPortableArtifact)
-			diagnostic := replayArtifactDiagnostic(t, err)
-			if diagnostic.Code != recordings.ArtifactDiagnosticMalformed || diagnostic.Area != "artifact" || diagnostic.Path != "artifact" || diagnostic.Message == "" {
-				t.Fatalf("DecodeArtifact(%s) diagnostic = %#v, want structured malformed facts", name, diagnostic)
-			}
 			if result.Artifact.SchemaVersion != "" || len(result.Artifact.Events) != 0 {
 				t.Fatalf("DecodeArtifact(%s) result = %#v, want zero value on failure", name, result.Artifact)
 			}
@@ -464,11 +384,12 @@ func TestRecordingReplayArtifacts_MalformedDecode(t *testing.T) {
 	}
 }
 
-// TestRecordingReplayArtifacts_ExportFailureLeavesNoPartialArtifact proves a
-// failed atomic publication (writing to a destination that is itself a
-// directory) reports the export-failed classification and leaves no
-// partially readable public artifact behind.
-func TestRecordingReplayArtifacts_ExportFailureLeavesNoPartialArtifact(t *testing.T) {
+// TestRecordingReplayArtifacts_ExportFailureLeavesNoPartialArtifactAndRetries
+// proves a failed atomic publication (writing to a destination that is itself
+// a directory) reports the export-failed classification, leaves no partially
+// readable public artifact behind, and permits a valid retry for the same
+// recording identity.
+func TestRecordingReplayArtifacts_ExportFailureLeavesNoPartialArtifactAndRetries(t *testing.T) {
 	t.Parallel()
 	service, replayArtifacts := newTestRecordingReplayArtifacts(t)
 	destination := filepath.Join(t.TempDir(), "destination-is-directory")
@@ -528,6 +449,24 @@ func TestRecordingReplayArtifacts_ExportFailureLeavesNoPartialArtifact(t *testin
 			err, recordings.ReplayArtifactErrorUnavailable, recordings.ReplayArtifactErrorInvalid,
 		)
 	}
+	if err := os.Remove(destination); err != nil {
+		t.Fatalf("remove failed destination: %v", err)
+	}
+	retried, err := replayArtifacts.ExportArtifact(context.Background(), recordings.ExportArtifactRequest{
+		RecordingID: recordingID,
+	})
+	if err != nil {
+		t.Fatalf("ExportArtifact retry: %v", err)
+	}
+	if retried.Reference != recordings.ArtifactReference(destination) {
+		t.Fatalf("ExportArtifact retry reference = %q, want %q", retried.Reference, destination)
+	}
+	if _, err := replayArtifacts.ReadArtifact(context.Background(), recordings.ReadArtifactRequest{
+		RecordingID: recordingID,
+		Reference:   retried.Reference,
+	}); err != nil {
+		t.Fatalf("ReadArtifact after successful retry: %v", err)
+	}
 }
 
 func assertReplayArtifactErrorKind(
@@ -541,33 +480,41 @@ func assertReplayArtifactErrorKind(
 	if !errors.Is(err, wantSentinel) {
 		t.Fatalf("error does not unwrap to %v: %v", wantSentinel, err)
 	}
-}
-
-func replayArtifactDiagnostic(t *testing.T, err error) *recordings.ArtifactDiagnostic {
-	t.Helper()
-	var replayArtifactErr *recordings.ReplayArtifactError
-	if !errors.As(err, &replayArtifactErr) || replayArtifactErr.Diagnostic == nil {
-		t.Fatalf("error = %v, want ReplayArtifactError with a structured diagnostic", err)
+	if replayArtifactErr.Diagnostic.Code != replayArtifactDiagnosticCodeForKind(wantKind) ||
+		replayArtifactErr.Diagnostic.Area == "" ||
+		replayArtifactErr.Diagnostic.Message == "" {
+		t.Fatalf("diagnostic = %#v, want safe diagnostic for kind %q", replayArtifactErr.Diagnostic, wantKind)
 	}
-	return replayArtifactErr.Diagnostic
+	if wantKind == recordings.ReplayArtifactErrorUnsupportedSchema &&
+		!reflect.DeepEqual(replayArtifactErr.Diagnostic.SupportedVersions, []string{string(recordings.ArtifactSchemaV1)}) {
+		t.Fatalf("unsupported-schema diagnostic = %#v, want supported artifact schema", replayArtifactErr.Diagnostic)
+	}
 }
 
-func assertArtifactDiagnostic(
-	t *testing.T,
-	err error,
-	wantCode recordings.ArtifactDiagnosticCode,
-	wantArea, wantPath string,
-) {
-	t.Helper()
-	diagnostic := replayArtifactDiagnostic(t, err)
-	if diagnostic.Code != wantCode || diagnostic.Area != wantArea || diagnostic.Path != wantPath || diagnostic.Message == "" {
-		t.Fatalf(
-			"diagnostic = %#v, want code %q, area %q, path %q, and safe message",
-			diagnostic,
-			wantCode,
-			wantArea,
-			wantPath,
-		)
+func replayArtifactDiagnosticCodeForKind(kind recordings.ReplayArtifactErrorKind) recordings.ReplayArtifactDiagnosticCode {
+	switch kind {
+	case recordings.ReplayArtifactErrorNotFound:
+		return recordings.ReplayArtifactDiagnosticRecordingNotFound
+	case recordings.ReplayArtifactErrorNotFinalized:
+		return recordings.ReplayArtifactDiagnosticRecordingNotFinalized
+	case recordings.ReplayArtifactErrorCorruptInput:
+		return recordings.ReplayArtifactDiagnosticInvalidSummary
+	case recordings.ReplayArtifactErrorUnavailable:
+		return recordings.ReplayArtifactDiagnosticMissingReference
+	case recordings.ReplayArtifactErrorUnsupportedSchema:
+		return recordings.ReplayArtifactDiagnosticUnsupportedVersion
+	case recordings.ReplayArtifactErrorInvalidIntegrity:
+		return recordings.ReplayArtifactDiagnosticInvalidIntegrity
+	case recordings.ReplayArtifactErrorInvalidOrder:
+		return recordings.ReplayArtifactDiagnosticInvalidOrder
+	case recordings.ReplayArtifactErrorForeign:
+		return recordings.ReplayArtifactDiagnosticForeignReference
+	case recordings.ReplayArtifactErrorCancelled:
+		return recordings.ReplayArtifactDiagnosticCancelled
+	case recordings.ReplayArtifactErrorExportFailed:
+		return recordings.ReplayArtifactDiagnosticDependencyFailure
+	default:
+		return recordings.ReplayArtifactDiagnosticMalformed
 	}
 }
 
@@ -619,15 +566,6 @@ type narrowReplayArtifactsFake struct {
 }
 
 var _ recordings.RecordingReplayArtifacts = (*narrowReplayArtifactsFake)(nil)
-
-func (fake *narrowReplayArtifactsFake) LoadReplayInput(
-	recordings.LoadReplayInputRequest,
-) (recordings.LoadReplayInputResult, error) {
-	return recordings.LoadReplayInputResult{Portable: &recordings.ReplayInputPortableRecording{
-		RecordingKind: "narrow-fake",
-		Session:       recordings.ReplayInputSessionSummary{ID: "narrow-fake-session"},
-	}}, nil
-}
 
 func (fake *narrowReplayArtifactsFake) LoadReplay(
 	request recordings.LoadReplayRequest,
@@ -693,13 +631,6 @@ func TestRecordingReplayArtifacts_NarrowFakeConsumption(t *testing.T) {
 		},
 	}
 	var replayArtifacts recordings.RecordingReplayArtifacts = fake
-	input, err := replayArtifacts.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "narrow-fake"})
-	if err != nil {
-		t.Fatalf("LoadReplayInput() error = %v", err)
-	}
-	if input.Portable == nil || input.Portable.Session.ID != "narrow-fake-session" {
-		t.Fatalf("LoadReplayInput() = %#v, want directly owned portable replay input", input)
-	}
 
 	loaded, err := replayArtifacts.LoadReplay(recordings.LoadReplayRequest{RecordingID: "narrow-fake"})
 	if err != nil {

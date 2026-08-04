@@ -289,7 +289,7 @@ func validatePortableRecordingEvents(
 		seen[event.ID] = struct{}{}
 		if event.Sequence < 0 || event.Sequence <= previous {
 			return portableRecordingDiagnostic(
-				PortableRecordingCodeInvalidSummary, "events", path+".sequence", "must be non-negative and strictly increasing",
+				PortableRecordingCodeInvalidOrder, "events", path+".sequence", "must be non-negative and strictly increasing",
 			)
 		}
 		previous = event.Sequence

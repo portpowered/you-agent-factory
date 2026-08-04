@@ -4,17 +4,36 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
 )
 
 type runtimeProducts struct {
 	application roles.OpenedApplicationRuntime
 	invocation  roles.OpenedInvocationRuntime
 	execution   roles.OpenedExecutionRuntime
+}
+
+func historicalReplayRuntimeProducts(
+	logger *zap.Logger,
+	projection recordingreplay.RecordingReplayProjection,
+) runtimeProducts {
+	inspection := recordingreplay.NewService(projection).Inspection()
+	return runtimeProducts{
+		application: roles.OpenedApplicationRuntime{
+			Process:          historicalReplayProcessRuntime{},
+			HistoricalReplay: &inspection,
+			Resources: roles.RuntimeResources{
+				Logger: logger,
+				Close:  func() error { return nil },
+			},
+		},
+	}
 }
 
 func assembleRuntimeProducts(
