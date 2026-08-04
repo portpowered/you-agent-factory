@@ -19,7 +19,7 @@ import (
 
 var (
 	_ factoryruntime.HostedInstance = (*factoryhost.Bundle)(nil)
-	_ factoryruntime.HostedLedger     = (*recordingfixtures.ScriptedRuntimeLedger)(nil)
+	_ factoryruntime.HostedLedger   = (*recordingfixtures.ScriptedRuntimeLedger)(nil)
 )
 
 // TestRuntimeRecordingsConsumerBehaviorPreserved proves CUT-RUN-REC story 004:
