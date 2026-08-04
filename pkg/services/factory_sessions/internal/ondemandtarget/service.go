@@ -10,20 +10,18 @@
 // this service tree never imports this package directly.
 //
 // Service implements exactly StartAsync, InvokeFactorySession, Cancel, and
-// CloseFactorySession -- the narrow
-// chat_sessions/internal/factorysessionsshim.FactoryTargetExecutionService
-// contract that existing, consumer-owned shim actually forwards to, and
-// nothing more. Earlier iterations of this package embedded the full 30+
-// method public factorysessions.Service interface as a permanently-nil value
-// solely so this type could be handed to the shim's constructor, which then
-// required the literal Service type; every unimplemented method panicked if
-// ever reached. That made this type a partial, panic-capable stand-in for
-// the full aggregate root -- a real production risk if any future shim
-// expansion or root composition ever called one of the unimplemented
-// methods. factorysessionsshim.New now depends on the narrow
-// FactoryTargetExecutionService interface instead of the full Service, so
-// this type can be -- and now is -- a complete, non-panicking implementation
-// of exactly what it claims to support.
+// CloseFactorySession -- the narrow, owner-published
+// factory_sessions/wire.TargetExecutionService capability -- and nothing
+// more. Earlier iterations of this package embedded the full 30+ method
+// public factorysessions.Service interface as a permanently-nil value solely
+// so this type could be handed to a caller-owned adapter's constructor,
+// which then required the literal Service type; every unimplemented method
+// panicked if ever reached. That made this type a partial, panic-capable
+// stand-in for the full aggregate root -- a real production risk if any
+// future composition ever called one of the unimplemented methods. This type
+// is now -- and is asserted to be, see the wire package's own var _
+// TargetExecutionService assertion -- a complete, non-panicking
+// implementation of exactly the capability it claims to support.
 package ondemandtarget
 
 import (

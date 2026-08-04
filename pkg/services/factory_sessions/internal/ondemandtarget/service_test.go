@@ -843,6 +843,98 @@ func TestLoggingNeverEmitsWorkingRootOrRawFailureText(t *testing.T) {
 	})
 }
 
+// targetExecutionCapability mirrors, method-for-method, the owner-published
+// factory_sessions/wire.TargetExecutionService capability (start, invoke,
+// cancel, close). It is declared locally, rather than imported from the wire
+// package, because that package itself depends on this one (wire wraps
+// ondemandtarget.Service for construction) -- importing it back here would
+// be cyclic. Go's structural typing still lets these tests prove Service is
+// a complete implementation of exactly this narrow shape.
+type targetExecutionCapability interface {
+	StartAsync(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error)
+	InvokeFactorySession(context.Context, string, factorysessions.InvocationRequest) (factorysessions.InvocationResult, error)
+	Cancel(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	CloseFactorySession(context.Context, string) error
+}
+
+// TestServiceSatisfiesPublishedTargetExecutionCapability proves a caller
+// typed only against the owner-published target-execution shape -- never
+// against the concrete *Service type or any wider aggregate contract -- can
+// start a target, invoke and cancel its captured session, and close it,
+// observing the exact same behavior (including post-close
+// ErrSessionNotFound) as a caller holding the concrete type. This is the
+// behavioral proof for the narrow capability's publication: any caller
+// depending on it receives a complete, non-panicking implementation of
+// exactly these four operations.
+func TestServiceSatisfiesPublishedTargetExecutionCapability(t *testing.T) {
+	sessions := &fakeSessions{invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}}
+	opener := &fakeOpener{opened: roles.OpenedInvocationRuntime{Sessions: sessions, Lifecycle: &fakeLifecycle{}}}
+	resolve := func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+		return factorysessions.RuntimeOpeningRequest{}, nil
+	}
+	svc := newTestService(t, opener, resolve, sequentialIDs("wrapper"))
+
+	var client targetExecutionCapability = svc
+
+	started, err := client.StartAsync(context.Background(), factorysessions.StartRequest{
+		Source: factorysessions.Source{FactoryID: "@you/review"},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync() via TargetExecutionService error = %v", err)
+	}
+	if started.SessionID == "" {
+		t.Fatal("StartAsync() via TargetExecutionService returned a blank SessionID")
+	}
+
+	if _, err := client.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{}); err != nil {
+		t.Fatalf("InvokeFactorySession() via TargetExecutionService error = %v", err)
+	}
+	if len(sessions.invokeCalls) != 1 {
+		t.Fatalf("invoke calls = %v, want exactly 1 dispatched to the captured runtime", sessions.invokeCalls)
+	}
+
+	if _, err := client.Cancel(context.Background(), started.SessionID, factorysessions.ControlRequest{}); err != nil {
+		t.Fatalf("Cancel() via TargetExecutionService error = %v", err)
+	}
+	if len(sessions.cancelCalls) != 1 {
+		t.Fatalf("cancel calls = %v, want exactly 1 forwarded to the captured runtime", sessions.cancelCalls)
+	}
+
+	if err := client.CloseFactorySession(context.Background(), started.SessionID); err != nil {
+		t.Fatalf("CloseFactorySession() via TargetExecutionService error = %v", err)
+	}
+	if err := client.CloseFactorySession(context.Background(), started.SessionID); err != nil {
+		t.Fatalf("repeated CloseFactorySession() via TargetExecutionService error = %v, want idempotent success", err)
+	}
+	if _, err := client.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{}); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("InvokeFactorySession() after close via TargetExecutionService error = %v, want ErrSessionNotFound", err)
+	}
+}
+
+// TestServiceViaTargetExecutionCapabilityRejectsUnsupportedTarget proves an
+// unresolvable target reported by the resolver reaches a caller of the
+// published target-execution capability unchanged, opening no runtime.
+func TestServiceViaTargetExecutionCapabilityRejectsUnsupportedTarget(t *testing.T) {
+	opener := &fakeOpener{}
+	resolveErr := errors.New("unsupported factory target")
+	resolve := func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+		return factorysessions.RuntimeOpeningRequest{}, resolveErr
+	}
+	svc := newTestService(t, opener, resolve, sequentialIDs("wrapper"))
+
+	var client targetExecutionCapability = svc
+
+	_, err := client.StartAsync(context.Background(), factorysessions.StartRequest{
+		Source: factorysessions.Source{FactoryID: "@you/unsupported"},
+	})
+	if !errors.Is(err, resolveErr) {
+		t.Fatalf("StartAsync() via TargetExecutionService error = %v, want %v", err, resolveErr)
+	}
+	if len(opener.calls) != 0 {
+		t.Fatalf("OpenInvocationRuntime call count = %d, want 0 after an unsupported-target failure", len(opener.calls))
+	}
+}
+
 // funcOpener is an invocationRuntimeOpener test double backed directly by a
 // function, for tests that need each successive OpenInvocationRuntime call
 // to return a distinct opened runtime (fakeOpener always returns the same
