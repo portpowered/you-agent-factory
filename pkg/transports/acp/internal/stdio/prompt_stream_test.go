@@ -1405,31 +1405,62 @@ func TestLiveDrainTurnUpdatesDeliversGapThenStopsOnCancel(t *testing.T) {
 	factoryTarget := &fakeFactoryTargetService{}
 	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
 	seedRetentionGap(t, eventsSvc, streamingTestSessionID)
+	// The live record immediately after the gap must be acknowledgeable for
+	// this test to prove the drain continues beyond the gap rather than merely
+	// waiting for cancellation after one notification.
+	chatSessions := server.chatSessions.(*fakeChatSessionsService)
+	chatSessions.mu.Lock()
+	chatSessions.getSessionResult.Session.StreamHead = 2
+	chatSessions.mu.Unlock()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = contextWithAttachmentCache(ctx, &attachmentCache{})
-	notify, notified := captureNotifier()
+	var mu sync.Mutex
+	var notified []acpsdk.SessionNotification
+	retainedDelivered := make(chan struct{})
+	var retainedOnce sync.Once
+	notify := func(notification acpsdk.SessionNotification) error {
+		mu.Lock()
+		notified = append(notified, notification)
+		count := len(notified)
+		mu.Unlock()
+		if count == 2 {
+			retainedOnce.Do(func() { close(retainedDelivered) })
+		}
+		return nil
+	}
 
 	drainDone := make(chan bool, 1)
 	go func() {
 		drainDone <- server.liveDrainTurnUpdates(ctx, "conn-a", streamingTestSessionID, 1, notify)
 	}()
 
+	// This direct notification signal replaces the prior timing delay: the
+	// gap must be delivered first and the retained record immediately after it
+	// must also arrive before cancellation can end the subscription.
+	<-retainedDelivered
 	select {
 	case <-drainDone:
-		t.Fatal("liveDrainTurnUpdates returned before the retained record was ever delivered")
-	case <-time.After(50 * time.Millisecond):
+		t.Fatal("liveDrainTurnUpdates returned after the gap instead of continuing to retained catch-up")
+	default:
 	}
 	cancel()
 
-	select {
-	case <-drainDone:
-	case <-time.After(2 * time.Second):
-		t.Fatal("liveDrainTurnUpdates did not stop after ctx was canceled")
+	if delivered := <-drainDone; !delivered {
+		t.Fatal("liveDrainTurnUpdates deliveredMessage = false, want the retained message delivered after the gap")
 	}
 
-	if len(*notified) == 0 {
-		t.Fatal("notify call count = 0, want at least the gap notice delivered before cancellation")
+	mu.Lock()
+	defer mu.Unlock()
+	if len(notified) != 2 {
+		t.Fatalf("notify call count = %d, want exactly 2 (gap notice, then retained record)", len(notified))
+	}
+	if notified[0].Update.AgentThoughtChunk == nil {
+		t.Fatalf("notification[0] = %+v, want the gap notice before retained catch-up", notified[0])
+	}
+	retained := notified[1].Update.AgentMessageChunk
+	if retained == nil || retained.Content.Text == nil || retained.Content.Text.Text != "retained" {
+		t.Fatalf("notification[1] = %+v, want retained message after the gap", notified[1])
 	}
 }
 
