@@ -2,6 +2,8 @@ package wire
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionsinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
+	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
 )
 
@@ -60,4 +62,32 @@ func ResolveCurrent(
 	rootDir string,
 ) (string, error) {
 	return catalogwire.ResolveCurrent(paths, rootDir)
+}
+
+// NewCatalogPathsService constructs the narrow, read-only Factory
+// Definitions catalog/path capability from the exact effective-catalog
+// operation and catalog-owned path/filesystem ports used by Wire
+// composition. It reuses the same private catalog collaborator the root
+// Service's ResolveNamedFactory delegates to, so results are identical, and
+// performs no filesystem reads or writes at construction time.
+func NewCatalogPathsService(
+	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
+	namedPaths factorydefinitions.NamedPathResolver,
+	namedFactoryCatalogFileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
+) (factorydefinitions.CatalogPathsService, error) {
+	catalogService, err := catalogwire.NewService(catalog.Dependencies{
+		Paths:      namedPaths,
+		FileSystem: namedFactoryCatalogFileSystem,
+	})
+	if err != nil {
+		return nil, err
+	}
+	resolveCurrentDir := func(rootDir string) (string, error) {
+		return catalogwire.ResolveCurrent(namedPaths, rootDir)
+	}
+	return factorydefinitionsinternal.NewCatalogPathsService(
+		listEffective,
+		catalogService.ResolveNamedFactory,
+		resolveCurrentDir,
+	)
 }
