@@ -638,16 +638,13 @@ func (s *Server) deliverReadTimeGap(
 	}
 
 	resumeAt := events.AggregateSequence(gap.EarliestRetained) - 1
-	// context.WithoutCancel: see drainRecords' identical comment -- the gap
-	// notice was already handed to notify above, so this acknowledgement must
-	// still complete despite ctx being canceled for a reason unrelated to
-	// this specific record.
-	ackResult, ackErr := s.chatSessions.AcknowledgeAttachment(context.WithoutCancel(ctx), chatsessions.AcknowledgeAttachmentRequest{
-		SessionID:       sessionID,
-		AttachmentID:    attachment.ID,
-		ExpectedVersion: sessionVersion,
-		AfterSequence:   resumeAt,
-	})
+	// acknowledgeDeliveredPosition keeps the same cancellation guarantee as
+	// drainRecords and refreshes a stale optimistic version. A response bridge
+	// can advance StreamHead after this gap notice reaches the client but before
+	// its cursor acknowledgement, so returning that benign conflict would leave
+	// the already-delivered gap retryable and duplicate it during retained
+	// catch-up.
+	ackResult, ackErr := s.acknowledgeDeliveredPosition(ctx, sessionID, attachment.ID, sessionVersion, resumeAt)
 	if ackErr != nil {
 		var posErr *chatsessions.AttachmentPositionError
 		if errors.As(ackErr, &posErr) {

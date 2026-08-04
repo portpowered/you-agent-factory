@@ -1191,6 +1191,81 @@ func TestStreamTurnUpdatesPropagatesGapAcknowledgeGenericFailure(t *testing.T) {
 	}
 }
 
+// TestLiveDrainTurnUpdatesRetriesGapAcknowledgementConflictBeforeCatchUp
+// proves a response bridge version advance after a live retention-gap notice
+// reaches the client cannot leave that already-delivered gap unacknowledged.
+// The refreshed acknowledgement must preserve exactly-once delivery through
+// the subsequent retained sweep and allow the retained record after the gap
+// to continue in the live drain.
+func TestLiveDrainTurnUpdatesRetriesGapAcknowledgementConflictBeforeCatchUp(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+	seedRetentionGap(t, eventsSvc, streamingTestSessionID)
+	chatSessions := server.chatSessions.(*fakeChatSessionsService)
+	chatSessions.getSessionResults = []chatsessions.GetSessionResult{
+		{Session: chatsessions.Session{Version: 1}},
+		{Session: chatsessions.Session{Version: 2}},
+	}
+	chatSessions.getSessionResult = chatsessions.GetSessionResult{Session: chatsessions.Session{Version: 2, StreamHead: 2}}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cache := &attachmentCache{}
+	ctx = contextWithAttachmentCache(ctx, cache)
+	var notified []acpsdk.SessionNotification
+	notify := func(notification acpsdk.SessionNotification) error {
+		notified = append(notified, notification)
+		if len(notified) == 1 {
+			chatSessions.mu.Lock()
+			chatSessions.acknowledgeAttachmentErrs = []error{
+				&chatsessions.ConflictError{Value: "Session", ID: streamingTestSessionID, Expected: 1, Actual: 2},
+			}
+			chatSessions.mu.Unlock()
+		}
+		if len(notified) == 2 {
+			cancel()
+		}
+		return nil
+	}
+
+	if delivered := server.liveDrainTurnUpdates(ctx, "conn-a", streamingTestSessionID, 1, notify); !delivered {
+		t.Fatal("liveDrainTurnUpdates() deliveredMessage = false, want retained catch-up after the gap")
+	}
+	if len(notified) != 2 {
+		t.Fatalf("notify call count = %d, want exactly 2 (the gap once, then retained catch-up)", len(notified))
+	}
+	if notified[0].Update.AgentThoughtChunk == nil {
+		t.Fatalf("notification[0] = %+v, want the retention-gap notice", notified[0])
+	}
+	retained := notified[1].Update.AgentMessageChunk
+	if retained == nil || retained.Content.Text == nil || retained.Content.Text.Text != "retained" {
+		t.Fatalf("notification[1] = %+v, want retained catch-up after the gap", notified[1])
+	}
+	if len(chatSessions.acknowledgeAttachmentReqs) != 3 {
+		t.Fatalf("acknowledge attempt count = %d, want exactly 3 (stale gap, refreshed gap, retained record)", len(chatSessions.acknowledgeAttachmentReqs))
+	}
+	if got := chatSessions.acknowledgeAttachmentReqs[0].ExpectedVersion; got != 1 {
+		t.Fatalf("first gap acknowledgement expected version = %d, want 1", got)
+	}
+	if got := chatSessions.acknowledgeAttachmentReqs[1].ExpectedVersion; got != 2 {
+		t.Fatalf("retried gap acknowledgement expected version = %d, want refreshed version 2", got)
+	}
+	attachment, ok := cache.get(streamingTestSessionID)
+	if !ok || attachment.AfterSequence != 2 {
+		t.Fatalf("cached attachment = %+v, %v, want retained sequence 2 acknowledged", attachment, ok)
+	}
+
+	catchUpNotify, catchUpNotifications := captureNotifier()
+	catchUpCtx := contextWithAttachmentCache(context.Background(), cache)
+	delivered, err := server.streamTurnUpdates(catchUpCtx, "conn-a", streamingTestSessionID, 1, catchUpNotify)
+	if err != nil || delivered {
+		t.Fatalf("post-live streamTurnUpdates() = %v, %v, want delivered=false and err=nil", delivered, err)
+	}
+	if len(*catchUpNotifications) != 0 {
+		t.Fatalf("post-live catch-up notify count = %d, want 0 (the acknowledged gap must not replay)", len(*catchUpNotifications))
+	}
+}
+
 // TestStreamTurnUpdatesStopsWhenRecordAcknowledgeLagsStreamHead proves a
 // *chatsessions.AttachmentPositionError acknowledging an ordinary record is
 // the same non-error "stop" case, not a failure: the record was already
