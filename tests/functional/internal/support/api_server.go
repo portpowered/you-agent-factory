@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -416,6 +418,16 @@ func readFactoryEventsFromURL(t testing.TB, endpoint string) []factoryapi.Factor
 		t.Fatalf("GET factory events status = %d url = %q body = %s", response.StatusCode, endpoint, strings.TrimSpace(string(body)))
 	}
 
+	retainedHeader := strings.TrimSpace(response.Header.Get(factorysessionshttp.SessionEventStreamRetainedCountHeader))
+	retainedCount, err := strconv.Atoi(retainedHeader)
+	if err != nil {
+		defer response.Body.Close()
+		t.Fatalf(
+			"GET factory events url = %q: missing or invalid %s header (%q): %v",
+			endpoint, factorysessionshttp.SessionEventStreamRetainedCountHeader, retainedHeader, err,
+		)
+	}
+
 	events := make(chan factoryapi.FactoryEvent, 256)
 	errs := make(chan error, 1)
 	go func() {
@@ -438,35 +450,23 @@ func readFactoryEventsFromURL(t testing.TB, endpoint string) []factoryapi.Factor
 		}
 	}()
 
-	var collected []factoryapi.FactoryEvent
+	collected := make([]factoryapi.FactoryEvent, 0, retainedCount)
 	deadline := time.NewTimer(functionalServerReadyTimeout)
 	defer deadline.Stop()
-	var quiet *time.Timer
-	var quietC <-chan time.Time
-	for {
+	for len(collected) < retainedCount {
 		select {
 		case event := <-events:
 			collected = append(collected, event)
-			if quiet == nil {
-				quiet = time.NewTimer(25 * time.Millisecond)
-			} else {
-				if !quiet.Stop() {
-					select {
-					case <-quiet.C:
-					default:
-					}
-				}
-				quiet.Reset(25 * time.Millisecond)
-			}
-			quietC = quiet.C
 		case err := <-errs:
 			t.Fatalf("read factory events: %v", err)
-		case <-quietC:
-			return collected
 		case <-deadline.C:
-			t.Fatalf("timed out reading factory event history")
+			t.Fatalf(
+				"timed out reading factory event history: got %d of %d retained events",
+				len(collected), retainedCount,
+			)
 		}
 	}
+	return collected
 }
 
 // GetFactoryResponseEventsAt reads retained public Factory response events

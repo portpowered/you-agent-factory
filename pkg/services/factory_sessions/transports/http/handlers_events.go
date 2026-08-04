@@ -22,6 +22,7 @@ const (
 	sessionEventStreamLogicalSessionKeyHeader = "X-Factory-Session-Logical-Session-Key-Id"
 	sessionEventStreamFactorySessionHeader    = "X-Factory-Session-Factory-Session-Id"
 	sessionEventStreamGenerationHeader        = "X-Factory-Session-Stream-Generation-Id"
+	sessionEventStreamRetainedCountHeader     = "X-Factory-Session-Retained-Event-Count"
 )
 
 const (
@@ -34,6 +35,12 @@ const (
 	SessionEventStreamFactorySessionHeader = sessionEventStreamFactorySessionHeader
 	// SessionEventStreamGenerationHeader identifies the stream generation.
 	SessionEventStreamGenerationHeader = sessionEventStreamGenerationHeader
+	// SessionEventStreamRetainedCountHeader carries the number of already-committed
+	// canonical Factory Events written as the stream's retained-history prefix
+	// (stream.History) before any live event is written. Callers that need a
+	// bounded, point-in-time read of committed history can read exactly this many
+	// leading `data:` records instead of guessing completion from stream timing.
+	SessionEventStreamRetainedCountHeader = sessionEventStreamRetainedCountHeader
 )
 
 // GetStatus handles GET /status as the supported runtime status read model.
@@ -467,6 +474,11 @@ func (s *Server) getEvents(
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
+	// Published before the body so a bounded reader can determine, from a
+	// deterministic header value rather than stream timing, exactly how many
+	// leading `data:` records make up the already-committed retained-history
+	// prefix (stream.History) captured at subscribe time.
+	w.Header().Set(sessionEventStreamRetainedCountHeader, strconv.Itoa(len(stream.History)))
 	if includeSessionHandshake {
 		writeSessionEventStreamHandshakeHeaders(w, stream)
 	}
