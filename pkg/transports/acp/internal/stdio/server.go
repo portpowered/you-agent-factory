@@ -219,8 +219,14 @@ func (s *Server) serveConnection(ctx context.Context, connectionID identity.Conn
 	// (see attachmentCache's own doc comment): reused across every
 	// "session/prompt" call on this connection so a later turn resumes the
 	// same delivery cursor instead of a fresh, later-arriving attachment
-	// silently observing the same records again.
+	// silently observing the same records again. detachAttachments releases
+	// every attachment this connection ever registered once this call
+	// returns, on every exit path (clean EOF, context cancellation, a
+	// partial trailing frame, or a writer failure alike) -- disconnect must
+	// always free the delivery consumer, never leaving it registered against
+	// a session this connection will never resume from again.
 	attachments := &attachmentCache{}
+	defer s.detachAttachments(ctx, attachments)
 
 	var notificationSeq uint64
 	for {

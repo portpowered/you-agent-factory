@@ -112,6 +112,11 @@ type fakeChatSessionsService struct {
 	// results.
 	attachments      map[string]chatsessions.Attachment
 	nextAttachmentID int
+	// detachCalls records every Detach call this fake observed, in order --
+	// disconnect-cleanup tests assert both which attachments were released
+	// and that a turn-mutating method was never reached alongside them.
+	detachCalls []chatsessions.DetachRequest
+	detachErr   error
 }
 
 var _ chatsessions.Service = (*fakeChatSessionsService)(nil)
@@ -255,8 +260,24 @@ func (f *fakeChatSessionsService) Attach(_ context.Context, req chatsessions.Att
 	return chatsessions.AttachResult{Attachment: attachment}, nil
 }
 
-func (f *fakeChatSessionsService) Detach(context.Context, chatsessions.DetachRequest) (chatsessions.DetachResult, error) {
-	return chatsessions.DetachResult{}, errors.New("fakeChatSessionsService: Detach not implemented")
+// Detach mirrors the real chatsessions.Service.Detach contract closely
+// enough for disconnect-cleanup tests: it removes the named attachment from
+// the same attachments map Attach/AcknowledgeAttachment share and reports
+// *chatsessions.NotFoundError for an attachment ID this fake never
+// registered (or already removed), matching the real Service's own
+// unknown-attachment behavior.
+func (f *fakeChatSessionsService) Detach(_ context.Context, req chatsessions.DetachRequest) (chatsessions.DetachResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.detachCalls = append(f.detachCalls, req)
+	if f.detachErr != nil {
+		return chatsessions.DetachResult{}, f.detachErr
+	}
+	if _, ok := f.attachments[req.AttachmentID]; !ok {
+		return chatsessions.DetachResult{}, &chatsessions.NotFoundError{Value: "Attachment", ID: req.AttachmentID}
+	}
+	delete(f.attachments, req.AttachmentID)
+	return chatsessions.DetachResult{}, nil
 }
 
 func (f *fakeChatSessionsService) RequestControl(context.Context, chatsessions.RequestControlRequest) (chatsessions.RequestControlResult, error) {

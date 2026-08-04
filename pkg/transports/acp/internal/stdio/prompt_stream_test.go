@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -73,15 +74,38 @@ func (f *fakeEventsService) Read(_ context.Context, req events.ReadRequest) (eve
 // they would a genuine committed record.
 func (f *fakeEventsService) seed(t *testing.T, sessionID string, kind workers.Kind, phase workers.Phase, payload any) {
 	t.Helper()
+	f.seedItem(t, sessionID, "", "", kind, phase, payload)
+}
+
+// seedItem is seed plus explicit sequencer-assigned itemID/parentItemID, for
+// tests that assert item lineage survives projection (Chat Sessions assigns
+// stable item identity at sequencing time -- see final-proposal.md §5.3 --
+// so a record observed through Events already carries it).
+func (f *fakeEventsService) seedItem(t *testing.T, sessionID, itemID, parentItemID string, kind workers.Kind, phase workers.Phase, payload any) {
+	t.Helper()
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		t.Fatalf("marshal seed payload: %v", err)
 	}
-	itemRaw, err := json.Marshal(chatsessions.SequencedItem{Kind: kind, Phase: phase, Payload: raw})
+	itemRaw, err := json.Marshal(chatsessions.SequencedItem{
+		ItemID: itemID, ParentItemID: parentItemID, Kind: kind, Phase: phase, Payload: raw,
+	})
 	if err != nil {
 		t.Fatalf("marshal seed envelope: %v", err)
 	}
+	f.seedRaw(sessionID, itemRaw)
+}
 
+// seedMalformed appends one record onto sessionID's topic whose payload does
+// not decode as chatsessions.SequencedItem, standing in for a committed
+// record this transport cannot make sense of -- proving drainRecords rejects
+// it as errMalformedSequencedEnvelope instead of panicking or silently
+// skipping it.
+func (f *fakeEventsService) seedMalformed(sessionID string) {
+	f.seedRaw(sessionID, json.RawMessage(`{"kind":`))
+}
+
+func (f *fakeEventsService) seedRaw(sessionID string, payload json.RawMessage) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	topic := chatsessions.EventsTopic(sessionID)
@@ -91,7 +115,7 @@ func (f *fakeEventsService) seed(t *testing.T, sessionID string, kind workers.Ki
 	position := events.AggregateSequence(len(f.records[topic]) + 1)
 	f.records[topic] = append(f.records[topic], events.Record{
 		ID:      events.RecordID{Topic: topic, Position: position},
-		Payload: itemRaw,
+		Payload: payload,
 	})
 }
 
@@ -381,5 +405,296 @@ func TestStreamTurnUpdatesNotifierFailureLeavesRecordRetryable(t *testing.T) {
 	chunk := secondNotified[0].Update.AgentMessageChunk
 	if chunk == nil || chunk.Content.Text == nil || chunk.Content.Text.Text != "retry me" {
 		t.Fatalf("second turn notification = %+v, want the record the first turn never acknowledged", secondNotified[0])
+	}
+}
+
+// captureNotifier returns a promptNotifier that appends every notification
+// it receives, and the slice it appends into.
+func captureNotifier() (promptNotifier, *[]acpsdk.SessionNotification) {
+	var notified []acpsdk.SessionNotification
+	return func(n acpsdk.SessionNotification) error {
+		notified = append(notified, n)
+		return nil
+	}, &notified
+}
+
+// TestStreamTurnUpdatesTwoIndependentAttachmentsObserveIdenticalRecordsWithOneExecution
+// proves story ACP-L1-V2-T03-message-projectors-004's AC1: two attachments
+// to one Chat Session -- connection A driving the actual "session/prompt"
+// turn (the only Factory execution), and connection B independently
+// draining the same already-sequenced records through its own attachment
+// and cursor, never itself dispatching a Factory turn -- observe the exact
+// same eligible records, in the same order, with the same sequencer-assigned
+// ItemID, while each attachment's own delivery cursor advances
+// independently of the other's.
+func TestStreamTurnUpdatesTwoIndependentAttachmentsObserveIdenticalRecordsWithOneExecution(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{invokeResult: fallbackInvokeResult("v1 fallback text")}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget, "turn-1")
+
+	eventsSvc.seedItem(t, streamingTestSessionID, "item-1", "", workers.KindReasoning, workers.PhaseCompleted, workers.ReasoningPayload{Summary: "thinking..."})
+	eventsSvc.seedItem(t, streamingTestSessionID, "item-2", "", workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("final answer"))
+
+	aNotify, aNotified := captureNotifier()
+	aCtx := contextWithAttachmentCache(contextWithPromptNotifier(context.Background(), aNotify), &attachmentCache{})
+	aEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt, promptTextParams(streamingTestSessionID, "hello"))
+	if _, rpcErr := server.handleSessionPrompt(aCtx, aEnv); rpcErr != nil {
+		t.Fatalf("connection A handleSessionPrompt() error = %+v, want success", rpcErr)
+	}
+
+	bNotify, bNotified := captureNotifier()
+	bCtx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	deliveredMessage, err := server.streamTurnUpdates(bCtx, "conn-b", streamingTestSessionID, 1, bNotify)
+	if err != nil {
+		t.Fatalf("connection B streamTurnUpdates() error = %v, want success", err)
+	}
+	if !deliveredMessage {
+		t.Fatal("connection B streamTurnUpdates() deliveredMessage = false, want true")
+	}
+
+	if len(*aNotified) != 2 || len(*bNotified) != 2 {
+		t.Fatalf("notify counts = A:%d B:%d, want exactly 2 each", len(*aNotified), len(*bNotified))
+	}
+	for i, want := range []string{"item-1", "item-2"} {
+		aID, bID := notificationItemID(t, (*aNotified)[i]), notificationItemID(t, (*bNotified)[i])
+		if aID != want || bID != want {
+			t.Fatalf("notification[%d] item id = A:%q B:%q, want both %q", i, aID, bID, want)
+		}
+	}
+
+	if got := len(factoryTarget.invokeCalls); got != 1 {
+		t.Fatalf("Factory invoke call count = %d, want exactly 1 (only connection A ever dispatches a turn)", got)
+	}
+}
+
+// notificationItemID extracts the MessageId a projected agent_thought_chunk
+// or agent_message_chunk update carries, failing the test if neither is set.
+func notificationItemID(t *testing.T, n acpsdk.SessionNotification) string {
+	t.Helper()
+	switch {
+	case n.Update.AgentThoughtChunk != nil && n.Update.AgentThoughtChunk.MessageId != nil:
+		return *n.Update.AgentThoughtChunk.MessageId
+	case n.Update.AgentMessageChunk != nil && n.Update.AgentMessageChunk.MessageId != nil:
+		return *n.Update.AgentMessageChunk.MessageId
+	default:
+		t.Fatalf("notification %+v carries no MessageId", n)
+		return ""
+	}
+}
+
+// TestStreamTurnUpdatesMalformedRecordFailsEachIndependentAttachmentTheSameWay
+// proves story 004's AC5 at the attachment level: a malformed record on the
+// shared topic stops each attachment's own drain at the same point --
+// delivering the one good record ahead of it and then failing with
+// errMalformedSequencedEnvelope -- without one attachment's failed attempt
+// corrupting the shared topic or the other attachment's independent state.
+func TestStreamTurnUpdatesMalformedRecordFailsEachIndependentAttachmentTheSameWay(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+
+	eventsSvc.seed(t, streamingTestSessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("good record"))
+	eventsSvc.seedMalformed(streamingTestSessionID)
+
+	aNotify, aNotified := captureNotifier()
+	aCtx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	if _, err := server.streamTurnUpdates(aCtx, "conn-a", streamingTestSessionID, 1, aNotify); err == nil || !errors.Is(err, errMalformedSequencedEnvelope) {
+		t.Fatalf("connection A streamTurnUpdates() error = %v, want errMalformedSequencedEnvelope", err)
+	}
+	if len(*aNotified) != 1 {
+		t.Fatalf("connection A notify count = %d, want exactly 1 (the good record delivered before the malformed one)", len(*aNotified))
+	}
+
+	bNotify, bNotified := captureNotifier()
+	bCtx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	if _, err := server.streamTurnUpdates(bCtx, "conn-b", streamingTestSessionID, 1, bNotify); err == nil || !errors.Is(err, errMalformedSequencedEnvelope) {
+		t.Fatalf("connection B streamTurnUpdates() error = %v, want errMalformedSequencedEnvelope", err)
+	}
+	if len(*bNotified) != 1 {
+		t.Fatalf("connection B notify count = %d, want exactly 1, unaffected by connection A's earlier failed attempt", len(*bNotified))
+	}
+}
+
+// TestStreamTurnUpdatesDeliversStreamGapRecordBeforeSubsequentCatchUp proves
+// story 004's AC4 for a producer-committed STREAM_GAP record (the only kind
+// of gap this transport-owned slice can construct without inventing history
+// -- see mapping.ProjectStreamGap's own doc comment): the gap notice is
+// delivered in its sequenced position, strictly before the later record that
+// follows it, and the later record's own text is never fabricated or
+// skipped around the gap.
+func TestStreamTurnUpdatesDeliversStreamGapRecordBeforeSubsequentCatchUp(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{invokeResult: fallbackInvokeResult("v1 fallback text")}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget, "turn-1")
+
+	eventsSvc.seed(t, streamingTestSessionID, workers.KindStreamGap, workers.PhaseUpdated, workers.StreamGapPayload{
+		FromSequence: 1, ToSequence: 1, FirstAvailableSequence: 2, Reason: "retention evicted",
+	})
+	eventsSvc.seed(t, streamingTestSessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("after the gap"))
+
+	notify, notified := captureNotifier()
+	ctx := contextWithAttachmentCache(contextWithPromptNotifier(context.Background(), notify), &attachmentCache{})
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt, promptTextParams(streamingTestSessionID, "hello"))
+	if _, rpcErr := server.handleSessionPrompt(ctx, env); rpcErr != nil {
+		t.Fatalf("handleSessionPrompt() error = %+v, want success", rpcErr)
+	}
+
+	if len(*notified) != 2 {
+		t.Fatalf("notify call count = %d, want exactly 2 (gap notice, then the message)", len(*notified))
+	}
+	if (*notified)[0].Update.AgentThoughtChunk == nil {
+		t.Fatalf("notification[0] = %+v, want the gap notice delivered first (sequenced first)", (*notified)[0])
+	}
+	msgChunk := (*notified)[1].Update.AgentMessageChunk
+	if msgChunk == nil || msgChunk.Content.Text == nil || msgChunk.Content.Text.Text != "after the gap" {
+		t.Fatalf("notification[1] = %+v, want the message that followed the gap, verbatim", (*notified)[1])
+	}
+}
+
+// TestDetachAttachmentsReleasesEveryCachedAttachmentWithoutTouchingTheTurn
+// proves story 004's AC2 (disconnect): detachAttachments -- the cleanup
+// serveConnection defers once per connection (see server.go) -- calls
+// chatsessions.Service.Detach for every attachment this connection ever
+// registered, and only Detach: this fake's AdvanceTurn/RequestControl would
+// themselves return "not implemented" errors if reached, so a nil error
+// here already proves no turn-mutating call happened as a side effect of
+// disconnect cleanup.
+func TestDetachAttachmentsReleasesEveryCachedAttachmentWithoutTouchingTheTurn(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, _ := newStreamingTestServer(t, factoryTarget)
+	chatSessions := server.chatSessions.(*fakeChatSessionsService)
+
+	cache := &attachmentCache{}
+	first, ok, err := server.ensureAttachment(contextWithAttachmentCache(context.Background(), cache), "conn-a", "session-a")
+	if err != nil || !ok {
+		t.Fatalf("ensureAttachment(session-a) = %+v, %v, %v, want a registered attachment", first, ok, err)
+	}
+	second, ok, err := server.ensureAttachment(contextWithAttachmentCache(context.Background(), cache), "conn-a", "session-b")
+	if err != nil || !ok {
+		t.Fatalf("ensureAttachment(session-b) = %+v, %v, %v, want a registered attachment", second, ok, err)
+	}
+
+	server.detachAttachments(context.Background(), cache)
+
+	if len(chatSessions.detachCalls) != 2 {
+		t.Fatalf("detach call count = %d, want exactly 2 (one per cached attachment)", len(chatSessions.detachCalls))
+	}
+	gotSessions := map[string]string{}
+	for _, req := range chatSessions.detachCalls {
+		gotSessions[req.SessionID] = req.AttachmentID
+	}
+	if gotSessions["session-a"] != first.ID || gotSessions["session-b"] != second.ID {
+		t.Fatalf("detach calls = %+v, want attachment %q for session-a and %q for session-b", chatSessions.detachCalls, first.ID, second.ID)
+	}
+}
+
+// TestDetachAttachmentsCompletesAfterContextCancellation proves
+// detachAttachments still releases attachments when ctx is already canceled
+// (context.WithoutCancel's own contract): a physically dropped connection
+// (context cancellation is exactly how one manifests in serveConnection's
+// own loop) must not leave its attachment stranded on the session forever.
+func TestDetachAttachmentsCompletesAfterContextCancellation(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, _ := newStreamingTestServer(t, factoryTarget)
+	chatSessions := server.chatSessions.(*fakeChatSessionsService)
+
+	cache := &attachmentCache{}
+	attachment, ok, err := server.ensureAttachment(contextWithAttachmentCache(context.Background(), cache), "conn-a", streamingTestSessionID)
+	if err != nil || !ok {
+		t.Fatalf("ensureAttachment() = %+v, %v, %v, want a registered attachment", attachment, ok, err)
+	}
+
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	server.detachAttachments(canceledCtx, cache)
+
+	if len(chatSessions.detachCalls) != 1 || chatSessions.detachCalls[0].AttachmentID != attachment.ID {
+		t.Fatalf("detach calls = %+v, want exactly one call for attachment %q despite the canceled context", chatSessions.detachCalls, attachment.ID)
+	}
+}
+
+// TestStreamTurnUpdatesReconnectAfterDetachReplaysRetainedHistoryOnce proves
+// story 004's AC2/AC3 together: after a connection's attachment is detached
+// (disconnect), a later connection attaching fresh to the same session
+// (reconnect -- this transport has no session/load or session/resume yet
+// (see server.go's own doc comment), so a genuinely new connection always
+// attaches fresh rather than resuming a specific prior attachment's cursor)
+// still observes every currently retained record exactly once, in order,
+// with its original sequencer-assigned ItemID: detaching one consumer never
+// corrupts the shared topic or session for the next one.
+func TestStreamTurnUpdatesReconnectAfterDetachReplaysRetainedHistoryOnce(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+	chatSessions := server.chatSessions.(*fakeChatSessionsService)
+
+	eventsSvc.seedItem(t, streamingTestSessionID, "item-1", "", workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("before disconnect"))
+
+	firstNotify, firstNotified := captureNotifier()
+	firstCache := &attachmentCache{}
+	firstCtx := contextWithAttachmentCache(context.Background(), firstCache)
+	if _, err := server.streamTurnUpdates(firstCtx, "conn-first", streamingTestSessionID, 1, firstNotify); err != nil {
+		t.Fatalf("first connection streamTurnUpdates() error = %v, want success", err)
+	}
+	if len(*firstNotified) != 1 {
+		t.Fatalf("first connection notify count = %d, want exactly 1", len(*firstNotified))
+	}
+
+	server.detachAttachments(context.Background(), firstCache)
+	if len(chatSessions.detachCalls) != 1 {
+		t.Fatalf("detach call count = %d, want exactly 1 after the first connection disconnects", len(chatSessions.detachCalls))
+	}
+
+	secondNotify, secondNotified := captureNotifier()
+	secondCtx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	if _, err := server.streamTurnUpdates(secondCtx, "conn-second", streamingTestSessionID, 1, secondNotify); err != nil {
+		t.Fatalf("reconnecting connection streamTurnUpdates() error = %v, want success", err)
+	}
+	if len(*secondNotified) != 1 {
+		t.Fatalf("reconnecting connection notify count = %d, want exactly 1 (the retained record, replayed once)", len(*secondNotified))
+	}
+	if got := notificationItemID(t, (*secondNotified)[0]); got != "item-1" {
+		t.Fatalf("reconnecting connection notification item id = %q, want the original %q", got, "item-1")
+	}
+}
+
+// TestStreamTurnUpdatesConcurrentIndependentAttachmentsRaceFree drives two
+// independent connections' drains against the same session concurrently
+// (story 004's own AC6 calls for race/repeat coverage over exactly this
+// shape: two consumers, no sleeps), proving neither the shared
+// fakeEventsService/fakeChatSessionsService test doubles nor
+// streamTurnUpdates itself have a data race, and that both attachments
+// still observe every seeded record exactly once regardless of goroutine
+// interleaving.
+func TestStreamTurnUpdatesConcurrentIndependentAttachmentsRaceFree(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+
+	const recordCount = 5
+	for i := range recordCount {
+		eventsSvc.seed(t, streamingTestSessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload(fmt.Sprintf("record-%d", i)))
+	}
+
+	drain := func(connID string) int {
+		notify, notified := captureNotifier()
+		ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+		if _, err := server.streamTurnUpdates(ctx, connID, streamingTestSessionID, 1, notify); err != nil {
+			t.Errorf("streamTurnUpdates(%s) error = %v, want success", connID, err)
+		}
+		return len(*notified)
+	}
+
+	var wg sync.WaitGroup
+	counts := make([]int, 2)
+	for i, connID := range []string{"conn-race-a", "conn-race-b"} {
+		wg.Add(1)
+		go func(i int, connID string) {
+			defer wg.Done()
+			counts[i] = drain(connID)
+		}(i, connID)
+	}
+	wg.Wait()
+
+	for i, got := range counts {
+		if got != recordCount {
+			t.Fatalf("connection %d notify count = %d, want exactly %d", i, got, recordCount)
+		}
 	}
 }

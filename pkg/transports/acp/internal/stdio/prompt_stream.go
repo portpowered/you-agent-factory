@@ -24,6 +24,7 @@ import (
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/mapping"
@@ -94,6 +95,38 @@ func (c *attachmentCache) set(sessionID string, a chatsessions.Attachment) {
 		c.bySession = make(map[string]chatsessions.Attachment)
 	}
 	c.bySession[sessionID] = a
+}
+
+// detachAttachments releases every attachment this connection registered
+// through ensureAttachment, best-effort: it is deferred once, when
+// serveConnection's one connection-scoped invocation ends (see server.go),
+// so a disconnected connection never leaves an attachment permanently
+// registered against a session it will never resume. It runs against
+// context.WithoutCancel(ctx) so detachment still completes when ctx already
+// carries the cancellation or error that ended the connection -- disconnect
+// must always release the delivery consumer regardless of why the
+// connection ended. It calls only chatsessions.Service.Detach, never
+// RequestControl, AdvanceTurn, or any other turn-mutating operation: Detach
+// removes just the named delivery consumer (see its own contract on
+// chatsessions.Service), so any turn still active on the session keeps
+// running unaffected, for any other attachment still observing it. A
+// per-session detach failure is logged as a bounded, payload-free
+// diagnostic (matching Serve's own outcome logging) and does not stop the
+// remaining sessions in cache from being released.
+func (s *Server) detachAttachments(ctx context.Context, cache *attachmentCache) {
+	if s == nil || s.chatSessions == nil || cache == nil {
+		return
+	}
+	detachCtx := context.WithoutCancel(ctx)
+	logger := logging.EnsureLogger(s.logger)
+	for sessionID, attachment := range cache.bySession {
+		if _, err := s.chatSessions.Detach(detachCtx, chatsessions.DetachRequest{
+			SessionID:    sessionID,
+			AttachmentID: attachment.ID,
+		}); err != nil {
+			logger.Warn("acp stdio attachment detach failed", "sessionId", sessionID, "outcome", terminalOutcomeLabel(err))
+		}
+	}
 }
 
 // errStreamGapEncountered marks a retained read that observed a Chat
