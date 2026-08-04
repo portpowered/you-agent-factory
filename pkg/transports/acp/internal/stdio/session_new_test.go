@@ -38,6 +38,11 @@ type fakeChatSessionsService struct {
 	getSessionReq    chatsessions.GetSessionRequest
 	getSessionReqs   []chatsessions.GetSessionRequest
 	getSessionResult chatsessions.GetSessionResult
+	// getSessionErrs, when non-empty, is consumed front-first across
+	// successive GetSession calls. A nil entry lets that call return its
+	// configured result, so tests can model a successful capture followed by a
+	// failed re-read without making the initial control capture fail too.
+	getSessionErrs []error
 	// getSessionResults, when non-empty, is consumed front-first across
 	// successive GetSession calls (one queued result per call) instead of
 	// the single static getSessionResult -- for tests where a later
@@ -155,7 +160,11 @@ type fakeChatSessionsService struct {
 
 	advanceControlReqs   []chatsessions.AdvanceControlRequest
 	advanceControlResult chatsessions.AdvanceControlResult
-	advanceControlErr    error
+	// advanceControlResults, when non-empty, is consumed front-first across
+	// successive calls so lifecycle tests can prove a final terminalization
+	// rejection after an otherwise committed control.
+	advanceControlResults []chatsessions.AdvanceControlResult
+	advanceControlErr     error
 }
 
 var _ chatsessions.Service = (*fakeChatSessionsService)(nil)
@@ -189,6 +198,13 @@ func (f *fakeChatSessionsService) GetSession(_ context.Context, req chatsessions
 	f.getSessionCalled = true
 	f.getSessionReq = req
 	f.getSessionReqs = append(f.getSessionReqs, req)
+	if len(f.getSessionErrs) > 0 {
+		next := f.getSessionErrs[0]
+		f.getSessionErrs = f.getSessionErrs[1:]
+		if next != nil {
+			return chatsessions.GetSessionResult{}, next
+		}
+	}
 	if f.getSessionErr != nil {
 		return chatsessions.GetSessionResult{}, f.getSessionErr
 	}
@@ -393,6 +409,12 @@ func (f *fakeChatSessionsService) AdvanceControl(_ context.Context, req chatsess
 	f.advanceControlReqs = append(f.advanceControlReqs, req)
 	if f.advanceControlErr != nil {
 		return chatsessions.AdvanceControlResult{}, f.advanceControlErr
+	}
+	if len(f.advanceControlResults) > 0 {
+		next := f.advanceControlResults[0]
+		f.advanceControlResults = f.advanceControlResults[1:]
+		f.lastControlIntent = next.Intent
+		return next, nil
 	}
 	if f.advanceControlResult.Intent.State != "" {
 		f.lastControlIntent = f.advanceControlResult.Intent

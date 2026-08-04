@@ -170,6 +170,67 @@ func TestStore_BindFactorySession_TurnNoLongerActiveIsTypedConflict(t *testing.T
 	}
 }
 
+// TestStore_BindFactorySession_ReplacedActiveTurnIsTypedConflict proves a
+// delayed bind with a fresh session version still cannot attach to a newer
+// turn that reused the same target episode.
+func TestStore_BindFactorySession_ReplacedActiveTurnIsTypedConflict(t *testing.T) {
+	ctx := context.Background()
+	store, started := startedTurnForBinding(t, time.Now())
+	if _, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: started.Session.ID, TurnID: started.Turn.ID, Next: chatsessions.TurnStateRunning,
+	}); err != nil {
+		t.Fatalf("AdvanceTurn(RUNNING): %v", err)
+	}
+	if _, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: started.Session.ID, TurnID: started.Turn.ID, Next: chatsessions.TurnStateCompleted,
+	}); err != nil {
+		t.Fatalf("AdvanceTurn(COMPLETED): %v", err)
+	}
+	released, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: started.Session.ID})
+	if err != nil {
+		t.Fatalf("GetSession after terminal turn: %v", err)
+	}
+	if _, err := store.StartTurn(ctx, chatsessions.StartTurnRequest{
+		RequestID: startTurnRequestID("replacement-bind"), SessionID: started.Session.ID, ExpectedVersion: released.Session.Version,
+	}); err != nil {
+		t.Fatalf("StartTurn(replacement): %v", err)
+	}
+	current, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: started.Session.ID})
+	if err != nil {
+		t.Fatalf("GetSession replacement: %v", err)
+	}
+	req := bindRequest(started, "fs-old-turn")
+	req.ExpectedVersion = current.Session.Version
+	_, err = store.BindFactorySession(ctx, req)
+	var conflict *chatsessions.ConflictError
+	if !errors.As(err, &conflict) || conflict.Value != "Turn" {
+		t.Fatalf("BindFactorySession old turn: got %v, want Turn *ConflictError", err)
+	}
+}
+
+// TestStore_BindFactorySession_WrongCapturedEpisodeLeavesCurrentBindingEmpty
+// proves a delayed bind cannot attach a Factory Session to whichever episode
+// happens to be current when its immutable captured episode no longer matches.
+func TestStore_BindFactorySession_WrongCapturedEpisodeLeavesCurrentBindingEmpty(t *testing.T) {
+	ctx := context.Background()
+	store, started := startedTurnForBinding(t, time.Now())
+	req := bindRequest(started, "fs-wrong-episode")
+	req.Episode++
+
+	_, err := store.BindFactorySession(ctx, req)
+	var conflict *chatsessions.ConflictError
+	if !errors.As(err, &conflict) || conflict.Value != "TargetEpisode" {
+		t.Fatalf("BindFactorySession wrong episode: got %v, want TargetEpisode *ConflictError", err)
+	}
+	current, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: started.Session.ID})
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if current.Episode.FactorySessionID != "" || current.Episode.PendingFactorySessionID != "" {
+		t.Fatalf("wrong-episode bind changed current episode: %#v", current.Episode)
+	}
+}
+
 // TestStore_BindFactorySession_BlankFactorySessionIDIsValidationError proves
 // a blank FactorySessionID is rejected before any mutation.
 func TestStore_BindFactorySession_BlankFactorySessionIDIsValidationError(t *testing.T) {

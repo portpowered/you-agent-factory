@@ -412,4 +412,187 @@ func TestHandleSessionCloseDependencyFailureLeavesLifecycleRetryable(t *testing.
 	}
 }
 
+// TestHandleSessionCloseCommittedIntentSafetyCases proves every re-read and
+// intent-state rejection after the immutable CLOSE capture stays bounded and
+// cannot reach an unrelated Factory Session.
+func TestHandleSessionCloseCommittedIntentSafetyCases(t *testing.T) {
+	current := chatsessions.GetSessionResult{
+		Session: chatsessions.Session{ID: "session-close-safety", State: chatsessions.SessionStateActive, Version: 7, ActiveTurnID: "turn-close-safety"},
+		Episode: chatsessions.TargetEpisode{
+			Number: 1, State: chatsessions.TargetEpisodeStateOpen,
+			Target:           chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
+			FactorySessionID: "fs-close-safety",
+		},
+		MostRecentTurnID: "turn-close-safety",
+	}
+	closed := current
+	closed.Session.State = chatsessions.SessionStateClosed
+	closed.Session.ActiveTurnID = ""
+	successor := current
+	successor.Session.ActiveTurnID = "turn-successor"
+	successor.MostRecentTurnID = "turn-successor"
+	targetLost := current
+	targetLost.Episode.FactorySessionID = ""
+
+	tests := []struct {
+		name            string
+		chatSessions    *fakeChatSessionsService
+		wantCode        int
+		wantCloseCalls  int
+		wantAdvanceCall int
+	}{
+		{
+			name: "completed redelivery is success without downstream effect",
+			chatSessions: &fakeChatSessionsService{
+				getSessionResult: current,
+				requestControlResult: chatsessions.RequestControlResult{Intent: chatsessions.ControlIntent{
+					SessionID: current.Session.ID, Action: chatsessions.ControlActionClose, State: chatsessions.ControlIntentStateCompleted,
+				}},
+			},
+			wantCode: 0,
+		},
+		{
+			name: "session closes while committed control is reread",
+			chatSessions: &fakeChatSessionsService{
+				getSessionResult:  current,
+				getSessionResults: []chatsessions.GetSessionResult{current, closed},
+			},
+			wantCode:        0,
+			wantAdvanceCall: 1,
+		},
+		{
+			name: "reread dependency failure after commit is bounded without downstream effect",
+			chatSessions: &fakeChatSessionsService{
+				getSessionResult: current,
+				getSessionErrs:   []error{nil, errors.New("unsafe close reread failure")},
+			},
+			wantCode:        -32603,
+			wantAdvanceCall: 1,
+		},
+		{
+			name: "replacement after commit is invalid params without downstream effect",
+			chatSessions: &fakeChatSessionsService{
+				getSessionResult:  current,
+				getSessionResults: []chatsessions.GetSessionResult{current, successor},
+			},
+			wantCode:        -32602,
+			wantAdvanceCall: 2,
+		},
+		{
+			name: "target disappears after commit is invalid params without downstream effect",
+			chatSessions: &fakeChatSessionsService{
+				getSessionResult:  current,
+				getSessionResults: []chatsessions.GetSessionResult{current, targetLost},
+			},
+			wantCode:        -32602,
+			wantAdvanceCall: 1,
+		},
+		{
+			name: "unexpected captured action is invalid params without downstream effect",
+			chatSessions: &fakeChatSessionsService{
+				getSessionResult: current,
+				requestControlResult: chatsessions.RequestControlResult{Intent: chatsessions.ControlIntent{
+					SessionID: current.Session.ID, Action: chatsessions.ControlActionCancel, State: chatsessions.ControlIntentStateRequested,
+				}},
+			},
+			wantCode: -32602,
+		},
+		{
+			name: "terminal captured intent is invalid params without downstream effect",
+			chatSessions: &fakeChatSessionsService{
+				getSessionResult: current,
+				requestControlResult: chatsessions.RequestControlResult{Intent: chatsessions.ControlIntent{
+					SessionID: current.Session.ID, Action: chatsessions.ControlActionClose, State: chatsessions.ControlIntentStateNoop,
+				}},
+			},
+			wantCode: -32602,
+		},
+		{
+			name: "commit dependency failure is bounded without downstream effect",
+			chatSessions: &fakeChatSessionsService{
+				getSessionResult:  current,
+				advanceControlErr: errors.New("unsafe provider error"),
+			},
+			wantCode:        -32603,
+			wantAdvanceCall: 1,
+		},
+		{
+			name: "terminalization rejection after factory close is invalid params",
+			chatSessions: &fakeChatSessionsService{
+				getSessionResult: current,
+				advanceControlResults: []chatsessions.AdvanceControlResult{
+					{Intent: chatsessions.ControlIntent{
+						SessionID: current.Session.ID, TurnID: current.MostRecentTurnID, TargetEpisode: current.Episode.Number,
+						State: chatsessions.ControlIntentStateCommitted,
+					}},
+					{Intent: chatsessions.ControlIntent{State: chatsessions.ControlIntentStateNoop}},
+				},
+			},
+			wantCode:        -32602,
+			wantCloseCalls:  1,
+			wantAdvanceCall: 2,
+		},
+	}
+
+	for index, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			factoryTarget := &fakeFactoryTargetService{}
+			server := New(nil, test.chatSessions, nil, factoryTarget, nil, nil, nil)
+			result, rpcErr := server.dispatchRequest(context.Background(), closeRequestEnvelope(t, int64(70+index), current.Session.ID))
+			if test.wantCode == 0 {
+				if rpcErr != nil {
+					t.Fatalf("session/close error = %+v, want success", rpcErr)
+				}
+				var response acpsdk.CloseSessionResponse
+				if err := json.Unmarshal(result, &response); err != nil {
+					t.Fatalf("unmarshal CloseSessionResponse: %v", err)
+				}
+			} else if rpcErr == nil || rpcErr.Code != test.wantCode {
+				t.Fatalf("session/close error = %+v, want code %d", rpcErr, test.wantCode)
+			}
+
+			factoryTarget.mu.Lock()
+			closeCalls := len(factoryTarget.closeCalls)
+			factoryTarget.mu.Unlock()
+			if closeCalls != test.wantCloseCalls {
+				t.Fatalf("CloseFactorySession calls = %d, want %d", closeCalls, test.wantCloseCalls)
+			}
+			test.chatSessions.mu.Lock()
+			advanceCalls := len(test.chatSessions.advanceControlReqs)
+			test.chatSessions.mu.Unlock()
+			if advanceCalls != test.wantAdvanceCall {
+				t.Fatalf("AdvanceControl calls = %d, want %d", advanceCalls, test.wantAdvanceCall)
+			}
+		})
+	}
+}
+
+// TestHandleSessionCloseRejectsUncorrelatedRequestIdentityWithoutEffects
+// proves a request that cannot supply the connection-scoped Chat identity is
+// bounded before it can read or control any lifecycle state.
+func TestHandleSessionCloseRejectsUncorrelatedRequestIdentityWithoutEffects(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{}
+	factoryTarget := &fakeFactoryTargetService{}
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil)
+
+	_, rpcErr := server.handleSessionClose(context.Background(), envelope.Envelope{
+		Params: json.RawMessage(`{"sessionId":"session-close-identity"}`),
+	})
+	if rpcErr == nil || rpcErr.Code != -32603 {
+		t.Fatalf("session/close error = %+v, want bounded internal error", rpcErr)
+	}
+	chatSessions.mu.Lock()
+	getCalls := len(chatSessions.getSessionReqs)
+	chatSessions.mu.Unlock()
+	if getCalls != 0 {
+		t.Fatalf("GetSession calls = %d, want 0 after identity rejection", getCalls)
+	}
+	factoryTarget.mu.Lock()
+	closeCalls := len(factoryTarget.closeCalls)
+	factoryTarget.mu.Unlock()
+	if closeCalls != 0 {
+		t.Fatalf("CloseFactorySession calls = %d, want 0 after identity rejection", closeCalls)
+	}
+}
+
 var _ factorysessions.TargetExecutionService = (*fakeFactoryTargetService)(nil)

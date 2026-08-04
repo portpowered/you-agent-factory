@@ -2885,6 +2885,138 @@ func TestHandleSessionCancelRepeatedIdentityDoesNotDuplicateFactoryCancel(t *tes
 	}
 }
 
+// TestHandleSessionCancelCommittedSafetyCases proves a control that loses its
+// target or collaborator after capture remains silent and cannot reach an
+// unintended Factory Session. Each case exercises the notification boundary
+// with a minted identity, so no JSON-RPC response is manufactured.
+func TestHandleSessionCancelCommittedSafetyCases(t *testing.T) {
+	current := chatsessions.GetSessionResult{
+		Session: chatsessions.Session{ID: "session-cancel-safety", State: chatsessions.SessionStateActive, Version: 7, ActiveTurnID: "turn-cancel-safety"},
+		Episode: chatsessions.TargetEpisode{
+			Number: 1, State: chatsessions.TargetEpisodeStateOpen,
+			Target:           chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
+			FactorySessionID: "fs-cancel-safety",
+		},
+		MostRecentTurnID: "turn-cancel-safety",
+	}
+	targetLost := current
+	targetLost.Episode.FactorySessionID = ""
+	successor := current
+	successor.Session.ActiveTurnID = "turn-cancel-successor"
+	successor.MostRecentTurnID = "turn-cancel-successor"
+
+	tests := []struct {
+		name            string
+		chatSessions    *fakeChatSessionsService
+		wantAdvanceCall int
+	}{
+		{
+			name: "target disappears after commit",
+			chatSessions: &fakeChatSessionsService{
+				getSessionResult:  current,
+				getSessionResults: []chatsessions.GetSessionResult{current, targetLost},
+			},
+			wantAdvanceCall: 1,
+		},
+		{
+			name: "reread dependency failure after commit",
+			chatSessions: &fakeChatSessionsService{
+				getSessionResult: current,
+				getSessionErrs:   []error{nil, errors.New("unsafe reread failure")},
+			},
+			wantAdvanceCall: 1,
+		},
+		{
+			name: "request control failure",
+			chatSessions: &fakeChatSessionsService{
+				getSessionResult:  current,
+				requestControlErr: errors.New("unsafe request control failure"),
+			},
+		},
+		{
+			name: "unexpected captured action",
+			chatSessions: &fakeChatSessionsService{
+				getSessionResult: current,
+				requestControlResult: chatsessions.RequestControlResult{Intent: chatsessions.ControlIntent{
+					SessionID: current.Session.ID, Action: chatsessions.ControlActionClose, State: chatsessions.ControlIntentStateRequested,
+				}},
+			},
+		},
+		{
+			name: "commit failure",
+			chatSessions: &fakeChatSessionsService{
+				getSessionResult:  current,
+				advanceControlErr: errors.New("unsafe commit failure"),
+			},
+			wantAdvanceCall: 1,
+		},
+		{
+			name: "commit returns terminal control",
+			chatSessions: &fakeChatSessionsService{
+				getSessionResult: current,
+				advanceControlResult: chatsessions.AdvanceControlResult{Intent: chatsessions.ControlIntent{
+					State: chatsessions.ControlIntentStateNoop,
+				}},
+			},
+			wantAdvanceCall: 1,
+		},
+		{
+			name: "committed control becomes superseded on reread",
+			chatSessions: &fakeChatSessionsService{
+				getSessionResult:  current,
+				getSessionResults: []chatsessions.GetSessionResult{current, successor},
+			},
+			wantAdvanceCall: 2,
+		},
+	}
+
+	for index, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			factoryTarget := &fakeFactoryTargetService{}
+			server := New(nil, test.chatSessions, nil, factoryTarget, nil, nil, nil)
+			server.handleSessionCancel(context.Background(), cancelNotificationEnvelope(t, fmt.Sprintf("cancel-safety-%d", index), current.Session.ID))
+
+			factoryTarget.mu.Lock()
+			cancelCalls := len(factoryTarget.cancelCalls)
+			factoryTarget.mu.Unlock()
+			if cancelCalls != 0 {
+				t.Fatalf("Cancel calls = %d, want 0", cancelCalls)
+			}
+			test.chatSessions.mu.Lock()
+			advanceCalls := len(test.chatSessions.advanceControlReqs)
+			test.chatSessions.mu.Unlock()
+			if advanceCalls != test.wantAdvanceCall {
+				t.Fatalf("AdvanceControl calls = %d, want %d", advanceCalls, test.wantAdvanceCall)
+			}
+		})
+	}
+}
+
+// TestHandleSessionCancelRejectsUncorrelatedIdentityWithoutEffects proves a
+// structurally invalid notification remains silent before any Chat or Factory
+// operation is attempted.
+func TestHandleSessionCancelRejectsUncorrelatedIdentityWithoutEffects(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{}
+	factoryTarget := &fakeFactoryTargetService{}
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil)
+
+	server.handleSessionCancel(context.Background(), envelope.Envelope{
+		Params: json.RawMessage(`{"sessionId":"session-cancel-identity"}`),
+	})
+	chatSessions.mu.Lock()
+	getCalls := len(chatSessions.getSessionReqs)
+	chatSessions.mu.Unlock()
+	if getCalls != 0 {
+		t.Fatalf("GetSession calls = %d, want 0 after identity rejection", getCalls)
+	}
+	factoryTarget.mu.Lock()
+	cancelCalls := len(factoryTarget.cancelCalls)
+	factoryTarget.mu.Unlock()
+	if cancelCalls != 0 {
+		t.Fatalf("Cancel calls = %d, want 0 after identity rejection", cancelCalls)
+	}
+}
+
 func TestChatControlRequestIdentityKeepsDistinctNotificationsDistinct(t *testing.T) {
 	first, err := identity.NewMinted("cancel-notification-a")
 	if err != nil {

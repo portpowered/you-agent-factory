@@ -279,6 +279,36 @@ func TestStore_StartTurn_InvalidRequestIdentityCreatesNoMutation(t *testing.T) {
 	}
 }
 
+// TestStore_StartTurn_GeneratedInvalidTurnLeavesSessionUnchanged proves an
+// invalid injected ID is rejected before turn admission mutates the session.
+func TestStore_StartTurn_GeneratedInvalidTurnLeavesSessionUnchanged(t *testing.T) {
+	ctx := context.Background()
+	ids := []string{"session-valid", ""}
+	store := NewStore(func() string {
+		id := ids[0]
+		ids = ids[1:]
+		return id
+	}, fixedClock(time.Now()), nil, nil)
+	created, err := store.CreateSession(ctx, validCreateRequest())
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	_, err = store.StartTurn(ctx, chatsessions.StartTurnRequest{
+		RequestID: startTurnRequestID("invalid-generated-turn"), SessionID: created.Session.ID, ExpectedVersion: created.Session.Version,
+	})
+	if !errors.Is(err, chatsessions.ErrRequiredValue) {
+		t.Fatalf("StartTurn with invalid generated ID: got %v, want ErrRequiredValue", err)
+	}
+	current, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: created.Session.ID})
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if current.Session != created.Session || current.MostRecentTurnID != "" {
+		t.Fatalf("invalid generated turn changed session: got %#v, want %#v", current, created)
+	}
+}
+
 // TestStore_StartTurn_SecondTurnAfterTerminalStaysActive proves a session
 // already ACTIVE (its first turn already terminated) admits a second turn
 // without an illegal ACTIVE->ACTIVE self-transition.

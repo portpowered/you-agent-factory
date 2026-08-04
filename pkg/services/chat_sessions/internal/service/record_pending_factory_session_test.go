@@ -132,6 +132,67 @@ func TestStore_RecordPendingFactorySession_TurnNoLongerActiveIsTypedConflict(t *
 	}
 }
 
+// TestStore_RecordPendingFactorySession_ReplacedActiveTurnIsTypedConflict
+// proves a fresh-version reconciliation record remains fenced to its captured
+// turn when a later turn is already authoritative for the same episode.
+func TestStore_RecordPendingFactorySession_ReplacedActiveTurnIsTypedConflict(t *testing.T) {
+	ctx := context.Background()
+	store, started := startedTurnForBinding(t, time.Now())
+	if _, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: started.Session.ID, TurnID: started.Turn.ID, Next: chatsessions.TurnStateRunning,
+	}); err != nil {
+		t.Fatalf("AdvanceTurn(RUNNING): %v", err)
+	}
+	if _, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: started.Session.ID, TurnID: started.Turn.ID, Next: chatsessions.TurnStateCompleted,
+	}); err != nil {
+		t.Fatalf("AdvanceTurn(COMPLETED): %v", err)
+	}
+	released, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: started.Session.ID})
+	if err != nil {
+		t.Fatalf("GetSession after terminal turn: %v", err)
+	}
+	if _, err := store.StartTurn(ctx, chatsessions.StartTurnRequest{
+		RequestID: startTurnRequestID("replacement-pending"), SessionID: started.Session.ID, ExpectedVersion: released.Session.Version,
+	}); err != nil {
+		t.Fatalf("StartTurn(replacement): %v", err)
+	}
+	current, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: started.Session.ID})
+	if err != nil {
+		t.Fatalf("GetSession replacement: %v", err)
+	}
+	req := pendingRequest(started, "fs-old-turn")
+	req.ExpectedVersion = current.Session.Version
+	_, err = store.RecordPendingFactorySession(ctx, req)
+	var conflict *chatsessions.ConflictError
+	if !errors.As(err, &conflict) || conflict.Value != "Turn" {
+		t.Fatalf("RecordPendingFactorySession old turn: got %v, want Turn *ConflictError", err)
+	}
+}
+
+// TestStore_RecordPendingFactorySession_WrongCapturedEpisodeLeavesCurrentPendingEmpty
+// proves late first-turn reconciliation cannot record a pending runtime on a
+// different target episode.
+func TestStore_RecordPendingFactorySession_WrongCapturedEpisodeLeavesCurrentPendingEmpty(t *testing.T) {
+	ctx := context.Background()
+	store, started := startedTurnForBinding(t, time.Now())
+	req := pendingRequest(started, "fs-wrong-episode")
+	req.Episode++
+
+	_, err := store.RecordPendingFactorySession(ctx, req)
+	var conflict *chatsessions.ConflictError
+	if !errors.As(err, &conflict) || conflict.Value != "TargetEpisode" {
+		t.Fatalf("RecordPendingFactorySession wrong episode: got %v, want TargetEpisode *ConflictError", err)
+	}
+	current, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: started.Session.ID})
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if current.Episode.PendingFactorySessionID != "" {
+		t.Fatalf("wrong-episode record changed current episode: %#v", current.Episode)
+	}
+}
+
 // TestStore_RecordPendingFactorySession_UnknownSessionIsTypedNotFound proves
 // recording against an unknown SessionID reports *NotFoundError.
 func TestStore_RecordPendingFactorySession_UnknownSessionIsTypedNotFound(t *testing.T) {
