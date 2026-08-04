@@ -40,25 +40,12 @@ func (r *registry) publishOpeningRecord(ctx context.Context, id, attemptID strin
 		Payload:    draftPayload,
 		DispatchID: attemptID,
 	}
-	if err := workers.ValidateDraft(draft); err != nil {
-		return fmt.Errorf("worker sessions: invalid opening draft: %w", err)
-	}
-	envelope, err := json.Marshal(draft)
-	if err != nil {
-		return fmt.Errorf("worker sessions: marshal opening draft: %w", err)
-	}
-
-	_, err = r.events.Append(ctx, events.AppendRequest{
-		Topic:          workersessions.Topic(id),
+	identity := events.AppendIdentity{
 		SourceType:     lifecycleSourceType,
 		SourceID:       events.SourceID(id),
 		SourceSequence: openingSourceSequence,
 		SourceEventID:  openingSourceEventID,
-		SchemaID:       workerDraftSchemaID,
-		Payload:        envelope,
-	}.Detached())
-	if err != nil {
-		return fmt.Errorf("worker sessions: append opening record: %w", err)
 	}
-	return nil
+	_, err = r.appendDraft(ctx, workersessions.Topic(id), identity, workerDraftSchemaID, draft)
+	return err
 }

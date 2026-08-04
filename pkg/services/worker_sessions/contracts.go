@@ -9,14 +9,17 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// Service is the W1+W2 Worker Session identity, registry, and supervision
-// foundation: stable identity reservation, immutable deterministic
-// inspection, and supervised Start with exactly-once terminal
-// classification. StartTurn, Events publication, Runtime and Provider
-// Session association, Pause/Resume/Cancel/Terminate controls, persistence,
-// and transport behavior are later ACP Worker Events slices (W3-W7) and are
-// not exposed here. Later slices land as additive methods on this same named
-// interface; W2 does not publish placeholder methods for them.
+// Service is the W1+W2+W3 Worker Session identity, registry, supervision,
+// and Events publication foundation: stable identity reservation, immutable
+// deterministic inspection, supervised Start with exactly-once terminal
+// classification and a before-handoff opening record, and PublishRecord for
+// committing source-native Worker observations onto that same topic.
+// StartTurn, the terminal SESSION projection, Runtime and Provider Session
+// association, Pause/Resume/Cancel/Terminate controls, persistence, and
+// transport behavior are later ACP Worker Events slices (W3 remainder,
+// W4-W7) and are not exposed here. Later slices land as additive methods on
+// this same named interface; earlier slices do not publish placeholder
+// methods for them.
 type Service interface {
 	// Reserve validates req and, when req.ID is not already registered,
 	// stores a new session in StateReserved and returns its snapshot.
@@ -46,6 +49,15 @@ type Service interface {
 	// and the adapter error second. Invalid requests and conflicting starts
 	// return a typed error before any registry mutation or Workers call.
 	Start(ctx context.Context, req StartRequest) (StartResult, error)
+
+	// PublishRecord validates req, then appends req.Draft, detached, as a
+	// source-native Worker record onto Topic(req.SessionID) using req's
+	// complete Events idempotency identity. PublishRecord relies on Events
+	// for aggregate order, duplicate resolution, cursors, reads, and
+	// subscriptions: it performs no ordering or deduplication of its own.
+	// An invalid Draft, a malformed Events identity, or an Events append
+	// failure is returned unchanged and commits no record.
+	PublishRecord(ctx context.Context, req PublishRecordRequest) (PublishRecordResult, error)
 }
 
 // ReserveRequest asks Service to reserve one new Worker Session identity.
