@@ -75,6 +75,12 @@ type attachmentCache struct {
 	bySession         map[string]chatsessions.Attachment
 	resumeIDBySession map[string]string
 	loadedSessions    map[string]bool
+	// workerChildBudgets retains only this connection's deterministic ACP
+	// projection accounting. It is keyed first by Chat Session, then by the
+	// sequencer-assigned child tool-call identity, so interleaved workers can
+	// never consume one another's record or byte allowance. The canonical
+	// source records remain unmodified.
+	workerChildBudgets map[string]map[string]mapping.ChildProjectionBudget
 }
 
 // attachmentCacheContextKey is the unexported context key attachmentCache is
@@ -179,6 +185,48 @@ func (c *attachmentCache) setResumeAttachmentID(sessionID, attachmentID string) 
 		c.resumeIDBySession = make(map[string]string)
 	}
 	c.resumeIDBySession[sessionID] = attachmentID
+}
+
+// boundWorkerChildProjection applies the pure mapping package's named bounds
+// to one already-associated child update. Both live and retained drains share
+// this connection-scoped cache, so a child cannot escape its budget merely by
+// crossing the live-to-retained handoff. There is intentionally no generic
+// Chat path here: unassociated records retain T03's existing projection.
+func (c *attachmentCache) boundWorkerChildProjection(
+	sessionID string,
+	item chatsessions.SequencedItem,
+	update *acpsdk.SessionUpdate,
+) (*acpsdk.SessionUpdate, error) {
+	if update == nil || update.ToolCallUpdate == nil {
+		return update, nil
+	}
+	parentItemID := string(update.ToolCallUpdate.ToolCallId)
+	if c == nil || parentItemID == "" {
+		budget := mapping.NewChildProjectionBudget(mapping.DefaultChildProjectionLimits())
+		_, bounded, err := mapping.BoundChildProjection(budget, item, update)
+		return bounded, err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.workerChildBudgets == nil {
+		c.workerChildBudgets = make(map[string]map[string]mapping.ChildProjectionBudget)
+	}
+	byParent := c.workerChildBudgets[sessionID]
+	if byParent == nil {
+		byParent = make(map[string]mapping.ChildProjectionBudget)
+		c.workerChildBudgets[sessionID] = byParent
+	}
+	budget, found := byParent[parentItemID]
+	if !found {
+		budget = mapping.NewChildProjectionBudget(mapping.DefaultChildProjectionLimits())
+	}
+	next, bounded, err := mapping.BoundChildProjection(budget, item, update)
+	if err != nil {
+		return nil, err
+	}
+	byParent[parentItemID] = next
+	return bounded, nil
 }
 
 // resumeAttachmentID returns the optional exact attachment identity this
@@ -583,6 +631,12 @@ func (s *Server) drainRecords(
 				return false, deliveredMessage, projErr
 			}
 			s.logWorkerChildProjectionSkipped(item)
+		}
+		if projErr == nil && item.WorkerSessionAssociation != nil {
+			update, projErr = cache.boundWorkerChildProjection(sessionID, item, update)
+			if projErr != nil {
+				s.logWorkerChildProjectionSkipped(item)
+			}
 		}
 
 		if update != nil {

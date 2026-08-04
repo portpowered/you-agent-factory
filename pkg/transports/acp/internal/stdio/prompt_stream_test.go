@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
+	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/mapping"
 )
 
 // fakeEventsService is a minimal events.Service test double, matching this
@@ -515,6 +516,58 @@ func TestStreamTurnUpdatesKeepsInterleavedWorkerContentInsideItsOwningToolCall(t
 			update.Content[0].Content.Content.Text.Text != want.text {
 			t.Fatalf("notification %d content = %#v, want %q", index+2, update.Content, want.text)
 		}
+	}
+}
+
+func TestStreamTurnUpdatesBoundsNoisyChildWithoutReducingSiblingBudget(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+	eventsSvc.seedWorkerChildItem(t, streamingTestSessionID, "worker-a", "", "dispatch-a", "worker-a-session", workers.PhaseStarted, "STARTING")
+	eventsSvc.seedWorkerChildItem(t, streamingTestSessionID, "worker-b", "", "dispatch-b", "worker-b-session", workers.PhaseStarted, "STARTING")
+	for index := 0; index < mapping.DefaultChildProjectionMaxRecords-1; index++ {
+		eventsSvc.seedWorkerChildRecord(t, streamingTestSessionID, fmt.Sprintf("worker-a-progress-%03d", index), "worker-a", "dispatch-a", "worker-a-session",
+			workers.KindProgress, workers.PhaseUpdated, workers.ProgressPayload{Label: fmt.Sprintf("a-progress-%03d", index)})
+	}
+	eventsSvc.seedWorkerChildRecord(t, streamingTestSessionID, "worker-b-message", "worker-b", "dispatch-b", "worker-b-session",
+		workers.KindMessage, workers.PhaseDelta, workers.MessageDeltaPayload{ContentBlockKind: workers.ContentBlockText, TextDelta: "b-survives"})
+	eventsSvc.seedWorkerChildRecord(t, streamingTestSessionID, "worker-a-error", "worker-a", "dispatch-a", "worker-a-session",
+		workers.KindError, workers.PhaseFailed, workers.ErrorPayload{Code: "upstream", Message: "failed"})
+	eventsSvc.seedWorkerChildItem(t, streamingTestSessionID, "worker-a-failed", "worker-a", "dispatch-a", "worker-a-session", workers.PhaseFailed, "FAILED")
+
+	var notified []acpsdk.SessionNotification
+	notify := func(n acpsdk.SessionNotification) error {
+		notified = append(notified, n)
+		return nil
+	}
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	if _, err := server.streamTurnUpdates(ctx, "conn-bounded-workers", streamingTestSessionID, 1, notify); err != nil {
+		t.Fatalf("streamTurnUpdates() error = %v", err)
+	}
+
+	childAContentNotifications := mapping.DefaultChildProjectionMaxRecords - 1
+	siblingIndex := 2 + childAContentNotifications
+	if len(notified) != siblingIndex+3 {
+		t.Fatalf("notification count = %d, want %d (openings, bounded A, B, failure, terminal)", len(notified), siblingIndex+3)
+	}
+	childAElision := notified[siblingIndex-1].Update.ToolCallUpdate
+	if childAElision == nil || childAElision.ToolCallId != "worker-a" ||
+		len(childAElision.Content) != 1 || childAElision.Content[0].Content == nil || childAElision.Content[0].Content.Content.Text == nil ||
+		childAElision.Content[0].Content.Content.Text.Text == "" {
+		t.Fatalf("worker A bound notification = %#v, want explicit parent-addressed elision", childAElision)
+	}
+	sibling := notified[siblingIndex].Update.ToolCallUpdate
+	if sibling == nil || sibling.ToolCallId != "worker-b" || len(sibling.Content) != 1 || sibling.Content[0].Content == nil || sibling.Content[0].Content.Content.Text == nil ||
+		sibling.Content[0].Content.Content.Text.Text != "b-survives" {
+		t.Fatalf("worker B notification = %#v, want unaffected sibling content", sibling)
+	}
+	failure := notified[siblingIndex+1].Update.ToolCallUpdate
+	if failure == nil || failure.ToolCallId != "worker-a" || len(failure.Content) != 1 || failure.Content[0].Content == nil || failure.Content[0].Content.Content.Text == nil ||
+		failure.Content[0].Content.Content.Text.Text != "Worker error content was elided because its per-child projection limit was reached." {
+		t.Fatalf("worker A failure notification = %#v, want retained failure elision", failure)
+	}
+	terminal := notified[siblingIndex+2].Update.ToolCallUpdate
+	if terminal == nil || terminal.ToolCallId != "worker-a" || terminal.Status == nil || *terminal.Status != acpsdk.ToolCallStatusFailed {
+		t.Fatalf("worker A terminal notification = %#v, want unchanged failed status", terminal)
 	}
 }
 

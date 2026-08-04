@@ -8,6 +8,7 @@ import (
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
+	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -277,4 +278,240 @@ func knownContentBlockKind(kind workers.ContentBlockKind) bool {
 	default:
 		return false
 	}
+}
+
+// ChildProjectionLimits names the bounded amount of content one associated
+// Worker Session can add to its ACP tool call. Limits apply independently to
+// each stored parent ItemID, never to a connection or a whole Factory turn.
+// MaxRecords includes ACP-visible elision notices; MaxSerializedBytes is the
+// JSON encoding size of the SessionUpdate delivered to the ACP client.
+type ChildProjectionLimits struct {
+	MaxRecords         int
+	MaxSerializedBytes int
+}
+
+const (
+	// DefaultChildProjectionMaxRecords leaves enough room for an explicit
+	// ordinary-content elision and a later failure/gap indication while still
+	// allowing normal Worker activity to remain useful.
+	DefaultChildProjectionMaxRecords = 128
+	// DefaultChildProjectionMaxSerializedBytes bounds one child's delivered
+	// content without allowing a noisy provider payload to dominate siblings.
+	DefaultChildProjectionMaxSerializedBytes = 64 * 1024
+)
+
+// DefaultChildProjectionLimits returns the production projection bounds.
+func DefaultChildProjectionLimits() ChildProjectionLimits {
+	return ChildProjectionLimits{
+		MaxRecords:         DefaultChildProjectionMaxRecords,
+		MaxSerializedBytes: DefaultChildProjectionMaxSerializedBytes,
+	}
+}
+
+// ChildProjectionBudget is an explicit value-state accumulator for one
+// child tool call. Callers retain it with their own delivery state and pass it
+// back to BoundChildProjection; the mapper performs no IO, identity lookup,
+// cursor mutation, or transport notification.
+type ChildProjectionBudget struct {
+	limits                 ChildProjectionLimits
+	emittedRecords         int
+	emittedBytes           int
+	ordinaryElisionEmitted bool
+	failureElisionEmitted  bool
+}
+
+// NewChildProjectionBudget creates empty, validated value state. Invalid
+// limits fail closed through BoundChildProjection rather than allowing an
+// implicit unlimited path.
+func NewChildProjectionBudget(limits ChildProjectionLimits) ChildProjectionBudget {
+	return ChildProjectionBudget{limits: limits}
+}
+
+// BoundChildProjection decides whether a mapped child update fits the
+// supplied per-child budget. It returns a new value-state and either the
+// original update, one deterministic ACP-visible elision update, or declared
+// no output after a prior elision has stated that later ordinary content is
+// omitted. Lifecycle-only updates are never content-budgeted, so terminal
+// state remains truthful even when a child is noisy.
+//
+// Two notice slots are reserved before accepting ordinary content. The first
+// makes normal record/byte pressure visible; the second remains available for
+// failure or STREAM_GAP evidence that occurs after transient content has
+// filled the normal allocation. This gives failure evidence precedence over
+// progress without ever exceeding the named record or byte limits.
+func BoundChildProjection(
+	budget ChildProjectionBudget,
+	item chatsessions.SequencedItem,
+	update *acpsdk.SessionUpdate,
+) (ChildProjectionBudget, *acpsdk.SessionUpdate, error) {
+	if update == nil || !hasBoundedChildContent(update) {
+		return budget, update, nil
+	}
+	if err := validateChildProjectionLimits(budget.limits); err != nil {
+		return budget, nil, err
+	}
+
+	parentItemID, err := childProjectionParentItemID(item, update)
+	if err != nil {
+		return budget, nil, err
+	}
+	ordinaryNotice, ordinaryNoticeBytes, err := childProjectionElision(parentItemID, childProjectionElisionOrdinary)
+	if err != nil {
+		return budget, nil, err
+	}
+	failureNotice, failureNoticeBytes, err := childProjectionElision(parentItemID, childProjectionElisionFailure)
+	if err != nil {
+		return budget, nil, err
+	}
+	reservedBytes := ordinaryNoticeBytes + failureNoticeBytes
+	if reservedBytes >= budget.limits.MaxSerializedBytes {
+		return budget, nil, fmt.Errorf("%w: child projection byte limit %d cannot hold required elision evidence", ErrMalformedRecord, budget.limits.MaxSerializedBytes)
+	}
+
+	serializedBytes, err := serializedUpdateBytes(update)
+	if err != nil {
+		return budget, nil, err
+	}
+	if childProjectionProtectedEvidence(item) {
+		return boundProtectedChildProjection(budget, item, update, serializedBytes, ordinaryNoticeBytes, failureNotice, failureNoticeBytes)
+	}
+	if budget.ordinaryElisionEmitted {
+		return budget, nil, nil
+	}
+	if budget.emittedRecords < budget.limits.MaxRecords-2 &&
+		budget.emittedBytes+serializedBytes <= budget.limits.MaxSerializedBytes-reservedBytes {
+		return budget.record(serializedBytes), update, nil
+	}
+	return budget.recordOrdinaryElision(ordinaryNoticeBytes), ordinaryNotice, nil
+}
+
+type childProjectionElisionKind uint8
+
+const (
+	childProjectionElisionOrdinary childProjectionElisionKind = iota
+	childProjectionElisionFailure
+)
+
+func (budget ChildProjectionBudget) record(bytes int) ChildProjectionBudget {
+	budget.emittedRecords++
+	budget.emittedBytes += bytes
+	return budget
+}
+
+func (budget ChildProjectionBudget) recordOrdinaryElision(bytes int) ChildProjectionBudget {
+	budget = budget.record(bytes)
+	budget.ordinaryElisionEmitted = true
+	return budget
+}
+
+func (budget ChildProjectionBudget) recordFailureElision(bytes int) ChildProjectionBudget {
+	budget = budget.record(bytes)
+	budget.failureElisionEmitted = true
+	return budget
+}
+
+func validateChildProjectionLimits(limits ChildProjectionLimits) error {
+	if limits.MaxRecords < 2 || limits.MaxSerializedBytes <= 0 {
+		return fmt.Errorf("%w: child projection limits require at least two records and a positive byte limit", ErrMalformedRecord)
+	}
+	return nil
+}
+
+func hasBoundedChildContent(update *acpsdk.SessionUpdate) bool {
+	if update == nil || update.ToolCallUpdate == nil {
+		return false
+	}
+	tool := update.ToolCallUpdate
+	return len(tool.Content) > 0 || tool.RawInput != nil || tool.RawOutput != nil || len(tool.Locations) > 0
+}
+
+func childProjectionParentItemID(item chatsessions.SequencedItem, update *acpsdk.SessionUpdate) (string, error) {
+	if update.ToolCallUpdate == nil || strings.TrimSpace(string(update.ToolCallUpdate.ToolCallId)) == "" {
+		return "", ErrMissingChildParent
+	}
+	parentItemID := string(update.ToolCallUpdate.ToolCallId)
+	if item.ParentItemID != "" && item.ParentItemID != parentItemID {
+		return "", fmt.Errorf("%w: child update target does not match stored parent item id", ErrMalformedRecord)
+	}
+	return parentItemID, nil
+}
+
+func childProjectionProtectedEvidence(item chatsessions.SequencedItem) bool {
+	return item.Kind == workers.KindError || item.Kind == workers.KindStreamGap
+}
+
+func boundProtectedChildProjection(
+	budget ChildProjectionBudget,
+	item chatsessions.SequencedItem,
+	update *acpsdk.SessionUpdate,
+	serializedBytes int,
+	ordinaryNoticeBytes int,
+	failureNotice *acpsdk.SessionUpdate,
+	failureNoticeBytes int,
+) (ChildProjectionBudget, *acpsdk.SessionUpdate, error) {
+	// Keep one ordinary-elision slot available when possible. A later noisy
+	// update must still be able to say why it was omitted after error/gap
+	// evidence took the protected path.
+	if budget.emittedRecords < budget.limits.MaxRecords-1 &&
+		budget.emittedBytes+serializedBytes <= budget.limits.MaxSerializedBytes-ordinaryNoticeBytes {
+		return budget.record(serializedBytes), update, nil
+	}
+	if item.Kind == workers.KindStreamGap {
+		gapNotice, gapNoticeBytes, err := childStreamGapElision(item, string(update.ToolCallUpdate.ToolCallId))
+		if err != nil {
+			return budget, nil, err
+		}
+		if budget.emittedRecords < budget.limits.MaxRecords &&
+			budget.emittedBytes+gapNoticeBytes <= budget.limits.MaxSerializedBytes {
+			return budget.recordFailureElision(gapNoticeBytes), gapNotice, nil
+		}
+	}
+	if !budget.failureElisionEmitted && budget.emittedRecords < budget.limits.MaxRecords &&
+		budget.emittedBytes+failureNoticeBytes <= budget.limits.MaxSerializedBytes {
+		return budget.recordFailureElision(failureNoticeBytes), failureNotice, nil
+	}
+	// An existing ordinary-elision notice already declares that subsequent
+	// non-terminal content is unavailable. Avoid duplicate notices once the
+	// fixed budget has been exhausted.
+	return budget, nil, nil
+}
+
+func serializedUpdateBytes(update *acpsdk.SessionUpdate) (int, error) {
+	encoded, err := json.Marshal(update)
+	if err != nil {
+		return 0, fmt.Errorf("%w: serialize child projection: %v", ErrMalformedRecord, err)
+	}
+	return len(encoded), nil
+}
+
+func childProjectionElision(parentItemID string, kind childProjectionElisionKind) (*acpsdk.SessionUpdate, int, error) {
+	text := "Worker child content was elided because its per-child projection limit was reached; subsequent non-terminal content is omitted."
+	switch kind {
+	case childProjectionElisionFailure:
+		text = "Worker error content was elided because its per-child projection limit was reached."
+	}
+	update := childTextUpdate(parentItemID, text)
+	bytes, err := serializedUpdateBytes(update)
+	if err != nil {
+		return nil, 0, err
+	}
+	return update, bytes, nil
+}
+
+func childStreamGapElision(item chatsessions.SequencedItem, parentItemID string) (*acpsdk.SessionUpdate, int, error) {
+	var payload workers.StreamGapPayload
+	if err := decodeChildPayload(item.Payload, &payload, "StreamGapPayload"); err != nil {
+		return nil, 0, err
+	}
+	if err := validateStreamGapPayload(payload); err != nil {
+		return nil, 0, err
+	}
+	payload.Reason = ""
+	text := gapNoticeText(payload) + " Additional stream-gap detail was elided because its per-child projection limit was reached."
+	update := childTextUpdate(parentItemID, text)
+	bytes, err := serializedUpdateBytes(update)
+	if err != nil {
+		return nil, 0, err
+	}
+	return update, bytes, nil
 }

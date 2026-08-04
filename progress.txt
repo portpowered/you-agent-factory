@@ -5,6 +5,8 @@
 - When a live source is replayed from its retained origin during terminal catch-up, retain successfully committed source identities for the current bridge run before applying lifecycle-order guards.
 - Only an associated SESSION/STARTED record opens a Factory child tool call; every other associated Worker record must preserve the sequencer-assigned opening ItemID as ParentItemID, even when its phase is STARTED.
 - Isolate typed mapping failures only for associated child records at the delivery boundary; preserve the established fatal behavior for malformed generic Chat envelopes.
+- Per-child ACP delivery policy belongs in the shared attachment cache, keyed by Chat Session and stored parent ItemID, so retained catch-up and live continuation use the same accounting without altering generic Chat projection.
+- Reserve explicit elision capacity before accepting ordinary bounded content; this preserves later failure or stream-gap evidence without exceeding the stated per-child limits.
 
 ## 2026-08-04 15:44 -07:00 - ACP-L4-W5-CHILD-TOOL-CALL-PROJECTION-001
 - Added a pure Worker child lifecycle mapper that renders sequenced, associated SESSION/STARTED records as pending ACP tool calls and maps RUNNING and terminal lifecycle records to parent-addressed tool-call updates.
@@ -66,4 +68,22 @@
   - Tool-call updates carry `Content`, `RawInput`, and `RawOutput`; preserving `workers.ToolPayload` and `workers.ToolDeltaPayload` in the raw fields avoids inventing a child-tool taxonomy.
   - Typed mapper failures can be isolated at the associated child delivery boundary while unassociated generic Chat mapping failures retain T03's existing fatal semantics.
   - `go vet` on changed packages, `go test ./pkg/transports/acp/... ./pkg/services/chat_sessions/internal/responsebridge`, `go test -race -count=20` on child mapper/delivery packages, and `make test` pass.
+---
+
+## 2026-08-04 16:31 -07:00 - ACP-L4-W5-CHILD-TOOL-CALL-PROJECTION-003
+- Added per-child ACP content budgets with deterministic limits of 128 projected content records and 64 KiB of serialized `SessionUpdate` data. Normal record or byte pressure now emits one explicit, parent-addressed elision and suppresses the declared subsequent non-terminal span.
+- Reserved delivery capacity for error and `STREAM_GAP` evidence, preserving a child failure indication and unchanged terminal lifecycle update even after noisy progress exhausts ordinary content. Oversized values are replaced as a whole with explicit elision, so raw provider data cannot bypass the byte limit.
+- Kept budget state in the connection attachment cache, keyed by Chat Session and sequencer-assigned child parent ItemID. This makes interleaved children independent and carries the same accounting across live and retained draining without changing generic Chat delivery or canonical records.
+- Added focused tests for record pressure, byte pressure, terminal/failure priority, multiple explicit stream-gap ranges, and retained ACP delivery where a saturated child leaves its sibling content unaffected.
+- Files changed:
+  - pkg/transports/acp/internal/mapping/child_content.go
+  - pkg/transports/acp/internal/mapping/child_content_test.go
+  - pkg/transports/acp/internal/stdio/prompt_stream.go
+  - pkg/transports/acp/internal/stdio/prompt_stream_test.go
+  - prd.json
+  - progress.txt
+- **Learnings for future iterations:**
+  - ACP `SessionUpdate` can be deterministically byte-accounted by JSON serializing the already-mapped update; replacing an oversized update with a content-only elision also prevents `RawInput` and `RawOutput` from bypassing the bound.
+  - Count only meaningful child content updates against the projection budget; immutable opening identity and lifecycle terminal status must remain available even when content is intentionally elided.
+  - `make test` passes. `make pkg-file-count` remains blocked by 47 pre-existing oversized-package baseline violations, including the unchanged ACP mapping package; this iteration added no Go files.
 ---

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	acpsdk "github.com/coder/acp-go-sdk"
@@ -213,6 +214,115 @@ func TestProjectWorkerChildInterleavingKeepsSiblingParentTargetsIndependent(t *t
 	}
 	if !reflect.DeepEqual(gotParents, wantParents) {
 		t.Fatalf("parent update targets = %#v, want %#v", gotParents, wantParents)
+	}
+}
+
+func TestBoundChildProjectionReservesFailureAndTerminalEvidenceAfterRecordPressure(t *testing.T) {
+	t.Parallel()
+	limits := ChildProjectionLimits{MaxRecords: 4, MaxSerializedBytes: 4096}
+	budget := NewChildProjectionBudget(limits)
+	ordinary := childItemWithParent(t, "child-tool-call", workers.KindProgress, workers.PhaseUpdated,
+		mustMarshal(t, workers.ProgressPayload{Label: "progress"}))
+
+	for index := 0; index < 2; index++ {
+		var update *acpsdk.SessionUpdate
+		var err error
+		budget, update, err = BoundChildProjection(budget, ordinary, childTextUpdate("child-tool-call", "progress"))
+		if err != nil || childUpdateText(t, update.ToolCallUpdate) != "progress" {
+			t.Fatalf("ordinary update %d = (%#v, %v), want retained content", index, update, err)
+		}
+	}
+
+	var update *acpsdk.SessionUpdate
+	var err error
+	budget, update, err = BoundChildProjection(budget, ordinary, childTextUpdate("child-tool-call", "noisy progress"))
+	if err != nil || update == nil || update.ToolCallUpdate == nil || !strings.Contains(childUpdateText(t, update.ToolCallUpdate), "content was elided") {
+		t.Fatalf("record-pressure update = (%#v, %v), want explicit ordinary elision", update, err)
+	}
+
+	budget, update, err = BoundChildProjection(budget, ordinary, childTextUpdate("child-tool-call", "later progress"))
+	if err != nil || update != nil {
+		t.Fatalf("post-elision ordinary update = (%#v, %v), want declared no output", update, err)
+	}
+
+	failure := childItemWithParent(t, "child-tool-call", workers.KindError, workers.PhaseFailed,
+		mustMarshal(t, workers.ErrorPayload{Code: "upstream", Message: "failed"}))
+	budget, update, err = BoundChildProjection(budget, failure, childTextUpdate("child-tool-call", "Worker error [upstream]: failed"))
+	if err != nil || update == nil || update.ToolCallUpdate == nil || !strings.Contains(childUpdateText(t, update.ToolCallUpdate), "Worker error content was elided") {
+		t.Fatalf("failure after record pressure = (%#v, %v), want explicit retained failure evidence", update, err)
+	}
+
+	terminalStatus := acpsdk.ToolCallStatusFailed
+	terminal := &acpsdk.SessionUpdate{ToolCallUpdate: &acpsdk.SessionToolCallUpdate{
+		ToolCallId: "child-tool-call", Status: &terminalStatus,
+	}}
+	terminalItem := childItemWithParent(t, "child-tool-call", workers.KindSession, workers.PhaseFailed,
+		mustMarshal(t, workers.SessionPayload{Status: "FAILED"}))
+	_, update, err = BoundChildProjection(budget, terminalItem, terminal)
+	if err != nil || update != terminal || update.ToolCallUpdate.Status == nil || *update.ToolCallUpdate.Status != acpsdk.ToolCallStatusFailed {
+		t.Fatalf("terminal after record pressure = (%#v, %v), want unchanged failed status", update, err)
+	}
+}
+
+func TestBoundChildProjectionReplacesOversizedValueWithByteBoundedElision(t *testing.T) {
+	t.Parallel()
+	ordinaryNotice, ordinaryBytes, err := childProjectionElision("child-tool-call", childProjectionElisionOrdinary)
+	if err != nil {
+		t.Fatalf("childProjectionElision(ordinary) error = %v", err)
+	}
+	_, failureBytes, err := childProjectionElision("child-tool-call", childProjectionElisionFailure)
+	if err != nil {
+		t.Fatalf("childProjectionElision(failure) error = %v", err)
+	}
+	limits := ChildProjectionLimits{MaxRecords: 4, MaxSerializedBytes: ordinaryBytes + failureBytes + 1}
+	item := childItemWithParent(t, "child-tool-call", workers.KindMessage, workers.PhaseDelta,
+		mustMarshal(t, workers.MessageDeltaPayload{ContentBlockKind: workers.ContentBlockText, TextDelta: strings.Repeat("x", 2048)}))
+
+	_, update, err := BoundChildProjection(
+		NewChildProjectionBudget(limits),
+		item,
+		childTextUpdate("child-tool-call", strings.Repeat("x", 2048)),
+	)
+	if err != nil || update == nil || update.ToolCallUpdate == nil {
+		t.Fatalf("BoundChildProjection() = (%#v, %v), want explicit byte elision", update, err)
+	}
+	if text := childUpdateText(t, update.ToolCallUpdate); !strings.Contains(text, "content was elided") || strings.Contains(text, strings.Repeat("x", 32)) {
+		t.Fatalf("byte-bounded content = %q, want explicit non-source elision", text)
+	}
+	gotBytes, err := serializedUpdateBytes(update)
+	if err != nil {
+		t.Fatalf("serializedUpdateBytes() error = %v", err)
+	}
+	if gotBytes > limits.MaxSerializedBytes {
+		t.Fatalf("elision bytes = %d, want <= %d", gotBytes, limits.MaxSerializedBytes)
+	}
+	if update != ordinaryNotice && childUpdateText(t, update.ToolCallUpdate) != childUpdateText(t, ordinaryNotice.ToolCallUpdate) {
+		t.Fatalf("byte elision = %#v, want deterministic ordinary notice", update)
+	}
+}
+
+func TestBoundChildProjectionKeepsMultipleStreamGapRanges(t *testing.T) {
+	t.Parallel()
+	budget := NewChildProjectionBudget(ChildProjectionLimits{MaxRecords: 8, MaxSerializedBytes: 4096})
+	gaps := []workers.StreamGapPayload{
+		{FromSequence: 3, ToSequence: 4, FirstAvailableSequence: 5, Reason: "first eviction"},
+		{FromSequence: 8, ToSequence: 9, FirstAvailableSequence: 10, Reason: "second eviction"},
+	}
+	for _, gap := range gaps {
+		item := childItemWithParent(t, "child-tool-call", workers.KindStreamGap, workers.PhaseUpdated, mustMarshal(t, gap))
+		mapped, err := ProjectWorkerChild(item)
+		if err != nil {
+			t.Fatalf("ProjectWorkerChild() error = %v", err)
+		}
+		var bounded *acpsdk.SessionUpdate
+		budget, bounded, err = BoundChildProjection(budget, item, mapped)
+		if err != nil || bounded == nil || bounded.ToolCallUpdate == nil {
+			t.Fatalf("BoundChildProjection() = (%#v, %v), want stream-gap update", bounded, err)
+		}
+		want := gapNoticeText(gap)
+		if got := childUpdateText(t, bounded.ToolCallUpdate); got != want {
+			t.Fatalf("stream-gap text = %q, want %q", got, want)
+		}
 	}
 }
 
