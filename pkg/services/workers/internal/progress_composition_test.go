@@ -239,10 +239,6 @@ func (testRuntimeScopeUnsupported) CancelInvocation(
 	return models.CancelInvocationResult{}, models.ErrUnsupportedOperation
 }
 
-func (s testModelsService) ForRuntime(models.RuntimeBinding) (models.Service, error) {
-	return s, nil
-}
-
 type injectedProviderRunner struct{}
 
 type testFactoryWorktreePreparer struct{}

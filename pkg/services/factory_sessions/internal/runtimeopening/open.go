@@ -82,7 +82,7 @@ func openRuntime(
 	sessionRequest := request.FactorySession
 	workerRequest := request.Workers
 	recordingRequest := request.Recordings
-	modelRequest := request.Models
+	modelCacheDirectory := request.ModelCacheDirectory
 	operatorDefaults := request.OperatorDefaults
 	configured, root, load, clock, logger, hostedPollers, err := PrepareRuntime(
 		ctx,
@@ -91,7 +91,7 @@ func openRuntime(
 		sessionRequest,
 		workerRequest,
 		recordingRequest,
-		modelRequest,
+		modelCacheDirectory,
 		operatorDefaults,
 		baseLogger,
 		edges,
@@ -205,7 +205,7 @@ func openRuntime(
 	modelsBind, err := bindModelsRuntimeScope(
 		ctx,
 		modelService,
-		configured.Models.CacheDirectory,
+		configured.ModelCacheDirectory,
 		currentRuntimeConfig,
 	)
 	if err != nil {

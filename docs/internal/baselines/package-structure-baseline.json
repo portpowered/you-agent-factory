@@ -1604,11 +1604,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/models/runtime_config_contract.go",
-      "target": "ValidateRuntimeBinding"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/operator_settings/backend_scope.go",
       "target": "EnsureLocalBackendScope"
     },
