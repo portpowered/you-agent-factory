@@ -35,9 +35,14 @@ feature-shaped.
 
 ### L2 explicitly defers to L3
 
-- **Factory Sessions root sealing.** All 45 methods stay as they are. L1 and L4
-  read through thin shims (`D4`). L4 never calls Factory Sessions for Worker
-  execution, so nothing in L4 blocks on it.
+- **Factory Sessions root sealing.** All 45 methods stay as they are. The
+  current L1 ACP Factory-target composition directly consumes the
+  owner-published `factory_sessions.TargetExecutionService`; its former Chat
+  Sessions shim is retired in the [canonical ACP consumer-owned shim
+  register](#canonical-acp-consumer-owned-shim-register) (`D4`). A future L4
+  consumer-owned Factory Sessions shim must be registered there when created.
+  L4 currently never calls Factory Sessions for Worker execution, so nothing
+  in L4 blocks on it.
 - **`runtimeOpener` / `RuntimeOpeningFactory` retirement.**
   `runtimeopening.NewFactory` takes **44 parameters**
   (`pkg/services/factory_sessions/internal/runtimeopening/factory.go:78-123`)
@@ -233,18 +238,22 @@ dispatchable unless a dependency is named.
 | Exact provider session continuation on resume | `CTR-PRV-CONT` |
 | Single injected Workers root | `CLN-WRK-RUNNERS` + `CUT-RUN-WRK-RUNNERS` |
 
-### Shims registered for deletion
+### Canonical ACP consumer-owned shim register
 
-Created by L1/L4 under `D4`, owned for removal by `CLN-L2-SHIMS`. Each entry
-records the consumer package, the provider root it adapts, and the L2 or L3
-packet whose completion retires it.
+This is the canonical ACP record for consumer-owned shims under `D4`.
+`CLN-L2-SHIMS` owns keeping the record current; the delivering L2 or L3 owner
+is responsible for supplying the retirement evidence. A **retired** row is
+history, not a claim that a source directory was deleted: retirement requires
+both the named delivered capability and current evidence that the consumer uses
+that owner-published root directly. The current active set is **empty**.
 
-| Shim | Adapts | Retired by |
-| --- | --- | --- |
-| `worker_sessions/internal/workersshim` | Workers execution | `CTR-WRK-EXEC` (may retire at creation) |
-| `worker_sessions/internal/providersshim` | `providers.Service` | `CTR-PRV-CONTROL` + `CTR-PRV-CONT` |
+| Shim identity | Consumer | Adapted public provider root or capability | Status | Retirement owner and exact milestone | Reviewer-verifiable retirement evidence |
+| --- | --- | --- | --- | --- | --- |
+| `worker_sessions/internal/workersshim` | `pkg/services/worker_sessions` | Workers execution, now `workers.WorkstationExecutionService` | Retired | L2 Root Consolidation — `CTR-WRK-EXEC`, merged as [PR #1706](https://github.com/portpowered/you-agent-factory/pull/1706) | `worker_sessions/wire.NewService` and `internal/service.New` directly accept `workers.WorkstationExecutionService`, and `Start` calls `DispatchWorkstation` on that injected root. The `CTR-WRK-EXEC` merge published the execution root. This records direct-root replacement; it does not assert that an adapter was deleted merely because a historical path is absent. |
+| `worker_sessions/internal/providersshim` | `pkg/services/worker_sessions` | Provider attempt control and continuation formerly expected from `providers.Service`; current consumer needs neither adapter because it hands execution to Workers | Retired | L2 Root Consolidation — `CTR-PRV-CONTROL`, merged as [PR #1749](https://github.com/portpowered/you-agent-factory/pull/1749), and `CTR-PRV-CONT`, merged as [PR #1780](https://github.com/portpowered/you-agent-factory/pull/1780) | Worker Sessions' direct construction and execution path depend on `workers.WorkstationExecutionService` plus its Events appender, not `providers.Service`; no live Providers adapter is required. The published Providers root now supplies the control and typed continuation capabilities delivered by the named milestones. This is direct-consumer evidence, not an inference from a missing shim path. |
+| `chat_sessions/internal/factorysessionsshim` | `pkg/services/chat_sessions` ACP Factory-target composition | Factory Sessions target execution, formerly adapted from `factorysessions.Service`, now `factorysessions.TargetExecutionService` | Retired | L3 Factory Sessions — `ACP-L3-FS-SEAL-TARGET-EXECUTION-PORT`, merged as [PR #1773](https://github.com/portpowered/you-agent-factory/pull/1773); capability publication `-001`, shim retirement `-004` | `factory_sessions.TargetExecutionService` is the owner-published narrow start/invoke/cancel/close capability. `chat_sessions/doc.go` and `pkg/wire/acp_transport.go` show ACP composition consuming that capability directly. The merged `-004` delivery retired the former shim after this replacement, rather than treating source absence alone as evidence. |
 
-A shim added without a register entry is a review defect.
+A new L1/L4 consumer-owned shim without a register entry is a review defect.
 
 ## 7. Acceptance criteria
 
