@@ -2456,6 +2456,12 @@
       "destinationKind": "family"
     },
     {
+      "packagePath": "pkg/platform/taskgroup",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
       "packagePath": "pkg/root",
       "disposition": "retain",
       "destination": "root",

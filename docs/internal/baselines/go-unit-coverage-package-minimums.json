@@ -101,6 +101,10 @@
       "minimum": 89.61
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/taskgroup",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/root",
       "minimum": 100.00
     },

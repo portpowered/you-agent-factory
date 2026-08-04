@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"reflect"
 	"strconv"
 	"strings"
@@ -2376,6 +2377,116 @@ func TestServeRoutesSessionCancelToCapturedFactorySession(t *testing.T) {
 	}
 	if factoryTarget.cancelCalls[0].request.RequestID == "" {
 		t.Fatal("Cancel request.RequestID is blank, want a non-blank correlated identity")
+	}
+}
+
+// TestServeCancelReachesFactorySessionWhileItsOwnSessionPromptInvocationIsStillBlocked
+// proves "session/cancel" is dispatched -- and reaches the captured Factory
+// Session's Cancel operation -- while a "session/prompt" received earlier on
+// the exact same connection is still blocked inside its own
+// InvokeFactorySession call, not only after that call has already returned.
+// This is the real ACP stdio protocol shape: a client always sends
+// "session/cancel" while the prompt it means to cancel is still in flight,
+// on the one connection carrying both. It also proves the still-blocked
+// prompt, once its downstream call reports the outcome the cancellation
+// caused, still terminalizes with the existing canceled-turn/stop-reason
+// behavior -- cancellation's only observable effect from the caller's own
+// side is that eventual "session/prompt" response, per handleSessionCancel's
+// own doc comment.
+func TestServeCancelReachesFactorySessionWhileItsOwnSessionPromptInvocationIsStillBlocked(t *testing.T) {
+	getSessionResult := sessionAt("session-1", "factory:@you/review", 3, "/work/project")
+	// handleSessionCancel resolves the bound Factory Session identity through
+	// its own, separate GetSession call (not through admitPromptTurn's
+	// StartTurn result), so this fake's Episode must carry the same
+	// FactorySessionID startTurnResult's Episode below does.
+	getSessionResult.Episode = chatsessions.TargetEpisode{
+		Number: 1, State: chatsessions.TargetEpisodeStateOpen,
+		Target:           chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
+		FactorySessionID: "fs-already-bound",
+	}
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: getSessionResult,
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", "fs-already-bound"),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{
+		invokeEnter:   make(chan struct{}),
+		invokeRelease: make(chan struct{}),
+		cancelEntered: make(chan struct{}),
+		invokeResult:  factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCanceled},
+	}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	pr, pw := io.Pipe()
+	out := &bytes.Buffer{}
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- server.Serve(context.Background(), pr, out) }()
+
+	promptLine := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"session/prompt","params":%s}`+"\n",
+		promptTextParams("session-1", "a message to cancel"))
+	if _, err := pw.Write([]byte(promptLine)); err != nil {
+		t.Fatalf("write session/prompt line: %v", err)
+	}
+
+	select {
+	case <-factoryTarget.invokeEnter:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for InvokeFactorySession to be entered")
+	}
+
+	cancelLine := `{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"session-1"}}` + "\n"
+	if _, err := pw.Write([]byte(cancelLine)); err != nil {
+		t.Fatalf("write session/cancel line: %v", err)
+	}
+
+	select {
+	case <-factoryTarget.cancelEntered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for Cancel to be entered")
+	}
+
+	// Cancel has already been recorded here, above, while
+	// InvokeFactorySession -- confirmed still blocked by this same
+	// assertion -- has not: proving cancellation reached the captured
+	// runtime without ever waiting for the prompt's own call to return
+	// first.
+	factoryTarget.mu.Lock()
+	cancelCallCount := len(factoryTarget.cancelCalls)
+	cancelSessionID := ""
+	if cancelCallCount > 0 {
+		cancelSessionID = factoryTarget.cancelCalls[0].sessionID
+	}
+	invokeCallCount := len(factoryTarget.invokeCalls)
+	factoryTarget.mu.Unlock()
+	if cancelCallCount != 1 {
+		t.Fatalf("Cancel call count = %d, want exactly 1 while the prompt invocation is still blocked", cancelCallCount)
+	}
+	if cancelSessionID != "fs-already-bound" {
+		t.Fatalf("Cancel sessionID = %q, want the episode's bound identity fs-already-bound", cancelSessionID)
+	}
+	if invokeCallCount != 1 {
+		t.Fatalf("InvokeFactorySession call count = %d, want exactly 1 still in flight", invokeCallCount)
+	}
+
+	close(factoryTarget.invokeRelease)
+
+	if err := pw.Close(); err != nil {
+		t.Fatalf("close input pipe: %v", err)
+	}
+	if err := <-serveErr; err != nil {
+		t.Fatalf("Serve() error = %v", err)
+	}
+
+	resp := assertSingleResponseLine(t, out)
+	if resp.Error != nil {
+		t.Fatalf("response error = %+v, want success", resp.Error)
+	}
+	var promptResp acpsdk.PromptResponse
+	if err := json.Unmarshal(resp.Result, &promptResp); err != nil {
+		t.Fatalf("unmarshal PromptResponse: %v", err)
+	}
+	if promptResp.StopReason != acpsdk.StopReasonCancelled {
+		t.Fatalf("stopReason = %q, want cancelled", promptResp.StopReason)
 	}
 }
 

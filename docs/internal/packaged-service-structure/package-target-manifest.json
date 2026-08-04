@@ -64,6 +64,7 @@
     "pkg/platform/replay",
     "pkg/platform/runtimeartifact",
     "pkg/platform/stdio",
+    "pkg/platform/taskgroup",
     "pkg/root",
     "pkg/services/automations",
     "pkg/services/automations/internal",
@@ -683,6 +684,11 @@
     },
     {
       "packagePath": "pkg/platform/stdio",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/taskgroup",
       "disposition": "retain",
       "destination": "platform"
     },

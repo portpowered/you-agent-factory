@@ -33,6 +33,8 @@ import (
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
+	"github.com/portpowered/infinite-you/pkg/platform/taskgroup"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
@@ -176,21 +178,41 @@ func scanCompleteLines(data []byte, atEOF bool) (advance int, token []byte, err 
 }
 
 // serveConnection reads line-delimited input to a clean EOF, treating every
-// complete non-empty line as one JSON-RPC 2.0 message. Each notification is
-// dispatched with no response ever written for it, and every other message
-// receives exactly one complete newline-terminated JSON-RPC response before
-// the next line is read, so no two responses can interleave. Context
-// cancellation is checked before every read: it stops accepting new work
-// immediately, and once a read fails or ends because the caller-owned
-// stream itself was closed or cancelled on the context's behalf, the
-// context's error is reported instead of the stream's raw error, so a
-// deliberate shutdown is never mistaken for a fault. A partial trailing
-// frame at EOF and a response write failure both end the connection with
-// their own error instead of being treated as success.
+// complete non-empty line as one JSON-RPC 2.0 message. Every message except
+// "session/prompt" is dispatched and, for a request, answered before the
+// next line is read, exactly as if this were a single-threaded loop.
+// "session/prompt" is instead dispatched through promptGroup (see
+// dispatchAsyncSessionPrompt) so this loop can keep reading and dispatching
+// the lines that follow it on the same connection -- most importantly a
+// "session/cancel" notification for the turn that same "session/prompt" is
+// still admitting, which must reach handleSessionCancel while the prompt's
+// own downstream Factory call is still blocked, not after it already
+// returned. safeOut (platformstdio.SerializeWrites) serializes every
+// response and notification write so a slow "session/prompt" response can
+// never tear or interleave with another line's write, even though the two
+// may now be produced concurrently; responses across different lines may
+// therefore complete, and be written, out of the order their requests were
+// read -- each is still correlated to its own request id, which is all
+// JSON-RPC 2.0 promises. Context cancellation is checked before every read:
+// it stops accepting new work immediately, and once a read fails or ends
+// because the caller-owned stream itself was closed or cancelled on the
+// context's behalf, the context's error is reported instead of the
+// stream's raw error, so a deliberate shutdown is never mistaken for a
+// fault. A partial trailing frame at EOF, and a response write failure on
+// this loop itself or on a dispatched "session/prompt" (surfaced through
+// promptGroup.Wait), both end the connection with their own error instead
+// of being treated as success; every outstanding "session/prompt" is
+// always awaited (promptGroup.Wait, deferred) before this method returns,
+// so Serve never returns while a response it may still write is in flight.
 func (s *Server) serveConnection(ctx context.Context, connectionID identity.ConnectionID, in io.Reader, out io.Writer) error {
 	scanner := bufio.NewScanner(in)
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
 	scanner.Split(scanCompleteLines)
+
+	safeOut := platformstdio.SerializeWrites(out)
+	writeResponseLocked := func(reqIdentity identity.RequestIdentity, result json.RawMessage, rpcErr *acpsdk.RequestError) error {
+		return writeResponse(safeOut, reqIdentity, result, rpcErr)
+	}
 
 	// notify is this connection's one outbound "session/update" delivery
 	// capability, carried through each dispatched request's context (see
@@ -199,15 +221,15 @@ func (s *Server) serveConnection(ctx context.Context, connectionID identity.Conn
 	// is "session/prompt", and adding a parameter every other handler and
 	// every existing unit test would have to accept for a capability they
 	// never use is exactly the kind of unnecessary plumbing a request-scoped
-	// context value avoids. Writing a notification line and writing this
-	// same request's eventual response line can never interleave with each
-	// other or with another request's lines: dispatchRequest runs to
-	// completion (and any notify call within it, synchronously) before this
-	// loop's single writeResponse call for the same line, and the next line
-	// is never read until that happens.
+	// context value avoids. safeOut keeps a notification write from tearing
+	// or interleaving with a concurrently-produced response or another
+	// notification.
 	notify := func(n acpsdk.SessionNotification) error {
-		return writeNotification(out, n)
+		return writeNotification(safeOut, n)
 	}
+
+	var promptGroup taskgroup.Group
+	defer promptGroup.Wait()
 
 	var notificationSeq uint64
 	for {
@@ -222,7 +244,7 @@ func (s *Server) serveConnection(ctx context.Context, connectionID identity.Conn
 				}
 				return err
 			}
-			return nil
+			return promptGroup.Wait()
 		}
 
 		line := scanner.Bytes()
@@ -232,77 +254,90 @@ func (s *Server) serveConnection(ctx context.Context, connectionID identity.Conn
 		raw := append(json.RawMessage(nil), line...)
 
 		reqCtx := contextWithPromptNotifier(ctx, notify)
-		env, result, rpcErr := s.dispatchRequest(reqCtx, connectionID, notificationSeq, raw)
-		if env.IsNotification {
-			notificationSeq++
+		env, decodeErr := envelope.Decode(connectionID, notificationSeq, raw)
+		if decodeErr != nil {
+			rpcErr, wireID, hasID := protocol.RejectEnvelope(decodeErr)
+			var rejectedIdentity identity.RequestIdentity
+			if hasID {
+				// connectionID is always non-blank for a real connection, and
+				// wireID is already validated by envelope.Decode, so
+				// NewCorrelated can never fail here.
+				rejectedIdentity, _ = identity.NewCorrelated(connectionID, wireID)
+			}
+			if err := writeResponseLocked(rejectedIdentity, nil, rpcErr); err != nil {
+				return err
+			}
 			continue
 		}
-		if err := writeResponse(out, env.Identity, result, rpcErr); err != nil {
+
+		if env.IsNotification {
+			notificationSeq++
+			if env.Method == acpsdk.AgentMethodSessionCancel {
+				s.handleSessionCancel(reqCtx, env)
+			}
+			continue
+		}
+
+		if env.Method == acpsdk.AgentMethodSessionPrompt {
+			s.dispatchAsyncSessionPrompt(reqCtx, env, &promptGroup, writeResponseLocked)
+			continue
+		}
+
+		result, rpcErr := s.dispatchRequest(reqCtx, env)
+		if err := writeResponseLocked(env.Identity, result, rpcErr); err != nil {
 			return err
 		}
 	}
 }
 
-// dispatchRequest decodes and executes one JSON-RPC message received on
-// connectionID. It returns the decoded envelope -- the zero Envelope, or an
-// Envelope carrying only a correlated Identity, for a message that never
-// successfully decoded -- alongside the outcome: a non-nil result for a
-// successful "initialize", "session/new", "session/set_config_option", or
-// "/factory <value>"-recognized "session/prompt" exchange, or a bounded,
-// protocol-safe *acpsdk.RequestError for every rejection. An
-// envelope.Decode failure is classified by protocol.RejectEnvelope into a
-// parse error (uncorrelated, for unparseable JSON) or an invalid-request
-// error (correlated to the message's id when that id was itself
-// syntactically valid); a decoded "initialize" envelope with valid params
-// that Negotiate rejects becomes the richer unsupported-protocol-version
-// error unwrapped, and every other rejection -- an unimplemented method,
-// params that fail to decode into the pinned request shape, or
-// "session/prompt" content that is not the "/factory <value>" command --
-// becomes method-not-found or invalid-params. The only methods this
-// transport dispatches to an effect in this slice are "initialize",
-// "session/new", "session/set_config_option", "session/prompt" (only for
-// its "/factory <value>" fallback command form), and "session/cancel" --
-// the last of which, being a notification, is dispatched to
-// handleSessionCancel but never produces a result or *acpsdk.RequestError
-// of its own, per JSON-RPC 2.0's "a server must never send a response for a
-// notification" rule; protocol-version
-// policy is delegated entirely to the existing V0 negotiation behavior
-// rather than re-implemented here.
-func (s *Server) dispatchRequest(ctx context.Context, connectionID identity.ConnectionID, notificationSeq uint64, raw json.RawMessage) (envelope.Envelope, json.RawMessage, *acpsdk.RequestError) {
-	env, err := envelope.Decode(connectionID, notificationSeq, raw)
-	if err != nil {
-		rpcErr, wireID, hasID := protocol.RejectEnvelope(err)
-		rejected := envelope.Envelope{}
-		if hasID {
-			// connectionID is always non-blank for a real connection, and
-			// wireID is already validated by envelope.Decode, so
-			// NewCorrelated can never fail here.
-			rejected.Identity, _ = identity.NewCorrelated(connectionID, wireID)
-		}
-		return rejected, nil, rpcErr
-	}
-	if env.IsNotification {
-		if env.Method == acpsdk.AgentMethodSessionCancel {
-			s.handleSessionCancel(ctx, env)
-		}
-		return env, nil, nil
-	}
+// dispatchAsyncSessionPrompt runs one "session/prompt" exchange on its own
+// goroutine, tracked by group, and writes its eventual response through
+// writeResponseLocked exactly the way the synchronous dispatch path in
+// serveConnection does. A write failure is reported through group's own
+// first-error tracking instead of returned, since this goroutine has no
+// caller left to return it to by the time it completes; serveConnection's
+// read loop observes it through its own deferred group.Wait() call and ends
+// the connection with it, the same as a synchronous write failure would.
+// Running "session/prompt" this way, instead of inline like every other
+// method, is what lets serveConnection's read loop keep consuming the lines
+// that follow it on the same connection -- in particular a "session/cancel"
+// notification for the same turn -- while its own downstream Factory call
+// is still in flight; see serveConnection's own doc comment.
+func (s *Server) dispatchAsyncSessionPrompt(
+	ctx context.Context,
+	env envelope.Envelope,
+	group *taskgroup.Group,
+	writeResponseLocked func(identity.RequestIdentity, json.RawMessage, *acpsdk.RequestError) error,
+) {
+	group.Go(func() error {
+		result, rpcErr := s.handleSessionPrompt(ctx, env)
+		return writeResponseLocked(env.Identity, result, rpcErr)
+	})
+}
 
+// dispatchRequest executes one already-decoded, non-notification JSON-RPC
+// request envelope: a non-nil result for a successful "initialize",
+// "session/new", "session/set_config_option", or "/factory <value>"-
+// recognized "session/prompt" exchange, or a bounded, protocol-safe
+// *acpsdk.RequestError for every rejection. protocol-version policy is
+// delegated entirely to the existing V0 negotiation behavior rather than
+// re-implemented here. serveConnection dispatches "session/prompt" itself
+// (see dispatchAsyncSessionPrompt) instead of routing it through this
+// method, so this method's own "session/prompt" case only ever runs when a
+// caller (for example an existing unit test) invokes dispatchRequest
+// directly.
+func (s *Server) dispatchRequest(ctx context.Context, env envelope.Envelope) (json.RawMessage, *acpsdk.RequestError) {
 	switch env.Method {
 	case acpsdk.AgentMethodInitialize:
-		result, rpcErr := dispatchInitialize(env.Params)
-		return env, result, rpcErr
+		return dispatchInitialize(env.Params)
 	case acpsdk.AgentMethodSessionNew:
-		result, rpcErr := s.handleSessionNew(ctx, env)
-		return env, result, rpcErr
+		return s.handleSessionNew(ctx, env)
 	case acpsdk.AgentMethodSessionSetConfigOption:
-		result, rpcErr := s.handleSessionSetConfigOption(ctx, env)
-		return env, result, rpcErr
+		return s.handleSessionSetConfigOption(ctx, env)
 	case acpsdk.AgentMethodSessionPrompt:
-		result, rpcErr := s.handleSessionPrompt(ctx, env)
-		return env, result, rpcErr
+		return s.handleSessionPrompt(ctx, env)
 	default:
-		return env, nil, protocol.MethodNotFound(env.Method)
+		return nil, protocol.MethodNotFound(env.Method)
 	}
 }
 

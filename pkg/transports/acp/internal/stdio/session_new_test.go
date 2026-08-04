@@ -290,9 +290,24 @@ type fakeFactoryTargetService struct {
 	// later retry against the same (or a differently bound) identity
 	// succeeds.
 	invokeErrs []error
+	// invokeEnter and invokeRelease, when both non-nil, make
+	// InvokeFactorySession block: it closes invokeEnter the instant it is
+	// entered (so a caller can deterministically wait, with no sleep, until
+	// the call is genuinely in flight) and then blocks until invokeRelease
+	// is itself closed before returning its configured result/error. This is
+	// how a test proves a concurrently-dispatched "session/cancel" reaches
+	// Cancel while an in-flight "session/prompt" is still blocked in its own
+	// InvokeFactorySession call, rather than only after it already returned.
+	invokeEnter   chan struct{}
+	invokeRelease chan struct{}
 
 	cancelCalls []cancelFactoryTargetCall
 	cancelErr   error
+	// cancelEntered, when non-nil, is closed the instant the first Cancel
+	// call is recorded, so a test can deterministically wait, with no sleep,
+	// until cancellation has genuinely reached this fake rather than merely
+	// having been written to the connection's input stream.
+	cancelEntered chan struct{}
 
 	closeCalls []string
 	closeErr   error
@@ -327,8 +342,17 @@ func (f *fakeFactoryTargetService) InvokeFactorySession(
 	request factorysessions.InvocationRequest,
 ) (factorysessions.InvocationResult, error) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.invokeCalls = append(f.invokeCalls, invokeFactoryTargetCall{sessionID: sessionID, request: request})
+	enter, release := f.invokeEnter, f.invokeRelease
+	f.mu.Unlock()
+
+	if enter != nil && release != nil {
+		close(enter)
+		<-release
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if len(f.invokeErrs) > 0 {
 		next := f.invokeErrs[0]
 		f.invokeErrs = f.invokeErrs[1:]
@@ -351,6 +375,9 @@ func (f *fakeFactoryTargetService) Cancel(
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.cancelCalls = append(f.cancelCalls, cancelFactoryTargetCall{sessionID: sessionID, request: request})
+	if len(f.cancelCalls) == 1 && f.cancelEntered != nil {
+		close(f.cancelEntered)
+	}
 	if f.cancelErr != nil {
 		return factorysessions.LifecycleControlResult{}, f.cancelErr
 	}

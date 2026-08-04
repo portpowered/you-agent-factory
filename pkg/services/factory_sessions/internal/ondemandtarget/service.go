@@ -11,7 +11,7 @@
 //
 // Service implements exactly StartAsync, InvokeFactorySession, Cancel, and
 // CloseFactorySession -- the narrow, owner-published
-// factory_sessions/wire.TargetExecutionService capability -- and nothing
+// factory_sessions.TargetExecutionService capability -- and nothing
 // more. Earlier iterations of this package embedded the full 30+ method
 // public factorysessions.Service interface as a permanently-nil value solely
 // so this type could be handed to a caller-owned adapter's constructor,
@@ -69,8 +69,9 @@ type invocationRuntimeOpener interface {
 	) (roles.OpenedInvocationRuntime, error)
 }
 
-// Service is a consumer-owned Factory Sessions activation that has no fixed,
-// pre-opened Factory Session runtime the way the CLI daemon's
+// Service is Factory Sessions' own on-demand target-execution activation
+// (published to peers as factorysessions.TargetExecutionService) that has no
+// fixed, pre-opened Factory Session runtime the way the CLI daemon's
 // single-project bootstrap (OpenApplication/Assembly.Complete) does.
 // Instead, the first StartAsync for a given caller-selected Factory
 // target and working root lazily opens exactly one ephemeral, non-HTTP-bound

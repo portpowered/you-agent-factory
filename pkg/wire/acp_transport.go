@@ -171,9 +171,9 @@ func provideACPServerFactoryTargetRuntimeResolver(
 	}
 }
 
-// provideACPServerFactoryTarget constructs the consumer-owned, on-demand
-// Factory Sessions activation the production ACP prompt-delegation consumer
-// starts or invokes a Factory Session through. Unlike the CLI daemon's
+// provideACPServerFactoryTarget constructs Factory Sessions' own on-demand
+// activation the production ACP prompt-delegation consumer starts or invokes
+// a Factory Session through. Unlike the CLI daemon's
 // single fixed-project bootstrap, ACP episodes select their Factory target
 // dynamically per session, so this activates one live runtime per target the
 // first time it is needed (through the same invocation-mode Runtime Opening
