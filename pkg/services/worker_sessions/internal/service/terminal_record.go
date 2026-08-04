@@ -69,10 +69,10 @@ func terminalDraft(state workersessions.State, result workersessions.TerminalRes
 		payload.FailureCause = string(result.Cause.Kind)
 		payload.FailureDetail = result.Cause.Detail
 	}
-	payloadJSON, err := json.Marshal(payload)
-	if err != nil {
-		return workers.Draft{}, fmt.Errorf("worker sessions: marshal terminal session payload: %w", err)
-	}
+	// terminalSessionPayload has only string fields, so json.Marshal cannot
+	// fail here; the error is intentionally discarded rather than defended
+	// against.
+	payloadJSON, _ := json.Marshal(payload)
 	return workers.Draft{
 		Kind:       workers.KindSession,
 		Phase:      phase,

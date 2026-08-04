@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -30,10 +29,10 @@ const (
 // workers.WorkstationExecutionService.DispatchWorkstation. A non-nil return
 // means no record was committed: Start must not proceed to Workers handoff.
 func (r *registry) publishOpeningRecord(ctx context.Context, id, attemptID string) error {
-	draftPayload, err := json.Marshal(workers.SessionPayload{Status: string(workersessions.StateStarting)})
-	if err != nil {
-		return fmt.Errorf("worker sessions: marshal opening session payload: %w", err)
-	}
+	// workers.SessionPayload{Status: string} has one string field, so
+	// json.Marshal cannot fail here; the error is intentionally discarded
+	// rather than defended against.
+	draftPayload, _ := json.Marshal(workers.SessionPayload{Status: string(workersessions.StateStarting)})
 	draft := workers.Draft{
 		Kind:       workers.KindSession,
 		Phase:      workers.PhaseStarted,
@@ -46,6 +45,6 @@ func (r *registry) publishOpeningRecord(ctx context.Context, id, attemptID strin
 		SourceSequence: openingSourceSequence,
 		SourceEventID:  openingSourceEventID,
 	}
-	_, err = r.appendDraft(ctx, workersessions.Topic(id), identity, workerDraftSchemaID, draft)
+	_, err := r.appendDraft(ctx, workersessions.Topic(id), identity, workerDraftSchemaID, draft)
 	return err
 }

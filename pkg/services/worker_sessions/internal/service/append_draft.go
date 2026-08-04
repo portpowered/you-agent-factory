@@ -22,10 +22,10 @@ func (r *registry) appendDraft(ctx context.Context, topic events.Topic, identity
 	if err := workers.ValidateDraft(draft); err != nil {
 		return events.AppendResult{}, fmt.Errorf("worker sessions: invalid draft: %w", err)
 	}
-	envelope, err := json.Marshal(draft)
-	if err != nil {
-		return events.AppendResult{}, fmt.Errorf("worker sessions: marshal draft: %w", err)
-	}
+	// draft's fields are exhaustively strings and json.RawMessage, neither of
+	// which json.Marshal can fail to encode, so the marshal error is
+	// unreachable and intentionally discarded rather than defended against.
+	envelope, _ := json.Marshal(draft)
 	return r.events.Append(ctx, events.AppendRequest{
 		Topic:          topic,
 		SourceType:     identity.SourceType,

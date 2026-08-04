@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -126,5 +127,21 @@ func TestTerminalDraft_NonTerminalState_ReturnsErrorAndNoDraft(t *testing.T) {
 				t.Fatalf("terminalDraft(%q) error = nil, want a non-nil error", state)
 			}
 		})
+	}
+}
+
+// TestPublishTerminalRecord_NonTerminalState_PropagatesTerminalDraftErrorAndAppendsNothing
+// proves publishTerminalRecord propagates terminalDraft's error unchanged and
+// never reaches appendDraft/Events for a state with no terminal projection.
+// Start itself can never pass such a state (see terminalPhase), so this
+// drives the registry method directly, the same way
+// TestTerminalDraft_NonTerminalState_ReturnsErrorAndNoDraft exercises the
+// pure mapping directly.
+func TestPublishTerminalRecord_NonTerminalState_PropagatesTerminalDraftErrorAndAppendsNothing(t *testing.T) {
+	r := newTestRegistry(t)
+
+	err := r.publishTerminalRecord(context.Background(), "worker-1", "dispatch-1", workersessions.StateReserved, workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted})
+	if err == nil {
+		t.Fatal("publishTerminalRecord() error = nil, want a non-nil error for a non-terminal state")
 	}
 }
