@@ -1,12 +1,21 @@
 package root_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
+	"runtime"
+	"sync/atomic"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testpath"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 // TestBuildProcessWiresRecordingsNeutralReplayGraph proves root.BuildProcess
@@ -28,3 +37,118 @@ func TestBuildProcessWiresRecordingsNeutralReplayGraph(t *testing.T) {
 		t.Fatalf("BuildProcess() read replay input %d times, want zero before runtime opening", replayReads)
 	}
 }
+
+// TestProcessExecuteRejectsInvalidPortableReplayBeforeLiveRuntimeConstruction
+// proves the customer run command reaches the Recordings-owned replay loader
+// through the canonical application graph. Rejected recording facts must not
+// open any live provider, script, or Factory Session control path.
+func TestProcessExecuteRejectsInvalidPortableReplayBeforeLiveRuntimeConstruction(t *testing.T) {
+	payload := invalidPortableReplayOrderPayload(t)
+	var replayReads atomic.Int32
+	var providerRuns atomic.Int32
+	var scriptRuns atomic.Int32
+	var sessionIDRequests atomic.Int32
+	var hostBindings atomic.Int32
+
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		FactorySessionReplayRecordingReader: func(path string) ([]byte, error) {
+			replayReads.Add(1)
+			if path != "recording.json" {
+				t.Fatalf("replay input path = %q, want recording.json", path)
+			}
+			return payload, nil
+		},
+		ProviderCommandRunner: replayConstructionCommandRunner{calls: &providerRuns},
+		ScriptCommandRunner:   replayConstructionCommandRunner{calls: &scriptRuns},
+		FactorySessionIDGenerator: func() string {
+			sessionIDRequests.Add(1)
+			return "must-not-create-live-session"
+		},
+		RuntimeHostObserver: func(factorysessions.RuntimeHostBinding) {
+			hostBindings.Add(1)
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+
+	workingDirectory := t.TempDir()
+	err = process.Execute(root.Input{
+		Args: []string{
+			"you", "run", "--dir", workingDirectory,
+			"--replay", "recording.json", "--no-record", "--quiet",
+		},
+		Context:          t.Context(),
+		Env:              replayTestHomeEnvironment(t.TempDir()),
+		WorkingDirectory: workingDirectory,
+	})
+	if err == nil {
+		t.Fatal("Process.Execute(run --replay) error = nil")
+	}
+	var replayErr *recordings.ReplayInputError
+	if !errors.As(err, &replayErr) ||
+		replayErr.Family != recordings.ReplayInputFamilyPortable ||
+		replayErr.Diagnostic.Code != recordings.ReplayArtifactDiagnosticInvalidOrder {
+		t.Fatalf("Process.Execute(run --replay) error = %v, want portable invalid-order diagnostic", err)
+	}
+	if replayReads.Load() != 1 {
+		t.Fatalf("replay input reads = %d, want one canonical runtime-opening read", replayReads.Load())
+	}
+	if providerRuns.Load() != 0 || scriptRuns.Load() != 0 || sessionIDRequests.Load() != 0 || hostBindings.Load() != 0 {
+		t.Fatalf(
+			"live replay construction calls = provider:%d script:%d sessionID:%d host:%d, want zero",
+			providerRuns.Load(), scriptRuns.Load(), sessionIDRequests.Load(), hostBindings.Load(),
+		)
+	}
+}
+
+func invalidPortableReplayOrderPayload(t *testing.T) []byte {
+	t.Helper()
+
+	path := testpath.MustRepoPathFromCaller(
+		t,
+		0,
+		"pkg", "services", "recordings", "internal", "artifacts", "testdata", "valid-v2.json",
+	)
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read valid portable recording: %v", err)
+	}
+	recording, err := recordings.DecodePortableRecording(bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("decode valid portable recording: %v", err)
+	}
+	recording.Events[1].Sequence = recording.Events[0].Sequence
+	payload, err = json.Marshal(recording)
+	if err != nil {
+		t.Fatalf("marshal invalid portable recording: %v", err)
+	}
+	return payload
+}
+
+func replayTestHomeEnvironment(home string) []string {
+	switch runtime.GOOS {
+	case "windows":
+		return []string{"USERPROFILE=" + home}
+	case "plan9":
+		return []string{"home=" + home}
+	default:
+		return []string{"HOME=" + home}
+	}
+}
+
+type replayConstructionCommandRunner struct {
+	calls *atomic.Int32
+}
+
+func (runner replayConstructionCommandRunner) Run(
+	context.Context,
+	platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	if runner.calls != nil {
+		runner.calls.Add(1)
+	}
+	return platformprocess.CommandResult{}, errors.New("replay validation must not execute commands")
+}
+
+var _ platformprocess.CommandRunner = replayConstructionCommandRunner{}

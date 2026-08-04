@@ -45,6 +45,7 @@ const (
 	CodeInvalidIdentity    = recordings.PortableRecordingCodeInvalidIdentity
 	CodeInvalidDigest      = recordings.PortableRecordingCodeInvalidDigest
 	CodeInvalidSummary     = recordings.PortableRecordingCodeInvalidSummary
+	CodeInvalidOrder       = recordings.PortableRecordingCodeInvalidOrder
 )
 
 var (

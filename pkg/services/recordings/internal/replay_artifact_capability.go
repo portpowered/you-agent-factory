@@ -374,6 +374,9 @@ func replayArtifactDiagnosticFromPortable(
 	case recordings.PortableRecordingCodeInvalidSummary:
 		result.Code = recordings.ReplayArtifactDiagnosticInvalidSummary
 		result.Message = "recording summary is invalid"
+	case recordings.PortableRecordingCodeInvalidOrder:
+		result.Code = recordings.ReplayArtifactDiagnosticInvalidOrder
+		result.Message = "recording event order is invalid"
 	default:
 		return replayInputDependencyDiagnostic()
 	}

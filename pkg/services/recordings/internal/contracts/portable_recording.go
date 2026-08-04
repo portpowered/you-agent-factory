@@ -129,6 +129,7 @@ const (
 	PortableRecordingCodeInvalidIdentity    PortableRecordingDiagnosticCode = "INVALID_RECORDING_IDENTITY"
 	PortableRecordingCodeInvalidDigest      PortableRecordingDiagnosticCode = "INVALID_RECORDING_DIGEST"
 	PortableRecordingCodeInvalidSummary     PortableRecordingDiagnosticCode = "INVALID_RECORDING_SUMMARY"
+	PortableRecordingCodeInvalidOrder       PortableRecordingDiagnosticCode = "INVALID_RECORDING_EVENT_ORDER"
 )
 
 // PortableRecordingDiagnostic reports one validation failure area.

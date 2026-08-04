@@ -278,6 +278,13 @@ func TestLoadRuntimeRejectsPortableFailureMatrixBeforeFactoryConstruction(t *tes
 			wantCode: recordings.ReplayArtifactDiagnosticInvalidSummary,
 		},
 		{
+			name: "invalid event order",
+			payload: runtimeLoadPortablePayload(t, func(recording *recordings.PortableRecording) {
+				recording.Events[1].Sequence = recording.Events[0].Sequence
+			}),
+			wantCode: recordings.ReplayArtifactDiagnosticInvalidOrder,
+		},
+		{
 			name: "invalid integrity",
 			payload: runtimeLoadPortablePayload(t, func(recording *recordings.PortableRecording) {
 				recording.Source.Hash = "invalid"
