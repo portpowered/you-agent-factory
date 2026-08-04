@@ -2431,3 +2431,53 @@ func TestServeSessionCancelUnknownSessionIsNoOp(t *testing.T) {
 		t.Fatalf("Cancel call count = %d, want 0 for an unknown Chat Session", len(factoryTarget.cancelCalls))
 	}
 }
+
+// TestServeSessionCancelMalformedParamsIsNoOp proves a "session/cancel"
+// notification whose params cannot be unmarshaled into
+// acpsdk.CancelNotification makes no GetSession or Cancel call rather than
+// panicking or writing an error response for what is a notification with no
+// response channel at all.
+func TestServeSessionCancelMalformedParamsIsNoOp(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{}
+	factoryTarget := &fakeFactoryTargetService{}
+	server := newTestServerWithFactoryTarget(chatSessions, nil, factoryTarget, "/home/operator")
+
+	line := `{"jsonrpc":"2.0","method":"session/cancel","params":"not-an-object"}` + "\n"
+	out := &bytes.Buffer{}
+	if err := server.Serve(context.Background(), strings.NewReader(line), out); err != nil {
+		t.Fatalf("Serve() error = %v", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("output = %q, want no response for a session/cancel notification", out.Bytes())
+	}
+	if chatSessions.getSessionCalled {
+		t.Fatal("GetSession was called, want no lookup for malformed session/cancel params")
+	}
+	if len(factoryTarget.cancelCalls) != 0 {
+		t.Fatalf("Cancel call count = %d, want 0 for malformed session/cancel params", len(factoryTarget.cancelCalls))
+	}
+}
+
+// TestServeSessionCancelBlankSessionIDIsNoOp proves a "session/cancel"
+// notification with a blank sessionId fails L1 V0 validation and makes no
+// GetSession or Cancel call.
+func TestServeSessionCancelBlankSessionIDIsNoOp(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{}
+	factoryTarget := &fakeFactoryTargetService{}
+	server := newTestServerWithFactoryTarget(chatSessions, nil, factoryTarget, "/home/operator")
+
+	line := `{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":""}}` + "\n"
+	out := &bytes.Buffer{}
+	if err := server.Serve(context.Background(), strings.NewReader(line), out); err != nil {
+		t.Fatalf("Serve() error = %v", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("output = %q, want no response for a session/cancel notification", out.Bytes())
+	}
+	if chatSessions.getSessionCalled {
+		t.Fatal("GetSession was called, want no lookup for a blank sessionId")
+	}
+	if len(factoryTarget.cancelCalls) != 0 {
+		t.Fatalf("Cancel call count = %d, want 0 for a blank sessionId", len(factoryTarget.cancelCalls))
+	}
+}
