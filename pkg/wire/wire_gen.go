@@ -493,7 +493,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	catalogPathsService, err := wire3.NewCatalogPathsService(effectiveFactoryCatalogOperation, namedPathResolver, namedFactoryCatalogFileSystem)
+	catalogPathsService, err := wire3.NewCatalogPathsService(effectiveFactoryCatalogOperation, namedPathResolver, namedFactoryCatalogFileSystem, loggingLogger)
 	if err != nil {
 		return nil, err
 	}

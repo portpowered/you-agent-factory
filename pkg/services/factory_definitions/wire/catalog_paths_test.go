@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 )
@@ -38,7 +39,7 @@ func TestNewCatalogPathsServicePerformsNoIOAtConstruction(t *testing.T) {
 		panic("listEffective invoked during inert construction")
 	}
 
-	if _, err := factorydefinitionswire.NewCatalogPathsService(panicky, paths, fileSystem); err != nil {
+	if _, err := factorydefinitionswire.NewCatalogPathsService(panicky, paths, fileSystem, logging.NoopLogger{}); err != nil {
 		t.Fatalf("NewCatalogPathsService: unexpected error: %v", err)
 	}
 	if paths.calls != 0 {
@@ -63,7 +64,7 @@ func TestCatalogPathsServiceResolveNamedFactoryPrefersProjectOverGlobal(t *testi
 	if err != nil {
 		t.Fatalf("NewPathResolver: %v", err)
 	}
-	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, fileSystem)
+	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, fileSystem, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewCatalogPathsService: %v", err)
 	}
@@ -100,7 +101,7 @@ func TestCatalogPathsServiceResolveNamedFactoryFallsBackToGlobal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPathResolver: %v", err)
 	}
-	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, fileSystem)
+	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, fileSystem, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewCatalogPathsService: %v", err)
 	}
@@ -130,7 +131,7 @@ func TestCatalogPathsServiceResolveNamedFactoryRejectsInvalidName(t *testing.T) 
 	if err != nil {
 		t.Fatalf("NewPathResolver: %v", err)
 	}
-	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, fileSystem)
+	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, fileSystem, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewCatalogPathsService: %v", err)
 	}
@@ -154,7 +155,7 @@ func TestCatalogPathsServiceResolveNamedFactoryReportsMissingDefinition(t *testi
 	if err != nil {
 		t.Fatalf("NewPathResolver: %v", err)
 	}
-	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, fileSystem)
+	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, fileSystem, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewCatalogPathsService: %v", err)
 	}
@@ -166,6 +167,42 @@ func TestCatalogPathsServiceResolveNamedFactoryReportsMissingDefinition(t *testi
 	})
 	if !errors.Is(err, factorydefinitions.ErrNamedFactoryNotFound) {
 		t.Fatalf("ResolveNamedFactory error = %v, want errors.Is ErrNamedFactoryNotFound", err)
+	}
+}
+
+// TestCatalogPathsServiceResolveNamedFactoryHonorsCancelledContext proves the
+// narrow capability preserves the pre-cancelled-context behavior of the ACP
+// adapter it replaced: an already-cancelled context is rejected before any
+// filesystem-backed named-path resolution runs, and no partial result is
+// returned even though a matching project-local Factory exists on disk.
+func TestCatalogPathsServiceResolveNamedFactoryHonorsCancelledContext(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	projectRoot := filepath.Join(root, "project")
+	writeFactoryJSON(t, filepath.Join(projectRoot, "alpha"))
+
+	fileSystem := platformfilesystem.Local{}
+	paths, err := factorydefinitionswire.NewPathResolver(fileSystem)
+	if err != nil {
+		t.Fatalf("NewPathResolver: %v", err)
+	}
+	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, fileSystem, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("NewCatalogPathsService: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	got, err := service.ResolveNamedFactory(ctx, factorydefinitions.ResolveNamedFactoryRequest{
+		ProjectRoot: projectRoot,
+		Name:        "alpha",
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("ResolveNamedFactory error = %v, want errors.Is context.Canceled", err)
+	}
+	if got != (factorydefinitions.ResolveNamedFactoryResult{}) {
+		t.Fatalf("ResolveNamedFactory returned a non-empty result on cancellation: %+v", got)
 	}
 }
 
@@ -183,7 +220,7 @@ func TestCatalogPathsServiceResolveCurrentFactoryLocationUsesCurrentPointer(t *t
 	if err := paths.WriteCurrentPointer(root, "alpha"); err != nil {
 		t.Fatalf("WriteCurrentPointer: %v", err)
 	}
-	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, fileSystem)
+	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, fileSystem, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewCatalogPathsService: %v", err)
 	}
@@ -210,7 +247,7 @@ func TestCatalogPathsServiceResolveCurrentFactoryLocationFallsBackToDirectLayout
 	if err != nil {
 		t.Fatalf("NewPathResolver: %v", err)
 	}
-	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, fileSystem)
+	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, fileSystem, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewCatalogPathsService: %v", err)
 	}
@@ -236,7 +273,7 @@ func TestCatalogPathsServiceResolveCurrentFactoryLocationReportsMissingLayout(t 
 	if err != nil {
 		t.Fatalf("NewPathResolver: %v", err)
 	}
-	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, fileSystem)
+	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, fileSystem, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewCatalogPathsService: %v", err)
 	}
@@ -270,7 +307,7 @@ func TestCatalogPathsServiceListEffectiveFactoriesForwardsResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPathResolver: %v", err)
 	}
-	service, err := factorydefinitionswire.NewCatalogPathsService(listEffective, paths, fileSystem)
+	service, err := factorydefinitionswire.NewCatalogPathsService(listEffective, paths, fileSystem, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewCatalogPathsService: %v", err)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -11,11 +12,13 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/testdeps"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap/zapcore"
 )
@@ -203,6 +206,115 @@ func TestProvideChatSessionsFactoryTargetCatalogServiceComposesThroughTheCanonic
 	}
 	if factoryDefinitions.callCount() != 2 {
 		t.Fatalf("ListEffectiveFactories call count = %d, want exactly 2 after a second resolution", factoryDefinitions.callCount())
+	}
+}
+
+// TestProvideChatSessionsFactoryTargetCatalogServicePreservesCancelledContextThroughRealCatalogPathsService
+// proves the canonical wire consumer boundary -- not just the narrow
+// Factory Definitions capability in isolation -- preserves the
+// pre-cancelled-context behavior the deleted ACP
+// acpServerFactoryDefinitions.ResolveNamedFactory adapter used to guarantee.
+// It composes a real, filesystem-backed factorydefinitions.CatalogPathsService
+// (not a fake) with the real Chat Sessions Factory target-catalog root
+// through the exact provider this graph registers, and a client working
+// root that requires named-path resolution. A live context resolves the
+// real on-disk Factory (proving the fixture is genuine), while an
+// already-cancelled context surfaces ErrFactoryTargetCatalogUnavailable
+// wrapping context.Canceled and returns no partial choices, instead of
+// completing filesystem resolution and succeeding.
+func TestProvideChatSessionsFactoryTargetCatalogServicePreservesCancelledContextThroughRealCatalogPathsService(t *testing.T) {
+	t.Parallel()
+
+	workingDir := t.TempDir()
+	projectRoot := factorydefinitions.ProjectFactoriesRoot(workingDir)
+	factoryDir := filepath.Join(projectRoot, "@you", "factory-builder")
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", factoryDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, "factory.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatalf("WriteFile(factory.json): %v", err)
+	}
+
+	fileSystem := platformfilesystem.Local{}
+	namedPaths, err := factorydefinitionswire.NewPathResolver(fileSystem)
+	if err != nil {
+		t.Fatalf("NewPathResolver: %v", err)
+	}
+	factoryLocation := factoryDir
+	listEffective := func(
+		context.Context,
+		factorydefinitions.ListEffectiveFactoriesRequest,
+	) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+		return factorydefinitions.ListEffectiveFactoriesResult{
+			Entries: []factorydefinitions.EffectiveFactoryCatalogEntry{
+				{
+					Name:       "@you/factory-builder",
+					Location:   &factoryLocation,
+					Definition: &factorydefinitions.FactoryConfig{Name: "Factory Builder"},
+				},
+			},
+		}, nil
+	}
+	catalogPaths, err := factorydefinitionswire.NewCatalogPathsService(listEffective, namedPaths, fileSystem, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("NewCatalogPathsService: %v", err)
+	}
+
+	logger := logging.NoopLogger{}
+	edges := serviceedges.Edges{}
+	files := provideOperatorSettingsFileSystem(edges)
+	providersRoot, err := provideProvidersService(edges)
+	if err != nil {
+		t.Fatalf("provideProvidersService() error = %v", err)
+	}
+	providerRegistry, err := provideProviderRegistry(edges, providersRoot)
+	if err != nil {
+		t.Fatalf("provideProviderRegistry() error = %v", err)
+	}
+	operatorSettings, err := provideOperatorSettingsService(
+		files,
+		provideOperatorSettingsCreateTemporaryFile(edges),
+		provideOperatorSettingsProviderCatalog(providerRegistry),
+		provideOperatorConfigDecoder(),
+		provideOperatorConfigEncoder(),
+		provideOperatorSettingsIDGenerator(edges),
+		providersRoot,
+		logger,
+	)
+	if err != nil {
+		t.Fatalf("provideOperatorSettingsService() error = %v", err)
+	}
+
+	catalog, err := provideChatSessionsFactoryTargetCatalogService(operatorSettings, catalogPaths, logger)
+	if err != nil {
+		t.Fatalf("provideChatSessionsFactoryTargetCatalogService() error = %v", err)
+	}
+
+	// No operator.json exists at this path, so profile resolution falls back
+	// to DefaultACPAgentProfile, whose default/allowed target is exactly
+	// "factory:@you/factory-builder" -- matching the on-disk fixture above.
+	operatorSettingsPath := filepath.Join(t.TempDir(), "config.json")
+	req := chatsessions.ResolveFactoryTargetCatalogRequest{
+		OperatorSettingsPath: operatorSettingsPath,
+		FactoryDiscovery: chatsessions.FactoryDiscoveryRoots{
+			ProjectRoot: projectRoot,
+			GlobalRoot:  filepath.Join(t.TempDir(), "global-factories"),
+		},
+		ClientWorkingRoot: workingDir,
+	}
+
+	if _, err := catalog.ResolveFactoryTargetCatalog(context.Background(), req); err != nil {
+		t.Fatalf("sanity ResolveFactoryTargetCatalog() with a live context: unexpected error: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	result, err := catalog.ResolveFactoryTargetCatalog(ctx, req)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("ResolveFactoryTargetCatalog() with a cancelled context: error = %v, want errors.Is context.Canceled", err)
+	}
+	if len(result.Choices) != 0 || result.CurrentTarget != "" {
+		t.Fatalf("ResolveFactoryTargetCatalog() with a cancelled context: result = %#v, want a zero (non-partial) result", result)
 	}
 }
 

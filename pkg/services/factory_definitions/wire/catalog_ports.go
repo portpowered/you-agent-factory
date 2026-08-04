@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionsinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
@@ -69,11 +70,14 @@ func ResolveCurrent(
 // operation and catalog-owned path/filesystem ports used by Wire
 // composition. It reuses the same private catalog collaborator the root
 // Service's ResolveNamedFactory delegates to, so results are identical, and
-// performs no filesystem reads or writes at construction time.
+// performs no filesystem reads or writes at construction time. logger is the
+// direct, required operation-logging abstraction; callers with no operation
+// logging pass logging.NoopLogger{}.
 func NewCatalogPathsService(
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
 	namedPaths factorydefinitions.NamedPathResolver,
 	namedFactoryCatalogFileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
+	logger logging.Logger,
 ) (factorydefinitions.CatalogPathsService, error) {
 	catalogService, err := catalogwire.NewService(catalog.Dependencies{
 		Paths:      namedPaths,
@@ -89,5 +93,6 @@ func NewCatalogPathsService(
 		listEffective,
 		catalogService.ResolveNamedFactory,
 		resolveCurrentDir,
+		logger,
 	)
 }
