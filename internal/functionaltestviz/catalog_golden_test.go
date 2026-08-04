@@ -17,6 +17,7 @@ func TestRenderCatalogMarkdownFullReportGolden(t *testing.T) {
 	inputs := functionaltestviz.CatalogInputs{
 		Records:  fullReportFixtureRecords(),
 		Coverage: fullReportCoverageSummary(),
+		Timing:   fullReportTimingSummary(),
 	}
 
 	first, err := functionaltestviz.RenderCatalogMarkdown(inputs)
@@ -136,6 +137,20 @@ func fullReportCoverageSummary() functionaltestviz.CoverageSummary {
 	}
 }
 
+func fullReportTimingSummary() functionaltestviz.FunctionalTimingSummary {
+	return functionaltestviz.FunctionalTimingSummary{
+		Version:                  functionaltestviz.FunctionalTimingSummaryVersion,
+		Complete:                 true,
+		WallSeconds:              5.0,
+		PackageElapsedSecondsSum: 7.5,
+		PackageCount:             2,
+		Packages: []functionaltestviz.FunctionalPackageTiming{
+			{Package: "github.com/portpowered/infinite-you/tests/functional/workers/inference/openai", Seconds: 4.5, Outcome: "pass"},
+			{Package: "github.com/portpowered/infinite-you/tests/functional/transport/cli/process", Seconds: 3.0, Outcome: "pass"},
+		},
+	}
+}
+
 func assertFullReportCoversRepresentativeSections(t *testing.T, catalog string) {
 	t.Helper()
 	required := []string{
@@ -157,6 +172,8 @@ func assertFullReportCoversRepresentativeSections(t *testing.T, catalog string) 
 		"## Package coverage\n",
 		"| `github.com/portpowered/infinite-you/pkg/config` |",
 		"## Harness verification\n",
+		"## Functional test timings\n",
+		"| `github.com/portpowered/infinite-you/tests/functional/transport/cli/process` |",
 	}
 	for _, fragment := range required {
 		if !strings.Contains(catalog, fragment) {

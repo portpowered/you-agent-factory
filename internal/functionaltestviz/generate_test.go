@@ -47,10 +47,15 @@ func TestGenerateWritesDefaultArtifactPath(t *testing.T) {
 	if err := os.WriteFile(coveragePath, []byte(generateCoverageSummaryJSON), 0o644); err != nil {
 		t.Fatalf("write coverage summary: %v", err)
 	}
+	timingPath := filepath.Join(root, "functional-timing-summary.json")
+	if err := os.WriteFile(timingPath, []byte(generateTimingSummaryJSON), 0o644); err != nil {
+		t.Fatalf("write timing summary: %v", err)
+	}
 
 	if err := functionaltestviz.Generate(functionaltestviz.GenerateConfig{
 		RepositoryRoot:      root,
 		CoverageSummaryPath: coveragePath,
+		TimingSummaryPath:   timingPath,
 	}); err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
@@ -72,10 +77,14 @@ func TestGenerateWritesDefaultArtifactPath(t *testing.T) {
 	if !strings.Contains(string(first), "## Package coverage\n") {
 		t.Fatalf("generated catalog missing package coverage:\n%s", first)
 	}
+	if !strings.Contains(string(first), "## Functional test timings\n") {
+		t.Fatalf("generated catalog missing functional test timings:\n%s", first)
+	}
 
 	if err := functionaltestviz.Generate(functionaltestviz.GenerateConfig{
 		RepositoryRoot:      root,
 		CoverageSummaryPath: coveragePath,
+		TimingSummaryPath:   timingPath,
 	}); err != nil {
 		t.Fatalf("Generate second: %v", err)
 	}
@@ -104,13 +113,50 @@ func TestGenerateFailsClosedForMissingCoverageSummary(t *testing.T) {
 		t.Fatalf("write fixture test: %v", err)
 	}
 
+	timingPath := filepath.Join(root, "functional-timing-summary.json")
+	if err := os.WriteFile(timingPath, []byte(generateTimingSummaryJSON), 0o644); err != nil {
+		t.Fatalf("write timing summary: %v", err)
+	}
+
 	err := functionaltestviz.Generate(functionaltestviz.GenerateConfig{
 		RepositoryRoot:      root,
 		CoverageSummaryPath: filepath.Join(root, "missing-coverage-summary.json"),
+		TimingSummaryPath:   timingPath,
 		OutputPath:          filepath.Join(root, "out.md"),
 	})
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("Generate(missing coverage) error = %v, want not-found guidance", err)
+	}
+}
+
+func TestGenerateFailsClosedForMissingTimingSummary(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	functionalRoot := filepath.Join(root, "tests", "functional")
+	if err := os.MkdirAll(filepath.Join(functionalRoot, "transport"), 0o755); err != nil {
+		t.Fatalf("mkdir functional root: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(functionalRoot, "transport", "help_test.go"),
+		[]byte("package transport\n\n// TestHelp verifies help.\nfunc TestHelp(t *testing.T) {}\n"),
+		0o644,
+	); err != nil {
+		t.Fatalf("write fixture test: %v", err)
+	}
+	coveragePath := filepath.Join(root, "coverage-summary.json")
+	if err := os.WriteFile(coveragePath, []byte(generateCoverageSummaryJSON), 0o644); err != nil {
+		t.Fatalf("write coverage summary: %v", err)
+	}
+
+	err := functionaltestviz.Generate(functionaltestviz.GenerateConfig{
+		RepositoryRoot:      root,
+		CoverageSummaryPath: coveragePath,
+		TimingSummaryPath:   filepath.Join(root, "missing-timing-summary.json"),
+		OutputPath:          filepath.Join(root, "out.md"),
+	})
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("Generate(missing timing) error = %v, want not-found guidance", err)
 	}
 }
 
@@ -186,6 +232,22 @@ const generateCoverageSummaryJSON = `{
       "coveragePercent": 50.0,
       "packageFloor": 40.0,
       "measurementException": null
+    }
+  ]
+}
+`
+
+const generateTimingSummaryJSON = `{
+  "version": 1,
+  "complete": true,
+  "wallSeconds": 1.0,
+  "packageElapsedSecondsSum": 1.0,
+  "packageCount": 1,
+  "packages": [
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/cli",
+      "seconds": 1.0,
+      "outcome": "pass"
     }
   ]
 }
