@@ -191,10 +191,10 @@ func cloneString(value *string) *string {
 
 // catalogPathsService is the stateless implementation of the narrow,
 // read-only Factory Definitions catalog/path capability. It is intentionally
-// unexported: the capability's public contract is published at the Wire
-// composition boundary (pkg/services/factory_definitions/wire), not at the
-// factory_definitions root, which already carries pre-existing,
-// deletion-only interface-count debt this capability must not grow.
+// unexported: the capability's public contract (factorydefinitions.CatalogPathsService)
+// is published at the factory_definitions service root
+// (current_factory_pointer.go); callers hold this type via type inference and
+// return it onward as that root interface.
 type catalogPathsService struct {
 	listEffective       factorydefinitions.EffectiveFactoryCatalogOperation
 	resolveNamedFactory func(context.Context, factorydefinitions.ResolveNamedFactoryRequest) (factorydefinitions.ResolveNamedFactoryResult, error)

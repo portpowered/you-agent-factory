@@ -69,24 +69,25 @@ func ResolveCurrent(
 
 // NewCatalogPathsService constructs the narrow, read-only Factory
 // Definitions catalog/path capability from the exact already-composed
-// effective-catalog, named-path, and current-directory collaborators used by
-// canonical Wire composition. Named-Factory resolution calls the catalog
-// subservice's own named-factory helper directly (the same one
-// catalog.Service.ResolveNamedFactory delegates to) instead of constructing a
-// second catalog.Service instance, and current-directory resolution reuses
-// the exact factorydefinitions.CurrentFactoryDirectoryResolver value
-// canonical Wire already constructs once for the rest of the graph.
-// Construction performs no filesystem reads or writes. logger is the direct,
-// required operation-logging abstraction; callers with no operation logging
-// pass logging.NoopLogger{}.
+// effective-catalog, named-factory-catalog, and current-directory
+// collaborators canonical Wire composes once for the rest of the graph.
+// Named-Factory resolution calls namedFactoryCatalog.ResolveNamedFactoryAcrossRoots
+// directly -- the same already-composed factorydefinitions.NamedFactoryCatalog
+// singleton the deleted ACP adapter used -- instead of constructing a second
+// operational path around it, and current-directory resolution reuses the
+// exact factorydefinitions.CurrentFactoryDirectoryResolver value canonical
+// Wire already constructs once for the rest of the graph. Construction
+// performs no filesystem reads or writes. logger is the direct, required
+// operation-logging abstraction; callers with no operation logging pass
+// logging.NoopLogger{}.
 func NewCatalogPathsService(
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
-	namedPaths factorydefinitions.NamedPathResolver,
+	namedFactoryCatalog factorydefinitions.NamedFactoryCatalog,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
 	logger logging.Logger,
 ) (factorydefinitions.CatalogPathsService, error) {
-	if namedPaths == nil {
-		return nil, fmt.Errorf("named Factory path resolver is required")
+	if namedFactoryCatalog == nil {
+		return nil, fmt.Errorf("named Factory catalog is required")
 	}
 	resolveNamedFactory := func(
 		ctx context.Context,
@@ -95,7 +96,7 @@ func NewCatalogPathsService(
 		if err := ctx.Err(); err != nil {
 			return factorydefinitions.ResolveNamedFactoryResult{}, err
 		}
-		resolution, err := catalogwire.ResolveNamedFactory(namedPaths, request.ProjectRoot, request.GlobalRoot, request.Name)
+		resolution, err := namedFactoryCatalog.ResolveNamedFactoryAcrossRoots(request.ProjectRoot, request.GlobalRoot, request.Name)
 		if err != nil {
 			return factorydefinitions.ResolveNamedFactoryResult{}, err
 		}

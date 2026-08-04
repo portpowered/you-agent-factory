@@ -83,10 +83,48 @@ func resolveCurrentDirFromPaths(paths factorydefinitions.NamedPathResolver) fact
 	}
 }
 
+// namedFactoryCatalogFromPaths builds the same factorydefinitions.NamedFactoryCatalog
+// shape canonical Wire's provideNamedFactoryCatalog constructs, from an
+// already-injected path resolver and filesystem, for direct use in focused
+// Wire tests.
+func namedFactoryCatalogFromPaths(
+	t *testing.T,
+	paths factorydefinitions.NamedPathResolver,
+	fileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
+) factorydefinitions.NamedFactoryCatalog {
+	t.Helper()
+	catalog, err := factorydefinitionswire.NewNamedFactoryCatalog(paths, fileSystem)
+	if err != nil {
+		t.Fatalf("NewNamedFactoryCatalog: %v", err)
+	}
+	return catalog
+}
+
+// recordingNamedFactoryCatalog is a no-I/O-at-construction
+// factorydefinitions.NamedFactoryCatalog double that panics on any call, for
+// proving NewCatalogPathsService performs zero collaborator work at
+// construction.
+type recordingNamedFactoryCatalog struct{ calls int }
+
+func (r *recordingNamedFactoryCatalog) ListNamedFactories(string) ([]factorydefinitions.NamedFactoryListEntry, error) {
+	r.calls++
+	panic("ListNamedFactories invoked during inert construction")
+}
+
+func (r *recordingNamedFactoryCatalog) DeleteNamedFactory(string, string) error {
+	r.calls++
+	panic("DeleteNamedFactory invoked during inert construction")
+}
+
+func (r *recordingNamedFactoryCatalog) ResolveNamedFactoryAcrossRoots(string, string, string) (*factorydefinitions.NamedFactoryResolution, error) {
+	r.calls++
+	panic("ResolveNamedFactoryAcrossRoots invoked during inert construction")
+}
+
 func TestNewCatalogPathsServicePerformsNoIOAtConstruction(t *testing.T) {
 	t.Parallel()
 
-	paths := &recordingNamedPathResolver{}
+	namedFactoryCatalog := &recordingNamedFactoryCatalog{}
 	panicky := func(context.Context, factorydefinitions.ListEffectiveFactoriesRequest) (factorydefinitions.ListEffectiveFactoriesResult, error) {
 		panic("listEffective invoked during inert construction")
 	}
@@ -94,11 +132,11 @@ func TestNewCatalogPathsServicePerformsNoIOAtConstruction(t *testing.T) {
 		panic("resolveCurrentDir invoked during inert construction")
 	}
 
-	if _, err := factorydefinitionswire.NewCatalogPathsService(panicky, paths, panickyResolveCurrentDir, logging.NoopLogger{}); err != nil {
+	if _, err := factorydefinitionswire.NewCatalogPathsService(panicky, namedFactoryCatalog, panickyResolveCurrentDir, logging.NoopLogger{}); err != nil {
 		t.Fatalf("NewCatalogPathsService: unexpected error: %v", err)
 	}
-	if paths.calls != 0 {
-		t.Fatalf("named path resolver calls = %d, want 0 at construction", paths.calls)
+	if namedFactoryCatalog.calls != 0 {
+		t.Fatalf("named Factory catalog calls = %d, want 0 at construction", namedFactoryCatalog.calls)
 	}
 }
 
@@ -116,7 +154,7 @@ func TestCatalogPathsServiceResolveNamedFactoryPrefersProjectOverGlobal(t *testi
 	if err != nil {
 		t.Fatalf("NewPathResolver: %v", err)
 	}
-	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, resolveCurrentDirFromPaths(paths), logging.NoopLogger{})
+	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, namedFactoryCatalogFromPaths(t, paths, fileSystem), resolveCurrentDirFromPaths(paths), logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewCatalogPathsService: %v", err)
 	}
@@ -153,7 +191,7 @@ func TestCatalogPathsServiceResolveNamedFactoryFallsBackToGlobal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPathResolver: %v", err)
 	}
-	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, resolveCurrentDirFromPaths(paths), logging.NoopLogger{})
+	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, namedFactoryCatalogFromPaths(t, paths, fileSystem), resolveCurrentDirFromPaths(paths), logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewCatalogPathsService: %v", err)
 	}
@@ -183,7 +221,7 @@ func TestCatalogPathsServiceResolveNamedFactoryRejectsInvalidName(t *testing.T) 
 	if err != nil {
 		t.Fatalf("NewPathResolver: %v", err)
 	}
-	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, resolveCurrentDirFromPaths(paths), logging.NoopLogger{})
+	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, namedFactoryCatalogFromPaths(t, paths, fileSystem), resolveCurrentDirFromPaths(paths), logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewCatalogPathsService: %v", err)
 	}
@@ -207,7 +245,7 @@ func TestCatalogPathsServiceResolveNamedFactoryReportsMissingDefinition(t *testi
 	if err != nil {
 		t.Fatalf("NewPathResolver: %v", err)
 	}
-	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, resolveCurrentDirFromPaths(paths), logging.NoopLogger{})
+	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, namedFactoryCatalogFromPaths(t, paths, fileSystem), resolveCurrentDirFromPaths(paths), logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewCatalogPathsService: %v", err)
 	}
@@ -239,7 +277,7 @@ func TestCatalogPathsServiceResolveNamedFactoryHonorsCancelledContext(t *testing
 	if err != nil {
 		t.Fatalf("NewPathResolver: %v", err)
 	}
-	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, resolveCurrentDirFromPaths(paths), logging.NoopLogger{})
+	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, namedFactoryCatalogFromPaths(t, paths, fileSystem), resolveCurrentDirFromPaths(paths), logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewCatalogPathsService: %v", err)
 	}
@@ -272,7 +310,7 @@ func TestCatalogPathsServiceResolveCurrentFactoryLocationUsesCurrentPointer(t *t
 	if err := paths.WriteCurrentPointer(root, "alpha"); err != nil {
 		t.Fatalf("WriteCurrentPointer: %v", err)
 	}
-	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, resolveCurrentDirFromPaths(paths), logging.NoopLogger{})
+	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, namedFactoryCatalogFromPaths(t, paths, fileSystem), resolveCurrentDirFromPaths(paths), logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewCatalogPathsService: %v", err)
 	}
@@ -299,7 +337,7 @@ func TestCatalogPathsServiceResolveCurrentFactoryLocationFallsBackToDirectLayout
 	if err != nil {
 		t.Fatalf("NewPathResolver: %v", err)
 	}
-	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, resolveCurrentDirFromPaths(paths), logging.NoopLogger{})
+	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, namedFactoryCatalogFromPaths(t, paths, fileSystem), resolveCurrentDirFromPaths(paths), logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewCatalogPathsService: %v", err)
 	}
@@ -325,7 +363,7 @@ func TestCatalogPathsServiceResolveCurrentFactoryLocationReportsMissingLayout(t 
 	if err != nil {
 		t.Fatalf("NewPathResolver: %v", err)
 	}
-	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, paths, resolveCurrentDirFromPaths(paths), logging.NoopLogger{})
+	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, namedFactoryCatalogFromPaths(t, paths, fileSystem), resolveCurrentDirFromPaths(paths), logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewCatalogPathsService: %v", err)
 	}
@@ -359,7 +397,7 @@ func TestCatalogPathsServiceListEffectiveFactoriesForwardsResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPathResolver: %v", err)
 	}
-	service, err := factorydefinitionswire.NewCatalogPathsService(listEffective, paths, resolveCurrentDirFromPaths(paths), logging.NoopLogger{})
+	service, err := factorydefinitionswire.NewCatalogPathsService(listEffective, namedFactoryCatalogFromPaths(t, paths, fileSystem), resolveCurrentDirFromPaths(paths), logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewCatalogPathsService: %v", err)
 	}
@@ -380,17 +418,18 @@ func TestCatalogPathsServiceListEffectiveFactoriesForwardsResult(t *testing.T) {
 	}
 }
 
-// TestNewCatalogPathsServiceRejectsMissingNamedPathResolver proves the public
-// Wire constructor validates namedPaths itself before capturing it into the
-// resolveNamedFactory closure. A closure value is never nil even when it
-// closes over a nil collaborator, so the internal constructor's own
-// resolveNamedFactory-is-nil check cannot catch a nil namedPaths passed at
-// this boundary; the public constructor must reject it directly.
-func TestNewCatalogPathsServiceRejectsMissingNamedPathResolver(t *testing.T) {
+// TestNewCatalogPathsServiceRejectsMissingNamedFactoryCatalog proves the
+// public Wire constructor validates namedFactoryCatalog itself before
+// capturing it into the resolveNamedFactory closure. A closure value is
+// never nil even when it closes over a nil collaborator, so the internal
+// constructor's own resolveNamedFactory-is-nil check cannot catch a nil
+// namedFactoryCatalog passed at this boundary; the public constructor must
+// reject it directly.
+func TestNewCatalogPathsServiceRejectsMissingNamedFactoryCatalog(t *testing.T) {
 	t.Parallel()
 
 	_, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, nil, resolveCurrentDirFromPaths(nil), logging.NoopLogger{})
 	if err == nil {
-		t.Fatal("NewCatalogPathsService(nil namedPaths) error = nil, want a validation error")
+		t.Fatal("NewCatalogPathsService(nil namedFactoryCatalog) error = nil, want a validation error")
 	}
 }

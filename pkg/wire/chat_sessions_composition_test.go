@@ -258,7 +258,11 @@ func TestProvideChatSessionsFactoryTargetCatalogServicePreservesCancelledContext
 	resolveCurrentDir := func(rootDir string) (string, error) {
 		return factorydefinitionswire.ResolveCurrent(namedPaths, rootDir)
 	}
-	catalogPaths, err := factorydefinitionswire.NewCatalogPathsService(listEffective, namedPaths, resolveCurrentDir, logging.NoopLogger{})
+	namedFactoryCatalog, err := factorydefinitionswire.NewNamedFactoryCatalog(namedPaths, fileSystem)
+	if err != nil {
+		t.Fatalf("NewNamedFactoryCatalog: %v", err)
+	}
+	catalogPaths, err := factorydefinitionswire.NewCatalogPathsService(listEffective, namedFactoryCatalog, resolveCurrentDir, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewCatalogPathsService: %v", err)
 	}

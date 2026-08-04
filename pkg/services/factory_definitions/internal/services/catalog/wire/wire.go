@@ -57,22 +57,6 @@ func ResolveCurrent(
 	return catalognamedfactories.ResolveCurrent(paths, rootDir)
 }
 
-// ResolveNamedFactory resolves one named Factory across project-local and
-// global catalog roots using the exact catalog-owned named-factory helper the
-// private catalog subservice's own ResolveNamedFactory method delegates to,
-// and an injected path resolver. It does not construct catalog.Service: a
-// caller that only needs named-Factory resolution gets it directly from the
-// shared named-factory helper instead of a second private subservice
-// instance.
-func ResolveNamedFactory(
-	paths factorydefinitions.NamedPathResolver,
-	projectRoot string,
-	globalRoot string,
-	name string,
-) (*factorydefinitions.NamedFactoryResolution, error) {
-	return catalognamedfactories.ResolveAcrossRoots(paths, projectRoot, globalRoot, name)
-}
-
 // NewPersistence constructs the catalog-owned Factory Definitions persistence
 // implementation from the exact serialization and filesystem ports used by owner
 // composition.
