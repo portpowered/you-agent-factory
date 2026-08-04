@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
@@ -81,6 +82,20 @@ func handleExecute(
 	service providers.Service,
 	input json.RawMessage,
 ) (json.RawMessage, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(input, &fields); err != nil {
+		envelope := decodeInputErrorEnvelope("decode execute input", err)
+		return json.Marshal(ToolResponse[providers.ExecuteResult]{Error: &envelope})
+	}
+	for field := range fields {
+		if strings.EqualFold(field, "resumeSession") {
+			envelope := decodeInputErrorEnvelope(
+				"decode execute input",
+				errors.New("resumeSession is not accepted by provider execute; continuation is not available through this MCP tool"),
+			)
+			return json.Marshal(ToolResponse[providers.ExecuteResult]{Error: &envelope})
+		}
+	}
 	return callToolJSON(input, "decode execute input", func(request ExecuteInput) ToolResponse[providers.ExecuteResult] {
 		return Execute(ctx, service, request)
 	})

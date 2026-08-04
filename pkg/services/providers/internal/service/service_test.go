@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	acpsdk "github.com/coder/acp-go-sdk"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
@@ -223,6 +224,10 @@ func (service *stubACPService) Integrations() []providers.ACPIntegration { retur
 
 func (service *stubACPService) Resolve(id providers.ID) (providers.ID, bool) {
 	return service.provider, id == service.provider
+}
+
+func (service *stubACPService) NegotiatedCapabilities(providers.ID) (acpsdk.AgentCapabilities, bool) {
+	return acpsdk.AgentCapabilities{}, false
 }
 
 func (service *stubACPService) Execute(

@@ -200,6 +200,55 @@ func TestExecuteFailureAcceptsPointerExecuteFailure(t *testing.T) {
 	}
 }
 
+func TestExecuteResumesThroughContinueWhenSessionIDPresent(t *testing.T) {
+	t.Parallel()
+
+	fake := &providersFake{}
+	runner, err := New(fake, noopPublisher)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	request := baseAgentRequest()
+	request.SessionID = "resume-session-2"
+	if _, err := runner.Execute(t.Context(), request); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	wantReference := providers.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     providers.SessionIDKind,
+		ID:       "resume-session-2",
+	}
+	if fake.continuationReference == nil || *fake.continuationReference != wantReference {
+		t.Fatalf("Providers.Continue Reference = %#v, want %#v", fake.continuationReference, wantReference)
+	}
+}
+
+func TestExecuteUnsupportedContinuationReturnsProviderError(t *testing.T) {
+	t.Parallel()
+
+	fake := &unsupportedContinuationProvidersFake{}
+	runner, err := New(fake, noopPublisher)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	request := baseAgentRequest()
+	request.SessionID = "resume-session-unsupported"
+	_, err = runner.Execute(t.Context(), request)
+	var providerErr *workers.ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("Execute() error = %v, want *workers.ProviderError", err)
+	}
+	if providerErr.Type != workers.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("ProviderError.Type = %q, want %q", providerErr.Type, workers.WorkFailureTypePermanentBadRequest)
+	}
+	if fake.executeCalls != 0 {
+		t.Fatalf("Providers.Execute calls = %d, want 0 (unsupported continuation must not fall back to a fresh attempt)", fake.executeCalls)
+	}
+}
+
 func TestExecuteForwardsInputTokensToProviders(t *testing.T) {
 	t.Parallel()
 
@@ -242,7 +291,8 @@ func baseAgentRequest() workers.RunnerExecutionRequest {
 
 type providersFake struct {
 	providers.Service
-	request providers.ExecuteRequest
+	request               providers.ExecuteRequest
+	continuationReference *providers.SessionRef
 }
 
 type failingProvidersFake struct {
@@ -255,6 +305,11 @@ type pointerFailureProvidersFake struct {
 	failure *providers.ExecuteFailure
 }
 
+type unsupportedContinuationProvidersFake struct {
+	providers.Service
+	executeCalls int
+}
+
 func noopPublisher(workers.ProgressFragment) {}
 
 func (fake *providersFake) Execute(
@@ -263,6 +318,23 @@ func (fake *providersFake) Execute(
 ) (providers.ExecuteResult, error) {
 	fake.request = request.Clone()
 	return providers.ExecuteResult{Content: "ok"}, nil
+}
+
+func (fake *providersFake) Continue(
+	_ context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	fake.request = request.Attempt.Clone()
+	reference := request.Reference.Clone()
+	fake.continuationReference = &reference
+	return providers.ContinueResult{
+		Reference: request.Reference,
+		Outcome:   providers.ContinuationOutcomeResumed,
+		Result:    providers.ExecuteResult{Content: "ok"},
+	}, nil
 }
 
 func (*providersFake) ListProviders(
@@ -284,6 +356,16 @@ func (fake *failingProvidersFake) Execute(
 	providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
 	return providers.ExecuteResult{}, fake.failure
+}
+
+func (fake *failingProvidersFake) Continue(
+	_ context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	return providers.ContinueResult{}, fake.failure
 }
 
 func (fake *failingProvidersFake) ListProviders(
@@ -315,6 +397,41 @@ func (fake *pointerFailureProvidersFake) ListProviders(
 }
 
 func (fake *pointerFailureProvidersFake) GetProvider(
+	context.Context,
+	providers.GetProviderRequest,
+) (providers.GetProviderResult, error) {
+	return providers.GetProviderResult{}, nil
+}
+
+func (fake *unsupportedContinuationProvidersFake) Execute(
+	context.Context,
+	providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	fake.executeCalls++
+	return providers.ExecuteResult{Content: "ok"}, nil
+}
+
+func (fake *unsupportedContinuationProvidersFake) Continue(
+	_ context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	return providers.ContinueResult{
+		Reference: request.Reference,
+		Outcome:   providers.ContinuationOutcomeUnsupported,
+	}, nil
+}
+
+func (*unsupportedContinuationProvidersFake) ListProviders(
+	context.Context,
+	providers.ListProvidersRequest,
+) (providers.ListProvidersResult, error) {
+	return providers.ListProvidersResult{}, nil
+}
+
+func (*unsupportedContinuationProvidersFake) GetProvider(
 	context.Context,
 	providers.GetProviderRequest,
 ) (providers.GetProviderResult, error) {

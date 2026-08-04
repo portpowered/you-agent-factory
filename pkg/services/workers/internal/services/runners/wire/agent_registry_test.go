@@ -226,6 +226,27 @@ func (fake *agentProvidersFake) Execute(
 	return fake.result, nil
 }
 
+func (fake *agentProvidersFake) Continue(
+	_ context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	fake.calls.Add(1)
+	fake.mu.Lock()
+	fake.request = request.Attempt.Clone()
+	fake.mu.Unlock()
+	if request.Attempt.UserMessage == agentFixtureExecutionFailure {
+		return providers.ContinueResult{}, errors.New("deterministic fixture failure")
+	}
+	return providers.ContinueResult{
+		Reference: request.Reference,
+		Outcome:   providers.ContinuationOutcomeResumed,
+		Result:    fake.result,
+	}, nil
+}
+
 func (fake *blockingAgentProvidersFake) Execute(
 	_ context.Context,
 	request providers.ExecuteRequest,
@@ -237,6 +258,26 @@ func (fake *blockingAgentProvidersFake) Execute(
 	fake.request = request.Clone()
 	fake.mu.Unlock()
 	return fake.result, nil
+}
+
+func (fake *blockingAgentProvidersFake) Continue(
+	_ context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	fake.calls.Add(1)
+	close(fake.entered)
+	<-fake.release
+	fake.mu.Lock()
+	fake.request = request.Attempt.Clone()
+	fake.mu.Unlock()
+	return providers.ContinueResult{
+		Reference: request.Reference,
+		Outcome:   providers.ContinuationOutcomeResumed,
+		Result:    fake.result,
+	}, nil
 }
 
 func (*agentProvidersFake) ListProviders(
@@ -335,12 +376,7 @@ func assertAgentProviderRequest(t *testing.T, request providers.ExecuteRequest) 
 		OutputSchema:     `{"type":"object"}`,
 		WorkingDirectory: "C:/fixture/work",
 		Worktree:         "C:/fixture/worktree",
-		ResumeSession: &providers.SessionRef{
-			Provider: providers.IDCodex,
-			Kind:     providers.SessionIDKind,
-			ID:       "resume-session-1",
-		},
-		EnvVars: map[string]string{"FIXTURE": "original"},
+		EnvVars:          map[string]string{"FIXTURE": "original"},
 	}
 	if !reflect.DeepEqual(request, want) {
 		t.Fatalf("Providers.Execute request = %#v, want %#v", request, want)

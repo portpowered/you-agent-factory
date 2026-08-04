@@ -122,19 +122,16 @@ func runDetachedSuccess(t *testing.T, subject Subject) {
 	request := conformanceRequest(provider)
 	wantRequest := request.Clone()
 
-	result, err := root.Execute(t.Context(), request)
+	result, err := executeConformance(t, root, t.Context(), request)
 	if err != nil {
 		t.Fatalf("Execute(success) error = %v", err)
 	}
 	assertSuccess(t, provider, result, true)
-	if request.ResumeSession.ID != conformanceSessionID {
-		t.Fatalf("caller session = %#v, want unchanged", request.ResumeSession)
-	}
 	assertObservation(t, adapter, 1, 1, wantRequest)
 
 	result.SessionRef.ID = "caller-mutated"
 	result.Diagnostics.Metadata["safe"] = "caller-mutated"
-	later, err := root.Execute(t.Context(), conformanceRequest(provider))
+	later, err := executeConformance(t, root, t.Context(), conformanceRequest(provider))
 	if err != nil {
 		t.Fatalf("second Execute(success) error = %v", err)
 	}
@@ -149,7 +146,7 @@ func runSessionlessSuccess(t *testing.T, subject Subject) {
 		Result: successResult(provider, false, nil),
 	})
 	request := conformanceRequest(provider)
-	result, err := root.Execute(t.Context(), request)
+	result, err := executeConformance(t, root, t.Context(), request)
 	if err != nil {
 		t.Fatalf("Execute(sessionless success) error = %v", err)
 	}
@@ -175,7 +172,7 @@ func runProgressSuccess(t *testing.T, subject Subject) {
 		Result: successResult(provider, true, progress),
 	})
 	request := conformanceRequest(provider)
-	result, err := root.Execute(t.Context(), request)
+	result, err := executeConformance(t, root, t.Context(), request)
 	if err != nil {
 		t.Fatalf("Execute(progress success) error = %v", err)
 	}
@@ -212,7 +209,7 @@ func runDeclaredFailure(t *testing.T, subject Subject) {
 	adapter, root := newSubjectRoot(t, subject, Plan{
 		Failure: nativeFailure,
 	})
-	result, err := root.Execute(t.Context(), request)
+	result, err := executeConformance(t, root, t.Context(), request)
 	failure := assertFailure(
 		t,
 		result,
@@ -246,7 +243,7 @@ func runParseFailure(t *testing.T, subject Subject) {
 			FinalParseError: errors.New("raw native parse payload"),
 		},
 	})
-	result, err := root.Execute(t.Context(), request)
+	result, err := executeConformance(t, root, t.Context(), request)
 	failure := assertFailure(
 		t,
 		result,
@@ -282,11 +279,11 @@ func runContextFailure(t *testing.T, subject Subject, deadline bool) {
 	outcome := make(chan executeOutcome, 1)
 	wantRequest := request.Clone()
 	go func() {
-		result, err := root.Execute(ctx, request)
+		result, err := executeConformance(t, root, ctx, request)
 		outcome <- executeOutcome{result: result, err: err}
 	}()
 	awaitStarted(t, adapter.Started)
-	request.ResumeSession.ID = "caller-mutated-in-flight"
+	request.UserMessage = "caller-mutated-in-flight"
 	if !deadline {
 		cancel()
 	}
@@ -316,7 +313,7 @@ func runPreTerminatedContext(t *testing.T, subject Subject, deadline bool) {
 	cancel()
 
 	request := conformanceRequest(provider)
-	result, err := root.Execute(ctx, request)
+	result, err := executeConformance(t, root, ctx, request)
 	assertFailure(t, result, err, wantSentinel, wantKind)
 	assertObservation(t, adapter, 0, 0, providers.ExecuteRequest{})
 }
@@ -332,7 +329,7 @@ func runLateSuccessAfterCancellation(t *testing.T, subject Subject) {
 	ctx, cancel := context.WithCancel(t.Context())
 	outcome := make(chan executeOutcome, 1)
 	go func() {
-		result, err := root.Execute(ctx, request)
+		result, err := executeConformance(t, root, ctx, request)
 		outcome <- executeOutcome{result: result, err: err}
 	}()
 	awaitStarted(t, adapter.Started)
@@ -380,6 +377,19 @@ func subjectProvider(subject Subject) providers.ID {
 	return providers.IDCodex
 }
 
+// executeConformance runs an ordinary request through the published Providers
+// root. Continuation is proven separately through Service.Continue because
+// Execute intentionally has no caller-populable session reference.
+func executeConformance(
+	t *testing.T,
+	root providers.Service,
+	ctx context.Context,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	t.Helper()
+	return root.Execute(ctx, request)
+}
+
 func conformanceRequest(provider providers.ID) providers.ExecuteRequest {
 	return providers.ExecuteRequest{
 		Provider:         provider,
@@ -389,11 +399,6 @@ func conformanceRequest(provider providers.ID) providers.ExecuteRequest {
 		OutputSchema:     `{"type":"string"}`,
 		WorkingDirectory: "C:/conformance",
 		Worktree:         "C:/conformance/tree",
-		ResumeSession: &providers.SessionRef{
-			Provider: provider,
-			Kind:     providers.SessionIDKind,
-			ID:       conformanceSessionID,
-		},
 	}
 }
 
@@ -481,9 +486,6 @@ func assertObservation(
 	for index, request := range observation.Requests {
 		if !reflect.DeepEqual(request, wantRequest) {
 			t.Fatalf("adapter request[%d] = %#v, want %#v", index, request, wantRequest)
-		}
-		if request.ResumeSession == wantRequest.ResumeSession {
-			t.Fatalf("adapter request[%d] retained caller SessionRef pointer", index)
 		}
 	}
 }

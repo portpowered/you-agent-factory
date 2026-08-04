@@ -12,6 +12,6 @@ func NewService(
 	integrations []providers.ACPIntegration,
 	commandFactory platformprocess.CommandFactory,
 	locator platformprocess.ExecutableLocator,
-) (acp.Service, error) {
+) (acp.ContinuationService, error) {
 	return acpservice.New(integrations, commandFactory, locator)
 }

@@ -46,7 +46,7 @@ func (s *service) Execute(
 	if err := validateRequest(request); err != nil {
 		return workers.RunnerExecutionResult{}, err
 	}
-	result, err := s.providers.Execute(ctx, providerRequest(request))
+	result, err := s.executeProviderAttempt(ctx, request)
 	if err != nil {
 		if failure, ok := providerFailure(err); ok {
 			response := runnerFailureResult(failure, request)
@@ -213,6 +213,42 @@ func validateRequest(request workers.RunnerExecutionRequest) error {
 	return nil
 }
 
+// executeProviderAttempt runs one provider attempt for request, resuming the
+// exact Provider Session request.SessionID names through Providers.Continue
+// when one is set, or performing an ordinary Providers.Execute attempt
+// otherwise - Providers no longer accepts a resume reference through Execute.
+// A resolved provider or session kind that truthfully cannot continue reports
+// the same typed ExecuteFailure vocabulary providerFailure already
+// translates into a runner failure result.
+func (s *service) executeProviderAttempt(
+	ctx context.Context,
+	request workers.RunnerExecutionRequest,
+) (providers.ExecuteResult, error) {
+	attempt := providerRequest(request)
+	if strings.TrimSpace(request.SessionID) == "" {
+		return s.providers.Execute(ctx, attempt)
+	}
+	reference := providers.SessionRef{
+		Provider: attempt.Provider,
+		Kind:     providers.SessionIDKind,
+		ID:       request.SessionID,
+	}
+	continued, err := s.providers.Continue(ctx, providers.ContinueRequest{
+		Reference: reference,
+		Attempt:   attempt,
+	})
+	if err != nil {
+		return providers.ExecuteResult{}, err
+	}
+	if continued.Outcome == providers.ContinuationOutcomeUnsupported {
+		return providers.ExecuteResult{}, providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindInvalidRequest,
+			Message: "provider does not support resuming this Provider Session",
+		}
+	}
+	return continued.Result, nil
+}
+
 func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRequest {
 	providerID := providerIDForRunner(request.RunnerID)
 	result := providers.ExecuteRequest{
@@ -231,13 +267,6 @@ func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRe
 		Worktree:           request.Worktree,
 		EnvVars:            cloneMetadata(request.EnvVars),
 		ProcessEnvironment: append([]string(nil), request.ProcessEnvironment...),
-	}
-	if strings.TrimSpace(request.SessionID) != "" {
-		result.ResumeSession = &providers.SessionRef{
-			Provider: providerID,
-			Kind:     providers.SessionIDKind,
-			ID:       request.SessionID,
-		}
 	}
 	return result
 }

@@ -105,6 +105,30 @@ func TestExecuteRejectsInvalidOrCrossProviderFailureSession(t *testing.T) {
 	}
 }
 
+func TestExecuteAppliesDefaultMessageForSessionNotFound(t *testing.T) {
+	t.Parallel()
+
+	executionService := mustExecutionService(t, func(
+		context.Context,
+		providers.ExecuteRequest,
+	) (providers.ExecuteResult, error) {
+		return providers.ExecuteResult{}, providers.ExecuteFailure{
+			Kind: providers.ExecuteFailureKindSessionNotFound,
+		}
+	})
+
+	_, executeErr := executionService.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:  providers.IDCodex,
+		AttemptID: "attempt-1",
+	})
+	var failure providers.ExecuteFailure
+	if !errors.As(executeErr, &failure) ||
+		failure.Kind != providers.ExecuteFailureKindSessionNotFound ||
+		failure.Message != "provider does not recognize the referenced Provider Session as live" {
+		t.Fatalf("Execute() error = %#v, want default SessionNotFound message", executeErr)
+	}
+}
+
 func TestExecuteCarriesLifecycleFailureSession(t *testing.T) {
 	t.Parallel()
 

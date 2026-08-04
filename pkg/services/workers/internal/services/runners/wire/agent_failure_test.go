@@ -175,6 +175,20 @@ func (fake *failingAgentProvidersFake) Execute(
 	return providers.ExecuteResult{}, fake.failure
 }
 
+func (fake *failingAgentProvidersFake) Continue(
+	_ context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	fake.calls.Add(1)
+	fake.mu.Lock()
+	fake.request = request.Attempt.Clone()
+	fake.mu.Unlock()
+	return providers.ContinueResult{}, fake.failure
+}
+
 type interruptingAgentProvidersFake struct {
 	agentProvidersFake
 	entered chan struct{}
@@ -198,6 +212,27 @@ func (fake *interruptingAgentProvidersFake) Execute(
 		kind = providers.ExecuteFailureKindTimeout
 	}
 	return providers.ExecuteResult{}, providerFailureFixture(kind)
+}
+
+func (fake *interruptingAgentProvidersFake) Continue(
+	ctx context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	fake.calls.Add(1)
+	fake.mu.Lock()
+	fake.request = request.Attempt.Clone()
+	fake.ctx = ctx
+	fake.mu.Unlock()
+	fake.once.Do(func() { close(fake.entered) })
+	<-ctx.Done()
+	kind := providers.ExecuteFailureKindCanceled
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		kind = providers.ExecuteFailureKindTimeout
+	}
+	return providers.ContinueResult{}, providerFailureFixture(kind)
 }
 
 func (fake *interruptingAgentProvidersFake) Context() context.Context {

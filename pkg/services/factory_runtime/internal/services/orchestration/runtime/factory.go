@@ -27,6 +27,7 @@ import (
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -77,6 +78,7 @@ type runtimeConfig struct {
 	scheduler                 scheduler.Scheduler
 	workerExecutors           map[string]workers.WorkerExecutor
 	workerService             workers.WorkstationExecutionService
+	workerSessions            workersessions.Service
 	runtimeConfig             interfaces.RuntimeDefinitionLookup
 	workflowContext           *factory_context.FactoryContext
 	runtimeMode               interfaces.RuntimeMode
@@ -113,6 +115,7 @@ func New(
 	runtimeScheduler scheduler.Scheduler,
 	workerExecutors map[string]workers.WorkerExecutor,
 	workerService workers.WorkstationExecutionService,
+	workerSessionsService workersessions.Service,
 	runtimeDefinitions interfaces.RuntimeDefinitionLookup,
 	workflowContext *factory_context.FactoryContext,
 	runtimeMode interfaces.RuntimeMode,
@@ -154,6 +157,9 @@ func New(
 	if workerService == nil {
 		return nil, fmt.Errorf("a canonical Workers workstation service is required")
 	}
+	if workerSessionsService == nil {
+		return nil, fmt.Errorf("a canonical Worker Sessions service is required")
+	}
 	if runtimeMode == "" {
 		runtimeMode = interfaces.RuntimeModeBatch
 	}
@@ -162,6 +168,7 @@ func New(
 		scheduler:                 runtimeScheduler,
 		workerExecutors:           workerExecutors,
 		workerService:             workerService,
+		workerSessions:            workerSessionsService,
 		runtimeConfig:             runtimeDefinitions,
 		workflowContext:           workflowContext,
 		runtimeMode:               runtimeMode,
@@ -192,7 +199,7 @@ func New(
 	resultBuffer := buffers.NewTypedBuffer[workerexecution.WorkResult](defaultRuntimeBufferSize)
 	effectiveEventHistory := ensureEventHistory(cfg)
 	dispatchResultHook, dispatchPlan, workersBoundary := configureRuntimeDispatch(
-		cfg, resultBuffer,
+		cfg, resultBuffer, effectiveEventHistory,
 	)
 	impl := newFactoryImpl(
 		cfg, nil, effectiveLogger, resultBuffer,
@@ -410,6 +417,7 @@ func (f *factoryImpl) recordSessionLifecycleResume() {
 func configureRuntimeDispatch(
 	cfg *runtimeConfig,
 	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult],
+	eventHistory recordings.RuntimeLedger,
 ) (
 	*dispatchPlanningResultHook,
 	dispatchplanning.Service,
@@ -424,7 +432,9 @@ func configureRuntimeDispatch(
 	var resultHook *dispatchPlanningResultHook
 	planner := dispatchplanningwire.New(
 		func(ctx context.Context, request workers.WorkstationDispatchRequest) error {
-			return workersBoundary.Publish(ctx, request, resultHook.acceptWorkersResult)
+			return startThroughWorkerSessions(
+				ctx, cfg, eventHistory, workersBoundary, request, resultHook.acceptWorkersResult,
+			)
 		},
 		workersBoundary.Cancel,
 	)

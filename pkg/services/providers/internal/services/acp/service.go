@@ -4,6 +4,7 @@ package acp
 import (
 	"context"
 
+	acpsdk "github.com/coder/acp-go-sdk"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
@@ -15,6 +16,16 @@ type Service interface {
 	Integrations() []providers.ACPIntegration
 	Resolve(providers.ID) (providers.ID, bool)
 	Execute(context.Context, providers.ID, providers.ExecuteRequest) (providers.ExecuteResult, error)
+
+	// NegotiatedCapabilities returns the exact AgentCapabilities id's daemon
+	// negotiated the last time its ACP initialize handshake completed
+	// successfully, without starting, blocking on, or otherwise causing any
+	// new provider connection or side effect. ok is false until id's daemon
+	// has completed at least one successful handshake; once true, the last
+	// successfully negotiated value is retained even while the daemon is
+	// temporarily disconnected, so a caller can never regress from a known
+	// truth back to an unknown or default claim.
+	NegotiatedCapabilities(id providers.ID) (acpsdk.AgentCapabilities, bool)
 
 	// Claim atomically captures the exact live execution generation named by
 	// id/attemptID, without any other side effect, when this service
@@ -43,6 +54,13 @@ type Service interface {
 	// and from each other (errors.Is against the returned error identifies
 	// which).
 	TryCancel(ctx context.Context, generation Generation) (accepted bool, err error)
+}
+
+// ContinuationService is the private ACP extension that receives a session
+// reference only after the Providers root has validated a Continue request.
+type ContinuationService interface {
+	Service
+	Continue(context.Context, providers.ID, providers.ExecuteRequest, providers.SessionRef) (providers.ExecuteResult, error)
 }
 
 // Generation is an opaque capability naming one exact live ACP execution

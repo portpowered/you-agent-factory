@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -11,11 +12,14 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/testdeps"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap/zapcore"
 )
@@ -79,20 +83,20 @@ func TestProvideChatSessionsServiceConstructsAnIndependentServiceDirectly(t *tes
 	}
 }
 
-// staticFactoryDefinitionsService is a minimal factorydefinitions.Service
-// double covering only ListEffectiveFactories, the sole collaborator method
-// the Chat Sessions Factory target-catalog operation depends on. Factory
-// Definitions' full production Service is only constructible from a live
-// Factory Session's SessionHost/DefinitionActivationGateway/Validator
-// (pkg/wire/factory_definition_service_provider.go's
-// provideFactoryDefinitionsFactory), so this composition test proves the
-// Chat Sessions side of the wiring (real canonical Operator Settings root,
-// real canonical logger, direct single injection, no dependency bag) with a
-// focused double standing in for the Factory Definitions root, matching the
-// same fake-collaborator convention used by
-// pkg/services/chat_sessions/internal/service's own unit tests.
+// staticFactoryDefinitionsService is a minimal
+// factorydefinitions.CatalogPathsService double covering only
+// ListEffectiveFactories, the sole collaborator method the Chat Sessions
+// Factory target-catalog operation depends on. This composition test proves
+// the Chat Sessions side of the wiring (real canonical Operator Settings
+// root, real canonical logger, direct single injection, no dependency bag)
+// with a focused double standing in for the narrow Factory Definitions
+// catalog/path capability, matching the same fake-collaborator convention
+// used by pkg/services/chat_sessions/internal/service's own unit tests. It
+// embeds the nil factorydefinitions.CatalogPathsService interface to satisfy
+// the contract; ResolveNamedFactory and ResolveCurrentFactoryLocation are
+// never exercised by this composition test.
 type staticFactoryDefinitionsService struct {
-	factorydefinitions.Service
+	factorydefinitions.CatalogPathsService
 
 	mu      sync.Mutex
 	calls   int
@@ -121,20 +125,13 @@ func (s *staticFactoryDefinitionsService) setEntries(entries []factorydefinition
 	s.entries = entries
 }
 
-// TestProvideChatSessionsFactoryTargetCatalogServiceComposesThroughTheCanonicalWireGraph
-// proves the exact provider chain pkg/wire registers for the Chat Sessions
-// Factory target-catalog root (provideChatSessionsFactoryTargetCatalogService
-// consuming the same provideOperatorSettingsService chain and canonical
-// process logger as every other canonical consumer) performs direct single
-// injection with no dependency bag, threads a real logger into the
-// operation's started/finished logs, observes live Factory Definitions
-// drift on the very next call, and never invokes anything beyond the one
-// read-only collaborator method it depends on.
-func TestProvideChatSessionsFactoryTargetCatalogServiceComposesThroughTheCanonicalWireGraph(t *testing.T) {
-	t.Parallel()
-
-	zapLogger, observed := testdeps.CapturingZapLogger(zapcore.InfoLevel)
-	logger := provideOperatorSettingsLogger(zapLogger)
+// newTestOperatorSettingsService composes the real canonical Operator
+// Settings root from a fresh edges.Edges through the exact provider chain
+// pkg/wire registers, shared by every Chat Sessions Factory target-catalog
+// composition test below that needs a genuine (non-fake) Operator Settings
+// collaborator.
+func newTestOperatorSettingsService(t *testing.T, logger logging.Logger) operatorsettings.Service {
+	t.Helper()
 
 	edges := serviceedges.Edges{}
 	files := provideOperatorSettingsFileSystem(edges)
@@ -159,6 +156,24 @@ func TestProvideChatSessionsFactoryTargetCatalogServiceComposesThroughTheCanonic
 	if err != nil {
 		t.Fatalf("provideOperatorSettingsService() error = %v", err)
 	}
+	return operatorSettings
+}
+
+// TestProvideChatSessionsFactoryTargetCatalogServiceComposesThroughTheCanonicalWireGraph
+// proves the exact provider chain pkg/wire registers for the Chat Sessions
+// Factory target-catalog root (provideChatSessionsFactoryTargetCatalogService
+// consuming the same provideOperatorSettingsService chain and canonical
+// process logger as every other canonical consumer) performs direct single
+// injection with no dependency bag, threads a real logger into the
+// operation's started/finished logs, observes live Factory Definitions
+// drift on the very next call, and never invokes anything beyond the one
+// read-only collaborator method it depends on.
+func TestProvideChatSessionsFactoryTargetCatalogServiceComposesThroughTheCanonicalWireGraph(t *testing.T) {
+	t.Parallel()
+
+	zapLogger, observed := testdeps.CapturingZapLogger(zapcore.InfoLevel)
+	logger := provideOperatorSettingsLogger(zapLogger)
+	operatorSettings := newTestOperatorSettingsService(t, logger)
 
 	factoryBuilderLocation := "/factories/@you/factory-builder"
 	factoryDefinitions := &staticFactoryDefinitionsService{
@@ -206,6 +221,100 @@ func TestProvideChatSessionsFactoryTargetCatalogServiceComposesThroughTheCanonic
 	}
 	if factoryDefinitions.callCount() != 2 {
 		t.Fatalf("ListEffectiveFactories call count = %d, want exactly 2 after a second resolution", factoryDefinitions.callCount())
+	}
+}
+
+// TestProvideChatSessionsFactoryTargetCatalogServicePreservesCancelledContextThroughRealCatalogPathsService
+// proves the canonical wire consumer boundary -- not just the narrow
+// Factory Definitions capability in isolation -- preserves the
+// pre-cancelled-context behavior the deleted ACP
+// acpServerFactoryDefinitions.ResolveNamedFactory adapter used to guarantee.
+// It composes a real, filesystem-backed factorydefinitions.CatalogPathsService
+// (not a fake) with the real Chat Sessions Factory target-catalog root
+// through the exact provider this graph registers, and a client working
+// root that requires named-path resolution. A live context resolves the
+// real on-disk Factory (proving the fixture is genuine), while an
+// already-cancelled context surfaces ErrFactoryTargetCatalogUnavailable
+// wrapping context.Canceled and returns no partial choices, instead of
+// completing filesystem resolution and succeeding.
+func TestProvideChatSessionsFactoryTargetCatalogServicePreservesCancelledContextThroughRealCatalogPathsService(t *testing.T) {
+	t.Parallel()
+
+	workingDir := t.TempDir()
+	projectRoot := factorydefinitions.ProjectFactoriesRoot(workingDir)
+	factoryDir := filepath.Join(projectRoot, "@you", "factory-builder")
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", factoryDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, "factory.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatalf("WriteFile(factory.json): %v", err)
+	}
+
+	fileSystem := platformfilesystem.Local{}
+	namedPaths, err := factorydefinitionswire.NewPathResolver(fileSystem)
+	if err != nil {
+		t.Fatalf("NewPathResolver: %v", err)
+	}
+	factoryLocation := factoryDir
+	listEffective := func(
+		context.Context,
+		factorydefinitions.ListEffectiveFactoriesRequest,
+	) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+		return factorydefinitions.ListEffectiveFactoriesResult{
+			Entries: []factorydefinitions.EffectiveFactoryCatalogEntry{
+				{
+					Name:       "@you/factory-builder",
+					Location:   &factoryLocation,
+					Definition: &factorydefinitions.FactoryConfig{Name: "Factory Builder"},
+				},
+			},
+		}, nil
+	}
+	resolveCurrentDir := func(rootDir string) (string, error) {
+		return factorydefinitionswire.ResolveCurrent(namedPaths, rootDir)
+	}
+	namedFactoryCatalog, err := factorydefinitionswire.NewNamedFactoryCatalog(namedPaths, fileSystem)
+	if err != nil {
+		t.Fatalf("NewNamedFactoryCatalog: %v", err)
+	}
+	catalogPaths, err := factorydefinitionswire.NewCatalogPathsService(listEffective, namedFactoryCatalog, resolveCurrentDir, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("NewCatalogPathsService: %v", err)
+	}
+
+	logger := logging.NoopLogger{}
+	operatorSettings := newTestOperatorSettingsService(t, logger)
+
+	catalog, err := provideChatSessionsFactoryTargetCatalogService(operatorSettings, catalogPaths, logger)
+	if err != nil {
+		t.Fatalf("provideChatSessionsFactoryTargetCatalogService() error = %v", err)
+	}
+
+	// No operator.json exists at this path, so profile resolution falls back
+	// to DefaultACPAgentProfile, whose default/allowed target is exactly
+	// "factory:@you/factory-builder" -- matching the on-disk fixture above.
+	operatorSettingsPath := filepath.Join(t.TempDir(), "config.json")
+	req := chatsessions.ResolveFactoryTargetCatalogRequest{
+		OperatorSettingsPath: operatorSettingsPath,
+		FactoryDiscovery: chatsessions.FactoryDiscoveryRoots{
+			ProjectRoot: projectRoot,
+			GlobalRoot:  filepath.Join(t.TempDir(), "global-factories"),
+		},
+		ClientWorkingRoot: workingDir,
+	}
+
+	if _, err := catalog.ResolveFactoryTargetCatalog(context.Background(), req); err != nil {
+		t.Fatalf("sanity ResolveFactoryTargetCatalog() with a live context: unexpected error: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	result, err := catalog.ResolveFactoryTargetCatalog(ctx, req)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("ResolveFactoryTargetCatalog() with a cancelled context: error = %v, want errors.Is context.Canceled", err)
+	}
+	if len(result.Choices) != 0 || result.CurrentTarget != "" {
+		t.Fatalf("ResolveFactoryTargetCatalog() with a cancelled context: result = %#v, want a zero (non-partial) result", result)
 	}
 }
 

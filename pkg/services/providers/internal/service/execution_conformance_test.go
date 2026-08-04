@@ -76,7 +76,7 @@ func (adapter *streamingAdapter) attempt(
 	adapter.recordStart(request)
 	defer adapter.recordCleanup()
 	if adapter.plan.MutateRequest {
-		request.ResumeSession.ID = "streaming-adapter-mutated"
+		request.UserMessage = "streaming-adapter-mutated"
 	}
 	if adapter.plan.WaitForContext {
 		<-ctx.Done()
@@ -139,7 +139,7 @@ func newFinalOnlyAdapter(plan executiontest.Plan) executiontest.Adapter {
 			state.mu.Unlock()
 		}()
 		if plan.MutateRequest {
-			request.ResumeSession.ID = "final-adapter-mutated"
+			request.UserMessage = "final-adapter-mutated"
 		}
 		if plan.WaitForContext {
 			<-ctx.Done()

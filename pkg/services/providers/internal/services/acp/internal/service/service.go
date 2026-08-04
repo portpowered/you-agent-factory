@@ -41,9 +41,9 @@ type Service struct {
 	locator      platformprocess.ExecutableLocator
 }
 
-var _ acp.Service = (*Service)(nil)
+var _ acp.ContinuationService = (*Service)(nil)
 
-func New(integrations []providers.ACPIntegration, newCommand platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) (acp.Service, error) {
+func New(integrations []providers.ACPIntegration, newCommand platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) (acp.ContinuationService, error) {
 	service := &Service{newCommand: newCommand, locator: locator}
 	if err := service.Configure(context.Background(), integrations); err != nil {
 		return nil, err
@@ -69,7 +69,33 @@ func (service *Service) Execute(ctx context.Context, id providers.ID, request pr
 	if !ok {
 		return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: fmt.Sprintf("ACP provider %q is unavailable", id)}
 	}
-	return daemon.execute(ctx, canonical, request)
+	return daemon.execute(ctx, canonical, request, nil)
+}
+
+// Continue resumes the exact private Providers session reference without
+// permitting an ordinary Execute caller to select a prior session.
+func (service *Service) Continue(
+	ctx context.Context,
+	id providers.ID,
+	request providers.ExecuteRequest,
+	reference providers.SessionRef,
+) (providers.ExecuteResult, error) {
+	daemon, canonical, ok := service.resolveDaemon(id)
+	if !ok {
+		return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: fmt.Sprintf("ACP provider %q is unavailable", id)}
+	}
+	return daemon.execute(ctx, canonical, request, &reference)
+}
+
+// NegotiatedCapabilities returns id's daemon's last successfully negotiated
+// AgentCapabilities without starting a connection or touching the daemon's
+// execute gate.
+func (service *Service) NegotiatedCapabilities(id providers.ID) (acpsdk.AgentCapabilities, bool) {
+	target, _, ok := service.resolveDaemon(id)
+	if !ok || target == nil {
+		return acpsdk.AgentCapabilities{}, false
+	}
+	return target.negotiatedCapabilities()
 }
 
 // Claim atomically captures the exact live cancel-window generation named by
@@ -227,9 +253,37 @@ type daemon struct {
 	stderr      bytes.Buffer
 
 	window cancelwindow.Window
+
+	// negotiatedMu guards negotiated/negotiatedKnown separately from gate so
+	// a capability read never blocks on (or is blocked by) an in-flight
+	// execute call holding the gate for the duration of a live attempt.
+	negotiatedMu    sync.RWMutex
+	negotiated      acpsdk.AgentCapabilities
+	negotiatedKnown bool
 }
 
-func (daemon *daemon) execute(ctx context.Context, id providers.ID, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+// negotiatedCapabilities returns the AgentCapabilities from the daemon's
+// last successful initialize handshake, without touching gate or causing any
+// connection side effect. ok is false until the first successful handshake.
+func (daemon *daemon) negotiatedCapabilities() (acpsdk.AgentCapabilities, bool) {
+	daemon.negotiatedMu.RLock()
+	defer daemon.negotiatedMu.RUnlock()
+	return daemon.negotiated, daemon.negotiatedKnown
+}
+
+func (daemon *daemon) recordNegotiated(capabilities acpsdk.AgentCapabilities) {
+	daemon.negotiatedMu.Lock()
+	daemon.negotiated = capabilities
+	daemon.negotiatedKnown = true
+	daemon.negotiatedMu.Unlock()
+}
+
+func (daemon *daemon) execute(
+	ctx context.Context,
+	id providers.ID,
+	request providers.ExecuteRequest,
+	resume *providers.SessionRef,
+) (providers.ExecuteResult, error) {
 	executionCtx, cancelExecution := context.WithCancel(ctx)
 	stopLifecycleWatch := context.AfterFunc(daemon.lifecycle, cancelExecution)
 	defer func() {
@@ -261,20 +315,9 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 	connection := daemon.connection
 	initialized := daemon.initialized
 
-	session, err := connection.NewSession(ctx, acpsdk.NewSessionRequest{Cwd: cwd, McpServers: []acpsdk.McpServer{}})
+	session, err := daemon.openSession(ctx, id, cwd, initialized, request, resume)
 	if err != nil {
-		var requestErr *acpsdk.RequestError
-		if errors.As(err, &requestErr) && requestErr.Code == -32000 {
-			// The current connection cannot serve work until the operator
-			// authenticates. No login operation is exposed through this service,
-			// so retaining the process only leaves an unusable daemon (and its
-			// working directory) alive. Close it now and let a later execution
-			// establish a fresh authenticated connection.
-			_ = daemon.stopLocked(context.Background())
-			return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindAuthentication, Message: "ACP authentication required" + authenticationMethodHint(initialized.AuthMethods)}
-		}
-		daemon.invalidateDisconnected(ctx)
-		return providers.ExecuteResult{}, rpcFailure(ctx, "session/new", id, err, daemon.stderr.String(), request)
+		return providers.ExecuteResult{}, err
 	}
 	daemon.client.setSessionID(string(session.SessionId))
 	modelConfig, err := applyAdvertisedModel(ctx, connection, session, request.Model)
@@ -302,6 +345,88 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 		return providers.ExecuteResult{}, withPartial(acpControlCanceledFailure(id), client, id)
 	}
 	return providers.ExecuteResult{Content: client.content(), SessionRef: &providers.SessionRef{Provider: id, Kind: providers.SessionIDKind, ID: string(session.SessionId)}, Diagnostics: &providers.ExecuteDiagnostics{Progress: completedPromptProgress(client.progressFacts()), Metadata: map[string]string{"execution_kind": "acp", "protocol_version": fmt.Sprint(initialized.ProtocolVersion), "model_config": modelConfig}}}, nil
+}
+
+// openSession resumes the exact private Provider Session reference through the native ACP
+// session/load method with its exact opaque id forwarded unchanged, and its
+// absence starts an ordinary fresh session/new. openSession never falls back
+// from a requested resume to a fresh session - a session/load failure is
+// returned as-is so a continuation can never silently adopt a different
+// Provider Session.
+func (daemon *daemon) openSession(
+	ctx context.Context,
+	id providers.ID,
+	cwd string,
+	initialized acpsdk.InitializeResponse,
+	request providers.ExecuteRequest,
+	resume *providers.SessionRef,
+) (acpsdk.NewSessionResponse, error) {
+	connection := daemon.connection
+	if resume != nil {
+		if resumeID := strings.TrimSpace(resume.ID); resumeID != "" {
+			loaded, err := connection.LoadSession(ctx, acpsdk.LoadSessionRequest{SessionId: acpsdk.SessionId(resumeID), Cwd: cwd, McpServers: []acpsdk.McpServer{}})
+			if err != nil {
+				return acpsdk.NewSessionResponse{}, daemon.sessionOpenFailure(ctx, id, "session/load", err, initialized, request)
+			}
+			return acpsdk.NewSessionResponse{Meta: loaded.Meta, ConfigOptions: loaded.ConfigOptions, Modes: loaded.Modes, SessionId: acpsdk.SessionId(resumeID)}, nil
+		}
+	}
+	session, err := connection.NewSession(ctx, acpsdk.NewSessionRequest{Cwd: cwd, McpServers: []acpsdk.McpServer{}})
+	if err != nil {
+		return acpsdk.NewSessionResponse{}, daemon.sessionOpenFailure(ctx, id, "session/new", err, initialized, request)
+	}
+	return session, nil
+}
+
+const (
+	// acpErrorCodeResourceNotFound is the ACP-reserved JSON-RPC error code
+	// (schema ErrorCodeResourceNotFound) an agent returns when a referenced
+	// resource, including a session/load id, is not recognized.
+	acpErrorCodeResourceNotFound = -32002
+
+	// JSON-RPC reserves this inclusive range for server errors. ACP agents use
+	// it for provider-side failures that are distinct from the standard JSON-RPC
+	// protocol errors such as -32603.
+	acpServerErrorMinimum = -32099
+	acpServerErrorMaximum = -32000
+)
+
+// sessionOpenFailure normalizes a session/new or session/load failure. An
+// authentication-required failure closes the unusable daemon so a later
+// execution establishes a fresh authenticated connection. A session/load
+// failure reporting ResourceNotFound means the daemon itself is healthy but
+// does not recognize the exact requested Provider Session id, so it is
+// reported as ExecuteFailureKindSessionNotFound instead of the generic RPC
+// failure Continue would otherwise be unable to distinguish from any other
+// dependency failure. Every other failure is reported through the same
+// rpcFailure normalization every other ACP RPC failure in this service uses.
+func (daemon *daemon) sessionOpenFailure(
+	ctx context.Context,
+	id providers.ID,
+	method string,
+	err error,
+	initialized acpsdk.InitializeResponse,
+	request providers.ExecuteRequest,
+) error {
+	var requestErr *acpsdk.RequestError
+	if errors.As(err, &requestErr) && requestErr.Code == -32000 {
+		// The current connection cannot serve work until the operator
+		// authenticates. No login operation is exposed through this service,
+		// so retaining the process only leaves an unusable daemon (and its
+		// working directory) alive. Close it now and let a later execution
+		// establish a fresh authenticated connection.
+		_ = daemon.stopLocked(context.Background())
+		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindAuthentication, Message: "ACP authentication required" + authenticationMethodHint(initialized.AuthMethods)}
+	}
+	if method == "session/load" && requestErr != nil && requestErr.Code == acpErrorCodeResourceNotFound {
+		daemon.invalidateDisconnected(ctx)
+		return providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindSessionNotFound,
+			Message: fmt.Sprintf("ACP provider %q does not recognize the referenced Provider Session as live", id),
+		}
+	}
+	daemon.invalidateDisconnected(ctx)
+	return rpcFailure(ctx, method, id, err, daemon.stderr.String(), request)
 }
 
 // promptWithWindow opens the cancelable window for attemptID, runs prompt,
@@ -392,6 +517,7 @@ func (daemon *daemon) ensureStarted(ctx context.Context, id providers.ID, cwd st
 	daemon.initialized = initialized
 	daemon.finished = finished
 	daemon.tree = tree
+	daemon.recordNegotiated(initialized.AgentCapabilities)
 	return nil
 }
 
@@ -543,6 +669,13 @@ func rpcFailure(ctx context.Context, method string, id providers.ID, err error, 
 		message += " (stderr: " + detail + ")"
 	}
 	kind := providers.ExecuteFailureKindUnknown
+	var requestErr *acpsdk.RequestError
+	if errors.As(err, &requestErr) && isACPServerFailure(requestErr.Code) {
+		// A server-side ACP failure is a provider dependency outcome. Workers
+		// classifies that outcome as retryable and, when a session was opened,
+		// retains the exact Provider Session for the retry continuation.
+		kind = providers.ExecuteFailureKindDependency
+	}
 	if method == "initialize" {
 		native := strings.ToLower(err.Error())
 		if strings.Contains(native, "protocol version") || strings.Contains(native, "protocolversion") {
@@ -556,6 +689,12 @@ func rpcFailure(ctx context.Context, method string, id providers.ID, err error, 
 		},
 	}}}}
 }
+
+func isACPServerFailure(code int) bool {
+	return code >= acpServerErrorMinimum && code <= acpServerErrorMaximum &&
+		code != -32000 && code != acpErrorCodeResourceNotFound
+}
+
 func safeRPCMessage(err error) string {
 	var requestErr *acpsdk.RequestError
 	if errors.As(err, &requestErr) && strings.TrimSpace(requestErr.Message) != "" {

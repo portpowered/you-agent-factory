@@ -595,6 +595,8 @@ func claudeDeclaredFailureMessage(kind providers.ExecuteFailureKind) string {
 		return "Claude encountered a temporary server error"
 	case providers.ExecuteFailureKindCanceled:
 		return "Claude execution was canceled"
+	case providers.ExecuteFailureKindSessionNotFound:
+		return "Claude does not recognize the referenced Provider Session as live"
 	default:
 		return "Claude returned a terminal failure"
 	}
