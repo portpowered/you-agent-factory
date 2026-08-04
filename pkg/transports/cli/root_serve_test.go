@@ -86,13 +86,15 @@ func TestServeFamily_VisibleInRootHelpAndDistinctFromWorkersAcpAndMcpServe(t *te
 // that only copies Use/Short/Long would silently produce -- fails this test.
 //
 // you.serve.acp declares no local manifest inputs of its own, so its only
-// local flag is Cobra's built-in --help. It does inherit the root's four
-// persistent you.flag.{debug,json,server,verbose} records -- exactly like
-// every other command family (see you.mcp/you.mcp.serve in
-// contracts/cli/commands.json) -- so those, and only those, may appear as
-// Global Flags in the real rendered output; this asserts the complete
-// rendered flag surface (local and inherited) instead of only local flags,
-// so an undeclared or unexpected inherited flag would fail this test too.
+// visible local flag is Cobra's built-in --help. It inherits the root's
+// you.flag.{debug,verbose} persistent records like every other command
+// family, but --json and --server are deliberately suppressed (see
+// suppressUnrelatedServeACPFlags in root_serve.go): --json would promise
+// structured output on stdout, already reserved for ACP protocol frames, and
+// --server configures an HTTP endpoint this command never contacts. This
+// asserts the complete rendered flag surface (local and inherited) instead
+// of only local flags, so an undeclared or unexpected flag -- including a
+// resurfaced --json/--server -- would fail this test too.
 func TestServeACPCommand_HelpRendersManifestExamplesAndNoLocalFlags(t *testing.T) {
 	var stdout bytes.Buffer
 	root := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI}).NewCommand(nil, nil, nil)
@@ -114,18 +116,36 @@ func TestServeACPCommand_HelpRendersManifestExamplesAndNoLocalFlags(t *testing.T
 			t.Fatalf("you serve acp --help missing %q:\n%s", want, got)
 		}
 	}
+	for _, unwanted := range []string{"--json", "--server"} {
+		if strings.Contains(got, unwanted) {
+			t.Fatalf("you serve acp --help must not advertise unrelated flag %q:\n%s", unwanted, got)
+		}
+	}
 
 	acpCmd, _, err := root.Find([]string{"serve", "acp"})
 	if err != nil {
 		t.Fatalf("find %q: %v", "you serve acp", err)
 	}
+	wantVisibleLocal := map[string]bool{"help": false}
 	acpCmd.LocalFlags().VisitAll(func(flag *pflag.Flag) {
-		if flag.Name != "help" {
+		if flag.Name == "json" || flag.Name == "server" {
+			if !flag.Hidden {
+				t.Fatalf("you serve acp local flag %q must be hidden", flag.Name)
+			}
+			return
+		}
+		if _, ok := wantVisibleLocal[flag.Name]; !ok {
 			t.Fatalf("you serve acp declares no manifest inputs but has local flag %q", flag.Name)
 		}
+		wantVisibleLocal[flag.Name] = true
 	})
+	for name, seen := range wantVisibleLocal {
+		if !seen {
+			t.Fatalf("you serve acp is missing the standard local flag %q", name)
+		}
+	}
 
-	wantInherited := map[string]bool{"debug": false, "json": false, "server": false, "verbose": false}
+	wantInherited := map[string]bool{"debug": false, "verbose": false}
 	acpCmd.InheritedFlags().VisitAll(func(flag *pflag.Flag) {
 		if _, ok := wantInherited[flag.Name]; !ok {
 			t.Fatalf("you serve acp advertises unrelated inherited flag %q", flag.Name)
@@ -139,6 +159,39 @@ func TestServeACPCommand_HelpRendersManifestExamplesAndNoLocalFlags(t *testing.T
 	}
 	if !strings.Contains(got, "Global Flags:") {
 		t.Fatalf("you serve acp --help missing rendered Global Flags section:\n%s", got)
+	}
+}
+
+// TestServeACPCommand_RejectsUnrelatedGlobalFlags proves --json and --server
+// are not silently accepted and ignored: passing either fails the invocation
+// with a clear diagnostic before any ACP server is dispatched.
+func TestServeACPCommand_RejectsUnrelatedGlobalFlags(t *testing.T) {
+	for _, args := range [][]string{
+		{"serve", "acp", "--json"},
+		{"serve", "acp", "--server", "http://localhost:9999"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			fake := &fakeACPServer{}
+			factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI})
+			factory.acpServer = fake
+
+			root := factory.NewCommand(nil, nil, nil)
+			var stdout, stderr bytes.Buffer
+			root.SetIn(strings.NewReader(""))
+			root.SetOut(&stdout)
+			root.SetErr(&stderr)
+			root.SetArgs(args)
+
+			if err := root.Execute(); err == nil {
+				t.Fatalf("execute %v: want an error, got success", args)
+			}
+			if fake.calls != 0 {
+				t.Fatalf("ACP server Serve called %d times, want 0 for a rejected unrelated flag", fake.calls)
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("stdout must stay empty on a rejected unrelated flag, got %q", stdout.String())
+			}
+		})
 	}
 }
 

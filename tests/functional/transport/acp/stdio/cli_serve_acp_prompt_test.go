@@ -71,7 +71,14 @@ func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 
-	factoryDir := seedFixtureFactory(t, home)
+	// cwd is installed as the fixture Factory's own project-local root (see
+	// seedFixtureFactory), so the one downstream provider dispatch's WorkDir
+	// can be asserted against it below -- proving the client-supplied
+	// session/new working root itself reaches exactly one downstream
+	// execution, not merely a resolved Factory identifier.
+	cwd := t.TempDir()
+
+	factoryDir := seedFixtureFactory(t, cwd)
 	support.SeedACPAgentProfile(t, home, fixtureFactoryTargetID, []string{fixtureFactoryTargetID})
 
 	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
@@ -82,7 +89,6 @@ func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 	})
 	support.CleanupProcess(t, process)
 
-	cwd := t.TempDir()
 	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 
 	stdinRead, stdinWrite, err := os.Pipe()
@@ -190,21 +196,18 @@ func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 	if got := runner.CallCount(); got != 1 {
 		t.Fatalf("provider command call count = %d, want exactly 1", got)
 	}
-	// The one downstream provider execution must run from the selected
-	// Factory's own installed directory, not the client's session/new cwd
-	// or some other location -- proving the selected Factory target reaches
-	// exactly one downstream execution at the expected root, not merely a
-	// resolved identifier that is never actually dispatched from. (cwd
-	// itself is a required, validated session/new input -- see
-	// chatsessions.CreateSessionRequest.WorkingRoot's non-blank
-	// requirement -- but for this fixture's global-scope named Factory
-	// target it is consumed only by catalog *resolution*, which already
-	// succeeded before dispatch; it does not additionally reappear as the
-	// installed Factory's own dispatch WorkDir, so asserting cwd itself
-	// against WorkDir here would be asserting something the production
-	// code never claims.)
+	// The fixture Factory is installed project-locally under cwd itself
+	// (factorydefinitions.ProjectFactoriesRoot(cwd), see seedFixtureFactory),
+	// the same cwd supplied as this session's session/new working root. The
+	// one downstream provider execution's WorkDir equals that installed
+	// directory, proving the client-supplied working root itself -- not
+	// merely a resolved Factory identifier -- reaches exactly one downstream
+	// execution at the expected root.
 	if got := runner.LastRequest().WorkDir; got != factoryDir {
 		t.Fatalf("provider command WorkDir = %q, want the selected Factory's own install directory %q", got, factoryDir)
+	}
+	if wantProjectRoot := factorydefinitions.ProjectFactoriesRoot(cwd); !strings.HasPrefix(factoryDir, wantProjectRoot) {
+		t.Fatalf("fixture factoryDir = %q, want it installed under the supplied working root's project catalog %q", factoryDir, wantProjectRoot)
 	}
 
 	// Process.Execute has already returned, so no further writer can append to
@@ -301,26 +304,30 @@ func agentMessageChunkText(t *testing.T, frame rpcFrame) string {
 }
 
 // seedFixtureFactory installs a minimal single-worker Factory project-locally
-// under the given project root (the same value supplied as session/new's
-// the global named-Factory root derived from home, at the exact
-// <globalRoot>/@scope/name/factory.json layout the production named-Factory
-// catalog and effective-catalog discovery both read -- the same layout
-// seedInstalledPackagedFactory (tests/functional/chat_sessions/root_composition)
-// writes for a real packaged Factory, but authored inline here as a single
-// MODEL_WORKER pipeline instead of a real packaged Factory's own business
-// workflow, so its one dispatch round is fully deterministic through a
-// ProviderCommandRunner fixture. It returns the installed Factory's own
+// under the given working root (the same cwd this test later supplies as
+// session/new's cwd param), at the exact
+// <ProjectFactoriesRoot(cwd)>/@scope/name/factory.json layout the production
+// named-Factory catalog and effective-catalog discovery both read -- the
+// same layout seedInstalledPackagedFactory
+// (tests/functional/chat_sessions/root_composition) writes for a real
+// packaged Factory, but authored inline here as a single MODEL_WORKER
+// pipeline instead of a real packaged Factory's own business workflow, so
+// its one dispatch round is fully deterministic through a
+// ProviderCommandRunner fixture. Installing project-locally (rather than
+// under the global named-Factory root) is what lets the caller prove the
+// client-supplied working root itself -- not just the selected Factory's
+// identity -- reaches the one downstream execution: production resolves a
+// project-local target's dispatch root from the same cwd-derived project
+// catalog directory (see
+// pkg/services/chat_sessions/internal/service/factory_target_catalog.go's
+// validateWorkingRootCompatibility). It returns the installed Factory's own
 // directory, which the caller asserts against the one recorded provider
-// command's WorkDir to prove the selected Factory reaches exactly one
-// downstream execution at the expected root.
-func seedFixtureFactory(t *testing.T, home string) string {
+// command's WorkDir.
+func seedFixtureFactory(t *testing.T, cwd string) string {
 	t.Helper()
 
-	globalRoot, err := factorydefinitions.NamedFactoriesRootForHome(home)
-	if err != nil {
-		t.Fatalf("NamedFactoriesRootForHome() error = %v", err)
-	}
-	factoryDir := filepath.Join(globalRoot, "@"+fixtureFactoryScope, fixtureFactoryName)
+	projectRoot := factorydefinitions.ProjectFactoriesRoot(cwd)
+	factoryDir := filepath.Join(projectRoot, "@"+fixtureFactoryScope, fixtureFactoryName)
 	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%q) error = %v", factoryDir, err)
 	}

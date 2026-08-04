@@ -11847,54 +11847,6 @@
             "since": "1.0.0"
           }
         },
-        "you.serve.acp.flag.json": {
-          "id": "you.serve.acp.flag.json",
-          "long": "json",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.json",
-          "valueType": "bool",
-          "required": false,
-          "default": "false",
-          "changedDefault": false,
-          "noOptionDefault": "true",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.serve.acp.flag.json",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.serve.acp.flag.server": {
-          "id": "you.serve.acp.flag.server",
-          "long": "server",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.server",
-          "valueType": "string",
-          "required": false,
-          "default": "http://localhost:7437",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.serve.acp.flag.server",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
         "you.serve.acp.flag.verbose": {
           "id": "you.serve.acp.flag.verbose",
           "long": "verbose",

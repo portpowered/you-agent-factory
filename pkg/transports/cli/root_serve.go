@@ -23,7 +23,65 @@ func productionServeCommand(options CommandFactory) *cobra.Command {
 	if err != nil {
 		panic(fmt.Sprintf("build serve family command: %v", err))
 	}
+	if err := suppressUnrelatedServeACPFlags(serve); err != nil {
+		panic(fmt.Sprintf("build serve family command: %v", err))
+	}
 	return serve
+}
+
+// serveACPUnrelatedFlagNames are inherited root persistent flags with no
+// ACP-stdio meaning: --json promises structured command output on stdout,
+// which is already reserved for ACP protocol frames, and --server configures
+// an HTTP API endpoint this command never contacts (it starts no HTTP or
+// dashboard listener).
+var serveACPUnrelatedFlagNames = []string{"json", "server"}
+
+// suppressUnrelatedServeACPFlags hides you serve acp's inherited --json and
+// --server flags from its rendered help and rejects them if explicitly
+// supplied.
+//
+// Cobra flag inheritance is pointer-shared: (*cobra.Command).PersistentFlags
+// registers one *pflag.Flag object on the root, and every descendant's
+// InheritedFlags() (via mergePersistentFlags/parentsPflags) references that
+// same object, so calling MarkHidden on it from here would hide --json and
+// --server on every other command too. Instead this registers new, local
+// flags of the same name directly on the acp leaf: (*cobra.Command).
+// InheritedFlags() skips any parent flag whose name already has a local
+// flag on the command (see cobra's own local.Lookup(f.Name) == nil guard),
+// so the shared root flags stay fully visible and functional on every
+// sibling command, and only acp's own local copies -- which are marked
+// hidden -- are affected.
+func suppressUnrelatedServeACPFlags(serve *cobra.Command) error {
+	acpCmd, _, err := serve.Find([]string{"acp"})
+	if err != nil {
+		return fmt.Errorf("find acp leaf: %w", err)
+	}
+	var jsonShadow bool
+	var serverShadow string
+	acpCmd.Flags().BoolVar(&jsonShadow, "json", false, "")
+	acpCmd.Flags().StringVar(&serverShadow, "server", "", "")
+	for _, name := range serveACPUnrelatedFlagNames {
+		if err := acpCmd.Flags().MarkHidden(name); err != nil {
+			return fmt.Errorf("hide flag %q: %w", name, err)
+		}
+	}
+	acpCmd.PreRunE = rejectServeACPUnrelatedFlags
+	return nil
+}
+
+// rejectServeACPUnrelatedFlags fails the invocation if a caller explicitly
+// passes --json or --server, rather than silently accepting and ignoring
+// them.
+func rejectServeACPUnrelatedFlags(cmd *cobra.Command, _ []string) error {
+	for _, name := range serveACPUnrelatedFlagNames {
+		if cmd.Flags().Changed(name) {
+			return fmt.Errorf(
+				"serve acp: --%s is not supported; ACP stdio reserves stdout for protocol frames and starts no HTTP server",
+				name,
+			)
+		}
+	}
+	return nil
 }
 
 // resolvedServeACPHandler adapts the injected ACP server into the generic
