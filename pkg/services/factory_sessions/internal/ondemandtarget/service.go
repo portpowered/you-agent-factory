@@ -174,6 +174,27 @@ type activatedRuntime struct {
 	runContext context.Context
 	cancel     context.CancelFunc
 	stopWorker factorysessions.RuntimeStop
+
+	mu         sync.Mutex
+	invocation *activeInvocation
+	closing    bool
+	closeOnce  sync.Once
+	closeErr   error
+
+	factoryTargetID string
+	config          factorysessions.RuntimeOpeningRequest
+}
+
+// activeInvocation is the one synchronous Factory invocation currently
+// executing in an activated runtime. The Chat Session admission boundary
+// serializes prompts for an episode, but keeping the cancellation handle here
+// makes the owner-published TargetExecutionService capable of interrupting
+// the exact request context that reached the provider without exposing the
+// runtime's private lifecycle internals to ACP.
+type activeInvocation struct {
+	cancel   context.CancelFunc
+	done     chan struct{}
+	canceled bool
 }
 
 func (s *Service) openActivatedRuntime(
@@ -197,7 +218,13 @@ func (s *Service) openActivatedRuntime(
 		return nil, fmt.Errorf("open Factory target runtime: %w", err)
 	}
 	runContext, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	active := &activatedRuntime{opened: opened, runContext: runContext, cancel: cancel}
+	active := &activatedRuntime{
+		opened:          opened,
+		runContext:      runContext,
+		cancel:          cancel,
+		factoryTargetID: factoryTargetID,
+		config:          config,
+	}
 	err = opened.Lifecycle.StartLifecycle(ctx, runContext)
 	if err == nil {
 		active.stopWorker, err = opened.Lifecycle.StartWorkerLifecycle(ctx)
@@ -215,32 +242,117 @@ func (s *Service) openActivatedRuntime(
 }
 
 func (a *activatedRuntime) close(ctx context.Context) error {
-	cleanupContext := context.WithoutCancel(ctx)
-	var result error
-	if a.opened.Sessions != nil {
-		if err := a.opened.Sessions.CloseFactorySession(cleanupContext, factorysessions.DefaultSessionID); err != nil &&
-			!errors.Is(err, factorysessions.ErrSessionNotFound) {
+	a.closeOnce.Do(func() {
+		a.mu.Lock()
+		a.closing = true
+		a.mu.Unlock()
+
+		cleanupContext := context.WithoutCancel(ctx)
+		var result error
+		if _, err := a.cancelInvocation(cleanupContext); err != nil {
 			result = errors.Join(result, err)
 		}
-	}
-	if a.stopWorker != nil {
-		result = errors.Join(result, a.stopWorker(cleanupContext))
-	}
-	if a.opened.Lifecycle != nil {
-		result = errors.Join(result, a.opened.Lifecycle.StopLifecycle(cleanupContext))
-	}
-	if a.cancel != nil {
-		a.cancel()
-	}
-	if a.opened.Lifecycle != nil {
-		if err := a.opened.Lifecycle.WaitForRuntime(cleanupContext); err != nil && !errors.Is(err, context.Canceled) {
-			result = errors.Join(result, err)
+		if a.opened.Sessions != nil {
+			if err := a.opened.Sessions.CloseFactorySession(cleanupContext, factorysessions.DefaultSessionID); err != nil &&
+				!errors.Is(err, factorysessions.ErrSessionNotFound) {
+				result = errors.Join(result, err)
+			}
 		}
+		if a.stopWorker != nil {
+			result = errors.Join(result, a.stopWorker(cleanupContext))
+		}
+		if a.opened.Lifecycle != nil {
+			result = errors.Join(result, a.opened.Lifecycle.StopLifecycle(cleanupContext))
+		}
+		if a.cancel != nil {
+			a.cancel()
+		}
+		if a.opened.Lifecycle != nil {
+			if err := a.opened.Lifecycle.WaitForRuntime(cleanupContext); err != nil && !errors.Is(err, context.Canceled) {
+				result = errors.Join(result, err)
+			}
+		}
+		if a.opened.CloseArtifacts != nil {
+			result = errors.Join(result, a.opened.CloseArtifacts())
+		}
+		a.closeErr = result
+	})
+	return a.closeErr
+}
+
+// beginInvocation registers the per-request cancellation context before the
+// Factory Sessions call starts. A target has one active Chat turn at a time;
+// treating a second concurrent call as an error avoids silently assigning a
+// cancel notification to the wrong invocation if that invariant is violated.
+func (a *activatedRuntime) beginInvocation(ctx context.Context) (context.Context, *activeInvocation, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.closing {
+		return nil, nil, errors.New("on-demand Factory target is closing")
 	}
-	if a.opened.CloseArtifacts != nil {
-		result = errors.Join(result, a.opened.CloseArtifacts())
+	if a.invocation != nil {
+		return nil, nil, errors.New("on-demand Factory target already has an active invocation")
 	}
-	return result
+	invocationContext, cancel := context.WithCancel(ctx)
+	invocation := &activeInvocation{cancel: cancel, done: make(chan struct{})}
+	a.invocation = invocation
+	return invocationContext, invocation, nil
+}
+
+// beginCancellation marks a live invocation as canceled and prevents another
+// one from starting on this runtime while Cancel closes it. A completed target
+// has no active invocation to cancel, so its caller receives a no-op and the
+// runtime remains available for later work.
+func (a *activatedRuntime) beginCancellation() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.closing || a.invocation == nil {
+		return false
+	}
+	a.closing = true
+	a.invocation.canceled = true
+	a.invocation.cancel()
+	return true
+}
+
+// finishInvocation clears a completed invocation and returns whether this
+// target's Cancel or Close path, rather than the caller's request context,
+// caused it to stop.
+func (a *activatedRuntime) finishInvocation(invocation *activeInvocation) bool {
+	a.mu.Lock()
+	if a.invocation == invocation {
+		a.invocation = nil
+	}
+	canceled := invocation.canceled
+	close(invocation.done)
+	a.mu.Unlock()
+	invocation.cancel()
+	return canceled
+}
+
+// cancelInvocation signals the exact active invocation and waits for its
+// Factory Sessions call to terminalize. Waiting keeps the Chat control fence
+// closed until the captured prompt has observed cancellation, so a later
+// prompt cannot inherit an in-flight provider operation. It reports false
+// when a normally completed turn has already cleared the active invocation.
+func (a *activatedRuntime) cancelInvocation(ctx context.Context) (bool, error) {
+	a.mu.Lock()
+	invocation := a.invocation
+	if invocation == nil {
+		a.mu.Unlock()
+		return false, nil
+	}
+	invocation.canceled = true
+	invocation.cancel()
+	done := invocation.done
+	a.mu.Unlock()
+
+	select {
+	case <-done:
+		return true, nil
+	case <-ctx.Done():
+		return true, ctx.Err()
+	}
 }
 
 // StartAsync opens (and keeps open) exactly one Factory target runtime for
@@ -407,7 +519,23 @@ func (s *Service) InvokeFactorySession(
 	if err != nil {
 		return factorysessions.InvocationResult{}, err
 	}
-	result, err := active.opened.Sessions.InvokeFactorySession(ctx, factorysessions.DefaultSessionID, request)
+	invocationContext, invocation, err := active.beginInvocation(ctx)
+	if err != nil {
+		return factorysessions.InvocationResult{}, err
+	}
+	result, err := active.opened.Sessions.InvokeFactorySession(invocationContext, factorysessions.DefaultSessionID, request)
+	if active.finishInvocation(invocation) {
+		if request.RequestID != nil && result.RequestID == "" {
+			result.RequestID = *request.RequestID
+		}
+		result.Status = factorysessions.InvocationTerminalStatusCanceled
+		result.ErrorCode = string(factorysessions.InvocationErrorCodeCanceled)
+		result.Message = ""
+		result.PrimaryResult = nil
+		result.SessionID = sessionID
+		s.logger.Info("on-demand Factory target invoke canceled")
+		return result, nil
+	}
 	if err != nil {
 		s.logger.Error("on-demand Factory target invoke failed")
 		return result, err
@@ -434,17 +562,64 @@ func (s *Service) SubscribeFactoryResponseEvents(
 }
 
 // Cancel cancels the exact runtime a prior StartAsync call opened for
-// sessionID.
+// sessionID. A live Factory's provider work is owned by its runtime lifecycle,
+// not the durable session control surface, so a real cancellation closes the
+// captured runtime and immediately replaces it under the same opaque target
+// identity. A later Chat turn therefore starts from a clean live runtime
+// without ever being routed to the canceled provider operation.
 func (s *Service) Cancel(
 	ctx context.Context,
 	sessionID string,
-	request factorysessions.ControlRequest,
+	_ factorysessions.ControlRequest,
 ) (factorysessions.LifecycleControlResult, error) {
 	active, err := s.lookup(sessionID)
 	if err != nil {
 		return factorysessions.LifecycleControlResult{}, err
 	}
-	return active.opened.Sessions.Cancel(ctx, factorysessions.DefaultSessionID, request)
+	if !active.beginCancellation() {
+		s.logger.Info("on-demand Factory target cancel completed", zap.String("outcome", string(factorysessions.LifecycleControlOutcomeNoOp)))
+		return factorysessions.LifecycleControlResult{
+			SessionID: sessionID,
+			Operation: factorysessions.LifecycleControlCancel,
+			Outcome:   factorysessions.LifecycleControlOutcomeNoOp,
+			Status:    factorysessions.LifecycleStatusRunning,
+		}, nil
+	}
+	if err := active.close(ctx); err != nil {
+		s.logger.Error("on-demand Factory target cancel failed")
+		return factorysessions.LifecycleControlResult{}, err
+	}
+	replacement, err := s.openActivatedRuntime(ctx, active.factoryTargetID, active.config)
+	if err != nil {
+		s.logger.Error("on-demand Factory target reset failed")
+		return factorysessions.LifecycleControlResult{}, err
+	}
+	if !s.replaceActivation(sessionID, active, replacement) {
+		_ = replacement.close(context.WithoutCancel(ctx))
+		return factorysessions.LifecycleControlResult{}, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, sessionID)
+	}
+	s.logger.Info("on-demand Factory target cancel completed", zap.String("outcome", string(factorysessions.LifecycleControlOutcomeAccepted)))
+	return factorysessions.LifecycleControlResult{
+		SessionID: sessionID,
+		Operation: factorysessions.LifecycleControlCancel,
+		Outcome:   factorysessions.LifecycleControlOutcomeAccepted,
+		Status:    factorysessions.LifecycleStatusRunning,
+	}, nil
+}
+
+// replaceActivation swaps a closed, canceled runtime for its freshly opened
+// successor only when sessionID still refers to that exact captured runtime.
+// A concurrent full CloseFactorySession wins by removing the mapping; in that
+// case the caller observes ErrSessionNotFound and the successor is closed by
+// Cancel before it returns.
+func (s *Service) replaceActivation(sessionID string, current, replacement *activatedRuntime) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.runtimes[sessionID] != current {
+		return false
+	}
+	s.runtimes[sessionID] = replacement
+	return true
 }
 
 // CloseFactorySession tears down and evicts the exact runtime a prior

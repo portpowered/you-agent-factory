@@ -98,6 +98,7 @@ type fakeSessions struct {
 	invokeCalls  []string
 	invokeResult factorysessions.InvocationResult
 	invokeErr    error
+	invoke       func(context.Context, string, factorysessions.InvocationRequest) (factorysessions.InvocationResult, error)
 
 	cancelCalls    []string
 	cancelContexts []context.Context
@@ -110,12 +111,18 @@ type fakeSessions struct {
 }
 
 func (f *fakeSessions) InvokeFactorySession(
-	_ context.Context, sessionID string, _ factorysessions.InvocationRequest,
+	ctx context.Context, sessionID string, request factorysessions.InvocationRequest,
 ) (factorysessions.InvocationResult, error) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.invokeCalls = append(f.invokeCalls, sessionID)
-	return f.invokeResult, f.invokeErr
+	invoke := f.invoke
+	result := f.invokeResult
+	err := f.invokeErr
+	f.mu.Unlock()
+	if invoke != nil {
+		return invoke(ctx, sessionID, request)
+	}
+	return result, err
 }
 
 func (f *fakeSessions) Cancel(

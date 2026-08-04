@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -67,23 +68,32 @@ func TestInvokeFactorySessionUnknownIdentityReportsSessionNotFound(t *testing.T)
 	}
 }
 
-// ctxKey is a private context key type for a test-only value, used to prove
-// Cancel forwards the caller's original context rather than substituting or
-// dropping it.
-type ctxKey string
-
-// TestCancelForwardsContextAndControlRequestToTheCapturedRuntime proves
-// Cancel forwards the exact caller context and ControlRequest to the
-// captured runtime's own Cancel call (against its DefaultSessionID, exactly
-// like InvokeFactorySession already does) and returns its lifecycle result or
-// error unchanged -- without reclassifying the outcome.
-func TestCancelForwardsContextAndControlRequestToTheCapturedRuntime(t *testing.T) {
-	cancelResult := factorysessions.LifecycleControlResult{
-		Operation: factorysessions.LifecycleControlKind("CANCEL"),
-		Outcome:   factorysessions.LifecycleControlOutcome("APPLIED"),
-	}
-	sessions := &fakeSessions{cancelResult: cancelResult}
-	opener := &fakeOpener{opened: roles.OpenedInvocationRuntime{Sessions: sessions, Lifecycle: &fakeLifecycle{}}}
+// TestCancelInterruptsOnlyTheActiveInvocation proves Cancel owns the
+// request-scoped context of the captured target's active invocation, waits
+// for it to terminalize as CANCELED, and replaces the stopped runtime under
+// the same opaque target identity for a later prompt. It intentionally does
+// not delegate to factorysessions.Service.Cancel: that contract addresses
+// durable sessions, while this on-demand runtime is a live target whose
+// provider work is governed by the runtime lifecycle.
+func TestCancelInterruptsOnlyTheActiveInvocation(t *testing.T) {
+	startedSignal := make(chan struct{})
+	invocationCount := 0
+	sessions := &fakeSessions{invoke: func(ctx context.Context, _ string, _ factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
+		invocationCount++
+		if invocationCount == 1 {
+			close(startedSignal)
+			<-ctx.Done()
+			return factorysessions.InvocationResult{}, ctx.Err()
+		}
+		return factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}, nil
+	}}
+	lifecycle := &fakeLifecycle{}
+	replacementSessions := &fakeSessions{invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}}
+	replacementLifecycle := &fakeLifecycle{}
+	opener := &sequencedOpener{results: []openResult{
+		{opened: roles.OpenedInvocationRuntime{Sessions: sessions, Lifecycle: lifecycle}},
+		{opened: roles.OpenedInvocationRuntime{Sessions: replacementSessions, Lifecycle: replacementLifecycle}},
+	}}
 	resolve := func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
 		return factorysessions.RuntimeOpeningRequest{}, nil
 	}
@@ -94,23 +104,51 @@ func TestCancelForwardsContextAndControlRequestToTheCapturedRuntime(t *testing.T
 		t.Fatalf("StartAsync() error = %v", err)
 	}
 
-	ctx := context.WithValue(context.Background(), ctxKey("trace"), "trace-1")
-	request := factorysessions.ControlRequest{RequestID: "control-1", Reason: "user requested"}
-	result, err := svc.Cancel(ctx, started.SessionID, request)
+	requestID := "turn-1"
+	invokeResult := make(chan struct {
+		result factorysessions.InvocationResult
+		err    error
+	}, 1)
+	go func() {
+		result, err := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{RequestID: &requestID})
+		invokeResult <- struct {
+			result factorysessions.InvocationResult
+			err    error
+		}{result: result, err: err}
+	}()
+	select {
+	case <-startedSignal:
+	case <-time.After(5 * time.Second):
+		t.Fatal("active invocation did not start")
+	}
+
+	result, err := svc.Cancel(context.Background(), started.SessionID, factorysessions.ControlRequest{RequestID: "control-1", Reason: "user requested"})
 	if err != nil {
 		t.Fatalf("Cancel() error = %v", err)
 	}
-	if result != cancelResult {
-		t.Fatalf("Cancel() result = %+v, want the captured runtime's own result %+v unchanged", result, cancelResult)
+	if result.SessionID != started.SessionID || result.Operation != factorysessions.LifecycleControlCancel || result.Outcome != factorysessions.LifecycleControlOutcomeAccepted {
+		t.Fatalf("Cancel() result = %+v, want accepted cancellation for %q", result, started.SessionID)
 	}
-	if len(sessions.cancelRequests) != 1 || sessions.cancelRequests[0] != request {
-		t.Fatalf("captured runtime cancel requests = %v, want exactly the original ControlRequest %+v", sessions.cancelRequests, request)
+	got := <-invokeResult
+	if got.err != nil {
+		t.Fatalf("canceled InvokeFactorySession() error = %v, want published canceled result", got.err)
 	}
-	if len(sessions.cancelContexts) != 1 || sessions.cancelContexts[0].Value(ctxKey("trace")) != "trace-1" {
-		t.Fatal("captured runtime Cancel did not receive the original caller context")
+	if got.result.Status != factorysessions.InvocationTerminalStatusCanceled || got.result.ErrorCode != string(factorysessions.InvocationErrorCodeCanceled) || got.result.SessionID != started.SessionID || got.result.RequestID != requestID {
+		t.Fatalf("canceled InvokeFactorySession() result = %+v, want the published canceled outcome for %q", got.result, started.SessionID)
 	}
-	if sessions.cancelCalls[0] != factorysessions.DefaultSessionID {
-		t.Fatalf("Cancel() dispatched sessionID = %q, want the runtime's own DefaultSessionID", sessions.cancelCalls[0])
+	if lifecycle.stopCalls != 1 {
+		t.Fatalf("StopLifecycle calls = %d, want 1 because cancellation stops the captured provider runtime", lifecycle.stopCalls)
+	}
+
+	second, err := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{})
+	if err != nil || second.Status != factorysessions.InvocationTerminalStatusCompleted {
+		t.Fatalf("later InvokeFactorySession() = (%+v, %v), want completed invocation through the replacement runtime", second, err)
+	}
+	if len(opener.calls) != 2 {
+		t.Fatalf("OpenInvocationRuntime calls = %d, want the original and replacement runtime", len(opener.calls))
+	}
+	if len(replacementSessions.invokeCalls) != 1 || replacementLifecycle.stopCalls != 0 {
+		t.Fatalf("replacement runtime = (invoke calls %v, StopLifecycle calls %d), want one later invocation and no close", replacementSessions.invokeCalls, replacementLifecycle.stopCalls)
 	}
 }
 
@@ -183,18 +221,19 @@ func TestInvokeAndCancelIsolationBetweenMultipleStartedTargets(t *testing.T) {
 	if _, err := svc.InvokeFactorySession(context.Background(), first.SessionID, factorysessions.InvocationRequest{}); err != nil {
 		t.Fatalf("InvokeFactorySession(first) error = %v", err)
 	}
-	if _, err := svc.Cancel(context.Background(), second.SessionID, factorysessions.ControlRequest{}); err != nil {
+	canceled, err := svc.Cancel(context.Background(), second.SessionID, factorysessions.ControlRequest{})
+	if err != nil {
 		t.Fatalf("Cancel(second) error = %v", err)
+	}
+	if canceled.SessionID != second.SessionID || canceled.Outcome != factorysessions.LifecycleControlOutcomeNoOp {
+		t.Fatalf("Cancel(second) result = %+v, want a no-op scoped to the inactive second target", canceled)
 	}
 
 	if len(firstSessions.invokeCalls) != 1 {
 		t.Fatalf("first target invoke calls = %v, want exactly 1", firstSessions.invokeCalls)
 	}
-	if len(firstSessions.cancelCalls) != 0 {
-		t.Fatalf("first target cancel calls = %v, want zero -- cancel targeted the second activation", firstSessions.cancelCalls)
-	}
-	if len(secondSessions.cancelCalls) != 1 {
-		t.Fatalf("second target cancel calls = %v, want exactly 1", secondSessions.cancelCalls)
+	if len(firstSessions.cancelCalls) != 0 || len(secondSessions.cancelCalls) != 0 {
+		t.Fatalf("durable session cancel calls = (%v, %v), want none -- an inactive live target has no invocation context to interrupt", firstSessions.cancelCalls, secondSessions.cancelCalls)
 	}
 	if len(secondSessions.invokeCalls) != 0 {
 		t.Fatalf("second target invoke calls = %v, want zero -- invoke targeted the first activation", secondSessions.invokeCalls)
@@ -464,11 +503,15 @@ func TestServiceSatisfiesPublishedTargetExecutionCapability(t *testing.T) {
 		t.Fatalf("invoke calls = %v, want exactly 1 dispatched to the captured runtime", sessions.invokeCalls)
 	}
 
-	if _, err := client.Cancel(context.Background(), started.SessionID, factorysessions.ControlRequest{}); err != nil {
+	cancelled, err := client.Cancel(context.Background(), started.SessionID, factorysessions.ControlRequest{})
+	if err != nil {
 		t.Fatalf("Cancel() via TargetExecutionService error = %v", err)
 	}
-	if len(sessions.cancelCalls) != 1 {
-		t.Fatalf("cancel calls = %v, want exactly 1 forwarded to the captured runtime", sessions.cancelCalls)
+	if cancelled.SessionID != started.SessionID || cancelled.Outcome != factorysessions.LifecycleControlOutcomeNoOp {
+		t.Fatalf("Cancel() via TargetExecutionService result = %+v, want a no-op scoped to a completed target", cancelled)
+	}
+	if len(sessions.cancelCalls) != 0 {
+		t.Fatalf("durable session cancel calls = %v, want none -- this target cancels only a live invocation context", sessions.cancelCalls)
 	}
 
 	if err := client.CloseFactorySession(context.Background(), started.SessionID); err != nil {
