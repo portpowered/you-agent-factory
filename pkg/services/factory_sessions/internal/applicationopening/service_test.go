@@ -549,3 +549,70 @@ func TestOpenApplicationPublishesHistoricalReplayInspectionWithoutLiveBindings(t
 		t.Fatal("historical replay unexpectedly bound live runtime components")
 	}
 }
+
+func TestOpenApplicationClosesHistoricalReplayResourcesWhenLifecyclePlanningFails(t *testing.T) {
+	t.Parallel()
+
+	planErr := errors.New("plan historical replay failed")
+	closeErr := errors.New("close historical replay failed")
+	inspection := factorysessions.HistoricalReplayInspection{
+		Session: factorysessions.SessionReadResult{SessionID: "recorded-session"},
+	}
+	closed := 0
+	adapted := false
+	service, err := New(
+		func(
+			context.Context,
+			*factorysessions.RuntimeOpeningRequest,
+			roles.ApplicationOpeningPorts,
+			*zap.Logger,
+		) (RuntimeInputs, error) {
+			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}, Logger: zap.NewNop()}, nil
+		},
+		runtimeOpenerFunc(func(
+			context.Context,
+			*factorysessions.RuntimeOpeningRequest,
+			runtimeopening.ExternalEffects,
+			*zap.Logger,
+		) (roles.OpenedApplicationRuntime, error) {
+			return roles.OpenedApplicationRuntime{
+				HistoricalReplay: &inspection,
+				Resources: roles.RuntimeResources{Close: func() error {
+					closed++
+					return closeErr
+				}},
+			}, nil
+		}),
+		func(
+			roles.OpenedApplicationRuntime,
+			runtimeopening.ExternalEffects,
+			factoryvisualization.Sink,
+		) (factorysessions.BoundProcessComponents, error) {
+			adapted = true
+			return factorysessions.BoundProcessComponents{}, nil
+		},
+		func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) {
+			return lifecycle.Plan{}, planErr
+		},
+	)
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+
+	_, err = service.OpenApplication(
+		context.Background(),
+		roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}},
+		zap.NewNop(),
+		nil,
+	)
+	if !errors.Is(err, planErr) || !errors.Is(err, closeErr) ||
+		!strings.Contains(err.Error(), "plan Factory Session historical replay lifecycle") {
+		t.Fatalf("OpenApplication() error = %v, want historical planning and cleanup causes", err)
+	}
+	if closed != 1 {
+		t.Fatalf("resource close count = %d, want 1", closed)
+	}
+	if adapted {
+		t.Fatal("historical replay unexpectedly bound live runtime components")
+	}
+}
