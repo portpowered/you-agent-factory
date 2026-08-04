@@ -292,7 +292,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	inputDirectoryWalker := provideFactoryRuntimeInputDirectoryWalker(edges2)
 	orchestrationCompilation := provideOrchestrationCompilation(factoryIDGenerator, javaScriptWorkflows)
 	v51 := wire.NewRuntimeFactory(quorumPolicyService, invocationOutputShapingService, workPropagationPolicyService, workService, decisionEnvelopeService, runtimeLoggerFactory, runtimeLogSinkFactory, runtimeMetricsSinkFactory, factoryIDGenerator, requestIDGenerator, runtimeDirectoryFileSystem, inputFileSystem, inputDirectoryWalker, orchestrationCompilation)
-	v52, err := wire.NewAssembly(v51)
+	workerSessionsFactory := provideWorkerSessionsFactory(eventsService, loggingLogger)
+	v52, err := wire.NewAssembly(v51, workerSessionsFactory)
 	if err != nil {
 		return nil, err
 	}
@@ -605,6 +606,7 @@ var apiSet = wire4.NewSet(http.NewAdapter, http.NewHandler, composition.NewHTTPB
 var servicesSet = wire4.NewSet(
 	provideProvidersService,
 	provideEventsService,
+	provideWorkerSessionsFactory,
 	provideApplicationProcessLifecycle,
 	provideProviderRegistry,
 	provideProviderRegistryRebinder, wire4.Bind(new(application.ProviderRegistry), new(workers.ProviderRegistry)), provideFactorySessionProviderIdentityResolver, wire2.NewRequestPreparation, provideFactorySessionHTTPRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,

@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"path/filepath"
@@ -118,6 +119,7 @@ func (f *RuntimeFactory) Build(
 	newRuntimeLedger factory.RuntimeLedgerFactory,
 	loadWorkerExecutors func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error),
 	workerService runtimeWorkstationService,
+	workerSessionsFactory factory.WorkerSessionsFactory,
 	dispatchCompleted func(string),
 ) (*factoryhost.Bundle, error) {
 	if f == nil || f.newID == nil {
@@ -163,6 +165,15 @@ func (f *RuntimeFactory) Build(
 	if structuredLogger == nil {
 		_ = logSink.Close()
 		return nil, fmt.Errorf("runtime logger factory returned nil")
+	}
+	if workerSessionsFactory == nil {
+		_ = logSink.Close()
+		return nil, fmt.Errorf("Worker Sessions factory is required")
+	}
+	workerSessions, err := workerSessionsFactory(workerService)
+	if err != nil {
+		_ = logSink.Close()
+		return nil, fmt.Errorf("construct Worker Sessions service: %w", err)
 	}
 	metricsSink, err := buildRuntimeMetricsSink(
 		f.runtimeMetrics,
@@ -219,6 +230,7 @@ func (f *RuntimeFactory) Build(
 		dispatchCompleted, logger, structuredLogger, logSink, metricsSink, net, eventHistory,
 		workerExecutors,
 		workerService,
+		workerSessions,
 		f.workService,
 		f.quorumPolicy,
 		f.outputShaping,
@@ -265,6 +277,7 @@ func assembleRuntimeBundle(
 	eventHistory recordings.RuntimeLedger,
 	workerExecutors map[string]workers.WorkerExecutor,
 	workerService runtimeWorkstationService,
+	workerSessions workersessions.Service,
 	workService work.Service,
 	quorumPolicy interfaces.QuorumPolicyService,
 	outputShaping interfaces.InvocationOutputShapingService,
@@ -307,6 +320,7 @@ func assembleRuntimeBundle(
 		runtimeScheduler,
 		workerExecutors,
 		workerService,
+		workerSessions,
 		loadedFactoryCfg,
 		RuntimeWorkflowContext(loadedFactoryCfg.FactoryConfig(), sessionID),
 		runtimeMode,

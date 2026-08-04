@@ -203,7 +203,7 @@ func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (
 		r.publishTerminalRecordOrLog(ctx, req.ID, attemptID, finalState, terminal)
 	}
 
-	return workersessions.StartResult{Session: final}, nil
+	return workersessions.StartResult{Session: final, Dispatch: dispatchResult, DispatchErr: dispatchErr}, nil
 }
 
 // reserveIfAbsent stores id as a new StateReserved session when it is not

@@ -59,6 +59,7 @@ func NewRuntimeBuild(
 	baseLogger *zap.Logger,
 	runtimeFactory *RuntimeFactory,
 	workerExecution workers.RuntimeService,
+	workerSessionsFactory factory.WorkerSessionsFactory,
 	sessionBuildFactory workers.SessionBuildFactory,
 	runtimeExecutorsFactory factory.WorkersRuntimeExecutorsFactory,
 	mockCommandRunnerFactory factory.WorkersMockCommandRunnerFactory,
@@ -143,6 +144,7 @@ func NewRuntimeBuild(
 				skipRunnerPrerequisiteValidation,
 				invocationSkipPermissionsOverride,
 				runtimeWorkers,
+				workerSessionsFactory,
 				runtimeExecutorsFactory,
 				progressPublisher,
 				runtimeFactory,
@@ -183,6 +185,7 @@ func buildBundle(
 	skipRunnerPrerequisiteValidation bool,
 	invocationSkipPermissionsOverride *bool,
 	workerExecution workers.RuntimeService,
+	workerSessionsFactory factory.WorkerSessionsFactory,
 	runtimeExecutorsFactory factory.WorkersRuntimeExecutorsFactory,
 	progressPublisher workers.ProgressPublisher,
 	runtimeFactory *RuntimeFactory,
@@ -275,6 +278,7 @@ func buildBundle(
 			)
 		},
 		workerExecution,
+		workerSessionsFactory,
 		dispatchCompleted,
 	)
 }
