@@ -215,8 +215,23 @@ func scanCompleteLines(data []byte, atEOF bool) (advance int, token []byte, err 
 // awaited (promptGroup.Wait, deferred) before this method returns, even on
 // the early-return failure path, so Serve never returns while a response it
 // may still write is in flight -- only the abandoned read loop goroutine,
-// which writes nothing further once EOF or another failure eventually
-// reaches it, is exempted from that wait.
+// which is blocked purely inside Scan with no line of its own left to act
+// on, is exempted from that wait.
+//
+// Being abandoned inside a blocked Scan call is the *only* thing that
+// goroutine is ever allowed to still be doing once this method returns.
+// dispatchGate (pkg/platform/taskgroup.Gate) enforces that: every unit of
+// dispatch work readConnectionLines is about to issue for an
+// already-scanned line -- a synchronous response write, a "session/cancel"
+// forward, or registering a "session/prompt" onto promptGroup -- first calls
+// dispatchGate.Enter, and dispatchGate.Close (deferred here, before
+// promptGroup.Wait so it runs first) blocks until any such in-flight unit
+// finishes being issued before permanently closing the gate. So if Scan
+// unblocks with new input after this method has already committed to
+// returning, dispatchConnectionLine's Enter call simply fails and that line
+// is never acted on -- it can never reach a "session/cancel" forward, a
+// fresh response write, or a new promptGroup registration after Serve has
+// decided to end the connection.
 func (s *Server) serveConnection(ctx context.Context, connectionID identity.ConnectionID, in io.Reader, out io.Writer) error {
 	scanner := bufio.NewScanner(in)
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
@@ -244,9 +259,18 @@ func (s *Server) serveConnection(ctx context.Context, connectionID identity.Conn
 	var promptGroup taskgroup.Group
 	defer promptGroup.Wait()
 
+	// dispatchGate must close before promptGroup is awaited: closing it
+	// first blocks until any dispatch that was still being issued (see
+	// dispatchConnectionLine) has finished issuing -- including, for a
+	// "session/prompt" line, its promptGroup.Go registration -- so the
+	// subsequent promptGroup.Wait sees every task that will ever be
+	// registered on this connection.
+	var dispatchGate taskgroup.Gate
+	defer dispatchGate.Close()
+
 	var readGroup taskgroup.Group
 	readGroup.Go(func() error {
-		return s.readConnectionLines(ctx, scanner, connectionID, writeResponseLocked, notify, &promptGroup)
+		return s.readConnectionLines(ctx, scanner, connectionID, writeResponseLocked, notify, &promptGroup, &dispatchGate)
 	})
 
 	select {
@@ -263,7 +287,10 @@ func (s *Server) serveConnection(ctx context.Context, connectionID identity.Conn
 // deliberate shutdown or an already-reported dispatched-prompt write failure
 // stops this loop from reading further input as soon as it is between two
 // reads -- though only serveConnection's own concurrent select, not this
-// check, can react while a Scan call already in flight is still blocked.
+// check, can react while a Scan call already in flight is still blocked. For
+// a line Scan does return, dispatchGate gates the actual dispatch (see
+// dispatchConnectionLine) so a connection shutdown decided while Scan was
+// blocked can never race with that line reaching a handler.
 func (s *Server) readConnectionLines(
 	ctx context.Context,
 	scanner *bufio.Scanner,
@@ -271,6 +298,7 @@ func (s *Server) readConnectionLines(
 	writeResponseLocked func(identity.RequestIdentity, json.RawMessage, *acpsdk.RequestError) error,
 	notify promptNotifier,
 	promptGroup *taskgroup.Group,
+	dispatchGate *taskgroup.Gate,
 ) error {
 	var notificationSeq uint64
 	for {
@@ -299,41 +327,74 @@ func (s *Server) readConnectionLines(
 		}
 		raw := append(json.RawMessage(nil), line...)
 
-		reqCtx := contextWithPromptNotifier(ctx, notify)
-		env, decodeErr := envelope.Decode(connectionID, notificationSeq, raw)
-		if decodeErr != nil {
-			rpcErr, wireID, hasID := protocol.RejectEnvelope(decodeErr)
-			var rejectedIdentity identity.RequestIdentity
-			if hasID {
-				// connectionID is always non-blank for a real connection, and
-				// wireID is already validated by envelope.Decode, so
-				// NewCorrelated can never fail here.
-				rejectedIdentity, _ = identity.NewCorrelated(connectionID, wireID)
-			}
-			if err := writeResponseLocked(rejectedIdentity, nil, rpcErr); err != nil {
-				return err
-			}
-			continue
+		release, ok := dispatchGate.Enter()
+		if !ok {
+			// The connection is already shutting down (see serveConnection's
+			// doc comment): this line arrived after that decision was made,
+			// so it must never reach a handler, a response write, or a new
+			// promptGroup registration.
+			return promptGroup.Err()
 		}
-
-		if env.IsNotification {
-			notificationSeq++
-			if env.Method == acpsdk.AgentMethodSessionCancel {
-				s.handleSessionCancel(reqCtx, env)
-			}
-			continue
-		}
-
-		if env.Method == acpsdk.AgentMethodSessionPrompt {
-			s.dispatchAsyncSessionPrompt(reqCtx, env, promptGroup, writeResponseLocked)
-			continue
-		}
-
-		result, rpcErr := s.dispatchRequest(reqCtx, env)
-		if err := writeResponseLocked(env.Identity, result, rpcErr); err != nil {
+		stop, err := s.dispatchConnectionLine(ctx, connectionID, raw, &notificationSeq, notify, writeResponseLocked, promptGroup)
+		release()
+		if stop {
 			return err
 		}
 	}
+}
+
+// dispatchConnectionLine decodes and dispatches exactly one already-scanned,
+// non-empty JSON-RPC line: a malformed-envelope rejection, a
+// "session/cancel" forward, an asynchronous "session/prompt" registration,
+// or a synchronous request dispatch and response write. Called only while
+// the caller holds an Enter'd dispatchGate slot, so every branch here is
+// guaranteed to finish being issued before serveConnection's deferred
+// dispatchGate.Close can complete. stop reports whether the read loop must
+// end, carrying err as its result when it does.
+func (s *Server) dispatchConnectionLine(
+	ctx context.Context,
+	connectionID identity.ConnectionID,
+	raw json.RawMessage,
+	notificationSeq *uint64,
+	notify promptNotifier,
+	writeResponseLocked func(identity.RequestIdentity, json.RawMessage, *acpsdk.RequestError) error,
+	promptGroup *taskgroup.Group,
+) (stop bool, err error) {
+	reqCtx := contextWithPromptNotifier(ctx, notify)
+	env, decodeErr := envelope.Decode(connectionID, *notificationSeq, raw)
+	if decodeErr != nil {
+		rpcErr, wireID, hasID := protocol.RejectEnvelope(decodeErr)
+		var rejectedIdentity identity.RequestIdentity
+		if hasID {
+			// connectionID is always non-blank for a real connection, and
+			// wireID is already validated by envelope.Decode, so
+			// NewCorrelated can never fail here.
+			rejectedIdentity, _ = identity.NewCorrelated(connectionID, wireID)
+		}
+		if err := writeResponseLocked(rejectedIdentity, nil, rpcErr); err != nil {
+			return true, err
+		}
+		return false, nil
+	}
+
+	if env.IsNotification {
+		*notificationSeq++
+		if env.Method == acpsdk.AgentMethodSessionCancel {
+			s.handleSessionCancel(reqCtx, env)
+		}
+		return false, nil
+	}
+
+	if env.Method == acpsdk.AgentMethodSessionPrompt {
+		s.dispatchAsyncSessionPrompt(reqCtx, env, promptGroup, writeResponseLocked)
+		return false, nil
+	}
+
+	result, rpcErr := s.dispatchRequest(reqCtx, env)
+	if err := writeResponseLocked(env.Identity, result, rpcErr); err != nil {
+		return true, err
+	}
+	return false, nil
 }
 
 // dispatchAsyncSessionPrompt runs one "session/prompt" exchange on its own

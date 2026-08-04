@@ -2715,3 +2715,177 @@ func TestServeSessionCancelBlankSessionIDIsNoOp(t *testing.T) {
 		t.Fatalf("Cancel call count = %d, want 0 for a blank sessionId", len(factoryTarget.cancelCalls))
 	}
 }
+
+// serveUntilAsyncWriteFailureWithReaderStillOpen drives a Server through
+// exactly the sequence TestServeAsyncWriteFailureStopsAllFurtherConnectionActivity's
+// subtests need: one "session/prompt" is admitted and invoked against a
+// captured Factory Session bound to "fs-already-bound", its response write
+// fails, and Serve returns that failure -- all proven through real events
+// (the buffered done receive), never a sleep -- while leaving the input side
+// of the pipe open and unread-from, exactly the "output already broken,
+// input still open" case serveConnection's own doc comment describes. The
+// returned pw is still writable; the caller may write exactly one further
+// line to it to test what happens to input that arrives after Serve has
+// already returned. Writing a second line after that first one would block
+// forever once the underlying read loop's goroutine has already rejected the
+// first and exited -- see the three subtests below, each of which writes
+// only one.
+func serveUntilAsyncWriteFailureWithReaderStillOpen(t *testing.T) (chatSessions *fakeChatSessionsService, factoryTarget *fakeFactoryTargetService, pw *io.PipeWriter, writer *countingErrorWriter) {
+	t.Helper()
+
+	getSessionResult := sessionAt("session-1", "factory:@you/review", 3, "/work/project")
+	// handleSessionCancel resolves the bound Factory Session identity through
+	// its own, separate GetSession call, so this fake's Episode must carry
+	// the same FactorySessionID startTurnResult's Episode below does.
+	getSessionResult.Episode = chatsessions.TargetEpisode{
+		Number: 1, State: chatsessions.TargetEpisodeStateOpen,
+		Target:           chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
+		FactorySessionID: "fs-already-bound",
+	}
+	chatSessions = &fakeChatSessionsService{
+		getSessionResult: getSessionResult,
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", "fs-already-bound"),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget = &fakeFactoryTargetService{
+		invokeResult:  factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted},
+		cancelEntered: make(chan struct{}),
+	}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	wantErr := errors.New("acp test: simulated async write failure")
+	writer = &countingErrorWriter{err: wantErr}
+
+	var pr *io.PipeReader
+	pr, pw = io.Pipe()
+	t.Cleanup(func() {
+		_ = pr.Close()
+		_ = pw.Close()
+	})
+
+	done := make(chan error, 1)
+	go func() { done <- server.Serve(context.Background(), pr, writer) }()
+
+	promptLine := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"session/prompt","params":%s}`+"\n",
+		promptTextParams("session-1", "a message whose response write fails"))
+	if _, err := pw.Write([]byte(promptLine)); err != nil {
+		t.Fatalf("write session/prompt line: %v", err)
+	}
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, wantErr) {
+			t.Fatalf("Serve() error = %v, want %v", err, wantErr)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve did not return after the dispatched prompt's response write failed")
+	}
+	if writer.calls != 1 {
+		t.Fatalf("writer was called %d times before Serve returned, want exactly 1", writer.calls)
+	}
+	return chatSessions, factoryTarget, pw, writer
+}
+
+// TestServeAsyncWriteFailureStopsAllFurtherConnectionActivity proves that
+// once Serve has returned because a dispatched "session/prompt" response
+// write failed, later input arriving on the same, still-open connection
+// stream can never reach a handler: no "session/cancel" forward, no ordinary
+// request effect (a "session/new" is used as the representative case), and
+// no new "session/prompt" dispatch -- the exact three risks a round of
+// review on this connection's shutdown path called out by name. Before
+// dispatchGate
+// (pkg/platform/taskgroup.Gate) gated every unit of dispatch work behind the
+// same lifecycle serveConnection's own return decides, the read loop's
+// goroutine -- deliberately left running, still blocked in Scan because its
+// underlying read has no way to be interrupted (see serveConnection's own
+// doc comment) -- could still decode and dispatch a line that arrived after
+// Serve had already returned to its caller, an orphaned goroutine still
+// silently acting on the connection's behalf.
+//
+// Each subtest's later line is only written after the helper's buffered done
+// receive proves Serve -- including its deferred dispatchGate.Close() -- has
+// already fully returned; by then, dispatchGate.Close() has already made any
+// further Enter() call structurally impossible to succeed (see
+// gate_test.go's own TestGateCloseBlocksUntilInFlightEnterReleases, which
+// proves that guarantee with no timing dependency at all). The one bounded
+// wait in each subtest below only gives the already-abandoned read goroutine
+// -- left running only because its blocking Scan call cannot otherwise be
+// interrupted, and unjoinable from a test that must not depend on it ever
+// unblocking -- a generous window to misbehave before asserting that it did
+// not; the guarantee itself does not depend on that window's length.
+func TestServeAsyncWriteFailureStopsAllFurtherConnectionActivity(t *testing.T) {
+	t.Run("SessionCancelIsNotForwarded", func(t *testing.T) {
+		_, factoryTarget, pw, writer := serveUntilAsyncWriteFailureWithReaderStillOpen(t)
+
+		cancelLine := `{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"session-1"}}` + "\n"
+		if _, err := pw.Write([]byte(cancelLine)); err != nil {
+			t.Fatalf("write session/cancel line after Serve returned: %v", err)
+		}
+
+		select {
+		case <-factoryTarget.cancelEntered:
+			t.Fatal("Cancel was invoked for a session/cancel notification that arrived after Serve had already returned")
+		case <-time.After(200 * time.Millisecond):
+		}
+
+		factoryTarget.mu.Lock()
+		cancelCallCount := len(factoryTarget.cancelCalls)
+		factoryTarget.mu.Unlock()
+		if cancelCallCount != 0 {
+			t.Fatalf("Cancel call count = %d, want 0 for a session/cancel notification received after Serve returned", cancelCallCount)
+		}
+		if writer.calls != 1 {
+			t.Fatalf("writer was called %d times after later input arrived, want still exactly 1 (no new response write)", writer.calls)
+		}
+	})
+
+	t.Run("SessionPromptIsNotDispatched", func(t *testing.T) {
+		_, factoryTarget, pw, writer := serveUntilAsyncWriteFailureWithReaderStillOpen(t)
+
+		anotherPromptLine := fmt.Sprintf(`{"jsonrpc":"2.0","id":2,"method":"session/prompt","params":%s}`+"\n",
+			promptTextParams("session-1", "a second message sent after Serve returned"))
+		if _, err := pw.Write([]byte(anotherPromptLine)); err != nil {
+			t.Fatalf("write a second session/prompt line after Serve returned: %v", err)
+		}
+
+		// There is no positive event to select on here: a correctly rejected
+		// line produces no observable call at all, only its absence. The
+		// bounded wait is this subtest's only way to give the abandoned
+		// goroutine a chance to prove it wrongly dispatched before checking.
+		<-time.After(200 * time.Millisecond)
+
+		factoryTarget.mu.Lock()
+		invokeCallCount := len(factoryTarget.invokeCalls)
+		factoryTarget.mu.Unlock()
+		if invokeCallCount != 1 {
+			t.Fatalf("InvokeFactorySession call count = %d, want exactly the 1 call made before Serve returned, no dispatch for the later session/prompt line", invokeCallCount)
+		}
+		if writer.calls != 1 {
+			t.Fatalf("writer was called %d times after later input arrived, want still exactly 1 (no new response write)", writer.calls)
+		}
+	})
+
+	t.Run("OrdinaryRequestIsNotDispatched", func(t *testing.T) {
+		chatSessions, _, pw, writer := serveUntilAsyncWriteFailureWithReaderStillOpen(t)
+
+		sessionNewLine := fmt.Sprintf(`{"jsonrpc":"2.0","id":3,"method":"session/new","params":%s}`+"\n", validSessionNewParams)
+		if _, err := pw.Write([]byte(sessionNewLine)); err != nil {
+			t.Fatalf("write a session/new line after Serve returned: %v", err)
+		}
+
+		// See SessionPromptIsNotDispatched above for why this wait is bounded
+		// rather than event-driven: a correctly rejected line leaves nothing
+		// to select on.
+		<-time.After(200 * time.Millisecond)
+
+		chatSessions.mu.Lock()
+		createCalled := chatSessions.createCalled
+		chatSessions.mu.Unlock()
+		if createCalled {
+			t.Fatal("CreateSession was called for a session/new request that arrived after Serve had already returned")
+		}
+		if writer.calls != 1 {
+			t.Fatalf("writer was called %d times after later input arrived, want still exactly 1 (no new response write)", writer.calls)
+		}
+	})
+}
