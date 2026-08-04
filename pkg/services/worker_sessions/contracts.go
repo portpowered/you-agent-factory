@@ -55,11 +55,20 @@ type Service interface {
 
 	// PublishRecord validates req, then appends req.Draft, detached, as a
 	// source-native Worker record onto Topic(req.SessionID) using req's
-	// complete Events idempotency identity. PublishRecord relies on Events
-	// for aggregate order, duplicate resolution, cursors, reads, and
-	// subscriptions: it performs no ordering or deduplication of its own.
-	// An invalid Draft, a malformed Events identity, or an Events append
-	// failure is returned unchanged and commits no record.
+	// complete Events idempotency identity. PublishRecord only accepts a
+	// record while req.SessionID's publication window is open -- after its
+	// opening record has committed and before its terminal record has
+	// started committing -- and only when req.SourceSequence does not
+	// regress behind one already accepted for the same (SourceType,
+	// SourceID); every accepted call for one session is itself serialized,
+	// so its own opening, publication, and terminal records can never
+	// interleave. Beyond that window and ordering enforcement, PublishRecord
+	// relies on Events for aggregate order, duplicate resolution, cursors,
+	// reads, and subscriptions. An invalid Draft, an unopened or closed
+	// publication window (ErrPublicationNotOpen), an out-of-order
+	// SourceSequence (ErrOutOfOrderPublication), a malformed Events
+	// identity, or an Events append failure is returned unchanged and
+	// commits no record.
 	PublishRecord(ctx context.Context, req PublishRecordRequest) (PublishRecordResult, error)
 }
 
@@ -213,4 +222,13 @@ var (
 	// paused, or terminal). No Workers call is made and the existing session
 	// is left unchanged.
 	ErrSessionNotStartable = errors.New("worker session: not startable")
+	// ErrPublicationNotOpen reports PublishRecord called for a session whose
+	// publication window is not open: the session was only ever reserved,
+	// its opening record has not yet committed, or its terminal record has
+	// already started committing. No record is committed.
+	ErrPublicationNotOpen = errors.New("worker session: publication is not open")
+	// ErrOutOfOrderPublication reports PublishRecord called with a
+	// SourceSequence that regresses behind one already accepted for the same
+	// (SourceType, SourceID). No record is committed.
+	ErrOutOfOrderPublication = errors.New("worker session: source sequence is out of order")
 )

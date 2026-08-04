@@ -36,11 +36,12 @@ type EventsAppender interface {
 }
 
 type registry struct {
-	mu        sync.RWMutex
-	sessions  map[string]workersessions.Session
-	execution workers.WorkstationExecutionService
-	events    EventsAppender
-	logger    logging.Logger
+	mu           sync.RWMutex
+	sessions     map[string]workersessions.Session
+	publications map[string]*publication
+	execution    workers.WorkstationExecutionService
+	events       EventsAppender
+	logger       logging.Logger
 }
 
 // Compile-time proof that production registry seals the W1+W2 root contract
@@ -62,10 +63,11 @@ func New(execution workers.WorkstationExecutionService, eventsAppender EventsApp
 		return nil, ErrMissingEventsAppender
 	}
 	return &registry{
-		sessions:  make(map[string]workersessions.Session),
-		execution: execution,
-		events:    eventsAppender,
-		logger:    logging.EnsureLogger(logger),
+		sessions:     make(map[string]workersessions.Session),
+		publications: make(map[string]*publication),
+		execution:    execution,
+		events:       eventsAppender,
+		logger:       logging.EnsureLogger(logger),
 	}, nil
 }
 
@@ -83,6 +85,7 @@ func (r *registry) Reserve(_ context.Context, req workersessions.ReserveRequest)
 	}
 	session := workersessions.Session{ID: req.ID, State: workersessions.StateReserved}
 	r.sessions[req.ID] = session
+	r.publications[req.ID] = &publication{}
 	r.logger.Info("worker session reserve", "sessionID", req.ID, "outcome", "reserved")
 	return session, nil
 }
@@ -218,6 +221,7 @@ func (r *registry) reserveIfAbsent(id string) {
 		return
 	}
 	r.sessions[id] = workersessions.Session{ID: id, State: workersessions.StateReserved}
+	r.publications[id] = &publication{}
 }
 
 // transitionToStarting atomically moves id from StateReserved to

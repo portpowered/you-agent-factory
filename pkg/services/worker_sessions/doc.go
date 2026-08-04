@@ -15,8 +15,14 @@
 // record terminalizes FAILED with FailureCauseEventPublicationFailure
 // without calling Workers at all. PublishRecord lets a caller append
 // validated source-native Worker observations onto that same topic using the
-// complete Events idempotency identity. After Start's exactly-once terminal
-// outcome commits, Start also appends one terminal KindSession draft
+// complete Events idempotency identity, but only while the session's
+// publication window is open (after its opening record, before its terminal
+// record starts committing) and only in non-decreasing SourceSequence order
+// per (SourceType, SourceID); every record one session ever commits --
+// opening, published, and terminal alike -- is serialized against the same
+// per-session lock, so they can never interleave or commit out of order.
+// After Start's exactly-once terminal outcome commits, Start also appends
+// one terminal KindSession draft
 // (PhaseCompleted/PhaseFailed, or the shared PhaseCanceled pair for the W1
 // CANCELED/TERMINATED states Start does not yet produce) derived from that
 // committed outcome; a failure publishing it is logged and never rewrites
