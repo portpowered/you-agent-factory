@@ -60,8 +60,14 @@ func TestRecordingsRootExposesOneServiceAndNoOperationalFunctions(t *testing.T) 
 	}
 
 	sort.Strings(interfaces)
-	if want := []string{"contracts.go:Service"}; len(interfaces) != len(want) || interfaces[0] != want[0] {
+	want := []string{"contracts.go:Service", "lifecycle_capability.go:RecordingLifecycle"}
+	if len(interfaces) != len(want) {
 		t.Fatalf("Recordings root interfaces = %v, want %v", interfaces, want)
+	}
+	for index := range want {
+		if interfaces[index] != want[index] {
+			t.Fatalf("Recordings root interfaces = %v, want %v", interfaces, want)
+		}
 	}
 	if len(exportedFunctions) != 0 {
 		t.Fatalf("Recordings root exported functions = %v, want none", exportedFunctions)
