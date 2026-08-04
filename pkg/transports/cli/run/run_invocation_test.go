@@ -502,6 +502,40 @@ func TestRunFactoryInvocationWritesTerminalRecordAndPreservesCleanupErrorAfterRe
 	}
 }
 
+// TestRunFactoryInvocationRejectsUndeterminedResultWithNilError proves that
+// runFactoryInvocation cannot silently report success when InvokeFactory
+// returns neither a determined terminal result (empty Status) nor an error.
+// MapInvocationFailure(nil) returns nil by design (a genuinely absent error
+// means success), so without an explicit invariant check this zero-value
+// outcome would flow straight through as a successful CLI exit with no
+// terminal record written at all -- the exact "hidden false success" defect
+// this guards against.
+func TestRunFactoryInvocationRejectsUndeterminedResultWithNilError(t *testing.T) {
+	var output bytes.Buffer
+	operation := testInvocationOperation{invokeFactory: func(
+		context.Context,
+		factorysessions.InvocationTarget,
+		factorysessions.InvocationRequest,
+		factorysessions.FactoryEventConsumer,
+	) (factorysessions.FactoryInvocationOutcome, error) {
+		return factorysessions.FactoryInvocationOutcome{}, nil
+	}}
+	cfg := RunConfig{
+		InvocationOutputMode: InvocationOutputResponseStream,
+		JSONOutput:           true, Output: &output,
+	}
+	err := runFactoryInvocation(
+		context.Background(), cfg, invocationTarget(cfg, nil, nil),
+		factoryapi.InvocationRequest{}, operation, testResponsePresentation(),
+	)
+	if err == nil {
+		t.Fatal("runFactoryInvocation error = nil, want a non-nil error when no terminal result was ever determined")
+	}
+	if output.Len() != 0 {
+		t.Fatalf("NDJSON output = %q, want no output written for an undetermined outcome", output.String())
+	}
+}
+
 func TestResolveFactoryInvocationRequest_NamedFactoryRejectsConflictingSources(t *testing.T) {
 	err := scriptedInvocationConflictError()
 	if !strings.Contains(err.Error(), "INVOCATION_INPUT_SOURCE_CONFLICT") {

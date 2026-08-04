@@ -306,6 +306,14 @@ func runFactoryInvocation(
 	outcome, err := invocation.InvokeFactory(invokeCtx, target, invocationRequest, consume)
 	result := outcome.Result
 	if result.Status == "" {
+		if err == nil {
+			// InvokeFactory returned neither a determined terminal result nor
+			// an error: without this explicit invariant failure, a nil err
+			// maps to a nil CLI error (MapInvocationFailure(nil) == nil),
+			// which would silently report success and omit the public
+			// terminal record contract this invocation type owes its caller.
+			err = fmt.Errorf("run factory invocation: invocation ended without a determined terminal result")
+		}
 		return MapInvocationFailure(err)
 	}
 	// A terminal result was determined even though err is non-nil: err is a
