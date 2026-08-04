@@ -136,6 +136,14 @@ type fakeChatSessionsService struct {
 	// deliverReadTimeGap propagate a genuine (non-*AttachmentPositionError)
 	// AcknowledgeAttachment failure instead of swallowing it.
 	acknowledgeAttachmentErr error
+	// acknowledgeAttachmentErrs, when non-empty, is consumed front-first
+	// across successive AcknowledgeAttachment calls. A nil entry permits that
+	// call to succeed, so retry tests can model one stale optimistic version
+	// followed by a successful refreshed acknowledgement.
+	acknowledgeAttachmentErrs []error
+	// acknowledgeAttachmentReqs records each attempt so retry tests can prove
+	// the refreshed session version reaches the next acknowledgement.
+	acknowledgeAttachmentReqs []chatsessions.AcknowledgeAttachmentRequest
 	// acknowledgeAttachmentPositionErr, when true, fails every
 	// AcknowledgeAttachment call with a *chatsessions.AttachmentPositionError
 	// -- the StreamHead-lag case drainRecords/deliverReadTimeGap treat as a
@@ -352,6 +360,14 @@ func (f *fakeChatSessionsService) AdvanceStreamHead(context.Context, chatsession
 func (f *fakeChatSessionsService) AcknowledgeAttachment(_ context.Context, req chatsessions.AcknowledgeAttachmentRequest) (chatsessions.AcknowledgeAttachmentResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.acknowledgeAttachmentReqs = append(f.acknowledgeAttachmentReqs, req)
+	if len(f.acknowledgeAttachmentErrs) > 0 {
+		next := f.acknowledgeAttachmentErrs[0]
+		f.acknowledgeAttachmentErrs = f.acknowledgeAttachmentErrs[1:]
+		if next != nil {
+			return chatsessions.AcknowledgeAttachmentResult{}, next
+		}
+	}
 	if f.acknowledgeAttachmentPositionErr {
 		return chatsessions.AcknowledgeAttachmentResult{}, &chatsessions.AttachmentPositionError{
 			SessionID: req.SessionID, AttachmentID: req.AttachmentID, Requested: uint64(req.AfterSequence),

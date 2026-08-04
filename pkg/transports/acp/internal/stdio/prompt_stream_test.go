@@ -1230,6 +1230,74 @@ func TestDrainRecordsPropagatesGenericAcknowledgeFailure(t *testing.T) {
 	}
 }
 
+// TestStreamTurnUpdatesRetriesStaleAcknowledgementBeforeReturning proves a
+// live record that was already notified remains acknowledged when a concurrent
+// response bridge advances the session version between StreamHead observation
+// and the attachment acknowledgement. The retry must use the freshly read
+// version and produce exactly one client update, preventing the retained
+// catch-up drain from replaying the same canonical message.
+func TestStreamTurnUpdatesRetriesStaleAcknowledgementBeforeReturning(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+	eventsSvc.seed(t, streamingTestSessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("hello"))
+	chatSessions := server.chatSessions.(*fakeChatSessionsService)
+	chatSessions.acknowledgeAttachmentErrs = []error{
+		&chatsessions.ConflictError{Value: "Session", ID: streamingTestSessionID, Expected: 1, Actual: 2},
+	}
+	chatSessions.getSessionResult = chatsessions.GetSessionResult{Session: chatsessions.Session{Version: 2}}
+
+	notify, notified := captureNotifier()
+	cache := &attachmentCache{}
+	ctx := contextWithAttachmentCache(context.Background(), cache)
+	delivered, err := server.streamTurnUpdates(ctx, "conn-a", streamingTestSessionID, 1, notify)
+	if err != nil || !delivered {
+		t.Fatalf("streamTurnUpdates() = %v, %v, want delivered=true and err=nil", delivered, err)
+	}
+	if len(*notified) != 1 {
+		t.Fatalf("notify call count = %d, want exactly 1", len(*notified))
+	}
+	if len(chatSessions.acknowledgeAttachmentReqs) != 2 {
+		t.Fatalf("acknowledge attempt count = %d, want exactly 2", len(chatSessions.acknowledgeAttachmentReqs))
+	}
+	if got := chatSessions.acknowledgeAttachmentReqs[0].ExpectedVersion; got != 1 {
+		t.Fatalf("first acknowledgement expected version = %d, want 1", got)
+	}
+	if got := chatSessions.acknowledgeAttachmentReqs[1].ExpectedVersion; got != 2 {
+		t.Fatalf("retried acknowledgement expected version = %d, want refreshed version 2", got)
+	}
+	attachment, ok := cache.get(streamingTestSessionID)
+	if !ok || attachment.AfterSequence != 1 {
+		t.Fatalf("cached attachment = %+v, %v, want acknowledged sequence 1", attachment, ok)
+	}
+}
+
+// TestStreamTurnUpdatesReturnsRefreshFailureAfterDeliveredConflict proves a
+// stale acknowledgement never turns a failed version refresh into a false
+// success. The client has already received the record, so the delivery result
+// remains true while the bounded dependency failure is surfaced for the
+// retained catch-up path to retry safely later.
+func TestStreamTurnUpdatesReturnsRefreshFailureAfterDeliveredConflict(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+	eventsSvc.seed(t, streamingTestSessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("hello"))
+	chatSessions := server.chatSessions.(*fakeChatSessionsService)
+	chatSessions.acknowledgeAttachmentErrs = []error{
+		&chatsessions.ConflictError{Value: "Session", ID: streamingTestSessionID, Expected: 1, Actual: 2},
+	}
+	wantErr := errors.New("refresh session failed")
+	chatSessions.getSessionErr = wantErr
+
+	notify, notified := captureNotifier()
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	delivered, err := server.streamTurnUpdates(ctx, "conn-a", streamingTestSessionID, 1, notify)
+	if !delivered || !errors.Is(err, wantErr) {
+		t.Fatalf("streamTurnUpdates() = %v, %v, want delivered=true and refresh error %v", delivered, err, wantErr)
+	}
+	if len(*notified) != 1 {
+		t.Fatalf("notify call count = %d, want exactly 1", len(*notified))
+	}
+}
+
 // TestDrainRecordsRejectsIllegalKindPhaseProjection proves a record that
 // decodes fine as a chatsessions.SequencedItem envelope but whose
 // Kind/Phase pair mapping.Project itself declares illegal (rather than the
