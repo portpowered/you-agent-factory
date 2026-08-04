@@ -246,9 +246,9 @@ func provideACPServer(
 // synchronous Factory dispatch call (see dispatchFactoryTurn's two Factory
 // dispatch branches in pkg/transports/acp/internal/stdio/session_prompt.go):
 // a thin closure with exactly acp.ResponseBridge's signature that forwards
-// to chat_sessions/wire.RunWithResponseBridge, the owning service's own
+// to the Chat Sessions-owned response bridge, the owning service's own
 // translation/drain-loop/concurrency implementation. pkg/wire composes this
-// closure (construction only, no I/O, no goroutine); this transport never
+// closure (construction only, no I/O, no goroutine); the ACP transport never
 // implements Factory response-event translation, and the ACP transport
 // package that calls the constructed closure never holds a raw concurrency
 // primitive of its own either.

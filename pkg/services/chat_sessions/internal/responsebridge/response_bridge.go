@@ -5,6 +5,7 @@ package responsebridge
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/events"
@@ -35,8 +36,11 @@ func New(sequencer Sequencer) *Service {
 }
 
 // Run sequences one Factory Session's response stream while invoke and the
-// transport-owned live drain run. It preserves invoke's result and error;
-// delivery is additive and its failures never rewrite the invocation outcome.
+// transport-owned live drain run. Once invoke returns, it stops the live
+// cursor consumer, drains every response event retained through that terminal
+// boundary with a non-cancelled context, and returns any bridge failure when
+// invoke itself succeeded. A prompt therefore never reports success while a
+// committed response-event tail was silently lost.
 func (s *Service) Run(
 	ctx context.Context,
 	subscriber factorysessions.TargetExecutionService,
@@ -46,63 +50,111 @@ func (s *Service) Run(
 	liveDrain func(context.Context),
 	invoke func(context.Context) (factorysessions.InvocationResult, error),
 ) (factorysessions.InvocationResult, error) {
-	bridgeCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	if s == nil || s.sequencer == nil || subscriber == nil {
+		return invoke(ctx)
+	}
+	cursor, err := subscriber.SubscribeFactoryResponseEvents(ctx, factorysessions.ResponseEventSubscriptionRequest{SessionID: factorySessionID})
+	if err != nil {
+		result, invokeErr := invoke(ctx)
+		if invokeErr != nil {
+			return result, invokeErr
+		}
+		return result, fmt.Errorf("subscribe factory response events: %w", err)
+	}
+	defer cursor.Detach()
 
+	liveCtx, cancelLive := context.WithCancel(ctx)
+	defer cancelLive()
+	deliveryCtx := context.WithoutCancel(ctx)
+	state := drainState{currentVersion: sessionVersion, chatItemIDByFactoryItemID: make(map[string]string)}
 	bridgeDone := make(chan struct{})
+	var liveBridgeErr error
 	go func() {
 		defer close(bridgeDone)
-		_ = s.drain(bridgeCtx, subscriber, chatSessionID, sessionVersion, factorySessionID)
+		liveBridgeErr = s.drainLive(liveCtx, deliveryCtx, cursor, chatSessionID, &state)
 	}()
 
 	drainDone := make(chan struct{})
 	go func() {
 		defer close(drainDone)
 		if liveDrain != nil {
-			liveDrain(bridgeCtx)
+			liveDrain(liveCtx)
 		}
 	}()
 
-	result, err := invoke(ctx)
-	cancel()
+	result, invokeErr := invoke(ctx)
+	cancelLive()
 	<-bridgeDone
 	<-drainDone
-	return result, err
+	bridgeErr := liveBridgeErr
+	if bridgeErr == nil {
+		bridgeErr = s.drainTail(deliveryCtx, cursor, chatSessionID, &state)
+	}
+	if invokeErr != nil {
+		return result, invokeErr
+	}
+	if bridgeErr != nil {
+		return result, fmt.Errorf("sequence factory response events: %w", bridgeErr)
+	}
+	return result, nil
 }
 
-func (s *Service) drain(
-	ctx context.Context,
-	subscriber factorysessions.TargetExecutionService,
-	chatSessionID string,
-	sessionVersion uint64,
-	factorySessionID string,
-) error {
-	if s == nil || s.sequencer == nil || subscriber == nil {
-		return nil
-	}
-	cursor, err := subscriber.SubscribeFactoryResponseEvents(ctx, factorysessions.ResponseEventSubscriptionRequest{SessionID: factorySessionID})
-	if err != nil {
-		return err
-	}
-	defer cursor.Detach()
+type drainState struct {
+	currentVersion            uint64
+	chatItemIDByFactoryItemID map[string]string
+}
 
-	currentVersion := sessionVersion
-	chatItemIDByFactoryItemID := make(map[string]string)
+func (s *Service) drainLive(
+	liveCtx, deliveryCtx context.Context,
+	cursor *factorysessions.ResponseEventCursor,
+	chatSessionID string,
+	state *drainState,
+) error {
 	for {
-		batch, nextErr := cursor.Next(ctx)
+		batch, nextErr := cursor.Next(liveCtx)
 		if nextErr != nil {
-			if errors.Is(nextErr, factorysessions.ErrResponseEventSubscriptionClosed) {
+			if errors.Is(nextErr, factorysessions.ErrResponseEventSubscriptionClosed) ||
+				errors.Is(nextErr, context.Canceled) || errors.Is(nextErr, context.DeadlineExceeded) {
 				return nil
 			}
 			return nextErr
 		}
-		for _, event := range batch {
-			currentVersion, err = s.sequence(ctx, chatSessionID, currentVersion, chatItemIDByFactoryItemID, event)
-			if err != nil {
-				return err
-			}
+		if err := s.sequenceBatch(deliveryCtx, chatSessionID, state, batch); err != nil {
+			return err
 		}
 	}
+}
+
+func (s *Service) drainTail(
+	deliveryCtx context.Context,
+	cursor *factorysessions.ResponseEventCursor,
+	chatSessionID string,
+	state *drainState,
+) error {
+	batch, err := cursor.Drain()
+	if errors.Is(err, factorysessions.ErrResponseEventSubscriptionClosed) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return s.sequenceBatch(deliveryCtx, chatSessionID, state, batch)
+}
+
+func (s *Service) sequenceBatch(
+	ctx context.Context,
+	chatSessionID string,
+	state *drainState,
+	batch []factorysessions.FactoryResponseEvent,
+) error {
+	for _, event := range batch {
+		version, err := s.sequence(ctx, chatSessionID, state.currentVersion, state.chatItemIDByFactoryItemID, event)
+		if err != nil {
+			return err
+		}
+		state.currentVersion = version
+	}
+	return nil
 }
 
 func (s *Service) sequence(

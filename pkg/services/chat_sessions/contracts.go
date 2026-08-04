@@ -68,13 +68,15 @@ type Service interface {
 
 	// Attach registers one connection's delivery position against a Chat
 	// Session's event stream, or -- when AttachRequest.Resume and
-	// AttachRequest.Interactive are both true and this session has a
-	// detached interactive attachment left behind by an earlier connection's
-	// Detach -- reactivates that same attachment under the new
-	// ConnectionID, preserving its already-advanced AfterSequence delivery
-	// cursor instead of starting a reconnecting client over from zero (see
-	// AttachRequest.Resume's own doc comment). It reports *NotFoundError
-	// when SessionID does not identify an existing session.
+	// AttachRequest.Interactive are both true -- reactivates a detached
+	// interactive attachment selected by AttachRequest.ResumeAttachmentID. A
+	// no-identity resume remains valid only when exactly one detached interactive
+	// attachment exists; an ambiguous selection is rejected rather than giving
+	// one consumer another consumer's delivery cursor. Reactivation preserves the
+	// attachment's already-advanced AfterSequence delivery cursor instead of
+	// starting a reconnecting client over from zero (see AttachRequest.Resume's
+	// own doc comment). It reports *NotFoundError when SessionID does not identify
+	// an existing session.
 	Attach(ctx context.Context, req AttachRequest) (AttachResult, error)
 
 	// Detach marks one previously attached connection's Attachment as
@@ -295,22 +297,26 @@ type AttachRequest struct {
 	SessionID    string
 	ConnectionID string
 	Interactive  bool
-	// Resume requests that, when this session already has a detached
-	// interactive attachment (Attachment.Detached, left behind by an earlier
-	// connection's Detach), Attach reactivate it under this request's
-	// ConnectionID instead of creating a fresh one -- the reactivated
-	// Attachment keeps its original ID and already-advanced AfterSequence
-	// delivery cursor. Resume only ever takes effect when Interactive is
-	// also true; it has no effect when no detached interactive attachment
-	// exists, so it is always safe to set even for a session's first-ever
-	// attachment.
+	// Resume requests that Attach reactivate a detached interactive attachment
+	// under this request's ConnectionID instead of creating a fresh one. When
+	// ResumeAttachmentID is present, it selects that exact stored attachment;
+	// otherwise Resume only succeeds when there is exactly one detached
+	// interactive attachment. Resume only ever takes effect when Interactive
+	// is also true; it has no effect when no detached interactive attachment
+	// exists, so it is safe to set for a session's first-ever attachment.
 	Resume bool
+	// ResumeAttachmentID is the opaque durable identity of the caller's prior
+	// detached Attachment. It is required to disambiguate a Resume when more
+	// than one interactive attachment is detached for the same Chat Session.
+	// The identity is service-owned and is never derived from a connection-local
+	// cursor or from another attachment's position.
+	ResumeAttachmentID string
 }
 
 // AttachResult carries the registered Attachment: either newly created, or
-// -- when AttachRequest.Resume matched a detached interactive attachment --
-// that same attachment reactivated under its original ID and delivery
-// cursor.
+// -- when AttachRequest.Resume matched one unambiguous detached interactive
+// attachment -- that same attachment reactivated under its original ID and
+// delivery cursor.
 type AttachResult struct {
 	Attachment Attachment
 }

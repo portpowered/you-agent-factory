@@ -8,11 +8,14 @@ import (
 
 // ResponseBridge starts subscribing to one Factory Session's response-event
 // stream through Factory Sessions' owner-published target-execution
-// capability. Its injected implementation sequences the observed events onto
-// the canonical Chat Session aggregate, concurrently with invoke, and returns
-// invoke's own result and error unchanged once invoke itself returns. It also runs liveDrain
-// concurrently with the same invoke call and joins it the same way: liveDrain
-// is this transport's own genuine mid-generation consumer loop (see
+// capability. Its injected implementation sequences observed events onto the
+// canonical Chat Session aggregate concurrently with invoke, then drains the
+// retained terminal tail before a successful prompt can return. An invocation
+// error remains authoritative; a bridge failure after a successful invocation
+// is returned so the prompt fails safely rather than omitting canonical output.
+// It also runs liveDrain concurrently with the same invoke call and joins it
+// the same way: liveDrain is this transport's own genuine mid-generation
+// consumer loop (see
 // internal/stdio.Server.liveDrainTurnUpdates), a plain function value with no
 // concurrency primitive of its own, so this package still never holds a raw
 // goroutine/channel/cancel -- it only ever supplies a callback for the

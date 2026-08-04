@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
@@ -52,6 +53,73 @@ func TestStore_Attach_ResumeReactivatesDetachedInteractiveAttachment(t *testing.
 	store.mu.RUnlock()
 	if count != 1 {
 		t.Fatalf("session has %d attachments after resume, want exactly 1 (reactivated, not duplicated)", count)
+	}
+}
+
+// TestStore_Attach_ResumeSelectsOwnDetachedAttachment proves two consumers
+// with different acknowledged positions cannot inherit each other's cursor:
+// identity-less resume rejects the ambiguity, then each caller resumes its
+// own durable Attachment identity regardless of detach or reconnect order.
+func TestStore_Attach_ResumeSelectsOwnDetachedAttachment(t *testing.T) {
+	ctx := context.Background()
+	store, session, _ := newSequencingTestSession(t)
+	last, session := sequenceAndAdvance(t, store, session, 1, 3)
+
+	first, err := store.Attach(ctx, chatsessions.AttachRequest{SessionID: session.ID, ConnectionID: "conn-a", Interactive: true})
+	if err != nil {
+		t.Fatalf("Attach (first): %v", err)
+	}
+	second, err := store.Attach(ctx, chatsessions.AttachRequest{SessionID: session.ID, ConnectionID: "conn-b", Interactive: true})
+	if err != nil {
+		t.Fatalf("Attach (second): %v", err)
+	}
+	firstAck, err := store.AcknowledgeAttachment(ctx, acknowledgeAttachmentRequest(session.ID, first.Attachment.ID, session.Version, 1))
+	if err != nil {
+		t.Fatalf("AcknowledgeAttachment (first): %v", err)
+	}
+	current, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession after first acknowledgement: %v", err)
+	}
+	secondAck, err := store.AcknowledgeAttachment(ctx, acknowledgeAttachmentRequest(session.ID, second.Attachment.ID, current.Session.Version, last))
+	if err != nil {
+		t.Fatalf("AcknowledgeAttachment (second): %v", err)
+	}
+	if _, err := store.Detach(ctx, chatsessions.DetachRequest{SessionID: session.ID, AttachmentID: first.Attachment.ID}); err != nil {
+		t.Fatalf("Detach (first): %v", err)
+	}
+	if _, err := store.Detach(ctx, chatsessions.DetachRequest{SessionID: session.ID, AttachmentID: second.Attachment.ID}); err != nil {
+		t.Fatalf("Detach (second): %v", err)
+	}
+
+	_, err = store.Attach(ctx, chatsessions.AttachRequest{SessionID: session.ID, ConnectionID: "conn-c", Interactive: true, Resume: true})
+	var ambiguity *chatsessions.AttachmentResumeAmbiguityError
+	if !errors.As(err, &ambiguity) || !errors.Is(err, chatsessions.ErrAmbiguousAttachmentResume) {
+		t.Fatalf("Attach (ambiguous resume): got %v, want AttachmentResumeAmbiguityError", err)
+	}
+	if ambiguity.CandidateCount != 2 {
+		t.Fatalf("ambiguous resume candidate count = %d, want 2", ambiguity.CandidateCount)
+	}
+
+	resumedSecond, err := store.Attach(ctx, chatsessions.AttachRequest{
+		SessionID: session.ID, ConnectionID: "conn-d", Interactive: true,
+		Resume: true, ResumeAttachmentID: second.Attachment.ID,
+	})
+	if err != nil {
+		t.Fatalf("Attach (resume second): %v", err)
+	}
+	resumedFirst, err := store.Attach(ctx, chatsessions.AttachRequest{
+		SessionID: session.ID, ConnectionID: "conn-e", Interactive: true,
+		Resume: true, ResumeAttachmentID: first.Attachment.ID,
+	})
+	if err != nil {
+		t.Fatalf("Attach (resume first): %v", err)
+	}
+	if resumedSecond.Attachment.ID != second.Attachment.ID || resumedSecond.Attachment.AfterSequence != secondAck.Attachment.AfterSequence {
+		t.Fatalf("resumed second = %+v, want ID %q and AfterSequence %d", resumedSecond.Attachment, second.Attachment.ID, secondAck.Attachment.AfterSequence)
+	}
+	if resumedFirst.Attachment.ID != first.Attachment.ID || resumedFirst.Attachment.AfterSequence != firstAck.Attachment.AfterSequence {
+		t.Fatalf("resumed first = %+v, want ID %q and AfterSequence %d", resumedFirst.Attachment, first.Attachment.ID, firstAck.Attachment.AfterSequence)
 	}
 }
 

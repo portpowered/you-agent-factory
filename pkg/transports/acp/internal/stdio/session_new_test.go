@@ -281,12 +281,7 @@ func (f *fakeChatSessionsService) AdvanceTurn(_ context.Context, req chatsession
 	return chatsessions.AdvanceTurnResult{Turn: chatsessions.Turn{ID: req.TurnID, State: req.Next}}, nil
 }
 
-// Attach mirrors the real chatsessions.Service.Attach contract's Resume
-// behavior (see that Store method's own doc comment): when req.Resume and
-// req.Interactive are both true and this fake already holds a detached
-// interactive attachment, it reactivates that same attachment (its ID and
-// AfterSequence survive) under the new ConnectionID instead of minting a
-// fresh one.
+// Attach mirrors the real resume policy: select the stored identity or sole candidate; reject a tie.
 func (f *fakeChatSessionsService) Attach(_ context.Context, req chatsessions.AttachRequest) (chatsessions.AttachResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -294,13 +289,32 @@ func (f *fakeChatSessionsService) Attach(_ context.Context, req chatsessions.Att
 		return chatsessions.AttachResult{}, f.attachErr
 	}
 	if req.Resume && req.Interactive {
-		for id, existing := range f.attachments {
-			if existing.Detached && existing.Interactive {
-				existing.ConnectionID = req.ConnectionID
-				existing.Detached = false
-				f.attachments[id] = existing
-				return chatsessions.AttachResult{Attachment: existing}, nil
+		if req.ResumeAttachmentID != "" {
+			existing, found := f.attachments[req.ResumeAttachmentID]
+			if !found || !existing.Detached || !existing.Interactive {
+				return chatsessions.AttachResult{}, &chatsessions.NotFoundError{Value: "Attachment", ID: req.ResumeAttachmentID}
 			}
+			existing.ConnectionID = req.ConnectionID
+			existing.Detached = false
+			f.attachments[req.ResumeAttachmentID] = existing
+			return chatsessions.AttachResult{Attachment: existing}, nil
+		}
+		var resumed chatsessions.Attachment
+		candidates := 0
+		for _, existing := range f.attachments {
+			if existing.Detached && existing.Interactive {
+				resumed = existing
+				candidates++
+			}
+		}
+		if candidates > 1 {
+			return chatsessions.AttachResult{}, &chatsessions.AttachmentResumeAmbiguityError{SessionID: req.SessionID, CandidateCount: candidates}
+		}
+		if candidates == 1 {
+			resumed.ConnectionID = req.ConnectionID
+			resumed.Detached = false
+			f.attachments[resumed.ID] = resumed
+			return chatsessions.AttachResult{Attachment: resumed}, nil
 		}
 	}
 

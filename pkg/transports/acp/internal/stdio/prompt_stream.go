@@ -319,9 +319,9 @@ func (s *Server) streamTurnUpdates(
 // it -- genuine mid-generation delivery, running concurrently with the
 // in-flight Factory invocation dispatchFactoryInvocation wraps (see
 // acp.ResponseBridge and responsebridge.Service.Run's own doc
-// comments). ctx is the bridge-derived context RunWithResponseBridge cancels
-// once invoke returns, so Subscription.Next(ctx) unblocks and this method
-// returns as soon as the turn's dispatch itself completes.
+// comments). ctx is the bridge-derived live-consumer context the response
+// bridge cancels once invoke returns, so Subscription.Next(ctx) unblocks and
+// this method returns as soon as the turn's dispatch itself completes.
 //
 // This is the live counterpart to streamTurnUpdates' post-invocation retained
 // catch-up, not a replacement for it: both share the exact same attachment
@@ -341,8 +341,8 @@ func (s *Server) streamTurnUpdates(
 // never propagated as the turn's own failure: it is additive, best-effort
 // streaming layered onto the guaranteed-correct post-invocation sweep, so
 // this method simply stops rather than surfacing an error to its caller
-// (RunWithResponseBridge, which does not itself check a return value -- see
-// that function's own signature). s.events == nil, no attachment (blank
+// (the response bridge, which does not itself use its return value). s.events
+// == nil, no attachment (blank
 // connectionID or an Attach failure), or a Subscribe failure are all silent
 // no-ops, matching streamTurnUpdates' own s.events == nil convention.
 //
@@ -529,7 +529,7 @@ func (s *Server) drainRecords(
 		// persists its cursor position must still complete even if ctx is
 		// canceled for a reason unrelated to this specific record (concretely:
 		// liveDrainTurnUpdates runs against a bridge-derived ctx that
-		// RunWithResponseBridge cancels the instant the wrapped Factory
+		// responsebridge.Service.Run cancels the instant the wrapped Factory
 		// invocation returns, which can race a still-in-flight
 		// AcknowledgeAttachment call for a record notify already delivered).
 		// Without this, that race leaves the cursor unadvanced past an

@@ -7,19 +7,19 @@ import (
 )
 
 // Attach registers one connection's delivery position against a Chat
-// Session, or -- when req.Resume and req.Interactive are both true and this
-// session already has a detached interactive attachment (left behind by an
-// earlier connection's Detach; see Detach's own doc comment) -- reactivates
-// that same attachment under req.ConnectionID instead of minting a fresh
-// one, preserving its ID and already-advanced AfterSequence delivery
-// cursor. Resume has no effect (an ordinary fresh attachment is created)
-// when no detached interactive attachment exists, so it is always safe to
-// request. It reports *NotFoundError for an unknown SessionID and a
-// *ValidationError when ConnectionID is blank; in either failure case no
-// attachment is created or reactivated. A successful attachment is
-// independent of every other attachment on the session and of the session's
-// own state: it never reads or writes Session, episodes, turns, or control
-// intents.
+// Session, or -- when req.Resume and req.Interactive are both true --
+// reactivates the exact detached attachment named by ResumeAttachmentID. An
+// identity-less resume is allowed only when one detached interactive
+// attachment exists; several candidates return
+// *AttachmentResumeAmbiguityError rather than leaking one consumer's cursor
+// to another. Resume has no effect (an ordinary fresh attachment is created)
+// when no detached interactive attachment exists, so it is safe to request
+// for a session's first-ever attachment. It reports *NotFoundError for an
+// unknown SessionID and a *ValidationError when ConnectionID is blank; in
+// either failure case no attachment is created or reactivated. A successful
+// attachment is independent of every other attachment on the session and of
+// the session's own state: it never reads or writes Session, episodes, turns,
+// or control intents.
 func (s *Store) Attach(_ context.Context, req chatsessions.AttachRequest) (result chatsessions.AttachResult, err error) {
 	s.logStart("Attach", req.SessionID)
 	defer func() {
@@ -34,7 +34,11 @@ func (s *Store) Attach(_ context.Context, req chatsessions.AttachRequest) (resul
 	}
 
 	if req.Resume && req.Interactive {
-		if resumed, found := resumableInteractiveAttachment(record.attachments); found {
+		resumed, found, resumeErr := resumableInteractiveAttachment(record.attachments, req.SessionID, req.ResumeAttachmentID)
+		if resumeErr != nil {
+			return chatsessions.AttachResult{}, resumeErr
+		}
+		if found {
 			resumed.ConnectionID = req.ConnectionID
 			resumed.Detached = false
 			if err := resumed.Validate(); err != nil {
@@ -62,18 +66,34 @@ func (s *Store) Attach(_ context.Context, req chatsessions.AttachRequest) (resul
 	return chatsessions.AttachResult{Attachment: attachment}, nil
 }
 
-// resumableInteractiveAttachment returns the one detached, interactive
-// attachment in attachments, if any. In ordinary use at most one exists at a
-// time for a given session: Attach's own Resume path is the only way to
-// reactivate one, and a still-connected interactive attachment is never
-// marked detached.
-func resumableInteractiveAttachment(attachments map[string]chatsessions.Attachment) (chatsessions.Attachment, bool) {
+// resumableInteractiveAttachment selects a detached interactive attachment
+// by its durable identity. Without an explicit identity, it returns the sole
+// detached candidate only; it rejects more than one candidate rather than
+// relying on Go map iteration order to choose a foreign delivery cursor.
+func resumableInteractiveAttachment(
+	attachments map[string]chatsessions.Attachment,
+	sessionID, attachmentID string,
+) (chatsessions.Attachment, bool, error) {
+	if attachmentID != "" {
+		attachment, found := attachments[attachmentID]
+		if !found || !attachment.Detached || !attachment.Interactive {
+			return chatsessions.Attachment{}, false, &chatsessions.NotFoundError{Value: "Attachment", ID: attachmentID}
+		}
+		return attachment, true, nil
+	}
+
+	var resumed chatsessions.Attachment
+	candidates := 0
 	for _, attachment := range attachments {
 		if attachment.Detached && attachment.Interactive {
-			return attachment, true
+			resumed = attachment
+			candidates++
 		}
 	}
-	return chatsessions.Attachment{}, false
+	if candidates > 1 {
+		return chatsessions.Attachment{}, false, &chatsessions.AttachmentResumeAmbiguityError{SessionID: sessionID, CandidateCount: candidates}
+	}
+	return resumed, candidates == 1, nil
 }
 
 // Detach marks one previously registered Attachment as detached rather than
