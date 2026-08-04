@@ -222,6 +222,12 @@ func TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome(t *testing.T) {
 		t.Fatalf("invocation workState = %#v, want task:failed", response.WorkState)
 	}
 
+	// The invocation response is terminal before the retained event projection
+	// necessarily includes the worker's terminal dispatch response. Wait for the
+	// public runtime status to become stably terminal before asserting that
+	// customer-visible event history.
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+
 	dispatches := support.ObserveDispatchEvents(t, server.GetFactoryEvents(t))
 	if len(dispatches) == 0 {
 		t.Fatal("dispatch observations missing, want at least one draft-fusion failure")
