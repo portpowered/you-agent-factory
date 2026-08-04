@@ -426,9 +426,11 @@ function requireFactoryEventSchema(document, specifier) {
 		!schema.required?.includes("type") ||
 		!schema.required?.includes("context") ||
 		!schema.required?.includes("payload") ||
-		schema.oneOf?.length !== 31 ||
+		schema.oneOf?.length !== 32 ||
 		schema.discriminator?.propertyName !== "type" ||
-		Object.keys(schema.discriminator?.mapping ?? {}).length !== 31
+		Object.keys(schema.discriminator?.mapping ?? {}).length !== 32 ||
+		schema.discriminator?.mapping?.DISPATCH_WORKER_SESSION_ASSOCIATION !==
+			"#/$defs/DispatchWorkerSessionAssociationEventPayload"
 	) {
 		throw new Error(
 			`[api-package-consumer] Factory Event schema is incomplete: ${specifier}`,
