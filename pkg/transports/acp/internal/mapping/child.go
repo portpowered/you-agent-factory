@@ -40,10 +40,9 @@ const workerToolCallMetaKey = "you.factory.worker_session"
 // ProjectWorkerChild projects the sequenced envelope form of an associated
 // Worker Session record. The association is stored with the Chat aggregate
 // item, so retained and live delivery choose the same child path without a
-// transport-local ownership map. The first lifecycle slice deliberately
-// declares non-SESSION Worker records as no output; the subsequent exhaustive
-// Worker-content slice extends that declared outcome without changing generic
-// Chat projection.
+// transport-local ownership map. Every legal Worker Kind/Phase pair has a
+// declared outcome in projectChildRecord; generic Chat projection remains on
+// Project and never reaches this function.
 func ProjectWorkerChild(item chatsessions.SequencedItem) (*acpsdk.SessionUpdate, error) {
 	if item.WorkerSessionAssociation == nil {
 		return nil, ErrMissingChildAssociation
@@ -62,13 +61,17 @@ func ProjectWorkerChild(item chatsessions.SequencedItem) (*acpsdk.SessionUpdate,
 			ErrMalformedRecord, draft.Kind, draft.Phase,
 		)
 	}
-	if draft.Kind != workers.KindSession {
-		return nil, nil
-	}
-	if draft.Phase == workers.PhaseStarted {
+	if isChildOpening(draft) {
 		return ProjectChildOpening(draft, association)
 	}
-	return ProjectChildLifecycle(draft)
+	if strings.TrimSpace(draft.ParentItemID) == "" {
+		return nil, ErrMissingChildParent
+	}
+	return projectChildRecord(draft)
+}
+
+func isChildOpening(draft workers.Draft) bool {
+	return draft.Kind == workers.KindSession && draft.Phase == workers.PhaseStarted
 }
 
 // ProjectChildOpening projects the sequenced SESSION/STARTED record that

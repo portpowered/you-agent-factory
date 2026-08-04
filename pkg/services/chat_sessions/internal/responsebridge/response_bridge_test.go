@@ -272,12 +272,17 @@ func (f *bridgeWorkerEvents) Subscribe(_ context.Context, req events.SubscribeRe
 
 func workerLifecycleRecord(t *testing.T, workerSessionID string, position events.AggregateSequence, phase workers.Phase, status string) events.Record {
 	t.Helper()
-	payload, err := json.Marshal(workers.Draft{
+	return workerDraftRecord(t, workerSessionID, position, workers.Draft{
 		Kind: workers.KindSession, Phase: phase,
 		Payload: json.RawMessage(`{"status":"` + status + `"}`),
 	})
+}
+
+func workerDraftRecord(t *testing.T, workerSessionID string, position events.AggregateSequence, draft workers.Draft) events.Record {
+	t.Helper()
+	payload, err := json.Marshal(draft)
 	if err != nil {
-		t.Fatalf("marshal worker lifecycle draft: %v", err)
+		t.Fatalf("marshal worker draft: %v", err)
 	}
 	topic := workersessions.Topic(workerSessionID)
 	return events.Record{
@@ -346,6 +351,43 @@ func TestServiceRunSequencesAssociatedWorkerLifecycleFromRetainedTail(t *testing
 		t.Fatalf("sequence/advance counts = %d/%d, want all three retained worker records", len(sequencer.sequences), len(sequencer.advances))
 	}
 	assertAssociatedWorkerLifecycle(t, sequencer.sequences, workerSessionID)
+}
+
+func TestServiceRunSequencesAssociatedWorkerContentRecordsWithOpeningParent(t *testing.T) {
+	const workerSessionID = "worker-session-content"
+	sequencer := &bridgeSequencer{didFirst: make(chan struct{})}
+	workerEvents := &bridgeWorkerEvents{records: map[events.Topic][]events.Record{
+		workersessions.Topic(workerSessionID): {
+			workerLifecycleRecord(t, workerSessionID, 1, workers.PhaseStarted, "STARTING"),
+			workerDraftRecord(t, workerSessionID, 2, workers.Draft{Kind: workers.KindMessage, Phase: workers.PhaseDelta, Payload: json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"answer"}`)}),
+			workerDraftRecord(t, workerSessionID, 3, workers.Draft{Kind: workers.KindTool, Phase: workers.PhaseDelta, Payload: json.RawMessage(`{"toolCallId":"native-tool","outputDelta":"tool output"}`)}),
+			workerDraftRecord(t, workerSessionID, 4, workers.Draft{Kind: workers.KindProgress, Phase: workers.PhaseUpdated, Payload: json.RawMessage(`{"label":"working"}`)}),
+			workerDraftRecord(t, workerSessionID, 5, workers.Draft{Kind: workers.KindError, Phase: workers.PhaseUpdated, Payload: json.RawMessage(`{"code":"retry","message":"temporary"}`)}),
+			workerLifecycleRecord(t, workerSessionID, 6, workers.PhaseCompleted, "COMPLETED"),
+		},
+	}}
+	target := bridgeTarget{cursor: closedResponseCursor(), factoryEvents: workerAssociationStream(t, "dispatch-content", workerSessionID)}
+
+	got, err := New(sequencer, target, workerEvents, logging.NoopLogger{}).Run(
+		context.Background(), "chat-1", 4, "factory-1", nil,
+		func(context.Context) (factorysessions.InvocationResult, error) {
+			return factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}, nil
+		},
+	)
+	if err != nil || got.Status != factorysessions.InvocationTerminalStatusCompleted {
+		t.Fatalf("Run() = (%+v, %v), want completed result and nil", got, err)
+	}
+	if len(sequencer.sequences) != 6 || len(sequencer.advances) != 6 {
+		t.Fatalf("sequence/advance counts = %d/%d, want every associated Worker record", len(sequencer.sequences), len(sequencer.advances))
+	}
+	assertAssociatedWorkerLifecycle(t, sequencer.sequences, workerSessionID)
+	for index, want := range []workers.Kind{
+		workers.KindSession, workers.KindMessage, workers.KindTool, workers.KindProgress, workers.KindError, workers.KindSession,
+	} {
+		if got := sequencer.sequences[index].Kind; got != want {
+			t.Fatalf("sequence %d kind = %q, want %q", index, got, want)
+		}
+	}
 }
 
 func TestServiceRunSequencesAssociatedWorkerLifecycleLiveBeforeInvokeReturns(t *testing.T) {

@@ -42,6 +42,11 @@ var (
 	// this lifecycle bridge fails closed rather than pretending its parent was
 	// observed.
 	ErrWorkerChildHistoryGap = errors.New("chat sessions: worker child history gap")
+	// ErrMalformedWorkerChildRecord reports a Worker topic payload that cannot
+	// be decoded as the published workers.Draft vocabulary. It is local to one
+	// child: ingestion logs and skips it so a malformed sibling cannot stop
+	// already-associated Worker Sessions from continuing to sequence.
+	ErrMalformedWorkerChildRecord = errors.New("chat sessions: malformed worker child record")
 )
 
 // workerChildren owns only the child-source ingestion lifecycle for one
@@ -277,6 +282,10 @@ func (s *Service) drainWorkerLifecycleLive(
 		switch delivery.Kind {
 		case events.DeliveryRecord:
 			if err := s.sequenceWorkerLifecycleRecord(deliveryCtx, chatSessionID, state, association, delivery.Record); err != nil {
+				if isIsolatedWorkerChildRecordError(err) {
+					s.logWorkerChildRecordSkipped(association, delivery.Record, err)
+					continue
+				}
 				return err
 			}
 		case events.DeliveryGap:
@@ -308,6 +317,10 @@ func (s *Service) drainWorkerLifecycleTail(
 		case events.ReadOutcomeProgress:
 			for _, record := range read.Records {
 				if err := s.sequenceWorkerLifecycleRecord(ctx, chatSessionID, state, association, record); err != nil {
+					if isIsolatedWorkerChildRecordError(err) {
+						s.logWorkerChildRecordSkipped(association, record, err)
+						continue
+					}
 					return err
 				}
 			}
@@ -327,10 +340,7 @@ func (s *Service) sequenceWorkerLifecycleRecord(
 ) error {
 	var draft workers.Draft
 	if err := json.Unmarshal(record.Payload, &draft); err != nil {
-		return fmt.Errorf("decode worker session record: %w", err)
-	}
-	if draft.Kind != workers.KindSession {
-		return nil
+		return fmt.Errorf("%w: %v", ErrMalformedWorkerChildRecord, err)
 	}
 
 	state.mu.Lock()
@@ -343,7 +353,7 @@ func (s *Service) sequenceWorkerLifecycleRecord(
 	if _, alreadySequenced := child.sequencedSources[identity]; alreadySequenced {
 		return nil
 	}
-	parentItemID, err := child.parentForLifecycle(draft.Phase, identity)
+	parentItemID, err := child.parentForRecord(draft, identity)
 	if err != nil {
 		return err
 	}
@@ -367,11 +377,11 @@ func (s *Service) sequenceWorkerLifecycleRecord(
 	if err != nil {
 		return err
 	}
-	if draft.Phase == workers.PhaseStarted {
+	if isWorkerChildOpening(draft) {
 		child.openingItemID = result.ItemID
 		child.openingSource = identity
 	}
-	if isWorkerTerminalPhase(draft.Phase) {
+	if isWorkerChildTerminal(draft) {
 		child.terminal = true
 		child.terminalSource = identity
 	}
@@ -380,8 +390,8 @@ func (s *Service) sequenceWorkerLifecycleRecord(
 	return nil
 }
 
-func (child *workerChild) parentForLifecycle(phase workers.Phase, identity events.AppendIdentity) (string, error) {
-	if phase == workers.PhaseStarted {
+func (child *workerChild) parentForRecord(draft workers.Draft, identity events.AppendIdentity) (string, error) {
+	if isWorkerChildOpening(draft) {
 		if child.openingItemID != "" && child.openingSource != identity {
 			return "", ErrDuplicateWorkerChildOpening
 		}
@@ -396,6 +406,53 @@ func (child *workerChild) parentForLifecycle(phase workers.Phase, identity event
 	return child.openingItemID, nil
 }
 
-func isWorkerTerminalPhase(phase workers.Phase) bool {
-	return phase == workers.PhaseCompleted || phase == workers.PhaseFailed || phase == workers.PhaseCanceled
+func isWorkerChildOpening(draft workers.Draft) bool {
+	return draft.Kind == workers.KindSession && draft.Phase == workers.PhaseStarted
+}
+
+func isWorkerChildTerminal(draft workers.Draft) bool {
+	return draft.Kind == workers.KindSession &&
+		(draft.Phase == workers.PhaseCompleted || draft.Phase == workers.PhaseFailed || draft.Phase == workers.PhaseCanceled)
+}
+
+func isIsolatedWorkerChildRecordError(err error) bool {
+	return errors.Is(err, ErrMalformedWorkerChildRecord) ||
+		errors.Is(err, ErrWorkerChildOpeningRequired) ||
+		errors.Is(err, ErrDuplicateWorkerChildOpening) ||
+		errors.Is(err, ErrWorkerChildAfterTerminal)
+}
+
+// logWorkerChildRecordSkipped makes a malformed record observable without
+// exposing worker payloads or letting one child end the entire Factory turn.
+func (s *Service) logWorkerChildRecordSkipped(
+	association chatsessions.WorkerSessionAssociation,
+	record events.Record,
+	err error,
+) {
+	if s == nil || s.logger == nil {
+		return
+	}
+	s.logger.Warn(
+		"chat sessions skipped malformed worker child record",
+		"op", responseBridgeOperation,
+		"dispatch_id", association.DispatchID,
+		"worker_session_id", association.WorkerSessionID,
+		"source_sequence", uint64(record.SourceSequence),
+		"error_class", workerChildRecordErrorClass(err),
+	)
+}
+
+func workerChildRecordErrorClass(err error) string {
+	switch {
+	case errors.Is(err, ErrMalformedWorkerChildRecord):
+		return "malformed_record"
+	case errors.Is(err, ErrWorkerChildOpeningRequired):
+		return "opening_required"
+	case errors.Is(err, ErrDuplicateWorkerChildOpening):
+		return "duplicate_opening"
+	case errors.Is(err, ErrWorkerChildAfterTerminal):
+		return "after_terminal"
+	default:
+		return "unknown"
+	}
 }

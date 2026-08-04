@@ -48,6 +48,8 @@ import (
 // streamTurnUpdates loops until Read reports ReadOutcomeAtHead.
 const retainedReadBatchLimit = 64
 
+const workerChildProjectionSkipOperation = "ProjectWorkerChild"
+
 // liveStreamHeadPollInterval bounds how long a live subscriber waits between
 // observing a sequenced event and observing the producer's accompanying
 // StreamHead advancement. Sequence commits the event before AdvanceStreamHead
@@ -577,7 +579,10 @@ func (s *Server) drainRecords(
 
 		update, projErr := projectSequencedItem(ctx, item)
 		if projErr != nil {
-			return false, deliveredMessage, projErr
+			if item.WorkerSessionAssociation == nil {
+				return false, deliveredMessage, projErr
+			}
+			s.logWorkerChildProjectionSkipped(item)
 		}
 
 		if update != nil {
@@ -635,6 +640,27 @@ func projectSequencedItem(ctx context.Context, item chatsessions.SequencedItem) 
 		return mapping.ProjectRetained(draft)
 	}
 	return mapping.Project(draft)
+}
+
+// logWorkerChildProjectionSkipped records a typed child mapping failure
+// without surfacing source payload contents or terminating delivery for a
+// healthy sibling. The pure mapper still returns its typed error to direct
+// callers; this retained/live consumer acknowledges the malformed child item
+// and continues the canonical aggregate order.
+func (s *Server) logWorkerChildProjectionSkipped(item chatsessions.SequencedItem) {
+	if s == nil || s.logger == nil || item.WorkerSessionAssociation == nil {
+		return
+	}
+	s.logger.Warn(
+		"acp skipped malformed worker child projection",
+		"op", workerChildProjectionSkipOperation,
+		"dispatch_id", item.WorkerSessionAssociation.DispatchID,
+		"worker_session_id", item.WorkerSessionAssociation.WorkerSessionID,
+		"item_id", item.ItemID,
+		"parent_item_id", item.ParentItemID,
+		"kind", string(item.Kind),
+		"phase", string(item.Phase),
+	)
 }
 
 // acknowledgeDeliveredPosition persists a position already handed to the

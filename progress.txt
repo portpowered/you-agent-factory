@@ -3,6 +3,8 @@
 - Factory child ownership must be established by the canonical dispatch-to-Worker-Session association; malformed or unaddressed child records fail closed without an ACP fallback.
 - A live event reader may use a cancellable context, but committed sequencing and terminal catch-up must use a non-cancelled delivery context so a record observed at the invocation boundary is not lost.
 - When a live source is replayed from its retained origin during terminal catch-up, retain successfully committed source identities for the current bridge run before applying lifecycle-order guards.
+- Only an associated SESSION/STARTED record opens a Factory child tool call; every other associated Worker record must preserve the sequencer-assigned opening ItemID as ParentItemID, even when its phase is STARTED.
+- Isolate typed mapping failures only for associated child records at the delivery boundary; preserve the established fatal behavior for malformed generic Chat envelopes.
 
 ## 2026-08-04 15:44 -07:00 - ACP-L4-W5-CHILD-TOOL-CALL-PROJECTION-001
 - Added a pure Worker child lifecycle mapper that renders sequenced, associated SESSION/STARTED records as pending ACP tool calls and maps RUNNING and terminal lifecycle records to parent-addressed tool-call updates.
@@ -42,4 +44,26 @@
   - The terminal retained sweep begins at each Worker topic origin, so it must skip records already sequenced live by canonical `(source type, source ID, source sequence, source event ID)` identity.
   - Associated envelopes route through `mapping.ProjectWorkerChild`; unassociated Chat envelopes must remain on the existing generic `mapping.Project` path.
   - `make wire-smoke`, `make test`, focused `go vet`, and `go test -race -count=20` on child producer/delivery packages pass.
+---
+
+## 2026-08-04 16:20 -07:00 - ACP-L4-W5-CHILD-TOOL-CALL-PROJECTION-002
+- Extended canonical Factory child ingestion to sequence every associated Worker record after its SESSION/STARTED opening, retaining the opening's sequencer-assigned ItemID as each record's ParentItemID.
+- Added a pure exhaustive child ACP mapper: meaningful Worker messages, reasoning, native tool payloads/deltas, file changes, plans, progress, usage, errors, and explicit gaps now become parent-addressed tool-call updates; RUN and TURN retain declared no-output outcomes.
+- Added typed malformed-record rejection and delivery isolation so a bad associated child record is acknowledged, logged safely, and cannot stop an interleaved sibling; generic Chat projection behavior is unchanged.
+- Added exhaustive Kind/Phase table coverage, native ToolPayload/delta assertions, content/lineage checks, bridge sequencing coverage, retained-delivery sibling isolation coverage, and focused race-repeat evidence.
+- Files changed:
+  - pkg/transports/acp/internal/mapping/child.go
+  - pkg/transports/acp/internal/mapping/child_content.go
+  - pkg/transports/acp/internal/mapping/child_content_test.go
+  - pkg/transports/acp/internal/stdio/prompt_stream.go
+  - pkg/transports/acp/internal/stdio/prompt_stream_test.go
+  - pkg/services/chat_sessions/internal/responsebridge/worker_children.go
+  - pkg/services/chat_sessions/internal/responsebridge/response_bridge_test.go
+  - prd.json
+  - progress.txt
+- **Learnings for future iterations:**
+  - Only SESSION/STARTED establishes a child parent; non-session STARTED records such as RUN/TOOL must target the already-sequenced child tool call rather than minting another opening.
+  - Tool-call updates carry `Content`, `RawInput`, and `RawOutput`; preserving `workers.ToolPayload` and `workers.ToolDeltaPayload` in the raw fields avoids inventing a child-tool taxonomy.
+  - Typed mapper failures can be isolated at the associated child delivery boundary while unassociated generic Chat mapping failures retain T03's existing fatal semantics.
+  - `go vet` on changed packages, `go test ./pkg/transports/acp/... ./pkg/services/chat_sessions/internal/responsebridge`, `go test -race -count=20` on child mapper/delivery packages, and `make test` pass.
 ---

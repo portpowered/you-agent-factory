@@ -52,8 +52,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-04: Extended the canonical Worker child bridge to sequence every associated Worker record after its SESSION/STARTED opening, then added an exhaustive pure ACP child mapper. MESSAGE, REASONING, TOOL, FILE_CHANGE, PLAN, PROGRESS, USAGE, ERROR, and STREAM_GAP now target the stored parent tool-call identity; RUN and TURN are validated declared no-output. Malformed child projection is typed and skips only that child during retained/live delivery, leaving sibling records ordered and intact. Focused mapper, bridge, retained delivery, race-repeat, vet, ACP package, and repository short tests pass."
     },
     {
       "id": "ACP-L4-W5-CHILD-TOOL-CALL-PROJECTION-003",
