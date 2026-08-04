@@ -526,6 +526,145 @@ func TestBackendVerificationLaneScriptSmoke_PreservesFailureExitAndLog(t *testin
 	}
 }
 
+// TestFunctionalTestVizLaneScriptSmoke_UsesCanonicalOwnedCommandAndCapturesLog prove run-functional-test-viz.sh invokes the canonical make target with the shared artifact directory and captures command.log.
+func TestFunctionalTestVizLaneScriptSmoke_UsesCanonicalOwnedCommandAndCapturesLog(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makePath := writeExecutableScript(t, "fake-make-functional-viz", "#!/bin/sh\nprintf '%s\\n' \"fake-make:$*\"\n")
+	artifactRoot := filepath.Join(t.TempDir(), "functional-test-viz-artifacts")
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "run-functional-test-viz.sh"),
+		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_DIR=%s", artifactRoot),
+		fmt.Sprintf("MAKE_BIN=%s", makePath),
+	)
+	if err != nil {
+		t.Fatalf("run functional test viz script: %v\n%s", err, output)
+	}
+	if !strings.Contains(output, "fake-make:functional-test-viz FUNCTIONAL_TEST_VIZ_DIR="+artifactRoot) {
+		t.Fatalf("functional test viz script did not invoke the canonical make target with the shared artifact directory:\n%s", output)
+	}
+
+	logBody, err := os.ReadFile(filepath.Join(artifactRoot, "command.log"))
+	if err != nil {
+		t.Fatalf("read functional test viz command log: %v", err)
+	}
+	if !strings.Contains(string(logBody), "fake-make:functional-test-viz") {
+		t.Fatalf("functional test viz command log missing canonical command output:\n%s", string(logBody))
+	}
+}
+
+// TestFunctionalTestVizLaneScriptSmoke_PreservesFailureExitAndLog prove run-functional-test-viz.sh preserves failure exit codes and command.log output so a failed lane cannot be papered over by publication steps.
+func TestFunctionalTestVizLaneScriptSmoke_PreservesFailureExitAndLog(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makePath := writeExecutableScript(t, "fake-make-functional-viz-fail", "#!/bin/sh\nprintf '%s\\n' \"fake-make:$*\"\nexit 42\n")
+	artifactRoot := filepath.Join(t.TempDir(), "functional-test-viz-artifacts")
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "run-functional-test-viz.sh"),
+		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_DIR=%s", artifactRoot),
+		fmt.Sprintf("MAKE_BIN=%s", makePath),
+	)
+	if err == nil {
+		t.Fatalf("functional test viz script unexpectedly succeeded:\n%s", output)
+	}
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok || exitErr.ExitCode() != 42 {
+		t.Fatalf("functional test viz script exit = %v, want exit code 42\n%s", err, output)
+	}
+
+	logBody, readErr := os.ReadFile(filepath.Join(artifactRoot, "command.log"))
+	if readErr != nil {
+		t.Fatalf("read functional test viz command log: %v", readErr)
+	}
+	if !strings.Contains(string(logBody), "fake-make:functional-test-viz") {
+		t.Fatalf("functional test viz command log missing failure output:\n%s", string(logBody))
+	}
+}
+
+// TestFunctionalTestSummaryPublishScriptSmoke_AppendsMarkdownWhenPresent prove publish-functional-test-summary.sh appends the functional test markdown to the job summary when the report exists.
+func TestFunctionalTestSummaryPublishScriptSmoke_AppendsMarkdownWhenPresent(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	tempDir := t.TempDir()
+	markdownPath := filepath.Join(tempDir, "functional-tests.md")
+	if err := os.WriteFile(markdownPath, []byte("## Functional test timings\n\nTotal wall-clock: 12.5s\n"), 0o644); err != nil {
+		t.Fatalf("write fake functional test markdown: %v", err)
+	}
+	summaryPath := filepath.Join(tempDir, "step-summary.md")
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "publish-functional-test-summary.sh"),
+		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_MARKDOWN=%s", markdownPath),
+		fmt.Sprintf("GITHUB_STEP_SUMMARY=%s", summaryPath),
+	)
+	if err != nil {
+		t.Fatalf("publish functional test summary script: %v\n%s", err, output)
+	}
+
+	summaryBody, readErr := os.ReadFile(summaryPath)
+	if readErr != nil {
+		t.Fatalf("read published job summary: %v", readErr)
+	}
+	if !strings.Contains(string(summaryBody), "## Functional test timings") {
+		t.Fatalf("job summary missing functional test timing section:\n%s", string(summaryBody))
+	}
+}
+
+// TestFunctionalTestSummaryPublishScriptSmoke_SkipsWhenMarkdownMissing prove publish-functional-test-summary.sh succeeds and leaves the job summary untouched when the markdown report is absent, so missing optional diagnostics never obscure an earlier failure.
+func TestFunctionalTestSummaryPublishScriptSmoke_SkipsWhenMarkdownMissing(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	tempDir := t.TempDir()
+	missingMarkdownPath := filepath.Join(tempDir, "does-not-exist.md")
+	summaryPath := filepath.Join(tempDir, "step-summary.md")
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "publish-functional-test-summary.sh"),
+		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_MARKDOWN=%s", missingMarkdownPath),
+		fmt.Sprintf("GITHUB_STEP_SUMMARY=%s", summaryPath),
+	)
+	if err != nil {
+		t.Fatalf("publish functional test summary script unexpectedly failed when markdown was absent: %v\n%s", err, output)
+	}
+	if !strings.Contains(output, "skipping job summary") {
+		t.Fatalf("publish functional test summary script did not report skipping the job summary:\n%s", output)
+	}
+	if _, statErr := os.Stat(summaryPath); statErr == nil {
+		summaryBody, readErr := os.ReadFile(summaryPath)
+		if readErr != nil {
+			t.Fatalf("read job summary: %v", readErr)
+		}
+		if len(summaryBody) != 0 {
+			t.Fatalf("job summary should remain untouched when markdown is absent, got:\n%s", string(summaryBody))
+		}
+	}
+}
+
+// TestFunctionalTestSummaryPublishScriptSmoke_NoopWhenGithubStepSummaryUnset prove publish-functional-test-summary.sh succeeds without a GitHub Actions job summary target.
+func TestFunctionalTestSummaryPublishScriptSmoke_NoopWhenGithubStepSummaryUnset(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	tempDir := t.TempDir()
+	markdownPath := filepath.Join(tempDir, "functional-tests.md")
+	if err := os.WriteFile(markdownPath, []byte("## Functional test timings\n"), 0o644); err != nil {
+		t.Fatalf("write fake functional test markdown: %v", err)
+	}
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "publish-functional-test-summary.sh"),
+		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_MARKDOWN=%s", markdownPath),
+		"GITHUB_STEP_SUMMARY=",
+	)
+	if err != nil {
+		t.Fatalf("publish functional test summary script unexpectedly failed without GITHUB_STEP_SUMMARY: %v\n%s", err, output)
+	}
+	if !strings.Contains(output, "GITHUB_STEP_SUMMARY not set") {
+		t.Fatalf("publish functional test summary script did not report the missing GITHUB_STEP_SUMMARY target:\n%s", output)
+	}
+}
+
 // TestVerifyExtendedCommandSmoke_UsesOnlyExplicitLongSuitesAfterPRTier prove verify-extended runs PR verification then only explicit long and specialty suites.
 func TestVerifyExtendedCommandSmoke_UsesOnlyExplicitLongSuitesAfterPRTier(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
