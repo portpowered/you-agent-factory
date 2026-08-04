@@ -58,7 +58,7 @@ func NewService(newID IDGenerator, now Clock, eventsAppender EventsAppender, eve
 	if eventsReader == nil {
 		return nil, fmt.Errorf("construct chat sessions: events reader is required")
 	}
-	return internalservice.NewStore(newID, now, logger...).WithEventsAppender(eventsAppender).WithEventsReader(eventsReader), nil
+	return internalservice.NewStore(newID, now, eventsAppender, eventsReader, logger...), nil
 }
 
 // NewFactoryTargetCatalogService constructs the Chat Sessions Factory

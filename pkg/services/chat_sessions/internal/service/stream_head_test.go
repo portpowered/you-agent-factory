@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -13,8 +14,10 @@ import (
 
 // advanceStreamHeadRequest builds the AdvanceStreamHeadRequest a caller would
 // issue immediately after an accepted Sequence call: the same source identity
-// tuple, the committed aggregate position, and the session version observed
-// before that Sequence call.
+// tuple (matching sequenceRequest's own SourceEventID construction, since
+// AdvanceStreamHead now requires the exact tuple that committed the position
+// it is asked to advance to), the committed aggregate position, and the
+// session version observed before that Sequence call.
 func advanceStreamHeadRequest(sessionID string, sourceSeq events.SourceSequence, expectedVersion uint64, position events.AggregateSequence) chatsessions.AdvanceStreamHeadRequest {
 	return chatsessions.AdvanceStreamHeadRequest{
 		SessionID:         sessionID,
@@ -23,7 +26,7 @@ func advanceStreamHeadRequest(sessionID string, sourceSeq events.SourceSequence,
 		SourceType:        "worker",
 		SourceID:          "worker-1",
 		SourceSequence:    sourceSeq,
-		SourceEventID:     events.SourceEventID("event-1"),
+		SourceEventID:     events.SourceEventID("event-" + strconv.FormatUint(uint64(sourceSeq), 10)),
 	}
 }
 
@@ -185,7 +188,7 @@ func TestStore_AdvanceStreamHead_NeverMovesBackward(t *testing.T) {
 		t.Fatalf("Sequence (2): %v", err)
 	}
 
-	advanced, err := store.AdvanceStreamHead(ctx, advanceStreamHeadRequest(session.ID, 1, session.Version, second.AggregateSequence))
+	advanced, err := store.AdvanceStreamHead(ctx, advanceStreamHeadRequest(session.ID, 2, session.Version, second.AggregateSequence))
 	if err != nil {
 		t.Fatalf("AdvanceStreamHead to position 2: %v", err)
 	}
@@ -215,11 +218,144 @@ func TestStore_AdvanceStreamHead_NeverMovesBackward(t *testing.T) {
 // session reports *NotFoundError.
 func TestStore_AdvanceStreamHead_UnknownSessionReportsNotFound(t *testing.T) {
 	ctx := context.Background()
-	store := NewStore(sequentialIDs("id"), fixedClock(time.Now()))
+	store := NewStore(sequentialIDs("id"), fixedClock(time.Now()), nil, nil)
 
 	_, err := store.AdvanceStreamHead(ctx, advanceStreamHeadRequest("does-not-exist", 1, 0, 1))
 	if !errors.Is(err, chatsessions.ErrNotFound) {
 		t.Fatalf("AdvanceStreamHead(unknown session): got %v, want ErrNotFound", err)
+	}
+}
+
+// TestStore_AdvanceStreamHead_CancelledContextIsRejected proves
+// AdvanceStreamHead checks ctx.Err() before taking the Store lock or
+// attempting any mutation, so a caller racing a cancellation never observes
+// a partial or unconditional head advancement -- mirroring Sequence's own
+// TestStore_Sequence_CancelledContextIsRejected precedent.
+func TestStore_AdvanceStreamHead_CancelledContextIsRejected(t *testing.T) {
+	store, session, _ := newSequencingTestSession(t)
+	seqResult, err := store.Sequence(context.Background(), sequenceRequest(session.ID, 1, ""))
+	if err != nil {
+		t.Fatalf("Sequence: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	req := advanceStreamHeadRequest(session.ID, 1, session.Version, seqResult.AggregateSequence)
+	if _, err := store.AdvanceStreamHead(ctx, req); !errors.Is(err, context.Canceled) {
+		t.Fatalf("AdvanceStreamHead(cancelled ctx): got %v, want context.Canceled", err)
+	}
+
+	store.mu.RLock()
+	record := store.sessions[session.ID]
+	store.mu.RUnlock()
+	if record.session.StreamHead != 0 {
+		t.Fatalf("StreamHead mutated by cancelled-context call: got %d, want 0", record.session.StreamHead)
+	}
+	if record.session.Version != session.Version {
+		t.Fatalf("Version mutated by cancelled-context call: got %d, want %d", record.session.Version, session.Version)
+	}
+}
+
+// TestStore_AdvanceStreamHead_RejectsUncommittedPosition proves
+// AdvanceStreamHead rejects an AggregateSequence this session's sequencer
+// never actually committed -- a position no Sequence call ever produced for
+// this session at all -- with *UncommittedStreamPositionError and no
+// mutation. Trusting an unvalidated position here is exactly what let a
+// caller advance StreamHead to fabricated state before this fix.
+func TestStore_AdvanceStreamHead_RejectsUncommittedPosition(t *testing.T) {
+	ctx := context.Background()
+	store, session, _ := newSequencingTestSession(t)
+
+	req := advanceStreamHeadRequest(session.ID, 1, session.Version, 999)
+	_, err := store.AdvanceStreamHead(ctx, req)
+	var uncommitted *chatsessions.UncommittedStreamPositionError
+	if !errors.As(err, &uncommitted) {
+		t.Fatalf("AdvanceStreamHead(never-sequenced position): got %v, want *UncommittedStreamPositionError", err)
+	}
+	if !errors.Is(err, chatsessions.ErrUncommittedStreamPosition) {
+		t.Fatalf("AdvanceStreamHead(never-sequenced position): got %v, want ErrUncommittedStreamPosition", err)
+	}
+
+	store.mu.RLock()
+	record := store.sessions[session.ID]
+	store.mu.RUnlock()
+	if record.session.StreamHead != 0 {
+		t.Fatalf("StreamHead mutated by rejected request: got %d, want 0", record.session.StreamHead)
+	}
+	if record.session.Version != session.Version {
+		t.Fatalf("Version mutated by rejected request: got %d, want %d", record.session.Version, session.Version)
+	}
+}
+
+// TestStore_AdvanceStreamHead_RejectsCrossSessionPosition proves a position
+// genuinely committed by one session's sequencer is not a valid
+// AdvanceStreamHead target for a different session, even though it is a
+// well-formed, real, already-assigned aggregate position -- mirroring
+// Sequence's own TestStore_Sequence_ParentFromAnotherSessionIsRejected
+// precedent for cross-session identity reuse.
+func TestStore_AdvanceStreamHead_RejectsCrossSessionPosition(t *testing.T) {
+	ctx := context.Background()
+	store, sessionA, _ := newSequencingTestSession(t)
+	createdB, err := store.CreateSession(ctx, chatsessions.CreateSessionRequest{
+		RequestID:     chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn-2", JSONRPCStringID: "req-2"},
+		WorkingRoot:   "/workspace/project-b",
+		InitialTarget: chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession (B): %v", err)
+	}
+
+	inA, err := store.Sequence(ctx, sequenceRequest(sessionA.ID, 1, ""))
+	if err != nil {
+		t.Fatalf("Sequence in session A: %v", err)
+	}
+
+	// Session B's own sequencer never committed inA's position; reusing that
+	// exact (position, source identity) pair against session B must be
+	// rejected, not silently accepted because the position and tuple are
+	// individually well-formed and real.
+	req := advanceStreamHeadRequest(createdB.Session.ID, 1, createdB.Session.Version, inA.AggregateSequence)
+	_, err = store.AdvanceStreamHead(ctx, req)
+	if !errors.Is(err, chatsessions.ErrUncommittedStreamPosition) {
+		t.Fatalf("AdvanceStreamHead(session B, session A's position): got %v, want ErrUncommittedStreamPosition", err)
+	}
+
+	store.mu.RLock()
+	record := store.sessions[createdB.Session.ID]
+	store.mu.RUnlock()
+	if record.session.StreamHead != 0 {
+		t.Fatalf("session B StreamHead mutated by rejected cross-session request: got %d, want 0", record.session.StreamHead)
+	}
+}
+
+// TestStore_AdvanceStreamHead_RejectsMismatchedSourceIdentityForCommittedPosition
+// proves that even when the requested AggregateSequence is a real position
+// this exact session's sequencer committed, AdvanceStreamHead still rejects
+// it if the caller's stated source identity does not match the tuple that
+// actually committed it -- the position alone is never sufficient proof.
+func TestStore_AdvanceStreamHead_RejectsMismatchedSourceIdentityForCommittedPosition(t *testing.T) {
+	ctx := context.Background()
+	store, session, _ := newSequencingTestSession(t)
+
+	seqResult, err := store.Sequence(ctx, sequenceRequest(session.ID, 1, ""))
+	if err != nil {
+		t.Fatalf("Sequence: %v", err)
+	}
+
+	req := advanceStreamHeadRequest(session.ID, 1, session.Version, seqResult.AggregateSequence)
+	req.SourceEventID = "event-does-not-match"
+	_, err = store.AdvanceStreamHead(ctx, req)
+	var uncommitted *chatsessions.UncommittedStreamPositionError
+	if !errors.As(err, &uncommitted) {
+		t.Fatalf("AdvanceStreamHead(mismatched source identity): got %v, want *UncommittedStreamPositionError", err)
+	}
+
+	store.mu.RLock()
+	record := store.sessions[session.ID]
+	store.mu.RUnlock()
+	if record.session.StreamHead != 0 {
+		t.Fatalf("StreamHead mutated by rejected request: got %d, want 0", record.session.StreamHead)
 	}
 }
 
@@ -339,13 +475,12 @@ func TestStore_AdvanceStreamHead_ConcurrentSamePositionConverges(t *testing.T) {
 // never the session's WorkingRoot or any other unsafe field.
 func TestStore_AdvanceStreamHead_SafeLogFields(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	store := NewStore(sequentialIDs("id"), fixedClock(time.Now()), logger)
+	store := NewStore(sequentialIDs("id"), fixedClock(time.Now()), newFakeEventsAppender(), nil, logger)
 
 	created, err := store.CreateSession(context.Background(), validCreateRequest())
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	store.WithEventsAppender(newFakeEventsAppender())
 	seqResult, err := store.Sequence(context.Background(), sequenceRequest(created.Session.ID, 1, ""))
 	if err != nil {
 		t.Fatalf("Sequence: %v", err)

@@ -84,6 +84,18 @@ var (
 	// position and the requested one that Events retention has since
 	// evicted, so the attachment cannot have genuinely observed it.
 	ErrAttachmentRetentionGap = errors.New("chat sessions: requested attachment position spans an evicted retention gap")
+	// ErrUncommittedStreamPosition reports that AdvanceStreamHead was asked
+	// to advance StreamHead to an AggregateSequence this session's sequencer
+	// never actually committed for the exact stated (SourceType, SourceID,
+	// SourceSequence, SourceEventID) tuple -- either the position was never
+	// assigned by Sequence for this session at all, or it was assigned to a
+	// different source identity (including one sequenced in another
+	// session). AdvanceStreamHead's contract is "the position a prior
+	// accepted Sequence call committed for this exact source identity";
+	// trusting an unvalidated position would let StreamHead advance to
+	// fabricated or cross-session state, which AcknowledgeAttachment would
+	// then trust as proof of a range no attachment ever actually observed.
+	ErrUncommittedStreamPosition = errors.New("chat sessions: requested stream head position was not committed by the stated source identity for this session")
 )
 
 // ValidationError reports one Chat Sessions value-validation failure. Value
@@ -298,6 +310,32 @@ func (e *AttachmentRetentionGapError) Error() string {
 // classify the failure.
 func (e *AttachmentRetentionGapError) Unwrap() error {
 	return ErrAttachmentRetentionGap
+}
+
+// UncommittedStreamPositionError reports that AdvanceStreamHead rejected a
+// requested AggregateSequence because this session's sequencer never
+// committed that exact position for the stated source identity tuple.
+// Neither the session nor any attachment is mutated. SourceType/SourceID/
+// SourceSequence/SourceEventID are opaque source identity values, safe to
+// cross a service boundary the same way BusyError's ActiveTurnID already is.
+type UncommittedStreamPositionError struct {
+	SessionID         string
+	AggregateSequence uint64
+	SourceType        string
+	SourceID          string
+	SourceSequence    uint64
+	SourceEventID     string
+}
+
+func (e *UncommittedStreamPositionError) Error() string {
+	return fmt.Sprintf("chat sessions: session %q: position %d source identity (%s, %s, %d, %s): %v",
+		e.SessionID, e.AggregateSequence, e.SourceType, e.SourceID, e.SourceSequence, e.SourceEventID, ErrUncommittedStreamPosition)
+}
+
+// Unwrap exposes ErrUncommittedStreamPosition so errors.Is/errors.As can
+// classify the failure.
+func (e *UncommittedStreamPositionError) Unwrap() error {
+	return ErrUncommittedStreamPosition
 }
 
 // TargetEpisodeNotClosedError reports that OpenNextTargetEpisode was invoked

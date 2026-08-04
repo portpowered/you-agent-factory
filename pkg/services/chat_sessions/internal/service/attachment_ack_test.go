@@ -296,6 +296,47 @@ func TestStore_AcknowledgeAttachment_RetentionGapIsRejected(t *testing.T) {
 	}
 }
 
+// TestStore_AcknowledgeAttachment_RejectsWhenReadStopsShortOfRequestedPosition
+// proves AcknowledgeAttachment does not treat a bare ReadOutcomeProgress as
+// sufficient proof that the full requested range was retained: it also
+// requires the read's own Next cursor to land exactly on the requested
+// position. This directly exercises the scenario a fabricated or
+// unvalidated StreamHead would otherwise enable -- Events reports Progress,
+// not Gap, when a caller asks for more records than currently exist, so a
+// naive "Progress means safe" check would let AcknowledgeAttachment advance
+// an attachment past positions Events never actually committed. The
+// fabrication is injected directly on the stored session (bypassing
+// AdvanceStreamHead, which independently rejects any uncommitted position)
+// to isolate AcknowledgeAttachment's own defense.
+func TestStore_AcknowledgeAttachment_RejectsWhenReadStopsShortOfRequestedPosition(t *testing.T) {
+	ctx := context.Background()
+	store, session, _ := newSequencingTestSession(t)
+	_, session = sequenceAndAdvance(t, store, session, 1, 1)
+
+	attached, err := store.Attach(ctx, chatsessions.AttachRequest{SessionID: session.ID, ConnectionID: "conn-1"})
+	if err != nil {
+		t.Fatalf("Attach: %v", err)
+	}
+
+	store.mu.Lock()
+	record := store.sessions[session.ID]
+	record.session.StreamHead = 5
+	store.sessions[session.ID] = record
+	store.mu.Unlock()
+
+	_, err = store.AcknowledgeAttachment(ctx, acknowledgeAttachmentRequest(session.ID, attached.Attachment.ID, session.Version, 5))
+	if err == nil {
+		t.Fatal("AcknowledgeAttachment: got nil error, want rejection for a position Events never actually committed")
+	}
+
+	store.mu.RLock()
+	record = store.sessions[session.ID]
+	store.mu.RUnlock()
+	if got := record.attachments[attached.Attachment.ID].AfterSequence; got != 0 {
+		t.Fatalf("AfterSequence mutated by rejected request: got %d, want 0", got)
+	}
+}
+
 // TestStore_AcknowledgeAttachment_CrossSessionAttachmentReportsNotFound
 // proves an AttachmentID that identifies a real attachment on a different
 // session is not resolvable against this session -- an acknowledgement can
@@ -560,14 +601,13 @@ func TestStore_AcknowledgeAttachment_ConcurrentDistinctAttachmentsDoNotInterfere
 // and never the session's WorkingRoot or any other unsafe field.
 func TestStore_AcknowledgeAttachment_SafeLogFields(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	store := NewStore(sequentialIDs("id"), fixedClock(time.Now()), logger)
+	appender := newFakeEventsAppender()
+	store := NewStore(sequentialIDs("id"), fixedClock(time.Now()), appender, appender, logger)
 
 	created, err := store.CreateSession(context.Background(), validCreateRequest())
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	appender := newFakeEventsAppender()
-	store.WithEventsAppender(appender).WithEventsReader(appender)
 	seqResult, err := store.Sequence(context.Background(), sequenceRequest(created.Session.ID, 1, ""))
 	if err != nil {
 		t.Fatalf("Sequence: %v", err)

@@ -203,7 +203,7 @@ func TestStore_BindFactorySession_BlankTurnIDIsValidationError(t *testing.T) {
 // against an unknown SessionID reports *NotFoundError.
 func TestStore_BindFactorySession_UnknownSessionIsTypedNotFound(t *testing.T) {
 	ctx := context.Background()
-	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()))
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil)
 
 	_, err := store.BindFactorySession(ctx, chatsessions.BindFactorySessionRequest{
 		SessionID: "does-not-exist", ExpectedVersion: 1, Episode: 1, TurnID: "turn-1", FactorySessionID: "factory-session-1",

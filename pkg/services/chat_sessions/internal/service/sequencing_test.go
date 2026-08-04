@@ -193,7 +193,7 @@ func (f *fakeEventsAppender) commitCount(topic events.Topic) int {
 func newSequencingTestSession(t *testing.T) (*Store, chatsessions.Session, *fakeEventsAppender) {
 	t.Helper()
 	appender := newFakeEventsAppender()
-	store := NewStore(sequentialIDs("id"), fixedClock(time.Now())).WithEventsAppender(appender).WithEventsReader(appender)
+	store := NewStore(sequentialIDs("id"), fixedClock(time.Now()), appender, appender)
 	created, err := store.CreateSession(context.Background(), validCreateRequest())
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -297,6 +297,36 @@ func TestStore_Sequence_PreservesSourceIdentityAndPayload(t *testing.T) {
 	}
 }
 
+// TestStore_Sequence_PreservesPayloadBytesVerbatimIncludingWhitespaceAndHTMLCharacters
+// proves the committed SequencedItem envelope's Payload is byte-for-byte
+// identical to the request's original Payload even when it contains
+// meaningful insignificant whitespace and HTML-sensitive characters
+// (<, >, &). A naive json.Marshal(item) on a struct embedding a
+// json.RawMessage field runs that field's bytes through Go's stdlib JSON
+// compaction (which strips insignificant whitespace) and, by default,
+// HTML-escaping (which rewrites <, >, & to <, >, &) before
+// Events ever sees it -- this test would fail against that implementation.
+func TestStore_Sequence_PreservesPayloadBytesVerbatimIncludingWhitespaceAndHTMLCharacters(t *testing.T) {
+	ctx := context.Background()
+	store, session, appender := newSequencingTestSession(t)
+
+	req := sequenceRequest(session.ID, 1, "")
+	req.Payload = json.RawMessage("{\n  \"text\": \"<script>alert('a' & 'b')</script>\"\n}")
+	if _, err := store.Sequence(ctx, req); err != nil {
+		t.Fatalf("Sequence: %v", err)
+	}
+
+	topic := chatsessions.EventsTopic(session.ID)
+	committed := appender.topics[topic].commits[0]
+	var envelope chatsessions.SequencedItem
+	if err := json.Unmarshal(committed.Payload, &envelope); err != nil {
+		t.Fatalf("unmarshal committed envelope: %v", err)
+	}
+	if string(envelope.Payload) != string(req.Payload) {
+		t.Fatalf("committed envelope Payload = %q, want byte-for-byte %q (whitespace/HTML-escaping must not change)", envelope.Payload, req.Payload)
+	}
+}
+
 // TestStore_Sequence_ChildAcceptedOnlyAfterParentSequenced proves a child
 // reference is rejected without committing anything when its ParentItemID
 // does not already identify an item sequenced in this exact session, and
@@ -361,7 +391,7 @@ func TestStore_Sequence_ParentFromAnotherSessionIsRejected(t *testing.T) {
 func TestStore_Sequence_UnknownSessionReportsNotFound(t *testing.T) {
 	ctx := context.Background()
 	appender := newFakeEventsAppender()
-	store := NewStore(sequentialIDs("id"), fixedClock(time.Now())).WithEventsAppender(appender)
+	store := NewStore(sequentialIDs("id"), fixedClock(time.Now()), appender, nil)
 
 	if _, err := store.Sequence(ctx, sequenceRequest("does-not-exist", 1, "")); !errors.Is(err, chatsessions.ErrNotFound) {
 		t.Fatalf("Sequence(unknown session): got %v, want ErrNotFound", err)
@@ -774,7 +804,7 @@ func TestStore_Sequence_AssignedItemFailingValidationIsRejected(t *testing.T) {
 		}
 		return ""
 	}
-	store := NewStore(blankAfterFirst, fixedClock(time.Now())).WithEventsAppender(appender)
+	store := NewStore(blankAfterFirst, fixedClock(time.Now()), appender, nil)
 	created, err := store.CreateSession(ctx, validCreateRequest())
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -799,7 +829,7 @@ func TestStore_Sequence_AppendFailurePropagatesWithoutIndexingItem(t *testing.T)
 	appender := stubAppender{fn: func(context.Context, events.AppendRequest) (events.AppendResult, error) {
 		return events.AppendResult{}, appendErr
 	}}
-	store := NewStore(sequentialIDs("id"), fixedClock(time.Now())).WithEventsAppender(appender)
+	store := NewStore(sequentialIDs("id"), fixedClock(time.Now()), appender, nil)
 	created, err := store.CreateSession(ctx, validCreateRequest())
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -832,7 +862,7 @@ func TestStore_Sequence_UnexpectedAppendOutcomeIsReportedAsError(t *testing.T) {
 			Outcome: bogusOutcome,
 		}, nil
 	}}
-	store := NewStore(sequentialIDs("id"), fixedClock(time.Now())).WithEventsAppender(appender)
+	store := NewStore(sequentialIDs("id"), fixedClock(time.Now()), appender, nil)
 	created, err := store.CreateSession(ctx, validCreateRequest())
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
