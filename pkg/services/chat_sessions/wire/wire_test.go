@@ -147,6 +147,13 @@ type stubFactoryDefinitionsService struct {
 	factorydefinitions.Service
 }
 
+func (stubFactoryDefinitionsService) ResolveCurrentFactoryLocation(
+	context.Context,
+	factorydefinitions.ResolveCurrentFactoryLocationRequest,
+) (factorydefinitions.ResolveCurrentFactoryLocationResult, error) {
+	return factorydefinitions.ResolveCurrentFactoryLocationResult{}, nil
+}
+
 // TestNewFactoryTargetCatalogService_ConstructsFromInjectedRoots proves this
 // package's NewFactoryTargetCatalogService is the thin delegation its doc
 // comment claims: it forwards the injected Operator Settings and Factory
