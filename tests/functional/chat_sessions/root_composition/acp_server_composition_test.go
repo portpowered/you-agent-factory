@@ -9,22 +9,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/root"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
@@ -50,7 +44,7 @@ func TestACPServerReachesCanonicalChatSessionsAuthorityThroughRootBuildProcess(t
 	t.Setenv("USERPROFILE", home)
 
 	seedInstalledPackagedFactory(t, home, "@you/goal")
-	seedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
+	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
 
 	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
 	if err != nil {
@@ -107,45 +101,6 @@ func seedInstalledPackagedFactory(t *testing.T, home, name string) {
 	configPath := filepath.Join(factoryDir, "factory.json")
 	if err := os.WriteFile(configPath, resolved.Definition.JSON, 0o644); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v", configPath, err)
-	}
-}
-
-// seedACPAgentProfile persists a real ACP Agent profile at the production
-// Operator Settings config path for home, through the same
-// operatorsettings.Service.UpdateACPAgentProfile production callers use, so
-// root.BuildProcess's real Operator Settings root resolves it unmodified.
-func seedACPAgentProfile(t *testing.T, home, defaultTarget string, allowedTargets []string) {
-	t.Helper()
-
-	providersRoot, err := providerswire.NewService()
-	if err != nil {
-		t.Fatalf("providerswire.NewService() error = %v", err)
-	}
-	service, err := settingswire.NewServiceFromConfigDocument(
-		settingswire.NewConfigDocumentService(
-			platformfilesystem.Local{},
-			func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
-				return os.CreateTemp(dir, pattern)
-			},
-			globalconfigmapping.Decode,
-			globalconfigmapping.Encode,
-			nil,
-			&sync.Mutex{},
-		),
-		providersRoot,
-		func() string { return "00000000-0000-4000-8000-000000000002" },
-		logging.NoopLogger{},
-	)
-	if err != nil {
-		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
-	}
-
-	configPath := operatorsettings.DefaultConfigPath(home)
-	if _, err := service.UpdateACPAgentProfile(context.Background(), configPath, operatorsettings.ACPAgentProfile{
-		DefaultTarget:  defaultTarget,
-		AllowedTargets: allowedTargets,
-	}); err != nil {
-		t.Fatalf("UpdateACPAgentProfile() error = %v", err)
 	}
 }
 

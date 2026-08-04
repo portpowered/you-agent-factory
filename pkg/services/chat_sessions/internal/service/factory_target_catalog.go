@@ -225,6 +225,20 @@ func allowedInstalledChoices(
 // validateWorkingRootCompatibility rejects a project-local canonical
 // resolution whose project root disagrees with the caller's client working
 // root. It is a no-op when the caller supplies no client working root.
+//
+// req.FactoryDiscovery.ProjectRoot (and therefore, when the resolution is
+// project-local, resolved.Resolution.ProjectRoot, which callers such as
+// factorydefinitions.ResolveNamedFactory always echo from it unchanged) is
+// always the project-scoped Factory root derived from a working directory
+// via factorydefinitions.ProjectFactoriesRoot -- i.e. "<workingDir>/factory",
+// never the bare working directory itself. ClientWorkingRoot, in contrast, is
+// documented and populated by every caller (see
+// pkg/transports/acp/internal/stdio/session_new.go and
+// session_set_config_option.go) as the client's own bare working directory.
+// Comparing the two directly would always disagree for a project-local
+// resolution regardless of whether the client is actually working inside
+// that project, so clientRoot is projected through the same
+// ProjectFactoriesRoot derivation before comparison.
 func (s *Service) validateWorkingRootCompatibility(
 	ctx context.Context,
 	req chatsessions.ResolveFactoryTargetCatalogRequest,
@@ -248,8 +262,9 @@ func (s *Service) validateWorkingRootCompatibility(
 			Cause:  dependencyContextCause(err),
 		}
 	}
+	clientProjectRoot := filepath.Clean(factorydefinitions.ProjectFactoriesRoot(clientRoot))
 	if resolved.Resolution.Source == factorydefinitions.NamedFactoryResolutionSourceProjectLocal &&
-		filepath.Clean(clientRoot) != filepath.Clean(resolved.Resolution.ProjectRoot) {
+		clientProjectRoot != filepath.Clean(resolved.Resolution.ProjectRoot) {
 		return &chatsessions.FactoryTargetCatalogError{
 			Target: current,
 			Err:    chatsessions.ErrFactoryTargetWorkingRootIncompatible,
