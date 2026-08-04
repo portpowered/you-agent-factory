@@ -604,6 +604,124 @@ func TestStore_Sequence_ContradictoryDuplicateIsRejected(t *testing.T) {
 	}
 }
 
+// TestStore_Sequence_ContradictoryLargeIntegerPayloadIsRejected proves a
+// retry whose payload differs only in a numeric field beyond float64's exact
+// integer range (9007199254740992 vs 9007199254740993, both distinct valid
+// JSON integers that collapse to the same float64) is still rejected as a
+// genuine contradiction rather than accepted as an identity-preserving
+// duplicate -- equalJSON must compare the two numbers by their exact decimal
+// text, not by decoding through float64.
+func TestStore_Sequence_ContradictoryLargeIntegerPayloadIsRejected(t *testing.T) {
+	ctx := context.Background()
+	store, session, appender := newSequencingTestSession(t)
+	topic := chatsessions.EventsTopic(session.ID)
+
+	original := sequenceRequest(session.ID, 1, "")
+	original.Payload = json.RawMessage(`{"value":9007199254740992}`)
+	first, err := store.Sequence(ctx, original)
+	if err != nil {
+		t.Fatalf("Sequence (first): %v", err)
+	}
+
+	retry := sequenceRequest(session.ID, 1, "")
+	retry.Payload = json.RawMessage(`{"value":9007199254740993}`)
+	_, err = store.Sequence(ctx, retry)
+	var conflict *chatsessions.SequencedIdentityConflictError
+	if !errors.As(err, &conflict) {
+		t.Fatalf("Sequence(adjacent large integer payload): got %v, want *SequencedIdentityConflictError", err)
+	}
+	if conflict.Field != "Payload" {
+		t.Fatalf("conflict.Field = %q, want %q", conflict.Field, "Payload")
+	}
+
+	if got := appender.commitCount(topic); got != 1 {
+		t.Fatalf("commit count after contradictory retry = %d, want exactly 1 (original untouched, no second record)", got)
+	}
+	storedRecord := appender.topics[topic].identity[events.AppendIdentity{
+		SourceType:     original.SourceType,
+		SourceID:       original.SourceID,
+		SourceSequence: original.SourceSequence,
+		SourceEventID:  original.SourceEventID,
+	}]
+	var storedItem chatsessions.SequencedItem
+	if err := json.Unmarshal(storedRecord.Payload, &storedItem); err != nil {
+		t.Fatalf("unmarshal stored envelope: %v", err)
+	}
+	if storedItem.ItemID != first.ItemID {
+		t.Fatalf("stored envelope ItemID = %q, want original %q (not replaced)", storedItem.ItemID, first.ItemID)
+	}
+}
+
+// countingIDs returns a deterministic IDGenerator like sequentialIDs, plus a
+// function reporting exactly how many times it has been called, so a test
+// can assert a code path never minted (and discarded) an identity.
+func countingIDs(prefix string) (IDGenerator, func() int) {
+	n := 0
+	gen := func() string {
+		n++
+		return prefix + "-" + strconv.Itoa(n)
+	}
+	return gen, func() int { return n }
+}
+
+// TestStore_Sequence_DuplicateAndContradictoryRetriesNeverConsumeGenerator
+// proves a duplicate retry and a contradictory retry of an already-known
+// source identity resolve entirely from this session's own local index:
+// neither calls the injected IDGenerator, and the ItemID a later genuinely
+// new record receives is exactly the next sequential identity, unaffected by
+// how many retries preceded it. Before this test's fix, Sequence called
+// s.newID() while building the candidate envelope before Append, discarding
+// that minted identity on every duplicate/rejected branch -- a hidden side
+// effect on the injected generator this test would have caught.
+func TestStore_Sequence_DuplicateAndContradictoryRetriesNeverConsumeGenerator(t *testing.T) {
+	ctx := context.Background()
+	appender := newFakeEventsAppender()
+	gen, callCount := countingIDs("id")
+	store := NewStore(gen, fixedClock(time.Now()), appender, appender)
+	created, err := store.CreateSession(ctx, validCreateRequest())
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	baseline := callCount() // CreateSession itself consumed exactly one identity.
+
+	if _, err := store.Sequence(ctx, sequenceRequest(created.Session.ID, 1, "")); err != nil {
+		t.Fatalf("Sequence (first): %v", err)
+	}
+	afterFirst := callCount()
+	if afterFirst != baseline+1 {
+		t.Fatalf("generator calls after first accepted Sequence = %d, want %d", afterFirst, baseline+1)
+	}
+
+	if _, err := store.Sequence(ctx, sequenceRequest(created.Session.ID, 1, "")); err != nil {
+		t.Fatalf("Sequence (duplicate retry): %v", err)
+	}
+	if got := callCount(); got != afterFirst {
+		t.Fatalf("generator calls after duplicate retry = %d, want unchanged %d (duplicate must not mint an ItemID)", got, afterFirst)
+	}
+
+	contradictory := sequenceRequest(created.Session.ID, 1, "")
+	contradictory.Payload = json.RawMessage(`{"text":"goodbye"}`)
+	var conflict *chatsessions.SequencedIdentityConflictError
+	if _, err := store.Sequence(ctx, contradictory); !errors.As(err, &conflict) {
+		t.Fatalf("Sequence (contradictory retry): got %v, want *SequencedIdentityConflictError", err)
+	}
+	if got := callCount(); got != afterFirst {
+		t.Fatalf("generator calls after contradictory retry = %d, want unchanged %d (rejected retry must not mint an ItemID)", got, afterFirst)
+	}
+
+	next, err := store.Sequence(ctx, sequenceRequest(created.Session.ID, 2, ""))
+	if err != nil {
+		t.Fatalf("Sequence (next new record): %v", err)
+	}
+	wantNextItemID := "id-" + strconv.Itoa(baseline+2)
+	if next.ItemID != wantNextItemID {
+		t.Fatalf("next accepted ItemID = %q, want %q (unaffected by prior retries)", next.ItemID, wantNextItemID)
+	}
+	if got := callCount(); got != baseline+2 {
+		t.Fatalf("generator calls after next accepted record = %d, want %d", got, baseline+2)
+	}
+}
+
 // TestStore_Sequence_ConcurrentFirstDeliveryAndRetryAgree races a first
 // delivery against a byte-identical retry of the same source identity tuple,
 // released through a shared start barrier (never a sleep). Exactly one of

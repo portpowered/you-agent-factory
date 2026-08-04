@@ -71,6 +71,18 @@ type sequencedSourceIdentity struct {
 	SourceEventID  events.SourceEventID
 }
 
+// sequencedRecord is what Sequence stores per sequencedSourceIdentity in
+// sessionRecord.sequencedBySource on a newly accepted commit: the exact
+// assigned item and the SchemaID and aggregate position Events committed it
+// under. Sequence consults this before minting any new ItemID so a
+// duplicate/contradictory retry of an already-known identity never consumes
+// (and discards) a fresh identity from the injected IDGenerator.
+type sequencedRecord struct {
+	Item     chatsessions.SequencedItem
+	SchemaID events.SchemaID
+	Position events.AggregateSequence
+}
+
 // sessionRecord is the Store-owned mutable aggregate for one Chat Session.
 // episodes is the session's full, consecutively numbered TargetEpisode
 // history ordered by Number, index 0 being Number 1; it is never rewritten
@@ -129,6 +141,14 @@ type sequencedSourceIdentity struct {
 // exact stated source identity, so StreamHead can never advance to a
 // fabricated, uncommitted, or cross-session position. Like
 // sequencedItemIDs, it is written only on a newly accepted Sequence record.
+// sequencedBySource is the reverse of sequencedPositions, keyed by source
+// identity instead of aggregate position: Sequence consults it first, before
+// minting any ItemID, so a duplicate or contradictory retry of an
+// already-known (SourceType, SourceID, SourceSequence, SourceEventID) tuple
+// resolves entirely from this session's own local state -- never consuming a
+// fresh identity from the injected IDGenerator, and never issuing another
+// Events append. Like sequencedItemIDs and sequencedPositions, it is written
+// only on a newly accepted Sequence record and never removed or overwritten.
 type sessionRecord struct {
 	session            chatsessions.Session
 	episodes           []chatsessions.TargetEpisode
@@ -140,6 +160,7 @@ type sessionRecord struct {
 	controls           map[chatsessions.RequestIdentity]chatsessions.ControlIntent
 	sequencedItemIDs   map[string]struct{}
 	sequencedPositions map[events.AggregateSequence]sequencedSourceIdentity
+	sequencedBySource  map[sequencedSourceIdentity]sequencedRecord
 }
 
 // activeTurnValue returns the session's current active Turn read live from

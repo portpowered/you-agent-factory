@@ -21,14 +21,25 @@ import (
 
 // Sequence commits req onto EventsTopic(req.SessionID) through the injected
 // EventsAppender, assigning a stable ItemID before append. The entire
-// operation -- session lookup, ParentItemID validation, Events append, and
-// the session's own sequenced-item index update -- runs under s.mu, which is
-// this Store's one serialization point: no two Sequence (or any other Store)
-// calls ever interleave, so commit order can never depend on source
-// timestamps or goroutine start order. On any failure (including one
-// reported by the EventsAppender itself), no partial state is left behind:
-// req.SessionID's sequencedItemIDs/sequencedPositions indexes are only ever
-// updated after a successful, newly accepted Events append.
+// operation -- session lookup, ParentItemID validation, duplicate resolution,
+// Events append, and the session's own sequenced-item index update -- runs
+// under s.mu, which is this Store's one serialization point: no two Sequence
+// (or any other Store) calls ever interleave, so commit order can never
+// depend on source timestamps or goroutine start order. On any failure
+// (including one reported by the EventsAppender itself), no partial state is
+// left behind: req.SessionID's sequencedItemIDs/sequencedPositions/
+// sequencedBySource indexes are only ever updated after a successful, newly
+// accepted Events append.
+//
+// Sequence consults record.sequencedBySource for req's exact source identity
+// before ever calling s.newID(): when this session has already committed a
+// record for that identity, the retry (whether byte-identical or
+// contradictory) resolves entirely from that local record, so a duplicate or
+// contradictory retry never mints -- and then discards -- a fresh ItemID from
+// the injected generator, and the ItemID a later genuinely new record
+// receives never depends on how many retries preceded it. s.newID() and an
+// Events append are only ever reached for a source identity this session has
+// not already resolved.
 func (s *Store) Sequence(ctx context.Context, req chatsessions.SequenceRequest) (result chatsessions.SequenceResult, err error) {
 	s.logStart("Sequence", req.SessionID)
 	defer func() {
@@ -57,6 +68,16 @@ func (s *Store) Sequence(ctx context.Context, req chatsessions.SequenceRequest) 
 		if _, known := record.sequencedItemIDs[req.ParentItemID]; !known {
 			return chatsessions.SequenceResult{}, &chatsessions.NotFoundError{Value: "ParentItem", ID: req.ParentItemID}
 		}
+	}
+
+	wantIdentity := sequencedSourceIdentity{
+		SourceType:     req.SourceType,
+		SourceID:       req.SourceID,
+		SourceSequence: req.SourceSequence,
+		SourceEventID:  req.SourceEventID,
+	}
+	if known, resolved := record.sequencedBySource[wantIdentity]; resolved {
+		return resolveSequencedDuplicate(req, known.SchemaID, known.Item, known.Position)
 	}
 
 	item := chatsessions.SequencedItem{
@@ -89,11 +110,11 @@ func (s *Store) Sequence(ctx context.Context, req chatsessions.SequenceRequest) 
 	switch appendResult.Outcome {
 	case events.AppendOutcomeAccepted:
 		record.sequencedItemIDs[item.ItemID] = struct{}{}
-		record.sequencedPositions[appendResult.Record.ID.Position] = sequencedSourceIdentity{
-			SourceType:     req.SourceType,
-			SourceID:       req.SourceID,
-			SourceSequence: req.SourceSequence,
-			SourceEventID:  req.SourceEventID,
+		record.sequencedPositions[appendResult.Record.ID.Position] = wantIdentity
+		record.sequencedBySource[wantIdentity] = sequencedRecord{
+			Item:     item,
+			SchemaID: req.SchemaID,
+			Position: appendResult.Record.ID.Position,
 		}
 		s.sessions[req.SessionID] = record
 		return chatsessions.SequenceResult{
@@ -104,30 +125,44 @@ func (s *Store) Sequence(ctx context.Context, req chatsessions.SequenceRequest) 
 			Outcome:           chatsessions.SequenceOutcomeAccepted,
 		}, nil
 	case events.AppendOutcomeDuplicate:
+		// record.sequencedBySource did not already know this identity (for
+		// example, a freshly constructed in-memory Store observing a topic
+		// Events itself retained from before this process started): resolve
+		// from the record Events reports instead of this session's own
+		// index.
 		var original chatsessions.SequencedItem
 		if unmarshalErr := json.Unmarshal(appendResult.Record.Payload, &original); unmarshalErr != nil {
 			return chatsessions.SequenceResult{}, fmt.Errorf("chat sessions: unmarshal original sequenced item envelope: %w", unmarshalErr)
 		}
-		if field, contradicted := contradictedField(req, appendResult.Record.SchemaID, original); contradicted {
-			return chatsessions.SequenceResult{}, &chatsessions.SequencedIdentityConflictError{
-				SessionID:      req.SessionID,
-				SourceType:     string(req.SourceType),
-				SourceID:       string(req.SourceID),
-				SourceSequence: uint64(req.SourceSequence),
-				SourceEventID:  string(req.SourceEventID),
-				Field:          field,
-			}
-		}
-		return chatsessions.SequenceResult{
-			SessionID:         req.SessionID,
-			ItemID:            original.ItemID,
-			ParentItemID:      original.ParentItemID,
-			AggregateSequence: appendResult.Record.ID.Position,
-			Outcome:           chatsessions.SequenceOutcomeDuplicate,
-		}, nil
+		return resolveSequencedDuplicate(req, appendResult.Record.SchemaID, original, appendResult.Record.ID.Position)
 	default:
 		return chatsessions.SequenceResult{}, fmt.Errorf("chat sessions: events append returned unexpected outcome %d", appendResult.Outcome)
 	}
+}
+
+// resolveSequencedDuplicate reports the SequenceResult for req, a reused
+// (SourceType, SourceID, SourceSequence, SourceEventID) tuple already
+// resolved to originalSchemaID/original/position, rejecting with
+// *SequencedIdentityConflictError when req disagrees with the original
+// commit on ParentItemID, Kind, SchemaID, or Payload.
+func resolveSequencedDuplicate(req chatsessions.SequenceRequest, originalSchemaID events.SchemaID, original chatsessions.SequencedItem, position events.AggregateSequence) (chatsessions.SequenceResult, error) {
+	if field, contradicted := contradictedField(req, originalSchemaID, original); contradicted {
+		return chatsessions.SequenceResult{}, &chatsessions.SequencedIdentityConflictError{
+			SessionID:      req.SessionID,
+			SourceType:     string(req.SourceType),
+			SourceID:       string(req.SourceID),
+			SourceSequence: uint64(req.SourceSequence),
+			SourceEventID:  string(req.SourceEventID),
+			Field:          field,
+		}
+	}
+	return chatsessions.SequenceResult{
+		SessionID:         req.SessionID,
+		ItemID:            original.ItemID,
+		ParentItemID:      original.ParentItemID,
+		AggregateSequence: position,
+		Outcome:           chatsessions.SequenceOutcomeDuplicate,
+	}, nil
 }
 
 // marshalSequencedItemEnvelope encodes item as the SequencedItem envelope
@@ -198,16 +233,72 @@ func contradictedField(req chatsessions.SequenceRequest, originalSchemaID events
 // (so key ordering or whitespace differences between two encodings of the
 // same source-native payload are never mistaken for a contradiction). Either
 // value failing to unmarshal falls back to an exact byte comparison rather
-// than treating malformed JSON as automatically equal or unequal.
+// than treating malformed JSON as automatically equal or unequal. Numbers are
+// decoded with json.Decoder.UseNumber and compared by their exact decimal
+// text rather than as float64: encoding/json's default float64 conversion
+// cannot distinguish every distinct valid JSON integer once it exceeds
+// float64's 53-bit mantissa (for example 9007199254740992 and
+// 9007199254740993 both round to the same float64), which would let a
+// contradictory large-integer retry silently pass as an identity-preserving
+// duplicate instead of the required *SequencedIdentityConflictError.
 func equalJSON(a, b json.RawMessage) bool {
-	var av, bv any
-	if err := json.Unmarshal(a, &av); err != nil {
+	av, aOK := decodeJSONExact(a)
+	bv, bOK := decodeJSONExact(b)
+	if !aOK || !bOK {
 		return bytes.Equal(a, b)
 	}
-	if err := json.Unmarshal(b, &bv); err != nil {
-		return bytes.Equal(a, b)
+	return jsonValuesEqual(av, bv)
+}
+
+// decodeJSONExact decodes raw with UseNumber so numeric fields survive as
+// json.Number (their original decimal text) instead of being rounded to
+// float64.
+func decodeJSONExact(raw json.RawMessage) (any, bool) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, false
 	}
-	return reflect.DeepEqual(av, bv)
+	return value, true
+}
+
+// jsonValuesEqual compares two values produced by decodeJSONExact,
+// special-casing json.Number to an exact decimal-text comparison (never a
+// float64 conversion) and recursing through objects/arrays; every other case
+// (string, bool, nil) is safe under reflect.DeepEqual because decodeJSONExact
+// never produces anything else for them.
+func jsonValuesEqual(a, b any) bool {
+	switch av := a.(type) {
+	case json.Number:
+		bv, ok := b.(json.Number)
+		return ok && av.String() == bv.String()
+	case map[string]any:
+		bv, ok := b.(map[string]any)
+		if !ok || len(av) != len(bv) {
+			return false
+		}
+		for key, aVal := range av {
+			bVal, known := bv[key]
+			if !known || !jsonValuesEqual(aVal, bVal) {
+				return false
+			}
+		}
+		return true
+	case []any:
+		bv, ok := b.([]any)
+		if !ok || len(av) != len(bv) {
+			return false
+		}
+		for i := range av {
+			if !jsonValuesEqual(av[i], bv[i]) {
+				return false
+			}
+		}
+		return true
+	default:
+		return reflect.DeepEqual(a, b)
+	}
 }
 
 func sequenceOutcomeLabel(outcome chatsessions.SequenceOutcome) string {
