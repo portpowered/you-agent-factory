@@ -325,8 +325,8 @@ func testRuntimeMetricsFactory(root string) factory.RuntimeMetricsSinkFactory {
 
 type runtimeRecordingsRecorderStub struct{}
 
-func (*runtimeRecordingsRecorderStub) BindRecordingService(
-	recordings.Service,
+func (*runtimeRecordingsRecorderStub) BindRecordingLifecycle(
+	recordings.RecordingLifecycle,
 	recordings.CanonicalEventScope,
 ) error {
 	return nil
