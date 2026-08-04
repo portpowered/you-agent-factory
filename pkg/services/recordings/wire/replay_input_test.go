@@ -8,6 +8,8 @@ import (
 	"github.com/portpowered/infinite-you/internal/testpath"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestReplayInputLoaderClassifiesPortableRecording(t *testing.T) {
@@ -24,6 +26,7 @@ func TestReplayInputLoaderClassifiesPortableRecording(t *testing.T) {
 			t.Fatal("legacy loader must not be called for a portable recording")
 			return nil, nil
 		},
+		zap.NewNop(),
 	)
 	result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: path})
 	if err != nil {
@@ -52,6 +55,7 @@ func TestReplayInputLoaderDelegatesLegacyArtifact(t *testing.T) {
 			requestedPath = path
 			return want, nil
 		},
+		zap.NewNop(),
 	)
 	result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: tempFile})
 	if err != nil {
@@ -71,7 +75,7 @@ func TestReplayInputLoaderDelegatesLegacyArtifact(t *testing.T) {
 func TestReplayInputLoaderRejectsMissingReader(t *testing.T) {
 	t.Parallel()
 
-	loader := recordingswire.NewReplayInputLoader(nil, nil)
+	loader := recordingswire.NewReplayInputLoader(nil, nil, zap.NewNop())
 	if _, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "recording.json"}); err == nil {
 		t.Fatal("missing reader error = nil")
 	}
@@ -89,6 +93,7 @@ func TestReplayInputLoaderWrapsReadFailure(t *testing.T) {
 			return nil, want
 		},
 		nil,
+		zap.NewNop(),
 	)
 	_, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "recording.json"})
 	if !errors.Is(err, want) {
@@ -100,7 +105,7 @@ func TestReplayInputLoaderRejectsMissingLegacyLoader(t *testing.T) {
 	t.Parallel()
 
 	tempFile := writeTempReplayInputFile(t, `{"schemaVersion":"legacy"}`)
-	loader := recordingswire.NewReplayInputLoader(recordings.RecordingReadFile(os.ReadFile), nil)
+	loader := recordingswire.NewReplayInputLoader(recordings.RecordingReadFile(os.ReadFile), nil, zap.NewNop())
 	if _, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: tempFile}); err == nil {
 		t.Fatal("missing legacy loader error = nil")
 	}
@@ -119,6 +124,7 @@ func TestReplayInputLoaderPropagatesMalformedPortableRecording(t *testing.T) {
 			t.Fatal("legacy loader must not be called for a portable recording payload")
 			return nil, nil
 		},
+		zap.NewNop(),
 	)
 	result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: tempFile})
 	if err == nil {
@@ -126,6 +132,51 @@ func TestReplayInputLoaderPropagatesMalformedPortableRecording(t *testing.T) {
 	}
 	if result.Portable != nil || result.Legacy != nil {
 		t.Fatalf("result = %+v, want zero-value result on failure", result)
+	}
+	var typed *recordings.ReplayInputError
+	if !errors.As(err, &typed) {
+		t.Fatalf("LoadReplayInput() error = %T, want *recordings.ReplayInputError", err)
+	}
+	if typed.Kind != recordings.ReplayInputErrorPortable {
+		t.Fatalf("ReplayInputError.Kind = %q, want %q", typed.Kind, recordings.ReplayInputErrorPortable)
+	}
+	if typed.Diagnostic == nil {
+		t.Fatal("ReplayInputError.Diagnostic = nil, want unsupported-version diagnostic")
+	}
+	if typed.Diagnostic.Code != recordings.ReplayInputDiagnosticUnsupportedVersion {
+		t.Fatalf(
+			"ReplayInputError.Diagnostic.Code = %q, want %q",
+			typed.Diagnostic.Code,
+			recordings.ReplayInputDiagnosticUnsupportedVersion,
+		)
+	}
+	if typed.Diagnostic.Area == "" || typed.Diagnostic.Message == "" || len(typed.Diagnostic.SupportedVersions) == 0 {
+		t.Fatalf("ReplayInputError.Diagnostic = %#v, want structured supported-version facts", typed.Diagnostic)
+	}
+}
+
+func TestReplayInputLoaderLogsIntentAndFailureWithoutInputPathOrPayload(t *testing.T) {
+	t.Parallel()
+
+	core, observed := observer.New(zap.InfoLevel)
+	loader := recordingswire.NewReplayInputLoader(nil, nil, zap.New(core))
+	if _, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "private/replay.json"}); err == nil {
+		t.Fatal("LoadReplayInput() error = nil, want reader configuration error")
+	}
+
+	entries := observed.All()
+	if len(entries) != 2 {
+		t.Fatalf("log entry count = %d, want 2", len(entries))
+	}
+	if entries[0].Message != "loading replay input" || entries[1].Message != "replay input reader is not configured" {
+		t.Fatalf("log messages = %q, %q", entries[0].Message, entries[1].Message)
+	}
+	for _, entry := range entries {
+		for _, field := range entry.Context {
+			if field.Key == "path" || field.Key == "payload" || field.String == "private/replay.json" {
+				t.Fatalf("log field = %#v, must not expose replay input path or payload", field)
+			}
+		}
 	}
 }
 

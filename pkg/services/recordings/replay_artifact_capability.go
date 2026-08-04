@@ -253,13 +253,39 @@ const (
 	ReplayArtifactErrorCancelled         ReplayArtifactErrorKind = "CANCELLED"
 )
 
+// ArtifactDiagnosticCode identifies one RecordingReplayArtifacts structured
+// validation failure area.
+type ArtifactDiagnosticCode string
+
+const (
+	ArtifactDiagnosticUnsupportedSchema ArtifactDiagnosticCode = "UNSUPPORTED_ARTIFACT_SCHEMA"
+	ArtifactDiagnosticInvalidSummary    ArtifactDiagnosticCode = "INVALID_ARTIFACT_SUMMARY"
+	ArtifactDiagnosticInvalidOrder      ArtifactDiagnosticCode = "INVALID_ARTIFACT_ORDER"
+	ArtifactDiagnosticInvalidIntegrity  ArtifactDiagnosticCode = "INVALID_ARTIFACT_INTEGRITY"
+	ArtifactDiagnosticMalformed         ArtifactDiagnosticCode = "MALFORMED_ARTIFACT"
+)
+
+// ArtifactDiagnostic reports one structured, directly owned portable
+// artifact validation failure area, including the supported schema versions
+// a caller can retry against.
+type ArtifactDiagnostic struct {
+	Code              ArtifactDiagnosticCode
+	Area              string
+	Path              string
+	Message           string
+	SupportedVersions []string
+}
+
 // ReplayArtifactError is a typed RecordingReplayArtifacts failure peers can
 // branch on via Kind or unwrap via Cause for standard errors.Is/errors.As
-// matching.
+// matching. Diagnostic is populated for structured validation failures
+// (ReplayArtifactErrorUnsupportedSchema, ReplayArtifactErrorInvalid,
+// ReplayArtifactErrorInvalidOrder, ReplayArtifactErrorInvalidIntegrity).
 type ReplayArtifactError struct {
-	Kind    ReplayArtifactErrorKind
-	Message string
-	Cause   error
+	Kind       ReplayArtifactErrorKind
+	Diagnostic *ArtifactDiagnostic
+	Message    string
+	Cause      error
 }
 
 func (e *ReplayArtifactError) Error() string {

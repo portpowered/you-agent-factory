@@ -3,6 +3,7 @@ package runtimeopening
 import (
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,7 +30,7 @@ func TestLoadRuntimePreservesValidatedPortableRecording(t *testing.T) {
 	var loggerSessionID string
 	var loggerFolderPath string
 	var loggerFactoryDir string
-	replayInputs := recordingswire.NewReplayInputLoader(recordings.RecordingReadFile(os.ReadFile), nil)
+	replayInputs := recordingswire.NewReplayInputLoader(recordings.RecordingReadFile(os.ReadFile), nil, zap.NewNop())
 	loaded, err := LoadRuntime(
 		t.TempDir(),
 		"",
@@ -93,7 +94,7 @@ func TestLoadRuntimePropagatesReplayInputFailure(t *testing.T) {
 			t.Fatalf("path = %q, want recording.json", path)
 		}
 		return nil, want
-	}, nil)
+	}, nil, zap.NewNop())
 	_, err := LoadRuntime(
 		t.TempDir(), "", "recording.json", operatorconfig.ResolvedDefaults{}, nil, root,
 		nil, nil, nil, replayInputs, nil,
@@ -101,6 +102,32 @@ func TestLoadRuntimePropagatesReplayInputFailure(t *testing.T) {
 	)
 	if !errors.Is(err, want) {
 		t.Fatalf("LoadRuntime() error = %v, want %v", err, want)
+	}
+	if !strings.HasPrefix(err.Error(), "load portable replay: ") {
+		t.Fatalf("LoadRuntime() error = %q, want portable replay context", err)
+	}
+}
+
+func TestLoadRuntimePreservesLegacyReplayFailureContext(t *testing.T) {
+	t.Parallel()
+
+	root := RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: zap.NewNop()}
+	legacyCause := errors.New("legacy artifact cannot be decoded")
+	replayInputs := recordingswire.NewReplayInputLoader(
+		func(string) ([]byte, error) { return []byte(`{"schemaVersion":"legacy"}`), nil },
+		func(string) (*recordings.ReplayArtifact, error) { return nil, legacyCause },
+		zap.NewNop(),
+	)
+	_, err := LoadRuntime(
+		t.TempDir(), "", "recording.json", operatorconfig.ResolvedDefaults{}, nil, root,
+		nil, nil, nil, replayInputs, nil,
+		func(base *zap.Logger, _, _, _ string) *zap.Logger { return base },
+	)
+	if !errors.Is(err, legacyCause) {
+		t.Fatalf("LoadRuntime() error = %v, want legacy cause %v", err, legacyCause)
+	}
+	if !strings.HasPrefix(err.Error(), "load factory config: load replay artifact: ") {
+		t.Fatalf("LoadRuntime() error = %q, want established legacy factory-config context", err)
 	}
 }
 

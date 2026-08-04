@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	artifactsimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/artifacts"
 	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
 )
 
 // NewPortableRecordingWriter constructs the portable recording writer selected
@@ -44,17 +46,24 @@ func NewReplayArtifactLoader(
 // decoder/validator with the existing legacy replay artifact loader behind
 // one Recordings-owned capability so callers no longer combine a raw file
 // reader, the aliased portable-recording decoder/validator, and the legacy
-// loader themselves.
+// loader themselves. logger is the repository's injected structured logging
+// abstraction; LoadReplayInput never logs the replay input's decoded
+// payload, only stable identifiers and outcome classification.
 func NewReplayInputLoader(
 	readFile recordings.RecordingReadFile,
 	loadLegacy recordings.ReplayArtifactLoader,
+	logger *zap.Logger,
 ) recordings.ReplayInputCapability {
-	return &replayInputLoader{readFile: readFile, loadLegacy: loadLegacy}
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	return &replayInputLoader{readFile: readFile, loadLegacy: loadLegacy, logger: logger}
 }
 
 type replayInputLoader struct {
 	readFile   recordings.RecordingReadFile
 	loadLegacy recordings.ReplayArtifactLoader
+	logger     *zap.Logger
 }
 
 var _ recordings.ReplayInputCapability = (*replayInputLoader)(nil)
@@ -62,32 +71,98 @@ var _ recordings.ReplayInputCapability = (*replayInputLoader)(nil)
 func (loader *replayInputLoader) LoadReplayInput(
 	request recordings.LoadReplayInputRequest,
 ) (recordings.LoadReplayInputResult, error) {
+	loader.logger.Info("loading replay input")
 	if loader.readFile == nil {
-		return recordings.LoadReplayInputResult{}, fmt.Errorf("Factory Session replay recording reader is required")
+		err := &recordings.ReplayInputError{
+			Kind:    recordings.ReplayInputErrorRead,
+			Message: "Factory Session replay recording reader is required",
+		}
+		loader.logger.Error("replay input reader is not configured")
+		return recordings.LoadReplayInputResult{}, err
 	}
-	data, err := loader.readFile(request.Path)
-	if err != nil {
-		return recordings.LoadReplayInputResult{}, fmt.Errorf("read replay recording: %w", err)
+	data, readErr := loader.readFile(request.Path)
+	if readErr != nil {
+		err := &recordings.ReplayInputError{
+			Kind:    recordings.ReplayInputErrorRead,
+			Message: fmt.Sprintf("read replay recording: %s", readErr.Error()),
+			Cause:   readErr,
+		}
+		loader.logger.Error("failed to read replay input")
+		return recordings.LoadReplayInputResult{}, err
 	}
 	var header struct {
 		RecordingKind string `json:"recordingKind"`
 	}
 	if err := json.Unmarshal(data, &header); err == nil &&
 		header.RecordingKind == recordings.KindJavaScriptFactorySession {
-		value, err := recordings.DecodePortableRecording(bytes.NewReader(data))
-		if err != nil {
-			return recordings.LoadReplayInputResult{}, err
+		value, decodeErr := recordings.DecodePortableRecording(bytes.NewReader(data))
+		if decodeErr != nil {
+			typed := &recordings.ReplayInputError{
+				Kind:       recordings.ReplayInputErrorPortable,
+				Diagnostic: toReplayInputDiagnostic(decodeErr),
+				Message:    decodeErr.Error(),
+				Cause:      decodeErr,
+			}
+			loader.logger.Warn(
+				"replay input failed portable recording validation",
+				zap.String("diagnosticCode", diagnosticCodeOf(typed.Diagnostic)),
+			)
+			return recordings.LoadReplayInputResult{}, typed
 		}
+		loader.logger.Info(
+			"loaded portable replay input",
+			zap.String("sessionID", value.Session.ID),
+		)
 		return recordings.LoadReplayInputResult{Portable: &value}, nil
 	}
 	if loader.loadLegacy == nil {
-		return recordings.LoadReplayInputResult{}, fmt.Errorf("replay artifact loader is required")
+		err := &recordings.ReplayInputError{
+			Kind:    recordings.ReplayInputErrorLegacy,
+			Message: "replay artifact loader is required",
+		}
+		loader.logger.Error("legacy replay artifact loader is not configured")
+		return recordings.LoadReplayInputResult{}, err
 	}
-	artifact, err := loader.loadLegacy(request.Path)
-	if err != nil {
-		return recordings.LoadReplayInputResult{}, fmt.Errorf("load replay artifact: %w", err)
+	artifact, legacyErr := loader.loadLegacy(request.Path)
+	if legacyErr != nil {
+		err := &recordings.ReplayInputError{
+			Kind:    recordings.ReplayInputErrorLegacy,
+			Message: fmt.Sprintf("load replay artifact: %s", legacyErr.Error()),
+			Cause:   legacyErr,
+		}
+		loader.logger.Warn("failed to load legacy replay artifact")
+		return recordings.LoadReplayInputResult{}, err
 	}
+	loader.logger.Info("loaded legacy replay artifact")
 	return recordings.LoadReplayInputResult{Legacy: artifact}, nil
+}
+
+// toReplayInputDiagnostic maps the existing portable-recording diagnostic
+// into the directly owned ReplayInputDiagnostic vocabulary so callers do not
+// depend on recordings/internal/contracts to observe structured facts.
+func toReplayInputDiagnostic(err error) *recordings.ReplayInputDiagnostic {
+	var diagnostic *recordings.PortableRecordingDiagnostic
+	if !errors.As(err, &diagnostic) || diagnostic == nil {
+		return nil
+	}
+	var versions []string
+	if len(diagnostic.SupportedVersions) > 0 {
+		versions = append([]string(nil), diagnostic.SupportedVersions...)
+	}
+	return &recordings.ReplayInputDiagnostic{
+		Code:              recordings.ReplayInputDiagnosticCode(diagnostic.Code),
+		Area:              diagnostic.Area,
+		Path:              diagnostic.Path,
+		Message:           diagnostic.Message,
+		SupportedVersions: versions,
+	}
+}
+
+func diagnosticCodeOf(diagnostic *recordings.ReplayInputDiagnostic) string {
+	if diagnostic == nil {
+		return ""
+	}
+	return string(diagnostic.Code)
 }
 
 // NewProjectionService constructs the Recordings projection capability for

@@ -309,11 +309,17 @@ func fromArtifactEnvelope(envelope recordings.ArtifactEnvelope) recordings.Porta
 	}
 }
 
+// artifactSupportedSchemaVersions lists the portable artifact schema
+// versions RecordingReplayArtifacts currently accepts, surfaced through
+// ArtifactDiagnostic so peers know which version to retry with.
+var artifactSupportedSchemaVersions = []string{string(recordings.ArtifactSchemaV1)}
+
 func translateReplayArtifactError(err error) error {
 	if err == nil {
 		return nil
 	}
 	kind := recordings.ReplayArtifactErrorInvalid
+	var diagnostic *recordings.ArtifactDiagnostic
 	switch {
 	case errors.Is(err, recordings.ErrReplayRecordingNotFound):
 		kind = recordings.ReplayArtifactErrorNotFound
@@ -325,10 +331,29 @@ func translateReplayArtifactError(err error) error {
 		kind = recordings.ReplayArtifactErrorUnavailable
 	case errors.Is(err, recordings.ErrUnsupportedPortableArtifactSchema):
 		kind = recordings.ReplayArtifactErrorUnsupportedSchema
+		diagnostic = &recordings.ArtifactDiagnostic{
+			Code:              recordings.ArtifactDiagnosticUnsupportedSchema,
+			Area:              "schemaVersion",
+			Path:              "schemaVersion",
+			Message:           "portable artifact schema version is not supported",
+			SupportedVersions: append([]string(nil), artifactSupportedSchemaVersions...),
+		}
 	case errors.Is(err, recordings.ErrInvalidPortableArtifactIntegrity):
 		kind = recordings.ReplayArtifactErrorInvalidIntegrity
+		diagnostic = &recordings.ArtifactDiagnostic{
+			Code:    recordings.ArtifactDiagnosticInvalidIntegrity,
+			Area:    "integrity",
+			Path:    "integrity.digest",
+			Message: "portable artifact digest does not match its computed integrity",
+		}
 	case errors.Is(err, recordings.ErrInvalidPortableArtifactOrder):
 		kind = recordings.ReplayArtifactErrorInvalidOrder
+		diagnostic = &recordings.ArtifactDiagnostic{
+			Code:    recordings.ArtifactDiagnosticInvalidOrder,
+			Area:    "events",
+			Path:    "events",
+			Message: "portable artifact canonical event order or summary cursors are invalid",
+		}
 	case errors.Is(err, recordings.ErrPortableArtifactExportFailed):
 		kind = recordings.ReplayArtifactErrorExportFailed
 	case errors.Is(err, recordings.ErrForeignPortableArtifact):
@@ -337,6 +362,17 @@ func translateReplayArtifactError(err error) error {
 		kind = recordings.ReplayArtifactErrorCancelled
 	case errors.Is(err, recordings.ErrInvalidPortableArtifact):
 		kind = recordings.ReplayArtifactErrorInvalid
+		diagnostic = &recordings.ArtifactDiagnostic{
+			Code:    recordings.ArtifactDiagnosticMalformed,
+			Area:    "artifact",
+			Path:    "artifact",
+			Message: "portable artifact document is malformed or fails structural validation",
+		}
 	}
-	return &recordings.ReplayArtifactError{Kind: kind, Message: err.Error(), Cause: err}
+	return &recordings.ReplayArtifactError{
+		Kind:       kind,
+		Diagnostic: diagnostic,
+		Message:    err.Error(),
+		Cause:      err,
+	}
 }

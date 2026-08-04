@@ -9,6 +9,7 @@ import (
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	"go.uber.org/zap"
 )
 
 // TestProvideFactorySessionReplayInputsClassifiesPortableRecording proves the
@@ -26,7 +27,7 @@ func TestProvideFactorySessionReplayInputsClassifiesPortableRecording(t *testing
 	)
 	loadReplay := provideReplayArtifactLoader(platformreplay.Local{})
 	replayFiles := provideFactorySessionReplayRecordingReader(serviceedges.Edges{})
-	capability := provideFactorySessionReplayInputs(loadReplay, replayFiles)
+	capability := provideFactorySessionReplayInputs(loadReplay, replayFiles, zap.NewNop())
 
 	result, err := capability.LoadReplayInput(recordings.LoadReplayInputRequest{Path: path})
 	if err != nil {
@@ -60,7 +61,7 @@ func TestProvideFactorySessionReplayInputsDelegatesLegacyArtifact(t *testing.T) 
 		return &recordings.ReplayArtifact{SchemaVersion: "legacy"}, nil
 	})
 	replayFiles := provideFactorySessionReplayRecordingReader(edges)
-	capability := provideFactorySessionReplayInputs(loadReplay, replayFiles)
+	capability := provideFactorySessionReplayInputs(loadReplay, replayFiles, zap.NewNop())
 
 	tempFile := filepath.Join(t.TempDir(), "legacy-replay.json")
 	if err := os.WriteFile(tempFile, []byte(`{"schemaVersion":"legacy"}`), 0o600); err != nil {

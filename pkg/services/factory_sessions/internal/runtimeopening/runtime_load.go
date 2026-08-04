@@ -1,6 +1,7 @@
 package runtimeopening
 
 import (
+	"errors"
 	"fmt"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -54,6 +55,10 @@ func LoadRuntime(
 		}
 		result, err := replayInputs.LoadReplayInput(recording.LoadReplayInputRequest{Path: replayPath})
 		if err != nil {
+			var inputErr *recording.ReplayInputError
+			if errors.As(err, &inputErr) && inputErr.Kind == recording.ReplayInputErrorLegacy {
+				return RuntimeLoad{}, fmt.Errorf("load factory config: %w", err)
+			}
 			return RuntimeLoad{}, fmt.Errorf("load portable replay: %w", err)
 		}
 		if result.Portable != nil {

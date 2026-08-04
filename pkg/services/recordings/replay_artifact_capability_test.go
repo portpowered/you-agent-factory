@@ -280,6 +280,21 @@ func TestRecordingReplayArtifacts_UnsupportedSchemaVersion(t *testing.T) {
 	assertReplayArtifactErrorKind(
 		t, err, recordings.ReplayArtifactErrorUnsupportedSchema, recordings.ErrUnsupportedPortableArtifactSchema,
 	)
+	diagnostic := replayArtifactDiagnostic(t, err)
+	if diagnostic.Code != recordings.ArtifactDiagnosticUnsupportedSchema ||
+		diagnostic.Area != "schemaVersion" ||
+		diagnostic.Path != "schemaVersion" ||
+		diagnostic.Message == "" ||
+		len(diagnostic.SupportedVersions) != 1 || diagnostic.SupportedVersions[0] != string(recordings.ArtifactSchemaV1) {
+		t.Fatalf("unsupported-schema diagnostic = %#v, want structured retry facts", diagnostic)
+	}
+
+	diagnostic.SupportedVersions[0] = "mutated"
+	_, err = replayArtifacts.ValidateArtifact(recordings.ValidateArtifactRequest{Artifact: built.Artifact})
+	second := replayArtifactDiagnostic(t, err)
+	if len(second.SupportedVersions) != 1 || second.SupportedVersions[0] != string(recordings.ArtifactSchemaV1) {
+		t.Fatalf("supported versions after mutating earlier diagnostic = %#v, want detached values", second.SupportedVersions)
+	}
 }
 
 // TestRecordingReplayArtifacts_InvalidOrder proves an artifact whose summary
@@ -302,6 +317,10 @@ func TestRecordingReplayArtifacts_InvalidOrder(t *testing.T) {
 	assertReplayArtifactErrorKind(
 		t, err, recordings.ReplayArtifactErrorInvalidOrder, recordings.ErrInvalidPortableArtifactOrder,
 	)
+	diagnostic := replayArtifactDiagnostic(t, err)
+	if diagnostic.Code != recordings.ArtifactDiagnosticInvalidOrder || diagnostic.Area != "events" || diagnostic.Path != "events" || diagnostic.Message == "" {
+		t.Fatalf("invalid-order diagnostic = %#v, want structured order facts", diagnostic)
+	}
 }
 
 // TestRecordingReplayArtifacts_InvalidIntegrity proves an artifact whose
@@ -321,6 +340,10 @@ func TestRecordingReplayArtifacts_InvalidIntegrity(t *testing.T) {
 	assertReplayArtifactErrorKind(
 		t, err, recordings.ReplayArtifactErrorInvalidIntegrity, recordings.ErrInvalidPortableArtifactIntegrity,
 	)
+	diagnostic := replayArtifactDiagnostic(t, err)
+	if diagnostic.Code != recordings.ArtifactDiagnosticInvalidIntegrity || diagnostic.Area != "integrity" || diagnostic.Path != "integrity.digest" || diagnostic.Message == "" {
+		t.Fatalf("invalid-integrity diagnostic = %#v, want structured integrity facts", diagnostic)
+	}
 }
 
 // TestRecordingReplayArtifacts_MalformedDecode proves empty, truncated,
@@ -349,6 +372,10 @@ func TestRecordingReplayArtifacts_MalformedDecode(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			result, err := replayArtifacts.DecodeArtifact(recordings.DecodeArtifactRequest{Payload: payload})
 			assertReplayArtifactErrorKind(t, err, recordings.ReplayArtifactErrorInvalid, recordings.ErrInvalidPortableArtifact)
+			diagnostic := replayArtifactDiagnostic(t, err)
+			if diagnostic.Code != recordings.ArtifactDiagnosticMalformed || diagnostic.Area != "artifact" || diagnostic.Path != "artifact" || diagnostic.Message == "" {
+				t.Fatalf("DecodeArtifact(%s) diagnostic = %#v, want structured malformed facts", name, diagnostic)
+			}
 			if result.Artifact.SchemaVersion != "" || len(result.Artifact.Events) != 0 {
 				t.Fatalf("DecodeArtifact(%s) result = %#v, want zero value on failure", name, result.Artifact)
 			}
@@ -433,6 +460,15 @@ func assertReplayArtifactErrorKind(
 	if !errors.Is(err, wantSentinel) {
 		t.Fatalf("error does not unwrap to %v: %v", wantSentinel, err)
 	}
+}
+
+func replayArtifactDiagnostic(t *testing.T, err error) *recordings.ArtifactDiagnostic {
+	t.Helper()
+	var replayArtifactErr *recordings.ReplayArtifactError
+	if !errors.As(err, &replayArtifactErr) || replayArtifactErr.Diagnostic == nil {
+		t.Fatalf("error = %v, want ReplayArtifactError with a structured diagnostic", err)
+	}
+	return replayArtifactErr.Diagnostic
 }
 
 // TestRecordingReplayArtifacts_DetachedResults proves mutating a returned

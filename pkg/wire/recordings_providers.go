@@ -8,6 +8,7 @@ import (
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
+	"go.uber.org/zap"
 )
 
 func provideRecordingsCLIAdapter() recordingscli.Adapter {
@@ -68,39 +69,28 @@ func provideRecordingLifecycleFactory(
 	}
 }
 
-// provideRecordingReplayArtifactsFactory narrows the Recordings root
-// constructed by provideRecordingsFactory down to the narrow
-// RecordingReplayArtifacts capability, so callers that only need to load
-// finalized replay facts and read, export, decode, or validate existing
-// portable artifacts receive that capability explicitly at Wire composition
-// time instead of depending on the broad Service.
 // provideFactorySessionReplayInputs composes the Recordings-owned
 // ReplayInputCapability from the existing legacy replay artifact loader and
 // replay recording file reader, so the Factory Sessions runtime-opening
 // replay-input lane receives one already-constructed capability instead of
 // combining those two raw effects itself.
+//
+// This capability is deliberately not backed by provideRecordingsFactory's
+// ledger/projection-constructed Service: runtime-opening classifies and
+// loads a replay input by filesystem path before this Factory Session's own
+// Recordings ledger and projection exist (they are constructed later in
+// openRuntime, once the loaded Factory topology from this very
+// classification step is known), and combinedService's LoadReplayRecording
+// only resolves recordings already tracked by that ledger's lifecycle
+// snapshot -- it cannot read an arbitrary caller-selected file. The two
+// capabilities also cover different document families: PortableRecording
+// (JavaScript Factory Session replay input, with redaction metadata) and
+// the legacy embedded-Factory ReplayArtifact are not PortableArtifact (the
+// canonical-event export envelope RecordingReplayArtifacts owns).
 func provideFactorySessionReplayInputs(
 	loadReplay recordings.ReplayArtifactLoader,
 	replayFiles factorysessionwire.ReplayRecordingReader,
+	logger *zap.Logger,
 ) recordings.ReplayInputCapability {
-	return recordingswire.NewReplayInputLoader(recordings.RecordingReadFile(replayFiles), loadReplay)
-}
-
-func provideRecordingReplayArtifactsFactory(
-	edges serviceedges.Edges,
-	targets recordings.LiveRecordingTargetPlanner,
-	storage platformreplay.Storage,
-) func(recordings.Ledger, recordings.ProjectionService) recordings.RecordingReplayArtifacts {
-	serviceFactory := provideRecordingsFactory(edges, targets, storage)
-	return func(
-		ledger recordings.Ledger,
-		projection recordings.ProjectionService,
-	) recordings.RecordingReplayArtifacts {
-		service := serviceFactory(ledger, projection)
-		replayArtifacts, ok := service.(recordings.RecordingReplayArtifacts)
-		if !ok {
-			panic("construct Recordings: service does not expose the replay/artifact capability")
-		}
-		return replayArtifacts
-	}
+	return recordingswire.NewReplayInputLoader(recordings.RecordingReadFile(replayFiles), loadReplay, logger)
 }
