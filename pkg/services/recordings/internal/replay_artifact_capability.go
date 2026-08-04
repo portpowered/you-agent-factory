@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
@@ -62,7 +63,7 @@ func (service *combinedService) ValidateArtifact(
 		Artifact: fromArtifactEnvelope(request.Artifact),
 	})
 	if err != nil {
-		return recordings.ValidateArtifactResult{}, translateReplayArtifactError(err)
+		return recordings.ValidateArtifactResult{}, translateArtifactValidationError(err, request.Artifact)
 	}
 	return recordings.ValidateArtifactResult{Summary: toArtifactSummary(result.Summary)}, nil
 }
@@ -77,7 +78,7 @@ func (service *combinedService) EncodeArtifact(
 		Artifact: fromArtifactEnvelope(request.Artifact),
 	})
 	if err != nil {
-		return recordings.EncodeArtifactResult{}, translateReplayArtifactError(err)
+		return recordings.EncodeArtifactResult{}, translateArtifactValidationError(err, request.Artifact)
 	}
 	return recordings.EncodeArtifactResult{Payload: result.Payload}, nil
 }
@@ -327,6 +328,47 @@ func fromArtifactEnvelope(envelope recordings.ArtifactEnvelope) recordings.Porta
 // ArtifactDiagnostic so peers know which version to retry with.
 var artifactSupportedSchemaVersions = []string{string(recordings.ArtifactSchemaV1)}
 
+// translateArtifactValidationError retains the existing sentinel error while
+// using the caller-provided detached envelope to distinguish an invalid
+// summary relationship from a malformed document. The underlying artifact
+// service already validates these same summary invariants; this adapter only
+// selects the Recordings-owned diagnostic vocabulary exposed to peers.
+func translateArtifactValidationError(err error, artifact recordings.ArtifactEnvelope) error {
+	if errors.Is(err, recordings.ErrInvalidPortableArtifact) && invalidArtifactSummary(artifact) {
+		return &recordings.ReplayArtifactError{
+			Kind: recordings.ReplayArtifactErrorInvalid,
+			Diagnostic: &recordings.ArtifactDiagnostic{
+				Code:    recordings.ArtifactDiagnosticInvalidSummary,
+				Area:    "summary",
+				Path:    invalidArtifactSummaryPath(artifact),
+				Message: "portable artifact summary does not match its canonical facts",
+			},
+			Message: err.Error(),
+			Cause:   err,
+		}
+	}
+	return translateReplayArtifactError(err)
+}
+
+func invalidArtifactSummary(artifact recordings.ArtifactEnvelope) bool {
+	summary := artifact.Summary
+	return strings.TrimSpace(string(summary.RecordingID)) == "" ||
+		!summary.Available ||
+		summary.EventCount != len(artifact.Events)
+}
+
+func invalidArtifactSummaryPath(artifact recordings.ArtifactEnvelope) string {
+	summary := artifact.Summary
+	switch {
+	case strings.TrimSpace(string(summary.RecordingID)) == "":
+		return "summary.recordingID"
+	case !summary.Available:
+		return "summary.available"
+	default:
+		return "summary.eventCount"
+	}
+}
+
 func translateReplayArtifactError(err error) error {
 	if err == nil {
 		return nil
@@ -336,12 +378,24 @@ func translateReplayArtifactError(err error) error {
 	switch {
 	case errors.Is(err, recordings.ErrReplayRecordingNotFound):
 		kind = recordings.ReplayArtifactErrorNotFound
+		diagnostic = &recordings.ArtifactDiagnostic{
+			Code:    recordings.ArtifactDiagnosticRecordingNotFound,
+			Area:    "recording",
+			Path:    "recordingID",
+			Message: "recording was not found",
+		}
 	case errors.Is(err, recordings.ErrReplayRecordingNotFinalized):
 		kind = recordings.ReplayArtifactErrorNotFinalized
 	case errors.Is(err, recordings.ErrCorruptReplayInput):
 		kind = recordings.ReplayArtifactErrorCorruptInput
 	case errors.Is(err, recordings.ErrPortableArtifactUnavailable):
 		kind = recordings.ReplayArtifactErrorUnavailable
+		diagnostic = &recordings.ArtifactDiagnostic{
+			Code:    recordings.ArtifactDiagnosticUnavailable,
+			Area:    "reference",
+			Path:    "reference",
+			Message: "portable artifact is not available",
+		}
 	case errors.Is(err, recordings.ErrUnsupportedPortableArtifactSchema):
 		kind = recordings.ReplayArtifactErrorUnsupportedSchema
 		diagnostic = &recordings.ArtifactDiagnostic{
@@ -371,6 +425,12 @@ func translateReplayArtifactError(err error) error {
 		kind = recordings.ReplayArtifactErrorExportFailed
 	case errors.Is(err, recordings.ErrForeignPortableArtifact):
 		kind = recordings.ReplayArtifactErrorForeign
+		diagnostic = &recordings.ArtifactDiagnostic{
+			Code:    recordings.ArtifactDiagnosticForeign,
+			Area:    "reference",
+			Path:    "reference",
+			Message: "portable artifact reference does not belong to the recording",
+		}
 	case errors.Is(err, recordings.ErrPortableArtifactCancelled):
 		kind = recordings.ReplayArtifactErrorCancelled
 	case errors.Is(err, recordings.ErrInvalidPortableArtifact):

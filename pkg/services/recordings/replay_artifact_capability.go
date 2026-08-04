@@ -287,6 +287,9 @@ const (
 type ArtifactDiagnosticCode string
 
 const (
+	ArtifactDiagnosticRecordingNotFound ArtifactDiagnosticCode = "REPLAY_RECORDING_NOT_FOUND"
+	ArtifactDiagnosticUnavailable       ArtifactDiagnosticCode = "PORTABLE_ARTIFACT_UNAVAILABLE"
+	ArtifactDiagnosticForeign           ArtifactDiagnosticCode = "FOREIGN_PORTABLE_ARTIFACT_REFERENCE"
 	ArtifactDiagnosticUnsupportedSchema ArtifactDiagnosticCode = "UNSUPPORTED_ARTIFACT_SCHEMA"
 	ArtifactDiagnosticInvalidSummary    ArtifactDiagnosticCode = "INVALID_ARTIFACT_SUMMARY"
 	ArtifactDiagnosticInvalidOrder      ArtifactDiagnosticCode = "INVALID_ARTIFACT_ORDER"
