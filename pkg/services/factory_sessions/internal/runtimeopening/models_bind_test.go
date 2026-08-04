@@ -379,10 +379,9 @@ func (failure *openingCoordinatorFailure) openWorkerExecution(
 	work.Service,
 	WorkersRuntimeFactory,
 	[]operatorconfig.ACPIntegration,
-	func(workers.RuntimeService),
-) (workers.RuntimeService, workers.SessionBuildFactory, error) {
+) (workers.RuntimeService, error) {
 	*failure.events = append(*failure.events, "later-step-failed")
-	return nil, nil, failure.err
+	return nil, failure.err
 }
 
 func openingCoordinatorDurableExecution(
