@@ -12,10 +12,33 @@ import (
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
+	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
 )
 
 const validSessionLoadParams = `{"sessionId":"session-1","cwd":"/work/project","mcpServers":[]}`
 const validSessionResumeParams = `{"sessionId":"session-1","cwd":"/work/project"}`
+
+func sessionResumeParamsWithAttachmentID(t *testing.T, attachmentID string) string {
+	t.Helper()
+	params, err := json.Marshal(acpsdk.ResumeSessionRequest{
+		SessionId: "session-1",
+		Cwd:       "/work/project",
+		Meta:      session.AttachmentResumeMetadata(attachmentID),
+	})
+	if err != nil {
+		t.Fatalf("marshal session/resume params: %v", err)
+	}
+	return string(params)
+}
+
+func attachmentIDFromMeta(t *testing.T, meta map[string]any) string {
+	t.Helper()
+	attachmentID, ok := meta[session.AttachmentResumeMetaKey].(string)
+	if !ok || attachmentID == "" {
+		t.Fatalf("_meta[%q] = %#v, want a non-empty attachment identity", session.AttachmentResumeMetaKey, meta[session.AttachmentResumeMetaKey])
+	}
+	return attachmentID
+}
 
 // TestHandleSessionLoadAndResumeRejectMissingSessionIdBeforeAnyEffect proves
 // both handlers validate before ever touching a collaborator: a request
@@ -155,6 +178,9 @@ func TestHandleSessionLoadAttachesAndCachesAResumableAttachment(t *testing.T) {
 	if cached.ConnectionID != string(connID) {
 		t.Fatalf("cached attachment ConnectionID = %q, want %q", cached.ConnectionID, connID)
 	}
+	if got := attachmentIDFromMeta(t, resp.Meta); got != cached.ID {
+		t.Fatalf("session/load response attachment identity = %q, want cached attachment %q", got, cached.ID)
+	}
 }
 
 // TestHandleSessionResumeReactivatesAttachmentDetachedByAnEarlierConnection
@@ -184,7 +210,7 @@ func TestHandleSessionResumeReactivatesAttachmentDetachedByAnEarlierConnection(t
 	secondCache := &attachmentCache{}
 	secondCtx := contextWithAttachmentCache(context.Background(), secondCache)
 	connID := identity.NewConnectionID()
-	env := numberIdentityEnvelope(t, connID, 1, acpsdk.AgentMethodSessionResume, validSessionResumeParams)
+	env := numberIdentityEnvelope(t, connID, 1, acpsdk.AgentMethodSessionResume, sessionResumeParamsWithAttachmentID(t, original.ID))
 
 	if _, rpcErr := server.handleSessionResume(secondCtx, env); rpcErr != nil {
 		t.Fatalf("handleSessionResume() error = %+v, want success", rpcErr)
@@ -202,6 +228,73 @@ func TestHandleSessionResumeReactivatesAttachmentDetachedByAnEarlierConnection(t
 	}
 	if resumed.ConnectionID != string(connID) {
 		t.Fatalf("resumed ConnectionID = %q, want the new connection %q", resumed.ConnectionID, connID)
+	}
+}
+
+// TestServeSessionResumeRestoresTwoDetachedAttachmentsByReturnedMetaIdentity
+// drives two independent consumers through the real stdio -> session/load ->
+// response _meta -> session/resume route. Their positions intentionally
+// differ before disconnect, then each client returns only the opaque identity
+// the server issued to it. This proves the customer-facing ACP path never
+// guesses from detached attachments, replays an already acknowledged cursor,
+// or gives one consumer the other's cursor when both reconnect.
+func TestServeSessionResumeRestoresTwoDetachedAttachmentsByReturnedMetaIdentity(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{}
+	server := newTestServer(chatSessions, nil, "/home/operator")
+
+	serveForAttachmentID := func(method, params string) string {
+		t.Helper()
+		input := `{"jsonrpc":"2.0","id":1,"method":"` + method + `","params":` + params + `}` + "\n"
+		out := &bytes.Buffer{}
+		if err := server.Serve(context.Background(), strings.NewReader(input), out); err != nil {
+			t.Fatalf("Serve(%s) error = %v", method, err)
+		}
+		response := assertSingleResponseLine(t, out)
+		if response.Error != nil {
+			t.Fatalf("Serve(%s) response error = %+v", method, response.Error)
+		}
+		var result struct {
+			Meta map[string]any `json:"_meta"`
+		}
+		if err := json.Unmarshal(response.Result, &result); err != nil {
+			t.Fatalf("unmarshal %s result: %v", method, err)
+		}
+		return attachmentIDFromMeta(t, result.Meta)
+	}
+
+	firstID := serveForAttachmentID(acpsdk.AgentMethodSessionLoad, validSessionLoadParams)
+	if _, err := chatSessions.AcknowledgeAttachment(context.Background(), chatsessions.AcknowledgeAttachmentRequest{
+		SessionID: "session-1", AttachmentID: firstID, AfterSequence: 3,
+	}); err != nil {
+		t.Fatalf("acknowledge first attachment: %v", err)
+	}
+
+	secondID := serveForAttachmentID(acpsdk.AgentMethodSessionLoad, validSessionLoadParams)
+	if secondID == firstID {
+		t.Fatalf("second session/load identity = %q, want an independent attachment", secondID)
+	}
+	if _, err := chatSessions.AcknowledgeAttachment(context.Background(), chatsessions.AcknowledgeAttachmentRequest{
+		SessionID: "session-1", AttachmentID: secondID, AfterSequence: 7,
+	}); err != nil {
+		t.Fatalf("acknowledge second attachment: %v", err)
+	}
+
+	if got := serveForAttachmentID(acpsdk.AgentMethodSessionResume, sessionResumeParamsWithAttachmentID(t, secondID)); got != secondID {
+		t.Fatalf("second reconnect identity = %q, want %q", got, secondID)
+	}
+	if got := serveForAttachmentID(acpsdk.AgentMethodSessionResume, sessionResumeParamsWithAttachmentID(t, firstID)); got != firstID {
+		t.Fatalf("first reconnect identity = %q, want %q", got, firstID)
+	}
+
+	chatSessions.mu.Lock()
+	first := chatSessions.attachments[firstID]
+	second := chatSessions.attachments[secondID]
+	chatSessions.mu.Unlock()
+	if first.AfterSequence != 3 {
+		t.Fatalf("first attachment AfterSequence = %d, want 3", first.AfterSequence)
+	}
+	if second.AfterSequence != 7 {
+		t.Fatalf("second attachment AfterSequence = %d, want 7", second.AfterSequence)
 	}
 }
 

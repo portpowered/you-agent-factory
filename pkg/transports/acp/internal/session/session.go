@@ -169,6 +169,57 @@ func ValidateNewSession(raw json.RawMessage) (NewSessionParams, error) {
 type LoadSessionParams struct {
 	SessionID SessionID
 	NewSessionParams
+	// ResumeAttachmentID is the opaque, service-issued identity an ACP client
+	// may return through the vendor-namespaced ACP _meta extension when it
+	// needs to resume one specific detached delivery attachment. It is not an
+	// aggregate cursor and never identifies another attachment by position.
+	ResumeAttachmentID string `json:",omitempty"`
+}
+
+// AttachmentResumeMetaKey is the vendor-namespaced ACP _meta key that carries
+// an opaque Chat Sessions attachment identity between a cooperating ACP client
+// and this transport. ACP reserves _meta specifically for custom data; using a
+// namespaced key keeps this extension out of the specification's root fields.
+const AttachmentResumeMetaKey = "portpowered.infinite-you/attachment-id"
+
+// AttachmentResumeCapabilityMetaKey advertises support for the attachment
+// resume extension in AgentCapabilities._meta. Clients that do not understand
+// it remain protocol-compatible and simply create a fresh delivery attachment
+// when they later load or resume a session.
+const AttachmentResumeCapabilityMetaKey = "portpowered.infinite-you/attachment-resume"
+
+// AttachmentResumeMetadata produces the ACP-standard _meta representation of
+// one opaque attachment identity. A blank ID has no valid representation and
+// is omitted rather than emitting a malformed extension value.
+func AttachmentResumeMetadata(attachmentID string) map[string]any {
+	if attachmentID == "" {
+		return nil
+	}
+	return map[string]any{AttachmentResumeMetaKey: attachmentID}
+}
+
+// AttachmentResumeCapabilityMetadata advertises the vendor extension without
+// claiming any new ACP core capability. Its value is deliberately descriptive
+// rather than a transport-local implementation detail, so a client can decide
+// whether to preserve and return AttachmentResumeMetaKey on reconnect.
+func AttachmentResumeCapabilityMetadata() map[string]any {
+	return map[string]any{AttachmentResumeCapabilityMetaKey: true}
+}
+
+// attachmentResumeID validates the optional vendor extension value. Unknown
+// _meta keys remain opaque to this transport as ACP requires; only this exact
+// namespaced key is interpreted. A present value must be a non-blank string so
+// a malformed reconnect never falls back to another consumer's cursor.
+func attachmentResumeID(meta map[string]any) (string, error) {
+	value, ok := meta[AttachmentResumeMetaKey]
+	if !ok {
+		return "", nil
+	}
+	attachmentID, ok := value.(string)
+	if !ok || attachmentID == "" {
+		return "", errors.New("acp: attachment resume metadata must be a non-empty string")
+	}
+	return attachmentID, nil
 }
 
 // ValidateLoadSession validates a raw session/load request against the L1
@@ -193,7 +244,15 @@ func ValidateLoadSession(raw json.RawMessage) (LoadSessionParams, error) {
 	if err != nil {
 		return LoadSessionParams{}, err
 	}
-	return LoadSessionParams{SessionID: SessionID(req.SessionId), NewSessionParams: NewSessionParams{Cwd: cwd, AdditionalDirectories: dirs}}, nil
+	attachmentID, err := attachmentResumeID(req.Meta)
+	if err != nil {
+		return LoadSessionParams{}, err
+	}
+	return LoadSessionParams{
+		SessionID:          SessionID(req.SessionId),
+		NewSessionParams:   NewSessionParams{Cwd: cwd, AdditionalDirectories: dirs},
+		ResumeAttachmentID: attachmentID,
+	}, nil
 }
 
 // ValidateResumeSession validates a raw session/resume request against the
@@ -215,7 +274,15 @@ func ValidateResumeSession(raw json.RawMessage) (LoadSessionParams, error) {
 	if err != nil {
 		return LoadSessionParams{}, err
 	}
-	return LoadSessionParams{SessionID: SessionID(req.SessionId), NewSessionParams: NewSessionParams{Cwd: cwd, AdditionalDirectories: dirs}}, nil
+	attachmentID, err := attachmentResumeID(req.Meta)
+	if err != nil {
+		return LoadSessionParams{}, err
+	}
+	return LoadSessionParams{
+		SessionID:          SessionID(req.SessionId),
+		NewSessionParams:   NewSessionParams{Cwd: cwd, AdditionalDirectories: dirs},
+		ResumeAttachmentID: attachmentID,
+	}, nil
 }
 
 // CancelParams is the closed L1 V0 shape of a validated session/cancel
@@ -321,9 +388,10 @@ func ValidateSetConfigOption(raw json.RawMessage) (ConfigOptionValue, error) {
 // request: a session identity and an ordered, non-empty sequence of
 // text-first content blocks.
 type PromptTurn struct {
-	SessionID SessionID
-	MessageID string
-	Content   []TextContent
+	SessionID          SessionID
+	MessageID          string
+	Content            []TextContent
+	ResumeAttachmentID string `json:",omitempty"`
 }
 
 // ValidatePrompt validates a session/prompt request against the L1 V0
@@ -350,6 +418,11 @@ func ValidatePrompt(req acpsdk.PromptRequest) (PromptTurn, error) {
 	if req.MessageId != nil {
 		turn.MessageID = *req.MessageId
 	}
+	attachmentID, err := attachmentResumeID(req.Meta)
+	if err != nil {
+		return PromptTurn{}, err
+	}
+	turn.ResumeAttachmentID = attachmentID
 	return turn, nil
 }
 

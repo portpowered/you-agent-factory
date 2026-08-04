@@ -67,8 +67,9 @@ const liveStreamHeadPollInterval = time.Millisecond
 // synchronization so the connection's asynchronous prompt execution cannot
 // race a live drain or another session's prompt while reusing this cache.
 type attachmentCache struct {
-	mu        sync.Mutex
-	bySession map[string]chatsessions.Attachment
+	mu                sync.Mutex
+	bySession         map[string]chatsessions.Attachment
+	resumeIDBySession map[string]string
 }
 
 // attachmentCacheContextKey is the unexported context key attachmentCache is
@@ -116,6 +117,35 @@ func (c *attachmentCache) set(sessionID string, a chatsessions.Attachment) {
 		c.bySession = make(map[string]chatsessions.Attachment)
 	}
 	c.bySession[sessionID] = a
+}
+
+// setResumeAttachmentID remembers the opaque identity a cooperating ACP
+// client supplied for a future Attach on this connection. It is only held for
+// this connection's lifetime and is passed straight back to the Chat Sessions
+// authority; this transport neither derives nor persists cursor identity.
+func (c *attachmentCache) setResumeAttachmentID(sessionID, attachmentID string) {
+	if c == nil || attachmentID == "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.resumeIDBySession == nil {
+		c.resumeIDBySession = make(map[string]string)
+	}
+	c.resumeIDBySession[sessionID] = attachmentID
+}
+
+// resumeAttachmentID returns the optional exact attachment identity this
+// connection supplied for sessionID. No identity deliberately means a new
+// consumer: guessing a sole detached attachment would become unsafe as soon
+// as two independent consumers have disconnected.
+func (c *attachmentCache) resumeAttachmentID(sessionID string) string {
+	if c == nil {
+		return ""
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.resumeIDBySession[sessionID]
 }
 
 // detachAttachments releases every attachment this connection registered
@@ -181,20 +211,14 @@ var errMalformedSequencedEnvelope = errors.New("acp: chat session aggregate reco
 // never attaches and reports ok=false so a caller can safely skip streaming
 // for this turn rather than fail it outright.
 //
-// Every Attach call here requests Resume: true, so a connection that is the
-// first to touch sessionID since an earlier connection's Detach (see
-// detachAttachments) reactivates that earlier connection's own interactive
-// attachment -- with its original ID and already-advanced AfterSequence
-// delivery cursor -- instead of starting over at position zero; a session
-// with no detached interactive attachment (its first-ever attach, or one
-// whose interactive attachment is still actively connected elsewhere) is
-// unaffected, since AttachRequest.Resume only ever reactivates a match and
-// otherwise creates an ordinary fresh attachment. This is what lets a
-// reconnecting client -- whether it reaches this transport again through
-// "session/load"/"session/resume" (see handleSessionLoad/handleSessionResume
-// in session_load.go, which call this same method eagerly) or simply issues
-// its next "session/prompt" on the same known session id -- resume
-// delivery from where its previous connection left off.
+// A connection resumes only when the cooperating client supplied its own
+// opaque attachment identity in the vendor-namespaced ACP _meta extension.
+// Without that identity this method creates a fresh consumer instead of
+// guessing at a detached attachment: two clients can legitimately have the
+// same ACP session ID but different delivery cursors, and choosing a detached
+// candidate would leak or replay another client's output. See session_load.go
+// for the customer-facing session/load and session/resume path that records
+// the identity before calling this method.
 func (s *Server) ensureAttachment(ctx context.Context, connectionID, sessionID string) (attachment chatsessions.Attachment, ok bool, err error) {
 	cache := attachmentCacheFromContext(ctx)
 	if a, cached := cache.get(sessionID); cached {
@@ -203,12 +227,14 @@ func (s *Server) ensureAttachment(ctx context.Context, connectionID, sessionID s
 	if connectionID == "" {
 		return chatsessions.Attachment{}, false, nil
 	}
+	resumeAttachmentID := cache.resumeAttachmentID(sessionID)
 
 	result, err := s.chatSessions.Attach(ctx, chatsessions.AttachRequest{
-		SessionID:    sessionID,
-		ConnectionID: connectionID,
-		Interactive:  true,
-		Resume:       true,
+		SessionID:          sessionID,
+		ConnectionID:       connectionID,
+		Interactive:        true,
+		Resume:             resumeAttachmentID != "",
+		ResumeAttachmentID: resumeAttachmentID,
 	})
 	if err != nil {
 		return chatsessions.Attachment{}, false, err

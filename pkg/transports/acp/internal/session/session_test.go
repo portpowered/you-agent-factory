@@ -208,6 +208,33 @@ func TestValidateLoadSession(t *testing.T) {
 		roundTrip(t, got)
 	})
 
+	t.Run("preserves a valid opaque attachment resume identity", func(t *testing.T) {
+		got, err := ValidateLoadSession(raw(t, acpsdk.LoadSessionRequest{
+			SessionId:  "sess-1",
+			Cwd:        "/home/user/project",
+			McpServers: []acpsdk.McpServer{},
+			Meta:       AttachmentResumeMetadata("attachment-42"),
+		}))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got.ResumeAttachmentID != "attachment-42" {
+			t.Fatalf("ResumeAttachmentID = %q, want attachment-42", got.ResumeAttachmentID)
+		}
+	})
+
+	t.Run("rejects a malformed attachment resume identity", func(t *testing.T) {
+		_, err := ValidateLoadSession(raw(t, acpsdk.LoadSessionRequest{
+			SessionId:  "sess-1",
+			Cwd:        "/home/user/project",
+			McpServers: []acpsdk.McpServer{},
+			Meta:       map[string]any{AttachmentResumeMetaKey: 42},
+		}))
+		if err == nil {
+			t.Fatal("expected malformed attachment resume metadata to be rejected")
+		}
+	})
+
 	t.Run("rejects a missing sessionId", func(t *testing.T) {
 		_, err := ValidateLoadSession(raw(t, acpsdk.LoadSessionRequest{Cwd: "/home/user/project", McpServers: []acpsdk.McpServer{}}))
 		if err == nil {
@@ -255,6 +282,20 @@ func TestValidateResumeSession(t *testing.T) {
 		want := LoadSessionParams{SessionID: "sess-1", NewSessionParams: NewSessionParams{Cwd: "/home/user/project"}}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("got %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("preserves a valid opaque attachment resume identity", func(t *testing.T) {
+		got, err := ValidateResumeSession(raw(t, acpsdk.ResumeSessionRequest{
+			SessionId: "sess-1",
+			Cwd:       "/home/user/project",
+			Meta:      AttachmentResumeMetadata("attachment-42"),
+		}))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got.ResumeAttachmentID != "attachment-42" {
+			t.Fatalf("ResumeAttachmentID = %q, want attachment-42", got.ResumeAttachmentID)
 		}
 	})
 
@@ -390,6 +431,31 @@ func TestValidatePrompt(t *testing.T) {
 			t.Fatalf("got %+v, want %+v", got, want)
 		}
 		roundTrip(t, got)
+	})
+
+	t.Run("preserves a valid opaque attachment resume identity", func(t *testing.T) {
+		got, err := ValidatePrompt(acpsdk.PromptRequest{
+			SessionId: "sess-1",
+			Prompt:    []acpsdk.ContentBlock{textBlock("continue")},
+			Meta:      AttachmentResumeMetadata("attachment-42"),
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got.ResumeAttachmentID != "attachment-42" {
+			t.Fatalf("ResumeAttachmentID = %q, want attachment-42", got.ResumeAttachmentID)
+		}
+	})
+
+	t.Run("rejects a malformed attachment resume identity", func(t *testing.T) {
+		_, err := ValidatePrompt(acpsdk.PromptRequest{
+			SessionId: "sess-1",
+			Prompt:    []acpsdk.ContentBlock{textBlock("continue")},
+			Meta:      map[string]any{AttachmentResumeMetaKey: []string{"attachment-42"}},
+		})
+		if err == nil {
+			t.Fatal("expected malformed attachment resume metadata to be rejected")
+		}
 	})
 
 	t.Run("rejects a missing sessionId", func(t *testing.T) {

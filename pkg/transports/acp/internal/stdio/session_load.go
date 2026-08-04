@@ -33,11 +33,12 @@ func (s *Server) handleSessionLoad(ctx context.Context, env envelope.Envelope) (
 	if err != nil {
 		return nil, protocol.SafeReject(err)
 	}
-	if rpcErr := s.reconnectSession(ctx, env, params.SessionID); rpcErr != nil {
+	attachment, rpcErr := s.reconnectSession(ctx, env, params.SessionID, params.ResumeAttachmentID)
+	if rpcErr != nil {
 		return nil, rpcErr
 	}
 
-	result, err := json.Marshal(acpsdk.LoadSessionResponse{})
+	result, err := json.Marshal(acpsdk.LoadSessionResponse{Meta: session.AttachmentResumeMetadata(attachment.ID)})
 	if err != nil {
 		return nil, classifyDependencyFailure(err)
 	}
@@ -54,11 +55,12 @@ func (s *Server) handleSessionResume(ctx context.Context, env envelope.Envelope)
 	if err != nil {
 		return nil, protocol.SafeReject(err)
 	}
-	if rpcErr := s.reconnectSession(ctx, env, params.SessionID); rpcErr != nil {
+	attachment, rpcErr := s.reconnectSession(ctx, env, params.SessionID, params.ResumeAttachmentID)
+	if rpcErr != nil {
 		return nil, rpcErr
 	}
 
-	result, err := json.Marshal(acpsdk.ResumeSessionResponse{})
+	result, err := json.Marshal(acpsdk.ResumeSessionResponse{Meta: session.AttachmentResumeMetadata(attachment.ID)})
 	if err != nil {
 		return nil, classifyDependencyFailure(err)
 	}
@@ -67,31 +69,42 @@ func (s *Server) handleSessionResume(ctx context.Context, env envelope.Envelope)
 
 // reconnectSession is the shared effect behind handleSessionLoad and
 // handleSessionResume: confirm sessionID still identifies an existing Chat
-// Session, then eagerly resolve (creating or resuming, per
-// ensureAttachment's own Resume semantics) this connection's delivery
-// attachment and record it in this connection's attachmentCache -- so a
-// later "session/prompt" on this same connection reuses the resolved
-// attachment through ensureAttachment's existing cache-hit path instead of
-// attaching again. An unknown sessionID (*chatsessions.NotFoundError)
-// classifies as a bounded invalid-params rejection via
+// Session, then eagerly create a fresh delivery attachment or reactivate the
+// exact detached attachment named by resumeAttachmentID. It records the
+// result in this connection's attachmentCache so a later "session/prompt" on
+// the same connection reuses it through ensureAttachment's cache-hit path
+// instead of attaching again. An omitted identity always creates a fresh
+// consumer; it never guesses among detached attachments. An unknown sessionID
+// (*chatsessions.NotFoundError) classifies as a bounded invalid-params rejection via
 // classifyTurnAdmissionFailure, matching how admitPromptTurn classifies the
 // identical GetSession failure for "session/prompt".
-func (s *Server) reconnectSession(ctx context.Context, env envelope.Envelope, sessionID session.SessionID) *acpsdk.RequestError {
+func (s *Server) reconnectSession(
+	ctx context.Context,
+	env envelope.Envelope,
+	sessionID session.SessionID,
+	resumeAttachmentID string,
+) (chatsessions.Attachment, *acpsdk.RequestError) {
 	if s.chatSessions == nil {
-		return classifyDependencyFailure(errSessionReconnectUnavailable)
+		return chatsessions.Attachment{}, classifyDependencyFailure(errSessionReconnectUnavailable)
 	}
 
 	connectionID, ok := env.Identity.ConnectionID()
 	if !ok {
-		return protocol.SafeReject(errors.New("acp: request identity has no connection"))
+		return chatsessions.Attachment{}, protocol.SafeReject(errors.New("acp: request identity has no connection"))
 	}
 
 	if _, err := s.chatSessions.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: string(sessionID)}); err != nil {
-		return classifyTurnAdmissionFailure(err)
+		return chatsessions.Attachment{}, classifyTurnAdmissionFailure(err)
 	}
 
-	if _, _, err := s.ensureAttachment(ctx, string(connectionID), string(sessionID)); err != nil {
-		return classifyDependencyFailure(err)
+	cache := attachmentCacheFromContext(ctx)
+	cache.setResumeAttachmentID(string(sessionID), resumeAttachmentID)
+	attachment, attached, err := s.ensureAttachment(ctx, string(connectionID), string(sessionID))
+	if err != nil {
+		return chatsessions.Attachment{}, classifyDependencyFailure(err)
 	}
-	return nil
+	if !attached {
+		return chatsessions.Attachment{}, classifyDependencyFailure(errSessionReconnectUnavailable)
+	}
+	return attachment, nil
 }

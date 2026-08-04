@@ -72,6 +72,23 @@ type fakeEventsService struct {
 
 var _ events.Service = (*fakeEventsService)(nil)
 
+func TestAttachmentCacheResumeAttachmentID(t *testing.T) {
+	var nilCache *attachmentCache
+	if got := nilCache.resumeAttachmentID("session-1"); got != "" {
+		t.Fatalf("nil cache resume identity = %q, want empty", got)
+	}
+
+	cache := &attachmentCache{}
+	cache.setResumeAttachmentID("session-1", "attachment-1")
+	if got := cache.resumeAttachmentID("session-1"); got != "attachment-1" {
+		t.Fatalf("cached resume identity = %q, want attachment-1", got)
+	}
+	cache.setResumeAttachmentID("session-1", "")
+	if got := cache.resumeAttachmentID("session-1"); got != "attachment-1" {
+		t.Fatalf("blank resume identity overwrote stored identity %q", got)
+	}
+}
+
 // Read mirrors the real Store.Read's own outcome decision
 // (pkg/services/events/internal/service/read.go), including its "from+1 ==
 // earliest is not a gap" boundary, so a test that calls markEvictedThrough
@@ -856,11 +873,12 @@ func TestDetachAttachmentsCompletesAfterContextCancellation(t *testing.T) {
 // id, exactly what a new "session/load"/"session/resume" or "session/prompt"
 // call on a brand-new connection observes) resumes from its previous
 // connection's last acknowledged position instead of replaying already-
-// delivered history from position zero: ensureAttachment's Resume request
-// (see prompt_stream.go) reactivates the detached interactive attachment
-// Detach left behind, so the second connection's streamTurnUpdates call
-// observes zero notifications for the record the first connection already
-// acknowledged, and exactly one for a record committed afterward.
+// delivered history from position zero: its client-supplied opaque attachment
+// identity (see prompt_stream.go) reactivates the detached interactive
+// attachment Detach left behind, so the second connection's
+// streamTurnUpdates call observes zero notifications for the record the first
+// connection already acknowledged, and exactly one for a record committed
+// afterward.
 func TestStreamTurnUpdatesReconnectAfterDetachResumesWithoutReplayingAcknowledgedHistory(t *testing.T) {
 	factoryTarget := &fakeFactoryTargetService{}
 	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
@@ -885,7 +903,9 @@ func TestStreamTurnUpdatesReconnectAfterDetachResumesWithoutReplayingAcknowledge
 	}
 
 	secondNotify, secondNotified := captureNotifier()
-	secondCtx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	secondCache := &attachmentCache{}
+	secondCache.setResumeAttachmentID(streamingTestSessionID, firstAttachment.ID)
+	secondCtx := contextWithAttachmentCache(context.Background(), secondCache)
 	if _, err := server.streamTurnUpdates(secondCtx, "conn-second", streamingTestSessionID, 1, secondNotify); err != nil {
 		t.Fatalf("reconnecting connection streamTurnUpdates() error = %v, want success", err)
 	}

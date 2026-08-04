@@ -211,6 +211,7 @@ func (s *Server) handleSessionPrompt(ctx context.Context, env envelope.Envelope)
 		}
 		return result, nil
 	}
+	attachmentCacheFromContext(ctx).setResumeAttachmentID(string(turn.SessionID), turn.ResumeAttachmentID)
 
 	return s.admitPromptTurn(ctx, turn, reqIdentity)
 }
@@ -427,7 +428,10 @@ func (s *Server) dispatchFactoryTurn(
 		terminal = chatsessions.TurnStateFailed
 		rpcErr = classifyDependencyFailure(notifyErr)
 	} else {
-		resp := acpsdk.PromptResponse{StopReason: dispatched.outcome.StopReason}
+		resp := acpsdk.PromptResponse{
+			Meta:       attachmentResumeMetadata(ctx, startResult.Session.ID),
+			StopReason: dispatched.outcome.StopReason,
+		}
 		marshaled, marshalErr := json.Marshal(resp)
 		if marshalErr != nil {
 			terminal = chatsessions.TurnStateFailed
@@ -442,6 +446,20 @@ func (s *Server) dispatchFactoryTurn(
 	}
 
 	return result, rpcErr
+}
+
+// attachmentResumeMetadata returns the opaque, service-issued attachment
+// identity for a successful prompt response so a cooperating ACP client can
+// reconnect this exact delivery cursor through the standard _meta extension.
+// The value is omitted when the request never attached (for example a server
+// deliberately constructed without Events), preserving the existing no-op
+// streaming behavior rather than inventing a transport-local identity.
+func attachmentResumeMetadata(ctx context.Context, sessionID string) map[string]any {
+	attachment, ok := attachmentCacheFromContext(ctx).get(sessionID)
+	if !ok {
+		return nil
+	}
+	return session.AttachmentResumeMetadata(attachment.ID)
 }
 
 // terminalRecoveryOrder lists every terminal TurnState in a fixed priority

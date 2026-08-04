@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	acpsdk "github.com/coder/acp-go-sdk"
+
+	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
 )
 
 // richClientCapabilities declares every optional client capability this
@@ -51,6 +53,9 @@ func TestNegotiateSupportedVersionAdvertisesHonestP0Profile(t *testing.T) {
 			}
 			if caps.SessionCapabilities.Resume == nil {
 				t.Error("AgentCapabilities.SessionCapabilities.Resume = nil, want advertised")
+			}
+			if got := caps.Meta[session.AttachmentResumeCapabilityMetaKey]; got != true {
+				t.Errorf("AgentCapabilities.Meta[%q] = %#v, want true", session.AttachmentResumeCapabilityMetaKey, got)
 			}
 
 			// Deferred capabilities: never claimed, regardless of what the
