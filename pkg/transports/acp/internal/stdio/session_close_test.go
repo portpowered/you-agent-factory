@@ -26,7 +26,7 @@ func TestHandleSessionCloseCommitsBeforeFactoryClose(t *testing.T) {
 	base, session, turn := newActiveBoundControlSession(t, "fs-close-bound")
 	chatSessions := &controlRecordingChatSessions{Service: base}
 	factoryTarget := &fakeFactoryTargetService{closeEntered: make(chan struct{}), closeRelease: make(chan struct{})}
-	server := New(nil, chatSessions, nil, factoryTarget, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil)
 	env := closeRequestEnvelope(t, 41, session.ID)
 
 	type closeResult struct {
@@ -101,7 +101,7 @@ func TestHandleSessionCloseUsesCapturedPendingFactorySession(t *testing.T) {
 	}
 	chatSessions := &fakeChatSessionsService{getSessionResult: current}
 	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, chatSessions, nil, factoryTarget, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil)
 
 	result, rpcErr := server.dispatchRequest(context.Background(), closeRequestEnvelope(t, 42, current.Session.ID))
 	if rpcErr != nil {
@@ -125,7 +125,7 @@ func TestHandleSessionCloseUsesCapturedPendingFactorySession(t *testing.T) {
 func TestHandleSessionCloseIsIdempotentAndRejectsPostClosePrompt(t *testing.T) {
 	base, session, _ := newActiveBoundControlSession(t, "fs-close-repeat")
 	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, base, nil, factoryTarget, nil)
+	server := New(nil, base, nil, factoryTarget, nil, nil, nil)
 
 	for _, requestID := range []int64{43, 44} {
 		result, rpcErr := server.dispatchRequest(context.Background(), closeRequestEnvelope(t, requestID, session.ID))
@@ -222,7 +222,7 @@ func TestHandleSessionCloseRejectsInvalidInputsWithoutFactoryEffects(t *testing.
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			server := New(nil, test.chatSessions, nil, test.factory, nil)
+			server := New(nil, test.chatSessions, nil, test.factory, nil, nil, nil)
 			_, rpcErr := server.dispatchRequest(context.Background(), test.env)
 			if rpcErr == nil || rpcErr.Code != test.wantCode {
 				t.Fatalf("session/close error = %+v, want code %d", rpcErr, test.wantCode)
@@ -262,7 +262,7 @@ func TestHandleSessionCloseWithoutActiveTurnLeavesLifecycleOpen(t *testing.T) {
 	}
 	chatSessions := &controlRecordingChatSessions{Service: base}
 	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, chatSessions, nil, factoryTarget, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil)
 
 	_, rpcErr := server.dispatchRequest(context.Background(), closeRequestEnvelope(t, 56, session.ID))
 	if rpcErr == nil || rpcErr.Code != -32602 {
@@ -299,7 +299,7 @@ func TestHandleSessionCloseStaleCaptureCannotReachReplacement(t *testing.T) {
 		requestRelease: release,
 	}
 	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, chatSessions, nil, factoryTarget, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil)
 	env := closeRequestEnvelope(t, 57, session.ID)
 
 	type closeResult struct{ err *acpsdk.RequestError }
@@ -356,7 +356,7 @@ func TestHandleSessionCloseDependencyFailureLeavesLifecycleRetryable(t *testing.
 	chatSessions := &controlRecordingChatSessions{Service: base}
 	failureText := "provider credential at /unsafe/path"
 	factoryTarget := &fakeFactoryTargetService{closeErr: errors.New(failureText)}
-	server := New(nil, chatSessions, nil, factoryTarget, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil)
 	env := closeRequestEnvelope(t, 59, session.ID)
 
 	_, rpcErr := server.dispatchRequest(context.Background(), env)
