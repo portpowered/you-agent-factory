@@ -300,7 +300,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	replayRuntimeConfigDecoder := provideReplayRuntimeConfigDecoder()
 	v55 := provideReplayArtifactLoader(storage)
 	v56 := provideFactorySessionReplayRecordingReader(edges2)
-	recordingReplayArtifacts := provideFactorySessionReplayInputs(v55, v56, loggingLogger)
+	replayInputLoader := provideFactorySessionReplayInputs(v55, v56, loggingLogger)
 	clockResolver := provideFactoryRuntimeClockResolver()
 	sessionLoggerFactory := provideFactoryRuntimeSessionLoggerFactory()
 	v57 := provideProviderFromCommandRunnerFactory(service, edges2, ptyAllocator)
@@ -349,7 +349,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		LoadFactory:                      v53,
 		NewLoadedFactory:                 v54,
 		DecodeReplayConfig:               replayRuntimeConfigDecoder,
-		ReplayInputs:                     recordingReplayArtifacts,
+		ReplayInputs:                     replayInputLoader,
 		CaptureLoadedFactorySnapshot:     v35,
 		ResolveClock:                     clockResolver,
 		NewSessionLogger:                 sessionLoggerFactory,

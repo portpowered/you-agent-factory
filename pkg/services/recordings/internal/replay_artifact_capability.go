@@ -140,47 +140,35 @@ func (service *combinedService) ReadArtifact(
 	return recordings.ReadArtifactResult{Artifact: toArtifactEnvelope(result.Artifact)}, nil
 }
 
-// LoadReplayInput implements recordings.RecordingReplayArtifacts for the
-// ledger-backed Recordings root. This construction path always has an
-// already-recorded ledger and projection, never a bare filesystem path to
-// classify, so it does not support LoadReplayInput; that operation is
-// implemented by the path-based bootstrap capability Factory Sessions
-// injects while opening runtime state, before any ledger exists (see
-// pkg/services/recordings/wire.NewReplayArtifactCapability).
-func (service *combinedService) LoadReplayInput(
-	recordings.LoadReplayInputRequest,
-) (recordings.LoadReplayInputResult, error) {
-	return recordings.LoadReplayInputResult{}, unsupportedReplayArtifactContext()
-}
-
-// replayInputArtifactCapability is the path-based Recordings implementation
-// Factory Sessions receives before a recording ledger exists. It owns the
-// portable-versus-legacy classification and its safe operation observability;
-// callers receive only the narrow RecordingReplayArtifacts contract.
-type replayInputArtifactCapability struct {
+// replayInputLoader is the path-based Recordings implementation Factory
+// Sessions receives before a recording ledger exists. It owns the
+// portable-versus-legacy classification and its safe operation observability.
+// Its public ReplayInputLoader contract contains only that lifecycle-safe
+// operation.
+type replayInputLoader struct {
 	readFile   recordings.RecordingReadFile
 	loadLegacy recordings.ReplayArtifactLoader
 	logger     logging.Logger
 }
 
-var _ recordings.RecordingReplayArtifacts = (*replayInputArtifactCapability)(nil)
+var _ recordings.ReplayInputLoader = (*replayInputLoader)(nil)
 
-// NewReplayArtifactCapability constructs the path-based replay/artifact
-// capability from the exact reader, legacy loader, and process logger selected
-// by Recordings Wire. It is inert: it performs no I/O until LoadReplayInput.
-func NewReplayArtifactCapability(
+// NewReplayInputLoader constructs the path-based replay-input capability from
+// the exact reader, legacy loader, and process logger selected by Recordings
+// Wire. It is inert: it performs no I/O until LoadReplayInput.
+func NewReplayInputLoader(
 	readFile recordings.RecordingReadFile,
 	loadLegacy recordings.ReplayArtifactLoader,
 	logger logging.Logger,
-) recordings.RecordingReplayArtifacts {
-	return &replayInputArtifactCapability{
+) recordings.ReplayInputLoader {
+	return &replayInputLoader{
 		readFile:   readFile,
 		loadLegacy: loadLegacy,
 		logger:     logging.EnsureLogger(logger),
 	}
 }
 
-func (loader *replayInputArtifactCapability) LoadReplayInput(
+func (loader *replayInputLoader) LoadReplayInput(
 	request recordings.LoadReplayInputRequest,
 ) (recordings.LoadReplayInputResult, error) {
 	loader.logReplayInputIntent()
@@ -230,7 +218,7 @@ func isPortableReplayInput(data []byte) bool {
 	return false
 }
 
-func (loader *replayInputArtifactCapability) loadPortableReplayInput(
+func (loader *replayInputLoader) loadPortableReplayInput(
 	data []byte,
 ) (recordings.LoadReplayInputResult, error) {
 	value, err := recordings.DecodePortableRecording(bytes.NewReader(data))
@@ -243,7 +231,7 @@ func (loader *replayInputArtifactCapability) loadPortableReplayInput(
 	return recordings.LoadReplayInputResult{Portable: &value}, nil
 }
 
-func (loader *replayInputArtifactCapability) loadLegacyReplayInput(
+func (loader *replayInputLoader) loadLegacyReplayInput(
 	path string,
 ) (recordings.LoadReplayInputResult, error) {
 	if loader.loadLegacy == nil {
@@ -262,7 +250,7 @@ func (loader *replayInputArtifactCapability) loadLegacyReplayInput(
 	return recordings.LoadReplayInputResult{Legacy: artifact}, nil
 }
 
-func (loader *replayInputArtifactCapability) replayInputDependencyFailure(
+func (loader *replayInputLoader) replayInputDependencyFailure(
 	classification string,
 	cause error,
 ) (recordings.LoadReplayInputResult, error) {
@@ -275,7 +263,7 @@ func (loader *replayInputArtifactCapability) replayInputDependencyFailure(
 	return recordings.LoadReplayInputResult{}, failure
 }
 
-func (loader *replayInputArtifactCapability) logReplayInputIntent() {
+func (loader *replayInputLoader) logReplayInputIntent() {
 	loader.logger.Info(
 		"recordings replay input accepted",
 		"operation", "load_replay_input",
@@ -283,7 +271,7 @@ func (loader *replayInputArtifactCapability) logReplayInputIntent() {
 	)
 }
 
-func (loader *replayInputArtifactCapability) logReplayInputOutcome(
+func (loader *replayInputLoader) logReplayInputOutcome(
 	outcome string,
 	classification string,
 	family string,
@@ -320,69 +308,6 @@ func newPortableReplayInputError(cause error) *recordings.ReplayInputError {
 		Family:     recordings.ReplayInputFamilyPortable,
 		Diagnostic: diagnostic,
 		Cause:      cause,
-	}
-}
-
-func (loader *replayInputArtifactCapability) LoadReplay(
-	recordings.LoadReplayRequest,
-) (recordings.LoadReplayResult, error) {
-	return recordings.LoadReplayResult{}, unsupportedReplayArtifactContext()
-}
-
-func (loader *replayInputArtifactCapability) BuildArtifact(
-	recordings.BuildArtifactRequest,
-) (recordings.BuildArtifactResult, error) {
-	return recordings.BuildArtifactResult{}, unsupportedReplayArtifactContext()
-}
-
-func (loader *replayInputArtifactCapability) ValidateArtifact(
-	recordings.ValidateArtifactRequest,
-) (recordings.ValidateArtifactResult, error) {
-	return recordings.ValidateArtifactResult{}, unsupportedReplayArtifactContext()
-}
-
-func (loader *replayInputArtifactCapability) EncodeArtifact(
-	recordings.EncodeArtifactRequest,
-) (recordings.EncodeArtifactResult, error) {
-	return recordings.EncodeArtifactResult{}, unsupportedReplayArtifactContext()
-}
-
-func (loader *replayInputArtifactCapability) DecodeArtifact(
-	recordings.DecodeArtifactRequest,
-) (recordings.DecodeArtifactResult, error) {
-	return recordings.DecodeArtifactResult{}, unsupportedReplayArtifactContext()
-}
-
-func (loader *replayInputArtifactCapability) SummarizeArtifact(
-	recordings.SummarizeArtifactRequest,
-) (recordings.SummarizeArtifactResult, error) {
-	return recordings.SummarizeArtifactResult{}, unsupportedReplayArtifactContext()
-}
-
-func (loader *replayInputArtifactCapability) ExportArtifact(
-	context.Context,
-	recordings.ExportArtifactRequest,
-) (recordings.ExportArtifactResult, error) {
-	return recordings.ExportArtifactResult{}, unsupportedReplayArtifactContext()
-}
-
-func (loader *replayInputArtifactCapability) ReadArtifact(
-	context.Context,
-	recordings.ReadArtifactRequest,
-) (recordings.ReadArtifactResult, error) {
-	return recordings.ReadArtifactResult{}, unsupportedReplayArtifactContext()
-}
-
-func unsupportedReplayArtifactContext() error {
-	return &recordings.ReplayArtifactError{
-		Kind: recordings.ReplayArtifactErrorUnsupportedContext,
-		Diagnostic: recordings.ReplayArtifactDiagnostic{
-			Code:    recordings.ReplayArtifactDiagnosticUnsupportedContext,
-			Area:    "capability",
-			Path:    "operation",
-			Message: "operation is unavailable in this Recordings capability context",
-		},
-		Cause: recordings.ErrReplayArtifactUnsupportedContext,
 	}
 }
 
@@ -749,13 +674,6 @@ func replayArtifactDiagnostic(kind recordings.ReplayArtifactErrorKind) recording
 			Area:    "publication",
 			Path:    "artifact",
 			Message: "replay artifact could not be published",
-		}
-	case recordings.ReplayArtifactErrorUnsupportedContext:
-		return recordings.ReplayArtifactDiagnostic{
-			Code:    recordings.ReplayArtifactDiagnosticUnsupportedContext,
-			Area:    "capability",
-			Path:    "operation",
-			Message: "operation is unavailable in this Recordings capability context",
 		}
 	default:
 		return recordings.ReplayArtifactDiagnostic{

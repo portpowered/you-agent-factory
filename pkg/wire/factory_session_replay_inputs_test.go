@@ -13,7 +13,7 @@ import (
 )
 
 // TestProvideFactorySessionReplayInputsClassifiesPortableRecording proves the
-// Wire-composed RecordingReplayArtifacts capability -- built from the existing replay
+// Wire-composed ReplayInputLoader capability -- built from the existing replay
 // artifact loader and the Factory Session replay recording reader -- reads a
 // real portable JavaScript Factory Session recording from disk and decodes
 // it, without the caller assembling the raw reader and decoder itself.

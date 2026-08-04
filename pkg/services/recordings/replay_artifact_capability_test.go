@@ -513,8 +513,6 @@ func replayArtifactDiagnosticCodeForKind(kind recordings.ReplayArtifactErrorKind
 		return recordings.ReplayArtifactDiagnosticCancelled
 	case recordings.ReplayArtifactErrorExportFailed:
 		return recordings.ReplayArtifactDiagnosticDependencyFailure
-	case recordings.ReplayArtifactErrorUnsupportedContext:
-		return recordings.ReplayArtifactDiagnosticUnsupportedContext
 	default:
 		return recordings.ReplayArtifactDiagnosticMalformed
 	}
@@ -618,12 +616,6 @@ func (fake *narrowReplayArtifactsFake) ReadArtifact(
 	context.Context, recordings.ReadArtifactRequest,
 ) (recordings.ReadArtifactResult, error) {
 	return recordings.ReadArtifactResult{Artifact: fake.artifact}, nil
-}
-
-func (fake *narrowReplayArtifactsFake) LoadReplayInput(
-	recordings.LoadReplayInputRequest,
-) (recordings.LoadReplayInputResult, error) {
-	return recordings.LoadReplayInputResult{}, recordings.ErrReplayArtifactUnsupportedContext
 }
 
 func TestRecordingReplayArtifacts_NarrowFakeConsumption(t *testing.T) {

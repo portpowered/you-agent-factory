@@ -38,27 +38,24 @@ func NewReplayArtifactLoader(
 	}
 }
 
-// NewReplayArtifactCapability constructs the path-based, pre-ledger
-// recordings.RecordingReplayArtifacts implementation selected by
+// NewReplayInputLoader constructs the path-based, pre-ledger
+// recordings.ReplayInputLoader implementation selected by
 // process-graph composition, composing the existing portable-recording
 // decoder/validator with the existing legacy replay artifact loader behind
-// the one Recordings-owned replay/artifact capability so callers no longer
+// the one Recordings-owned replay-input capability so callers no longer
 // combine a raw file reader, the aliased portable-recording decoder/
 // validator, and the legacy loader themselves.
 //
-// This implementation only supports LoadReplayInput: it is constructed and
-// injected before a Factory Session ledger exists (while Factory Sessions
-// opens runtime state from historical replay input), so its ledger-scoped
-// operations (LoadReplay, BuildArtifact, ValidateArtifact, EncodeArtifact,
-// DecodeArtifact, SummarizeArtifact, ExportArtifact, ReadArtifact) return a
-// ReplayArtifactErrorUnsupportedContext failure rather than fabricating
-// ledger access they do not have.
-func NewReplayArtifactCapability(
+// This capability contains only LoadReplayInput because it is constructed and
+// injected before a Factory Session ledger exists. Ledger-scoped artifact
+// behavior remains on RecordingReplayArtifacts, whose implementation has the
+// required ledger and publication dependencies.
+func NewReplayInputLoader(
 	readFile recordings.RecordingReadFile,
 	loadLegacy recordings.ReplayArtifactLoader,
 	logger logging.Logger,
-) recordings.RecordingReplayArtifacts {
-	return recordingsinternal.NewReplayArtifactCapability(readFile, loadLegacy, logger)
+) recordings.ReplayInputLoader {
+	return recordingsinternal.NewReplayInputLoader(readFile, loadLegacy, logger)
 }
 
 // NewProjectionService constructs the Recordings projection capability for

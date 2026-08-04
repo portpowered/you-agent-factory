@@ -173,7 +173,7 @@ type RuntimeOpeningDependencies struct {
 	LoadFactory                      factorydefinitions.LoadedFactoryLoader
 	NewLoadedFactory                 factorydefinitions.LoadedFactorySourceFactory
 	DecodeReplayConfig               factorydefinitions.ReplayRuntimeConfigDecoder
-	ReplayInputs                     recordings.RecordingReplayArtifacts
+	ReplayInputs                     recordings.ReplayInputLoader
 	CaptureLoadedFactorySnapshot     factorydefinitions.LoadedFactorySnapshotCapturer
 	ResolveClock                     factoryruntime.ClockResolver
 	NewSessionLogger                 factoryruntime.SessionLoggerFactory

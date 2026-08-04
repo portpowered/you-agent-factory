@@ -70,18 +70,17 @@ func provideRecordingLifecycleFactory(
 }
 
 // provideFactorySessionReplayInputs composes the Recordings-owned, path-based
-// RecordingReplayArtifacts capability from the existing legacy replay
+// ReplayInputLoader capability from the existing legacy replay
 // artifact loader and replay recording file reader, so the Factory Sessions
 // runtime-opening replay-input lane receives one already-constructed
-// capability instead of combining those two raw effects itself. It is the
-// same RecordingReplayArtifacts contract used by the ledger-backed Recordings
-// root constructed by provideRecordingsFactory above, but it is constructed
-// before a Factory Session ledger exists, so it only supports
-// LoadReplayInput (see recordingswire.NewReplayArtifactCapability).
+// capability instead of combining those two raw effects itself. This operation
+// is intentionally distinct from the ledger-backed RecordingReplayArtifacts
+// capability: it is composed before a Factory Session ledger exists and its
+// complete contract is the single LoadReplayInput operation.
 func provideFactorySessionReplayInputs(
 	loadReplay recordings.ReplayArtifactLoader,
 	replayFiles factorysessionwire.ReplayRecordingReader,
 	logger logging.Logger,
-) recordings.RecordingReplayArtifacts {
-	return recordingswire.NewReplayArtifactCapability(recordings.RecordingReadFile(replayFiles), loadReplay, logger)
+) recordings.ReplayInputLoader {
+	return recordingswire.NewReplayInputLoader(recordings.RecordingReadFile(replayFiles), loadReplay, logger)
 }

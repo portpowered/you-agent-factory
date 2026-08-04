@@ -2,16 +2,16 @@ package recordings
 
 import (
 	"context"
-	"errors"
 	"time"
 )
 
-// RecordingReplayArtifacts is a narrow, Recordings-owned capability for peers
-// that only need to load a finalized recording's detached canonical replay
+// RecordingReplayArtifacts is a narrow, ledger-backed Recordings capability
+// for peers that need to load a finalized recording's detached canonical replay
 // facts and build, validate, encode, decode, summarize, export, and read its
 // portable artifact envelope. It deliberately excludes recording lifecycle,
-// event streaming, projection query, and runtime execution behavior so peers
-// can fake it without implementing the rest of Service.
+// event streaming, projection query, runtime execution, and path-based
+// runtime-opening input so peers do not advertise behavior that needs a
+// different lifecycle scope.
 //
 // Every identity, replay-fact, artifact, request, result, diagnostic, and
 // typed-error type used by this capability is defined directly in this file
@@ -40,16 +40,19 @@ type RecordingReplayArtifacts interface {
 	// ReadArtifact reads and validates one published portable artifact from
 	// its public reference.
 	ReadArtifact(context.Context, ReadArtifactRequest) (ReadArtifactResult, error)
-	// LoadReplayInput reads the file at the selected path, classifies it as
-	// a portable JavaScript Factory Session recording or a legacy
-	// embedded-Factory replay artifact, and returns the decoded/validated
-	// result for exactly one of those two families. Unlike the other
-	// RecordingReplayArtifacts operations, this operation selects its input
-	// by filesystem path rather than by an already-recorded RecordingID, so
-	// it is usable before a Factory Session ledger exists (for example while
-	// Factory Sessions opens runtime state from historical replay input).
-	// Implementations backed by an already-open recording ledger are not
-	// required to support this operation.
+}
+
+// ReplayInputLoader is the separate, Recordings-owned capability used while
+// Factory Sessions opens runtime state before a session ledger exists. It owns
+// portable-versus-legacy path classification, detached replay facts, safe
+// diagnostics, and operation logging, but it deliberately has no finalized
+// recording or artifact operations.
+//
+// Keeping this lifecycle-specific operation separate from
+// RecordingReplayArtifacts means each implementation fulfills its complete
+// public contract; callers never receive unsupported-context stubs for a
+// method their capability advertised.
+type ReplayInputLoader interface {
 	LoadReplayInput(LoadReplayInputRequest) (LoadReplayInputResult, error)
 }
 
@@ -309,20 +312,6 @@ const (
 	ReplayArtifactErrorExportFailed      ReplayArtifactErrorKind = "EXPORT_FAILED"
 	ReplayArtifactErrorForeign           ReplayArtifactErrorKind = "FOREIGN"
 	ReplayArtifactErrorCancelled         ReplayArtifactErrorKind = "CANCELLED"
-	// ReplayArtifactErrorUnsupportedContext reports that the selected
-	// RecordingReplayArtifacts instance does not support the requested
-	// operation in its current construction context, for example a
-	// ledger-backed instance asked to classify a filesystem path, or a
-	// path-based bootstrap instance asked to operate on an already-recorded
-	// RecordingID before a Factory Session ledger exists.
-	ReplayArtifactErrorUnsupportedContext ReplayArtifactErrorKind = "UNSUPPORTED_CONTEXT"
-)
-
-// ErrReplayArtifactUnsupportedContext is the sentinel Cause for
-// ReplayArtifactErrorUnsupportedContext failures, so callers can match it
-// with errors.Is without depending on Kind string comparison.
-var ErrReplayArtifactUnsupportedContext = errors.New(
-	"replay/artifact operation is not supported by this capability instance",
 )
 
 // ReplayArtifactDiagnosticCode identifies a stable, safe validation or
@@ -344,7 +333,6 @@ const (
 	ReplayArtifactDiagnosticRecordingNotFinalized ReplayArtifactDiagnosticCode = "REPLAY_RECORDING_NOT_FINALIZED"
 	ReplayArtifactDiagnosticDependencyFailure     ReplayArtifactDiagnosticCode = "REPLAY_ARTIFACT_DEPENDENCY_FAILURE"
 	ReplayArtifactDiagnosticCancelled             ReplayArtifactDiagnosticCode = "REPLAY_ARTIFACT_CANCELLED"
-	ReplayArtifactDiagnosticUnsupportedContext    ReplayArtifactDiagnosticCode = "REPLAY_ARTIFACT_UNSUPPORTED_CONTEXT"
 )
 
 // ReplayArtifactDiagnostic is the detached, Recordings-owned explanation of

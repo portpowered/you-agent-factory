@@ -44,7 +44,7 @@ func TestLoadRuntimePreservesValidatedPortableRecording(t *testing.T) {
 	var loggerSessionID string
 	var loggerFolderPath string
 	var loggerFactoryDir string
-	replayInputs := recordingswire.NewReplayArtifactCapability(
+	replayInputs := recordingswire.NewReplayInputLoader(
 		recordings.RecordingReadFile(os.ReadFile), nil, logging.NoopLogger{},
 	)
 	loaded, err := LoadRuntime(
@@ -121,7 +121,7 @@ func TestLoadRuntimePropagatesReplayInputFailure(t *testing.T) {
 
 	root := RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: zap.NewNop()}
 	want := errors.New("recording read unavailable")
-	replayInputs := recordingswire.NewReplayArtifactCapability(func(path string) ([]byte, error) {
+	replayInputs := recordingswire.NewReplayInputLoader(func(path string) ([]byte, error) {
 		if path != "recording.json" {
 			t.Fatalf("path = %q, want recording.json", path)
 		}
@@ -150,7 +150,7 @@ func TestLoadRuntimePreservesLegacyReplayFailureContext(t *testing.T) {
 		t.Fatalf("write legacy replay fixture: %v", err)
 	}
 	want := errors.New("legacy replay unavailable")
-	replayInputs := recordingswire.NewReplayArtifactCapability(
+	replayInputs := recordingswire.NewReplayInputLoader(
 		recordings.RecordingReadFile(os.ReadFile),
 		func(string) (*recordings.ReplayArtifact, error) { return nil, want },
 		logging.NoopLogger{},
@@ -184,7 +184,7 @@ func TestLoadRuntimePreservesLegacyReplayInputs(t *testing.T) {
 			FinishedAt: time.Date(2026, time.July, 20, 2, 5, 0, 0, time.UTC),
 		},
 	}
-	capability := recordingswire.NewReplayArtifactCapability(
+	capability := recordingswire.NewReplayInputLoader(
 		func(path string) ([]byte, error) {
 			if path != "legacy-replay.json" {
 				t.Fatalf("read path = %q, want legacy-replay.json", path)
@@ -301,7 +301,7 @@ func assertPortableRuntimeFailureBeforeFactoryConstruction(
 	loadFactoryCalls := 0
 	decodeReplayConfigCalls := 0
 	newLoadedFactoryCalls := 0
-	capability := recordingswire.NewReplayArtifactCapability(
+	capability := recordingswire.NewReplayInputLoader(
 		func(path string) ([]byte, error) {
 			if path != "portable-replay.json" {
 				t.Fatalf("read path = %q, want portable-replay.json", path)
@@ -372,7 +372,7 @@ func TestLoadRuntimePreservesLegacyTypedDiagnostic(t *testing.T) {
 		},
 		Cause: recordings.ErrForeignPortableArtifact,
 	}
-	capability := recordingswire.NewReplayArtifactCapability(
+	capability := recordingswire.NewReplayInputLoader(
 		func(string) ([]byte, error) { return []byte(`{"schemaVersion":"legacy"}`), nil },
 		func(string) (*recordings.ReplayArtifact, error) { return nil, failure },
 		logging.NoopLogger{},
