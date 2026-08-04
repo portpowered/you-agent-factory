@@ -930,6 +930,55 @@ func TestServeSurfacesWriterFailureAndStopsFurtherWrites(t *testing.T) {
 	}
 }
 
+// TestServeAsyncPromptResponseWriteFailureEndsConnectionWithoutInputEOF
+// proves a "session/prompt" response write failure -- discovered only
+// asynchronously, on the dispatched prompt's own goroutine, after
+// serveConnection's read loop has already gone back to waiting for the next
+// line -- ends Serve with that write error immediately, instead of leaving
+// Serve blocked forever waiting for more input that never arrives. The
+// input pipe here is deliberately never closed and never written to again
+// after the one "session/prompt" line: before serveConnection additionally
+// selected on promptGroup's own Failed() signal concurrently with its
+// blocking read, this exact "output already broken, input still open with
+// nothing more coming" case had no way to unblock Serve. This server has no
+// chat_sessions/factory_sessions collaborators configured, so the dispatched
+// prompt fails fast with a bounded internal-error response instead of
+// blocking on a real Factory call -- the only thing this test needs is that
+// some response gets written and that write itself fails.
+func TestServeAsyncPromptResponseWriteFailureEndsConnectionWithoutInputEOF(t *testing.T) {
+	wantErr := errors.New("acp test: simulated async write failure")
+	writer := &countingErrorWriter{err: wantErr}
+
+	server := New(nil, nil, nil, nil, nil)
+
+	pr, pw := io.Pipe()
+	t.Cleanup(func() {
+		_ = pr.Close()
+		_ = pw.Close()
+	})
+
+	done := make(chan error, 1)
+	go func() { done <- server.Serve(context.Background(), pr, writer) }()
+
+	promptLine := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"session/prompt","params":%s}`+"\n",
+		promptTextParams("session-1", "hello"))
+	if _, err := pw.Write([]byte(promptLine)); err != nil {
+		t.Fatalf("write session/prompt line: %v", err)
+	}
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, wantErr) {
+			t.Fatalf("Serve() error = %v, want %v", err, wantErr)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve did not return after the dispatched prompt's response write failed, despite input remaining open with no EOF")
+	}
+	if writer.calls != 1 {
+		t.Fatalf("writer was called %d times, want exactly 1", writer.calls)
+	}
+}
+
 // shortWriter always writes one byte fewer than it was given, without
 // itself returning an error, mirroring a real short write.
 type shortWriter struct{}

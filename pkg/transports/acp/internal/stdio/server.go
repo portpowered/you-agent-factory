@@ -182,28 +182,41 @@ func scanCompleteLines(data []byte, atEOF bool) (advance int, token []byte, err 
 // "session/prompt" is dispatched and, for a request, answered before the
 // next line is read, exactly as if this were a single-threaded loop.
 // "session/prompt" is instead dispatched through promptGroup (see
-// dispatchAsyncSessionPrompt) so this loop can keep reading and dispatching
-// the lines that follow it on the same connection -- most importantly a
-// "session/cancel" notification for the turn that same "session/prompt" is
-// still admitting, which must reach handleSessionCancel while the prompt's
-// own downstream Factory call is still blocked, not after it already
-// returned. safeOut (platformstdio.SerializeWrites) serializes every
-// response and notification write so a slow "session/prompt" response can
-// never tear or interleave with another line's write, even though the two
-// may now be produced concurrently; responses across different lines may
-// therefore complete, and be written, out of the order their requests were
-// read -- each is still correlated to its own request id, which is all
-// JSON-RPC 2.0 promises. Context cancellation is checked before every read:
-// it stops accepting new work immediately, and once a read fails or ends
-// because the caller-owned stream itself was closed or cancelled on the
-// context's behalf, the context's error is reported instead of the
-// stream's raw error, so a deliberate shutdown is never mistaken for a
-// fault. A partial trailing frame at EOF, and a response write failure on
-// this loop itself or on a dispatched "session/prompt" (surfaced through
-// promptGroup.Wait), both end the connection with their own error instead
-// of being treated as success; every outstanding "session/prompt" is
-// always awaited (promptGroup.Wait, deferred) before this method returns,
-// so Serve never returns while a response it may still write is in flight.
+// dispatchAsyncSessionPrompt) so the read loop can keep reading and
+// dispatching the lines that follow it on the same connection -- most
+// importantly a "session/cancel" notification for the turn that same
+// "session/prompt" is still admitting, which must reach handleSessionCancel
+// while the prompt's own downstream Factory call is still blocked, not
+// after it already returned. safeOut (platformstdio.SerializeWrites)
+// serializes every response and notification write so a slow
+// "session/prompt" response can never tear or interleave with another
+// line's write, even though the two may now be produced concurrently;
+// responses across different lines may therefore complete, and be written,
+// out of the order their requests were read -- each is still correlated to
+// its own request id, which is all JSON-RPC 2.0 promises.
+//
+// The read loop itself (readConnectionLines) runs on its own goroutine,
+// tracked by readGroup, precisely because its underlying scanner.Scan call
+// is an ordinary blocking read this method has no way to interrupt except by
+// closing the caller-owned stream, which it does not own. Running it
+// concurrently is what lets this method itself return as soon as
+// promptGroup's own Failed() channel reports a dispatched "session/prompt"
+// response write failure -- the exact "output already broken, but input is
+// still open with nothing more coming" case a synchronous read loop would
+// otherwise block on forever. When that happens, readConnectionLines'
+// goroutine is simply abandoned still blocked in its own Scan call: it is
+// tied to the caller-owned stream's own lifetime (closed, in a real ACP
+// agent process, by the same process shutdown that ends this connection),
+// never to this method's return. A partial trailing frame at EOF, and a
+// response write failure on the read loop itself or on a dispatched
+// "session/prompt" (surfaced through promptGroup.Failed/Wait), both end the
+// connection with their own error instead of being treated as success.
+// Every outstanding "session/prompt" tracked by promptGroup is always
+// awaited (promptGroup.Wait, deferred) before this method returns, even on
+// the early-return failure path, so Serve never returns while a response it
+// may still write is in flight -- only the abandoned read loop goroutine,
+// which writes nothing further once EOF or another failure eventually
+// reaches it, is exempted from that wait.
 func (s *Server) serveConnection(ctx context.Context, connectionID identity.ConnectionID, in io.Reader, out io.Writer) error {
 	scanner := bufio.NewScanner(in)
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
@@ -231,10 +244,43 @@ func (s *Server) serveConnection(ctx context.Context, connectionID identity.Conn
 	var promptGroup taskgroup.Group
 	defer promptGroup.Wait()
 
+	var readGroup taskgroup.Group
+	readGroup.Go(func() error {
+		return s.readConnectionLines(ctx, scanner, connectionID, writeResponseLocked, notify, &promptGroup)
+	})
+
+	select {
+	case <-promptGroup.Failed():
+		return promptGroup.Err()
+	case <-readGroup.Done():
+		return readGroup.Wait()
+	}
+}
+
+// readConnectionLines is serveConnection's read loop, run on its own
+// goroutine (see serveConnection's own doc comment for why). It checks both
+// ctx.Err() and promptGroup.Failed() before every blocking Scan call, so a
+// deliberate shutdown or an already-reported dispatched-prompt write failure
+// stops this loop from reading further input as soon as it is between two
+// reads -- though only serveConnection's own concurrent select, not this
+// check, can react while a Scan call already in flight is still blocked.
+func (s *Server) readConnectionLines(
+	ctx context.Context,
+	scanner *bufio.Scanner,
+	connectionID identity.ConnectionID,
+	writeResponseLocked func(identity.RequestIdentity, json.RawMessage, *acpsdk.RequestError) error,
+	notify promptNotifier,
+	promptGroup *taskgroup.Group,
+) error {
 	var notificationSeq uint64
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
+		}
+		select {
+		case <-promptGroup.Failed():
+			return promptGroup.Err()
+		default:
 		}
 
 		if !scanner.Scan() {
@@ -279,7 +325,7 @@ func (s *Server) serveConnection(ctx context.Context, connectionID identity.Conn
 		}
 
 		if env.Method == acpsdk.AgentMethodSessionPrompt {
-			s.dispatchAsyncSessionPrompt(reqCtx, env, &promptGroup, writeResponseLocked)
+			s.dispatchAsyncSessionPrompt(reqCtx, env, promptGroup, writeResponseLocked)
 			continue
 		}
 

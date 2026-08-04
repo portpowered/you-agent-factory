@@ -2477,6 +2477,16 @@ func TestServeCancelReachesFactorySessionWhileItsOwnSessionPromptInvocationIsSti
 		t.Fatalf("Serve() error = %v", err)
 	}
 
+	assertCancelledPromptResponse(t, out)
+}
+
+// assertCancelledPromptResponse asserts out carries exactly one successful
+// "session/prompt" response reporting acpsdk.StopReasonCancelled -- the
+// shared tail assertion for the in-flight-cancellation tests above and
+// below, which both drive a real Cancel-caused invocation outcome through
+// to this same eventual response.
+func assertCancelledPromptResponse(t *testing.T, out *bytes.Buffer) {
+	t.Helper()
 	resp := assertSingleResponseLine(t, out)
 	if resp.Error != nil {
 		t.Fatalf("response error = %+v, want success", resp.Error)
@@ -2488,6 +2498,119 @@ func TestServeCancelReachesFactorySessionWhileItsOwnSessionPromptInvocationIsSti
 	if promptResp.StopReason != acpsdk.StopReasonCancelled {
 		t.Fatalf("stopReason = %q, want cancelled", promptResp.StopReason)
 	}
+}
+
+// TestServeCancelReachesPendingFactorySessionDuringFirstTurnInvocation proves
+// "session/cancel" reaches the exact runtime a first, currently-admitted
+// turn started -- while that turn's own follow-up InvokeFactorySession call
+// is still blocked and BindFactorySession has not yet committed it as the
+// episode's FactorySessionID -- by routing through the episode's
+// PendingFactorySessionID (recorded by RecordPendingFactorySession right
+// after StartAsync succeeds; see startFactorySessionForEpisode and
+// chatsessions.TargetEpisode.PendingFactorySessionID's own doc comments).
+// This is the real-world cancellation window that matters most: a caller
+// almost always cancels the very first prompt of a brand-new target episode
+// while it is still running, not only a later, already-bound turn (which
+// TestServeCancelReachesFactorySessionWhileItsOwnSessionPromptInvocationIsStillBlocked
+// already covers). Before handleSessionCancel also consulted
+// PendingFactorySessionID, this exact scenario was a silent no-op.
+func TestServeCancelReachesPendingFactorySessionDuringFirstTurnInvocation(t *testing.T) {
+	getSessionResult := sessionAt("session-1", "factory:@you/review", 3, "/work/project")
+	// handleSessionCancel resolves the captured identity through its own,
+	// separate GetSession call: the episode has not bound FactorySessionID
+	// yet (the first turn's InvokeFactorySession/BindFactorySession sequence
+	// is still in flight below), only the pending identity StartAsync
+	// already returned and RecordPendingFactorySession already durably
+	// recorded.
+	getSessionResult.Episode = chatsessions.TargetEpisode{
+		Number: 1, State: chatsessions.TargetEpisodeStateOpen,
+		Target:                  chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
+		PendingFactorySessionID: "fs-pending-1",
+	}
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: getSessionResult,
+		// The admitted StartTurn result's episode is genuinely unbound (blank
+		// FactorySessionID), driving dispatchFactoryTurn into
+		// startFactorySessionForEpisode -- the first-turn branch this test
+		// means to exercise.
+		startTurnResult: admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{
+		startResult:   factorysessions.AsyncStartResult{SessionID: "fs-pending-1"},
+		invokeEnter:   make(chan struct{}),
+		invokeRelease: make(chan struct{}),
+		cancelEntered: make(chan struct{}),
+		invokeResult:  factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCanceled},
+	}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	pr, pw := io.Pipe()
+	out := &bytes.Buffer{}
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- server.Serve(context.Background(), pr, out) }()
+
+	promptLine := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"session/prompt","params":%s}`+"\n",
+		promptTextParams("session-1", "a message to cancel"))
+	if _, err := pw.Write([]byte(promptLine)); err != nil {
+		t.Fatalf("write session/prompt line: %v", err)
+	}
+
+	select {
+	case <-factoryTarget.invokeEnter:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for InvokeFactorySession to be entered")
+	}
+
+	factoryTarget.mu.Lock()
+	startCallCount := len(factoryTarget.startCalls)
+	factoryTarget.mu.Unlock()
+	if startCallCount != 1 {
+		t.Fatalf("StartAsync call count = %d, want exactly 1 before its own follow-up invoke blocks", startCallCount)
+	}
+
+	cancelLine := `{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"session-1"}}` + "\n"
+	if _, err := pw.Write([]byte(cancelLine)); err != nil {
+		t.Fatalf("write session/cancel line: %v", err)
+	}
+
+	select {
+	case <-factoryTarget.cancelEntered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for Cancel to be entered")
+	}
+
+	// Cancel has already been recorded here, against the pending (not yet
+	// bound) identity, while InvokeFactorySession -- confirmed still blocked
+	// by this same assertion -- has not returned.
+	factoryTarget.mu.Lock()
+	cancelCallCount := len(factoryTarget.cancelCalls)
+	cancelSessionID := ""
+	if cancelCallCount > 0 {
+		cancelSessionID = factoryTarget.cancelCalls[0].sessionID
+	}
+	invokeCallCount := len(factoryTarget.invokeCalls)
+	factoryTarget.mu.Unlock()
+	if cancelCallCount != 1 {
+		t.Fatalf("Cancel call count = %d, want exactly 1 while the first turn's invocation is still blocked", cancelCallCount)
+	}
+	if cancelSessionID != "fs-pending-1" {
+		t.Fatalf("Cancel sessionID = %q, want the episode's pending (not yet bound) identity fs-pending-1", cancelSessionID)
+	}
+	if invokeCallCount != 1 {
+		t.Fatalf("InvokeFactorySession call count = %d, want exactly 1 still in flight", invokeCallCount)
+	}
+
+	close(factoryTarget.invokeRelease)
+
+	if err := pw.Close(); err != nil {
+		t.Fatalf("close input pipe: %v", err)
+	}
+	if err := <-serveErr; err != nil {
+		t.Fatalf("Serve() error = %v", err)
+	}
+
+	assertCancelledPromptResponse(t, out)
 }
 
 // TestServeSessionCancelWithNoBoundFactorySessionIsNoOp proves a

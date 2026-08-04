@@ -193,21 +193,29 @@ func (s *Server) handleSessionPrompt(ctx context.Context, env envelope.Envelope)
 }
 
 // handleSessionCancel executes one "session/cancel" notification: forward it
-// to the addressed Chat Session's currently bound Factory Session, through
+// to the addressed Chat Session's currently captured Factory Session, through
 // this same Server's Factory Sessions-owned target-execution capability's
 // Cancel operation, with the caller's own context and a ControlRequest
-// correlated to the addressed session. Per JSON-RPC 2.0 and the ACP
-// protocol, session/cancel is a notification: there is no response to build
-// or write for it, so every failure here -- malformed params, an unknown
-// Chat Session, an episode with no bound Factory Session yet, a missing
-// collaborator, or the downstream Cancel call itself failing -- is a silent
-// no-op. The caller observes cancellation's real effect only in the
-// concurrently in-flight "session/prompt" request's own eventual response:
-// factoryInvocationTurnState already maps a genuine downstream-canceled
-// outcome to TurnStateCanceled/StopReasonCancelled the same way it does for
-// every other Factory invocation outcome, so this method's only job is
-// reaching the exact captured runtime a prior turn started, not
-// reclassifying anything itself.
+// correlated to the addressed session. The captured identity is the
+// episode's committed FactorySessionID once a prior turn's bind has
+// succeeded, or -- for the exact window between a first turn's StartAsync
+// call and its own still-in-flight InvokeFactorySession/BindFactorySession
+// completion -- its PendingFactorySessionID (see
+// startFactorySessionForEpisode and chatsessions.TargetEpisode's own doc
+// comment): that is the real runtime a first, currently-admitted turn is
+// blocked inside, and it is exactly the case this transport must be able to
+// cancel, not only an already-bound later turn's. Per JSON-RPC 2.0 and the
+// ACP protocol, session/cancel is a notification: there is no response to
+// build or write for it, so every failure here -- malformed params, an
+// unknown Chat Session, an episode with neither a bound nor a pending
+// Factory Session yet, a missing collaborator, or the downstream Cancel call
+// itself failing -- is a silent no-op. The caller observes cancellation's
+// real effect only in the concurrently in-flight "session/prompt" request's
+// own eventual response: factoryInvocationTurnState already maps a genuine
+// downstream-canceled outcome to TurnStateCanceled/StopReasonCancelled the
+// same way it does for every other Factory invocation outcome, so this
+// method's only job is reaching the exact captured runtime a prior turn
+// started, not reclassifying anything itself.
 func (s *Server) handleSessionCancel(ctx context.Context, env envelope.Envelope) {
 	if s.chatSessions == nil || s.factoryTarget == nil {
 		return
@@ -226,6 +234,9 @@ func (s *Server) handleSessionCancel(ctx context.Context, env envelope.Envelope)
 		return
 	}
 	factorySessionID := getResult.Episode.FactorySessionID
+	if factorySessionID == "" {
+		factorySessionID = getResult.Episode.PendingFactorySessionID
+	}
 	if factorySessionID == "" {
 		return
 	}
