@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -30,6 +31,7 @@ type lifecycleRuntimeRecorder struct {
 	seen          map[string]struct{}
 	nextSequence  recordings.CanonicalEventSequence
 	finalizeErr   error
+	stopErr       error
 	pending       []pendingRuntimeRecording
 }
 
@@ -121,7 +123,11 @@ func (recorder *lifecycleRuntimeRecorder) BindRecordingLifecycle(
 	recorder.recordingID = result.Status.RecordingID
 	recorder.scope = scope
 	if err := recorder.recordEventLocked(recorder.initialEvent); err != nil {
-		return fmt.Errorf("record initial Factory snapshot: %w", err)
+		appendErr := fmt.Errorf("record initial Factory snapshot: %w", err)
+		recorder.stopErr = recorder.lifecycle.Stop(recordings.StopLifecycleRequest{
+			RecordingID: recorder.recordingID,
+		})
+		return errors.Join(appendErr, recorder.stopErr)
 	}
 	for _, pending := range recorder.pending {
 		if pending.event != nil {
@@ -151,7 +157,7 @@ func (recorder *lifecycleRuntimeRecorder) Stop() {
 	if recorder.lifecycle == nil {
 		return
 	}
-	_ = recorder.lifecycle.Stop(recordings.StopLifecycleRequest{
+	recorder.stopErr = recorder.lifecycle.Stop(recordings.StopLifecycleRequest{
 		RecordingID: recorder.recordingID,
 	})
 }
@@ -245,13 +251,17 @@ func (recorder *lifecycleRuntimeRecorder) Flush() error {
 	return err
 }
 
+// Err reports the last preserved cleanup or finalize failure. Stop failures
+// surface here even before Finalize runs, so startup callers that must stop
+// periodic work on an early failure (before finish) can still observe and
+// join the cleanup cause rather than discarding it.
 func (recorder *lifecycleRuntimeRecorder) Err() error {
 	if recorder == nil {
 		return nil
 	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
-	return recorder.finalizeErr
+	return errors.Join(recorder.stopErr, recorder.finalizeErr)
 }
 
 func (recorder *lifecycleRuntimeRecorder) Finalize(finishedAt time.Time) error {
