@@ -451,8 +451,8 @@ func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.
 	if request.Recordings.RecordPath != "record.json" || request.Recordings.ReplayPath != "replay.json" || request.Recordings.WorkflowID != "flow" {
 		t.Fatalf("Recordings request = %#v", request.Recordings)
 	}
-	if request.Models.CacheDirectory != "models" || opening.Ports.InvocationMetricsRecorder != nil || opening.Ports.RuntimeHostObserver == nil {
-		t.Fatalf("Models/ports = %#v / %#v", request.Models, opening.Ports)
+	if request.ModelCacheDirectory != "models" || opening.Ports.InvocationMetricsRecorder != nil || opening.Ports.RuntimeHostObserver == nil {
+		t.Fatalf("Models/ports = %#v / %#v", request.ModelCacheDirectory, opening.Ports)
 	}
 }
 

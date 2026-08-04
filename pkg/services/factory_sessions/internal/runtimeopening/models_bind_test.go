@@ -341,8 +341,9 @@ func TestOpenRuntimeClosesModelsScopeExactlyOnceAfterLaterStepFails(t *testing.T
 	_, err := factory.openRuntime(
 		context.Background(),
 		&factorysessions.RuntimeOpeningRequest{
-			FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: t.TempDir()},
-			FactorySession:    factorysessions.SessionRuntimeOpeningRequest{BackendScopeID: "test-scope"},
+			FactoryDefinition:   factorydefinitions.RuntimeOpeningRequest{Directory: t.TempDir()},
+			FactorySession:      factorysessions.SessionRuntimeOpeningRequest{BackendScopeID: "test-scope"},
+			ModelCacheDirectory: "/cache/models",
 		},
 		ExternalEffects{},
 		zap.NewNop(),
@@ -355,6 +356,12 @@ func TestOpenRuntimeClosesModelsScopeExactlyOnceAfterLaterStepFails(t *testing.T
 	}
 	if len(modelRoot.closeRequests) != 1 {
 		t.Fatalf("CloseRuntimeScope requests = %d, want exactly 1", len(modelRoot.closeRequests))
+	}
+	if len(modelRoot.openRequests) != 1 || modelRoot.openRequests[0].Config.CacheDirectory != "/cache/models" {
+		t.Fatalf(
+			"OpenRuntimeScope requests = %#v, want the Factory Sessions opening request's model cache directory",
+			modelRoot.openRequests,
+		)
 	}
 }
 
