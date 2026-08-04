@@ -5,10 +5,20 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func newTestEventsAppender(t *testing.T) wire.EventsAppender {
+	t.Helper()
+	svc, err := eventswire.NewService(logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("eventswire.NewService() error = %v, want nil", err)
+	}
+	return svc
+}
 
 type stubExecution struct{}
 
@@ -38,7 +48,7 @@ func (stubExecution) CancelWorkstationDispatch(
 }
 
 func TestNewService_ConstructsAWorkingServiceFromInjectedExecution(t *testing.T) {
-	service, err := wire.NewService(stubExecution{}, logging.NoopLogger{})
+	service, err := wire.NewService(stubExecution{}, newTestEventsAppender(t), logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewService() error = %v, want nil", err)
 	}
@@ -53,7 +63,13 @@ func TestNewService_ConstructsAWorkingServiceFromInjectedExecution(t *testing.T)
 }
 
 func TestNewService_RejectsNilExecution(t *testing.T) {
-	if _, err := wire.NewService(nil, logging.NoopLogger{}); err == nil {
+	if _, err := wire.NewService(nil, newTestEventsAppender(t), logging.NoopLogger{}); err == nil {
 		t.Fatalf("NewService(nil, ...) unexpectedly succeeded")
+	}
+}
+
+func TestNewService_RejectsNilEventsAppender(t *testing.T) {
+	if _, err := wire.NewService(stubExecution{}, nil, logging.NoopLogger{}); err == nil {
+		t.Fatalf("NewService(execution, nil, ...) unexpectedly succeeded")
 	}
 }

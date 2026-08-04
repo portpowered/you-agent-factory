@@ -26,6 +26,7 @@ func TestFailureCauseKind_Valid(t *testing.T) {
 		workersessions.FailureCauseWorkersExecutionFailure,
 		workersessions.FailureCauseAdapterFailure,
 		workersessions.FailureCauseExecutorPanic,
+		workersessions.FailureCauseEventPublicationFailure,
 	}
 	for _, kind := range valid {
 		if !kind.Valid() {

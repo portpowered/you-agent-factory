@@ -2,8 +2,12 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"sync"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/services/events"
+	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -99,4 +103,53 @@ func succeedingExecution() *fakeExecution {
 			}, nil
 		},
 	}
+}
+
+// newEventsAppender returns the real in-memory Events service, used by
+// default across this package's tests per the acp-worker-events proposal's
+// "use the real in-memory Events implementation" testing rule rather than a
+// hand-rolled fake of Events' own append/dedup/ordering behavior.
+func newEventsAppender() events.Service {
+	svc, err := eventswire.NewService(logging.NoopLogger{})
+	if err != nil {
+		panic(err)
+	}
+	return svc
+}
+
+// brokenEventsAppender is a controlled EventsAppender test double whose
+// Append always fails, used to prove Start's before-handoff publication
+// barrier explicitly fails the attempt and never reaches Workers.
+type brokenEventsAppender struct {
+	err error
+}
+
+func (b *brokenEventsAppender) Append(context.Context, events.AppendRequest) (events.AppendResult, error) {
+	if b.err != nil {
+		return events.AppendResult{}, b.err
+	}
+	return events.AppendResult{}, errors.New("broken events appender: append always fails")
+}
+
+// countingEventsAppender wraps a real events.Service, counting Append calls
+// so a test can prove a rejected Start published no Events record at all,
+// not just that it skipped the Workers call.
+type countingEventsAppender struct {
+	events.Service
+
+	mu    sync.Mutex
+	calls int
+}
+
+func (c *countingEventsAppender) Append(ctx context.Context, req events.AppendRequest) (events.AppendResult, error) {
+	c.mu.Lock()
+	c.calls++
+	c.mu.Unlock()
+	return c.Service.Append(ctx, req)
+}
+
+func (c *countingEventsAppender) callCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.calls
 }

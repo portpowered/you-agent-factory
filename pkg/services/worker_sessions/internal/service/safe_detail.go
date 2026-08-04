@@ -17,6 +17,7 @@ var genericFailureDetail = map[workersessions.FailureCauseKind]string{
 	workersessions.FailureCauseWorkersExecutionFailure: "the Workers execution result was not successful",
 	workersessions.FailureCauseAdapterFailure:          "the Workers adapter reported a failure",
 	workersessions.FailureCauseExecutorPanic:           "the Workers executor reported a panic",
+	workersessions.FailureCauseEventPublicationFailure: "the Worker Session opening record could not be published",
 }
 
 // knownFailureFamilies whitelists the exact WorkFailureFamily constants

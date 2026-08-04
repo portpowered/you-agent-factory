@@ -82,7 +82,7 @@ func assertNoPayloadOrCredentialKeys(t *testing.T, fields map[string]any) {
 
 func newLoggingRegistry(t *testing.T, logger *recordingLogger) workersessions.Service {
 	t.Helper()
-	registry, err := service.New(succeedingExecution(), logger)
+	registry, err := service.New(succeedingExecution(), newEventsAppender(), logger)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -162,7 +162,7 @@ func TestRegistryLogsStartOutcomes(t *testing.T) {
 				},
 			}, nil
 		},
-	}, logger)
+	}, newEventsAppender(), logger)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}

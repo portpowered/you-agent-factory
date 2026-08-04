@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -43,7 +44,11 @@ func (u unusedExecution) CancelWorkstationDispatch(context.Context, workers.Work
 // and transitionToStarting directly.
 func newTestRegistry(t *testing.T) *registry {
 	t.Helper()
-	svc, err := New(unusedExecution{t: t}, nil)
+	events, err := eventswire.NewService()
+	if err != nil {
+		t.Fatalf("eventswire.NewService() error = %v, want nil", err)
+	}
+	svc, err := New(unusedExecution{t: t}, events, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v, want nil", err)
 	}
