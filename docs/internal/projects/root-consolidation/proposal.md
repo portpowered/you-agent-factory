@@ -241,7 +241,6 @@ packet whose completion retires it.
 
 | Shim | Adapts | Retired by |
 | --- | --- | --- |
-| `chat_sessions/internal/factorysessionsshim` | `factory_sessions.Service` (45 methods) | L3 Factory Sessions sealing |
 | `worker_sessions/internal/workersshim` | Workers execution | `CTR-WRK-EXEC` (may retire at creation) |
 | `worker_sessions/internal/providersshim` | `providers.Service` | `CTR-PRV-CONTROL` + `CTR-PRV-CONT` |
 

@@ -86,7 +86,6 @@
     "pkg/services/automations/transports/http",
     "pkg/services/automations/wire",
     "pkg/services/chat_sessions",
-    "pkg/services/chat_sessions/internal/factorysessionsshim",
     "pkg/services/chat_sessions/internal/service",
     "pkg/services/chat_sessions/wire",
     "pkg/services/edges",
@@ -794,11 +793,6 @@
     },
     {
       "packagePath": "pkg/services/chat_sessions",
-      "disposition": "retain",
-      "destination": "chat_sessions"
-    },
-    {
-      "packagePath": "pkg/services/chat_sessions/internal/factorysessionsshim",
       "disposition": "retain",
       "destination": "chat_sessions"
     },

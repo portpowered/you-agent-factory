@@ -225,10 +225,6 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/factorysessionsshim",
-      "minimum": 100.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/service",
       "minimum": 93.05
     },
