@@ -9,8 +9,11 @@
 // as source-native JSON — Events does not convert them into an Events-owned
 // kind union.
 //
-// This package currently publishes the L1 V0 slice described in
+// This package publishes the L1 slice described in
 // docs/internal/projects/acp-client/final-proposal.md §5: detached identity,
-// position, envelope, and outcome contracts only. It has no implementation
-// and no wire construction; those belong to a later slice.
+// position, envelope, and outcome contracts, one concurrency-safe in-memory
+// implementation (pkg/services/events/internal/service), and one owning-service
+// wire constructor (pkg/services/events/wire). Canonical application
+// construction (pkg/wire) injects a single constructed instance for the
+// process.
 package events

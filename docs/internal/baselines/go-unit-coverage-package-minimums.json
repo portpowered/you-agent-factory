@@ -245,6 +245,14 @@
       "minimum": 95.97
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/events/internal/service",
+      "minimum": 95.84
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/events/wire",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
       "minimum": 80.57
     },
@@ -1137,6 +1145,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream",
       "minimum": 78.78
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/testing/eventsstub",
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session",

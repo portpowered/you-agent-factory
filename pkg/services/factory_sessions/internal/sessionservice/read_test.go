@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
@@ -13,11 +14,17 @@ import (
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/testing/eventsstub"
 )
+
+func newTestEventsServiceForSessionService(t *testing.T) events.Service {
+	t.Helper()
+	return eventsstub.New()
+}
 
 func newResponseServiceTestGateway(t *testing.T, host *openTestHost) *factorysessionservice.Service {
 	t.Helper()
-	responseService, err := responsestreamwire.NewService(func() string { return "response-event-test-id" }, nil)
+	responseService, err := responsestreamwire.NewService(func() string { return "response-event-test-id" }, nil, newTestEventsServiceForSessionService(t))
 	if err != nil {
 		t.Fatalf("construct response-stream service: %v", err)
 	}
@@ -96,7 +103,7 @@ func TestService_SubscribeFactoryResponseEvents_RequiresInjectedResponseOwner(t 
 
 func TestService_SubscribeFactoryResponseEvents_DelegatesReconnectPolicyToPrivateService(t *testing.T) {
 	t.Parallel()
-	responseService, err := responsestreamwire.NewService(func() string { return "response-event-outer" }, nil)
+	responseService, err := responsestreamwire.NewService(func() string { return "response-event-outer" }, nil, newTestEventsServiceForSessionService(t))
 	if err != nil {
 		t.Fatalf("construct response-stream service: %v", err)
 	}
@@ -104,7 +111,12 @@ func TestService_SubscribeFactoryResponseEvents_DelegatesReconnectPolicyToPrivat
 	if err != nil {
 		t.Fatalf("construct event store: %v", err)
 	}
-	first, err := store.Publish(responseevents.FactoryResponseEvent{
+	// Published through responseService.Publish (not store.Publish directly):
+	// this store is bound to the injected Events root (NewEventStore), so
+	// publishing straight to the store would retain local content Events
+	// never observed, which substituteFromEvents' no-fallback delegation now
+	// correctly surfaces as a gap instead of silently masking the mismatch.
+	first, err := responseService.Publish(store, responseevents.FactoryResponseEvent{
 		RunID: "run-1", Kind: responseevents.KindMessage, Phase: responseevents.PhaseDelta,
 		Provenance: responseevents.Provenance{
 			Provider: "test", NativeEventType: "delta", Delivery: responseevents.DeliveryNativeStream,
@@ -117,7 +129,7 @@ func TestService_SubscribeFactoryResponseEvents_DelegatesReconnectPolicyToPrivat
 	}
 	secondInput := first
 	secondInput.Payload = json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"second"}`)
-	second, err := store.Publish(secondInput)
+	second, err := responseService.Publish(store, secondInput)
 	if err != nil {
 		t.Fatalf("publish second: %v", err)
 	}

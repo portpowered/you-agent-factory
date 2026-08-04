@@ -7,10 +7,12 @@ import (
 	"testing"
 	"time"
 
+	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/testing/eventsstub"
 )
 
 func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
@@ -30,6 +32,7 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 		{name: "invocation input reader", mutate: func(in *newServiceInputs) { in.invocationInputFiles = nil }},
 		{name: "initial Work reader", mutate: func(in *newServiceInputs) { in.initialWorkFiles = nil }},
 		{name: "symlink resolver", mutate: func(in *newServiceInputs) { in.resolveSymlinks = nil }},
+		{name: "events root", mutate: func(in *newServiceInputs) { in.eventsService = nil }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -216,9 +219,11 @@ type newServiceInputs struct {
 	invocationInputFiles         fileeffects.InvocationInputReader
 	initialWorkFiles             fileeffects.InitialWorkReader
 	resolveSymlinks              factorysessions.LogicalTargetResolveSymlinks
+	eventsService                events.Service
 }
 
 func validNewServiceInputs() newServiceInputs {
+	eventsService := eventsstub.New()
 	return newServiceInputs{
 		sessionResultProjection: resultProjector{},
 		eventIDs:                func() string { return "response-event-id" },
@@ -229,6 +234,7 @@ func validNewServiceInputs() newServiceInputs {
 		invocationInputFiles:    fileeffects.InvocationInputReader(func(string) ([]byte, error) { return nil, nil }),
 		initialWorkFiles:        fileeffects.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
 		resolveSymlinks:         func(path string) (string, error) { return path, nil },
+		eventsService:           eventsService,
 	}
 }
 
@@ -248,6 +254,7 @@ func (in newServiceInputs) callNewService() (factorysessions.Service, error) {
 		in.invocationInputFiles,
 		in.initialWorkFiles,
 		in.resolveSymlinks,
+		in.eventsService,
 	)
 }
 

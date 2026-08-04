@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	events "github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 )
 
@@ -240,6 +241,7 @@ func (s *Subscription) Next(ctx context.Context) ([]responseevents.FactoryRespon
 			return nil, ErrSubscriptionClosed
 		}
 		if len(result.events) > 0 {
+			result.events = s.store.substituteFromEvents(result.events)
 			s.advance(result.nextSequence)
 			return result.events, nil
 		}
@@ -254,6 +256,7 @@ func (s *Subscription) Next(ctx context.Context) ([]responseevents.FactoryRespon
 				return nil, ErrSubscriptionClosed
 			}
 			if len(result.events) > 0 {
+				result.events = s.store.substituteFromEvents(result.events)
 				s.advance(result.nextSequence)
 				return result.events, nil
 			}
@@ -294,6 +297,7 @@ func (s *Subscription) Drain() ([]responseevents.FactoryResponseEvent, error) {
 		return nil, ErrSubscriptionClosed
 	}
 	if len(result.events) > 0 {
+		result.events = s.store.substituteFromEvents(result.events)
 		s.advance(result.nextSequence)
 	}
 	return result.events, nil
@@ -345,6 +349,235 @@ func (s *SessionResponseEventStore) eventsAfterLocked(afterSequence int64, dispa
 		}
 	}
 	return result
+}
+
+// DecodeFactoryResponseEvent is the single authoritative way to interpret a
+// Factory Session response event carried by an Events record on a session's
+// response-event topic (see responseEventTopic in the owning response_stream
+// service). events.Service.Append is one round trip: the publisher must
+// marshal a self-describing payload before Append assigns the record's real
+// aggregate position, so it can only ever predict that position beforehand
+// (see ResponseStream.Publish's sequenceHint) -- and an already-accepted
+// payload can never be rewritten afterward to correct a stale prediction on
+// a non-aligned topic (one whose Events aggregate positions and this store's
+// own session-local sequence numbering diverge, for example a second store
+// instance bound to a session topic that already carries history from a
+// prior instance). This function resolves that one-round-trip constraint
+// explicitly rather than masking it at any one caller's read boundary: it
+// never trusts the payload's own embedded Sequence field, and instead always
+// derives Sequence from the Events record's own assigned aggregate Position.
+// Every reader of this topic -- this store's own compatibility surface, and
+// any future direct Events consumer of the same topic -- must decode through
+// this function so they always observe one consistent identity for the same
+// accepted record, instead of each independently reconciling (or failing to
+// reconcile) the payload's stale predicted value.
+func DecodeFactoryResponseEvent(record events.Record) (responseevents.FactoryResponseEvent, error) {
+	var decoded responseevents.FactoryResponseEvent
+	if err := json.Unmarshal(record.Payload, &decoded); err != nil {
+		return responseevents.FactoryResponseEvent{}, err
+	}
+	decoded.Sequence = int64(record.ID.Position)
+	return decoded, nil
+}
+
+// substituteFromEvents replaces each real (non-gap) delivered event's
+// content with the matching record read back from the injected Events root,
+// so a subscriber's delivered content is genuinely sourced from Events
+// rather than only from this store's own retained copy. It is a no-op when
+// no Events root is bound (see NewSessionResponseEventStoreWithEventsAuthority).
+//
+// When bound, this store's own retained copy still decides *which* sequences
+// remain deliverable (tiered importance retention, dispatch filtering, gap
+// bookkeeping -- Events has no equivalent for any of these). For a sequence
+// Events can currently produce, its content always wins over this store's
+// own retained bytes, proving delivery is genuinely read back from Events
+// (see TestSessionResponseEventStoreSubscription_DeliversContentReadBackFromEventsAuthority).
+// For a sequence Events cannot currently produce, this method distinguishes
+// two causes:
+//
+//   - Events' own bounded FIFO retention window has evicted the position
+//     (a confirmed events.ReadOutcomeGap for it) even though this store's
+//     own tiered policy still retains it. This is expected, not a
+//     divergence: PublishThroughAuthority already proved Events accepted
+//     this exact content at commit time, before this store's own tiered
+//     eviction and Events' own FIFO eviction inevitably diverge on *which*
+//     older records they each keep. Falling back to this store's own
+//     retained copy here is what preserves the compatibility surface's
+//     existing tiered retention/gap behavior instead of manufacturing a new
+//     gap cause for a record the compatibility policy still promises.
+//   - Any other reason (a failed Read, a non-Progress/non-Gap outcome, or a
+//     payload Events returned but this store could not decode) is a real
+//     operational failure, not an expected retention-policy difference: it
+//     is replaced with the same synthetic stream-gap marker this store
+//     already publishes for its own retention gaps
+//     (eventsAuthorityGapEvent), never with this store's local bytes, so a
+//     broken or misbehaving Events integration cannot be masked by silently
+//     falling back to local content.
+//
+// This read always runs against context.Background(), independent of any
+// caller-supplied context: by the time delivered is non-empty, the local
+// store has already decided these sequences are deliverable, and a caller's
+// cancellation racing with that decision must not turn real retained content
+// into a false authority gap (a canceled context is guaranteed to make
+// events.Service.Read fail).
+func (s *SessionResponseEventStore) substituteFromEvents(delivered []responseevents.FactoryResponseEvent) []responseevents.FactoryResponseEvent {
+	if s == nil || s.eventsService == nil || len(delivered) == 0 {
+		return delivered
+	}
+
+	var minSeq, maxSeq int64
+	realCount := 0
+	for _, event := range delivered {
+		if event.Sequence <= 0 {
+			continue
+		}
+		if realCount == 0 || event.Sequence < minSeq {
+			minSeq = event.Sequence
+		}
+		if event.Sequence > maxSeq {
+			maxSeq = event.Sequence
+		}
+		realCount++
+	}
+	if realCount == 0 {
+		return delivered
+	}
+
+	byPosition, hardFailure := s.readEventsAuthorityRange(context.Background(), minSeq, maxSeq)
+
+	substituted := make([]responseevents.FactoryResponseEvent, len(delivered))
+	for i, event := range delivered {
+		if event.Sequence <= 0 {
+			substituted[i] = event
+			continue
+		}
+		record, ok := byPosition[event.Sequence]
+		if !ok {
+			if hardFailure {
+				substituted[i] = s.eventsAuthorityGapEvent(event.Sequence)
+			} else {
+				// Events' own bounded retention has evicted this position,
+				// but this store's tiered policy still retains it: adopt
+				// the store's own copy instead of a synthetic gap (see the
+				// doc comment above).
+				substituted[i] = event
+			}
+			continue
+		}
+		fromEvents, err := DecodeFactoryResponseEvent(record)
+		if err != nil {
+			substituted[i] = s.eventsAuthorityGapEvent(event.Sequence)
+			continue
+		}
+		substituted[i] = fromEvents
+	}
+	return substituted
+}
+
+// readEventsAuthorityRange reads every Events-authority position in
+// [minSeq, maxSeq] it can currently produce, resuming past any evicted
+// prefix instead of treating one evicted position as unavailability for the
+// entire requested range. events.Service.Read's Gap outcome is all-or-nothing
+// for the exact call it was made on (it reports Gap for the whole requested
+// range whenever the starting cursor itself is behind the earliest retained
+// position, even when later positions in that range remain retained), so a
+// single Read spanning an evicted low position would otherwise mark every
+// still-available newer position as unavailable too. This loop instead
+// re-issues Read starting exactly from one position before the gap's own
+// EarliestRetained (From is exclusive: it reports records strictly after the
+// cursor), so the position named by EarliestRetained itself is recovered
+// along with everything after it -- events.Service.Read's own boundary
+// contract (established by story 002) treats a From naming exactly
+// EarliestRetained-1 as a valid, non-gap cursor whose first returned record
+// is EarliestRetained, so only the positions Events has genuinely evicted
+// end up missing from the returned map.
+//
+// The returned hardFailure reports whether the loop stopped because of a
+// real operational failure (a Read error, or an outcome other than Progress
+// or Gap) rather than because it fully resolved the requested range through
+// zero or more expected Gap recoveries: substituteFromEvents uses this to
+// tell "Events genuinely evicted this position from its own bounded window"
+// (not a hard failure -- every position in range was accounted for) apart
+// from "Events could not be read at all" (a hard failure), since only the
+// latter must never be masked by falling back to local content.
+func (s *SessionResponseEventStore) readEventsAuthorityRange(ctx context.Context, minSeq, maxSeq int64) (byPosition map[int64]events.Record, hardFailure bool) {
+	byPosition = make(map[int64]events.Record, maxSeq-minSeq+1)
+	from := events.AggregateSequence(minSeq - 1)
+	for int64(from) < maxSeq {
+		limit := int(maxSeq) - int(from)
+		result, err := s.eventsService.Read(ctx, events.ReadRequest{
+			Topic: s.eventsTopic,
+			From:  events.Cursor{Topic: s.eventsTopic, Position: from},
+			Limit: limit,
+		})
+		if err != nil {
+			return byPosition, true
+		}
+		switch result.Outcome {
+		case events.ReadOutcomeProgress:
+			for _, record := range result.Records {
+				position := int64(record.ID.Position)
+				if position > maxSeq {
+					continue
+				}
+				byPosition[position] = record
+			}
+			if result.Next.Position <= from {
+				return byPosition, false
+			}
+			from = result.Next.Position
+		case events.ReadOutcomeGap:
+			next := events.AggregateSequence(result.Gap.EarliestRetained) - 1
+			if next <= from {
+				return byPosition, false
+			}
+			from = next
+		default:
+			return byPosition, true
+		}
+	}
+	return byPosition, false
+}
+
+// eventsAuthorityGapEventReason marks a synthetic stream-gap event produced
+// because the injected Events root could not currently produce content for a
+// sequence this store's own tiered retention still considers deliverable --
+// distinct from retentionGapReason, which marks a gap this store's own
+// retention policy created directly, so the two causes remain
+// distinguishable in the published gap payload.
+const eventsAuthorityGapEventReason = "events_authority_unavailable"
+
+// eventsAuthorityGapEvent synthesizes the same published stream-gap
+// vocabulary retentionGapEventLocked uses for this store's own retention
+// gaps, covering exactly one sequence the Events root could not produce
+// content for. It does not require s.mu: it reads only s.factorySessionID
+// (immutable after construction) and s.clock (safe for concurrent use), and
+// writes nothing.
+func (s *SessionResponseEventStore) eventsAuthorityGapEvent(sequence int64) responseevents.FactoryResponseEvent {
+	payload, _ := json.Marshal(responseevents.StreamGapPayload{
+		FromSequence:           sequence,
+		ToSequence:             sequence,
+		FirstAvailableSequence: sequence + 1,
+		Reason:                 eventsAuthorityGapEventReason,
+	})
+	identity := fmt.Sprintf("%s:%d:%d:%s", s.factorySessionID, sequence, sequence, eventsAuthorityGapEventReason)
+	return responseevents.FactoryResponseEvent{
+		SchemaVersion:    responseevents.SchemaVersionV1,
+		EventID:          uuid.NewSHA1(uuid.NameSpaceOID, []byte(identity)).String(),
+		Sequence:         0,
+		RecordedAt:       s.clock.Now().UTC(),
+		FactorySessionID: s.factorySessionID,
+		Kind:             responseevents.KindStreamGap,
+		Phase:            responseevents.PhaseUpdated,
+		Provenance: responseevents.Provenance{
+			Provider:        "you-agent-factory",
+			NativeEventType: "response.retention_gap",
+			Delivery:        responseevents.DeliverySynthesized,
+			Representation:  responseevents.RepresentationNotification,
+			Fidelity:        responseevents.FidelityLossy,
+		},
+		Payload: payload,
+	}
 }
 
 func (s *SessionResponseEventStore) firstAvailableSequenceLocked(afterSequence int64, dispatchID string) int64 {

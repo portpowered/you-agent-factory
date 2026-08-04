@@ -62,7 +62,7 @@ func (s *JavaScriptRuntimeService) sessionProgressPublisher(sessionID string, st
 			if err := responseevents.ValidateDraft(draft); err != nil {
 				return
 			}
-			_, _ = state.responseEvents.Publish(responseevents.FactoryResponseEvent{
+			_, _ = s.publishSessionResponseEvent(state, responseevents.FactoryResponseEvent{
 				RunID:              draft.RunID,
 				Kind:               draft.Kind,
 				Phase:              draft.Phase,
@@ -84,9 +84,23 @@ func (s *JavaScriptRuntimeService) sessionProgressPublisher(sessionID string, st
 			return
 		}
 		for _, event := range mapped {
-			_, _ = state.responseEvents.Publish(event)
+			_, _ = s.publishSessionResponseEvent(state, event)
 		}
 	}
+}
+
+// publishSessionResponseEvent publishes event into state's durable
+// response-event store, routing through the owner-private response-stream
+// service when available so the accepted record also mirrors into the
+// injected Events root, matching the live-session Manager's publish path.
+func (s *JavaScriptRuntimeService) publishSessionResponseEvent(
+	state *runtimeSessionState,
+	event responseevents.FactoryResponseEvent,
+) (responseevents.FactoryResponseEvent, error) {
+	if s != nil && s.responseStreams != nil {
+		return s.responseStreams.Publish(state.responseEvents, event)
+	}
+	return state.responseEvents.Publish(event)
 }
 
 func (s *JavaScriptRuntimeService) liveChildExecutor(

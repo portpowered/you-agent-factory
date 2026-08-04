@@ -11,16 +11,18 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/testing/eventsstub"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func newDurableResponseEventsService(t *testing.T) *JavaScriptRuntimeService {
 	t.Helper()
 
+	eventsService := eventsstub.New()
 	var next atomic.Uint64
 	streams, err := responsestreamwire.NewService(func() string {
 		return fmt.Sprintf("response-event-%d", next.Add(1))
-	}, nil)
+	}, nil, eventsService)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
