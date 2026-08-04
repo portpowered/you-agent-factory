@@ -8,12 +8,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
-// bareRecordingsService satisfies recordings.Service through a nil embed
-// only, so it deliberately does not expose recordings.RecordingLifecycle.
-type bareRecordingsService struct {
-	recordings.Service
-}
-
 // bareRuntimeRecorder satisfies recordings.RuntimeRecorder through a nil
 // embed only, so it deliberately does not expose
 // recordings.RuntimeRecordingBinder.
@@ -21,12 +15,10 @@ type bareRuntimeRecorder struct {
 	recordings.RuntimeRecorder
 }
 
-// fakeLifecycleRecordingsService satisfies both recordings.Service and
-// recordings.RecordingLifecycle through nil embeds; bindRuntimeRecordingLifecycle
-// only needs to observe its identity through the RecordingLifecycle
-// type assertion, never call through it.
+// fakeLifecycleRecordingsService satisfies recordings.RecordingLifecycle
+// through a nil embed; bindRuntimeRecordingLifecycle only needs to observe
+// its identity, never call through it.
 type fakeLifecycleRecordingsService struct {
-	recordings.Service
 	recordings.RecordingLifecycle
 }
 
@@ -62,23 +54,6 @@ func TestBindRuntimeRecordingLifecycleNilRecorderIsNoOp(t *testing.T) {
 	)
 	if err != nil {
 		t.Fatalf("bindRuntimeRecordingLifecycle() error = %v, want nil for a nil runtime recording", err)
-	}
-}
-
-func TestBindRuntimeRecordingLifecycleRejectsServiceWithoutCapability(t *testing.T) {
-	t.Parallel()
-
-	recorder := &fakeBindingRuntimeRecorder{}
-	err := bindRuntimeRecordingLifecycle(
-		recorder,
-		&bareRecordingsService{},
-		recordings.CanonicalEventScope{FactorySessionID: "~default"},
-	)
-	if err == nil || !strings.Contains(err.Error(), "does not expose the recording lifecycle capability") {
-		t.Fatalf("bindRuntimeRecordingLifecycle() error = %v, want lifecycle-capability error", err)
-	}
-	if recorder.calls != 0 {
-		t.Fatalf("BindRecordingLifecycle calls = %d, want 0 when the Service lacks the capability", recorder.calls)
 	}
 }
 

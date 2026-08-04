@@ -79,7 +79,11 @@ type ConductorInvocationWithProgressFactory = func(
 
 type RecordingsProjectionFactory = func() recordings.ProjectionService
 
-type RecordingsFactory = func(recordings.Ledger, recordings.ProjectionService) recordings.Service
+// RecordingLifecycleFactory constructs the Recordings-owned narrow lifecycle
+// capability bound to the runtime recorder while opening a Factory Session
+// runtime. Wire supplies this factory directly so this path never discovers
+// the capability from a broader Recordings Service at call time.
+type RecordingLifecycleFactory = func(recordings.Ledger, recordings.ProjectionService) recordings.RecordingLifecycle
 
 type RuntimeLedgerFactory = func() factoryruntime.RuntimeLedgerFactory
 

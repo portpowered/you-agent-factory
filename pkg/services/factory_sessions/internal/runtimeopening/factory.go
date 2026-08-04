@@ -35,7 +35,7 @@ type Factory struct {
 	factorySessionsService           factorysessions.Service
 	factorySessionExecutionFactory   FactorySessionExecutionFactory
 	recordingsProjectionFactory      RecordingsProjectionFactory
-	recordingsFactory                RecordingsFactory
+	recordingLifecycleFactory        RecordingLifecycleFactory
 	runtimeLedgerFactory             RuntimeLedgerFactory
 	runtimeRecorderFactory           recordings.RuntimeRecorderFactory
 	replayClockFactory               ReplayClockFactory
@@ -89,7 +89,7 @@ func NewFactory(
 	factorySessionsService factorysessions.Service,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	recordingsProjectionFactory RecordingsProjectionFactory,
-	recordingsFactory RecordingsFactory,
+	recordingLifecycleFactory RecordingLifecycleFactory,
 	runtimeLedgerFactory RuntimeLedgerFactory,
 	runtimeRecorderFactory recordings.RuntimeRecorderFactory,
 	replayClockFactory ReplayClockFactory,
@@ -166,7 +166,7 @@ func NewFactory(
 		factorySessionsService:           factorySessionsService,
 		factorySessionExecutionFactory:   factorySessionExecutionFactory,
 		recordingsProjectionFactory:      recordingsProjectionFactory,
-		recordingsFactory:                recordingsFactory,
+		recordingLifecycleFactory:        recordingLifecycleFactory,
 		runtimeLedgerFactory:             runtimeLedgerFactory,
 		runtimeRecorderFactory:           runtimeRecorderFactory,
 		replayClockFactory:               replayClockFactory,
@@ -221,7 +221,7 @@ func (f *Factory) openRuntime(
 		f.factorySessionsService,
 		f.factorySessionExecutionFactory,
 		f.recordingsProjectionFactory,
-		f.recordingsFactory,
+		f.recordingLifecycleFactory,
 		f.runtimeLedgerFactory,
 		f.runtimeRecorderFactory,
 		f.replayClockFactory,

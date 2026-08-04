@@ -37,7 +37,7 @@ func openRuntime(
 	factorySessionsService factorysessions.Service,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	recordingsProjectionFactory RecordingsProjectionFactory,
-	recordingsFactory RecordingsFactory,
+	recordingLifecycleFactory RecordingLifecycleFactory,
 	runtimeLedgerFactory RuntimeLedgerFactory,
 	runtimeRecorderFactory recordings.RuntimeRecorderFactory,
 	replayClockFactory ReplayClockFactory,
@@ -404,16 +404,16 @@ func openRuntime(
 	if workDomain == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Work factory returned nil service")
 	}
-	if recordingsFactory == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings factory is required")
+	if recordingLifecycleFactory == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings lifecycle factory is required")
 	}
-	recordingService := recordingsFactory(startupRuntime.RecordingLedger(), recordingProjections)
-	if recordingService == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings factory returned nil service")
+	recordingLifecycle := recordingLifecycleFactory(startupRuntime.RecordingLedger(), recordingProjections)
+	if recordingLifecycle == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings lifecycle factory returned nil lifecycle")
 	}
 	if err := bindRuntimeRecordingLifecycle(
 		runtimeRecording,
-		recordingService,
+		recordingLifecycle,
 		recordings.CanonicalEventScope{FactorySessionID: factorysessions.DefaultSessionID},
 	); err != nil {
 		return runtimeProducts{}, err
@@ -463,22 +463,18 @@ func openRuntime(
 	return opened, nil
 }
 
-// bindRuntimeRecordingLifecycle explicitly narrows the constructed Recordings
-// Service down to the RecordingLifecycle capability and binds the runtime
-// recorder to it, rather than handing the recorder the broad Service or
-// discovering binding through a caller-local type assertion. A nil
-// runtimeRecording (recording disabled) is a no-op.
+// bindRuntimeRecordingLifecycle binds the runtime recorder to the already-
+// narrowed RecordingLifecycle capability supplied explicitly by the caller,
+// rather than discovering it from a broader Recordings Service through a
+// caller-local type assertion. A nil runtimeRecording (recording disabled)
+// is a no-op.
 func bindRuntimeRecordingLifecycle(
 	runtimeRecording recordings.RuntimeRecorder,
-	recordingService recordings.Service,
+	recordingLifecycle recordings.RecordingLifecycle,
 	scope recordings.CanonicalEventScope,
 ) error {
 	if runtimeRecording == nil {
 		return nil
-	}
-	recordingLifecycle, ok := recordingService.(recordings.RecordingLifecycle)
-	if !ok {
-		return fmt.Errorf("construct runtime scope: Recordings service does not expose the recording lifecycle capability")
 	}
 	binder, ok := runtimeRecording.(recordings.RuntimeRecordingBinder)
 	if !ok {
