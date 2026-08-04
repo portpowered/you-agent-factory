@@ -85,6 +85,61 @@ func TestNewServeCommandFromManifestRejectsOutOfFamilyParentRecord(t *testing.T)
 	}
 }
 
+// TestNewServeCommandFromManifestRejectsMissingRootRecord proves the "you"
+// root lookup itself surfaces a manifest error instead of panicking or
+// silently building a rootless tree when a corrupted upstream manifest
+// snapshot omits the root command record entirely.
+func TestNewServeCommandFromManifestRejectsMissingRootRecord(t *testing.T) {
+	manifest := mustServeManifestWithRoot(t)
+	delete(manifest.Commands, "you")
+
+	_, err := climanifestcobra.NewServeCommandFromManifest(manifest, noopResolvedHandler)
+	if err == nil {
+		t.Fatal("NewServeCommandFromManifest() error = nil, want missing root record rejection")
+	}
+}
+
+// TestNewServeCommandFromManifestRejectsMissingParentRecord proves the
+// "you.serve" parent lookup surfaces a manifest error when a corrupted
+// upstream manifest snapshot omits the serve family's own parent record.
+func TestNewServeCommandFromManifestRejectsMissingParentRecord(t *testing.T) {
+	manifest := mustServeManifestWithRoot(t)
+	delete(manifest.Commands, "you.serve")
+
+	_, err := climanifestcobra.NewServeCommandFromManifest(manifest, noopResolvedHandler)
+	if err == nil {
+		t.Fatal("NewServeCommandFromManifest() error = nil, want missing parent record rejection")
+	}
+}
+
+// TestNewServeCommandFromManifestRejectsMissingAcpRecord proves the
+// "you.serve.acp" leaf lookup surfaces a manifest error when a corrupted
+// upstream manifest snapshot omits the acp leaf's own record.
+func TestNewServeCommandFromManifestRejectsMissingAcpRecord(t *testing.T) {
+	manifest := mustServeManifestWithRoot(t)
+	delete(manifest.Commands, "you.serve.acp")
+
+	_, err := climanifestcobra.NewServeCommandFromManifest(manifest, noopResolvedHandler)
+	if err == nil {
+		t.Fatal("NewServeCommandFromManifest() error = nil, want missing acp record rejection")
+	}
+}
+
+// TestNewServeCommandFromManifestPropagatesCommandTreeConstructionError
+// proves a downstream NewCommandTree rejection (here, an unsupported
+// manifest format version) surfaces through NewServeCommandFromManifest
+// instead of being swallowed, once all three CommandByID lookups above have
+// already succeeded.
+func TestNewServeCommandFromManifestPropagatesCommandTreeConstructionError(t *testing.T) {
+	manifest := mustServeManifestWithRoot(t)
+	manifest.FormatVersion = ""
+
+	_, err := climanifestcobra.NewServeCommandFromManifest(manifest, noopResolvedHandler)
+	if err == nil {
+		t.Fatal("NewServeCommandFromManifest() error = nil, want command tree construction rejection")
+	}
+}
+
 func noopResolvedHandler(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
 	return nil
 }
