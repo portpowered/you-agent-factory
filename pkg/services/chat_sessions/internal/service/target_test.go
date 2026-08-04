@@ -225,6 +225,59 @@ func TestStore_SetTarget_BusyWhileTurnActive(t *testing.T) {
 	}
 }
 
+// TestStore_SetTarget_BusyWhileCommittedCloseAwaitsFanout proves a terminal
+// captured turn does not reopen target admission while its committed CLOSE
+// still owns the episode. The close can therefore complete atomically after
+// the downstream Factory effect rather than discovering a replaced episode
+// and leaving a committed intent behind.
+func TestStore_SetTarget_BusyWhileCommittedCloseAwaitsFanout(t *testing.T) {
+	ctx := context.Background()
+	store, session, turn := newActiveTurnTestSession(t, time.Now())
+	if _, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: session.ID, TurnID: turn.ID, Next: chatsessions.TurnStateRunning,
+	}); err != nil {
+		t.Fatalf("AdvanceTurn(RUNNING): %v", err)
+	}
+	requestID := controlRequestID("conn-target", "close-fence")
+	if _, err := store.RequestControl(ctx, chatsessions.RequestControlRequest{
+		RequestID: requestID, SessionID: session.ID, ExpectedVersion: session.Version, Action: chatsessions.ControlActionClose,
+	}); err != nil {
+		t.Fatalf("RequestControl(CLOSE): %v", err)
+	}
+	if _, err := store.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
+		SessionID: session.ID, RequestID: requestID, Next: chatsessions.ControlIntentStateCommitted,
+	}); err != nil {
+		t.Fatalf("AdvanceControl(COMMITTED): %v", err)
+	}
+	if _, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: session.ID, TurnID: turn.ID, Next: chatsessions.TurnStateCompleted,
+	}); err != nil {
+		t.Fatalf("AdvanceTurn(COMPLETED): %v", err)
+	}
+	released, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession after terminal turn: %v", err)
+	}
+	if _, err := store.SetTarget(ctx, chatsessions.SetTargetRequest{
+		RequestID: setTargetRequestID("close-fence"), SessionID: session.ID,
+		ExpectedVersion: released.Session.Version, Target: otherTarget(),
+	}); !errors.Is(err, chatsessions.ErrBusy) {
+		t.Fatalf("SetTarget while CLOSE is committed: got %v, want ErrBusy", err)
+	}
+	if _, err := store.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
+		SessionID: session.ID, RequestID: requestID, Next: chatsessions.ControlIntentStateCompleted,
+	}); err != nil {
+		t.Fatalf("AdvanceControl(COMPLETED): %v", err)
+	}
+	closed, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession after close: %v", err)
+	}
+	if closed.Session.State != chatsessions.SessionStateClosed || closed.Episode.Number != session.TargetEpisode || closed.Episode.State != chatsessions.TargetEpisodeStateClosed {
+		t.Fatalf("committed close did not atomically close its original lifecycle: Session=%#v Episode=%#v", closed.Session, closed.Episode)
+	}
+}
+
 // TestStore_SetTarget_UnknownSessionIsTypedNotFound proves SetTarget against
 // an unknown SessionID reports *NotFoundError and mutates nothing.
 func TestStore_SetTarget_UnknownSessionIsTypedNotFound(t *testing.T) {

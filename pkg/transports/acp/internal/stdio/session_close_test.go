@@ -84,6 +84,61 @@ func TestHandleSessionCloseCommitsBeforeFactoryClose(t *testing.T) {
 	}
 }
 
+// TestHandleSessionCloseFencesTargetReplacementAfterTurnCompletion proves the
+// public ACP close path keeps the captured episode authoritative from
+// COMMITTED through downstream close. A normally completed prompt releases
+// ActiveTurnID, but SetTarget remains rejected until close terminalizes the
+// same captured lifecycle instead of leaving a closed Factory target beside a
+// newly open Chat target.
+func TestHandleSessionCloseFencesTargetReplacementAfterTurnCompletion(t *testing.T) {
+	base, session, turn := newActiveBoundControlSession(t, "fs-close-target-fence")
+	factoryTarget := &fakeFactoryTargetService{closeEntered: make(chan struct{}), closeRelease: make(chan struct{})}
+	server := New(nil, base, nil, factoryTarget, nil, nil, nil)
+	type closeResult struct{ err *acpsdk.RequestError }
+	done := make(chan closeResult, 1)
+	go func() {
+		_, err := server.dispatchRequest(context.Background(), closeRequestEnvelope(t, 411, session.ID))
+		done <- closeResult{err: err}
+	}()
+
+	waitForChannel(t, factoryTarget.closeEntered, "Factory Sessions CloseFactorySession")
+	if _, err := base.AdvanceTurn(context.Background(), chatsessions.AdvanceTurnRequest{
+		SessionID: session.ID, TurnID: turn.ID, Next: chatsessions.TurnStateCompleted,
+	}); err != nil {
+		t.Fatalf("AdvanceTurn(COMPLETED): %v", err)
+	}
+	released, err := base.GetSession(context.Background(), chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession after completion: %v", err)
+	}
+	if _, err := base.SetTarget(context.Background(), chatsessions.SetTargetRequest{
+		RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCNumber, ConnectionID: "close-target-fence", JSONRPCNumberID: "1"},
+		SessionID: session.ID, ExpectedVersion: released.Session.Version,
+		Target: chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/other"},
+	}); !errors.Is(err, chatsessions.ErrBusy) {
+		t.Fatalf("SetTarget while ACP CLOSE is committed: got %v, want ErrBusy", err)
+	}
+
+	close(factoryTarget.closeRelease)
+	response := <-done
+	if response.err != nil {
+		t.Fatalf("session/close error = %+v, want success", response.err)
+	}
+	closed, err := base.GetSession(context.Background(), chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession after close: %v", err)
+	}
+	if closed.Session.State != chatsessions.SessionStateClosed || closed.Episode.State != chatsessions.TargetEpisodeStateClosed {
+		t.Fatalf("ACP close left a partial lifecycle: Session=%#v Episode=%#v", closed.Session, closed.Episode)
+	}
+	factoryTarget.mu.Lock()
+	closeCalls := append([]string(nil), factoryTarget.closeCalls...)
+	factoryTarget.mu.Unlock()
+	if len(closeCalls) != 1 || closeCalls[0] != "fs-close-target-fence" {
+		t.Fatalf("CloseFactorySession calls = %#v, want only the captured target", closeCalls)
+	}
+}
+
 // TestHandleSessionCloseUsesCapturedPendingFactorySession proves first-turn
 // close reaches the pending identity that Chat Sessions recorded before the
 // eventual bind, not a blank or newly selected Factory Session.

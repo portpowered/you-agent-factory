@@ -100,6 +100,12 @@ type Service struct {
 
 	mu       sync.Mutex
 	runtimes map[string]*activatedRuntime
+	// controls serializes lifecycle control across every activation generation
+	// that has used one opaque caller-facing session ID. Cancel may replace an
+	// activation under that ID; CloseFactorySession must then either run before
+	// that replacement or close the replacement, never report success while it
+	// remains live.
+	controls map[string]*activationControl
 	// startsByRequestID indexes a non-blank StartRequest.RequestID onto the
 	// wrapper identity StartAsync opened for it, so a retried start for the
 	// same stable request identity (this service's caller uses a key derived
@@ -133,6 +139,13 @@ type pendingStart struct {
 	err    error
 }
 
+// activationControl is deliberately separate from activatedRuntime: Cancel
+// replaces the latter while CloseFactorySession must retain one lock spanning
+// both generations for the same opaque session ID.
+type activationControl struct {
+	mu sync.Mutex
+}
+
 // New constructs the on-demand activation over the given *runtimeopening.Factory.
 // Construction alone performs no I/O and opens no runtime.
 func New(
@@ -161,6 +174,7 @@ func New(
 		generateID:        generateID,
 		logger:            logger,
 		runtimes:          make(map[string]*activatedRuntime),
+		controls:          make(map[string]*activationControl),
 		startsByRequestID: make(map[string]string),
 		pendingStarts:     make(map[string]*pendingStart),
 	}, nil
@@ -269,7 +283,12 @@ func (a *activatedRuntime) close(ctx context.Context) (*activeInvocation, error)
 	a.closing = true
 	a.mu.Unlock()
 
-	invocation, cancelErr := a.cancelInvocation(context.WithoutCancel(ctx))
+	// Keep the caller's cancellation/deadline while waiting for a provider
+	// invocation to finish. cleanup intentionally continues with a detached
+	// context so a caller that times out does not strand already-started
+	// runtime cleanup, but the control itself reports that bounded failure and
+	// remains retryable.
+	invocation, cancelErr := a.cancelInvocation(ctx)
 	result := errors.Join(cancelErr, a.cleanup(context.WithoutCancel(ctx)))
 	if result == nil {
 		a.mu.Lock()
@@ -556,11 +575,53 @@ func (s *Service) publishActivation(requestID string, active *activatedRuntime) 
 	if _, exists := s.runtimes[wrapperID]; exists {
 		return "", fmt.Errorf("on-demand Factory target activation: generated session identity %q collided with an existing activation", wrapperID)
 	}
+	if _, exists := s.controls[wrapperID]; exists {
+		return "", fmt.Errorf("on-demand Factory target activation: generated session identity %q collided with an existing lifecycle control", wrapperID)
+	}
 	s.runtimes[wrapperID] = active
+	s.controls[wrapperID] = &activationControl{}
 	if requestID != "" {
 		s.startsByRequestID[requestID] = wrapperID
 	}
 	return wrapperID, nil
+}
+
+// lockControl acquires the lifecycle-generation lock for sessionID. A caller
+// holds it from lookup through every close, replacement, and map update, so a
+// concurrent close cannot observe and silently leave a Cancel replacement.
+func (s *Service) lockControl(sessionID string) (*activationControl, bool) {
+	for {
+		s.mu.Lock()
+		control, ok := s.controls[sessionID]
+		s.mu.Unlock()
+		if !ok {
+			return nil, false
+		}
+		control.mu.Lock()
+		s.mu.Lock()
+		current := s.controls[sessionID]
+		s.mu.Unlock()
+		if current == control {
+			return control, true
+		}
+		// A prior close evicted this generation while this caller waited. Do
+		// not let the stale lock govern a newly reused opaque identity.
+		control.mu.Unlock()
+	}
+}
+
+func (s *Service) unlockControl(control *activationControl) {
+	control.mu.Unlock()
+}
+
+// releaseControl removes the now-unused per-session control only when it is
+// still the generation lock this caller acquired and no activation remains.
+func (s *Service) releaseControl(sessionID string, control *activationControl) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.controls[sessionID] == control && s.runtimes[sessionID] == nil {
+		delete(s.controls, sessionID)
+	}
 }
 
 func (s *Service) lookup(sessionID string) (*activatedRuntime, error) {
@@ -642,6 +703,12 @@ func (s *Service) Cancel(
 	sessionID string,
 	_ factorysessions.ControlRequest,
 ) (factorysessions.LifecycleControlResult, error) {
+	control, ok := s.lockControl(sessionID)
+	if !ok {
+		return factorysessions.LifecycleControlResult{}, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, sessionID)
+	}
+	defer s.unlockControl(control)
+
 	active, err := s.lookup(sessionID)
 	if err != nil {
 		return factorysessions.LifecycleControlResult{}, err
@@ -714,6 +781,12 @@ func (s *Service) removeActivation(sessionID string, current *activatedRuntime) 
 // identity is a no-op success, matching the idempotent close semantics
 // factorysessions.Service.CloseFactorySession already documents.
 func (s *Service) CloseFactorySession(ctx context.Context, sessionID string) error {
+	control, ok := s.lockControl(sessionID)
+	if !ok {
+		return nil
+	}
+	defer s.unlockControl(control)
+
 	active, err := s.lookup(sessionID)
 	if errors.Is(err, factorysessions.ErrSessionNotFound) {
 		return nil
@@ -726,7 +799,10 @@ func (s *Service) CloseFactorySession(ctx context.Context, sessionID string) err
 	if err != nil {
 		s.logger.Error("on-demand Factory target close failed")
 	} else {
-		s.removeActivation(sessionID, active)
+		if !s.removeActivation(sessionID, active) {
+			return fmt.Errorf("on-demand Factory target close lost ownership of session %q", sessionID)
+		}
+		s.releaseControl(sessionID, control)
 		s.logger.Info("on-demand Factory target closed")
 	}
 	return err
@@ -752,14 +828,36 @@ func (s *Service) Close() error {
 	s.mu.Unlock()
 
 	var result error
-	for sessionID, runtime := range active {
+	for sessionID := range active {
+		control, ok := s.lockControl(sessionID)
+		if !ok {
+			continue
+		}
+		runtime, err := s.lookup(sessionID)
+		if errors.Is(err, factorysessions.ErrSessionNotFound) {
+			s.releaseControl(sessionID, control)
+			s.unlockControl(control)
+			continue
+		}
+		if err != nil {
+			result = errors.Join(result, err)
+			s.unlockControl(control)
+			continue
+		}
 		invocation, err := runtime.close(context.WithoutCancel(context.Background()))
 		runtime.resolveCancellation(invocation, err == nil)
 		if err != nil {
 			result = errors.Join(result, err)
+			s.unlockControl(control)
 			continue
 		}
-		s.removeActivation(sessionID, runtime)
+		if !s.removeActivation(sessionID, runtime) {
+			result = errors.Join(result, fmt.Errorf("on-demand Factory target close-all lost ownership of session %q", sessionID))
+			s.unlockControl(control)
+			continue
+		}
+		s.releaseControl(sessionID, control)
+		s.unlockControl(control)
 	}
 	if result != nil {
 		s.logger.Error("on-demand Factory target close-all failed", zap.Int("runtimeCount", len(active)))

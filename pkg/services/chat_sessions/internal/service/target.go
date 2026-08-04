@@ -11,8 +11,9 @@ import (
 // consecutively numbered one at the new target. It reports *NotFoundError
 // for an unknown SessionID, *ConflictError when ExpectedVersion no longer
 // matches the session's current version, and *BusyError while a non-terminal
-// turn is active -- in every failure case, no episode is created and the
-// stored session and episode history are left byte-for-byte unchanged.
+// turn is active or a COMMITTED control intent remains unresolved -- in every
+// failure case, no episode is created and the stored session and episode
+// history are left byte-for-byte unchanged.
 func (s *Store) SetTarget(_ context.Context, req chatsessions.SetTargetRequest) (result chatsessions.SetTargetResult, err error) {
 	s.logStart("SetTarget", req.SessionID)
 	defer func() {
@@ -42,6 +43,12 @@ func (s *Store) SetTarget(_ context.Context, req chatsessions.SetTargetRequest) 
 		return chatsessions.SetTargetResult{}, &chatsessions.BusyError{
 			Value: "Session", ID: req.SessionID,
 			ActiveTurnID: active.ID, ActiveTurnState: active.State,
+		}
+	}
+	if fenced, ok := record.committedControlTurn(); ok {
+		return chatsessions.SetTargetResult{}, &chatsessions.BusyError{
+			Value: "Session", ID: req.SessionID,
+			ActiveTurnID: fenced.ID, ActiveTurnState: fenced.State,
 		}
 	}
 

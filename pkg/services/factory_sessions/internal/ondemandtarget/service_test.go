@@ -157,6 +157,7 @@ func newTestService(t *testing.T, opener invocationRuntimeOpener, resolve Runtim
 		generateID:        generateID,
 		logger:            zap.NewNop(),
 		runtimes:          make(map[string]*activatedRuntime),
+		controls:          make(map[string]*activationControl),
 		startsByRequestID: make(map[string]string),
 		pendingStarts:     make(map[string]*pendingStart),
 	}
@@ -174,6 +175,7 @@ func newTestServiceWithObservedLogger(t *testing.T, opener invocationRuntimeOpen
 		generateID:        generateID,
 		logger:            zap.New(core),
 		runtimes:          make(map[string]*activatedRuntime),
+		controls:          make(map[string]*activationControl),
 		startsByRequestID: make(map[string]string),
 		pendingStarts:     make(map[string]*pendingStart),
 	}, observed
