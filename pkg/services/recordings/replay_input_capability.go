@@ -1,5 +1,7 @@
 package recordings
 
+import "time"
+
 // LoadReplayInputRequest selects one historical replay input by filesystem
 // path for RecordingReplayArtifacts.
 type LoadReplayInputRequest struct {
@@ -7,10 +9,147 @@ type LoadReplayInputRequest struct {
 }
 
 // LoadReplayInputResult contains exactly one of Portable or Legacy,
-// depending on which replay input family the selected path contained.
+// depending on which replay input family the selected path contained. Portable
+// is a directly owned, detached value rather than the compatibility
+// PortableRecording alias used by the legacy writer/reader surface.
 type LoadReplayInputResult struct {
-	Portable *PortableRecording
-	Legacy   *ReplayArtifact
+	Portable *ReplayInputPortableRecording
+	Legacy   *ReplayInputLegacyArtifact
+}
+
+// ReplayInputPortableRecording is the directly owned, privacy-bounded
+// JavaScript Factory Session recording returned by RecordingReplayArtifacts.
+// It is intentionally separate from PortableRecording, which is a
+// compatibility alias retained for the existing recording writer and replay
+// projection paths. Every nested value here is defined at the Recordings root
+// so a peer can consume this narrow capability without importing
+// recordings/internal/contracts.
+type ReplayInputPortableRecording struct {
+	RecordingKind              string
+	SchemaVersion              string
+	ReplayCompatibilityVersion string
+	Session                    ReplayInputSessionSummary
+	Source                     ReplayInputSourceSummary
+	ArgumentsDigest            string
+	PolicyHash                 string
+	Artifacts                  []ReplayInputArtifactSummary
+	Events                     []ReplayInputEventSummary
+	Checkpoint                 *ReplayInputCheckpointSummary
+	Result                     *ReplayInputResultSummary
+	Redaction                  ReplayInputRedactionMetadata
+}
+
+// ReplayInputSessionSummary exposes portable Factory Session identity and
+// completion facts.
+type ReplayInputSessionSummary struct {
+	ID               string
+	Status           string
+	OrchestratorKind string
+}
+
+// ReplayInputSourceSummary exposes the immutable workflow source facts used
+// by the recorded Factory Session.
+type ReplayInputSourceSummary struct {
+	Ref  string
+	Hash string
+}
+
+// ReplayInputArtifactSummary exposes one public artifact reference from a
+// portable recording without granting storage authority.
+type ReplayInputArtifactSummary struct {
+	ID          string
+	Kind        string
+	Visibility  string
+	Label       string
+	ContentHash string
+	SizeBytes   int64
+	CreatedAt   time.Time
+}
+
+// ReplayInputEventSummary exposes one canonical portable-recording event in
+// its recorded order.
+type ReplayInputEventSummary struct {
+	ID           string
+	Type         string
+	Sequence     int64
+	Timestamp    time.Time
+	ArtifactIDs  []string
+	CheckpointID string
+}
+
+// ReplayInputCheckpointSummary exposes only the public checkpoint reference
+// retained by a portable recording.
+type ReplayInputCheckpointSummary struct {
+	ID         string
+	Label      string
+	Summary    string
+	Timestamp  time.Time
+	ArtifactID string
+}
+
+// ReplayInputResultSummary exposes the public terminal result. PrimaryResult
+// is detached JSON bytes; it is never a shared decoder or payload handle.
+type ReplayInputResultSummary struct {
+	Status        string
+	Mode          string
+	PrimaryResult []byte
+	ContentHash   string
+	ArtifactIDs   []string
+	Failure       *ReplayInputFailureSummary
+	Availability  *ReplayInputAvailability
+}
+
+// ReplayInputFailureSummary exposes the safe failure facts retained by a
+// portable recording.
+type ReplayInputFailureSummary struct {
+	Reason                 string
+	Message                string
+	PartialResultAvailable bool
+}
+
+// ReplayInputAvailability exposes public result-availability detail.
+type ReplayInputAvailability struct {
+	Reason    string
+	Message   string
+	Retryable bool
+}
+
+// ReplayInputRedactionMetadata exposes the privacy decisions that shaped a
+// portable recording without exposing any omitted contents.
+type ReplayInputRedactionMetadata struct {
+	RuntimeStateOmitted        bool
+	CheckpointBodiesOmitted    bool
+	ProviderTranscriptsOmitted bool
+	ChildDispatchesOmitted     bool
+	SecretsRedacted            int64
+}
+
+// ReplayInputLegacyArtifact is the directly owned compatibility view of one
+// embedded-Factory replay artifact. Its serialized fields preserve the exact
+// legacy runtime input while keeping the narrow capability free of aliases to
+// Recordings' internal replay contracts. Factory Sessions adapts this value at
+// its existing Factory Definitions compatibility boundary.
+type ReplayInputLegacyArtifact struct {
+	SchemaVersion       string
+	RecordedAt          time.Time
+	Events              []ReplayInputLegacyEvent
+	FactorySnapshotJSON []byte
+	DiagnosticsJSON     []byte
+	WallClock           *ReplayInputWallClockMetadata
+}
+
+// ReplayInputLegacyEvent is one complete detached legacy Factory event
+// envelope. EventJSON preserves the legacy schema without exposing a runtime
+// event handle.
+type ReplayInputLegacyEvent struct {
+	EventJSON []byte
+}
+
+// ReplayInputWallClockMetadata preserves the replay timing facts used by the
+// existing Factory Sessions compatibility path.
+type ReplayInputWallClockMetadata struct {
+	StartedAt  time.Time
+	FinishedAt time.Time
 }
 
 // ReplayInputDiagnosticCode identifies one RecordingReplayArtifacts

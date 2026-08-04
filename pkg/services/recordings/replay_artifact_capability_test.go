@@ -523,7 +523,10 @@ var _ recordings.RecordingReplayArtifacts = (*narrowReplayArtifactsFake)(nil)
 func (fake *narrowReplayArtifactsFake) LoadReplayInput(
 	recordings.LoadReplayInputRequest,
 ) (recordings.LoadReplayInputResult, error) {
-	return recordings.LoadReplayInputResult{Legacy: &recordings.ReplayArtifact{SchemaVersion: "narrow-fake"}}, nil
+	return recordings.LoadReplayInputResult{Portable: &recordings.ReplayInputPortableRecording{
+		RecordingKind: "narrow-fake",
+		Session:       recordings.ReplayInputSessionSummary{ID: "narrow-fake-session"},
+	}}, nil
 }
 
 func (fake *narrowReplayArtifactsFake) LoadReplay(
@@ -590,6 +593,13 @@ func TestRecordingReplayArtifacts_NarrowFakeConsumption(t *testing.T) {
 		},
 	}
 	var replayArtifacts recordings.RecordingReplayArtifacts = fake
+	input, err := replayArtifacts.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "narrow-fake"})
+	if err != nil {
+		t.Fatalf("LoadReplayInput() error = %v", err)
+	}
+	if input.Portable == nil || input.Portable.Session.ID != "narrow-fake-session" {
+		t.Fatalf("LoadReplayInput() = %#v, want directly owned portable replay input", input)
+	}
 
 	loaded, err := replayArtifacts.LoadReplay(recordings.LoadReplayRequest{RecordingID: "narrow-fake"})
 	if err != nil {

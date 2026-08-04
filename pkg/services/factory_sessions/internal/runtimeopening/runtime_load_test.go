@@ -131,6 +131,47 @@ func TestLoadRuntimePreservesLegacyReplayFailureContext(t *testing.T) {
 	}
 }
 
+func TestLegacyReplayArtifactFromInputPreservesCompatibilityFacts(t *testing.T) {
+	t.Parallel()
+
+	recordedAt := time.Date(2026, time.August, 4, 12, 0, 0, 0, time.UTC)
+	input := &recordings.ReplayInputLegacyArtifact{
+		SchemaVersion:       "legacy.v1",
+		RecordedAt:          recordedAt,
+		FactorySnapshotJSON: []byte(`{"id":"factory-legacy"}`),
+		DiagnosticsJSON:     []byte(`{"notes":["captured"]}`),
+		Events: []recordings.ReplayInputLegacyEvent{
+			{EventJSON: []byte(`{"id":"event-legacy","context":{},"payload":{},"schemaVersion":"agent-factory.event.v1","type":"RUN_REQUEST"}`)},
+		},
+		WallClock: &recordings.ReplayInputWallClockMetadata{StartedAt: recordedAt},
+	}
+
+	artifact, err := legacyReplayArtifactFromInput(input)
+	if err != nil {
+		t.Fatalf("legacyReplayArtifactFromInput() error = %v", err)
+	}
+	if artifact.SchemaVersion != input.SchemaVersion || !artifact.RecordedAt.Equal(recordedAt) {
+		t.Fatalf("legacy artifact identity = (%q, %v), want (%q, %v)", artifact.SchemaVersion, artifact.RecordedAt, input.SchemaVersion, recordedAt)
+	}
+	if artifact.Factory == nil || string(*artifact.Factory) != string(input.FactorySnapshotJSON) {
+		t.Fatalf("legacy artifact Factory = %v, want detached decoded Factory snapshot", artifact.Factory)
+	}
+	if len(artifact.Events) != 1 || artifact.Events[0].Id != "event-legacy" {
+		t.Fatalf("legacy artifact Events = %#v, want decoded legacy event", artifact.Events)
+	}
+	if len(artifact.Diagnostics.Notes) != 1 || artifact.Diagnostics.Notes[0] != "captured" {
+		t.Fatalf("legacy artifact Diagnostics = %#v, want preserved diagnostics", artifact.Diagnostics)
+	}
+	if artifact.WallClock == nil || !artifact.WallClock.StartedAt.Equal(recordedAt) {
+		t.Fatalf("legacy artifact WallClock = %#v, want preserved replay clock metadata", artifact.WallClock)
+	}
+	input.FactorySnapshotJSON[0] = 'x'
+	input.Events[0].EventJSON[0] = 'x'
+	if string(*artifact.Factory) != `{"id":"factory-legacy"}` || artifact.Events[0].Id != "event-legacy" {
+		t.Fatalf("legacy artifact observed mutation from replay-input value: %#v", artifact)
+	}
+}
+
 func TestClockForReplayPreservesOverridesAndInjectedDefaults(t *testing.T) {
 	explicit := clockwork.NewFakeClockAt(time.Date(2026, time.July, 20, 1, 0, 0, 0, time.UTC))
 	replay := clockwork.NewFakeClockAt(time.Date(2026, time.July, 20, 2, 0, 0, 0, time.UTC))

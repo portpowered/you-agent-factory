@@ -92,7 +92,7 @@ func (loader *replayInputLoader) LoadReplayInput(
 			"loaded portable replay input",
 			zap.String("sessionID", value.Session.ID),
 		)
-		return recordings.LoadReplayInputResult{Portable: &value}, nil
+		return recordings.LoadReplayInputResult{Portable: toReplayInputPortableRecording(value)}, nil
 	}
 	if loader.loadLegacy == nil {
 		err := &recordings.ReplayInputError{
@@ -112,8 +112,18 @@ func (loader *replayInputLoader) LoadReplayInput(
 		loader.logger.Warn("failed to load legacy replay artifact")
 		return recordings.LoadReplayInputResult{}, err
 	}
+	legacy, conversionErr := toReplayInputLegacyArtifact(artifact)
+	if conversionErr != nil {
+		err := &recordings.ReplayInputError{
+			Kind:    recordings.ReplayInputErrorLegacy,
+			Message: fmt.Sprintf("prepare replay artifact: %s", conversionErr.Error()),
+			Cause:   conversionErr,
+		}
+		loader.logger.Warn("failed to prepare legacy replay artifact")
+		return recordings.LoadReplayInputResult{}, err
+	}
 	loader.logger.Info("loaded legacy replay artifact")
-	return recordings.LoadReplayInputResult{Legacy: artifact}, nil
+	return recordings.LoadReplayInputResult{Legacy: legacy}, nil
 }
 
 func newReplayInputLoader(
@@ -143,6 +153,160 @@ func toReplayInputDiagnostic(err error) *recordings.ReplayInputDiagnostic {
 		Message:           diagnostic.Message,
 		SupportedVersions: versions,
 	}
+}
+
+// toReplayInputPortableRecording copies the legacy portable-recording
+// compatibility value into the narrow capability's directly owned contract.
+// The conversion deliberately clones every nested slice and pointer so a
+// caller cannot mutate a later replay-input result through this value.
+func toReplayInputPortableRecording(
+	value recordings.PortableRecording,
+) *recordings.ReplayInputPortableRecording {
+	converted := &recordings.ReplayInputPortableRecording{
+		RecordingKind:              value.RecordingKind,
+		SchemaVersion:              value.SchemaVersion,
+		ReplayCompatibilityVersion: value.ReplayCompatibilityVersion,
+		Session: recordings.ReplayInputSessionSummary{
+			ID:               value.Session.ID,
+			Status:           value.Session.Status,
+			OrchestratorKind: value.Session.OrchestratorKind,
+		},
+		Source: recordings.ReplayInputSourceSummary{
+			Ref:  value.Source.Ref,
+			Hash: value.Source.Hash,
+		},
+		ArgumentsDigest: value.ArgumentsDigest,
+		PolicyHash:      value.PolicyHash,
+		Artifacts:       toReplayInputArtifactSummaries(value.Artifacts),
+		Events:          toReplayInputEventSummaries(value.Events),
+		Checkpoint:      toReplayInputCheckpointSummary(value.Checkpoint),
+		Result:          toReplayInputResultSummary(value.Result),
+		Redaction: recordings.ReplayInputRedactionMetadata{
+			RuntimeStateOmitted:        value.Redaction.RuntimeStateOmitted,
+			CheckpointBodiesOmitted:    value.Redaction.CheckpointBodiesOmitted,
+			ProviderTranscriptsOmitted: value.Redaction.ProviderTranscriptsOmitted,
+			ChildDispatchesOmitted:     value.Redaction.ChildDispatchesOmitted,
+			SecretsRedacted:            value.Redaction.SecretsRedacted,
+		},
+	}
+	return converted
+}
+
+func toReplayInputArtifactSummaries(
+	values []recordings.PortableRecordingArtifactSummary,
+) []recordings.ReplayInputArtifactSummary {
+	converted := make([]recordings.ReplayInputArtifactSummary, len(values))
+	for index, artifact := range values {
+		converted[index] = recordings.ReplayInputArtifactSummary{
+			ID:          artifact.ID,
+			Kind:        artifact.Kind,
+			Visibility:  artifact.Visibility,
+			Label:       artifact.Label,
+			ContentHash: artifact.ContentHash,
+			SizeBytes:   artifact.SizeBytes,
+			CreatedAt:   artifact.CreatedAt,
+		}
+	}
+	return converted
+}
+
+func toReplayInputEventSummaries(
+	values []recordings.PortableRecordingEventSummary,
+) []recordings.ReplayInputEventSummary {
+	converted := make([]recordings.ReplayInputEventSummary, len(values))
+	for index, event := range values {
+		converted[index] = recordings.ReplayInputEventSummary{
+			ID:           event.ID,
+			Type:         event.Type,
+			Sequence:     event.Sequence,
+			Timestamp:    event.Timestamp,
+			ArtifactIDs:  append([]string(nil), event.ArtifactIDs...),
+			CheckpointID: event.CheckpointID,
+		}
+	}
+	return converted
+}
+
+func toReplayInputCheckpointSummary(
+	value *recordings.PortableRecordingCheckpointSummary,
+) *recordings.ReplayInputCheckpointSummary {
+	if value == nil {
+		return nil
+	}
+	return &recordings.ReplayInputCheckpointSummary{
+		ID:         value.ID,
+		Label:      value.Label,
+		Summary:    value.Summary,
+		Timestamp:  value.Timestamp,
+		ArtifactID: value.ArtifactID,
+	}
+}
+
+func toReplayInputResultSummary(
+	value *recordings.PortableRecordingResult,
+) *recordings.ReplayInputResultSummary {
+	if value == nil {
+		return nil
+	}
+	converted := &recordings.ReplayInputResultSummary{
+		Status:        value.Status,
+		Mode:          value.Mode,
+		PrimaryResult: append([]byte(nil), value.PrimaryResult...),
+		ContentHash:   value.ContentHash,
+		ArtifactIDs:   append([]string(nil), value.ArtifactIDs...),
+	}
+	if value.Failure != nil {
+		converted.Failure = &recordings.ReplayInputFailureSummary{
+			Reason:                 value.Failure.Reason,
+			Message:                value.Failure.Message,
+			PartialResultAvailable: value.Failure.PartialResultAvailable,
+		}
+	}
+	if value.Availability != nil {
+		converted.Availability = &recordings.ReplayInputAvailability{
+			Reason:    value.Availability.Reason,
+			Message:   value.Availability.Message,
+			Retryable: value.Availability.Retryable,
+		}
+	}
+	return converted
+}
+
+func toReplayInputLegacyArtifact(
+	value *recordings.ReplayArtifact,
+) (*recordings.ReplayInputLegacyArtifact, error) {
+	if value == nil {
+		return nil, nil
+	}
+	converted := &recordings.ReplayInputLegacyArtifact{
+		SchemaVersion: value.SchemaVersion,
+		RecordedAt:    value.RecordedAt,
+	}
+	var err error
+	if converted.FactorySnapshotJSON, err = json.Marshal(value.Factory); err != nil {
+		return nil, fmt.Errorf("encode legacy Factory snapshot: %w", err)
+	}
+	if value.Factory == nil {
+		converted.FactorySnapshotJSON = nil
+	}
+	if converted.DiagnosticsJSON, err = json.Marshal(value.Diagnostics); err != nil {
+		return nil, fmt.Errorf("encode legacy replay diagnostics: %w", err)
+	}
+	converted.Events = make([]recordings.ReplayInputLegacyEvent, len(value.Events))
+	for index, event := range value.Events {
+		payload, encodeErr := json.Marshal(event)
+		if encodeErr != nil {
+			return nil, fmt.Errorf("encode legacy replay event %d: %w", index, encodeErr)
+		}
+		converted.Events[index] = recordings.ReplayInputLegacyEvent{EventJSON: payload}
+	}
+	if value.WallClock != nil {
+		converted.WallClock = &recordings.ReplayInputWallClockMetadata{
+			StartedAt:  value.WallClock.StartedAt,
+			FinishedAt: value.WallClock.FinishedAt,
+		}
+	}
+	return converted, nil
 }
 
 func diagnosticCodeOf(diagnostic *recordings.ReplayInputDiagnostic) string {

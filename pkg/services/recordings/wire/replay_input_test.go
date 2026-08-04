@@ -41,6 +41,21 @@ func TestReplayInputLoaderClassifiesPortableRecording(t *testing.T) {
 	if got := result.Portable.Session.ID; got != "session-js-001" {
 		t.Fatalf("Portable.Session.ID = %q, want session-js-001", got)
 	}
+	if got := result.Portable.Redaction.SecretsRedacted; got != 2 {
+		t.Fatalf("Portable.Redaction.SecretsRedacted = %d, want 2", got)
+	}
+	if got := result.Portable.Events[1].ArtifactIDs[0]; got != "artifact-1" {
+		t.Fatalf("Portable.Events[1].ArtifactIDs[0] = %q, want artifact-1", got)
+	}
+
+	result.Portable.Events[1].ArtifactIDs[0] = "mutated"
+	second, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: path})
+	if err != nil {
+		t.Fatalf("LoadReplayInput() second read = %v", err)
+	}
+	if second.Portable == nil || second.Portable.Events[1].ArtifactIDs[0] != "artifact-1" {
+		t.Fatalf("LoadReplayInput() second read = %#v, want detached portable event values", second.Portable)
+	}
 }
 
 func TestRecordingReplayArtifactsRuntimeConstructionIsInert(t *testing.T) {
@@ -87,7 +102,10 @@ func TestReplayInputLoaderDelegatesLegacyArtifact(t *testing.T) {
 
 	requestedPath := ""
 	tempFile := writeTempReplayInputFile(t, `{"schemaVersion":"legacy"}`)
-	want := &recordings.ReplayArtifact{SchemaVersion: "legacy"}
+	want := &recordings.ReplayArtifact{
+		SchemaVersion: "legacy",
+		Events:        []recordings.FactoryEvent{{Id: "legacy-event"}},
+	}
 	loader := recordingswire.NewReplayInputLoader(
 		recordings.RecordingReadFile(os.ReadFile),
 		func(path string) (*recordings.ReplayArtifact, error) {
@@ -103,8 +121,19 @@ func TestReplayInputLoaderDelegatesLegacyArtifact(t *testing.T) {
 	if result.Portable != nil {
 		t.Fatal("Portable = non-nil, want nil for a legacy artifact")
 	}
-	if result.Legacy != want {
-		t.Fatalf("Legacy = %v, want %v", result.Legacy, want)
+	if result.Legacy == nil || result.Legacy.SchemaVersion != want.SchemaVersion {
+		t.Fatalf("Legacy = %#v, want detached legacy artifact with schema %q", result.Legacy, want.SchemaVersion)
+	}
+	if got := string(result.Legacy.Events[0].EventJSON); got == "" {
+		t.Fatal("Legacy.Events[0].EventJSON = empty, want complete detached event envelope")
+	}
+	result.Legacy.Events[0].EventJSON[0] = 'x'
+	second, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: tempFile})
+	if err != nil {
+		t.Fatalf("LoadReplayInput() second legacy read = %v", err)
+	}
+	if second.Legacy == nil || second.Legacy.Events[0].EventJSON[0] != '{' {
+		t.Fatalf("LoadReplayInput() second legacy read = %#v, want detached event bytes", second.Legacy)
 	}
 	if requestedPath != tempFile {
 		t.Fatalf("legacy loader path = %q, want %q", requestedPath, tempFile)
