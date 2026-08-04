@@ -25,8 +25,11 @@ type Service struct {
 
 var _ chatsessions.FactoryTargetCatalogService = (*Service)(nil)
 
-// New constructs a Service from its required collaborator roots. logger is
-// the direct, required operation-logging abstraction; callers with no
+// New constructs a Service from its required collaborator roots.
+// factoryDefinitions is a struct of narrow operation values, not a nilable
+// interface; production Wire composition always populates every field, and
+// focused tests populate only the operations their scenario exercises. logger
+// is the direct, required operation-logging abstraction; callers with no
 // operation logging pass logging.NoopLogger{}.
 func New(
 	operatorSettings operatorsettings.Service,
@@ -35,9 +38,6 @@ func New(
 ) (*Service, error) {
 	if operatorSettings == nil {
 		return nil, fmt.Errorf("construct chat sessions factory target catalog: operator settings root is required")
-	}
-	if factoryDefinitions == nil {
-		return nil, fmt.Errorf("construct chat sessions factory target catalog: factory definitions catalog/path capability is required")
 	}
 	if logger == nil {
 		logger = logging.NoopLogger{}

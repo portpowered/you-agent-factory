@@ -92,14 +92,16 @@ func TestProvideChatSessionsServiceConstructsAnIndependentServiceDirectly(t *tes
 // catalog/path capability, matching the same fake-collaborator convention
 // used by pkg/services/chat_sessions/internal/service's own unit tests.
 type staticFactoryDefinitionsService struct {
-	factorydefinitions.CatalogPathsService
-
 	mu      sync.Mutex
 	calls   int
 	entries []factorydefinitions.EffectiveFactoryCatalogEntry
 }
 
-func (s *staticFactoryDefinitionsService) ListEffectiveFactories(
+func (s *staticFactoryDefinitionsService) CatalogPathsService() factorydefinitions.CatalogPathsService {
+	return factorydefinitions.CatalogPathsService{ListEffectiveFactories: s.listEffectiveFactories}
+}
+
+func (s *staticFactoryDefinitionsService) listEffectiveFactories(
 	context.Context,
 	factorydefinitions.ListEffectiveFactoriesRequest,
 ) (factorydefinitions.ListEffectiveFactoriesResult, error) {
@@ -171,7 +173,7 @@ func TestProvideChatSessionsFactoryTargetCatalogServiceComposesThroughTheCanonic
 		},
 	}
 
-	catalog, err := provideChatSessionsFactoryTargetCatalogService(operatorSettings, factoryDefinitions, logger)
+	catalog, err := provideChatSessionsFactoryTargetCatalogService(operatorSettings, factoryDefinitions.CatalogPathsService(), logger)
 	if err != nil {
 		t.Fatalf("provideChatSessionsFactoryTargetCatalogService() error = %v", err)
 	}

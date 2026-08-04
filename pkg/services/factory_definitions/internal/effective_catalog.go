@@ -191,10 +191,11 @@ func cloneString(value *string) *string {
 
 // catalogPathsService is the stateless implementation of the narrow,
 // read-only Factory Definitions catalog/path capability. It is intentionally
-// unexported: the capability's public contract (factorydefinitions.CatalogPathsService)
-// is published at the factory_definitions service root
+// unexported: the capability's public contract (factorydefinitions.CatalogPathsService,
+// a struct of the three narrow operation types this implementation's method
+// values populate) is published at the factory_definitions service root
 // (current_factory_pointer.go); callers hold this type via type inference and
-// return it onward as that root interface.
+// bundle its method values into that root struct.
 type catalogPathsService struct {
 	listEffective       factorydefinitions.EffectiveFactoryCatalogOperation
 	resolveNamedFactory func(context.Context, factorydefinitions.ResolveNamedFactoryRequest) (factorydefinitions.ResolveNamedFactoryResult, error)
@@ -208,9 +209,9 @@ type catalogPathsService struct {
 // work, and caches no operation results. logger is the direct, required
 // operation-logging abstraction; callers with no operation logging pass
 // logging.NoopLogger{}. The returned type is unexported; callers hold it via
-// type inference and return it onward as whatever interface their own
-// package publishes, exactly as any other unexported-type-behind-an-exported-
-// constructor Go value works.
+// type inference and bundle its method values into the exported
+// factorydefinitions.CatalogPathsService struct, exactly as any other
+// unexported-type-behind-an-exported-constructor Go value works.
 func NewCatalogPathsService(
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
 	resolveNamedFactory func(context.Context, factorydefinitions.ResolveNamedFactoryRequest) (factorydefinitions.ResolveNamedFactoryResult, error),

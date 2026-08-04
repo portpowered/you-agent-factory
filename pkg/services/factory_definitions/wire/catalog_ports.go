@@ -87,7 +87,7 @@ func NewCatalogPathsService(
 	logger logging.Logger,
 ) (factorydefinitions.CatalogPathsService, error) {
 	if namedFactoryCatalog == nil {
-		return nil, fmt.Errorf("named Factory catalog is required")
+		return factorydefinitions.CatalogPathsService{}, fmt.Errorf("named Factory catalog is required")
 	}
 	resolveNamedFactory := func(
 		ctx context.Context,
@@ -105,10 +105,18 @@ func NewCatalogPathsService(
 		}
 		return factorydefinitions.ResolveNamedFactoryResult{Resolution: *resolution}, nil
 	}
-	return factorydefinitionsinternal.NewCatalogPathsService(
+	impl, err := factorydefinitionsinternal.NewCatalogPathsService(
 		listEffective,
 		resolveNamedFactory,
 		resolveCurrentDir,
 		logger,
 	)
+	if err != nil {
+		return factorydefinitions.CatalogPathsService{}, err
+	}
+	return factorydefinitions.CatalogPathsService{
+		ListEffectiveFactories:        impl.ListEffectiveFactories,
+		ResolveNamedFactory:           impl.ResolveNamedFactory,
+		ResolveCurrentFactoryLocation: impl.ResolveCurrentFactoryLocation,
+	}, nil
 }
