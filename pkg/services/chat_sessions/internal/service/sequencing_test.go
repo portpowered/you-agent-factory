@@ -14,13 +14,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// fakeEventsAppender is a minimal, concurrency-safe EventsAppender double
-// built only against the published events.AppendRequest/AppendResult shape.
-// Unlike pkg/services/factory_sessions/internal/testing/eventsstub (which
-// never deduplicates), it performs the same identity-keyed duplicate
-// resolution the real Events Store performs, since Sequence's own duplicate
-// handling depends on observing AppendOutcomeDuplicate for a repeated
-// (SourceType, SourceID, SourceSequence, SourceEventID) tuple.
+// fakeEventsAppender is a minimal, concurrency-safe EventsAppender+EventsReader double that
+// dedups by identity like the real Events store, since Sequence depends on observing
+// AppendOutcomeDuplicate for a repeated source identity tuple.
 type fakeEventsAppender struct {
 	mu     sync.Mutex
 	topics map[events.Topic]*fakeTopicState
@@ -86,15 +82,8 @@ func (f *fakeEventsAppender) Append(ctx context.Context, req events.AppendReques
 	return events.AppendResult{Record: record.Detached(), Outcome: events.AppendOutcomeAccepted}, nil
 }
 
-// Read is a minimal, concurrency-safe EventsReader double over the same
-// retained-records state Append maintains. It reports ReadOutcomeGap when
-// From names a position before the oldest still-retained record (per
-// retentionLimit eviction), ReadOutcomeAtHead when From already names the
-// topic's live head, ReadOutcomeInvalidCursor when From names a position
-// beyond the live head, and ReadOutcomeProgress otherwise -- mirroring the
-// real Events Store's outcome contract closely enough for
-// AcknowledgeAttachment's gap-detection tests without depending on
-// events/internal/service.
+// Read mirrors the real Events Store's outcome contract (Gap/AtHead/InvalidCursor/Progress)
+// closely enough for AcknowledgeAttachment's gap-detection tests.
 func (f *fakeEventsAppender) Read(_ context.Context, req events.ReadRequest) (events.ReadResult, error) {
 	if err := req.Validate(); err != nil {
 		return events.ReadResult{}, err
@@ -149,11 +138,8 @@ func (f *fakeEventsAppender) Read(_ context.Context, req events.ReadRequest) (ev
 	}
 }
 
-// stubAppender is a bare EventsAppender double that delegates every Append
-// call to fn, used to force Sequence's less common outcome and error paths
-// (an underlying Events failure, or an outcome value Sequence does not
-// otherwise expect) without teaching fakeEventsAppender itself about
-// injected failures.
+// stubAppender delegates every Append call to fn, used to force Sequence's less common
+// outcome and error paths without teaching fakeEventsAppender about injected failures.
 type stubAppender struct {
 	fn func(context.Context, events.AppendRequest) (events.AppendResult, error)
 }
@@ -162,9 +148,6 @@ func (s stubAppender) Append(ctx context.Context, req events.AppendRequest) (eve
 	return s.fn(ctx, req)
 }
 
-// setRetentionLimit caps how many records topic keeps retained, lazily
-// creating the topic's state if no record has been committed to it yet, and
-// returns f for call chaining in test setup.
 func (f *fakeEventsAppender) setRetentionLimit(topic events.Topic, limit int) *fakeEventsAppender {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -187,9 +170,6 @@ func (f *fakeEventsAppender) commitCount(topic events.Topic) int {
 	return len(ts.commits)
 }
 
-// newSequencingTestSession constructs a Store wired to a fresh
-// fakeEventsAppender (also serving as the Store's EventsReader, since it
-// implements both) and one created Session ready for Sequence calls.
 func newSequencingTestSession(t *testing.T) (*Store, chatsessions.Session, *fakeEventsAppender) {
 	t.Helper()
 	appender := newFakeEventsAppender()
@@ -215,11 +195,6 @@ func sequenceRequest(sessionID string, sourceSeq events.SourceSequence, parentIt
 	}
 }
 
-// TestStore_Sequence_AssignsStableItemIDAndPersistsEnvelope proves a valid
-// Sequence request commits to EventsTopic(SessionID), assigns a non-empty
-// ItemID before append, and persists that exact ItemID inside the committed
-// Events record's Payload (the "complete envelope"), not in a
-// transport/connection-local map.
 func TestStore_Sequence_AssignsStableItemIDAndPersistsEnvelope(t *testing.T) {
 	ctx := context.Background()
 	store, session, appender := newSequencingTestSession(t)
@@ -258,10 +233,6 @@ func TestStore_Sequence_AssignsStableItemIDAndPersistsEnvelope(t *testing.T) {
 	}
 }
 
-// TestStore_Sequence_PreservesSourceIdentityAndPayload proves SourceType,
-// SourceID, SourceSequence, SourceEventID, SchemaID, and the source-native
-// Payload all cross into the committed Events append request unchanged, with
-// no new normalized event taxonomy substituted in their place.
 func TestStore_Sequence_PreservesSourceIdentityAndPayload(t *testing.T) {
 	ctx := context.Background()
 	store, session, appender := newSequencingTestSession(t)
@@ -297,15 +268,9 @@ func TestStore_Sequence_PreservesSourceIdentityAndPayload(t *testing.T) {
 	}
 }
 
-// TestStore_Sequence_PreservesPayloadBytesVerbatimIncludingWhitespaceAndHTMLCharacters
-// proves the committed SequencedItem envelope's Payload is byte-for-byte
-// identical to the request's original Payload even when it contains
-// meaningful insignificant whitespace and HTML-sensitive characters
-// (<, >, &). A naive json.Marshal(item) on a struct embedding a
-// json.RawMessage field runs that field's bytes through Go's stdlib JSON
-// compaction (which strips insignificant whitespace) and, by default,
-// HTML-escaping (which rewrites <, >, & to <, >, &) before
-// Events ever sees it -- this test would fail against that implementation.
+// A naive json.Marshal(item) on a struct embedding a json.RawMessage field runs that
+// field's bytes through Go's stdlib JSON compaction and HTML-escaping before Events ever
+// sees it -- this test would fail against that implementation.
 func TestStore_Sequence_PreservesPayloadBytesVerbatimIncludingWhitespaceAndHTMLCharacters(t *testing.T) {
 	ctx := context.Background()
 	store, session, appender := newSequencingTestSession(t)
@@ -327,10 +292,6 @@ func TestStore_Sequence_PreservesPayloadBytesVerbatimIncludingWhitespaceAndHTMLC
 	}
 }
 
-// TestStore_Sequence_ChildAcceptedOnlyAfterParentSequenced proves a child
-// reference is rejected without committing anything when its ParentItemID
-// does not already identify an item sequenced in this exact session, and
-// succeeds once that parent has actually been sequenced.
 func TestStore_Sequence_ChildAcceptedOnlyAfterParentSequenced(t *testing.T) {
 	ctx := context.Background()
 	store, session, appender := newSequencingTestSession(t)
@@ -360,9 +321,6 @@ func TestStore_Sequence_ChildAcceptedOnlyAfterParentSequenced(t *testing.T) {
 	}
 }
 
-// TestStore_Sequence_ParentFromAnotherSessionIsRejected proves an ItemID
-// sequenced in one session is not a valid ParentItemID reference in another
-// session, even though it is a well-formed, real, already-assigned identity.
 func TestStore_Sequence_ParentFromAnotherSessionIsRejected(t *testing.T) {
 	ctx := context.Background()
 	store, sessionA, _ := newSequencingTestSession(t)
@@ -385,9 +343,6 @@ func TestStore_Sequence_ParentFromAnotherSessionIsRejected(t *testing.T) {
 	}
 }
 
-// TestStore_Sequence_UnknownSessionReportsNotFound proves Sequence against a
-// SessionID that does not identify an existing session reports *NotFoundError
-// and commits nothing.
 func TestStore_Sequence_UnknownSessionReportsNotFound(t *testing.T) {
 	ctx := context.Background()
 	appender := newFakeEventsAppender()
@@ -398,9 +353,6 @@ func TestStore_Sequence_UnknownSessionReportsNotFound(t *testing.T) {
 	}
 }
 
-// TestStore_Sequence_InvalidRequestIsRejected table-drives every
-// SequenceRequest validation failure and proves each is rejected before any
-// Events append is attempted.
 func TestStore_Sequence_InvalidRequestIsRejected(t *testing.T) {
 	ctx := context.Background()
 
@@ -470,10 +422,6 @@ func TestStore_Sequence_InvalidRequestIsRejected(t *testing.T) {
 	}
 }
 
-// TestStore_Sequence_DuplicateSourceTupleReturnsOriginalIdentity proves
-// repeating the same (SourceType, SourceID, SourceSequence, SourceEventID)
-// tuple resolves to the originally assigned ItemID, ParentItemID, and
-// aggregate position instead of committing a second record.
 func TestStore_Sequence_DuplicateSourceTupleReturnsOriginalIdentity(t *testing.T) {
 	ctx := context.Background()
 	store, session, appender := newSequencingTestSession(t)
@@ -499,13 +447,8 @@ func TestStore_Sequence_DuplicateSourceTupleReturnsOriginalIdentity(t *testing.T
 	}
 }
 
-// TestStore_Sequence_ContradictoryDuplicateIsRejected table-drives every way
-// a reused (SourceType, SourceID, SourceSequence, SourceEventID) tuple can
-// disagree with the originally committed record (ParentItemID, Kind,
-// SchemaID, Payload) and proves each is rejected with
-// *chatsessions.SequencedIdentityConflictError instead of silently returning
-// the stale, contradicted identity or replacing the original committed
-// record.
+// TestStore_Sequence_ContradictoryDuplicateIsRejected table-drives every way a reused
+// source identity tuple can disagree with the originally committed record.
 func TestStore_Sequence_ContradictoryDuplicateIsRejected(t *testing.T) {
 	ctx := context.Background()
 	topic := func(session chatsessions.Session) events.Topic { return chatsessions.EventsTopic(session.ID) }
@@ -604,13 +547,8 @@ func TestStore_Sequence_ContradictoryDuplicateIsRejected(t *testing.T) {
 	}
 }
 
-// TestStore_Sequence_ContradictoryLargeIntegerPayloadIsRejected proves a
-// retry whose payload differs only in a numeric field beyond float64's exact
-// integer range (9007199254740992 vs 9007199254740993, both distinct valid
-// JSON integers that collapse to the same float64) is still rejected as a
-// genuine contradiction rather than accepted as an identity-preserving
-// duplicate -- equalJSON must compare the two numbers by their exact decimal
-// text, not by decoding through float64.
+// 9007199254740992 vs 9007199254740993 are distinct valid JSON integers that collapse to
+// the same float64 -- equalJSON must compare exact decimal text, not decode through float64.
 func TestStore_Sequence_ContradictoryLargeIntegerPayloadIsRejected(t *testing.T) {
 	ctx := context.Background()
 	store, session, appender := newSequencingTestSession(t)
@@ -652,9 +590,6 @@ func TestStore_Sequence_ContradictoryLargeIntegerPayloadIsRejected(t *testing.T)
 	}
 }
 
-// countingIDs returns a deterministic IDGenerator like sequentialIDs, plus a
-// function reporting exactly how many times it has been called, so a test
-// can assert a code path never minted (and discarded) an identity.
 func countingIDs(prefix string) (IDGenerator, func() int) {
 	n := 0
 	gen := func() string {
@@ -664,15 +599,8 @@ func countingIDs(prefix string) (IDGenerator, func() int) {
 	return gen, func() int { return n }
 }
 
-// TestStore_Sequence_DuplicateAndContradictoryRetriesNeverConsumeGenerator
-// proves a duplicate retry and a contradictory retry of an already-known
-// source identity resolve entirely from this session's own local index:
-// neither calls the injected IDGenerator, and the ItemID a later genuinely
-// new record receives is exactly the next sequential identity, unaffected by
-// how many retries preceded it. Before this test's fix, Sequence called
-// s.newID() while building the candidate envelope before Append, discarding
-// that minted identity on every duplicate/rejected branch -- a hidden side
-// effect on the injected generator this test would have caught.
+// Before this test's fix, Sequence called s.newID() while building the candidate envelope
+// before Append, discarding that minted identity on every duplicate/rejected branch.
 func TestStore_Sequence_DuplicateAndContradictoryRetriesNeverConsumeGenerator(t *testing.T) {
 	ctx := context.Background()
 	appender := newFakeEventsAppender()
@@ -722,12 +650,6 @@ func TestStore_Sequence_DuplicateAndContradictoryRetriesNeverConsumeGenerator(t 
 	}
 }
 
-// TestStore_Sequence_ConcurrentFirstDeliveryAndRetryAgree races a first
-// delivery against a byte-identical retry of the same source identity tuple,
-// released through a shared start barrier (never a sleep). Exactly one of
-// the two commits an Events record; both callers must observe the same
-// assigned ItemID and aggregate position, and the topic must retain exactly
-// one committed record for that identity.
 func TestStore_Sequence_ConcurrentFirstDeliveryAndRetryAgree(t *testing.T) {
 	ctx := context.Background()
 	store, session, appender := newSequencingTestSession(t)
@@ -780,12 +702,6 @@ func TestStore_Sequence_ConcurrentFirstDeliveryAndRetryAgree(t *testing.T) {
 	}
 }
 
-// TestStore_Sequence_ConcurrentDistinctRecordsCommitContiguousPositions
-// launches many goroutines against the same session with distinct source
-// identities, releasing them all through a shared start barrier (never a
-// sleep), and proves the assigned aggregate positions form exactly the
-// contiguous set {1..N} in successful commit order -- independent of which
-// goroutine the runtime happened to schedule first. Run with -race.
 func TestStore_Sequence_ConcurrentDistinctRecordsCommitContiguousPositions(t *testing.T) {
 	const n = 64
 	ctx := context.Background()
@@ -829,18 +745,9 @@ func TestStore_Sequence_ConcurrentDistinctRecordsCommitContiguousPositions(t *te
 	}
 }
 
-// TestStore_Sequence_ConcurrentChildNeverObservesTornParentState races a
-// child Sequence call (referencing the exact ItemID the parent call is about
-// to mint) against the parent's own Sequence call, released through a shared
-// start barrier. Because Sequence's session lookup, parent check, Events
-// append, and sequencedItemIDs update all run under one Store-wide critical
-// section, only two outcomes are ever possible regardless of scheduling
-// order: the child loses the race and observes *NotFoundError (parent not
-// sequenced yet), or the child wins the race and observes a fully consistent,
-// already-committed parent. A torn/partial observation (child succeeds
-// against a parent whose own Sequence call has not yet returned, or child's
-// error is anything other than NotFoundError) would fail this test. Repeat
-// under -race -count to stress different schedules.
+// Sequence's session lookup, parent check, Events append, and sequencedItemIDs update all
+// run under one Store-wide critical section, so only two outcomes are ever possible: the
+// child loses the race (*NotFoundError) or wins against a fully consistent parent.
 func TestStore_Sequence_ConcurrentChildNeverObservesTornParentState(t *testing.T) {
 	ctx := context.Background()
 	store, session, _ := newSequencingTestSession(t)
@@ -891,9 +798,6 @@ func TestStore_Sequence_ConcurrentChildNeverObservesTornParentState(t *testing.T
 	}
 }
 
-// TestStore_Sequence_CancelledContextIsRejected proves Sequence checks
-// ctx.Err() before taking the Store lock or attempting any Events append, so
-// a caller racing a cancellation never observes a partial commit.
 func TestStore_Sequence_CancelledContextIsRejected(t *testing.T) {
 	store, session, appender := newSequencingTestSession(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -907,10 +811,6 @@ func TestStore_Sequence_CancelledContextIsRejected(t *testing.T) {
 	}
 }
 
-// TestStore_Sequence_AssignedItemFailingValidationIsRejected proves Sequence
-// validates the SequencedItem envelope it assembles (including the ItemID
-// its own IDGenerator minted) before ever attempting an Events append, by
-// wiring a generator that mints a blank ItemID.
 func TestStore_Sequence_AssignedItemFailingValidationIsRejected(t *testing.T) {
 	ctx := context.Background()
 	appender := newFakeEventsAppender()
@@ -936,11 +836,6 @@ func TestStore_Sequence_AssignedItemFailingValidationIsRejected(t *testing.T) {
 	}
 }
 
-// TestStore_Sequence_AppendFailurePropagatesWithoutIndexingItem proves an
-// error reported by the injected EventsAppender itself (as opposed to a
-// non-error Duplicate/Accepted outcome) surfaces unchanged from Sequence, and
-// that the failed item's identity is never recorded as a valid ParentItemID
-// for a later Sequence call.
 func TestStore_Sequence_AppendFailurePropagatesWithoutIndexingItem(t *testing.T) {
 	ctx := context.Background()
 	appendErr := errors.New("events store unavailable")
@@ -958,11 +853,6 @@ func TestStore_Sequence_AppendFailurePropagatesWithoutIndexingItem(t *testing.T)
 	}
 }
 
-// TestStore_Sequence_UnexpectedAppendOutcomeIsReportedAsError proves Sequence
-// treats any events.AppendOutcome other than Accepted or Duplicate as an
-// error rather than silently returning a zero-value success, guarding
-// against Events ever widening its outcome vocabulary without Sequence being
-// updated to handle it.
 func TestStore_Sequence_UnexpectedAppendOutcomeIsReportedAsError(t *testing.T) {
 	ctx := context.Background()
 	const bogusOutcome = events.AppendOutcome(99)
@@ -991,10 +881,6 @@ func TestStore_Sequence_UnexpectedAppendOutcomeIsReportedAsError(t *testing.T) {
 	}
 }
 
-// TestEqualJSON table-drives equalJSON's structural-equivalence and
-// malformed-input fallback branches directly, since contradictedField only
-// ever calls it against already-validated (therefore always well-formed)
-// payloads -- Sequence's own request path never exercises the fallback.
 func TestEqualJSON(t *testing.T) {
 	tests := []struct {
 		name string
