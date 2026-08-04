@@ -45,11 +45,6 @@ var (
 	// ErrInvalidDispatchResultBoundary indicates the correlated worker result fell
 	// outside the published result-boundary vocabulary peers may submit.
 	ErrInvalidDispatchResultBoundary = dispatchplanning.ErrInvalidDispatchResultBoundary
-
-	// ErrCapabilityUnavailable indicates the root contract is published but its
-	// canonical runtime implementation belongs to a later implementation cut.
-	// Callers must not interpret this error as a successful no-op.
-	ErrCapabilityUnavailable = errors.New("factory runtime capability is unavailable")
 )
 
 type WorkersRuntimeExecutorsFactory func(
