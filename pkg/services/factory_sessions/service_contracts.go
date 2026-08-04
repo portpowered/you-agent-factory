@@ -72,9 +72,10 @@ type RuntimeBinding struct {
 // The published invocation slice uses InvocationRequest,
 // ResolvedInvocationInput, InvocationResult, InvocationTimeout,
 // InvocationTerminalStatus, InvocationErrorCode, and *InvocationValidationError
-// as plain root vocabulary on the singular Service aggregate; peers must not
-// import private invocation subservice types and must not depend on a separately
-// published peer-facing invoker interface.
+// as plain root vocabulary shared by the singular Service aggregate and
+// InvocationService; peers that need only one-shot invocation use the
+// owner-published capability and must not import private invocation subservice
+// types.
 // The published response-stream slice uses ResponseStreamSubscriptionRequest,
 // ResponseStreamCursor, ResponseStreamEvent, ResponseStreamGap,
 // ResponseStreamKindGap, ResponseStreamCompletionKind,

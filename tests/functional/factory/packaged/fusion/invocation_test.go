@@ -2,7 +2,9 @@ package fusion
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,7 +16,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -182,7 +183,7 @@ func TestPackagedFusionOptionalInputsReachWorkers(t *testing.T) {
 }
 
 // TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome proves that a
-// configured mock-worker rejection during one fusion stage returns a failed
+// provider-command failure during one fusion stage returns a failed
 // public terminal invocation outcome without a completed success primary
 // result attributable to the failing run.
 func TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome(t *testing.T) {
@@ -196,11 +197,13 @@ func TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome(t *testing.T) {
 		t.TempDir(),
 		factorydefinitions.PackagedFusionFactoryName,
 	)
+	runner := packagedFusionFailingCommandRunner{}
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
-		UseMockWorkers:            true,
-		MockWorkersConfig:         packagedFusionRejectingDrafterMockWorkersConfig(),
 		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: runner,
+		},
 	})
 
 	response := startPackagedFusionInvocation(
@@ -265,19 +268,19 @@ func TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome(t *testing.T) {
 	}
 }
 
-func packagedFusionRejectingDrafterMockWorkersConfig() *workers.MockWorkersConfig {
-	exitCode := 7
-	return &workers.MockWorkersConfig{
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "fusion-drafter",
-			WorkstationName: "draft-fusion",
-			RunType:         workers.MockWorkerRunTypeReject,
-			RejectConfig: &workers.MockWorkerRejectConfig{
-				Stderr:   "packaged fusion mock worker failure",
-				ExitCode: &exitCode,
-			},
-		}},
-	}
+// packagedFusionFailingCommandRunner is the ProviderCommandRunner edge mock
+// for this customer-visible failure path. It models a provider subprocess
+// failure without selecting the workers/mock feature owned elsewhere.
+type packagedFusionFailingCommandRunner struct{}
+
+func (packagedFusionFailingCommandRunner) Run(
+	_ context.Context,
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{
+		Stderr:   []byte("packaged fusion provider command failure"),
+		ExitCode: 7,
+	}, errors.New("packaged fusion provider command failure")
 }
 
 func modelRequestsByWorker(
