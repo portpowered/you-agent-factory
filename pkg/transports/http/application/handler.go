@@ -72,21 +72,21 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 		return nil, fmt.Errorf("bind HTTP handler: Models service, invoker, content preparation, and logger are required")
 	}
 	mapped, err := handler.mappings.Bind(
-		opened.FactoryRuntime, opened.FactoryDefinitions, opened.FactorySessions,
+		opened.FactoryRuntime, opened.FactoryDefinitions, opened.FactorySessions, opened.LiveControl,
 	)
 	if err != nil {
 		return nil, err
 	}
 	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
-		SessionsRoot: opened.FactorySessions,
-		Runtime:      mapped.Runtime, FactoryStatus: mapped.FactoryStatus,
+		SessionsRoot: opened.FactorySessions, LiveControl: opened.LiveControl,
+		Runtime: mapped.Runtime, FactoryStatus: mapped.FactoryStatus,
 		Sessions: mapped.Sessions, SessionEvents: opened.FactorySessions,
 		Invocation: mapped.Invocation, FactoryDefinitions: mapped.FactoryDefinitions,
 		FactoryValidation: handler.validation, WorkflowPreview: opened.WorkflowPreview,
 		DurableExecution: mapped.Durable, DurableLifecycle: mapped.Durable,
 		DurableListing: mapped.Durable, DurableProjection: mapped.Durable,
 		DurableLister:      opened.FactorySessions,
-		LiveSessionLister:  factorysessionshttp.ReadProjectionSessionListReader{Reader: opened.FactorySessions},
+		LiveSessionLister:  factorysessionshttp.ReadProjectionSessionListReader{Reader: opened.LiveControl},
 		WorkerPrompts:      opened.WorkerPrompts,
 		InvocationWorkType: handler.invocationWorkType,
 		SessionRequests:    handler.sessionRequests,

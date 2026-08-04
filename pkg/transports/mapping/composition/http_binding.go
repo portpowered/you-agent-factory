@@ -45,8 +45,9 @@ func (binder *HTTPBinder) Bind(
 	runtime factoryruntime.Service,
 	definitions factorydefinitions.Service,
 	sessions factorysessions.Service,
+	liveControl factorysessions.LiveControlService,
 ) (HTTPBinding, error) {
-	if runtime == nil || definitions == nil || sessions == nil ||
+	if runtime == nil || definitions == nil || sessions == nil || liveControl == nil ||
 		binder == nil || binder.content == nil {
 		return HTTPBinding{}, fmt.Errorf("bind HTTP mappings: opened Factory Session roles are required")
 	}
@@ -58,7 +59,7 @@ func (binder *HTTPBinder) Bind(
 	return HTTPBinding{
 		Runtime:            NewRuntimeAPI(legacyObservation, definitions),
 		FactoryStatus:      newFactoryStatusAPI(runtime, sessions),
-		Sessions:           NewLiveSessionAPI(sessions),
+		Sessions:           NewLiveSessionAPI(liveControl, sessions),
 		Invocation:         NewInvocationAPI(rootInvocationAdapter{root: sessions}),
 		FactoryDefinitions: NewFactoryDefinitionAPI(definitions),
 		Durable:            durable,

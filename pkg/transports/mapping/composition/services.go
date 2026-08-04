@@ -20,9 +20,10 @@ func NewRuntimeAPI(
 }
 
 func NewLiveSessionAPI(
+	liveControl factorysessions.LiveControlService,
 	sessions factorysessions.Service,
 ) apisurface.LiveSessionAPI {
-	return factorysessionmapping.NewLiveAPI(sessions)
+	return factorysessionmapping.NewLiveAPI(liveControl, sessions)
 }
 
 func NewFactoryDefinitionAPI(service factorydefinitions.Service) apisurface.FactorySaveAPI {

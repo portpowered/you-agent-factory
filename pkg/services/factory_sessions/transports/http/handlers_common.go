@@ -271,7 +271,7 @@ func (s *Server) handleLiveLifecycleControl(
 		return
 	}
 
-	if s.sessionsRoot != nil {
+	if s.liveControl != nil {
 		s.invokeRootLiveLifecycleControl(w, r.Context(), sessionID, operation, control)
 		return
 	}

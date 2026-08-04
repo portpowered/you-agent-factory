@@ -269,6 +269,40 @@ func TestAssembleRuntimeProductsCarriesModelsRootAndScopeIntoOpenedRuntime(t *te
 	}
 }
 
+func TestAssembleRuntimeProductsExposesSameFactorySessionsInstanceAsLiveControl(t *testing.T) {
+	t.Parallel()
+
+	gateway := &runtimeProductsSessionsRole{}
+	opened := assembleRuntimeProducts(
+		nil,
+		gateway,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		modelsRuntimeBind{},
+		nil,
+		inertHostedInstance{},
+		nil,
+		nil,
+		nil,
+		nil,
+		"/factory",
+		"runtime-1",
+		"backend-1",
+		func() error { return nil },
+	)
+
+	if got := opened.application.HTTP.FactorySessions; got != gateway {
+		t.Fatalf("FactorySessions = %T, want original runtime gateway %T", got, gateway)
+	}
+	if got := opened.application.HTTP.LiveControl; got == nil || any(got) != any(gateway) {
+		t.Fatalf("LiveControl = %T, want the same runtime gateway %T", got, gateway)
+	}
+}
+
 func TestRuntimeOpeningCleanupClosesModelsScopeAfterLaterResourceOnFailure(t *testing.T) {
 	t.Parallel()
 
@@ -474,6 +508,10 @@ func openingCoordinatorAdaptCommandRunner(platformprocess.CommandRunner) workers
 }
 
 type openingCoordinatorSessionsRoot struct {
+	factorysessions.Service
+}
+
+type runtimeProductsSessionsRole struct {
 	factorysessions.Service
 }
 

@@ -146,10 +146,10 @@ func (s *Server) invokeRootLiveLifecycleControl(
 ) {
 	switch operation {
 	case "pause":
-		result, err := s.sessionsRoot.PauseLiveFactorySession(ctx, string(sessionID), control)
+		result, err := s.liveControl.PauseLiveFactorySession(ctx, string(sessionID), control)
 		s.finishRootLifecycleControl(w, string(sessionID), operation, result, err)
 	case "resume":
-		result, err := s.sessionsRoot.ResumeLiveFactorySession(ctx, string(sessionID), control)
+		result, err := s.liveControl.ResumeLiveFactorySession(ctx, string(sessionID), control)
 		s.finishRootLifecycleControl(w, string(sessionID), operation, result, err)
 	default:
 		s.writeError(w, http.StatusInternalServerError, "live factory session lifecycle control failed", "INTERNAL_ERROR")

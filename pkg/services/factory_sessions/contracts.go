@@ -116,13 +116,18 @@ type RuntimeHTTPServices struct {
 	FactoryDefinitions interfaces.Service
 	WorkflowPreview    factoryruntime.WorkflowPreviewOperation
 	FactorySessions    Service
-	Work               work.Service
-	Models             models.Service
-	ModelsScope        models.RuntimeScopeRef
-	Workers            workers.Service
-	ProviderSessions   providersessions.Service
-	WorkerPrompts      workers.PromptTemplates
-	Logger             *zap.Logger
+	// LiveControl is the same runtime-bound Factory Sessions authority as
+	// FactorySessions, narrowed for clients that only manage live sessions.
+	// The broad root remains available here for stream, reconnect, invocation,
+	// durable, and inspection consumers that need excluded operations.
+	LiveControl      LiveControlService
+	Work             work.Service
+	Models           models.Service
+	ModelsScope      models.RuntimeScopeRef
+	Workers          workers.Service
+	ProviderSessions providersessions.Service
+	WorkerPrompts    workers.PromptTemplates
+	Logger           *zap.Logger
 }
 
 // HistoricalReplayInspection is the detached public read model restored from

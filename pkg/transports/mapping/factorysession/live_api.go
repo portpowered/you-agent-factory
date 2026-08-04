@@ -8,7 +8,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -17,29 +16,33 @@ import (
 // LiveAPI maps generated live-session contracts onto the canonical Factory
 // Session application gateway and registry.
 type LiveAPI struct {
+	control factorysessions.LiveControlService
 	gateway LiveGateway
 }
 
 var _ apisurface.LiveSessionAPI = (*LiveAPI)(nil)
 
-// LiveGateway is the narrow domain boundary required by the live-session
-// transport mapper.
+// LiveGateway is the non-control live-session boundary retained by the
+// transport mapper for response streams, reconnect, and result inspection.
+// Live control itself is injected separately through the owner-published
+// factorysessions.LiveControlService capability.
 type LiveGateway interface {
-	OpenFactorySession(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error)
-	ListFactorySessions(context.Context) ([]factorysessions.ReadProjection, error)
-	GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
 	SubscribeFactoryResponseEvents(context.Context, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error)
 	GetFactorySessionSyncPreflight(context.Context, string, *interfaces.FactoryEventReconnectCursor, *interfaces.FactorySessionLogicalResolveHint) (factorysessions.SyncPreflightResult, error)
 	GetFactorySessionResult(context.Context, string) (workflowresult.LiveSessionResult, error)
 	GetFactorySessionPartialResult(context.Context, string) (workflowresult.PartialSessionResult, error)
-	PauseLiveFactorySession(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
-	ResumeLiveFactorySession(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
-	CloseFactorySession(context.Context, string) error
 }
 
 // NewLiveAPI constructs the transport-facing live Factory Session service.
-func NewLiveAPI(gateway LiveGateway) *LiveAPI {
-	return &LiveAPI{gateway: gateway}
+func NewLiveAPI(control factorysessions.LiveControlService, gateway LiveGateway) *LiveAPI {
+	return &LiveAPI{control: control, gateway: gateway}
+}
+
+func (a *LiveAPI) requireControl() (factorysessions.LiveControlService, error) {
+	if a == nil || a.control == nil {
+		return nil, fmt.Errorf("Factory Session live-control service is required")
+	}
+	return a.control, nil
 }
 
 func (a *LiveAPI) requireGateway() (LiveGateway, error) {
@@ -50,11 +53,11 @@ func (a *LiveAPI) requireGateway() (LiveGateway, error) {
 }
 
 func (a *LiveAPI) ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error) {
-	gateway, err := a.requireGateway()
+	control, err := a.requireControl()
 	if err != nil {
 		return factoryapi.ListFactorySessionsResponse{}, err
 	}
-	reads, err := gateway.ListFactorySessions(ctx)
+	reads, err := control.ListFactorySessions(ctx)
 	if err != nil {
 		return factoryapi.ListFactorySessionsResponse{}, err
 	}
@@ -62,11 +65,11 @@ func (a *LiveAPI) ListFactorySessions(ctx context.Context) (factoryapi.ListFacto
 }
 
 func (a *LiveAPI) GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error) {
-	gateway, err := a.requireGateway()
+	control, err := a.requireControl()
 	if err != nil {
 		return factoryapi.FactorySession{}, err
 	}
-	projection, err := gateway.GetFactorySession(ctx, sessionID)
+	projection, err := control.GetFactorySession(ctx, sessionID)
 	if err != nil {
 		return factoryapi.FactorySession{}, err
 	}
@@ -124,11 +127,11 @@ func (a *LiveAPI) GetFactorySessionPartialResult(ctx context.Context, sessionID 
 }
 
 func (a *LiveAPI) OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
-	gateway, err := a.requireGateway()
+	control, err := a.requireControl()
 	if err != nil {
 		return factoryapi.OpenFactorySessionResponse{}, err
 	}
-	result, err := gateway.OpenFactorySession(ctx, OpenRequestFromAPI(request))
+	result, err := control.OpenFactorySession(ctx, OpenRequestFromAPI(request))
 	if err != nil {
 		return factoryapi.OpenFactorySessionResponse{}, err
 	}
@@ -139,31 +142,31 @@ func (a *LiveAPI) OpenFactorySession(ctx context.Context, request factoryapi.Ope
 }
 
 func (a *LiveAPI) CloseFactorySession(ctx context.Context, sessionID string) error {
-	gateway, err := a.requireGateway()
+	control, err := a.requireControl()
 	if err != nil {
 		return err
 	}
-	return gateway.CloseFactorySession(ctx, sessionID)
+	return control.CloseFactorySession(ctx, sessionID)
 }
 
-func (a *LiveAPI) PauseLiveFactorySession(ctx context.Context, sessionID string, control factorysessionexecution.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	gateway, err := a.requireGateway()
+func (a *LiveAPI) PauseLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.LiveControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	control, err := a.requireControl()
 	if err != nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}
-	result, err := gateway.PauseLiveFactorySession(ctx, sessionID, control)
+	result, err := control.PauseLiveFactorySession(ctx, sessionID, request)
 	if err != nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}
 	return LifecycleControlResponseToAPI(result), nil
 }
 
-func (a *LiveAPI) ResumeLiveFactorySession(ctx context.Context, sessionID string, control factorysessionexecution.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	gateway, err := a.requireGateway()
+func (a *LiveAPI) ResumeLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.LiveControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	control, err := a.requireControl()
 	if err != nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}
-	result, err := gateway.ResumeLiveFactorySession(ctx, sessionID, control)
+	result, err := control.ResumeLiveFactorySession(ctx, sessionID, request)
 	if err != nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}

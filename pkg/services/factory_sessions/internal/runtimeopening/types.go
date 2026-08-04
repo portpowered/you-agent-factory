@@ -69,7 +69,8 @@ func assembleRuntimeProducts(
 	httpServices := roles.RuntimeHTTPServices{
 		FactoryRuntime: factoryRuntime, FactoryDefinitions: factoryDefinitions,
 		WorkflowPreview: workflowPreview,
-		FactorySessions: factorySessionGateway, Work: workService,
+		FactorySessions: factorySessionGateway, LiveControl: factorySessionGateway,
+		Work:   workService,
 		Models: modelsBind.Root, ModelsScope: modelsBind.Scope,
 		Workers: workerService, ProviderSessions: providerSessions,
 		WorkerPrompts: workerPrompts, Logger: resources.Logger,
