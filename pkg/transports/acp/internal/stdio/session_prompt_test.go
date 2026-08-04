@@ -855,7 +855,7 @@ func admittedTurnResult(id, target string, version uint64, workingRoot, turnID, 
 
 // TestHandleSessionPromptFirstTurnStartsFactorySessionWithExactTargetRootAndContent
 // proves the first admitted turn in an unbound episode calls
-// StartFactoryTarget exactly once through the consumer-owned shim, with the
+// StartAsync exactly once through the Factory Sessions-owned capability, with the
 // episode's canonical Factory target, the session's exact editor working
 // root, and the validated prompt content -- never a process cwd or
 // substituted value.
@@ -1024,6 +1024,59 @@ func TestHandleSessionPromptInvokeFactoryTargetFailureMakesNoStartCall(t *testin
 	}
 	if chatSessions.bindFactorySessionCalled {
 		t.Fatal("BindFactorySession was called, want no binding attempt for an already-bound episode")
+	}
+}
+
+// TestHandleSessionPromptInvokeMissingSessionFailureAdvancesTurnToFailed
+// proves a later turn's invoke against an unknown or evicted Factory
+// Session identity -- classified by the Factory Sessions-owned capability as
+// the existing factorysessions.ErrSessionNotFound sentinel, not a generic
+// dependency error -- still reports a bounded failure, still advances the
+// admitted turn to TurnStateFailed (not silently stranded, not
+// misclassified as canceled), and never falls back to starting a second
+// Factory Session for the episode. classifyDependencyFailure collapses every
+// non-context-cancellation dependency error to the same bounded internal
+// error at this transport boundary by design, so this intentionally does not
+// assert errors.Is on the RPC response itself -- see
+// ondemandtarget.Service's own tests for the sentinel's errors.Is-compatible
+// classification at the capability that actually produces it.
+func TestHandleSessionPromptInvokeMissingSessionFailureAdvancesTurnToFailed(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", "fs-evicted"),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{invokeErr: factorysessions.ErrSessionNotFound}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "a later message"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure for a missing-session Invoke failure")
+	}
+
+	if len(factoryTarget.invokeCalls) != 1 {
+		t.Fatalf("InvokeFactorySession call count = %d, want exactly 1", len(factoryTarget.invokeCalls))
+	}
+	if len(factoryTarget.startCalls) != 0 {
+		t.Fatalf("StartAsync call count = %d, want 0 after a missing-session Invoke failure", len(factoryTarget.startCalls))
+	}
+	if chatSessions.bindFactorySessionCalled {
+		t.Fatal("BindFactorySession was called, want no binding attempt for an already-bound episode")
+	}
+
+	var terminalAdvance *chatsessions.AdvanceTurnRequest
+	for i := range chatSessions.advanceTurnReqs {
+		if chatSessions.advanceTurnReqs[i].Next != chatsessions.TurnStateRunning {
+			terminalAdvance = &chatSessions.advanceTurnReqs[i]
+			break
+		}
+	}
+	if terminalAdvance == nil {
+		t.Fatal("no terminal AdvanceTurn call observed, want exactly one terminal transition after the missing-session failure")
+	}
+	if terminalAdvance.Next != chatsessions.TurnStateFailed {
+		t.Fatalf("terminal AdvanceTurn Next = %v, want TurnStateFailed for a non-cancellation dependency failure", terminalAdvance.Next)
 	}
 }
 

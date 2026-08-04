@@ -442,15 +442,16 @@ func factoryInvocationTurnState(status factorysessions.InvocationTerminalStatus)
 }
 
 // startFactorySessionForEpisode starts exactly one Factory Session through
-// the consumer-owned Factory Sessions shim for the given turn's newly
-// admitted (unbound) episode -- unless a prior attempt for this same episode
-// already started one and durably recorded it as pending (see below), in
-// which case it reuses that identity instead of starting a second one -- then
-// dispatches this turn's validated prompt content into it via
-// InvokeFactoryTarget (the exact same operation invokeFactorySessionForEpisode
-// uses for every later turn) and binds the identity onto the episode.
+// the Factory Sessions-owned target-execution capability for the given
+// turn's newly admitted (unbound) episode -- unless a prior attempt for this
+// same episode already started one and durably recorded it as pending (see
+// below), in which case it reuses that identity instead of starting a
+// second one -- then dispatches this turn's validated prompt content into
+// it via InvokeFactorySession (the exact same operation
+// invokeFactorySessionForEpisode uses for every later turn) and binds the
+// identity onto the episode.
 //
-// StartFactoryTarget itself only opens the runtime: the shared
+// StartAsync itself only opens the runtime: the shared
 // factorysessions.Service.StartAsync it forwards to has no dedicated
 // content field and, more fundamentally, its Source vocabulary only resolves
 // named JavaScript workflow factories, not an ordinary packaged Factory --
@@ -532,7 +533,7 @@ func (s *Server) startFactorySessionForEpisode(
 				"workingRoot": startResult.Session.WorkingRoot,
 			},
 		}
-		startOutcome, err := s.factoryTarget.StartFactoryTarget(ctx, startReq)
+		startOutcome, err := s.factoryTarget.StartAsync(ctx, startReq)
 		if err != nil {
 			return dispatchOutcome{}, err
 		}
@@ -554,7 +555,7 @@ func (s *Server) startFactorySessionForEpisode(
 
 	requestID := startResult.Turn.ID
 	sourceKind := factorysessions.InvocationInputSourceKindText
-	outcome, err := s.factoryTarget.InvokeFactoryTarget(ctx, factorySessionID, factorysessions.InvocationRequest{
+	outcome, err := s.factoryTarget.InvokeFactorySession(ctx, factorySessionID, factorysessions.InvocationRequest{
 		Content:         promptContentToWorkParts(turn.Content),
 		ContentProvided: true,
 		RequestID:       &requestID,
@@ -580,7 +581,7 @@ func (s *Server) startFactorySessionForEpisode(
 				Episode:         startResult.Episode.Number,
 				TurnID:          startResult.Turn.ID,
 			})
-			return dispatchOutcome{}, errors.Join(err, clearErr, s.factoryTarget.CloseFactoryTarget(ctx, factorySessionID))
+			return dispatchOutcome{}, errors.Join(err, clearErr, s.factoryTarget.CloseFactorySession(ctx, factorySessionID))
 		}
 		return dispatchOutcome{}, err
 	}
@@ -598,7 +599,7 @@ func (s *Server) startFactorySessionForEpisode(
 // never starts a second Factory Session for an already-bound episode -- an
 // unbound episode is startFactorySessionForEpisode's job, not this one's.
 // The returned outcome is protocol.MapFactoryInvocationOutcome's
-// deterministic, safe projection of the shim's own published
+// deterministic, safe projection of the capability's own published
 // InvocationResult -- its terminal status and only the "text" parts of its
 // primary result, never the raw result itself. Unlike the start branch, this
 // call is synchronous: on success the returned dispatchOutcome terminalizes
@@ -618,7 +619,7 @@ func (s *Server) invokeFactorySessionForEpisode(
 
 	requestID := startResult.Turn.ID
 	sourceKind := factorysessions.InvocationInputSourceKindText
-	invokeResult, err := s.factoryTarget.InvokeFactoryTarget(ctx, startResult.Episode.FactorySessionID, factorysessions.InvocationRequest{
+	invokeResult, err := s.factoryTarget.InvokeFactorySession(ctx, startResult.Episode.FactorySessionID, factorysessions.InvocationRequest{
 		Content:         promptContentToWorkParts(turn.Content),
 		ContentProvided: true,
 		RequestID:       &requestID,

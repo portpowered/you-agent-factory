@@ -59,14 +59,14 @@ var errNullInitializeParams = errors.New("acp: initialize params must not be nul
 // chatSessions and catalog are the canonical Chat Sessions collaborators
 // "session/new", "session/set_config_option", the "/factory" fallback
 // command, and ordinary prompt turn admission dispatch to; factoryTarget is
-// the consumer-owned Factory Sessions shim an admitted ordinary prompt turn
-// starts or invokes against; resolveHomeDir supplies the operator home
-// directory used to derive the Operator Settings document path and Factory
-// discovery roots for a catalog resolution. Any of the four may be nil, in
-// which case a dispatched method reports a bounded internal error instead of
-// proceeding -- so a Server constructed for a slice of this transport that
-// never exercises them (for example the "initialize"-only smoke tests in
-// this package) never has to supply them.
+// the Factory Sessions-owned target-execution capability an admitted
+// ordinary prompt turn starts or invokes against; resolveHomeDir supplies
+// the operator home directory used to derive the Operator Settings document
+// path and Factory discovery roots for a catalog resolution. Any of the
+// four may be nil, in which case a dispatched method reports a bounded
+// internal error instead of proceeding -- so a Server constructed for a
+// slice of this transport that never exercises them (for example the
+// "initialize"-only smoke tests in this package) never has to supply them.
 //
 // A Server instance holds no reconciliation state of its own for a started-
 // but-not-yet-bound Factory Session: that record lives on the episode itself

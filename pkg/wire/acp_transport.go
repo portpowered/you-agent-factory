@@ -8,7 +8,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
-	chatsessionswire "github.com/portpowered/infinite-you/pkg/services/chat_sessions/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -207,28 +206,26 @@ func provideACPServerFactoryTarget(
 	)
 }
 
-// provideACPServerFactoryTargetService wraps the on-demand Factory Sessions
-// activation singleton through the existing, consumer-owned Factory Sessions
-// shim (chat_sessions/wire.NewFactoryTargetService, a thin construction
-// wrapper over chat_sessions/internal/factorysessionsshim.New) rather than
-// exposing the activation singleton's own methods directly -- so the
-// production ACP prompt-delegation consumer's every Factory Session call
-// actually flows through that existing shim, not a second, independently
-// constructed peer contract. Wire's own provider memoization guarantees this
-// still shares the exact same activation singleton
-// provideApplicationProcessLifecycle reaches for shutdown (see
-// provideACPServerFactoryTarget), since both depend on the identical
-// *factorysessionwire.OnDemandFactoryTargetService type.
+// provideACPServerFactoryTargetService exposes the on-demand Factory
+// Sessions activation singleton's own start/invoke/cancel/close methods
+// directly as the production ACP prompt-delegation consumer's Factory
+// Sessions dependency -- no adapter changes contexts, identifiers, requests,
+// results, or errors. Wire's own provider memoization guarantees this shares
+// the exact same activation singleton provideApplicationProcessLifecycle
+// reaches for shutdown (see provideACPServerFactoryTarget), since both
+// depend on the identical *factorysessionwire.OnDemandFactoryTargetService
+// type.
 //
 // pkg-boundary forbids pkg/transports/acp from importing another service's
 // wire subpackage, so it declares its own narrow acp.FactoryTargetService
 // interface (an exact structural match for
-// chatsessionswire.FactoryTargetService); only pkg/wire, exempt from that
-// rule, may compose the two.
+// factorysessionwire.TargetExecutionService, the Factory Sessions-owned
+// target-execution capability); only pkg/wire, exempt from that rule, may
+// compose the two.
 func provideACPServerFactoryTargetService(
 	target *factorysessionwire.OnDemandFactoryTargetService,
 ) acp.FactoryTargetService {
-	return chatsessionswire.NewFactoryTargetService(target)
+	return target
 }
 
 // provideACPServer constructs the production ACP stdio Server from the same

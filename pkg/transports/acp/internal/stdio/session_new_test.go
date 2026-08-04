@@ -307,7 +307,7 @@ type invokeFactoryTargetCall struct {
 	request   factorysessions.InvocationRequest
 }
 
-func (f *fakeFactoryTargetService) StartFactoryTarget(
+func (f *fakeFactoryTargetService) StartAsync(
 	_ context.Context,
 	request factorysessions.StartRequest,
 ) (factorysessions.AsyncStartResult, error) {
@@ -320,7 +320,7 @@ func (f *fakeFactoryTargetService) StartFactoryTarget(
 	return f.startResult, nil
 }
 
-func (f *fakeFactoryTargetService) InvokeFactoryTarget(
+func (f *fakeFactoryTargetService) InvokeFactorySession(
 	_ context.Context,
 	sessionID string,
 	request factorysessions.InvocationRequest,
@@ -342,7 +342,7 @@ func (f *fakeFactoryTargetService) InvokeFactoryTarget(
 	return f.invokeResult, nil
 }
 
-func (f *fakeFactoryTargetService) CloseFactoryTarget(_ context.Context, sessionID string) error {
+func (f *fakeFactoryTargetService) CloseFactorySession(_ context.Context, sessionID string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.closeCalls = append(f.closeCalls, sessionID)

@@ -20,9 +20,9 @@ import (
 // binding, session creation, or persistence.
 //
 // chatSessions and catalog are the canonical Chat Sessions collaborators
-// "session/new" dispatches to, factoryTarget is the consumer-owned Factory
-// Sessions shim ordinary prompt delegation starts or invokes against, and
-// resolveHomeDir resolves the operator home directory that call uses to
+// "session/new" dispatches to, factoryTarget is the Factory Sessions-owned
+// target-execution capability ordinary prompt delegation starts or invokes
+// against, and resolveHomeDir resolves the operator home directory that call uses to
 // derive the Operator Settings document path and Factory discovery roots.
 // This package injects exactly the instances its caller supplies; it never
 // resolves them itself.
