@@ -2,15 +2,19 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // countingWorkerSessionsService wraps a worker_sessions.Service and counts
@@ -272,6 +276,248 @@ func TestFactoryImpl_ConcurrentAcceptDispatchResultResolvesExactlyOnce(t *testin
 		t.Fatalf("Run: %v", err)
 	}
 	assertCanonicalResultProgression(t, runtime, ledger)
+}
+
+// TestFactoryImpl_WorkerSessionCompletionRacesExplicitAcceptanceAndCanonicalReplay
+// holds a Worker Session terminal callback and an explicit Runtime-root result
+// acceptance behind one channel barrier. The contenders are released together,
+// then the resulting canonical history is serialized and reloaded into a new
+// Recordings ledger and projection. This proves the W4 cutover has one terminal
+// effect even when the callback and an explicit delivery contend concurrently,
+// and that the retained canonical facts—not the live Runtime object—are enough
+// to preserve its identity and Work lineage after replay.
+func TestFactoryImpl_WorkerSessionCompletionRacesExplicitAcceptanceAndCanonicalReplay(t *testing.T) {
+	recordedAt := time.Date(2026, time.August, 4, 15, 0, 0, 0, time.UTC)
+	liveLedger := recordingswire.NewRuntimeLedger(
+		nil,
+		func() time.Time { return recordedAt },
+		"w4-terminal-race-live",
+		nil,
+	)
+	boundary := newControlledWorkstationBoundary()
+	runtime, err := newTestFactory(
+		withNet(buildSimpleNet()),
+		withWorkerService(boundary),
+		withWorkerExecutor("mock", &passExecutor{}),
+		withFactoryEventHistory(liveLedger),
+		withLogger(logging.NoopLogger{}),
+	)
+	requireNoRootErr(t, err, "New")
+	impl := runtime.(*factoryImpl)
+	const workID = "work-terminal-race"
+	if _, err := submitWorkRequests(t.Context(), runtime, []work.SubmitRequest{{
+		WorkID: workID, WorkTypeID: "task", TraceID: "trace-terminal-race",
+	}}); err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+
+	runDone := make(chan error, 1)
+	go func() { runDone <- runtime.Run(t.Context()) }()
+	request := awaitCanonicalWorkersRequest(t, boundary.requests)
+	terminal := factory.AcceptDispatchResultRequest{
+		DispatchID:    request.Execution.Dispatch.DispatchID,
+		CorrelationID: request.Execution.Dispatch.DispatchID,
+		WorkID:        workID,
+		ResultOutcome: factory.DispatchResultOutcomeSuccess,
+	}
+
+	// Neither completion path starts until both goroutines are waiting on the
+	// same barrier. The boundary send unblocks the actual Worker Sessions
+	// callback path; the other contender is the public Runtime operation.
+	release := make(chan struct{})
+	callbackDelivered := make(chan struct{})
+	explicitDelivered := make(chan struct {
+		result factory.AcceptDispatchResultResult
+		err    error
+	}, 1)
+	go func() {
+		<-release
+		boundary.results <- completedWorkersResult(request)
+		close(callbackDelivered)
+	}()
+	go func() {
+		<-release
+		result, acceptErr := impl.AcceptDispatchResult(t.Context(), terminal)
+		explicitDelivered <- struct {
+			result factory.AcceptDispatchResultResult
+			err    error
+		}{result: result, err: acceptErr}
+	}()
+	close(release)
+
+	explicit := <-explicitDelivered
+	requireNoRootErr(t, explicit.err, "AcceptDispatchResult(racing)")
+	if explicit.result.Outcome != factory.DispatchPlanOutcomeRetired &&
+		explicit.result.Outcome != factory.DispatchPlanOutcomeDuplicateIdempotent {
+		t.Fatalf("racing AcceptDispatchResult outcome = %q, want RETIRED or DUPLICATE_IDEMPOTENT", explicit.result.Outcome)
+	}
+	<-callbackDelivered
+	if err := <-runDone; err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	assertTerminalRaceLiveState(t, runtime, liveLedger, request, terminal)
+	replayed := reloadCanonicalRuntimeLedger(t, liveLedger.CanonicalEvents(), recordedAt)
+	assertTerminalRaceReplayState(t, replayed, request, terminal)
+
+	duplicate, err := impl.AcceptDispatchResult(t.Context(), terminal)
+	requireNoRootErr(t, err, "AcceptDispatchResult(after replay)")
+	if duplicate.Outcome != factory.DispatchPlanOutcomeDuplicateIdempotent {
+		t.Fatalf("terminal redelivery outcome = %q, want DUPLICATE_IDEMPOTENT", duplicate.Outcome)
+	}
+	assertTerminalRaceLiveState(t, runtime, liveLedger, request, terminal)
+}
+
+func assertTerminalRaceLiveState(
+	t *testing.T,
+	runtime factory.Factory,
+	ledger interface {
+		CanonicalEvents() []interfaces.FactoryEvent
+	},
+	request workers.WorkstationDispatchRequest,
+	terminal factory.AcceptDispatchResultRequest,
+) {
+	t.Helper()
+	impl := runtime.(*factoryImpl)
+	intent, ok := impl.dispatchPlan.Intent(request.Execution.Dispatch.DispatchID)
+	if !ok || intent.Result == nil {
+		t.Fatalf("terminal dispatch intent = (%#v, %t), want one accepted result", intent, ok)
+	}
+	if intent.Action.CorrelationID != terminal.CorrelationID ||
+		intent.Result.CorrelationID != terminal.CorrelationID ||
+		intent.Result.WorkID != terminal.WorkID {
+		t.Fatalf("terminal intent = %#v, want preserved correlation %q and Work lineage %q", intent, terminal.CorrelationID, terminal.WorkID)
+	}
+	if intent.Result.Outcome != "SUCCESS" {
+		t.Fatalf("terminal outcome = %q, want SUCCESS", intent.Result.Outcome)
+	}
+
+	snapshot, err := runtime.GetEngineStateSnapshot(t.Context())
+	requireNoRootErr(t, err, "GetEngineStateSnapshot")
+	if count := countTokensAtPlace(snapshot, "task:done"); count != 1 {
+		t.Fatalf("materialized task:done token count = %d, want exactly 1", count)
+	}
+	observed, err := impl.Observe(t.Context(), factory.ObserveRequest{Scope: factory.ObservationScopeFull})
+	requireNoRootErr(t, err, "Observe")
+	if len(observed.Observation.Results) != 1 ||
+		observed.Observation.Results[0].WorkID != terminal.WorkID ||
+		observed.Observation.Results[0].Outcome != "ACCEPTED" {
+		t.Fatalf("terminal Runtime observation = %#v, want one accepted result for %q", observed.Observation, terminal.WorkID)
+	}
+	assertTerminalRaceCanonicalFacts(t, ledger.CanonicalEvents(), request, terminal)
+}
+
+func reloadCanonicalRuntimeLedger(
+	t *testing.T,
+	events []interfaces.FactoryEvent,
+	recordedAt time.Time,
+) interface {
+	CanonicalEvents() []interfaces.FactoryEvent
+} {
+	t.Helper()
+
+	// The JSON round trip is the persistence boundary: replay is loaded from
+	// detached canonical event data, never by retaining or rereading the live
+	// ledger's in-memory events.
+	persisted, err := json.Marshal(events)
+	requireNoRootErr(t, err, "persist canonical events")
+	var loaded []interfaces.FactoryEvent
+	requireNoRootErr(t, json.Unmarshal(persisted, &loaded), "load canonical events")
+
+	replayLedger := recordingswire.NewRuntimeLedger(
+		nil,
+		func() time.Time { return recordedAt.Add(time.Second) },
+		"w4-terminal-race-replay",
+		nil,
+	)
+	for _, event := range loaded {
+		replayLedger.AppendRecordedEvent(event)
+	}
+	if _, err := recordingswire.NewProjectionService().ReconstructFactoryWorldState(
+		replayLedger.CanonicalEvents(),
+		maxCanonicalTick(replayLedger.CanonicalEvents()),
+	); err != nil {
+		t.Fatalf("reconstruct fresh canonical replay projection: %v", err)
+	}
+	return replayLedger
+}
+
+func assertTerminalRaceReplayState(
+	t *testing.T,
+	ledger interface {
+		CanonicalEvents() []interfaces.FactoryEvent
+	},
+	request workers.WorkstationDispatchRequest,
+	terminal factory.AcceptDispatchResultRequest,
+) {
+	t.Helper()
+	assertTerminalRaceCanonicalFacts(t, ledger.CanonicalEvents(), request, terminal)
+}
+
+func assertTerminalRaceCanonicalFacts(
+	t *testing.T,
+	events []interfaces.FactoryEvent,
+	request workers.WorkstationDispatchRequest,
+	terminal factory.AcceptDispatchResultRequest,
+) {
+	t.Helper()
+
+	associationCount := 0
+	responseCount := 0
+	for _, event := range events {
+		if event.Context.DispatchID == nil || *event.Context.DispatchID != terminal.DispatchID {
+			continue
+		}
+		switch event.Type {
+		case interfaces.FactoryEventTypeDispatchWorkerSessionAssoc:
+			associationCount++
+			var payload interfaces.DispatchWorkerSessionAssociationEventPayload
+			requireNoRootErr(t, event.DecodePayload(&payload), "decode Worker Session association")
+			if payload.WorkerSessionID != terminal.DispatchID {
+				t.Fatalf("replayed Worker Session ID = %q, want %q", payload.WorkerSessionID, terminal.DispatchID)
+			}
+		case interfaces.FactoryEventTypeDispatchResponse:
+			responseCount++
+			var payload workers.DispatchResponseEventPayload
+			requireNoRootErr(t, event.DecodePayload(&payload), "decode terminal dispatch response")
+			if payload.Outcome != workers.OutcomeAccepted {
+				t.Fatalf("replayed terminal response outcome = %q, want ACCEPTED", payload.Outcome)
+			}
+			if !containsCanonicalWorkID(event.Context.WorkIDs, terminal.WorkID) {
+				t.Fatalf("replayed terminal Work lineage = %#v, want %q", event.Context.WorkIDs, terminal.WorkID)
+			}
+		}
+	}
+	if associationCount != 1 || responseCount != 1 {
+		t.Fatalf(
+			"canonical race facts = associations:%d responses:%d, want exactly one each for dispatch %q",
+			associationCount,
+			responseCount,
+			request.Execution.Dispatch.DispatchID,
+		)
+	}
+}
+
+func containsCanonicalWorkID(workIDs *[]string, want string) bool {
+	if workIDs == nil {
+		return false
+	}
+	for _, workID := range *workIDs {
+		if workID == want {
+			return true
+		}
+	}
+	return false
+}
+
+func maxCanonicalTick(events []interfaces.FactoryEvent) int {
+	maxTick := 0
+	for _, event := range events {
+		if event.Context.Tick > maxTick {
+			maxTick = event.Context.Tick
+		}
+	}
+	return maxTick
 }
 
 // TestFactoryImpl_UnknownCallbackIdentityRejectedWithoutMutatingKnownDispatch
