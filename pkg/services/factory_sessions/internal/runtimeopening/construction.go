@@ -2,6 +2,7 @@ package runtimeopening
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -254,6 +255,21 @@ func NewDurableExecution(
 	}, nil
 }
 
+// NewWorkerExecution constructs the Factory Session's own Workers runtime and
+// returns a SessionBuildFactory closure that reaches the same canonical
+// Workers wire construction boundary for every later Factory Session build,
+// with only the final per-build provider command runner, script command
+// runner, and progress publisher supplied explicitly. A nil argument to the
+// returned SessionBuildFactory preserves the resolved value used to
+// construct this Factory Session's own runtime -- the exact instance
+// resolved here, not read back off an already-built RuntimeService. Each
+// runtime the SessionBuildFactory constructs is independent and is reported
+// through registerSessionBuildRuntime so its caller can fold its lifecycle
+// into the Factory Session's own cleanup. registerSessionBuildRuntime reports
+// whether it accepted the registration; when it returns false (the Factory
+// Session's cleanup has already run), the SessionBuildFactory closes the
+// freshly constructed runtime itself instead of returning one nothing will
+// ever close.
 func NewWorkerExecution(
 	runtimeRequest factoryruntime.RuntimeOpeningRequest,
 	workerRequest workers.RuntimeOpeningRequest,
@@ -270,18 +286,21 @@ func NewWorkerExecution(
 	workService work.Service,
 	factory WorkersRuntimeFactory,
 	acpIntegrations []operatorconfig.ACPIntegration,
-) (workers.RuntimeService, error) {
+	registerSessionBuildRuntime func(workers.RuntimeService) bool,
+) (workers.RuntimeService, workers.SessionBuildFactory, error) {
 	if factory == nil {
-		return nil, fmt.Errorf("Workers runtime factory is required")
+		return nil, nil, fmt.Errorf("Workers runtime factory is required")
 	}
 	if clock == nil {
-		return nil, fmt.Errorf("Factory Runtime clock is required")
+		return nil, nil, fmt.Errorf("Factory Runtime clock is required")
 	}
 	if workService == nil {
-		return nil, fmt.Errorf("Work service is required")
+		return nil, nil, fmt.Errorf("Work service is required")
 	}
 	now := clock.Now
-	return factory(
+	frozenACPIntegrations := append([]operatorconfig.ACPIntegration(nil), acpIntegrations...)
+	contentMaterializer := work.ContentMaterializeFunc(workService.MaterializeContentURL)
+	base, err := factory(
 		state,
 		modelService,
 		modelsScope,
@@ -296,9 +315,60 @@ func NewWorkerExecution(
 		workerRequest.InvocationSkipPermissionsOverride,
 		providerOverride,
 		now,
-		work.ContentMaterializeFunc(workService.MaterializeContentURL),
-		append([]operatorconfig.ACPIntegration(nil), acpIntegrations...),
+		contentMaterializer,
+		frozenACPIntegrations,
 	)
+	if err != nil {
+		return nil, nil, err
+	}
+	sessionBuildFactory := workers.SessionBuildFactory(func(
+		buildProviderCommandRunner workers.CommandRunner,
+		buildScriptCommandRunner workers.CommandRunner,
+		buildProgressPublisher workers.ProgressPublisher,
+	) (workers.RuntimeService, error) {
+		resolvedProviderCommandRunner := buildProviderCommandRunner
+		if resolvedProviderCommandRunner == nil {
+			resolvedProviderCommandRunner = providerCommandRunner
+		}
+		resolvedScriptCommandRunner := buildScriptCommandRunner
+		if resolvedScriptCommandRunner == nil {
+			resolvedScriptCommandRunner = scriptCommandRunner
+		}
+		resolvedProgressPublisher := buildProgressPublisher
+		if resolvedProgressPublisher == nil {
+			resolvedProgressPublisher = progressPublisher
+		}
+		built, err := factory(
+			state,
+			modelService,
+			modelsScope,
+			resolvedProviderCommandRunner,
+			resolvedScriptCommandRunner,
+			resolvedProgressPublisher,
+			ptyAllocator,
+			logger,
+			runtimeRequest.Verbose,
+			workerRequest.RunnerID,
+			workerRequest.Worktree,
+			workerRequest.InvocationSkipPermissionsOverride,
+			providerOverride,
+			now,
+			contentMaterializer,
+			frozenACPIntegrations,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if registerSessionBuildRuntime != nil && !registerSessionBuildRuntime(built) {
+			closeErr := built.Close(context.Background())
+			return nil, errors.Join(
+				fmt.Errorf("construct Worker runtime services: Factory Session is already closed"),
+				closeErr,
+			)
+		}
+		return built, nil
+	})
+	return base, sessionBuildFactory, nil
 }
 
 func resolveDefinitionPath(
