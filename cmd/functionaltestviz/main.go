@@ -14,6 +14,7 @@ type config struct {
 	repositoryRoot      string
 	functionalRoot      string
 	coverageSummaryPath string
+	timingSummaryPath   string
 	outputPath          string
 }
 
@@ -30,6 +31,7 @@ func parseConfig() config {
 	flag.StringVar(&cfg.repositoryRoot, "root", ".", "repository root used to resolve golden manifests and default paths")
 	flag.StringVar(&cfg.functionalRoot, "functional-root", "", "functional test tree to inventory (default: <root>/tests/functional)")
 	flag.StringVar(&cfg.coverageSummaryPath, "coverage-summary", "", "path to gocoveragecheck coverage-summary JSON (required)")
+	flag.StringVar(&cfg.timingSummaryPath, "timing-summary", "", "path to gocoveragecheck functional-timing-summary JSON (required)")
 	flag.StringVar(&cfg.outputPath, "output", "", "Markdown output path (default: <root>/.artifacts/functional-test-viz/functional-tests.md)")
 	flag.Parse()
 	return cfg
@@ -40,6 +42,7 @@ func run(cfg config, stdout, stderr io.Writer) error {
 		RepositoryRoot:      cfg.repositoryRoot,
 		FunctionalRoot:      cfg.functionalRoot,
 		CoverageSummaryPath: cfg.coverageSummaryPath,
+		TimingSummaryPath:   cfg.timingSummaryPath,
 		OutputPath:          cfg.outputPath,
 	}
 	if err := functionaltestviz.Generate(generateCfg); err != nil {

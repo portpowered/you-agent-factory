@@ -119,8 +119,8 @@ func testRuntimeOpeningRequestFactory(
 		Recordings: recordings.RuntimeOpeningRequest{
 			RecordPath: cfg.RecordPath, ReplayPath: cfg.ReplayPath, WorkflowID: cfg.Workflow,
 		},
-		Models:           models.RuntimeOpeningRequest{CacheDirectory: cfg.ModelCacheDir},
-		OperatorDefaults: cfg.OperatorDefaults,
+		ModelCacheDirectory: cfg.ModelCacheDir,
+		OperatorDefaults:    cfg.OperatorDefaults,
 	}, Ports: factorysessions.ApplicationOpeningPorts{
 		InvocationMetricsRecorder: cfg.InvocationMetricsRecorder,
 		RuntimeHostObserver:       observer,
@@ -155,7 +155,7 @@ func flattenTestRuntimeRequest(request *factorysessions.RuntimeOpeningRequest) *
 		InvocationSkipPermissionsOverride:       request.Workers.InvocationSkipPermissionsOverride,
 		RecordFlushInterval:                     request.Recordings.FlushInterval,
 		SkipBuiltInRunnerPrerequisiteValidation: request.Workers.SkipBuiltInPrerequisiteValidation,
-		ModelCacheDir:                           request.Models.CacheDirectory,
+		ModelCacheDir:                           request.ModelCacheDirectory,
 	}
 }
 

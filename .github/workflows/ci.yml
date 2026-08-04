@@ -206,7 +206,27 @@ jobs:
         run: make test-unit-coverage
       - name: Run backend functional coverage and visualization
         if: needs.classify.outputs.run_backend == 'true' && matrix.suite == 'functional'
-        run: make functional-test-viz
+        run: bash scripts/ci/run-functional-test-viz.sh
+        env:
+          FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
+      - name: Publish functional test job summary
+        if: always() && needs.classify.outputs.run_backend == 'true' && matrix.suite == 'functional'
+        run: bash scripts/ci/publish-functional-test-summary.sh
+        env:
+          FUNCTIONAL_TEST_VIZ_MARKDOWN: .artifacts/functional-test-viz/functional-tests.md
+      - name: Upload functional test diagnostics
+        if: always() && needs.classify.outputs.run_backend == 'true' && matrix.suite == 'functional'
+        uses: actions/upload-artifact@v4
+        with:
+          name: functional-test-diagnostics
+          path: |
+            .artifacts/functional-test-viz/functional-tests.md
+            .artifacts/functional-test-viz/functional-timing-summary.json
+            .artifacts/functional-test-viz/coverage-summary.json
+            .artifacts/functional-test-viz/coverage.out
+            .artifacts/functional-test-viz/command.log
+          if-no-files-found: ignore
+          retention-days: 14
 
   ui-backend-integration:
     name: UI Backend Integration

@@ -77,18 +77,21 @@ invocation returns actionable outcomes derived from the managed contract through
 `apisurface.InvocationErrorFromManagedRuntime`. When a runtime is `READY`,
 packaged and authored factories invoke through the same managed runtime layer.
 
-Production composition constructs the root `models.Service` through
-`pkg/services/models/wire` and injects that service directly into Factory Sessions.
-Opening a Factory Session passes Models-owned runtime data to `Service.ForRuntime`;
-it does not receive or invoke a separate Models runtime opener or construct the
-Models dependency itself. The runtime view is bound from model-scoped dependencies:
-the dynamic active-runtime configuration reader,
-the process model host, asset puller, logger, clock, pull-metrics recorder,
-direct-invocation executor builder, and factory runner identity. Stable
-collaborators are supplied as direct values; only runtime configuration remains
-a callback because activating another factory changes it after construction.
-The model service does not receive `FactoryService`, `runtimehost.Host`, or an
-adapter around either coordinator.
+Production composition constructs one process-scoped root `models.Service` through
+`pkg/services/models/wire` and injects that singular service directly into Factory
+Sessions. Opening a Factory Session calls `Service.OpenRuntimeScope` with a detached
+`RuntimeScopeConfig` -- the selected model cache directory plus the current Models
+runtime configuration -- and receives back only an opaque `RuntimeScopeRef`; it does
+not receive or construct another Models service, host, runtime, puller, limiter,
+process, or storage handle. Factory Session shutdown, or a later opening failure,
+closes that scope exactly once through `Service.CloseRuntimeScope`. The runtime view
+the opened scope observes is bound from model-scoped dependencies: the dynamic
+active-runtime configuration reader, the process model host, asset puller, logger,
+clock, pull-metrics recorder, direct-invocation executor builder, and factory runner
+identity. Stable collaborators are supplied as direct values; only runtime
+configuration remains a callback because activating another factory changes it after
+construction. The model service does not receive `FactoryService`, `runtimehost.Host`,
+or an adapter around either coordinator.
 
 ## Pull or Install Lifecycle
 

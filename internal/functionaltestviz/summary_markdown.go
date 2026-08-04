@@ -22,6 +22,8 @@ func RenderCatalogMarkdown(inputs CatalogInputs) (string, error) {
 	b.WriteString(RenderDebtMarkdown(BuildDebtReport(inputs.Records)))
 	b.WriteString("\n")
 	b.WriteString(RenderPackageCoverageMarkdown(inputs.Coverage))
+	b.WriteString("\n")
+	b.WriteString(RenderFunctionalTimingMarkdown(inputs.Timing))
 	return b.String(), nil
 }
 
