@@ -2592,6 +2592,10 @@ func assertCancelledPromptResponse(t *testing.T, out *bytes.Buffer) {
 type controlRecordingChatSessions struct {
 	chatsessions.Service
 
+	requestEntered chan struct{}
+	requestRelease <-chan struct{}
+	requestOnce    sync.Once
+
 	commitEntered chan struct{}
 	commitRelease <-chan struct{}
 	commitOnce    sync.Once
@@ -2605,6 +2609,12 @@ func (s *controlRecordingChatSessions) RequestControl(
 	ctx context.Context,
 	req chatsessions.RequestControlRequest,
 ) (chatsessions.RequestControlResult, error) {
+	if s.requestEntered != nil {
+		s.requestOnce.Do(func() { close(s.requestEntered) })
+		if s.requestRelease != nil {
+			<-s.requestRelease
+		}
+	}
 	result, err := s.Service.RequestControl(ctx, req)
 	if err == nil {
 		s.mu.Lock()
@@ -3113,6 +3123,55 @@ func TestServeSessionCancelBlankSessionIDIsNoOp(t *testing.T) {
 	}
 	if len(factoryTarget.cancelCalls) != 0 {
 		t.Fatalf("Cancel call count = %d, want 0 for a blank sessionId", len(factoryTarget.cancelCalls))
+	}
+}
+
+// TestHandleSessionCancelDependencyFailureLeavesTurnRunningAndRetryable
+// proves a Factory Sessions failure neither fabricates a cancelled turn nor
+// resolves the captured intent. Retrying the same notification identity can
+// later complete the original control without reaching another target.
+func TestHandleSessionCancelDependencyFailureLeavesTurnRunningAndRetryable(t *testing.T) {
+	base, session, turn := newActiveBoundControlSession(t, "fs-cancel-failure")
+	chatSessions := &controlRecordingChatSessions{Service: base}
+	factoryTarget := &fakeFactoryTargetService{cancelErr: errors.New("provider secret at /unsafe/path")}
+	server := New(nil, chatSessions, nil, factoryTarget, nil)
+	env := cancelNotificationEnvelope(t, "cancel-failure-1", session.ID)
+
+	server.handleSessionCancel(context.Background(), env)
+	current, err := base.GetSession(context.Background(), chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession after failed cancel: %v", err)
+	}
+	if current.Session.ActiveTurnID != turn.ID {
+		t.Fatalf("failed cancel cleared active turn: got %q, want %q", current.Session.ActiveTurnID, turn.ID)
+	}
+	_, err = base.StartTurn(context.Background(), chatsessions.StartTurnRequest{
+		RequestID:       chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCNumber, ConnectionID: "cancel-failure", JSONRPCNumberID: "2"},
+		SessionID:       session.ID,
+		ExpectedVersion: current.Session.Version,
+	})
+	var busyErr *chatsessions.BusyError
+	if !errors.As(err, &busyErr) || busyErr.ActiveTurnID != turn.ID || busyErr.ActiveTurnState != chatsessions.TurnStateRunning {
+		t.Fatalf("StartTurn after failed cancel error = %v, want running captured turn to remain active", err)
+	}
+	_, advances := chatSessions.snapshotControls()
+	if len(advances) != 1 || advances[0].Intent.State != chatsessions.ControlIntentStateCommitted {
+		t.Fatalf("control advances = %#v, want only COMMITTED after failed Factory cancel", advances)
+	}
+
+	factoryTarget.mu.Lock()
+	factoryTarget.cancelErr = nil
+	factoryTarget.mu.Unlock()
+	server.handleSessionCancel(context.Background(), env)
+	factoryTarget.mu.Lock()
+	cancelCalls := append([]cancelFactoryTargetCall(nil), factoryTarget.cancelCalls...)
+	factoryTarget.mu.Unlock()
+	if len(cancelCalls) != 2 || cancelCalls[0].sessionID != "fs-cancel-failure" || cancelCalls[1].sessionID != "fs-cancel-failure" {
+		t.Fatalf("Cancel calls = %#v, want retry of only the captured target", cancelCalls)
+	}
+	_, advances = chatSessions.snapshotControls()
+	if len(advances) != 2 || advances[1].Intent.State != chatsessions.ControlIntentStateCompleted {
+		t.Fatalf("control advances = %#v, want COMMITTED then COMPLETED after retry", advances)
 	}
 }
 

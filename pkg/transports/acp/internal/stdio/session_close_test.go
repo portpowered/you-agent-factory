@@ -3,6 +3,8 @@ package stdio
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 
 	acpsdk "github.com/coder/acp-go-sdk"
@@ -154,6 +156,248 @@ func TestHandleSessionCloseIsIdempotentAndRejectsPostClosePrompt(t *testing.T) {
 	if len(factoryTarget.startCalls) != startCount || len(factoryTarget.invokeCalls) != invokeCount {
 		t.Fatalf("post-close prompt reached Factory Sessions: StartAsync=%d Invoke=%d, want unchanged %d/%d",
 			len(factoryTarget.startCalls), len(factoryTarget.invokeCalls), startCount, invokeCount)
+	}
+}
+
+// TestHandleSessionCloseRejectsInvalidInputsWithoutFactoryEffects proves the
+// request boundary rejects malformed or unavailable close targets before it
+// can request a control intent or reach Factory Sessions.
+func TestHandleSessionCloseRejectsInvalidInputsWithoutFactoryEffects(t *testing.T) {
+	tests := []struct {
+		name         string
+		env          envelope.Envelope
+		chatSessions *fakeChatSessionsService
+		factory      factorysessions.TargetExecutionService
+		wantCode     int
+		wantGet      bool
+		wantControls int
+	}{
+		{
+			name:         "malformed params",
+			env:          numberIdentityEnvelope(t, "close-invalid", 51, acpsdk.AgentMethodSessionClose, `{"sessionId":`),
+			chatSessions: &fakeChatSessionsService{},
+			factory:      &fakeFactoryTargetService{},
+			wantCode:     -32602,
+		},
+		{
+			name:         "blank session id",
+			env:          closeRequestEnvelope(t, 52, ""),
+			chatSessions: &fakeChatSessionsService{},
+			factory:      &fakeFactoryTargetService{},
+			wantCode:     -32602,
+		},
+		{
+			name: "unknown session",
+			env:  closeRequestEnvelope(t, 53, "session-not-found"),
+			chatSessions: &fakeChatSessionsService{
+				getSessionErr: &chatsessions.NotFoundError{Value: "Session", ID: "session-not-found"},
+			},
+			factory:  &fakeFactoryTargetService{},
+			wantCode: -32602,
+			wantGet:  true,
+		},
+		{
+			name: "unbound target episode",
+			env:  closeRequestEnvelope(t, 54, "session-unbound"),
+			chatSessions: &fakeChatSessionsService{getSessionResult: chatsessions.GetSessionResult{
+				Session: chatsessions.Session{ID: "session-unbound", State: chatsessions.SessionStateActive, Version: 3, ActiveTurnID: "turn-unbound"},
+				Episode: chatsessions.TargetEpisode{
+					Number: 1, State: chatsessions.TargetEpisodeStateOpen,
+					Target: chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
+				},
+			}},
+			factory:      &fakeFactoryTargetService{},
+			wantCode:     -32602,
+			wantGet:      true,
+			wantControls: 0,
+		},
+		{
+			name:         "missing target collaborator",
+			env:          closeRequestEnvelope(t, 55, "session-any"),
+			chatSessions: &fakeChatSessionsService{},
+			factory:      nil,
+			wantCode:     -32603,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := New(nil, test.chatSessions, nil, test.factory, nil)
+			_, rpcErr := server.dispatchRequest(context.Background(), test.env)
+			if rpcErr == nil || rpcErr.Code != test.wantCode {
+				t.Fatalf("session/close error = %+v, want code %d", rpcErr, test.wantCode)
+			}
+
+			test.chatSessions.mu.Lock()
+			gotGet := test.chatSessions.getSessionCalled
+			gotControls := len(test.chatSessions.requestControlReqs)
+			test.chatSessions.mu.Unlock()
+			if gotGet != test.wantGet {
+				t.Fatalf("GetSession called = %t, want %t", gotGet, test.wantGet)
+			}
+			if gotControls != test.wantControls {
+				t.Fatalf("RequestControl calls = %d, want %d", gotControls, test.wantControls)
+			}
+			if target, ok := test.factory.(*fakeFactoryTargetService); ok {
+				target.mu.Lock()
+				closeCalls := len(target.closeCalls)
+				target.mu.Unlock()
+				if closeCalls != 0 {
+					t.Fatalf("CloseFactorySession calls = %d, want 0", closeCalls)
+				}
+			}
+		})
+	}
+}
+
+// TestHandleSessionCloseWithoutActiveTurnLeavesLifecycleOpen proves close
+// refuses a session that has no active turn without inventing a control or
+// closing the episode's already-bound Factory Session.
+func TestHandleSessionCloseWithoutActiveTurnLeavesLifecycleOpen(t *testing.T) {
+	base, session, turn := newActiveBoundControlSession(t, "fs-close-no-active")
+	if _, err := base.AdvanceTurn(context.Background(), chatsessions.AdvanceTurnRequest{
+		SessionID: session.ID, TurnID: turn.ID, Next: chatsessions.TurnStateCompleted,
+	}); err != nil {
+		t.Fatalf("AdvanceTurn(COMPLETED): %v", err)
+	}
+	chatSessions := &controlRecordingChatSessions{Service: base}
+	factoryTarget := &fakeFactoryTargetService{}
+	server := New(nil, chatSessions, nil, factoryTarget, nil)
+
+	_, rpcErr := server.dispatchRequest(context.Background(), closeRequestEnvelope(t, 56, session.ID))
+	if rpcErr == nil || rpcErr.Code != -32602 {
+		t.Fatalf("session/close error = %+v, want invalid params", rpcErr)
+	}
+	requests, _ := chatSessions.snapshotControls()
+	if len(requests) != 0 {
+		t.Fatalf("RequestControl calls = %#v, want none", requests)
+	}
+	factoryTarget.mu.Lock()
+	closeCalls := len(factoryTarget.closeCalls)
+	factoryTarget.mu.Unlock()
+	if closeCalls != 0 {
+		t.Fatalf("CloseFactorySession calls = %d, want 0", closeCalls)
+	}
+	current, err := base.GetSession(context.Background(), chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if current.Session.State != chatsessions.SessionStateActive || current.Episode.State != chatsessions.TargetEpisodeStateOpen {
+		t.Fatalf("close changed terminal-less lifecycle: Session=%#v Episode=%#v", current.Session, current.Episode)
+	}
+}
+
+// TestHandleSessionCloseStaleCaptureCannotReachReplacement proves a stale
+// version between the initial read and RequestControl is rejected before the
+// factory target. The newer replacement turn remains the active authority.
+func TestHandleSessionCloseStaleCaptureCannotReachReplacement(t *testing.T) {
+	base, session, turn := newActiveBoundControlSession(t, "fs-close-stale")
+	release := make(chan struct{})
+	chatSessions := &controlRecordingChatSessions{
+		Service:        base,
+		requestEntered: make(chan struct{}),
+		requestRelease: release,
+	}
+	factoryTarget := &fakeFactoryTargetService{}
+	server := New(nil, chatSessions, nil, factoryTarget, nil)
+	env := closeRequestEnvelope(t, 57, session.ID)
+
+	type closeResult struct{ err *acpsdk.RequestError }
+	done := make(chan closeResult, 1)
+	go func() {
+		_, err := server.dispatchRequest(context.Background(), env)
+		done <- closeResult{err: err}
+	}()
+	waitForChannel(t, chatSessions.requestEntered, "session/close before RequestControl")
+	if _, err := base.AdvanceTurn(context.Background(), chatsessions.AdvanceTurnRequest{
+		SessionID: session.ID, TurnID: turn.ID, Next: chatsessions.TurnStateCompleted,
+	}); err != nil {
+		t.Fatalf("AdvanceTurn(COMPLETED): %v", err)
+	}
+	current, err := base.GetSession(context.Background(), chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession before replacement: %v", err)
+	}
+	replacement, err := base.StartTurn(context.Background(), chatsessions.StartTurnRequest{
+		RequestID:       chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCNumber, ConnectionID: "close-stale", JSONRPCNumberID: "58"},
+		SessionID:       session.ID,
+		ExpectedVersion: current.Session.Version,
+	})
+	if err != nil {
+		t.Fatalf("StartTurn(replacement): %v", err)
+	}
+	close(release)
+	result := <-done
+	if result.err == nil || result.err.Code != -32602 {
+		t.Fatalf("stale session/close error = %+v, want invalid params", result.err)
+	}
+
+	factoryTarget.mu.Lock()
+	closeCalls := len(factoryTarget.closeCalls)
+	factoryTarget.mu.Unlock()
+	if closeCalls != 0 {
+		t.Fatalf("CloseFactorySession calls = %d, want 0", closeCalls)
+	}
+	updated, err := base.GetSession(context.Background(), chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession after stale close: %v", err)
+	}
+	if updated.Session.ActiveTurnID != replacement.Turn.ID || updated.Session.State != chatsessions.SessionStateActive || updated.Episode.State != chatsessions.TargetEpisodeStateOpen {
+		t.Fatalf("stale close changed replacement lifecycle: Session=%#v Episode=%#v", updated.Session, updated.Episode)
+	}
+}
+
+// TestHandleSessionCloseDependencyFailureLeavesLifecycleRetryable proves a
+// Factory Sessions close error does not partially close the Chat aggregate,
+// exposes only the bounded protocol failure, and leaves the captured intent
+// retryable by its exact request identity.
+func TestHandleSessionCloseDependencyFailureLeavesLifecycleRetryable(t *testing.T) {
+	base, session, turn := newActiveBoundControlSession(t, "fs-close-failure")
+	chatSessions := &controlRecordingChatSessions{Service: base}
+	failureText := "provider credential at /unsafe/path"
+	factoryTarget := &fakeFactoryTargetService{closeErr: errors.New(failureText)}
+	server := New(nil, chatSessions, nil, factoryTarget, nil)
+	env := closeRequestEnvelope(t, 59, session.ID)
+
+	_, rpcErr := server.dispatchRequest(context.Background(), env)
+	if rpcErr == nil || rpcErr.Code != -32603 {
+		t.Fatalf("failed session/close error = %+v, want internal error", rpcErr)
+	}
+	encoded, err := json.Marshal(rpcErr)
+	if err != nil {
+		t.Fatalf("marshal RequestError: %v", err)
+	}
+	if strings.Contains(string(encoded), failureText) || strings.Contains(string(encoded), "/unsafe/path") {
+		t.Fatalf("close failure leaked dependency detail: %s", encoded)
+	}
+	current, err := base.GetSession(context.Background(), chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession after failed close: %v", err)
+	}
+	if current.Session.State != chatsessions.SessionStateActive || current.Session.ActiveTurnID != turn.ID || current.Episode.State != chatsessions.TargetEpisodeStateOpen {
+		t.Fatalf("failed close partially changed Chat lifecycle: Session=%#v Episode=%#v", current.Session, current.Episode)
+	}
+	_, advances := chatSessions.snapshotControls()
+	if len(advances) != 1 || advances[0].Intent.State != chatsessions.ControlIntentStateCommitted {
+		t.Fatalf("control advances = %#v, want only COMMITTED after failed Factory close", advances)
+	}
+
+	factoryTarget.mu.Lock()
+	factoryTarget.closeErr = nil
+	factoryTarget.mu.Unlock()
+	result, retryErr := server.dispatchRequest(context.Background(), env)
+	if retryErr != nil {
+		t.Fatalf("retried session/close error = %+v, want success", retryErr)
+	}
+	var response acpsdk.CloseSessionResponse
+	if err := json.Unmarshal(result, &response); err != nil {
+		t.Fatalf("unmarshal retried CloseSessionResponse: %v", err)
+	}
+	factoryTarget.mu.Lock()
+	closeCalls := append([]string(nil), factoryTarget.closeCalls...)
+	factoryTarget.mu.Unlock()
+	if len(closeCalls) != 2 || closeCalls[0] != "fs-close-failure" || closeCalls[1] != "fs-close-failure" {
+		t.Fatalf("CloseFactorySession calls = %#v, want two retries for only the captured target", closeCalls)
 	}
 }
 
