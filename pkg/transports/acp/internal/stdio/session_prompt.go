@@ -118,16 +118,21 @@ func deliverPromptText(notify promptNotifier, sessionID string, text []string) e
 // overrides it via terminalStateForFailure, since the branch's own
 // terminal choice is only ever a genuine downstream-published outcome
 // (completed/canceled/timed-out/failed), never a Go-level call failure.
-// sessionVersion is the Chat Session's own version as of the last Chat
-// Sessions mutation this branch itself performed -- startResult.Session.Version
-// for invokeFactorySessionForEpisode (which performs no further Chat
-// Sessions mutation), or the BindFactorySession result's Session.Version for
-// startFactorySessionForEpisode (whose RecordPendingFactorySession/
-// BindFactorySession calls advance the session past what StartTurn/AdvanceTurn
-// already observed). deliverPromptUpdates' AcknowledgeAttachment calls must
-// use this current value, not startResult.Session.Version, or a fresh-episode
-// turn's own Bind advancing Version out from under it would spuriously fail
-// every such turn's streaming drain with a stale-version conflict.
+// sessionVersion is the Chat Session's own current version as of the last
+// Chat Sessions mutation observed by the time the branch returns --
+// startFactorySessionForEpisode's own BindFactorySession result for its
+// branch, or a fresh currentSessionVersion re-read for
+// invokeFactorySessionForEpisode. Neither branch may use
+// startResult.Session.Version directly: dispatchFactoryInvocation can run a
+// Chat Sessions-owned Factory response-event bridge concurrently with its
+// wrapped Factory invocation (see acp.ResponseBridge), and that bridge
+// independently advances Session.Version via AdvanceStreamHead for every
+// event it bridges, so a version captured at turn admission -- before that
+// concurrent advancement -- is stale by the time either branch's own
+// version-guarded calls (BindFactorySession, and deliverPromptUpdates' later
+// AcknowledgeAttachment calls) run. See currentSessionVersion's own doc
+// comment for why a single fresh read is safe here without its own retry
+// loop.
 type dispatchOutcome struct {
 	outcome        protocol.PromptOutcome
 	terminal       chatsessions.TurnState
@@ -585,9 +590,41 @@ func (s *Server) startFactorySessionForEpisode(
 	}
 	outcome.SessionID = factorySessionID
 
+	bindResult, err := s.bindStartedFactorySession(ctx, startResult, factorySessionID)
+	if err != nil {
+		return dispatchOutcome{}, err
+	}
+
+	return dispatchOutcome{
+		outcome:        protocol.MapFactoryInvocationOutcome(outcome),
+		terminal:       factoryInvocationTurnState(outcome.Status),
+		sessionVersion: bindResult.Session.Version,
+	}, nil
+}
+
+// bindStartedFactorySession binds factorySessionID onto startResult's
+// episode using a freshly re-read session version (see
+// currentSessionVersion's own doc comment for why startResult.Session.Version
+// itself may already be stale by this point). On a genuine
+// *chatsessions.FactorySessionConflictError -- a different identity already
+// won the episode -- it abandons this call's own started runtime: the
+// pending record is cleared and the runtime is closed (best-effort; a close
+// failure is joined into the returned error) so a later retry observes the
+// already-bound episode and invokes the winner instead, matching
+// startFactorySessionForEpisode's own doc comment.
+func (s *Server) bindStartedFactorySession(
+	ctx context.Context,
+	startResult chatsessions.StartTurnResult,
+	factorySessionID string,
+) (chatsessions.BindFactorySessionResult, error) {
+	sessionVersion, err := s.currentSessionVersion(ctx, startResult.Session.ID, startResult.Session.Version)
+	if err != nil {
+		return chatsessions.BindFactorySessionResult{}, err
+	}
+
 	bindResult, err := s.chatSessions.BindFactorySession(ctx, chatsessions.BindFactorySessionRequest{
 		SessionID:        startResult.Session.ID,
-		ExpectedVersion:  startResult.Session.Version,
+		ExpectedVersion:  sessionVersion,
 		Episode:          startResult.Episode.Number,
 		TurnID:           startResult.Turn.ID,
 		FactorySessionID: factorySessionID,
@@ -597,20 +634,15 @@ func (s *Server) startFactorySessionForEpisode(
 		if errors.As(err, &conflictErr) {
 			_, clearErr := s.chatSessions.RecordPendingFactorySession(ctx, chatsessions.RecordPendingFactorySessionRequest{
 				SessionID:       startResult.Session.ID,
-				ExpectedVersion: startResult.Session.Version,
+				ExpectedVersion: sessionVersion,
 				Episode:         startResult.Episode.Number,
 				TurnID:          startResult.Turn.ID,
 			})
-			return dispatchOutcome{}, errors.Join(err, clearErr, s.factoryTarget.CloseFactoryTarget(ctx, factorySessionID))
+			return chatsessions.BindFactorySessionResult{}, errors.Join(err, clearErr, s.factoryTarget.CloseFactoryTarget(ctx, factorySessionID))
 		}
-		return dispatchOutcome{}, err
+		return chatsessions.BindFactorySessionResult{}, err
 	}
-
-	return dispatchOutcome{
-		outcome:        protocol.MapFactoryInvocationOutcome(outcome),
-		terminal:       factoryInvocationTurnState(outcome.Status),
-		sessionVersion: bindResult.Session.Version,
-	}, nil
+	return bindResult, nil
 }
 
 // invokeFactorySessionForEpisode invokes the given turn's already-bound
@@ -654,11 +686,44 @@ func (s *Server) invokeFactorySessionForEpisode(
 		return dispatchOutcome{}, err
 	}
 
+	sessionVersion, err := s.currentSessionVersion(ctx, startResult.Session.ID, startResult.Session.Version)
+	if err != nil {
+		return dispatchOutcome{}, err
+	}
+
 	return dispatchOutcome{
 		outcome:        protocol.MapFactoryInvocationOutcome(invokeResult),
 		terminal:       factoryInvocationTurnState(invokeResult.Status),
-		sessionVersion: startResult.Session.Version,
+		sessionVersion: sessionVersion,
 	}, nil
+}
+
+// currentSessionVersion re-reads sessionID's current Session.Version through
+// GetSession rather than trusting a value captured before or during
+// dispatchFactoryInvocation. dispatchFactoryInvocation may run a Chat
+// Sessions-owned Factory response-event bridge concurrently with the
+// synchronous Factory invocation it wraps (see acp.ResponseBridge); that
+// bridge independently advances the session's Version via AdvanceStreamHead
+// for every event it bridges, so a version read at turn admission --
+// startResult.Session.Version, this method's fallback -- can already be
+// stale by the time dispatchFactoryInvocation returns. It is safe to read
+// fresh here without its own retry loop because dispatchFactoryInvocation
+// always fully joins its bridge before returning (see
+// factorysessionsshim.RunWithResponseBridge's own doc comment): no further
+// concurrent mutation from that bridge can race this read. A nil
+// s.chatSessions (a narrower slice construction that never reaches this
+// method in production, since admitPromptTurn already rejects a nil
+// s.chatSessions before ever calling dispatchFactoryTurn) falls back to the
+// caller-supplied value rather than panicking.
+func (s *Server) currentSessionVersion(ctx context.Context, sessionID string, fallback uint64) (uint64, error) {
+	if s.chatSessions == nil {
+		return fallback, nil
+	}
+	result, err := s.chatSessions.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: sessionID})
+	if err != nil {
+		return 0, err
+	}
+	return result.Session.Version, nil
 }
 
 // promptContentToWorkParts converts validated ACP text prompt content into

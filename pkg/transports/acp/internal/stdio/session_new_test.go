@@ -38,8 +38,17 @@ type fakeChatSessionsService struct {
 
 	getSessionCalled bool
 	getSessionReq    chatsessions.GetSessionRequest
+	getSessionReqs   []chatsessions.GetSessionRequest
 	getSessionResult chatsessions.GetSessionResult
-	getSessionErr    error
+	// getSessionResults, when non-empty, is consumed front-first across
+	// successive GetSession calls (one queued result per call) instead of
+	// the single static getSessionResult -- for tests where a later
+	// GetSession call (for example currentSessionVersion's fresh re-read
+	// after a dispatch that may have advanced Session.Version concurrently)
+	// must observe a different session snapshot than the admission-time
+	// call did.
+	getSessionResults []chatsessions.GetSessionResult
+	getSessionErr     error
 
 	setTargetCalled bool
 	setTargetReq    chatsessions.SetTargetRequest
@@ -149,8 +158,14 @@ func (f *fakeChatSessionsService) GetSession(_ context.Context, req chatsessions
 	defer f.mu.Unlock()
 	f.getSessionCalled = true
 	f.getSessionReq = req
+	f.getSessionReqs = append(f.getSessionReqs, req)
 	if f.getSessionErr != nil {
 		return chatsessions.GetSessionResult{}, f.getSessionErr
+	}
+	if len(f.getSessionResults) > 0 {
+		next := f.getSessionResults[0]
+		f.getSessionResults = f.getSessionResults[1:]
+		return next, nil
 	}
 	return f.getSessionResult, nil
 }

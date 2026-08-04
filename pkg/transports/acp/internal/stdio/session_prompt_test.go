@@ -924,8 +924,17 @@ func TestHandleSessionPromptFirstTurnStartsFactorySessionWithExactTargetRootAndC
 // the admitted session/episode/turn/version.
 func TestHandleSessionPromptFirstTurnBindsReturnedFactorySessionID(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{
-		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
-		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
+		// Two queued GetSession results, consumed front-first: the first
+		// (admission-time) call observes version 3, and the second --
+		// currentSessionVersion's fresh re-read after
+		// dispatchFactoryInvocation returns (see its own doc comment) --
+		// observes StartTurn's already-admitted version (4), not the stale
+		// admission-time snapshot the first call returned.
+		getSessionResults: []chatsessions.GetSessionResult{
+			sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+			sessionAt("session-1", "factory:@you/review", 4, "/work/project"),
+		},
+		startTurnResult: admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
 	}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
 	factoryTarget := &fakeFactoryTargetService{startResult: factorysessions.AsyncStartResult{SessionID: "fs-1"}}

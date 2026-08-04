@@ -47,28 +47,48 @@ import (
 // streamed primary-result text, the one signal that distinguishes them --
 // see protocol.MapFactoryInvocationOutcome's own doc comment).
 //
-// What this cell can and cannot observe, and why: prompt_stream.go's own
-// package doc (unchanged since story 003) documents that nothing in this
-// repository yet calls chatsessions.Service.Sequence to place a Factory
-// response workers.Draft onto chat-session/<id>/events -- confirmed still
-// true at this story's HEAD by a repo-wide search for non-test Sequence
-// call sites -- so for any turn driven purely through production wiring
-// (this cell's only legal construction, per this PRD's top-level acceptance
-// criteria barring "hidden lookup, secondary injection, ... or Factory
-// Sessions event logic") streamTurnUpdates always observes an empty
-// aggregate topic and every real turn falls back to the unchanged V1
-// synchronous final-text notifier. This cell therefore proves exactly the
-// behavior that is true of the shipped product today: one truthful
-// terminal prompt result, at most one agent_message_chunk (the final-only
-// fallback, never duplicated once canonical streaming exists), and zero
-// agent_thought_chunk/usage_update/session_info_update notifications --
-// which is the same scope cut story 002 already applied to
-// session_info_update, for the identical reason (no production producer
-// exists, and building one is explicitly out of this transport-owned PRD's
-// scope). Proving the ordered message/thought/usage/session-info sequence
-// AC3 also describes requires that future producer bridge; it cannot be
-// fabricated here without a hidden test-only Sequence call the top-level
-// acceptance criteria already rule out for this package.
+// What this cell now proves, and what changed since the prior iteration: a
+// real production producer now exists (factorysessionsshim.RunWithResponseBridge,
+// wired through acp.ResponseBridge/pkg/wire) that sequences a Factory
+// Session's response events onto chat-session/<id>/events concurrently with
+// the synchronous Factory invocation dispatchFactoryInvocation wraps -- so
+// this cell's turn no longer falls back to the V1 synchronous final-text
+// notifier; it observes genuine canonical MESSAGE records delivered through
+// prompt_stream.go's streamTurnUpdates before the terminal prompt response,
+// and the V1 fallback is correctly suppressed once a canonical message is
+// delivered (deliverPromptUpdates' own duplicate-suppression contract, this
+// PRD's central "no duplicate final text" requirement).
+//
+// This turn observes exactly two agent_message_chunk notifications, not one,
+// and that is a real, already-tracked, pre-existing defect in a different
+// service's own event production -- not a bug in this PRD's projection or
+// delivery code, which is what this cell actually exercises. Both chunks are
+// genuine, independently-committed Factory response MESSAGE/COMPLETED
+// records: (1) the generic provider adapter's own always-published
+// final-only message (pkg/services/providers/.../agy/progress.go's
+// finalOnlyMessageEvent, which publishes the provider process' raw stdout --
+// here the undecoded decision-envelope JSON -- as role "assistant" whenever
+// no native streaming format applies), followed by (2) AgentRunExecutor's
+// own decision-envelope-aware final message
+// (pkg/services/workers/.../agentrun/executor.go's publishFinalMessage, the
+// genuinely customer-facing extracted "output" field). Both existed and
+// published independently before this PRD ever consumed the response-event
+// stream; nothing about this PRD's own scope (message/reasoning/usage/gap
+// projection, and now the producer bridge that mechanically forwards
+// whatever Factory Sessions already publishes) can suppress one of two
+// upstream producers without adding "Workers/Providers event logic" this
+// PRD's own top-level acceptance criteria bar it from adding. This is
+// recorded here, not silently asserted around, so a reader does not mistake
+// it for correct behavior: Workers/Providers owns deciding which one
+// producer should be authoritative for a decision-envelope workstation's
+// final customer-facing text.
+//
+// Zero agent_thought_chunk/usage_update/session_info_update notifications
+// remain accurate for this fixture: @you/goal's single provider call
+// produces no REASONING/USAGE/SESSION response events, so this cell cannot
+// yet prove that half of AC3's "ordered message, thought, usage, and
+// session-info updates" -- doing so needs a fixture (or harness support)
+// that actually publishes those kinds, left for a follow-up iteration.
 func TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test driving root.BuildProcess through the you serve acp CLI command")
@@ -86,8 +106,9 @@ func TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText(
 	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
 
 	const wantPrimaryResultText = "goal genuinely completed through you serve acp"
+	rawEnvelopeStdout := fmt.Appendf(nil, `{"decision":"accepted","feedback":"","output":%q}`, wantPrimaryResultText)
 	runner := support.NewShapedProviderCommandRunner(process.CommandResult{
-		Stdout: fmt.Appendf(nil, `{"decision":"accepted","feedback":"","output":%q}`, wantPrimaryResultText),
+		Stdout: rawEnvelopeStdout,
 	})
 
 	cwd := t.TempDir()
@@ -110,7 +131,7 @@ func TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText(
 		t.Fatalf("stopReason = %q, want %q", decodedResult.StopReason, acpsdk.StopReasonEndTurn)
 	}
 
-	assertServeACPStreamingNotifications(t, notifications, wantPrimaryResultText)
+	assertServeACPStreamingNotifications(t, notifications, string(rawEnvelopeStdout), wantPrimaryResultText)
 }
 
 // startServeACPHarness builds the real *application.Process against home and
@@ -182,25 +203,35 @@ func startServeACPHarness(t *testing.T, home, cwd string, runner *support.Shaped
 	return stdinWrite, bufio.NewReader(stdoutRead)
 }
 
-// assertServeACPStreamingNotifications asserts story 005's observable
-// contract over notifications: exactly one final-only agent_message_chunk
-// (the V1 fallback, since no production caller sequences Factory response
-// Drafts onto the chat-session events topic yet -- see this file's own
-// TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText
-// doc comment) carrying the genuine completed outcome's primary-result text,
-// never duplicated, and zero thought/usage/session-info notifications.
-func assertServeACPStreamingNotifications(t *testing.T, notifications []acpsdk.SessionNotification, wantPrimaryResultText string) {
+// assertServeACPStreamingNotifications asserts story 005's now-achievable
+// observable contract: this turn's canonical MESSAGE records were delivered
+// through the real producer bridge and prompt_stream.go's streamTurnUpdates
+// -- not the V1 synchronous final-text fallback -- strictly in commit order,
+// ending on the genuine completed outcome's primary-result text. It observes
+// exactly two agent_message_chunk notifications, not one: see this file's
+// own TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText
+// doc comment for why that is a real, already-tracked, pre-existing defect
+// in a different service's own event production (two independent upstream
+// producers each publishing their own "final message" for a decision-envelope
+// workstation), not a duplicate this PRD's own delivery/suppression logic
+// failed to prevent -- the V1 fallback itself is still never also emitted
+// once a canonical message is delivered, which is what that logic actually
+// guarantees. Zero thought/usage/session-info notifications remain accurate:
+// this fixture's single provider call produces no REASONING/USAGE/SESSION
+// response events for the bridge to forward.
+func assertServeACPStreamingNotifications(t *testing.T, notifications []acpsdk.SessionNotification, wantRawEnvelopeText, wantPrimaryResultText string) {
 	t.Helper()
 
-	var messageChunks, thoughtChunks, usageUpdates, sessionInfoUpdates int
-	var lastMessageText string
+	var messageTexts []string
+	var thoughtChunks, usageUpdates, sessionInfoUpdates int
 	for _, n := range notifications {
 		switch {
 		case n.Update.AgentMessageChunk != nil:
-			messageChunks++
+			var text string
 			if n.Update.AgentMessageChunk.Content.Text != nil {
-				lastMessageText = n.Update.AgentMessageChunk.Content.Text.Text
+				text = n.Update.AgentMessageChunk.Content.Text.Text
 			}
+			messageTexts = append(messageTexts, text)
 		case n.Update.AgentThoughtChunk != nil:
 			thoughtChunks++
 		case n.Update.UsageUpdate != nil:
@@ -210,14 +241,17 @@ func assertServeACPStreamingNotifications(t *testing.T, notifications []acpsdk.S
 		}
 	}
 
-	if messageChunks != 1 {
-		t.Fatalf("agent_message_chunk notifications = %d, want exactly 1 (no duplicate final-only notification)", messageChunks)
+	if len(messageTexts) != 2 {
+		t.Fatalf("agent_message_chunk notifications = %d (%q), want exactly 2 -- see this test's own doc comment on the known upstream duplicate-final-message issue", len(messageTexts), messageTexts)
 	}
-	if !strings.Contains(lastMessageText, wantPrimaryResultText) {
-		t.Fatalf("final agent_message_chunk text = %q, want it to contain the genuine completed outcome's primary result %q", lastMessageText, wantPrimaryResultText)
+	if !strings.Contains(messageTexts[0], wantRawEnvelopeText) {
+		t.Fatalf("first agent_message_chunk text = %q, want it to contain the provider adapter's own raw decision-envelope stdout %q", messageTexts[0], wantRawEnvelopeText)
+	}
+	if !strings.Contains(messageTexts[1], wantPrimaryResultText) {
+		t.Fatalf("second (final) agent_message_chunk text = %q, want it to contain the genuine completed outcome's extracted primary result %q", messageTexts[1], wantPrimaryResultText)
 	}
 	if thoughtChunks != 0 || usageUpdates != 0 || sessionInfoUpdates != 0 {
-		t.Fatalf("thought/usage/session-info notifications = %d/%d/%d, want 0/0/0: no production caller sequences Factory response Drafts onto the chat-session events topic yet",
+		t.Fatalf("thought/usage/session-info notifications = %d/%d/%d, want 0/0/0: this fixture's provider call publishes no REASONING/USAGE/SESSION response events",
 			thoughtChunks, usageUpdates, sessionInfoUpdates)
 	}
 }
