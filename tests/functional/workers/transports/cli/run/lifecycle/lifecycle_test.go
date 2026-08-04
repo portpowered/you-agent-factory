@@ -121,7 +121,15 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 		continuousBaseURL,
 	)
 
+	// The hosted API listener is likewise held open, once the invocation asks
+	// it to shut down, until the polling goroutine below has deterministically
+	// observed terminal Work at least once. Without this gate, the invocation
+	// completing (which cancels and tears down the listener) structurally
+	// outraces the polling goroutine's next HTTP round trip, making terminal
+	// Work observability a best-effort race rather than a guarantee.
+	workObservedGate := make(chan struct{})
 	hostedAPI := support.NewProcessAPIServer()
+	hostedAPI.HoldShutdownUntilSignaled(workObservedGate)
 	hostedServerEdges.APIServerStarter = hostedAPI.Start
 	hostedProcess := support.BuildProcess(t, hostedServerEdges)
 
@@ -143,12 +151,14 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 		err         error
 	}, 1)
 	go func() {
-		var releaseOnce sync.Once
-		releaseWorker := func() { releaseOnce.Do(func() { close(sessionObservedGate) }) }
-		// Always release the gated worker before this goroutine exits, even on
-		// a WaitForBaseURL timeout, so an unexpected failure here cannot hang
+		var releaseWorkerOnce, releaseShutdownOnce sync.Once
+		releaseWorker := func() { releaseWorkerOnce.Do(func() { close(sessionObservedGate) }) }
+		releaseShutdown := func() { releaseShutdownOnce.Do(func() { close(workObservedGate) }) }
+		// Always release both gates before this goroutine exits, even on a
+		// WaitForBaseURL timeout, so an unexpected failure here cannot hang
 		// Process.Execute (and this test's t.Cleanup teardown) forever.
 		defer releaseWorker()
+		defer releaseShutdown()
 
 		baseURL, err := hostedAPI.WaitForBaseURL(5 * time.Second)
 		if err != nil {
@@ -163,6 +173,7 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 			baseURL,
 			wantServerAttachedInvocationPrimaryResult,
 			releaseWorker,
+			releaseShutdown,
 			command.Done(),
 		)
 		observationsReady <- struct {
@@ -199,7 +210,7 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 		t.Fatal("hosted Factory Session id observed during invocation is empty, want observable session identity")
 	}
 	if !observation.workVisible {
-		t.Logf("terminal /work was not observable before hosted API shutdown; stdout primary result remains the customer-visible proof")
+		t.Fatal("terminal /work was not observable before hosted API shutdown, want observable terminal Work content")
 	}
 }
 
@@ -312,7 +323,7 @@ func assertDetachedServerPrefRunCannotAttachToContinuousHost(
 
 func pollHostedServerAttachedInvocationObservations(
 	baseURL, wantWorkText string,
-	releaseWorker func(),
+	releaseWorker, releaseShutdown func(),
 	done <-chan struct{},
 ) (factoryapi.FactorySession, bool, error) {
 	ticker := time.NewTicker(10 * time.Millisecond)
@@ -343,6 +354,11 @@ func pollHostedServerAttachedInvocationObservations(
 		if !workVisible {
 			if ok, _ := tryReadTerminalWorkPrimaryText(baseURL, wantWorkText); ok {
 				workVisible = true
+				// The hosted API listener cannot close (and so the process
+				// cannot finish) until this deterministic release fires,
+				// which guarantees terminal Work was observable before host
+				// shutdown.
+				releaseShutdown()
 			}
 		}
 		if sessionRead && workVisible {

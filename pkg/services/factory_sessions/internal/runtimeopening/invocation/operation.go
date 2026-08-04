@@ -137,18 +137,21 @@ func (o *operation) InvokeFactory(
 		return outcome, err
 	}
 	defer func() {
-		resultErr = joinTeardownErrorUnlessResultDetermined(outcome, resultErr, lifecycle.close(ctx, opened), target.Logger)
+		resultErr = errors.Join(resultErr, lifecycle.close(ctx, opened))
 	}()
 	return o.invokeFactoryOnOpenedRuntime(ctx, opened, lifecycle.runContext, target, request, consume)
 }
 
-// joinTeardownErrorUnlessResultDetermined merges a post-result error (runtime
-// teardown, or a best-effort trailing Factory Event read) into resultErr only
-// when the invocation never reached a terminal result. Teardown, trailing
-// event delivery, and the invocation's own event-derived terminal result all
-// race each other; a failure in the former must not erase an already-
-// determined public outcome, since the record and process exit state a
-// caller observes stay tied to what the invocation itself decided.
+// joinTeardownErrorUnlessResultDetermined merges a post-result error from a
+// best-effort trailing Factory Event read into resultErr only when the
+// invocation never reached a terminal result. Trailing event delivery and the
+// invocation's own event-derived terminal result race each other; a failure
+// in the former must not erase an already-determined public outcome, since
+// the record a caller observes stays tied to what the invocation itself
+// decided. This is deliberately narrower than runtime teardown (lifecycle.close):
+// teardown failures (session close, worker stop, lifecycle stop, artifact
+// close) are genuine resource-cleanup errors and must always propagate and
+// preserve their failing exit semantics, even after a terminal result exists.
 func joinTeardownErrorUnlessResultDetermined(
 	outcome roles.FactoryInvocationOutcome,
 	resultErr error,
@@ -214,7 +217,7 @@ func (o *operation) invokeFactoryOnEphemeralRuntime(
 		return outcome, err
 	}
 	defer func() {
-		resultErr = joinTeardownErrorUnlessResultDetermined(outcome, resultErr, lifecycle.close(ctx, opened), target.Logger)
+		resultErr = errors.Join(resultErr, lifecycle.close(ctx, opened))
 	}()
 	return o.invokeFactoryOnOpenedRuntime(ctx, opened, lifecycle.runContext, target, request, consume)
 }

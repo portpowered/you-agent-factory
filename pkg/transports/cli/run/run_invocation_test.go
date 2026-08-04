@@ -451,6 +451,57 @@ func TestRunFactoryInvocationCarriesPreparedCompatibilityInputWithoutAPIContent(
 	}
 }
 
+// TestRunFactoryInvocationWritesTerminalRecordAndPreservesCleanupErrorAfterResult
+// proves that once InvokeFactory has determined a terminal result, a non-nil
+// error returned alongside it (a post-result runtime teardown/cleanup
+// failure, not a pre-terminal invocation failure) still causes the public
+// terminal NDJSON record to be written for that determined outcome AND still
+// causes runFactoryInvocation to report failure. Regression for both
+// directions of the "invocation_result record count = 0" defect class: a
+// cleanup failure must not silently swallow the terminal record (it is
+// written), and it must not silently swallow itself either (the CLI must not
+// report success).
+func TestRunFactoryInvocationWritesTerminalRecordAndPreservesCleanupErrorAfterResult(t *testing.T) {
+	cleanupErr := errors.New("close factory session: deterministic teardown failure")
+	var output bytes.Buffer
+	operation := testInvocationOperation{invokeFactory: func(
+		context.Context,
+		factorysessions.InvocationTarget,
+		factorysessions.InvocationRequest,
+		factorysessions.FactoryEventConsumer,
+	) (factorysessions.FactoryInvocationOutcome, error) {
+		return factorysessions.FactoryInvocationOutcome{Result: interfaces.FactoryInvocationResult{
+			RequestID: "request-cleanup",
+			Status:    interfaces.InvocationTerminalStatusCompleted,
+			PrimaryResult: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText, Text: "completed despite cleanup failure",
+			}},
+		}}, cleanupErr
+	}}
+	cfg := RunConfig{
+		InvocationOutputMode: InvocationOutputResponseStream,
+		JSONOutput:           true, Output: &output,
+	}
+	err := runFactoryInvocation(
+		context.Background(), cfg, invocationTarget(cfg, nil, nil),
+		factoryapi.InvocationRequest{}, operation, testResponsePresentation(),
+	)
+	if err == nil || !errors.Is(err, cleanupErr) {
+		t.Fatalf("runFactoryInvocation error = %v, want it to preserve the post-result cleanup failure %v", err, cleanupErr)
+	}
+
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("NDJSON output = %d lines, want exactly one terminal invocation_result record:\n%s", len(lines), output.String())
+	}
+	if !strings.Contains(lines[0], `"recordType":"invocation_result"`) {
+		t.Fatalf("terminal record = %q, want an invocation_result record", lines[0])
+	}
+	if !strings.Contains(lines[0], `"status":"`+string(interfaces.InvocationTerminalStatusCompleted)+`"`) {
+		t.Fatalf("terminal record = %q, want the invocation's own determined completed status", lines[0])
+	}
+}
+
 func TestResolveFactoryInvocationRequest_NamedFactoryRejectsConflictingSources(t *testing.T) {
 	err := scriptedInvocationConflictError()
 	if !strings.Contains(err.Error(), "INVOCATION_INPUT_SOURCE_CONFLICT") {

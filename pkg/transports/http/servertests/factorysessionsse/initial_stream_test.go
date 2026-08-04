@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -172,6 +173,30 @@ func TestFactorySessionSSEInitialStream_WritesSessionIdentityHandshakeHeaders(t 
 		factorySessionSSEStreamGenerationHeader,
 		factorySessionSSEFixtureStreamGenerationID,
 	)
+}
+
+func TestFactorySessionSSEInitialStream_WritesRetainedEventCountHeader(t *testing.T) {
+	fixture := NewFactorySessionSSEFixture(t)
+	server := httptest.NewServer(newAPITestServer(fixture.WorkAPI()).Handler())
+	defer server.Close()
+
+	harness := newFactorySessionSSEHarness(t, 2*time.Second)
+	stream := harness.Open(server.URL, fixture.SessionID, "")
+	defer stream.Close()
+
+	header := stream.Response.Header.Get(factorySessionSSERetainedEventCountHeader)
+	got, err := strconv.Atoi(header)
+	if err != nil {
+		t.Fatalf("%s = %q, want a decimal count: %v", factorySessionSSERetainedEventCountHeader, header, err)
+	}
+	if got != len(fixture.Retained) {
+		t.Fatalf("%s = %d, want %d (len(fixture.Retained))", factorySessionSSERetainedEventCountHeader, got, len(fixture.Retained))
+	}
+
+	retained := stream.ReadEvents(got)
+	if len(retained) != len(fixture.Retained) {
+		t.Fatalf("read %d retained events using the header count, want %d", len(retained), len(fixture.Retained))
+	}
 }
 
 func assertFactorySessionSSEHandshakeHeader(t *testing.T, got, headerName, want string) {

@@ -22,13 +22,36 @@ const processAPIServerReadyTimeout = 15 * time.Second
 type ProcessAPIServer struct {
 	ready chan struct{}
 
-	mu      sync.Mutex
-	started bool
-	url     string
+	mu           sync.Mutex
+	started      bool
+	url          string
+	shutdownGate <-chan struct{}
 }
 
 func NewProcessAPIServer() *ProcessAPIServer {
 	return &ProcessAPIServer{ready: make(chan struct{})}
+}
+
+// HoldShutdownUntilSignaled defers listener teardown, once the owning
+// invocation itself asks the transport to stop, until gate is closed or
+// processAPIServerReadyTimeout elapses as a safety ceiling. It must be called
+// before Start runs (i.e. before the owning process begins executing) so a
+// caller can prove an observation happened before the server was allowed to
+// close, instead of racing the invocation's own completion-triggered
+// teardown.
+func (server *ProcessAPIServer) HoldShutdownUntilSignaled(gate <-chan struct{}) {
+	if server == nil {
+		return
+	}
+	server.mu.Lock()
+	server.shutdownGate = gate
+	server.mu.Unlock()
+}
+
+func (server *ProcessAPIServer) currentShutdownGate() <-chan struct{} {
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	return server.shutdownGate
 }
 
 // Start serves the handler assembled by the injected process until its
@@ -59,6 +82,12 @@ func (server *ProcessAPIServer) Start(
 	server.mu.Unlock()
 
 	<-ctx.Done()
+	if gate := server.currentShutdownGate(); gate != nil {
+		select {
+		case <-gate:
+		case <-time.After(processAPIServerReadyTimeout):
+		}
+	}
 	httpServer.CloseClientConnections()
 	httpServer.Close()
 	return nil

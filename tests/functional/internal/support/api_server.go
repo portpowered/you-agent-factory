@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -399,16 +400,6 @@ func readFactoryEventStreamRecoveryFromURL(t testing.TB, endpoint string) factor
 	return recovery
 }
 
-// sessionEventStreamRetainedCountHeader mirrors
-// pkg/services/factory_sessions/transports/http.SessionEventStreamRetainedCountHeader.
-// It carries the number of already-committed canonical Factory Events written
-// as the session event stream's retained-history prefix (stream.History)
-// before any live event is written, captured under the same lock that orders
-// every other canonical event append. Reading exactly that many leading
-// `data:` records gives a deterministic, point-in-time snapshot of committed
-// history without guessing completion from stream quiescence.
-const sessionEventStreamRetainedCountHeader = "X-Factory-Session-Retained-Event-Count"
-
 func readFactoryEventsFromURL(t testing.TB, endpoint string) []factoryapi.FactoryEvent {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -427,13 +418,13 @@ func readFactoryEventsFromURL(t testing.TB, endpoint string) []factoryapi.Factor
 		t.Fatalf("GET factory events status = %d url = %q body = %s", response.StatusCode, endpoint, strings.TrimSpace(string(body)))
 	}
 
-	retainedHeader := strings.TrimSpace(response.Header.Get(sessionEventStreamRetainedCountHeader))
+	retainedHeader := strings.TrimSpace(response.Header.Get(factorysessionshttp.SessionEventStreamRetainedCountHeader))
 	retainedCount, err := strconv.Atoi(retainedHeader)
 	if err != nil {
 		defer response.Body.Close()
 		t.Fatalf(
 			"GET factory events url = %q: missing or invalid %s header (%q): %v",
-			endpoint, sessionEventStreamRetainedCountHeader, retainedHeader, err,
+			endpoint, factorysessionshttp.SessionEventStreamRetainedCountHeader, retainedHeader, err,
 		)
 	}
 

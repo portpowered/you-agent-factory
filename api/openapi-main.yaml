@@ -286,6 +286,13 @@ paths:
         stream generation invalidates prior cursors even when factorySessionId is
         unchanged.
 
+        Bounded retained-history reads: X-Factory-Session-Retained-Event-Count
+        reports exactly how many leading text/event-stream data frames make up
+        the already-committed retained-history prefix, captured at subscribe
+        time. Clients that need a point-in-time snapshot of committed history
+        can read exactly this many records and stop, instead of inferring
+        completion from stream quiescence.
+
         Keepalives: successful SSE responses use Connection keep-alive. Idle
         periods may occur while the Factory Session is waiting for new canonical
         events; clients must treat these as normal waiting state rather than
@@ -331,6 +338,10 @@ paths:
               description: Opaque invalidation token for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `streamGenerationID` values before reusing reconnect cursors or stream-derived projections.
               schema:
                 type: string
+            X-Factory-Session-Retained-Event-Count:
+              description: Count of already-committed canonical FactoryEvent records written as the retained-history prefix before any live event, captured at subscribe time. A bounded reader can read exactly this many leading data frames instead of inferring completion from stream quiescence.
+              schema:
+                type: integer
           content:
             text/event-stream:
               schema:
