@@ -153,18 +153,6 @@ func decodeExecuteRequestBody(body io.Reader) (ExecuteRequestBody, error) {
 	return request, nil
 }
 
-func sessionRefFromHTTP(input SessionRefResponse) (providers.SessionRef, error) {
-	ref := providers.SessionRef{
-		Provider: providers.ID(strings.TrimSpace(input.Provider)),
-		Kind:     strings.TrimSpace(input.Kind),
-		ID:       strings.TrimSpace(input.ID),
-	}
-	if err := ref.Validate(); err != nil {
-		return providers.SessionRef{}, err
-	}
-	return ref, nil
-}
-
 func sessionRefToHTTP(ref providers.SessionRef) SessionRefResponse {
 	return SessionRefResponse{
 		Provider: ref.Provider.String(),

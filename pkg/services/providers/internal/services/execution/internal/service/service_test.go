@@ -13,6 +13,7 @@ import (
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
+	executionservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/service"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 )
 
@@ -105,6 +106,15 @@ func TestNewRejectsInvalidRegistrationSets(t *testing.T) {
 	}
 }
 
+func TestBuiltInRegistrationsDefaultToUnavailableEffects(t *testing.T) {
+	t.Parallel()
+
+	registrations := executionservice.BuiltInRegistrations()
+	if len(registrations) != 3 {
+		t.Fatalf("BuiltInRegistrations() = %d registrations, want antigravity/codex/claude", len(registrations))
+	}
+}
+
 func TestContinueValidatesThenResolvesCanonicalAdapterExactlyOnce(t *testing.T) {
 	t.Parallel()
 
@@ -177,6 +187,139 @@ func TestContinueValidatesThenResolvesCanonicalAdapterExactlyOnce(t *testing.T) 
 	}
 	if resume.ID != "session-1" {
 		t.Fatalf("caller ResumeSession.ID = %q, want session-1", resume.ID)
+	}
+}
+
+func TestContinueFailsClosedAcrossPrivateContinuationBoundaries(t *testing.T) {
+	t.Parallel()
+
+	newRequest := func(provider providers.ID) execution.ContinuationRequest {
+		return execution.ContinuationRequest{
+			ExecuteRequest: providers.ExecuteRequest{Provider: provider, AttemptID: "attempt-continue"},
+			ResumeSession:  &providers.SessionRef{Provider: provider, Kind: providers.SessionIDKind, ID: "session-continue"},
+		}
+	}
+
+	t.Run("invalid private reference", func(t *testing.T) {
+		t.Parallel()
+
+		continuation := mustContinuationService(t, mustExecutionService(t, func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+			return providers.ExecuteResult{}, nil
+		}))
+		_, err := continuation.Continue(context.Background(), execution.ContinuationRequest{
+			ExecuteRequest: providers.ExecuteRequest{Provider: providers.IDCodex, AttemptID: "attempt-continue"},
+		})
+		assertContinuationExecuteFailure(t, err, providers.ExecuteFailureKindInvalidRequest)
+	})
+
+	t.Run("unregistered provider", func(t *testing.T) {
+		t.Parallel()
+
+		continuation := mustContinuationService(t, mustExecutionService(t, func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+			return providers.ExecuteResult{}, nil
+		}))
+		_, err := continuation.Continue(context.Background(), newRequest(providers.IDClaude))
+		if !errors.Is(err, providers.ErrProviderUnavailable) {
+			t.Fatalf("Continue(unregistered provider) error = %v, want ErrProviderUnavailable", err)
+		}
+	})
+
+	t.Run("catalog lookup failure", func(t *testing.T) {
+		t.Parallel()
+
+		catalogService := &recordingCatalog{
+			registration: func(id providers.ID) (providers.Descriptor, error) {
+				return providers.Descriptor{ID: id, Availability: providers.AvailabilitySelectable}, nil
+			},
+			get: func(context.Context, providers.GetProviderRequest) (providers.GetProviderResult, error) {
+				return providers.GetProviderResult{}, providers.ErrUnknownProvider
+			},
+		}
+		executionService, err := executionwire.NewService(catalogService, execution.Registration{
+			Provider: providers.IDCodex,
+			Attempt: func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+				t.Fatal("ordinary adapter called for catalog lookup failure")
+				return providers.ExecuteResult{}, nil
+			},
+		})
+		if err != nil {
+			t.Fatalf("NewService() = %v", err)
+		}
+		_, err = mustContinuationService(t, executionService).Continue(context.Background(), newRequest(providers.IDCodex))
+		if !errors.Is(err, providers.ErrUnknownProvider) {
+			t.Fatalf("Continue(catalog lookup failure) error = %v, want ErrUnknownProvider", err)
+		}
+	})
+
+	t.Run("missing continuation adapter", func(t *testing.T) {
+		t.Parallel()
+
+		continuation := mustContinuationService(t, mustExecutionService(t, func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+			return providers.ExecuteResult{}, nil
+		}))
+		_, err := continuation.Continue(context.Background(), newRequest(providers.IDCodex))
+		assertContinuationExecuteFailure(t, err, providers.ExecuteFailureKindDependency)
+	})
+
+	t.Run("canceled context", func(t *testing.T) {
+		t.Parallel()
+
+		continuation := mustContinuationService(t, mustExecutionService(t, func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+			return providers.ExecuteResult{}, nil
+		}))
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		_, err := continuation.Continue(ctx, newRequest(providers.IDCodex))
+		assertContinuationExecuteFailure(t, err, providers.ExecuteFailureKindCanceled)
+	})
+
+	t.Run("catalog registration mismatch", func(t *testing.T) {
+		t.Parallel()
+
+		registered := providers.Descriptor{ID: providers.IDCodex, Availability: providers.AvailabilitySelectable}
+		catalogService := &recordingCatalog{
+			registration: func(providers.ID) (providers.Descriptor, error) {
+				return registered, nil
+			},
+			get: func(context.Context, providers.GetProviderRequest) (providers.GetProviderResult, error) {
+				resolved := registered.Clone()
+				resolved.Aliases = []string{"codex-alias"}
+				return providers.GetProviderResult{Provider: resolved}, nil
+			},
+		}
+		executionService, err := executionwire.NewService(catalogService, execution.Registration{
+			Provider: providers.IDCodex,
+			Attempt: func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+				t.Fatal("ordinary adapter called for catalog mismatch")
+				return providers.ExecuteResult{}, nil
+			},
+			Continue: func(context.Context, execution.ContinuationRequest) (providers.ExecuteResult, error) {
+				t.Fatal("continuation adapter called for catalog mismatch")
+				return providers.ExecuteResult{}, nil
+			},
+		})
+		if err != nil {
+			t.Fatalf("NewService() = %v", err)
+		}
+		_, err = mustContinuationService(t, executionService).Continue(context.Background(), newRequest(providers.IDCodex))
+		assertContinuationExecuteFailure(t, err, providers.ExecuteFailureKindDependency)
+	})
+}
+
+func mustContinuationService(t *testing.T, service execution.Service) execution.ContinuationService {
+	t.Helper()
+	continuation, ok := service.(execution.ContinuationService)
+	if !ok {
+		t.Fatal("execution service does not implement ContinuationService")
+	}
+	return continuation
+}
+
+func assertContinuationExecuteFailure(t *testing.T, err error, kind providers.ExecuteFailureKind) {
+	t.Helper()
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) || failure.Kind != kind {
+		t.Fatalf("Continue() error = %#v, want ExecuteFailure kind %q", err, kind)
 	}
 }
 
@@ -325,6 +468,46 @@ func TestExecuteReturnsFirstAdapterFailureWithoutRetry(t *testing.T) {
 	}
 	if !reflect.DeepEqual(result, providers.ExecuteResult{}) {
 		t.Fatalf("failed Execute() result = %#v, want zero result", result)
+	}
+}
+
+func TestExecutePreservesDeclaredFailureSessionReference(t *testing.T) {
+	t.Parallel()
+
+	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "session-failed"}
+	executionService := mustExecutionService(t, func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+		return providers.ExecuteResult{}, providers.ExecuteFailure{
+			Kind:       providers.ExecuteFailureKindDependency,
+			SessionRef: &reference,
+		}
+	})
+	_, err := executionService.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:  providers.IDCodex,
+		AttemptID: "attempt-failed",
+	})
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) || failure.SessionRef == nil || *failure.SessionRef != reference {
+		t.Fatalf("Execute() error = %#v, want declared failure session %#v", err, reference)
+	}
+}
+
+func TestExecutePreservesLifecycleDeclaredFailureSessionReference(t *testing.T) {
+	t.Parallel()
+
+	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "session-lifecycle-failed"}
+	executionService := mustExecutionService(t, func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+		return providers.ExecuteResult{}, execution.AttemptFailure{Declared: &providers.ExecuteFailure{
+			Kind:       providers.ExecuteFailureKindDependency,
+			SessionRef: &reference,
+		}}
+	})
+	_, err := executionService.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:  providers.IDCodex,
+		AttemptID: "attempt-lifecycle-failed",
+	})
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) || failure.SessionRef == nil || *failure.SessionRef != reference {
+		t.Fatalf("Execute() error = %#v, want lifecycle failure session %#v", err, reference)
 	}
 }
 

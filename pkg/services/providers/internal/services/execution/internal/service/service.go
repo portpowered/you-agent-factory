@@ -195,10 +195,9 @@ func normalizeContextFailureWithExisting(
 	if !existingOK {
 		return contextFailure
 	}
-	normalized, normalizedOK := executeFailureAs(contextFailure)
-	if !normalizedOK {
-		return contextFailure
-	}
+	// normalizeContextFailure returns an ExecuteFailure whenever it returns a
+	// non-nil error, so its typed fields remain safe to preserve below.
+	normalized, _ := executeFailureAs(contextFailure)
 	normalized.SessionRef = existingFailure.SessionRef
 	normalized.Diagnostics = existingFailure.Diagnostics
 	return normalizeDeclaredFailure(normalized, request, extraSecrets...)
