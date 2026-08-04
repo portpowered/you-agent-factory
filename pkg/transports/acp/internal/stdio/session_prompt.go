@@ -20,12 +20,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
 )
 
-// factoryCommandName is the exact "/factory" slash-command token this
-// transport recognizes at the "session/prompt" input boundary
-// (final-proposal.md §3 "Fallback"), delegating to the same changeTarget
-// sequence "session/set_config_option" uses instead of duplicating catalog
-// filtering, reference parsing, expected-version policy, state mutation, or
-// error translation.
+// factoryCommandName is the exact "/factory" token recognized at the
+// session/prompt boundary. It delegates mutation to the existing changeTarget
+// sequence rather than duplicating target-selection policy.
 const factoryCommandName = "/factory"
 
 // errMalformedFactoryCommand marks a recognized "/factory" command attempt
@@ -473,22 +470,14 @@ func (s *Server) admitPromptTurn(ctx context.Context, turn session.PromptTurn, r
 		s.recoverStrandedTurn(ctx, startResult.Session.ID, startResult.Turn.ID, chatsessions.TurnStateCanceled)
 		return nil, classifyDependencyFailure(err)
 	}
+	if sessionVersion, err := s.recordPromptHistory(ctx, startResult, turn); err != nil {
+		s.recoverStrandedTurn(ctx, startResult.Session.ID, startResult.Turn.ID, chatsessions.TurnStateFailed)
+		return nil, classifyDependencyFailure(err)
+	} else {
+		startResult.Session.Version = sessionVersion
+	}
 
 	return s.dispatchFactoryTurn(ctx, startResult, turn, reqIdentity)
-}
-
-// recoverStrandedTurn makes one best-effort attempt to move turnID to
-// fallback after its primary terminalizing AdvanceTurn call already failed,
-// so that failure alone can never strand the session's busy/active-turn
-// state forever. Its own outcome is intentionally not surfaced to the
-// caller: the caller already has the primary failure to report, and no
-// further fallback is attempted beyond this single recovery call.
-func (s *Server) recoverStrandedTurn(ctx context.Context, sessionID, turnID string, fallback chatsessions.TurnState) {
-	_, _ = s.chatSessions.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
-		SessionID: sessionID,
-		TurnID:    turnID,
-		Next:      fallback,
-	})
 }
 
 // respondToRedeliveredTurn classifies a StartTurn result that identified an

@@ -14,6 +14,7 @@ import (
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
@@ -152,6 +153,12 @@ type fakeChatSessionsService struct {
 	// -- the StreamHead-lag case drainRecords/deliverReadTimeGap treat as a
 	// non-error "stop" rather than a failure.
 	acknowledgeAttachmentPositionErr bool
+
+	sequenceReqs          []chatsessions.SequenceRequest
+	sequenceErr           error
+	advanceStreamHeadReqs []chatsessions.AdvanceStreamHeadRequest
+	advanceStreamHeadErr  error
+	nextAggregateSequence events.AggregateSequence
 
 	requestControlReqs   []chatsessions.RequestControlRequest
 	requestControlResult chatsessions.RequestControlResult
@@ -430,12 +437,30 @@ func (f *fakeChatSessionsService) AdvanceControl(_ context.Context, req chatsess
 	return chatsessions.AdvanceControlResult{Intent: intent}, nil
 }
 
-func (f *fakeChatSessionsService) Sequence(context.Context, chatsessions.SequenceRequest) (chatsessions.SequenceResult, error) {
-	return chatsessions.SequenceResult{}, errors.New("fakeChatSessionsService: Sequence not implemented")
+func (f *fakeChatSessionsService) Sequence(_ context.Context, req chatsessions.SequenceRequest) (chatsessions.SequenceResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sequenceReqs = append(f.sequenceReqs, req)
+	if f.sequenceErr != nil {
+		return chatsessions.SequenceResult{}, f.sequenceErr
+	}
+	f.nextAggregateSequence++
+	return chatsessions.SequenceResult{
+		SessionID: req.SessionID, ItemID: fmt.Sprintf("sequenced-item-%d", f.nextAggregateSequence),
+		AggregateSequence: f.nextAggregateSequence, Outcome: chatsessions.SequenceOutcomeAccepted,
+	}, nil
 }
 
-func (f *fakeChatSessionsService) AdvanceStreamHead(context.Context, chatsessions.AdvanceStreamHeadRequest) (chatsessions.AdvanceStreamHeadResult, error) {
-	return chatsessions.AdvanceStreamHeadResult{}, errors.New("fakeChatSessionsService: AdvanceStreamHead not implemented")
+func (f *fakeChatSessionsService) AdvanceStreamHead(_ context.Context, req chatsessions.AdvanceStreamHeadRequest) (chatsessions.AdvanceStreamHeadResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.advanceStreamHeadReqs = append(f.advanceStreamHeadReqs, req)
+	if f.advanceStreamHeadErr != nil {
+		return chatsessions.AdvanceStreamHeadResult{}, f.advanceStreamHeadErr
+	}
+	f.getSessionResult.Session.StreamHead = uint64(req.AggregateSequence)
+	f.getSessionResult.Session.Version++
+	return chatsessions.AdvanceStreamHeadResult{Session: f.getSessionResult.Session, Outcome: chatsessions.AdvanceStreamHeadOutcomeAdvanced}, nil
 }
 
 func (f *fakeChatSessionsService) AcknowledgeAttachment(_ context.Context, req chatsessions.AcknowledgeAttachmentRequest) (chatsessions.AcknowledgeAttachmentResult, error) {

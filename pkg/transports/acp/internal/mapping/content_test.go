@@ -204,6 +204,31 @@ func TestProjectMessage_NoOutput(t *testing.T) {
 	})
 }
 
+func TestProjectRetained_UserMessageUsesOriginalItemIdentity(t *testing.T) {
+	draft := messageDraft(workers.PhaseCompleted, mustMarshal(t, workers.MessagePayload{
+		Role:          "user",
+		ContentBlocks: []workers.ContentBlock{{Kind: workers.ContentBlockText, Text: "reload me"}},
+	}), "item-user")
+
+	update, err := ProjectRetained(draft)
+	if err != nil {
+		t.Fatalf("ProjectRetained() error = %v", err)
+	}
+	if update == nil || update.UserMessageChunk == nil {
+		t.Fatalf("ProjectRetained() update = %+v, want a user_message_chunk", update)
+	}
+	if got := textOf(update.UserMessageChunk.Content); got != "reload me" {
+		t.Fatalf("user_message_chunk text = %q, want %q", got, "reload me")
+	}
+	assertMessageID(t, update.UserMessageChunk.MessageId, "item-user")
+
+	live, err := Project(draft)
+	if err != nil {
+		t.Fatalf("Project() error = %v", err)
+	}
+	requireNoUpdate(t, live)
+}
+
 // reasoningCase is one ProjectReasoning table-driven expectation.
 type reasoningCase struct {
 	name       string

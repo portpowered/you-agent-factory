@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -89,6 +90,55 @@ func TestServeACP_RootBuildProcessCloseStopsCapturedFactorySession(t *testing.T)
 	}
 	harness.finish(t)
 
+}
+
+// TestServeACP_RootBuildProcessCloseThenLoadReplaysRetainedItemIdentities
+// proves the composed close-and-reload journey. A completed first prompt
+// contributes its sequenced output, an active second prompt is closed through
+// the real Factory Sessions owner, and session/load then replays the retained
+// first output without provider re-execution or a replacement item identity.
+func TestServeACP_RootBuildProcessCloseThenLoadReplaysRetainedItemIdentities(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test driving ACP close then load through root.BuildProcess")
+	}
+
+	harness := newServeACPControlHarness(t, newControlProviderCommandRunner(2))
+	sessionID := harness.openSession(t)
+
+	harness.sendPrompt(t, 3, sessionID, "complete before the active close")
+	firstPrompt, originalUpdates := harness.responseWithUpdates(t, 3)
+	assertPromptStopReason(t, firstPrompt, acpsdk.StopReasonEndTurn)
+	originalItemIDs := agentMessageItemIDs(t, originalUpdates)
+	if len(originalItemIDs) == 0 {
+		t.Fatal("completed prompt produced no identified agent message update to retain")
+	}
+	if userIDs := userMessageItemIDs(t, originalUpdates); len(userIDs) != 0 {
+		t.Fatalf("live prompt replayed user message IDs %v, want no echo of client-supplied prompt", userIDs)
+	}
+
+	harness.sendPrompt(t, 4, sessionID, "close this later active prompt")
+	harness.runner.waitForStart(t, 2)
+	harness.sendClose(t, 5, sessionID)
+	responses := harness.responses(t, "4", "5")
+	assertPromptStopReason(t, responses["4"], acpsdk.StopReasonCancelled)
+	assertCloseResponse(t, responses["5"])
+	harness.runner.waitForCancellation(t, 2)
+
+	harness.sendLoad(t, 6, sessionID)
+	loadResponse, loadedUpdates := harness.responseWithUpdates(t, 6)
+	if loadResponse.Error != nil {
+		t.Fatalf("session/load response error = %+v, want retained-history success", loadResponse.Error)
+	}
+	if got := agentMessageItemIDs(t, loadedUpdates); !slices.Equal(got, originalItemIDs) {
+		t.Fatalf("loaded agent message IDs = %v, want original sequencer identities %v", got, originalItemIDs)
+	}
+	if userIDs := userMessageItemIDs(t, loadedUpdates); len(userIDs) != 2 || userIDs[0] == "" || userIDs[1] == "" {
+		t.Fatalf("loaded user message IDs = %v, want both retained prompt identities", userIDs)
+	}
+	if got := harness.runner.CallCount(); got != 2 {
+		t.Fatalf("provider command calls = %d, want exactly the completed and closed prompts", got)
+	}
+	harness.finish(t)
 }
 
 type serveACPControlHarness struct {
@@ -201,9 +251,41 @@ func (h *serveACPControlHarness) sendClose(t *testing.T, id int, sessionID strin
 	writeRPCLine(t, h.stdinWrite, fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"session/close","params":{"sessionId":%q}}`, id, sessionID))
 }
 
+func (h *serveACPControlHarness) sendLoad(t *testing.T, id int, sessionID string) {
+	t.Helper()
+	writeRPCLine(t, h.stdinWrite, fmt.Sprintf(
+		`{"jsonrpc":"2.0","id":%d,"method":"session/load","params":{"sessionId":%q,"cwd":%q,"mcpServers":[]}}`,
+		id, sessionID, h.cwd,
+	))
+}
+
 func (h *serveACPControlHarness) response(t *testing.T, id int) rpcFrame {
 	t.Helper()
 	return h.responses(t, fmt.Sprintf("%d", id))[fmt.Sprintf("%d", id)]
+}
+
+// responseWithUpdates returns one response and every preceding session/update
+// notification for that request. ACP load intentionally emits retained
+// history before its response, so this keeps the functional test on the
+// actual protocol ordering instead of dropping the evidence in responses.
+func (h *serveACPControlHarness) responseWithUpdates(t *testing.T, id int) (rpcFrame, []rpcFrame) {
+	t.Helper()
+	wantID := fmt.Sprintf("%d", id)
+	var updates []rpcFrame
+	for {
+		frame := readRPCFrame(t, h.stdout)
+		if frame.Method != "" {
+			if frame.Method != string(acpsdk.ClientMethodSessionUpdate) {
+				t.Fatalf("unexpected ACP notification method %q", frame.Method)
+			}
+			updates = append(updates, frame)
+			continue
+		}
+		if got := string(bytes.TrimSpace(frame.ID)); got != wantID {
+			t.Fatalf("unexpected ACP response id %s while waiting for %s", got, wantID)
+		}
+		return frame, updates
+	}
 }
 
 func (h *serveACPControlHarness) responses(t *testing.T, ids ...string) map[string]rpcFrame {
@@ -270,6 +352,40 @@ func assertCloseResponse(t *testing.T, response rpcFrame) {
 	if err := json.Unmarshal(response.Result, &closeResponse); err != nil {
 		t.Fatalf("unmarshal session/close result: %v", err)
 	}
+}
+
+func agentMessageItemIDs(t *testing.T, updates []rpcFrame) []string {
+	t.Helper()
+	ids := make([]string, 0, len(updates))
+	for _, frame := range updates {
+		var notification acpsdk.SessionNotification
+		if err := json.Unmarshal(frame.Params, &notification); err != nil {
+			t.Fatalf("unmarshal session/update notification: %v", err)
+		}
+		chunk := notification.Update.AgentMessageChunk
+		if chunk == nil || chunk.MessageId == nil {
+			continue
+		}
+		ids = append(ids, *chunk.MessageId)
+	}
+	return ids
+}
+
+func userMessageItemIDs(t *testing.T, updates []rpcFrame) []string {
+	t.Helper()
+	ids := make([]string, 0, len(updates))
+	for _, frame := range updates {
+		var notification acpsdk.SessionNotification
+		if err := json.Unmarshal(frame.Params, &notification); err != nil {
+			t.Fatalf("unmarshal session/update notification: %v", err)
+		}
+		chunk := notification.Update.UserMessageChunk
+		if chunk == nil || chunk.MessageId == nil {
+			continue
+		}
+		ids = append(ids, *chunk.MessageId)
+	}
+	return ids
 }
 
 type controlProviderCommandRunner struct {

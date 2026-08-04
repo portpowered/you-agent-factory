@@ -10,6 +10,7 @@ import (
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
@@ -38,6 +39,61 @@ func attachmentIDFromMeta(t *testing.T, meta map[string]any) string {
 		t.Fatalf("_meta[%q] = %#v, want a non-empty attachment identity", session.AttachmentResumeMetaKey, meta[session.AttachmentResumeMetaKey])
 	}
 	return attachmentID
+}
+
+// TestServeSessionLoadReplaysRetainedUpdatesBeforeItsResponse proves the ACP
+// load ordering: a fresh connection receives the retained Chat aggregate as
+// session/update notifications before the load response, with the exact item
+// identity assigned at sequencing time. It exercises the real JSON-RPC Serve
+// loop rather than only the handler so notification framing and response
+// ordering cannot drift apart.
+func TestServeSessionLoadReplaysRetainedUpdatesBeforeItsResponse(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+	eventsSvc.seedItem(t, streamingTestSessionID, "item-user", "", workers.KindMessage, workers.PhaseCompleted, workers.MessagePayload{
+		Role:          "user",
+		ContentBlocks: []workers.ContentBlock{{Kind: workers.ContentBlockText, Text: "retained question"}},
+	})
+	eventsSvc.seedItem(t, streamingTestSessionID, "item-assistant", "", workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("retained answer"))
+
+	input := `{"jsonrpc":"2.0","id":1,"method":"session/load","params":{"sessionId":"` + streamingTestSessionID + `","cwd":"/work/project","mcpServers":[]}}` + "\n"
+	out := &bytes.Buffer{}
+	if err := server.Serve(context.Background(), strings.NewReader(input), out); err != nil {
+		t.Fatalf("Serve() error = %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("Serve() emitted %d frames, want two retained updates then load response: %s", len(lines), out.String())
+	}
+	var userNotification notificationMessage
+	if err := json.Unmarshal([]byte(lines[0]), &userNotification); err != nil {
+		t.Fatalf("unmarshal retained user notification: %v", err)
+	}
+	if userNotification.Method != acpsdk.ClientMethodSessionUpdate {
+		t.Fatalf("first frame method = %q, want %q", userNotification.Method, acpsdk.ClientMethodSessionUpdate)
+	}
+	if userNotification.Params.Update.UserMessageChunk == nil || userNotification.Params.Update.UserMessageChunk.MessageId == nil {
+		t.Fatalf("first frame update = %+v, want an identified user message", userNotification.Params.Update)
+	}
+	if got := *userNotification.Params.Update.UserMessageChunk.MessageId; got != "item-user" {
+		t.Fatalf("replayed user MessageId = %q, want original sequencer identity %q", got, "item-user")
+	}
+	var assistantNotification notificationMessage
+	if err := json.Unmarshal([]byte(lines[1]), &assistantNotification); err != nil {
+		t.Fatalf("unmarshal retained assistant notification: %v", err)
+	}
+	if assistantNotification.Params.Update.AgentMessageChunk == nil || assistantNotification.Params.Update.AgentMessageChunk.MessageId == nil {
+		t.Fatalf("second frame update = %+v, want an identified agent message", assistantNotification.Params.Update)
+	}
+	if got := *assistantNotification.Params.Update.AgentMessageChunk.MessageId; got != "item-assistant" {
+		t.Fatalf("replayed assistant MessageId = %q, want original sequencer identity %q", got, "item-assistant")
+	}
+
+	response := assertSingleResponseLine(t, bytes.NewBufferString(lines[2]+"\n"))
+	if string(response.ID) != "1" || response.Error != nil {
+		t.Fatalf("load response = %+v, want successful response id 1", response)
+	}
 }
 
 // TestHandleSessionLoadAndResumeRejectMissingSessionIdBeforeAnyEffect proves
