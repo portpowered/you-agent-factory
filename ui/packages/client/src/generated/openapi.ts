@@ -3101,6 +3101,7 @@ export interface components {
         | components["schemas"]["WorkRequestEventPayload"]
         | components["schemas"]["RelationshipChangeRequestEventPayload"]
         | components["schemas"]["DispatchRequestEventPayload"]
+        | components["schemas"]["DispatchWorkerSessionAssociationEventPayload"]
         | components["schemas"]["ModelRequestEventPayload"]
         | components["schemas"]["ModelResponseEventPayload"]
         | components["schemas"]["InferenceRequestEventPayload"]
@@ -3246,6 +3247,11 @@ export interface components {
       inputs: components["schemas"]["DispatchConsumedWorkRef"][];
       resources?: components["schemas"]["Resource"][];
       metadata?: components["schemas"]["DispatchRequestEventMetadata"];
+    };
+    /** @description Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload. */
+    DispatchWorkerSessionAssociationEventPayload: {
+      /** @description Non-empty Worker Session identity allocated for the dispatch. */
+      workerSessionId: string;
     };
     /** @description Request details captured immediately before a model-backed worker invocation enters resource, load, and execution boundaries. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier. */
     ModelRequestEventPayload: {
@@ -7691,6 +7697,9 @@ export const FactoryEventType = {
   FactoryEventTypeRelationshipChangeRequest: "RELATIONSHIP_CHANGE_REQUEST",
   // A workstation request began processing a set of input work.
   FactoryEventTypeDispatchRequest: "DISPATCH_REQUEST",
+  // A dispatch was associated with the Worker Session allocated to execute it.
+  FactoryEventTypeDispatchWorkerSessionAssociation:
+    "DISPATCH_WORKER_SESSION_ASSOCIATION",
   // A model-backed worker invocation request is about to enter resource, load, and execution boundaries.
   FactoryEventTypeModelRequest: "MODEL_REQUEST",
   // A model-backed worker invocation returned with resource, load, output, and failure evidence.

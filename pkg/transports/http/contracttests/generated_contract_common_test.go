@@ -159,6 +159,7 @@ var canonicalFactoryEventTypes = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeWorkRequest,
 	factoryapi.FactoryEventTypeRelationshipChangeRequest,
 	factoryapi.FactoryEventTypeDispatchRequest,
+	factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation,
 	factoryapi.FactoryEventTypeModelRequest,
 	factoryapi.FactoryEventTypeModelResponse,
 	factoryapi.FactoryEventTypeInferenceRequest,
@@ -219,6 +220,10 @@ var generatedFactoryEventPayloadDecoders = map[factoryapi.FactoryEventType]func(
 	},
 	factoryapi.FactoryEventTypeDispatchRequest: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsDispatchRequestEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsDispatchWorkerSessionAssociationEventPayload()
 		return err
 	},
 	factoryapi.FactoryEventTypeModelRequest: func(payload factoryapi.FactoryEvent_Payload) error {
@@ -341,6 +346,9 @@ var generatedFactoryEventPayloadEncoders = map[reflect.Type]func(*factoryapi.Fac
 	},
 	reflect.TypeOf(factoryapi.DispatchRequestEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromDispatchRequestEventPayload(value.(factoryapi.DispatchRequestEventPayload))
+	},
+	reflect.TypeOf(factoryapi.DispatchWorkerSessionAssociationEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromDispatchWorkerSessionAssociationEventPayload(value.(factoryapi.DispatchWorkerSessionAssociationEventPayload))
 	},
 	reflect.TypeOf(factoryapi.ModelRequestEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromModelRequestEventPayload(value.(factoryapi.ModelRequestEventPayload))

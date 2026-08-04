@@ -265,16 +265,17 @@ func assertSessionLifecycleEventStatusVocabulary(t *testing.T, schemas map[strin
 func assertSessionLifecyclePayloadsOmitContextIdentityFields(t *testing.T, schemas map[string]any) {
 	t.Helper()
 	for schemaName, forbidden := range map[string][]string{
-		"SessionStartedEventPayload":                {"sessionId", "orchestratorKind", "orchestratorDialect"},
-		"SessionPausedEventPayload":                 {"sessionId", "orchestratorKind"},
-		"SessionResumedEventPayload":                {"sessionId", "orchestratorKind"},
-		"SessionResultUpdatedEventPayload":          {"sessionId", "orchestratorKind"},
-		"SessionCompletedEventPayload":              {"sessionId", "orchestratorKind"},
-		"OrchestratorPhaseChangedEventPayload":      {"sessionId", "phaseId", "phaseName"},
-		"OrchestratorCheckpointWrittenEventPayload": {"sessionId", "checkpointId", "phaseId", "phaseName"},
-		"DispatchQueuedEventPayload":                {"sessionId", "dispatchId", "phaseId", "phaseName"},
-		"DispatchInterruptedEventPayload":           {"sessionId", "dispatchId"},
-		"DispatchReconciledEventPayload":            {"sessionId", "dispatchId"},
+		"SessionStartedEventPayload":                   {"sessionId", "orchestratorKind", "orchestratorDialect"},
+		"SessionPausedEventPayload":                    {"sessionId", "orchestratorKind"},
+		"SessionResumedEventPayload":                   {"sessionId", "orchestratorKind"},
+		"SessionResultUpdatedEventPayload":             {"sessionId", "orchestratorKind"},
+		"SessionCompletedEventPayload":                 {"sessionId", "orchestratorKind"},
+		"OrchestratorPhaseChangedEventPayload":         {"sessionId", "phaseId", "phaseName"},
+		"OrchestratorCheckpointWrittenEventPayload":    {"sessionId", "checkpointId", "phaseId", "phaseName"},
+		"DispatchQueuedEventPayload":                   {"sessionId", "dispatchId", "phaseId", "phaseName"},
+		"DispatchWorkerSessionAssociationEventPayload": {"sessionId", "dispatchId"},
+		"DispatchInterruptedEventPayload":              {"sessionId", "dispatchId"},
+		"DispatchReconciledEventPayload":               {"sessionId", "dispatchId"},
 	} {
 		assertPropertiesAbsent(t, schemaProperties(t, schemaObject(t, schemas, schemaName), schemaName), schemaName, forbidden...)
 	}
@@ -333,6 +334,21 @@ func assertUnifiedDispatchEvents(t *testing.T, schemas map[string]any) {
 	assertPropertyRef(t, dispatchRequestProperties, "metadata", "#/components/schemas/DispatchRequestEventMetadata")
 	assertPropertiesAbsent(t, dispatchRequestProperties, "DispatchRequestEventPayload", "dispatchId", "workstation", "worker")
 	assertNoDispatchConfigCopies(t, dispatchRequestProperties, "DispatchRequestEventPayload")
+
+	association := schemaObject(t, schemas, "DispatchWorkerSessionAssociationEventPayload")
+	assertRequiredFields(t, association, "workerSessionId")
+	if additionalProperties, ok := association["additionalProperties"].(bool); !ok || additionalProperties {
+		t.Fatalf("DispatchWorkerSessionAssociationEventPayload.additionalProperties = %#v, want false", association["additionalProperties"])
+	}
+	associationProperties := schemaProperties(t, association, "DispatchWorkerSessionAssociationEventPayload")
+	if len(associationProperties) != 1 {
+		t.Fatalf("DispatchWorkerSessionAssociationEventPayload.properties = %#v, want only workerSessionId", associationProperties)
+	}
+	workerSessionID, ok := associationProperties["workerSessionId"].(map[string]any)
+	if !ok || workerSessionID["type"] != "string" || workerSessionID["minLength"] != 1 {
+		t.Fatalf("DispatchWorkerSessionAssociationEventPayload.workerSessionId = %#v, want required non-empty string", associationProperties["workerSessionId"])
+	}
+	assertPropertiesAbsent(t, associationProperties, "DispatchWorkerSessionAssociationEventPayload", "dispatchId")
 
 	dispatchInput := schemaObject(t, schemas, "DispatchConsumedWorkRef")
 	assertRequiredFields(t, dispatchInput, "workId")

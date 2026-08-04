@@ -291,6 +291,7 @@ const (
 	FactoryEventTypeDispatchReconciled            = recordingcontracts.FactoryEventTypeDispatchReconciled
 	FactoryEventTypeDispatchRequest               = recordingcontracts.FactoryEventTypeDispatchRequest
 	FactoryEventTypeDispatchResponse              = recordingcontracts.FactoryEventTypeDispatchResponse
+	FactoryEventTypeDispatchWorkerSessionAssoc    = recordingcontracts.FactoryEventTypeDispatchWorkerSessionAssoc
 	FactoryEventTypeFactoryChange                 = recordingcontracts.FactoryEventTypeFactoryChange
 	FactoryEventTypeFactoryStateResponse          = recordingcontracts.FactoryEventTypeFactoryStateResponse
 	FactoryEventTypeInferenceRequest              = recordingcontracts.FactoryEventTypeInferenceRequest

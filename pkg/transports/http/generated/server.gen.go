@@ -152,37 +152,38 @@ const (
 
 // Defines values for FactoryEventType.
 const (
-	FactoryEventTypeAgentRunResponse              FactoryEventType = "AGENT_RUN_RESPONSE"
-	FactoryEventTypeArtifactCreated               FactoryEventType = "ARTIFACT_CREATED"
-	FactoryEventTypeDispatchInterrupted           FactoryEventType = "DISPATCH_INTERRUPTED"
-	FactoryEventTypeDispatchQueued                FactoryEventType = "DISPATCH_QUEUED"
-	FactoryEventTypeDispatchReconciled            FactoryEventType = "DISPATCH_RECONCILED"
-	FactoryEventTypeDispatchRequest               FactoryEventType = "DISPATCH_REQUEST"
-	FactoryEventTypeDispatchResponse              FactoryEventType = "DISPATCH_RESPONSE"
-	FactoryEventTypeFactoryChange                 FactoryEventType = "FACTORY_CHANGE"
-	FactoryEventTypeFactoryStateResponse          FactoryEventType = "FACTORY_STATE_RESPONSE"
-	FactoryEventTypeInferenceRequest              FactoryEventType = "INFERENCE_REQUEST"
-	FactoryEventTypeInferenceResponse             FactoryEventType = "INFERENCE_RESPONSE"
-	FactoryEventTypeInitialStructureRequest       FactoryEventType = "INITIAL_STRUCTURE_REQUEST"
-	FactoryEventTypeJavaScriptCheckpointRef       FactoryEventType = "JAVASCRIPT_CHECKPOINT_REF"
-	FactoryEventTypeJavaScriptPhaseChange         FactoryEventType = "JAVASCRIPT_PHASE_CHANGE"
-	FactoryEventTypeModelRequest                  FactoryEventType = "MODEL_REQUEST"
-	FactoryEventTypeModelResponse                 FactoryEventType = "MODEL_RESPONSE"
-	FactoryEventTypeOrchestratorCheckpointWritten FactoryEventType = "ORCHESTRATOR_CHECKPOINT_WRITTEN"
-	FactoryEventTypeOrchestratorPhaseChanged      FactoryEventType = "ORCHESTRATOR_PHASE_CHANGED"
-	FactoryEventTypeRelationshipChangeRequest     FactoryEventType = "RELATIONSHIP_CHANGE_REQUEST"
-	FactoryEventTypeRunRequest                    FactoryEventType = "RUN_REQUEST"
-	FactoryEventTypeRunResponse                   FactoryEventType = "RUN_RESPONSE"
-	FactoryEventTypeScriptRequest                 FactoryEventType = "SCRIPT_REQUEST"
-	FactoryEventTypeScriptResponse                FactoryEventType = "SCRIPT_RESPONSE"
-	FactoryEventTypeSessionCompleted              FactoryEventType = "SESSION_COMPLETED"
-	FactoryEventTypeSessionLifecycleControl       FactoryEventType = "SESSION_LIFECYCLE_CONTROL"
-	FactoryEventTypeSessionPaused                 FactoryEventType = "SESSION_PAUSED"
-	FactoryEventTypeSessionResultUpdated          FactoryEventType = "SESSION_RESULT_UPDATED"
-	FactoryEventTypeSessionResumed                FactoryEventType = "SESSION_RESUMED"
-	FactoryEventTypeSessionStarted                FactoryEventType = "SESSION_STARTED"
-	FactoryEventTypeWorkRequest                   FactoryEventType = "WORK_REQUEST"
-	FactoryEventTypeWorkStateChange               FactoryEventType = "WORK_STATE_CHANGE"
+	FactoryEventTypeAgentRunResponse                 FactoryEventType = "AGENT_RUN_RESPONSE"
+	FactoryEventTypeArtifactCreated                  FactoryEventType = "ARTIFACT_CREATED"
+	FactoryEventTypeDispatchInterrupted              FactoryEventType = "DISPATCH_INTERRUPTED"
+	FactoryEventTypeDispatchQueued                   FactoryEventType = "DISPATCH_QUEUED"
+	FactoryEventTypeDispatchReconciled               FactoryEventType = "DISPATCH_RECONCILED"
+	FactoryEventTypeDispatchRequest                  FactoryEventType = "DISPATCH_REQUEST"
+	FactoryEventTypeDispatchResponse                 FactoryEventType = "DISPATCH_RESPONSE"
+	FactoryEventTypeDispatchWorkerSessionAssociation FactoryEventType = "DISPATCH_WORKER_SESSION_ASSOCIATION"
+	FactoryEventTypeFactoryChange                    FactoryEventType = "FACTORY_CHANGE"
+	FactoryEventTypeFactoryStateResponse             FactoryEventType = "FACTORY_STATE_RESPONSE"
+	FactoryEventTypeInferenceRequest                 FactoryEventType = "INFERENCE_REQUEST"
+	FactoryEventTypeInferenceResponse                FactoryEventType = "INFERENCE_RESPONSE"
+	FactoryEventTypeInitialStructureRequest          FactoryEventType = "INITIAL_STRUCTURE_REQUEST"
+	FactoryEventTypeJavaScriptCheckpointRef          FactoryEventType = "JAVASCRIPT_CHECKPOINT_REF"
+	FactoryEventTypeJavaScriptPhaseChange            FactoryEventType = "JAVASCRIPT_PHASE_CHANGE"
+	FactoryEventTypeModelRequest                     FactoryEventType = "MODEL_REQUEST"
+	FactoryEventTypeModelResponse                    FactoryEventType = "MODEL_RESPONSE"
+	FactoryEventTypeOrchestratorCheckpointWritten    FactoryEventType = "ORCHESTRATOR_CHECKPOINT_WRITTEN"
+	FactoryEventTypeOrchestratorPhaseChanged         FactoryEventType = "ORCHESTRATOR_PHASE_CHANGED"
+	FactoryEventTypeRelationshipChangeRequest        FactoryEventType = "RELATIONSHIP_CHANGE_REQUEST"
+	FactoryEventTypeRunRequest                       FactoryEventType = "RUN_REQUEST"
+	FactoryEventTypeRunResponse                      FactoryEventType = "RUN_RESPONSE"
+	FactoryEventTypeScriptRequest                    FactoryEventType = "SCRIPT_REQUEST"
+	FactoryEventTypeScriptResponse                   FactoryEventType = "SCRIPT_RESPONSE"
+	FactoryEventTypeSessionCompleted                 FactoryEventType = "SESSION_COMPLETED"
+	FactoryEventTypeSessionLifecycleControl          FactoryEventType = "SESSION_LIFECYCLE_CONTROL"
+	FactoryEventTypeSessionPaused                    FactoryEventType = "SESSION_PAUSED"
+	FactoryEventTypeSessionResultUpdated             FactoryEventType = "SESSION_RESULT_UPDATED"
+	FactoryEventTypeSessionResumed                   FactoryEventType = "SESSION_RESUMED"
+	FactoryEventTypeSessionStarted                   FactoryEventType = "SESSION_STARTED"
+	FactoryEventTypeWorkRequest                      FactoryEventType = "WORK_REQUEST"
+	FactoryEventTypeWorkStateChange                  FactoryEventType = "WORK_STATE_CHANGE"
 )
 
 // Defines values for FactoryGuardType.
@@ -1289,6 +1290,12 @@ type DispatchResponseEventPayload struct {
 	ProviderFailure             *ProviderFailureMetadata `json:"providerFailure,omitempty"`
 	SelectedClassificationLabel *string                  `json:"selectedClassificationLabel,omitempty"`
 	TransitionId                string                   `json:"transitionId"`
+}
+
+// DispatchWorkerSessionAssociationEventPayload Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload.
+type DispatchWorkerSessionAssociationEventPayload struct {
+	// WorkerSessionId Non-empty Worker Session identity allocated for the dispatch.
+	WorkerSessionId string `json:"workerSessionId"`
 }
 
 // ErrorFamily Stable machine-readable error family for broader client grouping.
@@ -7461,6 +7468,32 @@ func (t *FactoryEvent_Payload) FromDispatchRequestEventPayload(v DispatchRequest
 
 // MergeDispatchRequestEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided DispatchRequestEventPayload
 func (t *FactoryEvent_Payload) MergeDispatchRequestEventPayload(v DispatchRequestEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsDispatchWorkerSessionAssociationEventPayload returns the union data inside the FactoryEvent_Payload as a DispatchWorkerSessionAssociationEventPayload
+func (t FactoryEvent_Payload) AsDispatchWorkerSessionAssociationEventPayload() (DispatchWorkerSessionAssociationEventPayload, error) {
+	var body DispatchWorkerSessionAssociationEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromDispatchWorkerSessionAssociationEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided DispatchWorkerSessionAssociationEventPayload
+func (t *FactoryEvent_Payload) FromDispatchWorkerSessionAssociationEventPayload(v DispatchWorkerSessionAssociationEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeDispatchWorkerSessionAssociationEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided DispatchWorkerSessionAssociationEventPayload
+func (t *FactoryEvent_Payload) MergeDispatchWorkerSessionAssociationEventPayload(v DispatchWorkerSessionAssociationEventPayload) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
