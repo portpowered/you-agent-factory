@@ -22,6 +22,7 @@ import (
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
@@ -146,6 +147,7 @@ type CommandOperations struct {
 	VisualizeWork                     VisualizeWorkOperation
 	OpenRunSelection                  runcli.SelectionFactory
 	ACP                               acpcli.Service
+	ACPServer                         acp.Server
 }
 
 // CommandFactory constructs a fresh Cobra tree for each invocation from
@@ -197,6 +199,7 @@ type CommandFactory struct {
 	VisualizeWork          func(workcli.VisualizeConfig) error
 	openRunSelection       runcli.SelectionFactory
 	acp                    acpcli.Service
+	acpServer              acp.Server
 }
 
 // NewCommandFactory copies the Wire-built graph without installing defaults.
@@ -244,6 +247,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		VisualizeWork:                     operations.VisualizeWork,
 		openRunSelection:                  operations.OpenRunSelection,
 		acp:                               operations.ACP,
+		acpServer:                         operations.ACPServer,
 	}
 }
 

@@ -48,6 +48,11 @@ func MCPFamilyManifest() (climanifest.Manifest, error) {
 	return mcpFamilyManifestValue(), nil
 }
 
+// ServeFamilyManifest returns generated metadata for you serve and you serve acp.
+func ServeFamilyManifest() (climanifest.Manifest, error) {
+	return serveFamilyManifestValue(), nil
+}
+
 // CommandByID returns one generated representative-family command record.
 func CommandByID(id string) (climanifest.Command, error) {
 	manifest, err := RepresentativeFamilyManifest()

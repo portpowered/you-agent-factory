@@ -22,6 +22,7 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns
@@ -52,7 +53,7 @@ func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *t
 	t.Setenv("USERPROFILE", home)
 
 	seedInstalledPackagedFactory(t, home, "@you/goal")
-	seedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
+	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
 
 	// ProviderOverride (an in-process workers.Provider fake) is used here
 	// instead of the standards-preferred ProviderCommandRunner
@@ -158,7 +159,7 @@ func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(
 	t.Setenv("USERPROFILE", home)
 
 	seedInstalledPackagedFactory(t, home, "@you/goal")
-	seedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
+	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
 
 	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
 	if err != nil {
@@ -323,7 +324,7 @@ func runPromptDeliveries(t *testing.T, homePrefix string, deliveries int) int32 
 	t.Setenv("USERPROFILE", home)
 
 	seedInstalledPackagedFactory(t, home, "@you/goal")
-	seedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
+	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
 
 	provider := testutil.NewMockProvider(workers.InferenceResponse{Content: "acknowledged\n<COMPLETE>"})
 	var factorySessionIDCalls atomic.Int32
@@ -527,7 +528,7 @@ func TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch(t
 	t.Setenv("USERPROFILE", home)
 
 	seedInstalledPackagedFactory(t, home, "@you/goal")
-	seedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
+	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
 
 	provider := newBlockingProvider(testutil.NewMockProvider(workers.InferenceResponse{Content: "acknowledged\n<COMPLETE>"}))
 	var factorySessionIDCalls atomic.Int32

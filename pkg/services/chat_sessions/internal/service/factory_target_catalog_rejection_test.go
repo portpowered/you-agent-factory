@@ -319,9 +319,14 @@ func TestResolveFactoryTargetCatalogRejectsIncompatiblePinnedWorkingRoot(t *test
 		resolveNamedFactory: func(context.Context, factorydefinitions.ResolveNamedFactoryRequest) (factorydefinitions.ResolveNamedFactoryResult, error) {
 			return factorydefinitions.ResolveNamedFactoryResult{
 				Resolution: factorydefinitions.NamedFactoryResolution{
-					Name:        "@you/factory-builder",
-					Source:      factorydefinitions.NamedFactoryResolutionSourceProjectLocal,
-					ProjectRoot: "/repos/project-a",
+					Name:   "@you/factory-builder",
+					Source: factorydefinitions.NamedFactoryResolutionSourceProjectLocal,
+					// ProjectRoot always denotes a project-scoped Factory
+					// root derived via factorydefinitions.ProjectFactoriesRoot
+					// ("<workingDir>/factory"), matching what production
+					// callers (see factorydefinitions.ResolveNamedFactory)
+					// echo back -- not a bare working directory.
+					ProjectRoot: factorydefinitions.ProjectFactoriesRoot("/repos/project-a"),
 				},
 			}, nil
 		},
@@ -333,7 +338,7 @@ func TestResolveFactoryTargetCatalogRejectsIncompatiblePinnedWorkingRoot(t *test
 
 	_, err = service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
 		OperatorSettingsPath: "/operator.json",
-		FactoryDiscovery:     chatsessions.FactoryDiscoveryRoots{ProjectRoot: "/repos/project-a"},
+		FactoryDiscovery:     chatsessions.FactoryDiscoveryRoots{ProjectRoot: factorydefinitions.ProjectFactoriesRoot("/repos/project-a")},
 		ClientWorkingRoot:    "/repos/project-b",
 	})
 	assertFactoryTargetCatalogError(t, err, chatsessions.ErrFactoryTargetWorkingRootIncompatible, "factory:@you/factory-builder")
@@ -360,9 +365,14 @@ func TestResolveFactoryTargetCatalogAllowsCompatiblePinnedWorkingRoot(t *testing
 		resolveNamedFactory: func(context.Context, factorydefinitions.ResolveNamedFactoryRequest) (factorydefinitions.ResolveNamedFactoryResult, error) {
 			return factorydefinitions.ResolveNamedFactoryResult{
 				Resolution: factorydefinitions.NamedFactoryResolution{
-					Name:        "@you/factory-builder",
-					Source:      factorydefinitions.NamedFactoryResolutionSourceProjectLocal,
-					ProjectRoot: "/repos/project-a",
+					Name:   "@you/factory-builder",
+					Source: factorydefinitions.NamedFactoryResolutionSourceProjectLocal,
+					// See the matching comment above: this is the
+					// project-scoped root derived from the client's own
+					// working directory "/repos/project-a", the same
+					// derivation validateWorkingRootCompatibility applies to
+					// ClientWorkingRoot before comparing.
+					ProjectRoot: factorydefinitions.ProjectFactoriesRoot("/repos/project-a"),
 				},
 			}, nil
 		},
@@ -374,7 +384,7 @@ func TestResolveFactoryTargetCatalogAllowsCompatiblePinnedWorkingRoot(t *testing
 
 	result, err := service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
 		OperatorSettingsPath: "/operator.json",
-		FactoryDiscovery:     chatsessions.FactoryDiscoveryRoots{ProjectRoot: "/repos/project-a"},
+		FactoryDiscovery:     chatsessions.FactoryDiscoveryRoots{ProjectRoot: factorydefinitions.ProjectFactoriesRoot("/repos/project-a")},
 		ClientWorkingRoot:    "/repos/project-a/",
 	})
 	if err != nil {

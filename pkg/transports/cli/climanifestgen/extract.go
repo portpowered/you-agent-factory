@@ -46,6 +46,11 @@ func ExtractMCPFamily(manifest climanifest.Manifest) (climanifest.Manifest, erro
 	return extractFamily(manifest, "canonical MCP", MCPFamilyCommandIDs)
 }
 
+// ExtractServeFamily returns canonical metadata for you serve and you serve acp.
+func ExtractServeFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
+	return extractFamily(manifest, "canonical serve", ServeFamilyCommandIDs)
+}
+
 func extractFamily(
 	manifest climanifest.Manifest,
 	familyLabel string,

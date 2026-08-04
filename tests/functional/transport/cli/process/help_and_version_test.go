@@ -23,6 +23,7 @@ var expectedPublicRootCommandFamilies = []string{
 	"submit",
 	"init",
 	"server",
+	"serve",
 }
 
 var machineReadableVersionLinePattern = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.+-]+)*$|^dev$`)
@@ -31,7 +32,6 @@ var forbiddenRootDiscoveryCommands = []string{
 	"batch",
 	"list",
 	"show",
-	"serve",
 	"validate",
 	"save",
 	"flatten",

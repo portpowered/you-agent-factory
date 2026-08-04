@@ -29,3 +29,4 @@ with-mock-workers			enable mock-worker execution with an optional mock-workers J
 with-server		false	serve the Current Factory API for the lifetime of this run without opening a browser
 with-site		false	serve the embedded dashboard and open it once after listener readiness
 work			path to initial FACTORY_REQUEST_BATCH JSON file to submit
+worktree			create or reuse a Git worktree under the invocation working directory and execute this run in its checkout
