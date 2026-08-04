@@ -1,27 +1,18 @@
 package internal
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
-	"strings"
+	"fmt"
+	"slices"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 var _ recordings.RecordingReplayArtifacts = (*combinedService)(nil)
-
-// LoadReplayInput is intentionally unavailable on the finalized-recording
-// view. Factory Sessions uses the phase-aware RecordingReplayArtifacts
-// capability constructed before a runtime ledger exists; once that capability
-// binds this combined service, finalized-recording operations delegate here.
-func (service *combinedService) LoadReplayInput(
-	request recordings.LoadReplayInputRequest,
-) (recordings.LoadReplayInputResult, error) {
-	return recordings.LoadReplayInputResult{}, &recordings.ReplayInputError{
-		Kind:    recordings.ReplayInputErrorRead,
-		Message: "replay input loading requires the phase-aware Recordings capability",
-	}
-}
 
 // LoadReplay implements recordings.RecordingReplayArtifacts by adapting the
 // existing LoadReplayRecording operation to the root-owned replay/artifact
@@ -63,7 +54,7 @@ func (service *combinedService) ValidateArtifact(
 		Artifact: fromArtifactEnvelope(request.Artifact),
 	})
 	if err != nil {
-		return recordings.ValidateArtifactResult{}, translateArtifactValidationError(err, request.Artifact)
+		return recordings.ValidateArtifactResult{}, translateReplayArtifactError(err)
 	}
 	return recordings.ValidateArtifactResult{Summary: toArtifactSummary(result.Summary)}, nil
 }
@@ -78,7 +69,7 @@ func (service *combinedService) EncodeArtifact(
 		Artifact: fromArtifactEnvelope(request.Artifact),
 	})
 	if err != nil {
-		return recordings.EncodeArtifactResult{}, translateArtifactValidationError(err, request.Artifact)
+		return recordings.EncodeArtifactResult{}, translateReplayArtifactError(err)
 	}
 	return recordings.EncodeArtifactResult{Payload: result.Payload}, nil
 }
@@ -159,11 +150,268 @@ func (service *combinedService) ReadArtifact(
 func (service *combinedService) LoadReplayInput(
 	recordings.LoadReplayInputRequest,
 ) (recordings.LoadReplayInputResult, error) {
-	return recordings.LoadReplayInputResult{}, &recordings.ReplayArtifactError{
-		Kind:    recordings.ReplayArtifactErrorUnsupportedContext,
-		Message: "LoadReplayInput requires a path-based replay/artifact capability, not a recording ledger",
-		Cause:   recordings.ErrReplayArtifactUnsupportedContext,
+	return recordings.LoadReplayInputResult{}, unsupportedReplayArtifactContext()
+}
+
+// replayInputArtifactCapability is the path-based Recordings implementation
+// Factory Sessions receives before a recording ledger exists. It owns the
+// portable-versus-legacy classification and its safe operation observability;
+// callers receive only the narrow RecordingReplayArtifacts contract.
+type replayInputArtifactCapability struct {
+	readFile   recordings.RecordingReadFile
+	loadLegacy recordings.ReplayArtifactLoader
+	logger     logging.Logger
+}
+
+var _ recordings.RecordingReplayArtifacts = (*replayInputArtifactCapability)(nil)
+
+// NewReplayArtifactCapability constructs the path-based replay/artifact
+// capability from the exact reader, legacy loader, and process logger selected
+// by Recordings Wire. It is inert: it performs no I/O until LoadReplayInput.
+func NewReplayArtifactCapability(
+	readFile recordings.RecordingReadFile,
+	loadLegacy recordings.ReplayArtifactLoader,
+	logger logging.Logger,
+) recordings.RecordingReplayArtifacts {
+	return &replayInputArtifactCapability{
+		readFile:   readFile,
+		loadLegacy: loadLegacy,
+		logger:     logging.EnsureLogger(logger),
 	}
+}
+
+func (loader *replayInputArtifactCapability) LoadReplayInput(
+	request recordings.LoadReplayInputRequest,
+) (recordings.LoadReplayInputResult, error) {
+	loader.logReplayInputIntent()
+	if loader.readFile == nil {
+		return loader.replayInputDependencyFailure("reader_unavailable", fmt.Errorf("Factory Session replay recording reader is required"))
+	}
+	data, err := loader.readFile(request.Path)
+	if err != nil {
+		return loader.replayInputDependencyFailure("read_failure", fmt.Errorf("read replay recording: %w", err))
+	}
+	if isPortableReplayInput(data) {
+		return loader.loadPortableReplayInput(data)
+	}
+	return loader.loadLegacyReplayInput(request.Path)
+}
+
+func isPortableReplayInput(data []byte) bool {
+	var header struct {
+		RecordingKind string `json:"recordingKind"`
+	}
+	return json.Unmarshal(data, &header) == nil &&
+		header.RecordingKind == recordings.KindJavaScriptFactorySession
+}
+
+func (loader *replayInputArtifactCapability) loadPortableReplayInput(
+	data []byte,
+) (recordings.LoadReplayInputResult, error) {
+	value, err := recordings.DecodePortableRecording(bytes.NewReader(data))
+	if err != nil {
+		failure := newReplayInputError(recordings.ReplayInputFamilyPortable, err)
+		loader.logReplayInputOutcome("validation_failure", string(failure.Diagnostic.Code), "")
+		return recordings.LoadReplayInputResult{}, failure
+	}
+	loader.logReplayInputOutcome("success", "", string(recordings.ReplayInputFamilyPortable))
+	return recordings.LoadReplayInputResult{Portable: &value}, nil
+}
+
+func (loader *replayInputArtifactCapability) loadLegacyReplayInput(
+	path string,
+) (recordings.LoadReplayInputResult, error) {
+	if loader.loadLegacy == nil {
+		return loader.replayInputDependencyFailure("legacy_loader_unavailable", fmt.Errorf("replay artifact loader is required"))
+	}
+	artifact, err := loader.loadLegacy(path)
+	if err != nil {
+		failure := newReplayInputError(
+			recordings.ReplayInputFamilyLegacy,
+			fmt.Errorf("load replay artifact: %w", err),
+		)
+		loader.logReplayInputOutcome("dependency_failure", string(failure.Diagnostic.Code), "")
+		return recordings.LoadReplayInputResult{}, failure
+	}
+	loader.logReplayInputOutcome("success", "", string(recordings.ReplayInputFamilyLegacy))
+	return recordings.LoadReplayInputResult{Legacy: artifact}, nil
+}
+
+func (loader *replayInputArtifactCapability) replayInputDependencyFailure(
+	classification string,
+	cause error,
+) (recordings.LoadReplayInputResult, error) {
+	failure := newReplayInputError(recordings.ReplayInputFamilyPortable, cause)
+	outcome := "dependency_failure"
+	if errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
+		outcome = "canceled"
+	}
+	loader.logReplayInputOutcome(outcome, classification, "")
+	return recordings.LoadReplayInputResult{}, failure
+}
+
+func (loader *replayInputArtifactCapability) logReplayInputIntent() {
+	loader.logger.Info(
+		"recordings replay input accepted",
+		"operation", "load_replay_input",
+		"input_source", "filesystem_path",
+	)
+}
+
+func (loader *replayInputArtifactCapability) logReplayInputOutcome(
+	outcome string,
+	classification string,
+	family string,
+) {
+	fields := []any{"operation", "load_replay_input", "outcome", outcome}
+	if classification != "" {
+		fields = append(fields, "error_class", classification)
+	}
+	if family != "" {
+		fields = append(fields, "replay_family", family)
+	}
+	loader.logger.Info("recordings replay input outcome", fields...)
+}
+
+func newReplayInputError(family recordings.ReplayInputFamily, cause error) *recordings.ReplayInputError {
+	return &recordings.ReplayInputError{
+		Family:     family,
+		Diagnostic: replayInputDiagnostic(cause),
+		Cause:      cause,
+	}
+}
+
+func (loader *replayInputArtifactCapability) LoadReplay(
+	recordings.LoadReplayRequest,
+) (recordings.LoadReplayResult, error) {
+	return recordings.LoadReplayResult{}, unsupportedReplayArtifactContext()
+}
+
+func (loader *replayInputArtifactCapability) BuildArtifact(
+	recordings.BuildArtifactRequest,
+) (recordings.BuildArtifactResult, error) {
+	return recordings.BuildArtifactResult{}, unsupportedReplayArtifactContext()
+}
+
+func (loader *replayInputArtifactCapability) ValidateArtifact(
+	recordings.ValidateArtifactRequest,
+) (recordings.ValidateArtifactResult, error) {
+	return recordings.ValidateArtifactResult{}, unsupportedReplayArtifactContext()
+}
+
+func (loader *replayInputArtifactCapability) EncodeArtifact(
+	recordings.EncodeArtifactRequest,
+) (recordings.EncodeArtifactResult, error) {
+	return recordings.EncodeArtifactResult{}, unsupportedReplayArtifactContext()
+}
+
+func (loader *replayInputArtifactCapability) DecodeArtifact(
+	recordings.DecodeArtifactRequest,
+) (recordings.DecodeArtifactResult, error) {
+	return recordings.DecodeArtifactResult{}, unsupportedReplayArtifactContext()
+}
+
+func (loader *replayInputArtifactCapability) SummarizeArtifact(
+	recordings.SummarizeArtifactRequest,
+) (recordings.SummarizeArtifactResult, error) {
+	return recordings.SummarizeArtifactResult{}, unsupportedReplayArtifactContext()
+}
+
+func (loader *replayInputArtifactCapability) ExportArtifact(
+	context.Context,
+	recordings.ExportArtifactRequest,
+) (recordings.ExportArtifactResult, error) {
+	return recordings.ExportArtifactResult{}, unsupportedReplayArtifactContext()
+}
+
+func (loader *replayInputArtifactCapability) ReadArtifact(
+	context.Context,
+	recordings.ReadArtifactRequest,
+) (recordings.ReadArtifactResult, error) {
+	return recordings.ReadArtifactResult{}, unsupportedReplayArtifactContext()
+}
+
+func unsupportedReplayArtifactContext() error {
+	return &recordings.ReplayArtifactError{
+		Kind: recordings.ReplayArtifactErrorUnsupportedContext,
+		Diagnostic: recordings.ReplayArtifactDiagnostic{
+			Code:    recordings.ReplayArtifactDiagnosticUnsupportedContext,
+			Area:    "capability",
+			Path:    "operation",
+			Message: "operation is unavailable in this Recordings capability context",
+		},
+		Cause: recordings.ErrReplayArtifactUnsupportedContext,
+	}
+}
+
+func replayInputDiagnostic(err error) recordings.ReplayArtifactDiagnostic {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return recordings.ReplayArtifactDiagnostic{
+			Code:    recordings.ReplayArtifactDiagnosticCancelled,
+			Area:    "input",
+			Path:    "replayInput",
+			Message: "replay input loading was canceled",
+		}
+	}
+	var diagnostic *recordings.PortableRecordingDiagnostic
+	if errors.As(err, &diagnostic) {
+		return replayArtifactDiagnosticFromPortable(diagnostic)
+	}
+	return replayInputDependencyDiagnostic()
+}
+
+func replayInputDependencyDiagnostic() recordings.ReplayArtifactDiagnostic {
+	return recordings.ReplayArtifactDiagnostic{
+		Code:    recordings.ReplayArtifactDiagnosticDependencyFailure,
+		Area:    "input",
+		Path:    "replayInput",
+		Message: "replay input could not be loaded",
+	}
+}
+
+func replayArtifactDiagnosticFromPortable(
+	diagnostic *recordings.PortableRecordingDiagnostic,
+) recordings.ReplayArtifactDiagnostic {
+	if diagnostic == nil {
+		return replayInputDependencyDiagnostic()
+	}
+	result := recordings.ReplayArtifactDiagnostic{
+		Area: diagnostic.Area,
+		Path: safeReplayArtifactDiagnosticPath(diagnostic.Path),
+	}
+	switch diagnostic.Code {
+	case recordings.PortableRecordingCodeMalformedContract:
+		result.Code = recordings.ReplayArtifactDiagnosticMalformed
+		result.Message = "recording document is malformed"
+	case recordings.PortableRecordingCodeUnsupportedVersion:
+		result.Code = recordings.ReplayArtifactDiagnosticUnsupportedVersion
+		result.Message = "recording uses an unsupported replay compatibility version"
+		result.SupportedVersions = slices.Clone(diagnostic.SupportedVersions)
+	case recordings.PortableRecordingCodeInvalidIdentity:
+		result.Code = recordings.ReplayArtifactDiagnosticInvalidIdentity
+		result.Message = "recording identity is invalid"
+	case recordings.PortableRecordingCodeInvalidDigest:
+		result.Code = recordings.ReplayArtifactDiagnosticInvalidIntegrity
+		result.Message = "recording integrity is invalid"
+	case recordings.PortableRecordingCodeInvalidSummary:
+		result.Code = recordings.ReplayArtifactDiagnosticInvalidSummary
+		result.Message = "recording summary is invalid"
+	default:
+		return replayInputDependencyDiagnostic()
+	}
+	return result
+}
+
+func safeReplayArtifactDiagnosticPath(path string) string {
+	for _, character := range path {
+		if (character < 'a' || character > 'z') &&
+			(character < 'A' || character > 'Z') &&
+			(character < '0' || character > '9') &&
+			character != '.' && character != '[' && character != ']' {
+			return ""
+		}
+	}
+	return path
 }
 
 func toReplayScope(scope recordings.CanonicalEventScope) recordings.ReplayScope {
@@ -340,129 +588,128 @@ func fromArtifactEnvelope(envelope recordings.ArtifactEnvelope) recordings.Porta
 	}
 }
 
-// artifactSupportedSchemaVersions lists the portable artifact schema
-// versions RecordingReplayArtifacts currently accepts, surfaced through
-// ArtifactDiagnostic so peers know which version to retry with.
-var artifactSupportedSchemaVersions = []string{string(recordings.ArtifactSchemaV1)}
-
-// translateArtifactValidationError retains the existing sentinel error while
-// using the caller-provided detached envelope to distinguish an invalid
-// summary relationship from a malformed document. The underlying artifact
-// service already validates these same summary invariants; this adapter only
-// selects the Recordings-owned diagnostic vocabulary exposed to peers.
-func translateArtifactValidationError(err error, artifact recordings.ArtifactEnvelope) error {
-	if errors.Is(err, recordings.ErrInvalidPortableArtifact) && invalidArtifactSummary(artifact) {
-		return &recordings.ReplayArtifactError{
-			Kind: recordings.ReplayArtifactErrorInvalid,
-			Diagnostic: &recordings.ArtifactDiagnostic{
-				Code:    recordings.ArtifactDiagnosticInvalidSummary,
-				Area:    "summary",
-				Path:    invalidArtifactSummaryPath(artifact),
-				Message: "portable artifact summary does not match its canonical facts",
-			},
-			Message: err.Error(),
-			Cause:   err,
-		}
-	}
-	return translateReplayArtifactError(err)
-}
-
-func invalidArtifactSummary(artifact recordings.ArtifactEnvelope) bool {
-	summary := artifact.Summary
-	return strings.TrimSpace(string(summary.RecordingID)) == "" ||
-		!summary.Available ||
-		summary.EventCount != len(artifact.Events)
-}
-
-func invalidArtifactSummaryPath(artifact recordings.ArtifactEnvelope) string {
-	summary := artifact.Summary
-	switch {
-	case strings.TrimSpace(string(summary.RecordingID)) == "":
-		return "summary.recordingID"
-	case !summary.Available:
-		return "summary.available"
-	default:
-		return "summary.eventCount"
-	}
-}
-
 func translateReplayArtifactError(err error) error {
 	if err == nil {
 		return nil
 	}
 	kind := recordings.ReplayArtifactErrorInvalid
-	var diagnostic *recordings.ArtifactDiagnostic
 	switch {
 	case errors.Is(err, recordings.ErrReplayRecordingNotFound):
 		kind = recordings.ReplayArtifactErrorNotFound
-		diagnostic = &recordings.ArtifactDiagnostic{
-			Code:    recordings.ArtifactDiagnosticRecordingNotFound,
-			Area:    "recording",
-			Path:    "recordingID",
-			Message: "recording was not found",
-		}
 	case errors.Is(err, recordings.ErrReplayRecordingNotFinalized):
 		kind = recordings.ReplayArtifactErrorNotFinalized
 	case errors.Is(err, recordings.ErrCorruptReplayInput):
 		kind = recordings.ReplayArtifactErrorCorruptInput
 	case errors.Is(err, recordings.ErrPortableArtifactUnavailable):
 		kind = recordings.ReplayArtifactErrorUnavailable
-		diagnostic = &recordings.ArtifactDiagnostic{
-			Code:    recordings.ArtifactDiagnosticUnavailable,
-			Area:    "reference",
-			Path:    "reference",
-			Message: "portable artifact is not available",
-		}
 	case errors.Is(err, recordings.ErrUnsupportedPortableArtifactSchema):
 		kind = recordings.ReplayArtifactErrorUnsupportedSchema
-		diagnostic = &recordings.ArtifactDiagnostic{
-			Code:              recordings.ArtifactDiagnosticUnsupportedSchema,
-			Area:              "schemaVersion",
-			Path:              "schemaVersion",
-			Message:           "portable artifact schema version is not supported",
-			SupportedVersions: append([]string(nil), artifactSupportedSchemaVersions...),
-		}
 	case errors.Is(err, recordings.ErrInvalidPortableArtifactIntegrity):
 		kind = recordings.ReplayArtifactErrorInvalidIntegrity
-		diagnostic = &recordings.ArtifactDiagnostic{
-			Code:    recordings.ArtifactDiagnosticInvalidIntegrity,
-			Area:    "integrity",
-			Path:    "integrity.digest",
-			Message: "portable artifact digest does not match its computed integrity",
-		}
 	case errors.Is(err, recordings.ErrInvalidPortableArtifactOrder):
 		kind = recordings.ReplayArtifactErrorInvalidOrder
-		diagnostic = &recordings.ArtifactDiagnostic{
-			Code:    recordings.ArtifactDiagnosticInvalidOrder,
-			Area:    "events",
-			Path:    "events",
-			Message: "portable artifact canonical event order or summary cursors are invalid",
-		}
 	case errors.Is(err, recordings.ErrPortableArtifactExportFailed):
 		kind = recordings.ReplayArtifactErrorExportFailed
 	case errors.Is(err, recordings.ErrForeignPortableArtifact):
 		kind = recordings.ReplayArtifactErrorForeign
-		diagnostic = &recordings.ArtifactDiagnostic{
-			Code:    recordings.ArtifactDiagnosticForeign,
-			Area:    "reference",
-			Path:    "reference",
-			Message: "portable artifact reference does not belong to the recording",
-		}
 	case errors.Is(err, recordings.ErrPortableArtifactCancelled):
 		kind = recordings.ReplayArtifactErrorCancelled
 	case errors.Is(err, recordings.ErrInvalidPortableArtifact):
 		kind = recordings.ReplayArtifactErrorInvalid
-		diagnostic = &recordings.ArtifactDiagnostic{
-			Code:    recordings.ArtifactDiagnosticMalformed,
-			Area:    "artifact",
-			Path:    "artifact",
-			Message: "portable artifact document is malformed or fails structural validation",
-		}
 	}
 	return &recordings.ReplayArtifactError{
 		Kind:       kind,
-		Diagnostic: diagnostic,
-		Message:    err.Error(),
+		Diagnostic: replayArtifactDiagnostic(kind),
 		Cause:      err,
+	}
+}
+
+func replayArtifactDiagnostic(kind recordings.ReplayArtifactErrorKind) recordings.ReplayArtifactDiagnostic {
+	switch kind {
+	case recordings.ReplayArtifactErrorNotFound:
+		return recordings.ReplayArtifactDiagnostic{
+			Code:    recordings.ReplayArtifactDiagnosticRecordingNotFound,
+			Area:    "recording",
+			Path:    "recordingId",
+			Message: "recording was not found",
+		}
+	case recordings.ReplayArtifactErrorNotFinalized:
+		return recordings.ReplayArtifactDiagnostic{
+			Code:    recordings.ReplayArtifactDiagnosticRecordingNotFinalized,
+			Area:    "recording",
+			Path:    "recordingId",
+			Message: "recording is not finalized",
+		}
+	case recordings.ReplayArtifactErrorCorruptInput:
+		return recordings.ReplayArtifactDiagnostic{
+			Code:    recordings.ReplayArtifactDiagnosticInvalidSummary,
+			Area:    "replay",
+			Path:    "recording",
+			Message: "replay recording is invalid",
+		}
+	case recordings.ReplayArtifactErrorUnavailable:
+		return recordings.ReplayArtifactDiagnostic{
+			Code:    recordings.ReplayArtifactDiagnosticMissingReference,
+			Area:    "artifact",
+			Path:    "reference",
+			Message: "published replay artifact is unavailable",
+		}
+	case recordings.ReplayArtifactErrorUnsupportedSchema:
+		return recordings.ReplayArtifactDiagnostic{
+			Code:              recordings.ReplayArtifactDiagnosticUnsupportedVersion,
+			Area:              "compatibility",
+			Path:              "schemaVersion",
+			Message:           "artifact uses an unsupported schema version",
+			SupportedVersions: []string{string(recordings.ArtifactSchemaV1)},
+		}
+	case recordings.ReplayArtifactErrorInvalidIntegrity:
+		return recordings.ReplayArtifactDiagnostic{
+			Code:    recordings.ReplayArtifactDiagnosticInvalidIntegrity,
+			Area:    "integrity",
+			Path:    "integrity.digest",
+			Message: "artifact integrity is invalid",
+		}
+	case recordings.ReplayArtifactErrorInvalidOrder:
+		return recordings.ReplayArtifactDiagnostic{
+			Code:    recordings.ReplayArtifactDiagnosticInvalidOrder,
+			Area:    "events",
+			Path:    "events",
+			Message: "artifact event order is invalid",
+		}
+	case recordings.ReplayArtifactErrorForeign:
+		return recordings.ReplayArtifactDiagnostic{
+			Code:    recordings.ReplayArtifactDiagnosticForeignReference,
+			Area:    "artifact",
+			Path:    "reference",
+			Message: "artifact reference does not belong to the selected recording",
+		}
+	case recordings.ReplayArtifactErrorCancelled:
+		return recordings.ReplayArtifactDiagnostic{
+			Code:    recordings.ReplayArtifactDiagnosticCancelled,
+			Area:    "operation",
+			Path:    "context",
+			Message: "replay artifact operation was canceled",
+		}
+	case recordings.ReplayArtifactErrorExportFailed:
+		return recordings.ReplayArtifactDiagnostic{
+			Code:    recordings.ReplayArtifactDiagnosticDependencyFailure,
+			Area:    "publication",
+			Path:    "artifact",
+			Message: "replay artifact could not be published",
+		}
+	case recordings.ReplayArtifactErrorUnsupportedContext:
+		return recordings.ReplayArtifactDiagnostic{
+			Code:    recordings.ReplayArtifactDiagnosticUnsupportedContext,
+			Area:    "capability",
+			Path:    "operation",
+			Message: "operation is unavailable in this Recordings capability context",
+		}
+	default:
+		return recordings.ReplayArtifactDiagnostic{
+			Code:    recordings.ReplayArtifactDiagnosticMalformed,
+			Area:    "artifact",
+			Path:    "artifact",
+			Message: "artifact is malformed or invalid",
+		}
 	}
 }

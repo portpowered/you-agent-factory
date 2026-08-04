@@ -1,12 +1,11 @@
 package wire
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -57,105 +56,9 @@ func NewReplayArtifactLoader(
 func NewReplayArtifactCapability(
 	readFile recordings.RecordingReadFile,
 	loadLegacy recordings.ReplayArtifactLoader,
+	logger logging.Logger,
 ) recordings.RecordingReplayArtifacts {
-	return &replayArtifactCapability{readFile: readFile, loadLegacy: loadLegacy}
-}
-
-type replayArtifactCapability struct {
-	readFile   recordings.RecordingReadFile
-	loadLegacy recordings.ReplayArtifactLoader
-}
-
-var _ recordings.RecordingReplayArtifacts = (*replayArtifactCapability)(nil)
-
-func (loader *replayArtifactCapability) LoadReplayInput(
-	request recordings.LoadReplayInputRequest,
-) (recordings.LoadReplayInputResult, error) {
-	if loader.readFile == nil {
-		return recordings.LoadReplayInputResult{}, fmt.Errorf("Factory Session replay recording reader is required")
-	}
-	data, err := loader.readFile(request.Path)
-	if err != nil {
-		return recordings.LoadReplayInputResult{}, fmt.Errorf("read replay recording: %w", err)
-	}
-	var header struct {
-		RecordingKind string `json:"recordingKind"`
-	}
-	if err := json.Unmarshal(data, &header); err == nil &&
-		header.RecordingKind == recordings.KindJavaScriptFactorySession {
-		value, err := recordings.DecodePortableRecording(bytes.NewReader(data))
-		if err != nil {
-			return recordings.LoadReplayInputResult{}, err
-		}
-		return recordings.LoadReplayInputResult{Portable: &value}, nil
-	}
-	if loader.loadLegacy == nil {
-		return recordings.LoadReplayInputResult{}, fmt.Errorf("replay artifact loader is required")
-	}
-	artifact, err := loader.loadLegacy(request.Path)
-	if err != nil {
-		return recordings.LoadReplayInputResult{}, &recordings.ReplayInputError{
-			Family: recordings.ReplayInputFamilyLegacy,
-			Cause:  fmt.Errorf("load replay artifact: %w", err),
-		}
-	}
-	return recordings.LoadReplayInputResult{Legacy: artifact}, nil
-}
-
-func (loader *replayArtifactCapability) unsupportedContext(operation string) error {
-	return &recordings.ReplayArtifactError{
-		Kind:    recordings.ReplayArtifactErrorUnsupportedContext,
-		Message: operation + " requires an already-open Factory Session recording ledger",
-		Cause:   recordings.ErrReplayArtifactUnsupportedContext,
-	}
-}
-
-func (loader *replayArtifactCapability) LoadReplay(
-	recordings.LoadReplayRequest,
-) (recordings.LoadReplayResult, error) {
-	return recordings.LoadReplayResult{}, loader.unsupportedContext("LoadReplay")
-}
-
-func (loader *replayArtifactCapability) BuildArtifact(
-	recordings.BuildArtifactRequest,
-) (recordings.BuildArtifactResult, error) {
-	return recordings.BuildArtifactResult{}, loader.unsupportedContext("BuildArtifact")
-}
-
-func (loader *replayArtifactCapability) ValidateArtifact(
-	recordings.ValidateArtifactRequest,
-) (recordings.ValidateArtifactResult, error) {
-	return recordings.ValidateArtifactResult{}, loader.unsupportedContext("ValidateArtifact")
-}
-
-func (loader *replayArtifactCapability) EncodeArtifact(
-	recordings.EncodeArtifactRequest,
-) (recordings.EncodeArtifactResult, error) {
-	return recordings.EncodeArtifactResult{}, loader.unsupportedContext("EncodeArtifact")
-}
-
-func (loader *replayArtifactCapability) DecodeArtifact(
-	recordings.DecodeArtifactRequest,
-) (recordings.DecodeArtifactResult, error) {
-	return recordings.DecodeArtifactResult{}, loader.unsupportedContext("DecodeArtifact")
-}
-
-func (loader *replayArtifactCapability) SummarizeArtifact(
-	recordings.SummarizeArtifactRequest,
-) (recordings.SummarizeArtifactResult, error) {
-	return recordings.SummarizeArtifactResult{}, loader.unsupportedContext("SummarizeArtifact")
-}
-
-func (loader *replayArtifactCapability) ExportArtifact(
-	context.Context, recordings.ExportArtifactRequest,
-) (recordings.ExportArtifactResult, error) {
-	return recordings.ExportArtifactResult{}, loader.unsupportedContext("ExportArtifact")
-}
-
-func (loader *replayArtifactCapability) ReadArtifact(
-	context.Context, recordings.ReadArtifactRequest,
-) (recordings.ReadArtifactResult, error) {
-	return recordings.ReadArtifactResult{}, loader.unsupportedContext("ReadArtifact")
+	return recordingsinternal.NewReplayArtifactCapability(readFile, loadLegacy, logger)
 }
 
 // NewProjectionService constructs the Recordings projection capability for

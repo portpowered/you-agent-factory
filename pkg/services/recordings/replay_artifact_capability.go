@@ -80,8 +80,9 @@ const (
 // fact to preserve the established portable-versus-legacy error context
 // without depending on a Recordings implementation detail.
 type ReplayInputError struct {
-	Family ReplayInputFamily
-	Cause  error
+	Family     ReplayInputFamily
+	Diagnostic ReplayArtifactDiagnostic
+	Cause      error
 }
 
 func (e *ReplayInputError) Error() string {
@@ -324,21 +325,63 @@ var ErrReplayArtifactUnsupportedContext = errors.New(
 	"replay/artifact operation is not supported by this capability instance",
 )
 
+// ReplayArtifactDiagnosticCode identifies a stable, safe validation or
+// dependency outcome from RecordingReplayArtifacts. These codes intentionally
+// describe logical recording/artifact concerns rather than implementation
+// errors, filesystem paths, payload content, or integrity material.
+type ReplayArtifactDiagnosticCode string
+
+const (
+	ReplayArtifactDiagnosticMalformed             ReplayArtifactDiagnosticCode = "MALFORMED_REPLAY_ARTIFACT"
+	ReplayArtifactDiagnosticUnsupportedVersion    ReplayArtifactDiagnosticCode = "UNSUPPORTED_REPLAY_COMPATIBILITY_VERSION"
+	ReplayArtifactDiagnosticInvalidIdentity       ReplayArtifactDiagnosticCode = "INVALID_RECORDING_IDENTITY"
+	ReplayArtifactDiagnosticInvalidSummary        ReplayArtifactDiagnosticCode = "INVALID_RECORDING_SUMMARY"
+	ReplayArtifactDiagnosticInvalidIntegrity      ReplayArtifactDiagnosticCode = "INVALID_REPLAY_ARTIFACT_INTEGRITY"
+	ReplayArtifactDiagnosticInvalidOrder          ReplayArtifactDiagnosticCode = "INVALID_REPLAY_ARTIFACT_ORDER"
+	ReplayArtifactDiagnosticMissingReference      ReplayArtifactDiagnosticCode = "MISSING_REPLAY_ARTIFACT_REFERENCE"
+	ReplayArtifactDiagnosticForeignReference      ReplayArtifactDiagnosticCode = "FOREIGN_REPLAY_ARTIFACT_REFERENCE"
+	ReplayArtifactDiagnosticRecordingNotFound     ReplayArtifactDiagnosticCode = "REPLAY_RECORDING_NOT_FOUND"
+	ReplayArtifactDiagnosticRecordingNotFinalized ReplayArtifactDiagnosticCode = "REPLAY_RECORDING_NOT_FINALIZED"
+	ReplayArtifactDiagnosticDependencyFailure     ReplayArtifactDiagnosticCode = "REPLAY_ARTIFACT_DEPENDENCY_FAILURE"
+	ReplayArtifactDiagnosticCancelled             ReplayArtifactDiagnosticCode = "REPLAY_ARTIFACT_CANCELLED"
+	ReplayArtifactDiagnosticUnsupportedContext    ReplayArtifactDiagnosticCode = "REPLAY_ARTIFACT_UNSUPPORTED_CONTEXT"
+)
+
+// ReplayArtifactDiagnostic is the detached, Recordings-owned explanation of
+// a rejected replay/artifact operation. Path is a safe logical field path,
+// never a customer filesystem path. SupportedVersions is present only when a
+// compatibility failure can name supported values.
+type ReplayArtifactDiagnostic struct {
+	Code              ReplayArtifactDiagnosticCode
+	Area              string
+	Path              string
+	Message           string
+	SupportedVersions []string
+}
+
+// Error renders only the stable, safe diagnostic facts.
+func (d ReplayArtifactDiagnostic) Error() string {
+	if d.Path == "" {
+		return d.Message
+	}
+	return d.Path + ": " + d.Message
+}
+
 // ReplayArtifactError is a typed RecordingReplayArtifacts failure peers can
 // branch on via Kind or unwrap via Cause for standard errors.Is/errors.As
 // matching.
 type ReplayArtifactError struct {
-	Kind    ReplayArtifactErrorKind
-	Message string
-	Cause   error
+	Kind       ReplayArtifactErrorKind
+	Diagnostic ReplayArtifactDiagnostic
+	Cause      error
 }
 
 func (e *ReplayArtifactError) Error() string {
 	if e == nil {
 		return ""
 	}
-	if e.Message != "" {
-		return e.Message
+	if e.Diagnostic.Message != "" {
+		return e.Diagnostic.Error()
 	}
 	return string(e.Kind)
 }

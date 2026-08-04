@@ -300,7 +300,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	replayRuntimeConfigDecoder := provideReplayRuntimeConfigDecoder()
 	v55 := provideReplayArtifactLoader(storage)
 	v56 := provideFactorySessionReplayRecordingReader(edges2)
-	recordingReplayArtifacts := provideFactorySessionReplayInputs(v55, v56)
+	recordingReplayArtifacts := provideFactorySessionReplayInputs(v55, v56, loggingLogger)
 	clockResolver := provideFactoryRuntimeClockResolver()
 	sessionLoggerFactory := provideFactoryRuntimeSessionLoggerFactory()
 	v57 := provideProviderFromCommandRunnerFactory(service, edges2, ptyAllocator)

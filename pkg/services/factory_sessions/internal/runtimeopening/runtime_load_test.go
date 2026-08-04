@@ -9,6 +9,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testpath"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -30,7 +31,9 @@ func TestLoadRuntimePreservesValidatedPortableRecording(t *testing.T) {
 	var loggerSessionID string
 	var loggerFolderPath string
 	var loggerFactoryDir string
-	replayInputs := recordingswire.NewReplayArtifactCapability(recordings.RecordingReadFile(os.ReadFile), nil)
+	replayInputs := recordingswire.NewReplayArtifactCapability(
+		recordings.RecordingReadFile(os.ReadFile), nil, logging.NoopLogger{},
+	)
 	loaded, err := LoadRuntime(
 		t.TempDir(),
 		"",
@@ -110,7 +113,7 @@ func TestLoadRuntimePropagatesReplayInputFailure(t *testing.T) {
 			t.Fatalf("path = %q, want recording.json", path)
 		}
 		return nil, want
-	}, nil)
+	}, nil, logging.NoopLogger{})
 	_, err := LoadRuntime(
 		t.TempDir(), "", "recording.json", operatorconfig.ResolvedDefaults{}, nil, root,
 		nil, nil, nil, replayInputs, nil,
@@ -118,6 +121,11 @@ func TestLoadRuntimePropagatesReplayInputFailure(t *testing.T) {
 	)
 	if !errors.Is(err, want) {
 		t.Fatalf("LoadRuntime() error = %v, want %v", err, want)
+	}
+	var inputErr *recordings.ReplayInputError
+	if !errors.As(err, &inputErr) ||
+		inputErr.Diagnostic.Code != recordings.ReplayArtifactDiagnosticDependencyFailure {
+		t.Fatalf("LoadRuntime() error = %v, want Recordings-owned safe dependency diagnostic", err)
 	}
 }
 
@@ -132,6 +140,7 @@ func TestLoadRuntimePreservesLegacyReplayFailureContext(t *testing.T) {
 	replayInputs := recordingswire.NewReplayArtifactCapability(
 		recordings.RecordingReadFile(os.ReadFile),
 		func(string) (*recordings.ReplayArtifact, error) { return nil, want },
+		logging.NoopLogger{},
 	)
 	loaded, err := LoadRuntime(
 		t.TempDir(), "", path, operatorconfig.ResolvedDefaults{}, nil,

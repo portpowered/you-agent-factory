@@ -2,6 +2,7 @@ package wire
 
 import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
@@ -80,6 +81,7 @@ func provideRecordingLifecycleFactory(
 func provideFactorySessionReplayInputs(
 	loadReplay recordings.ReplayArtifactLoader,
 	replayFiles factorysessionwire.ReplayRecordingReader,
+	logger logging.Logger,
 ) recordings.RecordingReplayArtifacts {
-	return recordingswire.NewReplayArtifactCapability(recordings.RecordingReadFile(replayFiles), loadReplay)
+	return recordingswire.NewReplayArtifactCapability(recordings.RecordingReadFile(replayFiles), loadReplay, logger)
 }
