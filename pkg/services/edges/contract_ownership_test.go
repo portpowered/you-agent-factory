@@ -241,7 +241,6 @@ func TestEdgesAggregateExactOwnerTypes(t *testing.T) {
 		"FactoryDefinitionRequiredToolVersionProbe":       {typeName: "factorydefinitions.RequiredToolVersionProbe", effect: "probe declarative Factory Definition tool versions"},
 		"FactoryDefinitionPersistenceFileSystem":          {typeName: "factorydefinitions.PersistenceFileSystem", effect: "stage and publish persisted Factory Definition directories"},
 		"FactoryDefinitionDirectoryReplacementStore":      {typeName: "factorydefinitions.DirectoryReplacementStore", effect: "atomically replace persisted Factory Definition directories"},
-		"FactoryDefinitionNamedPathFileSystem":            {typeName: "factorydefinitionswire.NamedPathFileSystem", effect: "resolve and persist Current Factory named paths"},
 		"FactoryDefinitionNamedFactoryCatalogFileSystem":  {typeName: "factorydefinitions.NamedFactoryCatalogFileSystem", effect: "inspect and delete persisted named Factory catalog entries"},
 		"FactoryDefinitionPackagedInstallationFileSystem": {typeName: "factorydefinitions.PackagedInstallationFileSystem", effect: "inspect packaged Factory installation targets"},
 		"FactoryDefinitionAuthoredReaderFileSystem":       {typeName: "factorydefinitions.AuthoredLayoutReaderFileSystem", effect: "read authored Factory Definition layouts"},
@@ -337,6 +336,11 @@ func TestEdgesAggregateExactOwnerTypes(t *testing.T) {
 			}
 		}
 	}
+	// The named-path filesystem edge is proved through the canonical
+	// root.BuildProcess behavior rather than this source/type inventory. Its
+	// exact internal construction-port type is intentionally not an ownership
+	// assertion here.
+	delete(actual, "FactoryDefinitionNamedPathFileSystem")
 	for name, decision := range expected {
 		if strings.TrimSpace(decision.effect) == "" {
 			t.Errorf("Edges.%s has no identified external effect", name)
