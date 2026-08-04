@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"go.uber.org/zap"
 )
 
 type operation struct {
@@ -136,9 +137,37 @@ func (o *operation) InvokeFactory(
 		return outcome, err
 	}
 	defer func() {
-		resultErr = errors.Join(resultErr, lifecycle.close(ctx, opened))
+		resultErr = joinTeardownErrorUnlessResultDetermined(outcome, resultErr, lifecycle.close(ctx, opened), target.Logger)
 	}()
 	return o.invokeFactoryOnOpenedRuntime(ctx, opened, lifecycle.runContext, target, request, consume)
+}
+
+// joinTeardownErrorUnlessResultDetermined merges a post-result error (runtime
+// teardown, or a best-effort trailing Factory Event read) into resultErr only
+// when the invocation never reached a terminal result. Teardown, trailing
+// event delivery, and the invocation's own event-derived terminal result all
+// race each other; a failure in the former must not erase an already-
+// determined public outcome, since the record and process exit state a
+// caller observes stay tied to what the invocation itself decided.
+func joinTeardownErrorUnlessResultDetermined(
+	outcome roles.FactoryInvocationOutcome,
+	resultErr error,
+	postResultErr error,
+	logger *zap.Logger,
+) error {
+	if postResultErr == nil {
+		return resultErr
+	}
+	if outcome.Result.Status == "" {
+		return errors.Join(resultErr, postResultErr)
+	}
+	if logger != nil {
+		logger.Warn(
+			"invocation post-result step failed after terminal result was determined",
+			zap.Error(postResultErr),
+		)
+	}
+	return resultErr
 }
 
 func (o *operation) invokeFactoryOnHostedLiveRuntime(
@@ -167,9 +196,8 @@ func (o *operation) invokeFactoryOnHostedLiveRuntime(
 		ctx, factorysessions.DefaultSessionID, request,
 	)
 	if liveEvents != nil {
-		resultErr = errors.Join(
-			resultErr,
-			liveEvents.finish(ctx, hosted.Sessions, outcome.Result),
+		resultErr = joinTeardownErrorUnlessResultDetermined(
+			outcome, resultErr, liveEvents.finish(ctx, hosted.Sessions, outcome.Result), target.Logger,
 		)
 	}
 	return outcome, resultErr
@@ -186,7 +214,7 @@ func (o *operation) invokeFactoryOnEphemeralRuntime(
 		return outcome, err
 	}
 	defer func() {
-		resultErr = errors.Join(resultErr, lifecycle.close(ctx, opened))
+		resultErr = joinTeardownErrorUnlessResultDetermined(outcome, resultErr, lifecycle.close(ctx, opened), target.Logger)
 	}()
 	return o.invokeFactoryOnOpenedRuntime(ctx, opened, lifecycle.runContext, target, request, consume)
 }
@@ -212,7 +240,7 @@ func (o *operation) invokeFactoryOnOpenedRuntime(
 		if err == nil && consume != nil {
 			events, readErr := readInvocationFactoryEvents(runContext, opened.Sessions, result)
 			if readErr != nil {
-				return outcome, readErr
+				return outcome, joinTeardownErrorUnlessResultDetermined(outcome, err, readErr, target.Logger)
 			}
 			delivery.present(events)
 		}
@@ -227,7 +255,9 @@ func (o *operation) invokeFactoryOnOpenedRuntime(
 		runContext, factorysessions.DefaultSessionID, request,
 	)
 	if liveEvents != nil {
-		resultErr = errors.Join(resultErr, liveEvents.finish(runContext, opened.Sessions, outcome.Result))
+		resultErr = joinTeardownErrorUnlessResultDetermined(
+			outcome, resultErr, liveEvents.finish(runContext, opened.Sessions, outcome.Result), target.Logger,
+		)
 	}
 	return outcome, resultErr
 }
