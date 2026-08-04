@@ -10,6 +10,7 @@ import (
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	edges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
@@ -64,7 +65,6 @@ var servicesSet = wire.NewSet(
 	provideOperatorSettingsService,
 	provideOperatorSettingsIDGenerator,
 	provideChatSessionsFactoryTargetCatalogService,
-	provideACPServerFactoryDefinitions,
 	provideACPServerFactoryTargetRuntimeResolver,
 	provideACPServerFactoryTarget,
 	provideACPServerFactoryTargetService,
@@ -243,6 +243,7 @@ var factoryDefinitionsServicesSet = wire.NewSet(
 	provideEffectiveFactoryDefinitionNormalizer,
 	provideEffectiveFactoryCatalogOperation,
 	provideEffectiveFactoryDefinitionsService,
+	factorydefinitionswire.NewCatalogPathsService,
 )
 
 var workerServiceSet = wire.NewSet(

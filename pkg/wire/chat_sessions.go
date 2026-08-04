@@ -11,13 +11,14 @@ import (
 // provideChatSessionsFactoryTargetCatalogService constructs the Chat
 // Sessions Factory target-catalog root through the owning Chat Sessions Wire
 // package's focused constructor, from the same singular Operator Settings
-// and Factory Definitions public service roots the rest of this graph
-// composes. It performs no dependency-bag or service-locator composition:
-// every collaborator is a direct constructor parameter.
+// public service root and Factory Definitions' narrow, read-only
+// CatalogPathsService capability the rest of this graph composes. It
+// performs no dependency-bag or service-locator composition: every
+// collaborator is a direct constructor parameter.
 func provideChatSessionsFactoryTargetCatalogService(
 	operatorSettings operatorsettings.Service,
-	factoryDefinitions factorydefinitions.Service,
+	catalogPaths factorydefinitions.CatalogPathsService,
 	logger logging.Logger,
 ) (chatsessions.FactoryTargetCatalogService, error) {
-	return chatsessionswire.NewFactoryTargetCatalogService(operatorSettings, factoryDefinitions, logger)
+	return chatsessionswire.NewFactoryTargetCatalogService(operatorSettings, catalogPaths, logger)
 }

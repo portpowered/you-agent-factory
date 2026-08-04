@@ -275,13 +275,14 @@ func (fake *operatorSettingsFake) ResolveACPAgentProfile(path string) (operators
 	return operatorsettings.ACPAgentProfile{}, errUnexpectedCall
 }
 
-// factoryDefinitionsFake is a focused Factory Definitions root fake
-// exercising only ListEffectiveFactories and ResolveNamedFactory, the
-// collaborator methods the Factory target-catalog operation depends on.
-// resolveNamedFactory is only exercised when a test supplies a
-// ClientWorkingRoot, since the operation only calls it in that case.
+// factoryDefinitionsFake is a focused Factory Definitions catalog/path
+// capability fake exercising only ListEffectiveFactories and
+// ResolveNamedFactory, the collaborator methods the Factory target-catalog
+// operation depends on. resolveNamedFactory is only exercised when a test
+// supplies a ClientWorkingRoot, since the operation only calls it in that
+// case.
 type factoryDefinitionsFake struct {
-	factorydefinitions.Service
+	factorydefinitions.CatalogPathsService
 
 	listEffectiveFactories func(context.Context, factorydefinitions.ListEffectiveFactoriesRequest) (factorydefinitions.ListEffectiveFactoriesResult, error)
 	resolveNamedFactory    func(context.Context, factorydefinitions.ResolveNamedFactoryRequest) (factorydefinitions.ResolveNamedFactoryResult, error)

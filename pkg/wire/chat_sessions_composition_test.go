@@ -79,20 +79,17 @@ func TestProvideChatSessionsServiceConstructsAnIndependentServiceDirectly(t *tes
 	}
 }
 
-// staticFactoryDefinitionsService is a minimal factorydefinitions.Service
-// double covering only ListEffectiveFactories, the sole collaborator method
-// the Chat Sessions Factory target-catalog operation depends on. Factory
-// Definitions' full production Service is only constructible from a live
-// Factory Session's SessionHost/DefinitionActivationGateway/Validator
-// (pkg/wire/factory_definition_service_provider.go's
-// provideFactoryDefinitionsFactory), so this composition test proves the
-// Chat Sessions side of the wiring (real canonical Operator Settings root,
-// real canonical logger, direct single injection, no dependency bag) with a
-// focused double standing in for the Factory Definitions root, matching the
-// same fake-collaborator convention used by
-// pkg/services/chat_sessions/internal/service's own unit tests.
+// staticFactoryDefinitionsService is a minimal
+// factorydefinitions.CatalogPathsService double covering only
+// ListEffectiveFactories, the sole collaborator method the Chat Sessions
+// Factory target-catalog operation depends on. This composition test proves
+// the Chat Sessions side of the wiring (real canonical Operator Settings
+// root, real canonical logger, direct single injection, no dependency bag)
+// with a focused double standing in for the narrow Factory Definitions
+// catalog/path capability, matching the same fake-collaborator convention
+// used by pkg/services/chat_sessions/internal/service's own unit tests.
 type staticFactoryDefinitionsService struct {
-	factorydefinitions.Service
+	factorydefinitions.CatalogPathsService
 
 	mu      sync.Mutex
 	calls   int
