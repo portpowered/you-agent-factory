@@ -892,15 +892,12 @@ func provideDirectJavaScriptHostAdapter(
 	}
 	return func(
 		execution factorysessionwire.OwnedExecutionService,
-		executionLifecycle factorysessionwire.DirectJavaScriptLifecycle,
 		request factorysessions.DirectJavaScriptRunRequest,
 	) (lifecycle.Component, error) {
 		if request.Host == nil {
 			return nil, errors.New("direct JavaScript host request is required")
 		}
-		handler, err := httpHandler.BindDurableExecution(
-			execution, executionLifecycle, request.Logger,
-		)
+		handler, err := httpHandler.BindDurableExecution(execution, request.Logger)
 		if err != nil {
 			return nil, err
 		}

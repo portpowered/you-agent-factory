@@ -8,12 +8,10 @@ import (
 	"strings"
 	"sync"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 )
 
 type directJavaScriptRunOperation struct {
@@ -178,84 +176,8 @@ func (o *directJavaScriptRunOperation) prepareHosting(
 			return runCtx.Err()
 		}
 	}
-	transport, err := o.host(execution, directJavaScriptLifecycle{execution}, request)
+	transport, err := o.host(execution, request)
 	return transport, completion, err
-}
-
-type directJavaScriptLifecycle struct {
-	execution durableexecution.Service
-}
-
-func (adapter directJavaScriptLifecycle) PauseDurableFactorySession(
-	ctx context.Context, sessionID string, request factorysessions.ControlRequest,
-) (factorysessions.LifecycleControlResult, error) {
-	return adapter.execution.Pause(ctx, sessionID, request)
-}
-
-func (adapter directJavaScriptLifecycle) ResumeDurableFactorySession(
-	ctx context.Context, sessionID string, request factorysessions.ControlRequest,
-) (factorysessions.LifecycleControlResult, error) {
-	return adapter.execution.Resume(ctx, sessionID, request)
-}
-
-func (adapter directJavaScriptLifecycle) CancelDurableFactorySession(
-	ctx context.Context, sessionID string, request factorysessions.ControlRequest,
-) (factorysessions.LifecycleControlResult, error) {
-	return adapter.execution.Cancel(ctx, sessionID, request)
-}
-
-func (adapter directJavaScriptLifecycle) TerminateDurableFactorySession(
-	ctx context.Context, sessionID string, request factorysessions.ControlRequest,
-) (factorysessions.LifecycleControlResult, error) {
-	return adapter.execution.Terminate(ctx, sessionID, request)
-}
-
-func (adapter directJavaScriptLifecycle) ApproveDurableFactorySession(
-	ctx context.Context, sessionID string, request factorysessions.ApproveRequest,
-) (factorysessions.LifecycleControlResult, error) {
-	return adapter.execution.Approve(ctx, sessionID, request)
-}
-
-func (adapter directJavaScriptLifecycle) RetryDurableFactorySessionDispatch(
-	ctx context.Context, sessionID string, request factorysessions.RetryDispatchRequest,
-) (factorysessions.LifecycleControlResult, error) {
-	return adapter.execution.RetryDispatch(ctx, sessionID, request)
-}
-
-func (adapter directJavaScriptLifecycle) InterruptDurableFactorySessionDispatch(
-	ctx context.Context, sessionID string, request factorysessions.InterruptDispatchRequest,
-) (factorysessions.LifecycleControlResult, error) {
-	return adapter.execution.InterruptDispatch(ctx, sessionID, request)
-}
-
-func (adapter directJavaScriptLifecycle) ReadDurableFactorySessionEventStream(
-	ctx context.Context, sessionID string, request factorysessions.EventReconnectRequest,
-) (*factorydefinitions.FactoryEventStream, error) {
-	result, err := adapter.execution.ReadEvents(ctx, sessionID, request)
-	if err != nil {
-		return nil, err
-	}
-	return factorysessions.MaterializeEventReadStream(result), nil
-}
-
-func (adapter directJavaScriptLifecycle) ProbeDurableFactorySessionEvents(
-	ctx context.Context, sessionID string, request factorysessions.EventReconnectRequest,
-) error {
-	_, err := adapter.execution.ReadEvents(ctx, sessionID, request)
-	return err
-}
-
-func (adapter directJavaScriptLifecycle) SubscribeDurableFactoryResponseEvents(
-	ctx context.Context,
-	request factorysessions.ResponseEventSubscriptionRequest,
-) (*factorysessions.ResponseEventCursor, error) {
-	subscriber, ok := adapter.execution.(interface {
-		SubscribeResponseEvents(context.Context, string, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error)
-	})
-	if !ok {
-		return nil, factorysessions.ErrRuntimeNotAvailable
-	}
-	return subscriber.SubscribeResponseEvents(ctx, request.SessionID, request)
 }
 
 var _ roles.DirectJavaScriptRunOperation = (*directJavaScriptRunOperation)(nil)

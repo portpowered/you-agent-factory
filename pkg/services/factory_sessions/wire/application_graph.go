@@ -51,7 +51,6 @@ type (
 	DirectJavaScriptRunOperation         = roles.DirectJavaScriptRunOperation
 	DirectJavaScriptSyncRunner           = roles.DirectJavaScriptSyncRunner
 	DirectJavaScriptHostAdapter          = roles.DirectJavaScriptHostAdapter
-	DirectJavaScriptLifecycle            = roles.DirectJavaScriptLifecycle
 	RequestPreparation                   = roles.RequestPreparation
 	Registry                             = roles.Registry
 	RuntimePersistenceStore              = roles.RuntimePersistenceStore

@@ -145,21 +145,8 @@ type DirectJavaScriptRunOperation interface {
 
 type DirectJavaScriptHostAdapter func(
 	OwnedExecutionService,
-	DirectJavaScriptLifecycle,
 	factorysessions.DirectJavaScriptRunRequest,
 ) (lifecycle.Component, error)
-
-type DirectJavaScriptLifecycle interface {
-	PauseDurableFactorySession(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
-	ResumeDurableFactorySession(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
-	CancelDurableFactorySession(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
-	TerminateDurableFactorySession(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
-	ApproveDurableFactorySession(context.Context, string, factorysessions.ApproveRequest) (factorysessions.LifecycleControlResult, error)
-	RetryDurableFactorySessionDispatch(context.Context, string, factorysessions.RetryDispatchRequest) (factorysessions.LifecycleControlResult, error)
-	InterruptDurableFactorySessionDispatch(context.Context, string, factorysessions.InterruptDispatchRequest) (factorysessions.LifecycleControlResult, error)
-	ReadDurableFactorySessionEventStream(context.Context, string, factorysessions.EventReconnectRequest) (*factorydefinitions.FactoryEventStream, error)
-	ProbeDurableFactorySessionEvents(context.Context, string, factorysessions.EventReconnectRequest) error
-}
 
 type DirectJavaScriptSyncRunner func(
 	context.Context,

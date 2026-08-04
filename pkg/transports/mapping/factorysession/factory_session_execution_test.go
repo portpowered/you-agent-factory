@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -19,49 +18,41 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
-type strictDurableEventLifecycle struct {
-	factorysession.DurableLifecycleAPI
-	read  func(context.Context, string, factorysessionexecution.EventReconnectRequest) (*interfaces.FactoryEventStream, error)
-	probe func(context.Context, string, factorysessionexecution.EventReconnectRequest) error
+type strictDurableEventExecution struct {
+	factorysession.DurableExecution
+	read func(context.Context, string, factorysessionexecution.EventReconnectRequest) (factorysessionexecution.EventReadResult, error)
 }
 
-func (s strictDurableEventLifecycle) ReadDurableFactorySessionEventStream(
+func (s strictDurableEventExecution) ReadEvents(
 	ctx context.Context,
 	sessionID string,
 	request factorysessionexecution.EventReconnectRequest,
-) (*interfaces.FactoryEventStream, error) {
+) (factorysessionexecution.EventReadResult, error) {
 	return s.read(ctx, sessionID, request)
-}
-
-func (s strictDurableEventLifecycle) ProbeDurableFactorySessionEvents(
-	ctx context.Context,
-	sessionID string,
-	request factorysessionexecution.EventReconnectRequest,
-) error {
-	return s.probe(ctx, sessionID, request)
 }
 
 func TestDurableAPIEventRead_DelegatesMaterializedStreamToFactorySessions(t *testing.T) {
 	t.Parallel()
 
-	wantStream := &interfaces.FactoryEventStream{History: []interfaces.FactoryEvent{{Id: "event-1"}}}
 	sequence := factoryapi.AfterSequence(4)
-	api := factorysession.NewDurableAPI(nil, strictDurableEventLifecycle{
-		read: func(_ context.Context, sessionID string, request factorysessionexecution.EventReconnectRequest) (*interfaces.FactoryEventStream, error) {
+	api := factorysession.NewDurableAPI(strictDurableEventExecution{
+		read: func(_ context.Context, sessionID string, request factorysessionexecution.EventReconnectRequest) (factorysessionexecution.EventReadResult, error) {
 			if sessionID != "dur-sess-1" || request.AfterSequence == nil || *request.AfterSequence != 4 {
 				t.Fatalf("read request = session %q %#v", sessionID, request)
 			}
-			return wantStream, nil
+			return factorysessionexecution.EventReadResult{
+				SessionID: sessionID,
+				Events:    []json.RawMessage{json.RawMessage(`{"id":"event-1"}`)},
+			}, nil
 		},
-		probe: func(context.Context, string, factorysessionexecution.EventReconnectRequest) error { return nil },
 	})
 	raw, _ := factorysession.EventReconnectRequestFromAPI(factoryapi.GetEventsBySessionIdParams{AfterSequence: &sequence})
 	got, err := api.ReadDurableFactorySessionEvents(context.Background(), "dur-sess-1", raw)
 	if err != nil {
 		t.Fatalf("ReadDurableFactorySessionEvents: %v", err)
 	}
-	if got != wantStream {
-		t.Fatalf("stream = %#v, want exact service-materialized stream %#v", got, wantStream)
+	if got == nil || len(got.History) != 1 || got.History[0].Id != "event-1" {
+		t.Fatalf("stream = %#v, want materialized durable event history", got)
 	}
 }
 
@@ -69,17 +60,13 @@ func TestDurableAPIEventProbe_DelegatesWithoutReadingStream(t *testing.T) {
 	t.Parallel()
 
 	called := false
-	api := factorysession.NewDurableAPI(nil, strictDurableEventLifecycle{
-		read: func(context.Context, string, factorysessionexecution.EventReconnectRequest) (*interfaces.FactoryEventStream, error) {
-			t.Fatal("probe called stream read")
-			return nil, nil
-		},
-		probe: func(_ context.Context, sessionID string, request factorysessionexecution.EventReconnectRequest) error {
+	api := factorysession.NewDurableAPI(strictDurableEventExecution{
+		read: func(_ context.Context, sessionID string, request factorysessionexecution.EventReconnectRequest) (factorysessionexecution.EventReadResult, error) {
 			called = true
 			if sessionID != "dur-sess-1" || request.AfterEventID != " event-1 " {
 				t.Fatalf("probe request = session %q %#v", sessionID, request)
 			}
-			return nil
+			return factorysessionexecution.EventReadResult{SessionID: sessionID}, nil
 		},
 	})
 	after := factoryapi.AfterEventId(" event-1 ")
@@ -94,9 +81,53 @@ func TestDurableAPIEventProbe_DelegatesWithoutReadingStream(t *testing.T) {
 
 func TestDurableAPIListRequiresExecutionService(t *testing.T) {
 	t.Parallel()
-	api := factorysession.NewDurableAPI(nil, nil)
+	api := factorysession.NewDurableAPI(nil)
 	if _, err := api.ListDurableFactorySessions(context.Background(), factorysessionexecution.ListSessionsRequest{}); err == nil {
 		t.Fatal("ListDurableFactorySessions succeeded without an execution service")
+	}
+}
+
+type durableControlExecution struct {
+	factorysession.DurableExecution
+	pause func(context.Context, string, factorysessionexecution.DurableControlRequest) (factorysessionexecution.DurableControlResult, error)
+}
+
+func (fake durableControlExecution) Pause(
+	ctx context.Context,
+	sessionID string,
+	request factorysessionexecution.DurableControlRequest,
+) (factorysessionexecution.DurableControlResult, error) {
+	return fake.pause(ctx, sessionID, request)
+}
+
+func TestDurableAPIControl_UsesOwnerPublishedDurableCapability(t *testing.T) {
+	t.Parallel()
+
+	api := factorysession.NewDurableAPI(durableControlExecution{
+		pause: func(_ context.Context, sessionID string, request factorysessionexecution.DurableControlRequest) (factorysessionexecution.DurableControlResult, error) {
+			if sessionID != "dur-sess-1" || request.RequestID != "control-1" || request.Reason != "operator pause" {
+				t.Fatalf("Pause request = session %q %#v", sessionID, request)
+			}
+			return factorysessionexecution.DurableControlResult{
+				SessionID: sessionID,
+				Operation: factorysessionexecution.LifecycleControlPause,
+				Outcome:   factorysessionexecution.LifecycleControlOutcomeAccepted,
+				Status:    factorysessionexecution.LifecycleStatusPaused,
+			}, nil
+		},
+	})
+
+	result, err := api.PauseDurableFactorySession(context.Background(), "dur-sess-1", factorysessionexecution.DurableControlRequest{
+		RequestID: "control-1", Reason: "operator pause",
+	})
+	if err != nil {
+		t.Fatalf("PauseDurableFactorySession: %v", err)
+	}
+	if result.SessionId != "dur-sess-1" ||
+		result.Operation != factoryapi.FactorySessionLifecycleControlKindPause ||
+		result.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted ||
+		result.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("PauseDurableFactorySession = %#v, want mapped accepted pause", result)
 	}
 }
 
@@ -520,7 +551,7 @@ func TestDurableAPIResponseEvents_SubscriberDelegatesToExecution(t *testing.T) {
 			}
 			return wantCursor, nil
 		},
-	}, nil)
+	})
 
 	subscription, err := api.SubscribeDurableFactoryResponseEvents(context.Background(), factorysessionexecution.ResponseEventSubscriptionRequest{
 		SessionID:  "dur-sess-1",
@@ -566,7 +597,7 @@ func TestDurableAPIResponseEvents_DirectExecutionPathMapsSessionNotFound(t *test
 			}
 			return nil, factorysessionexecution.ErrSessionNotFound
 		},
-	}, nil)
+	})
 
 	_, err := api.SubscribeDurableFactoryResponseEvents(context.Background(), factorysessionexecution.ResponseEventSubscriptionRequest{
 		SessionID: "dur-sess-2",
@@ -586,7 +617,7 @@ func TestDurableAPIResponseEvents_DurableExecutionPathMapsStoreExpired(t *testin
 			}
 			return nil, factorysessionexecution.ErrResponseEventStoreExpired
 		},
-	}, nil)
+	})
 
 	_, err := api.SubscribeDurableFactoryResponseEvents(context.Background(), factorysessionexecution.ResponseEventSubscriptionRequest{
 		SessionID: "dur-sess-expired",
@@ -606,7 +637,7 @@ func TestDurableAPIResponseEvents_DirectExecutionPathMapsStoreExpired(t *testing
 			}
 			return nil, factorysessionexecution.ErrResponseEventStoreExpired
 		},
-	}, nil)
+	})
 
 	_, err := api.SubscribeDurableFactoryResponseEvents(context.Background(), factorysessionexecution.ResponseEventSubscriptionRequest{
 		SessionID: "dur-sess-expired",

@@ -104,13 +104,12 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 // scope retain their normal not-configured behavior.
 func (handler *Handler) BindDurableExecution(
 	execution factorysessionmapping.DurableExecution,
-	lifecycle factorysessionmapping.DurableLifecycleAPI,
 	logger *zap.Logger,
 ) (http.Handler, error) {
-	if handler == nil || handler.sessionRequests == nil || execution == nil || lifecycle == nil {
+	if handler == nil || handler.sessionRequests == nil || execution == nil {
 		return nil, fmt.Errorf("bind durable execution HTTP handler: process-scoped handler and execution are required")
 	}
-	durable := factorysessionmapping.NewDurableAPI(execution, lifecycle)
+	durable := factorysessionmapping.NewDurableAPI(execution)
 	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
 		DurableExecution: durable, DurableLifecycle: durable,
 		DurableListing: durable, DurableProjection: durable,

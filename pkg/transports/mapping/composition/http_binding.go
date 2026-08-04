@@ -57,7 +57,7 @@ func (binder *HTTPBinder) Bind(
 		return HTTPBinding{}, fmt.Errorf("bind HTTP mappings: legacy Factory Runtime observation is required")
 	}
 	var durableExecution factorysessionmapping.DurableExecution = sessions
-	durable := NewDurableAPI(durableExecution, sessions)
+	durable := NewDurableAPI(durableExecution)
 	return HTTPBinding{
 		Runtime:            NewRuntimeAPI(legacyObservation, definitions),
 		FactoryStatus:      newFactoryStatusAPI(runtime, sessions),
