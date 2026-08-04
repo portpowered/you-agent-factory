@@ -466,6 +466,7 @@ func TestDocsCommand_CanonicalOperatorTopicsResolve(t *testing.T) {
 		{topic: "models", heading: "# Models"},
 		{topic: "mcp", heading: "# MCP Host Setup"},
 		{topic: "javascript-workflows", heading: "# JavaScript Workflows"},
+		{topic: "serve-acp", heading: "# Host You As An ACP Agent"},
 	}
 
 	for _, tc := range cases {
@@ -526,7 +527,7 @@ func TestDocsCommand_UnsupportedTopicReturnsCanonicalTopicError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, run, config, mock-workers, record-replay, guards, relationships, work, sessions, orchestrators, javascript-workflows, mcp, workstations, workers, providers, resources, models, batch-inputs, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, run, config, mock-workers, record-replay, guards, relationships, work, sessions, orchestrators, javascript-workflows, mcp, workstations, workers, providers, serve-acp, resources, models, batch-inputs, templates)` {
 		t.Fatalf("unexpected docs error %q", got)
 	}
 	if got := stdout.String(); got != "" {

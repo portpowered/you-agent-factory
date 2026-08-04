@@ -36,6 +36,7 @@ concept owners below when you need the complete customer-facing contract.
 | `workstations` | Workstation kinds, routes, runtime fields, and scoped execution settings | [Workstations](workstations.md) |
 | `workers` | Worker quick reference | [Workers](workers.md) |
 | `providers` | ACP presets, custom integrations, Factory selection, validation, removal, and JavaScript usage | [Providers and ACP agents](providers.md) |
+| `serve-acp` | `you serve acp` ACP-agent host command, stdio channel contract, clean shutdown, and minimal client configuration | [Host You as an ACP agent](serve-acp.md) |
 | `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Config](config.md) |
 | `models` | Model discovery, readiness, pull, invocation, and Factory execution boundaries | [Models](models.md) |
 | `batch-inputs` | Batch-request quick reference | [Batch inputs](batch-inputs.md) |
@@ -100,6 +101,9 @@ filesystem work around that invocation.
 - [Providers and ACP agents](providers.md) owns ACP installation, built-in
   presets, operator-added integrations, `executorProvider` selection, and
   provider lifecycle commands.
+- [Host You as an ACP agent](serve-acp.md) owns the canonical `you serve acp`
+  ACP-agent host command, its stdio channel contract, clean shutdown
+  expectations, and a minimal client configuration example.
 - [Workstations](workstations.md) owns `AGENT_RUN` versus `INFERENCE_RUN`
   runtime behavior in addition to workstation kinds, route fields, and
   workstation-scoped execution settings.
@@ -140,6 +144,7 @@ Use these canonical concept owners when you need the current contract.
 - [Workstations](workstations.md)
 - [Workers](workers.md)
 - [Providers and ACP agents](providers.md)
+- [Host You as an ACP agent](serve-acp.md)
 - [Resources](resources.md)
 - [Models](models.md)
 - [Author AGENTS.md](authoring-agents-md.md)
