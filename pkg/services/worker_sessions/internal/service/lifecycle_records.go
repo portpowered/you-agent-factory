@@ -62,6 +62,7 @@ func (r *registry) publishOpeningRecord(ctx context.Context, id, attemptID strin
 	}
 	pub.open = true
 	pub.lastSequence = make(map[sourceKey]events.SourceSequence)
+	pub.accepted = make(map[events.AppendIdentity]struct{})
 	return nil
 }
 

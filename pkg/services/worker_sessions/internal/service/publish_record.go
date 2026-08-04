@@ -40,6 +40,15 @@ type publication struct {
 	// (SourceType, SourceID) this session has published, used to reject a
 	// record whose SourceSequence regresses behind one already committed.
 	lastSequence map[sourceKey]events.SourceSequence
+	// accepted holds every full Events idempotency identity this session has
+	// already committed. It lets an exact retry of a previously accepted
+	// identity reach Events (and resolve to the original record as a
+	// duplicate) even after a later SourceSequence has advanced lastSequence
+	// past it -- Events itself retains identities permanently for dedup, so a
+	// retry must stay idempotent regardless of publication order since. Only
+	// an identity never accepted before is subject to the out-of-order
+	// rejection below.
+	accepted map[events.AppendIdentity]struct{}
 }
 
 // publicationFor returns the publication registered for id, or nil if id was
@@ -60,8 +69,10 @@ func (r *registry) publicationFor(id string) *publication {
 // and must not yet have started committing its terminal record, and it
 // enforces that accepted records for one (SourceType, SourceID) commit in
 // non-decreasing SourceSequence order, rejecting a call that would regress
-// behind one already accepted. Beyond that ordering and window enforcement,
-// PublishRecord relies on Events for aggregate order, duplicate resolution,
+// behind one already accepted -- unless the call's full identity was itself
+// already accepted, in which case it always reaches Events and resolves to
+// the original record as a duplicate. Beyond that ordering and window
+// enforcement, PublishRecord relies on Events for aggregate order, duplicate resolution,
 // cursors, reads, and subscriptions. An invalid Draft, an unopened or closed
 // publication window, an out-of-order SourceSequence, a malformed Events
 // identity, or a rejected Events append is returned unchanged, and no record
@@ -87,22 +98,24 @@ func (r *registry) PublishRecord(ctx context.Context, req workersessions.Publish
 	}
 
 	key := sourceKey{sourceType: req.SourceType, sourceID: req.SourceID}
-	if last := pub.lastSequence[key]; req.SourceSequence < last {
-		r.logger.Info("worker session publish record rejected", "sessionID", req.SessionID, "outcome", "out_of_order")
-		return workersessions.PublishRecordResult{}, workersessions.ErrOutOfOrderPublication
-	}
-
 	identity := events.AppendIdentity{
 		SourceType:     req.SourceType,
 		SourceID:       req.SourceID,
 		SourceSequence: req.SourceSequence,
 		SourceEventID:  req.SourceEventID,
 	}
+	_, alreadyAccepted := pub.accepted[identity]
+	if last := pub.lastSequence[key]; !alreadyAccepted && req.SourceSequence < last {
+		r.logger.Info("worker session publish record rejected", "sessionID", req.SessionID, "outcome", "out_of_order")
+		return workersessions.PublishRecordResult{}, workersessions.ErrOutOfOrderPublication
+	}
+
 	appendResult, err := r.appendDraft(ctx, workersessions.Topic(req.SessionID), identity, req.SchemaID, req.Draft)
 	if err != nil {
 		r.logger.Info("worker session publish record rejected", "sessionID", req.SessionID, "outcome", "append_failed")
 		return workersessions.PublishRecordResult{}, err
 	}
+	pub.accepted[identity] = struct{}{}
 	if req.SourceSequence > pub.lastSequence[key] {
 		pub.lastSequence[key] = req.SourceSequence
 	}

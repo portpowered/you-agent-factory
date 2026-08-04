@@ -60,9 +60,13 @@ type Service interface {
 	// opening record has committed and before its terminal record has
 	// started committing -- and only when req.SourceSequence does not
 	// regress behind one already accepted for the same (SourceType,
-	// SourceID); every accepted call for one session is itself serialized,
-	// so its own opening, publication, and terminal records can never
-	// interleave. Beyond that window and ordering enforcement, PublishRecord
+	// SourceID), unless req's full four-part identity was itself already
+	// accepted: an exact retry of a previously accepted identity always
+	// reaches Events and resolves to the original record as a duplicate,
+	// regardless of any later SourceSequence accepted since. Every accepted
+	// call for one session is itself serialized, so its own opening,
+	// publication, and terminal records can never interleave. Beyond that
+	// window and ordering enforcement, PublishRecord
 	// relies on Events for aggregate order, duplicate resolution, cursors,
 	// reads, and subscriptions. An invalid Draft, an unopened or closed
 	// publication window (ErrPublicationNotOpen), an out-of-order
