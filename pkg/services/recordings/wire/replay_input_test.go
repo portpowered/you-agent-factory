@@ -151,6 +151,28 @@ func TestReplayInputLoaderPropagatesMalformedPortableRecording(t *testing.T) {
 	}
 }
 
+func TestReplayInputLoaderClassifiesLegacyLoaderFailure(t *testing.T) {
+	t.Parallel()
+
+	path := writeTempReplayInputFile(t, `{"schemaVersion":"legacy"}`)
+	want := errors.New("legacy replay unavailable")
+	loader := recordingswire.NewReplayArtifactCapability(
+		recordings.RecordingReadFile(os.ReadFile),
+		func(string) (*recordings.ReplayArtifact, error) { return nil, want },
+	)
+	result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: path})
+	if result.Portable != nil || result.Legacy != nil {
+		t.Fatalf("result = %#v, want zero result on legacy load failure", result)
+	}
+	if !errors.Is(err, want) {
+		t.Fatalf("LoadReplayInput() error = %v, want wrapped %v", err, want)
+	}
+	var inputErr *recordings.ReplayInputError
+	if !errors.As(err, &inputErr) || inputErr.Family != recordings.ReplayInputFamilyLegacy {
+		t.Fatalf("LoadReplayInput() error = %v, want legacy ReplayInputError", err)
+	}
+}
+
 func TestReplayArtifactCapabilityLedgerOperationsAreUnsupported(t *testing.T) {
 	t.Parallel()
 

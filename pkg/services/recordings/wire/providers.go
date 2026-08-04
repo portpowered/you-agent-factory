@@ -94,7 +94,10 @@ func (loader *replayArtifactCapability) LoadReplayInput(
 	}
 	artifact, err := loader.loadLegacy(request.Path)
 	if err != nil {
-		return recordings.LoadReplayInputResult{}, fmt.Errorf("load replay artifact: %w", err)
+		return recordings.LoadReplayInputResult{}, &recordings.ReplayInputError{
+			Family: recordings.ReplayInputFamilyLegacy,
+			Cause:  fmt.Errorf("load replay artifact: %w", err),
+		}
 	}
 	return recordings.LoadReplayInputResult{Legacy: artifact}, nil
 }

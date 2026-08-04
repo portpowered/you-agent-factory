@@ -3,6 +3,7 @@ package runtimeopening
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -58,6 +59,22 @@ func TestLoadRuntimePreservesValidatedPortableRecording(t *testing.T) {
 	if got := loaded.PortableRecording.Session.ID; got != "session-js-001" {
 		t.Fatalf("session id = %q, want session-js-001", got)
 	}
+	if loaded.PortableRecording.SchemaVersion != "2" ||
+		loaded.PortableRecording.ReplayCompatibilityVersion != "1" ||
+		loaded.PortableRecording.Source.Ref != "workflow/example.js" ||
+		len(loaded.PortableRecording.Artifacts) != 1 ||
+		len(loaded.PortableRecording.Events) != 2 ||
+		loaded.PortableRecording.Events[0].Sequence != 0 ||
+		loaded.PortableRecording.Events[1].Sequence != 1 ||
+		loaded.PortableRecording.Result == nil ||
+		loaded.PortableRecording.Result.Status != "FINAL" ||
+		!loaded.PortableRecording.Redaction.RuntimeStateOmitted ||
+		!loaded.PortableRecording.Redaction.CheckpointBodiesOmitted ||
+		!loaded.PortableRecording.Redaction.ProviderTranscriptsOmitted ||
+		!loaded.PortableRecording.Redaction.ChildDispatchesOmitted ||
+		loaded.PortableRecording.Redaction.SecretsRedacted != 2 {
+		t.Fatalf("portable recording = %#v, want validated compatibility, summaries, order, and redaction facts", loaded.PortableRecording)
+	}
 	if loaded.ReplayArtifact != nil || loaded.LoadedFactoryCfg != nil {
 		t.Fatal("portable recording mixed with Factory-event replay state")
 	}
@@ -101,6 +118,35 @@ func TestLoadRuntimePropagatesReplayInputFailure(t *testing.T) {
 	)
 	if !errors.Is(err, want) {
 		t.Fatalf("LoadRuntime() error = %v, want %v", err, want)
+	}
+}
+
+func TestLoadRuntimePreservesLegacyReplayFailureContext(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "legacy-replay.json")
+	if err := os.WriteFile(path, []byte(`{"schemaVersion":"legacy"}`), 0o600); err != nil {
+		t.Fatalf("write legacy replay fixture: %v", err)
+	}
+	want := errors.New("legacy replay unavailable")
+	replayInputs := recordingswire.NewReplayArtifactCapability(
+		recordings.RecordingReadFile(os.ReadFile),
+		func(string) (*recordings.ReplayArtifact, error) { return nil, want },
+	)
+	loaded, err := LoadRuntime(
+		t.TempDir(), "", path, operatorconfig.ResolvedDefaults{}, nil,
+		RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: zap.NewNop()},
+		nil, nil, nil, replayInputs, nil,
+		func(base *zap.Logger, _, _, _ string) *zap.Logger { return base },
+	)
+	if !errors.Is(err, want) {
+		t.Fatalf("LoadRuntime() error = %v, want wrapped %v", err, want)
+	}
+	if got, wantText := err.Error(), "load factory config: load replay artifact: legacy replay unavailable"; got != wantText {
+		t.Fatalf("LoadRuntime() error = %q, want %q", got, wantText)
+	}
+	if loaded.PortableRecording != nil || loaded.ReplayArtifact != nil || loaded.LoadedFactoryCfg != nil || loaded.SessionLogger != nil {
+		t.Fatalf("LoadRuntime() result = %#v, want zero result on legacy load failure", loaded)
 	}
 }
 

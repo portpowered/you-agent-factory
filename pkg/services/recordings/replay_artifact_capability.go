@@ -14,13 +14,9 @@ import (
 // can fake it without implementing the rest of Service.
 //
 // Every identity, replay-fact, artifact, request, result, diagnostic, and
-// typed-error type used by this capability is defined directly at the
-// Recordings root rather than aliased from recordings/internal/contracts.
+// typed-error type used by this capability is defined directly in this file
+// rather than aliased from recordings/internal/contracts.
 type RecordingReplayArtifacts interface {
-	// LoadReplayInput reads one caller-selected replay input and classifies it
-	// as either a portable JavaScript Factory Session recording or a legacy
-	// embedded-Factory replay artifact.
-	LoadReplayInput(LoadReplayInputRequest) (LoadReplayInputResult, error)
 	// LoadReplay selects one finalized recording's detached canonical replay
 	// facts by opaque recording identity.
 	LoadReplay(LoadReplayRequest) (LoadReplayResult, error)
@@ -70,30 +66,37 @@ type LoadReplayInputResult struct {
 	Legacy   *ReplayArtifact
 }
 
-// RecordingReplayArtifactsRuntime is the per-Factory-Session phase-aware
-// view of RecordingReplayArtifacts. It first loads replay input before the
-// runtime ledger exists, then binds the same capability to the completed
-// Recordings runtime state so its finalized-recording operations delegate to
-// the canonical implementation. Factory Sessions only receive this narrow
-// contract, never the broad Recordings Service.
-type RecordingReplayArtifactsRuntime interface {
-	RecordingReplayArtifacts
-	BindRecordingLifecycle(Ledger, ProjectionService) (RecordingLifecycle, error)
+// ReplayInputFamily identifies the historical replay document family selected
+// while loading a path-based replay input.
+type ReplayInputFamily string
+
+const (
+	ReplayInputFamilyPortable ReplayInputFamily = "PORTABLE"
+	ReplayInputFamilyLegacy   ReplayInputFamily = "LEGACY"
+)
+
+// ReplayInputError preserves the failure's document family while retaining
+// errors.Is/errors.As access to its cause. Factory Sessions uses this narrow
+// fact to preserve the established portable-versus-legacy error context
+// without depending on a Recordings implementation detail.
+type ReplayInputError struct {
+	Family ReplayInputFamily
+	Cause  error
 }
 
-// RecordingReplayArtifactsRuntimeBuilder constructs the canonical narrow
-// capability and lifecycle view for one runtime ledger and projection. It is
-// selected once by Wire; the runtime phase supplies only request-scoped
-// Recordings state.
-type RecordingReplayArtifactsRuntimeBuilder func(
-	Ledger,
-	ProjectionService,
-) (RecordingReplayArtifacts, RecordingLifecycle, error)
+func (e *ReplayInputError) Error() string {
+	if e == nil || e.Cause == nil {
+		return "replay input failure"
+	}
+	return e.Cause.Error()
+}
 
-// RecordingReplayArtifactsFactory constructs one phase-aware narrow
-// capability for each Factory Session runtime opening. Construction is inert;
-// the returned capability performs I/O only when an operation is invoked.
-type RecordingReplayArtifactsFactory func() RecordingReplayArtifactsRuntime
+func (e *ReplayInputError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
 
 // ReplayRecordingID is the Recordings-owned identity of one recording,
 // published for peers that only consume RecordingReplayArtifacts.
@@ -321,42 +324,13 @@ var ErrReplayArtifactUnsupportedContext = errors.New(
 	"replay/artifact operation is not supported by this capability instance",
 )
 
-// ArtifactDiagnosticCode identifies one RecordingReplayArtifacts structured
-// validation failure area.
-type ArtifactDiagnosticCode string
-
-const (
-	ArtifactDiagnosticRecordingNotFound ArtifactDiagnosticCode = "REPLAY_RECORDING_NOT_FOUND"
-	ArtifactDiagnosticUnavailable       ArtifactDiagnosticCode = "PORTABLE_ARTIFACT_UNAVAILABLE"
-	ArtifactDiagnosticForeign           ArtifactDiagnosticCode = "FOREIGN_PORTABLE_ARTIFACT_REFERENCE"
-	ArtifactDiagnosticUnsupportedSchema ArtifactDiagnosticCode = "UNSUPPORTED_ARTIFACT_SCHEMA"
-	ArtifactDiagnosticInvalidSummary    ArtifactDiagnosticCode = "INVALID_ARTIFACT_SUMMARY"
-	ArtifactDiagnosticInvalidOrder      ArtifactDiagnosticCode = "INVALID_ARTIFACT_ORDER"
-	ArtifactDiagnosticInvalidIntegrity  ArtifactDiagnosticCode = "INVALID_ARTIFACT_INTEGRITY"
-	ArtifactDiagnosticMalformed         ArtifactDiagnosticCode = "MALFORMED_ARTIFACT"
-)
-
-// ArtifactDiagnostic reports one structured, directly owned portable
-// artifact validation failure area, including the supported schema versions
-// a caller can retry against.
-type ArtifactDiagnostic struct {
-	Code              ArtifactDiagnosticCode
-	Area              string
-	Path              string
-	Message           string
-	SupportedVersions []string
-}
-
 // ReplayArtifactError is a typed RecordingReplayArtifacts failure peers can
 // branch on via Kind or unwrap via Cause for standard errors.Is/errors.As
-// matching. Diagnostic is populated for structured validation failures
-// (ReplayArtifactErrorUnsupportedSchema, ReplayArtifactErrorInvalid,
-// ReplayArtifactErrorInvalidOrder, ReplayArtifactErrorInvalidIntegrity).
+// matching.
 type ReplayArtifactError struct {
-	Kind       ReplayArtifactErrorKind
-	Diagnostic *ArtifactDiagnostic
-	Message    string
-	Cause      error
+	Kind    ReplayArtifactErrorKind
+	Message string
+	Cause   error
 }
 
 func (e *ReplayArtifactError) Error() string {

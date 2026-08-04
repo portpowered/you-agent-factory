@@ -94,11 +94,17 @@ func TestRecordingReplayArtifacts_ConstructionIsInert(t *testing.T) {
 func finalizedReplayArtifactRecording(
 	t *testing.T, service recordings.Service, recordingID string,
 ) recordings.ReplayRecordingID {
+	return finalizedReplayArtifactRecordingAt(t, service, recordingID, filepath.Join(t.TempDir(), recordingID+".json"))
+}
+
+func finalizedReplayArtifactRecordingAt(
+	t *testing.T, service recordings.Service, recordingID string, reference string,
+) recordings.ReplayRecordingID {
 	t.Helper()
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-" + recordingID}
 	bound, err := service.BindRecording(recordings.BindRecordingRequest{
 		RecordingID: recordings.RecordingID(recordingID),
-		Artifact:    recordings.RecordingArtifactReference(filepath.Join(t.TempDir(), recordingID+".json")),
+		Artifact:    recordings.RecordingArtifactReference(reference),
 		Scope:       scope,
 	})
 	if err != nil {
@@ -246,6 +252,18 @@ func TestRecordingReplayArtifacts_TypedFailures(t *testing.T) {
 
 	_, err = replayArtifacts.DecodeArtifact(recordings.DecodeArtifactRequest{Payload: []byte("{")})
 	assertReplayArtifactErrorKind(t, err, recordings.ReplayArtifactErrorInvalid, recordings.ErrInvalidPortableArtifact)
+
+	missingReference := filepath.Join(t.TempDir(), "missing-reference.json")
+	missingReferenceID := finalizedReplayArtifactRecordingAt(
+		t, service, "typed-failures-missing-reference", missingReference,
+	)
+	_, err = replayArtifacts.ReadArtifact(context.Background(), recordings.ReadArtifactRequest{
+		RecordingID: missingReferenceID,
+		Reference:   recordings.ArtifactReference(missingReference),
+	})
+	assertReplayArtifactErrorKind(
+		t, err, recordings.ReplayArtifactErrorUnavailable, recordings.ErrPortableArtifactUnavailable,
+	)
 
 	owner := finalizedReplayArtifactRecording(t, service, "typed-failures-owner")
 	other := finalizedReplayArtifactRecording(t, service, "typed-failures-other")
@@ -464,11 +482,12 @@ func TestRecordingReplayArtifacts_MalformedDecode(t *testing.T) {
 	}
 }
 
-// TestRecordingReplayArtifacts_ExportFailureLeavesNoPartialArtifact proves a
-// failed atomic publication (writing to a destination that is itself a
-// directory) reports the export-failed classification and leaves no
-// partially readable public artifact behind.
-func TestRecordingReplayArtifacts_ExportFailureLeavesNoPartialArtifact(t *testing.T) {
+// TestRecordingReplayArtifacts_ExportFailureLeavesNoPartialArtifactAndRetries
+// proves a failed atomic publication (writing to a destination that is itself
+// a directory) reports the export-failed classification, leaves no partially
+// readable public artifact behind, and permits a valid retry for the same
+// recording identity.
+func TestRecordingReplayArtifacts_ExportFailureLeavesNoPartialArtifactAndRetries(t *testing.T) {
 	t.Parallel()
 	service, replayArtifacts := newTestRecordingReplayArtifacts(t)
 	destination := filepath.Join(t.TempDir(), "destination-is-directory")
@@ -527,6 +546,24 @@ func TestRecordingReplayArtifacts_ExportFailureLeavesNoPartialArtifact(t *testin
 			"ReadArtifact() after failed export error = %v, want ReplayArtifactError with kind %q or %q",
 			err, recordings.ReplayArtifactErrorUnavailable, recordings.ReplayArtifactErrorInvalid,
 		)
+	}
+	if err := os.Remove(destination); err != nil {
+		t.Fatalf("remove failed destination: %v", err)
+	}
+	retried, err := replayArtifacts.ExportArtifact(context.Background(), recordings.ExportArtifactRequest{
+		RecordingID: recordingID,
+	})
+	if err != nil {
+		t.Fatalf("ExportArtifact retry: %v", err)
+	}
+	if retried.Reference != recordings.ArtifactReference(destination) {
+		t.Fatalf("ExportArtifact retry reference = %q, want %q", retried.Reference, destination)
+	}
+	if _, err := replayArtifacts.ReadArtifact(context.Background(), recordings.ReadArtifactRequest{
+		RecordingID: recordingID,
+		Reference:   retried.Reference,
+	}); err != nil {
+		t.Fatalf("ReadArtifact after successful retry: %v", err)
 	}
 }
 
