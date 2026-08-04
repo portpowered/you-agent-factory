@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/spf13/cobra"
 )
@@ -37,31 +36,24 @@ func NewServeCommandFromManifest(
 	if handler == nil {
 		return nil, fmt.Errorf("build serve command: handler is required")
 	}
-	rootRecord, err := manifest.CommandByID("you")
+	records, err := mustServeFamilyRecords(manifest)
 	if err != nil {
-		return nil, fmt.Errorf("build serve command: %w", err)
+		return nil, err
 	}
-	parentRecord, err := manifest.CommandByID("you.serve")
-	if err != nil {
-		return nil, fmt.Errorf("build serve command: %w", err)
-	}
+	rootRecord, parentRecord, acpRecord := records[0], records[1], records[2]
 	if parentRecord.Runnable {
 		return nil, fmt.Errorf("build serve command: %q must remain non-runnable", parentRecord.ID)
 	}
-	acpRecord, err := manifest.CommandByID("you.serve.acp")
-	if err != nil {
-		return nil, fmt.Errorf("build serve command: %w", err)
-	}
-	if err := climanifestgen.AssertServeFamilyCommandID(parentRecord.ID); err != nil {
-		return nil, fmt.Errorf("build serve command: %w", err)
-	}
-	if err := climanifestgen.AssertServeFamilyCommandID(acpRecord.ID); err != nil {
-		return nil, fmt.Errorf("build serve command: %w", err)
-	}
+	// Rebuild under these exact stable keys (not parentRecord.ID/acpRecord.ID)
+	// so that if either lookup above ever returned a mislabeled record from a
+	// corrupted upstream manifest (whose own .ID field disagrees with the
+	// canonical "you.serve"/"you.serve.acp" identity it was fetched by),
+	// NewCommandTree's own existing map-key/record-id consistency check
+	// rejects the tree instead of silently projecting a mislabeled command.
 	manifest.Commands = map[string]climanifest.Command{
 		rootRecord.ID:   rootRecord,
-		parentRecord.ID: parentRecord,
-		acpRecord.ID:    acpRecord,
+		"you.serve":     parentRecord,
+		"you.serve.acp": acpRecord,
 	}
 	root, err := NewCommandTree(manifest, GenericBindings{
 		Handlers: HandlerRegistry{
@@ -80,4 +72,19 @@ func NewServeCommandFromManifest(
 	}
 	root.RemoveCommand(parent)
 	return parent, nil
+}
+
+// mustServeFamilyRecords looks up the three required serve family command
+// records by their stable IDs, funneling every lookup through one shared
+// failure path instead of duplicating a "missing record" branch per record.
+func mustServeFamilyRecords(manifest climanifest.Manifest) ([3]climanifest.Command, error) {
+	var records [3]climanifest.Command
+	for i, id := range [3]string{"you", "you.serve", "you.serve.acp"} {
+		record, err := manifest.CommandByID(id)
+		if err != nil {
+			return [3]climanifest.Command{}, fmt.Errorf("build serve command: %w", err)
+		}
+		records[i] = record
+	}
+	return records, nil
 }

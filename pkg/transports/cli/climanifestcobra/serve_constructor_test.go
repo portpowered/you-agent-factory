@@ -53,14 +53,15 @@ func TestNewServeCommandRejectsNilHandler(t *testing.T) {
 	}
 }
 
-// TestNewServeCommandFromManifestRejectsOutOfFamilyAcpRecord proves the
-// production climanifestgen.AssertServeFamilyCommandID guard wired into
-// NewServeCommandFromManifest actually rejects a manifest whose
-// "you.serve.acp" entry does not carry a canonical serve-family command ID
-// (for example, corrupted upstream generation that mapped a foreign
-// command's record under that key). This is the behavioral replacement for
-// a prior self-referential test that only checked the canonical ID constant
-// list against itself.
+// TestNewServeCommandFromManifestRejectsOutOfFamilyAcpRecord proves
+// NewServeCommandFromManifest rejects a manifest whose "you.serve.acp" entry
+// does not carry a canonical serve-family command ID (for example, corrupted
+// upstream generation that mapped a foreign command's record under that
+// key). NewServeCommandFromManifest rebuilds its working manifest keyed by
+// the exact "you.serve"/"you.serve.acp" identities it looked the records up
+// by, not by each record's own (here, mislabeled) ID field, so
+// NewCommandTree's own shared map-key/record-id consistency check rejects
+// the tree instead of silently projecting a mislabeled command.
 func TestNewServeCommandFromManifestRejectsOutOfFamilyAcpRecord(t *testing.T) {
 	manifest := mustServeManifestWithRoot(t)
 	foreign := manifest.Commands["you.serve.acp"]

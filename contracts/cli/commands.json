@@ -11617,6 +11617,104 @@
       },
       "name": "serve",
       "path": "you serve",
+      "flags": {
+        "you.serve.flag.debug": {
+          "id": "you.serve.flag.debug",
+          "long": "debug",
+          "shorthand": "d",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.serve.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.serve.flag.json": {
+          "id": "you.serve.flag.json",
+          "long": "json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.serve.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.serve.flag.server": {
+          "id": "you.serve.flag.server",
+          "long": "server",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
+          "valueType": "string",
+          "required": false,
+          "default": "http://localhost:7437",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.serve.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.serve.flag.verbose": {
+          "id": "you.serve.flag.verbose",
+          "long": "verbose",
+          "shorthand": "v",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.serve.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
       "runnable": false,
       "usage": {
         "line": "serve"
@@ -11722,6 +11820,104 @@
           "code": 1,
           "id": "you.serve.acp.exit.usage",
           "kind": "usage"
+        }
+      },
+      "flags": {
+        "you.serve.acp.flag.debug": {
+          "id": "you.serve.acp.flag.debug",
+          "long": "debug",
+          "shorthand": "d",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.serve.acp.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.serve.acp.flag.json": {
+          "id": "you.serve.acp.flag.json",
+          "long": "json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.serve.acp.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.serve.acp.flag.server": {
+          "id": "you.serve.acp.flag.server",
+          "long": "server",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
+          "valueType": "string",
+          "required": false,
+          "default": "http://localhost:7437",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.serve.acp.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.serve.acp.flag.verbose": {
+          "id": "you.serve.acp.flag.verbose",
+          "long": "verbose",
+          "shorthand": "v",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.serve.acp.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "handler": {

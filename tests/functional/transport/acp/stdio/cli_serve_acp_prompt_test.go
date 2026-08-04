@@ -71,7 +71,7 @@ func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 
-	seedFixtureFactory(t, home)
+	factoryDir := seedFixtureFactory(t, home)
 	support.SeedACPAgentProfile(t, home, fixtureFactoryTargetID, []string{fixtureFactoryTargetID})
 
 	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
@@ -170,6 +170,13 @@ func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 	if err := stdinWrite.Close(); err != nil {
 		t.Fatalf("close stdin: %v", err)
 	}
+	// command.Done() is the deterministic completion signal (closed exactly
+	// when Process.Execute returns); the surrounding time.After is only a
+	// hang guard against a genuine regression (Execute never returning after
+	// clean stdin EOF), not a substitute for it -- 5s is generous versus this
+	// in-process fixture's actual completion time (well under 1s in
+	// practice), matching the same bounded-wait-as-hang-guard shape already
+	// used for the real production stdio server's own cancellation test.
 	select {
 	case <-command.Done():
 		if err := command.Err(); err != nil {
@@ -182,6 +189,22 @@ func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 
 	if got := runner.CallCount(); got != 1 {
 		t.Fatalf("provider command call count = %d, want exactly 1", got)
+	}
+	// The one downstream provider execution must run from the selected
+	// Factory's own installed directory, not the client's session/new cwd
+	// or some other location -- proving the selected Factory target reaches
+	// exactly one downstream execution at the expected root, not merely a
+	// resolved identifier that is never actually dispatched from. (cwd
+	// itself is a required, validated session/new input -- see
+	// chatsessions.CreateSessionRequest.WorkingRoot's non-blank
+	// requirement -- but for this fixture's global-scope named Factory
+	// target it is consumed only by catalog *resolution*, which already
+	// succeeded before dispatch; it does not additionally reappear as the
+	// installed Factory's own dispatch WorkDir, so asserting cwd itself
+	// against WorkDir here would be asserting something the production
+	// code never claims.)
+	if got := runner.LastRequest().WorkDir; got != factoryDir {
+		t.Fatalf("provider command WorkDir = %q, want the selected Factory's own install directory %q", got, factoryDir)
 	}
 
 	// Process.Execute has already returned, so no further writer can append to
@@ -277,7 +300,8 @@ func agentMessageChunkText(t *testing.T, frame rpcFrame) string {
 	return text.Text
 }
 
-// seedFixtureFactory installs a minimal single-worker Factory directly under
+// seedFixtureFactory installs a minimal single-worker Factory project-locally
+// under the given project root (the same value supplied as session/new's
 // the global named-Factory root derived from home, at the exact
 // <globalRoot>/@scope/name/factory.json layout the production named-Factory
 // catalog and effective-catalog discovery both read -- the same layout
@@ -285,8 +309,11 @@ func agentMessageChunkText(t *testing.T, frame rpcFrame) string {
 // writes for a real packaged Factory, but authored inline here as a single
 // MODEL_WORKER pipeline instead of a real packaged Factory's own business
 // workflow, so its one dispatch round is fully deterministic through a
-// ProviderCommandRunner fixture.
-func seedFixtureFactory(t *testing.T, home string) {
+// ProviderCommandRunner fixture. It returns the installed Factory's own
+// directory, which the caller asserts against the one recorded provider
+// command's WorkDir to prove the selected Factory reaches exactly one
+// downstream execution at the expected root.
+func seedFixtureFactory(t *testing.T, home string) string {
 	t.Helper()
 
 	globalRoot, err := factorydefinitions.NamedFactoriesRootForHome(home)
@@ -359,4 +386,6 @@ func seedFixtureFactory(t *testing.T, home string) {
 	); err != nil {
 		t.Fatalf("write %s: %v", workstationConfigPath, err)
 	}
+
+	return factoryDir
 }

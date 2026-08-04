@@ -84,6 +84,15 @@ func TestServeFamily_VisibleInRootHelpAndDistinctFromWorkersAcpAndMcpServe(t *te
 // authoritative manifest and the projected runtime command tree -- for
 // example a missing Examples section, the way a hand-built cobra.Command
 // that only copies Use/Short/Long would silently produce -- fails this test.
+//
+// you.serve.acp declares no local manifest inputs of its own, so its only
+// local flag is Cobra's built-in --help. It does inherit the root's four
+// persistent you.flag.{debug,json,server,verbose} records -- exactly like
+// every other command family (see you.mcp/you.mcp.serve in
+// contracts/cli/commands.json) -- so those, and only those, may appear as
+// Global Flags in the real rendered output; this asserts the complete
+// rendered flag surface (local and inherited) instead of only local flags,
+// so an undeclared or unexpected inherited flag would fail this test too.
 func TestServeACPCommand_HelpRendersManifestExamplesAndNoLocalFlags(t *testing.T) {
 	var stdout bytes.Buffer
 	root := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI}).NewCommand(nil, nil, nil)
@@ -115,6 +124,22 @@ func TestServeACPCommand_HelpRendersManifestExamplesAndNoLocalFlags(t *testing.T
 			t.Fatalf("you serve acp declares no manifest inputs but has local flag %q", flag.Name)
 		}
 	})
+
+	wantInherited := map[string]bool{"debug": false, "json": false, "server": false, "verbose": false}
+	acpCmd.InheritedFlags().VisitAll(func(flag *pflag.Flag) {
+		if _, ok := wantInherited[flag.Name]; !ok {
+			t.Fatalf("you serve acp advertises unrelated inherited flag %q", flag.Name)
+		}
+		wantInherited[flag.Name] = true
+	})
+	for name, seen := range wantInherited {
+		if !seen {
+			t.Fatalf("you serve acp is missing the standard inherited flag %q", name)
+		}
+	}
+	if !strings.Contains(got, "Global Flags:") {
+		t.Fatalf("you serve acp --help missing rendered Global Flags section:\n%s", got)
+	}
 }
 
 func TestServeACPCommand_DispatchesToInjectedACPServerWithExactStreamsAndContext(t *testing.T) {
@@ -196,6 +221,32 @@ func TestServeACPCommand_CancellationPropagatesFromProcessContext(t *testing.T) 
 	}
 }
 
+// readStartSignal wraps an io.ReadCloser and closes started the instant its
+// first Read call begins, before delegating to the real, potentially
+// blocking Read. bufio.Scanner.Scan calls Read exactly this way to fill its
+// buffer, so a caller that waits on started observes -- deterministically,
+// without guessing a duration -- that the scanner has actually reached its
+// blocking read rather than merely assuming enough wall-clock time has
+// passed.
+type readStartSignal struct {
+	rc      io.ReadCloser
+	once    sync.Once
+	started chan struct{}
+}
+
+func newReadStartSignal(rc io.ReadCloser) *readStartSignal {
+	return &readStartSignal{rc: rc, started: make(chan struct{})}
+}
+
+func (r *readStartSignal) Read(p []byte) (int, error) {
+	r.once.Do(func() { close(r.started) })
+	return r.rc.Read(p)
+}
+
+func (r *readStartSignal) Close() error {
+	return r.rc.Close()
+}
+
 // TestServeACPCommand_CancellationClosesStdinToUnblockRealServerMidRead
 // proves the production regression this story's review caught: the real
 // stdio.Server's Serve only checks ctx.Err() between reads (see
@@ -220,9 +271,10 @@ func TestServeACPCommand_CancellationClosesStdinToUnblockRealServerMidRead(t *te
 		_ = stdinRead.Close()
 		_ = stdinWrite.Close()
 	})
+	signalingStdin := newReadStartSignal(stdinRead)
 
 	root := factory.NewCommand(nil, nil, nil)
-	root.SetIn(stdinRead)
+	root.SetIn(signalingStdin)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 
@@ -233,10 +285,17 @@ func TestServeACPCommand_CancellationClosesStdinToUnblockRealServerMidRead(t *te
 	done := make(chan error, 1)
 	go func() { done <- root.Execute() }()
 
-	// Give Execute a moment to reach the blocking read before cancelling, so
-	// this test actually exercises a mid-read cancellation rather than a
-	// pre-cancelled context short-circuit.
-	time.Sleep(50 * time.Millisecond)
+	// Wait for the deterministic read-start signal instead of guessing how
+	// long Execute needs to reach the blocking read, so this test actually
+	// exercises a mid-read cancellation rather than a pre-cancelled context
+	// short-circuit. The surrounding timeout is only a hang guard against a
+	// genuine regression (the scanner never even attempting a read), not a
+	// substitute for the deterministic signal itself.
+	select {
+	case <-signalingStdin.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("real server did not begin reading stdin before timeout")
+	}
 	cancel()
 
 	select {
