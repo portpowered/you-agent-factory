@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -91,11 +92,18 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 	factoryDir := scaffoldProviderBackedFactory(t)
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
 
+	// The worker dispatch is held open until the polling goroutine below has
+	// deterministically observed the hosted Factory Session at least once.
+	// Without this gate, a mocked worker that returns instantly races the
+	// invocation's own completion (which cancels and tears down the hosted
+	// API listener) against the polling goroutine's first real HTTP round
+	// trip, and the listener side of that race wins essentially every time.
+	sessionObservedGate := make(chan struct{})
 	hostedServerEdges := serviceedges.Edges{}
 	support.ConfigureWorkerCommands(
 		t,
 		&hostedServerEdges,
-		support.NewStaticSuccessCommandRunner(wantServerAttachedInvocationPrimaryResult),
+		support.NewGatedSuccessCommandRunner(wantServerAttachedInvocationPrimaryResult, sessionObservedGate),
 		nil,
 	)
 	continuousHost := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -135,6 +143,13 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 		err         error
 	}, 1)
 	go func() {
+		var releaseOnce sync.Once
+		releaseWorker := func() { releaseOnce.Do(func() { close(sessionObservedGate) }) }
+		// Always release the gated worker before this goroutine exits, even on
+		// a WaitForBaseURL timeout, so an unexpected failure here cannot hang
+		// Process.Execute (and this test's t.Cleanup teardown) forever.
+		defer releaseWorker()
+
 		baseURL, err := hostedAPI.WaitForBaseURL(5 * time.Second)
 		if err != nil {
 			observationsReady <- struct {
@@ -147,6 +162,7 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 		session, workVisible, pollErr := pollHostedServerAttachedInvocationObservations(
 			baseURL,
 			wantServerAttachedInvocationPrimaryResult,
+			releaseWorker,
 			command.Done(),
 		)
 		observationsReady <- struct {
@@ -296,6 +312,7 @@ func assertDetachedServerPrefRunCannotAttachToContinuousHost(
 
 func pollHostedServerAttachedInvocationObservations(
 	baseURL, wantWorkText string,
+	releaseWorker func(),
 	done <-chan struct{},
 ) (factoryapi.FactorySession, bool, error) {
 	ticker := time.NewTicker(10 * time.Millisecond)
@@ -313,6 +330,12 @@ func pollHostedServerAttachedInvocationObservations(
 			if session, ok, diagnostic := tryReadDefaultFactorySession(baseURL); ok {
 				sessionDuring = session
 				sessionRead = true
+				// The gated worker dispatch cannot return (and so the
+				// invocation cannot complete and tear down the hosted API
+				// listener) until this deterministic release fires, which
+				// guarantees the session identity was observable while the
+				// invocation was still active.
+				releaseWorker()
 			} else if diagnostic != "" {
 				lastSessionErr = diagnostic
 			}
