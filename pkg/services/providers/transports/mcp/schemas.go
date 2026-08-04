@@ -140,7 +140,6 @@ func executeInputSchema() map[string]any {
 			"items":       map[string]any{},
 		},
 		"outputSchema":     stringProperty("Optional structured output schema for the attempt."),
-		"resumeSession":    sessionRefInputSchema(),
 		"workingDirectory": stringProperty("Optional working directory for the attempt."),
 		"worktree":         stringProperty("Optional worktree path for the attempt."),
 		"envVars": map[string]any{

@@ -32,6 +32,13 @@ const (
 	ExecuteFailureKindThrottled      ExecuteFailureKind = "throttled"
 	ExecuteFailureKindDependency     ExecuteFailureKind = "dependency"
 	ExecuteFailureKindUnknown        ExecuteFailureKind = "unknown"
+	// ExecuteFailureKindSessionNotFound reports that a resolved provider did
+	// not recognize the exact requested Provider Session id as live. Ordinary
+	// Execute never produces this kind: only a private Continue-triggered
+	// attempt can observe a prior session. Continue translates this
+	// kind into the typed stale continuation failure before returning to its
+	// caller, so this kind never reaches a Continue caller directly either.
+	ExecuteFailureKindSessionNotFound ExecuteFailureKind = "session_not_found"
 )
 
 // ExecuteFailure retains normalized one-attempt failure facts peers can branch
@@ -96,7 +103,6 @@ type ExecuteRequest struct {
 	UserMessage        string
 	InputTokens        []any
 	OutputSchema       string
-	ResumeSession      *SessionRef
 	WorkingDirectory   string
 	Worktree           string
 	EnvVars            map[string]string
@@ -114,11 +120,6 @@ func (request ExecuteRequest) Validate() error {
 	}
 	if _, ok := ReasoningEffort(request.ReasoningEffort).Canonical(); !ok {
 		return fmt.Errorf("%w: unsupported reasoning effort %q", ErrExecuteFailed, request.ReasoningEffort)
-	}
-	if request.ResumeSession != nil {
-		if err := request.ResumeSession.Validate(); err != nil {
-			return fmt.Errorf("%w", err)
-		}
 	}
 	return nil
 }
@@ -146,10 +147,6 @@ func (request ExecuteRequest) Clone() ExecuteRequest {
 	}
 	if request.InputTokens != nil {
 		cloned.InputTokens = append([]any(nil), request.InputTokens...)
-	}
-	if request.ResumeSession != nil {
-		resume := request.ResumeSession.Clone()
-		cloned.ResumeSession = &resume
 	}
 	return cloned
 }
@@ -294,4 +291,149 @@ type ControlAttemptResult struct {
 	AttemptID string
 	Action    ControlAction
 	Outcome   ControlOutcome
+}
+
+// ErrInvalidContinuationRequest reports that a continuation request is
+// malformed: a blank provider, session kind, or session identity in Reference,
+// or an otherwise invalid Attempt. It is returned before any provider adapter
+// is invoked.
+var ErrInvalidContinuationRequest = errors.New("provider continuation request is invalid")
+
+// ErrContinuationForeign reports that a continuation request names an Attempt
+// provider that does not match the Reference provider it continues. Providers
+// never substitutes the resolved canonical provider for the one a foreign
+// reference actually names.
+var ErrContinuationForeign = errors.New("provider continuation reference is foreign")
+
+// ErrContinuationStale reports that a continuation reference names a Provider
+// Session identity its resolved provider no longer recognizes as live.
+var ErrContinuationStale = errors.New("provider continuation reference is stale")
+
+// ContinuationOutcome is the closed Providers-owned continuation success
+// vocabulary. Unsupported is a successful capability result distinct from any
+// ContinuationFailure: the resolved provider or session kind truthfully
+// cannot continue, so no provider adapter is invoked.
+type ContinuationOutcome string
+
+const (
+	ContinuationOutcomeResumed     ContinuationOutcome = "resumed"
+	ContinuationOutcomeUnsupported ContinuationOutcome = "unsupported"
+)
+
+// ContinuationFailureKind is a provider-neutral continuation failure
+// category. Unsupported is not a member of this vocabulary - see
+// ContinuationOutcomeUnsupported.
+type ContinuationFailureKind string
+
+const (
+	ContinuationFailureKindInvalid ContinuationFailureKind = "invalid"
+	ContinuationFailureKindForeign ContinuationFailureKind = "foreign"
+	ContinuationFailureKindStale   ContinuationFailureKind = "stale"
+)
+
+// ContinuationFailure retains the normalized continuation failure fact and the
+// rejected detached reference, so peers can review exactly which Provider
+// Session reference was rejected without importing Providers internals or
+// re-deriving the reference from the original request.
+type ContinuationFailure struct {
+	Kind      ContinuationFailureKind
+	Message   string
+	Reference SessionRef
+}
+
+func (failure ContinuationFailure) Error() string {
+	message := strings.TrimSpace(failure.Message)
+	if message == "" {
+		return sentinelForContinuationFailureKind(failure.Kind).Error()
+	}
+	return fmt.Sprintf("%s: %s", sentinelForContinuationFailureKind(failure.Kind).Error(), message)
+}
+
+func (failure ContinuationFailure) Unwrap() error {
+	return sentinelForContinuationFailureKind(failure.Kind)
+}
+
+// Clone returns a detached continuation-failure copy.
+func (failure ContinuationFailure) Clone() ContinuationFailure {
+	failure.Reference = failure.Reference.Clone()
+	return failure
+}
+
+func sentinelForContinuationFailureKind(kind ContinuationFailureKind) error {
+	switch kind {
+	case ContinuationFailureKindForeign:
+		return ErrContinuationForeign
+	case ContinuationFailureKindStale:
+		return ErrContinuationStale
+	default:
+		return ErrInvalidContinuationRequest
+	}
+}
+
+// ContinueRequest identifies the exact prior Provider Session to resume -
+// provider identity, provider-specific session kind, and exact opaque session
+// identity, carried by Reference - and the next attempt input to run against
+// that continued session. Attempt.Provider must equal Reference.Provider;
+// continuation is requested exclusively through this contract, never through
+// the ordinary Execute vocabulary.
+type ContinueRequest struct {
+	Reference SessionRef
+	Attempt   ExecuteRequest
+}
+
+// Validate checks that Reference is a complete session identity, that Attempt
+// is itself valid, and that Attempt names the same provider as Reference - all
+// before any provider adapter is invoked.
+func (request ContinueRequest) Validate() error {
+	if err := request.Reference.Validate(); err != nil {
+		return ContinuationFailure{
+			Kind:      ContinuationFailureKindInvalid,
+			Message:   err.Error(),
+			Reference: request.Reference,
+		}
+	}
+	if err := request.Attempt.Validate(); err != nil {
+		return ContinuationFailure{
+			Kind:      ContinuationFailureKindInvalid,
+			Message:   err.Error(),
+			Reference: request.Reference,
+		}
+	}
+	if request.Attempt.Provider != request.Reference.Provider {
+		return ContinuationFailure{
+			Kind: ContinuationFailureKindForeign,
+			Message: fmt.Sprintf(
+				"attempt provider %q does not match reference provider %q",
+				request.Attempt.Provider, request.Reference.Provider,
+			),
+			Reference: request.Reference,
+		}
+	}
+	return nil
+}
+
+// Clone returns a detached continuation-request copy.
+func (request ContinueRequest) Clone() ContinueRequest {
+	cloned := request
+	cloned.Reference = request.Reference.Clone()
+	cloned.Attempt = request.Attempt.Clone()
+	return cloned
+}
+
+// ContinueResult is the detached result of one continuation intent: either
+// the closed unsupported outcome (no provider adapter was invoked) or the
+// resumed outcome carrying the continued attempt's ExecuteResult. Reference
+// echoes the exact continued Provider Session identity unchanged.
+type ContinueResult struct {
+	Reference SessionRef
+	Outcome   ContinuationOutcome
+	Result    ExecuteResult
+}
+
+// Clone returns a detached continuation-result copy.
+func (result ContinueResult) Clone() ContinueResult {
+	cloned := result
+	cloned.Reference = result.Reference.Clone()
+	cloned.Result = result.Result.Clone()
+	return cloned
 }

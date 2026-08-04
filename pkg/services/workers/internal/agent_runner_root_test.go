@@ -176,6 +176,24 @@ func (fake *serviceAgentProvidersFake) Execute(
 	return fake.result, nil
 }
 
+func (fake *serviceAgentProvidersFake) Continue(
+	_ context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	fake.calls.Add(1)
+	fake.mu.Lock()
+	fake.request = request.Attempt.Clone()
+	fake.mu.Unlock()
+	return providers.ContinueResult{
+		Reference: request.Reference,
+		Outcome:   providers.ContinuationOutcomeResumed,
+		Result:    fake.result,
+	}, nil
+}
+
 func (fake *failingServiceAgentProvidersFake) Execute(
 	ctx context.Context,
 	request providers.ExecuteRequest,
@@ -185,6 +203,20 @@ func (fake *failingServiceAgentProvidersFake) Execute(
 	fake.request = request.Clone()
 	fake.mu.Unlock()
 	return providers.ExecuteResult{}, fake.failure
+}
+
+func (fake *failingServiceAgentProvidersFake) Continue(
+	_ context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	fake.calls.Add(1)
+	fake.mu.Lock()
+	fake.request = request.Attempt.Clone()
+	fake.mu.Unlock()
+	return providers.ContinueResult{}, fake.failure
 }
 
 func (fake *interruptingServiceAgentProvidersFake) Execute(
@@ -202,6 +234,26 @@ func (fake *interruptingServiceAgentProvidersFake) Execute(
 		kind = providers.ExecuteFailureKindTimeout
 	}
 	return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: kind, Message: "interrupted"}
+}
+
+func (fake *interruptingServiceAgentProvidersFake) Continue(
+	ctx context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	fake.calls.Add(1)
+	fake.mu.Lock()
+	fake.request = request.Attempt.Clone()
+	fake.mu.Unlock()
+	fake.once.Do(func() { close(fake.entered) })
+	<-ctx.Done()
+	kind := providers.ExecuteFailureKindCanceled
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		kind = providers.ExecuteFailureKindTimeout
+	}
+	return providers.ContinueResult{}, providers.ExecuteFailure{Kind: kind, Message: "interrupted"}
 }
 
 func (*serviceAgentProvidersFake) ListProviders(

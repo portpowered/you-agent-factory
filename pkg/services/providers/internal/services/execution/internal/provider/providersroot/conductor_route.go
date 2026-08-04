@@ -81,9 +81,6 @@ func invocationRequestFromExecute(
 		ProcessEnvironment: append([]string(nil), request.ProcessEnvironment...),
 		SkipPermissions:    skipPermissions,
 	}
-	if request.ResumeSession != nil {
-		execution.SessionID = request.ResumeSession.ID
-	}
 	return inference.NewInvocationRequest(inference.InvocationInput{
 		InvocationID: invocationID,
 		Model:        execution.Model,

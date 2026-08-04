@@ -33,7 +33,7 @@ func NewCommandEffect(runner workers.CommandRunner) Effect {
 	}
 	return EffectFunc(func(
 		ctx context.Context,
-		request providers.ExecuteRequest,
+		request execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (EffectResult, error) {
 		started := time.Now()
@@ -53,7 +53,7 @@ func NewCommandEffect(runner workers.CommandRunner) Effect {
 	})
 }
 
-func buildCommand(request providers.ExecuteRequest) (workers.CommandRequest, error) {
+func buildCommand(request execution.ContinuationRequest) (workers.CommandRequest, error) {
 	args := []string{"-p"}
 	if request.SkipPermissions {
 		args = append(args, "--dangerously-skip-permissions")
@@ -88,7 +88,7 @@ func buildCommand(request providers.ExecuteRequest) (workers.CommandRequest, err
 		"--include-partial-messages",
 		request.UserMessage,
 	)
-	return commanddispatch.WorkersCommand(request, workers.CommandRequest{
+	return commanddispatch.WorkersCommand(request.ExecuteRequest, workers.CommandRequest{
 		Command: string(providers.IDClaude),
 		Args:    args,
 		Env: buildCommandEnv(

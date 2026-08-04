@@ -7,6 +7,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 	agypkg "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/agy"
 	inference "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/inferencecontract"
@@ -57,6 +58,70 @@ func TestIntegrationRoutesThroughProvidersRoot(t *testing.T) {
 	if got := destination.completion.Response().Content(); got != "agy conductor answer" {
 		t.Fatalf("terminal content = %q, want agy conductor answer", got)
 	}
+}
+
+func TestIntegrationRoutesRequestedSessionThroughProvidersContinue(t *testing.T) {
+	t.Parallel()
+
+	fake := &continuationProvidersFake{}
+	integration := agypkg.NewIntegration(agypkg.IntegrationDependencies{ProvidersService: fake})
+	request := inference.NewInvocationRequest(inference.InvocationInput{
+		InvocationID: "agy-integration-continue",
+		UserMessage:  "continue the prior turn",
+		Execution: workers.ProviderInferenceRequest{
+			Dispatch:  work.WorkDispatch{DispatchID: "agy-integration-continue"},
+			SessionID: "prior-session",
+		},
+	})
+	destination := &orderedWriter{}
+	if err := inference.ExecuteInvocation(context.Background(), integration, request, destination); err != nil {
+		t.Fatalf("ExecuteInvocation: %v", err)
+	}
+	if fake.executeCalls != 0 {
+		t.Fatalf("Providers.Execute calls = %d, want 0 for a requested session", fake.executeCalls)
+	}
+	wantReference := providers.SessionRef{
+		Provider: providers.IDAntigravity,
+		Kind:     providers.SessionIDKind,
+		ID:       "prior-session",
+	}
+	if fake.continueRequest.Reference != wantReference {
+		t.Fatalf("Providers.Continue reference = %#v, want %#v", fake.continueRequest.Reference, wantReference)
+	}
+	if fake.continueRequest.Attempt.Provider != providers.IDAntigravity ||
+		fake.continueRequest.Attempt.AttemptID != "agy-integration-continue" {
+		t.Fatalf("Providers.Continue attempt = %#v, want normalized Agy attempt", fake.continueRequest.Attempt)
+	}
+	if destination.completion == nil || destination.completion.Response() == nil ||
+		destination.completion.Response().Content() != "continued Agy response" {
+		t.Fatalf("completion = %#v, want continued Agy response", destination.completion)
+	}
+}
+
+type continuationProvidersFake struct {
+	providers.Service
+	continueRequest providers.ContinueRequest
+	executeCalls    int
+}
+
+func (fake *continuationProvidersFake) Execute(
+	context.Context,
+	providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	fake.executeCalls++
+	return providers.ExecuteResult{}, nil
+}
+
+func (fake *continuationProvidersFake) Continue(
+	_ context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	fake.continueRequest = request
+	return providers.ContinueResult{
+		Reference: request.Reference,
+		Outcome:   providers.ContinuationOutcomeResumed,
+		Result:    providers.ExecuteResult{Content: "continued Agy response"},
+	}, nil
 }
 
 type orderedWriter struct {

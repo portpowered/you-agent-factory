@@ -37,11 +37,20 @@ func NewService(
 
 // NewACPRegistration delegates one configured ACP identity to the already
 // constructed parent-private ACP service.
-func NewACPRegistration(id providers.ID, service acp.Service) execution.Registration {
+func NewACPRegistration(id providers.ID, service acp.ContinuationService) execution.Registration {
 	return execution.Registration{
 		Provider: id,
 		Attempt: func(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
 			return service.Execute(ctx, id, request)
+		},
+		Continue: func(ctx context.Context, request execution.ContinuationRequest) (providers.ExecuteResult, error) {
+			if request.ResumeSession == nil {
+				return providers.ExecuteResult{}, providers.ExecuteFailure{
+					Kind:    providers.ExecuteFailureKindInvalidRequest,
+					Message: "provider continuation is missing its session reference",
+				}
+			}
+			return service.Continue(ctx, id, request.ExecuteRequest, *request.ResumeSession)
 		},
 	}
 }
