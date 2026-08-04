@@ -418,6 +418,22 @@ func (s *Service) InvokeFactorySession(
 	return result, nil
 }
 
+// SubscribeFactoryResponseEvents subscribes to the exact runtime a prior
+// StartAsync call opened for req.SessionID (this wrapper's own caller-facing
+// identity), translating it to the runtime's own constant internal
+// DefaultSessionID the same way InvokeFactorySession and Cancel already do.
+func (s *Service) SubscribeFactoryResponseEvents(
+	ctx context.Context,
+	req factorysessions.ResponseEventSubscriptionRequest,
+) (*factorysessions.ResponseEventCursor, error) {
+	active, err := s.lookup(req.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	req.SessionID = factorysessions.DefaultSessionID
+	return active.opened.Sessions.SubscribeFactoryResponseEvents(ctx, req)
+}
+
 // Cancel cancels the exact runtime a prior StartAsync call opened for
 // sessionID.
 func (s *Service) Cancel(

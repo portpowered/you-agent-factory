@@ -89,11 +89,15 @@ type Server struct {
 	factoryTarget  acp.FactoryTargetService
 	events         events.Service
 	resolveHomeDir func() (string, error)
+	responseBridge acp.ResponseBridge
 }
 
 // New constructs an inert stdio Server. Construction alone performs no
 // reads, writes, goroutine starts, process starts, endpoint binding,
-// session creation, or persistence.
+// session creation, or persistence. responseBridge may be nil, in which case
+// an admitted prompt turn's Factory dispatch never starts the response
+// bridge (see runResponseBridge in response_bridge.go) and behaves exactly
+// as it did before that collaborator existed.
 func New(
 	logger logging.Logger,
 	chatSessions chatsessions.Service,
@@ -101,6 +105,7 @@ func New(
 	factoryTarget acp.FactoryTargetService,
 	eventsService events.Service,
 	resolveHomeDir func() (string, error),
+	responseBridge acp.ResponseBridge,
 ) *Server {
 	return &Server{
 		logger:         logging.EnsureLogger(logger),
@@ -109,6 +114,7 @@ func New(
 		factoryTarget:  factoryTarget,
 		events:         eventsService,
 		resolveHomeDir: resolveHomeDir,
+		responseBridge: responseBridge,
 	}
 }
 

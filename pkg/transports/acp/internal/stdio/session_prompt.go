@@ -570,12 +570,16 @@ func (s *Server) startFactorySessionForEpisode(
 
 	requestID := startResult.Turn.ID
 	sourceKind := factorysessions.InvocationInputSourceKindText
-	outcome, err := s.factoryTarget.InvokeFactoryTarget(ctx, factorySessionID, factorysessions.InvocationRequest{
-		Content:         promptContentToWorkParts(turn.Content),
-		ContentProvided: true,
-		RequestID:       &requestID,
-		SourceKind:      &sourceKind,
-	})
+	outcome, err := s.dispatchFactoryInvocation(ctx, startResult.Session.ID, startResult.Session.Version, factorySessionID,
+		func(invokeCtx context.Context) (factorysessions.InvocationResult, error) {
+			return s.factoryTarget.InvokeFactoryTarget(invokeCtx, factorySessionID, factorysessions.InvocationRequest{
+				Content:         promptContentToWorkParts(turn.Content),
+				ContentProvided: true,
+				RequestID:       &requestID,
+				SourceKind:      &sourceKind,
+			})
+		},
+	)
 	if err != nil {
 		return dispatchOutcome{}, err
 	}
@@ -636,12 +640,16 @@ func (s *Server) invokeFactorySessionForEpisode(
 
 	requestID := startResult.Turn.ID
 	sourceKind := factorysessions.InvocationInputSourceKindText
-	invokeResult, err := s.factoryTarget.InvokeFactoryTarget(ctx, startResult.Episode.FactorySessionID, factorysessions.InvocationRequest{
-		Content:         promptContentToWorkParts(turn.Content),
-		ContentProvided: true,
-		RequestID:       &requestID,
-		SourceKind:      &sourceKind,
-	})
+	invokeResult, err := s.dispatchFactoryInvocation(ctx, startResult.Session.ID, startResult.Session.Version, startResult.Episode.FactorySessionID,
+		func(invokeCtx context.Context) (factorysessions.InvocationResult, error) {
+			return s.factoryTarget.InvokeFactoryTarget(invokeCtx, startResult.Episode.FactorySessionID, factorysessions.InvocationRequest{
+				Content:         promptContentToWorkParts(turn.Content),
+				ContentProvided: true,
+				RequestID:       &requestID,
+				SourceKind:      &sourceKind,
+			})
+		},
+	)
 	if err != nil {
 		return dispatchOutcome{}, err
 	}

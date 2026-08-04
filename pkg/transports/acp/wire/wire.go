@@ -36,6 +36,7 @@ func NewServer(
 	factoryTarget acp.FactoryTargetService,
 	eventsService events.Service,
 	resolveHomeDir func() (string, error),
+	responseBridge acp.ResponseBridge,
 ) acp.Server {
-	return stdio.New(logger, chatSessions, catalog, factoryTarget, eventsService, resolveHomeDir)
+	return stdio.New(logger, chatSessions, catalog, factoryTarget, eventsService, resolveHomeDir, responseBridge)
 }

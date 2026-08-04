@@ -59,3 +59,12 @@ func (shim *Shim) CancelFactoryTarget(
 func (shim *Shim) CloseFactoryTarget(ctx context.Context, sessionID string) error {
 	return shim.service.CloseFactorySession(ctx, sessionID)
 }
+
+// SubscribeFactoryResponseEvents delegates exactly once to the existing
+// Factory Sessions response-event subscription operation.
+func (shim *Shim) SubscribeFactoryResponseEvents(
+	ctx context.Context,
+	req factorysessions.ResponseEventSubscriptionRequest,
+) (*factorysessions.ResponseEventCursor, error) {
+	return shim.service.SubscribeFactoryResponseEvents(ctx, req)
+}

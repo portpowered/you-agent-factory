@@ -21,6 +21,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
 )
@@ -649,7 +650,7 @@ func TestHandleSessionPromptEqualWireIDsAcrossConnectionsRemainDistinct(t *testi
 // configured reports a bounded internal failure rather than panicking or
 // dispatching a Factory effect.
 func TestHandleSessionPromptWithoutCollaboratorsReportsBoundedFailure(t *testing.T) {
-	server := New(nil, nil, nil, nil, nil, nil)
+	server := New(nil, nil, nil, nil, nil, nil, nil)
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams("session-1", "hello there"))
 
@@ -995,6 +996,67 @@ func TestHandleSessionPromptLaterTurnInvokesBoundFactorySessionExactlyOnce(t *te
 	}
 	if got.request.RequestID == nil || *got.request.RequestID != "turn-2" {
 		t.Fatalf("InvokeFactoryTarget request.RequestID = %v, want the admitted turn id turn-2", got.request.RequestID)
+	}
+}
+
+// TestHandleSessionPromptLaterTurnCallsResponseBridgeAroundInvokeFactoryTarget
+// proves dispatchFactoryInvocation actually reaches an injected
+// acp.ResponseBridge collaborator (rather than calling InvokeFactoryTarget
+// directly) with the exact Chat Session identity, session version, and bound
+// Factory Session identity this turn dispatches against, and that the
+// bridge's own invoke callback -- not some independent path -- is what
+// performs the real InvokeFactoryTarget call whose result becomes the final
+// prompt response.
+func TestHandleSessionPromptLaterTurnCallsResponseBridgeAroundInvokeFactoryTarget(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", "fs-already-bound"),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{invokeResult: fallbackInvokeResult("bridged response")}
+
+	var bridgeCalls int
+	var gotChatSessionID string
+	var gotSessionVersion uint64
+	var gotFactorySessionID string
+	responseBridge := func(
+		ctx context.Context,
+		_ chatsessions.Service,
+		_ acp.FactoryTargetService,
+		chatSessionID string,
+		sessionVersion uint64,
+		factorySessionID string,
+		invoke func(context.Context) (factorysessions.InvocationResult, error),
+	) (factorysessions.InvocationResult, error) {
+		bridgeCalls++
+		gotChatSessionID = chatSessionID
+		gotSessionVersion = sessionVersion
+		gotFactorySessionID = factorySessionID
+		return invoke(ctx)
+	}
+
+	server := newTestServerWithResponseBridge(chatSessions, catalog, factoryTarget, "/home/operator", responseBridge)
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "a later message"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr != nil {
+		t.Fatalf("handleSessionPrompt() error = %+v, want a successful final prompt response", rpcErr)
+	}
+
+	if bridgeCalls != 1 {
+		t.Fatalf("responseBridge called %d times, want exactly 1", bridgeCalls)
+	}
+	if gotChatSessionID != "session-1" {
+		t.Errorf("responseBridge chatSessionID = %q, want %q", gotChatSessionID, "session-1")
+	}
+	if gotSessionVersion != 4 {
+		t.Errorf("responseBridge sessionVersion = %d, want the admitted turn's own startResult.Session.Version 4", gotSessionVersion)
+	}
+	if gotFactorySessionID != "fs-already-bound" {
+		t.Errorf("responseBridge factorySessionID = %q, want the bound identity fs-already-bound", gotFactorySessionID)
+	}
+	if len(factoryTarget.invokeCalls) != 1 {
+		t.Fatalf("InvokeFactoryTarget call count = %d, want exactly 1 (reached through the bridge's own invoke callback)", len(factoryTarget.invokeCalls))
 	}
 }
 
@@ -2035,7 +2097,7 @@ func TestHandleSessionPromptRunningTransitionFailureRecoveryAdmitsLaterPrompt(t 
 		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-1"},
 		invokeResult: factorysessions.InvocationResult{SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted},
 	}
-	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil })
+	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil)
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "first message"))
@@ -2084,7 +2146,7 @@ func TestHandleSessionPromptPendingFactorySessionSurvivesNewServerInstance(t *te
 		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-pending"},
 		invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted},
 	}
-	firstServer := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil })
+	firstServer := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil)
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "first message"))
@@ -2098,7 +2160,7 @@ func TestHandleSessionPromptPendingFactorySessionSurvivesNewServerInstance(t *te
 	// A brand-new Server, sharing only the underlying store (not the failed
 	// firstServer instance or its wrapper), stands in for a restarted
 	// transport process.
-	secondServer := New(nil, store, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil })
+	secondServer := New(nil, store, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil)
 
 	secondEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "second message"))
@@ -2196,7 +2258,7 @@ func TestHandleSessionPromptTerminalTransitionFailureRecoveryAdmitsLaterPrompt(t
 		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-1"},
 		invokeResult: factorysessions.InvocationResult{SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted},
 	}
-	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil })
+	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil)
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "first message"))
@@ -2264,7 +2326,7 @@ func TestHandleSessionPromptFailedTerminalTransitionFailureRecoveryAdmitsLaterPr
 			SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted,
 		},
 	}
-	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil })
+	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil)
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "first message"))

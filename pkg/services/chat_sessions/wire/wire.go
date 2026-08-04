@@ -11,6 +11,7 @@
 package wire
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -18,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/factorysessionsshim"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/service"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
@@ -100,4 +102,34 @@ type FactoryTargetExecutionService = factorysessionsshim.FactoryTargetExecutionS
 // directly outside this service's own tree).
 func NewFactoryTargetService(service FactoryTargetExecutionService) FactoryTargetService {
 	return factorysessionsshim.New(service)
+}
+
+// FactoryResponseEventSubscriber is the Factory Sessions response-event
+// subscription dependency RunWithResponseBridge subscribes through,
+// re-published here (an alias for factorysessionsshim.ResponseEventSubscriber)
+// exclusively for pkg/wire's use, matching FactoryTargetService's own
+// re-publishing convention.
+type FactoryResponseEventSubscriber = factorysessionsshim.ResponseEventSubscriber
+
+// RunWithResponseBridge starts subscribing to one Factory Session's
+// response-event stream (through subscriber) and sequencing every event it
+// observes onto one Chat Session's aggregate stream (through chatSessions),
+// concurrently with invoke, and returns invoke's own result and error
+// unchanged once invoke itself returns. Re-published here (delegating to
+// factorysessionsshim.RunWithResponseBridge, this service's own internal
+// implementation, which is also the one place that owns this bridge's
+// goroutine and join channel) exclusively for pkg/wire's use, the same
+// reason NewFactoryTargetService is: a caller outside this service's own
+// tree (in particular the ACP transport) only ever holds a plain function
+// value of this shape, never a raw concurrency primitive of its own.
+func RunWithResponseBridge(
+	ctx context.Context,
+	chatSessions chatsessions.Service,
+	subscriber FactoryResponseEventSubscriber,
+	chatSessionID string,
+	sessionVersion uint64,
+	factorySessionID string,
+	invoke func(context.Context) (factorysessions.InvocationResult, error),
+) (factorysessions.InvocationResult, error) {
+	return factorysessionsshim.RunWithResponseBridge(ctx, chatSessions, subscriber, chatSessionID, sessionVersion, factorySessionID, invoke)
 }

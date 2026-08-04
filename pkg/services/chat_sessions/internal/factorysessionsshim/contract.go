@@ -29,6 +29,17 @@ type FactoryTargetService interface {
 		factorysessions.ControlRequest,
 	) (factorysessions.LifecycleControlResult, error)
 	CloseFactoryTarget(context.Context, string) error
+	// SubscribeFactoryResponseEvents subscribes to one already-started Factory
+	// target's response-event cursor (req.SessionID names it, the same
+	// wrapper identity every other method on this interface takes as its own
+	// explicit sessionID parameter), the narrow producer-side capability the
+	// response bridge (response_bridge.go) uses to place a Factory Session's
+	// streamed output onto a Chat Session's aggregate stream. It forwards
+	// unmodified to the injected execution service.
+	SubscribeFactoryResponseEvents(
+		context.Context,
+		factorysessions.ResponseEventSubscriptionRequest,
+	) (*factorysessions.ResponseEventCursor, error)
 }
 
 // FactoryTargetExecutionService is the narrow subset of the public
@@ -48,4 +59,8 @@ type FactoryTargetExecutionService interface {
 	InvokeFactorySession(context.Context, string, factorysessions.InvocationRequest) (factorysessions.InvocationResult, error)
 	Cancel(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
 	CloseFactorySession(context.Context, string) error
+	SubscribeFactoryResponseEvents(
+		context.Context,
+		factorysessions.ResponseEventSubscriptionRequest,
+	) (*factorysessions.ResponseEventCursor, error)
 }

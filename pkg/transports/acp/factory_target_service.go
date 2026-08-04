@@ -38,4 +38,15 @@ type FactoryTargetService interface {
 		factorysessions.ControlRequest,
 	) (factorysessions.LifecycleControlResult, error)
 	CloseFactoryTarget(context.Context, string) error
+	// SubscribeFactoryResponseEvents subscribes to one already-started Factory
+	// target's response-event cursor (req.SessionID names it, this
+	// transport's own opaque Factory target identity, the same identity every
+	// other method above takes as an explicit sessionID parameter). It is the
+	// producer-side capability ResponseBridge (response_bridge.go) uses to
+	// place a Factory Session's streamed output onto a Chat Session's
+	// aggregate stream.
+	SubscribeFactoryResponseEvents(
+		context.Context,
+		factorysessions.ResponseEventSubscriptionRequest,
+	) (*factorysessions.ResponseEventCursor, error)
 }

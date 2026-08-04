@@ -186,7 +186,7 @@ func newStreamingTestServer(t *testing.T, factoryTarget *fakeFactoryTargetServic
 	eventsSvc := &fakeEventsService{}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
 	resolveHomeDir := func() (string, error) { return "/home/operator", nil }
-	server := New(nil, chatSessions, catalog, factoryTarget, eventsSvc, resolveHomeDir)
+	server := New(nil, chatSessions, catalog, factoryTarget, eventsSvc, resolveHomeDir, nil)
 	return server, eventsSvc
 }
 
