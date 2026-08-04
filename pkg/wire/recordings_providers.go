@@ -18,7 +18,7 @@ func provideRecordingsFactory(
 	edges serviceedges.Edges,
 	targets recordings.LiveRecordingTargetPlanner,
 	storage platformreplay.Storage,
-) factorysessionwire.RecordingsFactory {
+) func(recordings.Ledger, recordings.ProjectionService) recordings.Service {
 	return func(
 		ledger recordings.Ledger,
 		projection recordings.ProjectionService,
@@ -40,5 +40,30 @@ func provideRecordingsFactory(
 			panic(err)
 		}
 		return service
+	}
+}
+
+// provideRecordingLifecycleFactory narrows the Recordings root constructed by
+// provideRecordingsFactory down to the RecordingLifecycle capability that the
+// Factory Session runtime-opening path binds to the runtime recorder. Wire
+// performs this narrowing once, at composition time, so runtime-opening
+// receives the narrow capability explicitly instead of discovering it from
+// the broad Service at call time.
+func provideRecordingLifecycleFactory(
+	edges serviceedges.Edges,
+	targets recordings.LiveRecordingTargetPlanner,
+	storage platformreplay.Storage,
+) factorysessionwire.RecordingLifecycleFactory {
+	serviceFactory := provideRecordingsFactory(edges, targets, storage)
+	return func(
+		ledger recordings.Ledger,
+		projection recordings.ProjectionService,
+	) recordings.RecordingLifecycle {
+		service := serviceFactory(ledger, projection)
+		lifecycle, ok := service.(recordings.RecordingLifecycle)
+		if !ok {
+			panic("construct Recordings: service does not expose the recording lifecycle capability")
+		}
+		return lifecycle
 	}
 }

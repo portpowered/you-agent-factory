@@ -14,8 +14,14 @@ import (
 )
 
 func TestNew_RejectsNilExecution(t *testing.T) {
-	if _, err := service.New(nil, nil); !errors.Is(err, service.ErrMissingExecution) {
-		t.Fatalf("New(nil, nil) error = %v, want ErrMissingExecution", err)
+	if _, err := service.New(nil, newEventsAppender(), nil); !errors.Is(err, service.ErrMissingExecution) {
+		t.Fatalf("New(nil, events, nil) error = %v, want ErrMissingExecution", err)
+	}
+}
+
+func TestNew_RejectsNilEventsAppender(t *testing.T) {
+	if _, err := service.New(succeedingExecution(), nil, nil); !errors.Is(err, service.ErrMissingEventsAppender) {
+		t.Fatalf("New(execution, nil, nil) error = %v, want ErrMissingEventsAppender", err)
 	}
 }
 
@@ -185,7 +191,7 @@ func TestStart_ReservationIsObservableBeforeWorkersHandoff(t *testing.T) {
 		reached:     make(chan struct{}),
 		proceed:     make(chan struct{}),
 	}
-	registry, err := service.New(execution, logger)
+	registry, err := service.New(execution, newEventsAppender(), logger)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}

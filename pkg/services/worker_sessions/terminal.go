@@ -52,12 +52,18 @@ const (
 	// evidence. This is authoritative from the WorkResult even when the
 	// adapter error is nil.
 	FailureCauseExecutorPanic FailureCauseKind = "EXECUTOR_PANIC"
+	// FailureCauseEventPublicationFailure reports that the Worker Session's
+	// opening SESSION/STARTED record could not be committed to its Events
+	// topic before Workers invocation (W3): the attempt is never handed off,
+	// and the session terminalizes FAILED without ever calling Workers.
+	FailureCauseEventPublicationFailure FailureCauseKind = "EVENT_PUBLICATION_FAILURE"
 )
 
-// Valid reports whether k is one of the four bounded W2 failure kinds.
+// Valid reports whether k is one of the five bounded W2+W3 failure kinds.
 func (k FailureCauseKind) Valid() bool {
 	switch k {
-	case FailureCauseStartFailure, FailureCauseWorkersExecutionFailure, FailureCauseAdapterFailure, FailureCauseExecutorPanic:
+	case FailureCauseStartFailure, FailureCauseWorkersExecutionFailure, FailureCauseAdapterFailure,
+		FailureCauseExecutorPanic, FailureCauseEventPublicationFailure:
 		return true
 	default:
 		return false

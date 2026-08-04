@@ -44,8 +44,8 @@ type terminalRecording struct {
 	finishedAt    time.Time
 }
 
-func (*terminalRecording) BindRecordingService(
-	recordings.Service,
+func (*terminalRecording) BindRecordingLifecycle(
+	recordings.RecordingLifecycle,
 	recordings.CanonicalEventScope,
 ) error {
 	return nil
@@ -64,6 +64,76 @@ func (r *terminalRecording) Finalize(finishedAt time.Time) error {
 }
 
 var _ recordings.RuntimeRecorder = (*terminalRecording)(nil)
+
+// flushFailingRecording is a controllable recordings.RuntimeRecorder fake
+// used to prove that a startup Flush failure joins any preserved cleanup
+// (Stop) cause into the returned Start() result rather than discarding it.
+type flushFailingRecording struct {
+	flushErr   error
+	cleanupErr error
+	stopCalls  int
+}
+
+func (*flushFailingRecording) BindRecordingLifecycle(
+	recordings.RecordingLifecycle,
+	recordings.CanonicalEventScope,
+) error {
+	return nil
+}
+func (*flushFailingRecording) Start(context.Context)               {}
+func (r *flushFailingRecording) Stop()                             { r.stopCalls++ }
+func (*flushFailingRecording) RecordEvent(interfaces.FactoryEvent) {}
+func (*flushFailingRecording) RecordError(error)                   {}
+func (*flushFailingRecording) Finish(time.Time)                    {}
+func (r *flushFailingRecording) Flush() error                      { return r.flushErr }
+func (r *flushFailingRecording) Err() error                        { return r.cleanupErr }
+func (*flushFailingRecording) Finalize(time.Time) error            { return nil }
+
+var _ recordings.RuntimeRecorder = (*flushFailingRecording)(nil)
+
+// runTrackingFactory records whether Run was ever invoked, to prove runtime
+// execution never starts after a startup recording failure.
+type runTrackingFactory struct {
+	lifecycleObserverFactory
+	ran bool
+}
+
+func (f *runTrackingFactory) Run(context.Context) error {
+	f.ran = true
+	return nil
+}
+
+func TestStart_JoinsCleanupCauseWhenStartupFlushFailsAndNeverRunsFactory(t *testing.T) {
+	t.Parallel()
+
+	flushErr := errors.New("startup flush failed")
+	cleanupErr := errors.New("stop cleanup failed")
+	recording := &flushFailingRecording{flushErr: flushErr, cleanupErr: cleanupErr}
+	factoryStub := &runTrackingFactory{}
+
+	handle := factoryhost.Start(context.Background(), &factoryhost.Bundle{
+		Factory:   factoryStub,
+		Logger:    zap.NewNop(),
+		Recording: recording,
+	})
+
+	if !handle.Completed() {
+		t.Fatal("Start() should complete the handle synchronously when the startup flush fails")
+	}
+	err := handle.Result()
+	if !errors.Is(err, flushErr) {
+		t.Fatalf("Start() result error = %v, want it to preserve the initiating flush cause", err)
+	}
+	if !errors.Is(err, cleanupErr) {
+		t.Fatalf("Start() result error = %v, want it to preserve the cleanup (Stop) cause", err)
+	}
+	if recording.stopCalls != 1 {
+		t.Fatalf("recording Stop calls = %d, want exactly 1", recording.stopCalls)
+	}
+	if factoryStub.ran {
+		t.Fatal("runtime execution must not start after a startup recording flush failure")
+	}
+}
 
 func TestStopDelegatesEveryRuntimeOutcomeToRecordingFinalization(t *testing.T) {
 	t.Parallel()

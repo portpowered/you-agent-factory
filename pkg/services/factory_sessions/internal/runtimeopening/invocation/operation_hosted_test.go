@@ -287,6 +287,87 @@ func TestInvokeFactoryUsesHostedLiveRuntimeForPetriFactory(t *testing.T) {
 	}
 }
 
+// raceyEventSubscribeSessionsFake subscribes successfully once (used by
+// startLiveInvocationFactoryEvents) and fails every subsequent subscribe
+// (used by the post-invocation trailing-events read inside finish()),
+// simulating a Factory Event stream that becomes unreadable purely because of
+// teardown timing after the invocation already produced a terminal result.
+type raceyEventSubscribeSessionsFake struct {
+	*hostedLiveSessionsFake
+	subscribeCalls    int
+	subscribeErrAfter error
+}
+
+func (fake *raceyEventSubscribeSessionsFake) SubscribeFactoryEventsForSession(
+	ctx context.Context,
+	sessionID string,
+	cursor *factorydefinitions.FactoryEventReconnectCursor,
+) (*factorydefinitions.FactoryEventStream, error) {
+	fake.subscribeCalls++
+	if fake.subscribeCalls > 1 {
+		return nil, fake.subscribeErrAfter
+	}
+	events := make(chan factorydefinitions.FactoryEvent)
+	close(events)
+	return &factorydefinitions.FactoryEventStream{Events: events}, nil
+}
+
+// TestInvokeFactoryHostedLiveRuntimePreservesResultWhenTrailingEventReadFails
+// proves a post-result trailing-Factory-Event read failure (a teardown-timing
+// race, not an invocation failure) does not erase an already-determined
+// terminal invocation result. Regression for the "invocation_result record
+// count = 0" flake: InvokeFactory previously joined this kind of post-result
+// error unconditionally, which discarded a valid outcome.Result and caused
+// callers to skip writing the public terminal record entirely.
+func TestInvokeFactoryHostedLiveRuntimePreservesResultWhenTrailingEventReadFails(t *testing.T) {
+	t.Parallel()
+
+	petriProjection := factorysessions.SessionProjection{
+		Context: factorysessions.ProjectionContext{
+			FactoryCfg: &factorydefinitions.FactoryConfig{
+				Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
+					Kind: factorydefinitions.OrchestratorKindPetri,
+				},
+			},
+		},
+	}
+	wantResult := factorydefinitions.FactoryInvocationResult{
+		Status:    factorydefinitions.InvocationTerminalStatusFailed,
+		ErrorCode: "WORK_REJECTED",
+		Message:   "deterministic worker rejection",
+	}
+	sessions := &raceyEventSubscribeSessionsFake{
+		hostedLiveSessionsFake: newHostedLiveSessionsFake(petriProjection),
+		subscribeErrAfter:      errors.New("event stream unavailable during teardown"),
+	}
+	invoker := &hostedInvokerFake{result: wantResult}
+
+	op := &operation{}
+	outcome, err := op.InvokeFactory(
+		context.Background(),
+		roles.InvocationTarget{
+			HostedLiveInvocation: &factorysessions.HostedLiveInvocation{
+				Sessions: sessions,
+				Invoker:  invoker,
+			},
+		},
+		factorysessions.InvocationRequest{},
+		func([]factorydefinitions.FactoryEvent) {},
+	)
+	if err != nil {
+		t.Fatalf("InvokeFactory() error = %v, want nil (trailing event read failure must not suppress the determined result)", err)
+	}
+	if outcome.Result.Status != wantResult.Status {
+		t.Fatalf("result status = %q, want %q", outcome.Result.Status, wantResult.Status)
+	}
+	if outcome.Result.ErrorCode != wantResult.ErrorCode {
+		t.Fatalf("result error code = %q, want %q", outcome.Result.ErrorCode, wantResult.ErrorCode)
+	}
+	if sessions.subscribeCalls < 2 {
+		t.Fatalf("subscribeCalls = %d, want at least 2 (start + trailing read)", sessions.subscribeCalls)
+	}
+}
+
 func TestInvokeFactoryHostedLiveRuntimePropagatesInvokerError(t *testing.T) {
 	t.Parallel()
 

@@ -159,3 +159,16 @@ func TestFilter_Validate_AcceptsEmptyAndAllValidStates(t *testing.T) {
 		t.Errorf("Validate() = %v, want nil", err)
 	}
 }
+
+// TestListRequest_Validate_DelegatesToFilter proves ListRequest.Validate is
+// exactly req.Filter.Validate(): it accepts a well-formed Filter and rejects
+// the same malformed Filter Filter.Validate itself rejects.
+func TestListRequest_Validate_DelegatesToFilter(t *testing.T) {
+	if err := (workersessions.ListRequest{Filter: workersessions.Filter{States: []workersessions.State{workersessions.StateRunning}}}).Validate(); err != nil {
+		t.Errorf("Validate() = %v, want nil", err)
+	}
+	req := workersessions.ListRequest{Filter: workersessions.Filter{States: []workersessions.State{"INTERRUPTED"}}}
+	if err := req.Validate(); !errors.Is(err, workersessions.ErrInvalidState) {
+		t.Errorf("Validate() = %v, want ErrInvalidState", err)
+	}
+}

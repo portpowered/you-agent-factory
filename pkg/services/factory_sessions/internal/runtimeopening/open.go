@@ -37,7 +37,7 @@ func openRuntime(
 	factorySessionsService factorysessions.Service,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	recordingsProjectionFactory RecordingsProjectionFactory,
-	recordingsFactory RecordingsFactory,
+	recordingLifecycleFactory RecordingLifecycleFactory,
 	runtimeLedgerFactory RuntimeLedgerFactory,
 	runtimeRecorderFactory recordings.RuntimeRecorderFactory,
 	replayClockFactory ReplayClockFactory,
@@ -138,9 +138,6 @@ func openRuntime(
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings runtime recorder factory is required")
 	}
 	var runtimeRecording recordings.RuntimeRecorder
-	type runtimeRecordingBinder interface {
-		BindRecordingService(recordings.Service, recordings.CanonicalEventScope) error
-	}
 	sessionRecorderFactory := func(
 		flushInterval time.Duration,
 		loaded factorydefinitions.LoadedFactorySource,
@@ -407,29 +404,19 @@ func openRuntime(
 	if workDomain == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Work factory returned nil service")
 	}
-	if recordingsFactory == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings factory is required")
+	if recordingLifecycleFactory == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings lifecycle factory is required")
 	}
-	recordingService := recordingsFactory(startupRuntime.RecordingLedger(), recordingProjections)
-	if recordingService == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings factory returned nil service")
+	recordingLifecycle := recordingLifecycleFactory(startupRuntime.RecordingLedger(), recordingProjections)
+	if recordingLifecycle == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings lifecycle factory returned nil lifecycle")
 	}
-	if runtimeRecording != nil {
-		binder, ok := runtimeRecording.(runtimeRecordingBinder)
-		if !ok {
-			return runtimeProducts{}, fmt.Errorf("construct runtime scope: runtime recording does not support Recordings binding")
-		}
-		if err := binder.BindRecordingService(
-			recordingService,
-			recordings.CanonicalEventScope{
-				FactorySessionID: factorysessions.DefaultSessionID,
-			},
-		); err != nil {
-			return runtimeProducts{}, fmt.Errorf(
-				"construct runtime scope: bind runtime recording: %w",
-				err,
-			)
-		}
+	if err := bindRuntimeRecordingLifecycle(
+		runtimeRecording,
+		recordingLifecycle,
+		recordings.CanonicalEventScope{FactorySessionID: factorysessions.DefaultSessionID},
+	); err != nil {
+		return runtimeProducts{}, err
 	}
 	if processRuntimeFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions process runtime factory is required")
@@ -474,4 +461,27 @@ func openRuntime(
 		cleanup.Close,
 	)
 	return opened, nil
+}
+
+// bindRuntimeRecordingLifecycle binds the runtime recorder to the already-
+// narrowed RecordingLifecycle capability supplied explicitly by the caller,
+// rather than discovering it from a broader Recordings Service through a
+// caller-local type assertion. A nil runtimeRecording (recording disabled)
+// is a no-op.
+func bindRuntimeRecordingLifecycle(
+	runtimeRecording recordings.RuntimeRecorder,
+	recordingLifecycle recordings.RecordingLifecycle,
+	scope recordings.CanonicalEventScope,
+) error {
+	if runtimeRecording == nil {
+		return nil
+	}
+	binder, ok := runtimeRecording.(recordings.RuntimeRecordingBinder)
+	if !ok {
+		return fmt.Errorf("construct runtime scope: runtime recording does not support Recordings binding")
+	}
+	if err := binder.BindRecordingLifecycle(recordingLifecycle, scope); err != nil {
+		return fmt.Errorf("construct runtime scope: bind runtime recording: %w", err)
+	}
+	return nil
 }
