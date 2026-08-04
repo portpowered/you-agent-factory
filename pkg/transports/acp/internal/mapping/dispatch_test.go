@@ -2,7 +2,10 @@ package mapping
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
+
+	acpsdk "github.com/coder/acp-go-sdk"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -209,4 +212,144 @@ func TestProjectDispatch_RejectsIllegalPhaseForKnownKind(t *testing.T) {
 
 	update, err := Project(workers.Draft{Kind: workers.KindSession, Phase: workers.PhaseDelta, Payload: json.RawMessage(`{}`)})
 	requireMalformed(t, update, err)
+}
+
+func TestProjectChildOpeningUsesStoredItemIdentityAndAssociation(t *testing.T) {
+	t.Parallel()
+
+	opening := childSessionDraft(workers.PhaseStarted, "child-item-1", "", "STARTING")
+	update, err := ProjectChildOpening(opening, ChildAssociation{DispatchID: "dispatch-1", WorkerSessionID: "worker-1"})
+	if err != nil {
+		t.Fatalf("ProjectChildOpening() error = %v", err)
+	}
+	if update == nil || update.ToolCall == nil {
+		t.Fatalf("ProjectChildOpening() update = %#v, want tool call", update)
+	}
+	if err := update.Validate(); err != nil {
+		t.Fatalf("ProjectChildOpening() update validation error = %v", err)
+	}
+	call := update.ToolCall
+	if call.ToolCallId != acpsdk.ToolCallId(opening.ItemID) {
+		t.Errorf("ToolCallId = %q, want stored item %q", call.ToolCallId, opening.ItemID)
+	}
+	if call.Status != acpsdk.ToolCallStatusPending {
+		t.Errorf("Status = %q, want pending", call.Status)
+	}
+	if call.Kind != acpsdk.ToolKindExecute {
+		t.Errorf("Kind = %q, want execute", call.Kind)
+	}
+	metadata, ok := call.Meta[workerToolCallMetaKey].(map[string]string)
+	if !ok {
+		t.Fatalf("metadata = %#v, want associated child metadata", call.Meta)
+	}
+	if metadata["dispatchId"] != "dispatch-1" || metadata["workerSessionId"] != "worker-1" {
+		t.Errorf("metadata = %#v, want canonical association", metadata)
+	}
+}
+
+func TestProjectChildOpeningRejectsMissingIdentityOrAssociation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		draft       workers.Draft
+		association ChildAssociation
+		want        error
+	}{
+		{"missing association", childSessionDraft(workers.PhaseStarted, "item-1", "", "RESERVED"), ChildAssociation{}, ErrMissingChildAssociation},
+		{"missing item", childSessionDraft(workers.PhaseStarted, "", "", "RESERVED"), ChildAssociation{DispatchID: "dispatch-1", WorkerSessionID: "worker-1"}, ErrMissingChildItemID},
+		{"opening has parent", childSessionDraft(workers.PhaseStarted, "item-1", "other-item", "RESERVED"), ChildAssociation{DispatchID: "dispatch-1", WorkerSessionID: "worker-1"}, ErrMalformedRecord},
+		{"opening already running", childSessionDraft(workers.PhaseStarted, "item-1", "", "RUNNING"), ChildAssociation{DispatchID: "dispatch-1", WorkerSessionID: "worker-1"}, ErrMalformedRecord},
+		{"malformed payload", workers.Draft{Kind: workers.KindSession, Phase: workers.PhaseStarted, ItemID: "item-1", Payload: json.RawMessage(`not-json`)}, ChildAssociation{DispatchID: "dispatch-1", WorkerSessionID: "worker-1"}, ErrMalformedRecord},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			update, err := ProjectChildOpening(tt.draft, tt.association)
+			if update != nil {
+				t.Fatalf("ProjectChildOpening() update = %#v, want no partial update", update)
+			}
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("ProjectChildOpening() error = %v, want %v", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestProjectChildLifecycleTargetsStoredParentAndMapsTerminals(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		phase  workers.Phase
+		status string
+		want   acpsdk.ToolCallStatus
+	}{
+		{"running", workers.PhaseUpdated, "RUNNING", acpsdk.ToolCallStatusInProgress},
+		{"completed", workers.PhaseCompleted, "COMPLETED", acpsdk.ToolCallStatusCompleted},
+		{"failed", workers.PhaseFailed, "FAILED", acpsdk.ToolCallStatusFailed},
+		{"canceled", workers.PhaseCanceled, "CANCELED", acpsdk.ToolCallStatusFailed},
+		{"terminated", workers.PhaseCanceled, "TERMINATED", acpsdk.ToolCallStatusFailed},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			draft := childSessionDraft(tt.phase, "record-item", "child-tool-call", tt.status)
+			update, err := ProjectChildLifecycle(draft)
+			if err != nil {
+				t.Fatalf("ProjectChildLifecycle() error = %v", err)
+			}
+			if update == nil || update.ToolCallUpdate == nil || update.ToolCallUpdate.Status == nil {
+				t.Fatalf("ProjectChildLifecycle() update = %#v, want tool call update", update)
+			}
+			if err := update.Validate(); err != nil {
+				t.Fatalf("ProjectChildLifecycle() update validation error = %v", err)
+			}
+			if update.ToolCallUpdate.ToolCallId != acpsdk.ToolCallId(draft.ParentItemID) {
+				t.Errorf("ToolCallId = %q, want stored parent %q", update.ToolCallUpdate.ToolCallId, draft.ParentItemID)
+			}
+			if *update.ToolCallUpdate.Status != tt.want {
+				t.Errorf("Status = %q, want %q", *update.ToolCallUpdate.Status, tt.want)
+			}
+		})
+	}
+}
+
+func TestProjectChildLifecycleKeepsPendingStatusAndRejectsMalformedLineage(t *testing.T) {
+	t.Parallel()
+
+	pending, err := ProjectChildLifecycle(childSessionDraft(workers.PhaseUpdated, "record-item", "child-tool-call", "STARTING"))
+	if err != nil || pending != nil {
+		t.Fatalf("pending lifecycle = (%#v, %v), want declared no output", pending, err)
+	}
+
+	tests := []struct {
+		name  string
+		draft workers.Draft
+		want  error
+	}{
+		{"missing parent", childSessionDraft(workers.PhaseUpdated, "record-item", "", "RUNNING"), ErrMissingChildParent},
+		{"bad terminal status", childSessionDraft(workers.PhaseCompleted, "record-item", "child-tool-call", "FAILED"), ErrMalformedRecord},
+		{"opening sent as update", childSessionDraft(workers.PhaseStarted, "record-item", "child-tool-call", "STARTING"), ErrMalformedRecord},
+		{"non lifecycle record", workers.Draft{Kind: workers.KindMessage, Phase: workers.PhaseDelta, ParentItemID: "child-tool-call", Payload: json.RawMessage(`{}`)}, ErrMalformedRecord},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			update, err := ProjectChildLifecycle(tt.draft)
+			if update != nil {
+				t.Fatalf("ProjectChildLifecycle() update = %#v, want no partial update", update)
+			}
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("ProjectChildLifecycle() error = %v, want %v", err, tt.want)
+			}
+		})
+	}
+}
+
+func childSessionDraft(phase workers.Phase, itemID, parentItemID, status string) workers.Draft {
+	payload, _ := json.Marshal(workers.SessionPayload{Status: status})
+	return workers.Draft{
+		Kind: workers.KindSession, Phase: phase, ItemID: itemID, ParentItemID: parentItemID, Payload: payload,
+	}
 }
