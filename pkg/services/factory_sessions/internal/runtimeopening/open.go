@@ -234,7 +234,7 @@ func openRuntime(
 	if inferenceProgressPublisherFactory := runtimeService.InferenceProgressPublisherFactory(logger); inferenceProgressPublisherFactory != nil {
 		initialProgressPublisher = inferenceProgressPublisherFactory(factorysessions.DefaultSessionID)
 	}
-	serviceService, sessionBuildFactory, err := workerExecutionFactory(
+	serviceService, err := workerExecutionFactory(
 		configured.Runtime,
 		configured.Workers,
 		clock,
@@ -248,14 +248,6 @@ func openRuntime(
 		selectedModels, modelsBind.Scope, workService,
 		workersRuntimeFactory,
 		durableExecution.ACPIntegrations,
-		func(built workers.RuntimeService) {
-			if built == nil {
-				return
-			}
-			cleanup.Add(func() error {
-				return built.Close(context.WithoutCancel(ctx))
-			})
-		},
 	)
 	if err != nil {
 		return runtimeProducts{}, err
@@ -325,7 +317,6 @@ func openRuntime(
 			clock,
 			logger,
 			serviceService,
-			sessionBuildFactory,
 			workersRuntimeExecutorsFactory,
 			workersMockCommandRunnerFactory,
 			runtimeService.InferenceProgressPublisherFactory(logger),
