@@ -186,7 +186,6 @@ func (fake *serviceAgentProvidersFake) Continue(
 	fake.calls.Add(1)
 	fake.mu.Lock()
 	fake.request = request.Attempt.Clone()
-	fake.request.ResumeSession = &request.Reference
 	fake.mu.Unlock()
 	return providers.ContinueResult{
 		Reference: request.Reference,
@@ -216,7 +215,6 @@ func (fake *failingServiceAgentProvidersFake) Continue(
 	fake.calls.Add(1)
 	fake.mu.Lock()
 	fake.request = request.Attempt.Clone()
-	fake.request.ResumeSession = &request.Reference
 	fake.mu.Unlock()
 	return providers.ContinueResult{}, fake.failure
 }
@@ -248,7 +246,6 @@ func (fake *interruptingServiceAgentProvidersFake) Continue(
 	fake.calls.Add(1)
 	fake.mu.Lock()
 	fake.request = request.Attempt.Clone()
-	fake.request.ResumeSession = &request.Reference
 	fake.mu.Unlock()
 	fake.once.Do(func() { close(fake.entered) })
 	<-ctx.Done()

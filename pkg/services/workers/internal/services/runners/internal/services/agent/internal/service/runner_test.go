@@ -220,8 +220,8 @@ func TestExecuteResumesThroughContinueWhenSessionIDPresent(t *testing.T) {
 		Kind:     providers.SessionIDKind,
 		ID:       "resume-session-2",
 	}
-	if fake.request.ResumeSession == nil || *fake.request.ResumeSession != wantReference {
-		t.Fatalf("Providers.Continue Reference = %#v, want %#v", fake.request.ResumeSession, wantReference)
+	if fake.continuationReference == nil || *fake.continuationReference != wantReference {
+		t.Fatalf("Providers.Continue Reference = %#v, want %#v", fake.continuationReference, wantReference)
 	}
 }
 
@@ -291,7 +291,8 @@ func baseAgentRequest() workers.RunnerExecutionRequest {
 
 type providersFake struct {
 	providers.Service
-	request providers.ExecuteRequest
+	request               providers.ExecuteRequest
+	continuationReference *providers.SessionRef
 }
 
 type failingProvidersFake struct {
@@ -327,7 +328,8 @@ func (fake *providersFake) Continue(
 		return providers.ContinueResult{}, err
 	}
 	fake.request = request.Attempt.Clone()
-	fake.request.ResumeSession = &request.Reference
+	reference := request.Reference.Clone()
+	fake.continuationReference = &reference
 	return providers.ContinueResult{
 		Reference: request.Reference,
 		Outcome:   providers.ContinuationOutcomeResumed,

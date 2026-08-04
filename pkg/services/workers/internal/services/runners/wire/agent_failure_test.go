@@ -185,7 +185,6 @@ func (fake *failingAgentProvidersFake) Continue(
 	fake.calls.Add(1)
 	fake.mu.Lock()
 	fake.request = request.Attempt.Clone()
-	fake.request.ResumeSession = &request.Reference
 	fake.mu.Unlock()
 	return providers.ContinueResult{}, fake.failure
 }
@@ -225,7 +224,6 @@ func (fake *interruptingAgentProvidersFake) Continue(
 	fake.calls.Add(1)
 	fake.mu.Lock()
 	fake.request = request.Attempt.Clone()
-	fake.request.ResumeSession = &request.Reference
 	fake.ctx = ctx
 	fake.mu.Unlock()
 	fake.once.Do(func() { close(fake.entered) })

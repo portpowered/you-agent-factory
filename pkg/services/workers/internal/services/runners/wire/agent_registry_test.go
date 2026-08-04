@@ -236,7 +236,6 @@ func (fake *agentProvidersFake) Continue(
 	fake.calls.Add(1)
 	fake.mu.Lock()
 	fake.request = request.Attempt.Clone()
-	fake.request.ResumeSession = &request.Reference
 	fake.mu.Unlock()
 	if request.Attempt.UserMessage == agentFixtureExecutionFailure {
 		return providers.ContinueResult{}, errors.New("deterministic fixture failure")
@@ -273,7 +272,6 @@ func (fake *blockingAgentProvidersFake) Continue(
 	<-fake.release
 	fake.mu.Lock()
 	fake.request = request.Attempt.Clone()
-	fake.request.ResumeSession = &request.Reference
 	fake.mu.Unlock()
 	return providers.ContinueResult{
 		Reference: request.Reference,
@@ -378,12 +376,7 @@ func assertAgentProviderRequest(t *testing.T, request providers.ExecuteRequest) 
 		OutputSchema:     `{"type":"object"}`,
 		WorkingDirectory: "C:/fixture/work",
 		Worktree:         "C:/fixture/worktree",
-		ResumeSession: &providers.SessionRef{
-			Provider: providers.IDCodex,
-			Kind:     providers.SessionIDKind,
-			ID:       "resume-session-1",
-		},
-		EnvVars: map[string]string{"FIXTURE": "original"},
+		EnvVars:          map[string]string{"FIXTURE": "original"},
 	}
 	if !reflect.DeepEqual(request, want) {
 		t.Fatalf("Providers.Execute request = %#v, want %#v", request, want)

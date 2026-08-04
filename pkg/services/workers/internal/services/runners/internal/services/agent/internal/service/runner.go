@@ -225,11 +225,14 @@ func (s *service) executeProviderAttempt(
 	request workers.RunnerExecutionRequest,
 ) (providers.ExecuteResult, error) {
 	attempt := providerRequest(request)
-	if attempt.ResumeSession == nil {
+	if strings.TrimSpace(request.SessionID) == "" {
 		return s.providers.Execute(ctx, attempt)
 	}
-	reference := *attempt.ResumeSession
-	attempt.ResumeSession = nil
+	reference := providers.SessionRef{
+		Provider: attempt.Provider,
+		Kind:     providers.SessionIDKind,
+		ID:       request.SessionID,
+	}
 	continued, err := s.providers.Continue(ctx, providers.ContinueRequest{
 		Reference: reference,
 		Attempt:   attempt,
@@ -264,13 +267,6 @@ func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRe
 		Worktree:           request.Worktree,
 		EnvVars:            cloneMetadata(request.EnvVars),
 		ProcessEnvironment: append([]string(nil), request.ProcessEnvironment...),
-	}
-	if strings.TrimSpace(request.SessionID) != "" {
-		result.ResumeSession = &providers.SessionRef{
-			Provider: providerID,
-			Kind:     providers.SessionIDKind,
-			ID:       request.SessionID,
-		}
 	}
 	return result
 }
