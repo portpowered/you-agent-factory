@@ -121,6 +121,45 @@ func TestServeRejectsAlreadyCancelledContext(t *testing.T) {
 	}
 }
 
+// writerFunc adapts a function to io.Writer.
+type writerFunc func(p []byte) (int, error)
+
+func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
+
+// TestServeRejectsContextCancelledBetweenReads proves the read loop's own
+// per-iteration ctx.Err() check (distinct from Serve's one-time pre-check in
+// TestServeRejectsAlreadyCancelledContext, and from the mid-read cancellation
+// in TestServeReturnsContextErrorOnMidReadCancellation) actually stops a
+// second line from ever being read once the context is cancelled between two
+// requests on the same connection. It cancels ctx from inside the response
+// write for the first line -- synchronous with serveConnection's own
+// goroutine, so no timing or extra synchronization is needed -- and asserts
+// only that first response was written before Serve returns ctx's error.
+func TestServeRejectsContextCancelledBetweenReads(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	in := strings.NewReader(
+		`{"jsonrpc":"2.0","id":1,"method":"unknown/method"}` + "\n" +
+			`{"jsonrpc":"2.0","id":2,"method":"unknown/method"}` + "\n",
+	)
+
+	var buf bytes.Buffer
+	writeCount := 0
+	out := writerFunc(func(p []byte) (int, error) {
+		writeCount++
+		cancel()
+		return buf.Write(p)
+	})
+
+	server := New(nil, nil, nil, nil, nil)
+	err := server.Serve(ctx, in, out)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Serve() error = %v, want context.Canceled", err)
+	}
+	if writeCount != 1 {
+		t.Fatalf("write count = %d, want exactly 1 (second line must never be read once ctx is cancelled)", writeCount)
+	}
+}
+
 func TestServeMintsDistinctConnectionIDsPerInvocation(t *testing.T) {
 	logger := &recordingLogger{}
 	server := New(logger, nil, nil, nil, nil)
