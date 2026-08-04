@@ -358,11 +358,20 @@ func (daemon *daemon) openSession(
 	return session, nil
 }
 
+// acpErrorCodeResourceNotFound is the ACP-reserved JSON-RPC error code
+// (schema ErrorCodeResourceNotFound) an agent returns when a referenced
+// resource, including a session/load id, is not recognized.
+const acpErrorCodeResourceNotFound = -32002
+
 // sessionOpenFailure normalizes a session/new or session/load failure. An
 // authentication-required failure closes the unusable daemon so a later
-// execution establishes a fresh authenticated connection; every other
-// failure is reported through the same rpcFailure normalization every other
-// ACP RPC failure in this service uses.
+// execution establishes a fresh authenticated connection. A session/load
+// failure reporting ResourceNotFound means the daemon itself is healthy but
+// does not recognize the exact requested Provider Session id, so it is
+// reported as ExecuteFailureKindSessionNotFound instead of the generic RPC
+// failure Continue would otherwise be unable to distinguish from any other
+// dependency failure. Every other failure is reported through the same
+// rpcFailure normalization every other ACP RPC failure in this service uses.
 func (daemon *daemon) sessionOpenFailure(
 	ctx context.Context,
 	id providers.ID,
@@ -380,6 +389,13 @@ func (daemon *daemon) sessionOpenFailure(
 		// establish a fresh authenticated connection.
 		_ = daemon.stopLocked(context.Background())
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindAuthentication, Message: "ACP authentication required" + authenticationMethodHint(initialized.AuthMethods)}
+	}
+	if method == "session/load" && requestErr != nil && requestErr.Code == acpErrorCodeResourceNotFound {
+		daemon.invalidateDisconnected(ctx)
+		return providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindSessionNotFound,
+			Message: fmt.Sprintf("ACP provider %q does not recognize the referenced Provider Session as live", id),
+		}
 	}
 	daemon.invalidateDisconnected(ctx)
 	return rpcFailure(ctx, method, id, err, daemon.stderr.String(), request)

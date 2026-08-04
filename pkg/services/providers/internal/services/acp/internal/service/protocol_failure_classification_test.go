@@ -155,11 +155,14 @@ func TestContinuationResumesExactSessionThroughSessionLoad(t *testing.T) {
 }
 
 // TestContinuationSessionLoadFailureDoesNotFallBackToFreshSession proves a
-// session/load failure (for example a stale or unknown session) is reported
-// as-is instead of silently starting a fresh session. The helper peer in
-// "resume-not-found" mode also does not implement session/new, so a
-// regression to a fresh-session fallback would fail this test rather than
-// masking the failure with an unrelated new session.
+// session/load ResourceNotFound failure (a stale or unknown session) is
+// classified as ExecuteFailureKindSessionNotFound - the typed vocabulary
+// Continue translates into the closed stale continuation failure - instead
+// of the generic RPC failure kind, and is reported as-is instead of silently
+// starting a fresh session. The helper peer in "resume-not-found" mode also
+// does not implement session/new, so a regression to a fresh-session
+// fallback would fail this test rather than masking the failure with an
+// unrelated new session.
 func TestContinuationSessionLoadFailureDoesNotFallBackToFreshSession(t *testing.T) {
 	var starts atomic.Int32
 	serviceValue, err := New([]providers.ACPIntegration{{
@@ -185,6 +188,12 @@ func TestContinuationSessionLoadFailureDoesNotFallBackToFreshSession(t *testing.
 	var failure providers.ExecuteFailure
 	if !errors.As(err, &failure) {
 		t.Fatalf("Execute() error = %v (%T), want ExecuteFailure - a session/load failure must be reported, not silently retried as a fresh session", err, err)
+	}
+	if failure.Kind != providers.ExecuteFailureKindSessionNotFound {
+		t.Fatalf("ExecuteFailure.Kind = %q, want %q", failure.Kind, providers.ExecuteFailureKindSessionNotFound)
+	}
+	if starts.Load() != 1 {
+		t.Fatalf("ACP daemon starts = %d, want exactly 1 - a stale reference must not start a second daemon or fresh-session attempt", starts.Load())
 	}
 }
 
@@ -336,7 +345,10 @@ func runProtocolFailurePeer(mode string, stdin io.Reader, stdout, stderr io.Writ
 			}
 		case "session/load":
 			if mode == "resume-not-found" {
-				return writeRPCError(writer, request.ID, -32001, "no rollout found for that session")
+				// -32002 is the ACP schema's ErrorCodeResourceNotFound - the
+				// real code a conformant agent returns for an unrecognized
+				// session/load id.
+				return writeRPCError(writer, request.ID, -32002, "no rollout found for that session")
 			}
 			if err := writeRPCResult(writer, request.ID, `{"configOptions":[]}`); err != nil {
 				return err

@@ -1,4 +1,4 @@
-package codex_test
+package claude_test
 
 import (
 	"context"
@@ -6,11 +6,11 @@ import (
 	"testing"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	codex "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
+	claude "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func TestCodexCommandEffectClassifiesStderrExitFailures(t *testing.T) {
+func TestClaudeCommandEffectClassifiesStderrExitFailures(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -20,12 +20,12 @@ func TestCodexCommandEffectClassifiesStderrExitFailures(t *testing.T) {
 	}{
 		{
 			name:     "authentication stderr",
-			stderr:   `ERROR: unexpected status 401 Unauthorized {"type":"authentication_error","message":"invalid api key"}`,
+			stderr:   "Error: authentication_error: invalid api key",
 			wantKind: providers.ExecuteFailureKindAuthentication,
 		},
 		{
 			name:     "throttle stderr",
-			stderr:   "ERROR: selected model is at capacity",
+			stderr:   "Error: rate limit exceeded, too many requests",
 			wantKind: providers.ExecuteFailureKindThrottled,
 		},
 		{
@@ -34,11 +34,12 @@ func TestCodexCommandEffectClassifiesStderrExitFailures(t *testing.T) {
 			wantKind: providers.ExecuteFailureKindTimeout,
 		},
 		{
-			// Verified against the real installed codex CLI:
-			// `echo hi | codex exec --json resume <fake-uuid> -` produces
-			// this exact stderr text on exit code 1.
+			// Verified against the real installed claude CLI:
+			// `echo hi | claude --resume <fake-uuid> --verbose --output-format
+			// stream-json --include-partial-messages -p "hi"` produces this
+			// exact stderr text on exit code 1.
 			name:     "stale session stderr",
-			stderr:   "Error: thread/resume: thread/resume failed: no rollout found for thread id 00000000-0000-0000-0000-000000000000 (code -32600)",
+			stderr:   "No conversation found with session ID: 00000000-0000-0000-0000-000000000000",
 			wantKind: providers.ExecuteFailureKindSessionNotFound,
 		},
 	}
@@ -48,13 +49,13 @@ func TestCodexCommandEffectClassifiesStderrExitFailures(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			effect := codex.NewCommandEffect(codexCommandRunnerStub{
+			effect := claude.NewCommandEffect(claudeCommandRunnerStub{
 				result: workers.CommandResult{
 					ExitCode: 1,
 					Stderr:   []byte(test.stderr),
 				},
 			})
-			_, err := newCodexRoot(t, effect).Execute(t.Context(), codexFailureRequest())
+			_, err := newClaudeRoot(t, effect).Execute(t.Context(), claudeFailureRequest())
 			var failure providers.ExecuteFailure
 			if !errors.As(err, &failure) {
 				t.Fatalf("Execute() error = %v, want providers.ExecuteFailure", err)
@@ -66,10 +67,10 @@ func TestCodexCommandEffectClassifiesStderrExitFailures(t *testing.T) {
 	}
 }
 
-type codexCommandRunnerStub struct {
+type claudeCommandRunnerStub struct {
 	result workers.CommandResult
 }
 
-func (stub codexCommandRunnerStub) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
+func (stub claudeCommandRunnerStub) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
 	return stub.result, nil
 }

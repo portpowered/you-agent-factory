@@ -32,6 +32,14 @@ const (
 	ExecuteFailureKindThrottled      ExecuteFailureKind = "throttled"
 	ExecuteFailureKindDependency     ExecuteFailureKind = "dependency"
 	ExecuteFailureKindUnknown        ExecuteFailureKind = "unknown"
+	// ExecuteFailureKindSessionNotFound reports that a resolved provider did
+	// not recognize the exact requested ResumeSession id as a live Provider
+	// Session. Ordinary Execute never produces this kind: Execute rejects any
+	// request that carries ResumeSession before dispatch, so only a
+	// Continue-triggered attempt can ever observe it. Continue translates this
+	// kind into the typed stale continuation failure before returning to its
+	// caller, so this kind never reaches a Continue caller directly either.
+	ExecuteFailureKindSessionNotFound ExecuteFailureKind = "session_not_found"
 )
 
 // ExecuteFailure retains normalized one-attempt failure facts peers can branch

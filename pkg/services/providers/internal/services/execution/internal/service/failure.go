@@ -213,7 +213,8 @@ func knownFailureKind(kind providers.ExecuteFailureKind) bool {
 		providers.ExecuteFailureKindMisconfigured,
 		providers.ExecuteFailureKindThrottled,
 		providers.ExecuteFailureKindDependency,
-		providers.ExecuteFailureKindUnknown:
+		providers.ExecuteFailureKindUnknown,
+		providers.ExecuteFailureKindSessionNotFound:
 		return true
 	default:
 		return false
@@ -236,6 +237,8 @@ func defaultFailureMessage(kind providers.ExecuteFailureKind) string {
 		return "provider execution was throttled"
 	case providers.ExecuteFailureKindDependency:
 		return "provider dependency failed"
+	case providers.ExecuteFailureKindSessionNotFound:
+		return "provider does not recognize the referenced Provider Session as live"
 	default:
 		return "provider execution failed"
 	}

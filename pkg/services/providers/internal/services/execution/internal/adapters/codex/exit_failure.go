@@ -15,6 +15,8 @@ func exitFailureFromCommandResult(result workers.CommandResult) error {
 	}
 	normalized := strings.ToLower(formatCombinedCommandOutput(result))
 	switch {
+	case containsAny(normalized, "no rollout found", "no conversation found", "no thread found", "thread not found"):
+		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindSessionNotFound, Message: declaredFailureMessage(providers.ExecuteFailureKindSessionNotFound)}
 	case containsAny(normalized, "api key", "authentication", "unauthorized", "forbidden", "login required", "not authenticated"):
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindAuthentication, Message: declaredFailureMessage(providers.ExecuteFailureKindAuthentication)}
 	case containsAny(normalized, "invalid argument", "bad request", "invalid request"):

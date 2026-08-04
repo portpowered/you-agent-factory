@@ -305,6 +305,15 @@ func (s *Service) Continue(
 
 	result, err := s.dispatch(ctx, attempt)
 	if err != nil {
+		if stale := staleContinuationFailure(err, reference); stale != nil {
+			s.logger.Info(
+				"provider continuation outcome",
+				"provider", string(canonical),
+				"kind", reference.Kind,
+				"outcome", "stale",
+			)
+			return providers.ContinueResult{}, *stale
+		}
 		s.logger.Info(
 			"provider continuation outcome",
 			"provider", string(canonical),
@@ -364,6 +373,25 @@ func (s *Service) resolveContinuationProvider(
 		return "", false, err
 	}
 	return resolved, descriptorHasCapability(descriptor, providers.CapabilitySessionResume), nil
+}
+
+// staleContinuationFailure translates a dispatch failure whose resolved
+// provider reported the exact requested reference id as not found (an
+// ExecuteFailureKindSessionNotFound declared failure - never produced by
+// ordinary Execute, since only a continuation dispatch ever carries
+// ResumeSession) into the typed stale continuation failure. It returns nil
+// for any other dispatch failure, which Continue reports unchanged.
+func staleContinuationFailure(err error, reference providers.SessionRef) *providers.ContinuationFailure {
+	var declared providers.ExecuteFailure
+	if !errors.As(err, &declared) || declared.Kind != providers.ExecuteFailureKindSessionNotFound {
+		return nil
+	}
+	failure := providers.ContinuationFailure{
+		Kind:      providers.ContinuationFailureKindStale,
+		Message:   declared.Message,
+		Reference: reference,
+	}
+	return &failure
 }
 
 func descriptorHasCapability(descriptor providers.Descriptor, capability providers.Capability) bool {
