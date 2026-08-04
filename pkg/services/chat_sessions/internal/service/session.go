@@ -95,5 +95,8 @@ func (s *Store) GetSession(_ context.Context, req chatsessions.GetSessionRequest
 	if !ok {
 		return chatsessions.GetSessionResult{}, &chatsessions.NotFoundError{Value: "Session", ID: req.SessionID}
 	}
-	return chatsessions.GetSessionResult{Session: record.session}, nil
+	return chatsessions.GetSessionResult{
+		Session: record.session,
+		Episode: record.episodes[len(record.episodes)-1],
+	}, nil
 }

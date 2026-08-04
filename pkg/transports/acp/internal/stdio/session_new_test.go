@@ -15,7 +15,6 @@ import (
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 )
@@ -272,15 +271,9 @@ func (f *fakeFactoryTargetCatalogService) ResolveFactoryTargetCatalog(
 }
 
 // fakeFactoryTargetService is a minimal
-// acp.FactoryTargetService test double: it embeds the interface
-// unimplemented so a call to a capability beyond Start/Invoke reaches a nil
-// method value and panics, proving the consumer never dispatches to
-// Cancel/Close from the ordinary prompt-delegation path this package's
-// tests exercise. mu guards every field for concurrent/duplicate-delivery
-// tests.
+// factorysessions.TargetExecutionService test double. mu guards every field
+// for concurrent/duplicate-delivery tests.
 type fakeFactoryTargetService struct {
-	acp.FactoryTargetService
-
 	mu sync.Mutex
 
 	startCalls  []factorysessions.StartRequest
@@ -291,15 +284,23 @@ type fakeFactoryTargetService struct {
 	invokeResult factorysessions.InvocationResult
 	invokeErr    error
 	// invokeErrs, when non-empty, is consumed front-first across successive
-	// InvokeFactoryTarget calls (one queued error per call, nil meaning that
+	// InvokeFactorySession calls (one queued error per call, nil meaning that
 	// call succeeds with invokeResult) instead of the single static
 	// invokeErr -- for tests that need one specific dispatch to fail while a
 	// later retry against the same (or a differently bound) identity
 	// succeeds.
 	invokeErrs []error
 
+	cancelCalls []cancelFactoryTargetCall
+	cancelErr   error
+
 	closeCalls []string
 	closeErr   error
+}
+
+type cancelFactoryTargetCall struct {
+	sessionID string
+	request   factorysessions.ControlRequest
 }
 
 type invokeFactoryTargetCall struct {
@@ -342,6 +343,20 @@ func (f *fakeFactoryTargetService) InvokeFactorySession(
 	return f.invokeResult, nil
 }
 
+func (f *fakeFactoryTargetService) Cancel(
+	_ context.Context,
+	sessionID string,
+	request factorysessions.ControlRequest,
+) (factorysessions.LifecycleControlResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.cancelCalls = append(f.cancelCalls, cancelFactoryTargetCall{sessionID: sessionID, request: request})
+	if f.cancelErr != nil {
+		return factorysessions.LifecycleControlResult{}, f.cancelErr
+	}
+	return factorysessions.LifecycleControlResult{}, nil
+}
+
 func (f *fakeFactoryTargetService) CloseFactorySession(_ context.Context, sessionID string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -365,11 +380,11 @@ func newTestServer(chatSessions *fakeChatSessionsService, catalog *fakeFactoryTa
 
 // newTestServerWithFactoryTarget is newTestServer plus an explicit Factory
 // Sessions delegation collaborator, for the ordinary-prompt-delegation tests
-// that need to observe or fail StartFactoryTarget/InvokeFactoryTarget calls.
+// that need to observe or fail StartAsync/InvokeFactorySession calls.
 func newTestServerWithFactoryTarget(
 	chatSessions *fakeChatSessionsService,
 	catalog *fakeFactoryTargetCatalogService,
-	factoryTarget acp.FactoryTargetService,
+	factoryTarget factorysessions.TargetExecutionService,
 	homeDir string,
 ) *Server {
 	resolveHomeDir := func() (string, error) { return homeDir, nil }

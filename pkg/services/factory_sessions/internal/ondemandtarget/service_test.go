@@ -858,7 +858,7 @@ func TestCloseTearsDownEveryTrackedRuntime(t *testing.T) {
 }
 
 // TestCloseWithNoOpenedRuntimesIsNoOpSuccess proves calling Close before any
-// StartFactoryTarget call succeeds without effect.
+// StartAsync call succeeds without effect.
 func TestCloseWithNoOpenedRuntimesIsNoOpSuccess(t *testing.T) {
 	svc := newTestService(t, &fakeOpener{}, nil, sequentialIDs("wrapper"))
 	if err := svc.Close(); err != nil {
@@ -983,20 +983,6 @@ func TestLoggingNeverEmitsWorkingRootOrRawFailureText(t *testing.T) {
 	})
 }
 
-// targetExecutionCapability mirrors, method-for-method, the owner-published
-// factory_sessions/wire.TargetExecutionService capability (start, invoke,
-// cancel, close). It is declared locally, rather than imported from the wire
-// package, because that package itself depends on this one (wire wraps
-// ondemandtarget.Service for construction) -- importing it back here would
-// be cyclic. Go's structural typing still lets these tests prove Service is
-// a complete implementation of exactly this narrow shape.
-type targetExecutionCapability interface {
-	StartAsync(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error)
-	InvokeFactorySession(context.Context, string, factorysessions.InvocationRequest) (factorysessions.InvocationResult, error)
-	Cancel(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
-	CloseFactorySession(context.Context, string) error
-}
-
 // TestServiceSatisfiesPublishedTargetExecutionCapability proves a caller
 // typed only against the owner-published target-execution shape -- never
 // against the concrete *Service type or any wider aggregate contract -- can
@@ -1014,7 +1000,7 @@ func TestServiceSatisfiesPublishedTargetExecutionCapability(t *testing.T) {
 	}
 	svc := newTestService(t, opener, resolve, sequentialIDs("wrapper"))
 
-	var client targetExecutionCapability = svc
+	var client factorysessions.TargetExecutionService = svc
 
 	started, err := client.StartAsync(context.Background(), factorysessions.StartRequest{
 		Source: factorysessions.Source{FactoryID: "@you/review"},
@@ -1062,7 +1048,7 @@ func TestServiceViaTargetExecutionCapabilityRejectsUnsupportedTarget(t *testing.
 	}
 	svc := newTestService(t, opener, resolve, sequentialIDs("wrapper"))
 
-	var client targetExecutionCapability = svc
+	var client factorysessions.TargetExecutionService = svc
 
 	_, err := client.StartAsync(context.Background(), factorysessions.StartRequest{
 		Source: factorysessions.Source{FactoryID: "@you/unsupported"},

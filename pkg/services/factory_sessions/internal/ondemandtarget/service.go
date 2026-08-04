@@ -72,7 +72,7 @@ type invocationRuntimeOpener interface {
 // Service is a consumer-owned Factory Sessions activation that has no fixed,
 // pre-opened Factory Session runtime the way the CLI daemon's
 // single-project bootstrap (OpenApplication/Assembly.Complete) does.
-// Instead, the first StartFactoryTarget for a given caller-selected Factory
+// Instead, the first StartAsync for a given caller-selected Factory
 // target and working root lazily opens exactly one ephemeral, non-HTTP-bound
 // runtime through the existing invocation-mode Runtime Opening path (the
 // same primitive the CLI's one-shot named invocation already uses, per
@@ -258,9 +258,9 @@ func (a *activatedRuntime) close(ctx context.Context) error {
 // published outcome (including text) makes a separate, immediate
 // InvokeFactorySession call against the returned SessionID -- the same
 // synchronous, non-JavaScript-workflow-specific call every later turn
-// already uses (see chat_sessions/internal/factorysessionsshim.Shim, whose
-// unmodified StartFactoryTarget/InvokeFactoryTarget map directly onto these
-// two methods). The returned SessionID is this service's own generated
+// already uses (see the owner-published TargetExecutionService this Service
+// satisfies, in ../../target_execution_contract.go). The returned SessionID
+// is this service's own generated
 // identity (never the opened runtime's shared internal constant session
 // identity), so a later InvokeFactorySession/Cancel/CloseFactorySession call
 // against it resolves back to this exact runtime.

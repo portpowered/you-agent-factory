@@ -11,6 +11,7 @@ package wire
 import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/stdio"
 )
@@ -30,7 +31,7 @@ func NewServer(
 	logger logging.Logger,
 	chatSessions chatsessions.Service,
 	catalog chatsessions.FactoryTargetCatalogService,
-	factoryTarget acp.FactoryTargetService,
+	factoryTarget factorysessions.TargetExecutionService,
 	resolveHomeDir func() (string, error),
 ) acp.Server {
 	return stdio.New(logger, chatSessions, catalog, factoryTarget, resolveHomeDir)

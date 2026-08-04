@@ -27,7 +27,7 @@
 // This package no longer owns a Factory Sessions adapter: the narrow
 // start/invoke/cancel/close Factory-target dependency ACP composition needs
 // is now consumed directly from Factory Sessions' own owner-published
-// factorysessionwire.TargetExecutionService capability (see
-// pkg/services/factory_sessions/wire), retiring the former
+// factorysessions.TargetExecutionService capability (see
+// pkg/services/factory_sessions), retiring the former
 // internal/factorysessionsshim stopgap at L3 Factory Sessions sealing.
 package chatsessions
