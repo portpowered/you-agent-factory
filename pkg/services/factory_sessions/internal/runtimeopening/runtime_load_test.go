@@ -72,6 +72,9 @@ func TestLoadRuntimePreservesValidatedPortableRecording(t *testing.T) {
 	if loaded.PortableRecording == nil {
 		t.Fatal("portable recording = nil")
 	}
+	if loaded.HistoricalReplay == nil {
+		t.Fatal("historical replay = nil")
+	}
 	if got := loaded.PortableRecording.Session.ID; got != "session-js-001" {
 		t.Fatalf("session id = %q, want session-js-001", got)
 	}
@@ -93,6 +96,19 @@ func TestLoadRuntimePreservesValidatedPortableRecording(t *testing.T) {
 	}
 	if loaded.ReplayArtifact != nil || loaded.LoadedFactoryCfg != nil {
 		t.Fatal("portable recording mixed with Factory-event replay state")
+	}
+	if loaded.HistoricalReplay.Session.SessionID != "session-js-001" ||
+		loaded.HistoricalReplay.Session.ResolvedSource.SourceRef != "workflow/example.js" ||
+		loaded.HistoricalReplay.Result.ResultStatus != factorysessions.ResultStatusFinal ||
+		len(loaded.HistoricalReplay.Artifacts.Artifacts) != 1 ||
+		loaded.HistoricalReplay.Artifacts.Artifacts[0].ID != "artifact-1" ||
+		len(loaded.HistoricalReplay.Events.Events) != 2 ||
+		!loaded.HistoricalReplay.Redaction.RuntimeStateOmitted ||
+		!loaded.HistoricalReplay.Redaction.CheckpointBodiesOmitted ||
+		!loaded.HistoricalReplay.Redaction.ProviderTranscriptsOmitted ||
+		!loaded.HistoricalReplay.Redaction.ChildDispatchesOmitted ||
+		loaded.HistoricalReplay.Redaction.SecretsRedacted != 2 {
+		t.Fatalf("historical replay = %#v, want public session, result, artifact, and ordered event facts", loaded.HistoricalReplay)
 	}
 	if loggerSessionID != "~default" || loggerFolderPath != rootDir || loggerFactoryDir == "" {
 		t.Fatalf(

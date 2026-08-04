@@ -7,6 +7,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
 	operatordefaultsruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/operatordefaults"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -19,6 +20,7 @@ type RuntimeLoad struct {
 	LoadedFactoryCfg  factorydefinitions.MutableLoadedFactorySource
 	ReplayArtifact    *factorydefinitions.ReplayArtifact
 	PortableRecording *recording.PortableRecording
+	HistoricalReplay  *recordingreplay.RecordingReplayProjection
 	SessionLogger     *zap.Logger
 }
 
@@ -62,8 +64,13 @@ func LoadRuntime(
 			return RuntimeLoad{}, fmt.Errorf("load portable replay: %w", err)
 		}
 		if result.Portable != nil {
+			projection, err := recordingreplay.ReplayRecording(*result.Portable)
+			if err != nil {
+				return RuntimeLoad{}, fmt.Errorf("load portable replay: inspect historical recording: %w", err)
+			}
 			return RuntimeLoad{
 				PortableRecording: result.Portable,
+				HistoricalReplay:  &projection,
 				SessionLogger:     logger,
 			}, nil
 		}

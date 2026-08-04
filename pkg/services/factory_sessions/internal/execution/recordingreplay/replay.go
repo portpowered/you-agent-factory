@@ -18,6 +18,7 @@ type RecordingReplayProjection struct {
 	Artifacts  fse.ListArtifactsResult
 	Result     fse.ResultReadResult
 	Checkpoint *CheckpointReadModel
+	Redaction  recording.PortableRecordingRedactionMetadata
 }
 
 type CheckpointReadModel struct {
@@ -61,6 +62,7 @@ func ReplayRecording(value recording.PortableRecording) (RecordingReplayProjecti
 		Artifacts:  fse.ListArtifactsResult{SessionID: value.Session.ID, Artifacts: artifacts},
 		Result:     result,
 		Checkpoint: replayCheckpoint(value.Checkpoint),
+		Redaction:  value.Redaction,
 	}, nil
 }
 

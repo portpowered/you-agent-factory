@@ -102,6 +102,64 @@ func TestProcessExecuteRejectsInvalidPortableReplayBeforeLiveRuntimeConstruction
 	}
 }
 
+// TestProcessExecuteReturnsPortableReplayInspectionWithoutLiveRuntimeConstruction
+// proves the canonical customer command accepts a valid portable recording as
+// an inspection-only historical replay. It must not allocate a live session or
+// construct provider, script, or host components to do so.
+func TestProcessExecuteReturnsPortableReplayInspectionWithoutLiveRuntimeConstruction(t *testing.T) {
+	payload := validPortableReplayPayload(t)
+	var replayReads atomic.Int32
+	var providerRuns atomic.Int32
+	var scriptRuns atomic.Int32
+	var sessionIDRequests atomic.Int32
+	var hostBindings atomic.Int32
+
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		FactorySessionReplayRecordingReader: func(path string) ([]byte, error) {
+			replayReads.Add(1)
+			if path != "recording.json" {
+				t.Fatalf("replay input path = %q, want recording.json", path)
+			}
+			return payload, nil
+		},
+		ProviderCommandRunner: replayConstructionCommandRunner{calls: &providerRuns},
+		ScriptCommandRunner:   replayConstructionCommandRunner{calls: &scriptRuns},
+		FactorySessionIDGenerator: func() string {
+			sessionIDRequests.Add(1)
+			return "must-not-create-live-session"
+		},
+		RuntimeHostObserver: func(factorysessions.RuntimeHostBinding) {
+			hostBindings.Add(1)
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+
+	workingDirectory := t.TempDir()
+	err = process.Execute(root.Input{
+		Args: []string{
+			"you", "run", "--dir", workingDirectory,
+			"--replay", "recording.json", "--no-record", "--quiet",
+		},
+		Context:          t.Context(),
+		Env:              replayTestHomeEnvironment(t.TempDir()),
+		WorkingDirectory: workingDirectory,
+	})
+	if err != nil {
+		t.Fatalf("Process.Execute(run --replay) error = %v", err)
+	}
+	if replayReads.Load() != 1 {
+		t.Fatalf("replay input reads = %d, want one canonical runtime-opening read", replayReads.Load())
+	}
+	if providerRuns.Load() != 0 || scriptRuns.Load() != 0 || sessionIDRequests.Load() != 0 || hostBindings.Load() != 0 {
+		t.Fatalf(
+			"live replay construction calls = provider:%d script:%d sessionID:%d host:%d, want zero",
+			providerRuns.Load(), scriptRuns.Load(), sessionIDRequests.Load(), hostBindings.Load(),
+		)
+	}
+}
+
 func invalidPortableReplayOrderPayload(t *testing.T) []byte {
 	t.Helper()
 
@@ -122,6 +180,21 @@ func invalidPortableReplayOrderPayload(t *testing.T) []byte {
 	payload, err = json.Marshal(recording)
 	if err != nil {
 		t.Fatalf("marshal invalid portable recording: %v", err)
+	}
+	return payload
+}
+
+func validPortableReplayPayload(t *testing.T) []byte {
+	t.Helper()
+
+	path := testpath.MustRepoPathFromCaller(
+		t,
+		0,
+		"pkg", "services", "recordings", "internal", "artifacts", "testdata", "valid-v2.json",
+	)
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read valid portable recording: %v", err)
 	}
 	return payload
 }

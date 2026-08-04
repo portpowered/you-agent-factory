@@ -4,6 +4,7 @@
 - When a document family is selected before full validation, scan the leading JSON object through its discriminator token so trailing documents still reach the correct family validator and preserve its error context.
 - Model Recordings capabilities around their lifecycle scope: pre-ledger path classification and ledger-backed finalized-artifact operations must have non-overlapping contracts, rather than returning unsupported-operation stubs from a shared interface.
 - Give canonical event-order validation its own portable diagnostic code and translate it to the Recordings replay diagnostic at the capability boundary; do not collapse it into a generic summary failure.
+- A validated portable recording is inspection-only: construct its historical projection at runtime loading, then short-circuit the normal live-runtime lifecycle before providers, workers, session identities, or runtime hosts are created.
 
 ## 2026-08-04 08:59:46 -07:00 - ACP-L3-FIX-REC-REPLAY-stranded-delivery-002
 - Restored legacy replay-loader wrapping at the Factory Sessions runtime-opening boundary while preserving `errors.Is`/`errors.As` through a public Recordings replay-input family error.
@@ -71,4 +72,14 @@
 - Files changed: `progress.txt`.
 - **Learnings for future iterations:**
   - When the parallel short suite reports an unrelated cancellation assertion, rerun that narrow package once before treating it as a replay regression; retain the full-suite rerun as the final verification evidence.
+---
+
+## 2026-08-04 10:31:39 -07:00 - ACP-L3-FIX-REC-REPLAY-stranded-delivery-004
+- Reconnected validated portable recordings to the historical inspection projection at `LoadRuntime`, preserving session/source/result facts, public artifact and ordered event summaries, optional checkpoint data, and redaction metadata.
+- Added the canonical `root.BuildProcess` + `Process.Execute` success path for `you run --replay`: it returns successfully after an inspection-only lifecycle and proves one replay read with no provider command, script command, Factory Session ID allocation, or runtime-host binding.
+- Files changed: `pkg/services/factory_sessions/internal/runtimeopening/runtime_load.go`, `pkg/services/factory_sessions/internal/runtimeopening/construction.go`, `pkg/services/factory_sessions/internal/runtimeopening/open.go`, `pkg/services/factory_sessions/internal/runtimeopening/types.go`, `pkg/services/factory_sessions/internal/runtimeopening/historical_replay_runtime.go`, `pkg/services/factory_sessions/internal/applicationopening/service.go`, `pkg/services/factory_sessions/internal/roles/contracts.go`, `pkg/services/factory_sessions/internal/execution/recordingreplay/replay.go`, focused runtime-opening/replay/root tests, `prd.json`, `progress.txt`.
+- **Learnings for future iterations:**
+  - `LoadRuntime` is the correct boundary for producing a portable historical read model; once it recognizes that model, `PrepareRuntime` must return before provider selection, hosted poller construction, and every live runtime dependency.
+  - The normal application adapter binds a full live HTTP surface, so inspection-only replay needs its own no-op primary lifecycle component while still using the existing Factory Sessions lifecycle planner.
+- Verification: `go test ./pkg/services/factory_sessions/... ./pkg/services/recordings/... ./pkg/wire/... ./pkg/root`; `go vet ./pkg/services/factory_sessions/... ./pkg/services/recordings/... ./pkg/wire/... ./pkg/root`; `go build ./...`; `make test`; and `git diff --check` passed. `make backend-size` reports the unchanged repository-wide 76 legacy violations; none of this story's files is listed.
 ---

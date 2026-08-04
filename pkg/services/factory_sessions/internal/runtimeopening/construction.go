@@ -129,6 +129,9 @@ func PrepareRuntime(
 	if err != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, err
 	}
+	if load.HistoricalReplay != nil {
+		return prepared, root, load, nil, load.SessionLogger, nil, nil
+	}
 	if err := operatordefaultsruntime.ResolveConcreteProviderSelections(
 		load.LoadedFactoryCfg,
 		providerIdentities,

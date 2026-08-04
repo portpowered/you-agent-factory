@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
@@ -103,6 +104,9 @@ func (service *Service) OpenApplication(
 	if err != nil {
 		return roles.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application runtime: %w", err)
 	}
+	if opened.HistoricalReplay {
+		return service.openHistoricalReplayApplication(opened)
+	}
 	if ports.RuntimeHTTPServicesBound != nil {
 		ports.RuntimeHTTPServicesBound(opened.HTTP)
 	}
@@ -124,6 +128,26 @@ func (service *Service) OpenApplication(
 	if err != nil {
 		err = closeOpenedRuntime(opened, err)
 		return roles.OpenedProcessApplication{}, fmt.Errorf("plan Factory Session application lifecycle: %w", err)
+	}
+	return roles.OpenedProcessApplication{
+		Plan:        plan,
+		Diagnostics: opened.Resources.Diagnostics,
+	}, nil
+}
+
+func (service *Service) openHistoricalReplayApplication(
+	opened roles.OpenedApplicationRuntime,
+) (roles.OpenedProcessApplication, error) {
+	plan, err := service.planLifecycle(roles.LifecyclePlanRequest{
+		Runtime: opened.Process,
+		Components: factorysessions.BoundProcessComponents{
+			Transport: lifecycle.NewRunner(func(context.Context) error { return nil }),
+		},
+		Close: opened.Resources.Close,
+	})
+	if err != nil {
+		err = closeOpenedRuntime(opened, err)
+		return roles.OpenedProcessApplication{}, fmt.Errorf("plan Factory Session historical replay lifecycle: %w", err)
 	}
 	return roles.OpenedProcessApplication{
 		Plan:        plan,

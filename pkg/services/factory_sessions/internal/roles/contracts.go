@@ -44,10 +44,11 @@ type RuntimeVisualizationServices struct {
 }
 
 type OpenedApplicationRuntime struct {
-	Process       ProcessRuntime
-	HTTP          RuntimeHTTPServices
-	Visualization RuntimeVisualizationServices
-	Resources     RuntimeResources
+	Process          ProcessRuntime
+	HTTP             RuntimeHTTPServices
+	Visualization    RuntimeVisualizationServices
+	Resources        RuntimeResources
+	HistoricalReplay bool
 }
 
 type OpenedProcessApplication struct {

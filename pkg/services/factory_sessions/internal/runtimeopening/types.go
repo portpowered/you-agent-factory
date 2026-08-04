@@ -9,12 +9,26 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
 )
 
 type runtimeProducts struct {
 	application roles.OpenedApplicationRuntime
 	invocation  roles.OpenedInvocationRuntime
 	execution   roles.OpenedExecutionRuntime
+}
+
+func historicalReplayRuntimeProducts(logger *zap.Logger) runtimeProducts {
+	return runtimeProducts{
+		application: roles.OpenedApplicationRuntime{
+			Process:          historicalReplayProcessRuntime{},
+			HistoricalReplay: true,
+			Resources: roles.RuntimeResources{
+				Logger: logger,
+				Close:  func() error { return nil },
+			},
+		},
+	}
 }
 
 func assembleRuntimeProducts(

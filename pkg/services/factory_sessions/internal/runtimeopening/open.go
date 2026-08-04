@@ -114,6 +114,9 @@ func openRuntime(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
+	if load.HistoricalReplay != nil {
+		return historicalReplayRuntimeProducts(logger), nil
+	}
 	if clock == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Runtime clock is required")
 	}
