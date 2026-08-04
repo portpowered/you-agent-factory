@@ -34,23 +34,30 @@ type ClassifiedRecord struct {
 }
 
 // CatalogInputs is the assembled catalog input set: classified inventory plus
-// decoded coverage-summary JSON.
+// decoded coverage-summary and functional-timing-summary JSON.
 type CatalogInputs struct {
 	Records  []ClassifiedRecord
 	Coverage CoverageSummary
+	Timing   FunctionalTimingSummary
 }
 
 // AssembleCatalogInputs classifies inventoried metadata records and loads the
-// required coverage-summary JSON path. Coverage is consumed only by decoding
-// that JSON; no coverage-profile parser is used.
-func AssembleCatalogInputs(records []functionaltestmetadata.Record, coverageSummaryPath string) (CatalogInputs, error) {
+// required coverage-summary and functional-timing-summary JSON paths.
+// Coverage and timing are consumed only by decoding those JSON artifacts; no
+// coverage-profile parser or second test run is used.
+func AssembleCatalogInputs(records []functionaltestmetadata.Record, coverageSummaryPath, timingSummaryPath string) (CatalogInputs, error) {
 	coverage, err := LoadCoverageSummary(coverageSummaryPath)
+	if err != nil {
+		return CatalogInputs{}, err
+	}
+	timing, err := LoadFunctionalTimingSummary(timingSummaryPath)
 	if err != nil {
 		return CatalogInputs{}, err
 	}
 	return CatalogInputs{
 		Records:  ClassifyRecords(records),
 		Coverage: coverage,
+		Timing:   timing,
 	}, nil
 }
 
