@@ -2,8 +2,11 @@ package recordings_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -34,10 +37,18 @@ func (lifecycleTestLedger) AppendRecordedEvent(factorydefinitions.FactoryEvent) 
 
 func newTestRecordingLifecycle(t *testing.T) recordings.RecordingLifecycle {
 	t.Helper()
+	return newTestRecordingLifecycleWithWriter(t, func(string, []byte) error { return nil })
+}
+
+func newTestRecordingLifecycleWithWriter(
+	t *testing.T,
+	writeFile func(string, []byte) error,
+) recordings.RecordingLifecycle {
+	t.Helper()
 	service, err := recordingswire.NewService(
 		lifecycleTestLedger{},
 		nil,
-		func(string, []byte) error { return nil },
+		writeFile,
 		func(string, os.FileMode) error { return nil },
 		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
 			return os.CreateTemp(dir, pattern)
@@ -74,6 +85,187 @@ func validLifecycleEvent(scope recordings.LifecycleScope, sequence int64) record
 			StreamGenerationID: "lifecycle-capability-test",
 			Sequence:           sequence,
 		},
+	}
+}
+
+// lifecycleWorkEvent builds a subsequent canonical event sharing the same
+// stream generation as validLifecycleEvent, for tests that append more than
+// one event and need strictly increasing sequences.
+func lifecycleWorkEvent(scope recordings.LifecycleScope, sequence int64) recordings.LifecycleEvent {
+	recordedAt := time.Unix(1_700_000_000+sequence, 0).UTC()
+	return recordings.LifecycleEvent{
+		ID:         fmt.Sprintf("work-event-%d", sequence),
+		Sequence:   sequence,
+		Scope:      scope,
+		Kind:       "WORK_REQUEST",
+		Payload:    "{}",
+		RecordedAt: recordedAt,
+		Cursor: recordings.LifecycleEventCursor{
+			StreamGenerationID: "lifecycle-capability-test",
+			Sequence:           sequence,
+		},
+	}
+}
+
+// capturingLifecycleWriter records every successfully written payload and can
+// be armed to fail the very next write, so tests can prove a flush retry
+// after a write failure persists durably without inventing or reordering
+// events.
+type capturingLifecycleWriter struct {
+	mu       sync.Mutex
+	writes   [][]byte
+	failNext bool
+}
+
+func (writer *capturingLifecycleWriter) write(_ string, payload []byte) error {
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	if writer.failNext {
+		writer.failNext = false
+		return errors.New("storage unavailable")
+	}
+	writer.writes = append(writer.writes, append([]byte(nil), payload...))
+	return nil
+}
+
+func (writer *capturingLifecycleWriter) armFailure() {
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	writer.failNext = true
+}
+
+func (writer *capturingLifecycleWriter) snapshot() [][]byte {
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	return append([][]byte(nil), writer.writes...)
+}
+
+func newCapturingRecordingLifecycle(t *testing.T) (*capturingLifecycleWriter, recordings.RecordingLifecycle) {
+	t.Helper()
+	writer := &capturingLifecycleWriter{}
+	return writer, newTestRecordingLifecycleWithWriter(t, writer.write)
+}
+
+func TestRecordingLifecycle_MultipleAppendsFlushesRetryAndPersistedOrder(t *testing.T) {
+	t.Parallel()
+
+	writer, lifecycle := newCapturingRecordingLifecycle(t)
+	scope := recordings.LifecycleScope{FactorySessionID: "session-multi"}
+	if _, err := lifecycle.Begin(recordings.BeginRecordingRequest{
+		Enabled:     true,
+		RecordingID: "multi",
+		Scope:       scope,
+		Artifact:    "artifact://multi",
+	}); err != nil {
+		t.Fatalf("Begin() error = %v", err)
+	}
+
+	first := validLifecycleEvent(scope, 0)
+	appendMultiLifecycleEvent(t, lifecycle, first)
+	flushed1 := assertMultiLifecycleFlushSequence(t, lifecycle, 0)
+	assertRepeatedMultiLifecycleFlushIsStable(t, lifecycle)
+
+	second := lifecycleWorkEvent(scope, 1)
+	appendMultiLifecycleEvent(t, lifecycle, second)
+	assertMultiLifecycleFlushRetrySucceedsAfterFailure(t, writer, lifecycle)
+
+	third := lifecycleWorkEvent(scope, 2)
+	appendMultiLifecycleEvent(t, lifecycle, third)
+	flushed3 := assertMultiLifecycleFlushSequence(t, lifecycle, 2)
+	if flushed3.RecordingID != flushed1.RecordingID {
+		t.Fatalf(
+			"RecordingID changed across repeated flushes: %q vs %q",
+			flushed3.RecordingID, flushed1.RecordingID,
+		)
+	}
+
+	assertPersistedMultiLifecycleEventOrder(t, writer, []string{first.ID, second.ID, third.ID})
+}
+
+func appendMultiLifecycleEvent(t *testing.T, lifecycle recordings.RecordingLifecycle, event recordings.LifecycleEvent) {
+	t.Helper()
+	if _, err := lifecycle.AppendEvent(recordings.AppendLifecycleEventRequest{
+		RecordingID: "multi", Event: event,
+	}); err != nil {
+		t.Fatalf("AppendEvent(%s) error = %v", event.ID, err)
+	}
+}
+
+func assertMultiLifecycleFlushSequence(
+	t *testing.T, lifecycle recordings.RecordingLifecycle, wantSequence int64,
+) recordings.LifecycleStatus {
+	t.Helper()
+	flushed, err := lifecycle.Flush(recordings.FlushLifecycleRequest{RecordingID: "multi"})
+	if err != nil {
+		t.Fatalf("Flush() error = %v", err)
+	}
+	if flushed.Status.FlushedThrough == nil || flushed.Status.FlushedThrough.Sequence != wantSequence {
+		t.Fatalf("Flush() FlushedThrough = %#v, want sequence %d", flushed.Status.FlushedThrough, wantSequence)
+	}
+	return flushed.Status
+}
+
+// assertRepeatedMultiLifecycleFlushIsStable proves repeating flush without a
+// new append succeeds without inventing or reordering events.
+func assertRepeatedMultiLifecycleFlushIsStable(t *testing.T, lifecycle recordings.RecordingLifecycle) {
+	t.Helper()
+	repeat, err := lifecycle.Flush(recordings.FlushLifecycleRequest{RecordingID: "multi"})
+	if err != nil {
+		t.Fatalf("Flush(repeat) error = %v", err)
+	}
+	if repeat.Status.FlushedThrough == nil || repeat.Status.FlushedThrough.Sequence != 0 ||
+		repeat.Status.AcceptedEvents != 1 {
+		t.Fatalf("Flush(repeat) status = %#v, want unchanged sequence 0 / 1 accepted event", repeat.Status)
+	}
+}
+
+func assertMultiLifecycleFlushRetrySucceedsAfterFailure(
+	t *testing.T, writer *capturingLifecycleWriter, lifecycle recordings.RecordingLifecycle,
+) {
+	t.Helper()
+	writer.armFailure()
+	if _, err := lifecycle.Flush(recordings.FlushLifecycleRequest{RecordingID: "multi"}); err == nil {
+		t.Fatal("Flush() error = nil, want write failure")
+	}
+	afterFailure, err := lifecycle.Status(recordings.LifecycleStatusRequest{RecordingID: "multi"})
+	if err != nil {
+		t.Fatalf("Status() after failed flush error = %v", err)
+	}
+	if afterFailure.Status.FlushedThrough == nil || afterFailure.Status.FlushedThrough.Sequence != 0 {
+		t.Fatalf(
+			"Status() after failed flush FlushedThrough = %#v, want unchanged sequence 0",
+			afterFailure.Status.FlushedThrough,
+		)
+	}
+	assertMultiLifecycleFlushSequence(t, lifecycle, 1)
+}
+
+func assertPersistedMultiLifecycleEventOrder(t *testing.T, writer *capturingLifecycleWriter, wantIDs []string) {
+	t.Helper()
+	writes := writer.snapshot()
+	if len(writes) != 3 {
+		t.Fatalf("persisted writes = %d, want 3 (the failed write must not persist)", len(writes))
+	}
+	var lastArtifact recordings.ReplayArtifact
+	if err := json.Unmarshal(writes[2], &lastArtifact); err != nil {
+		t.Fatalf("decode persisted artifact: %v", err)
+	}
+	if len(lastArtifact.Events) != len(wantIDs) {
+		t.Fatalf("persisted event count = %d, want %d (%#v)", len(lastArtifact.Events), len(wantIDs), lastArtifact.Events)
+	}
+	for index, wantID := range wantIDs {
+		if lastArtifact.Events[index].Id != wantID {
+			t.Fatalf(
+				"persisted event[%d].Id = %q, want %q (persisted order = %#v)",
+				index, lastArtifact.Events[index].Id, wantID, lastArtifact.Events,
+			)
+		}
+		if lastArtifact.Events[index].Context.Sequence != index {
+			t.Fatalf(
+				"persisted event[%d].Context.Sequence = %d, want %d",
+				index, lastArtifact.Events[index].Context.Sequence, index,
+			)
+		}
 	}
 }
 
