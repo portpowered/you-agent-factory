@@ -42,6 +42,129 @@ func TestService_LivePauseResumeThroughLiveRuntimeOwnerReturnsAcceptedOutcomeOnc
 	}
 }
 
+func TestLiveControlCapability_OpenPauseResumePreservesLifecycleResults(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "sess-live-control-pause-resume"
+	target := factorysessions.Target{
+		Ref:        factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		FactoryDir: "/tmp/factory",
+		FolderPath: "/tmp",
+		Project:    "demo",
+	}
+	factory := &gatewayLifecycleFactory{factoryState: string(interfaces.FactoryStateRunning)}
+	session := &livesession.LiveSession{
+		ID: sessionID,
+		SessionState: livesession.SessionState{
+			FactoryDir: target.FactoryDir,
+			FolderPath: target.FolderPath,
+		},
+		Project: target.Project,
+		Target:  target.Ref,
+	}
+	host := &liveRuntimeEffectHost{
+		openTestHost: openTestHost{
+			targets:        []factorysessions.Target{target},
+			openSessionID:  sessionID,
+			requireSession: session,
+			sessionIDs:     []string{sessionID},
+			sessions:       map[string]*livesession.LiveSession{sessionID: session},
+		},
+		factory: factory,
+	}
+
+	// The client holds only the owner-published live-control capability.
+	var client factorysessions.LiveControlService = newLiveRuntimeCompositionGateway(t, host)
+	opened, err := client.OpenFactorySession(context.Background(), factorysessions.LiveControlOpenRequest{
+		FolderPath: target.FolderPath,
+	})
+	if err != nil {
+		t.Fatalf("OpenFactorySession: %v", err)
+	}
+	if opened == nil || opened.SessionID != sessionID {
+		t.Fatalf("open result = %#v, want session id %q", opened, sessionID)
+	}
+
+	paused, err := client.PauseLiveFactorySession(
+		context.Background(),
+		opened.SessionID,
+		factorysessions.LiveControlRequest{Reason: "operator-pause"},
+	)
+	if err != nil || paused.SessionID != opened.SessionID ||
+		paused.Operation != factorysessions.LifecycleControlPause ||
+		paused.Outcome != factorysessions.LifecycleControlOutcomeAccepted ||
+		paused.Status != factorysessions.LifecycleStatusPaused {
+		t.Fatalf("PauseLiveFactorySession = (%#v, %v), want accepted paused result", paused, err)
+	}
+	if factory.pauseCalls != 1 {
+		t.Fatalf("pause calls = %d, want 1", factory.pauseCalls)
+	}
+
+	// The gateway test double models the runtime's state observation boundary.
+	// Production pause transitions this state inside the Factory Runtime.
+	factory.factoryState = string(interfaces.FactoryStatePaused)
+	resumed, err := client.ResumeLiveFactorySession(
+		context.Background(),
+		opened.SessionID,
+		factorysessions.LiveControlRequest{Reason: "operator-resume"},
+	)
+	if err != nil || resumed.SessionID != opened.SessionID ||
+		resumed.Operation != factorysessions.LifecycleControlResume ||
+		resumed.Outcome != factorysessions.LifecycleControlOutcomeAccepted ||
+		resumed.Status != factorysessions.LifecycleStatusRunning {
+		t.Fatalf("ResumeLiveFactorySession = (%#v, %v), want accepted running result", resumed, err)
+	}
+	if factory.resumeCalls != 1 {
+		t.Fatalf("resume calls = %d, want 1", factory.resumeCalls)
+	}
+}
+
+func TestLiveControlCapability_PreservesTypedRejectionAndCancellation(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "sess-live-control-rejection"
+	factory := &gatewayLifecycleFactory{factoryState: string(interfaces.FactoryStateCompleted)}
+	session := &livesession.LiveSession{ID: sessionID}
+	host := &liveRuntimeEffectHost{
+		openTestHost: openTestHost{
+			requireSession: session,
+			sessionIDs:     []string{sessionID},
+			sessions:       map[string]*livesession.LiveSession{sessionID: session},
+		},
+		factory: factory,
+	}
+
+	var client factorysessions.LiveControlService = newLiveRuntimeCompositionGateway(t, host)
+	_, err := client.ResumeLiveFactorySession(context.Background(), sessionID, factorysessions.LiveControlRequest{})
+	var controlErr *factorysessions.LiveControlError
+	if !errors.As(err, &controlErr) {
+		t.Fatalf("ResumeLiveFactorySession terminal error = %v, want *LiveControlError", err)
+	}
+	if controlErr.Outcome != factorysessions.LifecycleControlOutcomeTerminalSession {
+		t.Fatalf("terminal resume outcome = %q, want TERMINAL_SESSION", controlErr.Outcome)
+	}
+	if errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatal("terminal lifecycle rejection must remain distinct from ErrSessionNotFound")
+	}
+	if factory.resumeCalls != 0 {
+		t.Fatalf("resume calls = %d after terminal rejection, want none", factory.resumeCalls)
+	}
+
+	factory.factoryState = string(interfaces.FactoryStateRunning)
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = client.PauseLiveFactorySession(canceledCtx, sessionID, factorysessions.LiveControlRequest{})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("PauseLiveFactorySession canceled error = %v, want context canceled", err)
+	}
+	if factory.pauseCalls != 0 {
+		t.Fatalf("pause calls = %d after cancellation, want none", factory.pauseCalls)
+	}
+	if factory.factoryState != string(interfaces.FactoryStateRunning) {
+		t.Fatalf("factory state = %q after canceled pause, want RUNNING", factory.factoryState)
+	}
+}
+
 func TestService_LivePauseRejectsInvalidStateWithoutRegistryMutation(t *testing.T) {
 	t.Parallel()
 
