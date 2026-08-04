@@ -304,14 +304,37 @@ func runFactoryInvocation(
 		invocationRequest.PreparedInvocationInput = cfg.PreparedInvocationInput.Clone()
 	}
 	outcome, err := invocation.InvokeFactory(invokeCtx, target, invocationRequest, consume)
-	if err != nil {
+	result := outcome.Result
+	if result.Status == "" {
+		if err == nil {
+			// InvokeFactory returned neither a determined terminal result nor
+			// an error: without this explicit invariant failure, a nil err
+			// maps to a nil CLI error (MapInvocationFailure(nil) == nil),
+			// which would silently report success and omit the public
+			// terminal record contract this invocation type owes its caller.
+			err = fmt.Errorf("run factory invocation: invocation ended without a determined terminal result")
+		}
 		return MapInvocationFailure(err)
 	}
-	result := outcome.Result
+	// A terminal result was determined even though err is non-nil: err is a
+	// post-result failure (for example runtime teardown or resource cleanup)
+	// that races the invocation's own completion. The public terminal record
+	// must still be written for the outcome the invocation actually reached;
+	// err is preserved below so the CLI still reports failure and exit-code
+	// semantics for the cleanup error are not lost.
+	var writeErr error
 	if result.Status != interfaces.InvocationTerminalStatusCompleted {
-		return writeInvocationFailure(invocationCfg, result, streamRenderer)
+		writeErr = writeInvocationFailure(invocationCfg, result, streamRenderer)
+	} else {
+		writeErr = writeInvocationSuccess(invocationCfg, result, streamRenderer)
 	}
-	return writeInvocationSuccess(invocationCfg, result, streamRenderer)
+	if err != nil {
+		if writeErr != nil {
+			return errors.Join(MapInvocationFailure(err), writeErr)
+		}
+		return MapInvocationFailure(err)
+	}
+	return writeErr
 }
 
 type responseStreamCancelOnWriteError struct {
