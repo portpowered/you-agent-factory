@@ -705,7 +705,7 @@ func (o *operation) runtimeConfig(target roles.InvocationTarget) factorysessions
 	config.Recordings.RecordPath = target.RecordPath
 	config.Recordings.ReplayPath = target.ReplayPath
 	config.Recordings.WorkflowID = target.WorkflowID
-	config.Models.CacheDirectory = target.ModelCacheDir
+	config.ModelCacheDirectory = target.ModelCacheDir
 	return config
 }
 

@@ -24,6 +24,26 @@ func TestRunRequiresCoverageSummary(t *testing.T) {
 	}
 }
 
+func TestRunRequiresTimingSummary(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	coveragePath := filepath.Join(root, "coverage-summary.json")
+	if err := os.WriteFile(coveragePath, []byte(`{"coveredStatements":0,"measurableStatements":0,"coveragePercent":0.0,"packages":[]}`), 0o644); err != nil {
+		t.Fatalf("write coverage summary: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := run(config{
+		repositoryRoot:      root,
+		coverageSummaryPath: coveragePath,
+	}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "timing-summary path is required") {
+		t.Fatalf("run() error = %v, want required timing-summary guidance", err)
+	}
+}
+
 func TestRunWritesCatalog(t *testing.T) {
 	t.Parallel()
 
@@ -52,12 +72,27 @@ func TestRunWritesCatalog(t *testing.T) {
 		t.Fatalf("write coverage summary: %v", err)
 	}
 
+	timingPath := filepath.Join(root, "functional-timing-summary.json")
+	const timing = `{
+  "version": 1,
+  "complete": true,
+  "wallSeconds": 0.0,
+  "packageElapsedSecondsSum": 0.0,
+  "packageCount": 0,
+  "packages": []
+}
+`
+	if err := os.WriteFile(timingPath, []byte(timing), 0o644); err != nil {
+		t.Fatalf("write timing summary: %v", err)
+	}
+
 	outputPath := filepath.Join(root, "out", "functional-tests.md")
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	if err := run(config{
 		repositoryRoot:      root,
 		coverageSummaryPath: coveragePath,
+		timingSummaryPath:   timingPath,
 		outputPath:          outputPath,
 	}, &stdout, &stderr); err != nil {
 		t.Fatalf("run() error = %v", err)

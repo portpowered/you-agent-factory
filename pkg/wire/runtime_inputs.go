@@ -18,7 +18,6 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
-	"github.com/portpowered/infinite-you/pkg/services/models"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -102,10 +101,8 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 				ReplayPath: cfg.ReplayPath,
 				WorkflowID: cfg.Workflow,
 			},
-			Models: models.RuntimeOpeningRequest{
-				CacheDirectory: cfg.ModelCacheDir,
-			},
-			OperatorDefaults: cfg.OperatorDefaults,
+			ModelCacheDirectory: cfg.ModelCacheDir,
+			OperatorDefaults:    cfg.OperatorDefaults,
 		}
 		return factorysessionwire.ApplicationOpeningRequest{
 			Runtime: request,

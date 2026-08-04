@@ -24,13 +24,13 @@ import (
 )
 
 type preparedRuntime struct {
-	Definition       factorydefinitions.RuntimeOpeningRequest
-	Runtime          factoryruntime.RuntimeOpeningRequest
-	Session          factorysessions.SessionRuntimeOpeningRequest
-	Workers          workers.RuntimeOpeningRequest
-	Recordings       recordings.RuntimeOpeningRequest
-	Models           models.RuntimeOpeningRequest
-	OperatorDefaults operatorconfig.ResolvedDefaults
+	Definition          factorydefinitions.RuntimeOpeningRequest
+	Runtime             factoryruntime.RuntimeOpeningRequest
+	Session             factorysessions.SessionRuntimeOpeningRequest
+	Workers             workers.RuntimeOpeningRequest
+	Recordings          recordings.RuntimeOpeningRequest
+	ModelCacheDirectory string
+	OperatorDefaults    operatorconfig.ResolvedDefaults
 }
 
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
@@ -43,7 +43,7 @@ func PrepareRuntime(
 	sessionRequest factorysessions.SessionRuntimeOpeningRequest,
 	workerRequest workers.RuntimeOpeningRequest,
 	recordingRequest recordings.RuntimeOpeningRequest,
-	modelRequest models.RuntimeOpeningRequest,
+	modelCacheDirectory string,
 	operatorDefaults operatorconfig.ResolvedDefaults,
 	baseLogger *zap.Logger,
 	runtimeEdges ExternalEffects,
@@ -89,7 +89,7 @@ func PrepareRuntime(
 	}
 	prepared = preparedRuntime{
 		Definition: definitionRequest, Runtime: runtimeRequest, Session: sessionRequest,
-		Workers: workerRequest, Recordings: recordingRequest, Models: modelRequest,
+		Workers: workerRequest, Recordings: recordingRequest, ModelCacheDirectory: modelCacheDirectory,
 		OperatorDefaults: operatorDefaults,
 	}
 	root, err = ResolveRuntimeRoot(prepared.Definition.Directory, baseLogger, prepared.Runtime.RuntimeInstanceID, generateRuntimeInstanceID, resolveHome)

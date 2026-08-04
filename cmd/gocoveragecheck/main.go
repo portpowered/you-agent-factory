@@ -74,6 +74,7 @@ type config struct {
 	updateManifest   string
 	packageManifest  string
 	jsonOutput       string
+	timingOutput     string
 	min              float64
 	packageBaseline  string
 	packageMin       float64
@@ -176,6 +177,7 @@ func parseConfig() config {
 	flag.StringVar(&cfg.updateManifest, "update-manifest", "", "monotonically add or raise floors in an existing package-minimum manifest")
 	flag.StringVar(&cfg.packageManifest, "package-manifest", "", "enforce the active lane's checked-in package-minimum manifest")
 	flag.StringVar(&cfg.jsonOutput, "json-output", "", "optional path for a deterministic machine-readable coverage summary JSON document")
+	flag.StringVar(&cfg.timingOutput, "timing-output", "", "optional path for a deterministic machine-readable functional package timing summary JSON document, captured from the same go test run")
 	flag.Float64Var(&cfg.min, "min", 0, "minimum total statement coverage percentage")
 	flag.StringVar(&cfg.packageBaseline, "package-baseline", "", "newline-delimited list of backend packages temporarily exempt from the per-package minimum coverage gate; defaults by suite")
 	flag.Float64Var(&cfg.packageMin, "package-min", defaultPackageCoverageMin, "minimum statement coverage required for each non-baselined backend package")
@@ -269,8 +271,11 @@ func run(cfg config) (coverageResult, error) {
 	)
 
 	mergedTestArgs = append(mergedTestArgs, fmt.Sprintf("-coverprofile=%s", profilePath))
+	if strings.TrimSpace(cfg.timingOutput) != "" {
+		mergedTestArgs = append(mergedTestArgs, "-json")
+	}
 	mergedTestArgs = append(mergedTestArgs, testPackages...)
-	if _, _, err := runGoTestCoverageLane(mergedTestArgs, "run go test coverage lane"); err != nil {
+	if err := runGoTestCoverageLane(cfg, mergedTestArgs, testPackages, "run go test coverage lane"); err != nil {
 		return coverageResult{}, err
 	}
 	if err := canonicalizeCoverageProfile(profilePath, repoRoot, coverPackages); err != nil {
@@ -323,20 +328,39 @@ func packageCoverageBaselinePackages(cfg config, repoRoot string) (map[string]st
 	return readPackageCoverageBaseline(baselinePath)
 }
 
-func runGoTestCoverageLane(args []string, failurePrefix string) (string, string, error) {
+// runGoTestCoverageLane runs the merged go test coverage invocation once. When
+// cfg.timingOutput is set, it also captures package timing from the same
+// process's -json stdout and writes the timing summary before returning,
+// regardless of whether the go test invocation itself failed, so a failed or
+// crashed lane still leaves trustworthy (possibly incomplete) timing
+// diagnostics on disk.
+func runGoTestCoverageLane(cfg config, args []string, testPackages []string, failurePrefix string) error {
+	timingEnabled := strings.TrimSpace(cfg.timingOutput) != ""
+	started := time.Now()
 	stdout, stderr, err := runCommand(commandInvocation{
 		name: "go",
 		args: args,
 		env:  os.Environ(),
 	})
+	wallSeconds := time.Since(started).Seconds()
+
+	var timingWriteErr error
+	if timingEnabled {
+		summary := buildFunctionalTimingSummary(stdout, testPackages, wallSeconds)
+		timingWriteErr = writeFunctionalTimingSummaryJSON(cfg.timingOutput, summary)
+	}
+
 	if err != nil {
 		detail := mergeGoTestFailureDetail(stderr, stdout)
+		var testErr error
 		if detail != "" {
-			return "", "", fmt.Errorf("%s: %w\n%s", failurePrefix, err, detail)
+			testErr = fmt.Errorf("%s: %w\n%s", failurePrefix, err, detail)
+		} else {
+			testErr = fmt.Errorf("%s: %w", failurePrefix, err)
 		}
-		return "", "", fmt.Errorf("%s: %w", failurePrefix, err)
+		return errors.Join(testErr, timingWriteErr)
 	}
-	return stdout, stderr, nil
+	return timingWriteErr
 }
 
 func runCommand(invocation commandInvocation) (string, string, error) {
