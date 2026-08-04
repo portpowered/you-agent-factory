@@ -116,9 +116,10 @@ func TestPublishRecord_AppendsValidatedDetachedSourceNativeDraftsInOrder(t *test
 }
 
 // TestPublishRecord_OrderedAfterOpeningRecord proves that publishing source
-// observations onto a session Started through Start lands after the opening
-// SESSION/STARTED record already committed by Start's before-handoff
-// barrier.
+// observations onto a session Started through Start lands after both the
+// opening SESSION/STARTED record and the SESSION/COMPLETED terminal record
+// Start's synchronous dispatch has already committed by the time Start
+// returns.
 func TestPublishRecord_OrderedAfterOpeningRecord(t *testing.T) {
 	eventsSvc := newEventsAppender()
 	registry, err := service.New(succeedingExecution(), eventsSvc, nil)
@@ -135,14 +136,17 @@ func TestPublishRecord_OrderedAfterOpeningRecord(t *testing.T) {
 	}
 
 	committed := readAllDrafts(t, eventsSvc, workersessions.Topic("worker-1"))
-	if len(committed) != 2 {
-		t.Fatalf("committed record count = %d, want 2", len(committed))
+	if len(committed) != 3 {
+		t.Fatalf("committed record count = %d, want 3", len(committed))
 	}
 	if committed[0].Kind != workers.KindSession || committed[0].Phase != workers.PhaseStarted {
 		t.Fatalf("committed[0] = %+v, want the SESSION/STARTED opening record", committed[0])
 	}
-	if committed[1].Kind != workers.KindTool {
-		t.Fatalf("committed[1] Kind = %s, want TOOL", committed[1].Kind)
+	if committed[1].Kind != workers.KindSession || committed[1].Phase != workers.PhaseCompleted {
+		t.Fatalf("committed[1] = %+v, want the SESSION/COMPLETED terminal record", committed[1])
+	}
+	if committed[2].Kind != workers.KindTool {
+		t.Fatalf("committed[2] Kind = %s, want TOOL", committed[2].Kind)
 	}
 }
 

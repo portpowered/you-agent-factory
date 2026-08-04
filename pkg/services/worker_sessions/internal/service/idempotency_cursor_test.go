@@ -138,7 +138,7 @@ func TestPublishRecord_PagedReadDeliversRecordsExactlyOnceInContiguousOrder(t *t
 			t.Fatalf("PublishRecord() [%d] error = %v, want nil", i, err)
 		}
 	}
-	const wantTotal = published + 1 // + the W3-001 opening record
+	const wantTotal = published + 2 // + the W3-001 opening record and the W3-004 terminal record
 
 	topic := workersessions.Topic("worker-1")
 	var page events.ReadResult
@@ -197,8 +197,8 @@ func TestPublishRecord_SubscriptionFromLastReadCursorDeliversOnlyLaterRecords(t 
 	if err != nil {
 		t.Fatalf("Read() error = %v, want nil", err)
 	}
-	if readResult.Outcome != events.ReadOutcomeProgress || len(readResult.Records) != 2 {
-		t.Fatalf("Read() = %+v, want Progress with 2 records (opening + published)", readResult)
+	if readResult.Outcome != events.ReadOutcomeProgress || len(readResult.Records) != 3 {
+		t.Fatalf("Read() = %+v, want Progress with 3 records (opening + terminal + published)", readResult)
 	}
 	lastReadCursor := readResult.Next
 
@@ -215,12 +215,12 @@ func TestPublishRecord_SubscriptionFromLastReadCursorDeliversOnlyLaterRecords(t 
 	}
 
 	first := sub.Next(ctx)
-	if first.Kind != events.DeliveryRecord || first.Cursor.Position != 3 {
-		t.Fatalf("first Subscription.Next() = %+v, want DeliveryRecord at position 3 (only later records, never re-delivering the already-read positions 1-2)", first)
+	if first.Kind != events.DeliveryRecord || first.Cursor.Position != 4 {
+		t.Fatalf("first Subscription.Next() = %+v, want DeliveryRecord at position 4 (only later records, never re-delivering the already-read positions 1-3)", first)
 	}
 	second := sub.Next(ctx)
-	if second.Kind != events.DeliveryRecord || second.Cursor.Position != 4 {
-		t.Fatalf("second Subscription.Next() = %+v, want DeliveryRecord at position 4", second)
+	if second.Kind != events.DeliveryRecord || second.Cursor.Position != 5 {
+		t.Fatalf("second Subscription.Next() = %+v, want DeliveryRecord at position 5", second)
 	}
 }
 

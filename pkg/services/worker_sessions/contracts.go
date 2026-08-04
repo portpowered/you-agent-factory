@@ -12,14 +12,13 @@ import (
 // Service is the W1+W2+W3 Worker Session identity, registry, supervision,
 // and Events publication foundation: stable identity reservation, immutable
 // deterministic inspection, supervised Start with exactly-once terminal
-// classification and a before-handoff opening record, and PublishRecord for
-// committing source-native Worker observations onto that same topic.
-// StartTurn, the terminal SESSION projection, Runtime and Provider Session
-// association, Pause/Resume/Cancel/Terminate controls, persistence, and
-// transport behavior are later ACP Worker Events slices (W3 remainder,
-// W4-W7) and are not exposed here. Later slices land as additive methods on
-// this same named interface; earlier slices do not publish placeholder
-// methods for them.
+// classification, a before-handoff opening record, and an after-output
+// terminal SESSION record, plus PublishRecord for committing source-native
+// Worker observations onto that same topic. StartTurn, Runtime and Provider
+// Session association, Pause/Resume/Cancel/Terminate controls, persistence,
+// and transport behavior are later ACP Worker Events slices (W4-W7) and are
+// not exposed here. Later slices land as additive methods on this same named
+// interface; earlier slices do not publish placeholder methods for them.
 type Service interface {
 	// Reserve validates req and, when req.ID is not already registered,
 	// stores a new session in StateReserved and returns its snapshot.
@@ -47,7 +46,11 @@ type Service interface {
 	// only after the attempt commits its exactly-once absorbing COMPLETED or
 	// FAILED terminal outcome, classified from the Workers WorkResult first
 	// and the adapter error second. Invalid requests and conflicting starts
-	// return a typed error before any registry mutation or Workers call.
+	// return a typed error before any registry mutation or Workers call. Once
+	// the terminal outcome commits, Start also appends one terminal
+	// KindSession record (PhaseCompleted or PhaseFailed) to Topic(req.ID); a
+	// failure publishing that record is logged and never changes the
+	// returned, already-committed Session.
 	Start(ctx context.Context, req StartRequest) (StartResult, error)
 
 	// PublishRecord validates req, then appends req.Draft, detached, as a

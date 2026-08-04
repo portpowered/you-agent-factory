@@ -169,6 +169,7 @@ func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (
 				"state", string(workersessions.StateFailed),
 				"cause", causeKindString(terminal.Cause),
 			)
+			r.publishTerminalRecordOrLog(ctx, req.ID, attemptID, workersessions.StateFailed, terminal)
 		}
 		return workersessions.StartResult{Session: final}, nil
 	}
@@ -196,6 +197,7 @@ func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (
 			"state", string(finalState),
 			"cause", causeKindString(terminal.Cause),
 		)
+		r.publishTerminalRecordOrLog(ctx, req.ID, attemptID, finalState, terminal)
 	}
 
 	return workersessions.StartResult{Session: final}, nil

@@ -153,3 +153,28 @@ func (c *countingEventsAppender) callCount() int {
 	defer c.mu.Unlock()
 	return c.calls
 }
+
+// failOnNthAppendEventsAppender wraps the real in-memory Events service,
+// failing exactly its nth (1-indexed) Append call and delegating to the real
+// implementation on every other call. This lets a test simulate a terminal
+// (or opening) record publication failure in isolation, without a
+// permanently broken Events dependency masking whether the surrounding calls
+// still succeed.
+type failOnNthAppendEventsAppender struct {
+	events.Service
+	n int
+
+	mu    sync.Mutex
+	calls int
+}
+
+func (f *failOnNthAppendEventsAppender) Append(ctx context.Context, req events.AppendRequest) (events.AppendResult, error) {
+	f.mu.Lock()
+	f.calls++
+	call := f.calls
+	f.mu.Unlock()
+	if call == f.n {
+		return events.AppendResult{}, errors.New("failOnNthAppendEventsAppender: simulated append failure")
+	}
+	return f.Service.Append(ctx, req)
+}
