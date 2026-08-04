@@ -33,6 +33,14 @@ func TestCodexCommandEffectClassifiesStderrExitFailures(t *testing.T) {
 			stderr:   "request timed out after waiting for provider response",
 			wantKind: providers.ExecuteFailureKindTimeout,
 		},
+		{
+			// Verified against the real installed codex CLI:
+			// `echo hi | codex exec --json resume <fake-uuid> -` produces
+			// this exact stderr text on exit code 1.
+			name:     "stale session stderr",
+			stderr:   "Error: thread/resume: thread/resume failed: no rollout found for thread id 00000000-0000-0000-0000-000000000000 (code -32600)",
+			wantKind: providers.ExecuteFailureKindSessionNotFound,
+		},
 	}
 
 	for _, test := range tests {

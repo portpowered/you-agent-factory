@@ -5,10 +5,9 @@
 // components. It composes the implementation through direct single
 // injection of one workers.WorkstationExecutionService and one
 // EventsAppender, with no dependency bag, service locator, or alternate
-// construction path. There is no production consumer of
-// workersessions.Service yet (Runtime cutover is W4), so canonical pkg/wire
-// composition is not forced for this constructor; callers that need the
-// service call NewService directly.
+// construction path. Factory Runtime is the production consumer (W4
+// dispatch cutover), composed through pkg/services/factory_runtime/internal
+// and pkg/wire.
 package wire
 
 import (

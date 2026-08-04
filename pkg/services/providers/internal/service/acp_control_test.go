@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	acpsdk "github.com/coder/acp-go-sdk"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
@@ -65,6 +66,10 @@ func (a *acpAwareAttempt) Configure(context.Context, []providers.ACPIntegration)
 func (a *acpAwareAttempt) Integrations() []providers.ACPIntegration                    { return nil }
 func (a *acpAwareAttempt) Resolve(id providers.ID) (providers.ID, bool) {
 	return a.provider, id == a.provider
+}
+
+func (a *acpAwareAttempt) NegotiatedCapabilities(providers.ID) (acpsdk.AgentCapabilities, bool) {
+	return acpsdk.AgentCapabilities{}, false
 }
 
 func (a *acpAwareAttempt) Execute(
@@ -140,6 +145,10 @@ func (m *multiACPService) Integrations() []providers.ACPIntegration             
 func (m *multiACPService) Resolve(id providers.ID) (providers.ID, bool) {
 	_, ok := m.byProvider[id]
 	return id, ok
+}
+
+func (m *multiACPService) NegotiatedCapabilities(providers.ID) (acpsdk.AgentCapabilities, bool) {
+	return acpsdk.AgentCapabilities{}, false
 }
 
 func (m *multiACPService) Execute(
@@ -327,6 +336,10 @@ func (a *blockingACPAttempt) Configure(context.Context, []providers.ACPIntegrati
 func (a *blockingACPAttempt) Integrations() []providers.ACPIntegration                    { return nil }
 func (a *blockingACPAttempt) Resolve(id providers.ID) (providers.ID, bool) {
 	return "cursor-acp", id == "cursor-acp"
+}
+
+func (a *blockingACPAttempt) NegotiatedCapabilities(providers.ID) (acpsdk.AgentCapabilities, bool) {
+	return acpsdk.AgentCapabilities{}, false
 }
 
 func (a *blockingACPAttempt) Execute(
@@ -720,6 +733,10 @@ func (s *sequentialACPService) Configure(context.Context, []providers.ACPIntegra
 func (s *sequentialACPService) Integrations() []providers.ACPIntegration { return nil }
 func (s *sequentialACPService) Resolve(id providers.ID) (providers.ID, bool) {
 	return s.provider, id == s.provider
+}
+
+func (s *sequentialACPService) NegotiatedCapabilities(providers.ID) (acpsdk.AgentCapabilities, bool) {
+	return acpsdk.AgentCapabilities{}, false
 }
 
 // beginExecute arms this service for the next Execute call: the caller must

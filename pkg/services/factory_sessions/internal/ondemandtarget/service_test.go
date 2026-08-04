@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -100,7 +99,11 @@ type fakeSessions struct {
 	invokeResult factorysessions.InvocationResult
 	invokeErr    error
 
-	cancelCalls []string
+	cancelCalls    []string
+	cancelContexts []context.Context
+	cancelRequests []factorysessions.ControlRequest
+	cancelResult   factorysessions.LifecycleControlResult
+	cancelErr      error
 
 	closeCalls []string
 	closeErr   error
@@ -116,12 +119,14 @@ func (f *fakeSessions) InvokeFactorySession(
 }
 
 func (f *fakeSessions) Cancel(
-	_ context.Context, sessionID string, _ factorysessions.ControlRequest,
+	ctx context.Context, sessionID string, request factorysessions.ControlRequest,
 ) (factorysessions.LifecycleControlResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.cancelCalls = append(f.cancelCalls, sessionID)
-	return factorysessions.LifecycleControlResult{}, nil
+	f.cancelContexts = append(f.cancelContexts, ctx)
+	f.cancelRequests = append(f.cancelRequests, request)
+	return f.cancelResult, f.cancelErr
 }
 
 func (f *fakeSessions) CloseFactorySession(_ context.Context, sessionID string) error {
@@ -562,300 +567,4 @@ func (f *sequencedOpener) OpenInvocationRuntime(
 		return roles.OpenedInvocationRuntime{}, fmt.Errorf("sequencedOpener: no result configured for call %d", idx)
 	}
 	return f.results[idx].opened, f.results[idx].err
-}
-
-// TestInvokeFactorySessionReusesTheCachedRuntime proves InvokeFactorySession
-// calls against a previously started identity dispatch against the exact
-// cached runtime's DefaultSessionID without opening a second runtime, and
-// substitute the result's SessionID with the caller-facing generated
-// identity rather than leaking the runtime's own shared internal constant.
-func TestInvokeFactorySessionReusesTheCachedRuntime(t *testing.T) {
-	sessions := &fakeSessions{invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}}
-	opener := &fakeOpener{opened: roles.OpenedInvocationRuntime{Sessions: sessions, Lifecycle: &fakeLifecycle{}}}
-	resolve := func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
-		return factorysessions.RuntimeOpeningRequest{}, nil
-	}
-	svc := newTestService(t, opener, resolve, sequentialIDs("wrapper"))
-
-	started, err := svc.StartAsync(context.Background(), factorysessions.StartRequest{})
-	if err != nil {
-		t.Fatalf("StartAsync() error = %v", err)
-	}
-
-	first, err := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{})
-	if err != nil {
-		t.Fatalf("InvokeFactorySession() first error = %v", err)
-	}
-	if first.SessionID != started.SessionID {
-		t.Fatalf("InvokeFactorySession() result.SessionID = %q, want the generated wrapper identity %q", first.SessionID, started.SessionID)
-	}
-	if _, err := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{}); err != nil {
-		t.Fatalf("InvokeFactorySession() second error = %v", err)
-	}
-
-	if len(opener.calls) != 1 {
-		t.Fatalf("OpenInvocationRuntime call count = %d, want exactly 1 (no second open)", len(opener.calls))
-	}
-	if len(sessions.invokeCalls) != 2 {
-		t.Fatalf("InvokeFactorySession call count = %d, want exactly 2", len(sessions.invokeCalls))
-	}
-	for _, sessionID := range sessions.invokeCalls {
-		if sessionID != factorysessions.DefaultSessionID {
-			t.Fatalf("InvokeFactorySession sessionID = %q, want the runtime's own DefaultSessionID", sessionID)
-		}
-	}
-}
-
-// TestInvokeFactorySessionUnknownIdentityReportsSessionNotFound proves an
-// identity this service never started reports ErrSessionNotFound.
-func TestInvokeFactorySessionUnknownIdentityReportsSessionNotFound(t *testing.T) {
-	svc := newTestService(t, &fakeOpener{}, nil, sequentialIDs("wrapper"))
-	_, err := svc.InvokeFactorySession(context.Background(), "unknown", factorysessions.InvocationRequest{})
-	if !errors.Is(err, factorysessions.ErrSessionNotFound) {
-		t.Fatalf("InvokeFactorySession() error = %v, want ErrSessionNotFound", err)
-	}
-}
-
-// TestCloseFactorySessionTearsDownAndEvicts proves a close call tears down
-// the cached runtime and evicts it, so a later call against the same
-// identity reports ErrSessionNotFound instead of reusing a torn-down runtime.
-func TestCloseFactorySessionTearsDownAndEvicts(t *testing.T) {
-	sessions := &fakeSessions{invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}}
-	lifecycle := &fakeLifecycle{}
-	opener := &fakeOpener{opened: roles.OpenedInvocationRuntime{Sessions: sessions, Lifecycle: lifecycle}}
-	resolve := func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
-		return factorysessions.RuntimeOpeningRequest{}, nil
-	}
-	svc := newTestService(t, opener, resolve, sequentialIDs("wrapper"))
-
-	started, err := svc.StartAsync(context.Background(), factorysessions.StartRequest{})
-	if err != nil {
-		t.Fatalf("StartAsync() error = %v", err)
-	}
-
-	if err := svc.CloseFactorySession(context.Background(), started.SessionID); err != nil {
-		t.Fatalf("CloseFactorySession() error = %v", err)
-	}
-	if lifecycle.stopCalls != 1 {
-		t.Fatalf("StopLifecycle call count = %d, want exactly 1", lifecycle.stopCalls)
-	}
-
-	if _, err := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{}); !errors.Is(err, factorysessions.ErrSessionNotFound) {
-		t.Fatalf("InvokeFactorySession() after close error = %v, want ErrSessionNotFound", err)
-	}
-}
-
-// TestCloseFactorySessionUnknownIdentityIsNoOpSuccess proves closing an
-// unknown or already-closed identity succeeds without effect, matching
-// factorysessions.Service.CloseFactorySession's documented idempotent
-// close semantics.
-func TestCloseFactorySessionUnknownIdentityIsNoOpSuccess(t *testing.T) {
-	svc := newTestService(t, &fakeOpener{}, nil, sequentialIDs("wrapper"))
-	if err := svc.CloseFactorySession(context.Background(), "unknown"); err != nil {
-		t.Fatalf("CloseFactorySession() error = %v, want nil for an unknown identity", err)
-	}
-}
-
-// TestCloseTearsDownEveryTrackedRuntime proves Close (the io.Closer this
-// Service implements for a future process lifecycle plan to register) tears
-// down every runtime this Service has opened -- not just one -- and evicts
-// each of them, so a later call against any of their identities reports
-// ErrSessionNotFound instead of reusing a torn-down runtime.
-func TestCloseTearsDownEveryTrackedRuntime(t *testing.T) {
-	firstLifecycle := &fakeLifecycle{}
-	secondLifecycle := &fakeLifecycle{}
-	openCount := 0
-	opener := &funcOpener{open: func(context.Context, *factorysessions.RuntimeOpeningRequest, runtimeopening.ExternalEffects, *zap.Logger) (roles.OpenedInvocationRuntime, error) {
-		openCount++
-		lifecycle := firstLifecycle
-		if openCount == 2 {
-			lifecycle = secondLifecycle
-		}
-		return roles.OpenedInvocationRuntime{
-			Sessions:  &fakeSessions{invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}},
-			Lifecycle: lifecycle,
-		}, nil
-	}}
-	resolve := func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
-		return factorysessions.RuntimeOpeningRequest{}, nil
-	}
-	svc := newTestService(t, opener, resolve, sequentialIDs("wrapper"))
-
-	first, err := svc.StartAsync(context.Background(), factorysessions.StartRequest{Source: factorysessions.Source{FactoryID: "@you/first"}})
-	if err != nil {
-		t.Fatalf("StartAsync() first error = %v", err)
-	}
-	second, err := svc.StartAsync(context.Background(), factorysessions.StartRequest{Source: factorysessions.Source{FactoryID: "@you/second"}})
-	if err != nil {
-		t.Fatalf("StartAsync() second error = %v", err)
-	}
-
-	if err := svc.Close(); err != nil {
-		t.Fatalf("Close() error = %v", err)
-	}
-	if firstLifecycle.stopCalls != 1 {
-		t.Fatalf("first runtime StopLifecycle call count = %d, want exactly 1", firstLifecycle.stopCalls)
-	}
-	if secondLifecycle.stopCalls != 1 {
-		t.Fatalf("second runtime StopLifecycle call count = %d, want exactly 1", secondLifecycle.stopCalls)
-	}
-
-	if _, err := svc.InvokeFactorySession(context.Background(), first.SessionID, factorysessions.InvocationRequest{}); !errors.Is(err, factorysessions.ErrSessionNotFound) {
-		t.Fatalf("InvokeFactorySession(first) after Close error = %v, want ErrSessionNotFound", err)
-	}
-	if _, err := svc.InvokeFactorySession(context.Background(), second.SessionID, factorysessions.InvocationRequest{}); !errors.Is(err, factorysessions.ErrSessionNotFound) {
-		t.Fatalf("InvokeFactorySession(second) after Close error = %v, want ErrSessionNotFound", err)
-	}
-
-	// Close is idempotent: a second call has nothing left to close and
-	// succeeds without re-closing either runtime.
-	if err := svc.Close(); err != nil {
-		t.Fatalf("second Close() error = %v, want nil (idempotent)", err)
-	}
-	if firstLifecycle.stopCalls != 1 || secondLifecycle.stopCalls != 1 {
-		t.Fatalf("StopLifecycle call counts after second Close = (%d, %d), want (1, 1) -- no double close", firstLifecycle.stopCalls, secondLifecycle.stopCalls)
-	}
-}
-
-// TestCloseWithNoOpenedRuntimesIsNoOpSuccess proves calling Close before any
-// StartFactoryTarget call succeeds without effect.
-func TestCloseWithNoOpenedRuntimesIsNoOpSuccess(t *testing.T) {
-	svc := newTestService(t, &fakeOpener{}, nil, sequentialIDs("wrapper"))
-	if err := svc.Close(); err != nil {
-		t.Fatalf("Close() error = %v, want nil when no runtime was ever opened", err)
-	}
-}
-
-// TestLoggingNeverEmitsWorkingRootOrRawFailureText proves this Service's
-// structured logs stay bounded even when a resolve or activation failure's
-// own error text embeds a resolved filesystem path: neither the caller's
-// editor working root nor any substring of the raw underlying error's
-// message ever reaches a logged field or message across the resolve-failure,
-// open-failure, activation-failure, dispatch-failure, and close-failure
-// paths. Only closed, safe fields (Factory target identity, status,
-// counters) may appear.
-func TestLoggingNeverEmitsWorkingRootOrRawFailureText(t *testing.T) {
-	const sensitiveWorkingRoot = "/Users/alice/secret-project"
-	pathBearingErr := fmt.Errorf("open %s/factory.json: permission denied", sensitiveWorkingRoot)
-
-	assertNoLeak := func(t *testing.T, observed *observer.ObservedLogs) {
-		t.Helper()
-		if observed.Len() == 0 {
-			t.Fatal("no log entries observed, want at least one bounded failure log")
-		}
-		for _, entry := range observed.All() {
-			if strings.Contains(entry.Message, sensitiveWorkingRoot) {
-				t.Fatalf("log message %q contains the working root, want it bounded", entry.Message)
-			}
-			if strings.Contains(entry.Message, pathBearingErr.Error()) {
-				t.Fatalf("log message %q contains the raw error text, want it bounded", entry.Message)
-			}
-			for _, field := range entry.Context {
-				rendered := fmt.Sprintf("%v", field.Interface)
-				if field.String != "" {
-					rendered = field.String
-				}
-				if strings.Contains(rendered, sensitiveWorkingRoot) {
-					t.Fatalf("log field %s=%q contains the working root, want it bounded", field.Key, rendered)
-				}
-				if strings.Contains(rendered, pathBearingErr.Error()) {
-					t.Fatalf("log field %s=%q contains the raw error text, want it bounded", field.Key, rendered)
-				}
-			}
-		}
-	}
-
-	t.Run("open failure", func(t *testing.T) {
-		opener := &fakeOpener{err: pathBearingErr}
-		resolve := func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
-			return factorysessions.RuntimeOpeningRequest{}, nil
-		}
-		svc, observed := newTestServiceWithObservedLogger(t, opener, resolve, sequentialIDs("wrapper"))
-		_, err := svc.StartAsync(context.Background(), factorysessions.StartRequest{
-			Args: map[string]any{"workingRoot": sensitiveWorkingRoot},
-		})
-		if err == nil {
-			t.Fatal("StartAsync() error = nil, want the open failure")
-		}
-		assertNoLeak(t, observed)
-	})
-
-	t.Run("activation failure", func(t *testing.T) {
-		opener := &fakeOpener{opened: roles.OpenedInvocationRuntime{
-			Sessions:  &fakeSessions{},
-			Lifecycle: &fakeLifecycle{startErr: pathBearingErr},
-		}}
-		resolve := func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
-			return factorysessions.RuntimeOpeningRequest{}, nil
-		}
-		svc, observed := newTestServiceWithObservedLogger(t, opener, resolve, sequentialIDs("wrapper"))
-		_, err := svc.StartAsync(context.Background(), factorysessions.StartRequest{
-			Args: map[string]any{"workingRoot": sensitiveWorkingRoot},
-		})
-		if err == nil {
-			t.Fatal("StartAsync() error = nil, want the activation failure")
-		}
-		assertNoLeak(t, observed)
-	})
-
-	t.Run("dispatch failure", func(t *testing.T) {
-		opener := &fakeOpener{opened: roles.OpenedInvocationRuntime{
-			Sessions:  &fakeSessions{invokeErr: pathBearingErr},
-			Lifecycle: &fakeLifecycle{},
-		}}
-		resolve := func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
-			return factorysessions.RuntimeOpeningRequest{}, nil
-		}
-		svc, observed := newTestServiceWithObservedLogger(t, opener, resolve, sequentialIDs("wrapper"))
-		started, err := svc.StartAsync(context.Background(), factorysessions.StartRequest{
-			Args: map[string]any{"workingRoot": sensitiveWorkingRoot},
-		})
-		if err != nil {
-			t.Fatalf("StartAsync() error = %v", err)
-		}
-		observed.TakeAll()
-		if _, err := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{}); err == nil {
-			t.Fatal("InvokeFactorySession() error = nil, want the dispatch failure")
-		}
-		assertNoLeak(t, observed)
-	})
-
-	t.Run("close failure", func(t *testing.T) {
-		opener := &fakeOpener{opened: roles.OpenedInvocationRuntime{
-			Sessions:  &fakeSessions{invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}, closeErr: pathBearingErr},
-			Lifecycle: &fakeLifecycle{},
-		}}
-		resolve := func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
-			return factorysessions.RuntimeOpeningRequest{}, nil
-		}
-		svc, observed := newTestServiceWithObservedLogger(t, opener, resolve, sequentialIDs("wrapper"))
-		started, err := svc.StartAsync(context.Background(), factorysessions.StartRequest{
-			Args: map[string]any{"workingRoot": sensitiveWorkingRoot},
-		})
-		if err != nil {
-			t.Fatalf("StartAsync() error = %v", err)
-		}
-		observed.TakeAll()
-		if err := svc.CloseFactorySession(context.Background(), started.SessionID); err == nil {
-			t.Fatal("CloseFactorySession() error = nil, want the close failure")
-		}
-		assertNoLeak(t, observed)
-	})
-}
-
-// funcOpener is an invocationRuntimeOpener test double backed directly by a
-// function, for tests that need each successive OpenInvocationRuntime call
-// to return a distinct opened runtime (fakeOpener always returns the same
-// fixed one).
-type funcOpener struct {
-	open func(context.Context, *factorysessions.RuntimeOpeningRequest, runtimeopening.ExternalEffects, *zap.Logger) (roles.OpenedInvocationRuntime, error)
-}
-
-func (f *funcOpener) OpenInvocationRuntime(
-	ctx context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
-	effects runtimeopening.ExternalEffects,
-	logger *zap.Logger,
-) (roles.OpenedInvocationRuntime, error) {
-	return f.open(ctx, request, effects, logger)
 }

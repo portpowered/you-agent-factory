@@ -15,20 +15,20 @@ import (
 // PTY-backed execution, emit final stdout through observe, and return only
 // allowlisted execution facts.
 type Effect interface {
-	Execute(context.Context, providers.ExecuteRequest, func([]byte) error) (EffectResult, error)
+	Execute(context.Context, execution.ContinuationRequest, func([]byte) error) (EffectResult, error)
 }
 
 // EffectFunc adapts a function to Effect.
 type EffectFunc func(
 	context.Context,
-	providers.ExecuteRequest,
+	execution.ContinuationRequest,
 	func([]byte) error,
 ) (EffectResult, error)
 
 // Execute invokes the adapted function.
 func (effect EffectFunc) Execute(
 	ctx context.Context,
-	request providers.ExecuteRequest,
+	request execution.ContinuationRequest,
 	observe func([]byte) error,
 ) (EffectResult, error) {
 	return effect(ctx, request, observe)
@@ -49,6 +49,7 @@ func NewRegistration(effect Effect) execution.Registration {
 	return execution.Registration{
 		Provider: providers.IDAntigravity,
 		Attempt:  newAttempt(effect),
+		Continue: newContinuationAttempt(effect),
 	}
 }
 
@@ -59,6 +60,18 @@ func newAttempt(effect Effect) execution.Attempt {
 	return func(
 		ctx context.Context,
 		request providers.ExecuteRequest,
+	) (providers.ExecuteResult, error) {
+		return newContinuationAttempt(effect)(ctx, execution.ContinuationRequest{ExecuteRequest: request})
+	}
+}
+
+func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
+	if effect == nil {
+		return unavailableContinuationAttempt
+	}
+	return func(
+		ctx context.Context,
+		request execution.ContinuationRequest,
 	) (providers.ExecuteResult, error) {
 		var stdout bytes.Buffer
 		effectResult, effectErr := effect.Execute(ctx, request, func(chunk []byte) error {
@@ -127,6 +140,16 @@ func nativeFailure(err error) (execution.AttemptFailure, bool) {
 func unavailableAttempt(
 	context.Context,
 	providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, providers.ExecuteFailure{
+		Kind:    providers.ExecuteFailureKindDependency,
+		Message: "Antigravity native execution is unavailable",
+	}
+}
+
+func unavailableContinuationAttempt(
+	context.Context,
+	execution.ContinuationRequest,
 ) (providers.ExecuteResult, error) {
 	return providers.ExecuteResult{}, providers.ExecuteFailure{
 		Kind:    providers.ExecuteFailureKindDependency,

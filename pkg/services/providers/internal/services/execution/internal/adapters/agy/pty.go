@@ -12,6 +12,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/commandenv"
@@ -50,7 +51,7 @@ func NewPTYEffect(options PTYEffectOptions) Effect {
 	factoryRoot := strings.TrimSpace(options.FactoryRoot)
 	return EffectFunc(func(
 		ctx context.Context,
-		request providers.ExecuteRequest,
+		request execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (EffectResult, error) {
 		started := time.Now()
@@ -92,7 +93,7 @@ type ptyLaunch struct {
 }
 
 func buildPTYLaunch(
-	request providers.ExecuteRequest,
+	request execution.ContinuationRequest,
 	config ptyLaunchConfig,
 ) (ptyLaunch, error) {
 	if effort, _ := providers.ReasoningEffort(request.ReasoningEffort).Canonical(); effort != "" {
@@ -122,7 +123,7 @@ func buildPTYLaunch(
 	if err := agypty.ValidateArgv(argv); err != nil {
 		return ptyLaunch{}, err
 	}
-	command := commanddispatch.WorkersCommand(request, workers.CommandRequest{
+	command := commanddispatch.WorkersCommand(request.ExecuteRequest, workers.CommandRequest{
 		Command: argv[0],
 		Args:    argv[1:],
 		Env: commandenv.Build(
@@ -144,7 +145,7 @@ func buildPTYLaunch(
 	}, nil
 }
 
-func buildFlags(request providers.ExecuteRequest) []string {
+func buildFlags(request execution.ContinuationRequest) []string {
 	flags := []string{"--headless"}
 	if model := strings.TrimSpace(request.Model); model != "" {
 		flags = append(flags, "--model", model)

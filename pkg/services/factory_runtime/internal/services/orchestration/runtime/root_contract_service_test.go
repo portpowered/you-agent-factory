@@ -504,6 +504,20 @@ func completedWorkersResult(
 	}
 }
 
+func failedWorkersResult(
+	request workers.WorkstationDispatchRequest,
+) workers.WorkstationDispatchResult {
+	dispatch := request.Execution.Dispatch
+	return workers.WorkstationDispatchResult{
+		DispatchID: dispatch.DispatchID, WorkstationName: request.WorkstationName,
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
+		Result: workers.WorkResult{
+			DispatchID: dispatch.DispatchID, TransitionID: dispatch.TransitionID,
+			Outcome: workers.OutcomeFailed, Error: "simulated worker session failure",
+		},
+	}
+}
+
 func canceledWorkersResult(
 	request workers.WorkstationDispatchRequest,
 ) workers.WorkstationDispatchResult {

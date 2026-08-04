@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	agy "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 )
@@ -104,11 +105,11 @@ func TestPTYEffectClassifiesDistinctExecutionOutcomes(t *testing.T) {
 				Executable:             executable,
 				ExecutableDependencies: deps,
 			})
-			_, err := effect.Execute(ctx, providers.ExecuteRequest{
+			_, err := effect.Execute(ctx, execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 				Provider:    providers.IDAntigravity,
 				AttemptID:   "attempt-failure",
 				UserMessage: "deterministic failure prompt",
-			}, func([]byte) error { return nil })
+			}}, func([]byte) error { return nil })
 			assertExecuteFailure(t, err, tc.wantKind, tc.wantMessage)
 		})
 	}
@@ -129,11 +130,11 @@ func TestPTYEffectDeadlineTimeoutOutranksOutputDetail(t *testing.T) {
 		Executable:             "agy",
 		ExecutableDependencies: executableDependencies(nil),
 	})
-	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 		Provider:    providers.IDAntigravity,
 		AttemptID:   "attempt-timeout",
 		UserMessage: "deterministic failure prompt",
-	}, func([]byte) error { return nil })
+	}}, func([]byte) error { return nil })
 	assertExecuteFailure(t, err, providers.ExecuteFailureKindTimeout, agy.TimeoutFailureMessage)
 	if strings.Contains(err.Error(), "token=") {
 		t.Fatalf("failure leaked sensitive facts: %v", err)
@@ -151,12 +152,12 @@ func TestPTYEffectMissingExecutableViaExecNotFound(t *testing.T) {
 		Executable:             missingExecutable,
 		ExecutableDependencies: executableDependencies(nil),
 	})
-	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 		Provider:         providers.IDAntigravity,
 		AttemptID:        "attempt-missing",
 		UserMessage:      "hello",
 		WorkingDirectory: ".",
-	}, func([]byte) error { return nil })
+	}}, func([]byte) error { return nil })
 	assertExecuteFailure(t, err, providers.ExecuteFailureKindDependency, "Agy executable could not be found.")
 }
 
@@ -171,11 +172,11 @@ func TestPTYEffectTimeoutDoesNotTreatPartialOutputAsSuccess(t *testing.T) {
 		Executable:             "agy",
 		ExecutableDependencies: executableDependencies(nil),
 	})
-	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 		Provider:    providers.IDAntigravity,
 		AttemptID:   "dispatch-agy-timeout",
 		UserMessage: "plan the goal",
-	}, func(chunk []byte) error {
+	}}, func(chunk []byte) error {
 		t.Fatalf("observe() called with %q, want no terminal success on timeout", string(chunk))
 		return nil
 	})
@@ -268,11 +269,11 @@ func TestPTYEffectClassifiesExecErrNotFoundAsMissingExecutable(t *testing.T) {
 			"/missing/agy",
 		),
 	})
-	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 		Provider:         providers.IDAntigravity,
 		AttemptID:        "attempt-exec-not-found",
 		UserMessage:      "hello",
 		WorkingDirectory: ".",
-	}, func([]byte) error { return nil })
+	}}, func([]byte) error { return nil })
 	assertExecuteFailure(t, err, providers.ExecuteFailureKindDependency, "Agy executable could not be found.")
 }

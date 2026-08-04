@@ -1,19 +1,8 @@
 package factorydefinitions
 
 import (
-	"io/fs"
-
 	catalognamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 )
-
-// NamedPathFileSystem is the exact filesystem effect used to resolve and
-// persist Current Factory pointers and canonical named Factory paths.
-type NamedPathFileSystem interface {
-	ReadFile(string) ([]byte, error)
-	Stat(string) (fs.FileInfo, error)
-	MkdirAll(string, fs.FileMode) error
-	WriteFile(string, []byte, fs.FileMode) error
-}
 
 // NamedPathResolver owns canonical named-Factory filesystem resolution.
 type NamedPathResolver interface {

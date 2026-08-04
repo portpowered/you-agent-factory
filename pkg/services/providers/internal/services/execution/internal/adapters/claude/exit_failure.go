@@ -25,6 +25,8 @@ func exitFailureFromCommandResult(result workers.CommandResult) error {
 	}
 	normalized := strings.ToLower(formatCombinedCommandOutput(result))
 	switch {
+	case containsAny(normalized, "no conversation found", "no session found"):
+		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindSessionNotFound, Message: claudeDeclaredFailureMessage(providers.ExecuteFailureKindSessionNotFound)}
 	case containsAny(normalized, "api key", "authentication", "unauthorized", "forbidden", "login required", "not authenticated"):
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindAuthentication, Message: claudeDeclaredFailureMessage(providers.ExecuteFailureKindAuthentication)}
 	case containsAny(normalized, "invalid argument", "bad request", "invalid request"):

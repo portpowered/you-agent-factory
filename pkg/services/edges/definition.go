@@ -27,6 +27,7 @@ import (
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
@@ -131,7 +132,7 @@ type Edges struct {
 	FactoryDefinitionRequiredToolVersionProbe       factorydefinitions.RequiredToolVersionProbe
 	FactoryDefinitionPersistenceFileSystem          factorydefinitions.PersistenceFileSystem
 	FactoryDefinitionDirectoryReplacementStore      factorydefinitions.DirectoryReplacementStore
-	FactoryDefinitionNamedPathFileSystem            factorydefinitions.NamedPathFileSystem
+	FactoryDefinitionNamedPathFileSystem            factorydefinitionswire.NamedPathFileSystem
 	FactoryDefinitionNamedFactoryCatalogFileSystem  factorydefinitions.NamedFactoryCatalogFileSystem
 	FactoryDefinitionPackagedInstallationFileSystem factorydefinitions.PackagedInstallationFileSystem
 	FactoryDefinitionAuthoredReaderFileSystem       factorydefinitions.AuthoredLayoutReaderFileSystem

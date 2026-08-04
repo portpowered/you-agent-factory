@@ -11,8 +11,9 @@ import (
 )
 
 type adapterBinding struct {
-	provider providers.Descriptor
-	attempt  execution.Attempt
+	provider        providers.Descriptor
+	attempt         execution.Attempt
+	continueAttempt execution.ContinuationAttempt
 }
 
 type service struct {
@@ -20,7 +21,7 @@ type service struct {
 	adapters map[providers.ID]adapterBinding
 }
 
-var _ execution.Service = (*service)(nil)
+var _ execution.ContinuationService = (*service)(nil)
 
 // New constructs an inert execution service over one canonical catalog
 // authority and an immutable set of private adapter attempts.
@@ -64,6 +65,9 @@ func New(
 				registration.Provider,
 			)
 		}
+		if registration.Continue == nil {
+			registration.Continue = unavailableContinuationAttempt
+		}
 		if _, exists := adapters[registration.Provider]; exists {
 			return nil, fmt.Errorf(
 				"construct Providers Execution: duplicate adapter for %q",
@@ -71,11 +75,68 @@ func New(
 			)
 		}
 		adapters[registration.Provider] = adapterBinding{
-			provider: descriptor,
-			attempt:  registration.Attempt,
+			provider:        descriptor,
+			attempt:         registration.Attempt,
+			continueAttempt: registration.Continue,
 		}
 	}
 	return &service{catalog: catalogService, adapters: adapters}, nil
+}
+
+func unavailableContinuationAttempt(
+	context.Context,
+	execution.ContinuationRequest,
+) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, providers.ExecuteFailure{
+		Kind:    providers.ExecuteFailureKindDependency,
+		Message: "provider continuation adapter is unavailable",
+	}
+}
+
+// Continue performs one validated exact-session adapter attempt. It shares
+// ordinary execution normalization but uses the separate private continuation
+// seam, so a public Execute request can never populate its resume reference.
+func (s *service) Continue(
+	ctx context.Context,
+	request execution.ContinuationRequest,
+) (result providers.ExecuteResult, executeErr error) {
+	detached := request.Clone()
+	secret := continuationDiagnosticSecrets(detached.ResumeSession)
+	defer func() {
+		if contextErr := normalizeContextFailureWithExisting(ctx, detached.ExecuteRequest, executeErr, secret...); contextErr != nil {
+			result = providers.ExecuteResult{}
+			executeErr = contextErr
+		}
+	}()
+	if contextErr := normalizeContextFailure(ctx, detached.ExecuteRequest, secret...); contextErr != nil {
+		return providers.ExecuteResult{}, contextErr
+	}
+	if err := detached.Validate(); err != nil {
+		return providers.ExecuteResult{}, normalizeValidationFailure(detached.ExecuteRequest, secret...)
+	}
+	resolved, err := s.catalog.GetProvider(ctx, providers.GetProviderRequest{ID: detached.Provider})
+	if err != nil {
+		return providers.ExecuteResult{}, err
+	}
+	binding, ok := s.adapters[resolved.Provider.ID]
+	if !ok {
+		return providers.ExecuteResult{}, providers.ErrProviderUnavailable
+	}
+	if !sameRegistrationFacts(binding.provider, resolved.Provider) {
+		return providers.ExecuteResult{}, providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindDependency,
+			Message: "provider registration does not match the canonical catalog",
+		}
+	}
+	detached.Provider = resolved.Provider.ID
+	if detached.ResumeSession != nil {
+		detached.ResumeSession.Provider = resolved.Provider.ID
+	}
+	result, err = binding.continueAttempt(ctx, detached)
+	if err != nil {
+		return providers.ExecuteResult{}, normalizeAttemptFailure(ctx, err, detached.ExecuteRequest, secret...)
+	}
+	return normalizeSuccess(result, resolved.Provider.ID, detached.ExecuteRequest, secret...)
 }
 
 func (s *service) Execute(
@@ -124,8 +185,9 @@ func normalizeContextFailureWithExisting(
 	ctx context.Context,
 	request providers.ExecuteRequest,
 	existing error,
+	extraSecrets ...string,
 ) error {
-	contextFailure := normalizeContextFailure(ctx, request)
+	contextFailure := normalizeContextFailure(ctx, request, extraSecrets...)
 	if contextFailure == nil {
 		return nil
 	}
@@ -133,13 +195,19 @@ func normalizeContextFailureWithExisting(
 	if !existingOK {
 		return contextFailure
 	}
-	normalized, normalizedOK := executeFailureAs(contextFailure)
-	if !normalizedOK {
-		return contextFailure
-	}
+	// normalizeContextFailure returns an ExecuteFailure whenever it returns a
+	// non-nil error, so its typed fields remain safe to preserve below.
+	normalized, _ := executeFailureAs(contextFailure)
 	normalized.SessionRef = existingFailure.SessionRef
 	normalized.Diagnostics = existingFailure.Diagnostics
-	return normalizeDeclaredFailure(normalized, request)
+	return normalizeDeclaredFailure(normalized, request, extraSecrets...)
+}
+
+func continuationDiagnosticSecrets(reference *providers.SessionRef) []string {
+	if reference == nil {
+		return nil
+	}
+	return []string{reference.ID}
 }
 
 func sameRegistrationFacts(

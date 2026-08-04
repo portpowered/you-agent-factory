@@ -64,6 +64,7 @@
     "pkg/platform/replay",
     "pkg/platform/runtimeartifact",
     "pkg/platform/stdio",
+    "pkg/platform/taskgroup",
     "pkg/root",
     "pkg/services/automations",
     "pkg/services/automations/internal",
@@ -86,7 +87,6 @@
     "pkg/services/automations/transports/http",
     "pkg/services/automations/wire",
     "pkg/services/chat_sessions",
-    "pkg/services/chat_sessions/internal/factorysessionsshim",
     "pkg/services/chat_sessions/internal/service",
     "pkg/services/chat_sessions/wire",
     "pkg/services/edges",
@@ -688,6 +688,11 @@
       "destination": "platform"
     },
     {
+      "packagePath": "pkg/platform/taskgroup",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
       "packagePath": "pkg/root",
       "disposition": "retain",
       "destination": "root"
@@ -794,11 +799,6 @@
     },
     {
       "packagePath": "pkg/services/chat_sessions",
-      "disposition": "retain",
-      "destination": "chat_sessions"
-    },
-    {
-      "packagePath": "pkg/services/chat_sessions/internal/factorysessionsshim",
       "disposition": "retain",
       "destination": "chat_sessions"
     },

@@ -8,10 +8,16 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 	instancehostwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/wire"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func stubWorkerSessionsFactory(workers.WorkstationExecutionService) (workersessions.Service, error) {
+	return nil, nil
+}
+
 func TestNewAssemblyRequiresWireConstructedRuntimeFactory(t *testing.T) {
-	assembly, err := NewAssembly(nil)
+	assembly, err := NewAssembly(nil, stubWorkerSessionsFactory)
 	if err == nil || !strings.Contains(err.Error(), "Factory Runtime factory is required") {
 		t.Fatalf("NewAssembly(nil) error = %v, want required dependency", err)
 	}
@@ -20,9 +26,20 @@ func TestNewAssemblyRequiresWireConstructedRuntimeFactory(t *testing.T) {
 	}
 }
 
+func TestNewAssemblyRequiresWorkerSessionsFactory(t *testing.T) {
+	runtimeFactory := &RuntimeFactory{}
+	assembly, err := NewAssembly(runtimeFactory, nil)
+	if err == nil || !strings.Contains(err.Error(), "Worker Sessions factory is required") {
+		t.Fatalf("NewAssembly(nil factory) error = %v, want required dependency", err)
+	}
+	if assembly != nil {
+		t.Fatalf("NewAssembly(nil factory) = %#v, want nil assembly", assembly)
+	}
+}
+
 func TestNewAssemblyBindsRuntimeFactory(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
-	assembly, err := NewAssembly(runtimeFactory)
+	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory)
 	if err != nil {
 		t.Fatalf("NewAssembly() error = %v", err)
 	}

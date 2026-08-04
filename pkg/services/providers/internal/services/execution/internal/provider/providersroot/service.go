@@ -132,9 +132,6 @@ func inferenceRequest(request providers.ExecuteRequest) workers.ProviderInferenc
 		EnvVars:            cloneMetadata(request.EnvVars),
 		ProcessEnvironment: append([]string(nil), request.ProcessEnvironment...),
 	}
-	if request.ResumeSession != nil {
-		infer.SessionID = request.ResumeSession.ID
-	}
 	return infer
 }
 

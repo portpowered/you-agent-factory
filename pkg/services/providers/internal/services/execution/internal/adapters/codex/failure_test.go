@@ -10,6 +10,7 @@ import (
 	"time"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	codex "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 )
 
@@ -65,7 +66,7 @@ func TestCodexRootNormalizesFailureStagesAndSuppressesResults(t *testing.T) {
 			var cleanups atomic.Int32
 			effect := codex.EffectFunc(func(
 				_ context.Context,
-				_ providers.ExecuteRequest,
+				_ execution.ContinuationRequest,
 				observe func([]byte) error,
 			) (codex.EffectResult, error) {
 				defer cleanups.Add(1)
@@ -96,7 +97,7 @@ func TestCodexRootPreservesStartedSessionOnFailure(t *testing.T) {
 
 	effect := codex.EffectFunc(func(
 		_ context.Context,
-		_ providers.ExecuteRequest,
+		_ execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (codex.EffectResult, error) {
 		if err := observe([]byte(
@@ -155,7 +156,7 @@ func TestCodexRootCancellationAndDeadlineReachEffectAndCleanUpOnce(t *testing.T)
 			var cleanups atomic.Int32
 			effect := codex.EffectFunc(func(
 				ctx context.Context,
-				_ providers.ExecuteRequest,
+				_ execution.ContinuationRequest,
 				_ func([]byte) error,
 			) (codex.EffectResult, error) {
 				close(started)
@@ -203,7 +204,7 @@ func TestCodexRootFailureSuppressesPreviouslyObservedSuccess(t *testing.T) {
 
 	effect := codex.EffectFunc(func(
 		_ context.Context,
-		_ providers.ExecuteRequest,
+		_ execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (codex.EffectResult, error) {
 		if err := observe(codexSuccessStream()); err != nil {
@@ -229,7 +230,7 @@ func TestCodexRootCarriesObservedSessionOnParseFailure(t *testing.T) {
 
 	effect := codex.EffectFunc(func(
 		_ context.Context,
-		_ providers.ExecuteRequest,
+		_ execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (codex.EffectResult, error) {
 		return codex.EffectResult{}, observe([]byte(

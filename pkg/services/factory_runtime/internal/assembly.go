@@ -19,16 +19,23 @@ import (
 // Assembly owns the product-policy dependencies used to assemble each
 // session-owned Factory Runtime.
 type Assembly struct {
-	runtimeFactory *RuntimeFactory
+	runtimeFactory        *RuntimeFactory
+	workerSessionsFactory factoryruntime.WorkerSessionsFactory
 }
 
 // NewAssembly constructs the inert Factory Runtime assembly service selected
-// by Wire. It does not start a runtime or sidecar.
-func NewAssembly(runtimeFactory *RuntimeFactory) (*Assembly, error) {
+// by Wire. It does not start a runtime or sidecar. workerSessionsFactory is
+// the one directly injected per-session Worker Sessions construction path
+// (W4 dispatch cutover); Wire owns composing it over worker_sessions/wire so
+// Factory Runtime never imports that peer service's wire package directly.
+func NewAssembly(runtimeFactory *RuntimeFactory, workerSessionsFactory factoryruntime.WorkerSessionsFactory) (*Assembly, error) {
 	if runtimeFactory == nil {
 		return nil, fmt.Errorf("Factory Runtime factory is required")
 	}
-	return &Assembly{runtimeFactory: runtimeFactory}, nil
+	if workerSessionsFactory == nil {
+		return nil, fmt.Errorf("Worker Sessions factory is required")
+	}
+	return &Assembly{runtimeFactory: runtimeFactory, workerSessionsFactory: workerSessionsFactory}, nil
 }
 
 // Assemble creates one session-owned runtime from invocation values and the
@@ -137,6 +144,7 @@ func (a *Assembly) Assemble(
 		baseLogger,
 		a.runtimeFactory,
 		workerExecution,
+		a.workerSessionsFactory,
 		sessionBuildFactory,
 		runtimeExecutorsFactory,
 		mockCommandRunnerFactory,

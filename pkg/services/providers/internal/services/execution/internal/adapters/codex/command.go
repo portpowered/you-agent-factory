@@ -29,7 +29,7 @@ func NewCommandEffect(runner workers.CommandRunner) Effect {
 	}
 	return EffectFunc(func(
 		ctx context.Context,
-		request providers.ExecuteRequest,
+		request execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (EffectResult, error) {
 		started := time.Now()
@@ -37,7 +37,7 @@ func NewCommandEffect(runner workers.CommandRunner) Effect {
 		if err != nil {
 			return EffectResult{}, execution.AttemptFailure{NativeError: err}
 		}
-		result, runErr := runStreaming(ctx, runner, request, command, observe)
+		result, runErr := runStreaming(ctx, runner, request.ExecuteRequest, command, observe)
 		effectResult := EffectResult{DurationMillis: time.Since(started).Milliseconds()}
 		if runErr != nil {
 			return effectResult, nativeCommandError(ctx, runErr)
@@ -49,8 +49,8 @@ func NewCommandEffect(runner workers.CommandRunner) Effect {
 	})
 }
 
-func buildCommand(request providers.ExecuteRequest) (workers.CommandRequest, error) {
-	if err := validateCodexOptionalCapabilities(request); err != nil {
+func buildCommand(request execution.ContinuationRequest) (workers.CommandRequest, error) {
+	if err := validateCodexOptionalCapabilities(request.ExecuteRequest); err != nil {
 		return workers.CommandRequest{}, err
 	}
 	args := []string{"exec", "--json"}
@@ -67,8 +67,13 @@ func buildCommand(request providers.ExecuteRequest) (workers.CommandRequest, err
 	if effort != "" {
 		args = append(args, "--config", `model_reasoning_effort="`+effort+`"`)
 	}
+	if request.ResumeSession != nil {
+		if sessionID := strings.TrimSpace(request.ResumeSession.ID); sessionID != "" {
+			args = append(args, "resume", sessionID)
+		}
+	}
 	args = append(args, "-")
-	return commanddispatch.WorkersCommand(request, workers.CommandRequest{
+	return commanddispatch.WorkersCommand(request.ExecuteRequest, workers.CommandRequest{
 		Command: string(providers.IDCodex),
 		Args:    args,
 		Stdin:   []byte(request.UserMessage),

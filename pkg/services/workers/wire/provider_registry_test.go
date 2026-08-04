@@ -106,6 +106,13 @@ func (*registryProvidersFake) Execute(
 	return providers.ExecuteResult{}, nil
 }
 
+func (*registryProvidersFake) Continue(
+	context.Context,
+	providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	return providers.ContinueResult{}, nil
+}
+
 func (*registryProvidersFake) ListProviders(
 	context.Context,
 	providers.ListProvidersRequest,

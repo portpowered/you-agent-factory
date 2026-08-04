@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"reflect"
 	"strconv"
 	"strings"
@@ -855,7 +856,7 @@ func admittedTurnResult(id, target string, version uint64, workingRoot, turnID, 
 
 // TestHandleSessionPromptFirstTurnStartsFactorySessionWithExactTargetRootAndContent
 // proves the first admitted turn in an unbound episode calls
-// StartFactoryTarget exactly once through the consumer-owned shim, with the
+// StartAsync exactly once through the Factory Sessions-owned capability, with the
 // episode's canonical Factory target, the session's exact editor working
 // root, and the validated prompt content -- never a process cwd or
 // substituted value.
@@ -863,8 +864,8 @@ func admittedTurnResult(id, target string, version uint64, workingRoot, turnID, 
 // proves the first admitted turn in an unbound episode starts a Factory
 // Session with the episode's canonical target and the session's exact
 // editor working root, then dispatches this turn's validated content into
-// the returned identity via the immediate follow-up InvokeFactoryTarget call
-// -- StartFactoryTarget carries no content of its own, since the shared
+// the returned identity via the immediate follow-up InvokeFactorySession call
+// -- StartAsync carries no content of its own, since the shared
 // factorysessions.Service.StartAsync it forwards to has no dedicated content
 // field and cannot dispatch an ordinary packaged Factory at all (see
 // ondemandtarget.Service.StartAsync's own doc comment).
@@ -885,36 +886,36 @@ func TestHandleSessionPromptFirstTurnStartsFactorySessionWithExactTargetRootAndC
 	}
 
 	if len(factoryTarget.startCalls) != 1 {
-		t.Fatalf("StartFactoryTarget call count = %d, want exactly 1", len(factoryTarget.startCalls))
+		t.Fatalf("StartAsync call count = %d, want exactly 1", len(factoryTarget.startCalls))
 	}
 	got := factoryTarget.startCalls[0]
 	wantSource := factorysessions.Source{Kind: factoryruntime.WorkflowSourceKindFactoryID, FactoryID: "factory:@you/review"}
 	if !reflect.DeepEqual(got.Source, wantSource) {
-		t.Fatalf("StartFactoryTarget Source = %+v, want %+v", got.Source, wantSource)
+		t.Fatalf("StartAsync Source = %+v, want %+v", got.Source, wantSource)
 	}
 	if got.Args["workingRoot"] != "/work/project" {
-		t.Fatalf("StartFactoryTarget Args[workingRoot] = %v, want /work/project", got.Args["workingRoot"])
+		t.Fatalf("StartAsync Args[workingRoot] = %v, want /work/project", got.Args["workingRoot"])
 	}
 	if _, ok := got.Args["content"]; ok {
-		t.Fatalf("StartFactoryTarget Args[content] = %#v, want no content key at all", got.Args["content"])
+		t.Fatalf("StartAsync Args[content] = %#v, want no content key at all", got.Args["content"])
 	}
 	if got.RequestID != "session-1/episode/1" {
-		t.Fatalf("StartFactoryTarget RequestID = %q, want the stable per-episode key session-1/episode/1 (not the admitted turn id, which changes on every retry)", got.RequestID)
+		t.Fatalf("StartAsync RequestID = %q, want the stable per-episode key session-1/episode/1 (not the admitted turn id, which changes on every retry)", got.RequestID)
 	}
 
 	if len(factoryTarget.invokeCalls) != 1 {
-		t.Fatalf("InvokeFactoryTarget call count = %d, want exactly 1", len(factoryTarget.invokeCalls))
+		t.Fatalf("InvokeFactorySession call count = %d, want exactly 1", len(factoryTarget.invokeCalls))
 	}
 	invoked := factoryTarget.invokeCalls[0]
 	if invoked.sessionID != "fs-1" {
-		t.Fatalf("InvokeFactoryTarget sessionID = %q, want the identity StartFactoryTarget just returned", invoked.sessionID)
+		t.Fatalf("InvokeFactorySession sessionID = %q, want the identity StartAsync just returned", invoked.sessionID)
 	}
 	wantContent := []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello there"}}
 	if !reflect.DeepEqual(invoked.request.Content, wantContent) {
-		t.Fatalf("InvokeFactoryTarget request.Content = %#v, want %#v", invoked.request.Content, wantContent)
+		t.Fatalf("InvokeFactorySession request.Content = %#v, want %#v", invoked.request.Content, wantContent)
 	}
 	if invoked.request.RequestID == nil || *invoked.request.RequestID != "turn-1" {
-		t.Fatalf("InvokeFactoryTarget request.RequestID = %v, want the admitted turn id turn-1", invoked.request.RequestID)
+		t.Fatalf("InvokeFactorySession request.RequestID = %v, want the admitted turn id turn-1", invoked.request.RequestID)
 	}
 }
 
@@ -949,10 +950,10 @@ func TestHandleSessionPromptFirstTurnBindsReturnedFactorySessionID(t *testing.T)
 
 // TestHandleSessionPromptLaterTurnInvokesBoundFactorySessionExactlyOnce
 // proves a later turn in an episode that already carries a Factory Session
-// ID calls InvokeFactoryTarget exactly once with that exact bound identity,
+// ID calls InvokeFactorySession exactly once with that exact bound identity,
 // the validated prompt content, the text source kind, and the admitted
 // turn's ID as the correlated request ID -- and makes zero
-// StartFactoryTarget or BindFactorySession calls, since a second Factory
+// StartAsync or BindFactorySession calls, since a second Factory
 // Session must never be started for an already-started episode.
 func TestHandleSessionPromptLaterTurnInvokesBoundFactorySessionExactlyOnce(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{
@@ -970,38 +971,38 @@ func TestHandleSessionPromptLaterTurnInvokesBoundFactorySessionExactlyOnce(t *te
 	}
 
 	if len(factoryTarget.startCalls) != 0 {
-		t.Fatalf("StartFactoryTarget call count = %d, want 0 for an already-bound episode", len(factoryTarget.startCalls))
+		t.Fatalf("StartAsync call count = %d, want 0 for an already-bound episode", len(factoryTarget.startCalls))
 	}
 	if chatSessions.bindFactorySessionCalled {
 		t.Fatal("BindFactorySession was called, want no binding attempt for an already-bound episode")
 	}
 
 	if len(factoryTarget.invokeCalls) != 1 {
-		t.Fatalf("InvokeFactoryTarget call count = %d, want exactly 1", len(factoryTarget.invokeCalls))
+		t.Fatalf("InvokeFactorySession call count = %d, want exactly 1", len(factoryTarget.invokeCalls))
 	}
 	got := factoryTarget.invokeCalls[0]
 	if got.sessionID != "fs-already-bound" {
-		t.Fatalf("InvokeFactoryTarget sessionID = %q, want the bound identity fs-already-bound", got.sessionID)
+		t.Fatalf("InvokeFactorySession sessionID = %q, want the bound identity fs-already-bound", got.sessionID)
 	}
 	wantContent := []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "a later message"}}
 	if !reflect.DeepEqual(got.request.Content, wantContent) {
-		t.Fatalf("InvokeFactoryTarget request.Content = %#v, want %#v", got.request.Content, wantContent)
+		t.Fatalf("InvokeFactorySession request.Content = %#v, want %#v", got.request.Content, wantContent)
 	}
 	if !got.request.ContentProvided {
-		t.Fatal("InvokeFactoryTarget request.ContentProvided = false, want true")
+		t.Fatal("InvokeFactorySession request.ContentProvided = false, want true")
 	}
 	if got.request.SourceKind == nil || *got.request.SourceKind != factorysessions.InvocationInputSourceKindText {
-		t.Fatalf("InvokeFactoryTarget request.SourceKind = %v, want %q", got.request.SourceKind, factorysessions.InvocationInputSourceKindText)
+		t.Fatalf("InvokeFactorySession request.SourceKind = %v, want %q", got.request.SourceKind, factorysessions.InvocationInputSourceKindText)
 	}
 	if got.request.RequestID == nil || *got.request.RequestID != "turn-2" {
-		t.Fatalf("InvokeFactoryTarget request.RequestID = %v, want the admitted turn id turn-2", got.request.RequestID)
+		t.Fatalf("InvokeFactorySession request.RequestID = %v, want the admitted turn id turn-2", got.request.RequestID)
 	}
 }
 
-// TestHandleSessionPromptInvokeFactoryTargetFailureMakesNoStartCall proves an
-// InvokeFactoryTarget failure for a later turn reports a bounded failure and
+// TestHandleSessionPromptInvokeFactorySessionFailureMakesNoStartCall proves an
+// InvokeFactorySession failure for a later turn reports a bounded failure and
 // never falls back to starting a second Factory Session for the episode.
-func TestHandleSessionPromptInvokeFactoryTargetFailureMakesNoStartCall(t *testing.T) {
+func TestHandleSessionPromptInvokeFactorySessionFailureMakesNoStartCall(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{
 		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
 		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", "fs-already-bound"),
@@ -1017,13 +1018,66 @@ func TestHandleSessionPromptInvokeFactoryTargetFailureMakesNoStartCall(t *testin
 	}
 
 	if len(factoryTarget.invokeCalls) != 1 {
-		t.Fatalf("InvokeFactoryTarget call count = %d, want exactly 1", len(factoryTarget.invokeCalls))
+		t.Fatalf("InvokeFactorySession call count = %d, want exactly 1", len(factoryTarget.invokeCalls))
 	}
 	if len(factoryTarget.startCalls) != 0 {
-		t.Fatalf("StartFactoryTarget call count = %d, want 0 after an Invoke failure", len(factoryTarget.startCalls))
+		t.Fatalf("StartAsync call count = %d, want 0 after an Invoke failure", len(factoryTarget.startCalls))
 	}
 	if chatSessions.bindFactorySessionCalled {
 		t.Fatal("BindFactorySession was called, want no binding attempt for an already-bound episode")
+	}
+}
+
+// TestHandleSessionPromptInvokeMissingSessionFailureAdvancesTurnToFailed
+// proves a later turn's invoke against an unknown or evicted Factory
+// Session identity -- classified by the Factory Sessions-owned capability as
+// the existing factorysessions.ErrSessionNotFound sentinel, not a generic
+// dependency error -- still reports a bounded failure, still advances the
+// admitted turn to TurnStateFailed (not silently stranded, not
+// misclassified as canceled), and never falls back to starting a second
+// Factory Session for the episode. classifyDependencyFailure collapses every
+// non-context-cancellation dependency error to the same bounded internal
+// error at this transport boundary by design, so this intentionally does not
+// assert errors.Is on the RPC response itself -- see
+// ondemandtarget.Service's own tests for the sentinel's errors.Is-compatible
+// classification at the capability that actually produces it.
+func TestHandleSessionPromptInvokeMissingSessionFailureAdvancesTurnToFailed(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", "fs-evicted"),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{invokeErr: factorysessions.ErrSessionNotFound}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
+		promptTextParams("session-1", "a later message"))
+	if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure for a missing-session Invoke failure")
+	}
+
+	if len(factoryTarget.invokeCalls) != 1 {
+		t.Fatalf("InvokeFactorySession call count = %d, want exactly 1", len(factoryTarget.invokeCalls))
+	}
+	if len(factoryTarget.startCalls) != 0 {
+		t.Fatalf("StartAsync call count = %d, want 0 after a missing-session Invoke failure", len(factoryTarget.startCalls))
+	}
+	if chatSessions.bindFactorySessionCalled {
+		t.Fatal("BindFactorySession was called, want no binding attempt for an already-bound episode")
+	}
+
+	var terminalAdvance *chatsessions.AdvanceTurnRequest
+	for i := range chatSessions.advanceTurnReqs {
+		if chatSessions.advanceTurnReqs[i].Next != chatsessions.TurnStateRunning {
+			terminalAdvance = &chatSessions.advanceTurnReqs[i]
+			break
+		}
+	}
+	if terminalAdvance == nil {
+		t.Fatal("no terminal AdvanceTurn call observed, want exactly one terminal transition after the missing-session failure")
+	}
+	if terminalAdvance.Next != chatsessions.TurnStateFailed {
+		t.Fatalf("terminal AdvanceTurn Next = %v, want TurnStateFailed for a non-cancellation dependency failure", terminalAdvance.Next)
 	}
 }
 
@@ -1083,7 +1137,7 @@ func TestHandleSessionPromptLaterTurnMapsInvocationOutcomeToFinalStopReason(t *t
 
 // TestHandleSessionPromptFirstTurnResponseNeverLeaksFactorySessionIdentity
 // proves handleSessionPrompt's final response for the first (start) turn in
-// an episode is mapped from the follow-up InvokeFactoryTarget call's real
+// an episode is mapped from the follow-up InvokeFactorySession call's real
 // published outcome -- not the start call's own identity-only
 // AsyncStartResult, which carries no terminal status at all -- and never
 // leaks the returned Factory Session identity or any other raw invocation
@@ -1376,17 +1430,17 @@ func TestHandleSessionPromptSequentialTurnsStartThenInvokeExactlyOnce(t *testing
 		t.Fatalf("handleSessionPrompt() (first turn) error = %+v, want a successful final prompt response", rpcErr)
 	}
 	if len(factoryTarget.startCalls) != 1 {
-		t.Fatalf("StartFactoryTarget call count after first turn = %d, want exactly 1", len(factoryTarget.startCalls))
+		t.Fatalf("StartAsync call count after first turn = %d, want exactly 1", len(factoryTarget.startCalls))
 	}
 	// The first turn's own content dispatches through the immediate
-	// follow-up InvokeFactoryTarget call StartFactoryTarget's own identity
+	// follow-up InvokeFactorySession call StartAsync's own identity
 	// feeds into -- see startFactorySessionForEpisode's doc comment -- so
 	// one invoke call is already expected here, before the second turn.
 	if len(factoryTarget.invokeCalls) != 1 {
-		t.Fatalf("InvokeFactoryTarget call count after first turn = %d, want exactly 1 (the first turn's own content dispatch)", len(factoryTarget.invokeCalls))
+		t.Fatalf("InvokeFactorySession call count after first turn = %d, want exactly 1 (the first turn's own content dispatch)", len(factoryTarget.invokeCalls))
 	}
 	if got := factoryTarget.invokeCalls[0].sessionID; got != "fs-1" {
-		t.Fatalf("InvokeFactoryTarget sessionID = %q, want the identity StartFactoryTarget just returned (fs-1)", got)
+		t.Fatalf("InvokeFactorySession sessionID = %q, want the identity StartAsync just returned (fs-1)", got)
 	}
 
 	secondEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 2, acpsdk.AgentMethodSessionPrompt,
@@ -1395,13 +1449,13 @@ func TestHandleSessionPromptSequentialTurnsStartThenInvokeExactlyOnce(t *testing
 		t.Fatalf("handleSessionPrompt() (second turn) error = %+v, want a successful final prompt response", rpcErr)
 	}
 	if len(factoryTarget.startCalls) != 1 {
-		t.Fatalf("StartFactoryTarget call count after second turn = %d, want still exactly 1 (no second start)", len(factoryTarget.startCalls))
+		t.Fatalf("StartAsync call count after second turn = %d, want still exactly 1 (no second start)", len(factoryTarget.startCalls))
 	}
 	if len(factoryTarget.invokeCalls) != 2 {
-		t.Fatalf("InvokeFactoryTarget call count after second turn = %d, want exactly 2 (the first turn's dispatch plus the second turn's own invoke)", len(factoryTarget.invokeCalls))
+		t.Fatalf("InvokeFactorySession call count after second turn = %d, want exactly 2 (the first turn's dispatch plus the second turn's own invoke)", len(factoryTarget.invokeCalls))
 	}
 	if got := factoryTarget.invokeCalls[1].sessionID; got != "fs-1" {
-		t.Fatalf("InvokeFactoryTarget sessionID = %q, want the identity bound by the first turn's start (fs-1)", got)
+		t.Fatalf("InvokeFactorySession sessionID = %q, want the identity bound by the first turn's start (fs-1)", got)
 	}
 }
 
@@ -1448,10 +1502,10 @@ func TestHandleSessionPromptRedeliveredRequestMakesNoFactoryCall(t *testing.T) {
 				t.Fatal("AdvanceTurn was called, want no turn-state mutation for a redelivered already-terminal request")
 			}
 			if len(factoryTarget.startCalls) != 0 {
-				t.Fatalf("StartFactoryTarget call count = %d, want 0 for a redelivered request", len(factoryTarget.startCalls))
+				t.Fatalf("StartAsync call count = %d, want 0 for a redelivered request", len(factoryTarget.startCalls))
 			}
 			if len(factoryTarget.invokeCalls) != 0 {
-				t.Fatalf("InvokeFactoryTarget call count = %d, want 0 for a redelivered request", len(factoryTarget.invokeCalls))
+				t.Fatalf("InvokeFactorySession call count = %d, want 0 for a redelivered request", len(factoryTarget.invokeCalls))
 			}
 
 			var resp acpsdk.PromptResponse
@@ -1496,7 +1550,7 @@ func TestHandleSessionPromptRedeliveredBusyRequestRejectsAsBusy(t *testing.T) {
 }
 
 // TestHandleSessionPromptFactoryStartFailureMakesNoBindCall proves a
-// StartFactoryTarget failure reports a bounded failure and never calls
+// StartAsync failure reports a bounded failure and never calls
 // BindFactorySession.
 func TestHandleSessionPromptFactoryStartFailureMakesNoBindCall(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{
@@ -1519,7 +1573,7 @@ func TestHandleSessionPromptFactoryStartFailureMakesNoBindCall(t *testing.T) {
 }
 
 // TestHandleSessionPromptEmptyFactorySessionIdentityFailsSafely proves a
-// StartFactoryTarget success carrying a blank SessionID fails safely and
+// StartAsync success carrying a blank SessionID fails safely and
 // never calls BindFactorySession, rather than committing an empty identity.
 func TestHandleSessionPromptEmptyFactorySessionIdentityFailsSafely(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{
@@ -1564,7 +1618,7 @@ func TestHandleSessionPromptRecordPendingFailureAfterStartMakesNoBindCall(t *tes
 		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure when RecordPendingFactorySession fails")
 	}
 	if len(factoryTarget.invokeCalls) != 0 {
-		t.Fatalf("InvokeFactoryTarget call count = %d, want 0 when the pending identity was never durably recorded", len(factoryTarget.invokeCalls))
+		t.Fatalf("InvokeFactorySession call count = %d, want 0 when the pending identity was never durably recorded", len(factoryTarget.invokeCalls))
 	}
 	if chatSessions.bindFactorySessionCalled {
 		t.Fatal("BindFactorySession was called, want no binding attempt when RecordPendingFactorySession fails")
@@ -1574,7 +1628,7 @@ func TestHandleSessionPromptRecordPendingFailureAfterStartMakesNoBindCall(t *tes
 // TestHandleSessionPromptRetryAfterRecordPendingFailureReusesStableRequestID
 // proves that a later, uniquely identified prompt for the same still-unbound
 // episode (observed after a RecordPendingFactorySession failure left the
-// episode with no pending or bound identity at all) calls StartFactoryTarget
+// episode with no pending or bound identity at all) calls StartAsync
 // again with the exact same RequestID as the original attempt -- a stable key
 // derived only from the session and episode, never the admitted Turn's own
 // ID, which differs on every retry. This is what lets
@@ -1613,11 +1667,11 @@ func TestHandleSessionPromptRetryAfterRecordPendingFailureReusesStableRequestID(
 	}
 
 	if len(factoryTarget.startCalls) != 2 {
-		t.Fatalf("StartFactoryTarget call count = %d, want exactly 2 (the original attempt plus the retry)", len(factoryTarget.startCalls))
+		t.Fatalf("StartAsync call count = %d, want exactly 2 (the original attempt plus the retry)", len(factoryTarget.startCalls))
 	}
 	first, second := factoryTarget.startCalls[0], factoryTarget.startCalls[1]
 	if first.RequestID == "" || first.RequestID != second.RequestID {
-		t.Fatalf("StartFactoryTarget RequestID[0] = %q, RequestID[1] = %q, want the identical stable per-episode key on both calls", first.RequestID, second.RequestID)
+		t.Fatalf("StartAsync RequestID[0] = %q, RequestID[1] = %q, want the identical stable per-episode key on both calls", first.RequestID, second.RequestID)
 	}
 	if !chatSessions.bindFactorySessionCalled {
 		t.Fatal("BindFactorySession was not called, want the retry to bind after RecordPendingFactorySession succeeds the second time")
@@ -1628,7 +1682,7 @@ func TestHandleSessionPromptRetryAfterRecordPendingFailureReusesStableRequestID(
 }
 
 // TestHandleSessionPromptFirstTurnInvokeFailureMakesNoBindCall proves that
-// when the first turn's own follow-up InvokeFactoryTarget call (the one that
+// when the first turn's own follow-up InvokeFactorySession call (the one that
 // actually dispatches this turn's content into the just-started identity)
 // fails, the handler reports a bounded failure and never proceeds to bind.
 func TestHandleSessionPromptFirstTurnInvokeFailureMakesNoBindCall(t *testing.T) {
@@ -1650,10 +1704,10 @@ func TestHandleSessionPromptFirstTurnInvokeFailureMakesNoBindCall(t *testing.T) 
 		t.Fatal("handleSessionPrompt() error = nil, want a bounded failure when the first turn's own invoke fails")
 	}
 	if len(factoryTarget.startCalls) != 1 {
-		t.Fatalf("StartFactoryTarget call count = %d, want exactly 1", len(factoryTarget.startCalls))
+		t.Fatalf("StartAsync call count = %d, want exactly 1", len(factoryTarget.startCalls))
 	}
 	if len(factoryTarget.invokeCalls) != 1 {
-		t.Fatalf("InvokeFactoryTarget call count = %d, want exactly 1", len(factoryTarget.invokeCalls))
+		t.Fatalf("InvokeFactorySession call count = %d, want exactly 1", len(factoryTarget.invokeCalls))
 	}
 	if chatSessions.bindFactorySessionCalled {
 		t.Fatal("BindFactorySession was called, want no binding attempt when the dispatch itself failed")
@@ -1663,7 +1717,7 @@ func TestHandleSessionPromptFirstTurnInvokeFailureMakesNoBindCall(t *testing.T) 
 // TestHandleSessionPromptBindConflictClosesTheJustStartedRuntime proves that
 // when BindFactorySession fails with *chatsessions.FactorySessionConflictError
 // -- a different identity already won the episode -- the handler compensates
-// by closing the exact runtime identity StartFactoryTarget just returned and
+// by closing the exact runtime identity StartAsync just returned and
 // abandons its pending-start reconciliation record, since the next call for
 // this episode will correctly observe and invoke the already-bound winner
 // instead of ever needing this loser again.
@@ -1687,10 +1741,10 @@ func TestHandleSessionPromptBindConflictClosesTheJustStartedRuntime(t *testing.T
 	}
 
 	if len(factoryTarget.closeCalls) != 1 {
-		t.Fatalf("CloseFactoryTarget call count = %d, want exactly 1", len(factoryTarget.closeCalls))
+		t.Fatalf("CloseFactorySession call count = %d, want exactly 1", len(factoryTarget.closeCalls))
 	}
 	if factoryTarget.closeCalls[0] != "fs-orphan-candidate" {
-		t.Fatalf("CloseFactoryTarget sessionID = %q, want the exact identity StartFactoryTarget returned", factoryTarget.closeCalls[0])
+		t.Fatalf("CloseFactorySession sessionID = %q, want the exact identity StartAsync returned", factoryTarget.closeCalls[0])
 	}
 
 	wantAdvanceTurnSequence(t, chatSessions, "session-1", "turn-1", chatsessions.TurnStateRunning, chatsessions.TurnStateFailed)
@@ -1701,8 +1755,8 @@ func TestHandleSessionPromptBindConflictClosesTheJustStartedRuntime(t *testing.T
 // different-identity conflict (for example a transient version race), the
 // handler does not close the just-started runtime, and a later uniquely
 // identified retry for the same still-unbound episode dispatches through
-// InvokeFactoryTarget against that exact pending identity instead of calling
-// StartFactoryTarget a second time -- so a bind failure can never cause two
+// InvokeFactorySession against that exact pending identity instead of calling
+// StartAsync a second time -- so a bind failure can never cause two
 // Factory Sessions to exist for one episode.
 func TestHandleSessionPromptBindFailureRetryReusesPendingFactorySession(t *testing.T) {
 	secondTurn := admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", "")
@@ -1734,7 +1788,7 @@ func TestHandleSessionPromptBindFailureRetryReusesPendingFactorySession(t *testi
 		t.Fatal("first handleSessionPrompt() error = nil, want a bounded failure when BindFactorySession fails")
 	}
 	if len(factoryTarget.closeCalls) != 0 {
-		t.Fatalf("CloseFactoryTarget call count = %d, want 0: a non-conflict bind failure must not abandon the pending runtime", len(factoryTarget.closeCalls))
+		t.Fatalf("CloseFactorySession call count = %d, want 0: a non-conflict bind failure must not abandon the pending runtime", len(factoryTarget.closeCalls))
 	}
 
 	secondEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
@@ -1744,17 +1798,17 @@ func TestHandleSessionPromptBindFailureRetryReusesPendingFactorySession(t *testi
 	}
 
 	if len(factoryTarget.startCalls) != 1 {
-		t.Fatalf("StartFactoryTarget call count = %d, want exactly 1 (the retry reuses the pending identity via invoke, never starting a second Factory Session)", len(factoryTarget.startCalls))
+		t.Fatalf("StartAsync call count = %d, want exactly 1 (the retry reuses the pending identity via invoke, never starting a second Factory Session)", len(factoryTarget.startCalls))
 	}
 	// The first (failed-bind) attempt already dispatches its own content via
 	// invoke right after starting, before the bind attempt that then fails;
 	// the retry's own invoke against the same pending identity is the second.
 	if len(factoryTarget.invokeCalls) != 2 {
-		t.Fatalf("InvokeFactoryTarget call count = %d, want exactly 2 (the first attempt's dispatch plus the retry's)", len(factoryTarget.invokeCalls))
+		t.Fatalf("InvokeFactorySession call count = %d, want exactly 2 (the first attempt's dispatch plus the retry's)", len(factoryTarget.invokeCalls))
 	}
 	for i, call := range factoryTarget.invokeCalls {
 		if call.sessionID != "fs-pending" {
-			t.Fatalf("InvokeFactoryTarget[%d] sessionID = %q, want fs-pending", i, call.sessionID)
+			t.Fatalf("InvokeFactorySession[%d] sessionID = %q, want fs-pending", i, call.sessionID)
 		}
 	}
 }
@@ -1807,9 +1861,9 @@ func wantAdvanceTurnSequence(t *testing.T, chatSessions *fakeChatSessionsService
 
 // TestHandleSessionPromptFirstTurnAdvancesByInvokeOutcome proves a
 // first-turn (start) admission's terminal advancement tracks the follow-up
-// InvokeFactoryTarget call's own published terminal status exactly, the same
+// InvokeFactorySession call's own published terminal status exactly, the same
 // way a later (invoke) turn's does -- not a hardcoded TurnStateCompleted
-// regardless of outcome. StartFactoryTarget itself only opens the runtime
+// regardless of outcome. StartAsync itself only opens the runtime
 // (AsyncStartResult carries no terminal status at all); this turn's actual
 // published outcome is entirely the immediate follow-up invoke's.
 func TestHandleSessionPromptFirstTurnAdvancesByInvokeOutcome(t *testing.T) {
@@ -1853,7 +1907,7 @@ func TestHandleSessionPromptFirstTurnAdvancesByInvokeOutcome(t *testing.T) {
 // published terminal status exactly -- completed advances to COMPLETED,
 // caller-canceled/timed-out both advance to CANCELED, and a genuine Factory
 // failure (or any unmapped future status) advances to FAILED -- even though
-// InvokeFactoryTarget itself returns no Go error and the ACP response still
+// InvokeFactorySession itself returns no Go error and the ACP response still
 // carries its own (separately mapped, safe-fallback) stop reason.
 func TestHandleSessionPromptLaterTurnAdvancesByInvocationOutcome(t *testing.T) {
 	tests := []struct {
@@ -1975,7 +2029,7 @@ func TestHandleSessionPromptFactoryDispatchCancellationAdvancesTurnToCanceled(t 
 // TestHandleSessionPromptRunningTransitionFailureMakesNoFactoryDispatchCall
 // proves that when advancing a freshly admitted turn to TurnStateRunning
 // itself fails, the handler reports a bounded internal error, never attempts
-// a Factory dispatch call (StartFactoryTarget/InvokeFactoryTarget) for a
+// a Factory dispatch call (StartAsync/InvokeFactorySession) for a
 // turn that is not actually confirmed running, and makes one recovery
 // AdvanceTurn(CANCELED) attempt -- the one legal terminal transition from
 // ADMITTED -- so the session's busy state is not stranded forever.
@@ -1996,7 +2050,7 @@ func TestHandleSessionPromptRunningTransitionFailureMakesNoFactoryDispatchCall(t
 	}
 
 	if len(factoryTarget.startCalls) != 0 {
-		t.Fatalf("StartFactoryTarget call count = %d, want 0 when the turn never confirmed running", len(factoryTarget.startCalls))
+		t.Fatalf("StartAsync call count = %d, want 0 when the turn never confirmed running", len(factoryTarget.startCalls))
 	}
 	if chatSessions.bindFactorySessionCalled {
 		t.Fatal("BindFactorySession was called, want no binding attempt when the turn never confirmed running")
@@ -2049,7 +2103,7 @@ func TestHandleSessionPromptRunningTransitionFailureRecoveryAdmitsLaterPrompt(t 
 		t.Fatalf("second handleSessionPrompt() error = %+v, want the session admitted (not stranded busy)", rpcErr)
 	}
 	if len(factoryTarget.startCalls) != 1 {
-		t.Fatalf("StartFactoryTarget call count = %d, want exactly 1 (only the second, successfully admitted turn dispatches)", len(factoryTarget.startCalls))
+		t.Fatalf("StartAsync call count = %d, want exactly 1 (only the second, successfully admitted turn dispatches)", len(factoryTarget.startCalls))
 	}
 }
 
@@ -2092,7 +2146,7 @@ func TestHandleSessionPromptPendingFactorySessionSurvivesNewServerInstance(t *te
 		t.Fatal("first handleSessionPrompt() error = nil, want a bounded failure when the injected bind fault fires")
 	}
 	if len(factoryTarget.closeCalls) != 0 {
-		t.Fatalf("CloseFactoryTarget call count = %d, want 0: a non-conflict bind failure must not abandon the pending runtime", len(factoryTarget.closeCalls))
+		t.Fatalf("CloseFactorySession call count = %d, want 0: a non-conflict bind failure must not abandon the pending runtime", len(factoryTarget.closeCalls))
 	}
 
 	// A brand-new Server, sharing only the underlying store (not the failed
@@ -2107,18 +2161,18 @@ func TestHandleSessionPromptPendingFactorySessionSurvivesNewServerInstance(t *te
 	}
 
 	if len(factoryTarget.startCalls) != 1 {
-		t.Fatalf("StartFactoryTarget call count = %d, want exactly 1 (the new Server instance reuses the durably recorded pending identity via invoke, never starting a second Factory Session)", len(factoryTarget.startCalls))
+		t.Fatalf("StartAsync call count = %d, want exactly 1 (the new Server instance reuses the durably recorded pending identity via invoke, never starting a second Factory Session)", len(factoryTarget.startCalls))
 	}
 	// The first server's own attempt already dispatched via invoke right
 	// after starting, before its bind attempt failed; the second server's
 	// own invoke against the same durably-recorded pending identity is the
 	// second call.
 	if len(factoryTarget.invokeCalls) != 2 {
-		t.Fatalf("InvokeFactoryTarget call count = %d, want exactly 2 (the first attempt's dispatch plus the second server's)", len(factoryTarget.invokeCalls))
+		t.Fatalf("InvokeFactorySession call count = %d, want exactly 2 (the first attempt's dispatch plus the second server's)", len(factoryTarget.invokeCalls))
 	}
 	for i, call := range factoryTarget.invokeCalls {
 		if call.sessionID != "fs-pending" {
-			t.Fatalf("InvokeFactoryTarget[%d] sessionID = %q, want fs-pending", i, call.sessionID)
+			t.Fatalf("InvokeFactorySession[%d] sessionID = %q, want fs-pending", i, call.sessionID)
 		}
 	}
 }
@@ -2154,7 +2208,7 @@ func TestHandleSessionPromptTerminalTransitionFailurePropagatesBoundedError(t *t
 	}
 
 	if len(factoryTarget.startCalls) != 1 {
-		t.Fatalf("StartFactoryTarget call count = %d, want exactly 1 (the dispatch itself succeeded)", len(factoryTarget.startCalls))
+		t.Fatalf("StartAsync call count = %d, want exactly 1 (the dispatch itself succeeded)", len(factoryTarget.startCalls))
 	}
 	if !chatSessions.bindFactorySessionCalled {
 		t.Fatal("BindFactorySession was not called, want the successful dispatch to still bind before terminalization is attempted")
@@ -2210,14 +2264,14 @@ func TestHandleSessionPromptTerminalTransitionFailureRecoveryAdmitsLaterPrompt(t
 		t.Fatalf("second handleSessionPrompt() error = %+v, want the session admitted (not stranded busy)", rpcErr)
 	}
 	if len(factoryTarget.startCalls) != 1 {
-		t.Fatalf("StartFactoryTarget call count = %d, want exactly 1 (the first turn's dispatch itself succeeded before its terminalization faulted)", len(factoryTarget.startCalls))
+		t.Fatalf("StartAsync call count = %d, want exactly 1 (the first turn's dispatch itself succeeded before its terminalization faulted)", len(factoryTarget.startCalls))
 	}
 	// The first turn's own content already dispatched via invoke right
 	// after its successful start; the second turn's own invoke against the
 	// already-bound Factory Session (reused, not a second start) is the
 	// second call.
 	if len(factoryTarget.invokeCalls) != 2 {
-		t.Fatalf("InvokeFactoryTarget call count = %d, want exactly 2 (the first turn's dispatch plus the second turn's reuse)", len(factoryTarget.invokeCalls))
+		t.Fatalf("InvokeFactorySession call count = %d, want exactly 2 (the first turn's dispatch plus the second turn's reuse)", len(factoryTarget.invokeCalls))
 	}
 }
 
@@ -2277,4 +2331,556 @@ func TestHandleSessionPromptFailedTerminalTransitionFailureRecoveryAdmitsLaterPr
 	if _, rpcErr := server.handleSessionPrompt(context.Background(), secondEnv); rpcErr != nil {
 		t.Fatalf("second handleSessionPrompt() error = %+v, want the session admitted (not stranded busy) after a recovered FAILED-transition failure", rpcErr)
 	}
+}
+
+// TestServeRoutesSessionCancelToCapturedFactorySession proves a well-formed
+// "session/cancel" notification, dispatched through the full Serve/
+// dispatchRequest path (not a direct handleSessionCancel call), reaches the
+// exact Factory Session identity a prior turn bound to the addressed Chat
+// Session's current episode -- forwarding the caller's context and a
+// ControlRequest correlated to the addressed session -- and, per JSON-RPC
+// 2.0's notification contract, writes no response line at all.
+func TestServeRoutesSessionCancelToCapturedFactorySession(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: chatsessions.GetSessionResult{
+			Session: chatsessions.Session{ID: "session-1"},
+			Episode: chatsessions.TargetEpisode{
+				Number: 1, State: chatsessions.TargetEpisodeStateOpen,
+				Target:           chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "@you/review"},
+				FactorySessionID: "fs-1",
+			},
+		},
+	}
+	factoryTarget := &fakeFactoryTargetService{}
+	server := newTestServerWithFactoryTarget(chatSessions, nil, factoryTarget, "/home/operator")
+
+	line := `{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"session-1"}}` + "\n"
+	out := &bytes.Buffer{}
+	if err := server.Serve(context.Background(), strings.NewReader(line), out); err != nil {
+		t.Fatalf("Serve() error = %v", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("output = %q, want no response for a session/cancel notification", out.Bytes())
+	}
+
+	if !chatSessions.getSessionCalled {
+		t.Fatal("GetSession was not called, want the addressed session read to resolve its bound Factory Session identity")
+	}
+	if chatSessions.getSessionReq.SessionID != "session-1" {
+		t.Fatalf("GetSession SessionID = %q, want session-1", chatSessions.getSessionReq.SessionID)
+	}
+	if len(factoryTarget.cancelCalls) != 1 {
+		t.Fatalf("Cancel call count = %d, want exactly 1 forwarded to the captured Factory Session", len(factoryTarget.cancelCalls))
+	}
+	if got := factoryTarget.cancelCalls[0].sessionID; got != "fs-1" {
+		t.Fatalf("Cancel sessionID = %q, want the episode's bound identity fs-1", got)
+	}
+	if factoryTarget.cancelCalls[0].request.RequestID == "" {
+		t.Fatal("Cancel request.RequestID is blank, want a non-blank correlated identity")
+	}
+}
+
+// TestServeCancelReachesFactorySessionWhileItsOwnSessionPromptInvocationIsStillBlocked
+// proves "session/cancel" is dispatched -- and reaches the captured Factory
+// Session's Cancel operation -- while a "session/prompt" received earlier on
+// the exact same connection is still blocked inside its own
+// InvokeFactorySession call, not only after that call has already returned.
+// This is the real ACP stdio protocol shape: a client always sends
+// "session/cancel" while the prompt it means to cancel is still in flight,
+// on the one connection carrying both. It also proves the still-blocked
+// prompt, once its downstream call reports the outcome the cancellation
+// caused, still terminalizes with the existing canceled-turn/stop-reason
+// behavior -- cancellation's only observable effect from the caller's own
+// side is that eventual "session/prompt" response, per handleSessionCancel's
+// own doc comment.
+func TestServeCancelReachesFactorySessionWhileItsOwnSessionPromptInvocationIsStillBlocked(t *testing.T) {
+	getSessionResult := sessionAt("session-1", "factory:@you/review", 3, "/work/project")
+	// handleSessionCancel resolves the bound Factory Session identity through
+	// its own, separate GetSession call (not through admitPromptTurn's
+	// StartTurn result), so this fake's Episode must carry the same
+	// FactorySessionID startTurnResult's Episode below does.
+	getSessionResult.Episode = chatsessions.TargetEpisode{
+		Number: 1, State: chatsessions.TargetEpisodeStateOpen,
+		Target:           chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
+		FactorySessionID: "fs-already-bound",
+	}
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: getSessionResult,
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", "fs-already-bound"),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{
+		invokeEnter:   make(chan struct{}),
+		invokeRelease: make(chan struct{}),
+		cancelEntered: make(chan struct{}),
+		invokeResult:  factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCanceled},
+	}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	pr, pw := io.Pipe()
+	out := &bytes.Buffer{}
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- server.Serve(context.Background(), pr, out) }()
+
+	promptLine := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"session/prompt","params":%s}`+"\n",
+		promptTextParams("session-1", "a message to cancel"))
+	if _, err := pw.Write([]byte(promptLine)); err != nil {
+		t.Fatalf("write session/prompt line: %v", err)
+	}
+
+	select {
+	case <-factoryTarget.invokeEnter:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for InvokeFactorySession to be entered")
+	}
+
+	cancelLine := `{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"session-1"}}` + "\n"
+	if _, err := pw.Write([]byte(cancelLine)); err != nil {
+		t.Fatalf("write session/cancel line: %v", err)
+	}
+
+	select {
+	case <-factoryTarget.cancelEntered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for Cancel to be entered")
+	}
+
+	// Cancel has already been recorded here, above, while
+	// InvokeFactorySession -- confirmed still blocked by this same
+	// assertion -- has not: proving cancellation reached the captured
+	// runtime without ever waiting for the prompt's own call to return
+	// first.
+	factoryTarget.mu.Lock()
+	cancelCallCount := len(factoryTarget.cancelCalls)
+	cancelSessionID := ""
+	if cancelCallCount > 0 {
+		cancelSessionID = factoryTarget.cancelCalls[0].sessionID
+	}
+	invokeCallCount := len(factoryTarget.invokeCalls)
+	factoryTarget.mu.Unlock()
+	if cancelCallCount != 1 {
+		t.Fatalf("Cancel call count = %d, want exactly 1 while the prompt invocation is still blocked", cancelCallCount)
+	}
+	if cancelSessionID != "fs-already-bound" {
+		t.Fatalf("Cancel sessionID = %q, want the episode's bound identity fs-already-bound", cancelSessionID)
+	}
+	if invokeCallCount != 1 {
+		t.Fatalf("InvokeFactorySession call count = %d, want exactly 1 still in flight", invokeCallCount)
+	}
+
+	close(factoryTarget.invokeRelease)
+
+	if err := pw.Close(); err != nil {
+		t.Fatalf("close input pipe: %v", err)
+	}
+	if err := <-serveErr; err != nil {
+		t.Fatalf("Serve() error = %v", err)
+	}
+
+	assertCancelledPromptResponse(t, out)
+}
+
+// assertCancelledPromptResponse asserts out carries exactly one successful
+// "session/prompt" response reporting acpsdk.StopReasonCancelled -- the
+// shared tail assertion for the in-flight-cancellation tests above and
+// below, which both drive a real Cancel-caused invocation outcome through
+// to this same eventual response.
+func assertCancelledPromptResponse(t *testing.T, out *bytes.Buffer) {
+	t.Helper()
+	resp := assertSingleResponseLine(t, out)
+	if resp.Error != nil {
+		t.Fatalf("response error = %+v, want success", resp.Error)
+	}
+	var promptResp acpsdk.PromptResponse
+	if err := json.Unmarshal(resp.Result, &promptResp); err != nil {
+		t.Fatalf("unmarshal PromptResponse: %v", err)
+	}
+	if promptResp.StopReason != acpsdk.StopReasonCancelled {
+		t.Fatalf("stopReason = %q, want cancelled", promptResp.StopReason)
+	}
+}
+
+// TestServeCancelReachesPendingFactorySessionDuringFirstTurnInvocation proves
+// "session/cancel" reaches the exact runtime a first, currently-admitted
+// turn started -- while that turn's own follow-up InvokeFactorySession call
+// is still blocked and BindFactorySession has not yet committed it as the
+// episode's FactorySessionID -- by routing through the episode's
+// PendingFactorySessionID (recorded by RecordPendingFactorySession right
+// after StartAsync succeeds; see startFactorySessionForEpisode and
+// chatsessions.TargetEpisode.PendingFactorySessionID's own doc comments).
+// This is the real-world cancellation window that matters most: a caller
+// almost always cancels the very first prompt of a brand-new target episode
+// while it is still running, not only a later, already-bound turn (which
+// TestServeCancelReachesFactorySessionWhileItsOwnSessionPromptInvocationIsStillBlocked
+// already covers). Before handleSessionCancel also consulted
+// PendingFactorySessionID, this exact scenario was a silent no-op.
+func TestServeCancelReachesPendingFactorySessionDuringFirstTurnInvocation(t *testing.T) {
+	getSessionResult := sessionAt("session-1", "factory:@you/review", 3, "/work/project")
+	// handleSessionCancel resolves the captured identity through its own,
+	// separate GetSession call: the episode has not bound FactorySessionID
+	// yet (the first turn's InvokeFactorySession/BindFactorySession sequence
+	// is still in flight below), only the pending identity StartAsync
+	// already returned and RecordPendingFactorySession already durably
+	// recorded.
+	getSessionResult.Episode = chatsessions.TargetEpisode{
+		Number: 1, State: chatsessions.TargetEpisodeStateOpen,
+		Target:                  chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
+		PendingFactorySessionID: "fs-pending-1",
+	}
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: getSessionResult,
+		// The admitted StartTurn result's episode is genuinely unbound (blank
+		// FactorySessionID), driving dispatchFactoryTurn into
+		// startFactorySessionForEpisode -- the first-turn branch this test
+		// means to exercise.
+		startTurnResult: admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{
+		startResult:   factorysessions.AsyncStartResult{SessionID: "fs-pending-1"},
+		invokeEnter:   make(chan struct{}),
+		invokeRelease: make(chan struct{}),
+		cancelEntered: make(chan struct{}),
+		invokeResult:  factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCanceled},
+	}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	pr, pw := io.Pipe()
+	out := &bytes.Buffer{}
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- server.Serve(context.Background(), pr, out) }()
+
+	promptLine := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"session/prompt","params":%s}`+"\n",
+		promptTextParams("session-1", "a message to cancel"))
+	if _, err := pw.Write([]byte(promptLine)); err != nil {
+		t.Fatalf("write session/prompt line: %v", err)
+	}
+
+	select {
+	case <-factoryTarget.invokeEnter:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for InvokeFactorySession to be entered")
+	}
+
+	factoryTarget.mu.Lock()
+	startCallCount := len(factoryTarget.startCalls)
+	factoryTarget.mu.Unlock()
+	if startCallCount != 1 {
+		t.Fatalf("StartAsync call count = %d, want exactly 1 before its own follow-up invoke blocks", startCallCount)
+	}
+
+	cancelLine := `{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"session-1"}}` + "\n"
+	if _, err := pw.Write([]byte(cancelLine)); err != nil {
+		t.Fatalf("write session/cancel line: %v", err)
+	}
+
+	select {
+	case <-factoryTarget.cancelEntered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for Cancel to be entered")
+	}
+
+	// Cancel has already been recorded here, against the pending (not yet
+	// bound) identity, while InvokeFactorySession -- confirmed still blocked
+	// by this same assertion -- has not returned.
+	factoryTarget.mu.Lock()
+	cancelCallCount := len(factoryTarget.cancelCalls)
+	cancelSessionID := ""
+	if cancelCallCount > 0 {
+		cancelSessionID = factoryTarget.cancelCalls[0].sessionID
+	}
+	invokeCallCount := len(factoryTarget.invokeCalls)
+	factoryTarget.mu.Unlock()
+	if cancelCallCount != 1 {
+		t.Fatalf("Cancel call count = %d, want exactly 1 while the first turn's invocation is still blocked", cancelCallCount)
+	}
+	if cancelSessionID != "fs-pending-1" {
+		t.Fatalf("Cancel sessionID = %q, want the episode's pending (not yet bound) identity fs-pending-1", cancelSessionID)
+	}
+	if invokeCallCount != 1 {
+		t.Fatalf("InvokeFactorySession call count = %d, want exactly 1 still in flight", invokeCallCount)
+	}
+
+	close(factoryTarget.invokeRelease)
+
+	if err := pw.Close(); err != nil {
+		t.Fatalf("close input pipe: %v", err)
+	}
+	if err := <-serveErr; err != nil {
+		t.Fatalf("Serve() error = %v", err)
+	}
+
+	assertCancelledPromptResponse(t, out)
+}
+
+// TestServeSessionCancelWithNoBoundFactorySessionIsNoOp proves a
+// "session/cancel" notification for a Chat Session whose current episode has
+// not yet bound a Factory Session identity (an episode still pending or
+// never started) makes no Cancel call: there is no captured runtime to
+// forward to, and this is a silent no-op rather than a panic or a fabricated
+// call against a blank identity.
+func TestServeSessionCancelWithNoBoundFactorySessionIsNoOp(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: chatsessions.GetSessionResult{
+			Session: chatsessions.Session{ID: "session-1"},
+			Episode: chatsessions.TargetEpisode{
+				Number: 1, State: chatsessions.TargetEpisodeStateOpen,
+				Target: chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "@you/review"},
+			},
+		},
+	}
+	factoryTarget := &fakeFactoryTargetService{}
+	server := newTestServerWithFactoryTarget(chatSessions, nil, factoryTarget, "/home/operator")
+
+	line := `{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"session-1"}}` + "\n"
+	out := &bytes.Buffer{}
+	if err := server.Serve(context.Background(), strings.NewReader(line), out); err != nil {
+		t.Fatalf("Serve() error = %v", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("output = %q, want no response for a session/cancel notification", out.Bytes())
+	}
+	if len(factoryTarget.cancelCalls) != 0 {
+		t.Fatalf("Cancel call count = %d, want 0 when the episode has no bound Factory Session identity", len(factoryTarget.cancelCalls))
+	}
+}
+
+// TestServeSessionCancelUnknownSessionIsNoOp proves a "session/cancel"
+// notification addressed to an unknown Chat Session makes no Cancel call
+// rather than panicking or forwarding a blank identity.
+func TestServeSessionCancelUnknownSessionIsNoOp(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{getSessionErr: &chatsessions.NotFoundError{Value: "Session", ID: "session-1"}}
+	factoryTarget := &fakeFactoryTargetService{}
+	server := newTestServerWithFactoryTarget(chatSessions, nil, factoryTarget, "/home/operator")
+
+	line := `{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"session-1"}}` + "\n"
+	out := &bytes.Buffer{}
+	if err := server.Serve(context.Background(), strings.NewReader(line), out); err != nil {
+		t.Fatalf("Serve() error = %v", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("output = %q, want no response for a session/cancel notification", out.Bytes())
+	}
+	if len(factoryTarget.cancelCalls) != 0 {
+		t.Fatalf("Cancel call count = %d, want 0 for an unknown Chat Session", len(factoryTarget.cancelCalls))
+	}
+}
+
+// TestServeSessionCancelMalformedParamsIsNoOp proves a "session/cancel"
+// notification whose params cannot be unmarshaled into
+// acpsdk.CancelNotification makes no GetSession or Cancel call rather than
+// panicking or writing an error response for what is a notification with no
+// response channel at all.
+func TestServeSessionCancelMalformedParamsIsNoOp(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{}
+	factoryTarget := &fakeFactoryTargetService{}
+	server := newTestServerWithFactoryTarget(chatSessions, nil, factoryTarget, "/home/operator")
+
+	line := `{"jsonrpc":"2.0","method":"session/cancel","params":"not-an-object"}` + "\n"
+	out := &bytes.Buffer{}
+	if err := server.Serve(context.Background(), strings.NewReader(line), out); err != nil {
+		t.Fatalf("Serve() error = %v", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("output = %q, want no response for a session/cancel notification", out.Bytes())
+	}
+	if chatSessions.getSessionCalled {
+		t.Fatal("GetSession was called, want no lookup for malformed session/cancel params")
+	}
+	if len(factoryTarget.cancelCalls) != 0 {
+		t.Fatalf("Cancel call count = %d, want 0 for malformed session/cancel params", len(factoryTarget.cancelCalls))
+	}
+}
+
+// TestServeSessionCancelBlankSessionIDIsNoOp proves a "session/cancel"
+// notification with a blank sessionId fails L1 V0 validation and makes no
+// GetSession or Cancel call.
+func TestServeSessionCancelBlankSessionIDIsNoOp(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{}
+	factoryTarget := &fakeFactoryTargetService{}
+	server := newTestServerWithFactoryTarget(chatSessions, nil, factoryTarget, "/home/operator")
+
+	line := `{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":""}}` + "\n"
+	out := &bytes.Buffer{}
+	if err := server.Serve(context.Background(), strings.NewReader(line), out); err != nil {
+		t.Fatalf("Serve() error = %v", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("output = %q, want no response for a session/cancel notification", out.Bytes())
+	}
+	if chatSessions.getSessionCalled {
+		t.Fatal("GetSession was called, want no lookup for a blank sessionId")
+	}
+	if len(factoryTarget.cancelCalls) != 0 {
+		t.Fatalf("Cancel call count = %d, want 0 for a blank sessionId", len(factoryTarget.cancelCalls))
+	}
+}
+
+// serveUntilAsyncWriteFailureWithReaderStillOpen drives a Server through
+// exactly the sequence TestServeAsyncWriteFailureStopsAllFurtherConnectionActivity's
+// subtests need: one "session/prompt" is admitted and invoked against a
+// captured Factory Session bound to "fs-already-bound", its response write
+// fails, and Serve returns that failure -- all proven through real events
+// (the buffered done receive), never a sleep -- while the input side of the
+// pipe was, until that receive, still open and unread-from, exactly the
+// "output already broken, input still open" case serveConnection's own doc
+// comment describes. By the time done has received, serveConnection has
+// already called closeInputForShutdown and joined its read loop (see
+// serveConnection's own doc comment), so pr -- the *io.PipeReader Serve was
+// given -- is already closed. The returned pw is still a live
+// *io.PipeWriter; every subtest below writes to it to prove that closure,
+// not a sleep, is what the read loop's own termination leaves observable.
+func serveUntilAsyncWriteFailureWithReaderStillOpen(t *testing.T) (chatSessions *fakeChatSessionsService, factoryTarget *fakeFactoryTargetService, pw *io.PipeWriter, writer *countingErrorWriter) {
+	t.Helper()
+
+	getSessionResult := sessionAt("session-1", "factory:@you/review", 3, "/work/project")
+	// handleSessionCancel resolves the bound Factory Session identity through
+	// its own, separate GetSession call, so this fake's Episode must carry
+	// the same FactorySessionID startTurnResult's Episode below does.
+	getSessionResult.Episode = chatsessions.TargetEpisode{
+		Number: 1, State: chatsessions.TargetEpisodeStateOpen,
+		Target:           chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
+		FactorySessionID: "fs-already-bound",
+	}
+	chatSessions = &fakeChatSessionsService{
+		getSessionResult: getSessionResult,
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", "fs-already-bound"),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget = &fakeFactoryTargetService{
+		invokeResult:  factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted},
+		cancelEntered: make(chan struct{}),
+	}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+
+	wantErr := errors.New("acp test: simulated async write failure")
+	writer = &countingErrorWriter{err: wantErr}
+
+	var pr *io.PipeReader
+	pr, pw = io.Pipe()
+	t.Cleanup(func() {
+		_ = pr.Close()
+		_ = pw.Close()
+	})
+
+	done := make(chan error, 1)
+	go func() { done <- server.Serve(context.Background(), pr, writer) }()
+
+	promptLine := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"session/prompt","params":%s}`+"\n",
+		promptTextParams("session-1", "a message whose response write fails"))
+	if _, err := pw.Write([]byte(promptLine)); err != nil {
+		t.Fatalf("write session/prompt line: %v", err)
+	}
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, wantErr) {
+			t.Fatalf("Serve() error = %v, want %v", err, wantErr)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve did not return after the dispatched prompt's response write failed")
+	}
+	if writer.calls != 1 {
+		t.Fatalf("writer was called %d times before Serve returned, want exactly 1", writer.calls)
+	}
+	return chatSessions, factoryTarget, pw, writer
+}
+
+// writeAfterServeReturned writes line to pw from its own goroutine and
+// returns the write's outcome, bounded by a generous hang-safety timeout that
+// is not itself the assertion: on a correctly joined connection, pr is
+// already closed by the time this is called, so io.Pipe's own synchronous
+// contract makes the write return io.ErrClosedPipe immediately, with nothing
+// to wait for. The timeout only guards against the read loop having been
+// left alive and blocked reading (in which case the write would hang,
+// waiting for a reader that will never come), which this helper reports as a
+// test failure rather than a false pass.
+func writeAfterServeReturned(t *testing.T, pw *io.PipeWriter, line string) error {
+	t.Helper()
+	result := make(chan error, 1)
+	go func() {
+		_, err := pw.Write([]byte(line))
+		result <- err
+	}()
+	select {
+	case err := <-result:
+		return err
+	case <-time.After(5 * time.Second):
+		t.Fatal("write after Serve returned did not complete -- the read loop goroutine may still be alive and blocked reading, not joined by Serve's return")
+		return nil
+	}
+}
+
+// TestServeAsyncWriteFailureStopsAllFurtherConnectionActivity proves that
+// once Serve has returned because a dispatched "session/prompt" response
+// write failed, its read loop goroutine has already fully terminated -- not
+// merely been gated from acting -- so later input written to the same
+// connection stream can never reach a handler: no "session/cancel" forward,
+// no ordinary request effect (a "session/new" is used as the representative
+// case), and no new "session/prompt" dispatch. serveConnection's own doc
+// comment describes why: a dispatched write failure makes serveConnection
+// call closeInputForShutdown and join its read loop before returning, so pr
+// is already closed by the time each subtest below writes to pw. io.Pipe
+// makes that closure observable without any sleep or timing window: a write
+// to a PipeWriter whose PipeReader is closed returns io.ErrClosedPipe
+// immediately, precisely because there is no live reader goroutine left to
+// ever consume it.
+func TestServeAsyncWriteFailureStopsAllFurtherConnectionActivity(t *testing.T) {
+	t.Run("SessionCancelIsNotForwarded", func(t *testing.T) {
+		_, factoryTarget, pw, writer := serveUntilAsyncWriteFailureWithReaderStillOpen(t)
+
+		cancelLine := `{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"session-1"}}` + "\n"
+		if err := writeAfterServeReturned(t, pw, cancelLine); !errors.Is(err, io.ErrClosedPipe) {
+			t.Fatalf("write session/cancel line after Serve returned: err = %v, want io.ErrClosedPipe (the read loop must already be joined, not merely gated)", err)
+		}
+
+		factoryTarget.mu.Lock()
+		cancelCallCount := len(factoryTarget.cancelCalls)
+		factoryTarget.mu.Unlock()
+		if cancelCallCount != 0 {
+			t.Fatalf("Cancel call count = %d, want 0 for a session/cancel notification that could never be delivered after Serve returned", cancelCallCount)
+		}
+		if writer.calls != 1 {
+			t.Fatalf("writer was called %d times after later input arrived, want still exactly 1 (no new response write)", writer.calls)
+		}
+	})
+
+	t.Run("SessionPromptIsNotDispatched", func(t *testing.T) {
+		_, factoryTarget, pw, writer := serveUntilAsyncWriteFailureWithReaderStillOpen(t)
+
+		anotherPromptLine := fmt.Sprintf(`{"jsonrpc":"2.0","id":2,"method":"session/prompt","params":%s}`+"\n",
+			promptTextParams("session-1", "a second message sent after Serve returned"))
+		if err := writeAfterServeReturned(t, pw, anotherPromptLine); !errors.Is(err, io.ErrClosedPipe) {
+			t.Fatalf("write a second session/prompt line after Serve returned: err = %v, want io.ErrClosedPipe (the read loop must already be joined, not merely gated)", err)
+		}
+
+		factoryTarget.mu.Lock()
+		invokeCallCount := len(factoryTarget.invokeCalls)
+		factoryTarget.mu.Unlock()
+		if invokeCallCount != 1 {
+			t.Fatalf("InvokeFactorySession call count = %d, want exactly the 1 call made before Serve returned, no dispatch for a second session/prompt line that could never be delivered", invokeCallCount)
+		}
+		if writer.calls != 1 {
+			t.Fatalf("writer was called %d times after later input arrived, want still exactly 1 (no new response write)", writer.calls)
+		}
+	})
+
+	t.Run("OrdinaryRequestIsNotDispatched", func(t *testing.T) {
+		chatSessions, _, pw, writer := serveUntilAsyncWriteFailureWithReaderStillOpen(t)
+
+		sessionNewLine := fmt.Sprintf(`{"jsonrpc":"2.0","id":3,"method":"session/new","params":%s}`+"\n", validSessionNewParams)
+		if err := writeAfterServeReturned(t, pw, sessionNewLine); !errors.Is(err, io.ErrClosedPipe) {
+			t.Fatalf("write a session/new line after Serve returned: err = %v, want io.ErrClosedPipe (the read loop must already be joined, not merely gated)", err)
+		}
+
+		chatSessions.mu.Lock()
+		createCalled := chatSessions.createCalled
+		chatSessions.mu.Unlock()
+		if createCalled {
+			t.Fatal("CreateSession was called for a session/new request that could never be delivered after Serve had already returned")
+		}
+		if writer.calls != 1 {
+			t.Fatalf("writer was called %d times after later input arrived, want still exactly 1 (no new response write)", writer.calls)
+		}
+	})
 }

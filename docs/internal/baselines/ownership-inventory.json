@@ -180,12 +180,12 @@
       "owner": "chat_sessions",
       "kind": "top_level",
       "targetPath": "pkg/services/chat_sessions",
-      "authority": "L1 V0 Chat Sessions contract owner: detached session/target/turn/attachment/control-intent values, enum validation, and lifecycle transition tables; no implementation of the public Service interface in this slice. Retains a private internal/factorysessionsshim adapter over the published factory_sessions root for the narrow start/invoke/cancel/close Factory-target dependency, registered for deletion at L3 Factory Sessions sealing.",
-      "stateStore": "No state store for the public contract; publishes value types and pure validation/transition functions only. The internal shim holds no independent state store either — session state lives for the process duration in the factory_sessions target it adapts.",
-      "lifecycle": "Public values are stateless; the Service interface documents session/turn/control lifecycle for a later implementation to satisfy. The internal shim is session-scoped and discarded on process exit, same as the factory_sessions target it adapts.",
-      "consumers": "Future ACP transport and Chat Sessions implementation slices; no current consumer imports this package's public Service interface yet. The internal shim is consumed only within this package.",
-      "transactionBoundary": "None in this slice for the public contract; no persistence or mutation is performed. The internal shim delegates 1:1 to factory_sessions.Service and owns no separate transaction boundary.",
-      "failureRecovery": "Typed validation/transition/not-found/busy/conflict/unsupported errors are contract-only; no runtime recovery behavior exists in this slice. The internal shim's failures normalize at the factory_sessions public root it adapts."
+      "authority": "L1 V0 Chat Sessions contract owner: detached session/target/turn/attachment/control-intent values, enum validation, and lifecycle transition tables; no implementation of the public Service interface in this slice. No longer owns a Factory Sessions adapter: the narrow start/invoke/cancel/close Factory-target dependency is consumed directly from Factory Sessions' own owner-published target-execution capability as of L3 Factory Sessions sealing.",
+      "stateStore": "No state store for the public contract; publishes value types and pure validation/transition functions only.",
+      "lifecycle": "Public values are stateless; the Service interface documents session/turn/control lifecycle for a later implementation to satisfy.",
+      "consumers": "Future ACP transport and Chat Sessions implementation slices; no current consumer imports this package's public Service interface yet.",
+      "transactionBoundary": "None in this slice for the public contract; no persistence or mutation is performed.",
+      "failureRecovery": "Typed validation/transition/not-found/busy/conflict/unsupported errors are contract-only; no runtime recovery behavior exists in this slice."
     },
     {
       "serviceId": "events",
@@ -1096,12 +1096,6 @@
       "toOwner": "workers",
       "class": "command",
       "evidence": "pkg/services/automations/internal -\u003e pkg/services/workers"
-    },
-    {
-      "fromOwner": "chat_sessions",
-      "toOwner": "factory_sessions",
-      "class": "command",
-      "evidence": "pkg/services/chat_sessions/internal/factorysessionsshim -\u003e pkg/services/factory_sessions"
     },
     {
       "fromOwner": "chat_sessions",
@@ -2462,6 +2456,12 @@
       "destinationKind": "family"
     },
     {
+      "packagePath": "pkg/platform/taskgroup",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
       "packagePath": "pkg/root",
       "disposition": "retain",
       "destination": "root",
@@ -2589,12 +2589,6 @@
     },
     {
       "packagePath": "pkg/services/chat_sessions",
-      "disposition": "retain",
-      "destination": "chat_sessions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/chat_sessions/internal/factorysessionsshim",
       "disposition": "retain",
       "destination": "chat_sessions",
       "destinationKind": "owner"

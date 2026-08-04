@@ -341,6 +341,8 @@ func declaredFailureMessage(kind providers.ExecuteFailureKind) string {
 		return "Codex request timed out."
 	case providers.ExecuteFailureKindDependency:
 		return "Codex encountered a temporary server error"
+	case providers.ExecuteFailureKindSessionNotFound:
+		return "Codex does not recognize the referenced Provider Session as live"
 	default:
 		return "Codex reported a terminal error"
 	}

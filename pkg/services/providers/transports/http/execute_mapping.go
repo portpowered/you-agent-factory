@@ -50,21 +50,20 @@ type ExecuteResponse struct {
 // ExecuteRequestBody is the adapter-owned HTTP request body for one provider
 // execute attempt.
 type ExecuteRequestBody struct {
-	AttemptID          string              `json:"attemptId"`
-	WorkerType         string              `json:"workerType,omitempty"`
-	WorkstationName    string              `json:"workstationName,omitempty"`
-	Model              string              `json:"model,omitempty"`
-	ReasoningEffort    string              `json:"reasoningEffort,omitempty"`
-	SkipPermissions    bool                `json:"skipPermissions,omitempty"`
-	SystemPrompt       string              `json:"systemPrompt,omitempty"`
-	UserMessage        string              `json:"userMessage,omitempty"`
-	InputTokens        []any               `json:"inputTokens,omitempty"`
-	OutputSchema       string              `json:"outputSchema,omitempty"`
-	ResumeSession      *SessionRefResponse `json:"resumeSession,omitempty"`
-	WorkingDirectory   string              `json:"workingDirectory,omitempty"`
-	Worktree           string              `json:"worktree,omitempty"`
-	EnvVars            map[string]string   `json:"envVars,omitempty"`
-	ProcessEnvironment []string            `json:"processEnvironment,omitempty"`
+	AttemptID          string            `json:"attemptId"`
+	WorkerType         string            `json:"workerType,omitempty"`
+	WorkstationName    string            `json:"workstationName,omitempty"`
+	Model              string            `json:"model,omitempty"`
+	ReasoningEffort    string            `json:"reasoningEffort,omitempty"`
+	SkipPermissions    bool              `json:"skipPermissions,omitempty"`
+	SystemPrompt       string            `json:"systemPrompt,omitempty"`
+	UserMessage        string            `json:"userMessage,omitempty"`
+	InputTokens        []any             `json:"inputTokens,omitempty"`
+	OutputSchema       string            `json:"outputSchema,omitempty"`
+	WorkingDirectory   string            `json:"workingDirectory,omitempty"`
+	Worktree           string            `json:"worktree,omitempty"`
+	EnvVars            map[string]string `json:"envVars,omitempty"`
+	ProcessEnvironment []string          `json:"processEnvironment,omitempty"`
 }
 
 // ExecuteInput carries decoded HTTP inputs for one execute operation owned by
@@ -105,13 +104,6 @@ func ExecuteRequestFromHTTP(input ExecuteInput) (providers.ExecuteRequest, error
 	request.Worktree = strings.TrimSpace(body.Worktree)
 	request.EnvVars = body.EnvVars
 	request.ProcessEnvironment = body.ProcessEnvironment
-	if body.ResumeSession != nil {
-		resume, err := sessionRefFromHTTP(*body.ResumeSession)
-		if err != nil {
-			return providers.ExecuteRequest{}, err
-		}
-		request.ResumeSession = &resume
-	}
 	if err := request.Validate(); err != nil {
 		return providers.ExecuteRequest{}, err
 	}
@@ -145,23 +137,20 @@ func decodeExecuteRequestBody(body io.Reader) (ExecuteRequestBody, error) {
 	if len(payload) == 0 {
 		return ExecuteRequestBody{}, ErrInvalidExecuteRequest
 	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		return ExecuteRequestBody{}, ErrInvalidExecuteRequest
+	}
+	for field := range fields {
+		if strings.EqualFold(field, "resumeSession") {
+			return ExecuteRequestBody{}, ErrInvalidExecuteRequest
+		}
+	}
 	var request ExecuteRequestBody
 	if err := json.Unmarshal(payload, &request); err != nil {
 		return ExecuteRequestBody{}, ErrInvalidExecuteRequest
 	}
 	return request, nil
-}
-
-func sessionRefFromHTTP(input SessionRefResponse) (providers.SessionRef, error) {
-	ref := providers.SessionRef{
-		Provider: providers.ID(strings.TrimSpace(input.Provider)),
-		Kind:     strings.TrimSpace(input.Kind),
-		ID:       strings.TrimSpace(input.ID),
-	}
-	if err := ref.Validate(); err != nil {
-		return providers.SessionRef{}, err
-	}
-	return ref, nil
 }
 
 func sessionRefToHTTP(ref providers.SessionRef) SessionRefResponse {
