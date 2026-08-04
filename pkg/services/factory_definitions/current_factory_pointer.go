@@ -38,9 +38,8 @@ type ResolveCurrentFactoryLocationResult struct {
 // location resolution. It intentionally excludes authoring, compilation,
 // validation, snapshot, distribution, runtime, and session operations; peers
 // that need only catalog and path reads should depend on this interface
-// instead of the full Service root. The private implementation type behind
-// factorydefinitionswire.NewCatalogPathsService is the sole production
-// implementer.
+// instead of the full Service root. Production Wire returns its unexported,
+// stateless implementation through this owner-root interface.
 type CatalogPathsService interface {
 	ListEffectiveFactories(context.Context, ListEffectiveFactoriesRequest) (ListEffectiveFactoriesResult, error)
 	ResolveNamedFactory(context.Context, ResolveNamedFactoryRequest) (ResolveNamedFactoryResult, error)

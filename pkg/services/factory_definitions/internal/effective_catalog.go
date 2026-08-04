@@ -207,10 +207,9 @@ type catalogPathsService struct {
 // Construction performs no filesystem reads or writes, starts no lifecycle
 // work, and caches no operation results. logger is the direct, required
 // operation-logging abstraction; callers with no operation logging pass
-// logging.NoopLogger{}. The returned type is unexported; callers hold it via
-// type inference and bundle its method values into the exported
-// factorydefinitions.CatalogPathsService struct, exactly as any other
-// unexported-type-behind-an-exported-constructor Go value works.
+// logging.NoopLogger{}. The Factory Definitions Wire provider returns this
+// unexported implementation through the public
+// factorydefinitions.CatalogPathsService owner-root interface.
 func NewCatalogPathsService(
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
 	resolveNamedFactory func(context.Context, factorydefinitions.ResolveNamedFactoryRequest) (factorydefinitions.ResolveNamedFactoryResult, error),
