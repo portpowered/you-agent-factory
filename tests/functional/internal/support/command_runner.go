@@ -25,6 +25,29 @@ func NewStaticSuccessCommandRunner(stdout string) platformprocess.CommandRunner 
 	return &staticSuccessCommandRunner{stdout: []byte(stdout)}
 }
 
+type gatedSuccessCommandRunner struct {
+	stdout []byte
+	gate   <-chan struct{}
+}
+
+// NewGatedSuccessCommandRunner returns a CommandRunner whose successful result
+// is withheld until gate closes (or the invocation context ends first). It
+// lets a test deterministically hold a worker dispatch open for an explicit,
+// signal-based window instead of racing a fast/mocked worker's completion
+// against an out-of-process observer that has to make a real HTTP round trip.
+func NewGatedSuccessCommandRunner(stdout string, gate <-chan struct{}) platformprocess.CommandRunner {
+	return &gatedSuccessCommandRunner{stdout: []byte(stdout), gate: gate}
+}
+
+func (r *gatedSuccessCommandRunner) Run(ctx context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	select {
+	case <-r.gate:
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+	return platformprocess.CommandResult{Stdout: shapedProviderCommandStdout(req.Command, r.stdout)}, nil
+}
+
 // NewShapedProviderCommandRunner wraps the shared test runner so Codex and Claude
 // stdout is emitted in provider-native JSONL after conductor cutover.
 func NewShapedProviderCommandRunner(results ...platformprocess.CommandResult) *ShapedProviderCommandRunner {
@@ -119,4 +142,5 @@ func shapedProviderCommandStdout(command string, stdout []byte) []byte {
 
 var _ platformprocess.CommandRunner = (*RecordingCommandRunner)(nil)
 var _ platformprocess.CommandRunner = (*staticSuccessCommandRunner)(nil)
+var _ platformprocess.CommandRunner = (*gatedSuccessCommandRunner)(nil)
 var _ platformprocess.CommandRunner = (*ShapedProviderCommandRunner)(nil)

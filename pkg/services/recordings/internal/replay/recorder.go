@@ -40,10 +40,12 @@ type Recorder struct {
 	finalizeErr  error
 }
 
-// BindRecordingService rejects use of the legacy replay recorder as a
+var _ recordings.RuntimeRecordingBinder = (*Recorder)(nil)
+
+// BindRecordingLifecycle rejects use of the legacy replay recorder as a
 // production lifecycle authority.
-func (*Recorder) BindRecordingService(
-	recordings.Service,
+func (*Recorder) BindRecordingLifecycle(
+	recordings.RecordingLifecycle,
 	recordings.CanonicalEventScope,
 ) error {
 	return fmt.Errorf("legacy replay recorder cannot bind the Recordings root")

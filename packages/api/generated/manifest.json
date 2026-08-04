@@ -211,7 +211,7 @@
       "path": "generated/mcp/tools.json"
     },
     "generated.openapi.openapi": {
-      "artifactHash": "07d23c7a5f5bec5739bec848b293975c2b1eb203f7664563d16e1f5e2f644b80",
+      "artifactHash": "01a510bc08b6636f1368e9962a430bc73942688e14c6d4d8ce1d97ed9f655869",
       "documentation": {
         "documentation": {
           "description": {
@@ -228,7 +228,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.openapi.openapi",
-        "sourceHash": "07d23c7a5f5bec5739bec848b293975c2b1eb203f7664563d16e1f5e2f644b80",
+        "sourceHash": "01a510bc08b6636f1368e9962a430bc73942688e14c6d4d8ce1d97ed9f655869",
         "visibility": "public"
       },
       "family": "openapi",

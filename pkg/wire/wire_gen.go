@@ -215,7 +215,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v31 := provideFactorySessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, v23, v25, v26, v19, responseEventIDGenerator, responseEventRetentionLimits, v27, ptyAllocator, v28, providerRegistry, v29, workersMockCommandRunnerFactory, v30, edges2, eventsService)
 	v32 := provideRecordingsProjectionFactory()
 	storage := provideReplayArtifactStorage()
-	v33 := provideRecordingsFactory(edges2, v5, storage)
+	v33 := provideRecordingLifecycleFactory(edges2, v5, storage)
 	v34 := provideRuntimeLedgerFactory()
 	v35 := provideLoadedFactorySnapshotCapturer()
 	v36 := provideRuntimeRecorderFactory(v35)
@@ -330,7 +330,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		FactorySessionsService:           factorysessionsService,
 		FactorySessionExecutionFactory:   v31,
 		RecordingsProjectionFactory:      v32,
-		RecordingsFactory:                v33,
+		RecordingLifecycleFactory:        v33,
 		RuntimeLedgerFactory:             v34,
 		RuntimeRecorderFactory:           v36,
 		ReplayClockFactory:               v37,
@@ -685,7 +685,7 @@ var servicesSet = wire3.NewSet(
 	provideFactorySessionExecutionFactory,
 	provideConductorInvocationWithProgressFactory,
 	provideRecordingsProjectionFactory,
-	provideRecordingsFactory,
+	provideRecordingLifecycleFactory,
 	provideRuntimeLedgerFactory,
 	provideReplayArtifactStorage,
 	provideRuntimeRecorderFactory,

@@ -52,7 +52,7 @@ func Start(ctx context.Context, bundle *Bundle) *Handle {
 		if err := bundle.Recording.Flush(); err != nil {
 			runCancel()
 			bundle.Recording.Stop()
-			handle.setRunResult(err)
+			handle.setRunResult(errors.Join(err, bundle.Recording.Err()))
 			return handle
 		}
 	}

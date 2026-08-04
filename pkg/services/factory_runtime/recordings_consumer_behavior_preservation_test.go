@@ -19,7 +19,7 @@ import (
 
 var (
 	_ factoryruntime.HostedInstance = (*factoryhost.Bundle)(nil)
-	_ factoryruntime.HostedLedger     = (*recordingfixtures.ScriptedRuntimeLedger)(nil)
+	_ factoryruntime.HostedLedger   = (*recordingfixtures.ScriptedRuntimeLedger)(nil)
 )
 
 // TestRuntimeRecordingsConsumerBehaviorPreserved proves CUT-RUN-REC story 004:
@@ -165,8 +165,8 @@ type preservedTerminalRecording struct {
 	finishedAt    time.Time
 }
 
-func (*preservedTerminalRecording) BindRecordingService(
-	recordings.Service,
+func (*preservedTerminalRecording) BindRecordingLifecycle(
+	recordings.RecordingLifecycle,
 	recordings.CanonicalEventScope,
 ) error {
 	return nil

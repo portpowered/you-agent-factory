@@ -148,6 +148,7 @@ export interface paths {
      *     Reconnect cursors: pass after_event_id or after_sequence to receive only events recorded after the acknowledged point. When both are present, after_event_id wins. For session-scoped streams, after_sequence prefers FactoryEvent.context.sessionSequence when that field is present; otherwise it falls back to FactoryEvent.context.sequence. Omitting both cursors starts replay from the beginning of the session's currently retained history.
      *     Replay bounds: live sessions replay only events retained for the current stream generation of the targeted Factory Session. Durable execution session identifiers replay persisted canonical records for that session without crossing into another session. Cursors that no longer match the retained history boundary return typed invalid-cursor handling (400 on SSE open, cursor_stale on JSON reconnect probe) rather than silently skipping events.
      *     Identity handshake before reconnect: compare the response headers X-Factory-Session-Backend-Scope-Id, X-Factory-Session-Logical-Session-Key-Id, X-Factory-Session-Factory-Session-Id, and X-Factory-Session-Stream-Generation-Id with the latest sync-preflight or session-read identity set before reusing a persisted reconnect cursor or stream-derived cache. A changed streamGenerationId means the current stream generation invalidates prior cursors even when factorySessionId is unchanged.
+     *     Bounded retained-history reads: X-Factory-Session-Retained-Event-Count reports exactly how many leading text/event-stream data frames make up the already-committed retained-history prefix, captured at subscribe time. Clients that need a point-in-time snapshot of committed history can read exactly this many records and stop, instead of inferring completion from stream quiescence.
      *     Keepalives: successful SSE responses use Connection keep-alive. Idle periods may occur while the Factory Session is waiting for new canonical events; clients must treat these as normal waiting state rather than terminal stream completion unless the HTTP connection closes.
      *     Expired-cursor recovery: when Accept includes application/json, the same route acts as a reconnect probe and returns FactorySessionEventStreamRecovery instead of opening Server-Sent Events. cursor_stale outcomes tell clients to retry with omitAfterEventId and omitAfterSequence set so the next open omits stale cursors. UNKNOWN_SESSION means the selector does not resolve to a live or durable session and never falls back to the default session.
      *     Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
@@ -5561,9 +5562,16 @@ export interface components {
       /** @description Operator-authored ACP launch command preserved as one settings value. It contains no permission or timeout policy. */
       command: string;
     };
+    GlobalConfigACPAgentProfile: {
+      /** @description Unversioned namespaced Factory target reference, such as factory:@you/factory-builder. Factory Definitions owns enumeration and canonical reference resolution. */
+      defaultTarget: string;
+      /** @description Ordered allowlist of unversioned namespaced Factory target references. Order is authored and preserved. */
+      allowedTargets: string[];
+    };
     GlobalConfigACPSettings: {
       /** @description Operator-selected ACP provider integrations. Availability is derived by the Providers catalog and is never persisted here. */
       integrations?: components["schemas"]["GlobalConfigACPIntegration"][];
+      agentProfile?: components["schemas"]["GlobalConfigACPAgentProfile"];
     };
     GlobalConfigWorkers: {
       acp?: components["schemas"]["GlobalConfigACPSettings"];
@@ -6007,6 +6015,8 @@ export interface operations {
           "X-Factory-Session-Factory-Session-Id"?: string;
           /** @description Opaque invalidation token for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `streamGenerationID` values before reusing reconnect cursors or stream-derived projections. */
           "X-Factory-Session-Stream-Generation-Id"?: string;
+          /** @description Count of already-committed canonical FactoryEvent records written as the retained-history prefix before any live event, captured at subscribe time. A bounded reader can read exactly this many leading data frames instead of inferring completion from stream quiescence. */
+          "X-Factory-Session-Retained-Event-Count"?: number;
           [name: string]: unknown;
         };
         content: {
