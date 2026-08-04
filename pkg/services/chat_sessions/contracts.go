@@ -140,6 +140,21 @@ type Service interface {
 	// when ExpectedVersion no longer matches or the session's active
 	// turn/episode has moved on.
 	RecordPendingFactorySession(ctx context.Context, req RecordPendingFactorySessionRequest) (RecordPendingFactorySessionResult, error)
+
+	// Sequence is SessionID's one session-owned serialization point for
+	// committing source-native records onto EventsTopic(SessionID). It
+	// assigns a stable, non-empty ItemID before appending the complete
+	// envelope (SequencedItem) to Events, in successful commit order --
+	// independent of source timestamps, source sequence across producers, or
+	// goroutine start order. A non-blank ParentItemID is accepted only when
+	// it already identifies an item this exact session has sequenced;
+	// otherwise Sequence reports *NotFoundError and commits nothing. Reusing
+	// the same (SourceType, SourceID, SourceSequence, SourceEventID) tuple is
+	// idempotent: it returns the originally assigned ItemID, ParentItemID,
+	// and aggregate position with SequenceOutcomeDuplicate instead of a
+	// second committed record. It reports *NotFoundError when SessionID does
+	// not identify an existing session.
+	Sequence(ctx context.Context, req SequenceRequest) (SequenceResult, error)
 }
 
 // CreateSessionRequest carries the caller identity, initial target, and

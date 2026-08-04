@@ -3,19 +3,22 @@ package chatsessions_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 )
 
 // fakeService is a compile-time-only demonstration that Service is usable by
 // an external consumer using nothing but the package's public contracts. It
 // is not a candidate production implementation.
 type fakeService struct {
-	session chatsessions.Session
-	turn    chatsessions.Turn
-	intent  chatsessions.ControlIntent
+	session       chatsessions.Session
+	turn          chatsessions.Turn
+	intent        chatsessions.ControlIntent
+	sequenceCount int
 }
 
 var _ chatsessions.Service = (*fakeService)(nil)
@@ -121,6 +124,23 @@ func (f *fakeService) Attach(_ context.Context, req chatsessions.AttachRequest) 
 	return chatsessions.AttachResult{Attachment: chatsessions.Attachment{
 		ID: "attachment-1", SessionID: req.SessionID, ConnectionID: req.ConnectionID, Interactive: req.Interactive,
 	}}, nil
+}
+
+// Sequence is a minimal fake: it assigns a sequential ItemID and never
+// reports a duplicate, since none of this fake's own tests exercise
+// idempotency or parent-linkage.
+func (f *fakeService) Sequence(_ context.Context, req chatsessions.SequenceRequest) (chatsessions.SequenceResult, error) {
+	if req.SessionID != f.session.ID {
+		return chatsessions.SequenceResult{}, &chatsessions.NotFoundError{Value: "Session", ID: req.SessionID}
+	}
+	f.sequenceCount++
+	return chatsessions.SequenceResult{
+		SessionID:         req.SessionID,
+		ItemID:            fmt.Sprintf("item-%d", f.sequenceCount),
+		ParentItemID:      req.ParentItemID,
+		AggregateSequence: events.AggregateSequence(f.sequenceCount),
+		Outcome:           chatsessions.SequenceOutcomeAccepted,
+	}, nil
 }
 
 func (f *fakeService) Detach(_ context.Context, req chatsessions.DetachRequest) (chatsessions.DetachResult, error) {

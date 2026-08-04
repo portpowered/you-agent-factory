@@ -67,12 +67,13 @@ func (s *Store) CreateSession(_ context.Context, req chatsessions.CreateSessionR
 	}
 
 	s.sessions[session.ID] = sessionRecord{
-		session:        session,
-		episodes:       []chatsessions.TargetEpisode{episode},
-		turns:          make(map[string]chatsessions.Turn),
-		turnsByRequest: make(map[chatsessions.RequestIdentity]string),
-		attachments:    make(map[string]chatsessions.Attachment),
-		controls:       make(map[chatsessions.RequestIdentity]chatsessions.ControlIntent),
+		session:          session,
+		episodes:         []chatsessions.TargetEpisode{episode},
+		turns:            make(map[string]chatsessions.Turn),
+		turnsByRequest:   make(map[chatsessions.RequestIdentity]string),
+		attachments:      make(map[string]chatsessions.Attachment),
+		controls:         make(map[chatsessions.RequestIdentity]chatsessions.ControlIntent),
+		sequencedItemIDs: make(map[string]struct{}),
 	}
 	return chatsessions.CreateSessionResult{Session: session}, nil
 }

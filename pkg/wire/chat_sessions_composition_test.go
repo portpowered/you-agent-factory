@@ -44,15 +44,19 @@ func TestProvideChatSessionsServiceConstructsAnIndependentServiceDirectly(t *tes
 		t.Fatalf("logging.NewDefaultLogger() error = %v", err)
 	}
 	logger := logging.NewZapLogger(zapLogger, false)
+	eventsService, err := provideEventsService(logger)
+	if err != nil {
+		t.Fatalf("provideEventsService() error = %v", err)
+	}
 
-	first, err := provideChatSessionsService(logger)
+	first, err := provideChatSessionsService(eventsService, logger)
 	if err != nil {
 		t.Fatalf("provideChatSessionsService() error = %v", err)
 	}
 	if first == nil {
 		t.Fatal("provideChatSessionsService() = nil, want a constructed chat_sessions.Service")
 	}
-	second, err := provideChatSessionsService(logger)
+	second, err := provideChatSessionsService(eventsService, logger)
 	if err != nil {
 		t.Fatalf("provideChatSessionsService() second call error = %v", err)
 	}

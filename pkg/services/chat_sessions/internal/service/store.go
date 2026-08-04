@@ -1,11 +1,13 @@
 package service
 
 import (
+	"context"
 	"sync"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 )
 
 var _ chatsessions.Service = (*Store)(nil)
@@ -19,15 +21,36 @@ type IDGenerator func() string
 // caller can supply a deterministic clock under test.
 type Clock func() time.Time
 
+// EventsAppender is the narrow Events dependency the sequencer needs: commit
+// one source-native record into a topic's aggregate ordering. Store depends
+// on this port rather than the full events.Service so a caller wiring only
+// the sequencer's own tests never has to satisfy Read/Subscribe/AttachSource
+// too. Any events.Service value already satisfies this interface
+// structurally.
+type EventsAppender interface {
+	Append(context.Context, events.AppendRequest) (events.AppendResult, error)
+}
+
 // Store is the synchronized in-memory implementation of the L1 V1 Chat
 // Sessions engine. The zero value is not usable; construct with New.
 type Store struct {
 	mu       sync.RWMutex
 	sessions map[string]sessionRecord
 
-	newID  IDGenerator
-	now    Clock
-	logger logging.Logger
+	newID          IDGenerator
+	now            Clock
+	eventsAppender EventsAppender
+	logger         logging.Logger
+}
+
+// WithEventsAppender sets the Events append port Sequence commits
+// source-native records through, and returns s for construction chaining.
+// It mutates s in place (Store embeds a sync.RWMutex, which must never be
+// copied) and is intended to be called once during construction wiring,
+// before s is shared across goroutines.
+func (s *Store) WithEventsAppender(appender EventsAppender) *Store {
+	s.eventsAppender = appender
+	return s
 }
 
 // sessionRecord is the Store-owned mutable aggregate for one Chat Session.
@@ -74,15 +97,23 @@ type Store struct {
 // ActiveTurnID) and return the existing turn instead of admitting a second
 // one and dispatching its effects again. Like controls, an entry here is
 // never removed or overwritten.
+// sequencedItemIDs holds the ItemID of every aggregate record this session's
+// sequencer has ever assigned, independent of turns, episodes, attachments,
+// and controls. Sequence consults it to validate a child record's
+// ParentItemID (accepted only when the parent's ItemID is already a member)
+// and adds to it only on a newly accepted record -- a duplicate resolution
+// never inserts a second time, since the ItemID it resolves to is already a
+// member from the original accepted call.
 type sessionRecord struct {
-	session        chatsessions.Session
-	episodes       []chatsessions.TargetEpisode
-	turns          map[string]chatsessions.Turn
-	turnsByRequest map[chatsessions.RequestIdentity]string
-	lastTurnID     string
-	turnSequence   uint64
-	attachments    map[string]chatsessions.Attachment
-	controls       map[chatsessions.RequestIdentity]chatsessions.ControlIntent
+	session          chatsessions.Session
+	episodes         []chatsessions.TargetEpisode
+	turns            map[string]chatsessions.Turn
+	turnsByRequest   map[chatsessions.RequestIdentity]string
+	lastTurnID       string
+	turnSequence     uint64
+	attachments      map[string]chatsessions.Attachment
+	controls         map[chatsessions.RequestIdentity]chatsessions.ControlIntent
+	sequencedItemIDs map[string]struct{}
 }
 
 // activeTurnValue returns the session's current active Turn read live from

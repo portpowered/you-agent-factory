@@ -573,7 +573,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	chatsessionsService, err := provideChatSessionsService(loggingLogger)
+	chatsessionsService, err := provideChatSessionsService(eventsService, loggingLogger)
 	if err != nil {
 		return nil, err
 	}
