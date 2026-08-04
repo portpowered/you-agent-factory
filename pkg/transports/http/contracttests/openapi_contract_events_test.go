@@ -33,6 +33,47 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 	assertSessionLifecycleEventStatusVocabulary(t, schemas)
 }
 
+func TestOpenAPIContract_DispatchWorkerSessionAssociationRequiresNonEmptyContextDispatchID(t *testing.T) {
+	doc := loadValidatedOpenAPIContract(t)
+	schema := doc.Components.Schemas["FactoryEvent"].Value
+
+	valid := dispatchWorkerSessionAssociationFixture("dispatch-actual-7", true)
+	if err := schema.VisitJSON(valid); err != nil {
+		t.Fatalf("association with a dispatch ID should validate: %v", err)
+	}
+
+	for name, event := range map[string]map[string]any{
+		"missing dispatch ID": dispatchWorkerSessionAssociationFixture("", false),
+		"empty dispatch ID":   dispatchWorkerSessionAssociationFixture("", true),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := schema.VisitJSON(event); err == nil {
+				t.Fatalf("association with %s should not validate", name)
+			}
+		})
+	}
+}
+
+func dispatchWorkerSessionAssociationFixture(dispatchID string, includeDispatchID bool) map[string]any {
+	context := map[string]any{
+		"sequence":  3,
+		"tick":      2,
+		"eventTime": "2026-08-04T16:30:00Z",
+	}
+	if includeDispatchID {
+		context["dispatchId"] = dispatchID
+	}
+	return map[string]any{
+		"schemaVersion": "agent-factory.event.v1",
+		"id":            "event-dispatch-worker-session-association",
+		"type":          "DISPATCH_WORKER_SESSION_ASSOCIATION",
+		"context":       context,
+		"payload": map[string]any{
+			"workerSessionId": "worker-session-actual-11",
+		},
+	}
+}
+
 func TestOpenAPIContract_CanonicalFactoryEventVocabularyFixtureValidatesAndRetiresLegacyNames(t *testing.T) {
 	doc := loadValidatedOpenAPIContract(t)
 	fixture := loadCanonicalFactoryEventVocabularyFixture(t)

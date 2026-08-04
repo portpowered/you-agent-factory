@@ -60,6 +60,29 @@ properties:
       - $ref: ./payloads/JavaScriptCheckpointRefEventPayload.yaml
       - $ref: ./payloads/JavaScriptPhaseChangeEventPayload.yaml
       - $ref: ./payloads/ArtifactCreatedEventPayload.yaml
+# The association payload carries only the Worker Session identity. Exclude an
+# association envelope whose shared context does not contain a non-empty,
+# authoritative dispatch identity. `not` preserves the generated envelope
+# model while keeping this event-specific constraint in the public schema.
+not:
+  type: object
+  required:
+    - type
+    - context
+  properties:
+    type:
+      type: string
+      enum:
+        - DISPATCH_WORKER_SESSION_ASSOCIATION
+    context:
+      not:
+        type: object
+        required:
+          - dispatchId
+        properties:
+          dispatchId:
+            type: string
+            minLength: 1
 discriminator:
   propertyName: type
   mapping:

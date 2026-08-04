@@ -38,6 +38,18 @@ func (ctx *convertContext) convertItemsField(value any, childPath string) (map[s
 	return itemSchema, nil
 }
 
+func (ctx *convertContext) convertNotField(value any, childPath string) (map[string]any, []contractvalidator.Diagnostic) {
+	childValue, diagnostics := ctx.convertNode(value, childPath)
+	if len(diagnostics) != 0 {
+		return nil, diagnostics
+	}
+	childSchema, ok := childValue.(map[string]any)
+	if !ok {
+		return nil, []contractvalidator.Diagnostic{invalidSchemaValue(childPath)}
+	}
+	return childSchema, nil
+}
+
 func (ctx *convertContext) convertAdditionalPropertiesField(value any, childPath string) (any, []contractvalidator.Diagnostic) {
 	switch typed := value.(type) {
 	case bool:

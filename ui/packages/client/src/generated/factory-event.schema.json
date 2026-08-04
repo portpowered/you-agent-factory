@@ -5120,6 +5120,35 @@
     },
     "propertyName": "type"
   },
+  "not": {
+    "properties": {
+      "context": {
+        "not": {
+          "properties": {
+            "dispatchId": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "dispatchId"
+          ],
+          "type": "object"
+        }
+      },
+      "type": {
+        "enum": [
+          "DISPATCH_WORKER_SESSION_ASSOCIATION"
+        ],
+        "type": "string"
+      }
+    },
+    "required": [
+      "type",
+      "context"
+    ],
+    "type": "object"
+  },
   "oneOf": [
     {
       "properties": {

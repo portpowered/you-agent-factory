@@ -60,6 +60,12 @@ func TestStandaloneFactorySchemasValidateCanonicalEventAndRecordingShapes(t *tes
 	missingWorkerSessionID := cloneJSONValue(t, validAssociation).(map[string]any)
 	delete(missingWorkerSessionID["payload"].(map[string]any), "workerSessionId")
 	assertSchemaValueValid(t, eventSchema, missingWorkerSessionID, false)
+	missingDispatchID := cloneJSONValue(t, validAssociation).(map[string]any)
+	delete(missingDispatchID["context"].(map[string]any), "dispatchId")
+	assertSchemaValueValid(t, eventSchema, missingDispatchID, false)
+	emptyDispatchID := cloneJSONValue(t, validAssociation).(map[string]any)
+	emptyDispatchID["context"].(map[string]any)["dispatchId"] = ""
+	assertSchemaValueValid(t, eventSchema, emptyDispatchID, false)
 
 	missingEventID := cloneJSONValue(t, validEvent).(map[string]any)
 	delete(missingEventID, "id")

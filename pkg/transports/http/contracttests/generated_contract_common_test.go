@@ -152,6 +152,48 @@ func TestGeneratedGoClientExposesResponseEventSuccessAndTypedErrors(t *testing.T
 	}
 }
 
+func TestGeneratedGoClientFactoryEventAssociationRoundTripPreservesIdentityPair(t *testing.T) {
+	dispatchID := "dispatch-actual-7"
+	payload := generatedclient.FactoryEvent_Payload{}
+	if err := payload.FromDispatchWorkerSessionAssociationEventPayload(generatedclient.DispatchWorkerSessionAssociationEventPayload{
+		WorkerSessionId: "worker-session-actual-11",
+	}); err != nil {
+		t.Fatalf("encode generated client association payload: %v", err)
+	}
+
+	original := generatedclient.FactoryEvent{
+		SchemaVersion: generatedclient.AgentFactoryEventV1,
+		Id:            "event-dispatch-worker-session-association",
+		Type:          generatedclient.FactoryEventTypeDispatchWorkerSessionAssociation,
+		Context: generatedclient.FactoryEventContext{
+			Sequence:   17,
+			Tick:       8,
+			EventTime:  time.Date(2026, 8, 4, 16, 30, 0, 0, time.UTC),
+			DispatchId: &dispatchID,
+		},
+		Payload: payload,
+	}
+
+	encoded, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("marshal generated client association event: %v", err)
+	}
+	var roundTripped generatedclient.FactoryEvent
+	decodeRoundTripJSON(t, encoded, &roundTripped, "generated client association event")
+
+	if roundTripped.Id != original.Id || roundTripped.Type != original.Type ||
+		roundTripped.Context.DispatchId == nil || *roundTripped.Context.DispatchId != dispatchID {
+		t.Fatalf("generated client association envelope = %#v, want event and dispatch identities", roundTripped)
+	}
+	decodedPayload, err := roundTripped.Payload.AsDispatchWorkerSessionAssociationEventPayload()
+	if err != nil {
+		t.Fatalf("decode generated client association payload: %v", err)
+	}
+	if decodedPayload.WorkerSessionId != "worker-session-actual-11" {
+		t.Fatalf("generated client payload.workerSessionId = %q, want worker-session-actual-11", decodedPayload.WorkerSessionId)
+	}
+}
+
 var canonicalFactoryEventTypes = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeRunRequest,
 	factoryapi.FactoryEventTypeInitialStructureRequest,

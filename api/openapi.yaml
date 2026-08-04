@@ -6332,6 +6332,25 @@ components:
             - $ref: '#/components/schemas/JavaScriptCheckpointRefEventPayload'
             - $ref: '#/components/schemas/JavaScriptPhaseChangeEventPayload'
             - $ref: '#/components/schemas/ArtifactCreatedEventPayload'
+      not:
+        type: object
+        required:
+          - type
+          - context
+        properties:
+          type:
+            type: string
+            enum:
+              - DISPATCH_WORKER_SESSION_ASSOCIATION
+          context:
+            not:
+              type: object
+              required:
+                - dispatchId
+              properties:
+                dispatchId:
+                  type: string
+                  minLength: 1
       discriminator:
         propertyName: type
         mapping:

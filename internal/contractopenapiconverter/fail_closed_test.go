@@ -7,6 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/contractopenapiconverter"
 	"github.com/portpowered/infinite-you/internal/contractvalidator"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
 )
 
@@ -59,6 +60,62 @@ func TestConvertFailClosedSchemaAcceptsCompositionNullableGoldenFixtures(t *test
 			}
 			if converted == nil {
 				t.Fatal("ConvertFailClosedSchema() = nil, want converted schema")
+			}
+		})
+	}
+}
+
+func TestConvertFailClosedSchemaPreservesNegatedDispatchIdentityConstraint(t *testing.T) {
+	source := map[string]any{
+		"type":     "object",
+		"required": []any{"type", "context"},
+		"properties": map[string]any{
+			"type":    map[string]any{"type": "string", "enum": []any{"DISPATCH_WORKER_SESSION_ASSOCIATION"}},
+			"context": map[string]any{"type": "object"},
+		},
+		"not": map[string]any{
+			"type":     "object",
+			"required": []any{"type", "context"},
+			"properties": map[string]any{
+				"type": map[string]any{"type": "string", "enum": []any{"DISPATCH_WORKER_SESSION_ASSOCIATION"}},
+				"context": map[string]any{
+					"not": map[string]any{
+						"type":     "object",
+						"required": []any{"dispatchId"},
+						"properties": map[string]any{
+							"dispatchId": map[string]any{"type": "string", "minLength": 1},
+						},
+					},
+				},
+			},
+		},
+	}
+	converted, diagnostics := contractopenapiconverter.ConvertFailClosedSchema(source, nil)
+	if len(diagnostics) != 0 {
+		t.Fatalf("ConvertFailClosedSchema() diagnostics = %#v, want none", diagnostics)
+	}
+	compiler := jsonschema.NewCompiler()
+	compiler.DefaultDraft(jsonschema.Draft2020)
+	if err := compiler.AddResource("association.json", converted); err != nil {
+		t.Fatalf("add converted schema: %v", err)
+	}
+	schema, err := compiler.Compile("association.json")
+	if err != nil {
+		t.Fatalf("compile converted schema: %v", err)
+	}
+	if err := schema.Validate(map[string]any{
+		"type":    "DISPATCH_WORKER_SESSION_ASSOCIATION",
+		"context": map[string]any{"dispatchId": "dispatch-actual-7"},
+	}); err != nil {
+		t.Fatalf("non-empty dispatch identity should validate: %v", err)
+	}
+	for name, event := range map[string]map[string]any{
+		"missing dispatch ID": {"type": "DISPATCH_WORKER_SESSION_ASSOCIATION", "context": map[string]any{}},
+		"empty dispatch ID":   {"type": "DISPATCH_WORKER_SESSION_ASSOCIATION", "context": map[string]any{"dispatchId": ""}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := schema.Validate(event); err == nil {
+				t.Fatalf("association with %s should not validate", name)
 			}
 		})
 	}
