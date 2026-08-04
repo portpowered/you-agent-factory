@@ -205,6 +205,73 @@ func TestMapFragment_ProgressMappingIsDeterministic(t *testing.T) {
 	}
 }
 
+func TestMapFragment_ProjectsReasoningAndSessionTitleProgress(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name            string
+		fragment        responsestream.Event
+		wantKind        responseevents.Kind
+		wantPhase       responseevents.Phase
+		wantPayloadText string
+	}{
+		{
+			name: "reasoning delta",
+			fragment: responsestream.Event{
+				Kind: responsestream.EventKindProgressFragment, Type: responsestream.EventType("delta"),
+				Payload: "considering the constraints", Metadata: map[string]string{"kind": "reasoning", "item_id": "thought-1"},
+			},
+			wantKind: responseevents.KindReasoning, wantPhase: responseevents.PhaseDelta, wantPayloadText: "considering the constraints",
+		},
+		{
+			name: "session title update",
+			fragment: responsestream.Event{
+				Kind: responsestream.EventKindProgressFragment, Type: responsestream.EventType("updated"),
+				Payload: "Planning the delivery", Metadata: map[string]string{"kind": "session", "title_present": "true"},
+			},
+			wantKind: responseevents.KindSession, wantPhase: responseevents.PhaseUpdated, wantPayloadText: "Planning the delivery",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			events, err := fragmentmap.MapFragment(fragmentmap.Context{FactorySessionID: "session-1", RunID: "run-1"}, tc.fragment)
+			if err != nil {
+				t.Fatalf("MapFragment() error = %v", err)
+			}
+			if len(events) != 1 {
+				t.Fatalf("event count = %d, want 1", len(events))
+			}
+			event := events[0]
+			if event.Kind != tc.wantKind || event.Phase != tc.wantPhase {
+				t.Fatalf("kind/phase = %q/%q, want %q/%q", event.Kind, event.Phase, tc.wantKind, tc.wantPhase)
+			}
+
+			if tc.wantKind == responseevents.KindReasoning {
+				var payload responseevents.ReasoningPayload
+				if err := json.Unmarshal(event.Payload, &payload); err != nil {
+					t.Fatalf("unmarshal reasoning payload: %v", err)
+				}
+				if payload.SummaryDelta != tc.wantPayloadText {
+					t.Fatalf("summary delta = %q, want %q", payload.SummaryDelta, tc.wantPayloadText)
+				}
+				return
+			}
+
+			var payload responseevents.SessionPayload
+			if err := json.Unmarshal(event.Payload, &payload); err != nil {
+				t.Fatalf("unmarshal session payload: %v", err)
+			}
+			if payload.Title == nil || *payload.Title != tc.wantPayloadText {
+				t.Fatalf("session title = %v, want %q", payload.Title, tc.wantPayloadText)
+			}
+		})
+	}
+}
+
 func TestMapFragment_ResponseFragmentEmitsMessageDelta(t *testing.T) {
 	t.Parallel()
 

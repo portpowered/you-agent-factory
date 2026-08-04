@@ -42,6 +42,10 @@ const acpStreamUsageSessionID = "sess_stream_test_1"
 // this decision-envelope-free MODEL_WORKER path never advances past PROCESSING.
 const acpStreamUsageCompletionText = "the streaming fixture genuinely finished COMPLETE"
 
+const acpStreamUsageReasoningText = "the fixture is considering a safe delivery"
+
+const acpStreamUsageSessionTitle = "Delivering the ACP streaming fixture"
+
 // TestACPServeCommandStreamsUsageUpdateThroughRootBuildProcess extends story
 // 005's sibling cell (acp_streaming_composition_test.go's
 // TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText,
@@ -58,61 +62,20 @@ const acpStreamUsageCompletionText = "the streaming fixture genuinely finished C
 // itself an ACP *client* driving a scripted subprocess ACP *server* over
 // stdio (platformprocess.CommandFactory/ExecutableLocator edges), not the
 // decision-envelope AGENT_RUN shape @you/goal uses. The scripted subprocess
-// peer (usageStreamRPCPeer, self-re-exec'd via os.Args[0], see
-// TestACPStreamUsagePeerProcess below) sends one real "session/update"
-// usage_update notification (used:17, size:4096, matching the already-golden
-// tests/functional/providers/acp/testdata/json_golden fixture's own values)
-// followed by one real agent_message_chunk notification ending in the
-// fixture worker's stopToken, so the underlying Factory Runtime genuinely
-// reaches its declared TERMINAL work state -- this is a real, independently
-// proven production path: see
+// peer (usageStreamRPCPeer, self-reexec'd via os.Args[0], see
+// TestACPStreamUsagePeerProcess below) sends real reasoning, usage, session
+// title, and message updates before the final stop reason. The message ends
+// in the fixture worker's stopToken, so the underlying Factory Runtime
+// genuinely reaches its declared TERMINAL work state -- this is a real,
+// independently proven production path: see
 // tests/functional/providers/acp/run_parameters_content_test.go's
 // TestYouRunUsesPinnedACPWireGoldensAndProjectsTerminalOutput, whose pinned
 // golden response_stream.ndjson shows a real USAGE response event produced
 // from an identically-shaped usage_update notification.
 //
-// This cell deliberately does NOT attempt to also prove agent_thought_chunk
-// or session_info_update, and asserts they are absent -- not because this
-// fixture's peer omits them (it easily could send them), but because two
-// real, already-confirmed, pre-existing defects in a different, out-of-scope
-// service (pkg/services/factory_sessions, which this PRD's own top-level
-// acceptance criterion 6 bars this package from modifying) make it
-// impossible for any fixture to observe them through this production graph
-// today:
-//
-//   - REASONING is silently dropped before it ever reaches the ACP
-//     transport: pkg/services/factory_sessions/internal/stream/fragment.go's
-//     MapProgressFragment collapses the native ACP-sourced "reasoning" phase
-//     to a constant PROGRESS/Updated type (the ACP adapter never populates a
-//     dotted ExternalEventType the way the Codex/Claude adapters do), so
-//     pkg/services/factory_sessions/internal/responsestream/fragmentmap/mapper.go's
-//     semanticPhase always resolves KindReasoning fragments to PhaseUpdated
-//     -- but KindReasoning's only legal phases (see
-//     pkg/services/workers/internal/services/workstations/draftvalidation/validation.go's
-//     allowedPhasesByKind) are Started/Delta/Completed, so the record fails
-//     validation and pkg/services/factory_sessions's
-//     sessionProgressPublisher silently swallows it before any event ever
-//     reaches this PRD's own projector.
-//   - SESSION Title is always nil: pkg/services/factory_sessions/internal/responsestream/fragmentmap/mapper.go's
-//     semanticProgress function's `case "session":` branch builds a
-//     responseevents.SessionPayload{Status: ...} and never reads
-//     fragment.Payload (which does carry the real title text -- see
-//     pkg/services/providers/internal/services/acp/internal/service/service.go's
-//     mapSessionUpdate, which already sets detail from
-//     update.SessionInfoUpdate.Title). So even a real, title-bearing
-//     session_info_update notification produces a title-less SessionPayload
-//     in production today, which pkg/transports/acp/internal/mapping's
-//     ProjectSessionInfoUpdate correctly classifies as "no output" per its
-//     own already-tested contract from story 002.
-//
-// Both root causes are independently confirmed by
-// tests/functional/providers/acp/testdata/json_golden/expected/response_stream.ndjson:
-// its scripted peer (golden_rpc_peer_test.go's publishGoldenUpdates) sends a
-// real session_update_agent_thought_chunk.json notification and two real
-// session_info_update notifications, yet the pinned golden response-event
-// stream has zero REASONING entries and zero title-bearing SESSION entries.
-// Fixing either is out of this PRD's scope; a future PRD picking up Factory
-// Sessions work should start exactly at those two functions.
+// The peer also sends reasoning and title-bearing session metadata updates.
+// The production path preserves REASONING's DELTA phase and SESSION's UPDATED
+// phase, then projects their public ACP updates in the aggregate order below.
 //
 // This cell also exposed and closed a THIRD, previously undocumented defect,
 // inside this PRD's own package
@@ -193,45 +156,54 @@ func TestACPServeCommandStreamsUsageUpdateThroughRootBuildProcess(t *testing.T) 
 	assertACPStreamUsageNotifications(t, notifications)
 }
 
-// assertACPStreamUsageNotifications asserts exactly one usage_update
-// notification (Used == 17, matching the scripted peer's own published
-// value), exactly one agent_message_chunk notification (carrying exactly
-// acpStreamUsageCompletionText), and zero agent_thought_chunk/
-// session_info_update notifications -- see this file's own
-// TestACPServeCommandStreamsUsageUpdateThroughRootBuildProcess doc comment
-// for the precise, out-of-scope Factory Sessions root causes that make the
-// latter two currently unobservable through this production graph (the
-// third, in-scope redelivery race this cell also exposed is fixed, not
-// merely tolerated -- see the same doc comment).
+// assertACPStreamUsageNotifications proves all four ACP update classes are
+// observed before the terminal prompt response. The terminal message remains
+// singular even though the provider also supplied live reasoning and metadata.
 func assertACPStreamUsageNotifications(t *testing.T, notifications []acpsdk.SessionNotification) {
 	t.Helper()
 
 	var messageTexts []string
-	var thoughtChunks, usageUpdates, sessionInfoUpdates int
+	var thoughtTexts, sessionTitles []string
 	var usedValues []int
+	positions := map[string]int{}
 	for _, n := range notifications {
 		switch {
 		case n.Update.AgentMessageChunk != nil:
+			positions["message"] = len(positions)
 			var text string
 			if n.Update.AgentMessageChunk.Content.Text != nil {
 				text = n.Update.AgentMessageChunk.Content.Text.Text
 			}
 			messageTexts = append(messageTexts, text)
 		case n.Update.AgentThoughtChunk != nil:
-			thoughtChunks++
+			if _, ok := positions["thought"]; !ok {
+				positions["thought"] = len(positions)
+			}
+			if n.Update.AgentThoughtChunk.Content.Text != nil {
+				thoughtTexts = append(thoughtTexts, n.Update.AgentThoughtChunk.Content.Text.Text)
+			}
 		case n.Update.UsageUpdate != nil:
-			usageUpdates++
+			positions["usage"] = len(positions)
 			usedValues = append(usedValues, n.Update.UsageUpdate.Used)
 		case n.Update.SessionInfoUpdate != nil:
-			sessionInfoUpdates++
+			positions["session"] = len(positions)
+			if n.Update.SessionInfoUpdate.Title != nil {
+				sessionTitles = append(sessionTitles, *n.Update.SessionInfoUpdate.Title)
+			}
 		}
 	}
 
-	if usageUpdates != 1 {
-		t.Fatalf("usage_update notifications = %d, want exactly 1", usageUpdates)
+	if len(usedValues) != 1 {
+		t.Fatalf("usage_update notifications = %d, want exactly 1", len(usedValues))
 	}
 	if usedValues[0] != 17 {
 		t.Fatalf("usage_update Used = %d, want 17 (the scripted peer's own published value)", usedValues[0])
+	}
+	if len(thoughtTexts) == 0 || thoughtTexts[0] != acpStreamUsageReasoningText {
+		t.Fatalf("agent_thought_chunk texts = %q, want first %q", thoughtTexts, acpStreamUsageReasoningText)
+	}
+	if len(sessionTitles) != 1 || sessionTitles[0] != acpStreamUsageSessionTitle {
+		t.Fatalf("session_info_update titles = %q, want exactly %q", sessionTitles, acpStreamUsageSessionTitle)
 	}
 	if len(messageTexts) != 1 {
 		t.Fatalf("agent_message_chunk notifications = %d (%q), want exactly 1", len(messageTexts), messageTexts)
@@ -239,14 +211,8 @@ func assertACPStreamUsageNotifications(t *testing.T, notifications []acpsdk.Sess
 	if messageTexts[0] != acpStreamUsageCompletionText {
 		t.Fatalf("agent_message_chunk text = %q, want %q", messageTexts[0], acpStreamUsageCompletionText)
 	}
-	// Zero thought/session-info notifications is not an oversight: see this
-	// file's own TestACPServeCommandStreamsUsageUpdateThroughRootBuildProcess
-	// doc comment for the two precise, out-of-scope
-	// pkg/services/factory_sessions defects (MapProgressFragment /
-	// semanticProgress) that make both currently unobservable through this
-	// production graph, regardless of what a peer publishes.
-	if thoughtChunks != 0 || sessionInfoUpdates != 0 {
-		t.Fatalf("thought/session-info notifications = %d/%d, want 0/0", thoughtChunks, sessionInfoUpdates)
+	if !(positions["thought"] < positions["usage"] && positions["usage"] < positions["session"] && positions["session"] < positions["message"]) {
+		t.Fatalf("first update positions = %#v, want thought < usage < session-info < message", positions)
 	}
 }
 
@@ -473,15 +439,19 @@ func (p *usageStreamRPCPeer) respondNewSession(id json.RawMessage) error {
 	return p.respond(id, result)
 }
 
-// respondPrompt sends one real usage_update notification (used:17,
-// size:4096, matching the already-golden
-// tests/functional/providers/acp/testdata/json_golden fixture's own values)
-// then one real agent_message_chunk notification ending in the fixture
-// worker's configured stopToken, before answering the request itself --
-// the aggregate order this cell's assertions rely on.
+// respondPrompt sends real reasoning, usage, session-title, and message
+// updates in source order before its truthful terminal stop reason.
 func (p *usageStreamRPCPeer) respondPrompt(id json.RawMessage) error {
+	thoughtUpdate := json.RawMessage(fmt.Sprintf(`{"sessionId":%q,"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":%q}}}`, acpStreamUsageSessionID, acpStreamUsageReasoningText))
+	if err := p.write(usageStreamRPCEnvelope{JSONRPC: "2.0", Method: "session/update", Params: thoughtUpdate}); err != nil {
+		return err
+	}
 	usageUpdate := json.RawMessage(fmt.Sprintf(`{"sessionId":%q,"update":{"sessionUpdate":"usage_update","used":17,"size":4096}}`, acpStreamUsageSessionID))
 	if err := p.write(usageStreamRPCEnvelope{JSONRPC: "2.0", Method: "session/update", Params: usageUpdate}); err != nil {
+		return err
+	}
+	sessionUpdate := json.RawMessage(fmt.Sprintf(`{"sessionId":%q,"update":{"sessionUpdate":"session_info_update","title":%q}}`, acpStreamUsageSessionID, acpStreamUsageSessionTitle))
+	if err := p.write(usageStreamRPCEnvelope{JSONRPC: "2.0", Method: "session/update", Params: sessionUpdate}); err != nil {
 		return err
 	}
 	messageUpdate := json.RawMessage(fmt.Sprintf(`{"sessionId":%q,"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":%q}}}`, acpStreamUsageSessionID, acpStreamUsageCompletionText))

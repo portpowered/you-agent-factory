@@ -1,6 +1,9 @@
+{"kind":"REASONING","phase":"STARTED","provider":"cursor-acp","nativeType":"started","itemId":"assistant-reasoning"}
+{"kind":"REASONING","phase":"DELTA","provider":"cursor-acp","nativeType":"delta","itemId":"assistant-reasoning"}
 {"kind":"PLAN","phase":"UPDATED","provider":"cursor-acp","nativeType":"updated","itemId":"plan"}
 {"kind":"USAGE","phase":"UPDATED","provider":"cursor-acp","nativeType":"updated","itemId":"usage"}
-{"kind":"SESSION","phase":"UPDATED","provider":"cursor-acp","nativeType":"started","itemId":"session"}
+{"kind":"SESSION","phase":"UPDATED","provider":"cursor-acp","nativeType":"updated","itemId":"session"}
+{"kind":"REASONING","phase":"COMPLETED","provider":"cursor-acp","nativeType":"completed","itemId":"assistant-reasoning"}
 {"kind":"SESSION","phase":"UPDATED","provider":"cursor-acp","nativeType":"completed","itemId":"session"}
 {"kind":"MESSAGE","phase":"COMPLETED","provider":"cursor-acp","nativeType":"message.completed","itemId":"cursor-acp-message"}
 {"kind":"RUN","phase":"COMPLETED","provider":"cursor-acp","nativeType":"STREAM_COMPLETED","itemId":""}

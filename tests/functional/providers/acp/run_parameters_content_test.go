@@ -89,22 +89,9 @@ type stableResponseEvent struct {
 	ItemID     string `json:"itemId"`
 }
 
-// assertGoldenResponseStream pins the exact stable shape of every "cursor-acp"
-// response event this fixture's scripted RPC peer produces. The golden
-// carries two SESSION/UPDATED entries (native types "started"/"completed")
-// that were silently dropped before ACP-L1-V2-T03 legalized
-// workers.KindSession/PhaseUpdated (needed for real session_info_update
-// projection): the peer's scripted "session_info_update" notification
-// (golden_rpc_peer_test.go's publishGoldenUpdates) was always turned into
-// this same pair of workers.KindSession/PhaseUpdated records by
-// fragmentmap.mapper.go's semanticProgress -- draftvalidation simply
-// rejected the illegal pair before, so they never reached this observable
-// stream. They carry no title (fragmentmap.mapper.go's KindSession case
-// does not yet populate SessionPayload.Title from the notification's own
-// title text -- a separate, already-tracked gap: no production producer
-// sets Title yet), so they remain a no-output combination once actually
-// projected through the ACP transport's own mapping.ProjectSessionInfoUpdate;
-// they are pinned here only because this is a byte-for-byte stream golden.
+// assertGoldenResponseStream pins the exact response-event order produced by
+// the scripted ACP peer, including REASONING and title-bearing SESSION
+// metadata before the terminal MESSAGE and RUN records.
 func assertGoldenResponseStream(t *testing.T, events []factoryapi.FactoryResponseEvent) {
 	t.Helper()
 	var lines []string

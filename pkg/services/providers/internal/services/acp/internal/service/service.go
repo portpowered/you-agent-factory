@@ -911,10 +911,11 @@ func mapSessionUpdate(update acpsdk.SessionUpdate) ([]providers.ExecuteProgress,
 	case update.SessionInfoUpdate != nil:
 		kind = "session"
 		metadata["native_type"] = "session_info_update"
-		phase = "started"
+		phase = "updated"
 		itemID = "session"
 		if update.SessionInfoUpdate.Title != nil {
 			detail = *update.SessionInfoUpdate.Title
+			metadata["title_present"] = "true"
 		}
 	default:
 		return nil, ""
