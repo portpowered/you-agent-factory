@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -236,6 +237,89 @@ func TestHandleSessionLoadAttachesAndCachesAResumableAttachment(t *testing.T) {
 	}
 	if got := attachmentIDFromMeta(t, resp.Meta); got != cached.ID {
 		t.Fatalf("session/load response attachment identity = %q, want cached attachment %q", got, cached.ID)
+	}
+}
+
+// TestHandleSessionLoadRetryKeepsItsClosedSessionAttachment proves that a
+// completed load remains idempotent after close: the load-specific attachment
+// is still the cursor that has acknowledged the retained history, so retrying
+// must not create a new cursor that replays it a second time.
+func TestHandleSessionLoadRetryKeepsItsClosedSessionAttachment(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project")}
+	server := newTestServer(chatSessions, nil, "/home/operator")
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionLoad, validSessionLoadParams)
+
+	result, rpcErr := server.handleSessionLoad(ctx, env)
+	if rpcErr != nil {
+		t.Fatalf("first handleSessionLoad() error = %+v, want success", rpcErr)
+	}
+	var first acpsdk.LoadSessionResponse
+	if err := json.Unmarshal(result, &first); err != nil {
+		t.Fatalf("unmarshal first LoadSessionResponse: %v", err)
+	}
+	firstID := attachmentIDFromMeta(t, first.Meta)
+
+	chatSessions.getSessionResult.Session.State = chatsessions.SessionStateClosed
+	result, rpcErr = server.handleSessionLoad(ctx, env)
+	if rpcErr != nil {
+		t.Fatalf("retried handleSessionLoad() error = %+v, want success", rpcErr)
+	}
+	var retried acpsdk.LoadSessionResponse
+	if err := json.Unmarshal(result, &retried); err != nil {
+		t.Fatalf("unmarshal retried LoadSessionResponse: %v", err)
+	}
+	if got := attachmentIDFromMeta(t, retried.Meta); got != firstID {
+		t.Fatalf("retried session/load attachment identity = %q, want original %q", got, firstID)
+	}
+	if got := len(chatSessions.attachments); got != 1 {
+		t.Fatalf("Attach created %d attachments, want one retained-history cursor", got)
+	}
+}
+
+// TestHandleSessionLoadSuppressesSuccessMetadataWhenReplayCannotStart proves
+// a client never receives a successful load response with an attachment
+// identity when either its attachment or the retained-history read fails.
+// Returning that identity would falsely imply that the requested history had
+// been delivered and could cause the client to acknowledge records it never
+// observed.
+func TestHandleSessionLoadSuppressesSuccessMetadataWhenReplayCannotStart(t *testing.T) {
+	tests := []struct {
+		name   string
+		server func(t *testing.T) *Server
+	}{
+		{
+			name: "attachment failure",
+			server: func(t *testing.T) *Server {
+				t.Helper()
+				return newTestServer(&fakeChatSessionsService{
+					getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+					attachErr:        errors.New("attach retained-history cursor"),
+				}, nil, "/home/operator")
+			},
+		},
+		{
+			name: "retained history read failure",
+			server: func(t *testing.T) *Server {
+				t.Helper()
+				server, eventsSvc := newStreamingTestServer(t, &fakeFactoryTargetService{})
+				eventsSvc.readErr = errors.New("read retained history")
+				return server
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionLoad, validSessionLoadParams)
+			result, rpcErr := tt.server(t).handleSessionLoad(context.Background(), env)
+			if rpcErr == nil {
+				t.Fatal("handleSessionLoad() error = nil, want a bounded failure")
+			}
+			if result != nil {
+				t.Fatalf("handleSessionLoad() result = %s, want no successful attachment metadata", result)
+			}
+		})
 	}
 }
 

@@ -229,6 +229,76 @@ func TestProjectRetained_UserMessageUsesOriginalItemIdentity(t *testing.T) {
 	requireNoUpdate(t, live)
 }
 
+func TestProjectRetainedPreservesLiveProjectionAndFailureSemantics(t *testing.T) {
+	tests := []struct {
+		name        string
+		draft       workers.Draft
+		wantAgent   bool
+		wantThought bool
+		wantNoop    bool
+		wantErr     bool
+	}{
+		{
+			name: "assistant snapshot remains an agent message",
+			draft: messageDraft(workers.PhaseCompleted, mustMarshal(t, workers.MessagePayload{
+				Role:          "assistant",
+				ContentBlocks: []workers.ContentBlock{{Kind: workers.ContentBlockText, Text: "retained answer"}},
+			}), "item-assistant"),
+			wantAgent: true,
+		},
+		{
+			name: "message delta remains an agent message",
+			draft: messageDraft(workers.PhaseDelta, mustMarshal(t, workers.MessageDeltaPayload{
+				ContentBlockKind: workers.ContentBlockText,
+				TextDelta:        "partial answer",
+			}), "item-delta"),
+			wantAgent: true,
+		},
+		{
+			name: "reasoning remains a thought update",
+			draft: reasoningDraft(workers.PhaseCompleted, mustMarshal(t, workers.ReasoningPayload{
+				Summary: "retained reasoning",
+			}), "item-thought"),
+			wantThought: true,
+		},
+		{
+			name:    "malformed user snapshot is rejected",
+			draft:   messageDraft(workers.PhaseCompleted, json.RawMessage(`{"role":5}`), "item-malformed"),
+			wantErr: true,
+		},
+		{
+			name: "empty user snapshot produces no update",
+			draft: messageDraft(workers.PhaseCompleted, mustMarshal(t, workers.MessagePayload{
+				Role: "user",
+			}), "item-empty"),
+			wantNoop: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			update, err := ProjectRetained(tt.draft)
+			if tt.wantErr {
+				requireMalformed(t, update, err)
+				return
+			}
+			if err != nil {
+				t.Fatalf("ProjectRetained() error = %v", err)
+			}
+			if tt.wantNoop {
+				requireNoUpdate(t, update)
+				return
+			}
+			if tt.wantAgent && (update == nil || update.AgentMessageChunk == nil) {
+				t.Fatalf("ProjectRetained() update = %+v, want an agent message", update)
+			}
+			if tt.wantThought && (update == nil || update.AgentThoughtChunk == nil) {
+				t.Fatalf("ProjectRetained() update = %+v, want an agent thought", update)
+			}
+		})
+	}
+}
+
 // reasoningCase is one ProjectReasoning table-driven expectation.
 type reasoningCase struct {
 	name       string
