@@ -72,6 +72,17 @@ func (service *Service) Execute(ctx context.Context, id providers.ID, request pr
 	return daemon.execute(ctx, canonical, request)
 }
 
+// NegotiatedCapabilities returns id's daemon's last successfully negotiated
+// AgentCapabilities without starting a connection or touching the daemon's
+// execute gate.
+func (service *Service) NegotiatedCapabilities(id providers.ID) (acpsdk.AgentCapabilities, bool) {
+	target, _, ok := service.resolveDaemon(id)
+	if !ok || target == nil {
+		return acpsdk.AgentCapabilities{}, false
+	}
+	return target.negotiatedCapabilities()
+}
+
 // Claim atomically captures the exact live cancel-window generation named by
 // id/attemptID, if id's daemon currently has an established session/prompt
 // turn in flight for it.
@@ -227,6 +238,29 @@ type daemon struct {
 	stderr      bytes.Buffer
 
 	window cancelwindow.Window
+
+	// negotiatedMu guards negotiated/negotiatedKnown separately from gate so
+	// a capability read never blocks on (or is blocked by) an in-flight
+	// execute call holding the gate for the duration of a live attempt.
+	negotiatedMu    sync.RWMutex
+	negotiated      acpsdk.AgentCapabilities
+	negotiatedKnown bool
+}
+
+// negotiatedCapabilities returns the AgentCapabilities from the daemon's
+// last successful initialize handshake, without touching gate or causing any
+// connection side effect. ok is false until the first successful handshake.
+func (daemon *daemon) negotiatedCapabilities() (acpsdk.AgentCapabilities, bool) {
+	daemon.negotiatedMu.RLock()
+	defer daemon.negotiatedMu.RUnlock()
+	return daemon.negotiated, daemon.negotiatedKnown
+}
+
+func (daemon *daemon) recordNegotiated(capabilities acpsdk.AgentCapabilities) {
+	daemon.negotiatedMu.Lock()
+	daemon.negotiated = capabilities
+	daemon.negotiatedKnown = true
+	daemon.negotiatedMu.Unlock()
 }
 
 func (daemon *daemon) execute(ctx context.Context, id providers.ID, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
@@ -439,6 +473,7 @@ func (daemon *daemon) ensureStarted(ctx context.Context, id providers.ID, cwd st
 	daemon.initialized = initialized
 	daemon.finished = finished
 	daemon.tree = tree
+	daemon.recordNegotiated(initialized.AgentCapabilities)
 	return nil
 }
 

@@ -329,17 +329,28 @@ func (s *Service) Continue(
 // resolveContinuationProvider returns the canonical provider identity for
 // reference.Provider and whether that resolved provider truthfully
 // advertises CapabilitySessionResume, without invoking any provider adapter
-// or catalog readiness probe. err is the same typed error ListProviders/
-// GetProvider/Execute use for an unknown provider.
+// or catalog readiness probe. For an ACP integration whose daemon has
+// already completed at least one real initialize handshake (necessarily true
+// for any session identity a caller could legitimately hold, since a
+// Provider Session can only exist after a prior successful attempt against
+// that same daemon), it answers with the daemon's actual negotiated
+// LoadSession capability instead of the static config-time claim, so a
+// daemon that cannot really resume is reported as unsupported rather than
+// left to fail loudly deeper in the adapter. err is the same typed error
+// ListProviders/GetProvider/Execute use for an unknown provider.
 func (s *Service) resolveContinuationProvider(
 	reference providers.SessionRef,
 ) (canonical providers.ID, supported bool, err error) {
 	if s.acp != nil {
 		if resolved, ok := s.acp.Resolve(reference.Provider); ok {
 			for _, integration := range s.acp.Integrations() {
-				if integration.Name == resolved {
-					return resolved, descriptorHasCapability(acpDescriptor(integration), providers.CapabilitySessionResume), nil
+				if integration.Name != resolved {
+					continue
 				}
+				if negotiated, known := s.acp.NegotiatedCapabilities(resolved); known {
+					return resolved, negotiated.LoadSession, nil
+				}
+				return resolved, descriptorHasCapability(acpDescriptor(integration), providers.CapabilitySessionResume), nil
 			}
 			return resolved, false, nil
 		}
