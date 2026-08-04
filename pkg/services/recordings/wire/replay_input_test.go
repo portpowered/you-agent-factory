@@ -160,6 +160,43 @@ func TestReplayInputLoaderPropagatesMalformedPortableRecording(t *testing.T) {
 	}
 }
 
+func TestReplayInputLoaderRejectsTrailingPortableDocumentWithoutLegacyFallback(t *testing.T) {
+	t.Parallel()
+
+	path := testpath.MustRepoPathFromCaller(
+		t,
+		0,
+		"pkg", "services", "recordings", "internal", "artifacts", "testdata", "valid-v2.json",
+	)
+	valid, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read valid portable recording: %v", err)
+	}
+	loader := recordingswire.NewReplayArtifactCapability(
+		func(string) ([]byte, error) { return append(valid, []byte("\n{}")...), nil },
+		func(string) (*recordings.ReplayArtifact, error) {
+			t.Fatal("legacy loader must not be called for a trailing portable document")
+			return nil, nil
+		},
+		logging.NoopLogger{},
+	)
+
+	result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "recording.json"})
+	if err == nil {
+		t.Fatal("trailing portable recording error = nil")
+	}
+	if result.Portable != nil || result.Legacy != nil {
+		t.Fatalf("result = %#v, want zero result", result)
+	}
+	var inputErr *recordings.ReplayInputError
+	if !errors.As(err, &inputErr) || inputErr.Family != recordings.ReplayInputFamilyPortable {
+		t.Fatalf("error = %v, want portable ReplayInputError", err)
+	}
+	if inputErr.Diagnostic.Code != recordings.ReplayArtifactDiagnosticMalformed {
+		t.Fatalf("diagnostic = %#v, want malformed portable diagnostic", inputErr.Diagnostic)
+	}
+}
+
 func TestReplayInputLoaderClassifiesLegacyLoaderFailure(t *testing.T) {
 	t.Parallel()
 

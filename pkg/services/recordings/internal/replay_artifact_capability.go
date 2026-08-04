@@ -198,11 +198,36 @@ func (loader *replayInputArtifactCapability) LoadReplayInput(
 }
 
 func isPortableReplayInput(data []byte) bool {
-	var header struct {
-		RecordingKind string `json:"recordingKind"`
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	token, err := decoder.Token()
+	if err != nil {
+		return false
 	}
-	return json.Unmarshal(data, &header) == nil &&
-		header.RecordingKind == recordings.KindJavaScriptFactorySession
+	if delimiter, ok := token.(json.Delim); !ok || delimiter != '{' {
+		return false
+	}
+	for decoder.More() {
+		key, err := decoder.Token()
+		if err != nil {
+			return false
+		}
+		keyText, ok := key.(string)
+		if !ok {
+			return false
+		}
+		if keyText == "recordingKind" {
+			var kind string
+			if err := decoder.Decode(&kind); err != nil {
+				return false
+			}
+			return kind == recordings.KindJavaScriptFactorySession
+		}
+		var ignored json.RawMessage
+		if err := decoder.Decode(&ignored); err != nil {
+			return false
+		}
+	}
+	return false
 }
 
 func (loader *replayInputArtifactCapability) loadPortableReplayInput(
@@ -210,7 +235,7 @@ func (loader *replayInputArtifactCapability) loadPortableReplayInput(
 ) (recordings.LoadReplayInputResult, error) {
 	value, err := recordings.DecodePortableRecording(bytes.NewReader(data))
 	if err != nil {
-		failure := newReplayInputError(recordings.ReplayInputFamilyPortable, err)
+		failure := newPortableReplayInputError(err)
 		loader.logReplayInputOutcome("validation_failure", string(failure.Diagnostic.Code), "")
 		return recordings.LoadReplayInputResult{}, failure
 	}
@@ -277,6 +302,23 @@ func newReplayInputError(family recordings.ReplayInputFamily, cause error) *reco
 	return &recordings.ReplayInputError{
 		Family:     family,
 		Diagnostic: replayInputDiagnostic(cause),
+		Cause:      cause,
+	}
+}
+
+func newPortableReplayInputError(cause error) *recordings.ReplayInputError {
+	diagnostic := replayInputDiagnostic(cause)
+	if diagnostic.Code == recordings.ReplayArtifactDiagnosticDependencyFailure {
+		diagnostic = recordings.ReplayArtifactDiagnostic{
+			Code:    recordings.ReplayArtifactDiagnosticMalformed,
+			Area:    "recording",
+			Path:    "recording",
+			Message: "recording document is malformed",
+		}
+	}
+	return &recordings.ReplayInputError{
+		Family:     recordings.ReplayInputFamilyPortable,
+		Diagnostic: diagnostic,
 		Cause:      cause,
 	}
 }
@@ -353,11 +395,22 @@ func replayInputDiagnostic(err error) recordings.ReplayArtifactDiagnostic {
 			Message: "replay input loading was canceled",
 		}
 	}
+	var replayArtifactErr *recordings.ReplayArtifactError
+	if errors.As(err, &replayArtifactErr) {
+		return cloneReplayArtifactDiagnostic(replayArtifactErr.Diagnostic)
+	}
 	var diagnostic *recordings.PortableRecordingDiagnostic
 	if errors.As(err, &diagnostic) {
 		return replayArtifactDiagnosticFromPortable(diagnostic)
 	}
 	return replayInputDependencyDiagnostic()
+}
+
+func cloneReplayArtifactDiagnostic(
+	diagnostic recordings.ReplayArtifactDiagnostic,
+) recordings.ReplayArtifactDiagnostic {
+	diagnostic.SupportedVersions = slices.Clone(diagnostic.SupportedVersions)
+	return diagnostic
 }
 
 func replayInputDependencyDiagnostic() recordings.ReplayArtifactDiagnostic {

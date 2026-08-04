@@ -1,16 +1,21 @@
 package runtimeopening
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testpath"
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
@@ -18,8 +23,16 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"go.uber.org/zap"
 )
+
+type runtimeLoadPortableFailureCase struct {
+	name     string
+	payload  []byte
+	readErr  error
+	wantCode recordings.ReplayArtifactDiagnosticCode
+}
 
 func TestLoadRuntimePreservesValidatedPortableRecording(t *testing.T) {
 	path := testpath.MustRepoPathFromCaller(
@@ -159,16 +172,298 @@ func TestLoadRuntimePreservesLegacyReplayFailureContext(t *testing.T) {
 	}
 }
 
+func TestLoadRuntimePreservesLegacyReplayInputs(t *testing.T) {
+	t.Parallel()
+
+	artifact := &recordings.ReplayArtifact{
+		SchemaVersion: "legacy",
+		Events:        []factorydefinitions.FactoryEvent{{}},
+		Factory:       runtimeLoadFactorySnapshot(t),
+		WallClock: &factorydefinitions.ReplayWallClockMetadata{
+			StartedAt:  time.Date(2026, time.July, 20, 2, 0, 0, 0, time.UTC),
+			FinishedAt: time.Date(2026, time.July, 20, 2, 5, 0, 0, time.UTC),
+		},
+	}
+	capability := recordingswire.NewReplayArtifactCapability(
+		func(path string) ([]byte, error) {
+			if path != "legacy-replay.json" {
+				t.Fatalf("read path = %q, want legacy-replay.json", path)
+			}
+			return []byte(`{"schemaVersion":"legacy"}`), nil
+		},
+		func(path string) (*recordings.ReplayArtifact, error) {
+			if path != "legacy-replay.json" {
+				t.Fatalf("legacy path = %q, want legacy-replay.json", path)
+			}
+			return artifact, nil
+		},
+		logging.NoopLogger{},
+	)
+
+	loaded, err := LoadRuntime(
+		t.TempDir(),
+		"runtime-base",
+		"legacy-replay.json",
+		operatorconfig.ResolvedDefaults{},
+		nil,
+		RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: zap.NewNop()},
+		nil,
+		factorydefinitionswire.LoadedFactorySourceFactory(),
+		factorydefinitionswire.ReplayRuntimeConfigDecoder(),
+		capability,
+		nil,
+		func(base *zap.Logger, _, _, _ string) *zap.Logger { return base },
+	)
+	if err != nil {
+		t.Fatalf("LoadRuntime: %v", err)
+	}
+	if loaded.PortableRecording != nil || loaded.LoadedFactoryCfg == nil || loaded.ReplayArtifact != artifact {
+		t.Fatalf("LoadRuntime() = %#v, want only reconstructed legacy runtime inputs", loaded)
+	}
+	if got := loaded.LoadedFactoryCfg.RuntimeBaseDir(); got != "runtime-base" {
+		t.Fatalf("runtime base dir = %q, want runtime-base", got)
+	}
+	if len(loaded.ReplayArtifact.Events) != 1 ||
+		loaded.ReplayArtifact.WallClock == nil ||
+		!loaded.ReplayArtifact.WallClock.StartedAt.Equal(artifact.WallClock.StartedAt) {
+		t.Fatalf("legacy replay facts = %#v, want events and replay-clock metadata", loaded.ReplayArtifact)
+	}
+}
+
+func TestLoadRuntimeRejectsPortableFailureMatrixBeforeFactoryConstruction(t *testing.T) {
+	t.Parallel()
+
+	validPayload := runtimeLoadPortablePayload(t, nil)
+	readFailure := errors.New("portable reader unavailable")
+	testCases := []runtimeLoadPortableFailureCase{
+		{
+			name:     "missing input",
+			readErr:  os.ErrNotExist,
+			wantCode: recordings.ReplayArtifactDiagnosticDependencyFailure,
+		},
+		{
+			name:     "portable read failure",
+			readErr:  readFailure,
+			wantCode: recordings.ReplayArtifactDiagnosticDependencyFailure,
+		},
+		{
+			name:     "malformed JSON",
+			payload:  []byte(`{"recordingKind":"you.factory-session.javascript.recording","schemaVersion":`),
+			wantCode: recordings.ReplayArtifactDiagnosticMalformed,
+		},
+		{
+			name:     "trailing document",
+			payload:  append(validPayload, []byte("\n{}")...),
+			wantCode: recordings.ReplayArtifactDiagnosticMalformed,
+		},
+		{
+			name: "unsupported compatibility version",
+			payload: runtimeLoadPortablePayload(t, func(recording *recordings.PortableRecording) {
+				recording.ReplayCompatibilityVersion = "99"
+			}),
+			wantCode: recordings.ReplayArtifactDiagnosticUnsupportedVersion,
+		},
+		{
+			name: "invalid identity",
+			payload: runtimeLoadPortablePayload(t, func(recording *recordings.PortableRecording) {
+				recording.Session.ID = ""
+			}),
+			wantCode: recordings.ReplayArtifactDiagnosticInvalidIdentity,
+		},
+		{
+			name: "invalid summary",
+			payload: runtimeLoadPortablePayload(t, func(recording *recordings.PortableRecording) {
+				recording.Session.Status = "UNSUPPORTED"
+			}),
+			wantCode: recordings.ReplayArtifactDiagnosticInvalidSummary,
+		},
+		{
+			name: "invalid integrity",
+			payload: runtimeLoadPortablePayload(t, func(recording *recordings.PortableRecording) {
+				recording.Source.Hash = "invalid"
+			}),
+			wantCode: recordings.ReplayArtifactDiagnosticInvalidIntegrity,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			assertPortableRuntimeFailureBeforeFactoryConstruction(t, testCase)
+		})
+	}
+}
+
+func assertPortableRuntimeFailureBeforeFactoryConstruction(
+	t *testing.T,
+	testCase runtimeLoadPortableFailureCase,
+) {
+	t.Helper()
+
+	loadFactoryCalls := 0
+	decodeReplayConfigCalls := 0
+	newLoadedFactoryCalls := 0
+	capability := recordingswire.NewReplayArtifactCapability(
+		func(path string) ([]byte, error) {
+			if path != "portable-replay.json" {
+				t.Fatalf("read path = %q, want portable-replay.json", path)
+			}
+			return testCase.payload, testCase.readErr
+		},
+		func(string) (*recordings.ReplayArtifact, error) {
+			t.Fatal("legacy loader must not be called for portable replay failures")
+			return nil, nil
+		},
+		logging.NoopLogger{},
+	)
+
+	loaded, err := LoadRuntime(
+		t.TempDir(), "", "portable-replay.json", operatorconfig.ResolvedDefaults{}, nil,
+		RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: zap.NewNop()},
+		func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			loadFactoryCalls++
+			return nil, errors.New("Factory loading must not start")
+		},
+		func(string, *factorydefinitions.FactoryConfig, factorydefinitions.RuntimeDefinitionLookup, []factorydefinitions.PortableBundledFileReplacement) (factorydefinitions.MutableLoadedFactorySource, error) {
+			newLoadedFactoryCalls++
+			return nil, errors.New("legacy Factory reconstruction must not start")
+		},
+		func(*factorydefinitions.FactorySnapshot) (factorydefinitions.ReplayRuntimeConfig, error) {
+			decodeReplayConfigCalls++
+			return nil, errors.New("legacy Factory decoding must not start")
+		},
+		capability,
+		nil,
+		func(base *zap.Logger, _, _, _ string) *zap.Logger { return base },
+	)
+	if err == nil {
+		t.Fatal("LoadRuntime() error = nil")
+	}
+	if !strings.HasPrefix(err.Error(), "load portable replay: ") {
+		t.Fatalf("LoadRuntime() error = %q, want portable replay context", err)
+	}
+	var inputErr *recordings.ReplayInputError
+	if !errors.As(err, &inputErr) ||
+		inputErr.Family != recordings.ReplayInputFamilyPortable ||
+		inputErr.Diagnostic.Code != testCase.wantCode {
+		t.Fatalf("LoadRuntime() error = %v, want portable diagnostic %q", err, testCase.wantCode)
+	}
+	if loaded.PortableRecording != nil || loaded.ReplayArtifact != nil || loaded.LoadedFactoryCfg != nil || loaded.SessionLogger != nil {
+		t.Fatalf("LoadRuntime() result = %#v, want zero result", loaded)
+	}
+	if loadFactoryCalls != 0 || decodeReplayConfigCalls != 0 || newLoadedFactoryCalls != 0 {
+		t.Fatalf(
+			"Factory replay construction calls = load:%d decode:%d new:%d, want zero before input validation",
+			loadFactoryCalls,
+			decodeReplayConfigCalls,
+			newLoadedFactoryCalls,
+		)
+	}
+}
+
+func TestLoadRuntimePreservesLegacyTypedDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	failure := &recordings.ReplayArtifactError{
+		Kind: recordings.ReplayArtifactErrorForeign,
+		Diagnostic: recordings.ReplayArtifactDiagnostic{
+			Code:    recordings.ReplayArtifactDiagnosticForeignReference,
+			Area:    "artifact",
+			Path:    "reference",
+			Message: "artifact reference does not belong to the selected recording",
+		},
+		Cause: recordings.ErrForeignPortableArtifact,
+	}
+	capability := recordingswire.NewReplayArtifactCapability(
+		func(string) ([]byte, error) { return []byte(`{"schemaVersion":"legacy"}`), nil },
+		func(string) (*recordings.ReplayArtifact, error) { return nil, failure },
+		logging.NoopLogger{},
+	)
+
+	loaded, err := LoadRuntime(
+		t.TempDir(), "", "legacy-replay.json", operatorconfig.ResolvedDefaults{}, nil,
+		RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: zap.NewNop()},
+		nil, nil, nil, capability, nil,
+		func(base *zap.Logger, _, _, _ string) *zap.Logger { return base },
+	)
+	if !errors.Is(err, recordings.ErrForeignPortableArtifact) {
+		t.Fatalf("LoadRuntime() error = %v, want ErrForeignPortableArtifact", err)
+	}
+	if got, want := err.Error(), "load factory config: load replay artifact: reference: artifact reference does not belong to the selected recording"; got != want {
+		t.Fatalf("LoadRuntime() error = %q, want %q", got, want)
+	}
+	var inputErr *recordings.ReplayInputError
+	if !errors.As(err, &inputErr) ||
+		inputErr.Family != recordings.ReplayInputFamilyLegacy ||
+		inputErr.Diagnostic.Code != recordings.ReplayArtifactDiagnosticForeignReference {
+		t.Fatalf("LoadRuntime() error = %v, want legacy foreign-reference diagnostic", err)
+	}
+	if loaded.PortableRecording != nil || loaded.ReplayArtifact != nil || loaded.LoadedFactoryCfg != nil || loaded.SessionLogger != nil {
+		t.Fatalf("LoadRuntime() result = %#v, want zero result", loaded)
+	}
+}
+
+func runtimeLoadPortablePayload(
+	t *testing.T,
+	mutate func(*recordings.PortableRecording),
+) []byte {
+	t.Helper()
+
+	path := testpath.MustRepoPathFromCaller(
+		t,
+		0,
+		"pkg", "services", "recordings", "internal", "artifacts", "testdata", "valid-v2.json",
+	)
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read valid portable recording: %v", err)
+	}
+	if mutate == nil {
+		return payload
+	}
+	recording, err := recordings.DecodePortableRecording(bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("decode valid portable recording: %v", err)
+	}
+	mutate(&recording)
+	payload, err = json.Marshal(recording)
+	if err != nil {
+		t.Fatalf("marshal portable recording: %v", err)
+	}
+	return payload
+}
+
+func runtimeLoadFactorySnapshot(t *testing.T) *factorydefinitions.FactorySnapshot {
+	t.Helper()
+
+	config, err := factorymapping.FactoryConfigFromOpenAPIJSON([]byte(factoryfixtures.CrossPathValidAlphaFactoryJSON))
+	if err != nil {
+		t.Fatalf("decode Factory fixture: %v", err)
+	}
+	snapshot, err := factorydefinitionswire.FactorySnapshotCapturer()(t.TempDir(), config, nil, "", nil)
+	if err != nil {
+		t.Fatalf("capture Factory snapshot: %v", err)
+	}
+	return snapshot
+}
+
 func TestClockForReplayPreservesOverridesAndInjectedDefaults(t *testing.T) {
 	explicit := clockwork.NewFakeClockAt(time.Date(2026, time.July, 20, 1, 0, 0, 0, time.UTC))
 	replay := clockwork.NewFakeClockAt(time.Date(2026, time.July, 20, 2, 0, 0, 0, time.UTC))
 	fallback := clockwork.NewFakeClockAt(time.Date(2026, time.July, 20, 3, 0, 0, 0, time.UTC))
-	artifact := &factorydefinitions.ReplayArtifact{}
+	artifact := &factorydefinitions.ReplayArtifact{
+		WallClock: &factorydefinitions.ReplayWallClockMetadata{
+			StartedAt: time.Date(2026, time.July, 20, 2, 0, 0, 0, time.UTC),
+		},
+	}
 
 	selected, err := clockForReplay(
 		explicit,
 		artifact,
-		func(*factorydefinitions.ReplayArtifact) recordings.Clock { return replay },
+		func(got *factorydefinitions.ReplayArtifact) recordings.Clock {
+			if got != artifact || got.WallClock == nil || !got.WallClock.StartedAt.Equal(replay.Now()) {
+				t.Fatalf("replay clock input = %#v, want legacy artifact wall-clock metadata", got)
+			}
+			return replay
+		},
 		func(clock factoryruntime.Clock) factoryruntime.Clock {
 			if clock == nil {
 				return fallback
@@ -183,7 +478,12 @@ func TestClockForReplayPreservesOverridesAndInjectedDefaults(t *testing.T) {
 	selected, err = clockForReplay(
 		nil,
 		artifact,
-		func(*factorydefinitions.ReplayArtifact) recordings.Clock { return replay },
+		func(got *factorydefinitions.ReplayArtifact) recordings.Clock {
+			if got != artifact || got.WallClock == nil || !got.WallClock.StartedAt.Equal(replay.Now()) {
+				t.Fatalf("replay clock input = %#v, want legacy artifact wall-clock metadata", got)
+			}
+			return replay
+		},
 		func(clock factoryruntime.Clock) factoryruntime.Clock {
 			if clock == nil {
 				return fallback
