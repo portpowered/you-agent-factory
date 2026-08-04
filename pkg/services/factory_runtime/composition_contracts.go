@@ -7,6 +7,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -70,3 +71,11 @@ type WorkersMockCommandRunnerFactory func(
 	factorydefinitions.RuntimeDefinitionLookup,
 	workers.CommandRunner,
 ) workers.CommandRunner
+
+// WorkerSessionsFactory constructs the per-session Worker Sessions service
+// (W4 Runtime dispatch cutover) from that session's already-resolved Workers
+// execution boundary. Wire composes the one canonical construction path
+// (worker_sessions/wire.NewService plus its own Events/logging dependencies)
+// behind this factory so Factory Runtime never imports a peer service's
+// wire or internal packages directly.
+type WorkerSessionsFactory func(workers.WorkstationExecutionService) (workersessions.Service, error)

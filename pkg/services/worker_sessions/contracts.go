@@ -203,6 +203,19 @@ func (req StartRequest) Validate() error {
 // session's exactly-once terminal outcome has been committed.
 type StartResult struct {
 	Session Session
+	// Dispatch is the raw, detached workers.WorkstationDispatchResult
+	// returned by the underlying workers.WorkstationExecutionService.
+	// DispatchWorkstation call. It is populated whenever the attempt was
+	// actually handed off to Workers, and is the zero value when Start
+	// terminalized before handoff (for example
+	// FailureCauseEventPublicationFailure). Session.Result carries only the
+	// bounded, safe COMPLETED/FAILED classification; Dispatch carries the
+	// full Workers-owned payload a trusted caller needs to preserve existing
+	// Work materialization and output lineage behavior unchanged.
+	Dispatch workers.WorkstationDispatchResult
+	// DispatchErr is the raw adapter error returned alongside Dispatch, if
+	// any, detached from registry-owned state.
+	DispatchErr error
 }
 
 var (

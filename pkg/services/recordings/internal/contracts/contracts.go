@@ -1322,6 +1322,7 @@ type RuntimeLedger interface {
 	RecordWorkInput(int, work.SubmitRequest, workerexecution.Token, time.Time)
 	RecordWorkstationRequest(int, FactoryDispatchRecord, time.Time)
 	RecordWorkstationResponse(int, workerexecution.WorkResult, CompletedDispatch)
+	RecordDispatchWorkerSessionAssociation(tick int, dispatchID string, workerSessionID string, eventTime time.Time)
 	RecordRunResponse(int, FactoryState, string, time.Time)
 	RecordWorkStateChange(int, work.WorkStateChangeRecord, time.Time)
 	RecordFactoryStateChange(int, FactoryState, FactoryState, string, time.Time)

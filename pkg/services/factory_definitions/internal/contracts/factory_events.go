@@ -28,6 +28,7 @@ const (
 	FactoryEventTypeDispatchReconciled            FactoryEventType = "DISPATCH_RECONCILED"
 	FactoryEventTypeDispatchRequest               FactoryEventType = "DISPATCH_REQUEST"
 	FactoryEventTypeDispatchResponse              FactoryEventType = "DISPATCH_RESPONSE"
+	FactoryEventTypeDispatchWorkerSessionAssoc    FactoryEventType = "DISPATCH_WORKER_SESSION_ASSOCIATION"
 	FactoryEventTypeFactoryChange                 FactoryEventType = "FACTORY_CHANGE"
 	FactoryEventTypeFactoryStateResponse          FactoryEventType = "FACTORY_STATE_RESPONSE"
 	FactoryEventTypeInferenceRequest              FactoryEventType = "INFERENCE_REQUEST"
@@ -647,6 +648,16 @@ type DispatchRequestEventPayload struct {
 	PreviousChainingTraceIDs *[]string                     `json:"previousChainingTraceIds,omitempty"`
 	Resources                *[]DispatchResourceRef        `json:"resources,omitempty"`
 	TransitionID             string                        `json:"transitionId"`
+}
+
+// DispatchWorkerSessionAssociationEventPayload records the canonical,
+// stable dispatch-to-Worker-Session identity association. Runtime commits
+// this record before invoking worker_sessions.Service.Start for the
+// associated dispatch, so the association is always observable before any
+// event that depends on it (the Worker Session's own opening or output
+// records). DispatchID remains authoritative on FactoryEventContext.
+type DispatchWorkerSessionAssociationEventPayload struct {
+	WorkerSessionID string `json:"workerSessionId"`
 }
 
 // WorkStateChangeEventPayload describes a canonical Petri marking position

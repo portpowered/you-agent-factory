@@ -51,8 +51,11 @@ func NewRuntimeFactory(
 
 // NewAssembly constructs the inert Factory Runtime assembly service selected by
 // Wire. It does not start a runtime or sidecar.
-func NewAssembly(runtimeFactory *RuntimeFactory) (*Assembly, error) {
-	return factoryruntimeinternal.NewAssembly(runtimeFactory)
+func NewAssembly(
+	runtimeFactory *RuntimeFactory,
+	workerSessionsFactory factoryruntime.WorkerSessionsFactory,
+) (*Assembly, error) {
+	return factoryruntimeinternal.NewAssembly(runtimeFactory, workerSessionsFactory)
 }
 
 // NewOrchestratorDefinitionValidator returns the runtime-owned orchestrator
