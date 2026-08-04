@@ -19,6 +19,7 @@ func TestSupportedMethods(t *testing.T) {
 		"session/load",
 		"session/resume",
 		"session/cancel",
+		"session/close",
 		"session/set_config_option",
 		"session/prompt",
 		"session/update",

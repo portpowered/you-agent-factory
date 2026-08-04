@@ -638,3 +638,151 @@ func TestStore_RequestControl_RepeatedDistinctIdentitiesNeverCollide(t *testing.
 		}
 	}
 }
+
+// TestStore_AdvanceControl_CompletedCloseAtomicallyTerminalizesLifecycle
+// proves a CLOSE effect that has already succeeded is recorded as one Chat
+// lifecycle commit: the intent, captured running turn, current episode, and
+// session all become terminal before any successor can be admitted.
+func TestStore_AdvanceControl_CompletedCloseAtomicallyTerminalizesLifecycle(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 4, 14, 0, 0, 0, time.UTC)
+	store, session, turn := newActiveTurnTestSession(t, now)
+	if _, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: session.ID, TurnID: turn.ID, Next: chatsessions.TurnStateRunning,
+	}); err != nil {
+		t.Fatalf("AdvanceTurn(RUNNING): %v", err)
+	}
+	requestID := controlRequestID("conn-close", "1")
+	requested, err := store.RequestControl(ctx, chatsessions.RequestControlRequest{
+		RequestID: requestID, SessionID: session.ID, ExpectedVersion: session.Version, Action: chatsessions.ControlActionClose,
+	})
+	if err != nil {
+		t.Fatalf("RequestControl(CLOSE): %v", err)
+	}
+	if _, err := store.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
+		SessionID: session.ID, RequestID: requestID, Next: chatsessions.ControlIntentStateCommitted,
+	}); err != nil {
+		t.Fatalf("AdvanceControl(COMMITTED): %v", err)
+	}
+	completed, err := store.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
+		SessionID: session.ID, RequestID: requestID, Next: chatsessions.ControlIntentStateCompleted,
+	})
+	if err != nil {
+		t.Fatalf("AdvanceControl(COMPLETED): %v", err)
+	}
+	if completed.Intent.State != chatsessions.ControlIntentStateCompleted || completed.Intent.TurnID != requested.Intent.TurnID {
+		t.Fatalf("completed intent = %#v, want the captured CLOSE intent completed", completed.Intent)
+	}
+
+	closed, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession after close: %v", err)
+	}
+	if closed.Session.State != chatsessions.SessionStateClosed || closed.Session.ActiveTurnID != "" {
+		t.Fatalf("closed Session = %#v, want CLOSED with no active turn", closed.Session)
+	}
+	if closed.Episode.State != chatsessions.TargetEpisodeStateClosed || closed.Episode.ClosedAt == nil {
+		t.Fatalf("closed episode = %#v, want a terminal episode with ClosedAt", closed.Episode)
+	}
+	if _, err := store.StartTurn(ctx, chatsessions.StartTurnRequest{
+		RequestID: startTurnRequestID("post-close"), SessionID: session.ID, ExpectedVersion: closed.Session.Version,
+	}); !errors.Is(err, chatsessions.ErrInvalidTransition) {
+		t.Fatalf("StartTurn after close: got %v, want ErrInvalidTransition and no replacement admission", err)
+	}
+}
+
+// TestStore_AdvanceControl_CloseAfterSameTurnCompletionStillClosesSession
+// proves normal completion racing a committed CLOSE does not reopen admission
+// or leave the Chat Session open: the captured turn remains most recent, so
+// the successful close has a terminal lifecycle effect rather than NOOP.
+func TestStore_AdvanceControl_CloseAfterSameTurnCompletionStillClosesSession(t *testing.T) {
+	ctx := context.Background()
+	store, session, turn := newActiveTurnTestSession(t, time.Now())
+	if _, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: session.ID, TurnID: turn.ID, Next: chatsessions.TurnStateRunning,
+	}); err != nil {
+		t.Fatalf("AdvanceTurn(RUNNING): %v", err)
+	}
+	requestID := controlRequestID("conn-close", "same-turn-completion")
+	if _, err := store.RequestControl(ctx, chatsessions.RequestControlRequest{
+		RequestID: requestID, SessionID: session.ID, ExpectedVersion: session.Version, Action: chatsessions.ControlActionClose,
+	}); err != nil {
+		t.Fatalf("RequestControl(CLOSE): %v", err)
+	}
+	if _, err := store.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
+		SessionID: session.ID, RequestID: requestID, Next: chatsessions.ControlIntentStateCommitted,
+	}); err != nil {
+		t.Fatalf("AdvanceControl(COMMITTED): %v", err)
+	}
+	if _, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: session.ID, TurnID: turn.ID, Next: chatsessions.TurnStateCompleted,
+	}); err != nil {
+		t.Fatalf("AdvanceTurn(COMPLETED): %v", err)
+	}
+	completed, err := store.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
+		SessionID: session.ID, RequestID: requestID, Next: chatsessions.ControlIntentStateCompleted,
+	})
+	if err != nil {
+		t.Fatalf("AdvanceControl(COMPLETED): %v", err)
+	}
+	if completed.Intent.State != chatsessions.ControlIntentStateCompleted {
+		t.Fatalf("close intent state = %s, want COMPLETED", completed.Intent.State)
+	}
+	closed, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if closed.Session.State != chatsessions.SessionStateClosed || closed.Episode.State != chatsessions.TargetEpisodeStateClosed {
+		t.Fatalf("close after completion left lifecycle open: Session=%#v Episode=%#v", closed.Session, closed.Episode)
+	}
+}
+
+// TestStore_AdvanceControl_SupersededCloseLeavesReplacementOpen proves an old
+// CLOSE intent retains the same supersession rule as cancel: it cannot close
+// a newer turn or its active Chat Session.
+func TestStore_AdvanceControl_SupersededCloseLeavesReplacementOpen(t *testing.T) {
+	ctx := context.Background()
+	store, session, turn := newActiveTurnTestSession(t, time.Now())
+	requestID := controlRequestID("conn-close", "superseded")
+	if _, err := store.RequestControl(ctx, chatsessions.RequestControlRequest{
+		RequestID: requestID, SessionID: session.ID, ExpectedVersion: session.Version, Action: chatsessions.ControlActionClose,
+	}); err != nil {
+		t.Fatalf("RequestControl(CLOSE): %v", err)
+	}
+	if _, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
+		SessionID: session.ID, TurnID: turn.ID, Next: chatsessions.TurnStateCanceled,
+	}); err != nil {
+		t.Fatalf("AdvanceTurn(CANCELED): %v", err)
+	}
+	released, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession released: %v", err)
+	}
+	replacement, err := store.StartTurn(ctx, chatsessions.StartTurnRequest{
+		RequestID: startTurnRequestID("close-replacement"), SessionID: session.ID, ExpectedVersion: released.Session.Version,
+	})
+	if err != nil {
+		t.Fatalf("StartTurn replacement: %v", err)
+	}
+	if _, err := store.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
+		SessionID: session.ID, RequestID: requestID, Next: chatsessions.ControlIntentStateCommitted,
+	}); err != nil {
+		t.Fatalf("AdvanceControl(COMMITTED): %v", err)
+	}
+	resolved, err := store.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
+		SessionID: session.ID, RequestID: requestID, Next: chatsessions.ControlIntentStateCompleted,
+	})
+	if err != nil {
+		t.Fatalf("AdvanceControl(resolve): %v", err)
+	}
+	if resolved.Intent.State != chatsessions.ControlIntentStateSuperseded {
+		t.Fatalf("close resolution = %s, want SUPERSEDED", resolved.Intent.State)
+	}
+	current, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession current: %v", err)
+	}
+	if current.Session.State != chatsessions.SessionStateActive || current.Session.ActiveTurnID != replacement.Turn.ID {
+		t.Fatalf("superseded close disturbed replacement: Session=%#v want active %q", current.Session, replacement.Turn.ID)
+	}
+}

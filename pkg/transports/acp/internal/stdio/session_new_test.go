@@ -516,6 +516,11 @@ type fakeFactoryTargetService struct {
 
 	closeCalls []string
 	closeErr   error
+	// closeEntered and closeRelease mirror the deterministic Cancel controls:
+	// they expose the exact point a captured Factory Session close begins so
+	// a test can assert Chat's CLOSE intent is committed before fan-out.
+	closeEntered chan struct{}
+	closeRelease chan struct{}
 }
 
 type cancelFactoryTargetCall struct {
@@ -595,9 +600,16 @@ func (f *fakeFactoryTargetService) Cancel(
 
 func (f *fakeFactoryTargetService) CloseFactorySession(_ context.Context, sessionID string) error {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.closeCalls = append(f.closeCalls, sessionID)
-	return f.closeErr
+	if len(f.closeCalls) == 1 && f.closeEntered != nil {
+		close(f.closeEntered)
+	}
+	release, err := f.closeRelease, f.closeErr
+	f.mu.Unlock()
+	if release != nil {
+		<-release
+	}
+	return err
 }
 
 func (f *fakeFactoryTargetService) SubscribeFactoryResponseEvents(

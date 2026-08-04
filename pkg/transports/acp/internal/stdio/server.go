@@ -12,15 +12,15 @@
 // without fabrication, into the one final "session/prompt" response, and
 // terminalizing the admitted turn on every outcome (COMPLETED, CANCELED, or
 // FAILED) so no admitted turn is ever left stranded non-terminal, plus the
-// "session/cancel" notification, forwarded to the addressed Chat Session's
-// currently bound Factory Session turn through the same Factory
-// Sessions-owned target-execution capability -- protocol-safe rejection of
-// malformed input, unsupported methods, and unsupported protocol versions,
-// and deterministic termination on clean EOF, context cancellation, a
-// partial trailing frame, or a writer failure. Every other deferred ACP
-// session and prompt behavior continues to receive method-not-found. It is
-// internal to pkg/transports/acp; callers use the package root's exported
-// operations instead of this package directly.
+// "session/cancel" notification and "session/close" request, each routed
+// through a captured Chat control intent to the exact bound or pending
+// Factory Session using the same Factory Sessions-owned target-execution
+// capability -- protocol-safe rejection of malformed input, unsupported
+// methods, and unsupported protocol versions, and deterministic termination
+// on clean EOF, context cancellation, a partial trailing frame, or a writer
+// failure. Every other deferred ACP session and prompt behavior continues to
+// receive method-not-found. It is internal to pkg/transports/acp; callers use
+// the package root's exported operations instead of this package directly.
 package stdio
 
 import (
@@ -414,8 +414,9 @@ func (s *Server) readConnectionLines(
 // dispatchConnectionLine decodes and dispatches exactly one already-scanned,
 // non-empty JSON-RPC line: a malformed-envelope rejection, a
 // "session/cancel" forward, an asynchronous "session/prompt" registration,
-// or a synchronous request dispatch and response write. stop reports whether
-// the read loop must end, carrying err as its result when it does.
+// or a synchronous request dispatch (including "session/close") and response
+// write. stop reports whether the read loop must end, carrying err as its
+// result when it does.
 func (s *Server) dispatchConnectionLine(
 	ctx context.Context,
 	connectionID identity.ConnectionID,
@@ -498,9 +499,9 @@ func (s *Server) dispatchAsyncSessionPrompt(
 
 // dispatchRequest executes one already-decoded, non-notification JSON-RPC
 // request envelope: a non-nil result for a successful "initialize",
-// "session/new", "session/set_config_option", or "/factory <value>"-
-// recognized "session/prompt" exchange, or a bounded, protocol-safe
-// *acpsdk.RequestError for every rejection. protocol-version policy is
+// "session/new", "session/set_config_option", "session/close", or
+// "/factory <value>"-recognized "session/prompt" exchange, or a bounded,
+// protocol-safe *acpsdk.RequestError for every rejection. protocol-version policy is
 // delegated entirely to the existing V0 negotiation behavior rather than
 // re-implemented here. serveConnection dispatches "session/prompt" itself
 // (see dispatchAsyncSessionPrompt) instead of routing it through this
@@ -519,6 +520,8 @@ func (s *Server) dispatchRequest(ctx context.Context, env envelope.Envelope) (js
 		return s.handleSessionResume(ctx, env)
 	case acpsdk.AgentMethodSessionSetConfigOption:
 		return s.handleSessionSetConfigOption(ctx, env)
+	case acpsdk.AgentMethodSessionClose:
+		return s.handleSessionClose(ctx, env)
 	case acpsdk.AgentMethodSessionPrompt:
 		return s.handleSessionPrompt(ctx, env)
 	default:

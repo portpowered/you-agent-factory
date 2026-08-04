@@ -61,6 +61,9 @@ func (s *Store) StartTurn(_ context.Context, req chatsessions.StartTurnRequest) 
 			Expected: req.ExpectedVersion, Actual: record.session.Version,
 		}
 	}
+	if record.session.State.IsTerminal() {
+		return chatsessions.StartTurnResult{}, record.session.State.CanTransitionTo(chatsessions.SessionStateActive)
+	}
 	if active, ok := record.activeTurnValue(); ok {
 		return chatsessions.StartTurnResult{}, &chatsessions.BusyError{
 			Value: "Session", ID: req.SessionID,

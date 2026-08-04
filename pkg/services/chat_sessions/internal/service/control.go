@@ -78,27 +78,13 @@ func (s *Store) RequestControl(_ context.Context, req chatsessions.RequestContro
 }
 
 // AdvanceControl moves one ControlIntent to Next, enforcing the
-// ControlIntentState transition table. It reports *NotFoundError when the
-// intent identified by SessionID and RequestID does not exist and
-// *TransitionError when Next is not a legal transition from the intent's
-// current state; on either failure the stored intent is left byte-for-byte
-// unchanged. Once an intent is COMMITTED, its terminal outcome is always
-// resolved with chatsessions.ResolveControlIntentOutcome against the
-// intent's own captured TurnID, the captured turn's live State, and the
-// session's record.lastTurnID as that helper's mostRecentTurnID parameter --
-// caller-supplied Next is never consulted for that resolution, so a delayed
-// advancement can never retarget a captured intent to a later turn.
-// record.lastTurnID (not session.ActiveTurnID) is what the helper's
-// mostRecentTurnID parameter requires: a value that keeps identifying the
-// captured turn through that turn's own termination and only changes once a
-// newer turn is actually admitted. session.ActiveTurnID cannot serve that
-// role -- it clears to blank in the very commit that marks a turn terminal,
-// which would make every resolution SUPERSEDED and the NOOP outcome
-// unreachable. Passing lastTurnID is therefore not a substitution for a
-// different value the contract wants; it is the value the contract's own
-// documented semantics require, so a cancel racing a same-turn terminal
-// resolves NOOP while a control racing a since-admitted newer turn resolves
-// SUPERSEDED.
+// ControlIntentState transition table. A terminal resolution always uses the
+// immutable captured turn, never a caller-selected successor. A completed
+// CLOSE additionally atomically terminalizes its captured turn (when still
+// active), target episode, and Chat Session after the transport has already
+// closed the exact captured Factory Session. The one Store lock makes that
+// lifecycle commit indivisible: no observer can see a completed close intent
+// alongside an open Chat Session or episode.
 func (s *Store) AdvanceControl(_ context.Context, req chatsessions.AdvanceControlRequest) (result chatsessions.AdvanceControlResult, err error) {
 	s.logStart("AdvanceControl", req.SessionID)
 	defer func() {
@@ -117,14 +103,9 @@ func (s *Store) AdvanceControl(_ context.Context, req chatsessions.AdvanceContro
 		return chatsessions.AdvanceControlResult{}, &chatsessions.NotFoundError{Value: "ControlIntent", ID: req.SessionID}
 	}
 
-	next := req.Next
-	if intent.State == chatsessions.ControlIntentStateCommitted {
-		capturedTurn := record.turns[intent.TurnID]
-		outcome, err := chatsessions.ResolveControlIntentOutcome(intent.TurnID, capturedTurn.State, record.lastTurnID)
-		if err != nil {
-			return chatsessions.AdvanceControlResult{}, err
-		}
-		next = outcome
+	next, err := resolveControlOutcome(record, intent, req.Next)
+	if err != nil {
+		return chatsessions.AdvanceControlResult{}, err
 	}
 	if err := intent.State.CanTransitionTo(next); err != nil {
 		return chatsessions.AdvanceControlResult{}, err
@@ -135,9 +116,107 @@ func (s *Store) AdvanceControl(_ context.Context, req chatsessions.AdvanceContro
 	if err := updated.Validate(); err != nil {
 		return chatsessions.AdvanceControlResult{}, err
 	}
+	if intent.Action == chatsessions.ControlActionClose && next == chatsessions.ControlIntentStateCompleted {
+		record, err = s.completeCloseIntent(record, intent)
+		if err != nil {
+			return chatsessions.AdvanceControlResult{}, err
+		}
+	}
 
 	record.controls[req.RequestID] = updated
 	s.sessions[req.SessionID] = record
 
 	return chatsessions.AdvanceControlResult{Intent: updated}, nil
+}
+
+// resolveControlOutcome keeps all terminal intent resolution tied to the
+// immutable captured turn. CLOSE differs only when that same turn has already
+// terminalized: closing its Factory Session still has a useful lifecycle
+// effect, so the intent completes rather than becoming a CANCEL-style NOOP.
+// A later turn remains SUPERSEDED for every action and can never be reached.
+func resolveControlOutcome(record sessionRecord, intent chatsessions.ControlIntent, requested chatsessions.ControlIntentState) (chatsessions.ControlIntentState, error) {
+	if intent.State != chatsessions.ControlIntentStateCommitted {
+		return requested, nil
+	}
+	capturedTurn, ok := record.turns[intent.TurnID]
+	if !ok {
+		return "", &chatsessions.NotFoundError{Value: "Turn", ID: intent.TurnID}
+	}
+	outcome, err := chatsessions.ResolveControlIntentOutcome(intent.TurnID, capturedTurn.State, record.lastTurnID)
+	if err != nil {
+		return "", err
+	}
+	if intent.Action == chatsessions.ControlActionClose && outcome == chatsessions.ControlIntentStateNoop {
+		return chatsessions.ControlIntentStateCompleted, nil
+	}
+	return outcome, nil
+}
+
+// completeCloseIntent prepares the one atomic Chat lifecycle transition that
+// accompanies a successful captured Factory Session close. It changes no
+// stored state until every turn, episode, and session candidate validates.
+func (s *Store) completeCloseIntent(record sessionRecord, intent chatsessions.ControlIntent) (sessionRecord, error) {
+	if record.lastTurnID != intent.TurnID {
+		return record, &chatsessions.ConflictError{Value: "Turn", ID: intent.TurnID, Expected: intent.ExpectedVersion, Actual: record.session.Version}
+	}
+	if record.session.ActiveTurnID != "" && record.session.ActiveTurnID != intent.TurnID {
+		return record, &chatsessions.ConflictError{Value: "Turn", ID: intent.TurnID, Expected: intent.ExpectedVersion, Actual: record.session.Version}
+	}
+	if record.session.State == chatsessions.SessionStateClosed {
+		return record, nil
+	}
+	idx := len(record.episodes) - 1
+	if record.episodes[idx].Number != intent.TargetEpisode {
+		return record, &chatsessions.ConflictError{Value: "TargetEpisode", ID: intent.SessionID, Expected: intent.ExpectedVersion, Actual: record.session.Version}
+	}
+
+	now := s.now()
+	closedEpisode, err := chatsessions.CloseTargetEpisode(record.episodes[idx], now)
+	if err != nil {
+		return record, err
+	}
+	updatedTurn, updatedSequence, err := closeCapturedTurn(record, intent.TurnID)
+	if err != nil {
+		return record, err
+	}
+	updatedSession := record.session
+	if err := updatedSession.State.CanTransitionTo(chatsessions.SessionStateClosed); err != nil {
+		return record, err
+	}
+	updatedSession.State = chatsessions.SessionStateClosed
+	updatedSession.ActiveTurnID = ""
+	updatedSession.Version++
+	updatedSession.UpdatedAt = now
+	if err := updatedSession.Validate(); err != nil {
+		return record, err
+	}
+
+	record.episodes[idx] = closedEpisode
+	record.turns[intent.TurnID] = updatedTurn
+	record.turnSequence = updatedSequence
+	record.session = updatedSession
+	return record, nil
+}
+
+// closeCapturedTurn terminalizes a still-active captured turn as CANCELED.
+// A turn that already reached a terminal outcome retains that truthful state;
+// close only clears the session lifecycle around it.
+func closeCapturedTurn(record sessionRecord, turnID string) (chatsessions.Turn, uint64, error) {
+	turn, ok := record.turns[turnID]
+	if !ok {
+		return chatsessions.Turn{}, record.turnSequence, &chatsessions.NotFoundError{Value: "Turn", ID: turnID}
+	}
+	if turn.State.IsTerminal() {
+		return turn, record.turnSequence, nil
+	}
+	if err := turn.State.CanTransitionTo(chatsessions.TurnStateCanceled); err != nil {
+		return chatsessions.Turn{}, record.turnSequence, err
+	}
+	turn.State = chatsessions.TurnStateCanceled
+	sequence := record.turnSequence + 1
+	turn.TerminalSequence = sequence
+	if err := turn.Validate(); err != nil {
+		return chatsessions.Turn{}, record.turnSequence, err
+	}
+	return turn, sequence, nil
 }

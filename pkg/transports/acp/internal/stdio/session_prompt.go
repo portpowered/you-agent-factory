@@ -265,7 +265,7 @@ func (s *Server) applySessionCancel(ctx context.Context, sessionID string, reque
 		return
 	}
 	if current.Session.ActiveTurnID != intent.TurnID || current.Episode.Number != intent.TargetEpisode {
-		s.resolveSessionCancelIntent(ctx, intent)
+		s.resolveSessionControlIntent(ctx, intent)
 		return
 	}
 	factorySessionID := targetFactorySessionID(current.Episode)
@@ -282,7 +282,7 @@ func (s *Server) applySessionCancel(ctx context.Context, sessionID string, reque
 	}); err != nil {
 		return
 	}
-	s.resolveSessionCancelIntent(ctx, intent)
+	s.resolveSessionControlIntent(ctx, intent)
 }
 
 // commitSessionCancel first reads the current session version and episode,
@@ -352,12 +352,12 @@ func targetFactorySessionID(episode chatsessions.TargetEpisode) string {
 	return episode.PendingFactorySessionID
 }
 
-// resolveSessionCancelIntent asks Chat Sessions to derive the immutable
-// terminal outcome for intent's captured turn. Store computes COMPLETED,
-// NOOP, or SUPERSEDED from its own current state, so this transport cannot
-// overwrite a replacement turn or invent an outcome. Notification semantics
-// require an advancement failure to remain silent.
-func (s *Server) resolveSessionCancelIntent(ctx context.Context, intent chatsessions.ControlIntent) {
+// resolveSessionControlIntent asks Chat Sessions to derive the immutable
+// terminal outcome for intent's captured turn. Store computes the outcome
+// from its own current state, so this transport cannot overwrite a
+// replacement turn or invent an outcome. Callers map any failure according to
+// their own ACP response semantics.
+func (s *Server) resolveSessionControlIntent(ctx context.Context, intent chatsessions.ControlIntent) {
 	_, _ = s.chatSessions.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
 		SessionID: intent.SessionID,
 		RequestID: intent.RequestID,
@@ -996,6 +996,10 @@ func classifyTurnAdmissionFailure(cause error) *acpsdk.RequestError {
 	}
 	var validationErr *chatsessions.ValidationError
 	if errors.As(cause, &validationErr) {
+		return protocol.SafeReject(cause)
+	}
+	var transitionErr *chatsessions.TransitionError
+	if errors.As(cause, &transitionErr) {
 		return protocol.SafeReject(cause)
 	}
 

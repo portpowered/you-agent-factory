@@ -63,8 +63,8 @@ func TestNegotiateSupportedVersionAdvertisesHonestP0Profile(t *testing.T) {
 			if caps.SessionCapabilities.List != nil {
 				t.Error("AgentCapabilities.SessionCapabilities.List advertised, want deferred")
 			}
-			if caps.SessionCapabilities.Close != nil {
-				t.Error("AgentCapabilities.SessionCapabilities.Close advertised, want deferred (session/close is not a supported method)")
+			if caps.SessionCapabilities.Close == nil {
+				t.Error("AgentCapabilities.SessionCapabilities.Close = nil, want advertised for the executable session/close path")
 			}
 			if caps.SessionCapabilities.Fork != nil {
 				t.Error("AgentCapabilities.SessionCapabilities.Fork advertised, want deferred")
