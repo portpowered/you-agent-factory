@@ -63,6 +63,13 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	if root == nil {
 		t.Fatal("constructed root is nil")
 	}
+	var liveControl factorysessions.LiveControlService = service
+	if liveControl == nil {
+		t.Fatal("constructed live-control capability is nil")
+	}
+	if any(liveControl) != any(root) {
+		t.Fatalf("LiveControlService = %T, want the same authoritative Service instance %T", liveControl, root)
+	}
 }
 
 func TestNewServiceConstructsInertRoot(t *testing.T) {
