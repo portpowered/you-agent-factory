@@ -2,7 +2,6 @@
   "version": 1,
   "entries": [
     { "packagePath": "pkg/platform/process", "fileCount": 17, "owner": "backend-maintainers", "removalReason": "Split process execution responsibilities into durable child packages." },
-    { "packagePath": "pkg/services/chat_sessions/internal/service", "fileCount": 25, "owner": "chat-sessions-maintainers", "removalReason": "Partition session lifecycle, sequencing, attachment, control, turn, target, and factory-target-catalog operations by durable responsibility into focused child packages." },
     { "packagePath": "pkg/services/factory_definitions", "fileCount": 39, "owner": "factory-definition-maintainers", "removalReason": "Continue moving definition capabilities behind focused child-package contracts." },
     { "packagePath": "pkg/services/factory_definitions/contracts", "fileCount": 26, "owner": "factory-definition-maintainers", "removalReason": "Partition definition contracts by stable consumer boundary." },
     { "packagePath": "pkg/services/factory_definitions/definition", "fileCount": 35, "owner": "factory-definition-maintainers", "removalReason": "Split definition representation behavior by durable responsibility." },

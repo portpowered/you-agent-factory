@@ -22,10 +22,12 @@ const (
 // AggregateSequence -- the position Sequence's accepted commit was assigned
 // within EventsTopic(SessionID) -- under an optimistic-version guard.
 // SourceType, SourceID, SourceSequence, and SourceEventID are the same
-// identity the originating Sequence call used; AdvanceStreamHead never
-// re-derives or validates them against Events, it only carries them through
-// so structured operation logs can identify which source delivery drove one
-// StreamHead advancement without logging its payload.
+// identity the originating Sequence call used; AdvanceStreamHead requires
+// them to match the exact identity Sequence recorded when it committed
+// AggregateSequence, rejecting a mismatch with *UncommittedStreamPositionError
+// rather than trusting a caller-supplied position, and also carries them
+// through so structured operation logs can identify which source delivery
+// drove one StreamHead advancement without logging its payload.
 type AdvanceStreamHeadRequest struct {
 	SessionID       string
 	ExpectedVersion uint64
