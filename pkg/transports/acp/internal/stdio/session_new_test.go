@@ -21,13 +21,11 @@ import (
 )
 
 // fakeChatSessionsService is a minimal chatsessions.Service test double.
-// CreateSession, GetSession, SetTarget, and StartTurn are configurable and
-// tracked -- the methods this package's session/new,
-// session/set_config_option, and session/prompt handlers actually call.
-// Every other method fails loudly: no handler calls them, and a call to one
-// would itself be a defect worth catching. mu guards every field so the
-// fake is safe under the concurrent/duplicate-delivery admission tests that
-// call it from multiple goroutines against the same instance.
+// CreateSession, GetSession, SetTarget, turn operations, and control
+// operations are configurable and tracked -- the methods this package's ACP
+// handlers actually call. Every other method fails loudly: no handler calls
+// them, and a call to one would itself be a defect worth catching. mu guards
+// every field so the fake is safe under concurrent transport tests.
 type fakeChatSessionsService struct {
 	mu sync.Mutex
 
@@ -149,6 +147,15 @@ type fakeChatSessionsService struct {
 	// -- the StreamHead-lag case drainRecords/deliverReadTimeGap treat as a
 	// non-error "stop" rather than a failure.
 	acknowledgeAttachmentPositionErr bool
+
+	requestControlReqs   []chatsessions.RequestControlRequest
+	requestControlResult chatsessions.RequestControlResult
+	requestControlErr    error
+	lastControlIntent    chatsessions.ControlIntent
+
+	advanceControlReqs   []chatsessions.AdvanceControlRequest
+	advanceControlResult chatsessions.AdvanceControlResult
+	advanceControlErr    error
 }
 
 var _ chatsessions.Service = (*fakeChatSessionsService)(nil)
@@ -355,12 +362,50 @@ func (f *fakeChatSessionsService) Detach(_ context.Context, req chatsessions.Det
 	return chatsessions.DetachResult{}, nil
 }
 
-func (f *fakeChatSessionsService) RequestControl(context.Context, chatsessions.RequestControlRequest) (chatsessions.RequestControlResult, error) {
-	return chatsessions.RequestControlResult{}, errors.New("fakeChatSessionsService: RequestControl not implemented")
+func (f *fakeChatSessionsService) RequestControl(_ context.Context, req chatsessions.RequestControlRequest) (chatsessions.RequestControlResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.requestControlReqs = append(f.requestControlReqs, req)
+	if f.requestControlErr != nil {
+		return chatsessions.RequestControlResult{}, f.requestControlErr
+	}
+	if f.requestControlResult.Intent.State != "" {
+		f.lastControlIntent = f.requestControlResult.Intent
+		return f.requestControlResult, nil
+	}
+	intent := chatsessions.ControlIntent{
+		RequestID:       req.RequestID,
+		SessionID:       req.SessionID,
+		TurnID:          f.getSessionResult.Session.ActiveTurnID,
+		TargetEpisode:   f.getSessionResult.Episode.Number,
+		ExpectedVersion: req.ExpectedVersion,
+		Action:          req.Action,
+		State:           chatsessions.ControlIntentStateRequested,
+		RequestedAt:     time.Unix(0, 1),
+	}
+	f.lastControlIntent = intent
+	return chatsessions.RequestControlResult{Intent: intent}, nil
 }
 
-func (f *fakeChatSessionsService) AdvanceControl(context.Context, chatsessions.AdvanceControlRequest) (chatsessions.AdvanceControlResult, error) {
-	return chatsessions.AdvanceControlResult{}, errors.New("fakeChatSessionsService: AdvanceControl not implemented")
+func (f *fakeChatSessionsService) AdvanceControl(_ context.Context, req chatsessions.AdvanceControlRequest) (chatsessions.AdvanceControlResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.advanceControlReqs = append(f.advanceControlReqs, req)
+	if f.advanceControlErr != nil {
+		return chatsessions.AdvanceControlResult{}, f.advanceControlErr
+	}
+	if f.advanceControlResult.Intent.State != "" {
+		f.lastControlIntent = f.advanceControlResult.Intent
+		return f.advanceControlResult, nil
+	}
+	intent := f.lastControlIntent
+	if intent.RequestID != req.RequestID || intent.SessionID != req.SessionID {
+		intent.RequestID = req.RequestID
+		intent.SessionID = req.SessionID
+	}
+	intent.State = req.Next
+	f.lastControlIntent = intent
+	return chatsessions.AdvanceControlResult{Intent: intent}, nil
 }
 
 func (f *fakeChatSessionsService) Sequence(context.Context, chatsessions.SequenceRequest) (chatsessions.SequenceResult, error) {
@@ -464,6 +509,10 @@ type fakeFactoryTargetService struct {
 	// until cancellation has genuinely reached this fake rather than merely
 	// having been written to the connection's input stream.
 	cancelEntered chan struct{}
+	// cancelRelease, when non-nil, keeps Cancel in flight until the test
+	// closes it. Together with cancelEntered this lets tests observe the
+	// committed Chat control before its downstream effect returns.
+	cancelRelease chan struct{}
 
 	closeCalls []string
 	closeErr   error
@@ -529,13 +578,17 @@ func (f *fakeFactoryTargetService) Cancel(
 	request factorysessions.ControlRequest,
 ) (factorysessions.LifecycleControlResult, error) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.cancelCalls = append(f.cancelCalls, cancelFactoryTargetCall{sessionID: sessionID, request: request})
 	if len(f.cancelCalls) == 1 && f.cancelEntered != nil {
 		close(f.cancelEntered)
 	}
-	if f.cancelErr != nil {
-		return factorysessions.LifecycleControlResult{}, f.cancelErr
+	release, err := f.cancelRelease, f.cancelErr
+	f.mu.Unlock()
+	if release != nil {
+		<-release
+	}
+	if err != nil {
+		return factorysessions.LifecycleControlResult{}, err
 	}
 	return factorysessions.LifecycleControlResult{}, nil
 }

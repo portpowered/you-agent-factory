@@ -22,6 +22,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
 )
@@ -2438,6 +2439,19 @@ func TestServeRoutesSessionCancelToCapturedFactorySession(t *testing.T) {
 	if chatSessions.getSessionReq.SessionID != "session-1" {
 		t.Fatalf("GetSession SessionID = %q, want session-1", chatSessions.getSessionReq.SessionID)
 	}
+	chatSessions.mu.Lock()
+	controlRequests := append([]chatsessions.RequestControlRequest(nil), chatSessions.requestControlReqs...)
+	controlAdvances := append([]chatsessions.AdvanceControlRequest(nil), chatSessions.advanceControlReqs...)
+	chatSessions.mu.Unlock()
+	if len(controlRequests) != 1 || controlRequests[0].Action != chatsessions.ControlActionCancel {
+		t.Fatalf("RequestControl calls = %#v, want one CANCEL intent", controlRequests)
+	}
+	if controlRequests[0].RequestID.Kind != chatsessions.RequestIdentityKindTransportUUID {
+		t.Fatalf("RequestControl identity = %#v, want notification transport UUID", controlRequests[0].RequestID)
+	}
+	if len(controlAdvances) != 2 || controlAdvances[0].Next != chatsessions.ControlIntentStateCommitted || controlAdvances[1].Next != chatsessions.ControlIntentStateCompleted {
+		t.Fatalf("AdvanceControl calls = %#v, want COMMITTED then COMPLETED", controlAdvances)
+	}
 	if len(factoryTarget.cancelCalls) != 1 {
 		t.Fatalf("Cancel call count = %d, want exactly 1 forwarded to the captured Factory Session", len(factoryTarget.cancelCalls))
 	}
@@ -2566,6 +2580,323 @@ func assertCancelledPromptResponse(t *testing.T, out *bytes.Buffer) {
 	}
 	if promptResp.StopReason != acpsdk.StopReasonCancelled {
 		t.Fatalf("stopReason = %q, want cancelled", promptResp.StopReason)
+	}
+}
+
+// controlRecordingChatSessions observes control requests and their committed
+// outcomes while delegating every lifecycle decision to a real Chat Sessions
+// store. commitEntered/commitRelease, when configured, pause exactly after a
+// control has been REQUESTED and immediately before it commits, letting the
+// race tests below move the captured turn through a real terminal or
+// replacement transition without a timing sleep.
+type controlRecordingChatSessions struct {
+	chatsessions.Service
+
+	commitEntered chan struct{}
+	commitRelease <-chan struct{}
+	commitOnce    sync.Once
+
+	mu       sync.Mutex
+	requests []chatsessions.RequestControlRequest
+	advances []chatsessions.AdvanceControlResult
+}
+
+func (s *controlRecordingChatSessions) RequestControl(
+	ctx context.Context,
+	req chatsessions.RequestControlRequest,
+) (chatsessions.RequestControlResult, error) {
+	result, err := s.Service.RequestControl(ctx, req)
+	if err == nil {
+		s.mu.Lock()
+		s.requests = append(s.requests, req)
+		s.mu.Unlock()
+	}
+	return result, err
+}
+
+func (s *controlRecordingChatSessions) AdvanceControl(
+	ctx context.Context,
+	req chatsessions.AdvanceControlRequest,
+) (chatsessions.AdvanceControlResult, error) {
+	if req.Next == chatsessions.ControlIntentStateCommitted && s.commitEntered != nil {
+		s.commitOnce.Do(func() { close(s.commitEntered) })
+		if s.commitRelease != nil {
+			<-s.commitRelease
+		}
+	}
+	result, err := s.Service.AdvanceControl(ctx, req)
+	if err == nil {
+		s.mu.Lock()
+		s.advances = append(s.advances, result)
+		s.mu.Unlock()
+	}
+	return result, err
+}
+
+func (s *controlRecordingChatSessions) snapshotControls() (
+	[]chatsessions.RequestControlRequest,
+	[]chatsessions.AdvanceControlResult,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	requests := append([]chatsessions.RequestControlRequest(nil), s.requests...)
+	advances := append([]chatsessions.AdvanceControlResult(nil), s.advances...)
+	return requests, advances
+}
+
+// newActiveBoundControlSession creates a real active Chat turn with its exact
+// episode bound to factorySessionID. Control tests use it rather than a call
+// recorder so NOOP and SUPERSEDED outcomes come from Store's real aggregate
+// transitions.
+func newActiveBoundControlSession(t *testing.T, factorySessionID string) (chatsessions.Service, chatsessions.Session, chatsessions.Turn) {
+	t.Helper()
+	store, err := chatsessionswire.NewService(sequentialIDGenerator("control"), fixedClock(time.Unix(0, 1)), stubEventsAppender{}, stubEventsReader{})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	created, err := store.CreateSession(context.Background(), chatsessions.CreateSessionRequest{
+		RequestID:     chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCNumber, ConnectionID: "control-setup", JSONRPCNumberID: "1"},
+		WorkingRoot:   "/work/project",
+		InitialTarget: chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	started, err := store.StartTurn(context.Background(), chatsessions.StartTurnRequest{
+		RequestID:       chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCNumber, ConnectionID: "control-setup", JSONRPCNumberID: "2"},
+		SessionID:       created.Session.ID,
+		ExpectedVersion: created.Session.Version,
+	})
+	if err != nil {
+		t.Fatalf("StartTurn() error = %v", err)
+	}
+	if _, err := store.AdvanceTurn(context.Background(), chatsessions.AdvanceTurnRequest{
+		SessionID: started.Session.ID, TurnID: started.Turn.ID, Next: chatsessions.TurnStateRunning,
+	}); err != nil {
+		t.Fatalf("AdvanceTurn(RUNNING) error = %v", err)
+	}
+	bound, err := store.BindFactorySession(context.Background(), chatsessions.BindFactorySessionRequest{
+		SessionID: started.Session.ID, ExpectedVersion: started.Session.Version,
+		Episode: started.Episode.Number, TurnID: started.Turn.ID, FactorySessionID: factorySessionID,
+	})
+	if err != nil {
+		t.Fatalf("BindFactorySession() error = %v", err)
+	}
+	return store, bound.Session, chatsessions.Turn{ID: started.Turn.ID, Episode: started.Turn.Episode, State: chatsessions.TurnStateRunning}
+}
+
+func cancelNotificationEnvelope(t *testing.T, minted string, sessionID string) envelope.Envelope {
+	t.Helper()
+	id, err := identity.NewMinted(minted)
+	if err != nil {
+		t.Fatalf("NewMinted() error = %v", err)
+	}
+	return envelope.Envelope{
+		Identity:       id,
+		Method:         acpsdk.AgentMethodSessionCancel,
+		Params:         json.RawMessage(`{"sessionId":"` + sessionID + `"}`),
+		IsNotification: true,
+	}
+}
+
+func waitForChannel(t *testing.T, ch <-chan struct{}, description string) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timed out waiting for %s", description)
+	}
+}
+
+// TestHandleSessionCancelCommitsCapturedIntentBeforeFactoryCancel proves the
+// control order at the ACP boundary: a notification's full transport identity
+// is captured, the immutable CANCEL intent commits, and only then can the
+// exact bound Factory Session observe Cancel.
+func TestHandleSessionCancelCommitsCapturedIntentBeforeFactoryCancel(t *testing.T) {
+	base, session, turn := newActiveBoundControlSession(t, "fs-control-1")
+	chatSessions := &controlRecordingChatSessions{Service: base}
+	factoryTarget := &fakeFactoryTargetService{cancelEntered: make(chan struct{}), cancelRelease: make(chan struct{})}
+	server := New(nil, chatSessions, nil, factoryTarget, nil)
+	env := cancelNotificationEnvelope(t, "cancel-control-1", session.ID)
+
+	done := make(chan struct{})
+	go func() {
+		server.handleSessionCancel(context.Background(), env)
+		close(done)
+	}()
+	waitForChannel(t, factoryTarget.cancelEntered, "Factory Sessions Cancel")
+
+	requests, advances := chatSessions.snapshotControls()
+	if len(requests) != 1 {
+		t.Fatalf("RequestControl calls = %d, want 1", len(requests))
+	}
+	request := requests[0]
+	if request.SessionID != session.ID || request.ExpectedVersion != session.Version || request.Action != chatsessions.ControlActionCancel {
+		t.Fatalf("RequestControl request = %#v, want captured session/version CANCEL", request)
+	}
+	if request.RequestID.Kind != chatsessions.RequestIdentityKindTransportUUID || request.RequestID.TransportUUID == "" {
+		t.Fatalf("RequestControl identity = %#v, want a non-blank transport UUID", request.RequestID)
+	}
+	if len(advances) != 1 || advances[0].Intent.State != chatsessions.ControlIntentStateCommitted {
+		t.Fatalf("control advances before downstream Cancel = %#v, want only COMMITTED", advances)
+	}
+
+	factoryTarget.mu.Lock()
+	cancelCalls := append([]cancelFactoryTargetCall(nil), factoryTarget.cancelCalls...)
+	factoryTarget.mu.Unlock()
+	if len(cancelCalls) != 1 || cancelCalls[0].sessionID != "fs-control-1" {
+		t.Fatalf("Factory Sessions Cancel calls = %#v, want only captured fs-control-1", cancelCalls)
+	}
+	if cancelCalls[0].request.RequestID == "" {
+		t.Fatal("Factory Sessions Cancel request id is blank")
+	}
+
+	close(factoryTarget.cancelRelease)
+	waitForChannel(t, done, "cancel handler completion")
+	_, advances = chatSessions.snapshotControls()
+	if len(advances) != 2 || advances[1].Intent.State != chatsessions.ControlIntentStateCompleted {
+		t.Fatalf("control advances = %#v, want COMMITTED then COMPLETED", advances)
+	}
+	if advances[0].Intent.TurnID != turn.ID || advances[0].Intent.TargetEpisode != turn.Episode {
+		t.Fatalf("committed intent = %#v, want captured turn %q episode %d", advances[0].Intent, turn.ID, turn.Episode)
+	}
+}
+
+// TestHandleSessionCancelCompletionRaceResolvesNoopWithoutFactoryEffect proves
+// normal completion winning after capture but before commit causes the Store
+// to derive NOOP and never calls the target execution capability.
+func TestHandleSessionCancelCompletionRaceResolvesNoopWithoutFactoryEffect(t *testing.T) {
+	base, session, turn := newActiveBoundControlSession(t, "fs-control-noop")
+	release := make(chan struct{})
+	chatSessions := &controlRecordingChatSessions{Service: base, commitEntered: make(chan struct{}), commitRelease: release}
+	factoryTarget := &fakeFactoryTargetService{}
+	server := New(nil, chatSessions, nil, factoryTarget, nil)
+	env := cancelNotificationEnvelope(t, "cancel-noop-1", session.ID)
+
+	done := make(chan struct{})
+	go func() {
+		server.handleSessionCancel(context.Background(), env)
+		close(done)
+	}()
+	waitForChannel(t, chatSessions.commitEntered, "captured control before commit")
+	if _, err := base.AdvanceTurn(context.Background(), chatsessions.AdvanceTurnRequest{
+		SessionID: session.ID, TurnID: turn.ID, Next: chatsessions.TurnStateCompleted,
+	}); err != nil {
+		t.Fatalf("AdvanceTurn(COMPLETED) error = %v", err)
+	}
+	close(release)
+	waitForChannel(t, done, "cancel handler completion")
+
+	factoryTarget.mu.Lock()
+	cancelCount := len(factoryTarget.cancelCalls)
+	factoryTarget.mu.Unlock()
+	if cancelCount != 0 {
+		t.Fatalf("Factory Sessions Cancel calls = %d, want 0 after normal completion won", cancelCount)
+	}
+	_, advances := chatSessions.snapshotControls()
+	if len(advances) != 2 || advances[1].Intent.State != chatsessions.ControlIntentStateNoop {
+		t.Fatalf("control advances = %#v, want COMMITTED then NOOP", advances)
+	}
+}
+
+// TestHandleSessionCancelSupersededRaceCannotReachReplacementTurn proves a
+// REQUESTED control can lose to a successor before it commits, and its
+// captured identity resolves SUPERSEDED without cancelling that successor.
+func TestHandleSessionCancelSupersededRaceCannotReachReplacementTurn(t *testing.T) {
+	base, session, turn := newActiveBoundControlSession(t, "fs-control-old")
+	release := make(chan struct{})
+	chatSessions := &controlRecordingChatSessions{Service: base, commitEntered: make(chan struct{}), commitRelease: release}
+	factoryTarget := &fakeFactoryTargetService{}
+	server := New(nil, chatSessions, nil, factoryTarget, nil)
+	env := cancelNotificationEnvelope(t, "cancel-superseded-1", session.ID)
+
+	done := make(chan struct{})
+	go func() {
+		server.handleSessionCancel(context.Background(), env)
+		close(done)
+	}()
+	waitForChannel(t, chatSessions.commitEntered, "captured control before commit")
+	if _, err := base.AdvanceTurn(context.Background(), chatsessions.AdvanceTurnRequest{
+		SessionID: session.ID, TurnID: turn.ID, Next: chatsessions.TurnStateCompleted,
+	}); err != nil {
+		t.Fatalf("AdvanceTurn(COMPLETED) error = %v", err)
+	}
+	current, err := base.GetSession(context.Background(), chatsessions.GetSessionRequest{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("GetSession() error = %v", err)
+	}
+	if _, err := base.StartTurn(context.Background(), chatsessions.StartTurnRequest{
+		RequestID:       chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCNumber, ConnectionID: "control-setup", JSONRPCNumberID: "3"},
+		SessionID:       session.ID,
+		ExpectedVersion: current.Session.Version,
+	}); err != nil {
+		t.Fatalf("StartTurn(replacement) error = %v", err)
+	}
+	close(release)
+	waitForChannel(t, done, "cancel handler completion")
+
+	factoryTarget.mu.Lock()
+	cancelCount := len(factoryTarget.cancelCalls)
+	factoryTarget.mu.Unlock()
+	if cancelCount != 0 {
+		t.Fatalf("Factory Sessions Cancel calls = %d, want 0 for superseded control", cancelCount)
+	}
+	_, advances := chatSessions.snapshotControls()
+	if len(advances) != 2 || advances[1].Intent.State != chatsessions.ControlIntentStateSuperseded {
+		t.Fatalf("control advances = %#v, want COMMITTED then SUPERSEDED", advances)
+	}
+}
+
+// TestHandleSessionCancelRepeatedIdentityDoesNotDuplicateFactoryCancel proves
+// the same notification identity resolves through the immutable completed
+// intent on redelivery rather than issuing a second downstream cancellation.
+func TestHandleSessionCancelRepeatedIdentityDoesNotDuplicateFactoryCancel(t *testing.T) {
+	base, session, _ := newActiveBoundControlSession(t, "fs-control-repeat")
+	chatSessions := &controlRecordingChatSessions{Service: base}
+	factoryTarget := &fakeFactoryTargetService{}
+	server := New(nil, chatSessions, nil, factoryTarget, nil)
+	env := cancelNotificationEnvelope(t, "cancel-repeat-1", session.ID)
+
+	server.handleSessionCancel(context.Background(), env)
+	server.handleSessionCancel(context.Background(), env)
+
+	factoryTarget.mu.Lock()
+	cancelCalls := append([]cancelFactoryTargetCall(nil), factoryTarget.cancelCalls...)
+	factoryTarget.mu.Unlock()
+	if len(cancelCalls) != 1 || cancelCalls[0].sessionID != "fs-control-repeat" {
+		t.Fatalf("Factory Sessions Cancel calls = %#v, want exactly one captured cancellation", cancelCalls)
+	}
+	requests, advances := chatSessions.snapshotControls()
+	if len(requests) != 2 || requests[0].RequestID != requests[1].RequestID {
+		t.Fatalf("RequestControl calls = %#v, want the same identity on retry", requests)
+	}
+	if len(advances) != 2 || advances[0].Intent.State != chatsessions.ControlIntentStateCommitted || advances[1].Intent.State != chatsessions.ControlIntentStateCompleted {
+		t.Fatalf("control advances = %#v, want one COMMITTED then one COMPLETED lifecycle", advances)
+	}
+}
+
+func TestChatControlRequestIdentityKeepsDistinctNotificationsDistinct(t *testing.T) {
+	first, err := identity.NewMinted("cancel-notification-a")
+	if err != nil {
+		t.Fatalf("NewMinted(first) error = %v", err)
+	}
+	second, err := identity.NewMinted("cancel-notification-b")
+	if err != nil {
+		t.Fatalf("NewMinted(second) error = %v", err)
+	}
+	firstID, err := chatControlRequestIdentity(first)
+	if err != nil {
+		t.Fatalf("chatControlRequestIdentity(first) error = %v", err)
+	}
+	secondID, err := chatControlRequestIdentity(second)
+	if err != nil {
+		t.Fatalf("chatControlRequestIdentity(second) error = %v", err)
+	}
+	if firstID == secondID {
+		t.Fatalf("distinct notification identities mapped to one Chat identity: %#v", firstID)
+	}
+	if err := firstID.Validate(); err != nil {
+		t.Fatalf("first Chat control identity is invalid: %v", err)
 	}
 }
 

@@ -2,6 +2,7 @@ package stdio
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
+	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/protocol"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
 )
@@ -216,30 +218,18 @@ func (s *Server) handleSessionPrompt(ctx context.Context, env envelope.Envelope)
 	return s.admitPromptTurn(ctx, turn, reqIdentity)
 }
 
-// handleSessionCancel executes one "session/cancel" notification: forward it
-// to the addressed Chat Session's currently captured Factory Session, through
-// this same Server's Factory Sessions-owned target-execution capability's
-// Cancel operation, with the caller's own context and a ControlRequest
-// correlated to the addressed session. The captured identity is the
-// episode's committed FactorySessionID once a prior turn's bind has
-// succeeded, or -- for the exact window between a first turn's StartAsync
-// call and its own still-in-flight InvokeFactorySession/BindFactorySession
-// completion -- its PendingFactorySessionID (see
-// startFactorySessionForEpisode and chatsessions.TargetEpisode's own doc
-// comment): that is the real runtime a first, currently-admitted turn is
-// blocked inside, and it is exactly the case this transport must be able to
-// cancel, not only an already-bound later turn's. Per JSON-RPC 2.0 and the
-// ACP protocol, session/cancel is a notification: there is no response to
-// build or write for it, so every failure here -- malformed params, an
-// unknown Chat Session, an episode with neither a bound nor a pending
-// Factory Session yet, a missing collaborator, or the downstream Cancel call
-// itself failing -- is a silent no-op. The caller observes cancellation's
-// real effect only in the concurrently in-flight "session/prompt" request's
-// own eventual response: factoryInvocationTurnState already maps a genuine
-// downstream-canceled outcome to TurnStateCanceled/StopReasonCancelled the
-// same way it does for every other Factory invocation outcome, so this
-// method's only job is reaching the exact captured runtime a prior turn
-// started, not reclassifying anything itself.
+// handleSessionCancel executes one "session/cancel" notification through the
+// Chat Sessions-owned control state machine. It first captures and commits a
+// CANCEL intent for the active turn at the version it observed, then reaches
+// only the bound or pending Factory Session from that captured episode. A
+// second read after the commit is deliberate: completion can win between the
+// capture and the fan-out, in which case advancing the committed intent
+// resolves NOOP or SUPERSEDED without calling Factory Sessions.
+//
+// session/cancel is a JSON-RPC notification, so every rejection and
+// dependency failure remains silent. The concurrently in-flight
+// "session/prompt" response is the sole source of its eventual cancelled
+// stop reason; this handler never fabricates a prompt result.
 func (s *Server) handleSessionCancel(ctx context.Context, env envelope.Envelope) {
 	if s.chatSessions == nil || s.factoryTarget == nil {
 		return
@@ -253,22 +243,171 @@ func (s *Server) handleSessionCancel(ctx context.Context, env envelope.Envelope)
 		return
 	}
 
-	getResult, err := s.chatSessions.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: string(params.SessionID)})
+	requestID, err := chatControlRequestIdentity(env.Identity)
 	if err != nil {
 		return
 	}
-	factorySessionID := getResult.Episode.FactorySessionID
-	if factorySessionID == "" {
-		factorySessionID = getResult.Episode.PendingFactorySessionID
-	}
-	if factorySessionID == "" {
+	s.applySessionCancel(ctx, string(params.SessionID), requestID)
+}
+
+// applySessionCancel commits one immutable captured CANCEL intent, then
+// delegates only to its captured episode. It returns silently for every
+// rejected or unavailable dependency outcome because its caller is a JSON-RPC
+// notification handler.
+func (s *Server) applySessionCancel(ctx context.Context, sessionID string, requestID chatsessions.RequestIdentity) {
+	intent, ok := s.commitSessionCancel(ctx, sessionID, requestID)
+	if !ok {
 		return
 	}
 
-	_, _ = s.factoryTarget.Cancel(ctx, factorySessionID, factorysessions.ControlRequest{
-		RequestID: string(params.SessionID) + "/cancel",
+	current, err := s.chatSessions.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: intent.SessionID})
+	if err != nil {
+		return
+	}
+	if current.Session.ActiveTurnID != intent.TurnID || current.Episode.Number != intent.TargetEpisode {
+		s.resolveSessionCancelIntent(ctx, intent)
+		return
+	}
+	factorySessionID := targetFactorySessionID(current.Episode)
+	if factorySessionID == "" {
+		// The initial snapshot was non-blank, but do not control a target that
+		// disappeared while this intent was being committed. Leaving the
+		// intent committed preserves the existing retry contract.
+		return
+	}
+
+	if _, err := s.factoryTarget.Cancel(ctx, factorySessionID, factorysessions.ControlRequest{
+		RequestID: factoryCancelRequestID(intent.RequestID),
 		Reason:    "acp session/cancel",
+	}); err != nil {
+		return
+	}
+	s.resolveSessionCancelIntent(ctx, intent)
+}
+
+// commitSessionCancel first reads the current session version and episode,
+// then atomically captures and commits the active CANCEL intent. The initial
+// Factory Session check intentionally happens before RequestControl: an
+// episode without a bound or pending execution is not an executable ACP
+// control and must leave Chat lifecycle state untouched.
+func (s *Server) commitSessionCancel(
+	ctx context.Context,
+	sessionID string,
+	requestID chatsessions.RequestIdentity,
+) (chatsessions.ControlIntent, bool) {
+	getResult, err := s.chatSessions.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: sessionID})
+	if err != nil {
+		return chatsessions.ControlIntent{}, false
+	}
+	if targetFactorySessionID(getResult.Episode) == "" {
+		return chatsessions.ControlIntent{}, false
+	}
+
+	requested, err := s.chatSessions.RequestControl(ctx, chatsessions.RequestControlRequest{
+		RequestID:       requestID,
+		SessionID:       getResult.Session.ID,
+		ExpectedVersion: getResult.Session.Version,
+		Action:          chatsessions.ControlActionCancel,
 	})
+	if err != nil {
+		return chatsessions.ControlIntent{}, false
+	}
+	intent := requested.Intent
+	if intent.Action != chatsessions.ControlActionCancel || intent.SessionID != getResult.Session.ID {
+		return chatsessions.ControlIntent{}, false
+	}
+
+	switch intent.State {
+	case chatsessions.ControlIntentStateRequested:
+		committed, err := s.chatSessions.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
+			SessionID: intent.SessionID,
+			RequestID: intent.RequestID,
+			Next:      chatsessions.ControlIntentStateCommitted,
+		})
+		if err != nil {
+			return chatsessions.ControlIntent{}, false
+		}
+		intent = committed.Intent
+	case chatsessions.ControlIntentStateCommitted:
+		// A prior downstream failure leaves the immutable intent retryable.
+	default:
+		// A redelivered notification for a terminal intent has already
+		// resolved and must not reach Factory Sessions again.
+		return chatsessions.ControlIntent{}, false
+	}
+	if intent.State != chatsessions.ControlIntentStateCommitted {
+		return chatsessions.ControlIntent{}, false
+	}
+	return intent, true
+}
+
+// targetFactorySessionID selects the only Factory Session an ACP control may
+// reach: a committed episode binding, or the first-turn reconciliation
+// identity recorded before its invocation has bound. The caller supplies the
+// already-captured episode; this helper never looks up a newer episode.
+func targetFactorySessionID(episode chatsessions.TargetEpisode) string {
+	if episode.FactorySessionID != "" {
+		return episode.FactorySessionID
+	}
+	return episode.PendingFactorySessionID
+}
+
+// resolveSessionCancelIntent asks Chat Sessions to derive the immutable
+// terminal outcome for intent's captured turn. Store computes COMPLETED,
+// NOOP, or SUPERSEDED from its own current state, so this transport cannot
+// overwrite a replacement turn or invent an outcome. Notification semantics
+// require an advancement failure to remain silent.
+func (s *Server) resolveSessionCancelIntent(ctx context.Context, intent chatsessions.ControlIntent) {
+	_, _ = s.chatSessions.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
+		SessionID: intent.SessionID,
+		RequestID: intent.RequestID,
+		Next:      chatsessions.ControlIntentStateCompleted,
+	})
+}
+
+// factoryCancelRequestID turns the full immutable Chat control identity into
+// a bounded, opaque downstream request id. It avoids logging or forwarding a
+// raw JSON-RPC id while keeping retries of the same intent stable and distinct
+// identities overwhelmingly collision-resistant.
+func factoryCancelRequestID(requestID chatsessions.RequestIdentity) string {
+	encoded, err := json.Marshal(requestID)
+	if err != nil {
+		return "acp-cancel"
+	}
+	sum := sha256.Sum256(encoded)
+	return fmt.Sprintf("acp-cancel-%x", sum[:])
+}
+
+// chatControlRequestIdentity maps either identity form the ACP envelope owns
+// into Chat Sessions' complete, comparable identity model. Requests retain
+// their connection-scoped JSON-RPC identity through chatRequestIdentity.
+// Notifications have no JSON-RPC id, so envelope.Decode mints one opaque
+// identity from its connection, method, and notification sequence. Mapping
+// the encoded full identity deterministically to an RFC 4122-shaped UUID
+// gives that notification the existing TransportUUID representation without
+// collapsing it onto another notification or leaking its raw identifier.
+func chatControlRequestIdentity(id identity.RequestIdentity) (chatsessions.RequestIdentity, error) {
+	if !id.IsMinted() {
+		return chatRequestIdentity(id)
+	}
+	encoded, err := id.MarshalJSON()
+	if err != nil {
+		return chatsessions.RequestIdentity{}, err
+	}
+	sum := sha256.Sum256(encoded)
+	sum[6] = (sum[6] & 0x0f) | 0x50
+	sum[8] = (sum[8] & 0x3f) | 0x80
+	requestID := chatsessions.RequestIdentity{
+		Kind: chatsessions.RequestIdentityKindTransportUUID,
+		TransportUUID: fmt.Sprintf(
+			"%08x-%04x-%04x-%04x-%012x",
+			sum[0:4], sum[4:6], sum[6:8], sum[8:10], sum[10:16],
+		),
+	}
+	if err := requestID.Validate(); err != nil {
+		return chatsessions.RequestIdentity{}, err
+	}
+	return requestID, nil
 }
 
 // admitPromptTurn executes the ordinary (non-"/factory") prompt admission
