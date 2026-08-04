@@ -223,7 +223,7 @@ func provideFactoryDefinitionDirectoryReplacementStore(
 
 func provideFactoryDefinitionNamedPathFileSystem(
 	edges serviceedges.Edges,
-) factorydefinitions.NamedPathFileSystem {
+) factorydefinitionswire.NamedPathFileSystem {
 	if edges.FactoryDefinitionNamedPathFileSystem != nil {
 		return edges.FactoryDefinitionNamedPathFileSystem
 	}
@@ -231,7 +231,7 @@ func provideFactoryDefinitionNamedPathFileSystem(
 }
 
 func provideFactoryDefinitionNamedPathResolver(
-	fileSystem factorydefinitions.NamedPathFileSystem,
+	fileSystem factorydefinitionswire.NamedPathFileSystem,
 ) (factorydefinitions.NamedPathResolver, error) {
 	return factorydefinitionswire.NewPathResolver(fileSystem)
 }

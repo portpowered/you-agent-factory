@@ -5,9 +5,10 @@
 // chatsessions.Service (the in-memory session-state engine, backed by the
 // chat_sessions-private Store) and chatsessions.FactoryTargetCatalogService
 // (the Factory target-catalog operation, composed by direct single
-// injection of the singular Operator Settings and Factory Definitions
-// public service roots). Neither constructor is a dependency bag, service
-// locator, or alternate construction path for the other's root.
+// injection of the singular Operator Settings public service root and
+// Factory Definitions' narrow, read-only CatalogPathsService capability).
+// Neither constructor is a dependency bag, service locator, or alternate
+// construction path for the other's root.
 package wire
 
 import (
@@ -61,13 +62,13 @@ func NewService(newID IDGenerator, now Clock, eventsAppender EventsAppender, eve
 }
 
 // NewFactoryTargetCatalogService constructs the Chat Sessions Factory
-// target-catalog root from the singular Operator Settings and Factory
-// Definitions public service roots. logger is the direct, required
-// operation-logging abstraction; callers with no operation logging pass
-// logging.NoopLogger{}.
+// target-catalog root from the singular Operator Settings public service
+// root and Factory Definitions' narrow, read-only catalog/path capability.
+// logger is the direct, required operation-logging abstraction; callers with
+// no operation logging pass logging.NoopLogger{}.
 func NewFactoryTargetCatalogService(
 	operatorSettings operatorsettings.Service,
-	factoryDefinitions factorydefinitions.Service,
+	factoryDefinitions factorydefinitions.CatalogPathsService,
 	logger logging.Logger,
 ) (chatsessions.FactoryTargetCatalogService, error) {
 	return internalservice.New(operatorSettings, factoryDefinitions, logger)

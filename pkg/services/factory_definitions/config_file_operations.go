@@ -8,18 +8,20 @@ import (
 	"strings"
 )
 
-// FactoryConfigPathSource is the policy-free file metadata effect used by the
-// Factory Definitions owner to resolve an explicitly selected config file.
-type FactoryConfigPathSource interface {
-	Stat(string) (fs.FileInfo, error)
-}
-
 // FactoryConfigParser expands canonical Factory Definition bytes.
 type FactoryConfigParser func([]byte) (*FactoryConfig, error)
 
 type FactoryConfigRootResolver func(string) (string, error)
 type FactoryConfigFileLoader func(string) (*FactoryConfig, error)
 
+// FactoryConfigPathSource is the policy-free file metadata effect used to
+// resolve an explicitly selected config file.
+type FactoryConfigPathSource interface {
+	Stat(string) (fs.FileInfo, error)
+}
+
+// NewFactoryConfigRootResolver accepts the policy-free file metadata effect
+// used to resolve an explicitly selected config file.
 func NewFactoryConfigRootResolver(source FactoryConfigPathSource) FactoryConfigRootResolver {
 	return func(path string) (string, error) {
 		trimmed := strings.TrimSpace(path)
