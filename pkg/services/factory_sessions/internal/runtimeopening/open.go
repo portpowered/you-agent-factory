@@ -36,7 +36,7 @@ func openRuntime(
 	factorySessionsService factorysessions.Service,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	recordingsProjectionFactory RecordingsProjectionFactory,
-	recordingReplayArtifactsFactory RecordingReplayArtifactsFactory,
+	recordingLifecycleFactory RecordingLifecycleFactory,
 	runtimeLedgerFactory RuntimeLedgerFactory,
 	runtimeRecorderFactory recordings.RuntimeRecorderFactory,
 	replayClockFactory ReplayClockFactory,
@@ -60,6 +60,7 @@ func openRuntime(
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	replayInputs recordings.ReplayInputLoader,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	resolveClock factoryruntime.ClockResolver,
 	newSessionLogger factoryruntime.SessionLoggerFactory,
@@ -81,16 +82,6 @@ func openRuntime(
 	recordingRequest := request.Recordings
 	modelCacheDirectory := request.ModelCacheDirectory
 	operatorDefaults := request.OperatorDefaults
-	var replayArtifacts recordings.RecordingReplayArtifactsRuntime
-	if recordingRequest.ReplayPath != "" {
-		if recordingReplayArtifactsFactory == nil {
-			return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings replay/artifact capability factory is required")
-		}
-		replayArtifacts = recordingReplayArtifactsFactory()
-		if replayArtifacts == nil {
-			return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings replay/artifact capability factory returned nil")
-		}
-	}
 	configured, root, load, clock, logger, hostedPollers, err := PrepareRuntime(
 		ctx,
 		definitionRequest,
@@ -107,7 +98,7 @@ func openRuntime(
 		loadFactory,
 		newLoadedFactory,
 		decodeReplayConfig,
-		replayArtifacts,
+		replayInputs,
 		replayClockFactory,
 		automationHostedSourcesFactory,
 		factoryScaffoldInitializer,
@@ -122,6 +113,9 @@ func openRuntime(
 	)
 	if err != nil {
 		return runtimeProducts{}, err
+	}
+	if load.HistoricalReplay != nil {
+		return historicalReplayRuntimeProducts(logger, *load.HistoricalReplay), nil
 	}
 	if clock == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Runtime clock is required")
@@ -410,21 +404,12 @@ func openRuntime(
 	if workDomain == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Work factory returned nil service")
 	}
-	if replayArtifacts == nil {
-		if recordingReplayArtifactsFactory == nil {
-			return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings replay/artifact capability factory is required")
-		}
-		replayArtifacts = recordingReplayArtifactsFactory()
-		if replayArtifacts == nil {
-			return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings replay/artifact capability factory returned nil")
-		}
+	if recordingLifecycleFactory == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings lifecycle factory is required")
 	}
-	recordingLifecycle, err := replayArtifacts.BindRecordingLifecycle(startupRuntime.RecordingLedger(), recordingProjections)
-	if err != nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: bind Recordings replay/artifact capability: %w", err)
-	}
+	recordingLifecycle := recordingLifecycleFactory(startupRuntime.RecordingLedger(), recordingProjections)
 	if recordingLifecycle == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings replay/artifact capability returned nil lifecycle")
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings lifecycle factory returned nil lifecycle")
 	}
 	if err := bindRuntimeRecordingLifecycle(
 		runtimeRecording,

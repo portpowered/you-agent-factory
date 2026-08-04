@@ -6,17 +6,18 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testpath"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	"go.uber.org/zap"
 )
 
-// TestProvideRecordingReplayArtifactsFactoryClassifiesPortableRecording
-// proves the canonical Wire-composed RecordingReplayArtifacts capability reads
-// a portable Factory Session recording without the caller assembling raw
-// reader or decoder effects.
-func TestProvideRecordingReplayArtifactsFactoryClassifiesPortableRecording(t *testing.T) {
+// TestProvideFactorySessionReplayInputsClassifiesPortableRecording proves the
+// Wire-composed ReplayInputLoader capability -- built from the existing replay
+// artifact loader and the Factory Session replay recording reader -- reads a
+// real portable JavaScript Factory Session recording from disk and decodes
+// it, without the caller assembling the raw reader and decoder itself.
+func TestProvideFactorySessionReplayInputsClassifiesPortableRecording(t *testing.T) {
 	t.Parallel()
 
 	path := testpath.MustRepoPathFromCaller(
@@ -26,14 +27,7 @@ func TestProvideRecordingReplayArtifactsFactoryClassifiesPortableRecording(t *te
 	)
 	loadReplay := provideReplayArtifactLoader(platformreplay.Local{})
 	replayFiles := provideFactorySessionReplayRecordingReader(serviceedges.Edges{})
-	capability := provideRecordingReplayArtifactsFactory(
-		serviceedges.Edges{},
-		provideLiveRecordingTargetPlanner(),
-		platformreplay.Local{},
-		loadReplay,
-		replayFiles,
-		zap.NewNop(),
-	)()
+	capability := provideFactorySessionReplayInputs(loadReplay, replayFiles, logging.NoopLogger{})
 
 	result, err := capability.LoadReplayInput(recordings.LoadReplayInputRequest{Path: path})
 	if err != nil {
@@ -50,10 +44,10 @@ func TestProvideRecordingReplayArtifactsFactoryClassifiesPortableRecording(t *te
 	}
 }
 
-// TestProvideRecordingReplayArtifactsFactoryDelegatesLegacyArtifact proves
-// the same canonical capability falls back to the existing legacy loader for
-// a file that is not a portable recording.
-func TestProvideRecordingReplayArtifactsFactoryDelegatesLegacyArtifact(t *testing.T) {
+// TestProvideFactorySessionReplayInputsDelegatesLegacyArtifact proves the
+// same Wire-composed capability falls back to the existing legacy replay
+// artifact loader for a file that is not a portable recording.
+func TestProvideFactorySessionReplayInputsDelegatesLegacyArtifact(t *testing.T) {
 	t.Parallel()
 
 	overrideCalled := false
@@ -67,14 +61,7 @@ func TestProvideRecordingReplayArtifactsFactoryDelegatesLegacyArtifact(t *testin
 		return &recordings.ReplayArtifact{SchemaVersion: "legacy"}, nil
 	})
 	replayFiles := provideFactorySessionReplayRecordingReader(edges)
-	capability := provideRecordingReplayArtifactsFactory(
-		edges,
-		provideLiveRecordingTargetPlanner(),
-		platformreplay.Local{},
-		loadReplay,
-		replayFiles,
-		zap.NewNop(),
-	)()
+	capability := provideFactorySessionReplayInputs(loadReplay, replayFiles, logging.NoopLogger{})
 
 	tempFile := filepath.Join(t.TempDir(), "legacy-replay.json")
 	if err := os.WriteFile(tempFile, []byte(`{"schemaVersion":"legacy"}`), 0o600); err != nil {

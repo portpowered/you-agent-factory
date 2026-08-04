@@ -34,7 +34,7 @@ type Factory struct {
 	factorySessionsService           factorysessions.Service
 	factorySessionExecutionFactory   FactorySessionExecutionFactory
 	recordingsProjectionFactory      RecordingsProjectionFactory
-	recordingReplayArtifactsFactory  RecordingReplayArtifactsFactory
+	recordingLifecycleFactory        RecordingLifecycleFactory
 	runtimeLedgerFactory             RuntimeLedgerFactory
 	runtimeRecorderFactory           recordings.RuntimeRecorderFactory
 	replayClockFactory               ReplayClockFactory
@@ -58,6 +58,7 @@ type Factory struct {
 	loadFactory                      factorydefinitions.LoadedFactoryLoader
 	newLoadedFactory                 factorydefinitions.LoadedFactorySourceFactory
 	decodeReplayConfig               factorydefinitions.ReplayRuntimeConfigDecoder
+	replayInputs                     recordings.ReplayInputLoader
 	captureLoadedFactorySnapshot     factorydefinitions.LoadedFactorySnapshotCapturer
 	resolveClock                     factoryruntime.ClockResolver
 	newSessionLogger                 factoryruntime.SessionLoggerFactory
@@ -86,7 +87,7 @@ func NewFactory(
 	factorySessionsService factorysessions.Service,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	recordingsProjectionFactory RecordingsProjectionFactory,
-	recordingReplayArtifactsFactory RecordingReplayArtifactsFactory,
+	recordingLifecycleFactory RecordingLifecycleFactory,
 	runtimeLedgerFactory RuntimeLedgerFactory,
 	runtimeRecorderFactory recordings.RuntimeRecorderFactory,
 	replayClockFactory ReplayClockFactory,
@@ -105,6 +106,7 @@ func NewFactory(
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	replayInputs recordings.ReplayInputLoader,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	resolveClock factoryruntime.ClockResolver,
 	newSessionLogger factoryruntime.SessionLoggerFactory,
@@ -143,8 +145,8 @@ func NewFactory(
 	if namedPaths == nil {
 		return nil, fmt.Errorf("named Factory path resolver is required")
 	}
-	if recordingReplayArtifactsFactory == nil {
-		return nil, fmt.Errorf("Factory Session replay/artifact capability factory is required")
+	if replayInputs == nil {
+		return nil, fmt.Errorf("Factory Session replay input capability is required")
 	}
 	if factorySessionsService == nil {
 		return nil, fmt.Errorf("Factory Sessions service is required")
@@ -161,7 +163,7 @@ func NewFactory(
 		factorySessionsService:           factorySessionsService,
 		factorySessionExecutionFactory:   factorySessionExecutionFactory,
 		recordingsProjectionFactory:      recordingsProjectionFactory,
-		recordingReplayArtifactsFactory:  recordingReplayArtifactsFactory,
+		recordingLifecycleFactory:        recordingLifecycleFactory,
 		runtimeLedgerFactory:             runtimeLedgerFactory,
 		runtimeRecorderFactory:           runtimeRecorderFactory,
 		replayClockFactory:               replayClockFactory,
@@ -185,6 +187,7 @@ func NewFactory(
 		loadFactory:                      loadFactory,
 		newLoadedFactory:                 newLoadedFactory,
 		decodeReplayConfig:               decodeReplayConfig,
+		replayInputs:                     replayInputs,
 		captureLoadedFactorySnapshot:     captureLoadedFactorySnapshot,
 		resolveClock:                     resolveClock,
 		newSessionLogger:                 newSessionLogger,
@@ -214,7 +217,7 @@ func (f *Factory) openRuntime(
 		f.factorySessionsService,
 		f.factorySessionExecutionFactory,
 		f.recordingsProjectionFactory,
-		f.recordingReplayArtifactsFactory,
+		f.recordingLifecycleFactory,
 		f.runtimeLedgerFactory,
 		f.runtimeRecorderFactory,
 		f.replayClockFactory,
@@ -238,6 +241,7 @@ func (f *Factory) openRuntime(
 		f.loadFactory,
 		f.newLoadedFactory,
 		f.decodeReplayConfig,
+		f.replayInputs,
 		f.captureLoadedFactorySnapshot,
 		f.resolveClock,
 		f.newSessionLogger,

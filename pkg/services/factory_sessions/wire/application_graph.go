@@ -101,7 +101,7 @@ type (
 	FactorySessionExecutionFactory         = runtimeopening.FactorySessionExecutionFactory
 	ConductorInvocationWithProgressFactory = runtimeopening.ConductorInvocationWithProgressFactory
 	RecordingsProjectionFactory            = runtimeopening.RecordingsProjectionFactory
-	RecordingReplayArtifactsFactory        = runtimeopening.RecordingReplayArtifactsFactory
+	RecordingLifecycleFactory              = runtimeopening.RecordingLifecycleFactory
 	RuntimeLedgerFactory                   = runtimeopening.RuntimeLedgerFactory
 	ReplayClockFactory                     = runtimeopening.ReplayClockFactory
 	WorkersRuntimeFactory                  = runtimeopening.WorkersRuntimeFactory
@@ -154,7 +154,7 @@ type RuntimeOpeningDependencies struct {
 	FactorySessionsService           factorysessions.Service
 	FactorySessionExecutionFactory   FactorySessionExecutionFactory
 	RecordingsProjectionFactory      RecordingsProjectionFactory
-	RecordingReplayArtifactsFactory  RecordingReplayArtifactsFactory
+	RecordingLifecycleFactory        RecordingLifecycleFactory
 	RuntimeLedgerFactory             RuntimeLedgerFactory
 	RuntimeRecorderFactory           recordings.RuntimeRecorderFactory
 	ReplayClockFactory               ReplayClockFactory
@@ -173,6 +173,7 @@ type RuntimeOpeningDependencies struct {
 	LoadFactory                      factorydefinitions.LoadedFactoryLoader
 	NewLoadedFactory                 factorydefinitions.LoadedFactorySourceFactory
 	DecodeReplayConfig               factorydefinitions.ReplayRuntimeConfigDecoder
+	ReplayInputs                     recordings.ReplayInputLoader
 	CaptureLoadedFactorySnapshot     factorydefinitions.LoadedFactorySnapshotCapturer
 	ResolveClock                     factoryruntime.ClockResolver
 	NewSessionLogger                 factoryruntime.SessionLoggerFactory
@@ -191,7 +192,7 @@ func NewRuntimeOpeningFactory(deps RuntimeOpeningDependencies) (*RuntimeOpeningF
 		deps.FactoryDefinitionValidator, deps.NamedPaths, deps.DurableExecutionFactory,
 		deps.WorkerExecutionFactory, deps.ModelService, deps.WorkFactory, deps.AutomationFactory,
 		deps.FactorySessionsService, deps.FactorySessionExecutionFactory,
-		deps.RecordingsProjectionFactory, deps.RecordingReplayArtifactsFactory, deps.RuntimeLedgerFactory,
+		deps.RecordingsProjectionFactory, deps.RecordingLifecycleFactory, deps.RuntimeLedgerFactory,
 		deps.RuntimeRecorderFactory, deps.ReplayClockFactory, deps.ReplayExecutionFactory,
 		deps.WorkersRuntimeFactory, deps.WorkersRuntimeExecutorsFactory,
 		deps.WorkersMockCommandRunnerFactory, deps.AutomationHostedSourcesFactory,
@@ -199,7 +200,7 @@ func NewRuntimeOpeningFactory(deps RuntimeOpeningDependencies) (*RuntimeOpeningF
 		deps.FactoryScaffoldInitializer, deps.EditableFactoryValidator,
 		deps.InitialFactorySnapshotFactory, deps.FactoryRuntimeAssembler,
 		work.MaterializationService(deps.ContentMaterializer),
-		deps.LoadFactory, deps.NewLoadedFactory, deps.DecodeReplayConfig,
+		deps.LoadFactory, deps.NewLoadedFactory, deps.DecodeReplayConfig, deps.ReplayInputs,
 		deps.CaptureLoadedFactorySnapshot, deps.ResolveClock, deps.NewSessionLogger,
 		deps.AdaptWorkerCommandRunner, deps.ProviderFromCommandRunnerFactory, deps.ProcessRuntimeFactory,
 		deps.EnsureOperatorBackendScope,

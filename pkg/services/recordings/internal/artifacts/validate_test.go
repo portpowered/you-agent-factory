@@ -58,7 +58,7 @@ func TestValidationRejectsEventOrderingAndUnknownArtifactReferences(t *testing.T
 		t.Fatal(err)
 	}
 	valid.Events[1].Sequence = valid.Events[0].Sequence
-	assertDiagnostic(t, recording.Validate(valid), recording.CodeInvalidSummary, "events[1].sequence")
+	assertDiagnostic(t, recording.Validate(valid), recording.CodeInvalidOrder, "events[1].sequence")
 	valid, _ = loadFixture("valid-v2.json")
 	valid.Events[1].ArtifactIDs[0] = "missing"
 	assertDiagnostic(t, recording.Validate(valid), recording.CodeInvalidSummary, "events[1].artifactIds[0]")

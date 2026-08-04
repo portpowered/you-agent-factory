@@ -443,7 +443,8 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 	humanTerminal := runPolicy.HumanTerminalWriter(cmd.OutOrStdout())
 	if cleanInvocation || textInvocation {
 		cfg.Output = cmd.OutOrStdout()
-	} else if strings.TrimSpace(cfg.FactoryConfigPath) != "" {
+	} else if strings.TrimSpace(cfg.FactoryConfigPath) != "" ||
+		(strings.TrimSpace(cfg.ReplayPath) != "" && !cfg.SuppressDashboardRendering) {
 		cfg.Output = cmd.OutOrStdout()
 		cfg.StartupOutput = humanTerminal
 	} else {

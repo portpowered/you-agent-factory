@@ -51,7 +51,7 @@ func PrepareRuntime(
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	replayArtifacts recordings.RecordingReplayArtifacts,
+	replayInputs recordings.ReplayInputLoader,
 	replayClockFactory ReplayClockFactory,
 	hostedPollersFactory AutomationHostedSourcesFactory,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
@@ -122,12 +122,15 @@ func PrepareRuntime(
 		loadFactory,
 		newLoadedFactory,
 		decodeReplayConfig,
-		replayArtifacts,
+		replayInputs,
 		captureLoadedFactorySnapshot,
 		newSessionLogger,
 	)
 	if err != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, err
+	}
+	if load.HistoricalReplay != nil {
+		return prepared, root, load, nil, load.SessionLogger, nil, nil
 	}
 	if err := operatordefaultsruntime.ResolveConcreteProviderSelections(
 		load.LoadedFactoryCfg,

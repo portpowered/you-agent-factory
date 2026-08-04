@@ -28,6 +28,9 @@ func TestReplayRecordingRestoresCompletedPublicReadModelsWithoutLiveExecution(t 
 	if got.Result.ResultStatus != fse.ResultStatusFinal || string(got.Result.PrimaryResult) != `{"answer":"done"}` {
 		t.Fatalf("result projection = %#v", got.Result)
 	}
+	if got.Redaction != value.Redaction {
+		t.Fatalf("redaction projection = %#v, want %#v", got.Redaction, value.Redaction)
+	}
 	assertRecordedInspectionParity(t, value, got)
 }
 
