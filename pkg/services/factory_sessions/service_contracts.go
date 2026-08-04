@@ -87,9 +87,13 @@ type RuntimeBinding struct {
 // ForRuntime; peers supply already-constructed peer root capabilities through
 // plain binding inputs without downcasting or bundling nested opening
 // interfaces. Binding stays inert during construction characterization.
-// The process-scoped root uses ForRuntime to create an isolated runtime view;
-// a bound view serves the remaining application operations. Peers that need
-// operations outside an owner-published narrow capability depend on Service.
+// The process-scoped root uses ForRuntime to create an isolated runtime view; a
+// bound view serves the remaining application operations. Peers must depend on
+// the smallest owner-published capability it uses: LiveControlService for
+// live control, DurableExecutionService for durable execution,
+// InvocationService for one-shot invocation, or TargetExecutionService for the
+// established combined target behavior. Service remains the singular aggregate
+// authority for callers that genuinely need a combined surface.
 type Service interface {
 	StartAsync(context.Context, StartRequest) (AsyncStartResult, error)
 	StartSync(context.Context, StartRequest) (SyncStartResult, error)

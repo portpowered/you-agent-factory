@@ -215,10 +215,10 @@ func TestRegistry_FindByLogicalSessionKeyID_ReturnsMatchingSession(t *testing.T)
 
 // --- merged from durable_execution_contract_characterization_test.go ---
 
-// peerDurableExecutionFake exercises the published durable-execution root slice
-// through the singular Service. It compiles against only the Sessions root
-// package and never imports factory_sessions/internal or nested execution
-// implementation packages.
+// peerDurableExecutionFake exercises the published durable-execution capability
+// through the singular Service implementation. It compiles against only the
+// Sessions root package and never imports factory_sessions/internal or nested
+// execution implementation packages.
 type peerDurableExecutionFake struct {
 	*peerRootServiceFake
 	starts    map[string]DurableAsyncStartResult
@@ -240,6 +240,7 @@ func newPeerDurableExecutionFake() *peerDurableExecutionFake {
 }
 
 var _ Service = (*peerDurableExecutionFake)(nil)
+var _ DurableExecutionService = (*peerDurableExecutionFake)(nil)
 
 func (fake *peerDurableExecutionFake) StartAsync(
 	_ context.Context,
@@ -352,7 +353,7 @@ func TestDurableExecutionRootContract_StartAndInspectSuccess(t *testing.T) {
 	}
 	fake.lifecycle[sessionID] = LifecycleStatusRunning
 
-	var service Service = fake
+	var service DurableExecutionService = fake
 	ctx := context.Background()
 
 	started, err := service.StartAsync(ctx, DurableStartRequest{
@@ -412,7 +413,7 @@ func TestDurableExecutionRootContract_TypedFailures(t *testing.T) {
 		SessionID: checkpointID,
 	}
 
-	var service Service = fake
+	var service DurableExecutionService = fake
 	ctx := context.Background()
 
 	_, err := service.StartAsync(ctx, DurableStartRequest{RequestID: "req-invalid-source"})
@@ -462,8 +463,7 @@ func TestDurableExecutionRootContract_TypedFailures(t *testing.T) {
 // peerInvocationSurfaceFake exercises the published invocation root slice while
 // remaining a singular Service implementer. It compiles against only the
 // Sessions root package (plus approved Work content types already present in
-// root signatures) and never imports factory_sessions/internal or a separately
-// published peer-facing invoker interface.
+// root signatures) and never imports factory_sessions/internal.
 type peerInvocationSurfaceFake struct {
 	*peerRootServiceFake
 	outcomes map[string]InvocationResult
@@ -479,6 +479,7 @@ func newPeerInvocationSurfaceFake() *peerInvocationSurfaceFake {
 }
 
 var _ Service = (*peerInvocationSurfaceFake)(nil)
+var _ InvocationService = (*peerInvocationSurfaceFake)(nil)
 
 func invocationRequestKey(sessionID string, request InvocationRequest) string {
 	requestID := ""
@@ -497,8 +498,7 @@ func invocationRequestKey(sessionID string, request InvocationRequest) string {
 }
 
 // InvokeFactorySession is a peer-local callable using the published root
-// vocabulary. It is intentionally not a separately published root Invoker
-// interface; invocation stays under the singular Service aggregate.
+// vocabulary and the owner-published InvocationService capability.
 func (fake *peerInvocationSurfaceFake) InvokeFactorySession(
 	_ context.Context,
 	sessionID string,
@@ -543,10 +543,7 @@ func TestInvocationRootContract_ValidRequestMapsToSessionScopedOutcome(t *testin
 		},
 	}
 
-	var service Service = fake
-	if _, err := service.GetFactorySession(context.Background(), "missing"); !errors.Is(err, ErrSessionNotFound) {
-		t.Fatalf("singular Service read path = %v, want ErrSessionNotFound", err)
-	}
+	var service InvocationService = fake
 
 	resolved := ResolvedInvocationInput{
 		Source:  work.InputSourcePositionalText,
@@ -561,7 +558,7 @@ func TestInvocationRootContract_ValidRequestMapsToSessionScopedOutcome(t *testin
 		t.Fatalf("InvocationTimeout = %v, want positive published timeout budget", timeout)
 	}
 
-	result, err := fake.InvokeFactorySession(context.Background(), sessionID, request)
+	result, err := service.InvokeFactorySession(context.Background(), sessionID, request)
 	if err != nil {
 		t.Fatalf("InvokeFactorySession: %v", err)
 	}
@@ -617,13 +614,15 @@ func TestInvocationRootContract_TypedFailuresAreDistinct(t *testing.T) {
 		Message:   "invocation canceled by caller",
 	}
 
-	_, err := fake.InvokeFactorySession(context.Background(), sessionID, invalid)
+	var service InvocationService = fake
+
+	_, err := service.InvokeFactorySession(context.Background(), sessionID, invalid)
 	var invalidInput *InvocationValidationError
 	if !errors.As(err, &invalidInput) || invalidInput.Field != "content" {
 		t.Fatalf("invalid input = %v, want *InvocationValidationError field=content", err)
 	}
 
-	timeoutResult, err := fake.InvokeFactorySession(context.Background(), sessionID, timedOut)
+	timeoutResult, err := service.InvokeFactorySession(context.Background(), sessionID, timedOut)
 	if err != nil {
 		t.Fatalf("timeout InvokeFactorySession: %v", err)
 	}
@@ -632,7 +631,7 @@ func TestInvocationRootContract_TypedFailuresAreDistinct(t *testing.T) {
 		t.Fatalf("timeout result = %#v, want TIMED_OUT typed outcome", timeoutResult)
 	}
 
-	cancelResult, err := fake.InvokeFactorySession(context.Background(), sessionID, canceled)
+	cancelResult, err := service.InvokeFactorySession(context.Background(), sessionID, canceled)
 	if err != nil {
 		t.Fatalf("cancel InvokeFactorySession: %v", err)
 	}
