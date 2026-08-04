@@ -129,6 +129,12 @@ func (ctx *convertContext) convertSchemaObject(schema map[string]any, path strin
 				return nil, diagnostics
 			}
 			result[key] = itemSchema
+		case negationKeyword:
+			notSchema, diagnostics := ctx.convertNotField(value, childPath)
+			if len(diagnostics) != 0 {
+				return nil, diagnostics
+			}
+			result[key] = notSchema
 		case "additionalProperties":
 			additionalSchema, diagnostics := ctx.convertAdditionalPropertiesField(value, childPath)
 			if len(diagnostics) != 0 {

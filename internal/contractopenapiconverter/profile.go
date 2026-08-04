@@ -56,6 +56,8 @@ var compositionKeywords = map[string]struct{}{
 	"anyOf": {},
 }
 
+const negationKeyword = "not"
+
 func isCoreShapeKeyword(key string) bool {
 	if len(key) > 2 && key[0] == 'x' && key[1] == '-' {
 		return false
@@ -75,6 +77,9 @@ func isKeywordAllowed(stage, key string) bool {
 		if _, ok := compositionKeywords[key]; ok {
 			return true
 		}
+	}
+	if stage == profileStageFailClosed && key == negationKeyword {
+		return true
 	}
 	if stage == profileStageFailClosed && key == "$ref" {
 		return true

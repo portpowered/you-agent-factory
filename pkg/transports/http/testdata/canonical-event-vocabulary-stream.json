@@ -119,6 +119,20 @@
   },
   {
     "schemaVersion": "agent-factory.event.v1",
+    "id": "event-dispatch-worker-session-association",
+    "type": "DISPATCH_WORKER_SESSION_ASSOCIATION",
+    "context": {
+      "sequence": 5,
+      "tick": 2,
+      "eventTime": "2026-04-21T12:00:04.250Z",
+      "dispatchId": "dispatch-1"
+    },
+    "payload": {
+      "workerSessionId": "worker-session-1"
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
     "id": "event-model-request",
     "type": "MODEL_REQUEST",
     "context": {

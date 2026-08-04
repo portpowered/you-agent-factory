@@ -600,6 +600,20 @@ func generatedFactoryDispatchEvents(t *testing.T) []factoryapi.FactoryEvent {
 		},
 		{
 			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-dispatch-worker-session-association",
+			Type:          factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:   3,
+				Tick:       2,
+				EventTime:  eventTime,
+				DispatchId: &scriptDispatchID,
+			},
+			Payload: factoryEventPayload(t, factoryapi.DispatchWorkerSessionAssociationEventPayload{
+				WorkerSessionId: "worker-session-1",
+			}),
+		},
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
 			Id:            "event-dispatch-completed",
 			Type:          factoryapi.FactoryEventTypeDispatchResponse,
 			Context: factoryapi.FactoryEventContext{

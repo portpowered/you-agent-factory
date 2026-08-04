@@ -152,6 +152,48 @@ func TestGeneratedGoClientExposesResponseEventSuccessAndTypedErrors(t *testing.T
 	}
 }
 
+func TestGeneratedGoClientFactoryEventAssociationRoundTripPreservesIdentityPair(t *testing.T) {
+	dispatchID := "dispatch-actual-7"
+	payload := generatedclient.FactoryEvent_Payload{}
+	if err := payload.FromDispatchWorkerSessionAssociationEventPayload(generatedclient.DispatchWorkerSessionAssociationEventPayload{
+		WorkerSessionId: "worker-session-actual-11",
+	}); err != nil {
+		t.Fatalf("encode generated client association payload: %v", err)
+	}
+
+	original := generatedclient.FactoryEvent{
+		SchemaVersion: generatedclient.AgentFactoryEventV1,
+		Id:            "event-dispatch-worker-session-association",
+		Type:          generatedclient.FactoryEventTypeDispatchWorkerSessionAssociation,
+		Context: generatedclient.FactoryEventContext{
+			Sequence:   17,
+			Tick:       8,
+			EventTime:  time.Date(2026, 8, 4, 16, 30, 0, 0, time.UTC),
+			DispatchId: &dispatchID,
+		},
+		Payload: payload,
+	}
+
+	encoded, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("marshal generated client association event: %v", err)
+	}
+	var roundTripped generatedclient.FactoryEvent
+	decodeRoundTripJSON(t, encoded, &roundTripped, "generated client association event")
+
+	if roundTripped.Id != original.Id || roundTripped.Type != original.Type ||
+		roundTripped.Context.DispatchId == nil || *roundTripped.Context.DispatchId != dispatchID {
+		t.Fatalf("generated client association envelope = %#v, want event and dispatch identities", roundTripped)
+	}
+	decodedPayload, err := roundTripped.Payload.AsDispatchWorkerSessionAssociationEventPayload()
+	if err != nil {
+		t.Fatalf("decode generated client association payload: %v", err)
+	}
+	if decodedPayload.WorkerSessionId != "worker-session-actual-11" {
+		t.Fatalf("generated client payload.workerSessionId = %q, want worker-session-actual-11", decodedPayload.WorkerSessionId)
+	}
+}
+
 var canonicalFactoryEventTypes = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeRunRequest,
 	factoryapi.FactoryEventTypeInitialStructureRequest,
@@ -159,6 +201,7 @@ var canonicalFactoryEventTypes = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeWorkRequest,
 	factoryapi.FactoryEventTypeRelationshipChangeRequest,
 	factoryapi.FactoryEventTypeDispatchRequest,
+	factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation,
 	factoryapi.FactoryEventTypeModelRequest,
 	factoryapi.FactoryEventTypeModelResponse,
 	factoryapi.FactoryEventTypeInferenceRequest,
@@ -219,6 +262,10 @@ var generatedFactoryEventPayloadDecoders = map[factoryapi.FactoryEventType]func(
 	},
 	factoryapi.FactoryEventTypeDispatchRequest: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsDispatchRequestEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsDispatchWorkerSessionAssociationEventPayload()
 		return err
 	},
 	factoryapi.FactoryEventTypeModelRequest: func(payload factoryapi.FactoryEvent_Payload) error {
@@ -341,6 +388,9 @@ var generatedFactoryEventPayloadEncoders = map[reflect.Type]func(*factoryapi.Fac
 	},
 	reflect.TypeOf(factoryapi.DispatchRequestEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromDispatchRequestEventPayload(value.(factoryapi.DispatchRequestEventPayload))
+	},
+	reflect.TypeOf(factoryapi.DispatchWorkerSessionAssociationEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromDispatchWorkerSessionAssociationEventPayload(value.(factoryapi.DispatchWorkerSessionAssociationEventPayload))
 	},
 	reflect.TypeOf(factoryapi.ModelRequestEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromModelRequestEventPayload(value.(factoryapi.ModelRequestEventPayload))

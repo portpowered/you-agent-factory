@@ -6306,6 +6306,7 @@ components:
             - $ref: '#/components/schemas/WorkRequestEventPayload'
             - $ref: '#/components/schemas/RelationshipChangeRequestEventPayload'
             - $ref: '#/components/schemas/DispatchRequestEventPayload'
+            - $ref: '#/components/schemas/DispatchWorkerSessionAssociationEventPayload'
             - $ref: '#/components/schemas/ModelRequestEventPayload'
             - $ref: '#/components/schemas/ModelResponseEventPayload'
             - $ref: '#/components/schemas/InferenceRequestEventPayload'
@@ -6331,6 +6332,25 @@ components:
             - $ref: '#/components/schemas/JavaScriptCheckpointRefEventPayload'
             - $ref: '#/components/schemas/JavaScriptPhaseChangeEventPayload'
             - $ref: '#/components/schemas/ArtifactCreatedEventPayload'
+      not:
+        type: object
+        required:
+          - type
+          - context
+        properties:
+          type:
+            type: string
+            enum:
+              - DISPATCH_WORKER_SESSION_ASSOCIATION
+          context:
+            not:
+              type: object
+              required:
+                - dispatchId
+              properties:
+                dispatchId:
+                  type: string
+                  minLength: 1
       discriminator:
         propertyName: type
         mapping:
@@ -6340,6 +6360,7 @@ components:
           WORK_REQUEST: '#/components/schemas/WorkRequestEventPayload'
           RELATIONSHIP_CHANGE_REQUEST: '#/components/schemas/RelationshipChangeRequestEventPayload'
           DISPATCH_REQUEST: '#/components/schemas/DispatchRequestEventPayload'
+          DISPATCH_WORKER_SESSION_ASSOCIATION: '#/components/schemas/DispatchWorkerSessionAssociationEventPayload'
           MODEL_REQUEST: '#/components/schemas/ModelRequestEventPayload'
           MODEL_RESPONSE: '#/components/schemas/ModelResponseEventPayload'
           INFERENCE_REQUEST: '#/components/schemas/InferenceRequestEventPayload'
@@ -6398,6 +6419,7 @@ components:
         - FactoryEventTypeWorkRequest
         - FactoryEventTypeRelationshipChangeRequest
         - FactoryEventTypeDispatchRequest
+        - FactoryEventTypeDispatchWorkerSessionAssociation
         - FactoryEventTypeModelRequest
         - FactoryEventTypeModelResponse
         - FactoryEventTypeInferenceRequest
@@ -6430,6 +6452,7 @@ components:
         - WORK_REQUEST
         - RELATIONSHIP_CHANGE_REQUEST
         - DISPATCH_REQUEST
+        - DISPATCH_WORKER_SESSION_ASSOCIATION
         - MODEL_REQUEST
         - MODEL_RESPONSE
         - INFERENCE_REQUEST
@@ -6462,6 +6485,7 @@ components:
         - Work entered the factory as a normalized request.
         - A relationship-change request between work items was recorded.
         - A workstation request began processing a set of input work.
+        - A dispatch was associated with the Worker Session allocated to execute it.
         - A model-backed worker invocation request is about to enter resource, load, and execution boundaries.
         - A model-backed worker invocation returned with resource, load, output, and failure evidence.
         - A model-worker provider attempt is about to send a prompt to the provider.
@@ -6696,6 +6720,17 @@ components:
             $ref: '#/components/schemas/Resource'
         metadata:
           $ref: '#/components/schemas/DispatchRequestEventMetadata'
+    DispatchWorkerSessionAssociationEventPayload:
+      type: object
+      additionalProperties: false
+      description: Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload.
+      required:
+        - workerSessionId
+      properties:
+        workerSessionId:
+          type: string
+          minLength: 1
+          description: Non-empty Worker Session identity allocated for the dispatch.
     ModelRequestEventPayload:
       type: object
       additionalProperties: false

@@ -34,6 +34,7 @@ properties:
       - $ref: ./payloads/WorkRequestEventPayload.yaml
       - $ref: ./payloads/RelationshipChangeRequestEventPayload.yaml
       - $ref: ./payloads/DispatchRequestEventPayload.yaml
+      - $ref: ./payloads/DispatchWorkerSessionAssociationEventPayload.yaml
       - $ref: ./payloads/ModelRequestEventPayload.yaml
       - $ref: ./payloads/ModelResponseEventPayload.yaml
       - $ref: ./payloads/InferenceRequestEventPayload.yaml
@@ -59,6 +60,29 @@ properties:
       - $ref: ./payloads/JavaScriptCheckpointRefEventPayload.yaml
       - $ref: ./payloads/JavaScriptPhaseChangeEventPayload.yaml
       - $ref: ./payloads/ArtifactCreatedEventPayload.yaml
+# The association payload carries only the Worker Session identity. Exclude an
+# association envelope whose shared context does not contain a non-empty,
+# authoritative dispatch identity. `not` preserves the generated envelope
+# model while keeping this event-specific constraint in the public schema.
+not:
+  type: object
+  required:
+    - type
+    - context
+  properties:
+    type:
+      type: string
+      enum:
+        - DISPATCH_WORKER_SESSION_ASSOCIATION
+    context:
+      not:
+        type: object
+        required:
+          - dispatchId
+        properties:
+          dispatchId:
+            type: string
+            minLength: 1
 discriminator:
   propertyName: type
   mapping:
@@ -68,6 +92,7 @@ discriminator:
     WORK_REQUEST: ./payloads/WorkRequestEventPayload.yaml
     RELATIONSHIP_CHANGE_REQUEST: ./payloads/RelationshipChangeRequestEventPayload.yaml
     DISPATCH_REQUEST: ./payloads/DispatchRequestEventPayload.yaml
+    DISPATCH_WORKER_SESSION_ASSOCIATION: ./payloads/DispatchWorkerSessionAssociationEventPayload.yaml
     MODEL_REQUEST: ./payloads/ModelRequestEventPayload.yaml
     MODEL_RESPONSE: ./payloads/ModelResponseEventPayload.yaml
     INFERENCE_REQUEST: ./payloads/InferenceRequestEventPayload.yaml

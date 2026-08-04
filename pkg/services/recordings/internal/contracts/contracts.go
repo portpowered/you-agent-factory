@@ -256,6 +256,7 @@ const (
 	FactoryEventTypeDispatchReconciled            = interfaces.FactoryEventTypeDispatchReconciled
 	FactoryEventTypeDispatchRequest               = interfaces.FactoryEventTypeDispatchRequest
 	FactoryEventTypeDispatchResponse              = interfaces.FactoryEventTypeDispatchResponse
+	FactoryEventTypeDispatchWorkerSessionAssoc    = interfaces.FactoryEventTypeDispatchWorkerSessionAssoc
 	FactoryEventTypeFactoryChange                 = interfaces.FactoryEventTypeFactoryChange
 	FactoryEventTypeFactoryStateResponse          = interfaces.FactoryEventTypeFactoryStateResponse
 	FactoryEventTypeInferenceRequest              = interfaces.FactoryEventTypeInferenceRequest
