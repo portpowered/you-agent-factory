@@ -823,9 +823,20 @@ type DurableExecutionService interface {
 	ReadEvents(context.Context, string, EventReconnectRequest) (EventReadResult, error)
 }
 
+// SessionInventoryService is the owner-published capability for scoped
+// Factory Session inventory reads. Its request can intentionally select live,
+// durable, or combined inventory, so it remains separate from
+// DurableExecutionService and does not widen durable callers into live control.
+type SessionInventoryService interface {
+	ListSessions(context.Context, ListSessionsRequest) (ListSessionsResult, error)
+}
+
 // Service satisfies DurableExecutionService structurally. Keep this assertion
 // at the owner root so signature drift fails during the focused package build.
 var _ DurableExecutionService = (Service)(nil)
+
+// Service also satisfies the independent scoped inventory capability.
+var _ SessionInventoryService = (Service)(nil)
 
 // Slice-named aliases are the peer-facing durable vocabulary; nested
 // internal/execution types are not the peer-facing source of truth.

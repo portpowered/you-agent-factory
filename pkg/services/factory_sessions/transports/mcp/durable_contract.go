@@ -1,8 +1,11 @@
 package factorysession
 
-import factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
+import factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 
-// DurableExecution is the MCP adapter's narrow durable capability. The
-// production value is supplied by the singular Sessions root; this adapter
-// contract avoids publishing a second service authority from the root package.
-type DurableExecution = factorysessionwire.DurableExecutionService
+// DurableExecution composes the Factory Sessions-owned durable execution and
+// scoped inventory capabilities required by the MCP tool set. Inventory stays
+// separate because its request can intentionally include live sessions.
+type DurableExecution interface {
+	factorysessions.DurableExecutionService
+	factorysessions.SessionInventoryService
+}

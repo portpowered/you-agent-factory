@@ -9,6 +9,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 // HTTPBinding contains the representation-only roles bound to one opened
@@ -55,7 +56,8 @@ func (binder *HTTPBinder) Bind(
 	if !ok {
 		return HTTPBinding{}, fmt.Errorf("bind HTTP mappings: legacy Factory Runtime observation is required")
 	}
-	durable := NewDurableAPI(sessions, sessions)
+	var durableExecution factorysessionmapping.DurableExecution = sessions
+	durable := NewDurableAPI(durableExecution, sessions)
 	return HTTPBinding{
 		Runtime:            NewRuntimeAPI(legacyObservation, definitions),
 		FactoryStatus:      newFactoryStatusAPI(runtime, sessions),
