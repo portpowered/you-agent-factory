@@ -57,7 +57,12 @@ type Service interface {
 
 	// StartTurn admits a new Turn in TurnStateAdmitted against the session's
 	// current target episode. It reports *BusyError when a non-terminal turn
-	// is already active and *ConflictError when ExpectedVersion is stale.
+	// is already active or when an unresolved COMMITTED control intent fences
+	// admission of a successor turn, and *ConflictError when ExpectedVersion is
+	// stale. The fence remains in effect after its captured turn terminalizes:
+	// callers must resolve the captured control to its immutable outcome before
+	// admitting a replacement, so that an older control can never reach newer
+	// work.
 	StartTurn(ctx context.Context, req StartTurnRequest) (StartTurnResult, error)
 
 	// AdvanceTurn moves an admitted or running Turn to Next, enforcing the

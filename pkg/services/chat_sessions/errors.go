@@ -177,9 +177,12 @@ func (e *NotFoundError) Unwrap() error {
 }
 
 // BusyError reports that a Service operation was rejected because the named
-// session already has a non-terminal active turn. ActiveTurnID and
-// ActiveTurnState carry the safe identity and state of that blocking turn so
-// a caller can distinguish which turn is busy without a follow-up read.
+// session already has a non-terminal active turn or an unresolved COMMITTED
+// control intent fences admission of that turn's successor. ActiveTurnID and
+// ActiveTurnState carry the safe identity and state of the turn that blocks
+// admission, including a terminal captured turn while its control remains
+// unresolved, so a caller can distinguish the blocker without a follow-up
+// read.
 type BusyError struct {
 	Value           string
 	ID              string

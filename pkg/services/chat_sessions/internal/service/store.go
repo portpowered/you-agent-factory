@@ -176,6 +176,29 @@ func (record sessionRecord) activeTurnValue() (chatsessions.Turn, bool) {
 	return turn, ok
 }
 
+// committedControlTurn returns the turn captured by any unresolved COMMITTED
+// control intent. StartTurn uses this as an admission fence after the
+// captured turn terminalizes: allowing a successor before the control
+// resolves would give the older intent a path to later work. When multiple
+// controls are committed, choose the lexically first captured Turn ID so the
+// typed BusyError remains deterministic even if one was requested before a
+// successor and committed after that successor was already admitted.
+func (record sessionRecord) committedControlTurn() (chatsessions.Turn, bool) {
+	var fence chatsessions.Turn
+	found := false
+	for _, intent := range record.controls {
+		if intent.State != chatsessions.ControlIntentStateCommitted {
+			continue
+		}
+		turn, ok := record.turns[intent.TurnID]
+		if ok && (!found || turn.ID < fence.ID) {
+			fence = turn
+			found = true
+		}
+	}
+	return fence, found
+}
+
 // NewStore constructs an empty Store from explicit dependencies. newID and
 // now must be non-nil; eventsAppender and eventsReader may be nil for a
 // Store a caller knows will never exercise Sequence or AcknowledgeAttachment

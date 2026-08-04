@@ -307,16 +307,22 @@ func TestStore_RequestControl_DuplicateIdentityBeforeAdvancementIsIdempotent(t *
 }
 
 // TestStore_RequestControl_DuplicateIdentityAfterNewTurnNeverRetargets proves
-// AC5's "later work cannot become the target of an older intent" guarantee:
-// reusing a RequestID after its original intent advanced to COMMITTED and a
-// later turn started never rewrites the stored intent's captured turn,
-// target episode, or version to the newer facts -- the exact identity is
-// immutable once it has been used.
+// the "later work cannot become the target of an older intent" guarantee:
+// reusing a RequestID after its original REQUESTED intent's captured turn
+// terminalized and a later turn started never rewrites the stored intent's
+// captured turn, target episode, or version to the newer facts -- the exact
+// identity is immutable once it has been used. A COMMITTED intent would fence
+// the successor admission, which is covered separately.
 func TestStore_RequestControl_DuplicateIdentityAfterNewTurnNeverRetargets(t *testing.T) {
 	ctx := context.Background()
 	store, session, turn := newActiveTurnTestSession(t, time.Now())
 	reqID := controlRequestID("conn-1", "1")
-	committed := committedControlIntent(t, ctx, store, session, reqID)
+	requested, err := store.RequestControl(ctx, chatsessions.RequestControlRequest{
+		RequestID: reqID, SessionID: session.ID, ExpectedVersion: session.Version, Action: chatsessions.ControlActionCancel,
+	})
+	if err != nil {
+		t.Fatalf("RequestControl: %v", err)
+	}
 
 	if _, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
 		SessionID: session.ID, TurnID: turn.ID, Next: chatsessions.TurnStateCanceled,
@@ -340,8 +346,8 @@ func TestStore_RequestControl_DuplicateIdentityAfterNewTurnNeverRetargets(t *tes
 	if err != nil {
 		t.Fatalf("RequestControl duplicate after new turn: %v", err)
 	}
-	if replay.Intent != committed {
-		t.Fatalf("duplicate RequestControl after new turn changed the stored intent: got %+v, want %+v", replay.Intent, committed)
+	if replay.Intent != requested.Intent {
+		t.Fatalf("duplicate RequestControl after new turn changed the stored intent: got %+v, want %+v", replay.Intent, requested.Intent)
 	}
 	if replay.Intent.TurnID == newTurn.Turn.ID {
 		t.Fatal("duplicate RequestControl after new turn retargeted TurnID to the new turn")
@@ -480,15 +486,22 @@ func TestStore_AdvanceControl_ResolvesCompletedWhileTurnStillActive(t *testing.T
 }
 
 // TestStore_AdvanceControl_OldControlVersusNewTurnResolvesSuperseded proves
-// AC5's deterministic "old-control-versus-new-turn" race: once the captured
-// turn terminates and a later turn is admitted, advancing the older
-// committed intent resolves to SUPERSEDED and never completes, no-ops, or
-// retargets the later turn.
+// the deterministic old-control/new-turn race for a control captured while
+// REQUESTED: once its captured turn terminates and a successor is admitted,
+// committing then resolving the older intent yields SUPERSEDED and never
+// retargets the later turn. A control already COMMITTED instead fences that
+// successor admission (covered by the StartTurn test), so both race paths
+// remain safe.
 func TestStore_AdvanceControl_OldControlVersusNewTurnResolvesSuperseded(t *testing.T) {
 	ctx := context.Background()
 	store, session, turn := newActiveTurnTestSession(t, time.Now())
 	reqID := controlRequestID("conn-1", "1")
-	intent := committedControlIntent(t, ctx, store, session, reqID)
+	requested, err := store.RequestControl(ctx, chatsessions.RequestControlRequest{
+		RequestID: reqID, SessionID: session.ID, ExpectedVersion: session.Version, Action: chatsessions.ControlActionCancel,
+	})
+	if err != nil {
+		t.Fatalf("RequestControl: %v", err)
+	}
 
 	if _, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
 		SessionID: session.ID, TurnID: turn.ID, Next: chatsessions.TurnStateCanceled,
@@ -508,6 +521,15 @@ func TestStore_AdvanceControl_OldControlVersusNewTurnResolvesSuperseded(t *testi
 	if newTurn.Turn.ID == turn.ID {
 		t.Fatal("second StartTurn reused the first turn's ID")
 	}
+	committed, err := store.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
+		SessionID: session.ID, RequestID: reqID, Next: chatsessions.ControlIntentStateCommitted,
+	})
+	if err != nil {
+		t.Fatalf("AdvanceControl REQUESTED->COMMITTED: %v", err)
+	}
+	if committed.Intent.State != chatsessions.ControlIntentStateCommitted {
+		t.Fatalf("committed intent state = %s, want COMMITTED", committed.Intent.State)
+	}
 
 	result, err := store.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{
 		SessionID: session.ID, RequestID: reqID, Next: chatsessions.ControlIntentStateCompleted,
@@ -518,8 +540,8 @@ func TestStore_AdvanceControl_OldControlVersusNewTurnResolvesSuperseded(t *testi
 	if result.Intent.State != chatsessions.ControlIntentStateSuperseded {
 		t.Fatalf("Intent.State = %v, want SUPERSEDED", result.Intent.State)
 	}
-	if result.Intent.TurnID != intent.TurnID {
-		t.Fatalf("SUPERSEDED intent retargeted: TurnID = %q, want unchanged %q", result.Intent.TurnID, intent.TurnID)
+	if result.Intent.TurnID != requested.Intent.TurnID {
+		t.Fatalf("SUPERSEDED intent retargeted: TurnID = %q, want unchanged %q", result.Intent.TurnID, requested.Intent.TurnID)
 	}
 
 	stillNew, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: session.ID})

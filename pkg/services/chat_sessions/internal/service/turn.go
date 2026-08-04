@@ -11,10 +11,13 @@ import (
 // unknown SessionID, *ConflictError when ExpectedVersion no longer matches
 // the session's current version (checked before the busy check, matching
 // SetTarget's ordering), and *BusyError while a non-terminal turn is already
-// active -- in every failure case no turn is created and the stored session
-// and turn state are left byte-for-byte unchanged. On success it moves a
-// CREATED session to ACTIVE on its first turn and leaves an already-ACTIVE
-// session's State unchanged.
+// active or a COMMITTED control intent remains unresolved. The latter is the
+// captured-control admission fence: it continues to block a successor after
+// its captured turn terminalizes until AdvanceControl records COMPLETED,
+// NOOP, or SUPERSEDED. In every failure case no turn is created and the
+// stored session and turn state are left byte-for-byte unchanged. On success
+// it moves a CREATED session to ACTIVE on its first turn and leaves an
+// already-ACTIVE session's State unchanged.
 //
 // Reusing a RequestID that already identifies an admitted turn is treated as
 // an idempotent retry, the same way RequestControl treats a reused control
@@ -62,6 +65,12 @@ func (s *Store) StartTurn(_ context.Context, req chatsessions.StartTurnRequest) 
 		return chatsessions.StartTurnResult{}, &chatsessions.BusyError{
 			Value: "Session", ID: req.SessionID,
 			ActiveTurnID: active.ID, ActiveTurnState: active.State,
+		}
+	}
+	if fenced, ok := record.committedControlTurn(); ok {
+		return chatsessions.StartTurnResult{}, &chatsessions.BusyError{
+			Value: "Session", ID: req.SessionID,
+			ActiveTurnID: fenced.ID, ActiveTurnState: fenced.State,
 		}
 	}
 
