@@ -1,8 +1,6 @@
 package wire
 
 import (
-	"fmt"
-
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -10,7 +8,6 @@ import (
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
-	"go.uber.org/zap"
 )
 
 func provideRecordingsCLIAdapter() recordingscli.Adapter {
@@ -46,40 +43,43 @@ func provideRecordingsFactory(
 	}
 }
 
-// provideRecordingReplayArtifactsFactory composes the single phase-aware
-// Recordings replay/artifact capability consumed by Factory Sessions. Its
-// runtime view first loads a caller-selected portable or legacy replay input,
-// then binds the same narrow capability to the runtime's canonical ledger and
-// projection once those request-scoped values exist. No caller assembles raw
-// file effects, validates a portable document, or discovers a broad Service.
-func provideRecordingReplayArtifactsFactory(
+// provideRecordingLifecycleFactory narrows the Recordings root constructed by
+// provideRecordingsFactory down to the RecordingLifecycle capability that the
+// Factory Session runtime-opening path binds to the runtime recorder. Wire
+// performs this narrowing once, at composition time, so runtime-opening
+// receives the narrow capability explicitly instead of discovering it from
+// the broad Service at call time.
+func provideRecordingLifecycleFactory(
 	edges serviceedges.Edges,
 	targets recordings.LiveRecordingTargetPlanner,
 	storage platformreplay.Storage,
-	loadReplay recordings.ReplayArtifactLoader,
-	replayFiles factorysessionwire.ReplayRecordingReader,
-	logger *zap.Logger,
-) factorysessionwire.RecordingReplayArtifactsFactory {
+) factorysessionwire.RecordingLifecycleFactory {
 	serviceFactory := provideRecordingsFactory(edges, targets, storage)
-	runtimeBuilder := func(
+	return func(
 		ledger recordings.Ledger,
 		projection recordings.ProjectionService,
-	) (recordings.RecordingReplayArtifacts, recordings.RecordingLifecycle, error) {
+	) recordings.RecordingLifecycle {
 		service := serviceFactory(ledger, projection)
-		replayArtifacts, ok := service.(recordings.RecordingReplayArtifacts)
-		if !ok {
-			return nil, nil, fmt.Errorf("construct Recordings: service does not expose the replay/artifact capability")
-		}
 		lifecycle, ok := service.(recordings.RecordingLifecycle)
 		if !ok {
-			return nil, nil, fmt.Errorf("construct Recordings: service does not expose the recording lifecycle capability")
+			panic("construct Recordings: service does not expose the recording lifecycle capability")
 		}
-		return replayArtifacts, lifecycle, nil
+		return lifecycle
 	}
-	return recordingswire.NewRecordingReplayArtifactsFactory(
-		recordings.RecordingReadFile(replayFiles),
-		loadReplay,
-		logger,
-		runtimeBuilder,
-	)
+}
+
+// provideFactorySessionReplayInputs composes the Recordings-owned, path-based
+// RecordingReplayArtifacts capability from the existing legacy replay
+// artifact loader and replay recording file reader, so the Factory Sessions
+// runtime-opening replay-input lane receives one already-constructed
+// capability instead of combining those two raw effects itself. It is the
+// same RecordingReplayArtifacts contract used by the ledger-backed Recordings
+// root constructed by provideRecordingsFactory above, but it is constructed
+// before a Factory Session ledger exists, so it only supports
+// LoadReplayInput (see recordingswire.NewReplayArtifactCapability).
+func provideFactorySessionReplayInputs(
+	loadReplay recordings.ReplayArtifactLoader,
+	replayFiles factorysessionwire.ReplayRecordingReader,
+) recordings.RecordingReplayArtifacts {
+	return recordingswire.NewReplayArtifactCapability(recordings.RecordingReadFile(replayFiles), loadReplay)
 }

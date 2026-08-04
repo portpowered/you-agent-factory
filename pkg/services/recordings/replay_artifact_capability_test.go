@@ -680,6 +680,12 @@ func (fake *narrowReplayArtifactsFake) ReadArtifact(
 	return recordings.ReadArtifactResult{Artifact: fake.artifact}, nil
 }
 
+func (fake *narrowReplayArtifactsFake) LoadReplayInput(
+	recordings.LoadReplayInputRequest,
+) (recordings.LoadReplayInputResult, error) {
+	return recordings.LoadReplayInputResult{}, recordings.ErrReplayArtifactUnsupportedContext
+}
+
 func TestRecordingReplayArtifacts_NarrowFakeConsumption(t *testing.T) {
 	t.Parallel()
 	fake := &narrowReplayArtifactsFake{

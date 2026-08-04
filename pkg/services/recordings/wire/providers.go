@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 	artifactsimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/artifacts"
 	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"go.uber.org/zap"
 )
 
 // NewPortableRecordingWriter constructs the portable recording writer selected
@@ -41,279 +39,120 @@ func NewReplayArtifactLoader(
 	}
 }
 
-type replayInputLoader struct {
-	readFile   recordings.RecordingReadFile
-	loadLegacy recordings.ReplayArtifactLoader
-	logger     *zap.Logger
+// NewReplayArtifactCapability constructs the path-based, pre-ledger
+// recordings.RecordingReplayArtifacts implementation selected by
+// process-graph composition, composing the existing portable-recording
+// decoder/validator with the existing legacy replay artifact loader behind
+// the one Recordings-owned replay/artifact capability so callers no longer
+// combine a raw file reader, the aliased portable-recording decoder/
+// validator, and the legacy loader themselves.
+//
+// This implementation only supports LoadReplayInput: it is constructed and
+// injected before a Factory Session ledger exists (while Factory Sessions
+// opens runtime state from historical replay input), so its ledger-scoped
+// operations (LoadReplay, BuildArtifact, ValidateArtifact, EncodeArtifact,
+// DecodeArtifact, SummarizeArtifact, ExportArtifact, ReadArtifact) return a
+// ReplayArtifactErrorUnsupportedContext failure rather than fabricating
+// ledger access they do not have.
+func NewReplayArtifactCapability(
+	readFile recordings.RecordingReadFile,
+	loadLegacy recordings.ReplayArtifactLoader,
+) recordings.RecordingReplayArtifacts {
+	return &replayArtifactCapability{readFile: readFile, loadLegacy: loadLegacy}
 }
 
-func (loader *replayInputLoader) LoadReplayInput(
+type replayArtifactCapability struct {
+	readFile   recordings.RecordingReadFile
+	loadLegacy recordings.ReplayArtifactLoader
+}
+
+var _ recordings.RecordingReplayArtifacts = (*replayArtifactCapability)(nil)
+
+func (loader *replayArtifactCapability) LoadReplayInput(
 	request recordings.LoadReplayInputRequest,
 ) (recordings.LoadReplayInputResult, error) {
-	loader.logger.Info("loading replay input")
 	if loader.readFile == nil {
-		err := &recordings.ReplayInputError{
-			Kind:    recordings.ReplayInputErrorRead,
-			Message: "Factory Session replay recording reader is required",
-		}
-		loader.logger.Error("replay input reader is not configured")
-		return recordings.LoadReplayInputResult{}, err
+		return recordings.LoadReplayInputResult{}, fmt.Errorf("Factory Session replay recording reader is required")
 	}
-	data, readErr := loader.readFile(request.Path)
-	if readErr != nil {
-		err := &recordings.ReplayInputError{
-			Kind:    recordings.ReplayInputErrorRead,
-			Message: fmt.Sprintf("read replay recording: %s", readErr.Error()),
-			Cause:   readErr,
-		}
-		loader.logger.Error("failed to read replay input")
-		return recordings.LoadReplayInputResult{}, err
+	data, err := loader.readFile(request.Path)
+	if err != nil {
+		return recordings.LoadReplayInputResult{}, fmt.Errorf("read replay recording: %w", err)
 	}
 	var header struct {
 		RecordingKind string `json:"recordingKind"`
 	}
 	if err := json.Unmarshal(data, &header); err == nil &&
 		header.RecordingKind == recordings.KindJavaScriptFactorySession {
-		value, decodeErr := recordings.DecodePortableRecording(bytes.NewReader(data))
-		if decodeErr != nil {
-			typed := &recordings.ReplayInputError{
-				Kind:       recordings.ReplayInputErrorPortable,
-				Diagnostic: toReplayInputDiagnostic(decodeErr),
-				Message:    decodeErr.Error(),
-				Cause:      decodeErr,
-			}
-			loader.logger.Warn(
-				"replay input failed portable recording validation",
-				zap.String("diagnosticCode", diagnosticCodeOf(typed.Diagnostic)),
-			)
-			return recordings.LoadReplayInputResult{}, typed
+		value, err := recordings.DecodePortableRecording(bytes.NewReader(data))
+		if err != nil {
+			return recordings.LoadReplayInputResult{}, err
 		}
-		loader.logger.Info(
-			"loaded portable replay input",
-			zap.String("sessionID", value.Session.ID),
-		)
-		return recordings.LoadReplayInputResult{Portable: toReplayInputPortableRecording(value)}, nil
+		return recordings.LoadReplayInputResult{Portable: &value}, nil
 	}
 	if loader.loadLegacy == nil {
-		err := &recordings.ReplayInputError{
-			Kind:    recordings.ReplayInputErrorLegacy,
-			Message: "replay artifact loader is required",
-		}
-		loader.logger.Error("legacy replay artifact loader is not configured")
-		return recordings.LoadReplayInputResult{}, err
+		return recordings.LoadReplayInputResult{}, fmt.Errorf("replay artifact loader is required")
 	}
-	artifact, legacyErr := loader.loadLegacy(request.Path)
-	if legacyErr != nil {
-		err := &recordings.ReplayInputError{
-			Kind:    recordings.ReplayInputErrorLegacy,
-			Message: fmt.Sprintf("load replay artifact: %s", legacyErr.Error()),
-			Cause:   legacyErr,
-		}
-		loader.logger.Warn("failed to load legacy replay artifact")
-		return recordings.LoadReplayInputResult{}, err
+	artifact, err := loader.loadLegacy(request.Path)
+	if err != nil {
+		return recordings.LoadReplayInputResult{}, fmt.Errorf("load replay artifact: %w", err)
 	}
-	legacy, conversionErr := toReplayInputLegacyArtifact(artifact)
-	if conversionErr != nil {
-		err := &recordings.ReplayInputError{
-			Kind:    recordings.ReplayInputErrorLegacy,
-			Message: fmt.Sprintf("prepare replay artifact: %s", conversionErr.Error()),
-			Cause:   conversionErr,
-		}
-		loader.logger.Warn("failed to prepare legacy replay artifact")
-		return recordings.LoadReplayInputResult{}, err
-	}
-	loader.logger.Info("loaded legacy replay artifact")
-	return recordings.LoadReplayInputResult{Legacy: legacy}, nil
+	return recordings.LoadReplayInputResult{Legacy: artifact}, nil
 }
 
-func newReplayInputLoader(
-	readFile recordings.RecordingReadFile,
-	loadLegacy recordings.ReplayArtifactLoader,
-	logger *zap.Logger,
-) *replayInputLoader {
-	return &replayInputLoader{readFile: readFile, loadLegacy: loadLegacy, logger: logger}
-}
-
-// toReplayInputDiagnostic maps the existing portable-recording diagnostic
-// into the directly owned ReplayInputDiagnostic vocabulary so callers do not
-// depend on recordings/internal/contracts to observe structured facts.
-func toReplayInputDiagnostic(err error) *recordings.ReplayInputDiagnostic {
-	var diagnostic *recordings.PortableRecordingDiagnostic
-	if !errors.As(err, &diagnostic) || diagnostic == nil {
-		return nil
-	}
-	var versions []string
-	if len(diagnostic.SupportedVersions) > 0 {
-		versions = append([]string(nil), diagnostic.SupportedVersions...)
-	}
-	return &recordings.ReplayInputDiagnostic{
-		Code:              recordings.ReplayInputDiagnosticCode(diagnostic.Code),
-		Area:              diagnostic.Area,
-		Path:              diagnostic.Path,
-		Message:           diagnostic.Message,
-		SupportedVersions: versions,
+func (loader *replayArtifactCapability) unsupportedContext(operation string) error {
+	return &recordings.ReplayArtifactError{
+		Kind:    recordings.ReplayArtifactErrorUnsupportedContext,
+		Message: operation + " requires an already-open Factory Session recording ledger",
+		Cause:   recordings.ErrReplayArtifactUnsupportedContext,
 	}
 }
 
-// toReplayInputPortableRecording copies the legacy portable-recording
-// compatibility value into the narrow capability's directly owned contract.
-// The conversion deliberately clones every nested slice and pointer so a
-// caller cannot mutate a later replay-input result through this value.
-func toReplayInputPortableRecording(
-	value recordings.PortableRecording,
-) *recordings.ReplayInputPortableRecording {
-	converted := &recordings.ReplayInputPortableRecording{
-		RecordingKind:              value.RecordingKind,
-		SchemaVersion:              value.SchemaVersion,
-		ReplayCompatibilityVersion: value.ReplayCompatibilityVersion,
-		Session: recordings.ReplayInputSessionSummary{
-			ID:               value.Session.ID,
-			Status:           value.Session.Status,
-			OrchestratorKind: value.Session.OrchestratorKind,
-		},
-		Source: recordings.ReplayInputSourceSummary{
-			Ref:  value.Source.Ref,
-			Hash: value.Source.Hash,
-		},
-		ArgumentsDigest: value.ArgumentsDigest,
-		PolicyHash:      value.PolicyHash,
-		Artifacts:       toReplayInputArtifactSummaries(value.Artifacts),
-		Events:          toReplayInputEventSummaries(value.Events),
-		Checkpoint:      toReplayInputCheckpointSummary(value.Checkpoint),
-		Result:          toReplayInputResultSummary(value.Result),
-		Redaction: recordings.ReplayInputRedactionMetadata{
-			RuntimeStateOmitted:        value.Redaction.RuntimeStateOmitted,
-			CheckpointBodiesOmitted:    value.Redaction.CheckpointBodiesOmitted,
-			ProviderTranscriptsOmitted: value.Redaction.ProviderTranscriptsOmitted,
-			ChildDispatchesOmitted:     value.Redaction.ChildDispatchesOmitted,
-			SecretsRedacted:            value.Redaction.SecretsRedacted,
-		},
-	}
-	return converted
+func (loader *replayArtifactCapability) LoadReplay(
+	recordings.LoadReplayRequest,
+) (recordings.LoadReplayResult, error) {
+	return recordings.LoadReplayResult{}, loader.unsupportedContext("LoadReplay")
 }
 
-func toReplayInputArtifactSummaries(
-	values []recordings.PortableRecordingArtifactSummary,
-) []recordings.ReplayInputArtifactSummary {
-	converted := make([]recordings.ReplayInputArtifactSummary, len(values))
-	for index, artifact := range values {
-		converted[index] = recordings.ReplayInputArtifactSummary{
-			ID:          artifact.ID,
-			Kind:        artifact.Kind,
-			Visibility:  artifact.Visibility,
-			Label:       artifact.Label,
-			ContentHash: artifact.ContentHash,
-			SizeBytes:   artifact.SizeBytes,
-			CreatedAt:   artifact.CreatedAt,
-		}
-	}
-	return converted
+func (loader *replayArtifactCapability) BuildArtifact(
+	recordings.BuildArtifactRequest,
+) (recordings.BuildArtifactResult, error) {
+	return recordings.BuildArtifactResult{}, loader.unsupportedContext("BuildArtifact")
 }
 
-func toReplayInputEventSummaries(
-	values []recordings.PortableRecordingEventSummary,
-) []recordings.ReplayInputEventSummary {
-	converted := make([]recordings.ReplayInputEventSummary, len(values))
-	for index, event := range values {
-		converted[index] = recordings.ReplayInputEventSummary{
-			ID:           event.ID,
-			Type:         event.Type,
-			Sequence:     event.Sequence,
-			Timestamp:    event.Timestamp,
-			ArtifactIDs:  append([]string(nil), event.ArtifactIDs...),
-			CheckpointID: event.CheckpointID,
-		}
-	}
-	return converted
+func (loader *replayArtifactCapability) ValidateArtifact(
+	recordings.ValidateArtifactRequest,
+) (recordings.ValidateArtifactResult, error) {
+	return recordings.ValidateArtifactResult{}, loader.unsupportedContext("ValidateArtifact")
 }
 
-func toReplayInputCheckpointSummary(
-	value *recordings.PortableRecordingCheckpointSummary,
-) *recordings.ReplayInputCheckpointSummary {
-	if value == nil {
-		return nil
-	}
-	return &recordings.ReplayInputCheckpointSummary{
-		ID:         value.ID,
-		Label:      value.Label,
-		Summary:    value.Summary,
-		Timestamp:  value.Timestamp,
-		ArtifactID: value.ArtifactID,
-	}
+func (loader *replayArtifactCapability) EncodeArtifact(
+	recordings.EncodeArtifactRequest,
+) (recordings.EncodeArtifactResult, error) {
+	return recordings.EncodeArtifactResult{}, loader.unsupportedContext("EncodeArtifact")
 }
 
-func toReplayInputResultSummary(
-	value *recordings.PortableRecordingResult,
-) *recordings.ReplayInputResultSummary {
-	if value == nil {
-		return nil
-	}
-	converted := &recordings.ReplayInputResultSummary{
-		Status:        value.Status,
-		Mode:          value.Mode,
-		PrimaryResult: append([]byte(nil), value.PrimaryResult...),
-		ContentHash:   value.ContentHash,
-		ArtifactIDs:   append([]string(nil), value.ArtifactIDs...),
-	}
-	if value.Failure != nil {
-		converted.Failure = &recordings.ReplayInputFailureSummary{
-			Reason:                 value.Failure.Reason,
-			Message:                value.Failure.Message,
-			PartialResultAvailable: value.Failure.PartialResultAvailable,
-		}
-	}
-	if value.Availability != nil {
-		converted.Availability = &recordings.ReplayInputAvailability{
-			Reason:    value.Availability.Reason,
-			Message:   value.Availability.Message,
-			Retryable: value.Availability.Retryable,
-		}
-	}
-	return converted
+func (loader *replayArtifactCapability) DecodeArtifact(
+	recordings.DecodeArtifactRequest,
+) (recordings.DecodeArtifactResult, error) {
+	return recordings.DecodeArtifactResult{}, loader.unsupportedContext("DecodeArtifact")
 }
 
-func toReplayInputLegacyArtifact(
-	value *recordings.ReplayArtifact,
-) (*recordings.ReplayInputLegacyArtifact, error) {
-	if value == nil {
-		return nil, nil
-	}
-	converted := &recordings.ReplayInputLegacyArtifact{
-		SchemaVersion: value.SchemaVersion,
-		RecordedAt:    value.RecordedAt,
-	}
-	var err error
-	if converted.FactorySnapshotJSON, err = json.Marshal(value.Factory); err != nil {
-		return nil, fmt.Errorf("encode legacy Factory snapshot: %w", err)
-	}
-	if value.Factory == nil {
-		converted.FactorySnapshotJSON = nil
-	}
-	if converted.DiagnosticsJSON, err = json.Marshal(value.Diagnostics); err != nil {
-		return nil, fmt.Errorf("encode legacy replay diagnostics: %w", err)
-	}
-	converted.Events = make([]recordings.ReplayInputLegacyEvent, len(value.Events))
-	for index, event := range value.Events {
-		payload, encodeErr := json.Marshal(event)
-		if encodeErr != nil {
-			return nil, fmt.Errorf("encode legacy replay event %d: %w", index, encodeErr)
-		}
-		converted.Events[index] = recordings.ReplayInputLegacyEvent{EventJSON: payload}
-	}
-	if value.WallClock != nil {
-		converted.WallClock = &recordings.ReplayInputWallClockMetadata{
-			StartedAt:  value.WallClock.StartedAt,
-			FinishedAt: value.WallClock.FinishedAt,
-		}
-	}
-	return converted, nil
+func (loader *replayArtifactCapability) SummarizeArtifact(
+	recordings.SummarizeArtifactRequest,
+) (recordings.SummarizeArtifactResult, error) {
+	return recordings.SummarizeArtifactResult{}, loader.unsupportedContext("SummarizeArtifact")
 }
 
-func diagnosticCodeOf(diagnostic *recordings.ReplayInputDiagnostic) string {
-	if diagnostic == nil {
-		return ""
-	}
-	return string(diagnostic.Code)
+func (loader *replayArtifactCapability) ExportArtifact(
+	context.Context, recordings.ExportArtifactRequest,
+) (recordings.ExportArtifactResult, error) {
+	return recordings.ExportArtifactResult{}, loader.unsupportedContext("ExportArtifact")
+}
+
+func (loader *replayArtifactCapability) ReadArtifact(
+	context.Context, recordings.ReadArtifactRequest,
+) (recordings.ReadArtifactResult, error) {
+	return recordings.ReadArtifactResult{}, loader.unsupportedContext("ReadArtifact")
 }
 
 // NewProjectionService constructs the Recordings projection capability for

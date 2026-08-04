@@ -149,6 +149,23 @@ func (service *combinedService) ReadArtifact(
 	return recordings.ReadArtifactResult{Artifact: toArtifactEnvelope(result.Artifact)}, nil
 }
 
+// LoadReplayInput implements recordings.RecordingReplayArtifacts for the
+// ledger-backed Recordings root. This construction path always has an
+// already-recorded ledger and projection, never a bare filesystem path to
+// classify, so it does not support LoadReplayInput; that operation is
+// implemented by the path-based bootstrap capability Factory Sessions
+// injects while opening runtime state, before any ledger exists (see
+// pkg/services/recordings/wire.NewReplayArtifactCapability).
+func (service *combinedService) LoadReplayInput(
+	recordings.LoadReplayInputRequest,
+) (recordings.LoadReplayInputResult, error) {
+	return recordings.LoadReplayInputResult{}, &recordings.ReplayArtifactError{
+		Kind:    recordings.ReplayArtifactErrorUnsupportedContext,
+		Message: "LoadReplayInput requires a path-based replay/artifact capability, not a recording ledger",
+		Cause:   recordings.ErrReplayArtifactUnsupportedContext,
+	}
+}
+
 func toReplayScope(scope recordings.CanonicalEventScope) recordings.ReplayScope {
 	return recordings.ReplayScope{FactorySessionID: scope.FactorySessionID}
 }

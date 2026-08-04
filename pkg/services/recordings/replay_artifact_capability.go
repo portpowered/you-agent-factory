@@ -2,6 +2,7 @@ package recordings
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -43,6 +44,30 @@ type RecordingReplayArtifacts interface {
 	// ReadArtifact reads and validates one published portable artifact from
 	// its public reference.
 	ReadArtifact(context.Context, ReadArtifactRequest) (ReadArtifactResult, error)
+	// LoadReplayInput reads the file at the selected path, classifies it as
+	// a portable JavaScript Factory Session recording or a legacy
+	// embedded-Factory replay artifact, and returns the decoded/validated
+	// result for exactly one of those two families. Unlike the other
+	// RecordingReplayArtifacts operations, this operation selects its input
+	// by filesystem path rather than by an already-recorded RecordingID, so
+	// it is usable before a Factory Session ledger exists (for example while
+	// Factory Sessions opens runtime state from historical replay input).
+	// Implementations backed by an already-open recording ledger are not
+	// required to support this operation.
+	LoadReplayInput(LoadReplayInputRequest) (LoadReplayInputResult, error)
+}
+
+// LoadReplayInputRequest selects one historical replay input by filesystem
+// path.
+type LoadReplayInputRequest struct {
+	Path string
+}
+
+// LoadReplayInputResult contains exactly one of Portable or Legacy,
+// depending on which replay input family the selected path contained.
+type LoadReplayInputResult struct {
+	Portable *PortableRecording
+	Legacy   *ReplayArtifact
 }
 
 // RecordingReplayArtifactsRuntime is the per-Factory-Session phase-aware
@@ -280,6 +305,20 @@ const (
 	ReplayArtifactErrorExportFailed      ReplayArtifactErrorKind = "EXPORT_FAILED"
 	ReplayArtifactErrorForeign           ReplayArtifactErrorKind = "FOREIGN"
 	ReplayArtifactErrorCancelled         ReplayArtifactErrorKind = "CANCELLED"
+	// ReplayArtifactErrorUnsupportedContext reports that the selected
+	// RecordingReplayArtifacts instance does not support the requested
+	// operation in its current construction context, for example a
+	// ledger-backed instance asked to classify a filesystem path, or a
+	// path-based bootstrap instance asked to operate on an already-recorded
+	// RecordingID before a Factory Session ledger exists.
+	ReplayArtifactErrorUnsupportedContext ReplayArtifactErrorKind = "UNSUPPORTED_CONTEXT"
+)
+
+// ErrReplayArtifactUnsupportedContext is the sentinel Cause for
+// ReplayArtifactErrorUnsupportedContext failures, so callers can match it
+// with errors.Is without depending on Kind string comparison.
+var ErrReplayArtifactUnsupportedContext = errors.New(
+	"replay/artifact operation is not supported by this capability instance",
 )
 
 // ArtifactDiagnosticCode identifies one RecordingReplayArtifacts structured
