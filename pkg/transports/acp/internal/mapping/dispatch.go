@@ -44,6 +44,20 @@ var legalPhasesByKind = map[workers.Kind][]workers.Phase{
 // both resolve to (nil, nil) -- and rejects every unknown Kind or
 // Kind/Phase pair that response-draft validation would also have rejected,
 // returning (nil, ErrMalformedRecord) rather than silently classifying it.
+//
+// SESSION deserves the same note final-proposal.md §6.2 makes about PLAN:
+// the doc's projection table lists "Title/time change -> session_info_update"
+// as an intended L1 capability, but workers.SessionPayload carries no title
+// or other ACP-supported customer metadata field, and workers.Kind has no
+// separate value for a metadata change distinct from session lifecycle --
+// only KindSession's lifecycle phases (STARTED/COMPLETED/FAILED/CANCELED)
+// exist today, and draftvalidation already declares all of them NO_OUTPUT.
+// Adding a title/time source fact would mean inventing a new taxonomy
+// member, which conflicts with this PRD's own top-level "no new event
+// taxonomy" acceptance criterion. L1 therefore declares session_info_update
+// out of scope here as a deliberate scope cut, not a missing case --
+// identical in kind to PLAN's scope cut, not because the dispatch is
+// incomplete.
 func Project(draft workers.Draft) (*acpsdk.SessionUpdate, error) {
 	if !isLegalKindPhase(draft.Kind, draft.Phase) {
 		return nil, fmt.Errorf(
