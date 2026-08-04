@@ -11,6 +11,7 @@ import (
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
@@ -173,8 +174,12 @@ func TestNewFactoryTargetCatalogService_ConstructsFromInjectedRoots(t *testing.T
 // construction stores, but does not invoke, its injected collaborator.
 type stubResponseBridgeSequencer struct{ chatsessions.Service }
 
+type stubResponseBridgeFactoryTarget struct {
+	factorysessions.TargetExecutionService
+}
+
 func TestNewResponseBridgeConstructsFromInjectedSequencer(t *testing.T) {
-	bridge := NewResponseBridge(stubResponseBridgeSequencer{})
+	bridge := NewResponseBridge(stubResponseBridgeSequencer{}, stubResponseBridgeFactoryTarget{}, logging.NoopLogger{})
 	if bridge == nil {
 		t.Fatal("NewResponseBridge returned nil")
 	}

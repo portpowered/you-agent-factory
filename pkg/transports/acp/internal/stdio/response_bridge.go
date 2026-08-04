@@ -55,6 +55,6 @@ func (s *Server) dispatchFactoryInvocation(
 	liveDrain := func(drainCtx context.Context) {
 		liveDelivered = s.liveDrainTurnUpdates(drainCtx, connectionID, chatSessionID, sessionVersion, notify)
 	}
-	result, err = s.responseBridge(ctx, s.factoryTarget, chatSessionID, sessionVersion, factorySessionID, liveDrain, invoke)
+	result, err = s.responseBridge(ctx, chatSessionID, sessionVersion, factorySessionID, liveDrain, invoke)
 	return result, liveDelivered, err
 }

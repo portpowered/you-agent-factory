@@ -38,7 +38,7 @@ func TestDispatchFactoryInvocation_NilResponseBridgeCallsInvokeDirectly(t *testi
 func TestDispatchFactoryInvocation_NilChatSessionsOrFactoryTargetSkipsBridge(t *testing.T) {
 	bridgeCalled := false
 	bridge := func(
-		context.Context, factorysessions.TargetExecutionService, string, uint64, string,
+		context.Context, string, uint64, string,
 		func(context.Context),
 		func(context.Context) (factorysessions.InvocationResult, error),
 	) (factorysessions.InvocationResult, error) {
@@ -66,7 +66,6 @@ func TestDispatchFactoryInvocation_CallsInjectedResponseBridge(t *testing.T) {
 	var gotLiveDrainNonNil bool
 	bridge := func(
 		ctx context.Context,
-		_ factorysessions.TargetExecutionService,
 		chatSessionID string,
 		sessionVersion uint64,
 		factorySessionID string,
@@ -145,7 +144,6 @@ func TestHandleSessionPromptLiveDrainDeliversRecordBeforeInvokeReturns(t *testin
 
 	server.responseBridge = func(
 		ctx context.Context,
-		_ factorysessions.TargetExecutionService,
 		chatSessionID string,
 		_ uint64,
 		_ string,

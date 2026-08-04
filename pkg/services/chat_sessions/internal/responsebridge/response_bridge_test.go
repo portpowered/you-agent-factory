@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -77,7 +78,7 @@ func TestServiceRunSequencesFactoryEventsAndPreservesInvokeResult(t *testing.T) 
 	}
 
 	want := factorysessions.InvocationResult{RequestID: "turn-1", Status: factorysessions.InvocationTerminalStatusCompleted}
-	got, err := New(sequencer).Run(context.Background(), bridgeTarget{cursor: cursor}, "chat-1", 4, "factory-1", nil,
+	got, err := New(sequencer, bridgeTarget{cursor: cursor}, logging.NoopLogger{}).Run(context.Background(), "chat-1", 4, "factory-1", nil,
 		func(context.Context) (factorysessions.InvocationResult, error) {
 			<-sequencer.didFirst
 			return want, nil
@@ -130,7 +131,7 @@ func TestServiceRunDrainsTerminalTailWithNonCancelledContext(t *testing.T) {
 	}
 
 	want := factorysessions.InvocationResult{RequestID: "turn-1", Status: factorysessions.InvocationTerminalStatusCompleted}
-	got, err := New(sequencer).Run(context.Background(), bridgeTarget{cursor: cursor}, "chat-1", 4, "factory-1", nil,
+	got, err := New(sequencer, bridgeTarget{cursor: cursor}, logging.NoopLogger{}).Run(context.Background(), "chat-1", 4, "factory-1", nil,
 		func(context.Context) (factorysessions.InvocationResult, error) {
 			<-nextStarted
 			close(invokeReturned)
@@ -169,7 +170,7 @@ func TestServiceRunReturnsTerminalTailSequencingFailure(t *testing.T) {
 	}
 
 	want := factorysessions.InvocationResult{RequestID: "turn-1", Status: factorysessions.InvocationTerminalStatusCompleted}
-	got, err := New(sequencer).Run(context.Background(), bridgeTarget{cursor: cursor}, "chat-1", 4, "factory-1", nil,
+	got, err := New(sequencer, bridgeTarget{cursor: cursor}, logging.NoopLogger{}).Run(context.Background(), "chat-1", 4, "factory-1", nil,
 		func(context.Context) (factorysessions.InvocationResult, error) {
 			<-nextStarted
 			return want, nil
@@ -186,11 +187,110 @@ func TestServiceRunReturnsTerminalTailSequencingFailure(t *testing.T) {
 func TestServiceRunDoesNotReplaceInvokeFailureWhenSubscriptionFails(t *testing.T) {
 	wantErr := errors.New("invoke failed")
 	want := factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusFailed}
-	got, err := New(&bridgeSequencer{didFirst: make(chan struct{})}).Run(
-		context.Background(), bridgeTarget{err: errors.New("subscribe failed")}, "chat-1", 1, "factory-1", nil,
+	got, err := New(&bridgeSequencer{didFirst: make(chan struct{})}, bridgeTarget{err: errors.New("subscribe failed")}, logging.NoopLogger{}).Run(
+		context.Background(), "chat-1", 1, "factory-1", nil,
 		func(context.Context) (factorysessions.InvocationResult, error) { return want, wantErr },
 	)
 	if !errors.Is(err, wantErr) || !reflect.DeepEqual(got, want) {
 		t.Fatalf("Run() = (%+v, %v), want (%+v, %v)", got, err, want, wantErr)
 	}
+}
+
+type bridgeLogCall struct {
+	level string
+	msg   string
+	kv    []any
+}
+
+type bridgeRecordingLogger struct{ calls []bridgeLogCall }
+
+func (l *bridgeRecordingLogger) Debug(msg string, kv ...any) {
+	l.calls = append(l.calls, bridgeLogCall{level: "debug", msg: msg, kv: append([]any(nil), kv...)})
+}
+func (l *bridgeRecordingLogger) Info(msg string, kv ...any) {
+	l.calls = append(l.calls, bridgeLogCall{level: "info", msg: msg, kv: append([]any(nil), kv...)})
+}
+func (*bridgeRecordingLogger) Warn(string, ...any)    {}
+func (*bridgeRecordingLogger) Error(string, ...any)   {}
+func (*bridgeRecordingLogger) Verbose(string, ...any) {}
+
+func TestServiceRunLogsSafeSuccessfulOutcome(t *testing.T) {
+	logger := &bridgeRecordingLogger{}
+	cursor := &factorysessions.ResponseEventCursor{
+		NextEvents: func(context.Context) ([]factorysessions.FactoryResponseEvent, error) {
+			return nil, factorysessions.ErrResponseEventSubscriptionClosed
+		},
+		DrainEvents: func() ([]factorysessions.FactoryResponseEvent, error) {
+			return nil, factorysessions.ErrResponseEventSubscriptionClosed
+		},
+		DetachCursor: func() {},
+	}
+	_, err := New(
+		&bridgeSequencer{didFirst: make(chan struct{})},
+		bridgeTarget{cursor: cursor},
+		logger,
+	).Run(context.Background(), "chat-1", 1, "factory-1", nil,
+		func(context.Context) (factorysessions.InvocationResult, error) {
+			return factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	if len(logger.calls) != 2 {
+		t.Fatalf("log calls = %+v, want start and outcome", logger.calls)
+	}
+	if logger.calls[0].level != "debug" || logger.calls[0].msg != "chat_sessions response bridge start" {
+		t.Fatalf("start log = %+v, want debug bridge start", logger.calls[0])
+	}
+	if logger.calls[1].level != "info" || logger.calls[1].msg != "chat_sessions response bridge outcome" {
+		t.Fatalf("outcome log = %+v, want info bridge outcome", logger.calls[1])
+	}
+	assertBridgeLogValue(t, logger.calls[0], "op", responseBridgeOperation)
+	assertBridgeLogValue(t, logger.calls[0], "chat_session_id", "chat-1")
+	assertBridgeLogValue(t, logger.calls[0], "factory_session_id", "factory-1")
+	assertBridgeLogValue(t, logger.calls[1], "terminal_status", string(factorysessions.InvocationTerminalStatusCompleted))
+	assertBridgeLogValue(t, logger.calls[1], "error_class", "")
+}
+
+func TestServiceRunLogsSafeFailedOutcome(t *testing.T) {
+	const unsafeSubscriptionError = "provider api key=secret"
+	logger := &bridgeRecordingLogger{}
+	_, err := New(
+		&bridgeSequencer{didFirst: make(chan struct{})},
+		bridgeTarget{err: errors.New(unsafeSubscriptionError)},
+		logger,
+	).Run(context.Background(), "chat-1", 1, "factory-1", nil,
+		func(context.Context) (factorysessions.InvocationResult, error) {
+			return factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}, nil
+		},
+	)
+	if err == nil {
+		t.Fatal("Run() error = nil, want subscription failure")
+	}
+	if len(logger.calls) != 2 {
+		t.Fatalf("log calls = %+v, want start and outcome", logger.calls)
+	}
+	assertBridgeLogValue(t, logger.calls[1], "terminal_status", string(factorysessions.InvocationTerminalStatusCompleted))
+	assertBridgeLogValue(t, logger.calls[1], "error_class", "response_event_subscription")
+	for _, call := range logger.calls {
+		if call.msg == unsafeSubscriptionError {
+			t.Fatalf("log message leaked unsafe subscription error %q", unsafeSubscriptionError)
+		}
+		for i := 1; i < len(call.kv); i += 2 {
+			if call.kv[i] == unsafeSubscriptionError {
+				t.Fatalf("log fields leaked unsafe subscription error %q: %+v", unsafeSubscriptionError, call)
+			}
+		}
+	}
+}
+
+func assertBridgeLogValue(t *testing.T, call bridgeLogCall, key string, want any) {
+	t.Helper()
+	for i := 0; i+1 < len(call.kv); i += 2 {
+		if call.kv[i] == key && reflect.DeepEqual(call.kv[i+1], want) {
+			return
+		}
+	}
+	t.Fatalf("log %+v missing %q=%#v", call, key, want)
 }

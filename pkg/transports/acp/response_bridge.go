@@ -6,9 +6,9 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 )
 
-// ResponseBridge starts subscribing to one Factory Session's response-event
-// stream through Factory Sessions' owner-published target-execution
-// capability. Its injected implementation sequences observed events onto the
+// ResponseBridge sequences one Factory Session's response-event stream through
+// the Chat Sessions-owned bridge constructed with its Factory Sessions
+// target-execution collaborator. It sequences observed events onto the
 // canonical Chat Session aggregate concurrently with invoke, then drains the
 // retained terminal tail before a successful prompt can return. An invocation
 // error remains authoritative; a bridge failure after a successful invocation
@@ -29,7 +29,6 @@ import (
 // branches in internal/stdio/session_prompt.go).
 type ResponseBridge func(
 	ctx context.Context,
-	subscriber factorysessions.TargetExecutionService,
 	chatSessionID string,
 	sessionVersion uint64,
 	factorySessionID string,

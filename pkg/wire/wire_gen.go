@@ -509,7 +509,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	targetExecutionService := provideACPServerFactoryTargetService(v83)
-	v84 := provideChatSessionsResponseBridge(chatsessionsService)
+	v84 := provideChatSessionsResponseBridge(chatsessionsService, targetExecutionService, loggingLogger)
 	responseBridge := provideACPServerResponseBridge(v84)
 	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, targetExecutionService, eventsService, wireAcpServerResolveHomeDir, responseBridge)
 	commandOperations := cli.CommandOperations{

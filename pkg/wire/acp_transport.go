@@ -171,19 +171,23 @@ func provideACPServer(
 func provideACPServerResponseBridge(bridge *chatsessionswire.ResponseBridge) acp.ResponseBridge {
 	return func(
 		ctx context.Context,
-		subscriber factorysessions.TargetExecutionService,
 		chatSessionID string,
 		sessionVersion uint64,
 		factorySessionID string,
 		liveDrain func(context.Context),
 		invoke func(context.Context) (factorysessions.InvocationResult, error),
 	) (factorysessions.InvocationResult, error) {
-		return bridge.Run(ctx, subscriber, chatSessionID, sessionVersion, factorySessionID, liveDrain, invoke)
+		return bridge.Run(ctx, chatSessionID, sessionVersion, factorySessionID, liveDrain, invoke)
 	}
 }
 
 // provideChatSessionsResponseBridge constructs the Chat Sessions-owned
-// response-event bridge over the singular production Chat Sessions service.
-func provideChatSessionsResponseBridge(chatSessions chatsessions.Service) *chatsessionswire.ResponseBridge {
-	return chatsessionswire.NewResponseBridge(chatSessions)
+// response-event bridge over the singular production Chat Sessions and
+// Factory Sessions services, plus the canonical logging abstraction.
+func provideChatSessionsResponseBridge(
+	chatSessions chatsessions.Service,
+	factoryTarget factorysessions.TargetExecutionService,
+	logger logging.Logger,
+) *chatsessionswire.ResponseBridge {
+	return chatsessionswire.NewResponseBridge(chatSessions, factoryTarget, logger)
 }

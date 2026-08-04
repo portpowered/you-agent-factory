@@ -1030,7 +1030,6 @@ func TestHandleSessionPromptLaterTurnCallsResponseBridgeAroundInvokeFactorySessi
 	var gotFactorySessionID string
 	responseBridge := func(
 		ctx context.Context,
-		_ factorysessions.TargetExecutionService,
 		chatSessionID string,
 		sessionVersion uint64,
 		factorySessionID string,

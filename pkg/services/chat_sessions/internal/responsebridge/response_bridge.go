@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -15,6 +16,7 @@ import (
 const (
 	responseBridgeSourceType events.SourceType = "factory_response_event"
 	responseBridgeSchemaID   events.SchemaID   = "factory.response_event.v1"
+	responseBridgeOperation                    = "BridgeFactoryResponseEvents"
 )
 
 // Sequencer is the narrow Chat Sessions capability the bridge uses to commit
@@ -27,12 +29,22 @@ type Sequencer interface {
 // Service owns the response-event draining lifecycle for the Chat Sessions
 // consumer. Its collaborator is injected once at construction.
 type Service struct {
-	sequencer Sequencer
+	sequencer     Sequencer
+	factoryTarget factorysessions.TargetExecutionService
+	logger        logging.Logger
 }
 
 // New constructs an inert response-event bridge.
-func New(sequencer Sequencer) *Service {
-	return &Service{sequencer: sequencer}
+func New(
+	sequencer Sequencer,
+	factoryTarget factorysessions.TargetExecutionService,
+	logger logging.Logger,
+) *Service {
+	return &Service{
+		sequencer:     sequencer,
+		factoryTarget: factoryTarget,
+		logger:        logging.EnsureLogger(logger),
+	}
 }
 
 // Run sequences one Factory Session's response stream while invoke and the
@@ -43,23 +55,30 @@ func New(sequencer Sequencer) *Service {
 // committed response-event tail was silently lost.
 func (s *Service) Run(
 	ctx context.Context,
-	subscriber factorysessions.TargetExecutionService,
 	chatSessionID string,
 	sessionVersion uint64,
 	factorySessionID string,
 	liveDrain func(context.Context),
 	invoke func(context.Context) (factorysessions.InvocationResult, error),
-) (factorysessions.InvocationResult, error) {
-	if s == nil || s.sequencer == nil || subscriber == nil {
+) (result factorysessions.InvocationResult, err error) {
+	if s == nil || s.sequencer == nil || s.factoryTarget == nil {
 		return invoke(ctx)
 	}
-	cursor, err := subscriber.SubscribeFactoryResponseEvents(ctx, factorysessions.ResponseEventSubscriptionRequest{SessionID: factorySessionID})
-	if err != nil {
+	s.logStart(chatSessionID, factorySessionID)
+	failureClass := ""
+	defer func() {
+		s.logOutcome(chatSessionID, factorySessionID, result.Status, failureClass)
+	}()
+
+	cursor, subscribeErr := s.factoryTarget.SubscribeFactoryResponseEvents(ctx, factorysessions.ResponseEventSubscriptionRequest{SessionID: factorySessionID})
+	if subscribeErr != nil {
 		result, invokeErr := invoke(ctx)
 		if invokeErr != nil {
+			failureClass = "factory_invocation"
 			return result, invokeErr
 		}
-		return result, fmt.Errorf("subscribe factory response events: %w", err)
+		failureClass = "response_event_subscription"
+		return result, fmt.Errorf("subscribe factory response events: %w", subscribeErr)
 	}
 	defer cursor.Detach()
 
@@ -91,12 +110,50 @@ func (s *Service) Run(
 		bridgeErr = s.drainTail(deliveryCtx, cursor, chatSessionID, &state)
 	}
 	if invokeErr != nil {
+		failureClass = "factory_invocation"
 		return result, invokeErr
 	}
 	if bridgeErr != nil {
+		failureClass = "response_event_bridge"
 		return result, fmt.Errorf("sequence factory response events: %w", bridgeErr)
 	}
 	return result, nil
+}
+
+// logStart records the bridge's stable identifiers without source response
+// payloads, prompt text, provider commands, or paths.
+func (s *Service) logStart(chatSessionID, factorySessionID string) {
+	if s == nil || s.logger == nil {
+		return
+	}
+	s.logger.Debug(
+		"chat_sessions response bridge start",
+		"op", responseBridgeOperation,
+		"chat_session_id", chatSessionID,
+		"factory_session_id", factorySessionID,
+	)
+}
+
+// logOutcome records the terminal bridge outcome through stable identifiers
+// and a bounded classification only. It intentionally excludes the response
+// payload and the underlying error string, either of which can carry unsafe
+// provider-originated data.
+func (s *Service) logOutcome(
+	chatSessionID, factorySessionID string,
+	status factorysessions.InvocationTerminalStatus,
+	failureClass string,
+) {
+	if s == nil || s.logger == nil {
+		return
+	}
+	s.logger.Info(
+		"chat_sessions response bridge outcome",
+		"op", responseBridgeOperation,
+		"chat_session_id", chatSessionID,
+		"factory_session_id", factorySessionID,
+		"terminal_status", string(status),
+		"error_class", failureClass,
+	)
 }
 
 type drainState struct {
