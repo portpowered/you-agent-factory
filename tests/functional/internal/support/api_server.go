@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -398,6 +399,16 @@ func readFactoryEventStreamRecoveryFromURL(t testing.TB, endpoint string) factor
 	return recovery
 }
 
+// sessionEventStreamRetainedCountHeader mirrors
+// pkg/services/factory_sessions/transports/http.SessionEventStreamRetainedCountHeader.
+// It carries the number of already-committed canonical Factory Events written
+// as the session event stream's retained-history prefix (stream.History)
+// before any live event is written, captured under the same lock that orders
+// every other canonical event append. Reading exactly that many leading
+// `data:` records gives a deterministic, point-in-time snapshot of committed
+// history without guessing completion from stream quiescence.
+const sessionEventStreamRetainedCountHeader = "X-Factory-Session-Retained-Event-Count"
+
 func readFactoryEventsFromURL(t testing.TB, endpoint string) []factoryapi.FactoryEvent {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -414,6 +425,16 @@ func readFactoryEventsFromURL(t testing.TB, endpoint string) []factoryapi.Factor
 		defer response.Body.Close()
 		body, _ := io.ReadAll(response.Body)
 		t.Fatalf("GET factory events status = %d url = %q body = %s", response.StatusCode, endpoint, strings.TrimSpace(string(body)))
+	}
+
+	retainedHeader := strings.TrimSpace(response.Header.Get(sessionEventStreamRetainedCountHeader))
+	retainedCount, err := strconv.Atoi(retainedHeader)
+	if err != nil {
+		defer response.Body.Close()
+		t.Fatalf(
+			"GET factory events url = %q: missing or invalid %s header (%q): %v",
+			endpoint, sessionEventStreamRetainedCountHeader, retainedHeader, err,
+		)
 	}
 
 	events := make(chan factoryapi.FactoryEvent, 256)
@@ -438,35 +459,23 @@ func readFactoryEventsFromURL(t testing.TB, endpoint string) []factoryapi.Factor
 		}
 	}()
 
-	var collected []factoryapi.FactoryEvent
+	collected := make([]factoryapi.FactoryEvent, 0, retainedCount)
 	deadline := time.NewTimer(functionalServerReadyTimeout)
 	defer deadline.Stop()
-	var quiet *time.Timer
-	var quietC <-chan time.Time
-	for {
+	for len(collected) < retainedCount {
 		select {
 		case event := <-events:
 			collected = append(collected, event)
-			if quiet == nil {
-				quiet = time.NewTimer(25 * time.Millisecond)
-			} else {
-				if !quiet.Stop() {
-					select {
-					case <-quiet.C:
-					default:
-					}
-				}
-				quiet.Reset(25 * time.Millisecond)
-			}
-			quietC = quiet.C
 		case err := <-errs:
 			t.Fatalf("read factory events: %v", err)
-		case <-quietC:
-			return collected
 		case <-deadline.C:
-			t.Fatalf("timed out reading factory event history")
+			t.Fatalf(
+				"timed out reading factory event history: got %d of %d retained events",
+				len(collected), retainedCount,
+			)
 		}
 	}
+	return collected
 }
 
 // GetFactoryResponseEventsAt reads retained public Factory response events
