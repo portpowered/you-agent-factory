@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -112,14 +113,18 @@ func (s *Service) resolveSessionBuildDependencies(
 // was never adopted into base's shared provider lifecycle sink -- either
 // because construction failed after the rebind, or because the sink had
 // already closed by the time adoption was attempted. Without this, that
-// instance would never be closed by anything.
-func releaseUnadoptedProviders(deps sessionBuildDependencies) {
+// instance would never be closed by anything. The returned error is the
+// fallback Close's own failure, if any, so a caller can preserve it alongside
+// the primary error instead of discarding evidence that the release itself
+// did not succeed.
+func releaseUnadoptedProviders(deps sessionBuildDependencies) error {
 	if deps.reboundProviders == nil {
-		return
+		return nil
 	}
 	if lifecycle, ok := deps.reboundProviders.(providers.Lifecycle); ok {
-		_ = lifecycle.Close(context.Background())
+		return lifecycle.Close(context.Background())
 	}
+	return nil
 }
 
 // constructSessionBuildRuntime builds the independent Service instance for
@@ -197,7 +202,7 @@ func (s *Service) constructSessionBuildRuntime(deps sessionBuildDependencies) (*
 func (s *Service) newSessionBuildRuntime(
 	providerRunner, scriptRunner workers.CommandRunner,
 	progressPublisher workers.ProgressPublisher,
-) (*Service, error) {
+) (runtime *Service, err error) {
 	if s == nil || s.scriptFactory == nil {
 		return nil, fmt.Errorf("construct Worker runtime services: base service is required")
 	}
@@ -207,23 +212,26 @@ func (s *Service) newSessionBuildRuntime(
 	}
 	adopted := false
 	defer func() {
-		if !adopted {
-			releaseUnadoptedProviders(deps)
+		if adopted {
+			return
+		}
+		if releaseErr := releaseUnadoptedProviders(deps); releaseErr != nil {
+			err = errors.Join(err, fmt.Errorf("release unadopted provider lifecycle: %w", releaseErr))
 		}
 	}()
 
-	runtime, err := s.constructSessionBuildRuntime(deps)
+	built, err := s.constructSessionBuildRuntime(deps)
 	if err != nil {
 		return nil, err
 	}
 	if s.providerLifecycles != nil {
-		runtime.providerLifecycles = s.providerLifecycles
+		built.providerLifecycles = s.providerLifecycles
 	}
-	if deps.reboundProviders != nil && !runtime.providerLifecycles.Add(deps.reboundProviders) {
+	if deps.reboundProviders != nil && !built.providerLifecycles.Add(deps.reboundProviders) {
 		return nil, fmt.Errorf("construct Worker runtime services: base runtime is already closed")
 	}
 	adopted = true
-	return runtime, nil
+	return built, nil
 }
 
 // NewSessionBuildRuntime returns an independently constructed Workers runtime

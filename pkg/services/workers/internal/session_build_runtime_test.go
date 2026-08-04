@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -250,6 +251,96 @@ func TestNewSessionBuildRuntimeReleasesReboundProvidersWhenConstructionFailsAfte
 	}
 	if *closed != 1 {
 		t.Fatalf("rebound Providers service closed %d times after a construction failure, want exactly 1 (released instead of leaked)", *closed)
+	}
+}
+
+// failingCloseProvidersService is a providers.Service fake that also
+// implements providers.Lifecycle, whose Close always fails with a sentinel
+// error. Tests use it to prove a fallback release failure is preserved and
+// observable on the caller's returned error, rather than silently discarded.
+type failingCloseProvidersService struct {
+	testProvidersService
+}
+
+var errSentinelLifecycleCloseFailure = errors.New("sentinel: lifecycle close failed")
+
+func (failingCloseProvidersService) Close(context.Context) error {
+	return errSentinelLifecycleCloseFailure
+}
+
+// TestNewSessionBuildRuntimePreservesFallbackReleaseErrorAfterConstructionFailure
+// proves the post-merge blocking finding is fixed: when a rebound Providers
+// instance's fallback Close (triggered because construction failed after the
+// rebind) itself fails, that failure is joined onto the returned error
+// instead of being discarded with `_ = lifecycle.Close(...)`.
+func TestNewSessionBuildRuntimePreservesFallbackReleaseErrorAfterConstructionFailure(t *testing.T) {
+	t.Parallel()
+
+	base := newTestServiceWithDependencies(t, injectedProviderRunner{}, injectedProviderRunner{}, workers.ProgressPublisher(testProgressPublisher), zap.NewNop())
+	base.providerLifecycles = &ownedProviderLifecycles{}
+	base.providerRegistry = fakeProviderRegistry{}
+	base.factoryDocs = nil
+
+	base.providerRegistryRebinder = func(workers.CommandRunner) (workers.ProviderRegistry, providers.Service, error) {
+		return nil, failingCloseProvidersService{}, nil
+	}
+
+	runtime, err := base.newSessionBuildRuntime(taggedCommandRunner{tag: "build"}, nil, nil)
+	if err == nil {
+		t.Fatal("newSessionBuildRuntime() error = nil, want a construction error (nil Factory docs loader) joined with the fallback release failure")
+	}
+	if runtime != nil {
+		t.Fatal("newSessionBuildRuntime() returned a non-nil runtime after a construction failure")
+	}
+	if !errors.Is(err, errSentinelLifecycleCloseFailure) {
+		t.Fatalf("newSessionBuildRuntime() error = %v, want it to preserve the fallback release's sentinel error via errors.Is", err)
+	}
+}
+
+// TestNewSessionBuildRuntimePreservesFallbackReleaseErrorWhenBaseClosesBeforeAdoption
+// proves the other caller of releaseUnadoptedProviders -- the close-before-
+// adoption race -- also preserves a fallback release failure instead of
+// discarding it.
+func TestNewSessionBuildRuntimePreservesFallbackReleaseErrorWhenBaseClosesBeforeAdoption(t *testing.T) {
+	t.Parallel()
+
+	base := newTestServiceWithDependencies(t, injectedProviderRunner{}, injectedProviderRunner{}, workers.ProgressPublisher(testProgressPublisher), zap.NewNop())
+	base.providerLifecycles = &ownedProviderLifecycles{}
+	base.providerRegistry = fakeProviderRegistry{}
+
+	rebinderEntered := make(chan struct{})
+	proceed := make(chan struct{})
+	base.providerRegistryRebinder = func(workers.CommandRunner) (workers.ProviderRegistry, providers.Service, error) {
+		close(rebinderEntered)
+		<-proceed
+		return nil, failingCloseProvidersService{}, nil
+	}
+
+	type buildResult struct {
+		runtime *Service
+		err     error
+	}
+	resultCh := make(chan buildResult, 1)
+	go func() {
+		runtime, err := base.newSessionBuildRuntime(taggedCommandRunner{tag: "blocked-build"}, nil, nil)
+		resultCh <- buildResult{runtime: runtime, err: err}
+	}()
+
+	<-rebinderEntered
+	if err := base.Close(context.Background()); err != nil {
+		t.Fatalf("base.Close() error = %v", err)
+	}
+	close(proceed)
+
+	result := <-resultCh
+	if result.err == nil {
+		t.Fatal("newSessionBuildRuntime() error = nil, want an error because base already closed before adoption")
+	}
+	if result.runtime != nil {
+		t.Fatal("newSessionBuildRuntime() returned a non-nil runtime backed by an already-closed provider lifecycle sink")
+	}
+	if !errors.Is(result.err, errSentinelLifecycleCloseFailure) {
+		t.Fatalf("newSessionBuildRuntime() error = %v, want it to preserve the fallback release's sentinel error via errors.Is", result.err)
 	}
 }
 
