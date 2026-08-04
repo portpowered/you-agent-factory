@@ -81,10 +81,11 @@ func (s *Store) RequestControl(_ context.Context, req chatsessions.RequestContro
 // ControlIntentState transition table. A terminal resolution always uses the
 // immutable captured turn, never a caller-selected successor. A completed
 // CLOSE additionally atomically terminalizes its captured turn (when still
-// active), target episode, and Chat Session after the transport has already
-// closed the exact captured Factory Session. The one Store lock makes that
-// lifecycle commit indivisible: no observer can see a completed close intent
-// alongside an open Chat Session or episode.
+// active), target episode, and Chat Session, and detaches every delivery
+// attachment after the transport has already closed the exact captured Factory
+// Session. The one Store lock makes that lifecycle commit indivisible: no
+// observer can see a completed close intent alongside an open Chat Session,
+// episode, or live attachment.
 func (s *Store) AdvanceControl(_ context.Context, req chatsessions.AdvanceControlRequest) (result chatsessions.AdvanceControlResult, err error) {
 	s.logStart("AdvanceControl", req.SessionID)
 	defer func() {
@@ -195,7 +196,21 @@ func (s *Store) completeCloseIntent(record sessionRecord, intent chatsessions.Co
 	record.turns[intent.TurnID] = updatedTurn
 	record.turnSequence = updatedSequence
 	record.session = updatedSession
+	record.attachments = detachedAttachments(record.attachments)
 	return record, nil
+}
+
+// detachedAttachments makes a detached copy of every attachment so a failed
+// close validation cannot mutate the record still held by the Store. A closed
+// Chat Session has no live delivery owner, while the preserved IDs and cursors
+// continue to support process-local retained-history inspection.
+func detachedAttachments(attachments map[string]chatsessions.Attachment) map[string]chatsessions.Attachment {
+	detached := make(map[string]chatsessions.Attachment, len(attachments))
+	for id, attachment := range attachments {
+		attachment.Detached = true
+		detached[id] = attachment
+	}
+	return detached
 }
 
 // closeCapturedTurn terminalizes a still-active captured turn as CANCELED.

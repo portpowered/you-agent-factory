@@ -642,11 +642,24 @@ func TestStore_RequestControl_RepeatedDistinctIdentitiesNeverCollide(t *testing.
 // TestStore_AdvanceControl_CompletedCloseAtomicallyTerminalizesLifecycle
 // proves a CLOSE effect that has already succeeded is recorded as one Chat
 // lifecycle commit: the intent, captured running turn, current episode, and
-// session all become terminal before any successor can be admitted.
+// session all become terminal, and every delivery attachment is detached,
+// before any successor can be admitted.
 func TestStore_AdvanceControl_CompletedCloseAtomicallyTerminalizesLifecycle(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 8, 4, 14, 0, 0, 0, time.UTC)
 	store, session, turn := newActiveTurnTestSession(t, now)
+	firstAttachment, err := store.Attach(ctx, chatsessions.AttachRequest{
+		SessionID: session.ID, ConnectionID: "conn-close-first", Interactive: true,
+	})
+	if err != nil {
+		t.Fatalf("Attach first close observer: %v", err)
+	}
+	secondAttachment, err := store.Attach(ctx, chatsessions.AttachRequest{
+		SessionID: session.ID, ConnectionID: "conn-close-second", Interactive: true,
+	})
+	if err != nil {
+		t.Fatalf("Attach second close observer: %v", err)
+	}
 	if _, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
 		SessionID: session.ID, TurnID: turn.ID, Next: chatsessions.TurnStateRunning,
 	}); err != nil {
@@ -683,6 +696,14 @@ func TestStore_AdvanceControl_CompletedCloseAtomicallyTerminalizesLifecycle(t *t
 	}
 	if closed.Episode.State != chatsessions.TargetEpisodeStateClosed || closed.Episode.ClosedAt == nil {
 		t.Fatalf("closed episode = %#v, want a terminal episode with ClosedAt", closed.Episode)
+	}
+	store.mu.RLock()
+	attachments := store.sessions[session.ID].attachments
+	firstDetached := attachments[firstAttachment.Attachment.ID].Detached
+	secondDetached := attachments[secondAttachment.Attachment.ID].Detached
+	store.mu.RUnlock()
+	if !firstDetached || !secondDetached {
+		t.Fatalf("close attachments detached = (%t, %t), want both detached", firstDetached, secondDetached)
 	}
 	if _, err := store.StartTurn(ctx, chatsessions.StartTurnRequest{
 		RequestID: startTurnRequestID("post-close"), SessionID: session.ID, ExpectedVersion: closed.Session.Version,
