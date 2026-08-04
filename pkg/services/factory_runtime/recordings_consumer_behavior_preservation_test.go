@@ -165,8 +165,8 @@ type preservedTerminalRecording struct {
 	finishedAt    time.Time
 }
 
-func (*preservedTerminalRecording) BindRecordingService(
-	recordings.Service,
+func (*preservedTerminalRecording) BindRecordingLifecycle(
+	recordings.RecordingLifecycle,
 	recordings.CanonicalEventScope,
 ) error {
 	return nil

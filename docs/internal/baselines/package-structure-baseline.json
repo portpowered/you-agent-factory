@@ -2335,7 +2335,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/recordings",
-      "target": "pkg/services/recordings/contracts.go:Service,pkg/services/recordings/lifecycle_capability.go:RecordingLifecycle"
+      "target": "pkg/services/recordings/contracts.go:Service,pkg/services/recordings/lifecycle_capability.go:RecordingLifecycle,pkg/services/recordings/runtime_recording_binder.go:RuntimeRecordingBinder"
     },
     {
       "rule": "service-root-interface-count",

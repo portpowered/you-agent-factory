@@ -138,9 +138,6 @@ func openRuntime(
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings runtime recorder factory is required")
 	}
 	var runtimeRecording recordings.RuntimeRecorder
-	type runtimeRecordingBinder interface {
-		BindRecordingService(recordings.Service, recordings.CanonicalEventScope) error
-	}
 	sessionRecorderFactory := func(
 		flushInterval time.Duration,
 		loaded factorydefinitions.LoadedFactorySource,
@@ -414,22 +411,12 @@ func openRuntime(
 	if recordingService == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings factory returned nil service")
 	}
-	if runtimeRecording != nil {
-		binder, ok := runtimeRecording.(runtimeRecordingBinder)
-		if !ok {
-			return runtimeProducts{}, fmt.Errorf("construct runtime scope: runtime recording does not support Recordings binding")
-		}
-		if err := binder.BindRecordingService(
-			recordingService,
-			recordings.CanonicalEventScope{
-				FactorySessionID: factorysessions.DefaultSessionID,
-			},
-		); err != nil {
-			return runtimeProducts{}, fmt.Errorf(
-				"construct runtime scope: bind runtime recording: %w",
-				err,
-			)
-		}
+	if err := bindRuntimeRecordingLifecycle(
+		runtimeRecording,
+		recordingService,
+		recordings.CanonicalEventScope{FactorySessionID: factorysessions.DefaultSessionID},
+	); err != nil {
+		return runtimeProducts{}, err
 	}
 	if processRuntimeFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions process runtime factory is required")
@@ -474,4 +461,31 @@ func openRuntime(
 		cleanup.Close,
 	)
 	return opened, nil
+}
+
+// bindRuntimeRecordingLifecycle explicitly narrows the constructed Recordings
+// Service down to the RecordingLifecycle capability and binds the runtime
+// recorder to it, rather than handing the recorder the broad Service or
+// discovering binding through a caller-local type assertion. A nil
+// runtimeRecording (recording disabled) is a no-op.
+func bindRuntimeRecordingLifecycle(
+	runtimeRecording recordings.RuntimeRecorder,
+	recordingService recordings.Service,
+	scope recordings.CanonicalEventScope,
+) error {
+	if runtimeRecording == nil {
+		return nil
+	}
+	recordingLifecycle, ok := recordingService.(recordings.RecordingLifecycle)
+	if !ok {
+		return fmt.Errorf("construct runtime scope: Recordings service does not expose the recording lifecycle capability")
+	}
+	binder, ok := runtimeRecording.(recordings.RuntimeRecordingBinder)
+	if !ok {
+		return fmt.Errorf("construct runtime scope: runtime recording does not support Recordings binding")
+	}
+	if err := binder.BindRecordingLifecycle(recordingLifecycle, scope); err != nil {
+		return fmt.Errorf("construct runtime scope: bind runtime recording: %w", err)
+	}
+	return nil
 }

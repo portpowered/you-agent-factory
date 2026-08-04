@@ -60,7 +60,11 @@ func TestRecordingsRootExposesOneServiceAndNoOperationalFunctions(t *testing.T) 
 	}
 
 	sort.Strings(interfaces)
-	want := []string{"contracts.go:Service", "lifecycle_capability.go:RecordingLifecycle"}
+	want := []string{
+		"contracts.go:Service",
+		"lifecycle_capability.go:RecordingLifecycle",
+		"runtime_recording_binder.go:RuntimeRecordingBinder",
+	}
 	if len(interfaces) != len(want) {
 		t.Fatalf("Recordings root interfaces = %v, want %v", interfaces, want)
 	}

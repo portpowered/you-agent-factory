@@ -68,8 +68,8 @@ type runtimeRecordingsRecorderStub struct {
 	recordedEvents int
 }
 
-func (*runtimeRecordingsRecorderStub) BindRecordingService(
-	recordings.Service,
+func (*runtimeRecordingsRecorderStub) BindRecordingLifecycle(
+	recordings.RecordingLifecycle,
 	recordings.CanonicalEventScope,
 ) error {
 	return nil

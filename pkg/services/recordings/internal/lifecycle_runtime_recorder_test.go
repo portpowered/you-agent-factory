@@ -54,8 +54,8 @@ func TestLifecycleRuntimeRecorderUsesComposedRootForBindingFailuresAndFinalizati
 		Payload: []byte(`{"workId":"work-1"}`),
 	})
 	scope := recordings.CanonicalEventScope{FactorySessionID: "~default"}
-	if err := recorder.BindRecordingService(root, scope); err != nil {
-		t.Fatalf("BindRecordingService: %v", err)
+	if err := recorder.BindRecordingLifecycle(root.(recordings.RecordingLifecycle), scope); err != nil {
+		t.Fatalf("BindRecordingLifecycle: %v", err)
 	}
 
 	if err := recorder.Flush(); err != nil {
@@ -67,7 +67,7 @@ func TestLifecycleRuntimeRecorderUsesComposedRootForBindingFailuresAndFinalizati
 	}
 
 	status, err := root.QueryRecordingStatus(recordings.RecordingStatusRequest{
-		RecordingID: recorder.recordingID,
+		RecordingID: recordings.RecordingID(recorder.recordingID),
 	})
 	if err != nil {
 		t.Fatalf("QueryRecordingStatus: %v", err)
@@ -112,10 +112,10 @@ func TestReplayRecordingSnapshotWriterPreservesReplayCompatibility(t *testing.T)
 		runtimeRecorderTestClock{now: startedAt},
 	)
 	recorder := newLifecycleRecorderForTest(t, startedAt, path)
-	if err := recorder.BindRecordingService(root, recordings.CanonicalEventScope{
+	if err := recorder.BindRecordingLifecycle(root.(recordings.RecordingLifecycle), recordings.CanonicalEventScope{
 		FactorySessionID: "~default",
 	}); err != nil {
-		t.Fatalf("BindRecordingService: %v", err)
+		t.Fatalf("BindRecordingLifecycle: %v", err)
 	}
 	if err := recorder.Finalize(finishedAt); err != nil {
 		t.Fatalf("Finalize: %v", err)
@@ -196,8 +196,8 @@ func TestLifecycleRuntimeRecorderStopAndIdempotentRecordEvent(t *testing.T) {
 	)
 	recorder := newLifecycleRecorderForTest(t, startedAt, "recording-stop.json")
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-stop"}
-	if err := recorder.BindRecordingService(root, scope); err != nil {
-		t.Fatalf("BindRecordingService: %v", err)
+	if err := recorder.BindRecordingLifecycle(root.(recordings.RecordingLifecycle), scope); err != nil {
+		t.Fatalf("BindRecordingLifecycle: %v", err)
 	}
 	event := factorydefinitions.FactoryEvent{
 		Id:   "dup-event",

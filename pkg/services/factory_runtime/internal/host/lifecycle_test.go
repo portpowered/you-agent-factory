@@ -44,8 +44,8 @@ type terminalRecording struct {
 	finishedAt    time.Time
 }
 
-func (*terminalRecording) BindRecordingService(
-	recordings.Service,
+func (*terminalRecording) BindRecordingLifecycle(
+	recordings.RecordingLifecycle,
 	recordings.CanonicalEventScope,
 ) error {
 	return nil
