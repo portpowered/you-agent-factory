@@ -18,7 +18,10 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const acpHelperEnvironment = "YOU_TEST_ACP_AGENT_HELPER"
+const (
+	acpHelperEnvironment      = "YOU_TEST_ACP_AGENT_HELPER"
+	acpRetryMarkerEnvironment = "YOU_TEST_ACP_RETRY_MARKER"
+)
 
 func TestFactoryRunRoutesExecutorProviderThroughACPAdapter(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
@@ -47,6 +50,39 @@ func TestFactoryRunRoutesExecutorProviderThroughACPAdapter(t *testing.T) {
 		t.Fatalf("legacy provider calls = %d, want 0; ACP must be selected by executorProvider", got)
 	}
 	assertACPProviderSession(t, events)
+}
+
+// TestFactoryRunRetriesACPProviderByResumingExactSession exercises the public
+// Factory execution path through an ACP server error. The helper accepts a
+// fresh session only before it writes the failure marker, then accepts only
+// session/load with the original opaque id. A passing run therefore proves the
+// worker retry kept its Provider Session and called Providers.Continue rather
+// than silently opening a new ACP session.
+func TestFactoryRunRetriesACPProviderByResumingExactSession(t *testing.T) {
+	const sessionID = "acp-session-retry-resume"
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"retry ACP through its prior session"}`))
+	writeACPWorker(t, dir, "cursor-acp")
+	t.Setenv(acpHelperEnvironment, "retry-resume")
+	t.Setenv(acpRetryMarkerEnvironment, filepath.Join(t.TempDir(), "first-prompt-failed"))
+	t.Setenv("YOU_TEST_ACP_SESSION_ID", sessionID)
+
+	var processStarts atomic.Int32
+	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
+		PlatformProcessCommandFactory: acpHelperCommandFactory(&processStarts),
+		ProvidersExecutableLocator:    availableExecutableLocator{},
+	}, 20*time.Second)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
+		t.Fatalf("completed work = %d, want 1; events=%#v", got, events)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
+		t.Fatalf("failed work = %d, want 0; events=%#v", got, events)
+	}
+	if got := processStarts.Load(); got != 2 {
+		t.Fatalf("ACP process starts = %d, want 2 for the failed attempt and resumed retry", got)
+	}
+	assertProviderSessionID(t, events, "cursor-acp", sessionID)
 }
 
 func TestFactoryRunRetainsLegacyNamedExecutorProviderCompatibility(t *testing.T) {
@@ -103,6 +139,10 @@ func assertACPProviderSession(t *testing.T, events []factoryapi.FactoryEvent) {
 }
 
 func assertProviderSession(t *testing.T, events []factoryapi.FactoryEvent, provider string) {
+	assertProviderSessionID(t, events, provider, "acp-session-functional-1")
+}
+
+func assertProviderSessionID(t *testing.T, events []factoryapi.FactoryEvent, provider, sessionID string) {
 	t.Helper()
 	for _, event := range events {
 		if event.Type != factoryapi.FactoryEventTypeModelResponse {
@@ -115,8 +155,8 @@ func assertProviderSession(t *testing.T, events []factoryapi.FactoryEvent, provi
 		if payload.ProviderSession == nil || payload.ProviderSession.Provider == nil || payload.ProviderSession.Id == nil {
 			continue
 		}
-		if *payload.ProviderSession.Provider != provider || *payload.ProviderSession.Id != "acp-session-functional-1" {
-			t.Fatalf("Provider Session = %#v, want %s/acp-session-functional-1", payload.ProviderSession, provider)
+		if *payload.ProviderSession.Provider != provider || *payload.ProviderSession.Id != sessionID {
+			t.Fatalf("Provider Session = %#v, want %s/%s", payload.ProviderSession, provider, sessionID)
 		}
 		return
 	}
@@ -235,7 +275,7 @@ func (p *legacyProvider) Infer(context.Context, workers.ProviderInferenceRequest
 
 func TestACPAgentHelperProcess(t *testing.T) {
 	mode := os.Getenv(acpHelperEnvironment)
-	if mode != "1" && mode != "fail" && mode != "auth" && mode != "model" && mode != "resource" && mode != "content" && mode != "version" && mode != "init-fail" && mode != "stderr" && mode != "malformed" && mode != "eof" && mode != "block" && mode != "isolate" && mode != "unsupported" && mode != "persistent" && mode != "serialize" && mode != "crash-once" && mode != "spawn" && mode != "tournament" && mode != "cancelled-response" && mode != "resume" && mode != "resume-not-found" {
+	if mode != "1" && mode != "fail" && mode != "auth" && mode != "model" && mode != "resource" && mode != "content" && mode != "version" && mode != "init-fail" && mode != "stderr" && mode != "malformed" && mode != "eof" && mode != "block" && mode != "isolate" && mode != "unsupported" && mode != "persistent" && mode != "serialize" && mode != "crash-once" && mode != "spawn" && mode != "tournament" && mode != "cancelled-response" && mode != "resume" && mode != "resume-not-found" && mode != "retry-resume" {
 		return
 	}
 	if err := runFunctionalRPCPeer(mode, os.Stdin, os.Stdout, os.Stderr); err != nil {

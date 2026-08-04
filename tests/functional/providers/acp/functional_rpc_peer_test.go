@@ -74,7 +74,7 @@ func (p *functionalRPCPeer) serve() error {
 				authMethods = `[{"id":"login","name":"Agent login"},{"type":"env_var","id":"env-login","name":"Env var login","vars":[]},{"type":"terminal","id":"terminal-login","name":"Terminal login"}]`
 			}
 			agentCapabilities := `{}`
-			if p.mode == "resume" || p.mode == "resume-not-found" {
+			if p.mode == "resume" || p.mode == "resume-not-found" || p.mode == "retry-resume" {
 				// A real ACP agent that truthfully supports resume advertises
 				// loadSession - matched by resolveContinuationProvider's live
 				// negotiated-capability check.
@@ -93,6 +93,14 @@ func (p *functionalRPCPeer) serve() error {
 			}
 			if p.mode == "resume" || p.mode == "resume-not-found" {
 				return fmt.Errorf("unexpected session/new during a continuation - the continued attempt must resume through session/load instead of starting a fresh session")
+			}
+			if p.mode == "retry-resume" {
+				marker := os.Getenv(acpRetryMarkerEnvironment)
+				if _, err := os.Stat(marker); err == nil {
+					return fmt.Errorf("unexpected session/new after retryable ACP failure - the retry must resume through session/load")
+				} else if !os.IsNotExist(err) {
+					return fmt.Errorf("inspect ACP retry marker: %w", err)
+				}
 			}
 			config := `[]`
 			if p.mode == "model" {
@@ -123,6 +131,15 @@ func (p *functionalRPCPeer) serve() error {
 			}
 			if err := json.Unmarshal(request.Params, &params); err != nil {
 				return fmt.Errorf("decode session/load: %w", err)
+			}
+			if p.mode == "retry-resume" {
+				marker := os.Getenv(acpRetryMarkerEnvironment)
+				if _, err := os.Stat(marker); err != nil {
+					return fmt.Errorf("session/load before first retryable prompt failure: %w", err)
+				}
+				if params.SessionID != p.sessionID {
+					return fmt.Errorf("session/load id = %q, want original %q", params.SessionID, p.sessionID)
+				}
 			}
 			p.sessionID = params.SessionID
 			p.sessions++
@@ -175,6 +192,20 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 				return err
 			}
 			return fmt.Errorf("intentional ACP peer crash")
+		}
+	}
+	if p.mode == "retry-resume" {
+		marker := os.Getenv(acpRetryMarkerEnvironment)
+		if marker == "" {
+			return fmt.Errorf("retry-resume mode requires %s", acpRetryMarkerEnvironment)
+		}
+		if _, err := os.Stat(marker); os.IsNotExist(err) {
+			if err := os.WriteFile(marker, []byte("first prompt failed"), 0o600); err != nil {
+				return err
+			}
+			return p.respondError(request.ID, -32001, "temporarily unavailable", nil)
+		} else if err != nil {
+			return fmt.Errorf("inspect ACP retry marker: %w", err)
 		}
 	}
 	if p.mode == "serialize" && p.sessions == 1 {

@@ -43,6 +43,7 @@ func TestProtocolFailuresMapToStableExecuteFailureKinds(t *testing.T) {
 		{mode: "malformed", want: providers.ExecuteFailureKindUnknown},
 		{mode: "eof", want: providers.ExecuteFailureKindUnknown},
 		{mode: "fail", want: providers.ExecuteFailureKindUnknown, wantSessionID: "acp-session-service-1"},
+		{mode: "server-failure", want: providers.ExecuteFailureKindDependency, wantSessionID: "acp-session-service-1"},
 	} {
 		t.Run(test.mode, func(t *testing.T) {
 			var starts atomic.Int32
@@ -356,6 +357,9 @@ func runProtocolFailurePeer(mode string, stdin io.Reader, stdout, stderr io.Writ
 		case "session/prompt":
 			if mode == "fail" {
 				return writeRPCError(writer, request.ID, -32603, "Internal error")
+			}
+			if mode == "server-failure" {
+				return writeRPCError(writer, request.ID, -32001, "temporarily unavailable")
 			}
 			if mode == "cancelled-turn" {
 				return writeRPCResult(writer, request.ID, `{"stopReason":"cancelled"}`)
