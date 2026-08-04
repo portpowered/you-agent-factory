@@ -214,7 +214,7 @@ it and are migration inputs to L1, not new vocabulary.
 | `pkg/wire/**`, `pkg/root/**`, `pkg/initializer/**` | Shared, append-only, normal rebase. No lease. (D3) |
 | `pkg/services/workers/response_drafts.go` | L2 may harden; no lane may extend the taxonomy. |
 | `factory_sessions/internal/{responseeventstore,responsestream,cursors}` | L1 migrates these into `pkg/services/events`. L2/L3 do not touch them while L1 is active. |
-| `pkg/services/factory_sessions` root | L1 and L4 read through shims only. L2 owns changes. |
+| `pkg/services/factory_sessions` root | L1 directly consumes the owner-published `factory_sessions.TargetExecutionService` for ACP Factory targets. L4 currently has no Factory Sessions consumer; any future L4 consumer-owned shim must be registered in the [canonical ACP consumer-owned shim register](../root-consolidation/proposal.md#canonical-acp-consumer-owned-shim-register) when created. L2 owns changes. |
 | Recordings JSONL artifact format | Recordings-owned. Any lane needing a field files it as an L2 or L3 request. |
 | `docs/architecture/{architecture,data-model,event-streams}.md` | L1 owns the reconciliation pass (§6). |
 

@@ -35,9 +35,14 @@ feature-shaped.
 
 ### L2 explicitly defers to L3
 
-- **Factory Sessions root sealing.** All 45 methods stay as they are. L1 and L4
-  read through thin shims (`D4`). L4 never calls Factory Sessions for Worker
-  execution, so nothing in L4 blocks on it.
+- **Factory Sessions root sealing.** All 45 methods stay as they are. The
+  current L1 ACP Factory-target composition directly consumes the
+  owner-published `factory_sessions.TargetExecutionService`; its former Chat
+  Sessions shim is retired in the [canonical ACP consumer-owned shim
+  register](#canonical-acp-consumer-owned-shim-register) (`D4`). A future L4
+  consumer-owned Factory Sessions shim must be registered there when created.
+  L4 currently never calls Factory Sessions for Worker execution, so nothing
+  in L4 blocks on it.
 - **`runtimeOpener` / `RuntimeOpeningFactory` retirement.**
   `runtimeopening.NewFactory` takes **44 parameters**
   (`pkg/services/factory_sessions/internal/runtimeopening/factory.go:78-123`)
