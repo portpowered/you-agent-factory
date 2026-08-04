@@ -1,6 +1,7 @@
 package wire_test
 
 import (
+	"context"
 	"errors"
 	"os"
 	"strings"
@@ -190,6 +191,66 @@ func TestRecordingReplayArtifactsRuntimeConstructionIsInert(t *testing.T) {
 	}
 	if built {
 		t.Fatal("runtime artifact builder called by an unbound artifact operation")
+	}
+}
+
+// TestRecordingReplayArtifactsRuntimeBindsAndForwardsOperations proves that
+// the same phase-aware capability used for runtime opening becomes the
+// canonical finalized-recording capability after binding. Each public
+// operation is observed through its returned result rather than implementation
+// topology.
+func TestRecordingReplayArtifactsRuntimeBindsAndForwardsOperations(t *testing.T) {
+	t.Parallel()
+
+	artifacts := &phaseReplayArtifactsStub{}
+	lifecycle := &phaseRecordingLifecycleStub{}
+	builderCalls := 0
+	capability := recordingswire.NewRecordingReplayArtifactsFactory(
+		nil,
+		nil,
+		nil,
+		func(
+			recordings.Ledger,
+			recordings.ProjectionService,
+		) (recordings.RecordingReplayArtifacts, recordings.RecordingLifecycle, error) {
+			builderCalls++
+			return artifacts, lifecycle, nil
+		},
+	)()
+
+	bound, err := capability.BindRecordingLifecycle(nil, nil)
+	if err != nil || bound != lifecycle || builderCalls != 1 {
+		t.Fatalf("BindRecordingLifecycle() = (%#v, %v), builder calls %d; want lifecycle once", bound, err, builderCalls)
+	}
+	if _, err := capability.LoadReplay(recordings.LoadReplayRequest{RecordingID: "recording-1"}); err != nil {
+		t.Fatalf("LoadReplay() error = %v", err)
+	}
+	if _, err := capability.BuildArtifact(recordings.BuildArtifactRequest{RecordingID: "recording-1"}); err != nil {
+		t.Fatalf("BuildArtifact() error = %v", err)
+	}
+	if _, err := capability.ValidateArtifact(recordings.ValidateArtifactRequest{}); err != nil {
+		t.Fatalf("ValidateArtifact() error = %v", err)
+	}
+	if _, err := capability.EncodeArtifact(recordings.EncodeArtifactRequest{}); err != nil {
+		t.Fatalf("EncodeArtifact() error = %v", err)
+	}
+	if _, err := capability.DecodeArtifact(recordings.DecodeArtifactRequest{Payload: []byte(`{}`)}); err != nil {
+		t.Fatalf("DecodeArtifact() error = %v", err)
+	}
+	if _, err := capability.SummarizeArtifact(recordings.SummarizeArtifactRequest{}); err != nil {
+		t.Fatalf("SummarizeArtifact() error = %v", err)
+	}
+	if _, err := capability.ExportArtifact(context.Background(), recordings.ExportArtifactRequest{RecordingID: "recording-1"}); err != nil {
+		t.Fatalf("ExportArtifact() error = %v", err)
+	}
+	if _, err := capability.ReadArtifact(context.Background(), recordings.ReadArtifactRequest{RecordingID: "recording-1"}); err != nil {
+		t.Fatalf("ReadArtifact() error = %v", err)
+	}
+	if got := strings.Join(artifacts.calls, ","); got != "load,build,validate,encode,decode,summarize,export,read" {
+		t.Fatalf("forwarded operations = %q, want every finalized-recording operation once", got)
+	}
+	if _, err := capability.BindRecordingLifecycle(nil, nil); err == nil || builderCalls != 1 {
+		t.Fatalf("second BindRecordingLifecycle() = %v, builder calls %d; want one-time binding", err, builderCalls)
 	}
 }
 
@@ -445,4 +506,86 @@ func assertReplayInputDiagnostic(
 			t.Fatalf("diagnostic supported versions = %#v, want %#v", diagnostic.SupportedVersions, wantVersions)
 		}
 	}
+}
+
+type phaseReplayArtifactsStub struct {
+	calls []string
+}
+
+func (stub *phaseReplayArtifactsStub) LoadReplayInput(recordings.LoadReplayInputRequest) (recordings.LoadReplayInputResult, error) {
+	return recordings.LoadReplayInputResult{}, nil
+}
+
+func (stub *phaseReplayArtifactsStub) LoadReplay(request recordings.LoadReplayRequest) (recordings.LoadReplayResult, error) {
+	stub.calls = append(stub.calls, "load")
+	return recordings.LoadReplayResult{Replay: recordings.ReplayFacts{RecordingID: request.RecordingID}}, nil
+}
+
+func (stub *phaseReplayArtifactsStub) BuildArtifact(recordings.BuildArtifactRequest) (recordings.BuildArtifactResult, error) {
+	stub.calls = append(stub.calls, "build")
+	return recordings.BuildArtifactResult{}, nil
+}
+
+func (stub *phaseReplayArtifactsStub) ValidateArtifact(recordings.ValidateArtifactRequest) (recordings.ValidateArtifactResult, error) {
+	stub.calls = append(stub.calls, "validate")
+	return recordings.ValidateArtifactResult{}, nil
+}
+
+func (stub *phaseReplayArtifactsStub) EncodeArtifact(recordings.EncodeArtifactRequest) (recordings.EncodeArtifactResult, error) {
+	stub.calls = append(stub.calls, "encode")
+	return recordings.EncodeArtifactResult{}, nil
+}
+
+func (stub *phaseReplayArtifactsStub) DecodeArtifact(recordings.DecodeArtifactRequest) (recordings.DecodeArtifactResult, error) {
+	stub.calls = append(stub.calls, "decode")
+	return recordings.DecodeArtifactResult{}, nil
+}
+
+func (stub *phaseReplayArtifactsStub) SummarizeArtifact(recordings.SummarizeArtifactRequest) (recordings.SummarizeArtifactResult, error) {
+	stub.calls = append(stub.calls, "summarize")
+	return recordings.SummarizeArtifactResult{}, nil
+}
+
+func (stub *phaseReplayArtifactsStub) ExportArtifact(context.Context, recordings.ExportArtifactRequest) (recordings.ExportArtifactResult, error) {
+	stub.calls = append(stub.calls, "export")
+	return recordings.ExportArtifactResult{}, nil
+}
+
+func (stub *phaseReplayArtifactsStub) ReadArtifact(context.Context, recordings.ReadArtifactRequest) (recordings.ReadArtifactResult, error) {
+	stub.calls = append(stub.calls, "read")
+	return recordings.ReadArtifactResult{}, nil
+}
+
+type phaseRecordingLifecycleStub struct{}
+
+func (*phaseRecordingLifecycleStub) Begin(recordings.BeginRecordingRequest) (recordings.RecordingLifecycleResult, error) {
+	return recordings.RecordingLifecycleResult{}, nil
+}
+
+func (*phaseRecordingLifecycleStub) Bind(recordings.BindLifecycleRequest) (recordings.RecordingLifecycleResult, error) {
+	return recordings.RecordingLifecycleResult{}, nil
+}
+
+func (*phaseRecordingLifecycleStub) AppendEvent(recordings.AppendLifecycleEventRequest) (recordings.RecordingLifecycleResult, error) {
+	return recordings.RecordingLifecycleResult{}, nil
+}
+
+func (*phaseRecordingLifecycleStub) RecordFailure(recordings.RecordLifecycleFailureRequest) (recordings.RecordingLifecycleResult, error) {
+	return recordings.RecordingLifecycleResult{}, nil
+}
+
+func (*phaseRecordingLifecycleStub) Flush(recordings.FlushLifecycleRequest) (recordings.RecordingLifecycleResult, error) {
+	return recordings.RecordingLifecycleResult{}, nil
+}
+
+func (*phaseRecordingLifecycleStub) Stop(recordings.StopLifecycleRequest) error {
+	return nil
+}
+
+func (*phaseRecordingLifecycleStub) Finish(recordings.FinishLifecycleRequest) (recordings.RecordingLifecycleResult, error) {
+	return recordings.RecordingLifecycleResult{}, nil
+}
+
+func (*phaseRecordingLifecycleStub) Status(recordings.LifecycleStatusRequest) (recordings.RecordingLifecycleResult, error) {
+	return recordings.RecordingLifecycleResult{}, nil
 }
