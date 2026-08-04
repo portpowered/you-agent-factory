@@ -73,7 +73,14 @@ func (p *functionalRPCPeer) serve() error {
 				// default agent case, not just the latter.
 				authMethods = `[{"id":"login","name":"Agent login"},{"type":"env_var","id":"env-login","name":"Env var login","vars":[]},{"type":"terminal","id":"terminal-login","name":"Terminal login"}]`
 			}
-			result := json.RawMessage(fmt.Sprintf(`{"protocolVersion":%d,"agentCapabilities":{},"authMethods":%s}`, version, authMethods))
+			agentCapabilities := `{}`
+			if p.mode == "resume" || p.mode == "resume-not-found" {
+				// A real ACP agent that truthfully supports resume advertises
+				// loadSession - matched by resolveContinuationProvider's live
+				// negotiated-capability check.
+				agentCapabilities = `{"loadSession":true}`
+			}
+			result := json.RawMessage(fmt.Sprintf(`{"protocolVersion":%d,"agentCapabilities":%s,"authMethods":%s}`, version, agentCapabilities, authMethods))
 			if err := p.respond(request.ID, result); err != nil {
 				return err
 			}
@@ -83,6 +90,9 @@ func (p *functionalRPCPeer) serve() error {
 					return err
 				}
 				continue
+			}
+			if p.mode == "resume" || p.mode == "resume-not-found" {
+				return fmt.Errorf("unexpected session/new during a continuation - the continued attempt must resume through session/load instead of starting a fresh session")
 			}
 			config := `[]`
 			if p.mode == "model" {
@@ -96,6 +106,27 @@ func (p *functionalRPCPeer) serve() error {
 			p.sessionID = sessionID
 			result := json.RawMessage(fmt.Sprintf(`{"sessionId":%q,"configOptions":%s}`, sessionID, config))
 			if err := p.respond(request.ID, result); err != nil {
+				return err
+			}
+		case "session/load":
+			if p.mode == "resume-not-found" {
+				// -32002 is the ACP schema's ErrorCodeResourceNotFound - the real
+				// code a conformant agent returns for an unrecognized session/load
+				// id.
+				if err := p.respondError(request.ID, -32002, "no rollout found for that session", nil); err != nil {
+					return err
+				}
+				continue
+			}
+			var params struct {
+				SessionID string `json:"sessionId"`
+			}
+			if err := json.Unmarshal(request.Params, &params); err != nil {
+				return fmt.Errorf("decode session/load: %w", err)
+			}
+			p.sessionID = params.SessionID
+			p.sessions++
+			if err := p.respond(request.ID, json.RawMessage(`{"configOptions":[]}`)); err != nil {
 				return err
 			}
 		case "session/set_config_option":
