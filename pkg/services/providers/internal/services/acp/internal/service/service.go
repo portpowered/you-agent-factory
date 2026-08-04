@@ -378,10 +378,18 @@ func (daemon *daemon) openSession(
 	return session, nil
 }
 
-// acpErrorCodeResourceNotFound is the ACP-reserved JSON-RPC error code
-// (schema ErrorCodeResourceNotFound) an agent returns when a referenced
-// resource, including a session/load id, is not recognized.
-const acpErrorCodeResourceNotFound = -32002
+const (
+	// acpErrorCodeResourceNotFound is the ACP-reserved JSON-RPC error code
+	// (schema ErrorCodeResourceNotFound) an agent returns when a referenced
+	// resource, including a session/load id, is not recognized.
+	acpErrorCodeResourceNotFound = -32002
+
+	// JSON-RPC reserves this inclusive range for server errors. ACP agents use
+	// it for provider-side failures that are distinct from the standard JSON-RPC
+	// protocol errors such as -32603.
+	acpServerErrorMinimum = -32099
+	acpServerErrorMaximum = -32000
+)
 
 // sessionOpenFailure normalizes a session/new or session/load failure. An
 // authentication-required failure closes the unusable daemon so a later
@@ -661,6 +669,13 @@ func rpcFailure(ctx context.Context, method string, id providers.ID, err error, 
 		message += " (stderr: " + detail + ")"
 	}
 	kind := providers.ExecuteFailureKindUnknown
+	var requestErr *acpsdk.RequestError
+	if errors.As(err, &requestErr) && isACPServerFailure(requestErr.Code) {
+		// A server-side ACP failure is a provider dependency outcome. Workers
+		// classifies that outcome as retryable and, when a session was opened,
+		// retains the exact Provider Session for the retry continuation.
+		kind = providers.ExecuteFailureKindDependency
+	}
 	if method == "initialize" {
 		native := strings.ToLower(err.Error())
 		if strings.Contains(native, "protocol version") || strings.Contains(native, "protocolversion") {
@@ -674,6 +689,12 @@ func rpcFailure(ctx context.Context, method string, id providers.ID, err error, 
 		},
 	}}}}
 }
+
+func isACPServerFailure(code int) bool {
+	return code >= acpServerErrorMinimum && code <= acpServerErrorMaximum &&
+		code != -32000 && code != acpErrorCodeResourceNotFound
+}
+
 func safeRPCMessage(err error) string {
 	var requestErr *acpsdk.RequestError
 	if errors.As(err, &requestErr) && strings.TrimSpace(requestErr.Message) != "" {

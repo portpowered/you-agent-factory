@@ -55,78 +55,15 @@ func (p *functionalRPCPeer) serve() error {
 		}
 		switch request.Method {
 		case "initialize":
-			if p.mode == "init-fail" || p.mode == "stderr" {
-				if err := p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": "functional ACP initialization failure"}); err != nil {
-					return err
-				}
-				continue
-			}
-			version := 1
-			if p.mode == "version" {
-				version = 999
-			}
-			authMethods := `[]`
-			if p.mode == "auth" {
-				// Advertises all three real ACP auth method shapes (default
-				// agent-handled, env_var, terminal) so the hint-building
-				// switch's env_var/terminal cases are exercised alongside the
-				// default agent case, not just the latter.
-				authMethods = `[{"id":"login","name":"Agent login"},{"type":"env_var","id":"env-login","name":"Env var login","vars":[]},{"type":"terminal","id":"terminal-login","name":"Terminal login"}]`
-			}
-			agentCapabilities := `{}`
-			if p.mode == "resume" || p.mode == "resume-not-found" {
-				// A real ACP agent that truthfully supports resume advertises
-				// loadSession - matched by resolveContinuationProvider's live
-				// negotiated-capability check.
-				agentCapabilities = `{"loadSession":true}`
-			}
-			result := json.RawMessage(fmt.Sprintf(`{"protocolVersion":%d,"agentCapabilities":%s,"authMethods":%s}`, version, agentCapabilities, authMethods))
-			if err := p.respond(request.ID, result); err != nil {
+			if err := p.initialize(request); err != nil {
 				return err
 			}
 		case "session/new":
-			if p.mode == "auth" {
-				if err := p.respondError(request.ID, -32000, "Authentication required", nil); err != nil {
-					return err
-				}
-				continue
-			}
-			if p.mode == "resume" || p.mode == "resume-not-found" {
-				return fmt.Errorf("unexpected session/new during a continuation - the continued attempt must resume through session/load instead of starting a fresh session")
-			}
-			config := `[]`
-			if p.mode == "model" {
-				config = `[{"type":"select","id":"model","name":"Model","category":"model","currentValue":"default","options":[{"name":"Test model","value":"test-model"}]}]`
-			}
-			p.sessions++
-			sessionID := p.sessionID
-			if p.mode == "persistent" || p.mode == "serialize" {
-				sessionID = fmt.Sprintf("acp-session-functional-1-%d", p.sessions)
-			}
-			p.sessionID = sessionID
-			result := json.RawMessage(fmt.Sprintf(`{"sessionId":%q,"configOptions":%s}`, sessionID, config))
-			if err := p.respond(request.ID, result); err != nil {
+			if err := p.createSession(request); err != nil {
 				return err
 			}
 		case "session/load":
-			if p.mode == "resume-not-found" {
-				// -32002 is the ACP schema's ErrorCodeResourceNotFound - the real
-				// code a conformant agent returns for an unrecognized session/load
-				// id.
-				if err := p.respondError(request.ID, -32002, "no rollout found for that session", nil); err != nil {
-					return err
-				}
-				continue
-			}
-			var params struct {
-				SessionID string `json:"sessionId"`
-			}
-			if err := json.Unmarshal(request.Params, &params); err != nil {
-				return fmt.Errorf("decode session/load: %w", err)
-			}
-			p.sessionID = params.SessionID
-			p.sessions++
-			if err := p.respond(request.ID, json.RawMessage(`{"configOptions":[]}`)); err != nil {
+			if err := p.loadSession(request); err != nil {
 				return err
 			}
 		case "session/set_config_option":
@@ -164,6 +101,103 @@ func (p *functionalRPCPeer) serve() error {
 	return nil
 }
 
+func (p *functionalRPCPeer) initialize(request rpcEnvelope) error {
+	if p.mode == "init-fail" || p.mode == "stderr" {
+		return p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": "functional ACP initialization failure"})
+	}
+	version := 1
+	if p.mode == "version" {
+		version = 999
+	}
+	authMethods := `[]`
+	if p.mode == "auth" {
+		// Advertises all three real ACP auth method shapes (default agent-handled,
+		// env_var, terminal) so every authentication-hint shape is exercised.
+		authMethods = `[{"id":"login","name":"Agent login"},{"type":"env_var","id":"env-login","name":"Env var login","vars":[]},{"type":"terminal","id":"terminal-login","name":"Terminal login"}]`
+	}
+	capabilities := `{}`
+	if p.supportsSessionLoad() {
+		// A real ACP agent that truthfully supports resume advertises loadSession,
+		// matched by resolveContinuationProvider's negotiated-capability check.
+		capabilities = `{"loadSession":true}`
+	}
+	result := json.RawMessage(fmt.Sprintf(`{"protocolVersion":%d,"agentCapabilities":%s,"authMethods":%s}`, version, capabilities, authMethods))
+	return p.respond(request.ID, result)
+}
+
+func (p *functionalRPCPeer) createSession(request rpcEnvelope) error {
+	if p.mode == "auth" {
+		return p.respondError(request.ID, -32000, "Authentication required", nil)
+	}
+	if err := p.rejectUnexpectedNewSession(); err != nil {
+		return err
+	}
+	config := `[]`
+	if p.mode == "model" {
+		config = `[{"type":"select","id":"model","name":"Model","category":"model","currentValue":"default","options":[{"name":"Test model","value":"test-model"}]}]`
+	}
+	p.sessions++
+	sessionID := p.sessionID
+	if p.mode == "persistent" || p.mode == "serialize" {
+		sessionID = fmt.Sprintf("acp-session-functional-1-%d", p.sessions)
+	}
+	p.sessionID = sessionID
+	result := json.RawMessage(fmt.Sprintf(`{"sessionId":%q,"configOptions":%s}`, sessionID, config))
+	return p.respond(request.ID, result)
+}
+
+func (p *functionalRPCPeer) loadSession(request rpcEnvelope) error {
+	if p.mode == "resume-not-found" {
+		// -32002 is the ACP schema's ErrorCodeResourceNotFound returned for an
+		// unrecognized session/load id by a conformant agent.
+		return p.respondError(request.ID, -32002, "no rollout found for that session", nil)
+	}
+	var params struct {
+		SessionID string `json:"sessionId"`
+	}
+	if err := json.Unmarshal(request.Params, &params); err != nil {
+		return fmt.Errorf("decode session/load: %w", err)
+	}
+	if err := p.assertExactRetryResume(params.SessionID); err != nil {
+		return err
+	}
+	p.sessionID = params.SessionID
+	p.sessions++
+	return p.respond(request.ID, json.RawMessage(`{"configOptions":[]}`))
+}
+
+func (p *functionalRPCPeer) supportsSessionLoad() bool {
+	return p.mode == "resume" || p.mode == "resume-not-found" || p.mode == "retry-resume"
+}
+
+func (p *functionalRPCPeer) rejectUnexpectedNewSession() error {
+	if p.mode == "resume" || p.mode == "resume-not-found" {
+		return fmt.Errorf("unexpected session/new during a continuation - the continued attempt must resume through session/load instead of starting a fresh session")
+	}
+	if p.mode != "retry-resume" {
+		return nil
+	}
+	if _, err := os.Stat(os.Getenv(acpRetryMarkerEnvironment)); err == nil {
+		return fmt.Errorf("unexpected session/new after retryable ACP failure - the retry must resume through session/load")
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect ACP retry marker: %w", err)
+	}
+	return nil
+}
+
+func (p *functionalRPCPeer) assertExactRetryResume(sessionID string) error {
+	if p.mode != "retry-resume" {
+		return nil
+	}
+	if _, err := os.Stat(os.Getenv(acpRetryMarkerEnvironment)); err != nil {
+		return fmt.Errorf("session/load before first retryable prompt failure: %w", err)
+	}
+	if sessionID != p.sessionID {
+		return fmt.Errorf("session/load id = %q, want original %q", sessionID, p.sessionID)
+	}
+	return nil
+}
+
 func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 	if handled, err := p.respondToPackagedPrompt(request); handled {
 		return err
@@ -175,6 +209,20 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 				return err
 			}
 			return fmt.Errorf("intentional ACP peer crash")
+		}
+	}
+	if p.mode == "retry-resume" {
+		marker := os.Getenv(acpRetryMarkerEnvironment)
+		if marker == "" {
+			return fmt.Errorf("retry-resume mode requires %s", acpRetryMarkerEnvironment)
+		}
+		if _, err := os.Stat(marker); os.IsNotExist(err) {
+			if err := os.WriteFile(marker, []byte("first prompt failed"), 0o600); err != nil {
+				return err
+			}
+			return p.respondError(request.ID, -32001, "temporarily unavailable", nil)
+		} else if err != nil {
+			return fmt.Errorf("inspect ACP retry marker: %w", err)
 		}
 	}
 	if p.mode == "serialize" && p.sessions == 1 {
