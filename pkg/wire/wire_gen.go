@@ -299,21 +299,22 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v54 := provideLoadedFactorySourceFactory()
 	replayRuntimeConfigDecoder := provideReplayRuntimeConfigDecoder()
 	v55 := provideReplayArtifactLoader(storage)
+	v56 := provideFactorySessionReplayRecordingReader(edges2)
+	replayInputCapability := provideFactorySessionReplayInputs(v55, v56)
 	clockResolver := provideFactoryRuntimeClockResolver()
 	sessionLoggerFactory := provideFactoryRuntimeSessionLoggerFactory()
-	v56 := provideProviderFromCommandRunnerFactory(service, edges2, ptyAllocator)
+	v57 := provideProviderFromCommandRunnerFactory(service, edges2, ptyAllocator)
 	starter, err := provideAPIServerStarter(edges2)
 	if err != nil {
 		return nil, err
 	}
-	v57 := provideRuntimeHostOperation(starter)
-	v58, err := provideProcessRuntimeFactory(v57)
+	v58 := provideRuntimeHostOperation(starter)
+	v59, err := provideProcessRuntimeFactory(v58)
 	if err != nil {
 		return nil, err
 	}
 	backendScopeEnsurer := provideOperatorBackendScopeEnsurer(operatorsettingsService)
 	runtimeInstanceIDGenerator := provideFactorySessionRuntimeInstanceIDGenerator(edges2)
-	v59 := provideFactorySessionReplayRecordingReader(edges2)
 	providerIdentityResolver := provideFactorySessionProviderIdentityResolver(providerRegistry)
 	runtimeOpeningDependencies := wire2.RuntimeOpeningDependencies{
 		ProviderSessions:                 providersessionsService,
@@ -348,17 +349,16 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		LoadFactory:                      v53,
 		NewLoadedFactory:                 v54,
 		DecodeReplayConfig:               replayRuntimeConfigDecoder,
-		LoadReplay:                       v55,
+		ReplayInputs:                     replayInputCapability,
 		CaptureLoadedFactorySnapshot:     v35,
 		ResolveClock:                     clockResolver,
 		NewSessionLogger:                 sessionLoggerFactory,
 		AdaptWorkerCommandRunner:         v28,
-		ProviderFromCommandRunnerFactory: v56,
-		ProcessRuntimeFactory:            v58,
+		ProviderFromCommandRunnerFactory: v57,
+		ProcessRuntimeFactory:            v59,
 		EnsureOperatorBackendScope:       backendScopeEnsurer,
 		GenerateRuntimeInstanceID:        runtimeInstanceIDGenerator,
 		ResolveHome:                      homeDirectoryResolver,
-		ReplayFiles:                      v59,
 		ProviderIdentities:               providerIdentityResolver,
 	}
 	v60, err := wire2.NewRuntimeOpeningFactory(runtimeOpeningDependencies)
@@ -743,6 +743,7 @@ var servicesSet = wire3.NewSet(
 	provideInitialFactorySnapshotFactory, wire.NewRuntimeFactory, wire.NewAssembly, wire3.Bind(new(wire2.FactoryRuntimeAssembler), new(*wire.Assembly)), wire3.Struct(new(wire2.RuntimeOpeningDependencies), "*"), provideLoadedFactorySourceFactory,
 	provideLoadedFactoryLoader,
 	provideReplayArtifactLoader,
+	provideFactorySessionReplayInputs,
 	provideReplayRuntimeConfigDecoder, wire2.NewRuntimeOpeningFactory,
 )
 

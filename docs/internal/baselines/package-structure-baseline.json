@@ -2330,7 +2330,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/recordings",
-      "target": "pkg/services/recordings/contracts.go:Service,pkg/services/recordings/lifecycle_capability.go:RecordingLifecycle,pkg/services/recordings/runtime_recording_binder.go:RuntimeRecordingBinder"
+      "target": "pkg/services/recordings/contracts.go:Service,pkg/services/recordings/lifecycle_capability.go:RecordingLifecycle,pkg/services/recordings/replay_artifact_capability.go:RecordingReplayArtifacts,pkg/services/recordings/replay_input_capability.go:ReplayInputCapability,pkg/services/recordings/runtime_recording_binder.go:RuntimeRecordingBinder"
     },
     {
       "rule": "service-root-interface-count",

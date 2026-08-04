@@ -11,7 +11,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	operatordefaultsruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/operatordefaults"
@@ -52,7 +51,7 @@ func PrepareRuntime(
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	loadReplay recordings.ReplayArtifactLoader,
+	replayInputs recordings.ReplayInputCapability,
 	replayClockFactory ReplayClockFactory,
 	hostedPollersFactory AutomationHostedSourcesFactory,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
@@ -63,7 +62,6 @@ func PrepareRuntime(
 	ensureOperatorBackendScope operatorconfig.BackendScopeEnsurer,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
-	replayFiles fileeffects.ReplayRecordingReader,
 	providerIdentities factorysessions.ProviderIdentityResolver,
 ) (
 	prepared preparedRuntime,
@@ -124,10 +122,9 @@ func PrepareRuntime(
 		loadFactory,
 		newLoadedFactory,
 		decodeReplayConfig,
-		loadReplay,
+		replayInputs,
 		captureLoadedFactorySnapshot,
 		newSessionLogger,
-		replayFiles,
 	)
 	if err != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, err

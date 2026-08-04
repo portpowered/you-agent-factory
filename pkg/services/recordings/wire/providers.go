@@ -1,7 +1,9 @@
 package wire
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -35,6 +37,57 @@ func NewReplayArtifactLoader(
 	return func(path string) (*recordings.ReplayArtifact, error) {
 		return replayimpl.Load(storage, path, decodeFactorySnapshot)
 	}
+}
+
+// NewReplayInputLoader constructs the ReplayInputCapability selected by
+// process-graph composition, composing the existing portable-recording
+// decoder/validator with the existing legacy replay artifact loader behind
+// one Recordings-owned capability so callers no longer combine a raw file
+// reader, the aliased portable-recording decoder/validator, and the legacy
+// loader themselves.
+func NewReplayInputLoader(
+	readFile recordings.RecordingReadFile,
+	loadLegacy recordings.ReplayArtifactLoader,
+) recordings.ReplayInputCapability {
+	return &replayInputLoader{readFile: readFile, loadLegacy: loadLegacy}
+}
+
+type replayInputLoader struct {
+	readFile   recordings.RecordingReadFile
+	loadLegacy recordings.ReplayArtifactLoader
+}
+
+var _ recordings.ReplayInputCapability = (*replayInputLoader)(nil)
+
+func (loader *replayInputLoader) LoadReplayInput(
+	request recordings.LoadReplayInputRequest,
+) (recordings.LoadReplayInputResult, error) {
+	if loader.readFile == nil {
+		return recordings.LoadReplayInputResult{}, fmt.Errorf("Factory Session replay recording reader is required")
+	}
+	data, err := loader.readFile(request.Path)
+	if err != nil {
+		return recordings.LoadReplayInputResult{}, fmt.Errorf("read replay recording: %w", err)
+	}
+	var header struct {
+		RecordingKind string `json:"recordingKind"`
+	}
+	if err := json.Unmarshal(data, &header); err == nil &&
+		header.RecordingKind == recordings.KindJavaScriptFactorySession {
+		value, err := recordings.DecodePortableRecording(bytes.NewReader(data))
+		if err != nil {
+			return recordings.LoadReplayInputResult{}, err
+		}
+		return recordings.LoadReplayInputResult{Portable: &value}, nil
+	}
+	if loader.loadLegacy == nil {
+		return recordings.LoadReplayInputResult{}, fmt.Errorf("replay artifact loader is required")
+	}
+	artifact, err := loader.loadLegacy(request.Path)
+	if err != nil {
+		return recordings.LoadReplayInputResult{}, fmt.Errorf("load replay artifact: %w", err)
+	}
+	return recordings.LoadReplayInputResult{Legacy: artifact}, nil
 }
 
 // NewProjectionService constructs the Recordings projection capability for

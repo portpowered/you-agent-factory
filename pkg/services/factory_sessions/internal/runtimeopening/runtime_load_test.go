@@ -11,10 +11,10 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -29,6 +29,7 @@ func TestLoadRuntimePreservesValidatedPortableRecording(t *testing.T) {
 	var loggerSessionID string
 	var loggerFolderPath string
 	var loggerFactoryDir string
+	replayInputs := recordingswire.NewReplayInputLoader(recordings.RecordingReadFile(os.ReadFile), nil)
 	loaded, err := LoadRuntime(
 		t.TempDir(),
 		"",
@@ -39,7 +40,7 @@ func TestLoadRuntimePreservesValidatedPortableRecording(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		nil,
+		replayInputs,
 		nil,
 		func(base *zap.Logger, sessionID, folderPath, factoryDir string) *zap.Logger {
 			loggerSessionID = sessionID
@@ -47,7 +48,6 @@ func TestLoadRuntimePreservesValidatedPortableRecording(t *testing.T) {
 			loggerFactoryDir = factoryDir
 			return base
 		},
-		fileeffects.ReplayRecordingReader(os.ReadFile),
 	)
 	if err != nil {
 		t.Fatalf("load runtime: %v", err)
@@ -69,21 +69,38 @@ func TestLoadRuntimePreservesValidatedPortableRecording(t *testing.T) {
 	}
 }
 
-func TestPortableRecordingReplayRequiresAndUsesInjectedReader(t *testing.T) {
+func TestLoadRuntimeRejectsMissingReplayInputCapability(t *testing.T) {
 	t.Parallel()
 
-	if _, _, err := loadPortableRecordingReplay("recording.json", nil); err == nil {
-		t.Fatal("missing replay recording reader error = nil")
+	root := RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: zap.NewNop()}
+	_, err := LoadRuntime(
+		t.TempDir(), "", "recording.json", operatorconfig.ResolvedDefaults{}, nil, root,
+		nil, nil, nil, nil, nil,
+		func(base *zap.Logger, _, _, _ string) *zap.Logger { return base },
+	)
+	if err == nil {
+		t.Fatal("missing replay input capability error = nil")
 	}
+}
+
+func TestLoadRuntimePropagatesReplayInputFailure(t *testing.T) {
+	t.Parallel()
+
+	root := RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: zap.NewNop()}
 	want := errors.New("recording read unavailable")
-	_, _, err := loadPortableRecordingReplay("recording.json", func(path string) ([]byte, error) {
+	replayInputs := recordingswire.NewReplayInputLoader(func(path string) ([]byte, error) {
 		if path != "recording.json" {
 			t.Fatalf("path = %q, want recording.json", path)
 		}
 		return nil, want
-	})
+	}, nil)
+	_, err := LoadRuntime(
+		t.TempDir(), "", "recording.json", operatorconfig.ResolvedDefaults{}, nil, root,
+		nil, nil, nil, replayInputs, nil,
+		func(base *zap.Logger, _, _, _ string) *zap.Logger { return base },
+	)
 	if !errors.Is(err, want) {
-		t.Fatalf("loadPortableRecordingReplay error = %v, want %v", err, want)
+		t.Fatalf("LoadRuntime() error = %v, want %v", err, want)
 	}
 }
 
@@ -153,14 +170,13 @@ func TestClockForReplayRejectsMissingOrNilResolver(t *testing.T) {
 
 func TestLoadRuntimeRejectsMissingOrNilSessionLoggerFactory(t *testing.T) {
 	root := RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: zap.NewNop()}
-	if _, err := LoadRuntime("", "", "", operatorconfig.ResolvedDefaults{}, nil, root, nil, nil, nil, nil, nil, nil, nil); err == nil {
+	if _, err := LoadRuntime("", "", "", operatorconfig.ResolvedDefaults{}, nil, root, nil, nil, nil, nil, nil, nil); err == nil {
 		t.Fatal("missing session logger factory error = nil")
 	}
 	if _, err := LoadRuntime(
 		"", "", "", operatorconfig.ResolvedDefaults{}, nil, root,
 		nil, nil, nil, nil, nil,
 		func(*zap.Logger, string, string, string) *zap.Logger { return nil },
-		nil,
 	); err == nil {
 		t.Fatal("nil session logger error = nil")
 	}

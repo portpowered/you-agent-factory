@@ -173,7 +173,7 @@ type RuntimeOpeningDependencies struct {
 	LoadFactory                      factorydefinitions.LoadedFactoryLoader
 	NewLoadedFactory                 factorydefinitions.LoadedFactorySourceFactory
 	DecodeReplayConfig               factorydefinitions.ReplayRuntimeConfigDecoder
-	LoadReplay                       recordings.ReplayArtifactLoader
+	ReplayInputs                     recordings.ReplayInputCapability
 	CaptureLoadedFactorySnapshot     factorydefinitions.LoadedFactorySnapshotCapturer
 	ResolveClock                     factoryruntime.ClockResolver
 	NewSessionLogger                 factoryruntime.SessionLoggerFactory
@@ -183,7 +183,6 @@ type RuntimeOpeningDependencies struct {
 	EnsureOperatorBackendScope       operatorsettings.BackendScopeEnsurer
 	GenerateRuntimeInstanceID        factorysessions.RuntimeInstanceIDGenerator
 	ResolveHome                      factorysessions.HomeDirectoryResolver
-	ReplayFiles                      ReplayRecordingReader
 	ProviderIdentities               factorysessions.ProviderIdentityResolver
 }
 
@@ -201,11 +200,11 @@ func NewRuntimeOpeningFactory(deps RuntimeOpeningDependencies) (*RuntimeOpeningF
 		deps.FactoryScaffoldInitializer, deps.EditableFactoryValidator,
 		deps.InitialFactorySnapshotFactory, deps.FactoryRuntimeAssembler,
 		work.MaterializationService(deps.ContentMaterializer),
-		deps.LoadFactory, deps.NewLoadedFactory, deps.DecodeReplayConfig, deps.LoadReplay,
+		deps.LoadFactory, deps.NewLoadedFactory, deps.DecodeReplayConfig, deps.ReplayInputs,
 		deps.CaptureLoadedFactorySnapshot, deps.ResolveClock, deps.NewSessionLogger,
 		deps.AdaptWorkerCommandRunner, deps.ProviderFromCommandRunnerFactory, deps.ProcessRuntimeFactory,
 		deps.EnsureOperatorBackendScope,
-		deps.GenerateRuntimeInstanceID, deps.ResolveHome, deps.ReplayFiles,
+		deps.GenerateRuntimeInstanceID, deps.ResolveHome,
 		deps.ProviderIdentities,
 	)
 }

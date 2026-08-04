@@ -8,7 +8,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -61,7 +60,7 @@ func openRuntime(
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	loadReplay recordings.ReplayArtifactLoader,
+	replayInputs recordings.ReplayInputCapability,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	resolveClock factoryruntime.ClockResolver,
 	newSessionLogger factoryruntime.SessionLoggerFactory,
@@ -71,7 +70,6 @@ func openRuntime(
 	ensureOperatorBackendScope operatorsettings.BackendScopeEnsurer,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
-	replayFiles fileeffects.ReplayRecordingReader,
 	providerIdentities factorysessions.ProviderIdentityResolver,
 ) (products runtimeProducts, err error) {
 	if request == nil {
@@ -100,7 +98,7 @@ func openRuntime(
 		loadFactory,
 		newLoadedFactory,
 		decodeReplayConfig,
-		loadReplay,
+		replayInputs,
 		replayClockFactory,
 		automationHostedSourcesFactory,
 		factoryScaffoldInitializer,
@@ -111,7 +109,6 @@ func openRuntime(
 		ensureOperatorBackendScope,
 		generateRuntimeInstanceID,
 		resolveHome,
-		replayFiles,
 		providerIdentities,
 	)
 	if err != nil {

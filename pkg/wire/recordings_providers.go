@@ -74,6 +74,18 @@ func provideRecordingLifecycleFactory(
 // finalized replay facts and read, export, decode, or validate existing
 // portable artifacts receive that capability explicitly at Wire composition
 // time instead of depending on the broad Service.
+// provideFactorySessionReplayInputs composes the Recordings-owned
+// ReplayInputCapability from the existing legacy replay artifact loader and
+// replay recording file reader, so the Factory Sessions runtime-opening
+// replay-input lane receives one already-constructed capability instead of
+// combining those two raw effects itself.
+func provideFactorySessionReplayInputs(
+	loadReplay recordings.ReplayArtifactLoader,
+	replayFiles factorysessionwire.ReplayRecordingReader,
+) recordings.ReplayInputCapability {
+	return recordingswire.NewReplayInputLoader(recordings.RecordingReadFile(replayFiles), loadReplay)
+}
+
 func provideRecordingReplayArtifactsFactory(
 	edges serviceedges.Edges,
 	targets recordings.LiveRecordingTargetPlanner,
