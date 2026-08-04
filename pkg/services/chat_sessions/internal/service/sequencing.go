@@ -1,9 +1,11 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/events"
@@ -92,6 +94,16 @@ func (s *Store) Sequence(ctx context.Context, req chatsessions.SequenceRequest) 
 		if unmarshalErr := json.Unmarshal(appendResult.Record.Payload, &original); unmarshalErr != nil {
 			return chatsessions.SequenceResult{}, fmt.Errorf("chat sessions: unmarshal original sequenced item envelope: %w", unmarshalErr)
 		}
+		if field, contradicted := contradictedField(req, appendResult.Record.SchemaID, original); contradicted {
+			return chatsessions.SequenceResult{}, &chatsessions.SequencedIdentityConflictError{
+				SessionID:      req.SessionID,
+				SourceType:     string(req.SourceType),
+				SourceID:       string(req.SourceID),
+				SourceSequence: uint64(req.SourceSequence),
+				SourceEventID:  string(req.SourceEventID),
+				Field:          field,
+			}
+		}
 		return chatsessions.SequenceResult{
 			SessionID:         req.SessionID,
 			ItemID:            original.ItemID,
@@ -102,6 +114,44 @@ func (s *Store) Sequence(ctx context.Context, req chatsessions.SequenceRequest) 
 	default:
 		return chatsessions.SequenceResult{}, fmt.Errorf("chat sessions: events append returned unexpected outcome %d", appendResult.Outcome)
 	}
+}
+
+// contradictedField reports the first field of req that disagrees with
+// original, the already-committed record resolved for req's reused
+// (SourceType, SourceID, SourceSequence, SourceEventID) identity tuple.
+// originalSchemaID is the SchemaID Events stored alongside original (the
+// SequencedItem envelope itself never carries SchemaID -- see SequencedItem's
+// doc comment). An empty field name with contradicted=false means req is a
+// safe, identity-preserving repeat of the exact same request.
+func contradictedField(req chatsessions.SequenceRequest, originalSchemaID events.SchemaID, original chatsessions.SequencedItem) (field string, contradicted bool) {
+	switch {
+	case req.ParentItemID != original.ParentItemID:
+		return "ParentItemID", true
+	case req.Kind != original.Kind:
+		return "Kind", true
+	case req.SchemaID != originalSchemaID:
+		return "SchemaID", true
+	case !equalJSON(req.Payload, original.Payload):
+		return "Payload", true
+	default:
+		return "", false
+	}
+}
+
+// equalJSON reports whether a and b are structurally equivalent JSON values
+// (so key ordering or whitespace differences between two encodings of the
+// same source-native payload are never mistaken for a contradiction). Either
+// value failing to unmarshal falls back to an exact byte comparison rather
+// than treating malformed JSON as automatically equal or unequal.
+func equalJSON(a, b json.RawMessage) bool {
+	var av, bv any
+	if err := json.Unmarshal(a, &av); err != nil {
+		return bytes.Equal(a, b)
+	}
+	if err := json.Unmarshal(b, &bv); err != nil {
+		return bytes.Equal(a, b)
+	}
+	return reflect.DeepEqual(av, bv)
 }
 
 func sequenceOutcomeLabel(outcome chatsessions.SequenceOutcome) string {

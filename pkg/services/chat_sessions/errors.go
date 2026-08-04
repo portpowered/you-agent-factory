@@ -67,6 +67,13 @@ var (
 	// It is distinct from ErrStaleVersion: the caller's ExpectedVersion was
 	// current, but a concurrent or earlier bind attempt already won.
 	ErrFactorySessionAlreadyBound = errors.New("chat sessions: target episode factory session is already bound to a different identity")
+	// ErrSequencedIdentityContradiction reports that Sequence was called
+	// again with an already-accepted (SourceType, SourceID, SourceSequence,
+	// SourceEventID) identity tuple, but ParentItemID, Kind, SchemaID, or
+	// Payload contradicts the record originally committed for that exact
+	// tuple. Sequence rejects the reused tuple deterministically instead of
+	// silently returning the stale, contradicted identity.
+	ErrSequencedIdentityContradiction = errors.New("chat sessions: reused source identity contradicts originally sequenced record")
 )
 
 // ValidationError reports one Chat Sessions value-validation failure. Value
@@ -205,6 +212,34 @@ func (e *FactorySessionConflictError) Error() string {
 // classify the failure.
 func (e *FactorySessionConflictError) Unwrap() error {
 	return ErrFactorySessionAlreadyBound
+}
+
+// SequencedIdentityConflictError reports one Sequence call that reused an
+// already-accepted (SourceType, SourceID, SourceSequence, SourceEventID)
+// identity tuple with a Field whose value contradicts the record originally
+// committed for that exact tuple. SourceType/SourceID/SourceSequence/
+// SourceEventID are opaque source identity values, safe to cross a service
+// boundary the same way BusyError's ActiveTurnID already is.
+type SequencedIdentityConflictError struct {
+	SessionID      string
+	SourceType     string
+	SourceID       string
+	SourceSequence uint64
+	SourceEventID  string
+	// Field names the contradicted request field: "ParentItemID", "Kind",
+	// "SchemaID", or "Payload".
+	Field string
+}
+
+func (e *SequencedIdentityConflictError) Error() string {
+	return fmt.Sprintf("chat sessions: session %q source identity (%s, %s, %d, %s): %s: %v",
+		e.SessionID, e.SourceType, e.SourceID, e.SourceSequence, e.SourceEventID, e.Field, ErrSequencedIdentityContradiction)
+}
+
+// Unwrap exposes ErrSequencedIdentityContradiction so errors.Is/errors.As
+// can classify the failure.
+func (e *SequencedIdentityConflictError) Unwrap() error {
+	return ErrSequencedIdentityContradiction
 }
 
 // TargetEpisodeNotClosedError reports that OpenNextTargetEpisode was invoked

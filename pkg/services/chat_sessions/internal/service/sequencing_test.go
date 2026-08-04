@@ -364,6 +364,169 @@ func TestStore_Sequence_DuplicateSourceTupleReturnsOriginalIdentity(t *testing.T
 	}
 }
 
+// TestStore_Sequence_ContradictoryDuplicateIsRejected table-drives every way
+// a reused (SourceType, SourceID, SourceSequence, SourceEventID) tuple can
+// disagree with the originally committed record (ParentItemID, Kind,
+// SchemaID, Payload) and proves each is rejected with
+// *chatsessions.SequencedIdentityConflictError instead of silently returning
+// the stale, contradicted identity or replacing the original committed
+// record.
+func TestStore_Sequence_ContradictoryDuplicateIsRejected(t *testing.T) {
+	ctx := context.Background()
+	topic := func(session chatsessions.Session) events.Topic { return chatsessions.EventsTopic(session.ID) }
+
+	tests := []struct {
+		name      string
+		mutate    func(chatsessions.SequenceRequest) chatsessions.SequenceRequest
+		wantField string
+	}{
+		{
+			name: "contradictory parent",
+			mutate: func(r chatsessions.SequenceRequest) chatsessions.SequenceRequest {
+				r.ParentItemID = "some-other-parent"
+				return r
+			},
+			wantField: "ParentItemID",
+		},
+		{
+			name: "contradictory kind",
+			mutate: func(r chatsessions.SequenceRequest) chatsessions.SequenceRequest {
+				r.Kind = workers.KindTool
+				return r
+			},
+			wantField: "Kind",
+		},
+		{
+			name: "contradictory schema",
+			mutate: func(r chatsessions.SequenceRequest) chatsessions.SequenceRequest {
+				r.SchemaID = "worker.output.v2"
+				return r
+			},
+			wantField: "SchemaID",
+		},
+		{
+			name: "contradictory payload",
+			mutate: func(r chatsessions.SequenceRequest) chatsessions.SequenceRequest {
+				r.Payload = json.RawMessage(`{"text":"goodbye"}`)
+				return r
+			},
+			wantField: "Payload",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store, session, appender := newSequencingTestSession(t)
+
+			original := sequenceRequest(session.ID, 1, "")
+			first, err := store.Sequence(ctx, original)
+			if err != nil {
+				t.Fatalf("Sequence (first): %v", err)
+			}
+
+			retry := tt.mutate(sequenceRequest(session.ID, 1, ""))
+			if tt.wantField == "ParentItemID" {
+				// The contradictory ParentItemID must itself already name a
+				// sequenced item in this session, otherwise the earlier
+				// parent-lookup check (a distinct rejection path) would fire
+				// instead of the contradiction check this test targets.
+				altParent, err := store.Sequence(ctx, sequenceRequest(session.ID, 2, ""))
+				if err != nil {
+					t.Fatalf("Sequence (alternate parent): %v", err)
+				}
+				retry.ParentItemID = altParent.ItemID
+			}
+
+			_, err = store.Sequence(ctx, retry)
+			var conflict *chatsessions.SequencedIdentityConflictError
+			if !errors.As(err, &conflict) {
+				t.Fatalf("Sequence(%s): got %v, want *SequencedIdentityConflictError", tt.name, err)
+			}
+			if !errors.Is(err, chatsessions.ErrSequencedIdentityContradiction) {
+				t.Fatalf("Sequence(%s): got %v, want errors.Is ErrSequencedIdentityContradiction", tt.name, err)
+			}
+			if conflict.Field != tt.wantField {
+				t.Fatalf("conflict.Field = %q, want %q", conflict.Field, tt.wantField)
+			}
+
+			if got := appender.commitCount(topic(session)); got < 1 {
+				t.Fatalf("commit count = %d, want at least 1 (original record untouched)", got)
+			}
+			storedRecord := appender.topics[topic(session)].identity[events.AppendIdentity{
+				SourceType:     original.SourceType,
+				SourceID:       original.SourceID,
+				SourceSequence: original.SourceSequence,
+				SourceEventID:  original.SourceEventID,
+			}]
+			var storedItem chatsessions.SequencedItem
+			if err := json.Unmarshal(storedRecord.Payload, &storedItem); err != nil {
+				t.Fatalf("unmarshal stored envelope: %v", err)
+			}
+			if storedItem.ItemID != first.ItemID {
+				t.Fatalf("stored envelope ItemID = %q, want original %q (not replaced)", storedItem.ItemID, first.ItemID)
+			}
+		})
+	}
+}
+
+// TestStore_Sequence_ConcurrentFirstDeliveryAndRetryAgree races a first
+// delivery against a byte-identical retry of the same source identity tuple,
+// released through a shared start barrier (never a sleep). Exactly one of
+// the two commits an Events record; both callers must observe the same
+// assigned ItemID and aggregate position, and the topic must retain exactly
+// one committed record for that identity.
+func TestStore_Sequence_ConcurrentFirstDeliveryAndRetryAgree(t *testing.T) {
+	ctx := context.Background()
+	store, session, appender := newSequencingTestSession(t)
+	topic := chatsessions.EventsTopic(session.ID)
+	req := sequenceRequest(session.ID, 1, "")
+
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	var firstResult, secondResult chatsessions.SequenceResult
+	var firstErr, secondErr error
+
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		<-start
+		firstResult, firstErr = store.Sequence(ctx, req)
+	}()
+	go func() {
+		defer wg.Done()
+		<-start
+		secondResult, secondErr = store.Sequence(ctx, req)
+	}()
+	close(start)
+	wg.Wait()
+
+	if firstErr != nil {
+		t.Fatalf("first Sequence: %v", firstErr)
+	}
+	if secondErr != nil {
+		t.Fatalf("second Sequence: %v", secondErr)
+	}
+	if firstResult.ItemID != secondResult.ItemID {
+		t.Fatalf("ItemID diverged across the race: %q vs %q", firstResult.ItemID, secondResult.ItemID)
+	}
+	if firstResult.AggregateSequence != secondResult.AggregateSequence {
+		t.Fatalf("AggregateSequence diverged across the race: %d vs %d", firstResult.AggregateSequence, secondResult.AggregateSequence)
+	}
+	acceptedCount := 0
+	if firstResult.Outcome == chatsessions.SequenceOutcomeAccepted {
+		acceptedCount++
+	}
+	if secondResult.Outcome == chatsessions.SequenceOutcomeAccepted {
+		acceptedCount++
+	}
+	if acceptedCount != 1 {
+		t.Fatalf("accepted outcome count = %d, want exactly 1 (one winner, one duplicate)", acceptedCount)
+	}
+	if got := appender.commitCount(topic); got != 1 {
+		t.Fatalf("commit count after racing identical retry = %d, want exactly 1", got)
+	}
+}
+
 // TestStore_Sequence_ConcurrentDistinctRecordsCommitContiguousPositions
 // launches many goroutines against the same session with distinct source
 // identities, releasing them all through a shared start barrier (never a
