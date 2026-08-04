@@ -20,8 +20,8 @@ type PromptOutcome struct {
 }
 
 // MapFactoryInvocationOutcome is a total, deterministic mapping from one
-// completed Factory Session invocation (InvokeFactoryTarget, or the
-// synchronous activation StartFactoryTarget's own on-demand implementation
+// completed Factory Session invocation (InvokeFactorySession, or the
+// synchronous activation StartAsync's own on-demand implementation
 // performs for a first turn) outcome to the bounded ACP prompt outcome this
 // transport returns. Text is projected only from the invocation's published
 // "text" primary-result parts, in the same order they appear on

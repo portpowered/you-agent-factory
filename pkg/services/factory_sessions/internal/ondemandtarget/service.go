@@ -10,20 +10,18 @@
 // this service tree never imports this package directly.
 //
 // Service implements exactly StartAsync, InvokeFactorySession, Cancel, and
-// CloseFactorySession -- the narrow
-// chat_sessions/internal/factorysessionsshim.FactoryTargetExecutionService
-// contract that existing, consumer-owned shim actually forwards to, and
-// nothing more. Earlier iterations of this package embedded the full 30+
-// method public factorysessions.Service interface as a permanently-nil value
-// solely so this type could be handed to the shim's constructor, which then
-// required the literal Service type; every unimplemented method panicked if
-// ever reached. That made this type a partial, panic-capable stand-in for
-// the full aggregate root -- a real production risk if any future shim
-// expansion or root composition ever called one of the unimplemented
-// methods. factorysessionsshim.New now depends on the narrow
-// FactoryTargetExecutionService interface instead of the full Service, so
-// this type can be -- and now is -- a complete, non-panicking implementation
-// of exactly what it claims to support.
+// CloseFactorySession -- the narrow, owner-published
+// factory_sessions.TargetExecutionService capability -- and nothing
+// more. Earlier iterations of this package embedded the full 30+ method
+// public factorysessions.Service interface as a permanently-nil value solely
+// so this type could be handed to a caller-owned adapter's constructor,
+// which then required the literal Service type; every unimplemented method
+// panicked if ever reached. That made this type a partial, panic-capable
+// stand-in for the full aggregate root -- a real production risk if any
+// future composition ever called one of the unimplemented methods. This type
+// is now -- and is asserted to be, see the wire package's own var _
+// TargetExecutionService assertion -- a complete, non-panicking
+// implementation of exactly the capability it claims to support.
 package ondemandtarget
 
 import (
@@ -71,10 +69,11 @@ type invocationRuntimeOpener interface {
 	) (roles.OpenedInvocationRuntime, error)
 }
 
-// Service is a consumer-owned Factory Sessions activation that has no fixed,
-// pre-opened Factory Session runtime the way the CLI daemon's
+// Service is Factory Sessions' own on-demand target-execution activation
+// (published to peers as factorysessions.TargetExecutionService) that has no
+// fixed, pre-opened Factory Session runtime the way the CLI daemon's
 // single-project bootstrap (OpenApplication/Assembly.Complete) does.
-// Instead, the first StartFactoryTarget for a given caller-selected Factory
+// Instead, the first StartAsync for a given caller-selected Factory
 // target and working root lazily opens exactly one ephemeral, non-HTTP-bound
 // runtime through the existing invocation-mode Runtime Opening path (the
 // same primitive the CLI's one-shot named invocation already uses, per
@@ -260,9 +259,9 @@ func (a *activatedRuntime) close(ctx context.Context) error {
 // published outcome (including text) makes a separate, immediate
 // InvokeFactorySession call against the returned SessionID -- the same
 // synchronous, non-JavaScript-workflow-specific call every later turn
-// already uses (see chat_sessions/internal/factorysessionsshim.Shim, whose
-// unmodified StartFactoryTarget/InvokeFactoryTarget map directly onto these
-// two methods). The returned SessionID is this service's own generated
+// already uses (see the owner-published TargetExecutionService this Service
+// satisfies, in ../../target_execution_contract.go). The returned SessionID
+// is this service's own generated
 // identity (never the opened runtime's shared internal constant session
 // identity), so a later InvokeFactorySession/Cancel/CloseFactorySession call
 // against it resolves back to this exact runtime.

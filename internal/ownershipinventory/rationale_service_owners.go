@@ -279,12 +279,12 @@ func committedChatSessionsRationales() []OwnerRationaleCard {
 		topLevel(
 			"chat_sessions",
 			"pkg/services/chat_sessions",
-			"L1 V0 Chat Sessions contract owner: detached session/target/turn/attachment/control-intent values, enum validation, and lifecycle transition tables; no implementation of the public Service interface in this slice. Retains a private internal/factorysessionsshim adapter over the published factory_sessions root for the narrow start/invoke/cancel/close Factory-target dependency, registered for deletion at L3 Factory Sessions sealing.",
-			"No state store for the public contract; publishes value types and pure validation/transition functions only. The internal shim holds no independent state store either — session state lives for the process duration in the factory_sessions target it adapts.",
-			"Public values are stateless; the Service interface documents session/turn/control lifecycle for a later implementation to satisfy. The internal shim is session-scoped and discarded on process exit, same as the factory_sessions target it adapts.",
-			"Future ACP transport and Chat Sessions implementation slices; no current consumer imports this package's public Service interface yet. The internal shim is consumed only within this package.",
-			"None in this slice for the public contract; no persistence or mutation is performed. The internal shim delegates 1:1 to factory_sessions.Service and owns no separate transaction boundary.",
-			"Typed validation/transition/not-found/busy/conflict/unsupported errors are contract-only; no runtime recovery behavior exists in this slice. The internal shim's failures normalize at the factory_sessions public root it adapts.",
+			"L1 V0 Chat Sessions contract owner: detached session/target/turn/attachment/control-intent values, enum validation, and lifecycle transition tables; no implementation of the public Service interface in this slice. No longer owns a Factory Sessions adapter: the narrow start/invoke/cancel/close Factory-target dependency ACP composition needs is consumed directly from Factory Sessions' own owner-published factorysessions.TargetExecutionService capability, retiring the former internal/factorysessionsshim stopgap at L3 Factory Sessions sealing.",
+			"No state store for the public contract; publishes value types and pure validation/transition functions only. No independent state store is retained for the retired Factory Sessions adapter either -- session state now lives for the process duration in the factory_sessions target-execution capability composition injects directly.",
+			"Public values are stateless; the Service interface documents session/turn/control lifecycle for a later implementation to satisfy. The Factory Sessions-owned target-execution capability composition consumes directly is itself session-scoped and discarded on process exit.",
+			"Future ACP transport and Chat Sessions implementation slices; no current consumer imports this package's public Service interface yet. The retired Factory Sessions adapter's former consumers now depend on Factory Sessions' own published capability directly.",
+			"None in this slice for the public contract; no persistence or mutation is performed. The retired Factory Sessions adapter delegated 1:1 to factory_sessions.Service and owned no separate transaction boundary; the capability it forwarded to still does not.",
+			"Typed validation/transition/not-found/busy/conflict/unsupported errors are contract-only; no runtime recovery behavior exists in this slice. The retired Factory Sessions adapter's failures normalized at the factory_sessions public root it forwarded to; consumers of the published capability observe that same normalization directly.",
 		),
 	}
 }

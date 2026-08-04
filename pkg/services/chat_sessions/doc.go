@@ -24,14 +24,10 @@
 // the first implementation this package publishes; the L1 V0 Service root
 // above remains contract-only until its own L1 V1 implementation lands.
 //
-// internal/factorysessionsshim is a private, unexported implementation
-// detail owned by this package but outside its public contract: a
-// stopgap adapter over the published factory_sessions.Service root that some
-// later L1 Chat Sessions flow will need ahead of L3 Factory Sessions
-// sealing. It defines and implements its own internal FactoryTargetService
-// contract, does not import or extend chatsessions.Service, and is not part
-// of the L1 V0 contract slice above. It is registered under "Shims
-// registered for deletion" in
-// docs/internal/projects/root-consolidation/proposal.md, retired at L3
-// Factory Sessions sealing.
+// This package no longer owns a Factory Sessions adapter: the narrow
+// start/invoke/cancel/close Factory-target dependency ACP composition needs
+// is now consumed directly from Factory Sessions' own owner-published
+// factorysessions.TargetExecutionService capability (see
+// pkg/services/factory_sessions), retiring the former
+// internal/factorysessionsshim stopgap at L3 Factory Sessions sealing.
 package chatsessions

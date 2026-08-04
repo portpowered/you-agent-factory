@@ -192,6 +192,61 @@ func (s *Server) handleSessionPrompt(ctx context.Context, env envelope.Envelope)
 	return s.admitPromptTurn(ctx, turn, reqIdentity)
 }
 
+// handleSessionCancel executes one "session/cancel" notification: forward it
+// to the addressed Chat Session's currently captured Factory Session, through
+// this same Server's Factory Sessions-owned target-execution capability's
+// Cancel operation, with the caller's own context and a ControlRequest
+// correlated to the addressed session. The captured identity is the
+// episode's committed FactorySessionID once a prior turn's bind has
+// succeeded, or -- for the exact window between a first turn's StartAsync
+// call and its own still-in-flight InvokeFactorySession/BindFactorySession
+// completion -- its PendingFactorySessionID (see
+// startFactorySessionForEpisode and chatsessions.TargetEpisode's own doc
+// comment): that is the real runtime a first, currently-admitted turn is
+// blocked inside, and it is exactly the case this transport must be able to
+// cancel, not only an already-bound later turn's. Per JSON-RPC 2.0 and the
+// ACP protocol, session/cancel is a notification: there is no response to
+// build or write for it, so every failure here -- malformed params, an
+// unknown Chat Session, an episode with neither a bound nor a pending
+// Factory Session yet, a missing collaborator, or the downstream Cancel call
+// itself failing -- is a silent no-op. The caller observes cancellation's
+// real effect only in the concurrently in-flight "session/prompt" request's
+// own eventual response: factoryInvocationTurnState already maps a genuine
+// downstream-canceled outcome to TurnStateCanceled/StopReasonCancelled the
+// same way it does for every other Factory invocation outcome, so this
+// method's only job is reaching the exact captured runtime a prior turn
+// started, not reclassifying anything itself.
+func (s *Server) handleSessionCancel(ctx context.Context, env envelope.Envelope) {
+	if s.chatSessions == nil || s.factoryTarget == nil {
+		return
+	}
+	var req acpsdk.CancelNotification
+	if err := json.Unmarshal(env.Params, &req); err != nil {
+		return
+	}
+	params, err := session.ValidateCancel(req)
+	if err != nil {
+		return
+	}
+
+	getResult, err := s.chatSessions.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: string(params.SessionID)})
+	if err != nil {
+		return
+	}
+	factorySessionID := getResult.Episode.FactorySessionID
+	if factorySessionID == "" {
+		factorySessionID = getResult.Episode.PendingFactorySessionID
+	}
+	if factorySessionID == "" {
+		return
+	}
+
+	_, _ = s.factoryTarget.Cancel(ctx, factorySessionID, factorysessions.ControlRequest{
+		RequestID: string(params.SessionID) + "/cancel",
+		Reason:    "acp session/cancel",
+	})
+}
+
 // admitPromptTurn executes the ordinary (non-"/factory") prompt admission
 // sequence: read the addressed Chat Session and call its canonical
 // StartTurn exactly once with the full request identity, the real session
@@ -425,7 +480,7 @@ func terminalStateForFailure(cause error) chatsessions.TurnState {
 
 // factoryInvocationTurnState maps one published Factory Session invocation's
 // terminal status to the TurnState an admitted turn terminalizes to when
-// InvokeFactoryTarget itself returns no Go error: a genuine published
+// InvokeFactorySession itself returns no Go error: a genuine published
 // completed outcome advances to TurnStateCompleted, a published
 // caller-canceled or timed-out outcome advances to TurnStateCanceled, and a
 // published failure -- or any other unmapped status -- safely advances to
@@ -442,30 +497,31 @@ func factoryInvocationTurnState(status factorysessions.InvocationTerminalStatus)
 }
 
 // startFactorySessionForEpisode starts exactly one Factory Session through
-// the consumer-owned Factory Sessions shim for the given turn's newly
-// admitted (unbound) episode -- unless a prior attempt for this same episode
-// already started one and durably recorded it as pending (see below), in
-// which case it reuses that identity instead of starting a second one -- then
-// dispatches this turn's validated prompt content into it via
-// InvokeFactoryTarget (the exact same operation invokeFactorySessionForEpisode
-// uses for every later turn) and binds the identity onto the episode.
+// the Factory Sessions-owned target-execution capability for the given
+// turn's newly admitted (unbound) episode -- unless a prior attempt for this
+// same episode already started one and durably recorded it as pending (see
+// below), in which case it reuses that identity instead of starting a
+// second one -- then dispatches this turn's validated prompt content into
+// it via InvokeFactorySession (the exact same operation
+// invokeFactorySessionForEpisode uses for every later turn) and binds the
+// identity onto the episode.
 //
-// StartFactoryTarget itself only opens the runtime: the shared
+// StartAsync itself only opens the runtime: the shared
 // factorysessions.Service.StartAsync it forwards to has no dedicated
 // content field and, more fundamentally, its Source vocabulary only resolves
 // named JavaScript workflow factories, not an ordinary packaged Factory --
 // see ondemandtarget.Service.StartAsync's own doc comment. So this turn's
 // content, source kind, and correlated request ID travel through the
-// immediate follow-up InvokeFactoryTarget call instead, whose real, terminal
+// immediate follow-up InvokeFactorySession call instead, whose real, terminal
 // InvocationResult (ordered primary-result text included) is what
 // protocol.MapFactoryInvocationOutcome projects -- exactly the same
 // truthful-outcome guarantee invokeFactorySessionForEpisode already provides
 // for later turns, not a placeholder that always reports success. A blank
-// SessionID returned by StartFactoryTarget (errEmptyFactorySessionIdentity)
+// SessionID returned by StartAsync (errEmptyFactorySessionIdentity)
 // is returned unclassified for the caller to map.
 //
 // A start and its bind are not atomic against this transport's own process
-// -- BindFactorySession can fail after StartFactoryTarget already succeeded
+// -- BindFactorySession can fail after StartAsync already succeeded
 // -- so this method reconciles across separate calls through the singular
 // Chat/Factory Sessions authority itself, not this Server instance: the
 // admitted episode snapshot's own Episode.PendingFactorySessionID (durably
@@ -491,7 +547,7 @@ func factoryInvocationTurnState(status factorysessions.InvocationTerminalStatus)
 // session ID and episode number, both fixed for the life of one target
 // episode, never the admitted Turn's own ID (which is different on every
 // retry). This is what lets a retried start -- for example after a
-// successful StartFactoryTarget whose immediately-following
+// successful StartAsync whose immediately-following
 // RecordPendingFactorySession call failed -- converge on the exact same
 // on-demand Factory Sessions activation instead of starting a second one.
 func factoryStartRequestID(sessionID string, episode uint64) string {
@@ -532,7 +588,7 @@ func (s *Server) startFactorySessionForEpisode(
 				"workingRoot": startResult.Session.WorkingRoot,
 			},
 		}
-		startOutcome, err := s.factoryTarget.StartFactoryTarget(ctx, startReq)
+		startOutcome, err := s.factoryTarget.StartAsync(ctx, startReq)
 		if err != nil {
 			return dispatchOutcome{}, err
 		}
@@ -554,7 +610,7 @@ func (s *Server) startFactorySessionForEpisode(
 
 	requestID := startResult.Turn.ID
 	sourceKind := factorysessions.InvocationInputSourceKindText
-	outcome, err := s.factoryTarget.InvokeFactoryTarget(ctx, factorySessionID, factorysessions.InvocationRequest{
+	outcome, err := s.factoryTarget.InvokeFactorySession(ctx, factorySessionID, factorysessions.InvocationRequest{
 		Content:         promptContentToWorkParts(turn.Content),
 		ContentProvided: true,
 		RequestID:       &requestID,
@@ -580,7 +636,7 @@ func (s *Server) startFactorySessionForEpisode(
 				Episode:         startResult.Episode.Number,
 				TurnID:          startResult.Turn.ID,
 			})
-			return dispatchOutcome{}, errors.Join(err, clearErr, s.factoryTarget.CloseFactoryTarget(ctx, factorySessionID))
+			return dispatchOutcome{}, errors.Join(err, clearErr, s.factoryTarget.CloseFactorySession(ctx, factorySessionID))
 		}
 		return dispatchOutcome{}, err
 	}
@@ -598,14 +654,14 @@ func (s *Server) startFactorySessionForEpisode(
 // never starts a second Factory Session for an already-bound episode -- an
 // unbound episode is startFactorySessionForEpisode's job, not this one's.
 // The returned outcome is protocol.MapFactoryInvocationOutcome's
-// deterministic, safe projection of the shim's own published
+// deterministic, safe projection of the capability's own published
 // InvocationResult -- its terminal status and only the "text" parts of its
 // primary result, never the raw result itself. Unlike the start branch, this
 // call is synchronous: on success the returned dispatchOutcome terminalizes
 // to whatever factoryInvocationTurnState derives from the invocation's own
 // published terminal status, so a genuine Factory failure (InvocationResult
 // carrying InvocationTerminalStatusFailed) still terminalizes the Chat turn
-// to TurnStateFailed even though InvokeFactoryTarget itself returned no Go
+// to TurnStateFailed even though InvokeFactorySession itself returned no Go
 // error.
 func (s *Server) invokeFactorySessionForEpisode(
 	ctx context.Context,
@@ -618,7 +674,7 @@ func (s *Server) invokeFactorySessionForEpisode(
 
 	requestID := startResult.Turn.ID
 	sourceKind := factorysessions.InvocationInputSourceKindText
-	invokeResult, err := s.factoryTarget.InvokeFactoryTarget(ctx, startResult.Episode.FactorySessionID, factorysessions.InvocationRequest{
+	invokeResult, err := s.factoryTarget.InvokeFactorySession(ctx, startResult.Episode.FactorySessionID, factorysessions.InvocationRequest{
 		Content:         promptContentToWorkParts(turn.Content),
 		ContentProvided: true,
 		RequestID:       &requestID,
