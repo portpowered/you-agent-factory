@@ -575,14 +575,7 @@ func (s *Server) drainRecords(
 			return false, deliveredMessage, fmt.Errorf("%w: %v", errMalformedSequencedEnvelope, unmarshalErr)
 		}
 
-		draft := mapping.DraftFromSequencedItem(item)
-		var update *acpsdk.SessionUpdate
-		var projErr error
-		if isHistoryReplay(ctx) {
-			update, projErr = mapping.ProjectRetained(draft)
-		} else {
-			update, projErr = mapping.Project(draft)
-		}
+		update, projErr := projectSequencedItem(ctx, item)
 		if projErr != nil {
 			return false, deliveredMessage, projErr
 		}
@@ -627,6 +620,21 @@ func (s *Server) drainRecords(
 		cache.set(sessionID, *attachment)
 	}
 	return false, deliveredMessage, nil
+}
+
+// projectSequencedItem selects the child lifecycle mapper only when the
+// aggregate envelope carries the canonical Factory dispatch-to-Worker-Session
+// association. Unassociated records continue through the established generic
+// Project path unchanged, preserving T03 delivery behavior.
+func projectSequencedItem(ctx context.Context, item chatsessions.SequencedItem) (*acpsdk.SessionUpdate, error) {
+	if item.WorkerSessionAssociation != nil {
+		return mapping.ProjectWorkerChild(item)
+	}
+	draft := mapping.DraftFromSequencedItem(item)
+	if isHistoryReplay(ctx) {
+		return mapping.ProjectRetained(draft)
+	}
+	return mapping.Project(draft)
 }
 
 // acknowledgeDeliveredPosition persists a position already handed to the

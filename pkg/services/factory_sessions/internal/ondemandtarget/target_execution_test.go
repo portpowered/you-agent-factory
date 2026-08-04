@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
@@ -870,14 +871,19 @@ func TestLoggingNeverEmitsWorkingRootOrRawFailureText(t *testing.T) {
 // TestServiceSatisfiesPublishedTargetExecutionCapability proves a caller
 // typed only against the owner-published target-execution shape -- never
 // against the concrete *Service type or any wider aggregate contract -- can
-// start a target, invoke and cancel its captured session, and close it,
+// start a target, invoke and cancel its captured session, observe its
+// response and canonical Factory-event streams, and close it,
 // observing the exact same behavior (including post-close
 // ErrSessionNotFound) as a caller holding the concrete type. This is the
-// behavioral proof for the narrow capability's publication: any caller
-// depending on it receives a complete, non-panicking implementation of
-// exactly these four operations.
+// behavioral proof for the newly extended capability's publication: an ACP
+// caller can obtain the canonical Factory Event stream without downcasting
+// to the concrete service.
 func TestServiceSatisfiesPublishedTargetExecutionCapability(t *testing.T) {
-	sessions := &fakeSessions{invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}}
+	wantFactoryEvents := &factorydefinitions.FactoryEventStream{FactorySessionID: factorysessions.DefaultSessionID}
+	sessions := &fakeSessions{
+		invokeResult:       factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted},
+		factoryEventStream: wantFactoryEvents,
+	}
 	opener := &fakeOpener{opened: roles.OpenedInvocationRuntime{Sessions: sessions, Lifecycle: &fakeLifecycle{}}}
 	resolve := func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
 		return factorysessions.RuntimeOpeningRequest{}, nil
@@ -912,6 +918,11 @@ func TestServiceSatisfiesPublishedTargetExecutionCapability(t *testing.T) {
 	}
 	if len(sessions.cancelCalls) != 0 {
 		t.Fatalf("durable session cancel calls = %v, want none -- this target cancels only a live invocation context", sessions.cancelCalls)
+	}
+
+	stream, err := client.SubscribeFactoryEventsForSession(context.Background(), started.SessionID, nil)
+	if err != nil || stream != wantFactoryEvents {
+		t.Fatalf("SubscribeFactoryEventsForSession() = (%#v, %v), want captured stream and nil", stream, err)
 	}
 
 	if err := client.CloseFactorySession(context.Background(), started.SessionID); err != nil {

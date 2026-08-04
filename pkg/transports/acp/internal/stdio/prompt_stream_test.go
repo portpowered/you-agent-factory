@@ -171,6 +171,35 @@ func (f *fakeEventsService) seedItem(t *testing.T, sessionID, itemID, parentItem
 	f.seedRaw(sessionID, itemRaw)
 }
 
+// seedWorkerChildItem builds the exact association-carrying Chat envelope the
+// response bridge commits for one canonical Worker Session record. It keeps
+// the delivery assertion below on the transport's retained path rather than
+// calling a child mapper directly.
+func (f *fakeEventsService) seedWorkerChildItem(
+	t *testing.T,
+	sessionID, itemID, parentItemID, dispatchID, workerSessionID string,
+	phase workers.Phase,
+	status string,
+) {
+	t.Helper()
+	payload, err := json.Marshal(workers.SessionPayload{Status: status})
+	if err != nil {
+		t.Fatalf("marshal worker child lifecycle payload: %v", err)
+	}
+	itemRaw, err := json.Marshal(chatsessions.SequencedItem{
+		ItemID:                   itemID,
+		ParentItemID:             parentItemID,
+		WorkerSessionAssociation: &chatsessions.WorkerSessionAssociation{DispatchID: dispatchID, WorkerSessionID: workerSessionID},
+		Kind:                     workers.KindSession,
+		Phase:                    phase,
+		Payload:                  payload,
+	})
+	if err != nil {
+		t.Fatalf("marshal worker child sequenced envelope: %v", err)
+	}
+	f.seedRaw(sessionID, itemRaw)
+}
+
 // seedMalformed appends one record onto sessionID's topic whose payload does
 // not decode as chatsessions.SequencedItem, standing in for a committed
 // record this transport cannot make sense of -- proving drainRecords rejects
@@ -383,6 +412,42 @@ func TestStreamTurnUpdatesDeliversSeededMessageAndSuppressesV1Fallback(t *testin
 	}
 	if chunk.Content.Text == nil || chunk.Content.Text.Text != "streamed hello" {
 		t.Fatalf("notification chunk text = %+v, want %q", chunk.Content.Text, "streamed hello")
+	}
+}
+
+func TestStreamTurnUpdatesDeliversAssociatedWorkerLifecycleWithStoredLineage(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+	eventsSvc.seedWorkerChildItem(t, streamingTestSessionID, "worker-tool-call", "", "dispatch-1", "worker-session-1", workers.PhaseStarted, "STARTING")
+	eventsSvc.seedWorkerChildItem(t, streamingTestSessionID, "worker-running", "worker-tool-call", "dispatch-1", "worker-session-1", workers.PhaseUpdated, "RUNNING")
+	eventsSvc.seedWorkerChildItem(t, streamingTestSessionID, "worker-completed", "worker-tool-call", "dispatch-1", "worker-session-1", workers.PhaseCompleted, "COMPLETED")
+
+	var notified []acpsdk.SessionNotification
+	notify := func(n acpsdk.SessionNotification) error {
+		notified = append(notified, n)
+		return nil
+	}
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	deliveredMessage, err := server.streamTurnUpdates(ctx, "conn-worker", streamingTestSessionID, 1, notify)
+	if err != nil {
+		t.Fatalf("streamTurnUpdates() error = %v", err)
+	}
+	if deliveredMessage {
+		t.Fatal("streamTurnUpdates() deliveredMessage = true, want false for child lifecycle-only updates")
+	}
+	if len(notified) != 3 {
+		t.Fatalf("notification count = %d, want opening plus two lifecycle updates", len(notified))
+	}
+
+	opening := notified[0].Update.ToolCall
+	if opening == nil || opening.ToolCallId != "worker-tool-call" || opening.Status != acpsdk.ToolCallStatusPending {
+		t.Fatalf("opening = %#v, want pending tool call with stored ItemID", opening)
+	}
+	for index, wantStatus := range []acpsdk.ToolCallStatus{acpsdk.ToolCallStatusInProgress, acpsdk.ToolCallStatusCompleted} {
+		update := notified[index+1].Update.ToolCallUpdate
+		if update == nil || update.ToolCallId != "worker-tool-call" || update.Status == nil || *update.Status != wantStatus {
+			t.Fatalf("lifecycle notification %d = %#v, want parent worker-tool-call with status %q", index+1, update, wantStatus)
+		}
 	}
 }
 

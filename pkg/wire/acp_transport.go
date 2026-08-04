@@ -187,7 +187,8 @@ func provideACPServerResponseBridge(bridge *chatsessionswire.ResponseBridge) acp
 func provideChatSessionsResponseBridge(
 	chatSessions chatsessions.Service,
 	factoryTarget factorysessions.TargetExecutionService,
+	eventsService events.Service,
 	logger logging.Logger,
 ) *chatsessionswire.ResponseBridge {
-	return chatsessionswire.NewResponseBridge(chatSessions, factoryTarget, logger)
+	return chatsessionswire.NewResponseBridge(chatSessions, factoryTarget, eventsService, logger)
 }

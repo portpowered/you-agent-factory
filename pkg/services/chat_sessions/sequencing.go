@@ -2,6 +2,7 @@ package chatsessions
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -57,6 +58,12 @@ type SequenceRequest struct {
 	// ParentItemID names the already-sequenced aggregate item this record is
 	// a child of, or is blank for a record with no parent.
 	ParentItemID string
+	// WorkerSessionAssociation carries the already-published Factory
+	// dispatch-to-Worker-Session association when this envelope came from an
+	// associated Worker Session. It is absent for generic Factory response
+	// output, so downstream transports can distinguish the two without timing
+	// inference or connection-local registration state.
+	WorkerSessionAssociation *WorkerSessionAssociation
 	// Payload stays source-native JSON; Sequence does not convert it into a
 	// new normalized event taxonomy.
 	Payload json.RawMessage
@@ -92,11 +99,38 @@ func (r SequenceRequest) Validate() error {
 	if err := r.Phase.Validate(); err != nil {
 		return newValidationError("SequenceRequest", "Phase", ErrUnknownEnumValue)
 	}
+	if r.WorkerSessionAssociation != nil {
+		if err := r.WorkerSessionAssociation.Validate(); err != nil {
+			return err
+		}
+	}
 	if len(r.Payload) == 0 {
 		return newValidationError("SequenceRequest", "Payload", ErrRequiredValue)
 	}
 	if !json.Valid(r.Payload) {
 		return newValidationError("SequenceRequest", "Payload", ErrMalformedValue)
+	}
+	return nil
+}
+
+// WorkerSessionAssociation is the canonical, bounded ownership fact that
+// associates one Factory dispatch with the Worker Session executing it. Chat
+// sequencing carries this fact alongside source-native Worker records so a
+// later retained, live, or reconnecting consumer can select the child
+// projection without reconstructing membership from record timing or labels.
+type WorkerSessionAssociation struct {
+	DispatchID      string `json:"dispatchId"`
+	WorkerSessionID string `json:"workerSessionId"`
+}
+
+// Validate rejects incomplete canonical ownership facts. The values remain
+// opaque service identities; only non-blankness belongs at this boundary.
+func (a WorkerSessionAssociation) Validate() error {
+	if strings.TrimSpace(a.DispatchID) == "" {
+		return newValidationError("WorkerSessionAssociation", "DispatchID", ErrRequiredValue)
+	}
+	if strings.TrimSpace(a.WorkerSessionID) == "" {
+		return newValidationError("WorkerSessionAssociation", "WorkerSessionID", ErrRequiredValue)
 	}
 	return nil
 }
@@ -108,11 +142,12 @@ func (r SequenceRequest) Validate() error {
 // retained read, a live subscription, and a reconnect, with no
 // transport-owned or connection-local identity map.
 type SequencedItem struct {
-	ItemID       string          `json:"itemId"`
-	ParentItemID string          `json:"parentItemId,omitempty"`
-	Kind         workers.Kind    `json:"kind"`
-	Phase        workers.Phase   `json:"phase"`
-	Payload      json.RawMessage `json:"payload"`
+	ItemID                   string                    `json:"itemId"`
+	ParentItemID             string                    `json:"parentItemId,omitempty"`
+	WorkerSessionAssociation *WorkerSessionAssociation `json:"workerSessionAssociation,omitempty"`
+	Kind                     workers.Kind              `json:"kind"`
+	Phase                    workers.Phase             `json:"phase"`
+	Payload                  json.RawMessage           `json:"payload"`
 }
 
 // Validate reports whether i is an internally consistent, already-assigned
@@ -126,6 +161,11 @@ func (i SequencedItem) Validate() error {
 	}
 	if err := i.Phase.Validate(); err != nil {
 		return newValidationError("SequencedItem", "Phase", ErrUnknownEnumValue)
+	}
+	if i.WorkerSessionAssociation != nil {
+		if err := i.WorkerSessionAssociation.Validate(); err != nil {
+			return err
+		}
 	}
 	if len(i.Payload) == 0 {
 		return newValidationError("SequencedItem", "Payload", ErrRequiredValue)

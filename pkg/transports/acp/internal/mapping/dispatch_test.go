@@ -7,6 +7,7 @@ import (
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
+	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -344,6 +345,71 @@ func TestProjectChildLifecycleKeepsPendingStatusAndRejectsMalformedLineage(t *te
 				t.Fatalf("ProjectChildLifecycle() error = %v, want %v", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestProjectWorkerChildUsesSequencedAssociationAndLineage(t *testing.T) {
+	t.Parallel()
+	association := &chatsessions.WorkerSessionAssociation{DispatchID: "dispatch-1", WorkerSessionID: "worker-session-1"}
+	openingPayload, err := json.Marshal(workers.SessionPayload{Status: "STARTING"})
+	if err != nil {
+		t.Fatalf("marshal opening payload: %v", err)
+	}
+	opening, err := ProjectWorkerChild(chatsessions.SequencedItem{
+		ItemID: "sequenced-tool-call", WorkerSessionAssociation: association,
+		Kind: workers.KindSession, Phase: workers.PhaseStarted, Payload: openingPayload,
+	})
+	if err != nil || opening == nil || opening.ToolCall == nil {
+		t.Fatalf("ProjectWorkerChild(opening) = (%#v, %v), want ToolCall", opening, err)
+	}
+	if opening.ToolCall.ToolCallId != "sequenced-tool-call" {
+		t.Fatalf("opening ToolCallId = %q, want sequenced-tool-call", opening.ToolCall.ToolCallId)
+	}
+
+	runningPayload, err := json.Marshal(workers.SessionPayload{Status: "RUNNING"})
+	if err != nil {
+		t.Fatalf("marshal running payload: %v", err)
+	}
+	running, err := ProjectWorkerChild(chatsessions.SequencedItem{
+		ItemID: "sequenced-update", ParentItemID: "sequenced-tool-call", WorkerSessionAssociation: association,
+		Kind: workers.KindSession, Phase: workers.PhaseUpdated, Payload: runningPayload,
+	})
+	if err != nil || running == nil || running.ToolCallUpdate == nil {
+		t.Fatalf("ProjectWorkerChild(running) = (%#v, %v), want ToolCallUpdate", running, err)
+	}
+	if running.ToolCallUpdate.ToolCallId != "sequenced-tool-call" {
+		t.Fatalf("running ToolCallId = %q, want stored parent", running.ToolCallUpdate.ToolCallId)
+	}
+}
+
+func TestProjectWorkerChildRejectsMissingAssociationAndParent(t *testing.T) {
+	t.Parallel()
+	payload, err := json.Marshal(workers.SessionPayload{Status: "RUNNING"})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	missingAssociation, err := ProjectWorkerChild(chatsessions.SequencedItem{
+		ItemID: "item-1", Kind: workers.KindSession, Phase: workers.PhaseStarted, Payload: payload,
+	})
+	if missingAssociation != nil || !errors.Is(err, ErrMissingChildAssociation) {
+		t.Fatalf("ProjectWorkerChild(missing association) = (%#v, %v), want ErrMissingChildAssociation", missingAssociation, err)
+	}
+
+	malformedAssociation, err := ProjectWorkerChild(chatsessions.SequencedItem{
+		ItemID: "item-blank-association", WorkerSessionAssociation: &chatsessions.WorkerSessionAssociation{DispatchID: "dispatch-1"},
+		Kind: workers.KindSession, Phase: workers.PhaseUpdated, ParentItemID: "child-tool-call", Payload: payload,
+	})
+	if malformedAssociation != nil || !errors.Is(err, ErrMissingChildAssociation) {
+		t.Fatalf("ProjectWorkerChild(malformed association) = (%#v, %v), want ErrMissingChildAssociation", malformedAssociation, err)
+	}
+
+	missingParent, err := ProjectWorkerChild(chatsessions.SequencedItem{
+		ItemID: "item-2", WorkerSessionAssociation: &chatsessions.WorkerSessionAssociation{DispatchID: "dispatch-1", WorkerSessionID: "worker-session-1"},
+		Kind: workers.KindSession, Phase: workers.PhaseUpdated, Payload: payload,
+	})
+	if missingParent != nil || !errors.Is(err, ErrMissingChildParent) {
+		t.Fatalf("ProjectWorkerChild(missing parent) = (%#v, %v), want ErrMissingChildParent", missingParent, err)
 	}
 }
 

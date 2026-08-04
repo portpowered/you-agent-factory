@@ -179,7 +179,7 @@ type stubResponseBridgeFactoryTarget struct {
 }
 
 func TestNewResponseBridgeConstructsFromInjectedSequencer(t *testing.T) {
-	bridge := NewResponseBridge(stubResponseBridgeSequencer{}, stubResponseBridgeFactoryTarget{}, logging.NoopLogger{})
+	bridge := NewResponseBridge(stubResponseBridgeSequencer{}, stubResponseBridgeFactoryTarget{}, nil, logging.NoopLogger{})
 	if bridge == nil {
 		t.Fatal("NewResponseBridge returned nil")
 	}

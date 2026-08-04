@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
@@ -86,8 +87,8 @@ func (f *fakeLifecycle) CurrentRuntimeBundle() factoryruntime.HostedInstance {
 }
 
 // fakeSessions is a minimal factorysessions.Service test double: it embeds
-// the interface unimplemented so any call beyond
-// Invoke/Cancel/CloseFactorySession this package's Service actually uses
+// the interface unimplemented so any call beyond the target-execution
+// operations this package's Service actually uses
 // reaches a nil method value and panics, proving no other capability is
 // dispatched to.
 type fakeSessions struct {
@@ -110,6 +111,10 @@ type fakeSessions struct {
 	closeErr   error
 	closeErrs  []error
 	close      func(context.Context, string) error
+
+	factoryEventCalls  []string
+	factoryEventStream *factorydefinitions.FactoryEventStream
+	factoryEventErr    error
 }
 
 func (f *fakeSessions) InvokeFactorySession(
@@ -156,7 +161,18 @@ func (f *fakeSessions) CloseFactorySession(ctx context.Context, sessionID string
 	return err
 }
 
-func newTestService(t *testing.T, opener runtimeopening.InvocationRuntimeOpening, resolve RuntimeResolver, generateID factorysessions.SessionIDGenerator) *Service {
+func (f *fakeSessions) SubscribeFactoryEventsForSession(
+	_ context.Context,
+	sessionID string,
+	_ *factorydefinitions.FactoryEventReconnectCursor,
+) (*factorydefinitions.FactoryEventStream, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.factoryEventCalls = append(f.factoryEventCalls, sessionID)
+	return f.factoryEventStream, f.factoryEventErr
+}
+
+func newTestService(t *testing.T, opener invocationRuntimeOpener, resolve RuntimeResolver, generateID factorysessions.SessionIDGenerator) *Service {
 	t.Helper()
 	return &Service{
 		opening:           opener,

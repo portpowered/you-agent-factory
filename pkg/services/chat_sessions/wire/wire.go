@@ -18,6 +18,7 @@ import (
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/responsebridge"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/service"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -87,7 +88,8 @@ type ResponseBridge = responsebridge.Service
 func NewResponseBridge(
 	sequencer responsebridge.Sequencer,
 	factoryTarget factorysessions.TargetExecutionService,
+	workerEvents events.Service,
 	logger logging.Logger,
 ) *ResponseBridge {
-	return responsebridge.New(sequencer, factoryTarget, logger)
+	return responsebridge.New(sequencer, factoryTarget, workerEvents, logger)
 }

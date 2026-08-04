@@ -81,11 +81,12 @@ func (s *Store) Sequence(ctx context.Context, req chatsessions.SequenceRequest) 
 	}
 
 	item := chatsessions.SequencedItem{
-		ItemID:       s.newID(),
-		ParentItemID: req.ParentItemID,
-		Kind:         req.Kind,
-		Phase:        req.Phase,
-		Payload:      req.Payload,
+		ItemID:                   s.newID(),
+		ParentItemID:             req.ParentItemID,
+		WorkerSessionAssociation: copyWorkerSessionAssociation(req.WorkerSessionAssociation),
+		Kind:                     req.Kind,
+		Phase:                    req.Phase,
+		Payload:                  req.Payload,
 	}
 	if err := item.Validate(); err != nil {
 		return chatsessions.SequenceResult{}, err
@@ -139,6 +140,18 @@ func (s *Store) Sequence(ctx context.Context, req chatsessions.SequenceRequest) 
 	default:
 		return chatsessions.SequenceResult{}, fmt.Errorf("chat sessions: events append returned unexpected outcome %d", appendResult.Outcome)
 	}
+}
+
+// copyWorkerSessionAssociation detaches the stored canonical ownership fact
+// from the caller's request. Sequence retains the item for later duplicate
+// comparison, so aliasing its pointer would let a caller mutate an already
+// committed association after the event envelope was written.
+func copyWorkerSessionAssociation(source *chatsessions.WorkerSessionAssociation) *chatsessions.WorkerSessionAssociation {
+	if source == nil {
+		return nil
+	}
+	copy := *source
+	return &copy
 }
 
 // resolveSequencedDuplicate reports the SequenceResult for req, a reused
@@ -204,6 +217,14 @@ func marshalSequencedItemEnvelope(item chatsessions.SequencedItem) ([]byte, erro
 		buf.WriteString(`,"parentItemId":`)
 		buf.Write(parentItemID)
 	}
+	if item.WorkerSessionAssociation != nil {
+		association, marshalErr := json.Marshal(item.WorkerSessionAssociation)
+		if marshalErr != nil {
+			return nil, fmt.Errorf("workerSessionAssociation: %w", marshalErr)
+		}
+		buf.WriteString(`,"workerSessionAssociation":`)
+		buf.Write(association)
+	}
 	buf.WriteString(`,"kind":`)
 	buf.Write(kind)
 	buf.WriteString(`,"phase":`)
@@ -225,6 +246,8 @@ func contradictedField(req chatsessions.SequenceRequest, originalSchemaID events
 	switch {
 	case req.ParentItemID != original.ParentItemID:
 		return "ParentItemID", true
+	case !reflect.DeepEqual(req.WorkerSessionAssociation, original.WorkerSessionAssociation):
+		return "WorkerSessionAssociation", true
 	case req.Kind != original.Kind:
 		return "Kind", true
 	case req.Phase != original.Phase:

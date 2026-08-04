@@ -8,6 +8,7 @@ import (
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
+	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -35,6 +36,40 @@ var (
 )
 
 const workerToolCallMetaKey = "you.factory.worker_session"
+
+// ProjectWorkerChild projects the sequenced envelope form of an associated
+// Worker Session record. The association is stored with the Chat aggregate
+// item, so retained and live delivery choose the same child path without a
+// transport-local ownership map. The first lifecycle slice deliberately
+// declares non-SESSION Worker records as no output; the subsequent exhaustive
+// Worker-content slice extends that declared outcome without changing generic
+// Chat projection.
+func ProjectWorkerChild(item chatsessions.SequencedItem) (*acpsdk.SessionUpdate, error) {
+	if item.WorkerSessionAssociation == nil {
+		return nil, ErrMissingChildAssociation
+	}
+	association := ChildAssociation{
+		DispatchID:      item.WorkerSessionAssociation.DispatchID,
+		WorkerSessionID: item.WorkerSessionAssociation.WorkerSessionID,
+	}
+	if err := validateChildAssociation(association); err != nil {
+		return nil, err
+	}
+	draft := DraftFromSequencedItem(item)
+	if !isLegalKindPhase(draft.Kind, draft.Phase) {
+		return nil, fmt.Errorf(
+			"%w: kind %q phase %q is not a declared projectable combination",
+			ErrMalformedRecord, draft.Kind, draft.Phase,
+		)
+	}
+	if draft.Kind != workers.KindSession {
+		return nil, nil
+	}
+	if draft.Phase == workers.PhaseStarted {
+		return ProjectChildOpening(draft, association)
+	}
+	return ProjectChildLifecycle(draft)
+}
 
 // ProjectChildOpening projects the sequenced SESSION/STARTED record that
 // opens an associated Factory Worker Session. The supplied ItemID becomes the
