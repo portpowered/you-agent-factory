@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap/zapcore"
 )
@@ -123,20 +124,13 @@ func (s *staticFactoryDefinitionsService) setEntries(entries []factorydefinition
 	s.entries = entries
 }
 
-// TestProvideChatSessionsFactoryTargetCatalogServiceComposesThroughTheCanonicalWireGraph
-// proves the exact provider chain pkg/wire registers for the Chat Sessions
-// Factory target-catalog root (provideChatSessionsFactoryTargetCatalogService
-// consuming the same provideOperatorSettingsService chain and canonical
-// process logger as every other canonical consumer) performs direct single
-// injection with no dependency bag, threads a real logger into the
-// operation's started/finished logs, observes live Factory Definitions
-// drift on the very next call, and never invokes anything beyond the one
-// read-only collaborator method it depends on.
-func TestProvideChatSessionsFactoryTargetCatalogServiceComposesThroughTheCanonicalWireGraph(t *testing.T) {
-	t.Parallel()
-
-	zapLogger, observed := testdeps.CapturingZapLogger(zapcore.InfoLevel)
-	logger := provideOperatorSettingsLogger(zapLogger)
+// newTestOperatorSettingsService composes the real canonical Operator
+// Settings root from a fresh edges.Edges through the exact provider chain
+// pkg/wire registers, shared by every Chat Sessions Factory target-catalog
+// composition test below that needs a genuine (non-fake) Operator Settings
+// collaborator.
+func newTestOperatorSettingsService(t *testing.T, logger logging.Logger) operatorsettings.Service {
+	t.Helper()
 
 	edges := serviceedges.Edges{}
 	files := provideOperatorSettingsFileSystem(edges)
@@ -161,6 +155,24 @@ func TestProvideChatSessionsFactoryTargetCatalogServiceComposesThroughTheCanonic
 	if err != nil {
 		t.Fatalf("provideOperatorSettingsService() error = %v", err)
 	}
+	return operatorSettings
+}
+
+// TestProvideChatSessionsFactoryTargetCatalogServiceComposesThroughTheCanonicalWireGraph
+// proves the exact provider chain pkg/wire registers for the Chat Sessions
+// Factory target-catalog root (provideChatSessionsFactoryTargetCatalogService
+// consuming the same provideOperatorSettingsService chain and canonical
+// process logger as every other canonical consumer) performs direct single
+// injection with no dependency bag, threads a real logger into the
+// operation's started/finished logs, observes live Factory Definitions
+// drift on the very next call, and never invokes anything beyond the one
+// read-only collaborator method it depends on.
+func TestProvideChatSessionsFactoryTargetCatalogServiceComposesThroughTheCanonicalWireGraph(t *testing.T) {
+	t.Parallel()
+
+	zapLogger, observed := testdeps.CapturingZapLogger(zapcore.InfoLevel)
+	logger := provideOperatorSettingsLogger(zapLogger)
+	operatorSettings := newTestOperatorSettingsService(t, logger)
 
 	factoryBuilderLocation := "/factories/@you/factory-builder"
 	factoryDefinitions := &staticFactoryDefinitionsService{
@@ -270,29 +282,7 @@ func TestProvideChatSessionsFactoryTargetCatalogServicePreservesCancelledContext
 	}
 
 	logger := logging.NoopLogger{}
-	edges := serviceedges.Edges{}
-	files := provideOperatorSettingsFileSystem(edges)
-	providersRoot, err := provideProvidersService(edges)
-	if err != nil {
-		t.Fatalf("provideProvidersService() error = %v", err)
-	}
-	providerRegistry, err := provideProviderRegistry(edges, providersRoot)
-	if err != nil {
-		t.Fatalf("provideProviderRegistry() error = %v", err)
-	}
-	operatorSettings, err := provideOperatorSettingsService(
-		files,
-		provideOperatorSettingsCreateTemporaryFile(edges),
-		provideOperatorSettingsProviderCatalog(providerRegistry),
-		provideOperatorConfigDecoder(),
-		provideOperatorConfigEncoder(),
-		provideOperatorSettingsIDGenerator(edges),
-		providersRoot,
-		logger,
-	)
-	if err != nil {
-		t.Fatalf("provideOperatorSettingsService() error = %v", err)
-	}
+	operatorSettings := newTestOperatorSettingsService(t, logger)
 
 	catalog, err := provideChatSessionsFactoryTargetCatalogService(operatorSettings, catalogPaths, logger)
 	if err != nil {
