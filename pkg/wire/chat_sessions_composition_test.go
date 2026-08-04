@@ -92,7 +92,7 @@ func TestProvideChatSessionsServiceConstructsAnIndependentServiceDirectly(t *tes
 // catalog/path capability, matching the same fake-collaborator convention
 // used by pkg/services/chat_sessions/internal/service's own unit tests.
 type staticFactoryDefinitionsService struct {
-	factorydefinitions.CatalogPathsService
+	factorydefinitionswire.CatalogPathsService
 
 	mu      sync.Mutex
 	calls   int
@@ -255,7 +255,10 @@ func TestProvideChatSessionsFactoryTargetCatalogServicePreservesCancelledContext
 			},
 		}, nil
 	}
-	catalogPaths, err := factorydefinitionswire.NewCatalogPathsService(listEffective, namedPaths, fileSystem, logging.NoopLogger{})
+	resolveCurrentDir := func(rootDir string) (string, error) {
+		return factorydefinitionswire.ResolveCurrent(namedPaths, rootDir)
+	}
+	catalogPaths, err := factorydefinitionswire.NewCatalogPathsService(listEffective, namedPaths, resolveCurrentDir, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewCatalogPathsService: %v", err)
 	}

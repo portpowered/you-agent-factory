@@ -19,3 +19,16 @@ func ResolveCurrentFactoryDirectory(
 	}
 	return pointer.FactoryDir, nil
 }
+
+// ResolveCurrentFactoryLocationRequest selects the root whose current Factory
+// location to resolve.
+type ResolveCurrentFactoryLocationRequest struct {
+	RootDir string
+}
+
+// ResolveCurrentFactoryLocationResult carries the resolved current Factory
+// directory: the current-pointer target when a pointer exists at RootDir,
+// otherwise a root directly authored with a regular factory.json.
+type ResolveCurrentFactoryLocationResult struct {
+	FactoryDir string
+}

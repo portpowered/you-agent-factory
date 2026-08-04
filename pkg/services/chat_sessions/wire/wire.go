@@ -18,7 +18,6 @@ import (
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/factorysessionsshim"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/service"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
@@ -62,14 +61,22 @@ func NewService(newID IDGenerator, now Clock, eventsAppender EventsAppender, eve
 	return internalservice.NewStore(newID, now, eventsAppender, eventsReader, logger...), nil
 }
 
+// FactoryDefinitionsCatalogPaths is the narrow read subset of Factory
+// Definitions' catalog/path capability NewFactoryTargetCatalogService
+// requires: listing installed/available targets and resolving a
+// caller-supplied named target reference against project/global roots. Any
+// Factory Definitions collaborator whose method set covers these two
+// signatures satisfies it structurally.
+type FactoryDefinitionsCatalogPaths = internalservice.FactoryDefinitionsCatalogPaths
+
 // NewFactoryTargetCatalogService constructs the Chat Sessions Factory
 // target-catalog root from the singular Operator Settings public service
-// root and Factory Definitions' narrow, read-only CatalogPathsService
-// capability. logger is the direct, required operation-logging abstraction;
-// callers with no operation logging pass logging.NoopLogger{}.
+// root and Factory Definitions' narrow, read-only catalog/path capability.
+// logger is the direct, required operation-logging abstraction; callers with
+// no operation logging pass logging.NoopLogger{}.
 func NewFactoryTargetCatalogService(
 	operatorSettings operatorsettings.Service,
-	factoryDefinitions factorydefinitions.CatalogPathsService,
+	factoryDefinitions FactoryDefinitionsCatalogPaths,
 	logger logging.Logger,
 ) (chatsessions.FactoryTargetCatalogService, error) {
 	return internalservice.New(operatorSettings, factoryDefinitions, logger)
