@@ -89,8 +89,8 @@
         "Tests pass"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-04: Added a deterministic ACP delivery scenario for two associated Worker Sessions. It proves RESERVED and STARTING openings remain pending, interleaved live deltas stay isolated by stored tool-call parent, a failed child does not prevent a sibling completion, reconnect resumes from the acknowledged cursor, and retained+live+reconnect output exactly matches a fresh full retained replay. Focused race-repeat delivery evidence passes."
     }
   ]
 }

@@ -7,6 +7,7 @@
 - Isolate typed mapping failures only for associated child records at the delivery boundary; preserve the established fatal behavior for malformed generic Chat envelopes.
 - Per-child ACP delivery policy belongs in the shared attachment cache, keyed by Chat Session and stored parent ItemID, so retained catch-up and live continuation use the same accounting without altering generic Chat projection.
 - Reserve explicit elision capacity before accepting ordinary bounded content; this preserves later failure or stream-gap evidence without exceeding the stated per-child limits.
+- For retained/live/reconnect delivery proofs, compare the retained prefix plus subscriber-barrier live suffix and resumed suffix against a fresh full retained drain of the same canonical records.
 
 ## 2026-08-04 15:44 -07:00 - ACP-L4-W5-CHILD-TOOL-CALL-PROJECTION-001
 - Added a pure Worker child lifecycle mapper that renders sequenced, associated SESSION/STARTED records as pending ACP tool calls and maps RUNNING and terminal lifecycle records to parent-addressed tool-call updates.
@@ -86,4 +87,17 @@
   - ACP `SessionUpdate` can be deterministically byte-accounted by JSON serializing the already-mapped update; replacing an oversized update with a content-only elision also prevents `RawInput` and `RawOutput` from bypassing the bound.
   - Count only meaningful child content updates against the projection budget; immutable opening identity and lifecycle terminal status must remain available even when content is intentionally elided.
   - `make test` passes. `make pkg-file-count` remains blocked by 47 pre-existing oversized-package baseline violations, including the unchanged ACP mapping package; this iteration added no Go files.
+---
+
+## 2026-08-04 16:35 -07:00 - ACP-L4-W5-CHILD-TOOL-CALL-PROJECTION-004
+- Added a deterministic ACP transport scenario for two concurrently associated Worker Sessions across retained catch-up, live continuation, and attachment resume.
+- The scenario verifies RESERVED and STARTING children both open pending; interleaved live message deltas remain parent-isolated; one child's failed terminal update does not block the sibling's successful terminal update; resume emits only post-cursor terminal records; and the combined timeline exactly equals a fresh full retained replay.
+- Files changed:
+  - pkg/transports/acp/internal/stdio/response_bridge_test.go
+  - prd.json
+  - progress.txt
+- **Learnings for future iterations:**
+  - The ACP streaming fake exposes a subscriber barrier, so live handoff tests can wait for the subscription before publishing records instead of relying on timing sleeps.
+  - A resumed attachment retains its delivery cursor while a fresh attachment can independently reconstruct the complete canonical child timeline for an exact equivalence check.
+  - Focused `go test`, `go test -race -count=20`, ACP package tests, `go vet`, and `make test` pass. `make lint` reaches the pre-existing backend-size baseline of 85 violations; this change adds no size violation.
 ---
