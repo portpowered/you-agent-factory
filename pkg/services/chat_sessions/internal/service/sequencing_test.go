@@ -1037,6 +1037,30 @@ func TestEqualJSON(t *testing.T) {
 			b:    json.RawMessage(`{also-not-json`),
 			want: false,
 		},
+		{
+			name: "map with fewer keys is not equal",
+			a:    json.RawMessage(`{"a":1}`),
+			b:    json.RawMessage(`{"a":1,"b":2}`),
+			want: false,
+		},
+		{
+			name: "equal nested arrays",
+			a:    json.RawMessage(`{"items":[1,2,3]}`),
+			b:    json.RawMessage(`{"items":[1,2,3]}`),
+			want: true,
+		},
+		{
+			name: "arrays of different length are not equal",
+			a:    json.RawMessage(`{"items":[1,2]}`),
+			b:    json.RawMessage(`{"items":[1,2,3]}`),
+			want: false,
+		},
+		{
+			name: "arrays with a differing element are not equal",
+			a:    json.RawMessage(`{"items":[1,2,3]}`),
+			b:    json.RawMessage(`{"items":[1,2,9]}`),
+			want: false,
+		},
 	}
 
 	for _, tt := range tests {
