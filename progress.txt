@@ -1,0 +1,45 @@
+## Codebase Patterns
+- ACP outbound mappers are pure and must preserve Chat Sessions' stored ItemID and ParentItemID rather than allocating transport-local identities.
+- Factory child ownership must be established by the canonical dispatch-to-Worker-Session association; malformed or unaddressed child records fail closed without an ACP fallback.
+- A live event reader may use a cancellable context, but committed sequencing and terminal catch-up must use a non-cancelled delivery context so a record observed at the invocation boundary is not lost.
+- When a live source is replayed from its retained origin during terminal catch-up, retain successfully committed source identities for the current bridge run before applying lifecycle-order guards.
+
+## 2026-08-04 15:44 -07:00 - ACP-L4-W5-CHILD-TOOL-CALL-PROJECTION-001
+- Added a pure Worker child lifecycle mapper that renders sequenced, associated SESSION/STARTED records as pending ACP tool calls and maps RUNNING and terminal lifecycle records to parent-addressed tool-call updates.
+- Added focused tests for stable IDs, association metadata, pending/running/completed/failed/canceled semantics, malformed association/payload/status handling, and strict no-parent rejection.
+- Files changed:
+  - pkg/transports/acp/internal/mapping/child.go
+  - pkg/transports/acp/internal/mapping/dispatch_test.go
+  - prd.json
+  - progress.txt
+- **Learnings for future iterations:**
+  - The existing generic ACP mapper intentionally has no child ownership context; use the new child lifecycle seam only after canonical association and sequenced lineage are available.
+  - Worker Session opening records use SESSION/STARTED with STARTING status, while ACP has no canceled status, so CANCELED and TERMINATED map to ACP failed terminal updates.
+  - `go test ./pkg/transports/acp/...`, `go test -race -count=20 ./pkg/transports/acp/internal/mapping`, and `go vet ./pkg/transports/acp/internal/mapping` pass. `make pkg-file-count` is currently blocked by pre-existing repository baseline violations outside this change.
+---
+
+## 2026-08-04 16:09 -07:00 - ACP-L4-W5-CHILD-TOOL-CALL-PROJECTION-001
+- Completed stable child lifecycle delivery: Chat sequencing now persists the canonical dispatch-to-Worker-Session association; the response bridge consumes Factory association history/live events plus Worker Session topics; and ACP streaming projects the resulting stored lineage into one pending tool call followed by running/terminal updates.
+- Added same-run source identity suppression for the retained terminal sweep and separated live subscription cancellation from non-cancelled sequencing, preventing replay duplication and boundary-record loss.
+- Extended the on-demand Factory target capability to expose its exact captured Factory Event stream and regenerated the application wiring.
+- Files changed:
+  - pkg/services/chat_sessions/sequencing.go
+  - pkg/services/chat_sessions/internal/service/sequencing.go
+  - pkg/services/chat_sessions/internal/responsebridge/response_bridge.go
+  - pkg/services/chat_sessions/internal/responsebridge/worker_children.go
+  - pkg/services/chat_sessions/wire/wire.go
+  - pkg/services/factory_sessions/target_execution_contract.go
+  - pkg/services/factory_sessions/internal/ondemandtarget/service.go
+  - pkg/transports/acp/internal/mapping/child.go
+  - pkg/transports/acp/internal/stdio/prompt_stream.go
+  - pkg/wire/acp_transport.go
+  - pkg/wire/wire_gen.go
+  - focused service, bridge, mapper, ACP delivery, and target-execution tests
+  - prd.json
+  - progress.txt
+- **Learnings for future iterations:**
+  - Factory Event history establishes child membership before Worker Session start; subscribe to the Worker topic immediately, then re-read history after the invocation to close the live handoff.
+  - The terminal retained sweep begins at each Worker topic origin, so it must skip records already sequenced live by canonical `(source type, source ID, source sequence, source event ID)` identity.
+  - Associated envelopes route through `mapping.ProjectWorkerChild`; unassociated Chat envelopes must remain on the existing generic `mapping.Project` path.
+  - `make wire-smoke`, `make test`, focused `go vet`, and `go test -race -count=20` on child producer/delivery packages pass.
+---
