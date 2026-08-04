@@ -9,14 +9,16 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// Service is the W1+W2 Worker Session identity, registry, and supervision
-// foundation: stable identity reservation, immutable deterministic
-// inspection, and supervised Start with exactly-once terminal
-// classification. StartTurn, Events publication, Runtime and Provider
+// Service is the W1+W2+W3 Worker Session identity, registry, supervision,
+// and Events publication foundation: stable identity reservation, immutable
+// deterministic inspection, supervised Start with exactly-once terminal
+// classification, a before-handoff opening record, and an after-output
+// terminal SESSION record, plus PublishRecord for committing source-native
+// Worker observations onto that same topic. StartTurn, Runtime and Provider
 // Session association, Pause/Resume/Cancel/Terminate controls, persistence,
-// and transport behavior are later ACP Worker Events slices (W3-W7) and are
+// and transport behavior are later ACP Worker Events slices (W4-W7) and are
 // not exposed here. Later slices land as additive methods on this same named
-// interface; W2 does not publish placeholder methods for them.
+// interface; earlier slices do not publish placeholder methods for them.
 type Service interface {
 	// Reserve validates req and, when req.ID is not already registered,
 	// stores a new session in StateReserved and returns its snapshot.
@@ -44,8 +46,34 @@ type Service interface {
 	// only after the attempt commits its exactly-once absorbing COMPLETED or
 	// FAILED terminal outcome, classified from the Workers WorkResult first
 	// and the adapter error second. Invalid requests and conflicting starts
-	// return a typed error before any registry mutation or Workers call.
+	// return a typed error before any registry mutation or Workers call. Once
+	// the terminal outcome commits, Start also appends one terminal
+	// KindSession record (PhaseCompleted or PhaseFailed) to Topic(req.ID); a
+	// failure publishing that record is logged and never changes the
+	// returned, already-committed Session.
 	Start(ctx context.Context, req StartRequest) (StartResult, error)
+
+	// PublishRecord validates req, then appends req.Draft, detached, as a
+	// source-native Worker record onto Topic(req.SessionID) using req's
+	// complete Events idempotency identity. PublishRecord only accepts a
+	// record while req.SessionID's publication window is open -- after its
+	// opening record has committed and before its terminal record has
+	// started committing -- and only when req.SourceSequence does not
+	// regress behind one already accepted for the same (SourceType,
+	// SourceID), unless req's full four-part identity was itself already
+	// accepted: an exact retry of a previously accepted identity always
+	// reaches Events and resolves to the original record as a duplicate,
+	// regardless of any later SourceSequence accepted since. Every accepted
+	// call for one session is itself serialized, so its own opening,
+	// publication, and terminal records can never interleave. Beyond that
+	// window and ordering enforcement, PublishRecord
+	// relies on Events for aggregate order, duplicate resolution, cursors,
+	// reads, and subscriptions. An invalid Draft, an unopened or closed
+	// publication window (ErrPublicationNotOpen), an out-of-order
+	// SourceSequence (ErrOutOfOrderPublication), a malformed Events
+	// identity, or an Events append failure is returned unchanged and
+	// commits no record.
+	PublishRecord(ctx context.Context, req PublishRecordRequest) (PublishRecordResult, error)
 }
 
 // ReserveRequest asks Service to reserve one new Worker Session identity.
@@ -198,4 +226,13 @@ var (
 	// paused, or terminal). No Workers call is made and the existing session
 	// is left unchanged.
 	ErrSessionNotStartable = errors.New("worker session: not startable")
+	// ErrPublicationNotOpen reports PublishRecord called for a session whose
+	// publication window is not open: the session was only ever reserved,
+	// its opening record has not yet committed, or its terminal record has
+	// already started committing. No record is committed.
+	ErrPublicationNotOpen = errors.New("worker session: publication is not open")
+	// ErrOutOfOrderPublication reports PublishRecord called with a
+	// SourceSequence that regresses behind one already accepted for the same
+	// (SourceType, SourceID). No record is committed.
+	ErrOutOfOrderPublication = errors.New("worker session: source sequence is out of order")
 )
