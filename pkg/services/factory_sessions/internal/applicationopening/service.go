@@ -104,7 +104,10 @@ func (service *Service) OpenApplication(
 	if err != nil {
 		return roles.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application runtime: %w", err)
 	}
-	if opened.HistoricalReplay {
+	if opened.HistoricalReplay != nil {
+		if ports.HistoricalReplayBound != nil {
+			ports.HistoricalReplayBound(*opened.HistoricalReplay)
+		}
 		return service.openHistoricalReplayApplication(opened)
 	}
 	if ports.RuntimeHTTPServicesBound != nil {

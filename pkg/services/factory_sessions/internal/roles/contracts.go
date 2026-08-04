@@ -48,7 +48,7 @@ type OpenedApplicationRuntime struct {
 	HTTP             RuntimeHTTPServices
 	Visualization    RuntimeVisualizationServices
 	Resources        RuntimeResources
-	HistoricalReplay bool
+	HistoricalReplay *factorysessions.HistoricalReplayInspection
 }
 
 type OpenedProcessApplication struct {

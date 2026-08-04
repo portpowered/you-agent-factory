@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 )
 
@@ -15,6 +16,35 @@ type Service struct{ projection RecordingReplayProjection }
 
 func NewService(projection RecordingReplayProjection) *Service {
 	return &Service{projection: projection}
+}
+
+// Inspection returns the complete public read model for the recording. The
+// caller receives only the bounded facts already restored by ReplayRecording;
+// no live execution or mutable checkpoint state is exposed.
+func (s *Service) Inspection() factorysessions.HistoricalReplayInspection {
+	if s == nil {
+		return factorysessions.HistoricalReplayInspection{}
+	}
+	inspection := factorysessions.HistoricalReplayInspection{
+		Session:   s.projection.Session,
+		Events:    s.projection.Events,
+		Artifacts: s.projection.Artifacts,
+		Result:    s.projection.Result,
+		Redaction: factorysessions.HistoricalReplayRedaction{
+			RuntimeStateOmitted:        s.projection.Redaction.RuntimeStateOmitted,
+			CheckpointBodiesOmitted:    s.projection.Redaction.CheckpointBodiesOmitted,
+			ProviderTranscriptsOmitted: s.projection.Redaction.ProviderTranscriptsOmitted,
+			ChildDispatchesOmitted:     s.projection.Redaction.ChildDispatchesOmitted,
+			SecretsRedacted:            s.projection.Redaction.SecretsRedacted,
+		},
+	}
+	if checkpoint := s.projection.Checkpoint; checkpoint != nil {
+		inspection.Checkpoint = &factorysessions.HistoricalReplayCheckpoint{
+			ID: checkpoint.ID, Label: checkpoint.Label, Summary: checkpoint.Summary,
+			ArtifactID: checkpoint.ArtifactID, Timestamp: checkpoint.Timestamp,
+		}
+	}
+	return inspection
 }
 
 // IsNonLiveReplay lets control-plane routing recognize recorded canonical

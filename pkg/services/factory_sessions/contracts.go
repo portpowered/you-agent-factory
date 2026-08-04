@@ -2,6 +2,7 @@ package factorysessions
 
 import (
 	"context"
+	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -94,6 +95,11 @@ type ApplicationOpeningPorts struct {
 	// and before component binding. Hosted CLI invocations use it to route factory
 	// invokes through the live session invoker on the already-running host.
 	RuntimeHTTPServicesBound func(RuntimeHTTPServices)
+	// HistoricalReplayBound receives the read-only Factory Session inspection
+	// facts restored from a portable recording. It is invoked instead of binding
+	// a live runtime, so callers can present the recording without constructing
+	// providers, workers, a runtime host, or lifecycle controls.
+	HistoricalReplayBound func(HistoricalReplayInspection)
 }
 
 // ApplicationOpeningRequest binds a runtime request to invocation-local ports.
@@ -117,6 +123,36 @@ type RuntimeHTTPServices struct {
 	ProviderSessions   providersessions.Service
 	WorkerPrompts      workers.PromptTemplates
 	Logger             *zap.Logger
+}
+
+// HistoricalReplayInspection is the detached public read model restored from
+// a portable Factory Session recording. It uses the same Factory Session,
+// artifact, result, and ordered-event facts as the ordinary inspection
+// surfaces while making its read-only and redaction boundaries explicit.
+type HistoricalReplayInspection struct {
+	Session    SessionReadResult
+	Events     EventReadResult
+	Artifacts  ListArtifactsResult
+	Result     ResultReadResult
+	Checkpoint *HistoricalReplayCheckpoint
+	Redaction  HistoricalReplayRedaction
+}
+
+// HistoricalReplayCheckpoint is the public checkpoint summary available from
+// a historical portable recording. It never includes checkpoint body state.
+type HistoricalReplayCheckpoint struct {
+	ID, Label, Summary, ArtifactID string
+	Timestamp                      time.Time
+}
+
+// HistoricalReplayRedaction identifies the intentionally omitted recording
+// content without exposing any omitted content or integrity material.
+type HistoricalReplayRedaction struct {
+	RuntimeStateOmitted        bool
+	CheckpointBodiesOmitted    bool
+	ProviderTranscriptsOmitted bool
+	ChildDispatchesOmitted     bool
+	SecretsRedacted            int64
 }
 
 // FactoryScaffoldInitializer initializes a newly selected Factory directory.

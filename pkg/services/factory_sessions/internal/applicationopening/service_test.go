@@ -472,3 +472,80 @@ func TestOpenApplicationInvokesRuntimeHTTPServicesBound(t *testing.T) {
 		t.Fatal("RuntimeHTTPServicesBound was not invoked")
 	}
 }
+
+func TestOpenApplicationPublishesHistoricalReplayInspectionWithoutLiveBindings(t *testing.T) {
+	t.Parallel()
+
+	inspection := factorysessions.HistoricalReplayInspection{
+		Session: factorysessions.SessionReadResult{SessionID: "recorded-session"},
+		Redaction: factorysessions.HistoricalReplayRedaction{
+			RuntimeStateOmitted: true,
+			SecretsRedacted:     2,
+		},
+	}
+	var published factorysessions.HistoricalReplayInspection
+	var bound, adapted bool
+	service, err := New(
+		func(
+			context.Context,
+			*factorysessions.RuntimeOpeningRequest,
+			roles.ApplicationOpeningPorts,
+			*zap.Logger,
+		) (RuntimeInputs, error) {
+			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}, Logger: zap.NewNop()}, nil
+		},
+		runtimeOpenerFunc(func(
+			context.Context,
+			*factorysessions.RuntimeOpeningRequest,
+			runtimeopening.ExternalEffects,
+			*zap.Logger,
+		) (roles.OpenedApplicationRuntime, error) {
+			return roles.OpenedApplicationRuntime{HistoricalReplay: &inspection}, nil
+		}),
+		func(
+			roles.OpenedApplicationRuntime,
+			runtimeopening.ExternalEffects,
+			factoryvisualization.Sink,
+		) (factorysessions.BoundProcessComponents, error) {
+			adapted = true
+			return factorysessions.BoundProcessComponents{}, nil
+		},
+		func(request roles.LifecyclePlanRequest) (lifecycle.Plan, error) {
+			if request.Components.Transport == nil {
+				t.Fatal("historical replay lifecycle is missing its no-op transport")
+			}
+			return lifecycle.Plan{}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+
+	_, err = service.OpenApplication(
+		context.Background(),
+		roles.ApplicationOpeningRequest{
+			Runtime: &factorysessions.RuntimeOpeningRequest{},
+			Ports: roles.ApplicationOpeningPorts{
+				HistoricalReplayBound: func(got factorysessions.HistoricalReplayInspection) {
+					bound = true
+					published = got
+				},
+			},
+		},
+		zap.NewNop(),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("OpenApplication(): %v", err)
+	}
+	if !bound {
+		t.Fatal("HistoricalReplayBound was not invoked")
+	}
+	if published.Session.SessionID != "recorded-session" ||
+		!published.Redaction.RuntimeStateOmitted || published.Redaction.SecretsRedacted != 2 {
+		t.Fatalf("published historical replay = %#v, want recorded inspection facts", published)
+	}
+	if adapted {
+		t.Fatal("historical replay unexpectedly bound live runtime components")
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testpath"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -137,14 +138,16 @@ func TestProcessExecuteReturnsPortableReplayInspectionWithoutLiveRuntimeConstruc
 	}
 
 	workingDirectory := t.TempDir()
+	var stdout bytes.Buffer
 	err = process.Execute(root.Input{
 		Args: []string{
 			"you", "run", "--dir", workingDirectory,
-			"--replay", "recording.json", "--no-record", "--quiet",
+			"--replay", "recording.json", "--no-record",
 		},
 		Context:          t.Context(),
 		Env:              replayTestHomeEnvironment(t.TempDir()),
 		WorkingDirectory: workingDirectory,
+		Stdout:           &stdout,
 	})
 	if err != nil {
 		t.Fatalf("Process.Execute(run --replay) error = %v", err)
@@ -157,6 +160,24 @@ func TestProcessExecuteReturnsPortableReplayInspectionWithoutLiveRuntimeConstruc
 			"live replay construction calls = provider:%d script:%d sessionID:%d host:%d, want zero",
 			providerRuns.Load(), scriptRuns.Load(), sessionIDRequests.Load(), hostBindings.Load(),
 		)
+	}
+	for _, want := range []string{
+		"Replayed Factory Session: session-js-001",
+		"Source: workflow/example.js",
+		"Status: SUCCEEDED",
+		"Result: FINAL",
+		"Artifacts: 1",
+		"Artifact: artifact-1 (CHECKPOINT)",
+		"Checkpoint: checkpoint-1 (Waiting for operator input)",
+		"Events: 3",
+		"Redaction: runtimeStateOmitted=true checkpointBodiesOmitted=true providerTranscriptsOmitted=true childDispatchesOmitted=true secretsRedacted=2",
+		"Event 0: SESSION_STARTED (event-1)",
+		"Event 1: JAVASCRIPT_CHECKPOINT_REF (event-2)",
+		"Event 2: SESSION_COMPLETED (event-3)",
+	} {
+		if !bytes.Contains(stdout.Bytes(), []byte(want)) {
+			t.Fatalf("portable replay inspection output = %q, want %q", stdout.String(), want)
+		}
 	}
 }
 
@@ -187,16 +208,43 @@ func invalidPortableReplayOrderPayload(t *testing.T) []byte {
 func validPortableReplayPayload(t *testing.T) []byte {
 	t.Helper()
 
-	path := testpath.MustRepoPathFromCaller(
-		t,
-		0,
-		"pkg", "services", "recordings", "internal", "artifacts", "testdata", "valid-v2.json",
-	)
-	payload, err := os.ReadFile(path)
+	checkpointAt := time.Date(2026, time.July, 12, 12, 0, 1, 0, time.UTC)
+	recording, err := recordings.BuildPortableRecording(recordings.PortableRecordingCanonicalFacts{
+		SessionID:        "session-js-001",
+		Status:           "SUCCEEDED",
+		OrchestratorKind: "JAVASCRIPT",
+		SourceRef:        "workflow/example.js",
+		SourceHash:       replayPortableDigest('1'),
+		PolicyHash:       replayPortableDigest('3'),
+		Artifacts: []recordings.PortableRecordingCanonicalArtifact{{
+			ID: "artifact-1", Kind: "CHECKPOINT", Visibility: "PUBLIC", Label: "Approval checkpoint",
+			ContentHash: replayPortableDigest('4'), SizeBytes: 42, CreatedAt: checkpointAt, SecretsRedacted: 2,
+		}},
+		Events: []json.RawMessage{
+			json.RawMessage(`{"id":"event-1","type":"SESSION_STARTED","context":{"sequence":0,"eventTime":"2026-07-12T12:00:00Z"},"payload":{}}`),
+			json.RawMessage(`{"id":"event-2","type":"JAVASCRIPT_CHECKPOINT_REF","context":{"sequence":1,"eventTime":"2026-07-12T12:00:01Z","checkpointId":"checkpoint-1"},"payload":{"artifactIds":["artifact-1"]}}`),
+			json.RawMessage(`{"id":"event-3","type":"SESSION_COMPLETED","context":{"sequence":2,"eventTime":"2026-07-12T12:00:02Z"},"payload":{"artifactIds":["artifact-1"]}}`),
+		},
+		Checkpoint: &recordings.PortableRecordingCanonicalCheckpoint{
+			ID: "checkpoint-1", Label: "Approval", Summary: "Waiting for operator input",
+			ArtifactID: "artifact-1", Timestamp: checkpointAt,
+		},
+		Result: &recordings.PortableRecordingCanonicalResult{
+			Status: "FINAL", Mode: "final", PrimaryResult: json.RawMessage(`{"answer":"done"}`), ArtifactIDs: []string{"artifact-1"},
+		},
+	})
 	if err != nil {
-		t.Fatalf("read valid portable recording: %v", err)
+		t.Fatalf("build valid portable recording: %v", err)
+	}
+	payload, err := json.Marshal(recording)
+	if err != nil {
+		t.Fatalf("marshal valid portable recording: %v", err)
 	}
 	return payload
+}
+
+func replayPortableDigest(character byte) string {
+	return "sha256:" + string(bytes.Repeat([]byte{character}, 64))
 }
 
 func replayTestHomeEnvironment(home string) []string {
