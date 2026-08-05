@@ -15,7 +15,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"path/filepath"
@@ -170,11 +169,6 @@ func (f *RuntimeFactory) Build(
 		_ = logSink.Close()
 		return nil, fmt.Errorf("Worker Sessions factory is required")
 	}
-	workerSessions, err := workerSessionsFactory(workerService)
-	if err != nil {
-		_ = logSink.Close()
-		return nil, fmt.Errorf("construct Worker Sessions service: %w", err)
-	}
 	metricsSink, err := buildRuntimeMetricsSink(
 		f.runtimeMetrics,
 		runtimeMetricsPolicy,
@@ -219,8 +213,7 @@ func (f *RuntimeFactory) Build(
 		}
 	}
 
-	bundleBuilt = true
-	return assembleRuntimeBundle(
+	bundle, err := assembleRuntimeBundle(
 		dir, folderPath, sessionID, runtimeMode, verbose, runtimeScheduler,
 		workerExecutorOverrides, workerExecutorDecorator, inlineDispatch, submissionRecorder,
 		dispatchRecorder,
@@ -230,7 +223,7 @@ func (f *RuntimeFactory) Build(
 		dispatchCompleted, logger, structuredLogger, logSink, metricsSink, net, eventHistory,
 		workerExecutors,
 		workerService,
-		workerSessions,
+		workerSessionsFactory,
 		f.workService,
 		f.quorumPolicy,
 		f.outputShaping,
@@ -242,6 +235,11 @@ func (f *RuntimeFactory) Build(
 		f.inputDirectoryWalker,
 		f.decisionEnvelopes,
 	)
+	if err != nil {
+		return nil, err
+	}
+	bundleBuilt = true
+	return bundle, nil
 }
 
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
@@ -277,7 +275,7 @@ func assembleRuntimeBundle(
 	eventHistory recordings.RuntimeLedger,
 	workerExecutors map[string]workers.WorkerExecutor,
 	workerService runtimeWorkstationService,
-	workerSessions workersessions.Service,
+	workerSessionsFactory factory.WorkerSessionsFactory,
 	workService work.Service,
 	quorumPolicy interfaces.QuorumPolicyService,
 	outputShaping interfaces.InvocationOutputShapingService,
@@ -320,7 +318,7 @@ func assembleRuntimeBundle(
 		runtimeScheduler,
 		workerExecutors,
 		workerService,
-		workerSessions,
+		workerSessionsFactory,
 		loadedFactoryCfg,
 		RuntimeWorkflowContext(loadedFactoryCfg.FactoryConfig(), sessionID),
 		runtimeMode,

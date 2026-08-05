@@ -74,8 +74,8 @@ type WorkersMockCommandRunnerFactory func(
 
 // WorkerSessionsFactory constructs the per-session Worker Sessions service
 // (W4 Runtime dispatch cutover) from that session's already-resolved Workers
-// execution boundary. Wire composes the one canonical construction path
+// workstation-pool boundary. Wire composes the one canonical construction path
 // (worker_sessions/wire.NewService plus its own Events/logging dependencies)
 // behind this factory so Factory Runtime never imports a peer service's
 // wire or internal packages directly.
-type WorkerSessionsFactory func(workers.WorkstationExecutionService) (workersessions.Service, error)
+type WorkerSessionsFactory func(workers.WorkstationPoolBoundary) (workersessions.Service, error)

@@ -42,6 +42,26 @@ func (u unusedExecution) CancelWorkstationDispatch(context.Context, workers.Work
 	return workers.WorkstationDispatchCancelResult{}, nil
 }
 
+func (u unusedExecution) Start(context.Context) error {
+	u.t.Fatal("unexpected boundary Start call")
+	return nil
+}
+
+func (u unusedExecution) Publish(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAcceptFunc) error {
+	u.t.Fatal("unexpected boundary Publish call")
+	return nil
+}
+
+func (u unusedExecution) Cancel(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+	u.t.Fatal("unexpected boundary Cancel call")
+	return workers.WorkstationDispatchCancelResult{}, nil
+}
+
+func (u unusedExecution) Stop(context.Context) error {
+	u.t.Fatal("unexpected boundary Stop call")
+	return nil
+}
+
 // newTestRegistry returns the concrete *registry (not just the Service
 // interface) so white-box tests in this package can drive reserveIfAbsent
 // and transitionToStarting directly.

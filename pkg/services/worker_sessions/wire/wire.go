@@ -3,7 +3,7 @@
 // Wire performs construction only, returns the singular
 // workersessions.Service root interface, and starts no lifecycle
 // components. It composes the implementation through direct single
-// injection of one workers.WorkstationExecutionService and one
+// injection of one workers.WorkstationPoolBoundary and one
 // EventsAppender, with no dependency bag, service locator, or alternate
 // construction path. Factory Runtime is the production consumer (W4
 // dispatch cutover), composed through pkg/services/factory_runtime/internal
@@ -24,15 +24,15 @@ import (
 type EventsAppender = internalservice.EventsAppender
 
 // NewService constructs the Worker Sessions root from the one directly
-// injected workers.WorkstationExecutionService that Start hands attempts to
-// and the one directly injected EventsAppender Start's before-handoff
+// injected workers.WorkstationPoolBoundary that Start publishes attempts
+// through and the one directly injected EventsAppender Start's before-handoff
 // publication barrier commits through. logger is the direct, required
 // operation-logging abstraction; callers with no operation logging pass
 // logging.NoopLogger{}.
 func NewService(
-	execution workers.WorkstationExecutionService,
+	boundary workers.WorkstationPoolBoundary,
 	eventsAppender EventsAppender,
 	logger logging.Logger,
 ) (workersessions.Service, error) {
-	return internalservice.New(execution, eventsAppender, logger)
+	return internalservice.New(boundary, eventsAppender, logger)
 }

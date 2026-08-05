@@ -78,6 +78,7 @@ type runtimeConfig struct {
 	scheduler                 scheduler.Scheduler
 	workerExecutors           map[string]workers.WorkerExecutor
 	workerService             workers.WorkstationExecutionService
+	workerSessionsFactory     factory.WorkerSessionsFactory
 	workerSessions            workersessions.Service
 	runtimeConfig             interfaces.RuntimeDefinitionLookup
 	workflowContext           *factory_context.FactoryContext
@@ -115,7 +116,7 @@ func New(
 	runtimeScheduler scheduler.Scheduler,
 	workerExecutors map[string]workers.WorkerExecutor,
 	workerService workers.WorkstationExecutionService,
-	workerSessionsService workersessions.Service,
+	workerSessionsFactory factory.WorkerSessionsFactory,
 	runtimeDefinitions interfaces.RuntimeDefinitionLookup,
 	workflowContext *factory_context.FactoryContext,
 	runtimeMode interfaces.RuntimeMode,
@@ -157,8 +158,8 @@ func New(
 	if workerService == nil {
 		return nil, fmt.Errorf("a canonical Workers workstation service is required")
 	}
-	if workerSessionsService == nil {
-		return nil, fmt.Errorf("a canonical Worker Sessions service is required")
+	if workerSessionsFactory == nil {
+		return nil, fmt.Errorf("a canonical Worker Sessions factory is required")
 	}
 	if runtimeMode == "" {
 		runtimeMode = interfaces.RuntimeModeBatch
@@ -168,7 +169,7 @@ func New(
 		scheduler:                 runtimeScheduler,
 		workerExecutors:           workerExecutors,
 		workerService:             workerService,
-		workerSessions:            workerSessionsService,
+		workerSessionsFactory:     workerSessionsFactory,
 		runtimeConfig:             runtimeDefinitions,
 		workflowContext:           workflowContext,
 		runtimeMode:               runtimeMode,
@@ -198,9 +199,12 @@ func New(
 	marking := buildRuntimeMarking(cfg)
 	resultBuffer := buffers.NewTypedBuffer[workerexecution.WorkResult](defaultRuntimeBufferSize)
 	effectiveEventHistory := ensureEventHistory(cfg)
-	dispatchResultHook, dispatchPlan, workersBoundary := configureRuntimeDispatch(
+	dispatchResultHook, dispatchPlan, workersBoundary, err := configureRuntimeDispatch(
 		cfg, resultBuffer, effectiveEventHistory,
 	)
+	if err != nil {
+		return nil, err
+	}
 	impl := newFactoryImpl(
 		cfg, nil, effectiveLogger, resultBuffer,
 		dispatchResultHook, dispatchPlan, workersBoundary, effectiveEventHistory,
@@ -422,6 +426,7 @@ func configureRuntimeDispatch(
 	*dispatchPlanningResultHook,
 	dispatchplanning.Service,
 	workers.WorkstationPoolBoundary,
+	error,
 ) {
 	workersBoundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
 		Service:    cfg.workerService,
@@ -429,6 +434,11 @@ func configureRuntimeDispatch(
 		RouteNames: runtimeWorkstationRouteNames(cfg.net, cfg.workerExecutors),
 		Async:      !cfg.inlineDispatch && cfg.completionDeliveryPlanner == nil,
 	})
+	workerSessions, err := cfg.workerSessionsFactory(workersBoundary)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("construct Worker Sessions service: %w", err)
+	}
+	cfg.workerSessions = workerSessions
 	var resultHook *dispatchPlanningResultHook
 	planner := dispatchplanningwire.New(
 		func(ctx context.Context, request workers.WorkstationDispatchRequest) error {
@@ -447,7 +457,7 @@ func configureRuntimeDispatch(
 		cfg.workRequestIDs,
 		sessionIDFromFactoryConfig(cfg),
 	)
-	return resultHook, planner, workersBoundary
+	return resultHook, planner, workersBoundary, nil
 }
 
 func newFactoryImpl(

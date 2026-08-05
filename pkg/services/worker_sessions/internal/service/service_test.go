@@ -18,7 +18,7 @@ func newRegistry() workersessions.Service {
 }
 
 func newRegistryWithExecution(execution workers.WorkstationExecutionService) workersessions.Service {
-	registry, err := service.New(execution, newEventsAppender(), logging.NoopLogger{})
+	registry, err := service.New(executionBoundary{execution: execution}, newEventsAppender(), logging.NoopLogger{})
 	if err != nil {
 		panic(fmt.Sprintf("service.New() error = %v, want nil", err))
 	}
