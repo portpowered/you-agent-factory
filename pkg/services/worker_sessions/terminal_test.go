@@ -120,6 +120,17 @@ func TestTerminalResult_Validate_TableDriven(t *testing.T) {
 			wantErr: workersessions.ErrInvalidFailureCause,
 		},
 		{
+			name: "failed with an unknown continuation classification is rejected",
+			result: workersessions.TerminalResult{
+				Outcome: workersessions.TerminalOutcomeFailed,
+				Cause: &workersessions.FailureCause{
+					Kind:                            workersessions.FailureCauseWorkersExecutionFailure,
+					ProviderContinuationFailureKind: providers.ContinuationFailureKind("UNKNOWN"),
+				},
+			},
+			wantErr: workersessions.ErrInvalidFailureCause,
+		},
+		{
 			name: "completed with a cause is rejected",
 			result: workersessions.TerminalResult{
 				Outcome: workersessions.TerminalOutcomeCompleted,
