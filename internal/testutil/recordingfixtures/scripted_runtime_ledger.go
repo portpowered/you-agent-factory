@@ -37,6 +37,7 @@ type ScriptedRuntimeLedger struct {
 type ScriptedDispatchWorkerSessionAssociation struct {
 	DispatchID      string
 	WorkerSessionID string
+	RequestID       string
 }
 
 var _ recordings.RuntimeEventLedger = (*ScriptedRuntimeLedger)(nil)
@@ -188,12 +189,14 @@ func (l *ScriptedRuntimeLedger) RecordDispatchWorkerSessionAssociation(
 	_ int,
 	dispatchID string,
 	workerSessionID string,
+	requestID string,
 	_ time.Time,
 ) {
 	l.mu.Lock()
 	l.DispatchWorkerSessionAssociations = append(l.DispatchWorkerSessionAssociations, ScriptedDispatchWorkerSessionAssociation{
 		DispatchID:      dispatchID,
 		WorkerSessionID: workerSessionID,
+		RequestID:       requestID,
 	})
 	l.mu.Unlock()
 	l.recordCall("RecordDispatchWorkerSessionAssociation")

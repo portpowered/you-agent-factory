@@ -349,6 +349,19 @@ func (s *Service) DispatchWorkstation(
 	return s.Root.DispatchWorkstation(ctx, request)
 }
 
+// DispatchWorkstationWithAdmission delegates execution and the Workers-owned
+// admission acknowledgement through the runtime root.
+func (s *Service) DispatchWorkstationWithAdmission(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	admitted workers.WorkstationDispatchAdmissionFunc,
+) (workers.WorkstationDispatchResult, error) {
+	if s == nil {
+		return workers.WorkstationDispatchResult{}, workers.ErrWorkstationPoolUnavailable
+	}
+	return s.Root.DispatchWorkstationWithAdmission(ctx, request, admitted)
+}
+
 // CancelWorkstationDispatch delegates explicit cancellation to the private
 // workstation owner.
 func (s *Service) CancelWorkstationDispatch(

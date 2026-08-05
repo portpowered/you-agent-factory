@@ -23,11 +23,12 @@ func TestServiceResumeAfterPauseReturnsAcceptedOutcomeOnce(t *testing.T) {
 		t.Fatalf("NewService: %v", err)
 	}
 
+	control := factorysessions.ControlRequest{RequestID: "control-1", TurnID: "turn-1"}
 	paused, err := service.ApplyControl(
 		context.Background(),
 		"sess-control",
 		factorysessions.LifecycleControlPause,
-		factorysessions.ControlRequest{},
+		control,
 	)
 	if err != nil || paused.Outcome != factorysessions.LifecycleControlOutcomeAccepted || paused.Status != factorysessions.LifecycleStatusPaused {
 		t.Fatalf("pause = (%#v, %v), want accepted paused", paused, err)
@@ -35,19 +36,25 @@ func TestServiceResumeAfterPauseReturnsAcceptedOutcomeOnce(t *testing.T) {
 	if runtime.pauseCalls != 1 {
 		t.Fatalf("pause calls = %d, want 1", runtime.pauseCalls)
 	}
+	if got := runtime.pauseRequests; len(got) != 1 || got[0].TurnID != control.TurnID || got[0].ControlID != control.RequestID {
+		t.Fatalf("pause request = %#v, want captured turn/control identity", got)
+	}
 
 	runtime.state = string(factorydefinitions.FactoryStatePaused)
 	resumed, err := service.ApplyControl(
 		context.Background(),
 		"sess-control",
 		factorysessions.LifecycleControlResume,
-		factorysessions.ControlRequest{},
+		control,
 	)
 	if err != nil || resumed.Outcome != factorysessions.LifecycleControlOutcomeAccepted || resumed.Status != factorysessions.LifecycleStatusRunning {
 		t.Fatalf("resume = (%#v, %v), want accepted running", resumed, err)
 	}
 	if runtime.resumeCalls != 1 {
 		t.Fatalf("resume calls = %d, want 1", runtime.resumeCalls)
+	}
+	if got := runtime.resumeRequests; len(got) != 1 || got[0].TurnID != control.TurnID || got[0].ControlID != control.RequestID {
+		t.Fatalf("resume request = %#v, want captured turn/control identity", got)
 	}
 }
 

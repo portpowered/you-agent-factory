@@ -12,7 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func stubWorkerSessionsFactory(workers.WorkstationExecutionService) (workersessions.Service, error) {
+func stubWorkerSessionsFactory(workers.WorkstationPoolBoundary) (workersessions.Service, error) {
 	return nil, nil
 }
 

@@ -61,11 +61,13 @@ type factoryImpl struct {
 	mu           sync.RWMutex
 	// completeCh is closed when Run() returns (either by termination or error).
 	// WaitToComplete() returns this channel.
-	completeCh           chan struct{}
-	completeOnce         sync.Once
-	runCancel            context.CancelFunc
-	operatorMoveRequests map[string]appliedOperatorMove
-	resumeDrainPending   bool
+	completeCh                  chan struct{}
+	completeOnce                sync.Once
+	runCancel                   context.CancelFunc
+	operatorMoveRequests        map[string]appliedOperatorMove
+	resumeDrainPending          bool
+	workerSessionControlMu      sync.Mutex
+	workerSessionControlResults map[workerSessionControlKey]factory.WorkerSessionControlResult
 }
 
 type appliedOperatorMove struct {
@@ -78,6 +80,7 @@ type runtimeConfig struct {
 	scheduler                 scheduler.Scheduler
 	workerExecutors           map[string]workers.WorkerExecutor
 	workerService             workers.WorkstationExecutionService
+	workerSessionsFactory     factory.WorkerSessionsFactory
 	workerSessions            workersessions.Service
 	runtimeConfig             interfaces.RuntimeDefinitionLookup
 	workflowContext           *factory_context.FactoryContext
@@ -115,7 +118,7 @@ func New(
 	runtimeScheduler scheduler.Scheduler,
 	workerExecutors map[string]workers.WorkerExecutor,
 	workerService workers.WorkstationExecutionService,
-	workerSessionsService workersessions.Service,
+	workerSessionsFactory factory.WorkerSessionsFactory,
 	runtimeDefinitions interfaces.RuntimeDefinitionLookup,
 	workflowContext *factory_context.FactoryContext,
 	runtimeMode interfaces.RuntimeMode,
@@ -157,8 +160,8 @@ func New(
 	if workerService == nil {
 		return nil, fmt.Errorf("a canonical Workers workstation service is required")
 	}
-	if workerSessionsService == nil {
-		return nil, fmt.Errorf("a canonical Worker Sessions service is required")
+	if workerSessionsFactory == nil {
+		return nil, fmt.Errorf("a canonical Worker Sessions factory is required")
 	}
 	if runtimeMode == "" {
 		runtimeMode = interfaces.RuntimeModeBatch
@@ -168,7 +171,7 @@ func New(
 		scheduler:                 runtimeScheduler,
 		workerExecutors:           workerExecutors,
 		workerService:             workerService,
-		workerSessions:            workerSessionsService,
+		workerSessionsFactory:     workerSessionsFactory,
 		runtimeConfig:             runtimeDefinitions,
 		workflowContext:           workflowContext,
 		runtimeMode:               runtimeMode,
@@ -198,9 +201,12 @@ func New(
 	marking := buildRuntimeMarking(cfg)
 	resultBuffer := buffers.NewTypedBuffer[workerexecution.WorkResult](defaultRuntimeBufferSize)
 	effectiveEventHistory := ensureEventHistory(cfg)
-	dispatchResultHook, dispatchPlan, workersBoundary := configureRuntimeDispatch(
+	dispatchResultHook, dispatchPlan, workersBoundary, err := configureRuntimeDispatch(
 		cfg, resultBuffer, effectiveEventHistory,
 	)
+	if err != nil {
+		return nil, err
+	}
 	impl := newFactoryImpl(
 		cfg, nil, effectiveLogger, resultBuffer,
 		dispatchResultHook, dispatchPlan, workersBoundary, effectiveEventHistory,
@@ -422,6 +428,7 @@ func configureRuntimeDispatch(
 	*dispatchPlanningResultHook,
 	dispatchplanning.Service,
 	workers.WorkstationPoolBoundary,
+	error,
 ) {
 	workersBoundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
 		Service:    cfg.workerService,
@@ -429,6 +436,11 @@ func configureRuntimeDispatch(
 		RouteNames: runtimeWorkstationRouteNames(cfg.net, cfg.workerExecutors),
 		Async:      !cfg.inlineDispatch && cfg.completionDeliveryPlanner == nil,
 	})
+	workerSessions, err := cfg.workerSessionsFactory(workersBoundary)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("construct Worker Sessions service: %w", err)
+	}
+	cfg.workerSessions = workerSessions
 	var resultHook *dispatchPlanningResultHook
 	planner := dispatchplanningwire.New(
 		func(ctx context.Context, request workers.WorkstationDispatchRequest) error {
@@ -447,7 +459,7 @@ func configureRuntimeDispatch(
 		cfg.workRequestIDs,
 		sessionIDFromFactoryConfig(cfg),
 	)
-	return resultHook, planner, workersBoundary
+	return resultHook, planner, workersBoundary, nil
 }
 
 func newFactoryImpl(
@@ -461,19 +473,20 @@ func newFactoryImpl(
 	eventHistory recordings.RuntimeLedger,
 ) *factoryImpl {
 	return &factoryImpl{
-		engine:               eng,
-		cfg:                  cfg,
-		topology:             cfg.net,
-		logger:               logger,
-		resultBuffer:         resultBuffer,
-		dispatchFlow:         dispatchFlow,
-		dispatchPlan:         dispatchPlan,
-		workers:              workersBoundary,
-		eventHistory:         eventHistory,
-		state:                interfaces.FactoryStateIdle,
-		clock:                cfg.clock,
-		completeCh:           make(chan struct{}),
-		operatorMoveRequests: make(map[string]appliedOperatorMove),
+		engine:                      eng,
+		cfg:                         cfg,
+		topology:                    cfg.net,
+		logger:                      logger,
+		resultBuffer:                resultBuffer,
+		dispatchFlow:                dispatchFlow,
+		dispatchPlan:                dispatchPlan,
+		workers:                     workersBoundary,
+		eventHistory:                eventHistory,
+		state:                       interfaces.FactoryStateIdle,
+		clock:                       cfg.clock,
+		completeCh:                  make(chan struct{}),
+		operatorMoveRequests:        make(map[string]appliedOperatorMove),
+		workerSessionControlResults: make(map[workerSessionControlKey]factory.WorkerSessionControlResult),
 	}
 }
 
@@ -619,6 +632,8 @@ func (f *factoryImpl) SubscribeFactoryEvents(ctx context.Context, reconnect *int
 
 // Pause pauses the factory. Repeated calls while already paused are a no-op.
 func (f *factoryImpl) Pause(ctx context.Context) error {
+	f.workerSessionControlMu.Lock()
+	defer f.workerSessionControlMu.Unlock()
 	_, previousState, err := f.applyPauseControl()
 	if err != nil {
 		return fmt.Errorf("pause factory: invalid state %s", previousState)
@@ -658,6 +673,8 @@ func (f *factoryImpl) applyPauseControl() (factory.ControlOutcome, interfaces.Fa
 
 // Resume resumes a paused factory.
 func (f *factoryImpl) Resume(ctx context.Context) error {
+	f.workerSessionControlMu.Lock()
+	defer f.workerSessionControlMu.Unlock()
 	_, previousState, err := f.applyResumeControl()
 	if err != nil {
 		return fmt.Errorf("resume factory: invalid state %s", previousState)

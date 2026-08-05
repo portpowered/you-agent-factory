@@ -25,9 +25,10 @@ func TestReconstructedCanonicalLedgerRetainsDispatchWorkerSessionAssociationPair
 	associations := []struct {
 		dispatchID      string
 		workerSessionID string
+		requestID       string
 	}{
-		{dispatchID: "dispatch-actual-7", workerSessionID: "worker-session-actual-11"},
-		{dispatchID: "dispatch-actual-13", workerSessionID: "worker-session-actual-17"},
+		{dispatchID: "dispatch-actual-7", workerSessionID: "worker-session-actual-11", requestID: "turn-actual-3"},
+		{dispatchID: "dispatch-actual-13", workerSessionID: "worker-session-actual-17", requestID: "turn-actual-5"},
 	}
 
 	emitter := recordingevents.NewRuntimeLedger(nil, func() time.Time { return now }, generationID, nil)
@@ -37,6 +38,7 @@ func TestReconstructedCanonicalLedgerRetainsDispatchWorkerSessionAssociationPair
 			tick,
 			association.dispatchID,
 			association.workerSessionID,
+			association.requestID,
 			now.Add(time.Duration(index*2)*time.Second),
 		)
 		emitter.AppendRecordedEvent(dispatchWorkerSessionDependentOutput(
@@ -125,6 +127,7 @@ func assertReplayedDispatchWorkerSessionAssociation(
 	want struct {
 		dispatchID      string
 		workerSessionID string
+		requestID       string
 	},
 ) {
 	t.Helper()
@@ -137,6 +140,9 @@ func assertReplayedDispatchWorkerSessionAssociation(
 	canonicalEvent := canonical.FactoryEventFromCanonical(event)
 	if canonicalEvent.Context.DispatchID == nil || *canonicalEvent.Context.DispatchID != want.dispatchID {
 		t.Fatalf("replayed association dispatchId = %#v, want %q", canonicalEvent.Context.DispatchID, want.dispatchID)
+	}
+	if canonicalEvent.Context.RequestID == nil || *canonicalEvent.Context.RequestID != want.requestID {
+		t.Fatalf("replayed association requestId = %#v, want %q", canonicalEvent.Context.RequestID, want.requestID)
 	}
 	var canonicalPayload factorydefinitions.DispatchWorkerSessionAssociationEventPayload
 	if err := canonicalEvent.DecodePayload(&canonicalPayload); err != nil {
@@ -164,7 +170,8 @@ func assertReplayedDispatchWorkerSessionAssociation(
 	}
 	if normalized.Id != canonicalEvent.Id || normalized.Context.Sequence != canonicalEvent.Context.Sequence ||
 		normalized.Type != factorydefinitions.FactoryEventTypeDispatchWorkerSessionAssoc ||
-		normalized.Context.DispatchID == nil || *normalized.Context.DispatchID != want.dispatchID {
+		normalized.Context.DispatchID == nil || *normalized.Context.DispatchID != want.dispatchID ||
+		normalized.Context.RequestID == nil || *normalized.Context.RequestID != want.requestID {
 		t.Fatalf("normalized replayed association = %#v, want exact event and dispatch identities", normalized)
 	}
 	var normalizedPayload factorydefinitions.DispatchWorkerSessionAssociationEventPayload

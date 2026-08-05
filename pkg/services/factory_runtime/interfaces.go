@@ -58,10 +58,12 @@ type Service interface {
 	// Returns ErrNotRunning when the instance is not running.
 	ControlResume(ctx context.Context, req ResumeRequest) (ResumeResult, error)
 
-	// ControlTerminate requests cooperative stop of the Factory Runtime instance using
-	// the published plain terminate/stop control contract. Returns
-	// ErrAlreadyStopped, ErrNotRunning, or ErrInvalidLifecycleTransition for
-	// typed lifecycle failures. Nested IMP-RUN packets own durable stop wiring.
+	// ControlTerminate requests cooperative stop of the Factory Runtime instance
+	// using the published plain stop control contract. A turn-scoped request
+	// fans its captured CANCEL or TERMINATE action to associated Worker Sessions
+	// before the shared workstation pool shuts down. Returns ErrAlreadyStopped,
+	// ErrNotRunning, or ErrInvalidLifecycleTransition for typed lifecycle
+	// failures. Nested IMP-RUN packets own durable stop wiring.
 	ControlTerminate(ctx context.Context, req TerminateRequest) (TerminateResult, error)
 
 	// ControlWaitToComplete returns a channel that is closed when all tokens reach

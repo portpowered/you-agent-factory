@@ -12,7 +12,7 @@ func TestFactoryEventHistory_RecordDispatchWorkerSessionAssociation_RecordsCanon
 	eventTime := time.Date(2026, 4, 22, 16, 0, 0, 0, time.UTC)
 	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
-	history.RecordDispatchWorkerSessionAssociation(4, "dispatch-1", "worker-session-1", eventTime)
+	history.RecordDispatchWorkerSessionAssociation(4, "dispatch-1", "worker-session-1", "turn-1", eventTime)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -31,6 +31,9 @@ func TestFactoryEventHistory_RecordDispatchWorkerSessionAssociation_RecordsCanon
 	if event.Context.DispatchID == nil || *event.Context.DispatchID != "dispatch-1" {
 		t.Fatalf("context dispatchId = %v, want dispatch-1", event.Context.DispatchID)
 	}
+	if event.Context.RequestID == nil || *event.Context.RequestID != "turn-1" {
+		t.Fatalf("context requestId = %v, want turn-1", event.Context.RequestID)
+	}
 	if !event.Context.EventTime.Equal(eventTime) {
 		t.Fatalf("context eventTime = %s, want %s", event.Context.EventTime, eventTime)
 	}
@@ -48,8 +51,8 @@ func TestFactoryEventHistory_RecordDispatchWorkerSessionAssociation_IgnoresIncom
 	eventTime := time.Date(2026, 4, 22, 16, 0, 0, 0, time.UTC)
 	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
-	history.RecordDispatchWorkerSessionAssociation(4, "", "worker-session-1", eventTime)
-	history.RecordDispatchWorkerSessionAssociation(4, "dispatch-1", "", eventTime)
+	history.RecordDispatchWorkerSessionAssociation(4, "", "worker-session-1", "turn-1", eventTime)
+	history.RecordDispatchWorkerSessionAssociation(4, "dispatch-1", "", "turn-1", eventTime)
 
 	if got := len(history.CanonicalEvents()); got != 0 {
 		t.Fatalf("canonical event count = %d, want 0 for incomplete association identities", got)
@@ -58,5 +61,5 @@ func TestFactoryEventHistory_RecordDispatchWorkerSessionAssociation_IgnoresIncom
 
 func TestFactoryEventHistory_RecordDispatchWorkerSessionAssociation_NilHistoryDoesNotPanic(t *testing.T) {
 	var history *FactoryEventHistory
-	history.RecordDispatchWorkerSessionAssociation(4, "dispatch-1", "worker-session-1", time.Now())
+	history.RecordDispatchWorkerSessionAssociation(4, "dispatch-1", "worker-session-1", "turn-1", time.Now())
 }

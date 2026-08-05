@@ -19,7 +19,7 @@ func provideWorkerSessionsFactory(
 	eventsService events.Service,
 	logger logging.Logger,
 ) factoryruntime.WorkerSessionsFactory {
-	return func(execution workers.WorkstationExecutionService) (workersessions.Service, error) {
-		return workersessionswire.NewService(execution, eventsService, logger)
+	return func(boundary workers.WorkstationPoolBoundary) (workersessions.Service, error) {
+		return workersessionswire.NewService(boundary, eventsService, logger)
 	}
 }

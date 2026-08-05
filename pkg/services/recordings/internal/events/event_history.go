@@ -442,7 +442,7 @@ func (h *FactoryEventHistory) RecordWorkstationRequest(tick int, record interfac
 // dispatch-to-Worker-Session identity association. Callers must commit this
 // record before any event that depends on it (the Worker Session's own
 // opening or output records) can be observed.
-func (h *FactoryEventHistory) RecordDispatchWorkerSessionAssociation(tick int, dispatchID string, workerSessionID string, eventTime time.Time) {
+func (h *FactoryEventHistory) RecordDispatchWorkerSessionAssociation(tick int, dispatchID string, workerSessionID string, requestID string, eventTime time.Time) {
 	if h == nil || dispatchID == "" || workerSessionID == "" {
 		return
 	}
@@ -454,6 +454,7 @@ func (h *FactoryEventHistory) RecordDispatchWorkerSessionAssociation(tick int, d
 			Tick:       tick,
 			EventTime:  eventTime,
 			DispatchID: stringPtr(dispatchID),
+			RequestID:  stringPtrIfNotEmpty(requestID),
 		},
 		interfaces.DispatchWorkerSessionAssociationEventPayload{
 			WorkerSessionID: workerSessionID,

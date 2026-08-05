@@ -19,9 +19,11 @@ import (
 // double as an error rather than silently succeeding.
 type fakeExecution struct {
 	dispatch func(context.Context, workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error)
+	cancel   func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error)
 
-	mu    sync.Mutex
-	calls []workers.WorkstationDispatchRequest
+	mu          sync.Mutex
+	calls       []workers.WorkstationDispatchRequest
+	cancelCalls []workers.WorkstationDispatchCancelRequest
 }
 
 var _ workers.WorkstationExecutionService = (*fakeExecution)(nil)
@@ -51,10 +53,28 @@ func (f *fakeExecution) DispatchWorkstation(
 	return dispatch(ctx, req)
 }
 
+func (f *fakeExecution) DispatchWorkstationWithAdmission(
+	ctx context.Context,
+	req workers.WorkstationDispatchRequest,
+	admitted workers.WorkstationDispatchAdmissionFunc,
+) (workers.WorkstationDispatchResult, error) {
+	if admitted != nil {
+		admitted()
+	}
+	return f.DispatchWorkstation(ctx, req)
+}
+
 func (f *fakeExecution) CancelWorkstationDispatch(
-	context.Context,
-	workers.WorkstationDispatchCancelRequest,
+	ctx context.Context,
+	req workers.WorkstationDispatchCancelRequest,
 ) (workers.WorkstationDispatchCancelResult, error) {
+	f.mu.Lock()
+	f.cancelCalls = append(f.cancelCalls, req)
+	cancel := f.cancel
+	f.mu.Unlock()
+	if cancel != nil {
+		return cancel(ctx, req)
+	}
 	return workers.WorkstationDispatchCancelResult{}, nil
 }
 
@@ -68,6 +88,49 @@ func (f *fakeExecution) requests() []workers.WorkstationDispatchRequest {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]workers.WorkstationDispatchRequest(nil), f.calls...)
+}
+
+func (f *fakeExecution) cancellationRequests() []workers.WorkstationDispatchCancelRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]workers.WorkstationDispatchCancelRequest(nil), f.cancelCalls...)
+}
+
+// executionBoundary adapts the existing controlled Workers execution fake to
+// the exact pool boundary Worker Sessions receives in production. It keeps
+// tests focused on observable Worker Sessions behavior while preserving the
+// production rule that control enters through Boundary.Cancel.
+type executionBoundary struct {
+	execution workers.WorkstationExecutionService
+}
+
+var _ workers.WorkstationPoolBoundary = executionBoundary{}
+
+func (b executionBoundary) Start(ctx context.Context) error {
+	_, err := b.execution.StartWorkstationPool(ctx, workers.WorkstationPoolStartRequest{})
+	return err
+}
+
+func (b executionBoundary) Publish(ctx context.Context, req workers.WorkstationDispatchRequest, accept workers.WorkstationDispatchAcceptFunc) error {
+	return b.PublishWithAdmission(ctx, req, nil, accept)
+}
+
+func (b executionBoundary) PublishWithAdmission(ctx context.Context, req workers.WorkstationDispatchRequest, admitted workers.WorkstationDispatchAdmissionFunc, accept workers.WorkstationDispatchAcceptFunc) error {
+	if err := b.Start(ctx); err != nil {
+		return err
+	}
+	result, err := b.execution.DispatchWorkstationWithAdmission(ctx, req, admitted)
+	accept(context.Background(), req, result, err)
+	return nil
+}
+
+func (b executionBoundary) Cancel(ctx context.Context, req workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+	return b.execution.CancelWorkstationDispatch(ctx, req)
+}
+
+func (b executionBoundary) Stop(ctx context.Context) error {
+	_, err := b.execution.StopWorkstationPool(ctx)
+	return err
 }
 
 // validStartRequest returns a minimally well-formed StartRequest for id,

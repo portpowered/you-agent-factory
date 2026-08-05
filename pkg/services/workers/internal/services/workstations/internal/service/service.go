@@ -225,6 +225,26 @@ func (p *Pool) Dispatch(
 	ctx context.Context,
 	request workers.WorkstationDispatchRequest,
 ) (workers.WorkstationDispatchResult, error) {
+	return p.dispatch(ctx, request, nil)
+}
+
+// DispatchWithAdmission preserves Dispatch's terminal behavior while exposing
+// the point at which the dispatch becomes addressable by explicit
+// cancellation. Callers use this only as a synchronization barrier; Workers
+// retains all queueing, execution, cancellation, and terminal-result policy.
+func (p *Pool) DispatchWithAdmission(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	admitted workers.WorkstationDispatchAdmissionFunc,
+) (workers.WorkstationDispatchResult, error) {
+	return p.dispatch(ctx, request, admitted)
+}
+
+func (p *Pool) dispatch(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	admitted workers.WorkstationDispatchAdmissionFunc,
+) (workers.WorkstationDispatchResult, error) {
 	if err := contextError(ctx); err != nil {
 		return workers.WorkstationDispatchResult{}, err
 	}
@@ -239,6 +259,9 @@ func (p *Pool) Dispatch(
 	if err != nil {
 		cancelExecution()
 		return workers.WorkstationDispatchResult{}, err
+	}
+	if admitted != nil {
+		admitted()
 	}
 	p.logAccepted(name, record.dispatchID)
 	defer p.active.Done()

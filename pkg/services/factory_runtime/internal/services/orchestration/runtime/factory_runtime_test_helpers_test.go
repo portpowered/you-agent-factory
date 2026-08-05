@@ -71,8 +71,11 @@ func newTestFactory(opts ...testFactoryOption) (factory.Factory, error) {
 	if workerSessionsService == nil {
 		workerSessionsService = &fakeWorkerSessionsService{execution: workerService}
 	}
+	workerSessionsFactory := func(workers.WorkstationPoolBoundary) (workersessions.Service, error) {
+		return workerSessionsService, nil
+	}
 	return New(
-		cfg.net, cfg.scheduler, cfg.workerExecutors, workerService, workerSessionsService, cfg.runtimeConfig,
+		cfg.net, cfg.scheduler, cfg.workerExecutors, workerService, workerSessionsFactory, cfg.runtimeConfig,
 		cfg.workflowContext, cfg.runtimeMode, cfg.logger, cfg.clock,
 		cfg.inlineDispatch, cfg.eventHistory, nil,
 		nil, nil, cfg.submissionHooks,
@@ -164,6 +167,22 @@ func (s *fakeWorkerSessionsService) PublishRecord(context.Context, workersession
 	return workersessions.PublishRecordResult{}, nil
 }
 
+func (s *fakeWorkerSessionsService) Pause(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	return workersessions.ControlResult{}, nil
+}
+
+func (s *fakeWorkerSessionsService) Resume(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	return workersessions.ControlResult{}, nil
+}
+
+func (s *fakeWorkerSessionsService) Cancel(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	return workersessions.ControlResult{}, nil
+}
+
+func (s *fakeWorkerSessionsService) Terminate(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	return workersessions.ControlResult{}, nil
+}
+
 type testWorkstationBoundary struct {
 	routes map[string]workers.WorkstationRequestExecutor
 }
@@ -219,6 +238,17 @@ func (b *testWorkstationBoundary) DispatchWorkstation(
 		TerminalOutcome: terminal,
 		Result:          result,
 	}, err
+}
+
+func (b *testWorkstationBoundary) DispatchWorkstationWithAdmission(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	admitted workers.WorkstationDispatchAdmissionFunc,
+) (workers.WorkstationDispatchResult, error) {
+	if admitted != nil {
+		admitted()
+	}
+	return b.DispatchWorkstation(ctx, request)
 }
 
 func (*testWorkstationBoundary) CancelWorkstationDispatch(

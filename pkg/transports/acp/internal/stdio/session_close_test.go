@@ -54,6 +54,15 @@ func TestHandleSessionCloseCommitsBeforeFactoryClose(t *testing.T) {
 	if len(advances) != 1 || advances[0].Intent.State != chatsessions.ControlIntentStateCommitted || advances[0].Intent.TurnID != turn.ID {
 		t.Fatalf("advances before Factory close returns = %#v, want captured COMMITTED intent", advances)
 	}
+	factoryTarget.mu.Lock()
+	terminateCalls := append([]terminateFactoryTargetCall(nil), factoryTarget.terminateCalls...)
+	factoryTarget.mu.Unlock()
+	if len(terminateCalls) != 1 || terminateCalls[0].sessionID != "fs-close-bound" {
+		t.Fatalf("TerminateFactorySession calls = %#v, want only captured fs-close-bound", terminateCalls)
+	}
+	if got := terminateCalls[0].request; got.TurnID != turn.ID || got.RequestID != factoryTerminateRequestID(request.RequestID) {
+		t.Fatalf("TerminateFactorySession control = %#v, want captured turn and stable control identity", got)
+	}
 
 	close(factoryTarget.closeRelease)
 	response := <-done

@@ -54,6 +54,7 @@ type fakeLifecycle struct {
 	stopCalls        int
 	waitCalls        int
 	stopWorkerCalled bool
+	hosted           factoryruntime.HostedInstance
 }
 
 func (f *fakeLifecycle) StartLifecycle(context.Context, context.Context) error { return f.startErr }
@@ -83,7 +84,54 @@ func (f *fakeLifecycle) StopLifecycle(context.Context) error {
 }
 func (f *fakeLifecycle) FailStartup(err error) error { return err }
 func (f *fakeLifecycle) CurrentRuntimeBundle() factoryruntime.HostedInstance {
-	return nil
+	return f.hosted
+}
+
+type fakeHostedInstance struct {
+	factoryruntime.HostedInstance
+	runtime factoryruntime.Service
+}
+
+func (f fakeHostedInstance) RuntimeService() factoryruntime.Service { return f.runtime }
+
+type recordingTurnControlRuntime struct {
+	factoryruntime.Service
+
+	mu                sync.Mutex
+	terminateRequests []factoryruntime.TerminateRequest
+	onTerminate       func()
+}
+
+func (f *recordingTurnControlRuntime) ControlTerminate(
+	_ context.Context,
+	request factoryruntime.TerminateRequest,
+) (factoryruntime.TerminateResult, error) {
+	f.mu.Lock()
+	f.terminateRequests = append(f.terminateRequests, request)
+	onTerminate := f.onTerminate
+	f.mu.Unlock()
+	if onTerminate != nil {
+		onTerminate()
+	}
+	return factoryruntime.TerminateResult{
+		Outcome: factoryruntime.ControlOutcomeAccepted,
+		WorkerSessionControl: factoryruntime.WorkerSessionControlResult{
+			TurnID:  request.TurnID,
+			Action:  request.WorkerSessionAction,
+			Outcome: factoryruntime.WorkerSessionControlAggregateOutcomeApplied,
+			Children: []factoryruntime.WorkerSessionControlChildResult{{
+				WorkerSessionID: "worker-session-controlled",
+				DispatchID:      "dispatch-controlled",
+				Outcome:         factoryruntime.WorkerSessionControlChildOutcomeApplied,
+			}},
+		},
+	}, nil
+}
+
+func (f *recordingTurnControlRuntime) terminateCalls() []factoryruntime.TerminateRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]factoryruntime.TerminateRequest(nil), f.terminateRequests...)
 }
 
 // fakeSessions is a minimal factorysessions.Service test double: it embeds

@@ -536,8 +536,9 @@ type fakeFactoryTargetService struct {
 	// committed Chat control before its downstream effect returns.
 	cancelRelease chan struct{}
 
-	closeCalls []string
-	closeErr   error
+	closeCalls     []string
+	closeErr       error
+	terminateCalls []terminateFactoryTargetCall
 	// closeEntered and closeRelease mirror the deterministic Cancel controls:
 	// they expose the exact point a captured Factory Session close begins so
 	// a test can assert Chat's CLOSE intent is committed before fan-out.
@@ -553,6 +554,11 @@ type cancelFactoryTargetCall struct {
 type invokeFactoryTargetCall struct {
 	sessionID string
 	request   factorysessions.InvocationRequest
+}
+
+type terminateFactoryTargetCall struct {
+	sessionID string
+	request   factorysessions.ControlRequest
 }
 
 func (f *fakeFactoryTargetService) StartAsync(
@@ -622,6 +628,25 @@ func (f *fakeFactoryTargetService) Cancel(
 
 func (f *fakeFactoryTargetService) CloseFactorySession(_ context.Context, sessionID string) error {
 	f.mu.Lock()
+	f.closeCalls = append(f.closeCalls, sessionID)
+	if len(f.closeCalls) == 1 && f.closeEntered != nil {
+		close(f.closeEntered)
+	}
+	release, err := f.closeRelease, f.closeErr
+	f.mu.Unlock()
+	if release != nil {
+		<-release
+	}
+	return err
+}
+
+func (f *fakeFactoryTargetService) TerminateFactorySession(
+	_ context.Context,
+	sessionID string,
+	request factorysessions.ControlRequest,
+) error {
+	f.mu.Lock()
+	f.terminateCalls = append(f.terminateCalls, terminateFactoryTargetCall{sessionID: sessionID, request: request})
 	f.closeCalls = append(f.closeCalls, sessionID)
 	if len(f.closeCalls) == 1 && f.closeEntered != nil {
 		close(f.closeEntered)

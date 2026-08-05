@@ -276,6 +276,7 @@ func (s *Server) applySessionCancel(ctx context.Context, sessionID string, reque
 	if _, err := s.factoryTarget.Cancel(ctx, factorySessionID, factorysessions.ControlRequest{
 		RequestID: factoryCancelRequestID(intent.RequestID),
 		Reason:    "acp session/cancel",
+		TurnID:    intent.TurnID,
 	}); err != nil {
 		return
 	}
@@ -363,16 +364,27 @@ func (s *Server) resolveSessionControlIntent(ctx context.Context, intent chatses
 }
 
 // factoryCancelRequestID turns the full immutable Chat control identity into
-// a bounded, opaque downstream request id. It avoids logging or forwarding a
-// raw JSON-RPC id while keeping retries of the same intent stable and distinct
-// identities overwhelmingly collision-resistant.
+// the bounded, opaque downstream id for one CANCEL request.
 func factoryCancelRequestID(requestID chatsessions.RequestIdentity) string {
+	return factoryControlRequestID("cancel", requestID)
+}
+
+// factoryTerminateRequestID turns the full immutable Chat control identity
+// into the bounded, opaque downstream id for one TERMINATE request.
+func factoryTerminateRequestID(requestID chatsessions.RequestIdentity) string {
+	return factoryControlRequestID("terminate", requestID)
+}
+
+// factoryControlRequestID avoids logging or forwarding a raw JSON-RPC id
+// while keeping retries of the same intent stable and distinct identities
+// overwhelmingly collision-resistant.
+func factoryControlRequestID(action string, requestID chatsessions.RequestIdentity) string {
 	encoded, err := json.Marshal(requestID)
 	if err != nil {
-		return "acp-cancel"
+		return "acp-" + action
 	}
 	sum := sha256.Sum256(encoded)
-	return fmt.Sprintf("acp-cancel-%x", sum[:])
+	return fmt.Sprintf("acp-%s-%x", action, sum[:])
 }
 
 // chatControlRequestIdentity maps either identity form the ACP envelope owns

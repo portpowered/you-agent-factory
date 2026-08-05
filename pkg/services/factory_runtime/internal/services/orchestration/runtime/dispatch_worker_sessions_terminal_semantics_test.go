@@ -187,6 +187,22 @@ func (s *preHandoffFailedWorkerSessionsService) PublishRecord(
 	return workersessions.PublishRecordResult{}, nil
 }
 
+func (s *preHandoffFailedWorkerSessionsService) Pause(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	return workersessions.ControlResult{}, nil
+}
+
+func (s *preHandoffFailedWorkerSessionsService) Resume(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	return workersessions.ControlResult{}, nil
+}
+
+func (s *preHandoffFailedWorkerSessionsService) Cancel(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	return workersessions.ControlResult{}, nil
+}
+
+func (s *preHandoffFailedWorkerSessionsService) Terminate(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	return workersessions.ControlResult{}, nil
+}
+
 // TestFactoryImpl_DirectDispatchPreHandoffWorkerSessionFailureDoesNotFabricateSuccess
 // proves that when Worker Sessions terminalizes FAILED before ever reaching
 // Workers (FailureCauseEventPublicationFailure -- the one FAILED cause with no

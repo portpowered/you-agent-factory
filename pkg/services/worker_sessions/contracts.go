@@ -15,10 +15,10 @@ import (
 // classification, a before-handoff opening record, and an after-output
 // terminal SESSION record, plus PublishRecord for committing source-native
 // Worker observations onto that same topic. StartTurn, Runtime and Provider
-// Session association, Pause/Resume/Cancel/Terminate controls, persistence,
-// and transport behavior are later ACP Worker Events slices (W4-W7) and are
-// not exposed here. Later slices land as additive methods on this same named
-// interface; earlier slices do not publish placeholder methods for them.
+// Session association, persistence, and transport behavior are later ACP
+// Worker Events slices. Controls are exposed here because this service owns
+// one session's supervision state and is the only route to an admitted
+// workstation dispatch's explicit cancellation boundary.
 type Service interface {
 	// Reserve validates req and, when req.ID is not already registered,
 	// stores a new session in StateReserved and returns its snapshot.
@@ -43,10 +43,12 @@ type Service interface {
 	// Session identity in StateReserved, transitions StateStarting, and hands
 	// a detached clone of req.Execution to the one directly injected
 	// workers.WorkstationExecutionService. Start is synchronous: it returns
-	// only after the attempt commits its exactly-once absorbing COMPLETED or
-	// FAILED terminal outcome, classified from the Workers WorkResult first
-	// and the adapter error second. Invalid requests and conflicting starts
-	// return a typed error before any registry mutation or Workers call. Once
+	// only after the attempt commits its exactly-once absorbing terminal
+	// outcome, classified from the Workers WorkResult first and the adapter
+	// error second. A cancel or terminate that wins after Reserve but before
+	// Workers admission returns the established canceled terminal result
+	// without starting Workers. Invalid requests and conflicting starts return
+	// a typed error before any registry mutation or Workers call. Once
 	// the terminal outcome commits, Start also appends one terminal
 	// KindSession record (PhaseCompleted or PhaseFailed) to Topic(req.ID); a
 	// failure publishing that record is logged and never changes the
@@ -74,6 +76,23 @@ type Service interface {
 	// identity, or an Events append failure is returned unchanged and
 	// commits no record.
 	PublishRecord(ctx context.Context, req PublishRecordRequest) (PublishRecordResult, error)
+
+	// Pause returns an explicit unsupported result unless the supervised
+	// execution capability can truthfully pause. It never fabricates PAUSED.
+	Pause(ctx context.Context, req ControlRequest) (ControlResult, error)
+
+	// Resume returns an explicit unsupported result until a matching paused
+	// execution capability is available. It never fabricates RUNNING.
+	Resume(ctx context.Context, req ControlRequest) (ControlResult, error)
+
+	// Cancel explicitly stops an admitted dispatch through the injected
+	// WorkstationPoolBoundary. It never uses caller-context cancellation as a
+	// substitute for that boundary effect.
+	Cancel(ctx context.Context, req ControlRequest) (ControlResult, error)
+
+	// Terminate is Cancel with join semantics: a successful result is returned
+	// only after the associated dispatch callback has completed.
+	Terminate(ctx context.Context, req ControlRequest) (ControlResult, error)
 }
 
 // ReserveRequest asks Service to reserve one new Worker Session identity.

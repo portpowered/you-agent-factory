@@ -104,7 +104,7 @@ func TestPublishRecord_AppendsValidatedDetachedSourceNativeDraftsInOrder(t *test
 		},
 	}
 	var err error
-	svc, err = service.New(execution, eventsSvc, nil)
+	svc, err = service.New(executionBoundary{execution: execution}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -134,7 +134,7 @@ func TestPublishRecord_AppendsValidatedDetachedSourceNativeDraftsInOrder(t *test
 // lookup: this is validated by req.Validate() alone.
 func TestPublishRecord_InvalidDraft_ReturnsErrorAndCommitsNoRecord(t *testing.T) {
 	eventsSvc := newEventsAppender()
-	registry, err := service.New(succeedingExecution(), eventsSvc, nil)
+	registry, err := service.New(executionBoundary{execution: succeedingExecution()}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -156,7 +156,7 @@ func TestPublishRecord_InvalidDraft_ReturnsErrorAndCommitsNoRecord(t *testing.T)
 // any Events append is attempted.
 func TestPublishRecord_MalformedSourceIdentity_ReturnsErrorAndCommitsNoRecord(t *testing.T) {
 	eventsSvc := newEventsAppender()
-	registry, err := service.New(succeedingExecution(), eventsSvc, nil)
+	registry, err := service.New(executionBoundary{execution: succeedingExecution()}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -198,7 +198,7 @@ func TestPublishRecord_EventsAppendFailure_ReturnsErrorExplicitly(t *testing.T) 
 		},
 	}
 	var err error
-	svc, err = service.New(execution, appender, nil)
+	svc, err = service.New(executionBoundary{execution: execution}, appender, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -243,7 +243,7 @@ func TestPublishRecord_DuplicateSourceIdentity_ReturnsOriginalWithoutNewRecord(t
 		},
 	}
 	var err error
-	svc, err = service.New(execution, eventsSvc, nil)
+	svc, err = service.New(executionBoundary{execution: execution}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -297,7 +297,7 @@ func TestPublishRecord_CallerPayloadMutationAfterPublish_DoesNotAffectRetainedRe
 			}, nil
 		},
 	}
-	svc, err = service.New(execution, eventsSvc, nil)
+	svc, err = service.New(executionBoundary{execution: execution}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -347,7 +347,7 @@ func TestPublishRecord_ConcurrentSessionIsolation(t *testing.T) {
 		},
 	}
 	var err error
-	svc, err = service.New(execution, eventsSvc, nil)
+	svc, err = service.New(executionBoundary{execution: execution}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -388,7 +388,7 @@ func TestPublishRecordRequest_Validate_RejectsBlankSessionID(t *testing.T) {
 // was never registered returns ErrSessionNotFound.
 func TestPublishRecord_RejectsPublicationForUnknownSession(t *testing.T) {
 	eventsSvc := newEventsAppender()
-	registry, err := service.New(succeedingExecution(), eventsSvc, nil)
+	registry, err := service.New(executionBoundary{execution: succeedingExecution()}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -406,7 +406,7 @@ func TestPublishRecord_RejectsPublicationForUnknownSession(t *testing.T) {
 // nothing after the terminal record.
 func TestPublishRecord_RejectsPublicationAfterTerminal(t *testing.T) {
 	eventsSvc := newEventsAppender()
-	registry, err := service.New(succeedingExecution(), eventsSvc, nil)
+	registry, err := service.New(executionBoundary{execution: succeedingExecution()}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -461,7 +461,7 @@ func TestPublishRecord_LateOutputLosesRaceAgainstTerminal_IsRejectedNotInsertedA
 		},
 	}
 	var err error
-	svc, err = service.New(execution, eventsSvc, nil)
+	svc, err = service.New(executionBoundary{execution: execution}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -510,7 +510,7 @@ func TestPublishRecord_OutOfOrderSourceSequence_IsRejected(t *testing.T) {
 		},
 	}
 	var err error
-	svc, err = service.New(execution, eventsSvc, nil)
+	svc, err = service.New(executionBoundary{execution: execution}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}

@@ -220,6 +220,17 @@ func (testRuntimeWorkers) DispatchWorkstation(
 	return workers.WorkstationDispatchResult{}, nil
 }
 
+func (testRuntimeWorkers) DispatchWorkstationWithAdmission(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	admitted workers.WorkstationDispatchAdmissionFunc,
+) (workers.WorkstationDispatchResult, error) {
+	if admitted != nil {
+		admitted()
+	}
+	return testRuntimeWorkers{}.DispatchWorkstation(ctx, request)
+}
+
 func (testRuntimeWorkers) CancelWorkstationDispatch(
 	context.Context,
 	workers.WorkstationDispatchCancelRequest,
@@ -229,8 +240,8 @@ func (testRuntimeWorkers) CancelWorkstationDispatch(
 
 func testRuntimeWorkerSessionsFactory(t *testing.T) factory.WorkerSessionsFactory {
 	t.Helper()
-	return func(execution workers.WorkstationExecutionService) (workersessions.Service, error) {
-		return &stubWorkerSessionsService{execution: execution}, nil
+	return func(boundary workers.WorkstationPoolBoundary) (workersessions.Service, error) {
+		return &stubWorkerSessionsService{boundary: boundary}, nil
 	}
 }
 
@@ -239,7 +250,7 @@ func testRuntimeWorkerSessionsFactory(t *testing.T) factory.WorkerSessionsFactor
 // Workers execution boundary, mirroring the real cutover seam's shape
 // without pulling in the peer worker_sessions implementation package.
 type stubWorkerSessionsService struct {
-	execution workers.WorkstationExecutionService
+	boundary workers.WorkstationPoolBoundary
 }
 
 func (s *stubWorkerSessionsService) Reserve(context.Context, workersessions.ReserveRequest) (workersessions.Session, error) {
@@ -259,7 +270,13 @@ func (s *stubWorkerSessionsService) Start(ctx context.Context, req workersession
 		WorkstationName: req.Execution.WorkstationName,
 		Execution:       req.Execution.Execution,
 	}
-	dispatchResult, dispatchErr := s.execution.DispatchWorkstation(ctx, handoff)
+	var dispatchResult workers.WorkstationDispatchResult
+	var dispatchErr error
+	if err := s.boundary.Publish(ctx, handoff, func(_ context.Context, _ workers.WorkstationDispatchRequest, result workers.WorkstationDispatchResult, err error) {
+		dispatchResult, dispatchErr = result, err
+	}); err != nil {
+		return workersessions.StartResult{}, err
+	}
 	return workersessions.StartResult{
 		Session:     workersessions.Session{ID: req.ID, State: workersessions.StateCompleted},
 		Dispatch:    dispatchResult,
@@ -269,6 +286,22 @@ func (s *stubWorkerSessionsService) Start(ctx context.Context, req workersession
 
 func (s *stubWorkerSessionsService) PublishRecord(context.Context, workersessions.PublishRecordRequest) (workersessions.PublishRecordResult, error) {
 	return workersessions.PublishRecordResult{}, nil
+}
+
+func (s *stubWorkerSessionsService) Pause(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	return workersessions.ControlResult{}, nil
+}
+
+func (s *stubWorkerSessionsService) Resume(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	return workersessions.ControlResult{}, nil
+}
+
+func (s *stubWorkerSessionsService) Cancel(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	return workersessions.ControlResult{}, nil
+}
+
+func (s *stubWorkerSessionsService) Terminate(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	return workersessions.ControlResult{}, nil
 }
 
 func loadedFactoryFixture(dir string) (interfaces.MutableLoadedFactorySource, error) {

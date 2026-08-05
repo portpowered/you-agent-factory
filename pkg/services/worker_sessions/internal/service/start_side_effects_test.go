@@ -53,7 +53,7 @@ func TestStart_CommitsOpeningRecordBeforeWorkersInvocation(t *testing.T) {
 		},
 	}
 
-	registry, err := service.New(execution, eventsSvc, nil)
+	registry, err := service.New(executionBoundary{execution: execution}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -94,7 +94,7 @@ func TestStart_SubscriptionFromZeroCursor_ObservesOpeningRecord(t *testing.T) {
 		t.Fatalf("Subscribe() error = %v, want nil", err)
 	}
 
-	registry, err := service.New(succeedingExecution(), eventsSvc, nil)
+	registry, err := service.New(executionBoundary{execution: succeedingExecution()}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -123,7 +123,7 @@ func TestStart_SubscriptionFromZeroCursor_ObservesOpeningRecord(t *testing.T) {
 // handoff.
 func TestStart_OpeningRecordPublicationFailure_TerminalizesFailedWithoutCallingWorkers(t *testing.T) {
 	execution := succeedingExecution()
-	registry, err := service.New(execution, &brokenEventsAppender{}, nil)
+	registry, err := service.New(executionBoundary{execution: execution}, &brokenEventsAppender{}, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -151,7 +151,7 @@ func TestStart_OpeningRecordPublicationFailure_TerminalizesFailedWithoutCallingW
 // any Events record, not just skip the Workers call.
 func TestStart_InvalidRequest_CreatesNoTopicRecord(t *testing.T) {
 	appender := &countingEventsAppender{Service: newEventsAppender()}
-	registry, err := service.New(succeedingExecution(), appender, nil)
+	registry, err := service.New(executionBoundary{execution: succeedingExecution()}, appender, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -171,7 +171,7 @@ func TestStart_InvalidRequest_CreatesNoTopicRecord(t *testing.T) {
 // record: rejection happens before the opening record is ever attempted.
 func TestStart_NotStartableSession_CreatesNoTopicRecord(t *testing.T) {
 	appender := &countingEventsAppender{Service: newEventsAppender()}
-	registry, err := service.New(succeedingExecution(), appender, nil)
+	registry, err := service.New(executionBoundary{execution: succeedingExecution()}, appender, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -200,7 +200,7 @@ func TestStart_NotStartableSession_CreatesNoTopicRecord(t *testing.T) {
 func TestStart_CompletedSession_AppendsTerminalRecordAfterOpeningRecord(t *testing.T) {
 	eventsSvc := newEventsAppender()
 	topic := workersessions.Topic("worker-1")
-	registry, err := service.New(succeedingExecution(), eventsSvc, nil)
+	registry, err := service.New(executionBoundary{execution: succeedingExecution()}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -255,7 +255,7 @@ func TestStart_FailedSession_AppendsTerminalRecordWithClassifiedFailureCause(t *
 			}, nil
 		},
 	}
-	registry, err := service.New(execution, eventsSvc, nil)
+	registry, err := service.New(executionBoundary{execution: execution}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -342,7 +342,7 @@ func TestStart_TerminalRecordFollowsPublishedWorkerOutput(t *testing.T) {
 		},
 	}
 	var err error
-	svc, err = service.New(execution, eventsSvc, nil)
+	svc, err = service.New(executionBoundary{execution: execution}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -381,7 +381,7 @@ func TestStart_TerminalRecordFollowsPublishedWorkerOutput(t *testing.T) {
 // canonical W2 terminal Session Start returns.
 func TestStart_TerminalRecordPublicationFailure_DoesNotChangeCommittedSession(t *testing.T) {
 	appender := &failOnNthAppendEventsAppender{Service: newEventsAppender(), n: 2}
-	registry, err := service.New(succeedingExecution(), appender, nil)
+	registry, err := service.New(executionBoundary{execution: succeedingExecution()}, appender, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -425,7 +425,7 @@ func TestStart_TerminalRecordPublicationFailure_DoesNotChangeCommittedSession(t 
 // a second time, so no second terminal record is ever appended.
 func TestStart_RepeatedStartOnTerminalSession_PublishesNoSecondTerminalRecord(t *testing.T) {
 	appender := &countingEventsAppender{Service: newEventsAppender()}
-	registry, err := service.New(succeedingExecution(), appender, nil)
+	registry, err := service.New(executionBoundary{execution: succeedingExecution()}, appender, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -519,7 +519,7 @@ func assertNoPayloadOrCredentialKeys(t *testing.T, fields map[string]any) {
 
 func newLoggingRegistry(t *testing.T, logger *recordingLogger) workersessions.Service {
 	t.Helper()
-	registry, err := service.New(succeedingExecution(), newEventsAppender(), logger)
+	registry, err := service.New(executionBoundary{execution: succeedingExecution()}, newEventsAppender(), logger)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -588,7 +588,7 @@ func TestRegistryLogsListOutcomes(t *testing.T) {
 
 func TestRegistryLogsStartOutcomes(t *testing.T) {
 	logger := &recordingLogger{}
-	registry, err := service.New(&fakeExecution{
+	registry, err := service.New(executionBoundary{execution: &fakeExecution{
 		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
 			return workers.WorkstationDispatchResult{
 				DispatchID: req.Execution.Dispatch.DispatchID,
@@ -599,7 +599,7 @@ func TestRegistryLogsStartOutcomes(t *testing.T) {
 				},
 			}, nil
 		},
-	}, newEventsAppender(), logger)
+	}}, newEventsAppender(), logger)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}

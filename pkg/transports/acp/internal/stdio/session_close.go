@@ -8,6 +8,7 @@ import (
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/protocol"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
@@ -86,7 +87,11 @@ func (s *Server) applySessionClose(ctx context.Context, sessionID string, reques
 	if factorySessionID == "" {
 		return errSessionCloseTargetUnavailable
 	}
-	if err := s.factoryTarget.CloseFactorySession(ctx, factorySessionID); err != nil {
+	if err := s.factoryTarget.TerminateFactorySession(ctx, factorySessionID, factorysessions.ControlRequest{
+		RequestID: factoryTerminateRequestID(intent.RequestID),
+		Reason:    "acp session/close",
+		TurnID:    intent.TurnID,
+	}); err != nil {
 		return err
 	}
 	resolved, err := s.chatSessions.AdvanceControl(ctx, chatsessions.AdvanceControlRequest{

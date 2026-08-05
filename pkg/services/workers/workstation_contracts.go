@@ -272,6 +272,10 @@ type Service interface {
 	WorkstationRoute(context.Context, WorkstationRouteRequest) (WorkstationRouteResult, error)
 	// DispatchWorkstation executes through the binding for the requested route.
 	DispatchWorkstation(context.Context, WorkstationDispatchRequest) (WorkstationDispatchResult, error)
+	// DispatchWorkstationWithAdmission executes through the binding and invokes
+	// admitted once the exact dispatch ID is cancellable through
+	// CancelWorkstationDispatch.
+	DispatchWorkstationWithAdmission(context.Context, WorkstationDispatchRequest, WorkstationDispatchAdmissionFunc) (WorkstationDispatchResult, error)
 	// CancelWorkstationDispatch cancels queued or running workstation work.
 	CancelWorkstationDispatch(context.Context, WorkstationDispatchCancelRequest) (WorkstationDispatchCancelResult, error)
 }

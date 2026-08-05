@@ -68,6 +68,22 @@ func (s *countingWorkerSessionsService) PublishRecord(
 	return s.inner.PublishRecord(ctx, req)
 }
 
+func (s *countingWorkerSessionsService) Pause(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	return s.inner.Pause(ctx, req)
+}
+
+func (s *countingWorkerSessionsService) Resume(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	return s.inner.Resume(ctx, req)
+}
+
+func (s *countingWorkerSessionsService) Cancel(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	return s.inner.Cancel(ctx, req)
+}
+
+func (s *countingWorkerSessionsService) Terminate(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	return s.inner.Terminate(ctx, req)
+}
+
 func (s *countingWorkerSessionsService) startCallCount(sessionID string) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()

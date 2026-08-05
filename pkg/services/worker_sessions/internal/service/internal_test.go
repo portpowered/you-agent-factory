@@ -22,6 +22,19 @@ type unusedExecution struct {
 	t *testing.T
 }
 
+type failingPublishBoundary struct {
+	unusedExecution
+	err error
+}
+
+func (b failingPublishBoundary) Publish(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAcceptFunc) error {
+	return b.err
+}
+
+func (b failingPublishBoundary) PublishWithAdmission(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAdmissionFunc, workers.WorkstationDispatchAcceptFunc) error {
+	return b.err
+}
+
 func (u unusedExecution) StartWorkstationPool(context.Context, workers.WorkstationPoolStartRequest) (workers.WorkstationPoolStartResult, error) {
 	u.t.Fatal("unexpected StartWorkstationPool call")
 	return workers.WorkstationPoolStartResult{}, nil
@@ -37,9 +50,39 @@ func (u unusedExecution) DispatchWorkstation(context.Context, workers.Workstatio
 	return workers.WorkstationDispatchResult{}, nil
 }
 
+func (u unusedExecution) DispatchWorkstationWithAdmission(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAdmissionFunc) (workers.WorkstationDispatchResult, error) {
+	u.t.Fatal("unexpected DispatchWorkstationWithAdmission call")
+	return workers.WorkstationDispatchResult{}, nil
+}
+
 func (u unusedExecution) CancelWorkstationDispatch(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
 	u.t.Fatal("unexpected CancelWorkstationDispatch call")
 	return workers.WorkstationDispatchCancelResult{}, nil
+}
+
+func (u unusedExecution) Start(context.Context) error {
+	u.t.Fatal("unexpected boundary Start call")
+	return nil
+}
+
+func (u unusedExecution) Publish(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAcceptFunc) error {
+	u.t.Fatal("unexpected boundary Publish call")
+	return nil
+}
+
+func (u unusedExecution) PublishWithAdmission(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAdmissionFunc, workers.WorkstationDispatchAcceptFunc) error {
+	u.t.Fatal("unexpected boundary PublishWithAdmission call")
+	return nil
+}
+
+func (u unusedExecution) Cancel(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+	u.t.Fatal("unexpected boundary Cancel call")
+	return workers.WorkstationDispatchCancelResult{}, nil
+}
+
+func (u unusedExecution) Stop(context.Context) error {
+	u.t.Fatal("unexpected boundary Stop call")
+	return nil
 }
 
 // newTestRegistry returns the concrete *registry (not just the Service
@@ -174,6 +217,33 @@ func TestCommitTerminal_AlreadyTerminalIdentity_IsAbsorbingAndDoesNotOverwrite(t
 	}
 }
 
+// TestTransitionToRunning_TerminalSessionRemainsAbsorbing proves a late
+// admission callback cannot resurrect a Worker Session after its terminal
+// result has been committed. This is the guard that preserves the existing
+// terminal authority when completion wins an admission/control race.
+func TestTransitionToRunning_TerminalSessionRemainsAbsorbing(t *testing.T) {
+	r := newTestRegistry(t)
+	r.reserveIfAbsent("worker-1")
+	if _, err := r.transitionToStarting("worker-1"); err != nil {
+		t.Fatalf("transitionToStarting() error = %v, want nil", err)
+	}
+	if _, committed := r.commitTerminal("worker-1", workersessions.StateCompleted, workersessions.TerminalResult{
+		Outcome: workersessions.TerminalOutcomeCompleted,
+	}); !committed {
+		t.Fatal("commitTerminal() committed = false, want true")
+	}
+
+	r.transitionToRunning("worker-1")
+
+	got, err := r.Get(context.Background(), workersessions.GetRequest{ID: "worker-1"})
+	if err != nil {
+		t.Fatalf("Get() error = %v, want nil", err)
+	}
+	if got.State != workersessions.StateCompleted || got.Result == nil || got.Result.Outcome != workersessions.TerminalOutcomeCompleted {
+		t.Fatalf("Get() after late running transition = %#v, want unchanged COMPLETED terminal result", got)
+	}
+}
+
 // TestCommitTerminal_MissingIdentity_DoesNotFabricateASession proves
 // commitTerminal never creates or terminalizes an identity that was never
 // reserved or transitioned to StateStarting: it must be a no-op that reports
@@ -215,6 +285,165 @@ func TestCommitTerminal_ReservedPredecessor_IsRejectedAndLeavesSessionUnchanged(
 	}
 	if session.State != workersessions.StateReserved {
 		t.Fatalf("Get() after rejected commitTerminal() state = %q, want unchanged RESERVED", session.State)
+	}
+}
+
+func TestControlGuards_RejectInvalidTransitionsAndPreserveObservableSessionState(t *testing.T) {
+	r := newTestRegistry(t)
+	ctx := context.Background()
+
+	if got, committed := r.commitControlTerminal("missing", workersessions.StateCanceled); committed || got.ID != "" {
+		t.Fatalf("commit missing control terminal = %#v, %t; want no fabricated session", got, committed)
+	}
+	r.reserveIfAbsent("worker-1")
+	if got, committed := r.commitControlTerminal("worker-1", workersessions.StateCompleted); committed || got.State != workersessions.StateReserved {
+		t.Fatalf("commit invalid control terminal = %#v, %t; want unchanged RESERVED", got, committed)
+	}
+	if got, committed := r.commitControlTerminal("worker-1", workersessions.StateCanceled); !committed || got.State != workersessions.StateCanceled {
+		t.Fatalf("commit canceled control terminal = %#v, %t; want CANCELED", got, committed)
+	}
+	if got, committed := r.commitControlTerminal("worker-1", workersessions.StateTerminated); committed || got.State != workersessions.StateCanceled {
+		t.Fatalf("second control terminal = %#v, %t; want absorbing CANCELED", got, committed)
+	}
+	if session, ok := r.preAdmissionControlTerminal("missing", "dispatch-missing"); ok || session.ID != "" {
+		t.Fatalf("preAdmissionControlTerminal(missing) = %#v, %t; want no terminal", session, ok)
+	}
+
+	r.reserveIfAbsent("worker-2")
+	if _, err := r.transitionToStarting("worker-2"); err != nil {
+		t.Fatalf("transitionToStarting(worker-2): %v", err)
+	}
+	supervision, ok := r.registerSupervision("worker-2", "dispatch-2")
+	if !ok || supervision == nil {
+		t.Fatal("registerSupervision(worker-2) = unavailable, want exact supervised attempt")
+	}
+	if _, ok := r.registerSupervision("missing", "dispatch-missing"); ok {
+		t.Fatal("registerSupervision(missing) unexpectedly succeeded")
+	}
+	supervision.requestedAction = workersessions.ControlActionCancel
+	if r.beginBoundaryPublish("worker-2", supervision) {
+		t.Fatal("beginBoundaryPublish() succeeded after a control request")
+	}
+	r.reserveIfAbsent("worker-3")
+	if workerSession, err := r.Get(ctx, workersessions.GetRequest{ID: "worker-3"}); err != nil || workerSession.State != workersessions.StateReserved {
+		t.Fatalf("Get(worker-3) = %#v, %v, want RESERVED", workerSession, err)
+	}
+	if r.beginBoundaryPublish("worker-3", newSupervision("dispatch-3")) {
+		t.Fatal("beginBoundaryPublish() succeeded for a session that never started")
+	}
+	if session, err := r.Get(ctx, workersessions.GetRequest{ID: "worker-2"}); err != nil || session.State != workersessions.StateStarting {
+		t.Fatalf("Get(worker-2) = %#v, %v, want unchanged STARTING", session, err)
+	}
+}
+
+func TestStartPublishedAttempt_ControlAndPublishFailureHaveTerminalObservableOutcomes(t *testing.T) {
+	t.Run("control before boundary publication", func(t *testing.T) {
+		r := newTestRegistry(t)
+		r.reserveIfAbsent("worker-1")
+		if _, err := r.transitionToStarting("worker-1"); err != nil {
+			t.Fatalf("transitionToStarting: %v", err)
+		}
+		supervision, ok := r.registerSupervision("worker-1", "dispatch-1")
+		if !ok {
+			t.Fatal("registerSupervision before control: want exact starting attempt")
+		}
+		if _, committed := r.commitControlTerminal("worker-1", workersessions.StateCanceled); !committed {
+			t.Fatal("commit control terminal did not win before boundary publication")
+		}
+		result, err := r.publishRegisteredAttempt(
+			context.Background(), workersessions.StartRequest{ID: "worker-1"}, "dispatch-1", supervision, false,
+		)
+		if err != nil || result.Session.State != workersessions.StateCanceled {
+			t.Fatalf("startPublishedAttempt() = %#v, %v, want retained CANCELED session", result, err)
+		}
+
+		r.reserveIfAbsent("worker-2")
+		if _, err := r.transitionToStarting("worker-2"); err != nil {
+			t.Fatalf("transitionToStarting(worker-2): %v", err)
+		}
+		if _, committed := r.commitControlTerminal("worker-2", workersessions.StateCanceled); !committed {
+			t.Fatal("commit control terminal for worker-2 did not win before supervision registration")
+		}
+		result, err = r.startPublishedAttempt(context.Background(), workersessions.StartRequest{ID: "worker-2"}, "dispatch-2")
+		if err != nil || result.Session.State != workersessions.StateCanceled {
+			t.Fatalf("startPublishedAttempt() after control = %#v, %v, want retained CANCELED session", result, err)
+		}
+	})
+
+	t.Run("boundary publication failure", func(t *testing.T) {
+		r := newTestRegistry(t)
+		r.boundary = failingPublishBoundary{unusedExecution: unusedExecution{t: t}, err: errors.New("boundary publish failed")}
+		r.reserveIfAbsent("worker-1")
+		if _, err := r.transitionToStarting("worker-1"); err != nil {
+			t.Fatalf("transitionToStarting: %v", err)
+		}
+		result, err := r.startPublishedAttempt(context.Background(), workersessions.StartRequest{ID: "worker-1"}, "dispatch-1")
+		if err != nil || result.Session.State != workersessions.StateFailed || result.Session.Result == nil {
+			t.Fatalf("startPublishedAttempt() = %#v, %v, want failed terminal session", result, err)
+		}
+	})
+}
+
+func TestCancel_BeforeBoundaryAdmissionEitherWaitsOrTerminatesTheExactSupervision(t *testing.T) {
+	r := newTestRegistry(t)
+	r.reserveIfAbsent("worker-1")
+	if _, err := r.transitionToStarting("worker-1"); err != nil {
+		t.Fatalf("transitionToStarting: %v", err)
+	}
+	supervision, ok := r.registerSupervision("worker-1", "dispatch-1")
+	if !ok {
+		t.Fatal("registerSupervision: want supervised STARTING attempt")
+	}
+	supervision.mu.Lock()
+	supervision.publishing = true
+	supervision.mu.Unlock()
+	resultCh := make(chan workersessions.ControlResult, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		result, err := r.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		resultCh <- result
+		errCh <- err
+	}()
+	supervision.mu.Lock()
+	supervision.publishing = false
+	supervision.mu.Unlock()
+	supervision.signalPublished()
+	result := <-resultCh
+	if err := <-errCh; err != nil || result.Outcome != workersessions.ControlOutcomeApplied || result.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Cancel() before admission = %#v, %v, want applied CANCELED", result, err)
+	}
+
+	r.reserveIfAbsent("worker-2")
+	if _, err := r.transitionToStarting("worker-2"); err != nil {
+		t.Fatalf("transitionToStarting(worker-2): %v", err)
+	}
+	noOpSupervision, ok := r.registerSupervision("worker-2", "dispatch-2")
+	if !ok {
+		t.Fatal("registerSupervision(worker-2): want exact attempt")
+	}
+	noOpSupervision.controlAction = workersessions.ControlActionCancel
+	noOp, err := r.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-2"})
+	if err != nil || noOp.Outcome != workersessions.ControlOutcomeNoop {
+		t.Fatalf("repeated pre-admission Cancel() = %#v, %v, want NOOP", noOp, err)
+	}
+
+	r.reserveIfAbsent("worker-3")
+	if _, err := r.transitionToStarting("worker-3"); err != nil {
+		t.Fatalf("transitionToStarting(worker-3): %v", err)
+	}
+	activeSupervision, ok := r.registerSupervision("worker-3", "dispatch-3")
+	if !ok {
+		t.Fatal("registerSupervision(worker-3): want exact attempt")
+	}
+	activeSupervision.mu.Lock()
+	activeSupervision.controlActive = true
+	activeSupervision.controlDone = make(chan struct{})
+	closedWait := activeSupervision.controlDone
+	close(closedWait)
+	activeSupervision.mu.Unlock()
+	attempt := activeSupervision.beginCancellation(workersessions.ControlActionCancel)
+	if attempt.kind != cancellationAttemptWait || attempt.wait != closedWait {
+		t.Fatalf("beginCancellation() with another active control = %#v, want wait for that control", attempt)
 	}
 }
 

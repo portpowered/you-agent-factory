@@ -39,7 +39,8 @@ type registry struct {
 	mu           sync.RWMutex
 	sessions     map[string]workersessions.Session
 	publications map[string]*publication
-	execution    workers.WorkstationExecutionService
+	supervisions map[string]*supervision
+	boundary     workers.WorkstationPoolBoundary
 	events       EventsAppender
 	logger       logging.Logger
 }
@@ -50,13 +51,13 @@ type registry struct {
 var _ workersessions.Service = (*registry)(nil)
 
 // New constructs the process-local Worker Session registry from the one
-// directly injected workers.WorkstationExecutionService that Start hands
-// attempts to and the one directly injected EventsAppender Start's
+// directly injected workers.WorkstationPoolBoundary that Start publishes
+// attempts through and the one directly injected EventsAppender Start's
 // before-handoff publication barrier commits through. A nil logger falls
 // back to logging.NoopLogger. A nil execution or nil eventsAppender is
 // rejected: Start has no meaningful behavior without either.
-func New(execution workers.WorkstationExecutionService, eventsAppender EventsAppender, logger logging.Logger) (workersessions.Service, error) {
-	if execution == nil {
+func New(boundary workers.WorkstationPoolBoundary, eventsAppender EventsAppender, logger logging.Logger) (workersessions.Service, error) {
+	if boundary == nil {
 		return nil, ErrMissingExecution
 	}
 	if eventsAppender == nil {
@@ -65,7 +66,8 @@ func New(execution workers.WorkstationExecutionService, eventsAppender EventsApp
 	return &registry{
 		sessions:     make(map[string]workersessions.Session),
 		publications: make(map[string]*publication),
-		execution:    execution,
+		supervisions: make(map[string]*supervision),
+		boundary:     boundary,
 		events:       eventsAppender,
 		logger:       logging.EnsureLogger(logger),
 	}, nil
@@ -135,77 +137,6 @@ func matchesFilter(session workersessions.Session, filter workersessions.Filter)
 	return slices.Contains(filter.States, session.State)
 }
 
-// Start validates req, then establishes or reuses one stable Worker Session
-// identity, observably persisted in StateReserved before any Workers call,
-// transitions StateStarting before handoff, and hands a detached clone of
-// req.Execution to the one injected workers.WorkstationExecutionService so
-// the caller retains exclusive ownership of req.Execution's reference-backed
-// fields. Start is synchronous: it blocks until the attempt commits its
-// exactly-once absorbing terminal outcome, classified from the Workers
-// WorkResult first and the adapter error second, and returns the committed
-// detached snapshot.
-func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
-	attemptID := req.Execution.Execution.Dispatch.DispatchID
-
-	if err := req.Validate(); err != nil {
-		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "invalid")
-		return workersessions.StartResult{}, err
-	}
-
-	r.reserveIfAbsent(req.ID)
-	r.logger.Info("worker session start accepted", "sessionID", req.ID, "attemptID", attemptID, "outcome", "reserved", "state", string(workersessions.StateReserved))
-	if _, err := r.transitionToStarting(req.ID); err != nil {
-		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "not_startable")
-		return workersessions.StartResult{}, err
-	}
-
-	if publishErr := r.publishOpeningRecord(ctx, req.ID, attemptID); publishErr != nil {
-		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "event_publication_failed")
-		terminal := failedTerminal(workersessions.FailureCauseEventPublicationFailure, safeDetail(workersessions.FailureCauseEventPublicationFailure, nil))
-		final, committed := r.commitTerminal(req.ID, workersessions.StateFailed, terminal)
-		if committed {
-			r.logger.Info(
-				"worker session start terminal",
-				"sessionID", req.ID,
-				"attemptID", attemptID,
-				"outcome", string(workersessions.StateFailed),
-				"state", string(workersessions.StateFailed),
-				"cause", causeKindString(terminal.Cause),
-			)
-			r.publishTerminalRecordOrLog(ctx, req.ID, attemptID, workersessions.StateFailed, terminal)
-		}
-		return workersessions.StartResult{Session: final}, nil
-	}
-	r.logger.Info("worker session start", "sessionID", req.ID, "attemptID", attemptID, "outcome", "handoff", "state", string(workersessions.StateStarting))
-
-	handoff := workers.WorkstationDispatchRequest{
-		WorkstationName: req.Execution.WorkstationName,
-		Execution:       workers.CloneWorkstationExecutionRequest(req.Execution.Execution),
-	}
-	dispatchResult, dispatchErr := r.execution.DispatchWorkstation(ctx, handoff)
-	terminal := classifyTerminal(dispatchErr, dispatchResult)
-
-	finalState := workersessions.StateFailed
-	if terminal.Outcome == workersessions.TerminalOutcomeCompleted {
-		finalState = workersessions.StateCompleted
-	}
-
-	final, committed := r.commitTerminal(req.ID, finalState, terminal)
-	if committed {
-		r.logger.Info(
-			"worker session start terminal",
-			"sessionID", req.ID,
-			"attemptID", attemptID,
-			"outcome", string(finalState),
-			"state", string(finalState),
-			"cause", causeKindString(terminal.Cause),
-		)
-		r.publishTerminalRecordOrLog(ctx, req.ID, attemptID, finalState, terminal)
-	}
-
-	return workersessions.StartResult{Session: final, Dispatch: dispatchResult, DispatchErr: dispatchErr}, nil
-}
-
 // reserveIfAbsent stores id as a new StateReserved session when it is not
 // already registered, in its own locked critical section distinct from
 // transitionToStarting. This makes a brand-new identity's RESERVED state a
@@ -252,8 +183,10 @@ func (r *registry) transitionToStarting(id string) (workersessions.Session, erro
 // nonterminal state (StateReserved, StatePaused) is left completely
 // unchanged and returned as-is, and committed reports false. This makes the
 // terminal write itself absorbing regardless of how many callers reach
-// commitTerminal for one identity, and prevents it from fabricating a
-// terminal outcome for an identity that never actually reached handoff.
+// commitTerminal for one identity. STARTING handles a synchronous boundary
+// callback; RUNNING handles an asynchronously accepted attempt. Reserved
+// attempts remain ineligible so a terminal outcome is never fabricated for
+// an identity that never reached supervision.
 // Only the caller for which committed is true may emit the terminal
 // effect/log for this identity.
 func (r *registry) commitTerminal(id string, state workersessions.State, result workersessions.TerminalResult) (workersessions.Session, bool) {
@@ -261,7 +194,7 @@ func (r *registry) commitTerminal(id string, state workersessions.State, result 
 	defer r.mu.Unlock()
 
 	existing, exists := r.sessions[id]
-	if !exists || existing.State != workersessions.StateStarting {
+	if !exists || (existing.State != workersessions.StateStarting && existing.State != workersessions.StateRunning) {
 		return cloneSession(existing), false
 	}
 
@@ -270,6 +203,27 @@ func (r *registry) commitTerminal(id string, state workersessions.State, result 
 	session.Result = cloneTerminalResult(&result)
 	r.sessions[id] = session
 	return cloneSession(session), true
+}
+
+// commitControlTerminal terminalizes an unstarted or explicitly canceled
+// session without inventing a completed/failed result. A control can win
+// before a boundary publish begins (RESERVED/STARTING) or after a boundary
+// cancellation is observed (RUNNING); terminal states remain absorbing.
+func (r *registry) commitControlTerminal(id string, state workersessions.State) (workersessions.Session, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	existing, exists := r.sessions[id]
+	if !exists || existing.Terminal() {
+		return cloneSession(existing), false
+	}
+	if state != workersessions.StateCanceled && state != workersessions.StateTerminated {
+		return cloneSession(existing), false
+	}
+	existing.State = state
+	existing.Result = nil
+	r.sessions[id] = existing
+	return cloneSession(existing), true
 }
 
 // cloneSession returns a detached copy of session: mutating the returned

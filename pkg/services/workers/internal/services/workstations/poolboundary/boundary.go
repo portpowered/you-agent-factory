@@ -13,10 +13,11 @@ import (
 const DefaultRuntimePoolBindingCapacity = workers.DefaultRuntimePoolBindingCapacity
 
 type (
-	WorkstationExecutionService   = workers.WorkstationExecutionService
-	WorkstationDispatchAcceptFunc = workers.WorkstationDispatchAcceptFunc
-	WorkstationPoolBoundary       = workers.WorkstationPoolBoundary
-	WorkstationPoolBoundaryConfig = workers.WorkstationPoolBoundaryConfig
+	WorkstationExecutionService      = workers.WorkstationExecutionService
+	WorkstationDispatchAdmissionFunc = workers.WorkstationDispatchAdmissionFunc
+	WorkstationDispatchAcceptFunc    = workers.WorkstationDispatchAcceptFunc
+	WorkstationPoolBoundary          = workers.WorkstationPoolBoundary
+	WorkstationPoolBoundaryConfig    = workers.WorkstationPoolBoundaryConfig
 )
 
 var NewWorkstationPoolBoundary = workers.NewWorkstationPoolBoundary
