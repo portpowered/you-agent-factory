@@ -10,11 +10,22 @@ type WorkstationExecutionService interface {
 	StartWorkstationPool(context.Context, WorkstationPoolStartRequest) (WorkstationPoolStartResult, error)
 	StopWorkstationPool(context.Context) (WorkstationPoolStopResult, error)
 	DispatchWorkstation(context.Context, WorkstationDispatchRequest) (WorkstationDispatchResult, error)
+	DispatchWorkstationWithAdmission(context.Context, WorkstationDispatchRequest, WorkstationDispatchAdmissionFunc) (WorkstationDispatchResult, error)
 	CancelWorkstationDispatch(context.Context, WorkstationDispatchCancelRequest) (WorkstationDispatchCancelResult, error)
 }
 
+// WorkstationDispatchAdmissionFunc observes the exact instant Workers accepts
+// a dispatch into its cancellable queue or running set. It is invoked at most
+// once, only after Cancel can address the dispatch ID, and must return
+// promptly. The callback is a Workers boundary synchronization signal; it
+// does not own dispatch execution or terminal-result authority.
+type WorkstationDispatchAdmissionFunc func()
+
 // WorkstationDispatchAcceptFunc receives one detached dispatch result from an
-// asynchronous or synchronous workstation publish.
+// asynchronous or synchronous workstation publish. Publish returns only after
+// Workers has called its admission callback or has delivered its terminal
+// callback without admitting the dispatch, so callers can safely issue exact
+// cancellation immediately after a successful publish.
 type WorkstationDispatchAcceptFunc func(
 	context.Context,
 	WorkstationDispatchRequest,
@@ -80,6 +91,14 @@ func (a rootWorkstationExecutionService) DispatchWorkstation(
 	request WorkstationDispatchRequest,
 ) (WorkstationDispatchResult, error) {
 	return a.service.DispatchWorkstation(ctx, request)
+}
+
+func (a rootWorkstationExecutionService) DispatchWorkstationWithAdmission(
+	ctx context.Context,
+	request WorkstationDispatchRequest,
+	admitted WorkstationDispatchAdmissionFunc,
+) (WorkstationDispatchResult, error) {
+	return a.service.DispatchWorkstationWithAdmission(ctx, request, admitted)
 }
 
 func (a rootWorkstationExecutionService) CancelWorkstationDispatch(

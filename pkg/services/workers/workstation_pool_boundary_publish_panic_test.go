@@ -56,6 +56,17 @@ func (s *poolBoundaryFakeService) DispatchWorkstation(
 	}, err
 }
 
+func (s *poolBoundaryFakeService) DispatchWorkstationWithAdmission(
+	ctx context.Context,
+	request WorkstationDispatchRequest,
+	admitted WorkstationDispatchAdmissionFunc,
+) (WorkstationDispatchResult, error) {
+	if admitted != nil {
+		admitted()
+	}
+	return s.DispatchWorkstation(ctx, request)
+}
+
 func (*poolBoundaryFakeService) CancelWorkstationDispatch(
 	_ context.Context,
 	request WorkstationDispatchCancelRequest,

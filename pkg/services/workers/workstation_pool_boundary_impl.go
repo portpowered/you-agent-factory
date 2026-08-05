@@ -149,12 +149,24 @@ func (b *workstationPoolBoundary) Publish(
 	if err := b.Start(ctx); err != nil {
 		return err
 	}
+	admitted := make(chan struct{})
+	finished := make(chan struct{})
+	var admittedOnce sync.Once
 	execute := func() {
-		result, err := b.service.DispatchWorkstation(context.WithoutCancel(ctx), request)
+		defer close(finished)
+		result, err := b.service.DispatchWorkstationWithAdmission(
+			context.WithoutCancel(ctx),
+			request,
+			func() { admittedOnce.Do(func() { close(admitted) }) },
+		)
 		accept(context.Background(), request, result, err)
 	}
 	if b.async {
 		go execute()
+		select {
+		case <-admitted:
+		case <-finished:
+		}
 		return nil
 	}
 	execute()

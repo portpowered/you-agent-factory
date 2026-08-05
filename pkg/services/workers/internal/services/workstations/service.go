@@ -23,5 +23,6 @@ type Service interface {
 	Stop(context.Context) (workers.WorkstationPoolStopResult, error)
 	Route(context.Context, workers.WorkstationRouteRequest) (workers.WorkstationRouteResult, error)
 	Dispatch(context.Context, workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error)
+	DispatchWithAdmission(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAdmissionFunc) (workers.WorkstationDispatchResult, error)
 	Cancel(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error)
 }

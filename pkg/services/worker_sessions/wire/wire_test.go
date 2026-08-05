@@ -40,6 +40,17 @@ func (stubExecution) DispatchWorkstation(
 	return workers.WorkstationDispatchResult{Result: workers.WorkResult{Outcome: workers.OutcomeAccepted}}, nil
 }
 
+func (stubExecution) DispatchWorkstationWithAdmission(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	admitted workers.WorkstationDispatchAdmissionFunc,
+) (workers.WorkstationDispatchResult, error) {
+	if admitted != nil {
+		admitted()
+	}
+	return stubExecution{}.DispatchWorkstation(ctx, request)
+}
+
 func (stubExecution) CancelWorkstationDispatch(
 	context.Context,
 	workers.WorkstationDispatchCancelRequest,

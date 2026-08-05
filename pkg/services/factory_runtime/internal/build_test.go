@@ -220,6 +220,17 @@ func (testRuntimeWorkers) DispatchWorkstation(
 	return workers.WorkstationDispatchResult{}, nil
 }
 
+func (testRuntimeWorkers) DispatchWorkstationWithAdmission(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	admitted workers.WorkstationDispatchAdmissionFunc,
+) (workers.WorkstationDispatchResult, error) {
+	if admitted != nil {
+		admitted()
+	}
+	return testRuntimeWorkers{}.DispatchWorkstation(ctx, request)
+}
+
 func (testRuntimeWorkers) CancelWorkstationDispatch(
 	context.Context,
 	workers.WorkstationDispatchCancelRequest,

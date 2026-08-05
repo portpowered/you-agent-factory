@@ -1,12 +1,117 @@
 package runtime
 
 import (
+	"context"
+	"errors"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+// blockingAssociationLedger pauses immediately after the canonical association
+// is committed, producing the exact control window that formerly exposed an
+// unknown Worker Session before Start had reserved its identity.
+type blockingAssociationLedger struct {
+	*recordingfixtures.ScriptedRuntimeLedger
+
+	associated     chan struct{}
+	associatedOnce sync.Once
+	release        chan struct{}
+}
+
+func newBlockingAssociationLedger() *blockingAssociationLedger {
+	return &blockingAssociationLedger{
+		ScriptedRuntimeLedger: &recordingfixtures.ScriptedRuntimeLedger{},
+		associated:            make(chan struct{}),
+		release:               make(chan struct{}),
+	}
+}
+
+func (l *blockingAssociationLedger) RecordDispatchWorkerSessionAssociation(
+	tick int,
+	dispatchID string,
+	workerSessionID string,
+	requestID string,
+	eventTime time.Time,
+) {
+	l.ScriptedRuntimeLedger.RecordDispatchWorkerSessionAssociation(tick, dispatchID, workerSessionID, requestID, eventTime)
+	l.associatedOnce.Do(func() { close(l.associated) })
+	<-l.release
+}
+
+func TestStartThroughWorkerSessions_AssociationIsControlAddressableBeforeStart(t *testing.T) {
+	workerService := newControlledWorkstationBoundary()
+	workersBoundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
+		Service:    workerService,
+		RouteNames: []string{"review"},
+		Async:      true,
+	})
+	events, err := eventswire.NewService(logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("New events service: %v", err)
+	}
+	workerSessions, err := workersessionswire.NewService(workersBoundary, events, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("New Worker Sessions service: %v", err)
+	}
+	ledger := newBlockingAssociationLedger()
+	request := workers.WorkstationDispatchRequest{
+		WorkstationName: "review",
+		Execution: workers.WorkstationExecutionRequest{Dispatch: work.WorkDispatch{
+			DispatchID: "dispatch-1", WorkstationName: "review", Execution: work.ExecutionMetadata{RequestID: "turn-1"},
+		}},
+	}
+	cfg := &runtimeConfig{workerSessions: workerSessions, clock: testRuntimeClock{}}
+	accepted := make(chan workers.WorkstationDispatchResult, 1)
+	acceptedErr := make(chan error, 1)
+	startErr := make(chan error, 1)
+	go func() {
+		startErr <- startThroughWorkerSessions(context.Background(), cfg, ledger, workersBoundary, request, func(
+			_ context.Context,
+			_ workers.WorkstationDispatchRequest,
+			result workers.WorkstationDispatchResult,
+			err error,
+		) {
+			accepted <- result
+			acceptedErr <- err
+		})
+	}()
+	<-ledger.associated
+
+	reserved, err := workerSessions.Get(context.Background(), workersessions.GetRequest{ID: "dispatch-1"})
+	if err != nil || reserved.State != workersessions.StateReserved {
+		t.Fatalf("Worker Session at association publication = %#v, %v, want addressable RESERVED session", reserved, err)
+	}
+	controlled, err := workerSessions.Cancel(context.Background(), workersessions.ControlRequest{ID: "dispatch-1"})
+	if err != nil || controlled.Outcome != workersessions.ControlOutcomeApplied || controlled.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Cancel() in association/Start window = %#v, %v, want applied CANCELED", controlled, err)
+	}
+
+	close(ledger.release)
+	if err := <-startErr; err != nil {
+		t.Fatalf("startThroughWorkerSessions() error = %v", err)
+	}
+	result := <-accepted
+	if err := <-acceptedErr; !errors.Is(err, workers.ErrWorkstationDispatchCanceled) ||
+		result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled {
+		t.Fatalf("accepted control-won result = %#v, %v, want canceled Workers result", result, err)
+	}
+	select {
+	case dispatched := <-workerService.requests:
+		t.Fatalf("Workers dispatch started after pre-admission control: %#v", dispatched)
+	default:
+	}
+}
 
 // TestFactoryImpl_PlanDispatchRecordsWorkerSessionAssociationBeforeWorkersHandoff
 // proves the W4 Runtime dispatch cutover ordering guarantee: the canonical

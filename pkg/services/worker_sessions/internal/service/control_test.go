@@ -236,4 +236,110 @@ func TestControl_UnknownAndInvalidIdentityRemainDistinguishable(t *testing.T) {
 	if !errors.Is(invalidErr, workersessions.ErrInvalidSessionID) || !errors.Is(unknownErr, workersessions.ErrSessionNotFound) {
 		t.Fatalf("invalid=%v unknown=%v, want distinct typed errors", invalidErr, unknownErr)
 	}
+	_, pauseInvalidErr := registry.Pause(context.Background(), workersessions.ControlRequest{ID: " "})
+	_, pauseUnknownErr := registry.Pause(context.Background(), workersessions.ControlRequest{ID: "missing"})
+	if !errors.Is(pauseInvalidErr, workersessions.ErrInvalidSessionID) || !errors.Is(pauseUnknownErr, workersessions.ErrSessionNotFound) {
+		t.Fatalf("pause invalid=%v unknown=%v, want distinct typed errors", pauseInvalidErr, pauseUnknownErr)
+	}
+}
+
+func TestControl_BeforeStartCancellationAndTerminationPreventWorkersHandoff(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		state workersessions.State
+	}{
+		{name: "cancel", state: workersessions.StateCanceled},
+		{name: "terminate", state: workersessions.StateTerminated},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			boundary := newControlledBoundary()
+			registry := newControlledRegistry(t, boundary)
+			if _, err := registry.Reserve(context.Background(), workersessions.ReserveRequest{ID: "worker-1"}); err != nil {
+				t.Fatalf("Reserve() error = %v", err)
+			}
+			var result workersessions.ControlResult
+			var err error
+			if tc.name == "cancel" {
+				result, err = registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+			} else {
+				result, err = registry.Terminate(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+			}
+			if err != nil || result.Outcome != workersessions.ControlOutcomeApplied || result.Session.State != tc.state {
+				t.Fatalf("%s before Start = %#v, %v, want applied %s", tc.name, result, err, tc.state)
+			}
+			started, err := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+			if err != nil || !errors.Is(started.DispatchErr, workers.ErrWorkstationDispatchCanceled) ||
+				started.Dispatch.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled {
+				t.Fatalf("Start() after %s = %#v, %v, want canceled dispatch without handoff", tc.name, started, err)
+			}
+			select {
+			case request := <-boundary.started:
+				t.Fatalf("Workers Publish called after %s before Start: %#v", tc.name, request)
+			default:
+			}
+		})
+	}
+}
+
+func TestCancel_BoundaryAlreadyCanceledReturnsNoopWithoutChangingRunningSession(t *testing.T) {
+	boundary := newControlledBoundary()
+	registry := newControlledRegistry(t, boundary)
+	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
+	boundary.setCancel(func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+		return workers.WorkstationDispatchCancelResult{
+			DispatchID: "dispatch-1", Outcome: workers.WorkstationDispatchCancelOutcomeAlreadyCanceled,
+		}, nil
+	})
+
+	result, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+	if err != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateRunning {
+		t.Fatalf("Cancel() = %#v, %v, want NOOP with unchanged RUNNING session", result, err)
+	}
+	boundary.complete(completedDispatchResult("dispatch-1"), nil)
+	if final := <-started; final.Session.State != workersessions.StateCompleted {
+		t.Fatalf("Start() after ordinary completion = %#v, want COMPLETED", final)
+	}
+}
+
+func TestCancel_ConcurrentControlsShareOneBoundaryEffect(t *testing.T) {
+	boundary := newControlledBoundary()
+	registry := newControlledRegistry(t, boundary)
+	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
+	releaseCancel := make(chan struct{})
+	boundary.setCancel(func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+		<-releaseCancel
+		boundary.complete(canceledDispatchResult("dispatch-1"), workers.ErrWorkstationDispatchCanceled)
+		return workers.WorkstationDispatchCancelResult{
+			DispatchID: "dispatch-1", Outcome: workers.WorkstationDispatchCancelOutcomeCanceled,
+		}, nil
+	})
+
+	first := make(chan workersessions.ControlResult, 1)
+	firstErr := make(chan error, 1)
+	go func() {
+		result, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		first <- result
+		firstErr <- err
+	}()
+	<-boundary.cancelCalled
+	second := make(chan workersessions.ControlResult, 1)
+	secondErr := make(chan error, 1)
+	go func() {
+		result, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		second <- result
+		secondErr <- err
+	}()
+	close(releaseCancel)
+	if result := <-first; result.Outcome != workersessions.ControlOutcomeApplied || <-firstErr != nil {
+		t.Fatalf("first Cancel() = %#v, want applied", result)
+	}
+	if result := <-second; result.Outcome != workersessions.ControlOutcomeNoop || <-secondErr != nil {
+		t.Fatalf("second Cancel() = %#v, want no-op after the first control", result)
+	}
+	if calls := boundary.cancellations(); len(calls) != 1 || calls[0].DispatchID != "dispatch-1" {
+		t.Fatalf("boundary cancellation calls = %#v, want one exact call", calls)
+	}
+	if final := <-started; final.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Start() after shared cancellation = %#v, want CANCELED", final)
+	}
 }

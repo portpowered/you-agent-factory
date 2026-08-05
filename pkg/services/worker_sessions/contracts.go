@@ -43,10 +43,12 @@ type Service interface {
 	// Session identity in StateReserved, transitions StateStarting, and hands
 	// a detached clone of req.Execution to the one directly injected
 	// workers.WorkstationExecutionService. Start is synchronous: it returns
-	// only after the attempt commits its exactly-once absorbing COMPLETED or
-	// FAILED terminal outcome, classified from the Workers WorkResult first
-	// and the adapter error second. Invalid requests and conflicting starts
-	// return a typed error before any registry mutation or Workers call. Once
+	// only after the attempt commits its exactly-once absorbing terminal
+	// outcome, classified from the Workers WorkResult first and the adapter
+	// error second. A cancel or terminate that wins after Reserve but before
+	// Workers admission returns the established canceled terminal result
+	// without starting Workers. Invalid requests and conflicting starts return
+	// a typed error before any registry mutation or Workers call. Once
 	// the terminal outcome commits, Start also appends one terminal
 	// KindSession record (PhaseCompleted or PhaseFailed) to Topic(req.ID); a
 	// failure publishing that record is logged and never changes the

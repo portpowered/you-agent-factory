@@ -122,6 +122,19 @@ func (r *Root) DispatchWorkstation(
 	return r.workstations.Dispatch(ctx, request)
 }
 
+// DispatchWorkstationWithAdmission delegates execution and exposes the exact
+// admission point owned by the private workstation capability.
+func (r *Root) DispatchWorkstationWithAdmission(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	admitted workers.WorkstationDispatchAdmissionFunc,
+) (workers.WorkstationDispatchResult, error) {
+	if r == nil || r.workstations == nil {
+		return workers.WorkstationDispatchResult{}, workers.ErrWorkstationPoolUnavailable
+	}
+	return r.workstations.DispatchWithAdmission(ctx, request, admitted)
+}
+
 // CancelWorkstationDispatch delegates explicit cancellation to the private
 // workstation owner.
 func (r *Root) CancelWorkstationDispatch(

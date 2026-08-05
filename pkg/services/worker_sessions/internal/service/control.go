@@ -33,6 +33,21 @@ type supervision struct {
 	doneOnce      sync.Once
 }
 
+type cancellationAttemptKind uint8
+
+const (
+	cancellationAttemptNoop cancellationAttemptKind = iota
+	cancellationAttemptWait
+	cancellationAttemptBeforeAdmission
+	cancellationAttemptBoundary
+)
+
+type cancellationAttempt struct {
+	kind       cancellationAttemptKind
+	wait       chan struct{}
+	dispatchID string
+}
+
 func newSupervision(dispatchID string) *supervision {
 	return &supervision{
 		dispatchID: dispatchID,
@@ -43,6 +58,48 @@ func newSupervision(dispatchID string) *supervision {
 
 func (s *supervision) signalPublished() { s.publishedOnce.Do(func() { close(s.published) }) }
 func (s *supervision) signalDone()      { s.doneOnce.Do(func() { close(s.done) }) }
+
+func (s *supervision) beginCancellation(action workersessions.ControlAction) cancellationAttempt {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.controlAction != "" {
+		return cancellationAttempt{kind: cancellationAttemptNoop}
+	}
+	if s.controlActive {
+		return cancellationAttempt{kind: cancellationAttemptWait, wait: s.controlDone}
+	}
+	if s.publishing && !s.accepted {
+		return cancellationAttempt{kind: cancellationAttemptWait, wait: s.published}
+	}
+	if !s.accepted {
+		s.controlAction = action
+		return cancellationAttempt{kind: cancellationAttemptBeforeAdmission}
+	}
+	s.controlActive = true
+	s.controlDone = make(chan struct{})
+	s.requestedAction = action
+	return cancellationAttempt{kind: cancellationAttemptBoundary, wait: s.controlDone, dispatchID: s.dispatchID}
+}
+
+func (s *supervision) finishCancellation(
+	action workersessions.ControlAction,
+	wait chan struct{},
+	cancelResult workers.WorkstationDispatchCancelResult,
+	cancelErr error,
+	sessionTerminal bool,
+) bool {
+	alreadyTerminal := cancelAlreadyTerminal(cancelResult, cancelErr)
+	s.mu.Lock()
+	s.controlActive = false
+	close(wait)
+	if cancelErr == nil && cancelResult.Outcome == workers.WorkstationDispatchCancelOutcomeCanceled {
+		s.controlAction = action
+	} else if !alreadyTerminal && !sessionTerminal {
+		s.requestedAction = ""
+	}
+	s.mu.Unlock()
+	return alreadyTerminal
+}
 
 // Start supervises one resolved dispatch through the injected workstation pool
 // boundary. The boundary is the sole mechanism that starts, cancels, and
@@ -58,6 +115,13 @@ func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (
 	r.reserveIfAbsent(req.ID)
 	r.logger.Info("worker session start accepted", "sessionID", req.ID, "attemptID", attemptID, "outcome", "reserved", "state", string(workersessions.StateReserved))
 	if _, err := r.transitionToStarting(req.ID); err != nil {
+		if terminal, ok := r.preAdmissionControlTerminal(req.ID, attemptID); ok {
+			return workersessions.StartResult{
+				Session:     terminal,
+				Dispatch:    canceledBeforeAdmissionResult(req.Execution),
+				DispatchErr: workers.ErrWorkstationDispatchCanceled,
+			}, nil
+		}
 		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "not_startable")
 		return workersessions.StartResult{}, err
 	}
@@ -86,7 +150,17 @@ func (r *registry) startPublishedAttempt(ctx context.Context, req workersessions
 		}
 		return workersessions.StartResult{Session: final}, nil
 	}
-	if !r.beginBoundaryPublish(req.ID, supervision) {
+	return r.publishRegisteredAttempt(ctx, req, attemptID, supervision, r.beginBoundaryPublish(req.ID, supervision))
+}
+
+func (r *registry) publishRegisteredAttempt(
+	ctx context.Context,
+	req workersessions.StartRequest,
+	attemptID string,
+	supervision *supervision,
+	canPublish bool,
+) (workersessions.StartResult, error) {
+	if !canPublish {
 		final, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
 		supervision.signalPublished()
 		supervision.signalDone()
@@ -270,47 +344,36 @@ func (r *registry) cancelControl(ctx context.Context, req workersessions.Control
 			return r.controlApplied(req.ID, action, final, nil), nil
 		}
 
-		supervision.mu.Lock()
-		if supervision.controlAction != "" {
-			supervision.mu.Unlock()
+		attempt := supervision.beginCancellation(action)
+		switch attempt.kind {
+		case cancellationAttemptNoop:
 			return r.controlNoop(req.ID, action, session, supervision), nil
-		}
-		if supervision.controlActive {
-			wait := supervision.controlDone
-			supervision.mu.Unlock()
-			<-wait
+		case cancellationAttemptWait:
+			<-attempt.wait
 			continue
-		}
-		if supervision.publishing && !supervision.accepted {
-			wait := supervision.published
-			supervision.mu.Unlock()
-			<-wait
-			continue
-		}
-		if !supervision.accepted {
-			supervision.controlAction = action
-			supervision.mu.Unlock()
+		case cancellationAttemptBeforeAdmission:
 			final, _ := r.commitControlTerminal(req.ID, controlTerminalState(action))
 			supervision.signalDone()
 			return r.controlApplied(req.ID, action, final, supervision), nil
+		case cancellationAttemptBoundary:
+			// The exact dispatch is now accepted and can only be stopped through
+			// the Workers-owned boundary below.
 		}
-		supervision.controlActive = true
-		supervision.controlDone = make(chan struct{})
-		supervision.requestedAction = action
-		wait := supervision.controlDone
-		dispatchID := supervision.dispatchID
-		supervision.mu.Unlock()
+		wait := attempt.wait
+		dispatchID := attempt.dispatchID
 
 		cancelResult, cancelErr := r.boundary.Cancel(context.WithoutCancel(ctx), workers.WorkstationDispatchCancelRequest{DispatchID: dispatchID})
-		supervision.mu.Lock()
-		supervision.controlActive = false
-		close(wait)
-		if cancelErr == nil && cancelResult.Outcome == workers.WorkstationDispatchCancelOutcomeCanceled {
-			supervision.controlAction = action
-		} else if !sessionIsTerminal(r, req.ID) {
-			supervision.requestedAction = ""
+		alreadyTerminal := supervision.finishCancellation(action, wait, cancelResult, cancelErr, sessionIsTerminal(r, req.ID))
+
+		if alreadyTerminal {
+			<-supervision.done
+			current, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
+			result := workersessions.ControlResult{
+				Session: current, Action: action, Outcome: workersessions.ControlOutcomeNoop, DispatchID: dispatchID,
+			}
+			r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", dispatchID, "action", string(action), "outcome", string(result.Outcome))
+			return result, nil
 		}
-		supervision.mu.Unlock()
 
 		current, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
 		result := workersessions.ControlResult{Session: current, Action: action, DispatchID: dispatchID}
@@ -331,6 +394,34 @@ func (r *registry) cancelControl(ctx context.Context, req workersessions.Control
 		r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", dispatchID, "action", string(action), "outcome", string(result.Outcome))
 		return result, nil
 	}
+}
+
+func (r *registry) preAdmissionControlTerminal(id, attemptID string) (workersessions.Session, bool) {
+	session, err := r.Get(context.Background(), workersessions.GetRequest{ID: id})
+	if err != nil || (session.State != workersessions.StateCanceled && session.State != workersessions.StateTerminated) {
+		return workersessions.Session{}, false
+	}
+	r.logger.Info("worker session start skipped", "sessionID", id, "attemptID", attemptID, "outcome", string(session.State), "state", string(session.State))
+	return session, true
+}
+
+func canceledBeforeAdmissionResult(request workers.WorkstationDispatchRequest) workers.WorkstationDispatchResult {
+	return workers.WorkstationDispatchResult{
+		DispatchID:      request.Execution.Dispatch.DispatchID,
+		WorkstationName: request.WorkstationName,
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCanceled,
+		Result: workers.WorkResult{
+			DispatchID:   request.Execution.Dispatch.DispatchID,
+			TransitionID: request.Execution.Dispatch.TransitionID,
+			Outcome:      workers.OutcomeFailed,
+			Error:        workers.ErrWorkstationDispatchCanceled.Error(),
+		},
+	}
+}
+
+func cancelAlreadyTerminal(result workers.WorkstationDispatchCancelResult, err error) bool {
+	return result.Outcome == workers.WorkstationDispatchCancelOutcomeAlreadyTerminal &&
+		(err == nil || errors.Is(err, workers.ErrWorkstationDispatchAlreadyTerminal))
 }
 
 func (r *registry) controlTarget(id string) (workersessions.Session, *supervision, error) {

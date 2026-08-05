@@ -53,6 +53,17 @@ func (f *fakeExecution) DispatchWorkstation(
 	return dispatch(ctx, req)
 }
 
+func (f *fakeExecution) DispatchWorkstationWithAdmission(
+	ctx context.Context,
+	req workers.WorkstationDispatchRequest,
+	admitted workers.WorkstationDispatchAdmissionFunc,
+) (workers.WorkstationDispatchResult, error) {
+	if admitted != nil {
+		admitted()
+	}
+	return f.DispatchWorkstation(ctx, req)
+}
+
 func (f *fakeExecution) CancelWorkstationDispatch(
 	ctx context.Context,
 	req workers.WorkstationDispatchCancelRequest,

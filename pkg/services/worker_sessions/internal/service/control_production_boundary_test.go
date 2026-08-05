@@ -1,0 +1,191 @@
+package service_test
+
+import (
+	"context"
+	"sync"
+	"testing"
+
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+)
+
+// admissionControlledExecution is a controlled Workers execution service used
+// only behind the real asynchronous WorkstationPoolBoundary. Its channels make
+// the production boundary's admission barrier and terminal/control race
+// observable without sleeps or polling.
+type admissionControlledExecution struct {
+	mu sync.Mutex
+
+	dispatchEntered     chan struct{}
+	dispatchEnteredOnce sync.Once
+	allowAdmission      chan struct{}
+	cancelCalls         chan workers.WorkstationDispatchCancelRequest
+	complete            chan struct{}
+	completionCommitted chan struct{}
+	completionOnce      sync.Once
+	completionWins      bool
+}
+
+var _ workers.WorkstationExecutionService = (*admissionControlledExecution)(nil)
+
+func newAdmissionControlledExecution(completionWins bool) *admissionControlledExecution {
+	return &admissionControlledExecution{
+		dispatchEntered:     make(chan struct{}),
+		allowAdmission:      make(chan struct{}),
+		cancelCalls:         make(chan workers.WorkstationDispatchCancelRequest, 1),
+		complete:            make(chan struct{}),
+		completionCommitted: make(chan struct{}),
+		completionWins:      completionWins,
+	}
+}
+
+func (*admissionControlledExecution) StartWorkstationPool(
+	context.Context,
+	workers.WorkstationPoolStartRequest,
+) (workers.WorkstationPoolStartResult, error) {
+	return workers.WorkstationPoolStartResult{Outcome: workers.WorkstationPoolLifecycleOutcomeStarted}, nil
+}
+
+func (*admissionControlledExecution) StopWorkstationPool(
+	context.Context,
+) (workers.WorkstationPoolStopResult, error) {
+	return workers.WorkstationPoolStopResult{Outcome: workers.WorkstationPoolLifecycleOutcomeStopped}, nil
+}
+
+func (e *admissionControlledExecution) DispatchWorkstation(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+) (workers.WorkstationDispatchResult, error) {
+	return e.DispatchWorkstationWithAdmission(ctx, request, nil)
+}
+
+func (e *admissionControlledExecution) DispatchWorkstationWithAdmission(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	admitted workers.WorkstationDispatchAdmissionFunc,
+) (workers.WorkstationDispatchResult, error) {
+	e.dispatchEnteredOnce.Do(func() { close(e.dispatchEntered) })
+	select {
+	case <-e.allowAdmission:
+	case <-ctx.Done():
+		return workers.WorkstationDispatchResult{}, ctx.Err()
+	}
+	if admitted != nil {
+		admitted()
+	}
+	select {
+	case <-e.complete:
+	case <-ctx.Done():
+		return workers.WorkstationDispatchResult{}, ctx.Err()
+	}
+	e.completionOnce.Do(func() { close(e.completionCommitted) })
+	result := completedDispatchResult(request.Execution.Dispatch.DispatchID)
+	if e.completionWins {
+		return result, nil
+	}
+	return canceledDispatchResult(request.Execution.Dispatch.DispatchID), workers.ErrWorkstationDispatchCanceled
+}
+
+func (e *admissionControlledExecution) CancelWorkstationDispatch(
+	_ context.Context,
+	request workers.WorkstationDispatchCancelRequest,
+) (workers.WorkstationDispatchCancelResult, error) {
+	e.cancelCalls <- request
+	close(e.complete)
+	if e.completionWins {
+		<-e.completionCommitted
+		return workers.WorkstationDispatchCancelResult{
+			DispatchID: request.DispatchID,
+			Outcome:    workers.WorkstationDispatchCancelOutcomeAlreadyTerminal,
+		}, workers.ErrWorkstationDispatchAlreadyTerminal
+	}
+	return workers.WorkstationDispatchCancelResult{
+		DispatchID: request.DispatchID,
+		Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
+	}, nil
+}
+
+func newProductionBoundaryRegistry(t *testing.T, execution workers.WorkstationExecutionService) workersessions.Service {
+	t.Helper()
+	boundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
+		Service:    execution,
+		RouteNames: []string{"review"},
+		Async:      true,
+	})
+	return newControlledRegistry(t, boundary)
+}
+
+func TestCancel_WaitsForProductionAsyncBoundaryAdmissionBeforeExactCancellation(t *testing.T) {
+	execution := newAdmissionControlledExecution(false)
+	registry := newProductionBoundaryRegistry(t, execution)
+	started := make(chan workersessions.StartResult, 1)
+	go func() {
+		result, err := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+		if err != nil {
+			t.Errorf("Start() error = %v", err)
+		}
+		started <- result
+	}()
+	<-execution.dispatchEntered
+
+	cancelled := make(chan workersessions.ControlResult, 1)
+	cancelErr := make(chan error, 1)
+	go func() {
+		result, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		cancelled <- result
+		cancelErr <- err
+	}()
+	select {
+	case call := <-execution.cancelCalls:
+		t.Fatalf("Cancel reached dispatch %q before Workers admission", call.DispatchID)
+	default:
+	}
+
+	close(execution.allowAdmission)
+	result := <-cancelled
+	if err := <-cancelErr; err != nil || result.Outcome != workersessions.ControlOutcomeApplied {
+		t.Fatalf("Cancel() = %#v, %v, want applied after admission", result, err)
+	}
+	call := <-execution.cancelCalls
+	if call.DispatchID != "dispatch-1" {
+		t.Fatalf("Cancel dispatch ID = %q, want dispatch-1", call.DispatchID)
+	}
+	if final := <-started; final.Session.State != workersessions.StateCanceled ||
+		final.Dispatch.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled {
+		t.Fatalf("Start() after admitted cancellation = %#v, want canceled terminal result", final)
+	}
+}
+
+func TestCancel_ProductionBoundaryCompletionWinReturnsNoopAndPreservesCompletedSession(t *testing.T) {
+	execution := newAdmissionControlledExecution(true)
+	registry := newProductionBoundaryRegistry(t, execution)
+	started := make(chan workersessions.StartResult, 1)
+	go func() {
+		result, err := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+		if err != nil {
+			t.Errorf("Start() error = %v", err)
+		}
+		started <- result
+	}()
+	<-execution.dispatchEntered
+	close(execution.allowAdmission)
+
+	result, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+	if err != nil || result.Outcome != workersessions.ControlOutcomeNoop {
+		t.Fatalf("Cancel() = %#v, %v, want completion-wins NOOP", result, err)
+	}
+	if result.Session.State != workersessions.StateCompleted {
+		t.Fatalf("Cancel() session state = %q, want COMPLETED", result.Session.State)
+	}
+	if call := <-execution.cancelCalls; call.DispatchID != "dispatch-1" {
+		t.Fatalf("Cancel dispatch ID = %q, want dispatch-1", call.DispatchID)
+	}
+	final := <-started
+	if final.Session.State != workersessions.StateCompleted ||
+		final.Dispatch.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCompleted {
+		t.Fatalf("Start() after completion win = %#v, want completed terminal result", final)
+	}
+	if final.DispatchErr != nil {
+		t.Fatalf("Start() dispatch error = %v, want nil", final.DispatchErr)
+	}
+}

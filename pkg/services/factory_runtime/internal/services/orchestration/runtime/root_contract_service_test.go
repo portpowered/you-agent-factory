@@ -76,6 +76,17 @@ func (b *controlledWorkstationBoundary) DispatchWorkstation(
 	}
 }
 
+func (b *controlledWorkstationBoundary) DispatchWorkstationWithAdmission(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	admitted workers.WorkstationDispatchAdmissionFunc,
+) (workers.WorkstationDispatchResult, error) {
+	if admitted != nil {
+		admitted()
+	}
+	return b.DispatchWorkstation(ctx, request)
+}
+
 func (b *controlledWorkstationBoundary) CancelWorkstationDispatch(
 	_ context.Context,
 	request workers.WorkstationDispatchCancelRequest,
