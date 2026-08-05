@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- After changing an authored packaged Factory prompt, run `make packaged-factory-catalog-generate`; the prompt, generated Factory artifacts, and manifest are a single checked-in contract.
 - Process-boundary client tests must isolate every platform configuration root the child process can consult (HOME, USERPROFILE, APPDATA, LOCALAPPDATA, XDG roots, and package cache) beneath the test temp directory.
 - For a deterministic process-boundary provider effect, put a disposable provider-compatible executable first on the scenario PATH and retain only its provider identity plus invocation count.
 - Document `pkg/services/events` as the process-local, in-memory, session-scoped source-native observation stream; Recordings owns canonical Factory Event JSONL history, replay, artifacts, and historical projections.
@@ -84,4 +85,12 @@
 - **Learnings for future iterations:**
   - The docs CLI smoke test checks literal embedded Markdown; choose a marker that does not span a source line break when documenting a sanitized protocol fact.
   - `make lint` currently stops at 87 pre-existing backend-size findings outside this story; capture that baseline constraint separately from focused change verification.
+---
+
+## 2026-08-04 22:11 -07:00 - ACP-L1-V4-M01-ACPX-REAL-CLIENT-EVIDENCE-002
+- Repaired the failed Backend Functional Coverage lane by retaining the existing supplied-name prompt forms alongside the new optional-name guidance, then regenerated the packaged Factory catalog.
+- Files changed: `packages/packaged-factories/factories/factory-builder/prompts/build-factory.md`, `packages/packaged-factories/generated/factories/factory-builder/{factory.json,factory.yaml}`, `packages/packaged-factories/generated/manifest.json`, `progress.txt`.
+- **Learnings for future iterations:**
+  - The Factory Builder functional command-runner validates its real provider prompt as part of the public builder-flow coverage; preserve supplied-name instructions when extending that prompt for omitted-name ACP input.
+  - `go test ./tests/functional/factory/packaged/factory_builder -count=1 -timeout 2m`, `go test ./packages/packaged-factories -run TestFactoryBuilder -count=1 -timeout 2m`, and `make packaged-factory-catalog-check` validate this contract narrowly.
 ---

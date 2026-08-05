@@ -108,7 +108,7 @@ workstations:
         Inputs:
 
         - Request: `${request}`
-        - New Factory name (optional): `${factoryName}`
+        - New Factory name: `${factoryName}` (optional)
         - Requested orchestrator: `${orchestrator}`
 
         If the requested name is blank, derive one concise, stable, lowercase
@@ -144,14 +144,19 @@ workstations:
         operator-owned Factory root explicitly so persistence does not fall back to the
         project-local `./factory` default:
 
+        When the request supplied a name, use this command form:
+
         ```bash
-        you factory create <chosen-factory-name> --from <staged-candidate> --dir ~/.you-agent-factory/factories
+        you factory create ${factoryName} --from <staged-candidate> --dir ~/.you-agent-factory/factories
         ```
+
+        When the request did not supply a name, substitute the derived name in that
+        same command form.
 
         Never copy staged files into an operator-owned Factory root or use another
         installation path. Do not call `you factory update`; a requested name that
         already exists must remain unchanged. If validation or create fails, stop and
-        report the safe diagnostic, its validation code, field, or source location when
+        report the safe diagnostic, validation code, field, or source location when
         available, and a concrete correction action; leave no alternate installed
         Factory behind.
 
