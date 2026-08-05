@@ -217,12 +217,12 @@ func (o *SessionOwner) resolveSessionInvocationInput(
 	if err != nil {
 		return ResolvedSessionInvocationInput{}, err
 	}
-	if request.Args == nil {
-		return o.resolveCompatibilitySessionInvocationInput(ctx, content)
-	}
 	var signature *factorydefinitions.InvocationSignatureConfig
 	if cfg != nil {
 		signature = cfg.InvocationSignature
+	}
+	if request.Args == nil {
+		return o.resolveCompatibilitySessionInvocationInput(ctx, signature, content)
 	}
 	return o.resolveStructuredSessionInvocationInput(ctx, signature, directArgs, content)
 }
@@ -278,6 +278,7 @@ func resolvedPreparedSessionInvocationInput(
 
 func (o *SessionOwner) resolveCompatibilitySessionInvocationInput(
 	ctx context.Context,
+	signature *factorydefinitions.InvocationSignatureConfig,
 	content []work.WorkContentPart,
 ) (ResolvedSessionInvocationInput, error) {
 	if len(content) == 0 {
@@ -289,7 +290,53 @@ func (o *SessionOwner) resolveCompatibilitySessionInvocationInput(
 	if err != nil {
 		return ResolvedSessionInvocationInput{}, normalizeSessionInvocationError(err)
 	}
+	if signature != nil {
+		parameterName := primaryTextParameter(signature)
+		if parameterName == "" {
+			return ResolvedSessionInvocationInput{}, &factorydefinitions.RequestValidationError{
+				Message: "text content requires a primary positional or stdin invocation parameter",
+			}
+		}
+		if prepared.ResolvedInput == nil || strings.TrimSpace(prepared.ResolvedInput.Text) == "" {
+			return ResolvedSessionInvocationInput{}, &factorydefinitions.RequestValidationError{
+				Message: "content did not resolve to one logical invocation input",
+			}
+		}
+		return o.resolveStructuredSessionInvocationInput(ctx, signature, []work.NamedArgumentInput{{
+			Key: parameterName, Values: []string{prepared.ResolvedInput.Text},
+		}}, nil)
+	}
 	return resolvedSessionInvocationInputFromPrepared(nil, prepared)
+}
+
+// primaryTextParameter finds the signature parameter that receives ordinary
+// unstructured transport text. Positional slot one has precedence because it
+// is the Factory's declared primary Work content; a stdin binding is the
+// fallback for signatures that intentionally expose text only through stdin.
+func primaryTextParameter(signature *factorydefinitions.InvocationSignatureConfig) string {
+	if signature == nil {
+		return ""
+	}
+	stdinParameter := ""
+	for _, parameter := range signature.Parameters {
+		name := strings.TrimSpace(parameter.Name)
+		if name == "" {
+			continue
+		}
+		for _, binding := range parameter.Bindings {
+			switch binding.Kind {
+			case factorydefinitions.InvocationParameterBindingKindPositional:
+				if binding.Position == 1 {
+					return name
+				}
+			case factorydefinitions.InvocationParameterBindingKindStdin:
+				if stdinParameter == "" {
+					stdinParameter = name
+				}
+			}
+		}
+	}
+	return stdinParameter
 }
 
 func (o *SessionOwner) resolveStructuredSessionInvocationInput(

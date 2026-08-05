@@ -97,6 +97,43 @@ func TestSessionOwner_StructuredArgumentsPreserveCanonicalNamesAndSources(t *tes
 	}
 }
 
+func TestSessionOwner_CompatibilityContentRoutesToPrimarySignatureArgument(t *testing.T) {
+	cfg := sessionOwnerFactoryConfig()
+	cfg.InvocationSignature = &interfaces.InvocationSignatureConfig{Parameters: []interfaces.InvocationParameterConfig{
+		{
+			Name: "request", Required: true,
+			Bindings: []interfaces.InvocationParameterBindingConfig{
+				{Kind: string(factoryapi.FactoryInvocationParameterBindingKindPositional), Position: 1},
+				{Kind: string(factoryapi.FactoryInvocationParameterBindingKindStdin)},
+			},
+		},
+		{
+			Name: "optionalName", DefaultValues: []string{""},
+			Bindings: []interfaces.InvocationParameterBindingConfig{
+				{Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed)},
+			},
+		},
+	}}
+	var submitted workdomain.SubmitRequest
+	owner := successfulSessionOwner(cfg, func(request workdomain.SubmitRequest) { submitted = request })
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	content := sessionOwnerTextContent(t, "plain transport text")
+
+	if _, err := owner.InvokeFactorySession(context.Background(), "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{
+		SourceKind: &sourceKind,
+		Content:    &content,
+	})); err != nil {
+		t.Fatalf("InvokeFactorySession: %v", err)
+	}
+	request := submitted.InvocationArguments.Arguments["request"]
+	if len(request.Values) != 1 || request.Values[0] != "plain transport text" {
+		t.Fatalf("primary invocation argument = %#v, want the transport text", request.Values)
+	}
+	if len(submitted.Content) != 1 || submitted.Content[0].Text != "plain transport text" {
+		t.Fatalf("submitted content = %#v, want the routed primary input", submitted.Content)
+	}
+}
+
 func TestSessionOwner_PreparedCLIArgumentsRetainCanonicalValuesOrderAndProvenance(t *testing.T) {
 	cfg := sessionOwnerSignatureFactoryConfig()
 	cfg.InvocationSignature.Parameters[0].ValueMode = work.InvocationParameterValueModeRepeated

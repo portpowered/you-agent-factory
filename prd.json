@@ -52,8 +52,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Extended the pinned acpx@0.13.0 process-boundary proof through one ephemeral prompt, a non-empty assistant result fact, one end_turn result, and exactly one disposable Codex-shaped provider invocation. The real run exposed an ACP text-to-signature normalization defect for the shipped Factory Builder target; Factory Sessions now routes compatibility text to a signature's primary positional or stdin parameter, and Factory Builder safely derives an omitted name. Verified with Node 22.13, the real acpx path, focused Factory Sessions coverage, packaged-factory generation/coverage, docs smoke, and typecheck. The repository-wide lint target remains blocked by pre-existing backend-size findings outside this story."
     }
   ]
 }

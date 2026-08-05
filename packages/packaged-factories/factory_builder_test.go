@@ -43,7 +43,7 @@ func TestFactoryBuilderPublishedInvocation(t *testing.T) {
 		t.Fatalf("published Factory Builder identity = %#v", factoryBuilder)
 	}
 	assertFactoryBuilderParameter(t, factoryBuilder.InvocationSignature.Parameters, "request", "to", true, nil)
-	assertFactoryBuilderParameter(t, factoryBuilder.InvocationSignature.Parameters, "factoryName", "factory-name", true, nil)
+	assertFactoryBuilderParameter(t, factoryBuilder.InvocationSignature.Parameters, "factoryName", "factory-name", false, nil)
 	assertFactoryBuilderParameter(t, factoryBuilder.InvocationSignature.Parameters, "orchestrator", "orchestrator", false, []string{"graph", "javascript"})
 	assertFactoryBuilderParameter(t, factoryBuilder.InvocationSignature.Parameters, "builderProvider", "builder-provider", false, nil)
 	assertFactoryBuilderParameter(t, factoryBuilder.InvocationSignature.Parameters, "builderModel", "builder-model", false, nil)

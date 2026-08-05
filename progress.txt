@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Process-boundary client tests must isolate every platform configuration root the child process can consult (HOME, USERPROFILE, APPDATA, LOCALAPPDATA, XDG roots, and package cache) beneath the test temp directory.
+- For a deterministic process-boundary provider effect, put a disposable provider-compatible executable first on the scenario PATH and retain only its provider identity plus invocation count.
 - Document `pkg/services/events` as the process-local, in-memory, session-scoped source-native observation stream; Recordings owns canonical Factory Event JSONL history, replay, artifacts, and historical projections.
 - Architecture service inventories should name the package that publishes the public owner contract, and diagrams should show direct service operations unless a bounded delivery contract is explicitly involved.
 - Define ACP customer terms from the detached `chat_sessions` and `worker_sessions` public contracts; use customer-facing relationship diagrams and keep their event lifetimes separate from Recordings history.
@@ -64,4 +65,23 @@
   - `acpx@0.13.0` requires Node.js 22.13.0 or newer; the functional CI lane must install Node 22 before it runs the opt-in evidence test.
   - Fresh `you serve acp` state needs system initialization so its default `factory:@you/factory-builder` target is installed before ACP `session/new` resolves the catalog.
   - Run `bun install --frozen-lockfile` from `ui/` before `make typecheck` in a fresh worktree; the shared `tsconfig.app.json` setting is inherited by each typecheck project.
+---
+
+## 2026-08-04 21:50 -07:00 - ACP-L1-V4-M01-ACPX-REAL-CLIENT-EVIDENCE-002
+- Extended the pinned `acpx@0.13.0` acceptance path through one ephemeral prompt against the shipped Factory Builder target. It asserts a non-empty assistant-result fact, one `end_turn` result, and exactly one disposable Codex-shaped provider invocation without retaining prompt, response, JSON-RPC, command, credential, or host-path payloads.
+- Corrected the directly observed ACP blocking defect: Factory Sessions now maps text compatibility input to a Factory signature's primary positional or stdin parameter. The Factory Builder package accepts an omitted name and safely directs Builder to derive one or report a collision, allowing the default ACP target to admit an ordinary text turn.
+- Regenerated packaged Factory artifacts and updated the canonical ACP and Factory-authoring documentation with the sanitized command, evidence facts, and no-transcript boundary.
+- Files changed: `docs/reference/{authoring-factories,serve-acp}.md`, `packages/packaged-factories/{factories/factory-builder/{factory.yaml,prompts/build-factory.md},factory_builder_test.go,generated/{factories/factory-builder/{factory.json,factory.yaml},manifest.json}}`, `pkg/services/factory_sessions/internal/invocation/{session_owner.go,session_owner_test.go}`, `tests/functional/transport/acp/realclient/pinned_acpx_test.go`, `prd.json`, `progress.txt`.
+- **Learnings for future iterations:**
+  - ACP `session/prompt` exposes text content rather than named Factory arguments; Factory Sessions must normalize that text through a signature's declared primary input before runtime interpolation.
+  - A real-client acceptance test can exercise the production Codex subprocess adapter with a scenario-local executable, while a marker containing only `codex` proves identity and cardinality without preserving provider traffic.
+  - Regenerate `packages/packaged-factories/generated/` with `make packaged-factory-catalog-generate` after changing an authored packaged Factory.
+---
+
+## 2026-08-04 21:59 -07:00 - ACP-L1-V4-M01-ACPX-REAL-CLIENT-EVIDENCE-002
+- Verified the completed real-client story with the focused Factory Sessions and packaged-Factory tests, generated-catalog check, documentation CLI smoke test, pinned Node 22.13 acpx prompt run, and UI typecheck. Updated the packaged-docs smoke contract to use the sanitized assistant-result fact rather than the removed raw protocol marker.
+- Files changed: `tests/functional/smoke/cli_docs_smoke_test.go`, `prd.json`, `progress.txt` (with the story's previously recorded implementation files).
+- **Learnings for future iterations:**
+  - The docs CLI smoke test checks literal embedded Markdown; choose a marker that does not span a source line break when documenting a sanitized protocol fact.
+  - `make lint` currently stops at 87 pre-existing backend-size findings outside this story; capture that baseline constraint separately from focused change verification.
 ---

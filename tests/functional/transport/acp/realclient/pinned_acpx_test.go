@@ -23,15 +23,21 @@ const (
 	realClientAgentName         = "you-real-client"
 	defaultFactoryBuilderTarget = "factory:@you/factory-builder"
 	realClientEvidenceEnv       = "INFINITE_YOU_RUN_ACPX_REAL_CLIENT"
+	deterministicProviderName   = "codex"
+	providerObservationEnv      = "INFINITE_YOU_ACPX_PROVIDER_OBSERVATION"
 )
 
-// TestPinnedAcpxCreatesDefaultFactoryBuilderSession proves the OS-process
+// TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt proves the OS-process
 // boundary that root.BuildProcess tests intentionally cannot cover: a pinned,
 // independently packaged ACP client builds and starts the repository binary
-// through a portable structured argv configuration. The test keeps every ACPX
-// file, npm cache, server binary, and ACP session inside t.TempDir and reports
-// only phase classifications if that client boundary fails.
-func TestPinnedAcpxCreatesDefaultFactoryBuilderSession(t *testing.T) {
+// through a portable structured argv configuration, then completes one prompt
+// through the shipped default target. The disposable provider command is a
+// Codex-shaped external process, not an in-process fake: it reports only its
+// provider identity and emits the provider-native success envelope. The test
+// keeps every ACPX file, npm cache, server binary, provider marker, and ACP
+// session inside t.TempDir and reports only phase classifications if that
+// client boundary fails.
+func TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt(t *testing.T) {
 	if testing.Short() {
 		t.Skip("real acpx client evidence builds the CLI and installs a pinned npm package")
 	}
@@ -44,6 +50,7 @@ func TestPinnedAcpxCreatesDefaultFactoryBuilderSession(t *testing.T) {
 
 	scenario := newPinnedAcpxScenario(t)
 	buildCurrentYouBinary(t, scenario)
+	scenario.writeDeterministicProvider(t)
 	scenario.writeConfig(t)
 	scenario.assertPinnedVersion(t)
 	scenario.registerSessionCleanup(t)
@@ -51,7 +58,11 @@ func TestPinnedAcpxCreatesDefaultFactoryBuilderSession(t *testing.T) {
 	created := scenario.newSession(t)
 	assertCreatedSession(t, created)
 	assertNegotiatedDefaultTarget(t, scenario)
+	promptOutput := scenario.prompt(t)
+	scenario.assertOneDeterministicProviderInvocation(t)
+	assertPromptEvidence(t, promptOutput)
 	scenario.closeSession(t)
+	scenario.assertQueueOwnerStopped(t)
 }
 
 type pinnedAcpxScenario struct {
@@ -60,6 +71,8 @@ type pinnedAcpxScenario struct {
 	npmCache      string
 	repoRoot      string
 	serverPath    string
+	providerDir   string
+	providerProof string
 	sessionActive bool
 }
 
@@ -72,11 +85,13 @@ func newPinnedAcpxScenario(t *testing.T) *pinnedAcpxScenario {
 		serverName += ".exe"
 	}
 	return &pinnedAcpxScenario{
-		home:       filepath.Join(root, "home"),
-		project:    filepath.Join(root, "project"),
-		npmCache:   filepath.Join(root, "npm-cache"),
-		repoRoot:   repositoryRoot(t),
-		serverPath: filepath.Join(root, "bin", serverName),
+		home:          filepath.Join(root, "home"),
+		project:       filepath.Join(root, "project"),
+		npmCache:      filepath.Join(root, "npm-cache"),
+		repoRoot:      repositoryRoot(t),
+		serverPath:    filepath.Join(root, "bin", serverName),
+		providerDir:   filepath.Join(root, "provider"),
+		providerProof: filepath.Join(root, "provider", "invocations"),
 	}
 }
 
@@ -115,6 +130,38 @@ func (scenario *pinnedAcpxScenario) writeConfig(t *testing.T) {
 	}
 }
 
+func (scenario *pinnedAcpxScenario) writeDeterministicProvider(t *testing.T) {
+	t.Helper()
+	if err := os.MkdirAll(scenario.providerDir, 0o755); err != nil {
+		t.Fatalf("real ACP evidence setup failed: create deterministic provider directory")
+	}
+
+	providerPath, providerScript := deterministicProviderScript(scenario.providerDir)
+	if err := os.WriteFile(providerPath, []byte(providerScript), 0o700); err != nil {
+		t.Fatalf("real ACP evidence setup failed: write deterministic provider command")
+	}
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(providerPath, 0o700); err != nil {
+			t.Fatalf("real ACP evidence setup failed: mark deterministic provider command executable")
+		}
+	}
+}
+
+func deterministicProviderScript(directory string) (string, string) {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(directory, deterministicProviderName+".cmd"), `@echo off
+>> "%INFINITE_YOU_ACPX_PROVIDER_OBSERVATION%" echo codex
+echo {"type":"turn.started"}
+echo {"type":"item.completed","item":{"id":"real-client-result","type":"agent_message","text":"ok"}}
+echo {"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}
+`
+	}
+	return filepath.Join(directory, deterministicProviderName), `#!/bin/sh
+printf '%s\n' codex >> "$INFINITE_YOU_ACPX_PROVIDER_OBSERVATION"
+printf '%s\n' '{"type":"turn.started"}' '{"type":"item.completed","item":{"id":"real-client-result","type":"agent_message","text":"ok"}}' '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}'
+`
+}
+
 func (scenario *pinnedAcpxScenario) assertPinnedVersion(t *testing.T) {
 	t.Helper()
 	output, err := scenario.run("verify-acpx-version", "--version")
@@ -134,6 +181,25 @@ func (scenario *pinnedAcpxScenario) newSession(t *testing.T) acpxSessionResult {
 	}
 	scenario.sessionActive = true
 	return parseAcpxSessionResult(t, output, "session_ensured")
+}
+
+func (scenario *pinnedAcpxScenario) prompt(t *testing.T) []byte {
+	t.Helper()
+	// Keep the input ephemeral and semantically empty. The assertion below
+	// retains only result-presence and terminal facts, never prompt or result
+	// payloads from the real-client output.
+	output, err := scenario.run(
+		"complete-prompt",
+		"--format", "json",
+		"--timeout", "45",
+		realClientAgentName,
+		"prompt",
+		strings.Repeat("x", 16),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return output
 }
 
 func (scenario *pinnedAcpxScenario) closeSession(t *testing.T) {
@@ -166,15 +232,34 @@ func (scenario *pinnedAcpxScenario) run(phase string, args ...string) ([]byte, e
 }
 
 func (scenario *pinnedAcpxScenario) environment() []string {
-	return append(os.Environ(),
-		"HOME="+scenario.home,
-		"USERPROFILE="+scenario.home,
-		"APPDATA="+filepath.Join(scenario.home, "appdata"),
-		"LOCALAPPDATA="+filepath.Join(scenario.home, "localappdata"),
-		"XDG_CONFIG_HOME="+filepath.Join(scenario.home, "config"),
-		"XDG_CACHE_HOME="+filepath.Join(scenario.home, "cache"),
-		"npm_config_cache="+scenario.npmCache,
-	)
+	environment := append([]string(nil), os.Environ()...)
+	for name, value := range map[string]string{
+		"HOME":                              scenario.home,
+		"USERPROFILE":                       scenario.home,
+		"APPDATA":                           filepath.Join(scenario.home, "appdata"),
+		"LOCALAPPDATA":                      filepath.Join(scenario.home, "localappdata"),
+		"XDG_CONFIG_HOME":                   filepath.Join(scenario.home, "config"),
+		"XDG_CACHE_HOME":                    filepath.Join(scenario.home, "cache"),
+		"npm_config_cache":                  scenario.npmCache,
+		"YOU_DEFAULT_WORKER_MODEL_PROVIDER": deterministicProviderName,
+		providerObservationEnv:              scenario.providerProof,
+		"PATH":                              scenario.providerDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+	} {
+		environment = replaceEnvironmentValue(environment, name, value)
+	}
+	return environment
+}
+
+func replaceEnvironmentValue(environment []string, name, value string) []string {
+	filtered := make([]string, 0, len(environment)+1)
+	for _, item := range environment {
+		key, _, found := strings.Cut(item, "=")
+		if found && strings.EqualFold(key, name) {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	return append(filtered, name+"="+value)
 }
 
 func runBoundedCommand(directory string, environment []string, phase, name string, args ...string) ([]byte, error) {
@@ -252,6 +337,81 @@ func assertNegotiatedDefaultTarget(t *testing.T, scenario *pinnedAcpxScenario) {
 		}
 	}
 	t.Fatalf("real ACP evidence failed: current target was not %s", defaultFactoryBuilderTarget)
+}
+
+func assertPromptEvidence(t *testing.T, output []byte) {
+	t.Helper()
+
+	var assistantResult bool
+	terminalStopReasons := make([]string, 0, 1)
+	for _, line := range bytes.Split(bytes.TrimSpace(output), []byte{'\n'}) {
+		var frame struct {
+			Method string `json:"method"`
+			Params struct {
+				Update struct {
+					SessionUpdate string `json:"sessionUpdate"`
+					Content       struct {
+						Type string `json:"type"`
+						Text string `json:"text"`
+					} `json:"content"`
+				} `json:"update"`
+			} `json:"params"`
+			Result struct {
+				StopReason string `json:"stopReason"`
+			} `json:"result"`
+			Error json.RawMessage `json:"error"`
+		}
+		if err := json.Unmarshal(line, &frame); err != nil {
+			t.Fatal("real ACP evidence failed: acpx prompt output was not machine-readable JSON")
+		}
+		if len(frame.Error) > 0 && string(frame.Error) != "null" {
+			t.Fatal("real ACP evidence failed: acpx prompt reported a protocol error")
+		}
+		if frame.Method == "session/update" &&
+			frame.Params.Update.SessionUpdate == "agent_message_chunk" &&
+			frame.Params.Update.Content.Type == "text" &&
+			strings.TrimSpace(frame.Params.Update.Content.Text) != "" {
+			assistantResult = true
+		}
+		if frame.Method == "" && frame.Result.StopReason != "" {
+			terminalStopReasons = append(terminalStopReasons, frame.Result.StopReason)
+		}
+	}
+	if !assistantResult {
+		t.Fatal("real ACP evidence failed: prompt did not produce a non-empty assistant result")
+	}
+	if len(terminalStopReasons) != 1 || terminalStopReasons[0] != "end_turn" {
+		t.Fatal("real ACP evidence failed: prompt did not return exactly one successful end_turn result")
+	}
+}
+
+func (scenario *pinnedAcpxScenario) assertOneDeterministicProviderInvocation(t *testing.T) {
+	t.Helper()
+	payload, err := os.ReadFile(scenario.providerProof)
+	if err != nil {
+		t.Fatal("real ACP evidence failed: read deterministic provider observation")
+	}
+	invocations := 0
+	for _, line := range strings.Fields(string(payload)) {
+		if line != deterministicProviderName {
+			t.Fatal("real ACP evidence failed: provider observation did not identify the deterministic provider")
+		}
+		invocations++
+	}
+	if invocations != 1 {
+		t.Fatalf("real ACP evidence failed: deterministic provider invocation count = %d, want 1", invocations)
+	}
+}
+
+func (scenario *pinnedAcpxScenario) assertQueueOwnerStopped(t *testing.T) {
+	t.Helper()
+	entries, err := os.ReadDir(filepath.Join(scenario.home, ".acpx", "queues"))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("real ACP evidence cleanup failed: inspect disposable queue state")
+	}
+	if len(entries) != 0 {
+		t.Fatal("real ACP evidence cleanup failed: disposable acpx queue owner remained active")
+	}
 }
 
 type persistedAcpxSession struct {

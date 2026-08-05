@@ -17,8 +17,15 @@ semantics from the workspace.
 Inputs:
 
 - Request: `${request}`
-- New Factory name: `${factoryName}`
+- New Factory name (optional): `${factoryName}`
 - Requested orchestrator: `${orchestrator}`
+
+If the requested name is blank, derive one concise, stable, lowercase
+hyphenated name from the request before staging. Use that same derived name for
+the staging directory, validation context, named-Factory create command, and
+result. Never overwrite an existing named Factory; if the derived name already
+exists, stop and report the safe collision diagnostic rather than selecting a
+replacement name.
 
 Stage candidate files only beneath a new, Factory-name-scoped directory inside
 the current workspace. The staging directory is not an installed Factory. Do
@@ -47,7 +54,7 @@ operator-owned Factory root explicitly so persistence does not fall back to the
 project-local `./factory` default:
 
 ```bash
-you factory create ${factoryName} --from <staged-candidate> --dir ~/.you-agent-factory/factories
+you factory create <chosen-factory-name> --from <staged-candidate> --dir ~/.you-agent-factory/factories
 ```
 
 Never copy staged files into an operator-owned Factory root or use another
@@ -57,7 +64,7 @@ report the safe diagnostic, its validation code, field, or source location when
 available, and a concrete correction action; leave no alternate installed
 Factory behind.
 
-Return a concise, self-contained result that states the requested canonical
+Return a concise, self-contained result that states the chosen canonical
 Factory name, orchestrator kind, validation outcome, and whether the named
 Factory was installed. Refer to the named-Factory destination rather than
 printing a staging path. Redact credentials, secrets, raw provider commands,
