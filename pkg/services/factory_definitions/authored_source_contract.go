@@ -123,6 +123,14 @@ func (e *AuthoredFactoryDefinitionLoadFailure) Error() string {
 	if source := strings.TrimSpace(e.Source.Path); source != "" {
 		message += fmt.Sprintf(" (%s)", source)
 	}
+	// The classification and selected source make this failure safe for callers
+	// to identify, but public CLI and MCP errors must retain the diagnostic the
+	// Definitions-owned loader produced. The cause is already part of the
+	// public error chain through Unwrap; include its message here so wrapping
+	// this failure with fmt.Errorf does not discard actionable load details.
+	if e.Cause != nil {
+		message += ": " + e.Cause.Error()
+	}
 	return message
 }
 

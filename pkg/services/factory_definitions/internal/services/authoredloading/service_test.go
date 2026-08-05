@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -158,6 +159,9 @@ func assertTypedLoadFailure(
 	}
 	if !errors.Is(err, wantMatch) || !errors.Is(err, wantCause) {
 		t.Fatalf("error = %v, want classification %v and cause %v", err, wantMatch, wantCause)
+	}
+	if causeText := wantCause.Error(); causeText != "" && !strings.Contains(err.Error(), causeText) {
+		t.Fatalf("error = %q, want retained cause diagnostic %q", err, causeText)
 	}
 }
 
