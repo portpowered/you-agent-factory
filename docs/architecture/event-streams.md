@@ -1,90 +1,64 @@
 # Event Streams
 
-Systems correspond roughly to the construction of event streams.
+The product ships two different event contracts. They serve different
+lifetimes and must not be combined into a third, normalized hierarchy.
 
-there are two general event streams that are high event procedures.
+## Worker observations
 
-1. factory events
-2. worker events
+Workers publish source-native observations through the public `workers` contract
+(`pkg/services/workers/response_drafts.go`). An observation is a `workers.Draft`:
+its provider provenance identifies the original source, while its `Kind`,
+`Phase`, and typed JSON payload describe the observation made available to a
+consumer.
 
-## factory events
+The declared `workers.Kind` values are:
 
-Factory events denote the system state of the factory, what is next, what is going on.
-At any given time, you can largely replay the world state of the factory to the current tick of the event stream it is operating on.
+- `SESSION`
+- `RUN`
+- `TURN`
+- `MESSAGE`
+- `REASONING`
+- `TOOL`
+- `FILE_CHANGE`
+- `PLAN`
+- `PROGRESS`
+- `USAGE`
+- `ERROR`
+- `STREAM_GAP`
 
-- Factory Created (Definition)
-- Factory Start
-    - ===============================
-    - Workstation Start
-        - Worker Start
-            - Model Request Start
-            - Model Request Stream
-            - Model Request End  (Complete/Fail)
-            - Script Request Start
-            - Script Request Stream
-            - Script Request End  (Complete/Fail)
-            - Agent Request Start
-            - Agent Request Stream
-            - Agent Request End  (Complete/Fail)
-            - Logic Request Start
-            - Logic Request Stream
-            - Logic Request End  (Complete/Fail)
-        - Worker End (Complete/Fail)
-    - Workstation End (Complete/Fail)
-    - ================================
-    - Work Submission Request Start
-    - Work Submission request End (Complete/Fail)
-    - Work Change Request Start
-    - Work Change Request End (Complete/Fail)
-    - ================================
-    - Factory Definition Update Start (Definition change)
-    - Factory Definition Update End (Complete/Fail)
-    - Factory State Update Request Start (Paused/Running/Created/Started/Failed)
-    - Factory State Update Request End (Complete/Failed)
-- Factory End
-- Error
-## worker session events
+The declared `workers.Phase` values are `STARTED`, `DELTA`, `UPDATED`,
+`COMPLETED`, `FAILED`, and `CANCELED`.
 
-Worker events denote the changes that occur within the context of a given worker request
+`Kind` and `Phase` are not a Cartesian-product taxonomy. Each emitted
+observation uses the combination and typed payload supported by its source and
+Worker contract. For example, a `MESSAGE` observation can carry either a
+`MessagePayload` snapshot or a `MessageDeltaPayload`; a `TOOL` observation can
+carry `ToolPayload` or `ToolDeltaPayload`; and `STREAM_GAP` carries
+`StreamGapPayload`. Consumers must preserve the accompanying `Provenance` and
+interpret the payload for the specific emitted combination rather than assume
+that every kind accepts every phase or payload.
 
-- Session Start
-- User Stream Start
-    - User Stream Update
-        - User Item added
-            - User content start
-            - User content stream
-                - thinking content
-                - text content
-                - audio/image/file content
-                - tool call content
-            - User Content end
-        - User item added
-- User Stream End
-- Agent stream Start
-    - Agent Stream Update
-        - Agent Item added
-            - Agent content start
-            - Agent content stream
-                - thinking content
-                - text content
-                - audio/image/file content
-                - tool call content
-            - Agent content end
-        - Agent Item end
-- Agent Stream End
-- Tool stream Start
-    - Tool Stream Update
-        - Tool Item added
-            - Tool content start
-            - Tool content stream
-                - thinking content
-                - text content
-                - audio/image/file content
-                - tool call content
-            - Tool content end
-        - Tool Item end
-- Tool Stream End
-- Session In pRogress
-- Session Failed
-- Session End
-- Error
+The Events service delivers these observations through a process-local,
+in-memory, session-scoped stream. It retains observations only for the active
+process/session scope and relays source-native JSON; it does not create another
+kind union, durable journal, or replay history.
+
+## Canonical Factory history
+
+Recordings separately owns the canonical Factory history. Its `FactoryEvent`
+values are recorded in canonical order and written to Factory Event JSONL
+artifacts. Recordings uses that history for replay, historical inspection, and
+derived projections of Factory state.
+
+Factory history describes durable Factory facts. It is not a retention layer
+for Worker observations, and an Events stream is not a replayable Factory
+ledger. Conversely, `FactoryEvent` values are not a replacement vocabulary for
+source-native Worker observation payloads.
+
+## Superseded outline
+
+The former nested Factory/Worker/User/Agent/Tool event tree was conceptual
+material only. It is superseded and is not a supported event contract. New
+consumers must use the `workers.Kind`/`workers.Phase` vocabulary for Worker
+observations and Recordings `FactoryEvent` history for canonical Factory
+replay.

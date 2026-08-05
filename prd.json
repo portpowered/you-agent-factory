@@ -65,8 +65,8 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-04: Replaced the unsupported nested Factory/Worker/User/Agent/Tool outline in docs/architecture/event-streams.md with the shipped workers.Kind and workers.Phase vocabulary, typed-payload guidance, and source-native combination caveat. Documented the Events stream as process-local/session-scoped delivery and Recordings FactoryEvent JSONL artifacts as the separate canonical replay history. Verified the terminology against pkg/services/workers/response_drafts.go, pkg/services/events/doc.go, and pkg/services/recordings contracts; make typecheck passes."
     },
     {
       "id": "ACP-L1-V4-H04-DOCUMENTATION-RECONCILIATION-004",
