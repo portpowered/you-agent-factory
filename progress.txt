@@ -10,6 +10,7 @@
 - A late admission callback must never move a terminal Worker Session back to `RUNNING`; terminal lifecycle snapshots are absorbing under every control/completion interleaving.
 - When Workers reports `ALREADY_CANCELED`, its terminal callback can still be in flight; `Terminate` must join that callback before returning its idempotent terminal snapshot, while ordinary `Cancel` may retain its non-joining no-op contract.
 - Any successful `Terminate` no-op caused by an earlier accepted control must join the same supervision callback before returning; `controlDone` only serializes the boundary effect and is not a terminal-result barrier.
+- A committed Chat turn control must carry its immutable `TurnID` plus stable `ControlRequest.RequestID` to Factory Runtime as `TurnID`/`ControlID`; on-demand target cancellation must fan out before invocation-context cancellation and retain that result across runtime replacement.
 
 ## 2026-08-04 20:18 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-001
 - Implemented typed Worker Session pause, resume, cancel, and terminate controls. Cancel and terminate now target the exact supervised dispatch through `WorkstationPoolBoundary.Cancel`; terminate waits for the established terminal callback, and pause/resume explicitly report unsupported until a truthful resumable capability exists.
@@ -109,4 +110,15 @@
 - **Learnings for future iterations:**
   - `controlDone` proves the single cancellation side effect completed, not that the Worker Sessions terminal callback has committed; the `done` channel is the terminal-result join barrier.
   - A Terminate retry after Cancel must preserve the canceled result rather than manufacture a terminated result, while still waiting for the same callback.
+---
+
+## 2026-08-04 23:35 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-004
+- Addressed the blocking customer-path review finding. ACP now forwards the committed Chat turn ID and stable control identity to Factory Sessions; the on-demand target sends turn-scoped `CANCEL` to the exact captured Factory Runtime before it cancels the invocation context or begins teardown, preserving Factory Runtime and Worker Sessions result authority.
+- Retained each successful captured Runtime control under the opaque target generation lock. A retry after the target runtime is replaced cannot fan out to the later turn. Live Factory Session pause/resume forwarding now preserves the same turn/control identity instead of sending an empty Runtime request.
+- Added deterministic ACP ingress, on-demand target, and live Runtime behavioral assertions. The target regression proves the Worker Session control request reaches the original Runtime before invocation cancellation and that a retry does not reach the replacement Runtime.
+- Files changed: `pkg/transports/acp/internal/stdio/**`, `pkg/services/factory_sessions/{execution_contract.go,internal/execution/**,internal/ondemandtarget/**,internal/services/live_runtime/**}`, `prd.json`, `progress.txt`.
+- Verification: `go test ./pkg/services/factory_sessions/... ./pkg/transports/acp/...`; Runtime/Worker Sessions/Workers focused suites; targeted `-race -count=10` target-control test plus repeated Runtime fan-out races; focused `go vet`; `git diff --check`.
+- **Learnings for future iterations:**
+  - The control request's existing stable request ID is the natural Factory Runtime `ControlID`; only the captured turn ID needs to cross the Factory Sessions boundary explicitly.
+  - An on-demand target's activation can be replaced under a stable opaque ID, so turn-control evidence belongs to the generation lock, not the activation object.
 ---
