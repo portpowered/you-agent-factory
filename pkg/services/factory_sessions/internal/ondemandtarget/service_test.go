@@ -172,7 +172,7 @@ func (f *fakeSessions) SubscribeFactoryEventsForSession(
 	return f.factoryEventStream, f.factoryEventErr
 }
 
-func newTestService(t *testing.T, opener invocationRuntimeOpener, resolve RuntimeResolver, generateID factorysessions.SessionIDGenerator) *Service {
+func newTestService(t *testing.T, opener runtimeopening.InvocationRuntimeOpening, resolve RuntimeResolver, generateID factorysessions.SessionIDGenerator) *Service {
 	t.Helper()
 	return &Service{
 		opening:           opener,
