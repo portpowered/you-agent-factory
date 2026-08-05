@@ -4,6 +4,7 @@
 - When a directory loader resolves one concrete authored root, retain that root as an immutable optional value fact on the compiled source so narrow consumers can report the actual selection without reopening source bytes or widening mutable loader contracts.
 - When a validated effective definition enters Runtime, rebuild the existing mutable loaded source through its public factory with an empty runtime-definition lookup, then transfer the selected-root identity through the narrow public identity receiver; Runtime need not retain authored loader authority.
 - A typed authored-load wrapper must keep its safe classification and selected source while rendering its wrapped diagnostic in `Error()`; outer public error wrapping otherwise hides actionable validation, source-format, and layout failures.
+- Every new backend package with measurable unit-test statements needs an import-path-sorted numeric entry in `go-unit-coverage-package-minimums.json`; use the exact profile ratio truncated to two decimal percentage points rather than a coverage exception or rounded-up floor.
 - For a resumable provider attempt, bind the provider-authored typed session reference at its native live-observation point; post-result metadata cannot authorize an in-flight pause.
 - For a required CI failure, compare the failing path on the reviewed head and PR base before repairing it; do not expand a delivery lane to fix a defect unchanged on both revisions.
 - For a cross-service behavioral proof that needs one service's internal concrete collaborator, compose the peer through its owner-published `wire.New...` API inside the collaborator's package-level integration test; do not add a test-only production seam.
@@ -445,4 +446,13 @@
 - **Learnings for future iterations:**
   - A `%w` boundary preserves inspection through `errors.Is` and `errors.As` but still renders only the outer `Error()` text, so public diagnostic contracts need deliberate message retention.
   - When CI reports several failures, target the ones causally tied to the diff first and rerun unrelated failures before treating them as code defects.
+---
+
+## 2026-08-05 06:05 -07:00 - ACP-L3-DEF-CONSOLIDATE-AUTHORED-VALIDATION-004
+- Addressed the next PR #1800 CI failure: the new Factory Definitions `authoredloading` package participates in the unit-coverage lane and now has its required sorted package floor (`72.41%`, calculated from the focused 42/58 statement profile) in the checked-in unit coverage manifest.
+- Files changed: `docs/internal/baselines/go-unit-coverage-package-minimums.json`, `progress.txt`.
+- Verification: focused package coverage is 42/58 statements (72.4137%); manifest JSON and sorted import-path ordering are valid. `make test-unit-coverage` reaches the local Windows Go process command-length limitation while starting the full profile, so the Linux CI lane remains the authoritative full-coverage execution.
+- **Learnings for future iterations:**
+  - The coverage manifest is a closed measured-package inventory; adding a tested Go package requires its floor in the same delivery change.
+  - On this Windows workspace, the full coverage runner can exceed the OS process command-length limit when constructing the backend cover-package argument; run focused coverage locally and use the required Linux CI lane for the complete profile.
 ---
