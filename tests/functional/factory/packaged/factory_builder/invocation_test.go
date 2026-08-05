@@ -28,6 +28,10 @@ const (
 	javascriptFactoryRequest       = "Run two independent analyses and return one synthesized result."
 	javascriptFactoryPrimaryResult = "Synthesized two independent analyses."
 	factoryYAMLFile                = "factory.yaml"
+	invalidFactoryNewName          = "invalid-release-review"
+	invalidFactoryExistingName     = "protected-release-review"
+	invalidFactoryRequest          = "Create a release-note review Factory without changing an existing Factory."
+	invalidCandidateWorkerName     = "missing-reviewer"
 )
 
 // TestFactoryBuilderCreatesAndInstallsValidatedGraphFactory proves the public
@@ -123,6 +127,165 @@ func TestFactoryBuilderCreatesAndInstallsValidatedJavaScriptFactory(t *testing.T
 	if got := runner.InstalledFactoryCallCount(); got != 2 {
 		t.Fatalf("installed Factory provider command call count = %d, want two intended analysis calls", got)
 	}
+}
+
+// TestFactoryBuilderRejectsInvalidGeneratedCandidateWithoutInstallation proves
+// the public Builder flow reports actionable validation guidance without
+// creating a new destination or replacing and executing a named Factory that
+// already exists in the operator-owned catalog.
+func TestFactoryBuilderRejectsInvalidGeneratedCandidateWithoutInstallation(t *testing.T) {
+	for _, scenario := range []struct {
+		name               string
+		factoryName        string
+		installExistingOne bool
+	}{
+		{name: "new destination", factoryName: invalidFactoryNewName},
+		{name: "existing destination", factoryName: invalidFactoryExistingName, installExistingOne: true},
+	} {
+		scenario := scenario
+		t.Run(scenario.name, func(t *testing.T) {
+			homeDir := t.TempDir()
+			workingDirectory := t.TempDir()
+			environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+			runner := &factoryBuilderCommandRunner{
+				targetName:              scenario.factoryName,
+				customerRequest:         invalidFactoryRequest,
+				orchestrator:            "graph",
+				environment:             environment,
+				operatorRoot:            filepath.Join(homeDir, ".you-agent-factory", "factories"),
+				candidateYAML:           representativeInvalidGraphFactoryYAML,
+				expectValidationFailure: true,
+				builderResult:           invalidCandidateResult(scenario.factoryName),
+			}
+			process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
+			support.CleanupProcess(t, process)
+			runner.process = process
+
+			installedPath := filepath.Join(runner.operatorRoot, scenario.factoryName)
+			var before []byte
+			if scenario.installExistingOne {
+				installExistingGraphFactory(t, process, environment, workingDirectory, runner.operatorRoot, scenario.factoryName)
+				assertInstalledGraphFactoryRuns(t, process, environment, workingDirectory, installedPath)
+				before = readInstalledFactoryConfig(t, installedPath)
+			}
+			providerCallsBeforeBuilder := runner.InstalledFactoryCallCount()
+
+			builder := support.FakeInputs(t.Context(), []string{
+				"you", "--json", "run", "--named", factoryBuilderName, "--no-record",
+				"--factory-name", scenario.factoryName,
+				"--orchestrator", "graph",
+				"--builder-provider", "CODEX",
+				"--builder-model", "gpt-5",
+				invalidFactoryRequest,
+			})
+			builder.Input.Env = environment
+			builder.Input.WorkingDirectory = workingDirectory
+			if err := process.Execute(builder.Input); err != nil {
+				t.Fatalf("Process.Execute(invalid factory builder) error = %v\nstdout:\n%s\nstderr:\n%s", err, builder.Stdout(), builder.Stderr())
+			}
+			assertInvalidCandidateGuidance(t, support.DecodeInvocationResponseJSON(t, builder.Stdout()), scenario.factoryName, runner.StagePath())
+			assertBuilderRejectedCandidate(t, runner, workingDirectory, providerCallsBeforeBuilder)
+
+			if scenario.installExistingOne {
+				after := readInstalledFactoryConfig(t, installedPath)
+				if !bytes.Equal(before, after) {
+					t.Fatalf("installed Factory changed after rejected candidate\nbefore:\n%s\nafter:\n%s", before, after)
+				}
+				assertInstalledGraphFactoryRuns(t, process, environment, workingDirectory, installedPath)
+				return
+			}
+			if _, err := os.Stat(installedPath); !os.IsNotExist(err) {
+				t.Fatalf("invalid candidate installed at %q; stat error = %v", installedPath, err)
+			}
+		})
+	}
+}
+
+func invalidCandidateResult(factoryName string) string {
+	return "Factory " + factoryName + " (graph): validation failed at factory.worker.danglingReference for " +
+		invalidCandidateWorkerName + ". Correction: define that worker or change the workstation to a declared worker, then validate again. The Factory was not installed."
+}
+
+func assertInvalidCandidateGuidance(t *testing.T, response factoryapi.InvocationResponse, factoryName, stagePath string) {
+	t.Helper()
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("Builder invalid-candidate response status = %q, want completed safe guidance; response = %#v", response.Status, response)
+	}
+	if response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
+		t.Fatalf("Builder invalid-candidate primaryResult = %#v, want one text part", response.PrimaryResult)
+	}
+	part, err := (*response.PrimaryResult)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("Builder invalid-candidate primary result as text: %v", err)
+	}
+	for _, want := range []string{factoryName, "validation failed", "factory.worker.danglingReference", invalidCandidateWorkerName, "Correction", "not installed"} {
+		if !strings.Contains(part.Text, want) {
+			t.Fatalf("Builder invalid-candidate result = %q, want %q", part.Text, want)
+		}
+	}
+	for _, forbidden := range []string{stagePath, "you factory config validate", "api key", "token"} {
+		if strings.Contains(strings.ToLower(part.Text), strings.ToLower(forbidden)) {
+			t.Fatalf("Builder invalid-candidate result = %q, must redact %q", part.Text, forbidden)
+		}
+	}
+}
+
+func assertBuilderRejectedCandidate(
+	t *testing.T,
+	runner *factoryBuilderCommandRunner,
+	workingDirectory string,
+	providerCallsBeforeBuilder int,
+) {
+	t.Helper()
+	assertBuilderStageIsWorkspaceScoped(t, workingDirectory, runner.StagePath())
+	if runner.ValidationAttemptCount() != 1 {
+		t.Fatalf("candidate validation attempts = %d, want one public CLI validation", runner.ValidationAttemptCount())
+	}
+	diagnostic := runner.ValidationDiagnostic()
+	for _, want := range []string{"Factory validation failed.", "factory.worker.danglingReference", invalidCandidateWorkerName} {
+		if !strings.Contains(diagnostic, want) {
+			t.Fatalf("public validation diagnostic = %q, want %q", diagnostic, want)
+		}
+	}
+	if runner.PersistenceAttemptCount() != 0 {
+		t.Fatalf("named-Factory persistence attempts = %d, want none after validation failure", runner.PersistenceAttemptCount())
+	}
+	if runner.InstalledFactoryCallCount() != providerCallsBeforeBuilder {
+		t.Fatalf("invalid candidate provider command calls = %d, want %d before the Builder validation failure", runner.InstalledFactoryCallCount(), providerCallsBeforeBuilder)
+	}
+}
+
+func installExistingGraphFactory(
+	t *testing.T,
+	process support.Process,
+	environment []string,
+	workingDirectory, operatorRoot, factoryName string,
+) {
+	t.Helper()
+	stagePath := filepath.Join(workingDirectory, "existing-factory-stage", factoryYAMLFile)
+	if err := os.MkdirAll(filepath.Dir(stagePath), 0o755); err != nil {
+		t.Fatalf("create existing Factory staging directory: %v", err)
+	}
+	if err := os.WriteFile(stagePath, []byte(representativeGraphFactoryYAML), 0o600); err != nil {
+		t.Fatalf("write existing Factory staged definition: %v", err)
+	}
+	create := support.FakeInputs(t.Context(), []string{
+		"you", "factory", "create", factoryName, "--from", stagePath, "--dir", operatorRoot,
+	})
+	create.Input.Env = environment
+	create.Input.WorkingDirectory = workingDirectory
+	if err := process.Execute(create.Input); err != nil {
+		t.Fatalf("Process.Execute(create existing Factory) error = %v\nstdout:\n%s\nstderr:\n%s", err, create.Stdout(), create.Stderr())
+	}
+}
+
+func readInstalledFactoryConfig(t *testing.T, installedPath string) []byte {
+	t.Helper()
+	config, err := os.ReadFile(filepath.Join(installedPath, factorydefinitions.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("read installed Factory configuration: %v", err)
+	}
+	return config
 }
 
 func assertBuilderCompleted(t *testing.T, response factoryapi.InvocationResponse, factoryName, orchestrator string) {
@@ -403,19 +566,23 @@ func hasInvocationParameter(value any, name string) bool {
 }
 
 type factoryBuilderCommandRunner struct {
-	process         support.Process
-	targetName      string
-	customerRequest string
-	orchestrator    string
-	environment     []string
-	operatorRoot    string
-	candidateYAML   string
-	builderResult   string
+	process                 support.Process
+	targetName              string
+	customerRequest         string
+	orchestrator            string
+	environment             []string
+	operatorRoot            string
+	candidateYAML           string
+	builderResult           string
+	expectValidationFailure bool
 
 	mu                           sync.Mutex
 	stagePath                    string
 	builderPrepared              bool
 	installedFactoryCommandCalls int
+	validationAttemptCount       int
+	persistenceAttemptCount      int
+	validationDiagnostic         string
 }
 
 func (runner *factoryBuilderCommandRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -432,6 +599,9 @@ func (runner *factoryBuilderCommandRunner) Run(ctx context.Context, request plat
 	if builderRequest {
 		if prepareBuilder {
 			if err := runner.stageValidateAndInstall(ctx, request); err != nil {
+				if runner.expectValidationFailure && runner.ValidationDiagnostic() != "" {
+					return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(runner.builderResult)}, nil
+				}
 				return platformprocess.CommandResult{}, err
 			}
 		}
@@ -454,18 +624,25 @@ func (runner *factoryBuilderCommandRunner) stageValidateAndInstall(ctx context.C
 	if err := os.WriteFile(stagePath, []byte(runner.candidateYAML), 0o600); err != nil {
 		return fmt.Errorf("write staged Factory candidate: %w", err)
 	}
+	runner.mu.Lock()
+	runner.stagePath = stagePath
+	runner.validationAttemptCount++
+	runner.mu.Unlock()
 	if err := runner.executeCustomerCommand(ctx, request, []string{"you", "factory", "config", "validate", stagePath}); err != nil {
+		runner.mu.Lock()
+		runner.validationDiagnostic = err.Error()
+		runner.mu.Unlock()
 		return fmt.Errorf("validate staged Factory candidate: %w", err)
 	}
+	runner.mu.Lock()
+	runner.persistenceAttemptCount++
+	runner.mu.Unlock()
 	if err := runner.executeCustomerCommand(ctx, request, []string{
 		"you", "factory", "create", runner.targetName, "--from", stagePath,
 		"--dir", runner.operatorRoot,
 	}); err != nil {
 		return fmt.Errorf("install validated Factory candidate: %w", err)
 	}
-	runner.mu.Lock()
-	runner.stagePath = stagePath
-	runner.mu.Unlock()
 	return nil
 }
 
@@ -476,6 +653,7 @@ func (runner *factoryBuilderCommandRunner) assertProviderInstructions(request pl
 		runner.customerRequest,
 		"New Factory name: `" + runner.targetName + "`",
 		"Requested orchestrator: `" + runner.orchestrator + "`",
+		"validation code, field, or source location",
 	} {
 		if !strings.Contains(prompt, want) {
 			return fmt.Errorf("Factory Builder provider prompt must include %q", want)
@@ -506,6 +684,24 @@ func (runner *factoryBuilderCommandRunner) InstalledFactoryCallCount() int {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	return runner.installedFactoryCommandCalls
+}
+
+func (runner *factoryBuilderCommandRunner) ValidationAttemptCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.validationAttemptCount
+}
+
+func (runner *factoryBuilderCommandRunner) PersistenceAttemptCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.persistenceAttemptCount
+}
+
+func (runner *factoryBuilderCommandRunner) ValidationDiagnostic() string {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.validationDiagnostic
 }
 
 var _ platformprocess.CommandRunner = (*factoryBuilderCommandRunner)(nil)
@@ -548,6 +744,57 @@ workstations:
   - name: review-release-notes
     type: AGENT_RUN
     worker: release-notes-reviewer
+    body: |
+      Review the submitted release notes and return an approved summary.
+    inputs:
+      - workType: release-note-review
+        state: init
+    outputs:
+      - workType: release-note-review
+        state: complete
+    onFailure:
+      - workType: release-note-review
+        state: failed
+`
+
+const representativeInvalidGraphFactoryYAML = `name: invalid-release-note-review
+description:
+  type: LOCALIZABLE_ASSET
+  value: Deliberately invalid review Factory used to prove Builder rejection.
+invocationReturn:
+  policy: EXPLICIT
+  workTypeName: release-note-review
+  terminalState: complete
+invocationSignature:
+  parameters:
+    - name: releaseNotes
+      description: Release notes to review before publication.
+      externalName: release-notes
+      required: true
+      bindings:
+        - kind: POSITIONAL
+          position: 1
+workTypes:
+  - name: release-note-review
+    handlingBehavior:
+      - DEFAULT
+    states:
+      - name: init
+        type: INITIAL
+      - name: complete
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+workers:
+  - name: release-notes-reviewer
+    type: AGENT_WORKER
+    skipPermissions: true
+    agentTools:
+      policy: DISABLED
+workstations:
+  - name: review-release-notes
+    type: AGENT_RUN
+    worker: missing-reviewer
     body: |
       Review the submitted release notes and return an approved summary.
     inputs:

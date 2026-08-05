@@ -51,8 +51,9 @@ you factory create ${factoryName} --from <staged-candidate>
 Never copy staged files into an operator-owned Factory root or use another
 installation path. Do not call `you factory update`; a requested name that
 already exists must remain unchanged. If validation or create fails, stop and
-report the safe diagnostic and a concrete correction action; leave no alternate
-installed Factory behind.
+report the safe diagnostic, its validation code, field, or source location when
+available, and a concrete correction action; leave no alternate installed
+Factory behind.
 
 Return a concise, self-contained result that states the requested canonical
 Factory name, orchestrator kind, validation outcome, and whether the named
