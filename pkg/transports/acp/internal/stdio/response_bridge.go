@@ -3,8 +3,153 @@ package stdio
 import (
 	"context"
 
+	acpsdk "github.com/coder/acp-go-sdk"
+
+	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/mapping"
 )
+
+type workerChildProjectionNotificationError struct {
+	err error
+}
+
+func (err *workerChildProjectionNotificationError) Error() string {
+	return err.err.Error()
+}
+
+func (err *workerChildProjectionNotificationError) Unwrap() error {
+	return err.err
+}
+
+// boundWorkerChildProjection applies the pure mapping package's named bounds
+// to one already-associated child update while rebuilding canonical history.
+// Live and retained delivery instead uses deliverBoundWorkerChildProjection so
+// a failed notification cannot advance the accounting.
+func (c *attachmentCache) boundWorkerChildProjection(
+	sessionID string,
+	item chatsessions.SequencedItem,
+	update *acpsdk.SessionUpdate,
+) (*acpsdk.SessionUpdate, error) {
+	if update == nil || update.ToolCallUpdate == nil {
+		return update, nil
+	}
+	parentItemID := string(update.ToolCallUpdate.ToolCallId)
+	if c == nil || parentItemID == "" {
+		budget := mapping.NewChildProjectionBudget(mapping.DefaultChildProjectionLimits())
+		_, bounded, err := mapping.BoundChildProjection(budget, item, update)
+		return bounded, err
+	}
+
+	c.workerChildProjectionMu.Lock()
+	defer c.workerChildProjectionMu.Unlock()
+	return c.boundWorkerChildProjectionLocked(sessionID, parentItemID, item, update)
+}
+
+func (c *attachmentCache) boundWorkerChildProjectionLocked(
+	sessionID, parentItemID string,
+	item chatsessions.SequencedItem,
+	update *acpsdk.SessionUpdate,
+) (*acpsdk.SessionUpdate, error) {
+	next, bounded, err := c.previewWorkerChildProjection(sessionID, parentItemID, item, update)
+	if err != nil {
+		return nil, err
+	}
+	c.commitWorkerChildProjection(sessionID, parentItemID, next)
+	return bounded, nil
+}
+
+// deliverBoundWorkerChildProjection keeps a child budget transaction open
+// until the notification has succeeded. A failed notifier leaves the exact
+// prior budget in place, so retrying the unacknowledged canonical record has
+// the same content and elision position as a clean replay. The transaction
+// lock also keeps concurrent live and retained drains from observing or
+// committing the same child budget out of order.
+func (c *attachmentCache) deliverBoundWorkerChildProjection(
+	sessionID string,
+	item chatsessions.SequencedItem,
+	update *acpsdk.SessionUpdate,
+	notify func(*acpsdk.SessionUpdate) error,
+) (*acpsdk.SessionUpdate, error) {
+	if update == nil {
+		return update, nil
+	}
+	if update.ToolCallUpdate == nil {
+		if notify == nil {
+			return update, nil
+		}
+		if err := notify(update); err != nil {
+			return nil, &workerChildProjectionNotificationError{err: err}
+		}
+		return update, nil
+	}
+	parentItemID := string(update.ToolCallUpdate.ToolCallId)
+	if c == nil || parentItemID == "" {
+		budget := mapping.NewChildProjectionBudget(mapping.DefaultChildProjectionLimits())
+		_, bounded, err := mapping.BoundChildProjection(budget, item, update)
+		if err != nil || bounded == nil || notify == nil {
+			return bounded, err
+		}
+		if err := notify(bounded); err != nil {
+			return nil, &workerChildProjectionNotificationError{err: err}
+		}
+		return bounded, nil
+	}
+
+	c.workerChildProjectionMu.Lock()
+	defer c.workerChildProjectionMu.Unlock()
+	next, bounded, err := c.previewWorkerChildProjection(sessionID, parentItemID, item, update)
+	if err != nil || bounded == nil {
+		return bounded, err
+	}
+	if notify != nil {
+		if err := notify(bounded); err != nil {
+			return nil, &workerChildProjectionNotificationError{err: err}
+		}
+	}
+	c.commitWorkerChildProjection(sessionID, parentItemID, next)
+	return bounded, nil
+}
+
+func (c *attachmentCache) previewWorkerChildProjection(
+	sessionID, parentItemID string,
+	item chatsessions.SequencedItem,
+	update *acpsdk.SessionUpdate,
+) (mapping.ChildProjectionBudget, *acpsdk.SessionUpdate, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.workerChildBudgets == nil {
+		c.workerChildBudgets = make(map[string]map[string]mapping.ChildProjectionBudget)
+	}
+	byParent := c.workerChildBudgets[sessionID]
+	if byParent == nil {
+		byParent = make(map[string]mapping.ChildProjectionBudget)
+		c.workerChildBudgets[sessionID] = byParent
+	}
+	budget, found := byParent[parentItemID]
+	if !found {
+		budget = mapping.NewChildProjectionBudget(mapping.DefaultChildProjectionLimits())
+	}
+	next, bounded, err := mapping.BoundChildProjection(budget, item, update)
+	if err != nil {
+		return mapping.ChildProjectionBudget{}, nil, err
+	}
+	return next, bounded, nil
+}
+
+func (c *attachmentCache) commitWorkerChildProjection(sessionID, parentItemID string, budget mapping.ChildProjectionBudget) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.workerChildBudgets == nil {
+		c.workerChildBudgets = make(map[string]map[string]mapping.ChildProjectionBudget)
+	}
+	byParent := c.workerChildBudgets[sessionID]
+	if byParent == nil {
+		byParent = make(map[string]mapping.ChildProjectionBudget)
+		c.workerChildBudgets[sessionID] = byParent
+	}
+	byParent[parentItemID] = budget
+}
 
 // dispatchFactoryInvocation calls invoke -- one of the two
 // factorysessions.Service.InvokeFactorySession-forwarding calls

@@ -71,10 +71,11 @@ const liveStreamHeadPollInterval = time.Millisecond
 // synchronization so the connection's asynchronous prompt execution cannot
 // race a live drain or another session's prompt while reusing this cache.
 type attachmentCache struct {
-	mu                sync.Mutex
-	bySession         map[string]chatsessions.Attachment
-	resumeIDBySession map[string]string
-	loadedSessions    map[string]bool
+	mu                      sync.Mutex
+	workerChildProjectionMu sync.Mutex
+	bySession               map[string]chatsessions.Attachment
+	resumeIDBySession       map[string]string
+	loadedSessions          map[string]bool
 	// workerChildBudgets retains only this connection's deterministic ACP
 	// projection accounting after a new attachment has restored it from the
 	// canonical records through its stored cursor. It is keyed first by Chat
@@ -223,48 +224,6 @@ func (c *attachmentCache) resetWorkerChildBudgetInitialization(sessionID string)
 	delete(c.workerChildBudgets, sessionID)
 }
 
-// boundWorkerChildProjection applies the pure mapping package's named bounds
-// to one already-associated child update. Both live and retained drains share
-// this connection-scoped cache, so a child cannot escape its budget merely by
-// crossing the live-to-retained handoff. There is intentionally no generic
-// Chat path here: unassociated records retain T03's existing projection.
-func (c *attachmentCache) boundWorkerChildProjection(
-	sessionID string,
-	item chatsessions.SequencedItem,
-	update *acpsdk.SessionUpdate,
-) (*acpsdk.SessionUpdate, error) {
-	if update == nil || update.ToolCallUpdate == nil {
-		return update, nil
-	}
-	parentItemID := string(update.ToolCallUpdate.ToolCallId)
-	if c == nil || parentItemID == "" {
-		budget := mapping.NewChildProjectionBudget(mapping.DefaultChildProjectionLimits())
-		_, bounded, err := mapping.BoundChildProjection(budget, item, update)
-		return bounded, err
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.workerChildBudgets == nil {
-		c.workerChildBudgets = make(map[string]map[string]mapping.ChildProjectionBudget)
-	}
-	byParent := c.workerChildBudgets[sessionID]
-	if byParent == nil {
-		byParent = make(map[string]mapping.ChildProjectionBudget)
-		c.workerChildBudgets[sessionID] = byParent
-	}
-	budget, found := byParent[parentItemID]
-	if !found {
-		budget = mapping.NewChildProjectionBudget(mapping.DefaultChildProjectionLimits())
-	}
-	next, bounded, err := mapping.BoundChildProjection(budget, item, update)
-	if err != nil {
-		return nil, err
-	}
-	byParent[parentItemID] = next
-	return bounded, nil
-}
-
 // restoreWorkerChildProjectionBudget reconstructs the exact per-child budget
 // state an attachment had already consumed before this connection resumed it.
 // The attachment cursor is canonical durable state; this transport replays
@@ -274,7 +233,12 @@ func (c *attachmentCache) boundWorkerChildProjection(
 // incomplete prefix as a fresh content allowance.
 func (s *Server) restoreWorkerChildProjectionBudget(ctx context.Context, sessionID string, afterSequence uint64) (err error) {
 	cache := attachmentCacheFromContext(ctx)
-	if cache == nil || !cache.beginWorkerChildBudget(sessionID) {
+	if cache == nil {
+		return nil
+	}
+	cache.workerChildProjectionMu.Lock()
+	defer cache.workerChildProjectionMu.Unlock()
+	if !cache.beginWorkerChildBudget(sessionID) {
 		return nil
 	}
 	defer func() {
@@ -306,7 +270,7 @@ func (s *Server) restoreWorkerChildProjectionBudget(ctx context.Context, session
 				if rec.ID.Position > through {
 					return nil
 				}
-				if rebuildErr := s.rebuildWorkerChildProjectionBudget(cache, sessionID, rec); rebuildErr != nil {
+				if rebuildErr := s.rebuildWorkerChildProjectionBudgetLocked(cache, sessionID, rec); rebuildErr != nil {
 					return rebuildErr
 				}
 			}
@@ -324,6 +288,15 @@ func (s *Server) restoreWorkerChildProjectionBudget(ctx context.Context, session
 // projected update originally, so it cannot affect a healthy sibling's
 // reconstructed allowance.
 func (s *Server) rebuildWorkerChildProjectionBudget(cache *attachmentCache, sessionID string, rec events.Record) error {
+	if cache == nil {
+		return nil
+	}
+	cache.workerChildProjectionMu.Lock()
+	defer cache.workerChildProjectionMu.Unlock()
+	return s.rebuildWorkerChildProjectionBudgetLocked(cache, sessionID, rec)
+}
+
+func (s *Server) rebuildWorkerChildProjectionBudgetLocked(cache *attachmentCache, sessionID string, rec events.Record) error {
 	var item chatsessions.SequencedItem
 	if err := json.Unmarshal(rec.Payload, &item); err != nil {
 		return fmt.Errorf("%w: %v", errMalformedSequencedEnvelope, err)
@@ -336,7 +309,11 @@ func (s *Server) rebuildWorkerChildProjectionBudget(cache *attachmentCache, sess
 		s.logWorkerChildProjectionSkipped(item)
 		return nil
 	}
-	if _, err = cache.boundWorkerChildProjection(sessionID, item, update); err != nil {
+	if update == nil || update.ToolCallUpdate == nil {
+		return nil
+	}
+	parentItemID := string(update.ToolCallUpdate.ToolCallId)
+	if _, err = cache.boundWorkerChildProjectionLocked(sessionID, parentItemID, item, update); err != nil {
 		s.logWorkerChildProjectionSkipped(item)
 	}
 	return nil
@@ -752,13 +729,21 @@ func (s *Server) drainRecords(
 			s.logWorkerChildProjectionSkipped(item)
 		}
 		if projErr == nil && item.WorkerSessionAssociation != nil {
-			update, projErr = cache.boundWorkerChildProjection(sessionID, item, update)
+			update, projErr = cache.deliverBoundWorkerChildProjection(sessionID, item, update, func(bounded *acpsdk.SessionUpdate) error {
+				if notify == nil {
+					return nil
+				}
+				return notify(acpsdk.SessionNotification{SessionId: acpsdk.SessionId(sessionID), Update: *bounded})
+			})
 			if projErr != nil {
+				var notifyErr *workerChildProjectionNotificationError
+				if errors.As(projErr, &notifyErr) {
+					return false, deliveredMessage, notifyErr.Unwrap()
+				}
 				s.logWorkerChildProjectionSkipped(item)
+				update = nil
 			}
-		}
-
-		if update != nil {
+		} else if update != nil {
 			if notify != nil {
 				if notifyErr := notify(acpsdk.SessionNotification{
 					SessionId: acpsdk.SessionId(sessionID),

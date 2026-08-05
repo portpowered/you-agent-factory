@@ -3,6 +3,7 @@ package stdio
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -485,6 +486,89 @@ func TestReconnectRestoresWorkerChildBudget(t *testing.T) {
 			assertEqualWorkerChildNotifications(t, *full, combined)
 		})
 	}
+}
+
+// TestWorkerChildNotifierFailureDoesNotConsumeProjectionBudget proves a
+// failed notification does not charge its associated child record. Retrying
+// from the same attachment must keep the content and elision position equal
+// to a fresh full replay under both independent projection limits.
+func TestWorkerChildNotifierFailureDoesNotConsumeProjectionBudget(t *testing.T) {
+	for _, tt := range []struct {
+		name, retry, suffix string
+		prefix              []string
+	}{
+		{"record pressure", "retry content", "suffix becomes elision", recordPressurePrefix()},
+		{"byte pressure", strings.Repeat("r", 20000), strings.Repeat("s", 20000), []string{strings.Repeat("p", 40000)}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			server, eventsSvc := newStreamingTestServer(t, &fakeFactoryTargetService{})
+			eventsSvc.seedWorkerChildItem(t, streamingTestSessionID, "worker-a", "", "dispatch-a", "worker-a-session", workers.PhaseStarted, "STARTING")
+			seedWorkerChildMessages(t, eventsSvc, tt.prefix...)
+			seedWorkerChildMessage(t, eventsSvc, "worker-a-retry", tt.retry)
+			seedWorkerChildMessage(t, eventsSvc, "worker-a-suffix", tt.suffix)
+
+			cache := &attachmentCache{}
+			var initial []acpsdk.SessionNotification
+			wantErr := errors.New("notify failed")
+			failingNotify := func(notification acpsdk.SessionNotification) error {
+				if workerChildNotificationText(notification) == tt.retry {
+					return wantErr
+				}
+				initial = append(initial, notification)
+				return nil
+			}
+			ctx := contextWithAttachmentCache(context.Background(), cache)
+			if _, err := server.streamTurnUpdates(ctx, "conn-retry", streamingTestSessionID, 1, failingNotify); !errors.Is(err, wantErr) {
+				t.Fatalf("initial streamTurnUpdates() error = %v, want %v", err, wantErr)
+			}
+
+			retryNotify, retried := captureNotifier()
+			if _, err := server.streamTurnUpdates(ctx, "conn-retry", streamingTestSessionID, 1, retryNotify); err != nil {
+				t.Fatalf("retry streamTurnUpdates() error = %v", err)
+			}
+			if len(*retried) != 2 || workerChildNotificationText((*retried)[0]) != tt.retry {
+				t.Fatalf("retry notifications = %#v, want retried content before its one elision", *retried)
+			}
+			assertExplicitWorkerChildElision(t, (*retried)[1:], "worker-a")
+
+			fullNotify, full := captureNotifier()
+			fullCtx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+			if _, err := server.streamTurnUpdates(fullCtx, "conn-full", streamingTestSessionID, 1, fullNotify); err != nil {
+				t.Fatalf("full streamTurnUpdates() error = %v", err)
+			}
+			combined := append(append([]acpsdk.SessionNotification{}, initial...), (*retried)...)
+			assertEqualWorkerChildNotifications(t, *full, combined)
+		})
+	}
+}
+
+func recordPressurePrefix() []string {
+	prefix := make([]string, mapping.DefaultChildProjectionMaxRecords-3)
+	for index := range prefix {
+		prefix[index] = fmt.Sprintf("prefix-%03d", index)
+	}
+	return prefix
+}
+
+func seedWorkerChildMessages(t *testing.T, eventsSvc *fakeEventsService, messages ...string) {
+	t.Helper()
+	for index, message := range messages {
+		seedWorkerChildMessage(t, eventsSvc, fmt.Sprintf("worker-a-prefix-%03d", index), message)
+	}
+}
+
+func seedWorkerChildMessage(t *testing.T, eventsSvc *fakeEventsService, itemID, text string) {
+	t.Helper()
+	eventsSvc.seedWorkerChildRecord(t, streamingTestSessionID, itemID, "worker-a", "dispatch-a", "worker-a-session",
+		workers.KindMessage, workers.PhaseDelta, workers.MessageDeltaPayload{ContentBlockKind: workers.ContentBlockText, TextDelta: text})
+}
+
+func workerChildNotificationText(notification acpsdk.SessionNotification) string {
+	update := notification.Update.ToolCallUpdate
+	if update == nil || len(update.Content) != 1 || update.Content[0].Content == nil || update.Content[0].Content.Content.Text == nil {
+		return ""
+	}
+	return update.Content[0].Content.Content.Text.Text
 }
 
 func assertExplicitWorkerChildElision(t *testing.T, notifications []acpsdk.SessionNotification, parent string) {
