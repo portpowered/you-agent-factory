@@ -5,17 +5,19 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // supervision is the process-local, immutable dispatch association and
-// synchronization state for one Worker Session attempt. It is deliberately
-// not exposed in Session snapshots: callers address the stable session ID,
-// while Worker Sessions alone owns the exact dispatch ID used for boundary
-// cancellation.
+// synchronization state for one Worker Session attempt. Session snapshots can
+// expose only a detached accepted Provider Session association; this mutable
+// supervision remains Worker Sessions-owned so callers address controls by
+// stable session ID while Worker Sessions retains the exact dispatch ID.
 type supervision struct {
 	dispatchID string
+	turnID     string
 
 	mu              sync.Mutex
 	publishing      bool
@@ -48,9 +50,10 @@ type cancellationAttempt struct {
 	dispatchID string
 }
 
-func newSupervision(dispatchID string) *supervision {
+func newSupervision(dispatchID, turnID string) *supervision {
 	return &supervision{
 		dispatchID: dispatchID,
+		turnID:     turnID,
 		published:  make(chan struct{}),
 		done:       make(chan struct{}),
 	}
@@ -142,7 +145,7 @@ func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (
 // Worker Session record committed. Controls that win before boundary admission
 // terminalize the session without sending a cancellation for unknown work.
 func (r *registry) startPublishedAttempt(ctx context.Context, req workersessions.StartRequest, attemptID string) (workersessions.StartResult, error) {
-	supervision, canStart := r.registerSupervision(req.ID, attemptID)
+	supervision, canStart := r.registerSupervision(req.ID, attemptID, req.Execution.Execution.Dispatch.Execution.RequestID)
 	if !canStart {
 		final, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
 		if final.Terminal() {
@@ -230,13 +233,13 @@ func (r *registry) finishSupervisionPublication(supervision *supervision) {
 	supervision.signalPublished()
 }
 
-func (r *registry) registerSupervision(id, dispatchID string) (*supervision, bool) {
+func (r *registry) registerSupervision(id, dispatchID, turnID string) (*supervision, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if session, exists := r.sessions[id]; !exists || session.State != workersessions.StateStarting {
 		return nil, false
 	}
-	supervision := newSupervision(dispatchID)
+	supervision := newSupervision(dispatchID, turnID)
 	r.supervisions[id] = supervision
 	return supervision, true
 }
@@ -274,6 +277,7 @@ func (r *registry) completeSupervision(id string, supervision *supervision, resu
 	supervision.err = dispatchErr
 	action := supervision.requestedAction
 	supervision.mu.Unlock()
+	r.associateProviderSessionFromResult(id, supervision.dispatchID, result)
 
 	state, terminal := dispatchedTerminal(action, result, dispatchErr)
 	final, committed := r.commitTerminal(id, state, terminal)
@@ -282,6 +286,33 @@ func (r *registry) completeSupervision(id string, supervision *supervision, resu
 		r.publishTerminalRecordOrLog(context.Background(), id, supervision.dispatchID, state, terminal)
 	}
 	supervision.signalDone()
+}
+
+// associateProviderSessionFromResult preserves the Provider Session reference
+// returned by Workers before the terminal lifecycle record can close the
+// session's publication window. A malformed or conflicting Worker result is
+// visible in structured operation logs and never replaces an accepted exact
+// reference; it also never invents a replacement from runner or model state.
+func (r *registry) associateProviderSessionFromResult(
+	id, dispatchID string,
+	result workers.WorkstationDispatchResult,
+) {
+	metadata := result.Result.ProviderSession
+	if metadata == nil {
+		return
+	}
+	_, err := r.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: id,
+		DispatchID:      dispatchID,
+		Reference: providers.SessionRef{
+			Provider: providers.ID(metadata.Provider),
+			Kind:     metadata.Kind,
+			ID:       metadata.ID,
+		},
+	})
+	if err != nil {
+		r.logger.Info("worker session provider session association from result rejected", "sessionID", id, "attemptID", dispatchID, "outcome", "rejected")
+	}
 }
 
 func dispatchedTerminal(action workersessions.ControlAction, result workers.WorkstationDispatchResult, dispatchErr error) (workersessions.State, workersessions.TerminalResult) {

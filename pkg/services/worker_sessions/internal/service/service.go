@@ -230,6 +230,10 @@ func (r *registry) commitControlTerminal(id string, state workersessions.State) 
 // value, or its Result, never affects registry-owned state.
 func cloneSession(session workersessions.Session) workersessions.Session {
 	session.Result = cloneTerminalResult(session.Result)
+	if session.ProviderSessionAssociation != nil {
+		association := session.ProviderSessionAssociation.Clone()
+		session.ProviderSessionAssociation = &association
+	}
 	return session
 }
 
@@ -250,4 +254,68 @@ func causeKindString(cause *workersessions.FailureCause) string {
 		return ""
 	}
 	return string(cause.Kind)
+}
+
+// AssociateProviderSession records the exact reference one Worker attempt
+// observed. The caller provides only source-native facts; this registry owns
+// every correlation value and refuses a reference for another dispatch.
+func (r *registry) AssociateProviderSession(
+	_ context.Context,
+	req workersessions.ProviderSessionAssociationRequest,
+) (workersessions.ProviderSessionAssociationResult, error) {
+	if err := req.Validate(); err != nil {
+		r.logger.Info("worker session provider session association rejected", "sessionID", req.WorkerSessionID, "attemptID", req.DispatchID, "outcome", "invalid")
+		return workersessions.ProviderSessionAssociationResult{}, err
+	}
+
+	result, err := r.associateProviderSession(req)
+	if err != nil {
+		r.logger.Info("worker session provider session association rejected", "sessionID", req.WorkerSessionID, "attemptID", req.DispatchID, "outcome", "rejected")
+		return workersessions.ProviderSessionAssociationResult{}, err
+	}
+	r.logger.Info("worker session provider session association", "sessionID", req.WorkerSessionID, "attemptID", req.DispatchID, "outcome", string(result.Outcome))
+	return result, nil
+}
+
+func (r *registry) associateProviderSession(
+	req workersessions.ProviderSessionAssociationRequest,
+) (workersessions.ProviderSessionAssociationResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	session, exists := r.sessions[req.WorkerSessionID]
+	if !exists {
+		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrSessionNotFound
+	}
+	supervision := r.supervisions[req.WorkerSessionID]
+	if supervision == nil || supervision.dispatchID != req.DispatchID {
+		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationAttemptMismatch
+	}
+
+	association := workersessions.ProviderSessionAssociation{
+		WorkerSessionID: req.WorkerSessionID,
+		TurnID:          supervision.turnID,
+		DispatchID:      supervision.dispatchID,
+		AttemptID:       supervision.dispatchID,
+		Reference:       req.Reference.Clone(),
+	}
+	if existing := session.ProviderSessionAssociation; existing != nil {
+		if existing.Reference == association.Reference {
+			return workersessions.ProviderSessionAssociationResult{
+				Association: existing.Clone(),
+				Outcome:     workersessions.ProviderSessionAssociationOutcomeDuplicate,
+			}, nil
+		}
+		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationConflict
+	}
+	if session.Terminal() {
+		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationNotAvailable
+	}
+
+	session.ProviderSessionAssociation = &association
+	r.sessions[req.WorkerSessionID] = session
+	return workersessions.ProviderSessionAssociationResult{
+		Association: association.Clone(),
+		Outcome:     workersessions.ProviderSessionAssociationOutcomeAccepted,
+	}, nil
 }

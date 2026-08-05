@@ -313,11 +313,11 @@ func TestControlGuards_RejectInvalidTransitionsAndPreserveObservableSessionState
 	if _, err := r.transitionToStarting("worker-2"); err != nil {
 		t.Fatalf("transitionToStarting(worker-2): %v", err)
 	}
-	supervision, ok := r.registerSupervision("worker-2", "dispatch-2")
+	supervision, ok := r.registerSupervision("worker-2", "dispatch-2", "")
 	if !ok || supervision == nil {
 		t.Fatal("registerSupervision(worker-2) = unavailable, want exact supervised attempt")
 	}
-	if _, ok := r.registerSupervision("missing", "dispatch-missing"); ok {
+	if _, ok := r.registerSupervision("missing", "dispatch-missing", ""); ok {
 		t.Fatal("registerSupervision(missing) unexpectedly succeeded")
 	}
 	supervision.requestedAction = workersessions.ControlActionCancel
@@ -328,7 +328,7 @@ func TestControlGuards_RejectInvalidTransitionsAndPreserveObservableSessionState
 	if workerSession, err := r.Get(ctx, workersessions.GetRequest{ID: "worker-3"}); err != nil || workerSession.State != workersessions.StateReserved {
 		t.Fatalf("Get(worker-3) = %#v, %v, want RESERVED", workerSession, err)
 	}
-	if r.beginBoundaryPublish("worker-3", newSupervision("dispatch-3")) {
+	if r.beginBoundaryPublish("worker-3", newSupervision("dispatch-3", "")) {
 		t.Fatal("beginBoundaryPublish() succeeded for a session that never started")
 	}
 	if session, err := r.Get(ctx, workersessions.GetRequest{ID: "worker-2"}); err != nil || session.State != workersessions.StateStarting {
@@ -343,7 +343,7 @@ func TestStartPublishedAttempt_ControlAndPublishFailureHaveTerminalObservableOut
 		if _, err := r.transitionToStarting("worker-1"); err != nil {
 			t.Fatalf("transitionToStarting: %v", err)
 		}
-		supervision, ok := r.registerSupervision("worker-1", "dispatch-1")
+		supervision, ok := r.registerSupervision("worker-1", "dispatch-1", "")
 		if !ok {
 			t.Fatal("registerSupervision before control: want exact starting attempt")
 		}
@@ -390,7 +390,7 @@ func TestCancel_BeforeBoundaryAdmissionEitherWaitsOrTerminatesTheExactSupervisio
 	if _, err := r.transitionToStarting("worker-1"); err != nil {
 		t.Fatalf("transitionToStarting: %v", err)
 	}
-	supervision, ok := r.registerSupervision("worker-1", "dispatch-1")
+	supervision, ok := r.registerSupervision("worker-1", "dispatch-1", "")
 	if !ok {
 		t.Fatal("registerSupervision: want supervised STARTING attempt")
 	}
@@ -417,7 +417,7 @@ func TestCancel_BeforeBoundaryAdmissionEitherWaitsOrTerminatesTheExactSupervisio
 	if _, err := r.transitionToStarting("worker-2"); err != nil {
 		t.Fatalf("transitionToStarting(worker-2): %v", err)
 	}
-	noOpSupervision, ok := r.registerSupervision("worker-2", "dispatch-2")
+	noOpSupervision, ok := r.registerSupervision("worker-2", "dispatch-2", "")
 	if !ok {
 		t.Fatal("registerSupervision(worker-2): want exact attempt")
 	}
@@ -431,7 +431,7 @@ func TestCancel_BeforeBoundaryAdmissionEitherWaitsOrTerminatesTheExactSupervisio
 	if _, err := r.transitionToStarting("worker-3"); err != nil {
 		t.Fatalf("transitionToStarting(worker-3): %v", err)
 	}
-	activeSupervision, ok := r.registerSupervision("worker-3", "dispatch-3")
+	activeSupervision, ok := r.registerSupervision("worker-3", "dispatch-3", "")
 	if !ok {
 		t.Fatal("registerSupervision(worker-3): want exact attempt")
 	}

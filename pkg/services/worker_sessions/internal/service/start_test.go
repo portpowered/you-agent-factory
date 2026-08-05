@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/events"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -151,6 +153,367 @@ func TestStart_ValidNewIdentity_ObservesRunningDuringAdmittedInFlightHandoff(t *
 
 	close(release)
 	wg.Wait()
+}
+
+// TestStart_RetainsExactProviderSessionAssociationFromWorkerResult proves the
+// completion bridge commits the exact Providers-owned reference while the
+// attempt is still supervised, before terminal publication closes the session.
+func TestStart_RetainsExactProviderSessionAssociationFromWorkerResult(t *testing.T) {
+	returnedReference := &workers.ProviderSessionMetadata{
+		Provider: "codex",
+		Kind:     "provider-native-kind",
+		ID:       "opaque-provider-session-1",
+	}
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			return workers.WorkstationDispatchResult{
+				DispatchID:      req.Execution.Dispatch.DispatchID,
+				WorkstationName: req.WorkstationName,
+				TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
+				Result: workers.WorkResult{
+					DispatchID:      req.Execution.Dispatch.DispatchID,
+					Outcome:         workers.OutcomeAccepted,
+					ProviderSession: returnedReference,
+				},
+			}, nil
+		},
+	}
+	registry := newRegistryWithExecution(execution)
+	req := validStartRequest("worker-1", "dispatch-1")
+	req.Execution.Execution.Dispatch.Execution.RequestID = "turn-1"
+
+	started, err := registry.Start(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+	association := started.Session.ProviderSessionAssociation
+	if association == nil {
+		t.Fatal("Start() ProviderSessionAssociation = nil, want the returned exact reference")
+	}
+	if association.WorkerSessionID != "worker-1" || association.TurnID != "turn-1" ||
+		association.DispatchID != "dispatch-1" || association.AttemptID != "dispatch-1" {
+		t.Fatalf("association correlation = %#v, want worker/turn/dispatch/attempt identity", association)
+	}
+	if association.Reference.Provider != "codex" || association.Reference.Kind != "provider-native-kind" ||
+		association.Reference.ID != "opaque-provider-session-1" {
+		t.Fatalf("association reference = %#v, want the exact provider/kind/id returned by Workers", association.Reference)
+	}
+	if err := association.Validate(); err != nil {
+		t.Fatalf("association.Validate() = %v, want nil", err)
+	}
+
+	returnedReference.ID = "worker-mutated"
+	association.Reference.ID = "caller-mutated"
+	after, err := registry.Get(context.Background(), workersessions.GetRequest{ID: "worker-1"})
+	if err != nil {
+		t.Fatalf("Get() error = %v, want nil", err)
+	}
+	if after.ProviderSessionAssociation == nil || after.ProviderSessionAssociation.Reference.ID != "opaque-provider-session-1" {
+		t.Fatalf("stored association after caller mutation = %#v, want original detached reference", after.ProviderSessionAssociation)
+	}
+}
+
+// TestAssociateProviderSession_CommitsBeforeDependentWorkerRecord proves a
+// Worker attempt can record its exact reference before it emits a source
+// record whose ProviderSessionRef relies on that association. The resulting
+// automatic completion observation is an idempotent duplicate, not a rewrite.
+func TestAssociateProviderSession_CommitsBeforeDependentWorkerRecord(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	var registry workersessions.Service
+	var association workersessions.ProviderSessionAssociationResult
+	var published workersessions.PublishRecordResult
+	execution := &fakeExecution{
+		dispatch: func(ctx context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			var err error
+			association, err = registry.AssociateProviderSession(ctx, workersessions.ProviderSessionAssociationRequest{
+				WorkerSessionID: "worker-1",
+				DispatchID:      req.Execution.Dispatch.DispatchID,
+				Reference: providers.SessionRef{
+					Provider: "claude",
+					Kind:     "conversation-token",
+					ID:       "opaque-provider-session-2",
+				},
+			})
+			if err != nil {
+				t.Fatalf("AssociateProviderSession() error = %v, want nil", err)
+			}
+			stored, err := registry.Get(ctx, workersessions.GetRequest{ID: "worker-1"})
+			if err != nil || stored.ProviderSessionAssociation == nil {
+				t.Fatalf("Get() before dependent record = %#v, %v, want committed association", stored, err)
+			}
+			published, err = registry.PublishRecord(ctx, workersessions.PublishRecordRequest{
+				SessionID: "worker-1",
+				Draft: workers.Draft{
+					Kind:               workers.KindTool,
+					Phase:              workers.PhaseStarted,
+					Payload:            []byte(`{"toolCallId":"tool-1","toolName":"edit"}`),
+					DispatchID:         req.Execution.Dispatch.DispatchID,
+					ProviderSessionRef: "opaque-provider-session-2",
+				},
+				SourceType:     "worker_provider",
+				SourceID:       "provider-attempt-1",
+				SourceSequence: 1,
+				SourceEventID:  "provider-event-1",
+				SchemaID:       "workers.draft.v1",
+			})
+			if err != nil {
+				t.Fatalf("PublishRecord() error = %v, want nil", err)
+			}
+			return workers.WorkstationDispatchResult{
+				DispatchID:      req.Execution.Dispatch.DispatchID,
+				WorkstationName: req.WorkstationName,
+				TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+					ProviderSession: &workers.ProviderSessionMetadata{
+						Provider: "claude", Kind: "conversation-token", ID: "opaque-provider-session-2",
+					},
+				},
+			}, nil
+		},
+	}
+	var err error
+	registry, err = service.New(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	if _, err := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+	if association.Outcome != workersessions.ProviderSessionAssociationOutcomeAccepted {
+		t.Fatalf("AssociateProviderSession() outcome = %q, want ACCEPTED", association.Outcome)
+	}
+	if published.Outcome != workersessions.PublishOutcomeAccepted {
+		t.Fatalf("PublishRecord() outcome = %v, want accepted", published.Outcome)
+	}
+
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{
+		Topic: workersessions.Topic("worker-1"), From: events.Cursor{Topic: workersessions.Topic("worker-1")}, Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("Read() error = %v, want nil", err)
+	}
+	if len(read.Records) != 3 {
+		t.Fatalf("Read() records = %d, want opening, associated tool, terminal", len(read.Records))
+	}
+	tool := decodeDraft(t, read.Records[1])
+	if tool.ProviderSessionRef != "opaque-provider-session-2" || read.Records[1].ID.Position != published.AggregateSequence {
+		t.Fatalf("dependent Worker record = %#v at %d, want committed associated tool record at %d", tool, read.Records[1].ID.Position, published.AggregateSequence)
+	}
+}
+
+// TestAssociateProviderSession_IsIdempotentAndRejectsConflictsWithoutCrossSessionMutation
+// proves exact retries retain their original association, while a conflicting
+// reference cannot replace it or affect a sibling Worker Session.
+func TestAssociateProviderSession_IsIdempotentAndRejectsConflictsWithoutCrossSessionMutation(t *testing.T) {
+	started := make(chan string, 2)
+	release := map[string]chan struct{}{
+		"dispatch-a": make(chan struct{}),
+		"dispatch-b": make(chan struct{}),
+	}
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			started <- req.Execution.Dispatch.DispatchID
+			<-release[req.Execution.Dispatch.DispatchID]
+			return workers.WorkstationDispatchResult{Result: workers.WorkResult{Outcome: workers.OutcomeAccepted}}, nil
+		},
+	}
+	registry := newRegistryWithExecution(execution)
+	var starts sync.WaitGroup
+	starts.Add(2)
+	for _, identity := range []struct{ sessionID, dispatchID string }{
+		{sessionID: "worker-a", dispatchID: "dispatch-a"},
+		{sessionID: "worker-b", dispatchID: "dispatch-b"},
+	} {
+		go func(sessionID, dispatchID string) {
+			defer starts.Done()
+			if _, err := registry.Start(context.Background(), validStartRequest(sessionID, dispatchID)); err != nil {
+				t.Errorf("Start(%q) error = %v, want nil", sessionID, err)
+			}
+		}(identity.sessionID, identity.dispatchID)
+	}
+	<-started
+	<-started
+
+	first := workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: "worker-a", DispatchID: "dispatch-a",
+		Reference: providers.SessionRef{Provider: "codex", Kind: "thread", ID: "opaque-a"},
+	}
+	accepted, err := registry.AssociateProviderSession(context.Background(), first)
+	if err != nil || accepted.Outcome != workersessions.ProviderSessionAssociationOutcomeAccepted {
+		t.Fatalf("first AssociateProviderSession() = %#v, %v, want accepted", accepted, err)
+	}
+	duplicate, err := registry.AssociateProviderSession(context.Background(), first)
+	if err != nil || duplicate.Outcome != workersessions.ProviderSessionAssociationOutcomeDuplicate {
+		t.Fatalf("duplicate AssociateProviderSession() = %#v, %v, want duplicate", duplicate, err)
+	}
+	conflict := first
+	conflict.Reference.ID = "opaque-conflict"
+	if _, err := registry.AssociateProviderSession(context.Background(), conflict); !errors.Is(err, workersessions.ErrProviderSessionAssociationConflict) {
+		t.Fatalf("conflicting AssociateProviderSession() error = %v, want ErrProviderSessionAssociationConflict", err)
+	}
+	if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: "worker-b", DispatchID: "dispatch-b",
+		Reference: providers.SessionRef{Provider: "claude", Kind: "thread", ID: "opaque-b"},
+	}); err != nil {
+		t.Fatalf("sibling AssociateProviderSession() error = %v, want nil", err)
+	}
+
+	for _, want := range []struct{ sessionID, referenceID string }{
+		{sessionID: "worker-a", referenceID: "opaque-a"},
+		{sessionID: "worker-b", referenceID: "opaque-b"},
+	} {
+		snapshot, err := registry.Get(context.Background(), workersessions.GetRequest{ID: want.sessionID})
+		if err != nil || snapshot.ProviderSessionAssociation == nil || snapshot.ProviderSessionAssociation.Reference.ID != want.referenceID {
+			t.Fatalf("Get(%q) association = %#v, %v, want independent reference %q", want.sessionID, snapshot.ProviderSessionAssociation, err, want.referenceID)
+		}
+	}
+	close(release["dispatch-a"])
+	close(release["dispatch-b"])
+	starts.Wait()
+}
+
+// TestAssociateProviderSession_RejectsMalformedOrForeignAttemptWithoutWriting
+// proves malformed provider identity and a dispatch from another attempt are
+// explicit typed failures that leave the live session unassociated.
+func TestAssociateProviderSession_RejectsMalformedOrForeignAttemptWithoutWriting(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			close(started)
+			<-release
+			return workers.WorkstationDispatchResult{Result: workers.WorkResult{Outcome: workers.OutcomeAccepted}}, nil
+		},
+	}
+	registry := newRegistryWithExecution(execution)
+	done := make(chan error, 1)
+	go func() {
+		_, err := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+		done <- err
+	}()
+	<-started
+
+	if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: "worker-1", DispatchID: "dispatch-1",
+		Reference: providers.SessionRef{Kind: "thread", ID: "opaque-invalid"},
+	}); !errors.Is(err, providers.ErrInvalidID) {
+		t.Fatalf("malformed AssociateProviderSession() error = %v, want Providers ErrInvalidID", err)
+	}
+	if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: "worker-1", DispatchID: "foreign-dispatch",
+		Reference: providers.SessionRef{Provider: "codex", Kind: "thread", ID: "opaque-foreign"},
+	}); !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
+		t.Fatalf("foreign-attempt AssociateProviderSession() error = %v, want ErrProviderSessionAssociationAttemptMismatch", err)
+	}
+	snapshot, err := registry.Get(context.Background(), workersessions.GetRequest{ID: "worker-1"})
+	if err != nil {
+		t.Fatalf("Get() error = %v, want nil", err)
+	}
+	if snapshot.ProviderSessionAssociation != nil {
+		t.Fatalf("Get() association after rejections = %#v, want nil", snapshot.ProviderSessionAssociation)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+}
+
+// TestAssociateProviderSession_RejectsMissingOrTerminalSessionWithoutWriting
+// proves an association can only be committed to its still-live Worker
+// Session. Missing and terminal sessions return typed failures without
+// synthesizing or mutating an association.
+func TestAssociateProviderSession_RejectsMissingOrTerminalSessionWithoutWriting(t *testing.T) {
+	ctx := context.Background()
+	registry := newRegistryWithExecution(succeedingExecution())
+	reference := providers.SessionRef{Provider: "codex", Kind: "thread", ID: "opaque-session"}
+
+	if _, err := registry.AssociateProviderSession(ctx, workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: "missing-worker", DispatchID: "dispatch-1", Reference: reference,
+	}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("AssociateProviderSession() for missing session error = %v, want ErrSessionNotFound", err)
+	}
+
+	if _, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+	if _, err := registry.AssociateProviderSession(ctx, workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: "worker-1", DispatchID: "dispatch-1", Reference: reference,
+	}); !errors.Is(err, workersessions.ErrProviderSessionAssociationNotAvailable) {
+		t.Fatalf("AssociateProviderSession() for terminal session error = %v, want ErrProviderSessionAssociationNotAvailable", err)
+	}
+	snapshot, err := registry.Get(ctx, workersessions.GetRequest{ID: "worker-1"})
+	if err != nil {
+		t.Fatalf("Get() error = %v, want nil", err)
+	}
+	if snapshot.ProviderSessionAssociation != nil {
+		t.Fatalf("Get() association after terminal rejection = %#v, want nil", snapshot.ProviderSessionAssociation)
+	}
+}
+
+// TestStart_AbsentProviderSessionDoesNotSynthesizeAssociation proves a
+// successful Worker result remains explicitly unassociated when the provider
+// did not supply a complete reference; runner, model, and dispatch identity
+// are never used as substitutes.
+func TestStart_AbsentProviderSessionDoesNotSynthesizeAssociation(t *testing.T) {
+	execution := succeedingExecution()
+	registry := newRegistryWithExecution(execution)
+	req := validStartRequest("worker-1", "dispatch-1")
+	req.Execution.Execution.RunnerID = "codex"
+	req.Execution.Execution.Model = "gpt-5"
+
+	started, err := registry.Start(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+	if started.Session.ProviderSessionAssociation != nil {
+		t.Fatalf("Start() ProviderSessionAssociation = %#v, want nil without a provider-supplied reference", started.Session.ProviderSessionAssociation)
+	}
+}
+
+// TestStart_InvalidProviderSessionResultRemainsExplicitlyUnassociated proves a
+// malformed reference returned by Workers cannot create a false resumable
+// association. The completion path reports its rejection with safe
+// correlation fields and keeps the terminal Worker Session unassociated.
+func TestStart_InvalidProviderSessionResultRemainsExplicitlyUnassociated(t *testing.T) {
+	logger := &recordingLogger{}
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			return workers.WorkstationDispatchResult{
+				DispatchID:      req.Execution.Dispatch.DispatchID,
+				WorkstationName: req.WorkstationName,
+				TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+					ProviderSession: &workers.ProviderSessionMetadata{
+						Kind: "thread", ID: "opaque-invalid",
+					},
+				},
+			}, nil
+		},
+	}
+	registry, err := service.New(executionBoundary{execution: execution}, newEventsAppender(), logger)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+
+	started, err := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+	if err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+	if started.Session.ProviderSessionAssociation != nil {
+		t.Fatalf("Start() ProviderSessionAssociation = %#v, want nil after invalid Provider result", started.Session.ProviderSessionAssociation)
+	}
+	rejected := logger.entriesFor("worker session provider session association from result rejected")
+	if len(rejected) != 1 {
+		t.Fatalf("rejected result association log entries = %d, want 1", len(rejected))
+	}
+	if rejected[0].fields["sessionID"] != "worker-1" || rejected[0].fields["attemptID"] != "dispatch-1" ||
+		rejected[0].fields["outcome"] != "rejected" {
+		t.Fatalf("rejected result association log fields = %#v, want safe session/attempt/rejected fields", rejected[0].fields)
+	}
 }
 
 // gatingLogger is a recordingLogger whose Info call blocks after recording
