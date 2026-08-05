@@ -7,6 +7,7 @@
 - When a turn-scoped stop also ends the Factory Runtime, serialize Run's pool teardown behind Worker Sessions fan-out so the pool cannot preempt exact child controls.
 - An asynchronous `WorkstationPoolBoundary.Publish` must not return until Workers has admitted the dispatch into an exact cancellable queue or running set (or has already returned a terminal result); Worker Sessions may then safely issue exact cancellation.
 - A pool boundary that offers synchronous completion must forward Workers' cancellable-admission acknowledgement before it waits for the terminal result; otherwise a valid running dispatch becomes unreachable to its supervising control plane.
+- A late admission callback must never move a terminal Worker Session back to `RUNNING`; terminal lifecycle snapshots are absorbing under every control/completion interleaving.
 
 ## 2026-08-04 20:18 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-001
 - Implemented typed Worker Session pause, resume, cancel, and terminate controls. Cancel and terminate now target the exact supervised dispatch through `WorkstationPoolBoundary.Cancel`; terminate waits for the established terminal callback, and pause/resume explicitly report unsupported until a truthful resumable capability exists.
@@ -76,4 +77,14 @@
 - **Learnings for future iterations:**
   - Workers admission is a control-plane fact, not a completion fact: synchronous callers must see it while their publish call is still blocked on the terminal callback.
   - A production-boundary fan-out test can prove sibling progress deterministically by blocking each admitted dispatch on exact cancellation rather than using timers or polling.
+---
+
+## 2026-08-04 22:12 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-004
+- Restored the Worker Sessions package's enforced 100% unit-coverage floor after the synchronous-admission review fix introduced an unexercised terminal-state guard.
+- Added a behavioral lifecycle test proving that a late admission/running transition cannot resurrect an already completed Worker Session or replace its terminal result.
+- Files changed: `pkg/services/worker_sessions/internal/service/internal_test.go`, `prd.json`, `progress.txt`.
+- Verification: focused Worker Sessions/Factory Runtime/Workers tests; focused `go vet`; the relevant production-boundary and terminal-state tests with `-race -count=10`; Worker Sessions atomic statement coverage 100.0%; `git diff --check`.
+- **Learnings for future iterations:**
+  - Every new lifecycle callback needs a terminal-state race proof: callbacks arriving after completion must preserve the committed terminal snapshot rather than re-open the session.
+  - Per-package coverage floors are enforced by CI manifests, so add focused behavioral coverage for new safety guards instead of relaxing a baseline.
 ---

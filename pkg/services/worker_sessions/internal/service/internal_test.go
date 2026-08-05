@@ -217,6 +217,33 @@ func TestCommitTerminal_AlreadyTerminalIdentity_IsAbsorbingAndDoesNotOverwrite(t
 	}
 }
 
+// TestTransitionToRunning_TerminalSessionRemainsAbsorbing proves a late
+// admission callback cannot resurrect a Worker Session after its terminal
+// result has been committed. This is the guard that preserves the existing
+// terminal authority when completion wins an admission/control race.
+func TestTransitionToRunning_TerminalSessionRemainsAbsorbing(t *testing.T) {
+	r := newTestRegistry(t)
+	r.reserveIfAbsent("worker-1")
+	if _, err := r.transitionToStarting("worker-1"); err != nil {
+		t.Fatalf("transitionToStarting() error = %v, want nil", err)
+	}
+	if _, committed := r.commitTerminal("worker-1", workersessions.StateCompleted, workersessions.TerminalResult{
+		Outcome: workersessions.TerminalOutcomeCompleted,
+	}); !committed {
+		t.Fatal("commitTerminal() committed = false, want true")
+	}
+
+	r.transitionToRunning("worker-1")
+
+	got, err := r.Get(context.Background(), workersessions.GetRequest{ID: "worker-1"})
+	if err != nil {
+		t.Fatalf("Get() error = %v, want nil", err)
+	}
+	if got.State != workersessions.StateCompleted || got.Result == nil || got.Result.Outcome != workersessions.TerminalOutcomeCompleted {
+		t.Fatalf("Get() after late running transition = %#v, want unchanged COMPLETED terminal result", got)
+	}
+}
+
 // TestCommitTerminal_MissingIdentity_DoesNotFabricateASession proves
 // commitTerminal never creates or terminalizes an identity that was never
 // reserved or transitioned to StateStarting: it must be a no-op that reports
