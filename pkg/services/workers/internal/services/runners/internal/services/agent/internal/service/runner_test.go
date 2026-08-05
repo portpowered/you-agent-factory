@@ -225,6 +225,40 @@ func TestExecuteResumesThroughContinueWhenSessionIDPresent(t *testing.T) {
 	}
 }
 
+func TestExecuteResumesThroughExactWorkerSessionReferenceWithoutLegacyReconstruction(t *testing.T) {
+	t.Parallel()
+
+	fake := &providersFake{}
+	runner, err := New(fake, noopPublisher)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	exact := providers.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     "provider-native-thread",
+		ID:       "opaque-provider-session",
+	}
+	wantReference := exact.Clone()
+	request := baseAgentRequest()
+	request.SessionID = "legacy-session-that-must-not-be-used"
+	request.ResumeSession = &exact
+	if _, err := runner.Execute(t.Context(), request); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if fake.continuationReference == nil || *fake.continuationReference != wantReference {
+		t.Fatalf("Providers.Continue Reference = %#v, want exact %#v", fake.continuationReference, wantReference)
+	}
+	request.ResumeSession.ID = "caller-mutated"
+	if fake.continuationReference.ID != wantReference.ID {
+		t.Fatalf("Providers.Continue retained caller ResumeSession mutation: %#v", fake.continuationReference)
+	}
+	if fake.executeCalls != 0 {
+		t.Fatalf("Providers.Execute calls = %d, want 0 for exact continuation", fake.executeCalls)
+	}
+}
+
 func TestExecuteUnsupportedContinuationReturnsProviderError(t *testing.T) {
 	t.Parallel()
 
@@ -293,6 +327,7 @@ type providersFake struct {
 	providers.Service
 	request               providers.ExecuteRequest
 	continuationReference *providers.SessionRef
+	executeCalls          int
 }
 
 type failingProvidersFake struct {
@@ -316,6 +351,7 @@ func (fake *providersFake) Execute(
 	_ context.Context,
 	request providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
+	fake.executeCalls++
 	fake.request = request.Clone()
 	return providers.ExecuteResult{Content: "ok"}, nil
 }

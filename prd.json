@@ -50,8 +50,8 @@
         "Tests pass."
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented truthful pause/resume continuation for an associated Worker Session. Pause cancels only the exact admitted dispatch after a complete association exists and holds the original runtime completion path open; resume creates one continuation dispatch under the same Worker Session/turn/workstation/lineage correlation and carries the exact detached providers.SessionRef through Workers to Providers.Continue. The agent and agent-run inference paths clone and preserve the typed reference, and the runner gives it priority over the legacy bare SessionID compatibility path so ordinary Providers.Execute cannot run. Focused behavioral tests prove pause/resume ordering, exact provider/kind/ID preservation, fresh continuation-attempt identity, preserved correlation, terminal repeat no-op, and a controlled Provider edge with zero ordinary execute calls. Verified Worker Sessions/Workers and Factory Runtime suites, repeated focused race coverage, focused go vet, and make test. make typecheck remains blocked before this Go-only change by missing Bun types and TypeScript 6 baseUrl deprecation errors; make pkg-file-count remains blocked by the recorded unrelated 48 package baseline violations."
     },
     {
       "id": "ACP-L4-W7-PROVIDER-SESSION-CONTINUATION-003",

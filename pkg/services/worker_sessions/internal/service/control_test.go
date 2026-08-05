@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -79,6 +80,15 @@ func (b *controlledBoundary) cancellations() []workers.WorkstationDispatchCancel
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return append([]workers.WorkstationDispatchCancelRequest(nil), b.cancelCalls...)
+}
+
+func (b *controlledBoundary) currentRequest() workers.WorkstationDispatchRequest {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return workers.WorkstationDispatchRequest{
+		WorkstationName: b.request.WorkstationName,
+		Execution:       workers.CloneWorkstationExecutionRequest(b.request.Execution),
+	}
 }
 
 func (b *controlledBoundary) setCancel(fn func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error)) {
@@ -331,6 +341,77 @@ func TestControl_UnsupportedPauseResumeAndBoundaryFailureLeaveLifecycleTruthful(
 	terminal, err := registry.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
 	if err != nil || terminal.Outcome != workersessions.ControlOutcomeNoop {
 		t.Fatalf("Pause() on terminal session = %#v, %v, want NOOP", terminal, err)
+	}
+}
+
+func TestPauseResume_ContinuesExactProviderReferenceWithSameWorkerSessionCorrelation(t *testing.T) {
+	boundary := newControlledBoundary()
+	registry := newControlledRegistry(t, boundary)
+	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
+	initial := boundary.currentRequest()
+
+	reference := providers.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     providers.SessionIDKind,
+		ID:       "provider-session-1",
+	}
+	if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: "worker-1",
+		DispatchID:      "dispatch-1",
+		Reference:       reference,
+	}); err != nil {
+		t.Fatalf("AssociateProviderSession() error = %v", err)
+	}
+
+	boundary.setCancel(func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+		boundary.complete(canceledDispatchResult("dispatch-1"), workers.ErrWorkstationDispatchCanceled)
+		return workers.WorkstationDispatchCancelResult{
+			DispatchID: "dispatch-1", Outcome: workers.WorkstationDispatchCancelOutcomeCanceled,
+		}, nil
+	})
+	paused, err := registry.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+	if err != nil || paused.Outcome != workersessions.ControlOutcomeApplied || paused.Session.State != workersessions.StatePaused {
+		t.Fatalf("Pause() = %#v, %v, want applied PAUSED", paused, err)
+	}
+	select {
+	case result := <-started:
+		t.Fatalf("Start() returned from pause as %#v, want it to await continuation", result)
+	default:
+	}
+
+	resumed, err := registry.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+	if err != nil || resumed.Outcome != workersessions.ControlOutcomeApplied || resumed.Session.State != workersessions.StateRunning {
+		t.Fatalf("Resume() = %#v, %v, want applied RUNNING", resumed, err)
+	}
+	continuation := boundary.currentRequest()
+	if continuation.Execution.ResumeSession == nil || *continuation.Execution.ResumeSession != reference {
+		t.Fatalf("continuation ResumeSession = %#v, want exact %#v", continuation.Execution.ResumeSession, reference)
+	}
+	if continuation.WorkstationName != initial.WorkstationName || continuation.Execution.Dispatch.Execution.RequestID != initial.Execution.Dispatch.Execution.RequestID {
+		t.Fatalf("continuation correlation = %#v, want preserved workstation and turn request", continuation)
+	}
+	if continuation.Execution.Dispatch.DispatchID == "dispatch-1" || continuation.Execution.Dispatch.DispatchID != resumed.DispatchID {
+		t.Fatalf("continuation dispatch = %q, want fresh resumed dispatch %q", continuation.Execution.Dispatch.DispatchID, resumed.DispatchID)
+	}
+
+	resumedResult := completedDispatchResult(resumed.DispatchID)
+	resumedResult.Result.ProviderSession = &workers.ProviderSessionMetadata{
+		Provider: reference.Provider.String(),
+		Kind:     reference.Kind,
+		ID:       reference.ID,
+	}
+	boundary.complete(resumedResult, nil)
+	final := <-started
+	if final.Session.State != workersessions.StateCompleted || final.Dispatch.DispatchID != resumed.DispatchID {
+		t.Fatalf("Start() final = %#v, want resumed terminal result", final)
+	}
+	if final.Session.ProviderSessionAssociation == nil || final.Session.ProviderSessionAssociation.Reference != reference {
+		t.Fatalf("final association = %#v, want retained exact reference", final.Session.ProviderSessionAssociation)
+	}
+
+	repeated, err := registry.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+	if err != nil || repeated.Outcome != workersessions.ControlOutcomeNoop || repeated.Session.State != workersessions.StateCompleted {
+		t.Fatalf("repeated Resume() = %#v, %v, want terminal NOOP", repeated, err)
 	}
 }
 

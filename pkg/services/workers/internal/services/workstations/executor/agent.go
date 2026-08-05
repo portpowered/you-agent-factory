@@ -10,6 +10,7 @@ import (
 
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -362,6 +363,7 @@ func inferenceRequestForExecutionRequest(request workerexecution.WorkstationExec
 		ProcessEnvironment:           append([]string(nil), request.ProcessEnvironment...),
 		Worktree:                     request.Worktree,
 		WorkingDirectory:             request.WorkingDirectory,
+		ResumeSession:                cloneResumeSession(request.ResumeSession),
 	}
 	if workerDef != nil {
 		if executorProvider := strings.TrimSpace(workerDef.ExecutorProvider); executorProvider != "" {
@@ -383,6 +385,14 @@ func inferenceRequestForExecutionRequest(request workerexecution.WorkstationExec
 		}
 	}
 	return req
+}
+
+func cloneResumeSession(reference *providers.SessionRef) *providers.SessionRef {
+	if reference == nil {
+		return nil
+	}
+	cloned := reference.Clone()
+	return &cloned
 }
 
 func modelProviderForExecution(workerModelProvider string, selection workerexecution.ResolvedRunnerSelection) string {

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -18,10 +19,13 @@ import (
 type supervision struct {
 	dispatchID string
 	turnID     string
+	execution  workers.WorkstationDispatchRequest
 
 	mu              sync.Mutex
 	publishing      bool
 	accepted        bool
+	continuing      bool
+	resumeCount     uint
 	requestedAction workersessions.ControlAction
 	controlAction   workersessions.ControlAction
 	controlActive   bool
@@ -31,6 +35,8 @@ type supervision struct {
 
 	published     chan struct{}
 	publishedOnce sync.Once
+	paused        chan struct{}
+	pausedOnce    sync.Once
 	done          chan struct{}
 	doneOnce      sync.Once
 }
@@ -50,22 +56,39 @@ type cancellationAttempt struct {
 	dispatchID string
 }
 
-func newSupervision(dispatchID, turnID string) *supervision {
+func newSupervision(dispatchID, turnID string, executions ...workers.WorkstationDispatchRequest) *supervision {
+	var execution workers.WorkstationDispatchRequest
+	if len(executions) > 0 {
+		execution = executions[0]
+	}
 	return &supervision{
 		dispatchID: dispatchID,
 		turnID:     turnID,
+		execution:  cloneWorkstationDispatchRequest(execution),
 		published:  make(chan struct{}),
+		paused:     make(chan struct{}),
 		done:       make(chan struct{}),
 	}
 }
 
+func cloneWorkstationDispatchRequest(request workers.WorkstationDispatchRequest) workers.WorkstationDispatchRequest {
+	return workers.WorkstationDispatchRequest{
+		WorkstationName: request.WorkstationName,
+		Execution:       workers.CloneWorkstationExecutionRequest(request.Execution),
+	}
+}
+
 func (s *supervision) signalPublished() { s.publishedOnce.Do(func() { close(s.published) }) }
+func (s *supervision) signalPaused()    { s.pausedOnce.Do(func() { close(s.paused) }) }
 func (s *supervision) signalDone()      { s.doneOnce.Do(func() { close(s.done) }) }
 
 func (s *supervision) beginCancellation(action workersessions.ControlAction) cancellationAttempt {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.controlAction != "" {
+		return cancellationAttempt{kind: cancellationAttemptNoop}
+	}
+	if s.requestedAction != "" {
 		return cancellationAttempt{kind: cancellationAttemptNoop}
 	}
 	if s.controlActive {
@@ -96,7 +119,9 @@ func (s *supervision) finishCancellation(
 	s.controlActive = false
 	close(wait)
 	if cancelErr == nil && cancelResult.Outcome == workers.WorkstationDispatchCancelOutcomeCanceled {
-		s.controlAction = action
+		if action != workersessions.ControlActionPause {
+			s.controlAction = action
+		}
 	} else if !alreadyTerminal && !sessionTerminal {
 		s.requestedAction = ""
 	}
@@ -145,7 +170,7 @@ func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (
 // Worker Session record committed. Controls that win before boundary admission
 // terminalize the session without sending a cancellation for unknown work.
 func (r *registry) startPublishedAttempt(ctx context.Context, req workersessions.StartRequest, attemptID string) (workersessions.StartResult, error) {
-	supervision, canStart := r.registerSupervision(req.ID, attemptID, req.Execution.Execution.Dispatch.Execution.RequestID)
+	supervision, canStart := r.registerSupervision(req.ID, attemptID, req.Execution.Execution.Dispatch.Execution.RequestID, req.Execution)
 	if !canStart {
 		final, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
 		if final.Terminal() {
@@ -233,13 +258,16 @@ func (r *registry) finishSupervisionPublication(supervision *supervision) {
 	supervision.signalPublished()
 }
 
-func (r *registry) registerSupervision(id, dispatchID, turnID string) (*supervision, bool) {
+func (r *registry) registerSupervision(
+	id, dispatchID, turnID string,
+	executions ...workers.WorkstationDispatchRequest,
+) (*supervision, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if session, exists := r.sessions[id]; !exists || session.State != workersessions.StateStarting {
 		return nil, false
 	}
-	supervision := newSupervision(dispatchID, turnID)
+	supervision := newSupervision(dispatchID, turnID, executions...)
 	r.supervisions[id] = supervision
 	return supervision, true
 }
@@ -276,16 +304,49 @@ func (r *registry) completeSupervision(id string, supervision *supervision, resu
 	supervision.result = result
 	supervision.err = dispatchErr
 	action := supervision.requestedAction
+	continuing := supervision.continuing
+	dispatchID := supervision.dispatchID
 	supervision.mu.Unlock()
-	r.associateProviderSessionFromResult(id, supervision.dispatchID, result)
+	if !continuing {
+		r.associateProviderSessionFromResult(id, dispatchID, result)
+	}
+
+	if action == workersessions.ControlActionPause && dispatchCanceled(result, dispatchErr) {
+		if r.transitionToPaused(id) {
+			supervision.mu.Lock()
+			supervision.requestedAction = ""
+			supervision.mu.Unlock()
+			r.logger.Info("worker session control", "sessionID", id, "attemptID", dispatchID, "action", string(action), "outcome", string(workersessions.ControlOutcomeApplied))
+			supervision.signalPaused()
+			return
+		}
+	}
 
 	state, terminal := dispatchedTerminal(action, result, dispatchErr)
 	final, committed := r.commitTerminal(id, state, terminal)
 	if committed {
-		r.logTerminal(id, supervision.dispatchID, final)
-		r.publishTerminalRecordOrLog(context.Background(), id, supervision.dispatchID, state, terminal)
+		r.logTerminal(id, dispatchID, final)
+		r.publishTerminalRecordOrLog(context.Background(), id, dispatchID, state, terminal)
 	}
 	supervision.signalDone()
+}
+
+func dispatchCanceled(result workers.WorkstationDispatchResult, dispatchErr error) bool {
+	return result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCanceled ||
+		errors.Is(dispatchErr, workers.ErrWorkstationDispatchCanceled)
+}
+
+func (r *registry) transitionToPaused(id string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	session, exists := r.sessions[id]
+	if !exists || session.State != workersessions.StateRunning || session.ProviderSessionAssociation == nil {
+		return false
+	}
+	session.State = workersessions.StatePaused
+	r.sessions[id] = session
+	return true
 }
 
 // associateProviderSessionFromResult preserves the Provider Session reference
@@ -337,17 +398,187 @@ func (r *registry) logTerminal(id, attemptID string, session workersessions.Sess
 	r.logger.Info("worker session start terminal", "sessionID", id, "attemptID", attemptID, "outcome", string(session.State), "state", string(session.State), "cause", cause)
 }
 
-// Pause never changes lifecycle state until Worker Sessions owns a truthful
-// resumable execution capability. Returning UNSUPPORTED is deliberate: it
-// prevents a fabricated PAUSED state that a later resume could not honor.
+// Pause stops only an exact admitted attempt that already retained a complete
+// Provider Session association. The session becomes PAUSED only after the
+// established Workers cancellation callback has committed; an unassociated
+// execution remains truthfully unsupported rather than becoming a fabricated
+// resumable session.
 func (r *registry) Pause(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
-	return r.unsupportedControl(ctx, req, workersessions.ControlActionPause)
+	if err := req.Validate(); err != nil {
+		return workersessions.ControlResult{Action: workersessions.ControlActionPause, Outcome: workersessions.ControlOutcomeFailed}, err
+	}
+	for {
+		session, supervision, err := r.controlTarget(req.ID)
+		if err != nil {
+			return workersessions.ControlResult{Action: workersessions.ControlActionPause, Outcome: workersessions.ControlOutcomeFailed}, err
+		}
+		if session.Terminal() || session.State == workersessions.StatePaused {
+			return r.controlNoop(req.ID, workersessions.ControlActionPause, session, supervision), nil
+		}
+		if session.State != workersessions.StateRunning || supervision == nil || session.ProviderSessionAssociation == nil {
+			return r.unsupportedControl(ctx, req, workersessions.ControlActionPause)
+		}
+
+		attempt := supervision.beginCancellation(workersessions.ControlActionPause)
+		switch attempt.kind {
+		case cancellationAttemptNoop:
+			return r.controlNoop(req.ID, workersessions.ControlActionPause, session, supervision), nil
+		case cancellationAttemptWait:
+			<-attempt.wait
+			continue
+		case cancellationAttemptBeforeAdmission:
+			return r.unsupportedControl(ctx, req, workersessions.ControlActionPause)
+		case cancellationAttemptBoundary:
+		}
+
+		cancelResult, cancelErr := r.boundary.Cancel(
+			context.WithoutCancel(ctx),
+			workers.WorkstationDispatchCancelRequest{DispatchID: attempt.dispatchID},
+		)
+		alreadyTerminal := supervision.finishCancellation(
+			workersessions.ControlActionPause,
+			attempt.wait,
+			cancelResult,
+			cancelErr,
+			sessionIsTerminal(r, req.ID),
+		)
+		if cancelErr != nil {
+			current, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
+			result := workersessions.ControlResult{Session: current, Action: workersessions.ControlActionPause, Outcome: workersessions.ControlOutcomeFailed, DispatchID: attempt.dispatchID}
+			r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", attempt.dispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
+			return result, cancelErr
+		}
+		if alreadyTerminal || cancelResult.Outcome != workers.WorkstationDispatchCancelOutcomeCanceled {
+			<-supervision.done
+			current, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
+			return r.controlNoop(req.ID, workersessions.ControlActionPause, current, supervision), nil
+		}
+		select {
+		case <-supervision.paused:
+		case <-supervision.done:
+		}
+		current, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
+		result := workersessions.ControlResult{Session: current, Action: workersessions.ControlActionPause, DispatchID: attempt.dispatchID}
+		if current.State == workersessions.StatePaused {
+			result.Outcome = workersessions.ControlOutcomeApplied
+		} else {
+			result.Outcome = workersessions.ControlOutcomeNoop
+		}
+		r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", attempt.dispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
+		return result, nil
+	}
 }
 
-// Resume is unsupported until the exact paused provider-session association is
-// implemented. Terminal sessions retain their idempotent NOOP behavior.
+// Resume starts one next Workers attempt for the exact paused Worker Session.
+// The request carries the registry-owned reference unchanged so the Workers
+// provider runner must route only through Providers.Continue.
 func (r *registry) Resume(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
-	return r.unsupportedControl(ctx, req, workersessions.ControlActionResume)
+	if err := req.Validate(); err != nil {
+		return workersessions.ControlResult{Action: workersessions.ControlActionResume, Outcome: workersessions.ControlOutcomeFailed}, err
+	}
+	session, supervision, err := r.controlTarget(req.ID)
+	if err != nil {
+		return workersessions.ControlResult{Action: workersessions.ControlActionResume, Outcome: workersessions.ControlOutcomeFailed}, err
+	}
+	if session.Terminal() {
+		return r.controlNoop(req.ID, workersessions.ControlActionResume, session, supervision), nil
+	}
+	if supervision != nil && supervision.resumeInFlight() {
+		return r.controlNoop(req.ID, workersessions.ControlActionResume, session, supervision), nil
+	}
+	if session.State != workersessions.StatePaused || supervision == nil || session.ProviderSessionAssociation == nil {
+		return r.unsupportedControl(ctx, req, workersessions.ControlActionResume)
+	}
+
+	continuation, previousDispatchID, prepared := r.prepareContinuation(req.ID, supervision, session.ProviderSessionAssociation.Reference)
+	if !prepared {
+		current, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
+		return r.controlNoop(req.ID, workersessions.ControlActionResume, current, supervision), nil
+	}
+	publishErr := r.boundary.PublishWithAdmission(
+		context.WithoutCancel(ctx),
+		continuation,
+		func() { r.acceptSupervision(req.ID, supervision) },
+		func(_ context.Context, _ workers.WorkstationDispatchRequest, result workers.WorkstationDispatchResult, dispatchErr error) {
+			r.completeSupervision(req.ID, supervision, result, dispatchErr)
+		},
+	)
+	if publishErr != nil {
+		r.revertContinuation(req.ID, supervision, previousDispatchID)
+		current, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
+		result := workersessions.ControlResult{Session: current, Action: workersessions.ControlActionResume, Outcome: workersessions.ControlOutcomeFailed, DispatchID: continuation.Execution.Dispatch.DispatchID}
+		r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", result.DispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
+		return result, publishErr
+	}
+	r.finishContinuationPublication(supervision)
+	current, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
+	result := workersessions.ControlResult{Session: current, Action: workersessions.ControlActionResume, Outcome: workersessions.ControlOutcomeApplied, DispatchID: continuation.Execution.Dispatch.DispatchID}
+	r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", result.DispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
+	return result, nil
+}
+
+func (s *supervision) resumeInFlight() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.continuing && (s.publishing || s.accepted)
+}
+
+func (r *registry) prepareContinuation(
+	id string,
+	supervision *supervision,
+	reference providers.SessionRef,
+) (workers.WorkstationDispatchRequest, string, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	session, exists := r.sessions[id]
+	if !exists || session.State != workersessions.StatePaused || session.ProviderSessionAssociation == nil ||
+		session.ProviderSessionAssociation.Reference != reference {
+		return workers.WorkstationDispatchRequest{}, "", false
+	}
+
+	supervision.mu.Lock()
+	defer supervision.mu.Unlock()
+	if supervision.continuing || supervision.publishing {
+		return workers.WorkstationDispatchRequest{}, "", false
+	}
+	previousDispatchID := supervision.dispatchID
+	supervision.resumeCount++
+	continuation := cloneWorkstationDispatchRequest(supervision.execution)
+	continuation.Execution.Dispatch.DispatchID = fmt.Sprintf("%s/resume/%d", previousDispatchID, supervision.resumeCount)
+	continuedReference := reference.Clone()
+	continuation.Execution.ResumeSession = &continuedReference
+	supervision.dispatchID = continuation.Execution.Dispatch.DispatchID
+	supervision.publishing = true
+	supervision.accepted = false
+	supervision.continuing = true
+	supervision.result = workers.WorkstationDispatchResult{}
+	supervision.err = nil
+	session.State = workersessions.StateStarting
+	r.sessions[id] = session
+	return continuation, previousDispatchID, true
+}
+
+func (r *registry) revertContinuation(id string, supervision *supervision, previousDispatchID string) {
+	supervision.mu.Lock()
+	supervision.dispatchID = previousDispatchID
+	supervision.publishing = false
+	supervision.continuing = false
+	supervision.accepted = true
+	supervision.mu.Unlock()
+
+	r.mu.Lock()
+	if session, exists := r.sessions[id]; exists && session.State == workersessions.StateStarting {
+		session.State = workersessions.StatePaused
+		r.sessions[id] = session
+	}
+	r.mu.Unlock()
+}
+
+func (r *registry) finishContinuationPublication(supervision *supervision) {
+	supervision.mu.Lock()
+	supervision.publishing = false
+	supervision.mu.Unlock()
 }
 
 func (r *registry) unsupportedControl(_ context.Context, req workersessions.ControlRequest, action workersessions.ControlAction) (workersessions.ControlResult, error) {

@@ -1,6 +1,7 @@
 package workers
 
 import (
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -127,6 +128,12 @@ type WorkstationExecutionRequest struct {
 	Worktree                 string                          `json:"worktree,omitempty"`
 	WorkingDirectory         string                          `json:"working_directory,omitempty"`
 	WorkingDirectoryAuthored bool                            `json:"working_directory_authored,omitempty"`
+	// ResumeSession is the exact detached Providers-owned session identity a
+	// resumed Worker Session must continue. It is intentionally distinct from
+	// configuration's legacy SessionID: this value retains provider-specific
+	// kind and opaque identity, so a resumed attempt cannot reconstruct a
+	// reference from the selected runner or model.
+	ResumeSession *providers.SessionRef `json:"-"`
 }
 
 type ProviderInferenceRequest struct {
@@ -153,6 +160,10 @@ type ProviderInferenceRequest struct {
 	ReasoningEffort              string                          `json:"reasoning_effort,omitempty"`
 	ModelLocality                string                          `json:"model_locality,omitempty"`
 	SessionID                    string                          `json:"session_id,omitempty"`
+	// ResumeSession carries an exact typed Providers reference for continuation
+	// attempts. When non-nil, the provider runner must call Providers.Continue
+	// with this value unchanged and must not select ordinary execution.
+	ResumeSession *providers.SessionRef `json:"-"`
 	// SkipPermissions is the invocation-effective worker policy. Construction
 	// resolves persisted configuration and invocation overrides before the
 	// request reaches either the native runner or neutral conductor.
@@ -171,6 +182,7 @@ func CloneWorkstationExecutionRequest(request WorkstationExecutionRequest) Works
 	clone.ModelBindings = CloneResolvedModelOperationBindings(request.ModelBindings)
 	clone.EnvVars = cloneStringMap(request.EnvVars)
 	clone.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
+	clone.ResumeSession = cloneSessionRef(request.ResumeSession)
 	return clone
 }
 
@@ -182,7 +194,16 @@ func CloneProviderInferenceRequest(request ProviderInferenceRequest) ProviderInf
 	clone.RequiredOptionalCapabilities = append([]RunnerOptionalCapability(nil), request.RequiredOptionalCapabilities...)
 	clone.EnvVars = cloneStringMap(request.EnvVars)
 	clone.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
+	clone.ResumeSession = cloneSessionRef(request.ResumeSession)
 	return clone
+}
+
+func cloneSessionRef(reference *providers.SessionRef) *providers.SessionRef {
+	if reference == nil {
+		return nil
+	}
+	cloned := reference.Clone()
+	return &cloned
 }
 
 func CloneSubprocessExecutionRequest(request SubprocessExecutionRequest) SubprocessExecutionRequest {

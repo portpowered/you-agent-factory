@@ -213,18 +213,34 @@ func validateRequest(request workers.RunnerExecutionRequest) error {
 	return nil
 }
 
-// executeProviderAttempt runs one provider attempt for request, resuming the
-// exact Provider Session request.SessionID names through Providers.Continue
-// when one is set, or performing an ordinary Providers.Execute attempt
-// otherwise - Providers no longer accepts a resume reference through Execute.
-// A resolved provider or session kind that truthfully cannot continue reports
-// the same typed ExecuteFailure vocabulary providerFailure already
-// translates into a runner failure result.
+// executeProviderAttempt runs one provider attempt for request. A
+// Worker-Session-owned ResumeSession is always passed unchanged to
+// Providers.Continue, preserving provider-specific kind and opaque identity
+// without consulting runner/default selection. Legacy configuration SessionID
+// resumes retain their established compatibility path. Providers.Execute is
+// used only when neither continuation value is present.
 func (s *service) executeProviderAttempt(
 	ctx context.Context,
 	request workers.RunnerExecutionRequest,
 ) (providers.ExecuteResult, error) {
 	attempt := providerRequest(request)
+	if request.ResumeSession != nil {
+		reference := request.ResumeSession.Clone()
+		continued, err := s.providers.Continue(ctx, providers.ContinueRequest{
+			Reference: reference,
+			Attempt:   attempt,
+		})
+		if err != nil {
+			return providers.ExecuteResult{}, err
+		}
+		if continued.Outcome == providers.ContinuationOutcomeUnsupported {
+			return providers.ExecuteResult{}, providers.ExecuteFailure{
+				Kind:    providers.ExecuteFailureKindInvalidRequest,
+				Message: "provider does not support resuming this Provider Session",
+			}
+		}
+		return continued.Result, nil
+	}
 	if strings.TrimSpace(request.SessionID) == "" {
 		return s.providers.Execute(ctx, attempt)
 	}
@@ -327,6 +343,13 @@ func runnerFailureResult(
 			),
 			Kind: failure.SessionRef.Kind,
 			ID:   failure.SessionRef.ID,
+		}
+	}
+	if response.ProviderSession == nil && request.ResumeSession != nil {
+		response.ProviderSession = &workers.ProviderSessionMetadata{
+			Provider: workers.CanonicalProviderSessionProvider(request.ResumeSession.Provider.String()),
+			Kind:     request.ResumeSession.Kind,
+			ID:       request.ResumeSession.ID,
 		}
 	}
 	if response.ProviderSession == nil && strings.TrimSpace(request.SessionID) != "" {
