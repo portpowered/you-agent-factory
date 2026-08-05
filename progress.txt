@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- For a required CI failure, compare the failing path on the reviewed head and PR base before repairing it; do not expand a delivery lane to fix a defect unchanged on both revisions.
 - For a cross-service behavioral proof that needs one service's internal concrete collaborator, compose the peer through its owner-published `wire.New...` API inside the collaborator's package-level integration test; do not add a test-only production seam.
 - Construct each Factory Session's Worker Sessions service only after its session-owned `WorkstationPoolBoundary` exists, so dispatch and cancellation share the exact same boundary.
 - Worker Session controls must use `context.WithoutCancel` when calling the pool boundary; dispatch termination remains observable through the boundary callback rather than caller-context cancellation.
@@ -343,4 +344,14 @@
 - **Learnings for future iterations:**
   - A compatibility projection can remain observable without granting resumability; association validation belongs only to the exact provider-owned reference.
   - A response-stream regression can surface in unrelated provider fixtures, so retain provider-specific failure and timeout functional checks after changing a shared progress publisher.
+---
+
+## 2026-08-05 04:02 -07:00 - ACP-L4-W7-PROVIDER-SESSION-CONTINUATION-REVIEW
+- Inspected PR #1799 with thread-aware GitHub review data. Its only blocking conversation comment applies to the older `2864f4e` head; the reviewed `f0c8303` head contains the three requested remediations for live Provider Session association, PAUSED cancel/terminate completion, and continuation-result reference validation. There are no unresolved inline review threads or newer review comments.
+- Confirmed the PR title and description already match the requested name and current `prd.json`. Re-ran the focused Worker Sessions race suite plus Workers and Factory Runtime suites on `f0c8303`; all pass and `git diff --check` is clean.
+- The PR's only failing required CI lane is the shared `customer-factory-emulator-demos` component test, which fails because `ResizeObserver` is missing. The test has identical content and last-touch commit (`5c8260a`) on both `fork/main` and this branch, so it is a separate base regression rather than W7 work and is left out of this single-story delivery lane.
+- Files changed: `progress.txt`.
+- **Learnings for future iterations:**
+  - Thread-aware review inspection is necessary even when top-level comments exist; this PR had no inline threads and no newer feedback after the blocking comment.
+  - Compare a failed CI path against the base before treating it as delivery-lane fallout; exact base/head identity is strong evidence to keep an unrelated repair scoped to its owning work.
 ---
