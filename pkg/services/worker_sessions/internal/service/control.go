@@ -302,11 +302,17 @@ func (r *registry) transitionToRunning(id string) {
 
 func (r *registry) completeSupervision(id string, supervision *supervision, result workers.WorkstationDispatchResult, dispatchErr error) {
 	supervision.mu.Lock()
-	supervision.result = result
-	supervision.err = dispatchErr
 	action := supervision.requestedAction
 	continuing := supervision.continuing
 	dispatchID := supervision.dispatchID
+	supervision.mu.Unlock()
+	if continuing && !r.continuationResultMatchesAssociation(id, result) {
+		result = invalidContinuationResult(result)
+		r.logger.Info("worker session continuation result rejected", "sessionID", id, "attemptID", dispatchID, "outcome", "reference_mismatch")
+	}
+	supervision.mu.Lock()
+	supervision.result = result
+	supervision.err = dispatchErr
 	supervision.mu.Unlock()
 	if !continuing {
 		r.associateProviderSessionFromResult(id, dispatchID, result)
@@ -330,6 +336,45 @@ func (r *registry) completeSupervision(id string, supervision *supervision, resu
 		r.publishTerminalRecordOrLog(context.Background(), id, dispatchID, state, terminal)
 	}
 	supervision.signalDone()
+}
+
+// continuationResultMatchesAssociation keeps every Workers execution path
+// accountable to the exact reference that admitted the continuation. Agent
+// runners reject a provider mismatch before progress is published, while this
+// final check prevents another Workers adapter from committing a plausible
+// success under a stale or foreign retained association.
+func (r *registry) continuationResultMatchesAssociation(id string, result workers.WorkstationDispatchResult) bool {
+	if result.Result.Outcome != workers.OutcomeAccepted && result.Result.Outcome != workers.OutcomeContinue {
+		return true
+	}
+	metadata := result.Result.ProviderSession
+	if metadata == nil {
+		return false
+	}
+	reference := providers.SessionRef{
+		Provider: providers.ID(metadata.Provider),
+		Kind:     metadata.Kind,
+		ID:       metadata.ID,
+	}
+	if err := reference.Validate(); err != nil {
+		return false
+	}
+	r.mu.RLock()
+	session, exists := r.sessions[id]
+	r.mu.RUnlock()
+	return exists && session.ProviderSessionAssociation != nil &&
+		session.ProviderSessionAssociation.Reference == reference
+}
+
+func invalidContinuationResult(result workers.WorkstationDispatchResult) workers.WorkstationDispatchResult {
+	result.Result.Outcome = workers.OutcomeFailed
+	result.Result.FailureMetadata = &workers.WorkFailureMetadata{
+		Family: workers.WorkFailureFamilyTerminal,
+		Type:   workers.WorkFailureTypePermanentBadRequest,
+	}
+	result.Result.ProviderContinuationFailureKind = providers.ContinuationFailureKindInvalid
+	result.Result.ProviderContinuationOutcome = ""
+	return result
 }
 
 func dispatchCanceled(result workers.WorkstationDispatchResult, dispatchErr error) bool {
@@ -674,6 +719,9 @@ func (r *registry) cancelControl(ctx context.Context, req workersessions.Control
 			final, _ := r.commitControlTerminal(req.ID, controlTerminalState(action))
 			return r.controlApplied(req.ID, action, final, nil), nil
 		}
+		if session.State == workersessions.StatePaused {
+			return r.terminalizePausedControl(req.ID, action, supervision), nil
+		}
 
 		attempt := supervision.beginCancellation(action)
 		switch attempt.kind {
@@ -730,6 +778,21 @@ func (r *registry) cancelControl(ctx context.Context, req workersessions.Control
 		r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", dispatchID, "action", string(action), "outcome", string(result.Outcome))
 		return result, nil
 	}
+}
+
+// terminalizePausedControl consumes a PAUSED session without asking Workers to
+// cancel its already-canceled original dispatch. The original Start call is
+// intentionally waiting for either continuation or this terminal decision, so
+// signalDone is the authoritative release after the terminal record commits.
+func (r *registry) terminalizePausedControl(id string, action workersessions.ControlAction, supervision *supervision) workersessions.ControlResult {
+	state := controlTerminalState(action)
+	final, committed := r.commitControlTerminal(id, state)
+	if committed {
+		r.logTerminal(id, supervision.dispatchID, final)
+		r.publishTerminalRecordOrLog(context.Background(), id, supervision.dispatchID, state, workersessions.TerminalResult{})
+		supervision.signalDone()
+	}
+	return r.controlApplied(id, action, final, supervision)
 }
 
 func (r *registry) preAdmissionControlTerminal(id, attemptID string) (workersessions.Session, bool) {

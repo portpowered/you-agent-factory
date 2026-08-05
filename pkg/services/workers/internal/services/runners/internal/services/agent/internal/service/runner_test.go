@@ -405,6 +405,55 @@ func TestExecuteExactContinuationFailurePreservesClassificationWithoutFallback(t
 	}
 }
 
+func TestExecuteExactContinuationRejectsMismatchedProviderResultBeforePublishingOutput(t *testing.T) {
+	tests := []struct {
+		name                  string
+		continuationReference *providers.SessionRef
+		resultReference       *providers.SessionRef
+	}{
+		{
+			name:                  "continuation envelope reference",
+			continuationReference: &providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "foreign-session"},
+		},
+		{
+			name:            "execute result reference",
+			resultReference: &providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "foreign-session"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			fake := &providersFake{
+				continuationResponseReference: test.continuationReference,
+				continuationResultReference:   test.resultReference,
+			}
+			var published []workers.ProgressFragment
+			runner, err := New(fake, func(fragment workers.ProgressFragment) { published = append(published, fragment) })
+			if err != nil {
+				t.Fatalf("New() error = %v", err)
+			}
+			reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "expected-session"}
+			request := baseAgentRequest()
+			request.ResumeSession = &reference
+			result, err := runner.Execute(t.Context(), request)
+			var providerErr *workers.ProviderError
+			if !errors.As(err, &providerErr) || providerErr.ProviderContinuationFailureKind != providers.ContinuationFailureKindInvalid {
+				t.Fatalf("Execute() error = %#v, want invalid continuation ProviderError", err)
+			}
+			if result.Content != "" || result.ProviderSession == nil || result.ProviderSession.ID != reference.ID {
+				t.Fatalf("Execute() result = %#v, want no content and retained exact session", result)
+			}
+			if fake.executeCalls != 0 || fake.continueCalls != 1 {
+				t.Fatalf("provider calls = execute:%d continue:%d, want execute:0 continue:1", fake.executeCalls, fake.continueCalls)
+			}
+			if len(published) != 1 || published[0].Kind != workers.FailedFragmentKind || published[0].Payload == "ok" {
+				t.Fatalf("published progress = %#v, want one safe failure without successful output", published)
+			}
+		})
+	}
+}
+
 func TestExecuteForwardsInputTokensToProviders(t *testing.T) {
 	t.Parallel()
 
@@ -447,12 +496,14 @@ func baseAgentRequest() workers.RunnerExecutionRequest {
 
 type providersFake struct {
 	providers.Service
-	request               providers.ExecuteRequest
-	continuationReference *providers.SessionRef
-	continuationErr       error
-	continuationOutcome   providers.ContinuationOutcome
-	executeCalls          int
-	continueCalls         int
+	request                       providers.ExecuteRequest
+	continuationReference         *providers.SessionRef
+	continuationResponseReference *providers.SessionRef
+	continuationResultReference   *providers.SessionRef
+	continuationErr               error
+	continuationOutcome           providers.ContinuationOutcome
+	executeCalls                  int
+	continueCalls                 int
 }
 
 type failingProvidersFake struct {
@@ -499,10 +550,19 @@ func (fake *providersFake) Continue(
 	if outcome == "" {
 		outcome = providers.ContinuationOutcomeResumed
 	}
+	responseReference := request.Reference.Clone()
+	if fake.continuationResponseReference != nil {
+		responseReference = fake.continuationResponseReference.Clone()
+	}
+	result := providers.ExecuteResult{Content: "ok"}
+	if fake.continuationResultReference != nil {
+		reference := fake.continuationResultReference.Clone()
+		result.SessionRef = &reference
+	}
 	return providers.ContinueResult{
-		Reference: request.Reference,
+		Reference: responseReference,
 		Outcome:   outcome,
-		Result:    providers.ExecuteResult{Content: "ok"},
+		Result:    result,
 	}, nil
 }
 

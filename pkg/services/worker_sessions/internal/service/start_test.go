@@ -307,7 +307,13 @@ func TestStart_ProviderProgressCommitsAssociationBeforeOutputAndEnablesResume(t 
 		t.Fatalf("continuation ResumeSession = %#v, want exact %#v", continuation.Execution.ResumeSession, reference)
 	}
 
-	boundary.complete(completedDispatchResult(resumed.DispatchID), nil)
+	continued := completedDispatchResult(resumed.DispatchID)
+	continued.Result.ProviderSession = &workers.ProviderSessionMetadata{
+		Provider: reference.Provider.String(),
+		Kind:     reference.Kind,
+		ID:       reference.ID,
+	}
+	boundary.complete(continued, nil)
 	if result := <-started; result.Session.State != workersessions.StateCompleted ||
 		result.Session.ProviderSessionAssociation == nil || result.Session.ProviderSessionAssociation.Reference != reference {
 		t.Fatalf("Start() terminal result = %#v, want completed session retaining %#v", result, reference)

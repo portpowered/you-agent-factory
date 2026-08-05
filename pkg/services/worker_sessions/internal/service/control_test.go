@@ -415,6 +415,116 @@ func TestPauseResume_ContinuesExactProviderReferenceWithSameWorkerSessionCorrela
 	}
 }
 
+func TestPausedControl_TerminalizesWithoutRecancelingCompletedPauseDispatch(t *testing.T) {
+	tests := []struct {
+		name  string
+		call  func(workersessions.Service, context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error)
+		state workersessions.State
+	}{
+		{name: "cancel", call: func(service workersessions.Service, ctx context.Context, request workersessions.ControlRequest) (workersessions.ControlResult, error) {
+			return service.Cancel(ctx, request)
+		}, state: workersessions.StateCanceled},
+		{name: "terminate", call: func(service workersessions.Service, ctx context.Context, request workersessions.ControlRequest) (workersessions.ControlResult, error) {
+			return service.Terminate(ctx, request)
+		}, state: workersessions.StateTerminated},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			boundary := newControlledBoundary()
+			registry := newControlledRegistry(t, boundary)
+			started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
+			reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"}
+			if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+				WorkerSessionID: "worker-1", DispatchID: "dispatch-1", Reference: reference,
+			}); err != nil {
+				t.Fatalf("AssociateProviderSession() error = %v", err)
+			}
+			boundary.setCancel(func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+				boundary.complete(canceledDispatchResult(request.DispatchID), workers.ErrWorkstationDispatchCanceled)
+				return workers.WorkstationDispatchCancelResult{DispatchID: request.DispatchID, Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
+			})
+			if paused, err := registry.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"}); err != nil || paused.Session.State != workersessions.StatePaused {
+				t.Fatalf("Pause() = %#v, %v, want PAUSED", paused, err)
+			}
+
+			result, err := test.call(registry, context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+			if err != nil || result.Outcome != workersessions.ControlOutcomeApplied || result.Session.State != test.state {
+				t.Fatalf("%s() = %#v, %v, want applied %s", test.name, result, err, test.state)
+			}
+			if calls := boundary.cancellations(); len(calls) != 1 || calls[0].DispatchID != "dispatch-1" {
+				t.Fatalf("boundary cancellations = %#v, want only the original pause cancellation", calls)
+			}
+			if final := <-started; final.Session.State != test.state {
+				t.Fatalf("Start() after paused %s = %#v, want %s", test.name, final, test.state)
+			}
+		})
+	}
+}
+
+func TestPauseResume_InvalidContinuationResultFailsAndRetainsAssociation(t *testing.T) {
+	tests := []struct {
+		name     string
+		metadata func(providers.SessionRef) *workers.ProviderSessionMetadata
+	}{
+		{name: "missing reference"},
+		{
+			name: "malformed reference",
+			metadata: func(reference providers.SessionRef) *workers.ProviderSessionMetadata {
+				return &workers.ProviderSessionMetadata{Provider: reference.Provider.String(), Kind: reference.Kind}
+			},
+		},
+		{
+			name: "foreign reference",
+			metadata: func(reference providers.SessionRef) *workers.ProviderSessionMetadata {
+				return &workers.ProviderSessionMetadata{Provider: reference.Provider.String(), Kind: reference.Kind, ID: "foreign-provider-session"}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			boundary := newControlledBoundary()
+			registry := newControlledRegistry(t, boundary)
+			started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
+			reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"}
+			if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+				WorkerSessionID: "worker-1", DispatchID: "dispatch-1", Reference: reference,
+			}); err != nil {
+				t.Fatalf("AssociateProviderSession() error = %v", err)
+			}
+			boundary.setCancel(func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+				boundary.complete(canceledDispatchResult(request.DispatchID), workers.ErrWorkstationDispatchCanceled)
+				return workers.WorkstationDispatchCancelResult{DispatchID: request.DispatchID, Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
+			})
+			if paused, err := registry.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"}); err != nil || paused.Session.State != workersessions.StatePaused {
+				t.Fatalf("Pause() = %#v, %v, want PAUSED", paused, err)
+			}
+			resumed, err := registry.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+			if err != nil || resumed.Outcome != workersessions.ControlOutcomeApplied {
+				t.Fatalf("Resume() = %#v, %v, want applied continuation", resumed, err)
+			}
+			invalid := completedDispatchResult(resumed.DispatchID)
+			if test.metadata != nil {
+				invalid.Result.ProviderSession = test.metadata(reference)
+			}
+			boundary.complete(invalid, nil)
+
+			final := <-started
+			if final.Session.State != workersessions.StateFailed || final.Session.Result == nil || final.Session.Result.Cause == nil {
+				t.Fatalf("Start() after invalid continuation = %#v, want failed terminal result", final)
+			}
+			cause := final.Session.Result.Cause
+			if cause.Kind != workersessions.FailureCauseWorkersExecutionFailure || cause.ProviderContinuationFailureKind != providers.ContinuationFailureKindInvalid {
+				t.Fatalf("terminal failure cause = %#v, want invalid continuation classification", cause)
+			}
+			if final.Session.ProviderSessionAssociation == nil || final.Session.ProviderSessionAssociation.Reference != reference {
+				t.Fatalf("terminal association = %#v, want retained %#v", final.Session.ProviderSessionAssociation, reference)
+			}
+		})
+	}
+}
+
 func TestPauseResume_ContinuationFailureKeepsAssociationAndProviderClassification(t *testing.T) {
 	tests := []struct {
 		name                    string

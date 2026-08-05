@@ -253,7 +253,7 @@ func (s *service) executeProviderAttempt(
 		if continued.Outcome == providers.ContinuationOutcomeUnsupported {
 			return providers.ExecuteResult{}, continuationUnsupportedError{reference: reference}
 		}
-		return continued.Result, nil
+		return continuedExecuteResult(continued, reference)
 	}
 	if strings.TrimSpace(request.SessionID) == "" {
 		return s.providers.Execute(ctx, attempt)
@@ -274,6 +274,32 @@ func (s *service) executeProviderAttempt(
 		return providers.ExecuteResult{}, continuationUnsupportedError{reference: reference}
 	}
 	return continued.Result, nil
+}
+
+// continuedExecuteResult admits only a provider response that affirms the
+// exact typed Provider Session requested for the continuation. It also carries
+// that canonical reference into the result when the provider omits the
+// redundant ExecuteResult field, so progress and terminal output retain the
+// same identity without rebuilding it from a legacy session ID.
+func continuedExecuteResult(continued providers.ContinueResult, reference providers.SessionRef) (providers.ExecuteResult, error) {
+	if continued.Reference != reference {
+		return providers.ExecuteResult{}, invalidContinuationReference(reference)
+	}
+	result := continued.Result.Clone()
+	if result.SessionRef != nil && *result.SessionRef != reference {
+		return providers.ExecuteResult{}, invalidContinuationReference(reference)
+	}
+	continuedReference := reference.Clone()
+	result.SessionRef = &continuedReference
+	return result, nil
+}
+
+func invalidContinuationReference(reference providers.SessionRef) providers.ContinuationFailure {
+	return providers.ContinuationFailure{
+		Kind:      providers.ContinuationFailureKindInvalid,
+		Message:   "provider continuation returned a different session reference",
+		Reference: reference.Clone(),
+	}
 }
 
 func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRequest {

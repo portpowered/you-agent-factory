@@ -181,7 +181,7 @@ func TestFactoryResume_IsolatesCapturedChildProviderSessionContinuations(t *test
 		t.Fatalf("out-of-order foreign continuation = %#v, %v, want worker-b first", foreign, foreignStartErr)
 	}
 	assertContinuationTerminal(t, foreign, "dispatch-b/resume/1", workersessions.StateFailed, references["worker-b"], providers.ContinuationFailureKindForeign)
-	if err := execution.completeContinuation("dispatch-a/resume/1", completedContinuation("dispatch-a/resume/1")); err != nil {
+	if err := execution.completeContinuation("dispatch-a/resume/1", completedContinuation("dispatch-a/resume/1", references["worker-a"])); err != nil {
 		t.Fatal(err)
 	}
 	completed, completedStartErr := <-starts, <-startErrs
@@ -652,11 +652,19 @@ func canceledContinuationDispatch(dispatchID, workstationName string) workers.Wo
 	}
 }
 
-func completedContinuation(dispatchID string) continuationDispatchResult {
+func completedContinuation(dispatchID string, reference providers.SessionRef) continuationDispatchResult {
 	return continuationDispatchResult{result: workers.WorkstationDispatchResult{
 		DispatchID: dispatchID, WorkstationName: "review",
 		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
-		Result:          workers.WorkResult{DispatchID: dispatchID, Outcome: workers.OutcomeAccepted},
+		Result: workers.WorkResult{
+			DispatchID: dispatchID,
+			Outcome:    workers.OutcomeAccepted,
+			ProviderSession: &workers.ProviderSessionMetadata{
+				Provider: reference.Provider.String(),
+				Kind:     reference.Kind,
+				ID:       reference.ID,
+			},
+		},
 	}}
 }
 
