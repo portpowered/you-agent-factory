@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - For an owned Windows subprocess tree that must be cleaned after its direct parent exits, retain a kill-on-close Job Object handle until post-run cleanup; `taskkill` by an already-reaped parent PID cannot prove descendant termination.
+- When a platform-specific cleanup mechanism changes, update the canonical customer-facing reference alongside the behavioral regression evidence; describe a fallback as a fallback, not as the primary guarantee.
 - After changing an authored packaged Factory prompt, run `make packaged-factory-catalog-generate`; the prompt, generated Factory artifacts, and manifest are a single checked-in contract.
 - Process-boundary client tests must isolate every platform configuration root the child process can consult (HOME, USERPROFILE, APPDATA, LOCALAPPDATA, XDG roots, and package cache) beneath the test temp directory.
 - Because `cmd/functionallane` intentionally defaults to `-short`, an opt-in process-boundary test needs its own required non-short CI invocation and a fact-only artifact when its execution is acceptance evidence.
@@ -125,4 +126,11 @@
 - **Learnings for future iterations:**
   - A branch can be associated with a PR in its fork/upstream repository even when `gh pr view` against the local `origin` cannot find it; resolve the PR URL returned by `gh pr create` and query that repository explicitly.
   - The GitHub issue-comment feed can retain historical blocking comments after their requested commit lands; inspect thread resolution, comment target heads, current diff, and current required checks together before treating feedback as outstanding.
+---
+
+## 2026-08-04 23:35 -07:00 - ACP-L1-V4-M01-ACPX-REAL-CLIENT-EVIDENCE-002
+- Corrected the canonical ACP guide after final PR review: Windows process-tree cleanup is established by a retained kill-on-close Job Object, while `taskkill /T` is only a fallback if Job Object ownership cannot be established. The guide now also names both timeout and non-zero-parent descendant-termination coverage.
+- Files changed: `docs/reference/serve-acp.md`, `progress.txt`.
+- **Learnings for future iterations:**
+  - Reference documentation for process guarantees must name the mechanism that establishes the guarantee on every terminal path; a PID-based fallback cannot describe reaped-parent cleanup as the primary behavior.
 ---

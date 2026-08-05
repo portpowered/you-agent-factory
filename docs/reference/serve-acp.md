@@ -107,10 +107,11 @@ provider values; it does not inherit credentials, proxy settings, or other
 developer environment. The proof asserts a non-empty assistant result fact,
 one `end_turn` terminal result, and exactly one `codex` provider invocation; it
 does not assert, save, or print prompt text, assistant text, JSON-RPC frames,
-provider arguments, environment values, or host paths. Timeout cleanup kills
-the complete process tree (a dedicated process-group path on Unix and
-`taskkill /T` on Windows), and a failure-path test verifies the recorded
-scenario descendant exits. The test then uses `sessions close`, observes that
+provider arguments, environment values, or host paths. Cleanup owns the
+complete process tree through a dedicated process group on Unix and a retained
+kill-on-close Job Object on Windows (`taskkill /T` is only a fallback when job
+ownership cannot be established). Timeout and non-zero-parent failure-path
+tests verify the recorded scenario descendant exits. The test then uses `sessions close`, observes that
 the disposable acpx queue owner has stopped, and removes every scenario-owned
 client record, cache, and process. Failures report a bounded phase only.
 
