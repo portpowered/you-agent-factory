@@ -3,11 +3,14 @@ package wire
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"slices"
 	"testing"
 
 	"go.uber.org/zap"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -299,6 +302,48 @@ func TestProvideApplicationProcessLifecycle_ComposesProvidersAndFactoryTargetClo
 	}
 	if err := nilFactoryLifecycle.Close(context.Background()); err != nil {
 		t.Fatalf("composed ProcessLifecycle.Close() with a nil factoryTarget error = %v, want nil (defensive no-op)", err)
+	}
+}
+
+// TestProcessCloseContinuesThroughEveryLifecycleOwnerAfterFailure proves the
+// Process.Close path does not let a failure from an earlier process-owned
+// closer make later owners unreachable. This is important for the lazily
+// opened ACP Factory target: it must still receive its teardown attempt even
+// when another process lifecycle owner reports a failure.
+func TestProcessCloseContinuesThroughEveryLifecycleOwnerAfterFailure(t *testing.T) {
+	t.Parallel()
+
+	providersCloseErr := errors.New("close Providers")
+	eventsCloseErr := errors.New("close Events")
+	targetCloseErr := errors.New("close ACP Factory target")
+	var closed []string
+	lifecycle := compositeProcessLifecycle{closers: []func(context.Context) error{
+		func(context.Context) error {
+			closed = append(closed, "providers")
+			return providersCloseErr
+		},
+		func(context.Context) error {
+			closed = append(closed, "events")
+			return eventsCloseErr
+		},
+		func(context.Context) error {
+			closed = append(closed, "factory-target")
+			return targetCloseErr
+		},
+	}}
+	process, err := initializerapplication.NewProcess(nil, nil, wireTestProviderRegistry{}, lifecycle, nil)
+	if err != nil {
+		t.Fatalf("NewProcess() error = %v", err)
+	}
+
+	err = process.Close(context.Background())
+	for _, expected := range []error{providersCloseErr, eventsCloseErr, targetCloseErr} {
+		if !errors.Is(err, expected) {
+			t.Fatalf("Process.Close() error = %v, want it to retain %v", err, expected)
+		}
+	}
+	if !slices.Equal(closed, []string{"providers", "events", "factory-target"}) {
+		t.Fatalf("Process.Close() closer calls = %v, want every process lifecycle owner in order", closed)
 	}
 }
 
