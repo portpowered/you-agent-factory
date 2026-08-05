@@ -127,6 +127,28 @@ func TestDocsCommandSmoke_AuthoringFactoriesDescribesMinimalGoalRepeater(t *test
 	}
 }
 
+func TestDocsCommandSmoke_AuthoringFactoriesDescribesFactoryBuilder(t *testing.T) {
+	output := executeDocsSmokeCommand(t, t.TempDir(), "docs", "authoring-factories")
+	for _, want := range []string{
+		"The fifteen first-party packaged Factories",
+		"`@you/factory-builder`",
+		"### Built-in `@you/factory-builder` validated creation",
+		"--factory-name release-note-review",
+		"--orchestrator javascript",
+		"you docs agents",
+		"you docs config",
+		"you docs javascript-workflows",
+		"you factory config validate <staged-candidate>",
+		"Validation is required before persistence",
+		"you factory create <factory-name> --from <staged-candidate>",
+		"does not install the candidate, and does not start it",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("you docs authoring-factories missing Factory Builder marker %q:\n%s", want, output)
+		}
+	}
+}
+
 func TestDocsCommandSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree(t *testing.T) {
 	workingDir := t.TempDir()
 	missingDocsTree := filepath.Join(workingDir, "docs")

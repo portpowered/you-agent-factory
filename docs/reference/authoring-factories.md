@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-05-23
+last-modified: 2026-08-04
 doc-id: agent-factory/authoring-factories
 ---
 
@@ -293,7 +293,7 @@ This precedence is selection-only: the CLI chooses exactly one matching named
 factory directory and never merges a project-local definition with a global
 definition of the same canonical name.
 
-The fourteen first-party packaged Factories also use the named-factory path.
+The fifteen first-party packaged Factories also use the named-factory path.
 `you factory list` is the discovery source for their descriptions and runnable
 examples.
 
@@ -301,6 +301,7 @@ examples.
 | --- | --- | --- |
 | `@you/classify` | Graph | Route a request to a small, medium, or large model lane by complexity. |
 | `@you/deep-research` | JavaScript | Run bounded specialist investigations in parallel and synthesize their findings. |
+| `@you/factory-builder` | Graph | Create and install one validated graph or JavaScript Factory from a request. |
 | `@you/full-flow` | Graph | Plan implementation waves, work in isolated worktrees, merge, and replan until complete. |
 | `@you/fusion` | Graph | Produce a draft with one worker and refine it with another. |
 | `@you/goal` | Graph | Repeat bounded work on a goal until the executor reports completion. |
@@ -319,6 +320,8 @@ Representative invocations:
 ```bash
 you run --named @you/plan-execute --to "Implement the requested feature"
 you run --named @you/plan-parallel --to "Implement the requested feature"
+you run --named @you/factory-builder --factory-name release-note-review --orchestrator graph --to "Review submitted release notes and return an approved summary."
+you run --named @you/factory-builder --factory-name release-synthesis --orchestrator javascript --to "Run two independent analyses and return one synthesized result."
 you run --named @you/loop --every 1h --to "Check dependency updates"
 you run --named @you/tournament --rounds 3 --to "Propose a launch strategy"
 you run --named @you/full-flow --to "Complete the requested project"
@@ -336,6 +339,53 @@ See `you run --named <factory> --help` for each Factory's arguments,
 `you docs run` for invocation inputs and stdout result modes, `you docs
 sessions` for stopped-run inspection and recovery, and `you docs models` for
 TTS readiness, direct invocation, and audio or JSON result choices.
+
+### Built-in `@you/factory-builder` validated creation
+
+`@you/factory-builder` creates exactly one new named Factory from a request.
+Set `--orchestrator graph` for a YAML graph Factory or `--orchestrator
+javascript` for a JavaScript orchestrator. `--factory-name` is required and
+must be a new stable Factory name. Optional `--builder-provider` and
+`--builder-model` overrides follow the normal operator-default precedence when
+they are omitted.
+
+Before asking Builder to materialize a Factory, use the canonical public
+guides for the requested form:
+
+```bash
+you docs agents
+you docs authoring-factories
+you docs config
+you docs javascript-workflows
+```
+
+Builder stages its candidate beneath the current workspace, outside an
+installed Factory root. It must first use the public validate-only command:
+
+```bash
+you factory config validate <staged-candidate>
+```
+
+Validation is required before persistence; success does not itself install the
+candidate. Only after validation succeeds, Builder uses the ordinary named
+Factory create command:
+
+```bash
+you factory create <factory-name> --from <staged-candidate>
+```
+
+That command owns the named-Factory destination. Builder does not copy staged
+files into `./factory`, the operator-owned Factory root, a packaged Factory
+directory, or another installed Factory. It also does not use `you factory
+update`: a requested name that already exists remains unchanged. When
+validation fails, Builder reports the safe diagnostic and a concrete correction
+action, does not install the candidate, and does not start it.
+
+The Builder result reports the canonical Factory name, requested orchestrator,
+validation outcome, and installation outcome without exposing staging paths,
+credentials, raw provider commands, or other unsafe host details. Inspect a
+successful installation with `you factory list` or validate it again by name's
+installed path before running it.
 
 ### Built-in `@you/review` approval gate
 
