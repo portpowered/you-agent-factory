@@ -49,8 +49,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-05: Preserved the concrete selected-root identity through compilation so the focused capability returns factory.json, factory.yaml, or factory.yml rather than the caller's directory. Added Definitions-owned behavioral coverage for explicit JSON/YAML/YML files, direct and current directory selection, split runtime bodies/prompts, bundled content materialization, runtime-base overrides, blocking validation, and nested result isolation. Focused race coverage, Factory Definitions packages, go vet, typecheck, and make verify-fast pass."
     },
     {
       "id": "ACP-L3-DEF-CONSOLIDATE-AUTHORED-VALIDATION-003",

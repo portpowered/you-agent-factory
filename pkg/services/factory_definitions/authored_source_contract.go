@@ -55,6 +55,14 @@ type AuthoredFactoryDefinitionIdentity struct {
 	Format AuthoredFactoryFormat
 }
 
+// AuthoredFactorySourceIdentityProvider exposes the selected authored root
+// without exposing source payload bytes. Loaded-source implementations may
+// provide this optional value contract so the focused loader can report the
+// actual root selected from a Factory directory.
+type AuthoredFactorySourceIdentityProvider interface {
+	AuthoredFactorySourceIdentity() AuthoredFactoryDefinitionIdentity
+}
+
 // LoadValidatedAuthoredFactoryDefinitionResult contains detached effective
 // definition facts. Callers cannot mutate the loader-owned source through this
 // result.

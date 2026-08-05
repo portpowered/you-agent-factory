@@ -66,6 +66,20 @@ func TestLoadValidatedAuthoredFactoryDefinitionReturnsDetachedEffectiveFacts(t *
 	if loaded.config.Workers[0].Body != "original" || loaded.bundled[0].TargetPath != "docs/guide.md" {
 		t.Fatal("returned facts mutated the loader-owned effective source")
 	}
+
+	later, err := service.LoadValidatedAuthoredFactoryDefinition(
+		t.Context(),
+		factorydefinitions.LoadValidatedAuthoredFactoryDefinitionRequest{
+			SourcePath: "fixtures/alpha/factory.yaml",
+		},
+	)
+	if err != nil {
+		t.Fatalf("LoadValidatedAuthoredFactoryDefinition(second call): %v", err)
+	}
+	if later.Definition.Workers[0].Body != "original" ||
+		later.BundledFileReplacements[0].TargetPath != "docs/guide.md" {
+		t.Fatalf("later result retained caller mutation: %#v", later)
+	}
 }
 
 type loadedSourceStub struct {

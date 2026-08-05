@@ -15,6 +15,7 @@ import (
 type Source struct {
 	factoryDir                  string
 	runtimeBaseDir              string
+	authoredSource              factorydefinitions.AuthoredFactoryDefinitionIdentity
 	factory                     *factorydefinitions.FactoryConfig
 	workers                     map[string]*factorydefinitions.FactoryWorkerConfig
 	workstations                map[string]*factorydefinitions.FactoryWorkstationConfig
@@ -24,6 +25,7 @@ type Source struct {
 var _ factorydefinitions.RuntimeConfigLookup = (*Source)(nil)
 var _ factorydefinitions.RuntimeFactoryConfigLookup = (*Source)(nil)
 var _ factorydefinitions.MutableLoadedFactorySource = (*Source)(nil)
+var _ factorydefinitions.AuthoredFactorySourceIdentityProvider = (*Source)(nil)
 
 // New constructs an effective loaded source from an authored Factory
 // Definition and optional runtime definitions.
@@ -80,6 +82,26 @@ func (s *Source) RuntimeBaseDir() string {
 		return s.runtimeBaseDir
 	}
 	return s.factoryDir
+}
+
+// AuthoredFactorySourceIdentity returns the selected authored root identity
+// without retaining the decoded source payload.
+func (s *Source) AuthoredFactorySourceIdentity() factorydefinitions.AuthoredFactoryDefinitionIdentity {
+	if s == nil {
+		return factorydefinitions.AuthoredFactoryDefinitionIdentity{}
+	}
+	return s.authoredSource
+}
+
+// SetAuthoredFactorySourceIdentity attaches the root selected by the
+// compilation loader. It is used only while constructing a fresh source.
+func (s *Source) SetAuthoredFactorySourceIdentity(
+	identity factorydefinitions.AuthoredFactoryDefinitionIdentity,
+) {
+	if s == nil {
+		return
+	}
+	s.authoredSource = identity
 }
 
 func (s *Source) SetRuntimeBaseDir(dir string) {

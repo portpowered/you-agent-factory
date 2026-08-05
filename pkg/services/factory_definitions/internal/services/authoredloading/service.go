@@ -69,6 +69,11 @@ func (s *Service) validatedResult(
 	if loaded == nil || loaded.FactoryConfig() == nil {
 		return factorydefinitions.LoadValidatedAuthoredFactoryDefinitionResult{}, malformedFailure(selected)
 	}
+	if source, ok := loaded.(factorydefinitions.AuthoredFactorySourceIdentityProvider); ok {
+		if identity := source.AuthoredFactorySourceIdentity(); identity.Path != "" {
+			selected = identity
+		}
+	}
 	if selected.Path == "" {
 		selected.Path = loaded.FactoryDir()
 	}

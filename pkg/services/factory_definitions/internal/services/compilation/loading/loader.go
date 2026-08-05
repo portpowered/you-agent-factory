@@ -323,7 +323,20 @@ func (l *Loader) LoadSourceFromFactoryDir(
 	if err != nil {
 		return nil, sourceContextError(source, "build loaded factory source", err)
 	}
+	if receiver, ok := loadedSource.(authoredFactorySourceIdentityReceiver); ok {
+		receiver.SetAuthoredFactorySourceIdentity(factorydefinitions.AuthoredFactoryDefinitionIdentity{
+			Path:   source.Path,
+			Format: source.Format,
+		})
+	}
 	return loadedSource, nil
+}
+
+// authoredFactorySourceIdentityReceiver is intentionally local to
+// compilation. It lets the concrete loaded-source retain selected-root facts
+// without expanding the mutable loaded-source contract consumed by Runtime.
+type authoredFactorySourceIdentityReceiver interface {
+	SetAuthoredFactorySourceIdentity(factorydefinitions.AuthoredFactoryDefinitionIdentity)
 }
 
 // LoadSourceFromCanonicalJSON normalizes one canonical representation and

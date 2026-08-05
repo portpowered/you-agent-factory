@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Process-scoped Factory Definitions capabilities should be constructed in `pkg/wire`, retained as an explicit `FactoryDefinitionsRuntimeOpeningDependencies` member, and proven inert before any runtime-opening operation invokes them.
+- When a directory loader resolves one concrete authored root, retain that root as an immutable optional value fact on the compiled source so narrow consumers can report the actual selection without reopening source bytes or widening mutable loader contracts.
 - For a cross-service behavioral proof that needs one service's internal concrete collaborator, compose the peer through its owner-published `wire.New...` API inside the collaborator's package-level integration test; do not add a test-only production seam.
 - Construct each Factory Session's Worker Sessions service only after its session-owned `WorkstationPoolBoundary` exists, so dispatch and cancellation share the exact same boundary.
 - Worker Session controls must use `context.WithoutCancel` when calling the pool boundary; dispatch termination remains observable through the boundary callback rather than caller-context cancellation.
@@ -246,4 +247,14 @@
 - **Learnings for future iterations:**
   - The canonical loader’s `LoadRuntimeSource` preserves current-directory resolution, while `LoadSourceFromFactoryDir` preserves explicit source/directory selection; the focused capability can compose both without changing their internals.
   - `pkg-file-count` and `pkg-boundary` currently fail on recorded repository-wide debt, but neither reports the new `authoredloading` leaf or this story’s changed boundaries.
+---
+
+## 2026-08-05 05:16 -07:00 - ACP-L3-DEF-CONSOLIDATE-AUTHORED-VALIDATION-002
+- Preserved the actual authored root selected during compilation as an immutable source-identity fact, so the focused loader now reports the concrete `factory.json`, `factory.yaml`, or `factory.yml` selected from a direct or current directory rather than only the caller-provided directory.
+- Added Definitions-owned behavioral coverage for explicit JSON/YAML/YML inputs, current and direct resolution, split worker/workstation bodies and prompts, Runtime base-directory overrides, bundled-file materialization, blocking validation, and detached nested results across repeated loads.
+- Files changed: `pkg/services/factory_definitions/{authored_source_contract.go,internal/services/{authoredloading/{service.go,service_test.go},compilation/{loadedsource/source.go,loading/loader.go}},wire/compile_load_equivalence_test.go}`, `prd.json`, `progress.txt`.
+- Verification: `go test -race ./pkg/services/factory_definitions/wire -run 'TestValidatedAuthoredFactoryDefinitionLoader' -count=10`; `go test ./pkg/services/factory_definitions/... -count=1`; `go vet ./pkg/services/factory_definitions/...`; `make typecheck`; `make verify-fast`; `git diff --check`.
+- **Learnings for future iterations:**
+  - The direct loader accepts a concrete root file or an unambiguous Factory directory; the current-directory resolver intentionally retains its existing `factory.json` fallback behavior.
+  - A repeated real-loader invocation after mutating nested returned definition data proves detachment without a source-topology meta test.
 ---

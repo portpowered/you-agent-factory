@@ -8,10 +8,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 )
 
@@ -73,6 +75,220 @@ func TestWireCompileLoadEquivalence_RuntimeConfigMergeThroughDefinitionsRoot(t *
 	}
 	if facts.workstationWorker != "executor" {
 		t.Fatalf("merged workstation worker = %q, want executor", facts.workstationWorker)
+	}
+}
+
+func TestValidatedAuthoredFactoryDefinitionLoader_SelectsExplicitSupportedSources(t *testing.T) {
+	t.Parallel()
+
+	loader := newCompileLoadLoader(t, platformfilesystem.Local{})
+	service := newValidatedAuthoredFactoryDefinitionLoader(t, loader)
+	tests := []struct {
+		name       string
+		rootName   string
+		format     factorydefinitions.AuthoredFactoryFormat
+		directory  bool
+		runtimeDir string
+	}{
+		{name: "explicit JSON", rootName: "factory.json", format: factorydefinitions.AuthoredFactoryFormatJSON},
+		{name: "explicit YAML", rootName: "factory.yaml", format: factorydefinitions.AuthoredFactoryFormatYAML},
+		{name: "explicit YML", rootName: "factory.yml", format: factorydefinitions.AuthoredFactoryFormatYAML},
+		{name: "direct directory", rootName: "factory.yaml", format: factorydefinitions.AuthoredFactoryFormatYAML, directory: true, runtimeDir: "runtime-base"},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			directory := t.TempDir()
+			path := filepath.Join(directory, test.rootName)
+			writeWireValidatedFactory(t, path, false)
+
+			request := factorydefinitions.LoadValidatedAuthoredFactoryDefinitionRequest{
+				SourcePath: path,
+			}
+			if test.directory {
+				request.SourcePath = directory
+				request.ExecutionBaseDir = test.runtimeDir
+			}
+			result, err := service.LoadValidatedAuthoredFactoryDefinition(t.Context(), request)
+			if err != nil {
+				t.Fatalf("LoadValidatedAuthoredFactoryDefinition: %v", err)
+			}
+			assertWireValidatedSourceResult(t, result, path, test.format, directory, test.runtimeDir)
+		})
+	}
+}
+
+func TestValidatedAuthoredFactoryDefinitionLoader_PreservesCurrentSplitBundledAndDetachedFacts(t *testing.T) {
+	t.Parallel()
+
+	loader := newCompileLoadLoader(t, platformfilesystem.Local{})
+	service := newValidatedAuthoredFactoryDefinitionLoader(t, loader)
+
+	t.Run("current directory", func(t *testing.T) {
+		directory := t.TempDir()
+		path := filepath.Join(directory, "factory.json")
+		writeWireValidatedFactory(t, path, false)
+
+		result, err := service.LoadValidatedAuthoredFactoryDefinition(
+			t.Context(),
+			factorydefinitions.LoadValidatedAuthoredFactoryDefinitionRequest{Directory: directory},
+		)
+		if err != nil {
+			t.Fatalf("LoadValidatedAuthoredFactoryDefinition: %v", err)
+		}
+		assertWireValidatedSourceResult(
+			t,
+			result,
+			path,
+			factorydefinitions.AuthoredFactoryFormatJSON,
+			directory,
+			"",
+		)
+	})
+
+	t.Run("split layout remains effective and detached", func(t *testing.T) {
+		directory := t.TempDir()
+		writeWireCompileEquivalenceAuthoredFactory(t, directory)
+
+		first, err := service.LoadValidatedAuthoredFactoryDefinition(
+			t.Context(),
+			factorydefinitions.LoadValidatedAuthoredFactoryDefinitionRequest{SourcePath: directory},
+		)
+		if err != nil {
+			t.Fatalf("LoadValidatedAuthoredFactoryDefinition(first): %v", err)
+		}
+		if len(first.Definition.Workers) != 1 || first.Definition.Workers[0].Command != "go" ||
+			len(first.Definition.Workstations) != 1 || first.Definition.Workstations[0].PromptTemplate != "Implement {{ .WorkID }}." {
+			t.Fatalf("split effective definition = %#v", first.Definition)
+		}
+		first.Definition.Workers[0].Command = "caller mutation"
+
+		later, err := service.LoadValidatedAuthoredFactoryDefinition(
+			t.Context(),
+			factorydefinitions.LoadValidatedAuthoredFactoryDefinitionRequest{SourcePath: directory},
+		)
+		if err != nil {
+			t.Fatalf("LoadValidatedAuthoredFactoryDefinition(later): %v", err)
+		}
+		if later.Definition.Workers[0].Command != "go" {
+			t.Fatalf("later effective definition retained caller mutation: %#v", later.Definition)
+		}
+	})
+
+	t.Run("bundled content remains materialized", func(t *testing.T) {
+		directory := t.TempDir()
+		path := filepath.Join(directory, "factory.json")
+		writeWireValidatedFactory(t, path, true)
+		if err := os.MkdirAll(filepath.Join(directory, "docs"), 0o755); err != nil {
+			t.Fatalf("MkdirAll(docs): %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(directory, "docs", "guide.md"), []byte("old\n"), 0o644); err != nil {
+			t.Fatalf("WriteFile(existing bundled doc): %v", err)
+		}
+
+		result, err := service.LoadValidatedAuthoredFactoryDefinition(
+			t.Context(),
+			factorydefinitions.LoadValidatedAuthoredFactoryDefinitionRequest{SourcePath: path},
+		)
+		if err != nil {
+			t.Fatalf("LoadValidatedAuthoredFactoryDefinition: %v", err)
+		}
+		if len(result.BundledFileReplacements) != 1 ||
+			result.BundledFileReplacements[0].TargetPath != "factory/docs/guide.md" {
+			t.Fatalf("bundled replacements = %#v", result.BundledFileReplacements)
+		}
+		result.Definition.ResourceManifest.BundledFiles[0].Content.Inline = "caller mutation"
+		result.BundledFileReplacements[0].TargetPath = "caller.md"
+		later, err := service.LoadValidatedAuthoredFactoryDefinition(
+			t.Context(),
+			factorydefinitions.LoadValidatedAuthoredFactoryDefinitionRequest{SourcePath: path},
+		)
+		if err != nil {
+			t.Fatalf("LoadValidatedAuthoredFactoryDefinition(later): %v", err)
+		}
+		if later.Definition.ResourceManifest.BundledFiles[0].Content.Inline != "new bundled content\n" {
+			t.Fatalf("later bundled definition retained caller mutation: %#v", later.Definition.ResourceManifest)
+		}
+		content, err := os.ReadFile(filepath.Join(directory, "docs", "guide.md"))
+		if err != nil {
+			t.Fatalf("ReadFile(materialized bundled doc): %v", err)
+		}
+		if string(content) != "new bundled content\n" {
+			t.Fatalf("materialized bundled doc = %q", content)
+		}
+	})
+}
+
+func newValidatedAuthoredFactoryDefinitionLoader(
+	t *testing.T,
+	loader *factorydefinitionswire.Loader,
+) factorydefinitions.ValidatedAuthoredFactoryDefinitionLoader {
+	t.Helper()
+
+	service, err := factorydefinitionswire.NewValidatedAuthoredFactoryDefinitionLoader(
+		loader.LoadRuntimeSource,
+		loader.LoadSourceFromFactoryDir,
+		factoryvalidation.New(nil),
+	)
+	if err != nil {
+		t.Fatalf("NewValidatedAuthoredFactoryDefinitionLoader: %v", err)
+	}
+	return service
+}
+
+func writeWireValidatedFactory(t *testing.T, path string, bundled bool) {
+	t.Helper()
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(factoryfixtures.CrossPathValidAlphaFactoryJSON), &payload); err != nil {
+		t.Fatalf("Unmarshal valid Factory fixture: %v", err)
+	}
+	if bundled {
+		payload["supportingFiles"] = map[string]any{
+			"bundledFiles": []map[string]any{{
+				"type":       "DOC",
+				"targetPath": "factory/docs/guide.md",
+				"content": map[string]string{
+					"encoding": "utf-8",
+					"inline":   "new bundled content\n",
+				},
+			}},
+		}
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("Marshal valid Factory fixture: %v", err)
+	}
+	if err := os.WriteFile(path, encoded, 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", path, err)
+	}
+}
+
+func assertWireValidatedSourceResult(
+	t *testing.T,
+	result factorydefinitions.LoadValidatedAuthoredFactoryDefinitionResult,
+	wantPath string,
+	wantFormat factorydefinitions.AuthoredFactoryFormat,
+	wantFactoryDir string,
+	runtimeDirOverride string,
+) {
+	t.Helper()
+
+	if result.Source.Path != wantPath || result.Source.Format != wantFormat {
+		t.Fatalf("selected source = %#v, want path=%q format=%q", result.Source, wantPath, wantFormat)
+	}
+	if result.FactoryDir != wantFactoryDir {
+		t.Fatalf("FactoryDir = %q, want %q", result.FactoryDir, wantFactoryDir)
+	}
+	wantRuntimeDir := wantFactoryDir
+	if runtimeDirOverride != "" {
+		wantRuntimeDir = runtimeDirOverride
+	}
+	if result.RuntimeBaseDir != wantRuntimeDir {
+		t.Fatalf("RuntimeBaseDir = %q, want %q", result.RuntimeBaseDir, wantRuntimeDir)
+	}
+	if result.Definition == nil || result.Definition.Name != "alpha" || result.Validation.HasBlockingTargets() {
+		t.Fatalf("validated effective definition = %#v, validation=%#v", result.Definition, result.Validation)
 	}
 }
 
