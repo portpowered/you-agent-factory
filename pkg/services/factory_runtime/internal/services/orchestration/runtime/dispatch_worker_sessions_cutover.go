@@ -36,6 +36,7 @@ func startThroughWorkerSessions(
 		request.Execution.Dispatch.Execution.DispatchCreatedTick,
 		dispatchID,
 		sessionID,
+		request.Execution.Dispatch.Execution.RequestID,
 		cfg.clock.Now(),
 	)
 	execute := func() {

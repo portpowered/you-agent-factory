@@ -50,8 +50,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-04: The W4 canonical dispatch-to-Worker-Session association now retains the dispatch execution request ID in FactoryEvent.context.requestId. Factory Runtime captures one immutable, sorted-and-deduplicated Worker Session target set from that session-scoped canonical ledger for the committed turn; duplicate associations select once, later commits remain outside an already captured set, and later-turn/direct/other-session events are excluded. Focused Runtime and Recordings tests plus focused go vet pass."
     },
     {
       "id": "ACP-L4-W6-WORKER-CONTROL-FANOUT-003",
