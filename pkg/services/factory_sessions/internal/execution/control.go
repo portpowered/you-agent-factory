@@ -15,6 +15,7 @@ func NormalizeControlRequest(req ControlRequest) (ControlRequest, error) {
 	return ControlRequest{
 		RequestID: strings.TrimSpace(req.RequestID),
 		Reason:    strings.TrimSpace(req.Reason),
+		TurnID:    strings.TrimSpace(req.TurnID),
 	}, nil
 }
 

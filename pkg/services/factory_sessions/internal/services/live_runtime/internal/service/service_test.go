@@ -178,16 +178,20 @@ type testFactoryRuntime struct {
 	pauseCalls     int
 	resumeCalls    int
 	terminateCalls int
+	pauseRequests  []factoryruntime.PauseRequest
+	resumeRequests []factoryruntime.ResumeRequest
 }
 
 func (f *testFactoryRuntime) Run(context.Context) error    { return nil }
 func (f *testFactoryRuntime) Pause(context.Context) error  { f.pauseCalls++; return nil }
 func (f *testFactoryRuntime) Resume(context.Context) error { f.resumeCalls++; return nil }
-func (f *testFactoryRuntime) ControlPause(ctx context.Context, _ factoryruntime.PauseRequest) (factoryruntime.PauseResult, error) {
+func (f *testFactoryRuntime) ControlPause(ctx context.Context, request factoryruntime.PauseRequest) (factoryruntime.PauseResult, error) {
+	f.pauseRequests = append(f.pauseRequests, request)
 	err := f.Pause(ctx)
 	return factoryruntime.PauseResult{Outcome: factoryruntime.ControlOutcomeAccepted}, err
 }
-func (f *testFactoryRuntime) ControlResume(ctx context.Context, _ factoryruntime.ResumeRequest) (factoryruntime.ResumeResult, error) {
+func (f *testFactoryRuntime) ControlResume(ctx context.Context, request factoryruntime.ResumeRequest) (factoryruntime.ResumeResult, error) {
+	f.resumeRequests = append(f.resumeRequests, request)
 	err := f.Resume(ctx)
 	return factoryruntime.ResumeResult{Outcome: factoryruntime.ControlOutcomeAccepted}, err
 }

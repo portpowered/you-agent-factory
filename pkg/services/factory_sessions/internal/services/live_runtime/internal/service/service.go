@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	liveruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime"
@@ -114,7 +114,8 @@ func (s *service) ApplyControl(ctx context.Context, sessionID string, operation 
 	if err := ctx.Err(); err != nil {
 		return factorysessions.LifecycleControlResult{}, err
 	}
-	if _, err := factorysessionexecution.NormalizeControlRequest(control); err != nil {
+	control, err := factorysessionexecution.NormalizeControlRequest(control)
+	if err != nil {
 		return factorysessions.LifecycleControlResult{}, err
 	}
 	activeFactory, err := s.dependencies.SessionFactory(sessionID)
@@ -135,7 +136,7 @@ func (s *service) ApplyControl(ctx context.Context, sessionID string, operation 
 		s.dependencies.ObserveControl(sessionID, operation, control, outcome, currentStatus, controlErr)
 		return factorysessions.LifecycleControlResult{}, controlErr
 	}
-	resultStatus, err := applyAcceptedControl(ctx, activeFactory, operation, outcome, currentStatus)
+	resultStatus, err := applyAcceptedControl(ctx, activeFactory, operation, outcome, currentStatus, control)
 	if err != nil {
 		return factorysessions.LifecycleControlResult{}, err
 	}
@@ -144,18 +145,24 @@ func (s *service) ApplyControl(ctx context.Context, sessionID string, operation 
 	return result, nil
 }
 
-func applyAcceptedControl(ctx context.Context, activeFactory factoryruntime.Service, operation factorysessions.LifecycleControlKind, outcome factorysessions.LifecycleControlOutcome, currentStatus factorysessions.LifecycleStatus) (factorysessions.LifecycleStatus, error) {
+func applyAcceptedControl(ctx context.Context, activeFactory factoryruntime.Service, operation factorysessions.LifecycleControlKind, outcome factorysessions.LifecycleControlOutcome, currentStatus factorysessions.LifecycleStatus, control factorysessions.ControlRequest) (factorysessions.LifecycleStatus, error) {
 	if outcome != factorysessions.LifecycleControlOutcomeAccepted {
 		return currentStatus, nil
 	}
 	switch operation {
 	case factorysessions.LifecycleControlPause:
-		if _, err := activeFactory.ControlPause(ctx, factoryruntime.PauseRequest{}); err != nil {
+		if _, err := activeFactory.ControlPause(ctx, factoryruntime.PauseRequest{
+			TurnID:    control.TurnID,
+			ControlID: control.RequestID,
+		}); err != nil {
 			return "", fmt.Errorf("pause live factory session: %w", err)
 		}
 		return factorysessions.LifecycleStatusPaused, nil
 	case factorysessions.LifecycleControlResume:
-		if _, err := activeFactory.ControlResume(ctx, factoryruntime.ResumeRequest{}); err != nil {
+		if _, err := activeFactory.ControlResume(ctx, factoryruntime.ResumeRequest{
+			TurnID:    control.TurnID,
+			ControlID: control.RequestID,
+		}); err != nil {
 			return "", fmt.Errorf("resume live factory session: %w", err)
 		}
 		return factorysessions.LifecycleStatusRunning, nil

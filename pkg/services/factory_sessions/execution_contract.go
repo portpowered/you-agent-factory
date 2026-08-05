@@ -118,9 +118,13 @@ type ControlError struct {
 }
 
 // ControlRequest is optional metadata shared by pause, resume, cancel, and terminate.
+// TurnID binds a control that originated from a captured Chat turn to that
+// immutable Factory Runtime turn. RequestID remains the committed control
+// identity used to retain the original result on a retry.
 type ControlRequest struct {
 	RequestID string
 	Reason    string
+	TurnID    string
 }
 
 // DispatchDetail is the shared durable dispatch read projection.

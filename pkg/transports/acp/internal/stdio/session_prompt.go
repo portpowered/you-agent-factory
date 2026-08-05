@@ -276,6 +276,7 @@ func (s *Server) applySessionCancel(ctx context.Context, sessionID string, reque
 	if _, err := s.factoryTarget.Cancel(ctx, factorySessionID, factorysessions.ControlRequest{
 		RequestID: factoryCancelRequestID(intent.RequestID),
 		Reason:    "acp session/cancel",
+		TurnID:    intent.TurnID,
 	}); err != nil {
 		return
 	}

@@ -2760,6 +2760,9 @@ func TestHandleSessionCancelCommitsCapturedIntentBeforeFactoryCancel(t *testing.
 	if cancelCalls[0].request.RequestID == "" {
 		t.Fatal("Factory Sessions Cancel request id is blank")
 	}
+	if cancelCalls[0].request.TurnID != turn.ID {
+		t.Fatalf("Factory Sessions Cancel turn id = %q, want captured turn %q", cancelCalls[0].request.TurnID, turn.ID)
+	}
 
 	close(factoryTarget.cancelRelease)
 	waitForChannel(t, done, "cancel handler completion")

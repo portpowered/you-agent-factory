@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
@@ -151,6 +152,77 @@ func TestCancelInterruptsOnlyTheActiveInvocation(t *testing.T) {
 	}
 	if len(replacementSessions.invokeCalls) != 1 || replacementLifecycle.stopCalls != 0 {
 		t.Fatalf("replacement runtime = (invoke calls %v, StopLifecycle calls %d), want one later invocation and no close", replacementSessions.invokeCalls, replacementLifecycle.stopCalls)
+	}
+}
+
+// TestCancelFansCapturedTurnBeforeInvocationCancellation proves the ACP-facing
+// target control reaches the exact pre-replacement Factory Runtime with its
+// immutable turn/control identity before the invocation context is canceled.
+// A retry after replacement uses the retained evidence and cannot control the
+// later runtime or turn.
+func TestCancelFansCapturedTurnBeforeInvocationCancellation(t *testing.T) {
+	invocationStarted := make(chan struct{})
+	var invocationContext context.Context
+	sessions := &fakeSessions{invoke: func(ctx context.Context, _ string, _ factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
+		invocationContext = ctx
+		close(invocationStarted)
+		<-ctx.Done()
+		return factorysessions.InvocationResult{}, ctx.Err()
+	}}
+	originalRuntime := &recordingTurnControlRuntime{}
+	originalRuntime.onTerminate = func() {
+		select {
+		case <-invocationContext.Done():
+			t.Error("captured Factory turn control ran after invocation context cancellation")
+		default:
+		}
+	}
+	originalLifecycle := &fakeLifecycle{hosted: fakeHostedInstance{runtime: originalRuntime}}
+	replacementRuntime := &recordingTurnControlRuntime{}
+	replacementLifecycle := &fakeLifecycle{hosted: fakeHostedInstance{runtime: replacementRuntime}}
+	opener := &sequencedOpener{results: []openResult{
+		{opened: roles.OpenedInvocationRuntime{Sessions: sessions, Lifecycle: originalLifecycle}},
+		{opened: roles.OpenedInvocationRuntime{Sessions: &fakeSessions{}, Lifecycle: replacementLifecycle}},
+	}}
+	svc := newTestService(t, opener, func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+		return factorysessions.RuntimeOpeningRequest{}, nil
+	}, sequentialIDs("wrapper"))
+
+	started, err := svc.StartAsync(context.Background(), factorysessions.StartRequest{})
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+	invoked := make(chan error, 1)
+	go func() {
+		_, invokeErr := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{})
+		invoked <- invokeErr
+	}()
+	<-invocationStarted
+
+	control := factorysessions.ControlRequest{
+		RequestID: "control-captured-1",
+		Reason:    "acp session/cancel",
+		TurnID:    "turn-captured-1",
+	}
+	if _, err := svc.Cancel(context.Background(), started.SessionID, control); err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+	if err := <-invoked; err != nil {
+		t.Fatalf("InvokeFactorySession after Cancel: %v", err)
+	}
+	calls := originalRuntime.terminateCalls()
+	if len(calls) != 1 {
+		t.Fatalf("original Factory Runtime ControlTerminate calls = %#v, want one", calls)
+	}
+	if got := calls[0]; got.TurnID != control.TurnID || got.ControlID != control.RequestID || got.WorkerSessionAction != factoryruntime.WorkerSessionControlActionCancel {
+		t.Fatalf("original Factory Runtime control = %#v, want captured CANCEL identity", got)
+	}
+
+	if _, err := svc.Cancel(context.Background(), started.SessionID, control); err != nil {
+		t.Fatalf("retry Cancel: %v", err)
+	}
+	if got := replacementRuntime.terminateCalls(); len(got) != 0 {
+		t.Fatalf("replacement Factory Runtime ControlTerminate calls = %#v, want none", got)
 	}
 }
 
