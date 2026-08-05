@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- When a review rejects a new docs-string inventory assertion, remove the new marker check; if an existing legacy smoke contract requires a term, preserve that term as accurate canonical documentation rather than expanding the inventory.
 - For an owned Windows subprocess tree that must be cleaned after its direct parent exits, retain a kill-on-close Job Object handle until post-run cleanup; `taskkill` by an already-reaped parent PID cannot prove descendant termination.
 - When a platform-specific cleanup mechanism changes, update the canonical customer-facing reference alongside the behavioral regression evidence; describe a fallback as a fallback, not as the primary guarantee.
 - After changing an authored packaged Factory prompt, run `make packaged-factory-catalog-generate`; the prompt, generated Factory artifacts, and manifest are a single checked-in contract.
@@ -133,4 +134,12 @@
 - Files changed: `docs/reference/serve-acp.md`, `progress.txt`.
 - **Learnings for future iterations:**
   - Reference documentation for process guarantees must name the mechanism that establishes the guarantee on every terminal path; a PID-based fallback cannot describe reaped-parent cleanup as the primary behavior.
+---
+
+## 2026-08-05 00:11 -07:00 - ACP-L1-V4-M01-ACPX-REAL-CLIENT-EVIDENCE-002
+- Addressed the current PR review findings by removing the new ACP marker inventory from the legacy docs smoke test and the unrelated UI TypeScript compiler suppression. The canonical ACP guide retains the existing `session/update` and `stopReason` facts as accurate protocol documentation, while real-client process-boundary coverage remains the behavioral proof.
+- Files changed: `docs/reference/serve-acp.md`, `tests/functional/smoke/cli_docs_smoke_test.go`, `ui/tsconfig.app.json`, `progress.txt`.
+- **Learnings for future iterations:**
+  - Historical docs smoke assertions can require legacy protocol terms even when a feature change must not add new marker-inventory coverage; retain the accurate terminology in its canonical guide and prove the feature through the owning runtime boundary.
+  - `make docs-reference-smoke`, `make typecheck`, and `go test ./tests/functional/transport/acp/realclient -count=1 -timeout 90s` are focused follow-up evidence for this review correction.
 ---

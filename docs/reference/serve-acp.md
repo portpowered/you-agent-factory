@@ -120,8 +120,9 @@ client record, cache, and process. Failures report a bounded phase only.
 After the client starts the child process, the check observes the implemented
 V1 contract through acpx's JSON output: `initialize`, `session/new` with the
 operator's configured Factory target, one ordinary text prompt, a non-empty
-assistant result update, and one terminal `session/prompt` response with the
-shipped `end_turn` reason. It retains no transcript or payloads. Events
+assistant result `session/update`, and one terminal `session/prompt` response
+whose `stopReason` is the shipped `end_turn` reason. It retains no transcript
+or payloads. Events
 streaming, attachment cursors, `session/load`, `session/resume`, `session/close`,
 control fan-out, L4 Worker Events, persistence, and remote ACP remain outside
 this V1 slice. The check proves the prompt/result transport path, not the
