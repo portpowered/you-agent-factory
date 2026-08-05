@@ -344,10 +344,11 @@ TTS readiness, direct invocation, and audio or JSON result choices.
 
 `@you/factory-builder` creates exactly one new named Factory from a request.
 Set `--orchestrator graph` for a YAML graph Factory or `--orchestrator
-javascript` for a JavaScript orchestrator. `--factory-name` is required and
-must be a new stable Factory name. Optional `--builder-provider` and
-`--builder-model` overrides follow the normal operator-default precedence when
-they are omitted.
+javascript` for a JavaScript orchestrator. `--factory-name` optionally supplies
+a new stable Factory name; when it is omitted, Builder derives one from the
+request and fails safely if that name already exists. Optional
+`--builder-provider` and `--builder-model` overrides follow the normal
+operator-default precedence when they are omitted.
 
 Before asking Builder to materialize a Factory, use the canonical public
 guides for the requested form:

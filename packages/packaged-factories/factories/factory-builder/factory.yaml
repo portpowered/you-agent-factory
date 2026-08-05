@@ -19,9 +19,10 @@ invocationSignature:
         - kind: STDIN
         - kind: NAMED
     - name: factoryName
-      description: New stable name for the Factory that will be created through the named-Factory CLI.
+      description: Optional stable name for the Factory that will be created through the named-Factory CLI. When omitted, Builder derives one from the request.
       externalName: factory-name
-      required: true
+      defaultValues:
+        - ""
       bindings:
         - kind: NAMED
     - name: orchestrator
