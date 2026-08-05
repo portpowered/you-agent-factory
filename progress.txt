@@ -3,6 +3,7 @@
 - Process-scoped Factory Definitions capabilities should be constructed in `pkg/wire`, retained as an explicit `FactoryDefinitionsRuntimeOpeningDependencies` member, and proven inert before any runtime-opening operation invokes them.
 - When a directory loader resolves one concrete authored root, retain that root as an immutable optional value fact on the compiled source so narrow consumers can report the actual selection without reopening source bytes or widening mutable loader contracts.
 - When a validated effective definition enters Runtime, rebuild the existing mutable loaded source through its public factory with an empty runtime-definition lookup, then transfer the selected-root identity through the narrow public identity receiver; Runtime need not retain authored loader authority.
+- A typed authored-load wrapper must keep its safe classification and selected source while rendering its wrapped diagnostic in `Error()`; outer public error wrapping otherwise hides actionable validation, source-format, and layout failures.
 - For a resumable provider attempt, bind the provider-authored typed session reference at its native live-observation point; post-result metadata cannot authorize an in-flight pause.
 - For a required CI failure, compare the failing path on the reviewed head and PR base before repairing it; do not expand a delivery lane to fix a defect unchanged on both revisions.
 - For a cross-service behavioral proof that needs one service's internal concrete collaborator, compose the peer through its owner-published `wire.New...` API inside the collaborator's package-level integration test; do not add a test-only production seam.
@@ -434,4 +435,14 @@
 - Verification: Factory Sessions Runtime-opening, all Factory Definitions, and canonical Wire tests pass after the merge; JSON parsing and `git diff --check` are clean.
 - **Learnings for future iterations:**
   - When independent worktrees use task-local PRD files, resolve a shared-file merge conflict by preserving the active branch's PRD and appending both progress histories; source ownership remains independent of task tracking.
+---
+
+## 2026-08-05 05:55 -07:00 - ACP-L3-DEF-CONSOLIDATE-AUTHORED-VALIDATION-004
+- Repaired the Runtime migration's public diagnostic regression identified by PR #1800's Backend Functional Coverage lane. `AuthoredFactoryDefinitionLoadFailure.Error()` now includes its original cause after the safe typed classification and selected source, preserving actionable blocking-validation, malformed-source, missing-layout, and mapping details through Runtime's outer error wrapping.
+- Added a behavioral assertion that every focused authored load failure renders its retained underlying diagnostic, while maintaining its typed `errors.Is`/`errors.As` contract.
+- Files changed: `pkg/services/factory_definitions/authored_source_contract.go`, `pkg/services/factory_definitions/internal/services/authoredloading/service_test.go`, `progress.txt`.
+- Verification: focused authored loading and Runtime-opening unit tests; the five authored-loading functional failures from CI; `TestCodexGoldenTextAndToolSuccess` repeated three times; and `git diff --check` all pass.
+- **Learnings for future iterations:**
+  - A `%w` boundary preserves inspection through `errors.Is` and `errors.As` but still renders only the outer `Error()` text, so public diagnostic contracts need deliberate message retention.
+  - When CI reports several failures, target the ones causally tied to the diff first and rerun unrelated failures before treating them as code defects.
 ---
