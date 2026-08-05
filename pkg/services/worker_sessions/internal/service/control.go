@@ -486,8 +486,14 @@ func (r *registry) Resume(ctx context.Context, req workersessions.ControlRequest
 	if supervision != nil && supervision.resumeInFlight() {
 		return r.controlNoop(req.ID, workersessions.ControlActionResume, session, supervision), nil
 	}
-	if session.State != workersessions.StatePaused || supervision == nil || session.ProviderSessionAssociation == nil {
+	if session.State == workersessions.StatePaused && session.ProviderSessionAssociation == nil {
+		return r.rejectedResume(session, supervision, workersessions.ErrProviderSessionAssociationMissing)
+	}
+	if session.State != workersessions.StatePaused || supervision == nil {
 		return r.unsupportedControl(ctx, req, workersessions.ControlActionResume)
+	}
+	if err := validateResumeAssociation(session); err != nil {
+		return r.rejectedResume(session, supervision, err)
 	}
 
 	continuation, previousDispatchID, prepared := r.prepareContinuation(req.ID, supervision, session.ProviderSessionAssociation.Reference)
@@ -515,6 +521,43 @@ func (r *registry) Resume(ctx context.Context, req workersessions.ControlRequest
 	result := workersessions.ControlResult{Session: current, Action: workersessions.ControlActionResume, Outcome: workersessions.ControlOutcomeApplied, DispatchID: continuation.Execution.Dispatch.DispatchID}
 	r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", result.DispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
 	return result, nil
+}
+
+func validateResumeAssociation(session workersessions.Session) error {
+	association := session.ProviderSessionAssociation
+	if association == nil {
+		return workersessions.ErrProviderSessionAssociationMissing
+	}
+	if err := association.Validate(); err != nil {
+		return fmt.Errorf("%w: %w", workersessions.ErrInvalidProviderSessionAssociation, err)
+	}
+	if association.WorkerSessionID != session.ID {
+		return fmt.Errorf("%w: worker session identity mismatch", workersessions.ErrInvalidProviderSessionAssociation)
+	}
+	return nil
+}
+
+func (r *registry) rejectedResume(
+	session workersessions.Session,
+	supervision *supervision,
+	err error,
+) (workersessions.ControlResult, error) {
+	result := workersessions.ControlResult{
+		Session: session,
+		Action:  workersessions.ControlActionResume,
+		Outcome: workersessions.ControlOutcomeFailed,
+	}
+	if supervision != nil {
+		result.DispatchID = supervision.dispatchID
+	}
+	r.logger.Info(
+		"worker session control",
+		"sessionID", session.ID,
+		"attemptID", result.DispatchID,
+		"action", string(result.Action),
+		"outcome", string(result.Outcome),
+	)
+	return result, err
 }
 
 func (s *supervision) resumeInFlight() bool {

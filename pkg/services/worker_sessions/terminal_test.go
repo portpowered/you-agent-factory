@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
@@ -46,6 +47,40 @@ func TestFailureCause_Validate_RejectsUnknownKind(t *testing.T) {
 	}
 	if err := (workersessions.FailureCause{Kind: workersessions.FailureCauseExecutorPanic}).Validate(); err != nil {
 		t.Errorf("Validate() = %v, want nil", err)
+	}
+}
+
+func TestFailureCause_Validate_AdmitsOnlySafeProviderContinuationClassifications(t *testing.T) {
+	valid := workersessions.FailureCause{
+		Kind:                            workersessions.FailureCauseWorkersExecutionFailure,
+		ProviderFailureKind:             providers.ExecuteFailureKindDependency,
+		ProviderContinuationFailureKind: providers.ContinuationFailureKindStale,
+	}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid continuation classification Validate() = %v", err)
+	}
+	unsupported := workersessions.FailureCause{
+		Kind:                        workersessions.FailureCauseWorkersExecutionFailure,
+		ProviderContinuationOutcome: providers.ContinuationOutcomeUnsupported,
+	}
+	if err := unsupported.Validate(); err != nil {
+		t.Fatalf("unsupported continuation classification Validate() = %v", err)
+	}
+	invalid := workersessions.FailureCause{
+		Kind:                            workersessions.FailureCauseWorkersExecutionFailure,
+		ProviderContinuationFailureKind: providers.ContinuationFailureKindStale,
+		ProviderContinuationOutcome:     providers.ContinuationOutcomeUnsupported,
+	}
+	if err := invalid.Validate(); !errors.Is(err, workersessions.ErrInvalidFailureCause) {
+		t.Fatalf("simultaneous continuation failure/outcome Validate() = %v, want ErrInvalidFailureCause", err)
+	}
+	providerKind, continuationKind, outcome := workersessions.SanitizeProviderFailureClassification(
+		providers.ExecuteFailureKind("untrusted"),
+		providers.ContinuationFailureKind("untrusted"),
+		providers.ContinuationOutcome("untrusted"),
+	)
+	if providerKind != "" || continuationKind != "" || outcome != "" {
+		t.Fatalf("SanitizeProviderFailureClassification() = %q/%q/%q, want empty safe values", providerKind, continuationKind, outcome)
 	}
 }
 

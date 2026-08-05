@@ -68,8 +68,8 @@
         "Tests pass."
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added a stable missing-association resume failure and validation before a paused session can dispatch continuation. Provider-edge invalid, foreign, stale, unsupported, and operational continuation outcomes now retain their Providers-owned classification through the in-process Workers result and into safe Worker Session terminal evidence, without adding or changing Factory Event contracts. The runner always calls Continue for an exact reference and performs zero ordinary Execute calls for every rejection; rejected sessions retain their association and terminal retries are no-ops. Verified with deterministic controlled-boundary/Provider-edge tables, Agent and Agent-Run propagation coverage, focused and full Workers/Providers/Factory Runtime suites, repeated race coverage, go vet, and make test. make typecheck remains blocked by the existing missing Bun types and TypeScript 6 baseUrl deprecation; make pkg-file-count remains blocked by the documented unrelated 48 baseline violations."
     },
     {
       "id": "ACP-L4-W7-PROVIDER-SESSION-CONTINUATION-004",

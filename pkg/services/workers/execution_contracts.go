@@ -6,6 +6,7 @@ import (
 	"time"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -322,8 +323,16 @@ type WorkResult struct {
 	SelectedClassificationLabel string                   `json:"selected_classification_label,omitempty"`
 	FailureMetadata             *WorkFailureMetadata     `json:"failure_metadata,omitempty"`
 	ProviderSession             *ProviderSessionMetadata `json:"provider_session,omitempty"`
-	Diagnostics                 *WorkDiagnostics         `json:"diagnostics,omitempty"`
-	Metrics                     WorkMetrics              `json:"metrics"`
+	// ProviderFailureKind and ProviderContinuation* retain Providers-owned
+	// classifications across the in-process Workers result boundary. They are
+	// deliberately excluded from event serialization: Factory Event contracts
+	// keep their existing normalized Worker failure vocabulary, while a Worker
+	// Session can safely expose the classification for its exact resume result.
+	ProviderFailureKind             providers.ExecuteFailureKind      `json:"-"`
+	ProviderContinuationFailureKind providers.ContinuationFailureKind `json:"-"`
+	ProviderContinuationOutcome     providers.ContinuationOutcome     `json:"-"`
+	Diagnostics                     *WorkDiagnostics                  `json:"diagnostics,omitempty"`
+	Metrics                         WorkMetrics                       `json:"metrics"`
 }
 
 // ProviderSessionMetadata carries a stable provider rollout/session identity.

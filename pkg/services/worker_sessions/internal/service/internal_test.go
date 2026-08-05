@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -877,5 +880,60 @@ func TestPublishRecord_RejectsPublicationForMerelyReservedSession(t *testing.T) 
 	})
 	if !errors.Is(err, workersessions.ErrPublicationNotOpen) {
 		t.Fatalf("PublishRecord() for a merely reserved session error = %v, want ErrPublicationNotOpen", err)
+	}
+}
+
+func TestResume_RejectsMissingOrMalformedAssociationBeforeContinuationHandoff(t *testing.T) {
+	tests := []struct {
+		name        string
+		association *workersessions.ProviderSessionAssociation
+		wantErr     error
+	}{
+		{
+			name:    "missing association",
+			wantErr: workersessions.ErrProviderSessionAssociationMissing,
+		},
+		{
+			name: "malformed association",
+			association: &workersessions.ProviderSessionAssociation{
+				WorkerSessionID: "worker-1",
+				DispatchID:      "dispatch-1",
+				AttemptID:       "dispatch-1",
+				Reference: providers.SessionRef{
+					Provider: providers.IDCodex,
+					Kind:     providers.SessionIDKind,
+				},
+			},
+			wantErr: workersessions.ErrInvalidProviderSessionAssociation,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			session := workersessions.Session{
+				ID:                         "worker-1",
+				State:                      workersessions.StatePaused,
+				ProviderSessionAssociation: test.association,
+			}
+			registry := &registry{
+				sessions: map[string]workersessions.Session{"worker-1": session},
+				supervisions: map[string]*supervision{
+					"worker-1": newSupervision("dispatch-1", "turn-1"),
+				},
+				logger: logging.NoopLogger{},
+			}
+
+			result, err := registry.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+			if !errors.Is(err, test.wantErr) || result.Outcome != workersessions.ControlOutcomeFailed ||
+				result.Session.State != workersessions.StatePaused {
+				t.Fatalf("Resume() = %#v, %v, want failed PAUSED result with %v", result, err, test.wantErr)
+			}
+			if test.name == "malformed association" && !errors.Is(err, providers.ErrInvalidSessionRef) {
+				t.Fatalf("Resume() malformed association error = %v, want Providers ErrInvalidSessionRef", err)
+			}
+			if current := registry.sessions["worker-1"]; !reflect.DeepEqual(current, session) {
+				t.Fatalf("Resume() mutated rejected association: got %#v, want %#v", current, session)
+			}
+		})
 	}
 }

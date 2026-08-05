@@ -291,7 +291,7 @@ func missingWorkerWorkResult(dispatch work.WorkDispatch, workerType string, dura
 func inferenceErrorWorkResult(dispatch work.WorkDispatch, err error, diagnostics *workerexecution.WorkDiagnostics, retryCount int, start time.Time, clock func() time.Time) workerexecution.WorkResult {
 	providerErr := workerexecution.NormalizeProviderExecutionError(err)
 	failureMetadata := workerexecution.WorkFailureMetadataFromProviderError(providerErr)
-	return workerexecution.WorkResult{
+	result := workerexecution.WorkResult{
 		DispatchID:      dispatch.DispatchID,
 		TransitionID:    dispatch.TransitionID,
 		Outcome:         workerexecution.OutcomeFailed,
@@ -301,6 +301,12 @@ func inferenceErrorWorkResult(dispatch work.WorkDispatch, err error, diagnostics
 		Diagnostics:     mergeWorkDiagnostics(withInferenceErrorDiagnostics(diagnostics, err, retryCount), providerDiagnosticsFromError(providerErr)),
 		Metrics:         agentWorkMetrics(start, retryCount, clock),
 	}
+	if providerErr != nil {
+		result.ProviderFailureKind = providerErr.ProviderFailureKind
+		result.ProviderContinuationFailureKind = providerErr.ProviderContinuationFailureKind
+		result.ProviderContinuationOutcome = providerErr.ProviderContinuationOutcome
+	}
+	return result
 }
 
 func (ae *AgentExecutor) workResultForInferenceResponse(request workerexecution.WorkstationExecutionRequest, resp workerexecution.InferenceResponse, outcome workerexecution.WorkOutcome, diagnostics *workerexecution.WorkDiagnostics, retryCount int, start time.Time) (workerexecution.WorkResult, error) {

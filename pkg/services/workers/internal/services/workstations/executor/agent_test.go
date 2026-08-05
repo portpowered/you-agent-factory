@@ -5,6 +5,7 @@ import (
 	"errors"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"testing"
 	"time"
 
@@ -79,6 +80,37 @@ func TestEffectiveWorkerDefinitionClearsEmptyResolvedPlaceholders(t *testing.T) 
 	}
 	if worker.ReasoningEffort != "${effort}" {
 		t.Fatalf("authored worker mutated: %#v", worker)
+	}
+}
+
+func TestAgentExecutor_PreservesProviderContinuationClassification(t *testing.T) {
+	providerErr := workerexecution.NewProviderError(
+		workerexecution.WorkFailureTypePermanentBadRequest,
+		"provider session continuation was rejected",
+		providers.ContinuationFailure{Kind: providers.ContinuationFailureKindStale},
+	)
+	providerErr.ProviderContinuationFailureKind = providers.ContinuationFailureKindStale
+	provider := &agentMockProvider{err: providerErr}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*workerconfig.FactoryWorkerConfig{
+			"worker-a": {Model: "test-model", ModelProvider: string(modelprovider.ProviderCodex)},
+		},
+	}, provider, nil, time.Now)
+
+	result, err := executor.Execute(context.Background(), testAgentRequest(
+		work.WorkDispatch{DispatchID: "dispatch-continuation", WorkerType: "worker-a", WorkstationName: "review"},
+		withAgentPrompts("system", "user"),
+	))
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeFailed ||
+		result.ProviderContinuationFailureKind != providers.ContinuationFailureKindStale ||
+		result.ProviderFailureKind != "" || result.ProviderContinuationOutcome != "" {
+		t.Fatalf("Execute() result = %#v, want a stale continuation failure", result)
+	}
+	if provider.callCount != 1 {
+		t.Fatalf("provider calls = %d, want one terminal continuation attempt", provider.callCount)
 	}
 }
 

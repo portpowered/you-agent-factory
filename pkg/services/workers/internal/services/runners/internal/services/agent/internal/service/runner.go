@@ -48,9 +48,18 @@ func (s *service) Execute(
 	}
 	result, err := s.executeProviderAttempt(ctx, request)
 	if err != nil {
+		if response, normalizedErr, handled := continuationFailureResult(ctx, request, err); handled {
+			s.publishTerminalFailure(
+				request.Dispatch.DispatchID,
+				normalizedErr,
+				response.ProviderSession,
+				"",
+			)
+			return response, normalizedErr
+		}
 		if failure, ok := providerFailure(err); ok {
 			response := runnerFailureResult(failure, request)
-			normalizedErr := normalizeProviderFailure(ctx, failure, err, response)
+			normalizedErr := normalizeProviderFailure(ctx, failure, err, response, request.ResumeSession != nil)
 			s.publishFailureProgress(
 				request.Dispatch.DispatchID,
 				failure,
@@ -234,10 +243,7 @@ func (s *service) executeProviderAttempt(
 			return providers.ExecuteResult{}, err
 		}
 		if continued.Outcome == providers.ContinuationOutcomeUnsupported {
-			return providers.ExecuteResult{}, providers.ExecuteFailure{
-				Kind:    providers.ExecuteFailureKindInvalidRequest,
-				Message: "provider does not support resuming this Provider Session",
-			}
+			return providers.ExecuteResult{}, continuationUnsupportedError{reference: reference}
 		}
 		return continued.Result, nil
 	}
@@ -257,10 +263,7 @@ func (s *service) executeProviderAttempt(
 		return providers.ExecuteResult{}, err
 	}
 	if continued.Outcome == providers.ContinuationOutcomeUnsupported {
-		return providers.ExecuteResult{}, providers.ExecuteFailure{
-			Kind:    providers.ExecuteFailureKindInvalidRequest,
-			Message: "provider does not support resuming this Provider Session",
-		}
+		return providers.ExecuteResult{}, continuationUnsupportedError{reference: reference}
 	}
 	return continued.Result, nil
 }
@@ -388,6 +391,7 @@ func normalizeProviderFailure(
 	failure providers.ExecuteFailure,
 	cause error,
 	result workers.RunnerExecutionResult,
+	continuation bool,
 ) error {
 	interruption := ctx.Err()
 	if errors.Is(interruption, context.Canceled) {
@@ -421,11 +425,86 @@ func normalizeProviderFailure(
 		boundedFailureMessage(canonicalAgentFailureMessage(failureType, failure.Message)),
 		errors.Join(interruption, cause),
 	)
+	if continuation {
+		normalized.ProviderFailureKind = failure.Kind
+	}
 	normalized.ProviderSession = workers.CloneProviderSessionMetadata(
 		result.ProviderSession,
 	)
 	normalized.Diagnostics = workers.CloneWorkDiagnostics(result.Diagnostics)
 	return normalized
+}
+
+// continuationUnsupportedError keeps Providers' successful unsupported
+// capability result distinct from an invalid Execute failure until Workers has
+// copied that exact classification into its own in-process result boundary.
+type continuationUnsupportedError struct {
+	reference providers.SessionRef
+}
+
+func (continuationUnsupportedError) Error() string {
+	return "provider does not support resuming this Provider Session"
+}
+
+func continuationFailureResult(
+	ctx context.Context,
+	request workers.RunnerExecutionRequest,
+	err error,
+) (workers.RunnerExecutionResult, error, bool) {
+	if unsupported, ok := unsupportedContinuation(err); ok {
+		response := runnerContinuationFailureResult(request, unsupported.reference)
+		normalized := workers.NewProviderError(
+			workers.WorkFailureTypePermanentBadRequest,
+			"provider session continuation is unsupported",
+			err,
+		)
+		normalized.ProviderContinuationOutcome = providers.ContinuationOutcomeUnsupported
+		normalized.ProviderSession = workers.CloneProviderSessionMetadata(response.ProviderSession)
+		return response, normalized, true
+	}
+	if failure, ok := continuationFailure(err); ok {
+		response := runnerContinuationFailureResult(request, failure.Reference)
+		normalized := workers.NewProviderError(
+			workers.WorkFailureTypePermanentBadRequest,
+			"provider session continuation was rejected",
+			errors.Join(ctx.Err(), err),
+		)
+		normalized.ProviderContinuationFailureKind = failure.Kind
+		normalized.ProviderSession = workers.CloneProviderSessionMetadata(response.ProviderSession)
+		return response, normalized, true
+	}
+	return workers.RunnerExecutionResult{}, nil, false
+}
+
+func runnerContinuationFailureResult(
+	request workers.RunnerExecutionRequest,
+	fallback providers.SessionRef,
+) workers.RunnerExecutionResult {
+	reference := fallback.Clone()
+	if request.ResumeSession != nil {
+		reference = request.ResumeSession.Clone()
+	}
+	return runnerFailureResult(providers.ExecuteFailure{SessionRef: &reference}, request)
+}
+
+func unsupportedContinuation(err error) (continuationUnsupportedError, bool) {
+	var unsupported continuationUnsupportedError
+	if errors.As(err, &unsupported) {
+		return unsupported, true
+	}
+	return continuationUnsupportedError{}, false
+}
+
+func continuationFailure(err error) (providers.ContinuationFailure, bool) {
+	var value providers.ContinuationFailure
+	if errors.As(err, &value) {
+		return value.Clone(), true
+	}
+	var pointer *providers.ContinuationFailure
+	if errors.As(err, &pointer) && pointer != nil {
+		return pointer.Clone(), true
+	}
+	return providers.ContinuationFailure{}, false
 }
 
 func canceledProviderError(cause error, result workers.RunnerExecutionResult) *workers.ProviderError {

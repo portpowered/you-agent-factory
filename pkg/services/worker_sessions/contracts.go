@@ -363,6 +363,11 @@ var (
 	// session that has not reached a live supervised attempt, or for a
 	// terminal attempt that never committed an association.
 	ErrProviderSessionAssociationNotAvailable = errors.New("worker session: provider session association is not available")
+	// ErrProviderSessionAssociationMissing reports a resume requested for a
+	// PAUSED Worker Session that has no exact Provider Session association.
+	// Worker Sessions never falls back to current provider/model selection or
+	// synthesizes a reference from a bare session ID in this case.
+	ErrProviderSessionAssociationMissing = errors.New("worker session: provider session association is missing")
 	// ErrProviderSessionAssociationConflict reports a different exact Provider
 	// Session reference observed after one reference was already committed for
 	// the same Worker Session attempt.

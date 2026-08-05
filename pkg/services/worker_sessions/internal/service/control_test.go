@@ -415,6 +415,97 @@ func TestPauseResume_ContinuesExactProviderReferenceWithSameWorkerSessionCorrela
 	}
 }
 
+func TestPauseResume_ContinuationFailureKeepsAssociationAndProviderClassification(t *testing.T) {
+	tests := []struct {
+		name                    string
+		providerFailureKind     providers.ExecuteFailureKind
+		continuationFailureKind providers.ContinuationFailureKind
+		continuationOutcome     providers.ContinuationOutcome
+	}{
+		{
+			name:                    "invalid reference",
+			continuationFailureKind: providers.ContinuationFailureKindInvalid,
+		},
+		{
+			name:                    "foreign reference",
+			continuationFailureKind: providers.ContinuationFailureKindForeign,
+		},
+		{
+			name:                    "stale reference",
+			continuationFailureKind: providers.ContinuationFailureKindStale,
+		},
+		{
+			name:                "unsupported continuation",
+			continuationOutcome: providers.ContinuationOutcomeUnsupported,
+		},
+		{
+			name:                "provider operational failure",
+			providerFailureKind: providers.ExecuteFailureKindDependency,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			boundary := newControlledBoundary()
+			registry := newControlledRegistry(t, boundary)
+			started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
+			reference := providers.SessionRef{
+				Provider: providers.IDCodex,
+				Kind:     providers.SessionIDKind,
+				ID:       "provider-session-1",
+			}
+			if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+				WorkerSessionID: "worker-1",
+				DispatchID:      "dispatch-1",
+				Reference:       reference,
+			}); err != nil {
+				t.Fatalf("AssociateProviderSession() error = %v", err)
+			}
+			boundary.setCancel(func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+				boundary.complete(canceledDispatchResult("dispatch-1"), workers.ErrWorkstationDispatchCanceled)
+				return workers.WorkstationDispatchCancelResult{DispatchID: "dispatch-1", Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
+			})
+			if paused, err := registry.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"}); err != nil || paused.Session.State != workersessions.StatePaused {
+				t.Fatalf("Pause() = %#v, %v, want PAUSED", paused, err)
+			}
+
+			resumed, err := registry.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+			if err != nil || resumed.Outcome != workersessions.ControlOutcomeApplied {
+				t.Fatalf("Resume() = %#v, %v, want applied continuation", resumed, err)
+			}
+			failed := completedDispatchResult(resumed.DispatchID)
+			failed.Result.Outcome = workers.OutcomeFailed
+			failed.Result.FailureMetadata = &workers.WorkFailureMetadata{
+				Family: workers.WorkFailureFamilyTerminal,
+				Type:   workers.WorkFailureTypePermanentBadRequest,
+			}
+			failed.Result.ProviderFailureKind = test.providerFailureKind
+			failed.Result.ProviderContinuationFailureKind = test.continuationFailureKind
+			failed.Result.ProviderContinuationOutcome = test.continuationOutcome
+			boundary.complete(failed, nil)
+
+			final := <-started
+			if final.Session.State != workersessions.StateFailed || final.Session.Result == nil || final.Session.Result.Cause == nil {
+				t.Fatalf("Start() final = %#v, want failed terminal result", final)
+			}
+			cause := final.Session.Result.Cause
+			if cause.ProviderFailureKind != test.providerFailureKind ||
+				cause.ProviderContinuationFailureKind != test.continuationFailureKind ||
+				cause.ProviderContinuationOutcome != test.continuationOutcome {
+				t.Fatalf("terminal continuation classification = %#v", cause)
+			}
+			if final.Session.ProviderSessionAssociation == nil || final.Session.ProviderSessionAssociation.Reference != reference {
+				t.Fatalf("terminal association = %#v, want retained exact reference", final.Session.ProviderSessionAssociation)
+			}
+			repeated, err := registry.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+			if err != nil || repeated.Outcome != workersessions.ControlOutcomeNoop || repeated.Session.Result == nil ||
+				repeated.Session.Result.Cause.ProviderContinuationFailureKind != test.continuationFailureKind {
+				t.Fatalf("repeated Resume() = %#v, %v, want unchanged terminal no-op", repeated, err)
+			}
+		})
+	}
+}
+
 func TestControl_UnknownAndInvalidIdentityRemainDistinguishable(t *testing.T) {
 	registry := newControlledRegistry(t, newControlledBoundary())
 	_, invalidErr := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: " "})

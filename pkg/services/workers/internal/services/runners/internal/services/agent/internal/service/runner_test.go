@@ -283,6 +283,128 @@ func TestExecuteUnsupportedContinuationReturnsProviderError(t *testing.T) {
 	}
 }
 
+func TestExecuteExactContinuationFailurePreservesClassificationWithoutFallback(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                        string
+		reference                   providers.SessionRef
+		continuationErr             error
+		continuationOutcome         providers.ContinuationOutcome
+		wantProviderFailureKind     providers.ExecuteFailureKind
+		wantContinuationFailureKind providers.ContinuationFailureKind
+		wantContinuationOutcome     providers.ContinuationOutcome
+		wantError                   error
+	}{
+		{
+			name: "malformed reference",
+			reference: providers.SessionRef{
+				Provider: providers.IDCodex,
+				ID:       "opaque-malformed-session",
+			},
+			wantContinuationFailureKind: providers.ContinuationFailureKindInvalid,
+			wantError:                   providers.ErrInvalidContinuationRequest,
+		},
+		{
+			name: "unsupported provider session kind",
+			reference: providers.SessionRef{
+				Provider: providers.IDCodex,
+				Kind:     "provider-native-thread",
+				ID:       "opaque-unsupported-kind",
+			},
+			continuationErr: providers.ContinuationFailure{
+				Kind: providers.ContinuationFailureKindInvalid,
+			},
+			wantContinuationFailureKind: providers.ContinuationFailureKindInvalid,
+			wantError:                   providers.ErrInvalidContinuationRequest,
+		},
+		{
+			name: "foreign provider reference",
+			reference: providers.SessionRef{
+				Provider: providers.IDCodex,
+				Kind:     providers.SessionIDKind,
+				ID:       "opaque-foreign-session",
+			},
+			continuationErr: providers.ContinuationFailure{
+				Kind: providers.ContinuationFailureKindForeign,
+			},
+			wantContinuationFailureKind: providers.ContinuationFailureKindForeign,
+			wantError:                   providers.ErrContinuationForeign,
+		},
+		{
+			name: "stale provider session",
+			reference: providers.SessionRef{
+				Provider: providers.IDCodex,
+				Kind:     providers.SessionIDKind,
+				ID:       "opaque-stale-session",
+			},
+			continuationErr: providers.ContinuationFailure{
+				Kind: providers.ContinuationFailureKindStale,
+			},
+			wantContinuationFailureKind: providers.ContinuationFailureKindStale,
+			wantError:                   providers.ErrContinuationStale,
+		},
+		{
+			name: "unsupported continuation capability",
+			reference: providers.SessionRef{
+				Provider: providers.IDCodex,
+				Kind:     providers.SessionIDKind,
+				ID:       "opaque-unsupported-session",
+			},
+			continuationOutcome:     providers.ContinuationOutcomeUnsupported,
+			wantContinuationOutcome: providers.ContinuationOutcomeUnsupported,
+		},
+		{
+			name: "provider operational failure",
+			reference: providers.SessionRef{
+				Provider: providers.IDCodex,
+				Kind:     providers.SessionIDKind,
+				ID:       "opaque-operational-session",
+			},
+			continuationErr: providers.ExecuteFailure{
+				Kind: providers.ExecuteFailureKindDependency,
+			},
+			wantProviderFailureKind: providers.ExecuteFailureKindDependency,
+			wantError:               providers.ErrExecuteFailed,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			fake := &providersFake{
+				continuationErr:     test.continuationErr,
+				continuationOutcome: test.continuationOutcome,
+			}
+			runner, err := New(fake, noopPublisher)
+			if err != nil {
+				t.Fatalf("New() error = %v", err)
+			}
+
+			request := baseAgentRequest()
+			reference := test.reference.Clone()
+			request.ResumeSession = &reference
+			_, err = runner.Execute(t.Context(), request)
+			var providerErr *workers.ProviderError
+			if !errors.As(err, &providerErr) {
+				t.Fatalf("Execute() error = %v, want *workers.ProviderError", err)
+			}
+			if test.wantError != nil && !errors.Is(err, test.wantError) {
+				t.Fatalf("Execute() error = %v, want %v", err, test.wantError)
+			}
+			if providerErr.ProviderFailureKind != test.wantProviderFailureKind ||
+				providerErr.ProviderContinuationFailureKind != test.wantContinuationFailureKind ||
+				providerErr.ProviderContinuationOutcome != test.wantContinuationOutcome {
+				t.Fatalf("ProviderError continuation classification = %#v", providerErr)
+			}
+			if fake.executeCalls != 0 || fake.continueCalls != 1 {
+				t.Fatalf("Providers calls execute=%d continue=%d, want execute=0 continue=1", fake.executeCalls, fake.continueCalls)
+			}
+		})
+	}
+}
+
 func TestExecuteForwardsInputTokensToProviders(t *testing.T) {
 	t.Parallel()
 
@@ -327,7 +449,10 @@ type providersFake struct {
 	providers.Service
 	request               providers.ExecuteRequest
 	continuationReference *providers.SessionRef
+	continuationErr       error
+	continuationOutcome   providers.ContinuationOutcome
 	executeCalls          int
+	continueCalls         int
 }
 
 type failingProvidersFake struct {
@@ -360,15 +485,23 @@ func (fake *providersFake) Continue(
 	_ context.Context,
 	request providers.ContinueRequest,
 ) (providers.ContinueResult, error) {
+	fake.continueCalls++
 	if err := request.Validate(); err != nil {
 		return providers.ContinueResult{}, err
+	}
+	if fake.continuationErr != nil {
+		return providers.ContinueResult{}, fake.continuationErr
 	}
 	fake.request = request.Attempt.Clone()
 	reference := request.Reference.Clone()
 	fake.continuationReference = &reference
+	outcome := fake.continuationOutcome
+	if outcome == "" {
+		outcome = providers.ContinuationOutcomeResumed
+	}
 	return providers.ContinueResult{
 		Reference: request.Reference,
-		Outcome:   providers.ContinuationOutcomeResumed,
+		Outcome:   outcome,
 		Result:    providers.ExecuteResult{Content: "ok"},
 	}, nil
 }

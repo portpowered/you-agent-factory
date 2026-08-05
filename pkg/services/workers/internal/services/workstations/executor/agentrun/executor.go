@@ -314,7 +314,7 @@ func agentRunFailureWorkResult(
 	if toolRecorder != nil {
 		failureDiagnostics = mergeToolDiagnostics(failureDiagnostics, toolPolicy, toolRecorder)
 	}
-	return workerexecution.WorkResult{
+	result := workerexecution.WorkResult{
 		DispatchID:      dispatch.DispatchID,
 		TransitionID:    dispatch.TransitionID,
 		Outcome:         workerexecution.OutcomeFailed,
@@ -323,6 +323,12 @@ func agentRunFailureWorkResult(
 		Diagnostics:     agentRunDiagnostics(failureDiagnostics),
 		Metrics:         workerexecution.WorkMetrics{Duration: duration},
 	}
+	if providerErr := workerexecution.NormalizeProviderExecutionError(err); providerErr != nil {
+		result.ProviderFailureKind = providerErr.ProviderFailureKind
+		result.ProviderContinuationFailureKind = providerErr.ProviderContinuationFailureKind
+		result.ProviderContinuationOutcome = providerErr.ProviderContinuationOutcome
+	}
+	return result
 }
 
 func missingWorkerWorkResult(dispatch work.WorkDispatch, workerType string, duration time.Duration) workerexecution.WorkResult {
