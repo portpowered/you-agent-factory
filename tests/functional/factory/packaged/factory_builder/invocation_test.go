@@ -66,8 +66,8 @@ func TestFactoryBuilderCreatesAndInstallsValidatedGraphFactory(t *testing.T) {
 
 	installedPath := filepath.Join(homeDir, ".you-agent-factory", "factories", graphFactoryName)
 	assertBuilderStageIsWorkspaceScoped(t, workingDirectory, runner.StagePath())
-	assertInstalledGraphFactory(t, process, environment, installedPath)
-	assertInstalledGraphFactoryRuns(t, process, environment, workingDirectory)
+	assertInstalledGraphFactory(t, process, environment, installedPath, runner.operatorRoot)
+	assertInstalledGraphFactoryRuns(t, process, environment, workingDirectory, installedPath)
 	if got := runner.InstalledFactoryCallCount(); got != 1 {
 		t.Fatalf("installed Factory provider command call count = %d, want one customer invocation", got)
 	}
@@ -106,7 +106,12 @@ func assertBuilderStageIsWorkspaceScoped(t *testing.T, workingDirectory, stagePa
 	}
 }
 
-func assertInstalledGraphFactory(t *testing.T, process support.Process, environment []string, installedPath string) {
+func assertInstalledGraphFactory(
+	t *testing.T,
+	process support.Process,
+	environment []string,
+	installedPath, operatorRoot string,
+) {
 	t.Helper()
 	installedConfig := filepath.Join(installedPath, factorydefinitions.FactoryConfigFile)
 	validate := support.FakeInputs(t.Context(), []string{"you", "factory", "config", "validate", installedConfig})
@@ -125,12 +130,30 @@ func assertInstalledGraphFactory(t *testing.T, process support.Process, environm
 		t.Fatalf("decode flattened installed Factory: %v\npayload:\n%s", err, payload)
 	}
 	assertRepresentativeGraphDefinition(t, definition)
+	assertInstalledFactoryIsListed(t, process, environment, operatorRoot)
 }
 
-func assertInstalledGraphFactoryRuns(t *testing.T, process support.Process, environment []string, workingDirectory string) {
+func assertInstalledFactoryIsListed(t *testing.T, process support.Process, environment []string, operatorRoot string) {
+	t.Helper()
+	list := support.FakeInputs(t.Context(), []string{"you", "--json", "factory", "list", "--dir", operatorRoot})
+	list.Input.Env = environment
+	if err := process.Execute(list.Input); err != nil {
+		t.Fatalf("Process.Execute(list installed Factory) error = %v\nstdout:\n%s\nstderr:\n%s", err, list.Stdout(), list.Stderr())
+	}
+	if !strings.Contains(list.Stdout(), graphFactoryName) {
+		t.Fatalf("factory list output = %q, want installed Factory %q", list.Stdout(), graphFactoryName)
+	}
+}
+
+func assertInstalledGraphFactoryRuns(
+	t *testing.T,
+	process support.Process,
+	environment []string,
+	workingDirectory, installedPath string,
+) {
 	t.Helper()
 	run := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "run", "--named", graphFactoryName, "--no-record",
+		"you", "--json", "run", "--factory", filepath.Join(installedPath, factorydefinitions.FactoryConfigFile), "--no-record",
 		"--provider", "CODEX", "--model", "gpt-5",
 		"Review these release notes for publication.",
 	})
