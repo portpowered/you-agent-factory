@@ -384,7 +384,12 @@ func (r *registry) cancelControl(ctx context.Context, req workersessions.Control
 		cancelResult, cancelErr := r.boundary.Cancel(context.WithoutCancel(ctx), workers.WorkstationDispatchCancelRequest{DispatchID: dispatchID})
 		alreadyTerminal := supervision.finishCancellation(action, wait, cancelResult, cancelErr, sessionIsTerminal(r, req.ID))
 
-		if alreadyTerminal {
+		// Terminate promises to return only after the authoritative dispatch
+		// callback has committed. Workers reports an already-canceled dispatch
+		// without an error, but that callback can still be in flight; join it
+		// before returning the idempotent snapshot. Cancel intentionally keeps
+		// its non-joining already-canceled behavior.
+		if alreadyTerminal || (action == workersessions.ControlActionTerminate && cancelAlreadyCanceled(cancelResult, cancelErr)) {
 			<-supervision.done
 			current, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
 			result := workersessions.ControlResult{
@@ -441,6 +446,10 @@ func canceledBeforeAdmissionResult(request workers.WorkstationDispatchRequest) w
 func cancelAlreadyTerminal(result workers.WorkstationDispatchCancelResult, err error) bool {
 	return result.Outcome == workers.WorkstationDispatchCancelOutcomeAlreadyTerminal &&
 		(err == nil || errors.Is(err, workers.ErrWorkstationDispatchAlreadyTerminal))
+}
+
+func cancelAlreadyCanceled(result workers.WorkstationDispatchCancelResult, err error) bool {
+	return result.Outcome == workers.WorkstationDispatchCancelOutcomeAlreadyCanceled && err == nil
 }
 
 func (r *registry) controlTarget(id string) (workersessions.Session, *supervision, error) {

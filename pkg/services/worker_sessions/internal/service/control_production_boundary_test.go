@@ -27,6 +27,9 @@ type admissionControlledExecution struct {
 	completionCommitted chan struct{}
 	completionOnce      sync.Once
 	completionWins      bool
+	alreadyCanceled     bool
+	cancellations       int
+	completeOnce        sync.Once
 }
 
 var _ workers.WorkstationExecutionService = (*admissionControlledExecution)(nil)
@@ -95,8 +98,25 @@ func (e *admissionControlledExecution) CancelWorkstationDispatch(
 	_ context.Context,
 	request workers.WorkstationDispatchCancelRequest,
 ) (workers.WorkstationDispatchCancelResult, error) {
+	e.mu.Lock()
+	e.cancellations++
+	alreadyCanceled := e.alreadyCanceled && e.cancellations > 1
+	firstCancellation := e.alreadyCanceled && e.cancellations == 1
+	e.mu.Unlock()
 	e.cancelCalls <- request
-	close(e.complete)
+	if alreadyCanceled {
+		return workers.WorkstationDispatchCancelResult{
+			DispatchID: request.DispatchID,
+			Outcome:    workers.WorkstationDispatchCancelOutcomeAlreadyCanceled,
+		}, nil
+	}
+	if firstCancellation {
+		return workers.WorkstationDispatchCancelResult{
+			DispatchID: request.DispatchID,
+			Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
+		}, nil
+	}
+	e.completeOnce.Do(func() { close(e.complete) })
 	if e.completionWins {
 		<-e.completionCommitted
 		return workers.WorkstationDispatchCancelResult{
@@ -245,5 +265,63 @@ func TestTerminate_ProductionSynchronousBoundaryCancelsAdmittedDispatchBeforePub
 	}
 	if final.Session.State != workersessions.StateTerminated || final.Dispatch.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled || !errors.Is(final.DispatchErr, workers.ErrWorkstationDispatchCanceled) {
 		t.Fatalf("Start() after synchronous cancellation = %#v, want one terminated canceled result", final)
+	}
+}
+
+func TestTerminate_ProductionBoundaryAlreadyCanceledJoinsHeldCallback(t *testing.T) {
+	execution := newAdmissionControlledExecution(false)
+	execution.alreadyCanceled = true
+	boundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
+		Service:    execution,
+		RouteNames: []string{"review"},
+		Async:      true,
+	})
+	registry := newControlledRegistry(t, boundary)
+	started := make(chan workersessions.StartResult, 1)
+	startErr := make(chan error, 1)
+	go func() {
+		result, err := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+		started <- result
+		startErr <- err
+	}()
+	<-execution.dispatchEntered
+	close(execution.allowAdmission)
+	<-execution.admitted
+
+	first, err := boundary.Cancel(context.Background(), workers.WorkstationDispatchCancelRequest{DispatchID: "dispatch-1"})
+	if err != nil || first.Outcome != workers.WorkstationDispatchCancelOutcomeCanceled {
+		t.Fatalf("first boundary Cancel() = %#v, %v, want committed cancellation", first, err)
+	}
+	if call := <-execution.cancelCalls; call.DispatchID != "dispatch-1" {
+		t.Fatalf("first boundary cancel dispatch ID = %q, want dispatch-1", call.DispatchID)
+	}
+
+	terminated := make(chan workersessions.ControlResult, 1)
+	terminateErr := make(chan error, 1)
+	go func() {
+		result, err := registry.Terminate(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		terminated <- result
+		terminateErr <- err
+	}()
+	if call := <-execution.cancelCalls; call.DispatchID != "dispatch-1" {
+		t.Fatalf("Terminate boundary cancel dispatch ID = %q, want dispatch-1", call.DispatchID)
+	}
+	select {
+	case result := <-terminated:
+		t.Fatalf("Terminate() returned before canceled callback joined: %#v", result)
+	default:
+	}
+
+	close(execution.complete)
+	result := <-terminated
+	if err := <-terminateErr; err != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Terminate() = %#v, %v, want joined canceled NOOP", result, err)
+	}
+	final := <-started
+	if err := <-startErr; err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+	if final.Session.State != workersessions.StateCanceled || final.Dispatch.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled || !errors.Is(final.DispatchErr, workers.ErrWorkstationDispatchCanceled) {
+		t.Fatalf("Start() after held cancellation = %#v, want established canceled result", final)
 	}
 }
