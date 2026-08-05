@@ -2,6 +2,7 @@
 - Attach an existing typed Factory Definitions sentinel at the source/layout or compilation operation that knows the failure class; a focused public capability can then preserve both the stable classification and original cause with `errors.Join` without matching error text.
 - Process-scoped Factory Definitions capabilities should be constructed in `pkg/wire`, retained as an explicit `FactoryDefinitionsRuntimeOpeningDependencies` member, and proven inert before any runtime-opening operation invokes them.
 - When a directory loader resolves one concrete authored root, retain that root as an immutable optional value fact on the compiled source so narrow consumers can report the actual selection without reopening source bytes or widening mutable loader contracts.
+- When a validated effective definition enters Runtime, rebuild the existing mutable loaded source through its public factory with an empty runtime-definition lookup, then transfer the selected-root identity through the narrow public identity receiver; Runtime need not retain authored loader authority.
 - For a cross-service behavioral proof that needs one service's internal concrete collaborator, compose the peer through its owner-published `wire.New...` API inside the collaborator's package-level integration test; do not add a test-only production seam.
 - Construct each Factory Session's Worker Sessions service only after its session-owned `WorkstationPoolBoundary` exists, so dispatch and cancellation share the exact same boundary.
 - Worker Session controls must use `context.WithoutCancel` when calling the pool boundary; dispatch termination remains observable through the boundary callback rather than caller-context cancellation.
@@ -269,4 +270,15 @@
 - **Learnings for future iterations:**
   - A typed failure's `Unwrap` can return `errors.Join(classificationSentinel, cause)` so callers retain both the stable failure category and the underlying filesystem, parser, validation, or dependency cause.
   - Direct real-loader tests are a useful companion to injected-failure tests: they prove that selection/decoding/layout boundaries assign the intended category before the focused capability receives the error.
+---
+
+## 2026-08-05 05:39 -07:00 - ACP-L3-DEF-CONSOLIDATE-AUTHORED-VALIDATION-004
+- Migrated the live Factory Session Runtime-opening path to request authored input exclusively through `ValidatedAuthoredFactoryDefinitionLoader`. Current-Factory selection and blocking validation stay in Factory Definitions; the runtime-opening factory no longer receives a separate named-path resolver for this load path or repeats its validation.
+- Rebuilt the existing Runtime mutable source only from the capability's detached effective definition, Factory directory, Runtime base directory, bundled replacement facts, and selected-root identity. Replay loading and later Runtime-owned reload hooks retain their existing behavior.
+- Added behavioral coverage for explicit selection forwarding, effective-definition/directory/base/bundled/identity preservation, and typed malformed failure propagation before mutable source construction. Updated construction and cleanup tests to inject the focused capability directly; regenerated canonical Wire output.
+- Files changed: `pkg/services/factory_definitions/{authored_source_contract.go,internal/services/compilation/loading/loader.go}`, `pkg/services/factory_sessions/internal/runtimeopening/{construction.go,factory.go,open.go,runtime_load.go,runtime_load_test.go,runtime_root_test.go,factories_test.go,models_bind_test.go}`, `pkg/wire/wire_gen.go`, `prd.json`, `progress.txt`.
+- Verification: `go test ./pkg/services/factory_sessions/... ./pkg/services/factory_definitions/... ./pkg/wire -count=1`; focused `go test -race -count=5`; focused `go vet`; `make generate-wire`; `make verify-fast`; `git diff --check` all pass. `make lint` reaches 90 existing repository-wide `backend-size` findings; no changed package appears in that report.
+- **Learnings for future iterations:**
+  - A fully effective detached Factory definition can retain split-layout behavior when Runtime creates its normal mutable loaded source with an empty runtime-definition lookup; the public source factory performs its own clone and normalization.
+  - Moving current-Factory selection into the focused loader removes a Runtime-facing `NamedPathResolver` dependency while preserving direct-source home normalization at the Factory Sessions boundary.
 ---

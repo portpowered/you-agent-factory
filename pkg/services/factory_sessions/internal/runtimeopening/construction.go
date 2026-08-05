@@ -46,8 +46,7 @@ func PrepareRuntime(
 	operatorDefaults operatorconfig.ResolvedDefaults,
 	baseLogger *zap.Logger,
 	runtimeEdges ExternalEffects,
-	factoryDefinitionValidator factorydefinitions.Validator,
-	namedPaths factorydefinitions.NamedPathResolver,
+	authoredDefinitionLoader factorydefinitions.ValidatedAuthoredFactoryDefinitionLoader,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
@@ -99,26 +98,20 @@ func PrepareRuntime(
 	if err := ensureBackendScope(ensureOperatorBackendScope, &prepared.Session, prepared.Recordings.ReplayPath, root.BaseLogger); err != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, err
 	}
-	var resolveCurrentDir func(string) (string, error)
-	if namedPaths != nil {
-		resolveCurrentDir = namedPaths.ResolveCurrentDir
-	}
-	selectedDefinitionPath, err := resolveDefinitionPath(
+	if err := normalizeDefinitionSourcePath(
 		&prepared.Definition,
 		prepared.Recordings.ReplayPath,
-		resolveCurrentDir,
 		resolveHome,
-	)
-	if err != nil {
+	); err != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, err
 	}
-	load, err = LoadRuntime(
-		selectedDefinitionPath,
-		prepared.Definition.ExecutionBaseDir,
+	load, err = LoadRuntimeFromDefinition(
+		ctx,
+		prepared.Definition,
 		prepared.Recordings.ReplayPath,
 		prepared.OperatorDefaults,
-		nil,
 		root,
+		authoredDefinitionLoader,
 		loadFactory,
 		newLoadedFactory,
 		decodeReplayConfig,
@@ -140,17 +133,6 @@ func PrepareRuntime(
 			"validate Factory provider selections: %w",
 			err,
 		)
-	}
-	if factoryDefinitionValidator == nil {
-		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, fmt.Errorf(
-			"Factory Definition validator is required",
-		)
-	}
-	if load.LoadedFactoryCfg != nil {
-		result := factoryDefinitionValidator.ValidateBlockingLoad(ctx, load.LoadedFactoryCfg.FactoryConfig())
-		if err := factorydefinitions.NewBlockingFactoryLoadError(result); err != nil {
-			return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, err
-		}
 	}
 	if hostedPollersFactory == nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, fmt.Errorf(
@@ -421,34 +403,22 @@ func newSessionBuildFactory(
 	}
 }
 
-func resolveDefinitionPath(
+func normalizeDefinitionSourcePath(
 	definition *factorydefinitions.RuntimeOpeningRequest,
 	replayPath string,
-	resolveCurrentDir func(string) (string, error),
 	resolveHome factorysessions.HomeDirectoryResolver,
-) (string, error) {
+) error {
 	if replayPath != "" {
-		return definition.Directory, nil
+		return nil
 	}
 	if definition.SourcePath != "" {
 		resolved, err := logicaltarget.AbsolutizeFactoryDirectory(definition.SourcePath, resolveHome)
 		if err != nil {
-			return "", fmt.Errorf("resolve factory source: %w", err)
+			return fmt.Errorf("resolve factory source: %w", err)
 		}
-		return resolved, nil
+		definition.SourcePath = resolved
 	}
-	if resolveCurrentDir == nil {
-		return "", fmt.Errorf("named Factory path resolver is required")
-	}
-	resolvedDir, err := resolveCurrentDir(definition.Directory)
-	if err != nil {
-		return "", fmt.Errorf("resolve factory dir: %w", err)
-	}
-	definition.Directory, err = logicaltarget.AbsolutizeFactoryDirectory(resolvedDir, resolveHome)
-	if err != nil {
-		return "", fmt.Errorf("resolve factory dir: %w", err)
-	}
-	return definition.Directory, nil
+	return nil
 }
 
 func operatorConfigPath(request factorysessions.SessionRuntimeOpeningRequest) (string, error) {

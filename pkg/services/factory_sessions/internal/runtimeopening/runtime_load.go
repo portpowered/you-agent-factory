@@ -1,6 +1,7 @@
 package runtimeopening
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -24,6 +25,9 @@ type RuntimeLoad struct {
 	SessionLogger     *zap.Logger
 }
 
+// LoadRuntime preserves the existing internal Runtime-loading entry point for
+// replay callers. Runtime opening uses LoadRuntimeFromDefinition so authored
+// definitions always cross the focused Factory Definitions boundary.
 func LoadRuntime(
 	dir string,
 	executionBaseDir string,
@@ -38,6 +42,75 @@ func LoadRuntime(
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	newSessionLogger factoryruntime.SessionLoggerFactory,
 ) (RuntimeLoad, error) {
+	return loadRuntime(
+		context.Background(),
+		factorydefinitions.RuntimeOpeningRequest{
+			Directory:        dir,
+			ExecutionBaseDir: executionBaseDir,
+		},
+		replayPath,
+		operatorDefaults,
+		workstationLoader,
+		root,
+		nil,
+		loadFactory,
+		newLoadedFactory,
+		decodeReplayConfig,
+		replayInputs,
+		captureLoadedFactorySnapshot,
+		newSessionLogger,
+	)
+}
+
+// LoadRuntimeFromDefinition loads a live authored Factory through the narrow
+// Factory Definitions-owned capability. Replay construction retains its
+// existing snapshot path and therefore does not invoke the authored loader.
+func LoadRuntimeFromDefinition(
+	ctx context.Context,
+	definitionRequest factorydefinitions.RuntimeOpeningRequest,
+	replayPath string,
+	operatorDefaults operatorconfig.ResolvedDefaults,
+	root RuntimeRoot,
+	authoredDefinitionLoader factorydefinitions.ValidatedAuthoredFactoryDefinitionLoader,
+	loadFactory factorydefinitions.LoadedFactoryLoader,
+	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
+	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	replayInputs recording.ReplayInputLoader,
+	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	newSessionLogger factoryruntime.SessionLoggerFactory,
+) (RuntimeLoad, error) {
+	return loadRuntime(
+		ctx,
+		definitionRequest,
+		replayPath,
+		operatorDefaults,
+		nil,
+		root,
+		authoredDefinitionLoader,
+		loadFactory,
+		newLoadedFactory,
+		decodeReplayConfig,
+		replayInputs,
+		captureLoadedFactorySnapshot,
+		newSessionLogger,
+	)
+}
+
+func loadRuntime(
+	ctx context.Context,
+	definitionRequest factorydefinitions.RuntimeOpeningRequest,
+	replayPath string,
+	operatorDefaults operatorconfig.ResolvedDefaults,
+	workstationLoader factorydefinitions.WorkstationLoader,
+	root RuntimeRoot,
+	authoredDefinitionLoader factorydefinitions.ValidatedAuthoredFactoryDefinitionLoader,
+	loadFactory factorydefinitions.LoadedFactoryLoader,
+	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
+	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	replayInputs recording.ReplayInputLoader,
+	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	newSessionLogger factoryruntime.SessionLoggerFactory,
+) (RuntimeLoad, error) {
 	if newSessionLogger == nil {
 		return RuntimeLoad{}, fmt.Errorf("Factory Runtime session logger factory is required")
 	}
@@ -45,7 +118,7 @@ func LoadRuntime(
 		root.BaseLogger,
 		factorysessions.DefaultSessionID,
 		root.FactoryRootDir,
-		dir,
+		runtimeDefinitionLogPath(definitionRequest),
 	)
 	if logger == nil {
 		return RuntimeLoad{}, fmt.Errorf("Factory Runtime session logger factory returned nil")
@@ -77,13 +150,13 @@ func LoadRuntime(
 		legacyArtifact = result.Legacy
 	}
 
-	logger.Info("loading factory config", zap.String("dir", dir))
+	logger.Info("loading factory config", zap.String("dir", runtimeDefinitionLogPath(definitionRequest)))
 	loaded, artifact, err := loadRuntimeConfig(
-		dir,
-		executionBaseDir,
+		ctx,
+		definitionRequest,
 		replayPath,
 		operatorDefaults,
-		workstationLoader,
+		authoredDefinitionLoader,
 		loadFactory,
 		newLoadedFactory,
 		decodeReplayConfig,
@@ -101,7 +174,7 @@ func LoadRuntime(
 		)
 	}
 	warnReplayMetadataMismatches(
-		dir,
+		definitionRequest.Directory,
 		replayPath,
 		workstationLoader,
 		artifact,
@@ -117,31 +190,25 @@ func LoadRuntime(
 }
 
 func loadRuntimeConfig(
-	dir string,
-	executionBaseDir string,
+	ctx context.Context,
+	definitionRequest factorydefinitions.RuntimeOpeningRequest,
 	replayPath string,
 	operatorDefaults operatorconfig.ResolvedDefaults,
-	workstationLoader factorydefinitions.WorkstationLoader,
+	authoredDefinitionLoader factorydefinitions.ValidatedAuthoredFactoryDefinitionLoader,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 	artifact *factorydefinitions.ReplayArtifact,
 ) (factorydefinitions.MutableLoadedFactorySource, *factorydefinitions.ReplayArtifact, error) {
 	if replayPath == "" {
-		if loadFactory == nil {
-			return nil, nil, fmt.Errorf("Factory Definitions loader is required")
-		}
-		loaded, err := loadFactory(dir, workstationLoader)
-		if loaded != nil {
-			loaded.SetRuntimeBaseDir(executionBaseDir)
-		}
-		if err != nil {
-			return loaded, nil, err
-		}
-		if err := applyOperatorDefaults(loaded, operatorDefaults); err != nil {
-			return nil, nil, err
-		}
-		return loaded, nil, nil
+		loaded, err := loadAuthoredRuntimeConfig(
+			ctx,
+			definitionRequest,
+			operatorDefaults,
+			authoredDefinitionLoader,
+			newLoadedFactory,
+		)
+		return loaded, nil, err
 	}
 	if artifact == nil {
 		return nil, nil, fmt.Errorf("replay artifact is required")
@@ -165,8 +232,78 @@ func loadRuntimeConfig(
 	if err != nil {
 		return nil, nil, fmt.Errorf("build embedded replay config: %w", err)
 	}
-	loaded.SetRuntimeBaseDir(executionBaseDir)
+	loaded.SetRuntimeBaseDir(definitionRequest.ExecutionBaseDir)
 	return loaded, artifact, nil
+}
+
+func loadAuthoredRuntimeConfig(
+	ctx context.Context,
+	request factorydefinitions.RuntimeOpeningRequest,
+	operatorDefaults operatorconfig.ResolvedDefaults,
+	loader factorydefinitions.ValidatedAuthoredFactoryDefinitionLoader,
+	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
+) (factorydefinitions.MutableLoadedFactorySource, error) {
+	if loader == nil {
+		return nil, fmt.Errorf("validated Factory Definitions loader is required")
+	}
+	result, err := loader.LoadValidatedAuthoredFactoryDefinition(
+		ctx,
+		factorydefinitions.LoadValidatedAuthoredFactoryDefinitionRequest{
+			Directory:        request.Directory,
+			SourcePath:       request.SourcePath,
+			ExecutionBaseDir: request.ExecutionBaseDir,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if result.Definition == nil {
+		return nil, fmt.Errorf("validated Factory Definitions loader returned no definition")
+	}
+	if newLoadedFactory == nil {
+		return nil, fmt.Errorf("Factory Definitions loaded-source factory is required")
+	}
+	loaded, err := newLoadedFactory(
+		result.FactoryDir,
+		result.Definition,
+		alreadyEffectiveRuntimeDefinitions{},
+		result.BundledFileReplacements,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("build validated Factory Definition source: %w", err)
+	}
+	if loaded == nil {
+		return nil, fmt.Errorf("Factory Definitions loaded-source factory returned nil")
+	}
+	loaded.SetRuntimeBaseDir(result.RuntimeBaseDir)
+	if receiver, ok := loaded.(factorydefinitions.AuthoredFactorySourceIdentityReceiver); ok {
+		receiver.SetAuthoredFactorySourceIdentity(result.Source)
+	}
+	if err := applyOperatorDefaults(loaded, operatorDefaults); err != nil {
+		return nil, err
+	}
+	return loaded, nil
+}
+
+// alreadyEffectiveRuntimeDefinitions preserves the effective authored result
+// returned by Factory Definitions while the existing mutable Runtime source is
+// assembled. The source factory clones and normalizes that detached result;
+// it must not rediscover authored split files through Runtime.
+type alreadyEffectiveRuntimeDefinitions struct{}
+
+func (alreadyEffectiveRuntimeDefinitions) Worker(string) (*factorydefinitions.FactoryWorkerConfig, bool) {
+	return nil, false
+}
+
+func (alreadyEffectiveRuntimeDefinitions) Workstation(string) (*factorydefinitions.FactoryWorkstationConfig, bool) {
+	return nil, false
+}
+
+func runtimeDefinitionLogPath(request factorydefinitions.RuntimeOpeningRequest) string {
+	if request.SourcePath != "" {
+		return request.SourcePath
+	}
+	return request.Directory
 }
 
 func applyOperatorDefaults(

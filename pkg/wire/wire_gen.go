@@ -240,7 +240,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v24 := provideLoadedFactorySnapshotCapturer()
 	factoryDefinitionsDependencies := &wire.FactoryDefinitionsRuntimeOpeningDependencies{
 		Validator:                     v16,
-		NamedPaths:                    namedPathResolver,
 		Factory:                       v21,
 		AuthoredDefinitionLoader:      validatedAuthoredFactoryDefinitionLoader,
 		InitialFactorySnapshotFactory: initialFactorySnapshotFactory,

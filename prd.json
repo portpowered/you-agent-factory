@@ -85,8 +85,8 @@
         "Tests pass"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-05: Migrated live Factory Session Runtime opening to LoadRuntimeFromDefinition, which passes explicit selection context to the process-scoped ValidatedAuthoredFactoryDefinitionLoader and rebuilds the existing mutable Runtime source only from its detached result. Current-Factory resolution and blocking validation now stay in Factory Definitions; Runtime preserves selected root identity, effective config, directories, bundled replacement facts, base directory, replay behavior, and typed loading failures without invoking the legacy authored loader. Focused race/owner tests, Factory Sessions/Definitions/Wire suites, go vet, generated wire, and make verify-fast pass. make lint reaches only 90 pre-existing backend-size violations outside this change; the changed packages do not appear in that report."
     }
   ]
 }

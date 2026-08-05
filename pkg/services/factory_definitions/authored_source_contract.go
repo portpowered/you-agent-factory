@@ -63,6 +63,13 @@ type AuthoredFactorySourceIdentityProvider interface {
 	AuthoredFactorySourceIdentity() AuthoredFactoryDefinitionIdentity
 }
 
+// AuthoredFactorySourceIdentityReceiver accepts the immutable selected-root
+// fact while a fresh loaded source is being assembled. It does not expose
+// authored payload bytes or mutable loader authority.
+type AuthoredFactorySourceIdentityReceiver interface {
+	SetAuthoredFactorySourceIdentity(AuthoredFactoryDefinitionIdentity)
+}
+
 // LoadValidatedAuthoredFactoryDefinitionResult contains detached effective
 // definition facts. Callers cannot mutate the loader-owned source through this
 // result.

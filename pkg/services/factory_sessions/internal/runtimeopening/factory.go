@@ -100,7 +100,6 @@ type FactoryRuntimeDependencies struct {
 // collaborators.
 type FactoryDefinitionsDependencies struct {
 	Validator                     factorydefinitions.Validator
-	NamedPaths                    factorydefinitions.NamedPathResolver
 	Factory                       FactoryDefinitionsFactory
 	AuthoredDefinitionLoader      factorydefinitions.ValidatedAuthoredFactoryDefinitionLoader
 	InitialFactorySnapshotFactory factorydefinitions.InitialFactorySnapshotFactory
@@ -198,7 +197,6 @@ type Factory struct {
 	workService                      work.Service
 	providerSessions                 providersessions.Service
 	factoryDefinitionValidator       factorydefinitions.Validator
-	namedPaths                       factorydefinitions.NamedPathResolver
 	factoryWorkflows                 factoryruntime.JavaScriptWorkflowDefinitions
 	workflowPreview                  factoryruntime.WorkflowPreviewOperation
 	loadFactory                      factorydefinitions.LoadedFactoryLoader
@@ -267,7 +265,6 @@ func NewFactory(dependencies Dependencies) (*Factory, error) {
 		workService:                      work.MaterializationService(workDependencies.ContentMaterializer),
 		providerSessions:                 providerSessions.Service,
 		factoryDefinitionValidator:       factoryDefinitions.Validator,
-		namedPaths:                       factoryDefinitions.NamedPaths,
 		factoryWorkflows:                 factoryRuntime.FactoryWorkflows,
 		workflowPreview:                  factoryRuntime.WorkflowPreview,
 		loadFactory:                      factoryDefinitions.LoadFactory,
@@ -340,7 +337,6 @@ func (dependencies Dependencies) validateFactoryDefinitions() error {
 	}
 	return validateRuntimeOpeningRequirements("Factory Definitions",
 		runtimeOpeningRequirement{"validator", group.Validator},
-		runtimeOpeningRequirement{"named path resolver", group.NamedPaths},
 		runtimeOpeningRequirement{"factory", group.Factory},
 		runtimeOpeningRequirement{"validated authored definition loader", group.AuthoredDefinitionLoader},
 		runtimeOpeningRequirement{"initial factory snapshot factory", group.InitialFactorySnapshotFactory},
@@ -509,7 +505,7 @@ func (f *Factory) openRuntime(
 		f.workService,
 		f.providerSessions,
 		f.factoryDefinitionValidator,
-		f.namedPaths,
+		f.authoredDefinitionLoader,
 		f.factoryWorkflows,
 		f.workflowPreview,
 		f.loadFactory,

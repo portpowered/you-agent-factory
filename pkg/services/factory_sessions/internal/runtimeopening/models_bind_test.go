@@ -11,6 +11,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
@@ -532,8 +533,9 @@ func newOpeningCoordinatorFactory(t *testing.T, modelService models.Service) *Fa
 		editableFactoryValidator:       openingCoordinatorValidateEditable,
 		workService:                    work.MaterializationService(openingCoordinatorContentMaterializer{}),
 		factoryDefinitionValidator:     openingCoordinatorValidator{},
-		namedPaths:                     openingCoordinatorNamedPaths{},
+		authoredDefinitionLoader:       openingCoordinatorAuthoredDefinitionLoader{},
 		loadFactory:                    openingCoordinatorLoadFactory,
+		newLoadedFactory:               factorydefinitionswire.LoadedFactorySourceFactory(),
 		resolveClock:                   openingCoordinatorResolveClock,
 		newSessionLogger:               openingCoordinatorSessionLogger,
 		adaptWorkerCommandRunner:       openingCoordinatorAdaptCommandRunner,
@@ -729,12 +731,17 @@ type openingCoordinatorValidator struct {
 	factorydefinitions.Validator
 }
 
-type openingCoordinatorNamedPaths struct {
-	factorydefinitions.NamedPathResolver
-}
+type openingCoordinatorAuthoredDefinitionLoader struct{}
 
-func (openingCoordinatorNamedPaths) ResolveCurrentDir(rootDir string) (string, error) {
-	return rootDir, nil
+func (openingCoordinatorAuthoredDefinitionLoader) LoadValidatedAuthoredFactoryDefinition(
+	_ context.Context,
+	request factorydefinitions.LoadValidatedAuthoredFactoryDefinitionRequest,
+) (factorydefinitions.LoadValidatedAuthoredFactoryDefinitionResult, error) {
+	return factorydefinitions.LoadValidatedAuthoredFactoryDefinitionResult{
+		Source:     factorydefinitions.AuthoredFactoryDefinitionIdentity{Path: request.Directory},
+		Definition: &factorydefinitions.FactoryConfig{},
+		FactoryDir: request.Directory,
+	}, nil
 }
 
 type openingCoordinatorClock struct{}

@@ -2,6 +2,7 @@ package runtimeopening
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -32,6 +33,141 @@ type runtimeLoadPortableFailureCase struct {
 	payload  []byte
 	readErr  error
 	wantCode recordings.ReplayArtifactDiagnosticCode
+}
+
+func TestLoadRuntimeFromDefinitionUsesValidatedAuthoredDefinition(t *testing.T) {
+	t.Parallel()
+
+	config, err := factorymapping.FactoryConfigFromOpenAPIJSON(
+		[]byte(factoryfixtures.CrossPathValidAlphaFactoryJSON),
+	)
+	if err != nil {
+		t.Fatalf("decode Factory fixture: %v", err)
+	}
+	factoryDir := t.TempDir()
+	sourcePath := filepath.Join(factoryDir, "factory.yaml")
+	loader := &recordingAuthoredDefinitionLoader{
+		result: factorydefinitions.LoadValidatedAuthoredFactoryDefinitionResult{
+			Source: factorydefinitions.AuthoredFactoryDefinitionIdentity{
+				Path: sourcePath, Format: factorydefinitions.AuthoredFactoryFormatYAML,
+			},
+			Definition:     config,
+			FactoryDir:     factoryDir,
+			RuntimeBaseDir: "execution-base",
+			BundledFileReplacements: []factorydefinitions.PortableBundledFileReplacement{{
+				TargetPath: "docs/guide.md",
+			}},
+		},
+	}
+	loaded, err := LoadRuntimeFromDefinition(
+		context.Background(),
+		factorydefinitions.RuntimeOpeningRequest{
+			Directory:        "factory-root",
+			SourcePath:       sourcePath,
+			ExecutionBaseDir: "execution-base",
+		},
+		"",
+		operatorconfig.ResolvedDefaults{},
+		RuntimeRoot{FactoryRootDir: factoryDir, BaseLogger: zap.NewNop()},
+		loader,
+		func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			t.Fatal("legacy Factory loader must not load an authored runtime definition")
+			return nil, nil
+		},
+		factorydefinitionswire.LoadedFactorySourceFactory(),
+		nil,
+		nil,
+		nil,
+		func(base *zap.Logger, _, _, _ string) *zap.Logger { return base },
+	)
+	if err != nil {
+		t.Fatalf("LoadRuntimeFromDefinition: %v", err)
+	}
+	if len(loader.requests) != 1 {
+		t.Fatalf("validated-loader requests = %#v, want one request", loader.requests)
+	}
+	if got := loader.requests[0]; got.Directory != "factory-root" ||
+		got.SourcePath != sourcePath || got.ExecutionBaseDir != "execution-base" {
+		t.Fatalf("validated-loader request = %#v, want explicit selection facts", got)
+	}
+	if loaded.LoadedFactoryCfg == nil || loaded.LoadedFactoryCfg.FactoryConfig() == nil ||
+		loaded.LoadedFactoryCfg.FactoryConfig().Name != config.Name {
+		t.Fatalf("runtime definition = %#v, want effective Factory %q", loaded.LoadedFactoryCfg, config.Name)
+	}
+	if got := loaded.LoadedFactoryCfg.FactoryDir(); got != factoryDir {
+		t.Fatalf("FactoryDir = %q, want %q", got, factoryDir)
+	}
+	if got := loaded.LoadedFactoryCfg.RuntimeBaseDir(); got != "execution-base" {
+		t.Fatalf("RuntimeBaseDir = %q, want execution-base", got)
+	}
+	if got := loaded.LoadedFactoryCfg.PortableBundledFileReplacements(); len(got) != 1 || got[0].TargetPath != "docs/guide.md" {
+		t.Fatalf("bundled replacements = %#v, want retained replacement", got)
+	}
+	identitySource, ok := loaded.LoadedFactoryCfg.(factorydefinitions.AuthoredFactorySourceIdentityProvider)
+	if !ok || identitySource.AuthoredFactorySourceIdentity() != loader.result.Source {
+		t.Fatalf("selected source identity = %#v, want %#v", identitySource, loader.result.Source)
+	}
+}
+
+func TestLoadRuntimeFromDefinitionPropagatesTypedAuthoredFailureWithoutSourceConstruction(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("factory configuration is malformed")
+	loader := &recordingAuthoredDefinitionLoader{err: &factorydefinitions.AuthoredFactoryDefinitionLoadFailure{
+		Kind:   factorydefinitions.AuthoredFactoryDefinitionLoadFailureMalformed,
+		Source: factorydefinitions.AuthoredFactoryDefinitionIdentity{Path: "factory.yaml"},
+		Cause:  cause,
+	}}
+	newSourceCalls := 0
+	loaded, err := LoadRuntimeFromDefinition(
+		context.Background(),
+		factorydefinitions.RuntimeOpeningRequest{Directory: "factory-root", SourcePath: "factory.yaml"},
+		"",
+		operatorconfig.ResolvedDefaults{},
+		RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: zap.NewNop()},
+		loader,
+		nil,
+		func(
+			string,
+			*factorydefinitions.FactoryConfig,
+			factorydefinitions.RuntimeDefinitionLookup,
+			[]factorydefinitions.PortableBundledFileReplacement,
+		) (factorydefinitions.MutableLoadedFactorySource, error) {
+			newSourceCalls++
+			return nil, nil
+		},
+		nil,
+		nil,
+		nil,
+		func(base *zap.Logger, _, _, _ string) *zap.Logger { return base },
+	)
+	if loaded.LoadedFactoryCfg != nil {
+		t.Fatalf("LoadRuntimeFromDefinition result = %#v, want no partial definition", loaded)
+	}
+	if !errors.Is(err, factorydefinitions.ErrAuthoredFactoryDefinitionMalformed) || !errors.Is(err, cause) {
+		t.Fatalf("LoadRuntimeFromDefinition error = %v, want typed malformed failure with cause", err)
+	}
+	var failure *factorydefinitions.AuthoredFactoryDefinitionLoadFailure
+	if !errors.As(err, &failure) || failure.Source.Path != "factory.yaml" {
+		t.Fatalf("LoadRuntimeFromDefinition error = %v, want safe typed source failure", err)
+	}
+	if newSourceCalls != 0 {
+		t.Fatalf("loaded-source factory calls = %d, want none on typed failure", newSourceCalls)
+	}
+}
+
+type recordingAuthoredDefinitionLoader struct {
+	result   factorydefinitions.LoadValidatedAuthoredFactoryDefinitionResult
+	err      error
+	requests []factorydefinitions.LoadValidatedAuthoredFactoryDefinitionRequest
+}
+
+func (loader *recordingAuthoredDefinitionLoader) LoadValidatedAuthoredFactoryDefinition(
+	_ context.Context,
+	request factorydefinitions.LoadValidatedAuthoredFactoryDefinitionRequest,
+) (factorydefinitions.LoadValidatedAuthoredFactoryDefinitionResult, error) {
+	loader.requests = append(loader.requests, request)
+	return loader.result, loader.err
 }
 
 func TestLoadRuntimePreservesValidatedPortableRecording(t *testing.T) {

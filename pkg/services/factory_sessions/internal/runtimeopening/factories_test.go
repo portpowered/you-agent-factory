@@ -254,7 +254,6 @@ func assertFactoryDefinitionsDependenciesRetained(t *testing.T, factory *Factory
 	t.Helper()
 	group := dependencies.FactoryDefinitions
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions validator", factory.factoryDefinitionValidator, group.Validator)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions paths", factory.namedPaths, group.NamedPaths)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions factory", factory.factoryDefinitionsFactory, group.Factory)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions authored loader", factory.authoredDefinitionLoader, group.AuthoredDefinitionLoader)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions initial snapshot", factory.initialFactorySnapshotFactory, group.InitialFactorySnapshotFactory)
@@ -374,7 +373,6 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 		{"Factory Runtime clock resolver", func(d *Dependencies) { d.FactoryRuntime.ResolveClock = nil }},
 		{"Factory Runtime session logger factory", func(d *Dependencies) { d.FactoryRuntime.NewSessionLogger = nil }},
 		{"Factory Definitions validator", func(d *Dependencies) { d.FactoryDefinitions.Validator = nil }},
-		{"Factory Definitions named path resolver", func(d *Dependencies) { d.FactoryDefinitions.NamedPaths = nil }},
 		{"Factory Definitions factory", func(d *Dependencies) { d.FactoryDefinitions.Factory = nil }},
 		{"Factory Definitions validated authored definition loader", func(d *Dependencies) { d.FactoryDefinitions.AuthoredDefinitionLoader = nil }},
 		{"Factory Definitions initial factory snapshot factory", func(d *Dependencies) { d.FactoryDefinitions.InitialFactorySnapshotFactory = nil }},
@@ -428,7 +426,6 @@ func validRuntimeOpeningDependencies(calls *int) Dependencies {
 		},
 		FactoryDefinitions: &FactoryDefinitionsDependencies{
 			Validator:                     validatorConstructionStub{},
-			NamedPaths:                    namedPathsConstructionStub{},
 			Factory:                       inertRuntimeOpeningFunction[FactoryDefinitionsFactory](calls),
 			AuthoredDefinitionLoader:      authoredDefinitionLoaderConstructionStub{},
 			InitialFactorySnapshotFactory: inertRuntimeOpeningFunction[factorydefinitions.InitialFactorySnapshotFactory](calls),
@@ -502,9 +499,6 @@ type workflowPreviewConstructionStub struct {
 type validatorConstructionStub struct{ factorydefinitions.Validator }
 type authoredDefinitionLoaderConstructionStub struct {
 	factorydefinitions.ValidatedAuthoredFactoryDefinitionLoader
-}
-type namedPathsConstructionStub struct {
-	factorydefinitions.NamedPathResolver
 }
 type factorySessionsConstructionStub struct{ factorysessions.Service }
 type factoryRuntimeAssemblerConstructionStub struct{ FactoryRuntimeAssembler }
