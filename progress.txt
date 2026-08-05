@@ -1,0 +1,39 @@
+## Codebase Patterns
+- Construct each Factory Session's Worker Sessions service only after its session-owned `WorkstationPoolBoundary` exists, so dispatch and cancellation share the exact same boundary.
+- Worker Session controls must use `context.WithoutCancel` when calling the pool boundary; dispatch termination remains observable through the boundary callback rather than caller-context cancellation.
+- Runtime tests inject a Worker Sessions service by wrapping it in a `WorkerSessionsFactory`, keeping runtime construction dependent on the public factory contract.
+- Scope Factory child controls from `DISPATCH_WORKER_SESSION_ASSOCIATION` events' `context.requestId`, then retain one detached canonical-ledger snapshot per committed control; never rescan live dispatches or reselect on retry.
+- A turn-targeted Factory control must carry the immutable turn and control identities; cache its detached fan-out result by both so retries cannot select associations committed later.
+
+## 2026-08-04 20:18 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-001
+- Implemented typed Worker Session pause, resume, cancel, and terminate controls. Cancel and terminate now target the exact supervised dispatch through `WorkstationPoolBoundary.Cancel`; terminate waits for the established terminal callback, and pause/resume explicitly report unsupported until a truthful resumable capability exists.
+- Changed Factory Runtime composition to construct each Worker Sessions service from the session-owned pool boundary, preserving Factory Runtime's existing terminal-result callback as the canonical result path.
+- Added deterministic behavioral coverage for detached-context cancellation, exact dispatch identity, idempotency, termination join behavior, unsupported pause/resume, terminal no-ops, invalid/unknown IDs, and boundary failures.
+- Files changed: `pkg/services/worker_sessions/**`, `pkg/services/factory_runtime/**`, `pkg/wire/worker_sessions_providers.go`, `prd.json`, `progress.txt`.
+- Verification: focused Worker Sessions, Factory Runtime/internal, and wire tests; repeated `-race` control tests; and focused `go vet` pass. `make verify-fast` is blocked before Go tests by pre-existing dashboard typecheck environment/configuration failures (missing Bun types and TypeScript 6 `baseUrl` deprecation).
+- **Learnings for future iterations:**
+  - The runtime pool boundary deliberately detaches dispatch context; controls must invoke its explicit `Cancel` method to stop accepted work.
+  - Worker Session terminal state must be committed from the Workers boundary callback so control does not replace Factory Runtime's accepted dispatch result.
+  - Existing runtime test doubles bypass the real pool boundary, so their factory adapters must remain compatible with the public Worker Sessions factory contract.
+---
+## 2026-08-04 20:27 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-002
+- Preserved each Factory dispatch's immutable request/turn correlation on its canonical Worker Session association event and added deterministic captured-turn target selection from the session-scoped canonical ledger.
+- The selector has stable sequence ordering and deduplication, ignores malformed/direct/later-turn records, yields an empty no-op target set for no matches, and retains the original targets when a later association is committed after capture.
+- Files changed: `pkg/services/recordings/**`, `pkg/services/factory_runtime/internal/services/orchestration/runtime/**`, `internal/testutil/recordingfixtures/scripted_runtime_ledger.go`, `prd.json`, `progress.txt`.
+- Verification: `go test ./pkg/services/factory_runtime/internal/services/orchestration/runtime ./pkg/services/recordings/internal/events ./pkg/services/recordings/internal/services/canonical_ledger`; matching focused `go vet`.
+- **Learnings for future iterations:**
+  - `WorkDispatch.Execution.RequestID` is the immutable Factory invocation correlation used to distinguish one captured ACP turn from a later turn sharing the same Factory Session.
+  - `RuntimeLedger.CanonicalEvents()` supplies the control linearization snapshot; retain its detached selection for retries rather than rebuilding a target set.
+  - A Factory Runtime ledger is session-scoped, so cross-Factory-Session isolation is achieved by selecting only from the captured runtime's ledger.
+---
+## 2026-08-04 20:39 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-003
+- Added Factory Runtime pause/resume fan-out for an immutable captured turn and control ID. Each committed control selects the canonical Worker Session associations once, invokes every selected child through `worker_sessions.Service`, and returns ordered per-child plus aggregate evidence without changing the Runtime result path.
+- Preserved idempotency by retaining the original captured evidence for a repeated control ID, including after a later lifecycle transition; late association events cannot enter that original control. Empty targets are explicit no-ops, and a child failure or unsupported response never prevents sibling attempts.
+- Added deterministic coverage for ordered mixed outcomes, single and multiple failure continuation, detached caller cancellation, all aggregate classifications, duplicate/retry isolation, late-child behavior, and empty captured turns.
+- Files changed: `pkg/services/factory_runtime/worker_session_control.go`, `pkg/services/factory_runtime/work_move_errors.go`, `pkg/services/factory_runtime/internal/services/orchestration/runtime/{factory.go,worker_pool.go,worker_session_control_fanout.go,worker_session_control_fanout_test.go}`, `prd.json`, `progress.txt`.
+- Verification: `go test ./pkg/services/factory_runtime/...`; `go test ./pkg/services/worker_sessions/...`; focused `go test -race ./pkg/services/factory_runtime/internal/services/orchestration/runtime -run 'Test(FanOutWorkerSessionControl|FactoryControls_)' -count=1`; focused `go vet ./pkg/services/factory_runtime/...`; `git diff --check`.
+- **Learnings for future iterations:**
+  - Public Runtime pause/resume controls can preserve compatibility with factory-wide callers by treating a blank turn ID as an explicit empty child fan-out.
+  - After the Factory lifecycle control commits, fan-out should carry a cancellation-detached context and report individual failures as deterministic child evidence, so a disconnected caller cannot stop later siblings.
+  - The aggregate action must not write Worker Session or Factory Runtime terminal state; Worker Sessions and the existing dispatch callback remain the result authorities.
+---
