@@ -379,6 +379,13 @@ func runBoundedCommandWithTimeout(directory string, environment []string, phase 
 	if err := command.Start(); err != nil {
 		return nil, fmt.Errorf("real ACP evidence failed during %s: launch", phase)
 	}
+	tree, err := attachCommandProcessTree(command)
+	if err != nil {
+		_ = terminateCommandProcessTree(command, nil)
+		_ = command.Wait()
+		return nil, fmt.Errorf("real ACP evidence failed during %s: process ownership", phase)
+	}
+	defer closeCommandProcessTree(command, tree)
 	completed := make(chan error, 1)
 	go func() {
 		completed <- command.Wait()
@@ -390,12 +397,12 @@ func runBoundedCommandWithTimeout(directory string, environment []string, phase 
 		if err == nil {
 			return output.Bytes(), nil
 		}
-		if cleanupErr := terminateCommandProcessTree(command); cleanupErr != nil {
+		if cleanupErr := terminateCommandProcessTree(command, tree); cleanupErr != nil {
 			return nil, fmt.Errorf("real ACP evidence failed during %s: non-zero exit cleanup", phase)
 		}
 		return nil, fmt.Errorf("real ACP evidence failed during %s: non-zero exit", phase)
 	case <-timer.C:
-		cleanupErr := terminateCommandProcessTree(command)
+		cleanupErr := terminateCommandProcessTree(command, tree)
 		<-completed
 		if cleanupErr != nil {
 			return nil, fmt.Errorf("real ACP evidence failed during %s: timeout cleanup", phase)

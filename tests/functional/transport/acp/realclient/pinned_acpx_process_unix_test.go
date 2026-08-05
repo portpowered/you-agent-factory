@@ -8,11 +8,33 @@ import (
 	"syscall"
 )
 
+type commandProcessTree struct {
+	pgid int
+}
+
 func configureCommandProcessTree(command *exec.Cmd) {
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 }
 
-func terminateCommandProcessTree(command *exec.Cmd) error {
+func attachCommandProcessTree(command *exec.Cmd) (*commandProcessTree, error) {
+	if command.Process == nil || command.Process.Pid <= 0 {
+		return nil, nil
+	}
+	return &commandProcessTree{pgid: command.Process.Pid}, nil
+}
+
+func closeCommandProcessTree(command *exec.Cmd, tree *commandProcessTree) {
+	_ = terminateCommandProcessTree(command, tree)
+}
+
+func terminateCommandProcessTree(command *exec.Cmd, tree *commandProcessTree) error {
+	if tree != nil && tree.pgid > 0 {
+		err := syscall.Kill(-tree.pgid, syscall.SIGKILL)
+		if errors.Is(err, syscall.ESRCH) {
+			return nil
+		}
+		return err
+	}
 	if command.Process == nil || command.Process.Pid <= 0 {
 		return nil
 	}

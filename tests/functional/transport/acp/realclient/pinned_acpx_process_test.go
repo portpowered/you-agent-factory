@@ -17,21 +17,62 @@ const (
 	processTreeHelperModeEnv  = "INFINITE_YOU_ACPX_PROCESS_TREE_HELPER_MODE"
 	processTreePIDPathEnv     = "INFINITE_YOU_ACPX_PROCESS_TREE_PID_PATH"
 	processTreeParentMode     = "parent"
+	processTreeParentExitMode = "parent-exit-nonzero"
 	processTreeDescendantMode = "descendant"
 )
 
 func TestRunBoundedCommandTerminatesScenarioDescendants(t *testing.T) {
+	if runProcessTreeHelper(t) {
+		return
+	}
+	pid := runTimedOutProcessTreeScenario(t)
+	waitForProcessExit(t, pid)
+}
+
+func TestRunBoundedCommandTerminatesDescendantsAfterNonZeroExit(t *testing.T) {
+	if runProcessTreeHelper(t) {
+		return
+	}
+	pidPath := filepath.Join(t.TempDir(), "descendant-pid")
+	_, err := runBoundedCommandWithTimeout(
+		t.TempDir(),
+		allowlistedEnvironment(map[string]string{
+			processTreeHelperModeEnv: processTreeParentExitMode,
+			processTreePIDPathEnv:    pidPath,
+		}),
+		"terminate-process-tree-after-non-zero-exit",
+		time.Second,
+		os.Args[0],
+		"-test.run=^TestRunBoundedCommandTerminatesDescendantsAfterNonZeroExit$",
+	)
+	if err == nil || !strings.Contains(err.Error(), "non-zero exit") {
+		if err == nil {
+			t.Fatal("real ACP evidence cleanup failed: non-zero scenario did not report non-zero exit")
+		}
+		t.Fatalf("real ACP evidence cleanup failed: non-zero scenario returned safe classification %q", err.Error())
+	}
+	waitForProcessExit(t, readProcessTreeDescendantPID(t, pidPath))
+}
+
+func runProcessTreeHelper(t *testing.T) bool {
 	switch os.Getenv(processTreeHelperModeEnv) {
 	case processTreeParentMode:
-		runProcessTreeParent(t)
-		return
+		runProcessTreeParent(t, false)
+		return true
+	case processTreeParentExitMode:
+		runProcessTreeParent(t, true)
+		return true
 	case processTreeDescendantMode:
 		fmt.Fprintln(os.Stdout, os.Getpid())
 		for {
 			time.Sleep(time.Hour)
 		}
 	}
+	return false
+}
 
+func runTimedOutProcessTreeScenario(t *testing.T) int {
+	t.Helper()
 	pidPath := filepath.Join(t.TempDir(), "descendant-pid")
 	_, err := runBoundedCommandWithTimeout(
 		t.TempDir(),
@@ -50,18 +91,23 @@ func TestRunBoundedCommandTerminatesScenarioDescendants(t *testing.T) {
 		}
 		t.Fatalf("real ACP evidence cleanup failed: timeout scenario returned safe classification %q", err.Error())
 	}
+	return readProcessTreeDescendantPID(t, pidPath)
+}
+
+func readProcessTreeDescendantPID(t *testing.T, pidPath string) int {
+	t.Helper()
 	payload, readErr := os.ReadFile(pidPath)
 	if readErr != nil {
-		t.Fatal("real ACP evidence cleanup failed: timeout scenario did not start descendant")
+		t.Fatal("real ACP evidence cleanup failed: scenario did not start descendant")
 	}
 	pid, parseErr := strconv.Atoi(strings.TrimSpace(string(payload)))
 	if parseErr != nil || pid <= 0 {
-		t.Fatal("real ACP evidence cleanup failed: timeout scenario reported invalid descendant identity")
+		t.Fatal("real ACP evidence cleanup failed: scenario reported invalid descendant identity")
 	}
-	waitForProcessExit(t, pid)
+	return pid
 }
 
-func runProcessTreeParent(t *testing.T) {
+func runProcessTreeParent(t *testing.T, exitNonZero bool) {
 	t.Helper()
 	command := exec.Command(os.Args[0], "-test.run=^TestRunBoundedCommandTerminatesScenarioDescendants$")
 	command.Env = allowlistedEnvironment(map[string]string{
@@ -82,6 +128,9 @@ func runProcessTreeParent(t *testing.T) {
 	}
 	if err := os.WriteFile(os.Getenv(processTreePIDPathEnv), []byte(strings.TrimSpace(line)), 0o600); err != nil {
 		t.Fatal("real ACP evidence cleanup failed: retain descendant identity")
+	}
+	if exitNonZero {
+		os.Exit(1)
 	}
 	for {
 		time.Sleep(time.Hour)

@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- For an owned Windows subprocess tree that must be cleaned after its direct parent exits, retain a kill-on-close Job Object handle until post-run cleanup; `taskkill` by an already-reaped parent PID cannot prove descendant termination.
 - After changing an authored packaged Factory prompt, run `make packaged-factory-catalog-generate`; the prompt, generated Factory artifacts, and manifest are a single checked-in contract.
 - Process-boundary client tests must isolate every platform configuration root the child process can consult (HOME, USERPROFILE, APPDATA, LOCALAPPDATA, XDG roots, and package cache) beneath the test temp directory.
 - Because `cmd/functionallane` intentionally defaults to `-short`, an opt-in process-boundary test needs its own required non-short CI invocation and a fact-only artifact when its execution is acceptance evidence.
@@ -105,4 +106,14 @@
   - An opt-in test must turn missing pinned-runtime prerequisites into a failure in its required CI lane; leaving normal local skips intact avoids forcing a networked client into the short suite.
   - `exec.CommandContext` only guarantees direct-process cancellation. For owned client trees, use OS-specific group/tree termination and assert a recorded descendant has exited after the timeout path.
   - A retained real-client artifact can stay safe by encoding only asserted facts and a full repository SHA; never capture the command output, transcript, temp location, or effective environment.
+---
+
+## 2026-08-04 23:00 -07:00 - ACP-L1-V4-M01-ACPX-REAL-CLIENT-EVIDENCE-002
+- Addressed the outstanding blocking PR feedback for the Windows non-zero-exit path. Every bounded real-client command now has an owned process tree; Windows uses a kill-on-close Job Object and Unix retains its process group through cleanup.
+- Added a behavioral process-boundary regression that starts a descendant, has its direct parent exit non-zero, and verifies the descendant has terminated. The existing timeout case continues to prove timeout cleanup.
+- Files changed: `tests/functional/transport/acp/realclient/{pinned_acpx_test.go,pinned_acpx_process_test.go,pinned_acpx_process_unix_test.go,pinned_acpx_process_windows_test.go}`, `prd.json`, `progress.txt`.
+- **Learnings for future iterations:**
+  - On Windows, cleanup by parent PID is insufficient after `Wait` reaps that parent; a Job Object retained by the scenario owns remaining descendants independently of that PID.
+  - The process-boundary test helper can use a controlled non-zero parent exit plus a recorded descendant PID to verify cleanup without inspecting internal implementation state.
+  - `go test ./tests/functional/transport/acp/realclient -count=10 -timeout 45s` and a Windows cross-compile provide focused regression evidence when the local host cannot execute Windows process semantics.
 ---
