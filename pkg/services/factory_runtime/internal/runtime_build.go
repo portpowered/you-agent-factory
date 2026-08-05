@@ -12,6 +12,7 @@ import (
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -108,10 +109,17 @@ func NewRuntimeBuild(
 			if progressFactory != nil {
 				progressPublisher = progressFactory(spec.SessionID)
 			}
+			// Workers and the runtime-owned Worker Sessions service are assembled
+			// in opposite dependency order: Workers needs its progress publisher
+			// before the workstation pool exists, while Worker Sessions needs that
+			// pool. This bridge is bound exactly once when the Factory Runtime
+			// creates Worker Sessions, ensuring reference-bearing progress cannot
+			// reach the response stream before its Worker Session association.
+			providerSessionProgress := workersessions.NewProviderSessionObservationPublisher(progressPublisher)
 			runtimeWorkers, err := sessionBuildFactory(
 				spec.ProviderCommandRunner,
 				spec.CommandRunnerOverride,
-				progressPublisher,
+				providerSessionProgress.Publish,
 			)
 			if err != nil {
 				return nil, fmt.Errorf("construct runtime Worker service: %w", err)
@@ -146,7 +154,7 @@ func NewRuntimeBuild(
 				runtimeWorkers,
 				workerSessionsFactory,
 				runtimeExecutorsFactory,
-				progressPublisher,
+				providerSessionProgress,
 				runtimeFactory,
 				dispatchCompleted,
 				worldStateProjector,
@@ -187,7 +195,7 @@ func buildBundle(
 	workerExecution workers.RuntimeService,
 	workerSessionsFactory factory.WorkerSessionsFactory,
 	runtimeExecutorsFactory factory.WorkersRuntimeExecutorsFactory,
-	progressPublisher workers.ProgressPublisher,
+	providerSessionProgress *workersessions.ProviderSessionObservationPublisher,
 	runtimeFactory *RuntimeFactory,
 	dispatchCompleted func(string),
 	worldStateProjector factory.WorldStateProjector,
@@ -229,6 +237,14 @@ func buildBundle(
 			zap.Error(snapshotErr),
 		)
 	}
+	if providerSessionProgress == nil {
+		return nil, fmt.Errorf("Worker Session provider progress bridge is required")
+	}
+	if workerSessionsFactory == nil {
+		return nil, fmt.Errorf("Worker Sessions factory is required")
+	}
+	workerSessionsFactory = bindProviderSessionProgress(workerSessionsFactory, providerSessionProgress)
+
 	return runtimeFactory.Build(
 		ctx,
 		spec.Dir,
@@ -271,7 +287,7 @@ func buildBundle(
 				verbose,
 				skipRunnerPrerequisiteValidation,
 				invocationSkipPermissionsOverride,
-				progressPublisher,
+				providerSessionProgress.Publish,
 				history,
 				logger,
 				runtimeFactory.loggerFactory,
@@ -281,6 +297,23 @@ func buildBundle(
 		workerSessionsFactory,
 		dispatchCompleted,
 	)
+}
+
+// bindProviderSessionProgress keeps the Workers progress bridge session-local:
+// Factory Runtime creates the same Worker Sessions service that owns the pool
+// and binds it before any dispatch can be admitted or produce output.
+func bindProviderSessionProgress(
+	workerSessionsFactory factory.WorkerSessionsFactory,
+	publisher *workersessions.ProviderSessionObservationPublisher,
+) factory.WorkerSessionsFactory {
+	return func(boundary workers.WorkstationPoolBoundary) (workersessions.Service, error) {
+		service, err := workerSessionsFactory(boundary)
+		if err != nil {
+			return nil, err
+		}
+		publisher.Bind(service)
+		return service, nil
+	}
 }
 
 func loadWorkerOptions(

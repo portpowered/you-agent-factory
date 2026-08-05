@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -33,6 +36,19 @@ func (b failingPublishBoundary) Publish(context.Context, workers.WorkstationDisp
 
 func (b failingPublishBoundary) PublishWithAdmission(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAdmissionFunc, workers.WorkstationDispatchAcceptFunc) error {
 	return b.err
+}
+
+// cancellationResultBoundary supplies one deterministic boundary cancellation
+// result without starting or publishing any Workers attempt. It lets the
+// control tests exercise only the already-admitted control effect.
+type cancellationResultBoundary struct {
+	unusedExecution
+	result workers.WorkstationDispatchCancelResult
+	err    error
+}
+
+func (b cancellationResultBoundary) Cancel(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+	return b.result, b.err
 }
 
 func (u unusedExecution) StartWorkstationPool(context.Context, workers.WorkstationPoolStartRequest) (workers.WorkstationPoolStartResult, error) {
@@ -313,11 +329,11 @@ func TestControlGuards_RejectInvalidTransitionsAndPreserveObservableSessionState
 	if _, err := r.transitionToStarting("worker-2"); err != nil {
 		t.Fatalf("transitionToStarting(worker-2): %v", err)
 	}
-	supervision, ok := r.registerSupervision("worker-2", "dispatch-2")
+	supervision, ok := r.registerSupervision("worker-2", "dispatch-2", "")
 	if !ok || supervision == nil {
 		t.Fatal("registerSupervision(worker-2) = unavailable, want exact supervised attempt")
 	}
-	if _, ok := r.registerSupervision("missing", "dispatch-missing"); ok {
+	if _, ok := r.registerSupervision("missing", "dispatch-missing", ""); ok {
 		t.Fatal("registerSupervision(missing) unexpectedly succeeded")
 	}
 	supervision.requestedAction = workersessions.ControlActionCancel
@@ -328,7 +344,7 @@ func TestControlGuards_RejectInvalidTransitionsAndPreserveObservableSessionState
 	if workerSession, err := r.Get(ctx, workersessions.GetRequest{ID: "worker-3"}); err != nil || workerSession.State != workersessions.StateReserved {
 		t.Fatalf("Get(worker-3) = %#v, %v, want RESERVED", workerSession, err)
 	}
-	if r.beginBoundaryPublish("worker-3", newSupervision("dispatch-3")) {
+	if r.beginBoundaryPublish("worker-3", newSupervision("dispatch-3", "")) {
 		t.Fatal("beginBoundaryPublish() succeeded for a session that never started")
 	}
 	if session, err := r.Get(ctx, workersessions.GetRequest{ID: "worker-2"}); err != nil || session.State != workersessions.StateStarting {
@@ -343,7 +359,7 @@ func TestStartPublishedAttempt_ControlAndPublishFailureHaveTerminalObservableOut
 		if _, err := r.transitionToStarting("worker-1"); err != nil {
 			t.Fatalf("transitionToStarting: %v", err)
 		}
-		supervision, ok := r.registerSupervision("worker-1", "dispatch-1")
+		supervision, ok := r.registerSupervision("worker-1", "dispatch-1", "")
 		if !ok {
 			t.Fatal("registerSupervision before control: want exact starting attempt")
 		}
@@ -390,7 +406,7 @@ func TestCancel_BeforeBoundaryAdmissionEitherWaitsOrTerminatesTheExactSupervisio
 	if _, err := r.transitionToStarting("worker-1"); err != nil {
 		t.Fatalf("transitionToStarting: %v", err)
 	}
-	supervision, ok := r.registerSupervision("worker-1", "dispatch-1")
+	supervision, ok := r.registerSupervision("worker-1", "dispatch-1", "")
 	if !ok {
 		t.Fatal("registerSupervision: want supervised STARTING attempt")
 	}
@@ -417,7 +433,7 @@ func TestCancel_BeforeBoundaryAdmissionEitherWaitsOrTerminatesTheExactSupervisio
 	if _, err := r.transitionToStarting("worker-2"); err != nil {
 		t.Fatalf("transitionToStarting(worker-2): %v", err)
 	}
-	noOpSupervision, ok := r.registerSupervision("worker-2", "dispatch-2")
+	noOpSupervision, ok := r.registerSupervision("worker-2", "dispatch-2", "")
 	if !ok {
 		t.Fatal("registerSupervision(worker-2): want exact attempt")
 	}
@@ -426,12 +442,17 @@ func TestCancel_BeforeBoundaryAdmissionEitherWaitsOrTerminatesTheExactSupervisio
 	if err != nil || noOp.Outcome != workersessions.ControlOutcomeNoop {
 		t.Fatalf("repeated pre-admission Cancel() = %#v, %v, want NOOP", noOp, err)
 	}
+	requestedSupervision := newSupervision("dispatch-requested", "")
+	requestedSupervision.requestedAction = workersessions.ControlActionPause
+	if attempt := requestedSupervision.beginCancellation(workersessions.ControlActionCancel); attempt.kind != cancellationAttemptNoop {
+		t.Fatalf("beginCancellation() after a requested action = %#v, want noop", attempt)
+	}
 
 	r.reserveIfAbsent("worker-3")
 	if _, err := r.transitionToStarting("worker-3"); err != nil {
 		t.Fatalf("transitionToStarting(worker-3): %v", err)
 	}
-	activeSupervision, ok := r.registerSupervision("worker-3", "dispatch-3")
+	activeSupervision, ok := r.registerSupervision("worker-3", "dispatch-3", "")
 	if !ok {
 		t.Fatal("registerSupervision(worker-3): want exact attempt")
 	}
@@ -878,4 +899,334 @@ func TestPublishRecord_RejectsPublicationForMerelyReservedSession(t *testing.T) 
 	if !errors.Is(err, workersessions.ErrPublicationNotOpen) {
 		t.Fatalf("PublishRecord() for a merely reserved session error = %v, want ErrPublicationNotOpen", err)
 	}
+}
+
+func TestResume_RejectsMissingOrMalformedAssociationBeforeContinuationHandoff(t *testing.T) {
+	tests := []struct {
+		name        string
+		association *workersessions.ProviderSessionAssociation
+		wantErr     error
+	}{
+		{
+			name:    "missing association",
+			wantErr: workersessions.ErrProviderSessionAssociationMissing,
+		},
+		{
+			name: "malformed association",
+			association: &workersessions.ProviderSessionAssociation{
+				WorkerSessionID: "worker-1",
+				DispatchID:      "dispatch-1",
+				AttemptID:       "dispatch-1",
+				Reference: providers.SessionRef{
+					Provider: providers.IDCodex,
+					Kind:     providers.SessionIDKind,
+				},
+			},
+			wantErr: workersessions.ErrInvalidProviderSessionAssociation,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			session := workersessions.Session{
+				ID:                         "worker-1",
+				State:                      workersessions.StatePaused,
+				ProviderSessionAssociation: test.association,
+			}
+			registry := &registry{
+				sessions: map[string]workersessions.Session{"worker-1": session},
+				supervisions: map[string]*supervision{
+					"worker-1": newSupervision("dispatch-1", "turn-1"),
+				},
+				logger: logging.NoopLogger{},
+			}
+
+			result, err := registry.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+			if !errors.Is(err, test.wantErr) || result.Outcome != workersessions.ControlOutcomeFailed ||
+				result.Session.State != workersessions.StatePaused {
+				t.Fatalf("Resume() = %#v, %v, want failed PAUSED result with %v", result, err, test.wantErr)
+			}
+			if test.name == "malformed association" && !errors.Is(err, providers.ErrInvalidSessionRef) {
+				t.Fatalf("Resume() malformed association error = %v, want Providers ErrInvalidSessionRef", err)
+			}
+			if current := registry.sessions["worker-1"]; !reflect.DeepEqual(current, session) {
+				t.Fatalf("Resume() mutated rejected association: got %#v, want %#v", current, session)
+			}
+		})
+	}
+}
+
+func newPausedContinuationRegistry(t *testing.T) (*registry, *supervision, providers.SessionRef) {
+	t.Helper()
+	r := newTestRegistry(t)
+	reference := providers.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     providers.SessionIDKind,
+		ID:       "provider-session-1",
+	}
+	supervision := newSupervision("dispatch-1", "turn-1")
+	supervision.accepted = true
+	r.sessions["worker-1"] = workersessions.Session{
+		ID:    "worker-1",
+		State: workersessions.StatePaused,
+		ProviderSessionAssociation: &workersessions.ProviderSessionAssociation{
+			WorkerSessionID: "worker-1",
+			TurnID:          "turn-1",
+			DispatchID:      "dispatch-1",
+			AttemptID:       "dispatch-1",
+			Reference:       reference,
+		},
+	}
+	r.supervisions["worker-1"] = supervision
+	return r, supervision, reference
+}
+
+func newRunningPauseRegistry(t *testing.T) (*registry, *supervision) {
+	t.Helper()
+	r, supervision, _ := newPausedContinuationRegistry(t)
+	session := r.sessions["worker-1"]
+	session.State = workersessions.StateRunning
+	r.sessions["worker-1"] = session
+	return r, supervision
+}
+
+func TestContinuationControl_GuardsPreserveThePausedSession(t *testing.T) {
+	t.Run("transition to paused rejects a non-running session", func(t *testing.T) {
+		r, _, _ := newPausedContinuationRegistry(t)
+		if r.transitionToPaused("worker-1") {
+			t.Fatal("transitionToPaused() = true for an already PAUSED session, want false")
+		}
+	})
+
+	t.Run("association validation keeps provider identity errors typed", func(t *testing.T) {
+		if err := validateResumeAssociation(workersessions.Session{}); !errors.Is(err, workersessions.ErrProviderSessionAssociationMissing) {
+			t.Fatalf("validateResumeAssociation(nil) = %v, want ErrProviderSessionAssociationMissing", err)
+		}
+		malformed := workersessions.Session{
+			ID:    "worker-1",
+			State: workersessions.StatePaused,
+			ProviderSessionAssociation: &workersessions.ProviderSessionAssociation{
+				WorkerSessionID: "worker-1",
+				DispatchID:      "dispatch-1",
+				AttemptID:       "dispatch-1",
+				Reference:       providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind},
+			},
+		}
+		if err := validateResumeAssociation(malformed); !errors.Is(err, workersessions.ErrInvalidProviderSessionAssociation) || !errors.Is(err, providers.ErrInvalidSessionRef) {
+			t.Fatalf("validateResumeAssociation(malformed) = %v, want typed association and provider errors", err)
+		}
+		mismatched := malformed
+		associationCopy := malformed.ProviderSessionAssociation.Clone()
+		mismatched.ProviderSessionAssociation = &associationCopy
+		mismatched.ProviderSessionAssociation.Reference.ID = "provider-session-1"
+		mismatched.ProviderSessionAssociation.WorkerSessionID = "worker-2"
+		if err := validateResumeAssociation(mismatched); !errors.Is(err, workersessions.ErrInvalidProviderSessionAssociation) {
+			t.Fatalf("validateResumeAssociation(mismatched) = %v, want ErrInvalidProviderSessionAssociation", err)
+		}
+	})
+
+	t.Run("preparation rejects stale state and competing continuation", func(t *testing.T) {
+		r, supervision, reference := newPausedContinuationRegistry(t)
+		if _, _, prepared := r.prepareContinuation("missing", supervision, reference); prepared {
+			t.Fatal("prepareContinuation() prepared a missing session")
+		}
+		other := reference
+		other.ID = "provider-session-other"
+		if _, _, prepared := r.prepareContinuation("worker-1", supervision, other); prepared {
+			t.Fatal("prepareContinuation() prepared a mismatched provider session")
+		}
+		supervision.continuing = true
+		if _, _, prepared := r.prepareContinuation("worker-1", supervision, reference); prepared {
+			t.Fatal("prepareContinuation() prepared while a continuation was already in flight")
+		}
+		supervision.continuing = false
+
+		continuation, previousDispatchID, prepared := r.prepareContinuation("worker-1", supervision, reference)
+		if !prepared || previousDispatchID != "dispatch-1" || continuation.Execution.ResumeSession == nil || *continuation.Execution.ResumeSession != reference {
+			t.Fatalf("prepareContinuation() = %#v, %q, %t, want a detached exact continuation", continuation, previousDispatchID, prepared)
+		}
+		r.revertContinuation("worker-1", supervision, previousDispatchID)
+		current, err := r.Get(context.Background(), workersessions.GetRequest{ID: "worker-1"})
+		if err != nil || current.State != workersessions.StatePaused {
+			t.Fatalf("Get() after revertContinuation = %#v, %v, want PAUSED", current, err)
+		}
+		supervision.mu.Lock()
+		defer supervision.mu.Unlock()
+		if supervision.dispatchID != "dispatch-1" || supervision.publishing || supervision.continuing || !supervision.accepted {
+			t.Fatalf("revertContinuation supervision = %#v, want restored admitted dispatch", supervision)
+		}
+	})
+
+	t.Run("resume rejects invalid and missing identities", func(t *testing.T) {
+		r := newTestRegistry(t)
+		if _, err := r.Resume(context.Background(), workersessions.ControlRequest{ID: " "}); !errors.Is(err, workersessions.ErrInvalidSessionID) {
+			t.Fatalf("Resume(blank) = %v, want ErrInvalidSessionID", err)
+		}
+		if _, err := r.Resume(context.Background(), workersessions.ControlRequest{ID: "missing"}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+			t.Fatalf("Resume(missing) = %v, want ErrSessionNotFound", err)
+		}
+	})
+
+	t.Run("resume is a no-op while continuation is publishing", func(t *testing.T) {
+		r, supervision, _ := newPausedContinuationRegistry(t)
+		supervision.continuing = true
+		supervision.publishing = true
+		result, err := r.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		if err != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StatePaused {
+			t.Fatalf("Resume() = %#v, %v, want PAUSED NOOP", result, err)
+		}
+	})
+
+	t.Run("resume is a no-op when preparation loses its race", func(t *testing.T) {
+		r, supervision, _ := newPausedContinuationRegistry(t)
+		supervision.continuing = true
+		supervision.accepted = false
+		result, err := r.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		if err != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StatePaused {
+			t.Fatalf("Resume() = %#v, %v, want PAUSED NOOP", result, err)
+		}
+	})
+
+	t.Run("publication failure restores the exact paused continuation", func(t *testing.T) {
+		r, supervision, _ := newPausedContinuationRegistry(t)
+		publishErr := errors.New("continuation publish failed")
+		r.boundary = failingPublishBoundary{unusedExecution: unusedExecution{t: t}, err: publishErr}
+		result, err := r.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		if !errors.Is(err, publishErr) || result.Outcome != workersessions.ControlOutcomeFailed || result.DispatchID != "dispatch-1/resume/1" {
+			t.Fatalf("Resume() = %#v, %v, want failed fresh continuation dispatch", result, err)
+		}
+		if result.Session.State != workersessions.StatePaused || supervision.dispatchID != "dispatch-1" {
+			t.Fatalf("Resume() after publish failure = %#v with dispatch %q, want restored PAUSED dispatch-1", result, supervision.dispatchID)
+		}
+	})
+
+	t.Run("unsupported control distinguishes invalid missing and terminal sessions", func(t *testing.T) {
+		r := newTestRegistry(t)
+		if _, err := r.unsupportedControl(context.Background(), workersessions.ControlRequest{ID: " "}, workersessions.ControlActionPause); !errors.Is(err, workersessions.ErrInvalidSessionID) {
+			t.Fatalf("unsupportedControl(blank) = %v, want ErrInvalidSessionID", err)
+		}
+		if _, err := r.unsupportedControl(context.Background(), workersessions.ControlRequest{ID: "missing"}, workersessions.ControlActionPause); !errors.Is(err, workersessions.ErrSessionNotFound) {
+			t.Fatalf("unsupportedControl(missing) = %v, want ErrSessionNotFound", err)
+		}
+		r.sessions["terminal"] = workersessions.Session{ID: "terminal", State: workersessions.StateCanceled}
+		result, err := r.unsupportedControl(context.Background(), workersessions.ControlRequest{ID: "terminal"}, workersessions.ControlActionPause)
+		if err != nil || result.Outcome != workersessions.ControlOutcomeNoop {
+			t.Fatalf("unsupportedControl(terminal) = %#v, %v, want NOOP", result, err)
+		}
+	})
+}
+
+func TestPause_ControlOutcomesKeepTheLifecycleTruthful(t *testing.T) {
+	t.Run("invalid and missing identities fail without a boundary effect", func(t *testing.T) {
+		r := newTestRegistry(t)
+		if _, err := r.Pause(context.Background(), workersessions.ControlRequest{ID: " "}); !errors.Is(err, workersessions.ErrInvalidSessionID) {
+			t.Fatalf("Pause(blank) = %v, want ErrInvalidSessionID", err)
+		}
+		if _, err := r.Pause(context.Background(), workersessions.ControlRequest{ID: "missing"}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+			t.Fatalf("Pause(missing) = %v, want ErrSessionNotFound", err)
+		}
+	})
+
+	t.Run("duplicate and pre-admission pause requests do not fabricate paused state", func(t *testing.T) {
+		r, supervision := newRunningPauseRegistry(t)
+		supervision.controlAction = workersessions.ControlActionCancel
+		result, err := r.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		if err != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateRunning {
+			t.Fatalf("duplicate Pause() = %#v, %v, want RUNNING NOOP", result, err)
+		}
+
+		r, supervision = newRunningPauseRegistry(t)
+		supervision.accepted = false
+		result, err = r.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		if err != nil || result.Outcome != workersessions.ControlOutcomeUnsupported || result.Session.State != workersessions.StateRunning {
+			t.Fatalf("pre-admission Pause() = %#v, %v, want RUNNING UNSUPPORTED", result, err)
+		}
+	})
+
+	t.Run("boundary error returns a failed control without changing the session", func(t *testing.T) {
+		r, _ := newRunningPauseRegistry(t)
+		boundaryErr := errors.New("cancel boundary failed")
+		r.boundary = cancellationResultBoundary{unusedExecution: unusedExecution{t: t}, err: boundaryErr}
+		result, err := r.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		if !errors.Is(err, boundaryErr) || result.Outcome != workersessions.ControlOutcomeFailed || result.Session.State != workersessions.StateRunning {
+			t.Fatalf("Pause() = %#v, %v, want failed RUNNING result", result, err)
+		}
+	})
+
+	t.Run("already-terminal cancellation is a no-op", func(t *testing.T) {
+		r, supervision := newRunningPauseRegistry(t)
+		supervision.signalDone()
+		r.boundary = cancellationResultBoundary{
+			unusedExecution: unusedExecution{t: t},
+			result:          workers.WorkstationDispatchCancelResult{DispatchID: "dispatch-1", Outcome: workers.WorkstationDispatchCancelOutcomeAlreadyCanceled},
+		}
+		result, err := r.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		if err != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateRunning {
+			t.Fatalf("Pause() = %#v, %v, want RUNNING NOOP", result, err)
+		}
+	})
+
+	t.Run("cancellation without a paused callback remains a no-op", func(t *testing.T) {
+		r, supervision := newRunningPauseRegistry(t)
+		supervision.signalDone()
+		r.boundary = cancellationResultBoundary{
+			unusedExecution: unusedExecution{t: t},
+			result:          workers.WorkstationDispatchCancelResult{DispatchID: "dispatch-1", Outcome: workers.WorkstationDispatchCancelOutcomeCanceled},
+		}
+		result, err := r.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		if err != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateRunning {
+			t.Fatalf("Pause() = %#v, %v, want RUNNING NOOP", result, err)
+		}
+	})
+
+	t.Run("pause waits for an already active control before reading the terminal snapshot", func(t *testing.T) {
+		r, supervision := newRunningPauseRegistry(t)
+		supervision.mu.Lock()
+		supervision.controlActive = true
+		supervision.controlDone = make(chan struct{})
+		wait := supervision.controlDone
+		supervision.mu.Unlock()
+
+		observedWait := make(chan struct{})
+		stopRelease := make(chan struct{})
+		go func() {
+			select {
+			case wait <- struct{}{}:
+				close(observedWait)
+			case <-stopRelease:
+				return
+			}
+			for {
+				select {
+				case wait <- struct{}{}:
+				case <-stopRelease:
+					return
+				}
+			}
+		}()
+
+		resultCh := make(chan workersessions.ControlResult, 1)
+		errCh := make(chan error, 1)
+		go func() {
+			result, err := r.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+			resultCh <- result
+			errCh <- err
+		}()
+		<-observedWait
+
+		// observedWait proves Pause selected cancellationAttemptWait. Hold the
+		// registry writer lock while recording the terminal winner so the next
+		// control-loop read sees an authoritative terminal snapshot.
+		r.mu.Lock()
+		session := r.sessions["worker-1"]
+		session.State = workersessions.StateCanceled
+		r.sessions["worker-1"] = session
+		r.mu.Unlock()
+		close(stopRelease)
+
+		result := <-resultCh
+		if err := <-errCh; err != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateCanceled {
+			t.Fatalf("Pause() after active control = %#v, %v, want CANCELED NOOP", result, err)
+		}
+	})
 }

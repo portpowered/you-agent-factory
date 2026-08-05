@@ -6,11 +6,14 @@ import (
 	"io/fs"
 	"strings"
 	"testing"
+	"time"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 func TestFailureClassForError_ModelhostLeaseDenied(t *testing.T) {
@@ -125,6 +128,29 @@ func TestFailureMetadataForError_PreservesRetryableProviderFailure(t *testing.T)
 	if metadata == nil || metadata.Family != workerexecution.WorkFailureFamilyRetryable ||
 		metadata.Type != workerexecution.WorkFailureTypeInternalServerError {
 		t.Fatalf("metadata = %#v, want retryable internal server error", metadata)
+	}
+}
+
+func TestAgentRunFailureWorkResult_PreservesProviderContinuationClassification(t *testing.T) {
+	t.Parallel()
+
+	providerErr := workerexecution.NewProviderError(
+		workerexecution.WorkFailureTypePermanentBadRequest,
+		"provider session continuation is unsupported",
+		nil,
+	)
+	providerErr.ProviderContinuationOutcome = providers.ContinuationOutcomeUnsupported
+	result := agentRunFailureWorkResult(
+		work.WorkDispatch{DispatchID: "dispatch-agent-run-continuation", TransitionID: "transition-1"},
+		providerErr,
+		time.Second,
+		"",
+		nil,
+	)
+	if result.Outcome != workerexecution.OutcomeFailed ||
+		result.ProviderContinuationOutcome != providers.ContinuationOutcomeUnsupported ||
+		result.ProviderFailureKind != "" || result.ProviderContinuationFailureKind != "" {
+		t.Fatalf("agentRunFailureWorkResult() = %#v, want unsupported continuation classification", result)
 	}
 }
 

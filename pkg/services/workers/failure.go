@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerinferencefailure "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/inferencefailure"
 )
 
@@ -145,12 +146,15 @@ func adaptClassificationError(err error) error {
 
 // ProviderError is the public normalized Worker provider failure.
 type ProviderError struct {
-	Family          WorkFailureFamily
-	Type            WorkFailureType
-	Message         string
-	ProviderSession *ProviderSessionMetadata
-	Diagnostics     *WorkDiagnostics
-	Cause           error
+	Family                          WorkFailureFamily
+	Type                            WorkFailureType
+	Message                         string
+	ProviderSession                 *ProviderSessionMetadata
+	Diagnostics                     *WorkDiagnostics
+	Cause                           error
+	ProviderFailureKind             providers.ExecuteFailureKind
+	ProviderContinuationFailureKind providers.ContinuationFailureKind
+	ProviderContinuationOutcome     providers.ContinuationOutcome
 }
 
 func (e *ProviderError) Error() string {

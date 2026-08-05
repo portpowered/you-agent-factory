@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
@@ -170,5 +171,114 @@ func TestListRequest_Validate_DelegatesToFilter(t *testing.T) {
 	req := workersessions.ListRequest{Filter: workersessions.Filter{States: []workersessions.State{"INTERRUPTED"}}}
 	if err := req.Validate(); !errors.Is(err, workersessions.ErrInvalidState) {
 		t.Errorf("Validate() = %v, want ErrInvalidState", err)
+	}
+}
+
+func TestProviderSessionAssociation_ValidateAndClone(t *testing.T) {
+	valid := workersessions.ProviderSessionAssociation{
+		WorkerSessionID: "worker-1",
+		TurnID:          "turn-1",
+		DispatchID:      "dispatch-1",
+		AttemptID:       "dispatch-1",
+		Reference: providers.SessionRef{
+			Provider: providers.IDCodex,
+			Kind:     providers.SessionIDKind,
+			ID:       "provider-session-1",
+		},
+	}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid association Validate() = %v, want nil", err)
+	}
+	if got := valid.Clone(); got != valid {
+		t.Fatalf("Clone() = %#v, want equal detached value %#v", got, valid)
+	}
+
+	for _, test := range []struct {
+		name        string
+		association workersessions.ProviderSessionAssociation
+		wantErr     error
+	}{
+		{name: "missing worker session", association: workersessions.ProviderSessionAssociation{DispatchID: "dispatch-1", AttemptID: "dispatch-1", Reference: valid.Reference}, wantErr: workersessions.ErrInvalidSessionID},
+		{name: "missing dispatch", association: workersessions.ProviderSessionAssociation{WorkerSessionID: "worker-1", AttemptID: "dispatch-1", Reference: valid.Reference}, wantErr: workersessions.ErrInvalidProviderSessionAssociation},
+		{name: "mismatched attempt", association: workersessions.ProviderSessionAssociation{WorkerSessionID: "worker-1", DispatchID: "dispatch-1", AttemptID: "dispatch-2", Reference: valid.Reference}, wantErr: workersessions.ErrInvalidProviderSessionAssociation},
+		{name: "invalid provider reference", association: workersessions.ProviderSessionAssociation{WorkerSessionID: "worker-1", DispatchID: "dispatch-1", AttemptID: "dispatch-1", Reference: providers.SessionRef{Kind: providers.SessionIDKind, ID: "provider-session-1"}}, wantErr: providers.ErrInvalidID},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if err := test.association.Validate(); !errors.Is(err, test.wantErr) {
+				t.Fatalf("Validate() = %v, want %v", err, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestProviderSessionAssociationRequest_Validate(t *testing.T) {
+	valid := workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: "worker-1",
+		DispatchID:      "dispatch-1",
+		Reference: providers.SessionRef{
+			Provider: providers.IDCodex,
+			Kind:     providers.SessionIDKind,
+			ID:       "provider-session-1",
+		},
+	}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid association request Validate() = %v, want nil", err)
+	}
+	for _, test := range []struct {
+		name    string
+		req     workersessions.ProviderSessionAssociationRequest
+		wantErr error
+	}{
+		{name: "missing worker session", req: workersessions.ProviderSessionAssociationRequest{DispatchID: valid.DispatchID, Reference: valid.Reference}, wantErr: workersessions.ErrInvalidSessionID},
+		{name: "blank dispatch", req: workersessions.ProviderSessionAssociationRequest{WorkerSessionID: valid.WorkerSessionID, DispatchID: " ", Reference: valid.Reference}, wantErr: workersessions.ErrInvalidProviderSessionAssociation},
+		{name: "invalid provider reference", req: workersessions.ProviderSessionAssociationRequest{WorkerSessionID: valid.WorkerSessionID, DispatchID: valid.DispatchID, Reference: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind}}, wantErr: providers.ErrInvalidSessionRef},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if err := test.req.Validate(); !errors.Is(err, test.wantErr) {
+				t.Fatalf("Validate() = %v, want %v", err, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestControlRequest_Validate(t *testing.T) {
+	if err := (workersessions.ControlRequest{ID: "worker-1"}).Validate(); err != nil {
+		t.Fatalf("valid control request Validate() = %v, want nil", err)
+	}
+	if err := (workersessions.ControlRequest{ID: " \t"}).Validate(); !errors.Is(err, workersessions.ErrInvalidSessionID) {
+		t.Fatalf("blank control request Validate() = %v, want ErrInvalidSessionID", err)
+	}
+}
+
+func TestSession_Validate_RequiresAssociationToBelongToSession(t *testing.T) {
+	association := &workersessions.ProviderSessionAssociation{
+		WorkerSessionID: "worker-1",
+		DispatchID:      "dispatch-1",
+		AttemptID:       "dispatch-1",
+		Reference: providers.SessionRef{
+			Provider: providers.IDCodex,
+			Kind:     providers.SessionIDKind,
+			ID:       "provider-session-1",
+		},
+	}
+	valid := workersessions.Session{ID: "worker-1", State: workersessions.StateRunning, ProviderSessionAssociation: association}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("associated session Validate() = %v, want nil", err)
+	}
+
+	mismatched := valid
+	associationCopy := association.Clone()
+	mismatched.ProviderSessionAssociation = &associationCopy
+	mismatched.ProviderSessionAssociation.WorkerSessionID = "worker-2"
+	if err := mismatched.Validate(); !errors.Is(err, workersessions.ErrInvalidProviderSessionAssociation) {
+		t.Fatalf("mismatched association Validate() = %v, want ErrInvalidProviderSessionAssociation", err)
+	}
+
+	malformed := valid
+	malformedAssociation := association.Clone()
+	malformedAssociation.Reference.ID = ""
+	malformed.ProviderSessionAssociation = &malformedAssociation
+	if err := malformed.Validate(); !errors.Is(err, providers.ErrInvalidSessionRef) {
+		t.Fatalf("malformed association Validate() = %v, want Providers ErrInvalidSessionRef", err)
 	}
 }

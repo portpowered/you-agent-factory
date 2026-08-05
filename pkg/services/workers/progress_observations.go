@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 // CanonicalDraftFragment carries one provider-native canonical response draft
@@ -17,15 +18,25 @@ const (
 	ResponseFragmentKind  = "RESPONSE_FRAGMENT"
 	CompletedFragmentKind = "STREAM_COMPLETED"
 	FailedFragmentKind    = "STREAM_FAILED"
+	// ProviderSessionObservedFragmentKind is an internal hand-off of a
+	// provider-authored exact session identity. The Worker Sessions bridge
+	// commits it before any dependent response output and does not expose this
+	// bookkeeping fragment on the response stream itself.
+	ProviderSessionObservedFragmentKind = "PROVIDER_SESSION_OBSERVED"
 )
 
 // ProgressFragment is the provider-neutral transient observation emitted by
 // Workers and accepted by a Factory Session response stream.
 type ProgressFragment struct {
-	DispatchID                     string
-	Kind                           string
-	Type                           string
-	Payload                        string
+	DispatchID string
+	Kind       string
+	Type       string
+	Payload    string
+	// ProviderSessionReference is the exact detached typed reference returned
+	// by Providers for this attempt. ProviderSessionRef remains the
+	// response-stream metadata projection; Worker Sessions must use this field
+	// when it associates a resumable execution before forwarding output.
+	ProviderSessionReference       *providers.SessionRef
 	ProviderSessionRef             *providersessions.Metadata
 	ExternalEventType              string
 	Metadata                       map[string]string
@@ -35,3 +46,13 @@ type ProgressFragment struct {
 
 // ProgressPublisher receives transient Worker observations.
 type ProgressPublisher func(ProgressFragment)
+
+// CloneProviderSessionReference returns a detached copy of the exact typed
+// Provider Session reference carried by a Workers progress fragment.
+func CloneProviderSessionReference(reference *providers.SessionRef) *providers.SessionRef {
+	if reference == nil {
+		return nil
+	}
+	cloned := reference.Clone()
+	return &cloned
+}

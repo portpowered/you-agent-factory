@@ -80,6 +80,48 @@ func TestClaudeRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {
 	assertRepeatedClaudeResultDetached(t, secondContinued.Result)
 }
 
+func TestClaudeRootObservesProviderSessionWhileNativeAttemptIsLive(t *testing.T) {
+	t.Parallel()
+
+	observed := make(chan providers.SessionRef, 1)
+	effect := claude.EffectFunc(func(
+		_ context.Context,
+		_ execution.ContinuationRequest,
+		observe func([]byte) error,
+	) (claude.EffectResult, error) {
+		if err := observe([]byte(`{"type":"system","subtype":"init","session_id":"claude-live-observation"}` + "\n")); err != nil {
+			return claude.EffectResult{}, err
+		}
+		select {
+		case reference := <-observed:
+			want := providers.SessionRef{Provider: providers.IDClaude, Kind: providers.SessionIDKind, ID: "claude-live-observation"}
+			if reference != want {
+				t.Fatalf("live SessionObserver reference = %#v, want %#v", reference, want)
+			}
+		default:
+			t.Fatal("SessionObserver was not called before native effect returned")
+		}
+		if err := observe([]byte(`{"type":"result","subtype":"success","is_error":false,"result":"observed live","session_id":"claude-live-observation"}` + "\n")); err != nil {
+			return claude.EffectResult{}, err
+		}
+		return claude.EffectResult{}, nil
+	})
+	root := newClaudeRoot(t, effect)
+
+	result, err := root.Execute(t.Context(), providers.ExecuteRequest{
+		Provider: providers.IDClaude, AttemptID: "attempt-live-observation", UserMessage: "observe the provider session",
+		SessionObserver: func(reference providers.SessionRef) {
+			observed <- reference
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.SessionRef == nil || result.SessionRef.ID != "claude-live-observation" {
+		t.Fatalf("Execute().SessionRef = %#v, want live session reference", result.SessionRef)
+	}
+}
+
 func TestClaudeStreamDeltaPreservesWhitespace(t *testing.T) {
 	t.Parallel()
 

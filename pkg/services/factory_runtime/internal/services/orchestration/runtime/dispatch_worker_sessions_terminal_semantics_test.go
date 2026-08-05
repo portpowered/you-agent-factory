@@ -187,6 +187,18 @@ func (s *preHandoffFailedWorkerSessionsService) PublishRecord(
 	return workersessions.PublishRecordResult{}, nil
 }
 
+func (s *preHandoffFailedWorkerSessionsService) AssociateProviderSession(
+	context.Context, workersessions.ProviderSessionAssociationRequest,
+) (workersessions.ProviderSessionAssociationResult, error) {
+	return workersessions.ProviderSessionAssociationResult{}, nil
+}
+
+func (s *preHandoffFailedWorkerSessionsService) ObserveProviderSession(
+	context.Context, workersessions.ProviderSessionObservationRequest,
+) (workersessions.ProviderSessionAssociationResult, error) {
+	return workersessions.ProviderSessionAssociationResult{}, nil
+}
+
 func (s *preHandoffFailedWorkerSessionsService) Pause(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {
 	return workersessions.ControlResult{}, nil
 }

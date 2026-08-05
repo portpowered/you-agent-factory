@@ -41,7 +41,15 @@ func classifyTerminal(
 		case dispatchErr != nil:
 			kind = workersessions.FailureCauseAdapterFailure
 		}
-		return failedTerminal(kind, safeDetail(kind, workResult.FailureMetadata))
+		terminal := failedTerminal(kind, safeDetail(kind, workResult.FailureMetadata))
+		terminal.Cause.ProviderFailureKind,
+			terminal.Cause.ProviderContinuationFailureKind,
+			terminal.Cause.ProviderContinuationOutcome = workersessions.SanitizeProviderFailureClassification(
+			workResult.ProviderFailureKind,
+			workResult.ProviderContinuationFailureKind,
+			workResult.ProviderContinuationOutcome,
+		)
+		return terminal
 	}
 }
 

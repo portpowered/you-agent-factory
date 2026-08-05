@@ -41,6 +41,7 @@ type decoder struct {
 	declaredFailure *providers.ExecuteFailure
 	declaredKnown   bool
 	decodeErr       error
+	observeSession  providers.SessionObserver
 }
 
 type messageCompletion struct {
@@ -99,9 +100,10 @@ type nativeDelta struct {
 	PartialJSON string `json:"partial_json"`
 }
 
-func newDecoder(attemptID string) *decoder {
+func newDecoder(attemptID string, observeSession providers.SessionObserver) *decoder {
 	return &decoder{
 		attemptID:         strings.TrimSpace(attemptID),
+		observeSession:    observeSession,
 		blocks:            make(map[int]*contentBlock),
 		completedMessages: make(map[string]string),
 		completedTools:    make(map[string]string),
@@ -196,6 +198,13 @@ func (decoder *decoder) decodeRecord(raw []byte) {
 	if session := strings.TrimSpace(envelope.SessionID); session != "" {
 		if decoder.sessionID == "" {
 			decoder.sessionID = session
+			if decoder.observeSession != nil {
+				decoder.observeSession(providers.SessionRef{
+					Provider: providers.IDClaude,
+					Kind:     providers.SessionIDKind,
+					ID:       session,
+				})
+			}
 			decoder.addProgress("session.started", "started", nil)
 		}
 	}

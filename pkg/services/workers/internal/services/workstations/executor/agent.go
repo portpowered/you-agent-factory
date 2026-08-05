@@ -10,6 +10,7 @@ import (
 
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -290,7 +291,7 @@ func missingWorkerWorkResult(dispatch work.WorkDispatch, workerType string, dura
 func inferenceErrorWorkResult(dispatch work.WorkDispatch, err error, diagnostics *workerexecution.WorkDiagnostics, retryCount int, start time.Time, clock func() time.Time) workerexecution.WorkResult {
 	providerErr := workerexecution.NormalizeProviderExecutionError(err)
 	failureMetadata := workerexecution.WorkFailureMetadataFromProviderError(providerErr)
-	return workerexecution.WorkResult{
+	result := workerexecution.WorkResult{
 		DispatchID:      dispatch.DispatchID,
 		TransitionID:    dispatch.TransitionID,
 		Outcome:         workerexecution.OutcomeFailed,
@@ -300,6 +301,12 @@ func inferenceErrorWorkResult(dispatch work.WorkDispatch, err error, diagnostics
 		Diagnostics:     mergeWorkDiagnostics(withInferenceErrorDiagnostics(diagnostics, err, retryCount), providerDiagnosticsFromError(providerErr)),
 		Metrics:         agentWorkMetrics(start, retryCount, clock),
 	}
+	if providerErr != nil {
+		result.ProviderFailureKind = providerErr.ProviderFailureKind
+		result.ProviderContinuationFailureKind = providerErr.ProviderContinuationFailureKind
+		result.ProviderContinuationOutcome = providerErr.ProviderContinuationOutcome
+	}
+	return result
 }
 
 func (ae *AgentExecutor) workResultForInferenceResponse(request workerexecution.WorkstationExecutionRequest, resp workerexecution.InferenceResponse, outcome workerexecution.WorkOutcome, diagnostics *workerexecution.WorkDiagnostics, retryCount int, start time.Time) (workerexecution.WorkResult, error) {
@@ -362,6 +369,7 @@ func inferenceRequestForExecutionRequest(request workerexecution.WorkstationExec
 		ProcessEnvironment:           append([]string(nil), request.ProcessEnvironment...),
 		Worktree:                     request.Worktree,
 		WorkingDirectory:             request.WorkingDirectory,
+		ResumeSession:                cloneResumeSession(request.ResumeSession),
 	}
 	if workerDef != nil {
 		if executorProvider := strings.TrimSpace(workerDef.ExecutorProvider); executorProvider != "" {
@@ -383,6 +391,14 @@ func inferenceRequestForExecutionRequest(request workerexecution.WorkstationExec
 		}
 	}
 	return req
+}
+
+func cloneResumeSession(reference *providers.SessionRef) *providers.SessionRef {
+	if reference == nil {
+		return nil
+	}
+	cloned := reference.Clone()
+	return &cloned
 }
 
 func modelProviderForExecution(workerModelProvider string, selection workerexecution.ResolvedRunnerSelection) string {
