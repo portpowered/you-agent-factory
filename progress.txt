@@ -117,3 +117,12 @@
   - The process-boundary test helper can use a controlled non-zero parent exit plus a recorded descendant PID to verify cleanup without inspecting internal implementation state.
   - `go test ./tests/functional/transport/acp/realclient -count=10 -timeout 45s` and a Windows cross-compile provide focused regression evidence when the local host cannot execute Windows process semantics.
 ---
+
+## 2026-08-04 23:18 -07:00 - ACP-L1-V4-M01-ACPX-REAL-CLIENT-EVIDENCE-002
+- Rechecked active PR #1798 after its final process-cleanup commit. The historical blocking feedback is satisfied at the current head: Windows owns each child tree with a kill-on-close Job Object, and the non-zero-parent behavioral regression proves its descendant terminates. No unresolved review threads remain; all required CI checks for the implementation head are successful.
+- Updated the PR description from the current `prd.json` so its retained scope and acceptance evidence match the checked-in plan.
+- Files changed: `progress.txt`, PR #1798 description.
+- **Learnings for future iterations:**
+  - A branch can be associated with a PR in its fork/upstream repository even when `gh pr view` against the local `origin` cannot find it; resolve the PR URL returned by `gh pr create` and query that repository explicitly.
+  - The GitHub issue-comment feed can retain historical blocking comments after their requested commit lands; inspect thread resolution, comment target heads, current diff, and current required checks together before treating feedback as outstanding.
+---
