@@ -93,8 +93,6 @@ workstations:
     resources:
       - name: factory-builder-slot
         capacity: 1
-    workPropagation:
-      mode: PRESERVE_INPUT
     inputs:
       - workType: factory-build
         state: init

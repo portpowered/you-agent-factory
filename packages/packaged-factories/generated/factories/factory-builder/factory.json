@@ -180,9 +180,6 @@
         }
       ],
       "type": "AGENT_RUN",
-      "workPropagation": {
-        "mode": "PRESERVE_INPUT"
-      },
       "worker": "factory-builder"
     }
   ]

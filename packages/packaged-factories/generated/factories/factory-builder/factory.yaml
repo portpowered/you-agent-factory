@@ -164,6 +164,4 @@ workstations:
         - capacity: 1
           name: factory-builder-slot
       type: AGENT_RUN
-      workPropagation:
-        mode: PRESERVE_INPUT
       worker: factory-builder
