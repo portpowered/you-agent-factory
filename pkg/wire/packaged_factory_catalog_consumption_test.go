@@ -65,6 +65,7 @@ func assertPublishedPackagedFactoryNames(t *testing.T, listed factorydefinitions
 	wantNames := []string{
 		"@you/classify",
 		"@you/deep-research",
+		"@you/factory-builder",
 		"@you/full-flow",
 		"@you/fusion",
 		"@you/goal",

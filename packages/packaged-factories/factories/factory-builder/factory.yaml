@@ -1,0 +1,105 @@
+name: "@you/factory-builder"
+id: builtin-factory-builder
+description:
+  type: LOCALIZABLE_ASSET
+  value: Creates and installs one validated graph or JavaScript Factory from a customer request.
+invocationReturn:
+  policy: EXPLICIT
+  workTypeName: factory-build
+  terminalState: complete
+invocationSignature:
+  parameters:
+    - name: request
+      description: Requested behavior for the reusable Factory to create.
+      externalName: to
+      required: true
+      bindings:
+        - kind: POSITIONAL
+          position: 1
+        - kind: STDIN
+        - kind: NAMED
+    - name: factoryName
+      description: New stable name for the Factory that will be created through the named-Factory CLI.
+      externalName: factory-name
+      required: true
+      bindings:
+        - kind: NAMED
+    - name: orchestrator
+      description: "Factory form to author: graph for YAML topology or javascript for a JavaScript orchestrator."
+      externalName: orchestrator
+      choices:
+        - graph
+        - javascript
+      defaultValue: graph
+      bindings:
+        - kind: NAMED
+    - name: builderProvider
+      description: Optional model provider override for the Factory Builder; omitted values use operator defaults.
+      externalName: builder-provider
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: builderModel
+      description: Optional model override for the Factory Builder; omitted values use operator defaults.
+      externalName: builder-model
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+examples:
+  - name: graph-factory
+    description:
+      type: LOCALIZABLE_ASSET
+      value: Create a reusable graph Factory for a bounded review workflow.
+    args:
+      request: Review submitted release notes and return an approved summary.
+      factoryName: release-note-review
+      orchestrator: graph
+  - name: javascript-factory
+    description:
+      type: LOCALIZABLE_ASSET
+      value: Create a reusable JavaScript Factory for a bounded synthesis workflow.
+    args:
+      request: Run two independent analyses and return one synthesized result.
+      factoryName: release-synthesis
+      orchestrator: javascript
+workTypes:
+  - name: factory-build
+    handlingBehavior:
+      - DEFAULT
+    states:
+      - name: init
+        type: INITIAL
+      - name: complete
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+resources:
+  - name: factory-builder-slot
+    capacity: 1
+workers:
+  - name: factory-builder
+    type: AGENT_WORKER
+    skipPermissions: true
+    modelProvider: ${builderProvider}
+    model: ${builderModel}
+    agentTools:
+      policy: ENABLED
+workstations:
+  - name: build-factory
+    type: AGENT_RUN
+    worker: factory-builder
+    resources:
+      - name: factory-builder-slot
+        capacity: 1
+    inputs:
+      - workType: factory-build
+        state: init
+    outputs:
+      - workType: factory-build
+        state: complete
+    onFailure:
+      - workType: factory-build
+        state: failed
+    promptFile: prompts/build-factory.md
