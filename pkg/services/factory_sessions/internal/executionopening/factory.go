@@ -43,7 +43,7 @@ type WorkerInvocationWithProgressFactory = func(
 
 // Factory owns provider selection and lazy runtime-backed execution scopes.
 type Factory struct {
-	runtimes       *runtimeopening.Factory
+	runtimes       runtimeopening.ExecutionRuntimeOpening
 	runtimeEffects runtimeopening.ExternalEffects
 	commandRunner  workers.CommandRunner
 	allocator      workers.PTYAllocator
@@ -59,7 +59,7 @@ type Factory struct {
 var _ roles.StdioExecutionOpening = (*Factory)(nil)
 
 func NewFactory(
-	runtimes *runtimeopening.Factory,
+	runtimes runtimeopening.ExecutionRuntimeOpening,
 	runtimeEffects runtimeopening.ExternalEffects,
 	commandRunner workers.CommandRunner,
 	allocator workers.PTYAllocator,

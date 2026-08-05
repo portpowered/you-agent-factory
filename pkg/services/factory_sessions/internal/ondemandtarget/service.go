@@ -5,9 +5,8 @@
 // non-HTTP-bound runtime per caller-selected Factory target the first time it
 // is needed, then keeps it open for later calls against the identity it
 // returned. This is private implementation: pkg/services/factory_sessions/wire
-// exposes it as a thin construction wrapper (matching how that package already
-// wraps runtimeopening.Factory as RuntimeOpeningFactory) so a caller outside
-// this service tree never imports this package directly.
+// exposes it as a thin construction wrapper so a caller outside this service
+// tree never imports this package directly.
 //
 // Service implements exactly StartAsync, InvokeFactorySession, Cancel, and
 // CloseFactorySession -- the narrow, owner-published
@@ -29,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"sync"
 
 	"go.uber.org/zap"
@@ -57,20 +57,6 @@ type RuntimeResolver func(
 	workingRoot string,
 ) (factorysessions.RuntimeOpeningRequest, error)
 
-// invocationRuntimeOpener is the narrow capability this service consumes
-// from *runtimeopening.Factory, declared here (rather than consuming the
-// concrete type directly) so a test can substitute a fake without
-// constructing the full Factory's own large production dependency graph.
-// *runtimeopening.Factory already satisfies this interface structurally.
-type invocationRuntimeOpener interface {
-	OpenInvocationRuntime(
-		ctx context.Context,
-		request *factorysessions.RuntimeOpeningRequest,
-		effects runtimeopening.ExternalEffects,
-		logger *zap.Logger,
-	) (roles.OpenedInvocationRuntime, error)
-}
-
 // Service is Factory Sessions' own on-demand target-execution activation
 // (published to peers as factorysessions.TargetExecutionService) that has no
 // fixed, pre-opened Factory Session runtime the way the CLI daemon's
@@ -78,8 +64,8 @@ type invocationRuntimeOpener interface {
 // Instead, the first StartAsync for a given caller-selected Factory
 // target and working root lazily opens exactly one ephemeral, non-HTTP-bound
 // runtime through the existing invocation-mode Runtime Opening path (the
-// same primitive the CLI's one-shot named invocation already uses, per
-// runtimeopening.Factory.OpenInvocationRuntime), starts its lifecycle, and
+// same primitive the CLI's one-shot named invocation already uses), starts
+// its lifecycle, and
 // keeps it open so every later call against the returned identity reuses
 // that exact runtime instead of starting a second one.
 //
@@ -92,7 +78,7 @@ type invocationRuntimeOpener interface {
 // cached runtime (and the runtime's own DefaultSessionID) on every later
 // call. Callers must treat the returned identity as opaque.
 type Service struct {
-	factory    invocationRuntimeOpener
+	opening    runtimeopening.InvocationRuntimeOpening
 	effects    runtimeopening.ExternalEffects
 	resolve    RuntimeResolver
 	generateID factorysessions.SessionIDGenerator
@@ -146,17 +132,18 @@ type activationControl struct {
 	mu sync.Mutex
 }
 
-// New constructs the on-demand activation over the given *runtimeopening.Factory.
-// Construction alone performs no I/O and opens no runtime.
+// New constructs the on-demand activation over the given Factory Sessions
+// invocation-opening capability. Construction alone performs no I/O and
+// opens no runtime.
 func New(
-	factory *runtimeopening.Factory,
+	opening runtimeopening.InvocationRuntimeOpening,
 	effects runtimeopening.ExternalEffects,
 	resolve RuntimeResolver,
 	generateID factorysessions.SessionIDGenerator,
 	logger *zap.Logger,
 ) (*Service, error) {
-	if factory == nil {
-		return nil, errors.New("construct on-demand Factory target activation: Runtime Opening factory is required")
+	if missingInvocationRuntimeOpening(opening) {
+		return nil, errors.New("construct on-demand Factory target activation: invocation runtime opening is required")
 	}
 	if resolve == nil {
 		return nil, errors.New("construct on-demand Factory target activation: Factory target runtime resolver is required")
@@ -168,7 +155,7 @@ func New(
 		return nil, errors.New("construct on-demand Factory target activation: logger is required")
 	}
 	return &Service{
-		factory:           factory,
+		opening:           opening,
 		effects:           effects,
 		resolve:           resolve,
 		generateID:        generateID,
@@ -178,6 +165,19 @@ func New(
 		startsByRequestID: make(map[string]string),
 		pendingStarts:     make(map[string]*pendingStart),
 	}, nil
+}
+
+func missingInvocationRuntimeOpening(opening runtimeopening.InvocationRuntimeOpening) bool {
+	if opening == nil {
+		return true
+	}
+	value := reflect.ValueOf(opening)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
 
 // activatedRuntime is one lazily-opened, lifecycle-started invocation
@@ -236,7 +236,7 @@ func (s *Service) openActivatedRuntime(
 	s.logger.Info("activating on-demand Factory target runtime",
 		zap.String("factoryTargetId", factoryTargetID))
 
-	opened, err := s.factory.OpenInvocationRuntime(ctx, &config, s.effects, s.logger)
+	opened, err := s.opening.OpenInvocationRuntime(ctx, &config, s.effects, s.logger)
 	if err != nil {
 		s.logger.Error("failed to open on-demand Factory target runtime",
 			zap.String("factoryTargetId", factoryTargetID))

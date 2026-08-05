@@ -110,7 +110,7 @@ func provideACPServerFactoryTargetRuntimeResolver(
 // guarantees both consumers observe this exact same singleton, not two
 // independently constructed activations.
 func provideACPServerFactoryTarget(
-	openRuntime *factorysessionwire.RuntimeOpeningFactory,
+	openRuntime factorysessionwire.InvocationRuntimeOpening,
 	edges serviceedges.Edges,
 	resolveTarget factorysessionwire.FactoryTargetRuntimeResolver,
 	generateSessionID factorysessions.SessionIDGenerator,

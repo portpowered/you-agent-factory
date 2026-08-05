@@ -68,7 +68,7 @@ func TestModelsPresentationRoot_ReturnsNilForUnsetOperation(t *testing.T) {
 	}
 }
 
-func TestModelsPresentationRoot_DelegatesToRuntimeOpeningFactory(t *testing.T) {
+func TestModelsPresentationRoot_DelegatesToRuntimeOpening(t *testing.T) {
 	t.Parallel()
 
 	op := &operation{openRuntime: &runtimeopening.Factory{}}
@@ -105,6 +105,7 @@ func TestOpenModelsPresentationScope_PropagatesRuntimeOpenFailure(t *testing.T) 
 	factoryDir := t.TempDir()
 	op, err := NewOperation(
 		&runtimeopening.Factory{},
+		nil,
 		runtimeopening.ExternalEffects{},
 		workingDirectoryStub{dir: factoryDir},
 		func(root string) (string, error) {

@@ -393,7 +393,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		Workers:            workersDependencies,
 		OperatorSettings:   operatorSettingsDependencies,
 	}
-	v57, err := wire.NewRuntimeOpeningFactory(v56)
+	v57, err := wire.NewRuntimeOpening(v56)
 	if err != nil {
 		return nil, err
 	}
@@ -418,7 +418,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	modelInvocationTimeout := provideModelInvocationTimeout()
-	v65, err := provideInvocationOperation(v57, edges2, workingDirectory, v4, v64, modelInvocationTimeout, runtimeArtifactRootResolver, v25)
+	v65, err := provideInvocationOperation(v57, modelsService, edges2, workingDirectory, v4, v64, modelInvocationTimeout, runtimeArtifactRootResolver, v25)
 	if err != nil {
 		return nil, err
 	}
@@ -472,7 +472,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	v71 := provideRuntimeInputResolver(edges2, clockResolver)
-	v72 := provideRuntimeOpener(v57)
 	runtimeFactory := provideFactoryVisualizationFactory()
 	factoryStatusProjector := factory.NewFactoryStatusProjector()
 	contentPreparation := work.NewContentPreparation()
@@ -492,30 +491,30 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	runnerFactory := provideLifecycleRunnerFactory()
-	v73, err := provideApplicationRuntimeAdapter(runtimeFactory, applicationHandler, runnerFactory)
+	v72, err := provideApplicationRuntimeAdapter(runtimeFactory, applicationHandler, runnerFactory)
 	if err != nil {
 		return nil, err
 	}
-	v74 := wire.NewLifecyclePlanOperation()
-	v75, err := wire.NewApplicationService(v71, v72, v73, v74)
+	v73 := wire.NewLifecyclePlanOperation()
+	v74, err := wire.NewApplicationService(v71, v57, v72, v73)
 	if err != nil {
 		return nil, err
 	}
-	runRuntimeRunnerBuilder, err := provideRunRuntimeRunnerBuilder(runtimeRunnerBuilder, v75)
+	runRuntimeRunnerBuilder, err := provideRunRuntimeRunnerBuilder(runtimeRunnerBuilder, v74)
 	if err != nil {
 		return nil, err
 	}
-	v76 := provideResponsePresentation()
-	v77 := provideDirectJavaScriptSyncRunner()
+	v75 := provideResponsePresentation()
+	v76 := provideDirectJavaScriptSyncRunner()
 	directJavaScriptHostAdapter, err := provideDirectJavaScriptHostAdapter(applicationHandler, starter, runnerFactory)
 	if err != nil {
 		return nil, err
 	}
-	v78, err := wire.NewDirectJavaScriptRunOperation(v63, v77, v25, directJavaScriptHostAdapter)
+	v77, err := wire.NewDirectJavaScriptRunOperation(v63, v76, v25, directJavaScriptHostAdapter)
 	if err != nil {
 		return nil, err
 	}
-	selectionFactory, err := provideRunSelectionFactory(runOpener, runRuntimeRunnerBuilder, v65, v76, v78, runtimeRunnerBuilder)
+	selectionFactory, err := provideRunSelectionFactory(runOpener, runRuntimeRunnerBuilder, v65, v75, v77, runtimeRunnerBuilder)
 	if err != nil {
 		return nil, err
 	}
@@ -533,14 +532,14 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	wireAcpServerResolveHomeDir := provideACPServerResolveHomeDir()
-	v79 := provideACPServerFactoryTargetRuntimeResolver(wireAcpServerResolveHomeDir, v, defaultsResolver, runtimeArtifactRootResolver)
-	v80, err := provideACPServerFactoryTarget(v57, edges2, v79, v25, logger)
+	v78 := provideACPServerFactoryTargetRuntimeResolver(wireAcpServerResolveHomeDir, v, defaultsResolver, runtimeArtifactRootResolver)
+	v79, err := provideACPServerFactoryTarget(v57, edges2, v78, v25, logger)
 	if err != nil {
 		return nil, err
 	}
-	targetExecutionService := provideACPServerFactoryTargetService(v80)
-	v81 := provideChatSessionsResponseBridge(chatsessionsService, targetExecutionService, loggingLogger)
-	responseBridge := provideACPServerResponseBridge(v81)
+	targetExecutionService := provideACPServerFactoryTargetService(v79)
+	v80 := provideChatSessionsResponseBridge(chatsessionsService, targetExecutionService, loggingLogger)
+	responseBridge := provideACPServerResponseBridge(v80)
 	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, targetExecutionService, eventsService, wireAcpServerResolveHomeDir, responseBridge)
 	commandOperations := cli.CommandOperations{
 		ObserveCLI:                        cliObserver,
@@ -593,23 +592,23 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	stdioOpener := stdio.NewOpener()
-	v82 := provideFixtureStdioApplicationBuilder(stdioRunnerBuilder, runnerFactory, stdioOpener, v66, workflowPreviewOperation)
+	v81 := provideFixtureStdioApplicationBuilder(stdioRunnerBuilder, runnerFactory, stdioOpener, v66, workflowPreviewOperation)
 	openedStdioRunnerBuilder, err := application.NewOpenedStdioRunnerBuilder(managedRunnerFactory)
 	if err != nil {
 		return nil, err
 	}
-	v83 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, v66)
-	v84, err := wire.NewStdioOpeningService(v62, v82, v83)
+	v82 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, v66)
+	v83, err := wire.NewStdioOpeningService(v62, v81, v82)
 	if err != nil {
 		return nil, err
 	}
-	processStdioApplicationOpener, err := provideStdioApplicationOpener(v84)
+	processStdioApplicationOpener, err := provideStdioApplicationOpener(v83)
 	if err != nil {
 		return nil, err
 	}
-	v85 := provideSystemInitializationInspectPath(edges2)
-	v86 := provideSystemInitializationLegacyFactoryMigrationFileSystem(edges2)
-	systeminitializationService, err := provideSystemInitializationService(v20, packagedInstallationFileSystem, packagedFactoryCatalogOperations, configLoader, backendScopeEnsurer, v85, v86)
+	v84 := provideSystemInitializationInspectPath(edges2)
+	v85 := provideSystemInitializationLegacyFactoryMigrationFileSystem(edges2)
+	systeminitializationService, err := provideSystemInitializationService(v20, packagedInstallationFileSystem, packagedFactoryCatalogOperations, configLoader, backendScopeEnsurer, v84, v85)
 	if err != nil {
 		return nil, err
 	}
@@ -618,7 +617,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	processLifecycle, err := provideApplicationProcessLifecycle(service, eventsService, v80)
+	processLifecycle, err := provideApplicationProcessLifecycle(service, eventsService, v79)
 	if err != nil {
 		return nil, err
 	}
@@ -783,7 +782,7 @@ var servicesSet = wire4.NewSet(
 	provideInitialFactorySnapshotFactory, wire2.NewRuntimeFactory, wire2.NewAssembly, wire4.Bind(new(wire.FactoryRuntimeAssembler), new(*wire2.Assembly)), wire4.Struct(new(wire.ProviderSessionsRuntimeOpeningDependencies), "*"), wire4.Struct(new(wire.FactoryRuntimeOpeningDependencies), "*"), wire4.Struct(new(wire.FactoryDefinitionsRuntimeOpeningDependencies), "*"), wire4.Struct(new(wire.FactorySessionsRuntimeOpeningDependencies), "*"), wire4.Struct(new(wire.WorkRuntimeOpeningDependencies), "*"), wire4.Struct(new(wire.AutomationsRuntimeOpeningDependencies), "*"), wire4.Struct(new(wire.ModelsRuntimeOpeningDependencies), "*"), wire4.Struct(new(wire.RecordingsRuntimeOpeningDependencies), "*"), wire4.Struct(new(wire.WorkersRuntimeOpeningDependencies), "*"), wire4.Struct(new(wire.OperatorSettingsRuntimeOpeningDependencies), "*"), wire4.Struct(new(wire.RuntimeOpeningDependencies), "*"), provideLoadedFactorySourceFactory,
 	provideLoadedFactoryLoader,
 	provideReplayArtifactLoader,
-	provideReplayRuntimeConfigDecoder, wire.NewRuntimeOpeningFactory,
+	provideReplayRuntimeConfigDecoder, wire.NewRuntimeOpening,
 )
 
 var providerSessionServiceSet = wire4.NewSet(
@@ -884,9 +883,7 @@ var BundleSet = wire4.NewSet(
 	providePackagedFactoryDefinitions,
 	providePackagedFactoryCatalog,
 	provideSystemInitializationService,
-	provideSystemInitializationOperation,
-	provideRuntimeOpener,
-	provideApplicationRuntimeAdapter,
+	provideSystemInitializationOperation, wire4.Bind(new(wire.ApplicationRuntimeOpening), new(*wire.RuntimeOpening)), wire4.Bind(new(wire.InvocationRuntimeOpening), new(*wire.RuntimeOpening)), wire4.Bind(new(wire.ExecutionRuntimeOpening), new(*wire.RuntimeOpening)), provideApplicationRuntimeAdapter,
 	provideLifecycleRunnerFactory,
 	provideWorkStopSummaryProjector,
 	provideRuntimeOpeningRequestFactory,

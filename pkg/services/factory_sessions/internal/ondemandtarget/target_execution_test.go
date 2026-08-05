@@ -949,7 +949,7 @@ func TestServiceViaTargetExecutionCapabilityRejectsUnsupportedTarget(t *testing.
 	}
 }
 
-// funcOpener is an invocationRuntimeOpener test double backed directly by a
+// funcOpener is an invocation runtime-opening test double backed directly by a
 // function, for tests that need each successive OpenInvocationRuntime call
 // to return a distinct opened runtime (fakeOpener always returns the same
 // fixed one).

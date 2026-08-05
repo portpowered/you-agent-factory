@@ -72,15 +72,15 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	}
 }
 
-func TestNewRuntimeOpeningFactoryRejectsIncompleteGroupsAtCompositionBoundary(t *testing.T) {
+func TestNewRuntimeOpeningRejectsIncompleteGroupsAtCompositionBoundary(t *testing.T) {
 	t.Parallel()
 
-	factory, err := NewRuntimeOpeningFactory(RuntimeOpeningDependencies{})
+	factory, err := NewRuntimeOpening(RuntimeOpeningDependencies{})
 	if factory != nil {
-		t.Fatalf("NewRuntimeOpeningFactory() = %#v, want nil factory", factory)
+		t.Fatalf("NewRuntimeOpening() = %#v, want nil factory", factory)
 	}
 	if got, want := err.Error(), "Factory Sessions runtime-opening Provider Sessions group is required"; got != want {
-		t.Fatalf("NewRuntimeOpeningFactory() error = %q, want %q", got, want)
+		t.Fatalf("NewRuntimeOpening() error = %q, want %q", got, want)
 	}
 }
 

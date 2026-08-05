@@ -227,7 +227,7 @@ var servicesSet = wire.NewSet(
 	provideLoadedFactoryLoader,
 	provideReplayArtifactLoader,
 	provideReplayRuntimeConfigDecoder,
-	factorysessionwire.NewRuntimeOpeningFactory,
+	factorysessionwire.NewRuntimeOpening,
 )
 
 var providerSessionServiceSet = wire.NewSet(
@@ -331,7 +331,9 @@ var BundleSet = wire.NewSet(
 	providePackagedFactoryCatalog,
 	provideSystemInitializationService,
 	provideSystemInitializationOperation,
-	provideRuntimeOpener,
+	wire.Bind(new(factorysessionwire.ApplicationRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),
+	wire.Bind(new(factorysessionwire.InvocationRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),
+	wire.Bind(new(factorysessionwire.ExecutionRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),
 	provideApplicationRuntimeAdapter,
 	provideLifecycleRunnerFactory,
 	provideWorkStopSummaryProjector,

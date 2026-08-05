@@ -23,6 +23,42 @@ import (
 // into the Workers-owned command port.
 type WorkerCommandRunnerAdapter func(platformprocess.CommandRunner) workers.CommandRunner
 
+// ApplicationRuntimeOpening opens the application view of one Factory Sessions
+// runtime. Consumers receive this narrow operation rather than the
+// process-scoped grouped construction type.
+type ApplicationRuntimeOpening interface {
+	OpenApplicationRuntime(
+		context.Context,
+		*factorysessions.RuntimeOpeningRequest,
+		ExternalEffects,
+		*zap.Logger,
+	) (roles.OpenedApplicationRuntime, error)
+}
+
+// InvocationRuntimeOpening opens the invocation-only view of one Factory
+// Sessions runtime. Consumers receive this narrow operation rather than the
+// process-scoped grouped construction type.
+type InvocationRuntimeOpening interface {
+	OpenInvocationRuntime(
+		context.Context,
+		*factorysessions.RuntimeOpeningRequest,
+		ExternalEffects,
+		*zap.Logger,
+	) (roles.OpenedInvocationRuntime, error)
+}
+
+// ExecutionRuntimeOpening opens the durable-execution view of one Factory
+// Sessions runtime. It keeps direct execution on the same authoritative
+// opening capability while preserving its smaller operation surface.
+type ExecutionRuntimeOpening interface {
+	OpenExecutionRuntime(
+		context.Context,
+		*factorysessions.RuntimeOpeningRequest,
+		ExternalEffects,
+		*zap.Logger,
+	) (roles.OpenedExecutionRuntime, error)
+}
+
 // Dependencies is the Factory Sessions-owned construction input for the one
 // process-scoped runtime-opening factory. Groups are construction vocabulary:
 // they select fixed collaborators once in canonical Wire composition and do
@@ -178,6 +214,12 @@ type Factory struct {
 	resolveHome                      factorysessions.HomeDirectoryResolver
 	providerIdentities               factorysessions.ProviderIdentityResolver
 }
+
+var (
+	_ ApplicationRuntimeOpening = (*Factory)(nil)
+	_ InvocationRuntimeOpening  = (*Factory)(nil)
+	_ ExecutionRuntimeOpening   = (*Factory)(nil)
+)
 
 func NewFactory(dependencies Dependencies) (*Factory, error) {
 	if err := dependencies.validate(); err != nil {

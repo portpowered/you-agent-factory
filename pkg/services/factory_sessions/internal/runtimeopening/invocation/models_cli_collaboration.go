@@ -13,7 +13,7 @@ func (o *operation) ModelsPresentationRoot() models.Service {
 	if o == nil || o.openRuntime == nil {
 		return nil
 	}
-	return o.openRuntime.ModelsRoot()
+	return o.modelsRoot
 }
 
 func (o *operation) OpenModelsCatalogScope(
@@ -30,7 +30,7 @@ func (o *operation) OpenModelsCatalogScope(
 			Close: o.catalogScopeClose,
 		}, nil
 	}
-	root := o.openRuntime.ModelsRoot()
+	root := o.modelsRoot
 	if root == nil {
 		return models.PresentationScope{}, errors.New("models presentation root is unavailable")
 	}

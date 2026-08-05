@@ -21,10 +21,10 @@ const workersImportRoot = "github.com/portpowered/infinite-you/pkg/services/work
 // TestRuntimeOpeningPackagesImportWorkersOnlyThroughRoot seals runtime-opening
 // and construction call sites to the Workers service root contract.
 
-// TestRuntimeOpeningFactoryRolesNameWorkersRootContracts proves runtime-opening
+// TestRuntimeOpeningRolesNameWorkersRootContracts proves runtime-opening
 // construction helpers type Workers-facing bindings only through the Workers
 // service root.
-func TestRuntimeOpeningFactoryRolesNameWorkersRootContracts(t *testing.T) {
+func TestRuntimeOpeningRolesNameWorkersRootContracts(t *testing.T) {
 	t.Parallel()
 
 	var (

@@ -8,15 +8,12 @@ import (
 
 // FactoryTargetRuntimeResolver is re-published here so a caller outside the
 // factory_sessions tree can declare a field or parameter of this type
-// without importing the internal ondemandtarget package directly, matching
-// how this package already re-publishes RuntimeOpeningFactory and its peers.
+// without importing the internal ondemandtarget package directly.
 type FactoryTargetRuntimeResolver = ondemandtarget.RuntimeResolver
 
 // OnDemandFactoryTargetService is re-published here for the same reason;
 // the actual operational implementation lives in the owning service's
-// internal/ondemandtarget package, not this wire package, matching this
-// package's own established RuntimeOpeningFactory convention (a construction
-// alias plus a thin wrapper constructor, never operational implementation).
+// internal/ondemandtarget package, not this wire package.
 type OnDemandFactoryTargetService = ondemandtarget.Service
 
 // The on-demand activation this package constructs satisfies the
@@ -29,10 +26,10 @@ type OnDemandFactoryTargetService = ondemandtarget.Service
 var _ factorysessions.TargetExecutionService = (*OnDemandFactoryTargetService)(nil)
 
 // NewOnDemandFactoryTargetService constructs the on-demand Factory Sessions
-// activation over the given already-wired RuntimeOpeningFactory. Construction
-// alone performs no I/O and opens no runtime.
+// activation over the given already-wired invocation-opening capability.
+// Construction alone performs no I/O and opens no runtime.
 func NewOnDemandFactoryTargetService(
-	factory *RuntimeOpeningFactory,
+	factory InvocationRuntimeOpening,
 	effects RuntimeOpeningExternalEffects,
 	resolve FactoryTargetRuntimeResolver,
 	generateID factorysessions.SessionIDGenerator,

@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
@@ -206,6 +207,53 @@ func TestBuildProcessOpensFactoryWithRegisteredExternalProviderWithoutProviderIO
 			integration.capabilityCalls,
 			integration.invokeCalls,
 		)
+	}
+}
+
+// TestBuildProcessDefersAndOpensOneFactoryRuntime proves that the canonical
+// process graph remains inert across repeated construction, then opens one
+// Factory Session runtime for one selected live application execution.
+func TestBuildProcessDefersAndOpensOneFactoryRuntime(t *testing.T) {
+	t.Parallel()
+
+	var openedRuntimeIDs atomic.Int32
+	edges := serviceedges.Edges{
+		FactorySessionRuntimeInstanceIDGenerator: func() string {
+			openedRuntimeIDs.Add(1)
+			return "root-runtime-opening"
+		},
+	}
+	process, err := BuildProcess(context.Background(), edges)
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	second, err := BuildProcess(context.Background(), edges)
+	if err != nil {
+		t.Fatalf("second BuildProcess() error = %v", err)
+	}
+	if got := openedRuntimeIDs.Load(); got != 0 {
+		t.Fatalf("runtime IDs generated during process construction = %d, want 0", got)
+	}
+
+	factoryDir := rootFactoryWithProvider(t, "codex")
+	if err := process.Execute(Input{
+		Args: []string{
+			"you", "run", "--dir", factoryDir, "--with-mock-workers", "--quiet", "--no-record",
+		},
+		Env:              homeEnvironment(t.TempDir()),
+		Context:          context.Background(),
+		WorkingDirectory: factoryDir,
+	}); err != nil {
+		t.Fatalf("Process.Execute(run) error = %v", err)
+	}
+	if got := openedRuntimeIDs.Load(); got != 1 {
+		t.Fatalf("runtime IDs generated during one process execution = %d, want 1", got)
+	}
+	if err := process.Close(context.Background()); err != nil {
+		t.Fatalf("Process.Close() error = %v", err)
+	}
+	if err := second.Close(context.Background()); err != nil {
+		t.Fatalf("second Process.Close() error = %v", err)
 	}
 }
 
