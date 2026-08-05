@@ -303,12 +303,6 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/factory_sessions/internal/runtimeopening/factory.go#NewFactory",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-function",
       "target": "pkg/services/factory_sessions/internal/runtimeopening/open.go#openRuntime",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
@@ -1372,12 +1366,6 @@
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
       "target": "pkg/services/factory_sessions/internal/runtimeopening/construction.go#PrepareRuntime",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/factory_sessions/internal/runtimeopening/factory.go#NewFactory",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
