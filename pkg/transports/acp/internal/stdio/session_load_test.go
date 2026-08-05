@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
@@ -38,6 +40,61 @@ func attachmentIDFromMeta(t *testing.T, meta map[string]any) string {
 		t.Fatalf("_meta[%q] = %#v, want a non-empty attachment identity", session.AttachmentResumeMetaKey, meta[session.AttachmentResumeMetaKey])
 	}
 	return attachmentID
+}
+
+// TestServeSessionLoadReplaysRetainedUpdatesBeforeItsResponse proves the ACP
+// load ordering: a fresh connection receives the retained Chat aggregate as
+// session/update notifications before the load response, with the exact item
+// identity assigned at sequencing time. It exercises the real JSON-RPC Serve
+// loop rather than only the handler so notification framing and response
+// ordering cannot drift apart.
+func TestServeSessionLoadReplaysRetainedUpdatesBeforeItsResponse(t *testing.T) {
+	factoryTarget := &fakeFactoryTargetService{}
+	server, eventsSvc := newStreamingTestServer(t, factoryTarget)
+	eventsSvc.seedItem(t, streamingTestSessionID, "item-user", "", workers.KindMessage, workers.PhaseCompleted, workers.MessagePayload{
+		Role:          "user",
+		ContentBlocks: []workers.ContentBlock{{Kind: workers.ContentBlockText, Text: "retained question"}},
+	})
+	eventsSvc.seedItem(t, streamingTestSessionID, "item-assistant", "", workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("retained answer"))
+
+	input := `{"jsonrpc":"2.0","id":1,"method":"session/load","params":{"sessionId":"` + streamingTestSessionID + `","cwd":"/work/project","mcpServers":[]}}` + "\n"
+	out := &bytes.Buffer{}
+	if err := server.Serve(context.Background(), strings.NewReader(input), out); err != nil {
+		t.Fatalf("Serve() error = %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("Serve() emitted %d frames, want two retained updates then load response: %s", len(lines), out.String())
+	}
+	var userNotification notificationMessage
+	if err := json.Unmarshal([]byte(lines[0]), &userNotification); err != nil {
+		t.Fatalf("unmarshal retained user notification: %v", err)
+	}
+	if userNotification.Method != acpsdk.ClientMethodSessionUpdate {
+		t.Fatalf("first frame method = %q, want %q", userNotification.Method, acpsdk.ClientMethodSessionUpdate)
+	}
+	if userNotification.Params.Update.UserMessageChunk == nil || userNotification.Params.Update.UserMessageChunk.MessageId == nil {
+		t.Fatalf("first frame update = %+v, want an identified user message", userNotification.Params.Update)
+	}
+	if got := *userNotification.Params.Update.UserMessageChunk.MessageId; got != "item-user" {
+		t.Fatalf("replayed user MessageId = %q, want original sequencer identity %q", got, "item-user")
+	}
+	var assistantNotification notificationMessage
+	if err := json.Unmarshal([]byte(lines[1]), &assistantNotification); err != nil {
+		t.Fatalf("unmarshal retained assistant notification: %v", err)
+	}
+	if assistantNotification.Params.Update.AgentMessageChunk == nil || assistantNotification.Params.Update.AgentMessageChunk.MessageId == nil {
+		t.Fatalf("second frame update = %+v, want an identified agent message", assistantNotification.Params.Update)
+	}
+	if got := *assistantNotification.Params.Update.AgentMessageChunk.MessageId; got != "item-assistant" {
+		t.Fatalf("replayed assistant MessageId = %q, want original sequencer identity %q", got, "item-assistant")
+	}
+
+	response := assertSingleResponseLine(t, bytes.NewBufferString(lines[2]+"\n"))
+	if string(response.ID) != "1" || response.Error != nil {
+		t.Fatalf("load response = %+v, want successful response id 1", response)
+	}
 }
 
 // TestHandleSessionLoadAndResumeRejectMissingSessionIdBeforeAnyEffect proves
@@ -180,6 +237,89 @@ func TestHandleSessionLoadAttachesAndCachesAResumableAttachment(t *testing.T) {
 	}
 	if got := attachmentIDFromMeta(t, resp.Meta); got != cached.ID {
 		t.Fatalf("session/load response attachment identity = %q, want cached attachment %q", got, cached.ID)
+	}
+}
+
+// TestHandleSessionLoadRetryKeepsItsClosedSessionAttachment proves that a
+// completed load remains idempotent after close: the load-specific attachment
+// is still the cursor that has acknowledged the retained history, so retrying
+// must not create a new cursor that replays it a second time.
+func TestHandleSessionLoadRetryKeepsItsClosedSessionAttachment(t *testing.T) {
+	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project")}
+	server := newTestServer(chatSessions, nil, "/home/operator")
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionLoad, validSessionLoadParams)
+
+	result, rpcErr := server.handleSessionLoad(ctx, env)
+	if rpcErr != nil {
+		t.Fatalf("first handleSessionLoad() error = %+v, want success", rpcErr)
+	}
+	var first acpsdk.LoadSessionResponse
+	if err := json.Unmarshal(result, &first); err != nil {
+		t.Fatalf("unmarshal first LoadSessionResponse: %v", err)
+	}
+	firstID := attachmentIDFromMeta(t, first.Meta)
+
+	chatSessions.getSessionResult.Session.State = chatsessions.SessionStateClosed
+	result, rpcErr = server.handleSessionLoad(ctx, env)
+	if rpcErr != nil {
+		t.Fatalf("retried handleSessionLoad() error = %+v, want success", rpcErr)
+	}
+	var retried acpsdk.LoadSessionResponse
+	if err := json.Unmarshal(result, &retried); err != nil {
+		t.Fatalf("unmarshal retried LoadSessionResponse: %v", err)
+	}
+	if got := attachmentIDFromMeta(t, retried.Meta); got != firstID {
+		t.Fatalf("retried session/load attachment identity = %q, want original %q", got, firstID)
+	}
+	if got := len(chatSessions.attachments); got != 1 {
+		t.Fatalf("Attach created %d attachments, want one retained-history cursor", got)
+	}
+}
+
+// TestHandleSessionLoadSuppressesSuccessMetadataWhenReplayCannotStart proves
+// a client never receives a successful load response with an attachment
+// identity when either its attachment or the retained-history read fails.
+// Returning that identity would falsely imply that the requested history had
+// been delivered and could cause the client to acknowledge records it never
+// observed.
+func TestHandleSessionLoadSuppressesSuccessMetadataWhenReplayCannotStart(t *testing.T) {
+	tests := []struct {
+		name   string
+		server func(t *testing.T) *Server
+	}{
+		{
+			name: "attachment failure",
+			server: func(t *testing.T) *Server {
+				t.Helper()
+				return newTestServer(&fakeChatSessionsService{
+					getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
+					attachErr:        errors.New("attach retained-history cursor"),
+				}, nil, "/home/operator")
+			},
+		},
+		{
+			name: "retained history read failure",
+			server: func(t *testing.T) *Server {
+				t.Helper()
+				server, eventsSvc := newStreamingTestServer(t, &fakeFactoryTargetService{})
+				eventsSvc.readErr = errors.New("read retained history")
+				return server
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionLoad, validSessionLoadParams)
+			result, rpcErr := tt.server(t).handleSessionLoad(context.Background(), env)
+			if rpcErr == nil {
+				t.Fatal("handleSessionLoad() error = nil, want a bounded failure")
+			}
+			if result != nil {
+				t.Fatalf("handleSessionLoad() result = %s, want no successful attachment metadata", result)
+			}
+		})
 	}
 }
 

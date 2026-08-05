@@ -4,15 +4,17 @@ package stdio
 // chat-session streaming: attaching to a Chat Session, draining its
 // aggregate topic in order, projecting each record, and delivering it before
 // the V1 fallback (deliverPromptUpdates). It intentionally does not
-// implement the producer side itself -- the Chat Sessions-owned
-// responsebridge.Service.Run
+// implement the Factory-response producer side itself -- the Chat
+// Sessions-owned responsebridge.Service.Run
 // (invoked through the injected acp.ResponseBridge collaborator; see
 // response_bridge.go and dispatchFactoryTurn's two Factory dispatch branches
 // in session_prompt.go) owns calling chatsessions.Service.Sequence and
 // chatsessions.Service.AdvanceStreamHead to put a Factory response
 // workers.Draft onto chat-session/<id>/events in the first place, since that
 // is Factory Sessions event logic this package's own governing PRD bars it
-// from adding. This file provides two consumers of that topic:
+// from adding. ACP prompt admission owns the distinct user-authored record
+// before it dispatches a Factory turn. This file provides two consumers of
+// that topic:
 // liveDrainTurnUpdates (Subscribe-based, run concurrently with the in-flight
 // Factory invocation via the same injected collaborator, for genuine
 // mid-generation delivery) and streamTurnUpdates (Read-based, run strictly
@@ -70,11 +72,18 @@ type attachmentCache struct {
 	mu                sync.Mutex
 	bySession         map[string]chatsessions.Attachment
 	resumeIDBySession map[string]string
+	loadedSessions    map[string]bool
 }
 
 // attachmentCacheContextKey is the unexported context key attachmentCache is
 // carried under, so no other package can inject or observe it.
 type attachmentCacheContextKey struct{}
+
+// historyReplayContextKey marks the one session/load replay path. Live prompt
+// streams intentionally suppress user-authored records because the connected
+// client supplied them; a later load must include those same retained records
+// to rebuild the complete conversation.
+type historyReplayContextKey struct{}
 
 // contextWithAttachmentCache attaches cache to ctx for the duration of one
 // connection.
@@ -89,6 +98,15 @@ func contextWithAttachmentCache(ctx context.Context, cache *attachmentCache) con
 func attachmentCacheFromContext(ctx context.Context) *attachmentCache {
 	cache, _ := ctx.Value(attachmentCacheContextKey{}).(*attachmentCache)
 	return cache
+}
+
+func contextWithHistoryReplay(ctx context.Context) context.Context {
+	return context.WithValue(ctx, historyReplayContextKey{}, true)
+}
+
+func isHistoryReplay(ctx context.Context) bool {
+	replay, _ := ctx.Value(historyReplayContextKey{}).(bool)
+	return replay
 }
 
 // get reports the cached Attachment for sessionID, or ok=false when this
@@ -117,6 +135,32 @@ func (c *attachmentCache) set(sessionID string, a chatsessions.Attachment) {
 		c.bySession = make(map[string]chatsessions.Attachment)
 	}
 	c.bySession[sessionID] = a
+}
+
+// markLoaded records that this connection has already completed a
+// session/load for sessionID. It distinguishes a closed session's stale
+// pre-close attachment (which must be replaced so load can replay retained
+// history) from the attachment that this same load request installed (which
+// a retry must reuse to avoid duplicate delivery).
+func (c *attachmentCache) markLoaded(sessionID string) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.loadedSessions == nil {
+		c.loadedSessions = make(map[string]bool)
+	}
+	c.loadedSessions[sessionID] = true
+}
+
+func (c *attachmentCache) wasLoaded(sessionID string) bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.loadedSessions[sessionID]
 }
 
 // setResumeAttachmentID remembers the opaque identity a cooperating ACP
@@ -531,7 +575,14 @@ func (s *Server) drainRecords(
 			return false, deliveredMessage, fmt.Errorf("%w: %v", errMalformedSequencedEnvelope, unmarshalErr)
 		}
 
-		update, projErr := mapping.Project(mapping.DraftFromSequencedItem(item))
+		draft := mapping.DraftFromSequencedItem(item)
+		var update *acpsdk.SessionUpdate
+		var projErr error
+		if isHistoryReplay(ctx) {
+			update, projErr = mapping.ProjectRetained(draft)
+		} else {
+			update, projErr = mapping.Project(draft)
+		}
 		if projErr != nil {
 			return false, deliveredMessage, projErr
 		}

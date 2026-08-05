@@ -120,8 +120,9 @@ type Service interface {
 	// caller-selected value, so completion can only ever complete, no-op, or
 	// supersede the captured turn -- never a later one. A completed CLOSE
 	// intent atomically terminalizes the captured episode, active turn, and
-	// Chat Session with the intent; callers must advance it only after the
-	// captured Factory Session close succeeds.
+	// Chat Session and detaches every delivery attachment with the intent;
+	// callers must advance it only after the captured Factory Session close
+	// succeeds.
 	AdvanceControl(ctx context.Context, req AdvanceControlRequest) (AdvanceControlResult, error)
 
 	// BindFactorySession commits a returned Factory Session identity onto

@@ -430,12 +430,12 @@ func (f *fakeChatSessionsService) AdvanceControl(_ context.Context, req chatsess
 	return chatsessions.AdvanceControlResult{Intent: intent}, nil
 }
 
-func (f *fakeChatSessionsService) Sequence(context.Context, chatsessions.SequenceRequest) (chatsessions.SequenceResult, error) {
-	return chatsessions.SequenceResult{}, errors.New("fakeChatSessionsService: Sequence not implemented")
+func (f *fakeChatSessionsService) Sequence(ctx context.Context, req chatsessions.SequenceRequest) (chatsessions.SequenceResult, error) {
+	return recordFakePromptHistory(f, ctx, req)
 }
 
-func (f *fakeChatSessionsService) AdvanceStreamHead(context.Context, chatsessions.AdvanceStreamHeadRequest) (chatsessions.AdvanceStreamHeadResult, error) {
-	return chatsessions.AdvanceStreamHeadResult{}, errors.New("fakeChatSessionsService: AdvanceStreamHead not implemented")
+func (f *fakeChatSessionsService) AdvanceStreamHead(ctx context.Context, req chatsessions.AdvanceStreamHeadRequest) (chatsessions.AdvanceStreamHeadResult, error) {
+	return advanceFakePromptHistoryStreamHead(f, ctx, req)
 }
 
 func (f *fakeChatSessionsService) AcknowledgeAttachment(_ context.Context, req chatsessions.AcknowledgeAttachmentRequest) (chatsessions.AcknowledgeAttachmentResult, error) {

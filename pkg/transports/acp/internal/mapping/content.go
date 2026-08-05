@@ -18,6 +18,7 @@ import (
 // transport's output to project, so it produces no update rather than an
 // error.
 const assistantMessageRole = "assistant"
+const userMessageRole = "user"
 
 // ProjectMessage projects one MESSAGE-kind record -- workers.PhaseStarted,
 // PhaseDelta, or PhaseCompleted, the only phases response-draft validation
@@ -50,6 +51,35 @@ func ProjectMessage(draft workers.Draft) (*acpsdk.SessionUpdate, error) {
 		chunk.MessageId = &id
 	}
 	return &acpsdk.SessionUpdate{AgentMessageChunk: chunk}, nil
+}
+
+// ProjectRetained projects a committed record during session/load history
+// replay. It differs from Project only for a completed user MESSAGE: the
+// prompt-originating client did not need that update live, but a loading
+// client needs it to reconstruct the retained conversation with the
+// sequencer-assigned MessageId intact.
+func ProjectRetained(draft workers.Draft) (*acpsdk.SessionUpdate, error) {
+	if !isLegalKindPhase(draft.Kind, draft.Phase) || draft.Kind != workers.KindMessage || draft.Phase == workers.PhaseDelta {
+		return Project(draft)
+	}
+
+	var snapshot workers.MessagePayload
+	if err := json.Unmarshal(draft.Payload, &snapshot); err != nil {
+		return nil, fmt.Errorf("%w: payload must decode as MessagePayload: %v", ErrMalformedRecord, err)
+	}
+	if snapshot.Role != userMessageRole {
+		return Project(draft)
+	}
+	text := joinTextBlocks(snapshot.ContentBlocks)
+	if text == "" {
+		return nil, nil
+	}
+	chunk := &acpsdk.SessionUpdateUserMessageChunk{Content: acpsdk.TextBlock(text)}
+	if draft.ItemID != "" {
+		id := draft.ItemID
+		chunk.MessageId = &id
+	}
+	return &acpsdk.SessionUpdate{UserMessageChunk: chunk}, nil
 }
 
 // messageText extracts the customer-facing text a MESSAGE record carries:
