@@ -14,6 +14,7 @@
 - A committed Chat turn control must carry its immutable `TurnID` plus stable `ControlRequest.RequestID` to Factory Runtime as `TurnID`/`ControlID`; on-demand target cancellation must fan out before invocation-context cancellation and retain that result across runtime replacement.
 - A committed Chat close needs a control-aware target termination operation: preserve its opaque control ID and turn ID through Factory Sessions, fan out before target cleanup, and keep generic close separate for process lifecycle cleanup.
 - Factory portable payloads must derive and verify root and bundled-artifact integrity, then prepare the complete layout before any create or replace operation; reuse that prepared layout for the eventual atomic write.
+- Content-addressed Factory snapshots must exclude their declared identity and artifact-integrity metadata before canonical hashing, while artifact digesting uses a stable Factory-relative path order.
 
 ## 2026-08-04 20:18 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-001
 - Implemented typed Worker Session pause, resume, cancel, and terminate controls. Cancel and terminate now target the exact supervised dispatch through `WorkstationPoolBoundary.Cancel`; terminate waits for the established terminal callback, and pause/resume explicitly report unsupported until a truthful resumable capability exists.
@@ -246,4 +247,15 @@
   - A focused capability can wrap direct internal ports while preserving aggregate callback forwarding only for unmigrated consumers; migrate each coherent consumer independently.
   - YAML and YML installation must canonicalize the selected YAML source for validation while retaining the caller-selected authored root filename at write time.
   - A generated wire diff is expected while composition changes; compare the generated file hash across a second generation to prove reproducibility.
+---
+
+## 2026-08-05 05:35 -07:00 - ACP-L3-DEF-CONSOLIDATE-PACKAGING-SNAPSHOTS-002
+- Published the focused Factory Definitions `Snapshots` capability for explicit and loaded definition capture, detached import preparation, identity verification, and atomic materialization. Callers supply only definition values and target facts; codecs, runtime/session collaborators, and filesystem effects remain composition-owned ports.
+- Added deterministic SHA-256 snapshot identities that canonicalize map-backed snapshot content, seal bundled-artifact integrity, and reject changed or mismatched content before target mutation. Materialization now pre-validates artifacts, stages the exact `factory.json` plus bundled files, and atomically publishes a complete replacement.
+- Added behavioral coverage for equivalent identity stability, content changes, workers/workstations/source metadata/artifact round trips, detached caller-owned values, typed missing/malformed/integrity/unsafe input failures, and unchanged existing or absent targets when validation fails.
+- Files changed: `pkg/services/factory_definitions/{snapshot_capture.go,service_contract.go,internal/snapshots_portability.go,internal/services/snapshots_portability/**,wire/{snapshots.go,wire.go}}`, `prd.json`, `progress.txt`.
+- Verification: `go test ./pkg/services/factory_definitions/... -count=1`; `go test ./pkg/wire -count=1`; repeated focused `go test -race .../snapshots_portability/internal/service -run '^TestSnapshots' -count=5`; focused `go vet`; `make typecheck`; `git diff --check`. `make pkg-boundary` and `make pkg-file-count` remain blocked by their existing repository-wide baselines (141 and 48 violations respectively) outside this story.
+- **Learnings for future iterations:**
+  - A Factory snapshot's public JSON representation needs a composition-injected decoder for portable artifact restoration; keep that decoder inside Factory Definitions construction rather than exposing it to capability callers.
+  - Validate snapshot identity and bundled-content integrity before creating a staging directory, then stage the source and artifacts together so a failed publish cannot partially mutate an existing target.
 ---

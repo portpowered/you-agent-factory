@@ -9,9 +9,18 @@ import (
 )
 
 type snapshotPortabilityStub struct {
-	captureCalled     bool
-	prepareCalled     bool
-	materializeCalled bool
+	captureCalled       bool
+	captureLoadedCalled bool
+	prepareCalled       bool
+	materializeCalled   bool
+}
+
+func (s *snapshotPortabilityStub) CaptureLoadedFactorySnapshot(
+	context.Context,
+	factorydefinitions.CaptureLoadedFactorySnapshotRequest,
+) (factorydefinitions.CaptureFactorySnapshotResult, error) {
+	s.captureLoadedCalled = true
+	return factorydefinitions.CaptureFactorySnapshotResult{}, nil
 }
 
 func (s *snapshotPortabilityStub) CaptureFactorySnapshot(

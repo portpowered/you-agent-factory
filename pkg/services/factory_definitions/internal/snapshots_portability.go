@@ -5,12 +5,11 @@ import (
 	"fmt"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
 )
 
 type snapshotsPortabilityService struct {
 	factorydefinitions.Service
-	snapshots snapshotsportability.Service
+	snapshots factorydefinitions.Snapshots
 }
 
 // AttachSnapshotsPortability returns the Factory Definitions service with
@@ -18,7 +17,7 @@ type snapshotsPortabilityService struct {
 // nested snapshots_portability owner while preserving every other root operation.
 func AttachSnapshotsPortability(
 	service factorydefinitions.Service,
-	snapshots snapshotsportability.Service,
+	snapshots factorydefinitions.Snapshots,
 ) (factorydefinitions.Service, error) {
 	if service == nil {
 		return nil, fmt.Errorf("Factory Definitions service is required")

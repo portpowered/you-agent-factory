@@ -53,8 +53,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Published the focused Factory Definitions Snapshots capability with deterministic SHA-256 identities, detached loaded/explicit capture, typed input failures, artifact integrity verification, and staged atomic materialization. Behavioral coverage proves source/runtime/metadata/artifact round trips, stable identities, detachment, and pre-mutation failure safety. Verified Factory Definitions and wire tests, repeated race coverage, vet, typecheck, and diff validation; repository-wide package-boundary and package-file-count gates retain their existing shared baselines."
     },
     {
       "id": "ACP-L3-DEF-CONSOLIDATE-PACKAGING-SNAPSHOTS-003",

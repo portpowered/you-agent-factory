@@ -452,12 +452,24 @@ type CaptureFactorySnapshotRequest struct {
 // consume without importing snapshotcapture implementation types.
 type CaptureFactorySnapshotResult struct {
 	Snapshot *FactorySnapshot
+	Identity SnapshotIdentity
+}
+
+// CaptureLoadedFactorySnapshotRequest captures one already-loaded Factory
+// definition, including its effective runtime definitions and portable source
+// facts. The source is a Factory Definitions contract rather than a Runtime,
+// Session, or Recordings implementation.
+type CaptureLoadedFactorySnapshotRequest struct {
+	Source          FactorySnapshotSource
+	SourceDirectory string
+	Metadata        map[string]string
 }
 
 // PrepareFactorySnapshotImportRequest carries raw snapshot payload bytes for
 // import/prepare. Callers do not supply boundary codecs as request fields.
 type PrepareFactorySnapshotImportRequest struct {
-	Payload []byte
+	Payload          []byte
+	ExpectedIdentity SnapshotIdentity
 }
 
 // PrepareFactorySnapshotImportResult carries Definitions-owned portable import
@@ -466,13 +478,15 @@ type PrepareFactorySnapshotImportResult struct {
 	Snapshot *FactorySnapshot
 	Name     string
 	Portable PortableFactorySnapshotFacts
+	Identity SnapshotIdentity
 }
 
 // MaterializeFactorySnapshotRequest materializes one detached snapshot and its
 // bundled assets under a target directory.
 type MaterializeFactorySnapshotRequest struct {
-	TargetDir string
-	Snapshot  *FactorySnapshot
+	TargetDir        string
+	Snapshot         *FactorySnapshot
+	ExpectedIdentity SnapshotIdentity
 }
 
 // MaterializeFactorySnapshotResult carries Definitions-owned portable
@@ -480,6 +494,7 @@ type MaterializeFactorySnapshotRequest struct {
 type MaterializeFactorySnapshotResult struct {
 	TargetDir string
 	Portable  PortableFactorySnapshotFacts
+	Identity  SnapshotIdentity
 }
 
 // PortableFactorySnapshotFacts are detached portability identity/asset facts

@@ -13,38 +13,8 @@
 // validation/distribution APIs.
 package snapshotsportability
 
-import (
-	"context"
+import factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-)
-
-// Service owns detached Factory snapshot capture, prepare-import, and
-// materialize behind the CTR-DEF root snapshot slice.
-type Service interface {
-	CaptureFactorySnapshot(
-		context.Context,
-		factorydefinitions.CaptureFactorySnapshotRequest,
-	) (factorydefinitions.CaptureFactorySnapshotResult, error)
-	PrepareFactorySnapshotImport(
-		context.Context,
-		factorydefinitions.PrepareFactorySnapshotImportRequest,
-	) (factorydefinitions.PrepareFactorySnapshotImportResult, error)
-	MaterializeFactorySnapshot(
-		context.Context,
-		factorydefinitions.MaterializeFactorySnapshotRequest,
-	) (factorydefinitions.MaterializeFactorySnapshotResult, error)
-}
-
-// Dependencies are the exact collaborator ports required by snapshots_portability.
-// They are supplied by Factory Definitions composition and never selected here:
-// snapshots_portability does not choose host filesystem adapters, boundary
-// codecs, or Wire/root constructors.
-type Dependencies struct {
-	LoadCanonical             factorydefinitions.CanonicalFactoryJSONLoader
-	CaptureLoaded             factorydefinitions.LoadedFactorySnapshotCapturer
-	PreparePortable           factorydefinitions.PortableFactoryConfigPreparer
-	DecodeSnapshot            factorydefinitions.FactorySnapshotJSONDecoder
-	MaterializePortableFiles  factorydefinitions.PortableBundledFilesMaterializer
-	ValidateMaterializeWrites factorydefinitions.PortableBundledFileWritesValidator
-}
+// Service is the private name retained for root compatibility forwarding. New
+// consumers receive the public focused Snapshots capability directly.
+type Service = factorydefinitions.Snapshots

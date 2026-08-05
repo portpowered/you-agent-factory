@@ -19,10 +19,7 @@ import (
 	compilationcanonical "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical"
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
-	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
-	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
 	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
-	snapshotsportabilitywire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
@@ -80,14 +77,17 @@ func NewService(
 		applyStarterWork,
 	)
 	captureFactorySnapshot := FactorySnapshotCapturer()
-	snapshotsPortability, err := snapshotsportabilitywire.NewService(snapshotsportability.Dependencies{
-		LoadCanonical:             loader.LoadSourceFromCanonicalJSON,
-		CaptureLoaded:             LoadedFactorySnapshotCapturer(),
-		PreparePortable:           preparePortableFactoryConfig,
-		DecodeSnapshot:            FactorySnapshotJSONDecoder(),
-		MaterializePortableFiles:  snapshotsportabilitymaterialize.NewMaterializer(portableFileSystem),
-		ValidateMaterializeWrites: snapshotsportabilitymaterialize.NewWritesValidator(portableFileSystem),
-	})
+	snapshotFileSystem, ok := portableFileSystem.(factorydefinitions.SnapshotMaterializationFileSystem)
+	if !ok {
+		return nil, fmt.Errorf("construct Factory Definitions snapshots: portable filesystem must support atomic snapshot materialization")
+	}
+	snapshots, err := NewSnapshots(
+		loader,
+		applySupportedFiles,
+		applyStarterWork,
+		snapshotFileSystem,
+		directoryReplacementStore,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +179,7 @@ func NewService(
 	if attached == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: effective catalog attachment rejected its dependencies")
 	}
-	withSnapshots, err := factorydefinitionsinternal.AttachSnapshotsPortability(attached, snapshotsPortability)
+	withSnapshots, err := factorydefinitionsinternal.AttachSnapshotsPortability(attached, snapshots)
 	if err != nil {
 		return nil, err
 	}

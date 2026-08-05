@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -12,6 +13,7 @@ import (
 	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
 	snapshotsportabilityprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare"
 	snapshotsportabilityreplayconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig"
+	snapshotsportabilitywire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 )
@@ -22,6 +24,17 @@ func FactorySnapshotJSONDecoder() contracts.FactorySnapshotJSONDecoder {
 	return snapshotsportabilitycapture.NewJSONDecoder(
 		factorymapping.GeneratedFactoryFromOpenAPIJSON,
 	)
+}
+
+// FactorySnapshotConfigDecoder binds the public snapshot representation back
+// to the Factory Definitions configuration used by snapshot portability.
+func FactorySnapshotConfigDecoder() contracts.FactorySnapshotConfigDecoder {
+	return func(snapshot *contracts.FactorySnapshot) (*contracts.FactoryConfig, error) {
+		if snapshot == nil {
+			return nil, fmt.Errorf("Factory snapshot is required")
+		}
+		return factorymapping.FactoryConfigFromOpenAPIJSON(*snapshot)
+	}
 }
 
 // LoadedFactorySnapshotCapturer binds canonical snapshot representation
@@ -37,6 +50,33 @@ func LoadedFactorySnapshotCapturer() contracts.LoadedFactorySnapshotCapturer {
 func FactorySnapshotCapturer() contracts.FactorySnapshotCapturer {
 	return snapshotsportabilitycapture.NewExplicit(
 		factorysnapshot.ObjectFromFactoryConfig,
+	)
+}
+
+// NewSnapshots constructs the focused Factory Definitions snapshot capability
+// once from canonical loading, portable preparation, and exact filesystem
+// effects. Construction is inert; capture and materialization occur only when
+// a caller invokes the returned capability.
+func NewSnapshots(
+	loader *compilationloading.Loader,
+	applySupportedFiles contracts.PortableBundledFilesApplier,
+	applyStarterWork contracts.FactoryStarterWorkApplier,
+	fileSystem contracts.SnapshotMaterializationFileSystem,
+	directories contracts.DirectoryReplacementStore,
+) (contracts.Snapshots, error) {
+	if loader == nil {
+		return nil, fmt.Errorf("construct Factory Definitions snapshots: loader is required")
+	}
+	return snapshotsportabilitywire.NewService(
+		loader.LoadSourceFromCanonicalJSON,
+		LoadedFactorySnapshotCapturer(),
+		PortableFactoryConfigPreparer(applySupportedFiles, applyStarterWork),
+		FactorySnapshotJSONDecoder(),
+		FactorySnapshotConfigDecoder(),
+		NewPortableBundledFilesMaterializer(fileSystem),
+		NewPortableBundledFileWritesValidator(fileSystem),
+		fileSystem,
+		directories,
 	)
 }
 

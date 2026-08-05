@@ -1,6 +1,10 @@
 package materialize
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io/fs"
 	"path/filepath"
 	"strings"
 
@@ -12,48 +16,118 @@ import (
 func Snapshot(
 	targetDir string,
 	snapshot *factorydefinitions.FactorySnapshot,
+	factoryConfig *factorydefinitions.FactoryConfig,
 	validateMaterializeWrites factorydefinitions.PortableBundledFileWritesValidator,
 	materializePortableFiles factorydefinitions.PortableBundledFilesMaterializer,
+	fileSystem factorydefinitions.SnapshotMaterializationFileSystem,
+	directories factorydefinitions.DirectoryReplacementStore,
 ) (factorydefinitions.MaterializeFactorySnapshotResult, error) {
-	if validateMaterializeWrites == nil || materializePortableFiles == nil {
+	if validateMaterializeWrites == nil || materializePortableFiles == nil || fileSystem == nil || directories == nil {
 		return factorydefinitions.MaterializeFactorySnapshotResult{}, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize
 	}
 	targetDir = strings.TrimSpace(targetDir)
-	if targetDir == "" || snapshot == nil || !safeTarget(targetDir) {
-		return factorydefinitions.MaterializeFactorySnapshotResult{}, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize
-	}
-
-	factoryConfig, assets, err := factoryConfigFromSnapshot(snapshot)
-	if err != nil {
+	if targetDir == "" || snapshot == nil || factoryConfig == nil || !safeTarget(targetDir) {
 		return factorydefinitions.MaterializeFactorySnapshotResult{}, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize
 	}
 	if err := validateMaterializeWrites(targetDir, factoryConfig); err != nil {
 		return factorydefinitions.MaterializeFactorySnapshotResult{}, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize
 	}
-	if _, err := materializePortableFiles(targetDir, factoryConfig); err != nil {
-		return factorydefinitions.MaterializeFactorySnapshotResult{}, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize
+	if err := stageAndPublish(
+		targetDir,
+		snapshot,
+		factoryConfig,
+		materializePortableFiles,
+		fileSystem,
+		directories,
+	); err != nil {
+		return factorydefinitions.MaterializeFactorySnapshotResult{}, err
 	}
 
 	return factorydefinitions.MaterializeFactorySnapshotResult{
 		TargetDir: targetDir,
 		Portable: factorydefinitions.PortableFactorySnapshotFacts{
 			FactoryDir: targetDir,
-			Assets:     assets,
+			Assets:     portableAssetsFromConfig(factoryConfig),
 		},
 	}, nil
 }
 
-func factoryConfigFromSnapshot(
+func stageAndPublish(
+	targetDir string,
 	snapshot *factorydefinitions.FactorySnapshot,
-) (*factorydefinitions.FactoryConfig, []factorydefinitions.PortableSnapshotAssetFact, error) {
-	var factoryConfig factorydefinitions.FactoryConfig
-	if err := snapshot.Decode(&factoryConfig); err != nil {
-		return nil, nil, err
+	factoryConfig *factorydefinitions.FactoryConfig,
+	materializePortableFiles factorydefinitions.PortableBundledFilesMaterializer,
+	fileSystem factorydefinitions.SnapshotMaterializationFileSystem,
+	directories factorydefinitions.DirectoryReplacementStore,
+) error {
+	parentDir := filepath.Dir(targetDir)
+	segment := filepath.Base(targetDir)
+	if parentDir == "." || segment == "." || segment == string(filepath.Separator) {
+		return factorydefinitions.ErrUnsafeFactorySnapshotMaterialize
 	}
-	if factoryConfig.ResourceManifest == nil {
-		factoryConfig.ResourceManifest = &factorydefinitions.PortableResourceManifestConfig{}
+	if info, err := fileSystem.Stat(parentDir); err != nil || !info.IsDir() {
+		return fmt.Errorf("snapshot target parent is unavailable")
 	}
-	return &factoryConfig, portableAssetsFromConfig(&factoryConfig), nil
+	stagingDir, err := fileSystem.MkdirTemp(parentDir, "."+segment+".snapshot-")
+	if err != nil {
+		return fmt.Errorf("create snapshot staging directory: %w", err)
+	}
+	defer func() { _ = fileSystem.RemoveAll(stagingDir) }()
+
+	if err := writeStagedSnapshot(stagingDir, snapshot, factoryConfig, materializePortableFiles, fileSystem); err != nil {
+		return err
+	}
+	if err := publishStagedSnapshot(parentDir, targetDir, stagingDir, fileSystem, directories); err != nil {
+		return err
+	}
+	return nil
+}
+
+func writeStagedSnapshot(
+	stagingDir string,
+	snapshot *factorydefinitions.FactorySnapshot,
+	factoryConfig *factorydefinitions.FactoryConfig,
+	materializePortableFiles factorydefinitions.PortableBundledFilesMaterializer,
+	fileSystem factorydefinitions.SnapshotMaterializationFileSystem,
+) error {
+	if err := fileSystem.WriteFile(
+		filepath.Join(stagingDir, factorydefinitions.FactoryConfigFile),
+		bytes.Clone(*snapshot),
+		0o644,
+	); err != nil {
+		return fmt.Errorf("write snapshot Factory source: %w", err)
+	}
+	if _, err := materializePortableFiles(stagingDir, factoryConfig); err != nil {
+		return fmt.Errorf("materialize snapshot bundled artifacts: %w", err)
+	}
+	return nil
+}
+
+func publishStagedSnapshot(
+	parentDir string,
+	targetDir string,
+	stagingDir string,
+	fileSystem factorydefinitions.SnapshotMaterializationFileSystem,
+	directories factorydefinitions.DirectoryReplacementStore,
+) error {
+	info, err := fileSystem.Stat(targetDir)
+	if errors.Is(err, fs.ErrNotExist) {
+		if err := fileSystem.Rename(stagingDir, targetDir); err != nil {
+			return fmt.Errorf("publish new snapshot target: %w", err)
+		}
+		return nil
+	}
+	if err != nil || !info.IsDir() {
+		return fmt.Errorf("snapshot target is not a directory")
+	}
+	backupDir, err := directories.Commit(parentDir, targetDir, stagingDir)
+	if err != nil {
+		return fmt.Errorf("publish snapshot target: %w", err)
+	}
+	if backupDir != "" {
+		_ = fileSystem.RemoveAll(backupDir)
+	}
+	return nil
 }
 
 func portableAssetsFromConfig(

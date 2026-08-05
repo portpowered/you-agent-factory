@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/directoryreplace"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
 	snapshotsportabilitycapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture"
 	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
 	snapshotsportabilitywire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire"
@@ -51,7 +51,7 @@ func stubPreparePortable(
 	return factoryConfig, nil
 }
 
-func newCaptureService(t *testing.T) snapshotsportability.Service {
+func newCaptureService(t *testing.T) factorydefinitions.Snapshots {
 	t.Helper()
 	return newSnapshotService(t, stubDecodeSnapshot)
 }
@@ -60,20 +60,34 @@ func stubDecodeSnapshot(payload []byte) (*factorydefinitions.FactorySnapshot, er
 	return factorydefinitions.NewFactorySnapshot(json.RawMessage(payload))
 }
 
+func stubDecodeConfig(snapshot *factorydefinitions.FactorySnapshot) (*factorydefinitions.FactoryConfig, error) {
+	if snapshot == nil {
+		return nil, factorydefinitions.ErrInvalidFactorySnapshotPayload
+	}
+	var config factorydefinitions.FactoryConfig
+	if err := snapshot.Decode(&config); err != nil {
+		return nil, err
+	}
+	return &config, nil
+}
+
 func newSnapshotService(
 	t *testing.T,
 	decode factorydefinitions.FactorySnapshotJSONDecoder,
-) snapshotsportability.Service {
+) factorydefinitions.Snapshots {
 	t.Helper()
 	fileSystem := platformfilesystem.Local{}
-	svc, err := snapshotsportabilitywire.NewService(snapshotsportability.Dependencies{
-		LoadCanonical:             stubLoadCanonical,
-		CaptureLoaded:             snapshotsportabilitycapture.NewLoaded(snapshotObjectMapper),
-		PreparePortable:           stubPreparePortable,
-		DecodeSnapshot:            decode,
-		MaterializePortableFiles:  snapshotsportabilitymaterialize.NewMaterializer(fileSystem),
-		ValidateMaterializeWrites: snapshotsportabilitymaterialize.NewWritesValidator(fileSystem),
-	})
+	svc, err := snapshotsportabilitywire.NewService(
+		stubLoadCanonical,
+		snapshotsportabilitycapture.NewLoaded(snapshotObjectMapper),
+		stubPreparePortable,
+		decode,
+		stubDecodeConfig,
+		snapshotsportabilitymaterialize.NewMaterializer(fileSystem),
+		snapshotsportabilitymaterialize.NewWritesValidator(fileSystem),
+		fileSystem,
+		directoryreplace.Local{},
+	)
 	if err != nil {
 		t.Fatalf("snapshotsportabilitywire.NewService: %v", err)
 	}
@@ -108,17 +122,20 @@ func fullSnapshotObjectMapper(factory *factorydefinitions.FactoryConfig) (map[st
 	return object, nil
 }
 
-func newRoundTripService(t *testing.T) snapshotsportability.Service {
+func newRoundTripService(t *testing.T) factorydefinitions.Snapshots {
 	t.Helper()
 	fileSystem := platformfilesystem.Local{}
-	svc, err := snapshotsportabilitywire.NewService(snapshotsportability.Dependencies{
-		LoadCanonical:             stubLoadCanonical,
-		CaptureLoaded:             snapshotsportabilitycapture.NewLoaded(fullSnapshotObjectMapper),
-		PreparePortable:           stubPreparePortable,
-		DecodeSnapshot:            stubDecodeSnapshot,
-		MaterializePortableFiles:  snapshotsportabilitymaterialize.NewMaterializer(fileSystem),
-		ValidateMaterializeWrites: snapshotsportabilitymaterialize.NewWritesValidator(fileSystem),
-	})
+	svc, err := snapshotsportabilitywire.NewService(
+		stubLoadCanonical,
+		snapshotsportabilitycapture.NewLoaded(fullSnapshotObjectMapper),
+		stubPreparePortable,
+		stubDecodeSnapshot,
+		stubDecodeConfig,
+		snapshotsportabilitymaterialize.NewMaterializer(fileSystem),
+		snapshotsportabilitymaterialize.NewWritesValidator(fileSystem),
+		fileSystem,
+		directoryreplace.Local{},
+	)
 	if err != nil {
 		t.Fatalf("snapshotsportabilitywire.NewService: %v", err)
 	}
