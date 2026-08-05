@@ -18,11 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	invocationwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/wire"
-	"github.com/portpowered/infinite-you/pkg/services/models"
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // The aliases in this file are the service-owned construction vocabulary used
@@ -94,30 +89,41 @@ type (
 	ProcessLifecycleFactory = processlifecycle.Factory
 	RuntimeHostService      = runtimehosting.Service
 
-	RuntimeOpeningExternalEffects          = runtimeopening.ExternalEffects
-	WorkFactory                            = runtimeopening.WorkFactory
-	AutomationFactory                      = runtimeopening.AutomationFactory
-	FactorySessionExecutionFactory         = runtimeopening.FactorySessionExecutionFactory
-	ConductorInvocationWithProgressFactory = runtimeopening.ConductorInvocationWithProgressFactory
-	RecordingsProjectionFactory            = runtimeopening.RecordingsProjectionFactory
-	RecordingLifecycleFactory              = runtimeopening.RecordingLifecycleFactory
-	RuntimeLedgerFactory                   = runtimeopening.RuntimeLedgerFactory
-	ReplayClockFactory                     = runtimeopening.ReplayClockFactory
-	WorkersRuntimeFactory                  = runtimeopening.WorkersRuntimeFactory
-	AutomationHostedSourcesFactory         = runtimeopening.AutomationHostedSourcesFactory
-	WorkersLocalRuntimeHooksFactory        = runtimeopening.WorkersLocalRuntimeHooksFactory
-	FactoryDefinitionsFactory              = runtimeopening.FactoryDefinitionsFactory
-	DurableExecutionFactory                = runtimeopening.DurableExecutionFactory
-	DurableExecution                       = runtimeopening.DurableExecution
-	WorkerExecutionFactory                 = runtimeopening.WorkerExecutionFactory
-	WorkerCommandRunnerAdapter             = runtimeopening.WorkerCommandRunnerAdapter
-	ProviderFromCommandRunnerFactory       = runtimeopening.ProviderFromCommandRunnerFactory
-	FactoryRuntimeAssembler                = runtimeopening.FactoryRuntimeAssembler
-	RuntimeOpeningFactory                  = runtimeopening.Factory
-	RuntimeRoot                            = runtimeopening.RuntimeRoot
-	ModelPullMetricsRecorder               = factorysessioncontracts.ModelPullMetricsRecorder
-	InvocationArtifactFileSystem           = factorysessioncontracts.InvocationArtifactFileSystem
-	InvocationArtifactExporter             = factorysessioncontracts.InvocationArtifactExporter
+	RuntimeOpeningExternalEffects                = runtimeopening.ExternalEffects
+	RuntimeOpeningDependencies                   = runtimeopening.Dependencies
+	ProviderSessionsRuntimeOpeningDependencies   = runtimeopening.ProviderSessionsDependencies
+	FactoryRuntimeOpeningDependencies            = runtimeopening.FactoryRuntimeDependencies
+	FactoryDefinitionsRuntimeOpeningDependencies = runtimeopening.FactoryDefinitionsDependencies
+	FactorySessionsRuntimeOpeningDependencies    = runtimeopening.FactorySessionsDependencies
+	WorkRuntimeOpeningDependencies               = runtimeopening.WorkDependencies
+	AutomationsRuntimeOpeningDependencies        = runtimeopening.AutomationsDependencies
+	ModelsRuntimeOpeningDependencies             = runtimeopening.ModelsDependencies
+	RecordingsRuntimeOpeningDependencies         = runtimeopening.RecordingsDependencies
+	WorkersRuntimeOpeningDependencies            = runtimeopening.WorkersDependencies
+	OperatorSettingsRuntimeOpeningDependencies   = runtimeopening.OperatorSettingsDependencies
+	WorkFactory                                  = runtimeopening.WorkFactory
+	AutomationFactory                            = runtimeopening.AutomationFactory
+	FactorySessionExecutionFactory               = runtimeopening.FactorySessionExecutionFactory
+	ConductorInvocationWithProgressFactory       = runtimeopening.ConductorInvocationWithProgressFactory
+	RecordingsProjectionFactory                  = runtimeopening.RecordingsProjectionFactory
+	RecordingLifecycleFactory                    = runtimeopening.RecordingLifecycleFactory
+	RuntimeLedgerFactory                         = runtimeopening.RuntimeLedgerFactory
+	ReplayClockFactory                           = runtimeopening.ReplayClockFactory
+	WorkersRuntimeFactory                        = runtimeopening.WorkersRuntimeFactory
+	AutomationHostedSourcesFactory               = runtimeopening.AutomationHostedSourcesFactory
+	WorkersLocalRuntimeHooksFactory              = runtimeopening.WorkersLocalRuntimeHooksFactory
+	FactoryDefinitionsFactory                    = runtimeopening.FactoryDefinitionsFactory
+	DurableExecutionFactory                      = runtimeopening.DurableExecutionFactory
+	DurableExecution                             = runtimeopening.DurableExecution
+	WorkerExecutionFactory                       = runtimeopening.WorkerExecutionFactory
+	WorkerCommandRunnerAdapter                   = runtimeopening.WorkerCommandRunnerAdapter
+	ProviderFromCommandRunnerFactory             = runtimeopening.ProviderFromCommandRunnerFactory
+	FactoryRuntimeAssembler                      = runtimeopening.FactoryRuntimeAssembler
+	RuntimeOpeningFactory                        = runtimeopening.Factory
+	RuntimeRoot                                  = runtimeopening.RuntimeRoot
+	ModelPullMetricsRecorder                     = factorysessioncontracts.ModelPullMetricsRecorder
+	InvocationArtifactFileSystem                 = factorysessioncontracts.InvocationArtifactFileSystem
+	InvocationArtifactExporter                   = factorysessioncontracts.InvocationArtifactExporter
 
 	StandaloneSessionExecutionFactory   = executionopening.StandaloneSessionExecutionFactory
 	WorkerInvocationFactory             = executionopening.WorkerInvocationFactory
@@ -139,73 +145,8 @@ var (
 	NewExecutionOpeningFactory = executionopening.NewFactory
 )
 
-type RuntimeOpeningDependencies struct {
-	ProviderSessions                 providersessions.Service
-	FactoryWorkflows                 factoryruntime.JavaScriptWorkflowDefinitions
-	WorkflowPreview                  factoryruntime.WorkflowPreviewOperation
-	FactoryDefinitionValidator       factorydefinitions.Validator
-	NamedPaths                       factorydefinitions.NamedPathResolver
-	DurableExecutionFactory          DurableExecutionFactory
-	WorkerExecutionFactory           WorkerExecutionFactory
-	ModelService                     models.Service
-	WorkFactory                      WorkFactory
-	AutomationFactory                AutomationFactory
-	FactorySessionsService           factorysessions.Service
-	FactorySessionExecutionFactory   FactorySessionExecutionFactory
-	RecordingsProjectionFactory      RecordingsProjectionFactory
-	RecordingLifecycleFactory        RecordingLifecycleFactory
-	RuntimeLedgerFactory             RuntimeLedgerFactory
-	RuntimeRecorderFactory           recordings.RuntimeRecorderFactory
-	ReplayClockFactory               ReplayClockFactory
-	ReplayExecutionFactory           recordings.ReplayExecutionFactory
-	WorkersRuntimeFactory            WorkersRuntimeFactory
-	WorkersRuntimeExecutorsFactory   factoryruntime.WorkersRuntimeExecutorsFactory
-	WorkersMockCommandRunnerFactory  factoryruntime.WorkersMockCommandRunnerFactory
-	AutomationHostedSourcesFactory   AutomationHostedSourcesFactory
-	WorkersLocalRuntimeHooksFactory  WorkersLocalRuntimeHooksFactory
-	FactoryDefinitionsFactory        FactoryDefinitionsFactory
-	FactoryScaffoldInitializer       factorysessions.FactoryScaffoldInitializer
-	EditableFactoryValidator         factorysessions.EditableFactoryValidator
-	InitialFactorySnapshotFactory    factorydefinitions.InitialFactorySnapshotFactory
-	FactoryRuntimeAssembler          FactoryRuntimeAssembler
-	ContentMaterializer              work.ContentMaterializer
-	LoadFactory                      factorydefinitions.LoadedFactoryLoader
-	NewLoadedFactory                 factorydefinitions.LoadedFactorySourceFactory
-	DecodeReplayConfig               factorydefinitions.ReplayRuntimeConfigDecoder
-	ReplayInputs                     recordings.ReplayInputLoader
-	CaptureLoadedFactorySnapshot     factorydefinitions.LoadedFactorySnapshotCapturer
-	ResolveClock                     factoryruntime.ClockResolver
-	NewSessionLogger                 factoryruntime.SessionLoggerFactory
-	AdaptWorkerCommandRunner         WorkerCommandRunnerAdapter
-	ProviderFromCommandRunnerFactory ProviderFromCommandRunnerFactory
-	ProcessRuntimeFactory            ProcessRuntimeFactory
-	EnsureOperatorBackendScope       operatorsettings.BackendScopeEnsurer
-	GenerateRuntimeInstanceID        factorysessions.RuntimeInstanceIDGenerator
-	ResolveHome                      factorysessions.HomeDirectoryResolver
-	ProviderIdentities               factorysessions.ProviderIdentityResolver
-}
-
 func NewRuntimeOpeningFactory(deps RuntimeOpeningDependencies) (*RuntimeOpeningFactory, error) {
-	return runtimeopening.NewFactory(
-		deps.ProviderSessions, deps.FactoryWorkflows, deps.WorkflowPreview,
-		deps.FactoryDefinitionValidator, deps.NamedPaths, deps.DurableExecutionFactory,
-		deps.WorkerExecutionFactory, deps.ModelService, deps.WorkFactory, deps.AutomationFactory,
-		deps.FactorySessionsService, deps.FactorySessionExecutionFactory,
-		deps.RecordingsProjectionFactory, deps.RecordingLifecycleFactory, deps.RuntimeLedgerFactory,
-		deps.RuntimeRecorderFactory, deps.ReplayClockFactory, deps.ReplayExecutionFactory,
-		deps.WorkersRuntimeFactory, deps.WorkersRuntimeExecutorsFactory,
-		deps.WorkersMockCommandRunnerFactory, deps.AutomationHostedSourcesFactory,
-		deps.WorkersLocalRuntimeHooksFactory, deps.FactoryDefinitionsFactory,
-		deps.FactoryScaffoldInitializer, deps.EditableFactoryValidator,
-		deps.InitialFactorySnapshotFactory, deps.FactoryRuntimeAssembler,
-		work.MaterializationService(deps.ContentMaterializer),
-		deps.LoadFactory, deps.NewLoadedFactory, deps.DecodeReplayConfig, deps.ReplayInputs,
-		deps.CaptureLoadedFactorySnapshot, deps.ResolveClock, deps.NewSessionLogger,
-		deps.AdaptWorkerCommandRunner, deps.ProviderFromCommandRunnerFactory, deps.ProcessRuntimeFactory,
-		deps.EnsureOperatorBackendScope,
-		deps.GenerateRuntimeInstanceID, deps.ResolveHome,
-		deps.ProviderIdentities,
-	)
+	return runtimeopening.NewFactory(deps)
 }
 
 func NewLifecyclePlanOperation() LifecyclePlanOperation {
