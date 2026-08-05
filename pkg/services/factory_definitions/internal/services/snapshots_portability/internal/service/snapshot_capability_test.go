@@ -105,6 +105,78 @@ func TestSnapshotsCaptureRoundTripUsesStableIdentityAndCompleteLayout(t *testing
 	}
 }
 
+func TestSnapshotsIdentityChangesForEveryPortableDefinitionFact(t *testing.T) {
+	t.Parallel()
+
+	svc := newRoundTripService(t)
+	baseInput := defaultSnapshotIdentityInput()
+	base := captureLoadedIdentitySnapshot(t, svc, baseInput)
+
+	tests := []struct {
+		name   string
+		change func(*snapshotIdentityInput)
+	}{
+		{
+			name: "canonical definition",
+			change: func(input *snapshotIdentityInput) {
+				input.name = "beta"
+			},
+		},
+		{
+			name: "runtime worker binding",
+			change: func(input *snapshotIdentityInput) {
+				input.workerBody = "changed runtime writer"
+			},
+		},
+		{
+			name: "runtime workstation binding",
+			change: func(input *snapshotIdentityInput) {
+				input.workstationBody = "changed runtime workstation"
+			},
+		},
+		{
+			name: "Factory source root",
+			change: func(input *snapshotIdentityInput) {
+				input.directory = "/factories/beta"
+			},
+		},
+		{
+			name: "source directory",
+			change: func(input *snapshotIdentityInput) {
+				input.sourceDirectory = "/source/beta"
+			},
+		},
+		{
+			name: "metadata",
+			change: func(input *snapshotIdentityInput) {
+				input.metadata = "second"
+			},
+		},
+		{
+			name: "bundled artifact content",
+			change: func(input *snapshotIdentityInput) {
+				input.artifact = "changed"
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			input := baseInput
+			test.change(&input)
+			changed := captureLoadedIdentitySnapshot(t, svc, input)
+			if changed.Identity == "" || changed.Identity == base.Identity {
+				t.Fatalf(
+					"%s identity = %q, want a distinct non-empty identity from %q",
+					test.name,
+					changed.Identity,
+					base.Identity,
+				)
+			}
+		})
+	}
+}
+
 func TestSnapshotsRejectIntegrityFailuresBeforeTargetMutation(t *testing.T) {
 	t.Parallel()
 
@@ -274,6 +346,124 @@ func TestSnapshotsCaptureLoadedDefinitionDetachesMetadata(t *testing.T) {
 
 func canonicalSnapshotInput(content string) []byte {
 	return []byte(`{"name":"alpha","workers":[{"name":"writer","type":"codex","body":"write"}],"workstations":[{"name":"review","type":"LOGICAL_MOVE","body":"review"}],"resourceManifest":{"bundledFiles":[{"type":"DOC","targetPath":"factory/docs/README.md","content":{"encoding":"utf-8","inline":"` + content + `"}}]}}`)
+}
+
+type snapshotIdentitySource struct {
+	stubLoadedSource
+	workers      map[string]*factorydefinitions.FactoryWorkerConfig
+	workstations map[string]*factorydefinitions.FactoryWorkstationConfig
+}
+
+type snapshotIdentityInput struct {
+	name            string
+	directory       string
+	sourceDirectory string
+	artifact        string
+	workerBody      string
+	workstationBody string
+	metadata        string
+}
+
+func defaultSnapshotIdentityInput() snapshotIdentityInput {
+	return snapshotIdentityInput{
+		name:            "alpha",
+		directory:       "/factories/alpha",
+		sourceDirectory: "/source/alpha",
+		artifact:        "hello",
+		workerBody:      "runtime writer",
+		workstationBody: "runtime workstation",
+		metadata:        "first",
+	}
+}
+
+func (s snapshotIdentitySource) Worker(name string) (*factorydefinitions.FactoryWorkerConfig, bool) {
+	worker, ok := s.workers[name]
+	return worker, ok
+}
+
+func (s snapshotIdentitySource) Workstation(name string) (*factorydefinitions.FactoryWorkstationConfig, bool) {
+	workstation, ok := s.workstations[name]
+	return workstation, ok
+}
+
+func newSnapshotIdentitySource(
+	name string,
+	directory string,
+	artifact string,
+	workerBody string,
+	workstationBody string,
+) snapshotIdentitySource {
+	return snapshotIdentitySource{
+		stubLoadedSource: stubLoadedSource{
+			dir: directory,
+			cfg: &factorydefinitions.FactoryConfig{
+				Name: name,
+				Workers: []factorydefinitions.FactoryWorkerConfig{{
+					Name: "writer",
+					Type: "codex",
+					Body: "authored worker",
+				}},
+				Workstations: []factorydefinitions.FactoryWorkstationConfig{{
+					Name: "review",
+					Type: "LOGICAL_MOVE",
+					Body: "authored workstation",
+				}},
+				ResourceManifest: &factorydefinitions.PortableResourceManifestConfig{
+					BundledFiles: []factorydefinitions.BundledFileConfig{{
+						Type:       factorydefinitions.BundledFileTypeDoc,
+						TargetPath: "factory/docs/README.md",
+						Content: factorydefinitions.BundledFileContentConfig{
+							Encoding: factorydefinitions.BundledFileEncodingUTF8,
+							Inline:   artifact,
+						},
+					}},
+				},
+			},
+		},
+		workers: map[string]*factorydefinitions.FactoryWorkerConfig{
+			"writer": {
+				Name: "writer",
+				Type: "codex",
+				Body: workerBody,
+			},
+		},
+		workstations: map[string]*factorydefinitions.FactoryWorkstationConfig{
+			"review": {
+				Name: "review",
+				Type: "LOGICAL_MOVE",
+				Body: workstationBody,
+			},
+		},
+	}
+}
+
+func captureLoadedIdentitySnapshot(
+	t *testing.T,
+	svc factorydefinitions.Snapshots,
+	input snapshotIdentityInput,
+) factorydefinitions.CaptureFactorySnapshotResult {
+	t.Helper()
+	result, err := svc.CaptureLoadedFactorySnapshot(
+		context.Background(),
+		factorydefinitions.CaptureLoadedFactorySnapshotRequest{
+			Source: newSnapshotIdentitySource(
+				input.name,
+				input.directory,
+				input.artifact,
+				input.workerBody,
+				input.workstationBody,
+			),
+			SourceDirectory: input.sourceDirectory,
+			Metadata:        map[string]string{"caller": input.metadata},
+		},
+	)
+	if err != nil {
+		t.Fatalf("CaptureLoadedFactorySnapshot: %v", err)
+	}
+	if result.Identity == "" {
+		t.Fatal("CaptureLoadedFactorySnapshot returned an empty identity")
+	}
+	return result
 }
 
 func equivalentCanonicalSnapshotInput() []byte {

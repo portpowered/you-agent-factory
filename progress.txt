@@ -16,6 +16,7 @@
 - A committed Chat close needs a control-aware target termination operation: preserve its opaque control ID and turn ID through Factory Sessions, fan out before target cleanup, and keep generic close separate for process lifecycle cleanup.
 - Factory portable payloads must derive and verify root and bundled-artifact integrity, then prepare the complete layout before any create or replace operation; reuse that prepared layout for the eventual atomic write.
 - Content-addressed Factory snapshots must exclude their declared identity and artifact-integrity metadata before canonical hashing, while artifact digesting uses a stable Factory-relative path order.
+- Content-addressed snapshot tests should hold a baseline constant and independently vary canonical definition, runtime bindings, source facts, metadata, and artifact bytes; every semantic input must yield a distinct non-empty identity.
 
 ## 2026-08-04 20:18 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-001
 - Implemented typed Worker Session pause, resume, cancel, and terminate controls. Cancel and terminate now target the exact supervised dispatch through `WorkstationPoolBoundary.Cancel`; terminate waits for the established terminal callback, and pause/resume explicitly report unsupported until a truthful resumable capability exists.
@@ -270,4 +271,13 @@
 - **Learnings for future iterations:**
   - A bootstrap consumer can preserve catalog validation timing while depending only on a focused capability by resolving identities before mutation and retaining only their public names for later installation.
   - Inert-construction proof should observe that no injected capability operation or filesystem edge has run before `Initialize`, then exercise the same direct capability after construction; source-file inventories do not prove that runtime boundary.
+---
+
+## 2026-08-05 06:04 -07:00 - ACP-L3-DEF-CONSOLIDATE-PACKAGING-SNAPSHOTS-002
+- Addressed the PR review's missing snapshot identity proof with a table-driven behavioral matrix. Each case holds the remaining portable definition content constant and independently changes canonical Factory meaning, runtime worker/workstation bindings, Factory root, source directory, metadata, or a bundled artifact byte, then requires a distinct non-empty identity.
+- Files changed: `pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service/snapshot_capability_test.go`, `prd.json`, `progress.txt`.
+- Verification: `go test ./pkg/services/factory_definitions/internal/services/snapshots_portability/... -count=1`; `go test ./pkg/services/factory_definitions/... -run 'TestSnapshots|TestCapture' -count=1`; repeated new identity test (`-count=20`); focused `go vet`; `git diff --check`.
+- **Learnings for future iterations:**
+  - Equivalent serialization order is only one part of content-addressed identity behavior; coverage must independently vary every portable input consumed by the hash.
+  - Use `CaptureLoadedFactorySnapshot` with a controlled runtime-definition source to prove runtime worker and workstation bindings affect identity without exposing implementation collaborators to production callers.
 ---
