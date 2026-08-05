@@ -1,0 +1,14 @@
+## Codebase Patterns
+- Document `pkg/services/events` as the process-local, in-memory, session-scoped source-native observation stream; Recordings owns canonical Factory Event JSONL history, replay, artifacts, and historical projections.
+- Architecture service inventories should name the package that publishes the public owner contract, and diagrams should show direct service operations unless a bounded delivery contract is explicitly involved.
+
+## 2026-08-04 20:30 -07:00 - ACP-L1-V4-H04-DOCUMENTATION-RECONCILIATION-001
+- Reconciled the architecture service inventory, system-flow diagrams, canonical-history explanation, and frontend/backend event prose with the implemented Chat Sessions, Events, Worker Sessions, and Recordings boundaries.
+- Replaced the obsolete Docs service, `event_stream` owner, and universal Event Bus model with direct service operations plus bounded, session-scoped source-native Event delivery.
+- Clarified that Recordings owns canonical `FactoryEvent` JSONL artifacts, replay, and historical inspection, while Events is process-local and retained only for the session it serves.
+- Files changed: `docs/architecture/architecture.md`, `prd.json`, `progress.txt`.
+- **Learnings for future iterations:**
+  - `pkg/services/events` already documents its D1/D2 boundary in `doc.go`; use that contract wording when reconciling customer-facing documentation.
+  - `pkg/services/chat_sessions` and `pkg/services/worker_sessions` publish the ACP session contracts; their explicit Events topics are bounded delivery paths, not a system-wide event bus.
+  - `make typecheck` may require a lockfile-pinned `bun install --frozen-lockfile` in a fresh worktree before the declared `@types/bun` package is available.
+---
