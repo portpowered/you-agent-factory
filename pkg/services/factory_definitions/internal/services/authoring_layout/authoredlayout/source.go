@@ -49,7 +49,11 @@ func newFactorySourcePathResolver(
 		}
 		if !info.IsDir() {
 			if !info.Mode().IsRegular() {
-				return "", fmt.Errorf("Factory Definition source must be a regular file: %s", path)
+				return "", fmt.Errorf(
+					"%w: Factory Definition source must be a regular file: %s",
+					factorydefinitions.ErrAuthoredFactoryDefinitionMalformed,
+					path,
+				)
 			}
 			return path, nil
 		}
@@ -79,7 +83,11 @@ func loadFactorySourceFile(
 	}
 	decoded, err := decodeAuthoredFactory(sourcePath, format, data)
 	if err != nil {
-		return factorydefinitions.AuthoredFactorySource{}, err
+		return factorydefinitions.AuthoredFactorySource{}, fmt.Errorf(
+			"%w: %w",
+			factorydefinitions.ErrAuthoredFactoryDefinitionMalformed,
+			err,
+		)
 	}
 	return factorydefinitions.AuthoredFactorySource{
 		Path:   sourcePath,
@@ -98,7 +106,8 @@ func authoredFactoryFormatForPath(
 		return factorydefinitions.AuthoredFactoryFormatYAML, nil
 	default:
 		return "", fmt.Errorf(
-			"unsupported Factory Definition extension %q; supported extensions are %s",
+			"%w: unsupported Factory Definition extension %q; supported extensions are %s",
+			factorydefinitions.ErrAuthoredFactoryDefinitionMalformed,
 			filepath.Ext(path),
 			factorydefinitions.SupportedAuthoredFactoryExtensions,
 		)
@@ -132,7 +141,8 @@ func resolveFactoryDirectoryRoot(
 	switch len(matches) {
 	case 0:
 		return "", fmt.Errorf(
-			"Factory Definition directory %s has no supported root; expected exactly one of %s",
+			"%w: Factory Definition directory %s has no supported root; expected exactly one of %s",
+			factorydefinitions.ErrAuthoredFactoryDefinitionMissing,
 			directory,
 			factorydefinitions.SupportedAuthoredFactoryRootFiles,
 		)
@@ -140,7 +150,8 @@ func resolveFactoryDirectoryRoot(
 		return matches[0], nil
 	default:
 		return "", fmt.Errorf(
-			"Factory Definition directory %s has ambiguous roots: %s; keep exactly one of %s",
+			"%w: Factory Definition directory %s has ambiguous roots: %s; keep exactly one of %s",
+			factorydefinitions.ErrAuthoredFactoryDefinitionMalformed,
 			directory,
 			strings.Join(matches, ", "),
 			factorydefinitions.SupportedAuthoredFactoryRootFiles,

@@ -67,8 +67,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-05: Classified the focused authored-loader's missing, malformed, unresolved, blocking-validation, and dependency outcomes while preserving typed sentinels and original inspectable causes. Source/layout and compilation boundaries now attach the stable failure classification at the operation that knows it, so the focused service does not infer meaning from error strings. Added real-loader coverage for missing files/directories, malformed JSON, missing split content, unsafe portable content, blocking findings, plus focused warning/hint, cancellation, and dependency behavior. Definitions tests, focused race coverage, go vet, typecheck, and make verify-fast pass."
     },
     {
       "id": "ACP-L3-DEF-CONSOLIDATE-AUTHORED-VALIDATION-004",

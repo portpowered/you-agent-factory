@@ -123,10 +123,17 @@ func (e *AuthoredFactoryDefinitionLoadFailure) Unwrap() error {
 	if e == nil {
 		return nil
 	}
+	classified := authoredFactoryDefinitionLoadFailureSentinel(e.Kind)
 	if e.Cause != nil {
-		return e.Cause
+		return errors.Join(classified, e.Cause)
 	}
-	switch e.Kind {
+	return classified
+}
+
+func authoredFactoryDefinitionLoadFailureSentinel(
+	kind AuthoredFactoryDefinitionLoadFailureKind,
+) error {
+	switch kind {
 	case AuthoredFactoryDefinitionLoadFailureMissing:
 		return ErrAuthoredFactoryDefinitionMissing
 	case AuthoredFactoryDefinitionLoadFailureMalformed:

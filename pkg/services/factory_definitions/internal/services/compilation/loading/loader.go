@@ -282,13 +282,21 @@ func (l *Loader) LoadSourceFromFactoryDir(
 	}
 	factoryConfig, err := l.decodeFactory(source.Data)
 	if err != nil {
-		return nil, sourceContextError(source, "parse factory config", err)
+		return nil, fmt.Errorf(
+			"%w: %w",
+			factorydefinitions.ErrAuthoredFactoryDefinitionMalformed,
+			sourceContextError(source, "parse factory config", err),
+		)
 	}
 	if err := l.blockingLoadError(factoryConfig); err != nil {
 		return nil, sourceContextError(source, "validate factory config", err)
 	}
 	if err := l.validateManifest(resolvedFactoryDir, factoryConfig); err != nil {
-		return nil, sourceContextError(source, "validate portable resource manifest", err)
+		return nil, fmt.Errorf(
+			"%w: %w",
+			factorydefinitions.ErrAuthoredFactoryDefinitionUnresolved,
+			sourceContextError(source, "validate portable resource manifest", err),
+		)
 	}
 	replacements, err := l.materializePortableFiles(
 		resolvedFactoryDir,
@@ -312,7 +320,11 @@ func (l *Loader) LoadSourceFromFactoryDir(
 		workstationLoader,
 	)
 	if err != nil {
-		return nil, sourceContextError(source, "load runtime definitions", err)
+		return nil, fmt.Errorf(
+			"%w: %w",
+			factorydefinitions.ErrAuthoredFactoryDefinitionUnresolved,
+			sourceContextError(source, "load runtime definitions", err),
+		)
 	}
 	loadedSource, err := l.newSource(
 		resolvedFactoryDir,

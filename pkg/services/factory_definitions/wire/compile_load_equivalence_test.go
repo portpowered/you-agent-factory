@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
@@ -217,6 +218,169 @@ func TestValidatedAuthoredFactoryDefinitionLoader_PreservesCurrentSplitBundledAn
 			t.Fatalf("materialized bundled doc = %q", content)
 		}
 	})
+}
+
+func TestValidatedAuthoredFactoryDefinitionLoaderClassifiesAuthoredInputFailures(t *testing.T) {
+	t.Parallel()
+
+	loader := newCompileLoadLoader(t, platformfilesystem.Local{})
+	service := newValidatedAuthoredFactoryDefinitionLoader(t, loader)
+
+	t.Run("missing selected source", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "missing.yaml")
+		assertWireValidatedLoadFailure(
+			t,
+			service,
+			factorydefinitions.LoadValidatedAuthoredFactoryDefinitionRequest{SourcePath: path},
+			factorydefinitions.AuthoredFactoryDefinitionLoadFailureMissing,
+			factorydefinitions.ErrAuthoredFactoryDefinitionMissing,
+		)
+	})
+
+	t.Run("directory without a supported root", func(t *testing.T) {
+		directory := t.TempDir()
+		assertWireValidatedLoadFailure(
+			t,
+			service,
+			factorydefinitions.LoadValidatedAuthoredFactoryDefinitionRequest{SourcePath: directory},
+			factorydefinitions.AuthoredFactoryDefinitionLoadFailureMissing,
+			factorydefinitions.ErrAuthoredFactoryDefinitionMissing,
+		)
+	})
+
+	t.Run("malformed configuration", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "factory.json")
+		if err := os.WriteFile(path, []byte("{"), 0o644); err != nil {
+			t.Fatalf("WriteFile(malformed Factory): %v", err)
+		}
+		assertWireValidatedLoadFailure(
+			t,
+			service,
+			factorydefinitions.LoadValidatedAuthoredFactoryDefinitionRequest{SourcePath: path},
+			factorydefinitions.AuthoredFactoryDefinitionLoadFailureMalformed,
+			factorydefinitions.ErrAuthoredFactoryDefinitionMalformed,
+		)
+	})
+
+	t.Run("unresolved split authored content", func(t *testing.T) {
+		directory := t.TempDir()
+		writeWireCompileEquivalenceAuthoredFactory(t, directory)
+		path := filepath.Join(directory, "factory.json")
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("ReadFile(Factory): %v", err)
+		}
+		withInlineRuntimeDefinition := strings.Replace(
+			string(content),
+			`{"name": "executor"}`,
+			`{"name": "executor", "type": "SCRIPT_WORKER", "command": "go"}`,
+			1,
+		)
+		if withInlineRuntimeDefinition == string(content) {
+			t.Fatal("Factory fixture did not contain the worker declaration")
+		}
+		if err := os.WriteFile(path, []byte(withInlineRuntimeDefinition), 0o644); err != nil {
+			t.Fatalf("WriteFile(Factory with inline Worker): %v", err)
+		}
+		if err := os.Remove(filepath.Join(directory, "workers", "executor", "AGENTS.md")); err != nil {
+			t.Fatalf("Remove(worker definition): %v", err)
+		}
+		assertWireValidatedLoadFailure(
+			t,
+			service,
+			factorydefinitions.LoadValidatedAuthoredFactoryDefinitionRequest{SourcePath: directory},
+			factorydefinitions.AuthoredFactoryDefinitionLoadFailureUnresolved,
+			factorydefinitions.ErrAuthoredFactoryDefinitionUnresolved,
+		)
+	})
+
+	t.Run("unsafe portable authored content", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "factory.json")
+		writeWireValidatedFactory(t, path, true)
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("ReadFile(Factory): %v", err)
+		}
+		unsafe := strings.Replace(
+			string(content),
+			`"targetPath":"factory/docs/guide.md"`,
+			`"targetPath":"../guide.md"`,
+			1,
+		)
+		if unsafe == string(content) {
+			t.Fatal("Factory fixture did not contain the portable target path")
+		}
+		if err := os.WriteFile(path, []byte(unsafe), 0o644); err != nil {
+			t.Fatalf("WriteFile(unsafe Factory): %v", err)
+		}
+		assertWireValidatedLoadFailure(
+			t,
+			service,
+			factorydefinitions.LoadValidatedAuthoredFactoryDefinitionRequest{SourcePath: path},
+			factorydefinitions.AuthoredFactoryDefinitionLoadFailureUnresolved,
+			factorydefinitions.ErrAuthoredFactoryDefinitionUnresolved,
+		)
+	})
+
+	t.Run("blocking validation", func(t *testing.T) {
+		directory := t.TempDir()
+		writeWireCompileEquivalenceAuthoredFactory(t, directory)
+		path := filepath.Join(directory, "factory.json")
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("ReadFile(Factory): %v", err)
+		}
+		invalid := strings.Replace(
+			string(content),
+			`"state": "complete"`,
+			`"state": "missing"`,
+			1,
+		)
+		if invalid == string(content) {
+			t.Fatal("Factory fixture did not contain the terminal output state")
+		}
+		if err := os.WriteFile(path, []byte(invalid), 0o644); err != nil {
+			t.Fatalf("WriteFile(invalid Factory): %v", err)
+		}
+		failure := assertWireValidatedLoadFailure(
+			t,
+			service,
+			factorydefinitions.LoadValidatedAuthoredFactoryDefinitionRequest{SourcePath: path},
+			factorydefinitions.AuthoredFactoryDefinitionLoadFailureValidation,
+			factorydefinitions.ErrAuthoredFactoryDefinitionValidation,
+		)
+		if len(failure.Validation.Targets) == 0 {
+			t.Fatal("blocking validation failure did not retain findings")
+		}
+	})
+}
+
+func assertWireValidatedLoadFailure(
+	t *testing.T,
+	service factorydefinitions.ValidatedAuthoredFactoryDefinitionLoader,
+	request factorydefinitions.LoadValidatedAuthoredFactoryDefinitionRequest,
+	wantKind factorydefinitions.AuthoredFactoryDefinitionLoadFailureKind,
+	wantSentinel error,
+) *factorydefinitions.AuthoredFactoryDefinitionLoadFailure {
+	t.Helper()
+
+	result, err := service.LoadValidatedAuthoredFactoryDefinition(t.Context(), request)
+	if result.Definition != nil || result.Source != (factorydefinitions.AuthoredFactoryDefinitionIdentity{}) ||
+		result.FactoryDir != "" || result.RuntimeBaseDir != "" ||
+		len(result.BundledFileReplacements) != 0 || len(result.Validation.Targets) != 0 {
+		t.Fatalf("failure returned partial result: %#v", result)
+	}
+	var failure *factorydefinitions.AuthoredFactoryDefinitionLoadFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("error = %T %v, want typed authored load failure", err, err)
+	}
+	if failure.Kind != wantKind || failure.Source.Path != request.SourcePath {
+		t.Fatalf("typed failure = %#v, want kind=%q source=%q", failure, wantKind, request.SourcePath)
+	}
+	if !errors.Is(err, wantSentinel) {
+		t.Fatalf("error = %v, want errors.Is %v", err, wantSentinel)
+	}
+	return failure
 }
 
 func newValidatedAuthoredFactoryDefinitionLoader(

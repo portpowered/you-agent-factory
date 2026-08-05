@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"strings"
 
@@ -51,11 +52,8 @@ func (s *Service) LoadValidatedAuthoredFactoryDefinition(
 	selected := authoredIdentity(request)
 	loaded, err := s.load(request)
 	if err != nil {
-		return factorydefinitions.LoadValidatedAuthoredFactoryDefinitionResult{}, &factorydefinitions.AuthoredFactoryDefinitionLoadFailure{
-			Kind:   factorydefinitions.AuthoredFactoryDefinitionLoadFailureDependency,
-			Source: selected,
-			Cause:  err,
-		}
+		return factorydefinitions.LoadValidatedAuthoredFactoryDefinitionResult{},
+			loadFailure(selected, err)
 	}
 	return s.validatedResult(ctx, request, selected, loaded)
 }
@@ -129,6 +127,50 @@ func malformedFailure(
 		Kind:   factorydefinitions.AuthoredFactoryDefinitionLoadFailureMalformed,
 		Source: selected,
 	}
+}
+
+func loadFailure(
+	selected factorydefinitions.AuthoredFactoryDefinitionIdentity,
+	cause error,
+) error {
+	if blocking, ok := factorydefinitions.AsBlockingFactoryLoadError(cause); ok {
+		return &factorydefinitions.AuthoredFactoryDefinitionLoadFailure{
+			Kind:       factorydefinitions.AuthoredFactoryDefinitionLoadFailureValidation,
+			Source:     selected,
+			Validation: cloneValidation(factorydefinitions.ValidationResult{Targets: blocking.Targets}),
+			Cause:      cause,
+		}
+	}
+	return &factorydefinitions.AuthoredFactoryDefinitionLoadFailure{
+		Kind:   loadFailureKind(cause),
+		Source: selected,
+		Cause:  cause,
+	}
+}
+
+func loadFailureKind(
+	cause error,
+) factorydefinitions.AuthoredFactoryDefinitionLoadFailureKind {
+	switch {
+	case errors.Is(cause, factorydefinitions.ErrAuthoredFactoryDefinitionMissing),
+		errors.Is(cause, fs.ErrNotExist),
+		errors.Is(cause, factorydefinitions.ErrFactoryLayoutNotFound):
+		return factorydefinitions.AuthoredFactoryDefinitionLoadFailureMissing
+	case errors.Is(cause, factorydefinitions.ErrAuthoredFactoryDefinitionMalformed),
+		errors.Is(cause, factorydefinitions.ErrInvalidAuthoredFactorySource):
+		return factorydefinitions.AuthoredFactoryDefinitionLoadFailureMalformed
+	case errors.Is(cause, factorydefinitions.ErrAuthoredFactoryDefinitionUnresolved),
+		errors.Is(cause, factorydefinitions.ErrUnresolvedDefinitionReference),
+		isPortableBundledFileValidationError(cause):
+		return factorydefinitions.AuthoredFactoryDefinitionLoadFailureUnresolved
+	default:
+		return factorydefinitions.AuthoredFactoryDefinitionLoadFailureDependency
+	}
+}
+
+func isPortableBundledFileValidationError(cause error) bool {
+	var validationErr *factorydefinitions.PortableBundledFileValidationError
+	return errors.As(cause, &validationErr)
 }
 
 func dependencyFailure(message string) error {
