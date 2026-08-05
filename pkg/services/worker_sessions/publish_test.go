@@ -134,6 +134,21 @@ func TestProviderSessionObservationPublisher_AssociatesBeforeForwardingExactProg
 		t.Fatalf("forwarded fragments = %#v, want exact reference after observation", forwarded)
 	}
 
+	// The live reference hand-off commits the association but is internal
+	// bookkeeping, so it cannot add a response-stream observation ahead of
+	// provider-authored output.
+	publisher.Publish(workers.ProgressFragment{
+		DispatchID:               "dispatch-1",
+		Kind:                     workers.ProviderSessionObservedFragmentKind,
+		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
+		ProviderSessionRef: &workers.ProviderSessionMetadata{
+			Provider: reference.Provider.String(), Kind: reference.Kind, ID: reference.ID,
+		},
+	})
+	if len(first.requests) != 2 || len(forwarded) != 2 {
+		t.Fatalf("live reference hand-off requests=%#v forwarded=%#v, want observed without forwarding", first.requests, forwarded)
+	}
+
 	fragment.ProviderSessionReference.ID = "caller-mutated"
 	if first.requests[0].Reference.ID != reference.ID || forwarded[1].ProviderSessionReference.ID != reference.ID {
 		t.Fatalf("association or forwarded reference retained caller mutation: %#v %#v", first.requests[0], forwarded[1])
@@ -151,7 +166,7 @@ func TestProviderSessionObservationPublisher_AssociatesBeforeForwardingExactProg
 		},
 	}
 	publisher.Publish(mismatch)
-	if len(first.requests) != 1 || len(second.requests) != 0 || len(forwarded) != 2 {
+	if len(first.requests) != 2 || len(second.requests) != 0 || len(forwarded) != 2 {
 		t.Fatalf("mismatched fragment rerouted or forwarded: first=%#v second=%#v forwarded=%#v", first.requests, second.requests, forwarded)
 	}
 
@@ -165,7 +180,7 @@ func TestProviderSessionObservationPublisher_AssociatesBeforeForwardingExactProg
 		},
 	}
 	publisher.Publish(legacy)
-	if len(first.requests) != 1 || len(forwarded) != 3 ||
+	if len(first.requests) != 2 || len(forwarded) != 3 ||
 		forwarded[2].ProviderSessionReference != nil ||
 		forwarded[2].ProviderSessionRef == nil ||
 		forwarded[2].ProviderSessionRef.ID != "legacy-session" {
@@ -174,7 +189,7 @@ func TestProviderSessionObservationPublisher_AssociatesBeforeForwardingExactProg
 	noDownstream := workersessions.NewProviderSessionObservationPublisher(nil)
 	noDownstream.Bind(first)
 	noDownstream.Publish(legacy)
-	if len(first.requests) != 1 {
+	if len(first.requests) != 2 {
 		t.Fatalf("nil-downstream metadata-only output was observed: %#v", first.requests)
 	}
 	first.err = errors.New("association rejected")
@@ -183,7 +198,7 @@ func TestProviderSessionObservationPublisher_AssociatesBeforeForwardingExactProg
 		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
 		ProviderSessionRef:       workers.CloneProviderSessionMetadata(forwarded[1].ProviderSessionRef),
 	})
-	if len(first.requests) != 2 || len(forwarded) != 3 {
+	if len(first.requests) != 3 || len(forwarded) != 3 {
 		t.Fatalf("rejected observation forwarded output: requests:%#v forwarded:%#v", first.requests, forwarded)
 	}
 

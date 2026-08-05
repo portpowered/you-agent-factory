@@ -83,6 +83,9 @@ func (p *ProviderSessionObservationPublisher) Publish(fragment workers.ProgressF
 			return
 		}
 	}
+	if fragment.Kind == workers.ProviderSessionObservedFragmentKind {
+		return
+	}
 	if next != nil {
 		next(fragment)
 	}

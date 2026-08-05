@@ -80,6 +80,48 @@ func TestCodexRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {
 	assertRepeatedCodexResultDetached(t, secondContinued.Result)
 }
 
+func TestCodexRootObservesProviderSessionWhileNativeAttemptIsLive(t *testing.T) {
+	t.Parallel()
+
+	observed := make(chan providers.SessionRef, 1)
+	effect := codex.EffectFunc(func(
+		_ context.Context,
+		_ execution.ContinuationRequest,
+		observe func([]byte) error,
+	) (codex.EffectResult, error) {
+		if err := observe([]byte(`{"type":"thread.started","thread_id":"thread-live-observation"}` + "\n")); err != nil {
+			return codex.EffectResult{}, err
+		}
+		select {
+		case reference := <-observed:
+			want := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "thread-live-observation"}
+			if reference != want {
+				t.Fatalf("live SessionObserver reference = %#v, want %#v", reference, want)
+			}
+		default:
+			t.Fatal("SessionObserver was not called before native effect returned")
+		}
+		if err := observe([]byte(`{"type":"item.completed","item":{"id":"message-live-observation","type":"agent_message","text":"observed live"}}` + "\n")); err != nil {
+			return codex.EffectResult{}, err
+		}
+		return codex.EffectResult{}, nil
+	})
+	root := newCodexRoot(t, effect)
+
+	result, err := root.Execute(t.Context(), providers.ExecuteRequest{
+		Provider: providers.IDCodex, AttemptID: "attempt-live-observation", UserMessage: "observe the provider session",
+		SessionObserver: func(reference providers.SessionRef) {
+			observed <- reference
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.SessionRef == nil || result.SessionRef.ID != "thread-live-observation" {
+		t.Fatalf("Execute().SessionRef = %#v, want live thread reference", result.SessionRef)
+	}
+}
+
 func assertCodexSuccessResult(
 	t *testing.T,
 	result providers.ExecuteResult,

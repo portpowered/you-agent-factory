@@ -241,6 +241,7 @@ func (s *service) executeProviderAttempt(
 	request workers.RunnerExecutionRequest,
 ) (providers.ExecuteResult, error) {
 	attempt := providerRequest(request)
+	attempt.SessionObserver = s.observeProviderSession(request.Dispatch.DispatchID)
 	if request.ResumeSession != nil {
 		reference := request.ResumeSession.Clone()
 		continued, err := s.providers.Continue(ctx, providers.ContinueRequest{
@@ -274,6 +275,26 @@ func (s *service) executeProviderAttempt(
 		return providers.ExecuteResult{}, continuationUnsupportedError{reference: reference}
 	}
 	return continued.Result, nil
+}
+
+// observeProviderSession forwards only a provider-authored exact reference to
+// the session-local progress bridge while the Provider attempt is still live.
+// The bridge owns association validation and commits it before allowing the
+// later response or terminal fragments for this dispatch to proceed.
+func (s *service) observeProviderSession(dispatchID string) providers.SessionObserver {
+	return func(reference providers.SessionRef) {
+		reference = reference.Clone()
+		s.publish(workers.ProgressFragment{
+			DispatchID:               dispatchID,
+			Kind:                     workers.ProviderSessionObservedFragmentKind,
+			ProviderSessionReference: &reference,
+			ProviderSessionRef: &workers.ProviderSessionMetadata{
+				Provider: workers.CanonicalProviderSessionProvider(reference.Provider.String()),
+				Kind:     reference.Kind,
+				ID:       reference.ID,
+			},
+		})
+	}
 }
 
 // continuedExecuteResult admits only a provider response that affirms the

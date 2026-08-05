@@ -60,8 +60,39 @@ func TestExecuteForwardsEnvThroughProviderRequest(t *testing.T) {
 		EnvVars:            map[string]string{"FIXTURE": "configured"},
 		ProcessEnvironment: []string{"FIXTURE=configured"},
 	}
-	if !reflect.DeepEqual(fake.request, want) {
-		t.Fatalf("Providers.Execute request = %#v, want %#v", fake.request, want)
+	got := fake.request
+	observer := got.SessionObserver
+	got.SessionObserver = nil
+	if observer == nil {
+		t.Fatal("Providers.Execute request SessionObserver = nil, want live provider session observation")
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Providers.Execute request = %#v, want %#v", got, want)
+	}
+}
+
+func TestExecutePublishesLiveProviderSessionObservationBeforeProviderReturns(t *testing.T) {
+	t.Parallel()
+
+	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "live-session-1"}
+	fake := &observingProvidersFake{reference: reference}
+	var published []workers.ProgressFragment
+	runner, err := New(fake, func(fragment workers.ProgressFragment) {
+		published = append(published, fragment)
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	if _, err := runner.Execute(t.Context(), baseAgentRequest()); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !fake.observedBeforeReturn {
+		t.Fatal("Provider session observation was not delivered while Providers.Execute was live")
+	}
+	if len(published) < 2 || published[0].Kind != workers.ProviderSessionObservedFragmentKind ||
+		published[0].ProviderSessionReference == nil || *published[0].ProviderSessionReference != reference {
+		t.Fatalf("published observations = %#v, want exact live session observation before output", published)
 	}
 }
 
@@ -506,6 +537,12 @@ type providersFake struct {
 	continueCalls                 int
 }
 
+type observingProvidersFake struct {
+	providers.Service
+	reference            providers.SessionRef
+	observedBeforeReturn bool
+}
+
 type failingProvidersFake struct {
 	providers.Service
 	failure providers.ExecuteFailure
@@ -530,6 +567,36 @@ func (fake *providersFake) Execute(
 	fake.executeCalls++
 	fake.request = request.Clone()
 	return providers.ExecuteResult{Content: "ok"}, nil
+}
+
+func (fake *observingProvidersFake) Execute(
+	_ context.Context,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	request.ObserveSession(fake.reference)
+	fake.observedBeforeReturn = true
+	return providers.ExecuteResult{Content: "ok", SessionRef: workers.CloneProviderSessionReference(&fake.reference)}, nil
+}
+
+func (fake *observingProvidersFake) Continue(
+	context.Context,
+	providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	return providers.ContinueResult{}, errors.New("unexpected continuation")
+}
+
+func (*observingProvidersFake) ListProviders(
+	context.Context,
+	providers.ListProvidersRequest,
+) (providers.ListProvidersResult, error) {
+	return providers.ListProvidersResult{}, nil
+}
+
+func (*observingProvidersFake) GetProvider(
+	context.Context,
+	providers.GetProviderRequest,
+) (providers.GetProviderResult, error) {
+	return providers.GetProviderResult{}, nil
 }
 
 func (fake *providersFake) Continue(

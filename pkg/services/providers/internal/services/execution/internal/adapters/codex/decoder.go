@@ -24,6 +24,7 @@ type decoder struct {
 	declaredFailure *providers.ExecuteFailure
 	declaredKnown   bool
 	decodeErr       error
+	observeSession  providers.SessionObserver
 }
 
 type recordEnvelope struct {
@@ -73,8 +74,8 @@ type planItem struct {
 	Completed bool   `json:"completed"`
 }
 
-func newDecoder() *decoder {
-	return &decoder{}
+func newDecoder(observeSession providers.SessionObserver) *decoder {
+	return &decoder{observeSession: observeSession}
 }
 
 func (decoder *decoder) observe(chunk []byte) error {
@@ -171,8 +172,7 @@ func (decoder *decoder) decodeRecord(raw []byte) {
 	}
 	switch record.Type {
 	case "thread.started":
-		decoder.sessionID = strings.TrimSpace(record.ThreadID)
-		if decoder.sessionID == "" {
+		if !decoder.observeSessionID(record.ThreadID) {
 			decoder.markDecodeFailure("malformed_thread")
 			return
 		}
@@ -204,6 +204,25 @@ func (decoder *decoder) decodeRecord(raw []byte) {
 	default:
 		decoder.addDiagnostic("unsupported_event")
 	}
+}
+
+func (decoder *decoder) observeSessionID(raw string) bool {
+	sessionID := strings.TrimSpace(raw)
+	if sessionID == "" {
+		return false
+	}
+	if decoder.sessionID != "" {
+		return true
+	}
+	decoder.sessionID = sessionID
+	if decoder.observeSession != nil {
+		decoder.observeSession(providers.SessionRef{
+			Provider: providers.IDCodex,
+			Kind:     providers.SessionIDKind,
+			ID:       sessionID,
+		})
+	}
+	return true
 }
 
 func (decoder *decoder) decodeItem(nativeType string, raw json.RawMessage) {

@@ -320,6 +320,11 @@ func (daemon *daemon) execute(
 		return providers.ExecuteResult{}, err
 	}
 	daemon.client.setSessionID(string(session.SessionId))
+	request.ObserveSession(providers.SessionRef{
+		Provider: id,
+		Kind:     providers.SessionIDKind,
+		ID:       string(session.SessionId),
+	})
 	modelConfig, err := applyAdvertisedModel(ctx, connection, session, request.Model)
 	if err != nil {
 		daemon.invalidateDisconnected(ctx)

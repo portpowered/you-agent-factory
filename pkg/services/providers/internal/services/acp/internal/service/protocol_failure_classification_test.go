@@ -118,6 +118,56 @@ func TestPromptCancelledStopReasonMapsToExecuteFailureKindCanceled(t *testing.T)
 	}
 }
 
+func TestACPExecuteObservesProviderSessionWhileAttemptIsLive(t *testing.T) {
+	var starts atomic.Int32
+	serviceValue, err := New([]providers.ACPIntegration{{
+		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
+	}}, protocolHelperCommandFactory(&starts), availableLocator{})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	t.Cleanup(func() { _ = serviceValue.Close(context.Background()) })
+
+	observed := make(chan providers.SessionRef, 1)
+	releaseObservation := make(chan struct{})
+	workingDirectory := t.TempDir()
+	type executeOutcome struct {
+		result providers.ExecuteResult
+		err    error
+	}
+	completed := make(chan executeOutcome, 1)
+	go func() {
+		result, executeErr := serviceValue.Execute(context.Background(), "cursor-acp", providers.ExecuteRequest{
+			Provider: "cursor-acp", AttemptID: "attempt-live-observation", UserMessage: "observe the provider session",
+			WorkingDirectory: workingDirectory, ProcessEnvironment: append(os.Environ(), protocolHelperEnvironment+"=normal"),
+			SessionObserver: func(reference providers.SessionRef) {
+				observed <- reference
+				<-releaseObservation
+			},
+		})
+		completed <- executeOutcome{result: result, err: executeErr}
+	}()
+
+	reference := <-observed
+	want := providers.SessionRef{Provider: "cursor-acp", Kind: providers.SessionIDKind, ID: "acp-session-service-1"}
+	if reference != want {
+		t.Fatalf("live SessionObserver reference = %#v, want %#v", reference, want)
+	}
+	select {
+	case outcome := <-completed:
+		t.Fatalf("Execute() completed before live observation released: %#v", outcome)
+	default:
+	}
+	close(releaseObservation)
+	outcome := <-completed
+	if outcome.err != nil {
+		t.Fatalf("Execute() error = %v", outcome.err)
+	}
+	if outcome.result.SessionRef == nil || *outcome.result.SessionRef != want {
+		t.Fatalf("Execute().SessionRef = %#v, want %#v", outcome.result.SessionRef, want)
+	}
+}
+
 // TestContinuationResumesExactSessionThroughSessionLoad proves a request
 // carried through the private continuation boundary reaches the ACP peer through session/load with the
 // exact opaque session id forwarded unchanged, and the returned result

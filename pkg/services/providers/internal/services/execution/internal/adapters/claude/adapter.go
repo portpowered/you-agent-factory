@@ -67,7 +67,7 @@ func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
 		ctx context.Context,
 		request execution.ContinuationRequest,
 	) (providers.ExecuteResult, error) {
-		decoder := newDecoder(request.AttemptID)
+		decoder := newDecoder(request.AttemptID, request.ExecuteRequest.ObserveSession)
 		effectResult, effectErr := effect.Execute(ctx, request, decoder.observe)
 		flushErr := decoder.flush()
 		if failure, failed := collectFailure(decoder, effectErr, flushErr); failed {

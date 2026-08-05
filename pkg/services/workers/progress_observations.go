@@ -18,6 +18,11 @@ const (
 	ResponseFragmentKind  = "RESPONSE_FRAGMENT"
 	CompletedFragmentKind = "STREAM_COMPLETED"
 	FailedFragmentKind    = "STREAM_FAILED"
+	// ProviderSessionObservedFragmentKind is an internal hand-off of a
+	// provider-authored exact session identity. The Worker Sessions bridge
+	// commits it before any dependent response output and does not expose this
+	// bookkeeping fragment on the response stream itself.
+	ProviderSessionObservedFragmentKind = "PROVIDER_SESSION_OBSERVED"
 )
 
 // ProgressFragment is the provider-neutral transient observation emitted by
