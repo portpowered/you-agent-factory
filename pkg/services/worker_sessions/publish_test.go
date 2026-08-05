@@ -155,9 +155,9 @@ func TestProviderSessionObservationPublisher_AssociatesBeforeForwardingExactProg
 		t.Fatalf("mismatched fragment rerouted or forwarded: first=%#v second=%#v forwarded=%#v", first.requests, second.requests, forwarded)
 	}
 
-	// Metadata-only compatibility output is not a provider-native SessionRef:
-	// it must not be reconstructed into a resumable association or forwarded
-	// as if Worker Sessions had accepted one.
+	// Metadata-only compatibility output is not a provider-native SessionRef.
+	// It must remain visible to the response stream, but cannot be reconstructed
+	// into a resumable association.
 	legacy := workers.ProgressFragment{
 		DispatchID: "dispatch-legacy",
 		ProviderSessionRef: &workers.ProviderSessionMetadata{
@@ -165,8 +165,11 @@ func TestProviderSessionObservationPublisher_AssociatesBeforeForwardingExactProg
 		},
 	}
 	publisher.Publish(legacy)
-	if len(first.requests) != 1 || len(forwarded) != 2 {
-		t.Fatalf("metadata-only output was associated or forwarded: requests:%#v forwarded:%#v", first.requests, forwarded)
+	if len(first.requests) != 1 || len(forwarded) != 3 ||
+		forwarded[2].ProviderSessionReference != nil ||
+		forwarded[2].ProviderSessionRef == nil ||
+		forwarded[2].ProviderSessionRef.ID != "legacy-session" {
+		t.Fatalf("metadata-only output association or forwarding = requests:%#v forwarded:%#v", first.requests, forwarded)
 	}
 	noDownstream := workersessions.NewProviderSessionObservationPublisher(nil)
 	noDownstream.Bind(first)
@@ -180,7 +183,7 @@ func TestProviderSessionObservationPublisher_AssociatesBeforeForwardingExactProg
 		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
 		ProviderSessionRef:       workers.CloneProviderSessionMetadata(forwarded[1].ProviderSessionRef),
 	})
-	if len(first.requests) != 2 || len(forwarded) != 2 {
+	if len(first.requests) != 2 || len(forwarded) != 3 {
 		t.Fatalf("rejected observation forwarded output: requests:%#v forwarded:%#v", first.requests, forwarded)
 	}
 

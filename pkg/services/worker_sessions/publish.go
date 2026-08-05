@@ -22,9 +22,9 @@ type ProviderSessionObservationPublisher struct {
 }
 
 // NewProviderSessionObservationPublisher creates an unbound progress bridge.
-// Non-reference-bearing fragments continue to the supplied publisher, while
-// reference-bearing fragments wait for Bind and a successful Worker Sessions
-// association before they are forwarded.
+// Fragments without an exact typed reference remain non-resumable and continue
+// to the supplied publisher, while reference-bearing fragments wait for Bind
+// and a successful Worker Sessions association before they are forwarded.
 func NewProviderSessionObservationPublisher(next workers.ProgressPublisher) *ProviderSessionObservationPublisher {
 	return &ProviderSessionObservationPublisher{next: next}
 }
@@ -66,14 +66,11 @@ func (p *ProviderSessionObservationPublisher) Publish(fragment workers.ProgressF
 		// session under this Worker Session even though association succeeded.
 		return
 	}
-	if reference == nil && metadata != nil {
-		// Metadata is a response projection, not a trusted provider-native
-		// SessionRef. In particular, it can be compatibility data derived from
-		// a request's configured SessionID. Do not reconstruct a resumable
-		// reference from it or let dependent output claim an unassociated
-		// Provider Session.
-		return
-	}
+	// Metadata without a source reference is a response projection rather than
+	// a trusted provider-native SessionRef. In particular, it can be
+	// compatibility data derived from a request's configured SessionID. It
+	// therefore remains non-resumable, but must still be forwarded so existing
+	// terminal and failure response streams remain observable.
 	if reference != nil {
 		if observer == nil {
 			return
