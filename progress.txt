@@ -4,6 +4,7 @@
 - Define ACP customer terms from the detached `chat_sessions` and `worker_sessions` public contracts; use customer-facing relationship diagrams and keep their event lifetimes separate from Recordings history.
 - Event documentation has two shipped contracts only: `workers.Kind`/`workers.Phase` observations retain source provenance, while Recordings `FactoryEvent` JSONL artifacts supply canonical replay history.
 - When a PSS decision is superseded, update its canonical record and local planner plan/checklist together, then point all local links to the surviving canonical decision.
+- Checklist entries and changed-path inventories that name a current decision document must use its canonical path, not its former planner location.
 
 ## 2026-08-04 20:30 -07:00 - ACP-L1-V4-H04-DOCUMENTATION-RECONCILIATION-001
 - Reconciled the architecture service inventory, system-flow diagrams, canonical-history explanation, and frontend/backend event prose with the implemented Chat Sessions, Events, Worker Sessions, and Recordings boundaries.
@@ -43,4 +44,12 @@
   - The canonical PSS decision lives at `docs/internal/packaged-service-structure/dec-run-rec-durability.md`; older `docs/temp` decision links are obsolete and should point there.
   - PSS-I01 and PSS-I05 narrowing are already applied in the committed manifest, so planning notes should describe their final residual boundaries rather than schedule another rescope.
   - `make readme-check` and `make typecheck`, plus a focused Markdown link review, provide the appropriate evidence for documentation-only PSS reconciliation.
+---
+
+## 2026-08-04 20:50 -07:00 - ACP-L1-V4-H04-DOCUMENTATION-RECONCILIATION-004
+- Addressed the blocking PR review by correcting the local PSS checklist's checked decision-location statement and expected-path inventory to the canonical `docs/internal/packaged-service-structure/dec-run-rec-durability.md` path.
+- Files changed: `docs/temp/projects/packaged-service-structure/checklist.md`, `prd.json`, `progress.txt`.
+- **Learnings for future iterations:**
+  - A Markdown link can be correct while adjacent checklist/inventory prose still names an obsolete path; review both when reconciling moved decision records.
+  - The local PSS checklist is active verification guidance, so its expected-path inventory must be maintained as rigorously as its links.
 ---

@@ -12,8 +12,8 @@ program. Cross-links the committed decision artifacts and planner hold text.
 the private process-local adapter is permanent, and D1 cancels any
 Recordings-backed durable checkpoint storage follow-on.
 
-- [x] DEC-RUN-REC-DURABILITY decision note checked in under
-  `docs/temp/projects/packaged-service-structure/`
+- [x] DEC-RUN-REC-DURABILITY decision note checked in at
+  `docs/internal/packaged-service-structure/dec-run-rec-durability.md`
 - [x] Decision states Runtime owns opaque `checkpoint_recovery` and Recordings
   owns durable history/artifact authority
 - [x] IMP-RUN-04 shipped a Runtime opaque CheckpointStore port with a
@@ -105,7 +105,7 @@ Expected changed paths for this packet:
 - `docs/temp/meta.md`
 - `docs/temp/projects/packaged-service-structure/README.md`
 - `docs/temp/projects/packaged-service-structure/checklist.md`
-- `docs/temp/projects/packaged-service-structure/dec-run-rec-durability.md`
+- `docs/internal/packaged-service-structure/dec-run-rec-durability.md`
 - `docs/temp/projects/packaged-service-structure/plan.md`
 
 ## Planner cross-links
