@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- For a cross-service behavioral proof that needs one service's internal concrete collaborator, compose the peer through its owner-published `wire.New...` API inside the collaborator's package-level integration test; do not add a test-only production seam.
 - Construct each Factory Session's Worker Sessions service only after its session-owned `WorkstationPoolBoundary` exists, so dispatch and cancellation share the exact same boundary.
 - Worker Session controls must use `context.WithoutCancel` when calling the pool boundary; dispatch termination remains observable through the boundary callback rather than caller-context cancellation.
 - Runtime tests inject a Worker Sessions service by wrapping it in a `WorkerSessionsFactory`, keeping runtime construction dependent on the public factory contract.
@@ -130,5 +131,15 @@
 - Files changed: `pkg/transports/acp/internal/stdio/**`, `pkg/services/factory_sessions/{target_execution_contract.go,internal/ondemandtarget/**}`, `prd.json`, `progress.txt`.
 - **Learnings for future iterations:**
   - A generic runtime close does not carry customer turn ownership; exposing a distinct target-termination seam prevents an otherwise correct Runtime fan-out from being bypassed at ingress.
-  - Keep opaque downstream control IDs action-specific, so separate committed CANCEL and TERMINATE controls cannot collide while each remains safely retryable.
+- Keep opaque downstream control IDs action-specific, so separate committed CANCEL and TERMINATE controls cannot collide while each remains safely retryable.
+---
+
+## 2026-08-05 00:31 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-004
+- Addressed the remaining review-evidence blocker with a deterministic package-integration proof that enters through the real Factory Sessions on-demand target termination boundary and composes the real Factory Runtime captured-turn selector, Worker Sessions service, and synchronous Workers boundary.
+- The test starts two captured children plus one live replacement-turn child. It submits the committed close with a canceled caller context, proves both captured dispatches reach exact `WorkstationPoolBoundary.Cancel` before target cleanup, verifies their existing callback-owned canceled terminal results, and confirms the replacement child receives no control until explicit test cleanup.
+- Files changed: `pkg/services/factory_runtime/internal/services/orchestration/runtime/captured_turn_terminate_integration_test.go`, `pkg/services/factory_runtime/internal/services/orchestration/runtime/worker_session_control_fanout_test.go`, `prd.json`, `progress.txt`.
+- Verification: focused integration test; `go test -race -count=10` for the integration path; Factory Runtime, Worker Sessions, and Factory Sessions suites; focused `go vet`; `git diff --check`.
+- **Learnings for future iterations:**
+  - A cross-service package-integration test can retain internal Runtime construction while entering Factory Sessions through its public wire API, avoiding a test-only production seam.
+  - A controlled dispatch that cannot finish without its exact boundary cancellation proves fan-out ordering and detached-context behavior more directly than observing a recording Runtime fake.
 ---

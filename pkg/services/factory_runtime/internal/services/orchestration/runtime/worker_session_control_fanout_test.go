@@ -507,9 +507,10 @@ var _ workersessions.Service = (*workerSessionControlSpy)(nil)
 // cancellation, so the test observes the control path without sleeps or an
 // artificial completion race.
 type synchronousFanOutExecution struct {
-	mu          sync.Mutex
-	dispatches  map[string]*synchronousFanOutDispatch
-	cancelCalls chan workers.WorkstationDispatchCancelRequest
+	mu                     sync.Mutex
+	dispatches             map[string]*synchronousFanOutDispatch
+	cancelCalls            chan workers.WorkstationDispatchCancelRequest
+	canceledControlContext bool
 }
 
 type synchronousFanOutDispatch struct {
@@ -524,7 +525,7 @@ var _ workers.WorkstationExecutionService = (*synchronousFanOutExecution)(nil)
 func newSynchronousFanOutExecution(dispatchIDs ...string) *synchronousFanOutExecution {
 	execution := &synchronousFanOutExecution{
 		dispatches:  make(map[string]*synchronousFanOutDispatch),
-		cancelCalls: make(chan workers.WorkstationDispatchCancelRequest, 2),
+		cancelCalls: make(chan workers.WorkstationDispatchCancelRequest, len(dispatchIDs)),
 	}
 	for _, dispatchID := range dispatchIDs {
 		execution.dispatches[dispatchID] = &synchronousFanOutDispatch{admitted: make(chan struct{}), canceled: make(chan struct{})}
@@ -574,11 +575,14 @@ func (e *synchronousFanOutExecution) DispatchWorkstationWithAdmission(
 }
 
 func (e *synchronousFanOutExecution) CancelWorkstationDispatch(
-	_ context.Context,
+	ctx context.Context,
 	request workers.WorkstationDispatchCancelRequest,
 ) (workers.WorkstationDispatchCancelResult, error) {
 	e.mu.Lock()
 	dispatch := e.dispatches[request.DispatchID]
+	if ctx.Err() != nil {
+		e.canceledControlContext = true
+	}
 	e.mu.Unlock()
 	if dispatch == nil {
 		return workers.WorkstationDispatchCancelResult{}, workers.ErrUnknownWorkstationDispatch
@@ -595,4 +599,10 @@ func (e *synchronousFanOutExecution) admitted(dispatchID string) <-chan struct{}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.dispatches[dispatchID].admitted
+}
+
+func (e *synchronousFanOutExecution) observedCanceledControlContext() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.canceledControlContext
 }
