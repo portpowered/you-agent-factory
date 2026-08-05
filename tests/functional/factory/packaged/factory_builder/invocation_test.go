@@ -32,6 +32,7 @@ const (
 	invalidFactoryExistingName     = "protected-release-review"
 	invalidFactoryRequest          = "Create a release-note review Factory without changing an existing Factory."
 	invalidCandidateWorkerName     = "missing-reviewer"
+	operatorFactoryRootArgument    = "~/.you-agent-factory/factories"
 )
 
 // TestFactoryBuilderCreatesAndInstallsValidatedGraphFactory proves the public
@@ -75,6 +76,7 @@ func TestFactoryBuilderCreatesAndInstallsValidatedGraphFactory(t *testing.T) {
 
 	installedPath := filepath.Join(homeDir, ".you-agent-factory", "factories", graphFactoryName)
 	assertBuilderStageIsWorkspaceScoped(t, workingDirectory, runner.StagePath())
+	assertBuilderPersistsToOperatorRoot(t, runner, workingDirectory)
 	assertInstalledGraphFactory(t, process, environment, installedPath, runner.operatorRoot)
 	assertInstalledGraphFactoryRuns(t, process, environment, workingDirectory, installedPath)
 	if got := runner.InstalledFactoryCallCount(); got != 1 {
@@ -122,6 +124,7 @@ func TestFactoryBuilderCreatesAndInstallsValidatedJavaScriptFactory(t *testing.T
 
 	installedPath := filepath.Join(homeDir, ".you-agent-factory", "factories", javascriptFactoryName)
 	assertBuilderStageIsWorkspaceScoped(t, workingDirectory, runner.StagePath())
+	assertBuilderPersistsToOperatorRoot(t, runner, workingDirectory)
 	assertInstalledJavaScriptFactory(t, process, environment, installedPath, runner.operatorRoot)
 	assertInstalledJavaScriptFactoryRuns(t, process, environment, workingDirectory, installedPath)
 	if got := runner.InstalledFactoryCallCount(); got != 2 {
@@ -253,6 +256,7 @@ func assertBuilderRejectedCandidate(
 	if runner.InstalledFactoryCallCount() != providerCallsBeforeBuilder {
 		t.Fatalf("invalid candidate provider command calls = %d, want %d before the Builder validation failure", runner.InstalledFactoryCallCount(), providerCallsBeforeBuilder)
 	}
+	assertNoProjectLocalFactoryShadow(t, workingDirectory, runner.targetName)
 }
 
 func installExistingGraphFactory(
@@ -318,6 +322,26 @@ func assertBuilderStageIsWorkspaceScoped(t *testing.T, workingDirectory, stagePa
 	}
 	if filepath.Base(stagePath) != factoryYAMLFile {
 		t.Fatalf("staged candidate = %q, want YAML Factory definition", stagePath)
+	}
+}
+
+func assertBuilderPersistsToOperatorRoot(t *testing.T, runner *factoryBuilderCommandRunner, workingDirectory string) {
+	t.Helper()
+	want := []string{
+		"you", "factory", "create", runner.targetName, "--from", runner.StagePath(),
+		"--dir", runner.operatorRoot,
+	}
+	if got := runner.PersistenceCommand(); strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("Builder persistence command = %#v, want exact public command %#v", got, want)
+	}
+	assertNoProjectLocalFactoryShadow(t, workingDirectory, runner.targetName)
+}
+
+func assertNoProjectLocalFactoryShadow(t *testing.T, workingDirectory, factoryName string) {
+	t.Helper()
+	shadow := filepath.Join(workingDirectory, factorydefinitions.FactoryDir, factoryName)
+	if _, err := os.Stat(shadow); !os.IsNotExist(err) {
+		t.Fatalf("project-local Factory shadow at %q; stat error = %v", shadow, err)
 	}
 }
 
@@ -583,6 +607,7 @@ type factoryBuilderCommandRunner struct {
 	validationAttemptCount       int
 	persistenceAttemptCount      int
 	validationDiagnostic         string
+	persistenceCommand           []string
 }
 
 func (runner *factoryBuilderCommandRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -634,13 +659,15 @@ func (runner *factoryBuilderCommandRunner) stageValidateAndInstall(ctx context.C
 		runner.mu.Unlock()
 		return fmt.Errorf("validate staged Factory candidate: %w", err)
 	}
-	runner.mu.Lock()
-	runner.persistenceAttemptCount++
-	runner.mu.Unlock()
-	if err := runner.executeCustomerCommand(ctx, request, []string{
+	persistenceCommand := []string{
 		"you", "factory", "create", runner.targetName, "--from", stagePath,
 		"--dir", runner.operatorRoot,
-	}); err != nil {
+	}
+	runner.mu.Lock()
+	runner.persistenceAttemptCount++
+	runner.persistenceCommand = append([]string(nil), persistenceCommand...)
+	runner.mu.Unlock()
+	if err := runner.executeCustomerCommand(ctx, request, persistenceCommand); err != nil {
 		return fmt.Errorf("install validated Factory candidate: %w", err)
 	}
 	return nil
@@ -654,6 +681,7 @@ func (runner *factoryBuilderCommandRunner) assertProviderInstructions(request pl
 		"New Factory name: `" + runner.targetName + "`",
 		"Requested orchestrator: `" + runner.orchestrator + "`",
 		"validation code, field, or source location",
+		"you factory create " + runner.targetName + " --from <staged-candidate> --dir " + operatorFactoryRootArgument,
 	} {
 		if !strings.Contains(prompt, want) {
 			return fmt.Errorf("Factory Builder provider prompt must include %q", want)
@@ -702,6 +730,12 @@ func (runner *factoryBuilderCommandRunner) ValidationDiagnostic() string {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	return runner.validationDiagnostic
+}
+
+func (runner *factoryBuilderCommandRunner) PersistenceCommand() []string {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return append([]string(nil), runner.persistenceCommand...)
 }
 
 var _ platformprocess.CommandRunner = (*factoryBuilderCommandRunner)(nil)

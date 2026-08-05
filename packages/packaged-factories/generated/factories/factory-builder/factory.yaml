@@ -132,10 +132,12 @@ workstations:
 
         Correct every validation failure before attempting persistence. A successful
         validation is a prerequisite, not installation. After validation succeeds,
-        install only through the existing named-Factory command:
+        install only through the existing named-Factory command. Pass the global
+        operator-owned Factory root explicitly so persistence does not fall back to the
+        project-local `./factory` default:
 
         ```bash
-        you factory create ${factoryName} --from <staged-candidate>
+        you factory create ${factoryName} --from <staged-candidate> --dir ~/.you-agent-factory/factories
         ```
 
         Never copy staged files into an operator-owned Factory root or use another

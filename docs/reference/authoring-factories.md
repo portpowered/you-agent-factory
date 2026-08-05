@@ -368,10 +368,12 @@ you factory config validate <staged-candidate>
 
 Validation is required before persistence; success does not itself install the
 candidate. Only after validation succeeds, Builder uses the ordinary named
-Factory create command:
+Factory create command with the global operator-owned Factory root explicitly
+selected. That prevents the command's project-local `./factory` default from
+shadowing the shared named Factory:
 
 ```bash
-you factory create <factory-name> --from <staged-candidate>
+you factory create <factory-name> --from <staged-candidate> --dir ~/.you-agent-factory/factories
 ```
 
 That command owns the named-Factory destination. Builder does not copy staged

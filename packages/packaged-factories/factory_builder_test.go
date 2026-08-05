@@ -11,7 +11,7 @@ import (
 
 const factoryBuilderSlug = "factory-builder"
 
-func TestFactoryBuilderPublishedInvocationAndInstructions(t *testing.T) {
+func TestFactoryBuilderPublishedInvocation(t *testing.T) {
 	t.Parallel()
 
 	published := packagedfactories.Published()
@@ -51,23 +51,6 @@ func TestFactoryBuilderPublishedInvocationAndInstructions(t *testing.T) {
 		t.Fatalf("Factory Builder tool policy = %q, want ENABLED", factoryBuilder.WorkerToolPolicy("factory-builder"))
 	}
 
-	instructions, err := fs.ReadFile(packagedfactories.Source(), "factories/factory-builder/prompts/build-factory.md")
-	if err != nil {
-		t.Fatalf("read Factory Builder instructions: %v", err)
-	}
-	for _, requirement := range []string{
-		"you docs agents",
-		"you docs authoring-factories",
-		"you docs config",
-		"you docs javascript-workflows",
-		"you factory config validate <staged-candidate>",
-		"you factory create ${factoryName} --from <staged-candidate>",
-		"Never copy staged files into an operator-owned Factory root",
-	} {
-		if !strings.Contains(string(instructions), requirement) {
-			t.Fatalf("Factory Builder instructions missing %q", requirement)
-		}
-	}
 }
 
 type factoryBuilderManifest struct {
