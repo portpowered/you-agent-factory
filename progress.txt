@@ -1,6 +1,7 @@
 ## Codebase Patterns
 - Document `pkg/services/events` as the process-local, in-memory, session-scoped source-native observation stream; Recordings owns canonical Factory Event JSONL history, replay, artifacts, and historical projections.
 - Architecture service inventories should name the package that publishes the public owner contract, and diagrams should show direct service operations unless a bounded delivery contract is explicitly involved.
+- Define ACP customer terms from the detached `chat_sessions` and `worker_sessions` public contracts; use customer-facing relationship diagrams and keep their event lifetimes separate from Recordings history.
 
 ## 2026-08-04 20:30 -07:00 - ACP-L1-V4-H04-DOCUMENTATION-RECONCILIATION-001
 - Reconciled the architecture service inventory, system-flow diagrams, canonical-history explanation, and frontend/backend event prose with the implemented Chat Sessions, Events, Worker Sessions, and Recordings boundaries.
@@ -11,4 +12,13 @@
   - `pkg/services/events` already documents its D1/D2 boundary in `doc.go`; use that contract wording when reconciling customer-facing documentation.
   - `pkg/services/chat_sessions` and `pkg/services/worker_sessions` publish the ACP session contracts; their explicit Events topics are bounded delivery paths, not a system-wide event bus.
   - `make typecheck` may require a lockfile-pinned `bun install --frozen-lockfile` in a fresh worktree before the declared `@types/bun` package is available.
+---
+
+## 2026-08-04 21:05 -07:00 - ACP-L1-V4-H04-DOCUMENTATION-RECONCILIATION-002
+- Added concise customer-facing definitions for Chat Session, Target Episode, Turn, and Worker Session, along with a diagram that explains how a selected target, ordered turns, and one-or-more Worker Sessions relate within an episode.
+- Clarified that `FactoryResponseEvent` is an ephemeral, process-local invocation-progress record and never enters the Recordings-owned canonical `FactoryEvent` replay ledger.
+- Files changed: `docs/architecture/data-model.md`, `prd.json`, `progress.txt`.
+- **Learnings for future iterations:**
+  - A target change creates a new immutable `TargetEpisode`; every admitted `Turn` records the episode it belongs to, so documentation should describe historical target selection without implying an internal runtime model.
+  - Worker Sessions are stable execution/control identities and are distinct from Provider Sessions; an episode may require multiple Worker Sessions.
 ---

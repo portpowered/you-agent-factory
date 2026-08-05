@@ -19,9 +19,36 @@ The public API and customer-facing documentation should use these resource meani
 - `Work`: one customer-visible unit of work moving through a factory according to the configured work types, work states, workstations, workers, and guards.
 - `Work Request`: one caller-authored request that creates or upserts work through the public API. A work request is distinct from the runtime work items it creates or updates.
 - `Provider Session`: one provider-backed execution session or transcript-bearing interaction owned by a workstation run or related runtime activity. Provider sessions are runtime inspection resources, not factory-definition resources.
-- `FactoryResponseEvent`: one ephemeral, session-scoped observation record for invocation progress (message snapshots, tool lifecycle updates, and related public progress while work is running). Response events are delivered on `GET /factory-sessions/{session_id}/response-events`; CLI lifecycle and NDJSON output consume canonical `FactoryEvent` values instead. Response events do not enter canonical `FactoryEvent` replay history and are not a substitute for durable session facts.
+- `Chat Session`: the customer-facing conversation and control context for addressing a selected target. A Chat Session keeps its turns in order and records its target history; it is not the canonical Factory replay history.
+- `Target Episode`: one bounded attempt to run or interact with the target currently selected in a Chat Session. Selecting a different target opens a new episode without rewriting the earlier one. For a Factory target, the episode can be associated with the Factory Session that runs that target.
+- `Turn`: one ordered user or agent interaction unit admitted within a Chat Session. Each turn belongs to the current Target Episode and can cause work or Worker activity for that episode; a session has at most one non-terminal turn at a time.
+- `Worker Session`: the execution and control context for a Worker that participates in a Target Episode. An episode can use multiple Worker Sessions when its orchestration requires multiple worker executions; a Worker Session is distinct from a provider-backed `Provider Session`.
+- `FactoryResponseEvent`: one ephemeral, process-local, session-scoped observation record for invocation progress (message snapshots, tool lifecycle updates, and related public progress while work is running). Response events are delivered on `GET /factory-sessions/{session_id}/response-events`; CLI lifecycle and NDJSON output consume canonical `FactoryEvent` values instead. Response events do not enter the Recordings-owned canonical `FactoryEvent` replay ledger and are not a substitute for durable session facts.
 
 These terms are the primary public resource model. Internal Petri-net concepts such as tokens, transitions, places, and edges remain implementation details that support the runtime, but they are not the primary customer-facing API resources.
+
+### Chat and execution relationships
+
+```mermaid
+flowchart LR
+    chat[Chat Session]
+    episode[Target Episode]
+    turn[Turn]
+    target[Selected Factory or other target]
+    worker[Worker Session]
+
+    chat -->|keeps ordered| turn
+    chat -->|opens one or more| episode
+    episode -->|addresses| target
+    turn -->|belongs to| episode
+    episode -->|can involve one or more| worker
+```
+
+The diagram describes customer-facing control and execution relationships. A
+Chat Session may have several Target Episodes over its lifetime, but each Turn
+is associated with one episode. Worker Sessions are execution contexts that
+may be involved in that episode; their source-native observations are separate
+from the canonical Factory Event history held by Recordings.
 
 ## Internal system data model
 

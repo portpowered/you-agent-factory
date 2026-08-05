@@ -48,8 +48,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-04: Added customer-facing Chat Session, Target Episode, Turn, and Worker Session definitions plus their relationship diagram to docs/architecture/data-model.md. Clarified that FactoryResponseEvent is ephemeral and process-local, outside the Recordings-owned canonical FactoryEvent replay ledger. Verified the terms against the Chat Sessions and Worker Sessions public contracts; make typecheck passes."
     },
     {
       "id": "ACP-L1-V4-H04-DOCUMENTATION-RECONCILIATION-003",
