@@ -266,14 +266,8 @@ func TestBoundChildProjectionReservesFailureAndTerminalEvidenceAfterRecordPressu
 
 func TestBoundChildProjectionReplacesOversizedValueWithByteBoundedElision(t *testing.T) {
 	t.Parallel()
-	ordinaryNotice, ordinaryBytes, err := childProjectionElision("child-tool-call", childProjectionElisionOrdinary)
-	if err != nil {
-		t.Fatalf("childProjectionElision(ordinary) error = %v", err)
-	}
-	_, failureBytes, err := childProjectionElision("child-tool-call", childProjectionElisionFailure)
-	if err != nil {
-		t.Fatalf("childProjectionElision(failure) error = %v", err)
-	}
+	ordinaryNotice, ordinaryBytes := childProjectionElision("child-tool-call", childProjectionElisionOrdinary)
+	_, failureBytes := childProjectionElision("child-tool-call", childProjectionElisionFailure)
 	limits := ChildProjectionLimits{MaxRecords: 4, MaxSerializedBytes: ordinaryBytes + failureBytes + 1}
 	item := childItemWithParent(t, "child-tool-call", workers.KindMessage, workers.PhaseDelta,
 		mustMarshal(t, workers.MessageDeltaPayload{ContentBlockKind: workers.ContentBlockText, TextDelta: strings.Repeat("x", 2048)}))

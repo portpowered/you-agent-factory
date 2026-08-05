@@ -22,6 +22,7 @@ type bridgeSequencer struct {
 	sequences               []chatsessions.SequenceRequest
 	advances                []chatsessions.AdvanceStreamHeadRequest
 	sequenceErr             error
+	advanceErr              error
 	sequenceSawCancelledCtx bool
 	didFirst                chan struct{}
 }
@@ -46,6 +47,9 @@ func (s *bridgeSequencer) Sequence(ctx context.Context, req chatsessions.Sequenc
 func (s *bridgeSequencer) AdvanceStreamHead(_ context.Context, req chatsessions.AdvanceStreamHeadRequest) (chatsessions.AdvanceStreamHeadResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.advanceErr != nil {
+		return chatsessions.AdvanceStreamHeadResult{}, s.advanceErr
+	}
 	s.advances = append(s.advances, req)
 	return chatsessions.AdvanceStreamHeadResult{Session: chatsessions.Session{Version: req.ExpectedVersion + 1}}, nil
 }

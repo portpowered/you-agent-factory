@@ -355,14 +355,8 @@ func BoundChildProjection(
 	if err != nil {
 		return budget, nil, err
 	}
-	ordinaryNotice, ordinaryNoticeBytes, err := childProjectionElision(parentItemID, childProjectionElisionOrdinary)
-	if err != nil {
-		return budget, nil, err
-	}
-	failureNotice, failureNoticeBytes, err := childProjectionElision(parentItemID, childProjectionElisionFailure)
-	if err != nil {
-		return budget, nil, err
-	}
+	ordinaryNotice, ordinaryNoticeBytes := childProjectionElision(parentItemID, childProjectionElisionOrdinary)
+	failureNotice, failureNoticeBytes := childProjectionElision(parentItemID, childProjectionElisionFailure)
 	reservedBytes := ordinaryNoticeBytes + failureNoticeBytes
 	if reservedBytes >= budget.limits.MaxSerializedBytes {
 		return budget, nil, fmt.Errorf("%w: child projection byte limit %d cannot hold required elision evidence", ErrMalformedRecord, budget.limits.MaxSerializedBytes)
@@ -484,18 +478,14 @@ func serializedUpdateBytes(update *acpsdk.SessionUpdate) (int, error) {
 	return len(encoded), nil
 }
 
-func childProjectionElision(parentItemID string, kind childProjectionElisionKind) (*acpsdk.SessionUpdate, int, error) {
+func childProjectionElision(parentItemID string, kind childProjectionElisionKind) (*acpsdk.SessionUpdate, int) {
 	text := "Worker child content was elided because its per-child projection limit was reached; subsequent non-terminal content is omitted."
 	switch kind {
 	case childProjectionElisionFailure:
 		text = "Worker error content was elided because its per-child projection limit was reached."
 	}
 	update := childTextUpdate(parentItemID, text)
-	bytes, err := serializedUpdateBytes(update)
-	if err != nil {
-		return nil, 0, err
-	}
-	return update, bytes, nil
+	return update, serializedKnownChildUpdateBytes(update)
 }
 
 func childStreamGapElision(item chatsessions.SequencedItem, parentItemID string) (*acpsdk.SessionUpdate, int, error) {
@@ -509,9 +499,14 @@ func childStreamGapElision(item chatsessions.SequencedItem, parentItemID string)
 	payload.Reason = ""
 	text := gapNoticeText(payload) + " Additional stream-gap detail was elided because its per-child projection limit was reached."
 	update := childTextUpdate(parentItemID, text)
-	bytes, err := serializedUpdateBytes(update)
-	if err != nil {
-		return nil, 0, err
-	}
-	return update, bytes, nil
+	return update, serializedKnownChildUpdateBytes(update), nil
+}
+
+// serializedKnownChildUpdateBytes handles updates composed exclusively from
+// static string-backed ACP fields. Unlike provider-originated RawInput and
+// RawOutput (handled by serializedUpdateBytes), this shape cannot contain an
+// unsupported JSON value, so its size is deterministic and cannot fail.
+func serializedKnownChildUpdateBytes(update *acpsdk.SessionUpdate) int {
+	encoded, _ := json.Marshal(update)
+	return len(encoded)
 }
