@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -111,6 +113,133 @@ func TestDispatchFactoryInvocation_CallsInjectedResponseBridge(t *testing.T) {
 	if !gotLiveDrainNonNil {
 		t.Error("dispatchFactoryInvocation passed a nil liveDrain to the injected responseBridge, want a non-nil callback")
 	}
+}
+
+func TestDeliverBoundWorkerChildProjectionPreservesNotificationOutcomes(t *testing.T) {
+	item, update := projectedWorkerChildMessage(t)
+	notifyErr := errors.New("notification failed")
+
+	t.Run("no update is a no-op", func(t *testing.T) {
+		cache := &attachmentCache{}
+		bounded, err := cache.deliverBoundWorkerChildProjection("session", item, nil, nil)
+		if err != nil || bounded != nil {
+			t.Fatalf("deliverBoundWorkerChildProjection(nil) = (%#v, %v), want (nil, nil)", bounded, err)
+		}
+		if bounded, err := cache.boundWorkerChildProjection("session", item, nil); err != nil || bounded != nil {
+			t.Fatalf("boundWorkerChildProjection(nil) = (%#v, %v), want (nil, nil)", bounded, err)
+		}
+	})
+
+	t.Run("generic updates preserve notifier behavior", func(t *testing.T) {
+		generic := &acpsdk.SessionUpdate{}
+		bounded, err := (&attachmentCache{}).deliverBoundWorkerChildProjection("session", item, generic, nil)
+		if err != nil || bounded != generic {
+			t.Fatalf("generic update without notifier = (%#v, %v), want original update and nil", bounded, err)
+		}
+
+		_, err = (&attachmentCache{}).deliverBoundWorkerChildProjection("session", item, generic, func(*acpsdk.SessionUpdate) error {
+			return notifyErr
+		})
+		if !errors.Is(err, notifyErr) {
+			t.Fatalf("generic notifier error = %v, want wrapped %v", err, notifyErr)
+		}
+		if err.Error() != notifyErr.Error() {
+			t.Fatalf("generic notifier error text = %q, want %q", err.Error(), notifyErr.Error())
+		}
+	})
+
+	t.Run("fallback projection notifies exactly the bounded update", func(t *testing.T) {
+		var cache *attachmentCache
+		var delivered *acpsdk.SessionUpdate
+		bounded, err := cache.deliverBoundWorkerChildProjection("session", item, update, func(got *acpsdk.SessionUpdate) error {
+			delivered = got
+			return nil
+		})
+		if err != nil || bounded == nil || delivered != bounded {
+			t.Fatalf("fallback delivery = (%#v, %v), delivered %#v; want one bounded delivered update", bounded, err, delivered)
+		}
+
+		_, err = cache.deliverBoundWorkerChildProjection("session", item, update, func(*acpsdk.SessionUpdate) error {
+			return notifyErr
+		})
+		if !errors.Is(err, notifyErr) {
+			t.Fatalf("fallback notifier error = %v, want wrapped %v", err, notifyErr)
+		}
+
+		bounded, err = cache.deliverBoundWorkerChildProjection("session", item, update, nil)
+		if err != nil || bounded == nil {
+			t.Fatalf("fallback without notifier = (%#v, %v), want bounded update", bounded, err)
+		}
+	})
+
+	t.Run("malformed bounded content is never notified or committed", func(t *testing.T) {
+		cache := &attachmentCache{}
+		unsafe := &acpsdk.SessionUpdate{ToolCallUpdate: &acpsdk.SessionToolCallUpdate{
+			ToolCallId: update.ToolCallUpdate.ToolCallId,
+			RawInput:   math.Inf(1),
+		}}
+		notified := false
+		bounded, err := cache.deliverBoundWorkerChildProjection("session", item, unsafe, func(*acpsdk.SessionUpdate) error {
+			notified = true
+			return nil
+		})
+		if bounded != nil || !errors.Is(err, mapping.ErrMalformedRecord) {
+			t.Fatalf("malformed delivery = (%#v, %v), want typed malformed error", bounded, err)
+		}
+		if notified {
+			t.Fatal("malformed child update notified the client")
+		}
+		if got := cache.workerChildBudgets["session"]; len(got) != 0 {
+			t.Fatalf("malformed child update committed a child budget: %#v", got)
+		}
+	})
+}
+
+func TestWorkerChildProjectionCacheNoopsWithoutAttachmentState(t *testing.T) {
+	var cache *attachmentCache
+	cache.markLoaded("session")
+	if cache.wasLoaded("session") {
+		t.Fatal("nil attachment cache reported a session as loaded")
+	}
+
+	server, _ := newStreamingTestServer(t, &fakeFactoryTargetService{})
+	if err := server.restoreWorkerChildProjectionBudget(context.Background(), streamingTestSessionID, 1); err != nil {
+		t.Fatalf("restore without an attachment cache = %v, want nil", err)
+	}
+	if err := server.rebuildWorkerChildProjectionBudget(nil, streamingTestSessionID, events.Record{}); err != nil {
+		t.Fatalf("rebuild without an attachment cache = %v, want nil", err)
+	}
+
+	materialized := &attachmentCache{}
+	budget := mapping.NewChildProjectionBudget(mapping.DefaultChildProjectionLimits())
+	materialized.commitWorkerChildProjection("session", "child", budget)
+	if got := materialized.workerChildBudgets["session"]["child"]; got != budget {
+		t.Fatalf("committed child budget = %#v, want %#v", got, budget)
+	}
+}
+
+func projectedWorkerChildMessage(t *testing.T) (chatsessions.SequencedItem, *acpsdk.SessionUpdate) {
+	t.Helper()
+	payload, err := json.Marshal(workers.MessageDeltaPayload{
+		ContentBlockKind: workers.ContentBlockText,
+		TextDelta:        "bounded child content",
+	})
+	if err != nil {
+		t.Fatalf("marshal child message payload: %v", err)
+	}
+	item := chatsessions.SequencedItem{
+		ItemID:                   "child-message",
+		ParentItemID:             "child-tool-call",
+		WorkerSessionAssociation: &chatsessions.WorkerSessionAssociation{DispatchID: "dispatch", WorkerSessionID: "worker-session"},
+		Kind:                     workers.KindMessage,
+		Phase:                    workers.PhaseDelta,
+		Payload:                  payload,
+	}
+	update, err := mapping.ProjectWorkerChild(item)
+	if err != nil || update == nil || update.ToolCallUpdate == nil {
+		t.Fatalf("ProjectWorkerChild() = (%#v, %v), want child update", update, err)
+	}
+	return item, update
 }
 
 // TestHandleSessionPromptLiveDrainDeliversRecordBeforeInvokeReturns proves
