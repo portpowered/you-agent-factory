@@ -13,30 +13,40 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
-func (f *factoryImpl) ControlPause(ctx context.Context, _ factory.PauseRequest) (factory.PauseResult, error) {
+func (f *factoryImpl) ControlPause(ctx context.Context, req factory.PauseRequest) (factory.PauseResult, error) {
+	f.workerSessionControlMu.Lock()
+	defer f.workerSessionControlMu.Unlock()
 	outcome, _, err := f.applyPauseControl()
 	if err != nil {
 		return factory.PauseResult{}, err
 	}
+	workerSessionControl := f.controlAssociatedWorkerSessions(
+		ctx, req.TurnID, req.ControlID, factory.WorkerSessionControlActionPause, outcome,
+	)
 	if f.dispatchPlan != nil {
 		if err := f.dispatchPlan.Pause(ctx); err != nil {
-			return factory.PauseResult{}, err
+			return factory.PauseResult{Outcome: outcome, WorkerSessionControl: workerSessionControl}, err
 		}
 	}
-	return factory.PauseResult{Outcome: outcome}, nil
+	return factory.PauseResult{Outcome: outcome, WorkerSessionControl: workerSessionControl}, nil
 }
 
-func (f *factoryImpl) ControlResume(ctx context.Context, _ factory.ResumeRequest) (factory.ResumeResult, error) {
+func (f *factoryImpl) ControlResume(ctx context.Context, req factory.ResumeRequest) (factory.ResumeResult, error) {
+	f.workerSessionControlMu.Lock()
+	defer f.workerSessionControlMu.Unlock()
 	outcome, _, err := f.applyResumeControl()
 	if err != nil {
 		return factory.ResumeResult{}, err
 	}
+	workerSessionControl := f.controlAssociatedWorkerSessions(
+		ctx, req.TurnID, req.ControlID, factory.WorkerSessionControlActionResume, outcome,
+	)
 	if f.dispatchPlan != nil {
 		if err := f.dispatchPlan.Resume(ctx); err != nil {
-			return factory.ResumeResult{}, err
+			return factory.ResumeResult{Outcome: outcome, WorkerSessionControl: workerSessionControl}, err
 		}
 	}
-	return factory.ResumeResult{Outcome: outcome}, nil
+	return factory.ResumeResult{Outcome: outcome, WorkerSessionControl: workerSessionControl}, nil
 }
 
 func (f *factoryImpl) ControlTerminate(ctx context.Context, req factory.TerminateRequest) (factory.TerminateResult, error) {

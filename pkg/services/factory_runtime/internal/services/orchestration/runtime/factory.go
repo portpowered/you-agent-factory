@@ -61,11 +61,13 @@ type factoryImpl struct {
 	mu           sync.RWMutex
 	// completeCh is closed when Run() returns (either by termination or error).
 	// WaitToComplete() returns this channel.
-	completeCh           chan struct{}
-	completeOnce         sync.Once
-	runCancel            context.CancelFunc
-	operatorMoveRequests map[string]appliedOperatorMove
-	resumeDrainPending   bool
+	completeCh                  chan struct{}
+	completeOnce                sync.Once
+	runCancel                   context.CancelFunc
+	operatorMoveRequests        map[string]appliedOperatorMove
+	resumeDrainPending          bool
+	workerSessionControlMu      sync.Mutex
+	workerSessionControlResults map[workerSessionControlKey]factory.WorkerSessionControlResult
 }
 
 type appliedOperatorMove struct {
@@ -471,19 +473,20 @@ func newFactoryImpl(
 	eventHistory recordings.RuntimeLedger,
 ) *factoryImpl {
 	return &factoryImpl{
-		engine:               eng,
-		cfg:                  cfg,
-		topology:             cfg.net,
-		logger:               logger,
-		resultBuffer:         resultBuffer,
-		dispatchFlow:         dispatchFlow,
-		dispatchPlan:         dispatchPlan,
-		workers:              workersBoundary,
-		eventHistory:         eventHistory,
-		state:                interfaces.FactoryStateIdle,
-		clock:                cfg.clock,
-		completeCh:           make(chan struct{}),
-		operatorMoveRequests: make(map[string]appliedOperatorMove),
+		engine:                      eng,
+		cfg:                         cfg,
+		topology:                    cfg.net,
+		logger:                      logger,
+		resultBuffer:                resultBuffer,
+		dispatchFlow:                dispatchFlow,
+		dispatchPlan:                dispatchPlan,
+		workers:                     workersBoundary,
+		eventHistory:                eventHistory,
+		state:                       interfaces.FactoryStateIdle,
+		clock:                       cfg.clock,
+		completeCh:                  make(chan struct{}),
+		operatorMoveRequests:        make(map[string]appliedOperatorMove),
+		workerSessionControlResults: make(map[workerSessionControlKey]factory.WorkerSessionControlResult),
 	}
 }
 
@@ -629,6 +632,8 @@ func (f *factoryImpl) SubscribeFactoryEvents(ctx context.Context, reconnect *int
 
 // Pause pauses the factory. Repeated calls while already paused are a no-op.
 func (f *factoryImpl) Pause(ctx context.Context) error {
+	f.workerSessionControlMu.Lock()
+	defer f.workerSessionControlMu.Unlock()
 	_, previousState, err := f.applyPauseControl()
 	if err != nil {
 		return fmt.Errorf("pause factory: invalid state %s", previousState)
@@ -668,6 +673,8 @@ func (f *factoryImpl) applyPauseControl() (factory.ControlOutcome, interfaces.Fa
 
 // Resume resumes a paused factory.
 func (f *factoryImpl) Resume(ctx context.Context) error {
+	f.workerSessionControlMu.Lock()
+	defer f.workerSessionControlMu.Unlock()
 	_, previousState, err := f.applyResumeControl()
 	if err != nil {
 		return fmt.Errorf("resume factory: invalid state %s", previousState)

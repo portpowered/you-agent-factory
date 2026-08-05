@@ -67,8 +67,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-04: Factory Runtime pause/resume controls now accept immutable turn and control identities, capture the canonical association snapshot once per committed control, and fan out in deterministic order solely through Worker Sessions. Public results retain detached per-child applied/no-op/unsupported/failed evidence plus aggregate APPLIED/NOOP/UNSUPPORTED/PARTIAL/FAILED outcomes. Repeated controls return the original evidence without reselecting late children, child errors do not stop siblings, and fan-out ignores caller cancellation after the parent control commits. Focused fan-out, repeat/isolation, empty-selection, full Runtime, Worker Sessions, race, and vet verification pass."
     },
     {
       "id": "ACP-L4-W6-WORKER-CONTROL-FANOUT-004",
