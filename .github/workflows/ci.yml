@@ -213,7 +213,13 @@ jobs:
         run: bash scripts/ci/run-functional-test-viz.sh
         env:
           FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
+      - name: Run pinned real ACP client evidence
+        if: needs.classify.outputs.run_backend == 'true' && matrix.suite == 'functional'
+        run: go test -v ./tests/functional/transport/acp/realclient -run '^TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt$' -count=1 -timeout 4m
+        env:
           INFINITE_YOU_RUN_ACPX_REAL_CLIENT: "1"
+          INFINITE_YOU_REQUIRE_ACPX_REAL_CLIENT: "1"
+          INFINITE_YOU_ACPX_EVIDENCE_OUTPUT: ${{ github.workspace }}/.artifacts/functional-test-viz/real-acpx-evidence.json
       - name: Publish functional test job summary
         if: always() && needs.classify.outputs.run_backend == 'true' && matrix.suite == 'functional'
         run: bash scripts/ci/publish-functional-test-summary.sh
@@ -230,7 +236,16 @@ jobs:
             .artifacts/functional-test-viz/coverage-summary.json
             .artifacts/functional-test-viz/coverage.out
             .artifacts/functional-test-viz/command.log
+            .artifacts/functional-test-viz/real-acpx-evidence.json
           if-no-files-found: ignore
+          retention-days: 14
+      - name: Require pinned real ACP evidence artifact
+        if: always() && needs.classify.outputs.run_backend == 'true' && matrix.suite == 'functional'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pinned-real-acp-evidence
+          path: .artifacts/functional-test-viz/real-acpx-evidence.json
+          if-no-files-found: error
           retention-days: 14
 
   ui-backend-integration:

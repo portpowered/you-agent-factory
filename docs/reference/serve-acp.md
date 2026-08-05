@@ -63,13 +63,16 @@ It builds the current checkout before the client starts it; it never selects a
 globally installed `you` or `acpx` executable.
 
 ```bash
-INFINITE_YOU_RUN_ACPX_REAL_CLIENT=1 go test ./tests/functional/transport/acp/realclient/... -run TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt
+INFINITE_YOU_RUN_ACPX_REAL_CLIENT=1 INFINITE_YOU_REQUIRE_ACPX_REAL_CLIENT=1 INFINITE_YOU_ACPX_EVIDENCE_OUTPUT=<sanitized-evidence.json> go test -v ./tests/functional/transport/acp/realclient/... -run '^TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt$' -count=1
 ```
 
 It requires `npm`/`npx` and Node.js 22.13.0 or later, the runtime declared by
 the pinned acpx package. The default functional suite deliberately leaves this
-networked, process-boundary proof disabled; the repository CI enables it in its
-functional lane.
+networked, process-boundary proof disabled. CI runs it separately from the
+short functional coverage command, without `-short`, and treats a missing Node
+or acpx prerequisite as a failure. The required CI step retains one sanitized
+JSON artifact containing only the revision, acpx version, initialization,
+session, target, result, provider-count, cleanup, and terminal-outcome facts.
 
 The check runs the effective client command in this shape, with a fresh
 temporary home, project directory, npm cache, and server binary on every run:
@@ -98,13 +101,18 @@ version and `target` selection of `factory:@you/factory-builder`.
 The same scenario invokes acpx's `prompt` command exactly once with ephemeral
 text. Its disposable provider command follows the supported Codex subprocess
 protocol, records only the provider identity, and is selected through the
-scenario's scoped operator default. The proof asserts a non-empty assistant
-result fact, one `end_turn` terminal result, and exactly one `codex` provider
-invocation; it does not assert, save, or print prompt text, assistant text,
-JSON-RPC frames, provider arguments, environment values, or host paths. The
-test then uses `sessions close`, observes that the disposable acpx queue owner
-has stopped, and removes every scenario-owned client record, cache, and
-process. Failures report a bounded phase only.
+scenario's scoped operator default. The child process receives a narrow
+allowlist of runtime variables plus scenario-owned home, cache, temporary, and
+provider values; it does not inherit credentials, proxy settings, or other
+developer environment. The proof asserts a non-empty assistant result fact,
+one `end_turn` terminal result, and exactly one `codex` provider invocation; it
+does not assert, save, or print prompt text, assistant text, JSON-RPC frames,
+provider arguments, environment values, or host paths. Timeout cleanup kills
+the complete process tree (a dedicated process-group path on Unix and
+`taskkill /T` on Windows), and a failure-path test verifies the recorded
+scenario descendant exits. The test then uses `sessions close`, observes that
+the disposable acpx queue owner has stopped, and removes every scenario-owned
+client record, cache, and process. Failures report a bounded phase only.
 
 ## Exchange One ACP Prompt
 

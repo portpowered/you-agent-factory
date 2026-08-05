@@ -3,14 +3,15 @@ package realclient_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -23,6 +24,8 @@ const (
 	realClientAgentName         = "you-real-client"
 	defaultFactoryBuilderTarget = "factory:@you/factory-builder"
 	realClientEvidenceEnv       = "INFINITE_YOU_RUN_ACPX_REAL_CLIENT"
+	realClientRequiredEnv       = "INFINITE_YOU_REQUIRE_ACPX_REAL_CLIENT"
+	realClientEvidenceOutputEnv = "INFINITE_YOU_ACPX_EVIDENCE_OUTPUT"
 	deterministicProviderName   = "codex"
 	providerObservationEnv      = "INFINITE_YOU_ACPX_PROVIDER_OBSERVATION"
 )
@@ -38,15 +41,7 @@ const (
 // session inside t.TempDir and reports only phase classifications if that
 // client boundary fails.
 func TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt(t *testing.T) {
-	if testing.Short() {
-		t.Skip("real acpx client evidence builds the CLI and installs a pinned npm package")
-	}
-	if os.Getenv(realClientEvidenceEnv) != "1" {
-		t.Skip("set INFINITE_YOU_RUN_ACPX_REAL_CLIENT=1 to run pinned real-client ACP evidence")
-	}
-	if !nodeSupportsPinnedAcpx() {
-		t.Skip("pinned acpx@0.13.0 requires Node.js 22.13.0 or later")
-	}
+	requirePinnedAcpxPrerequisites(t)
 
 	scenario := newPinnedAcpxScenario(t)
 	buildCurrentYouBinary(t, scenario)
@@ -63,17 +58,57 @@ func TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt(t *testing.T) {
 	assertPromptEvidence(t, promptOutput)
 	scenario.closeSession(t)
 	scenario.assertQueueOwnerStopped(t)
+	scenario.emitEvidence(t)
+}
+
+func requirePinnedAcpxPrerequisites(t *testing.T) {
+	t.Helper()
+	required := os.Getenv(realClientRequiredEnv) == "1"
+	if testing.Short() {
+		if required {
+			t.Fatal("real ACP evidence prerequisite failed: required lane must run without -short")
+		}
+		t.Skip("real acpx client evidence builds the CLI and installs a pinned npm package")
+	}
+	if os.Getenv(realClientEvidenceEnv) != "1" {
+		if required {
+			t.Fatal("real ACP evidence prerequisite failed: required lane did not enable the pinned client")
+		}
+		t.Skip("set INFINITE_YOU_RUN_ACPX_REAL_CLIENT=1 to run pinned real-client ACP evidence")
+	}
+	if !nodeSupportsPinnedAcpx() {
+		if required {
+			t.Fatal("real ACP evidence prerequisite failed: Node.js 22.13.0 or later is required")
+		}
+		t.Skip("pinned acpx@0.13.0 requires Node.js 22.13.0 or later")
+	}
 }
 
 type pinnedAcpxScenario struct {
-	home          string
-	project       string
-	npmCache      string
-	repoRoot      string
-	serverPath    string
-	providerDir   string
-	providerProof string
-	sessionActive bool
+	home            string
+	project         string
+	npmCache        string
+	temporary       string
+	repoRoot        string
+	revision        string
+	serverPath      string
+	providerDir     string
+	providerProof   string
+	sessionMayExist bool
+}
+
+type realClientEvidence struct {
+	Revision            string `json:"revision"`
+	AcpxVersion         string `json:"acpxVersion"`
+	Initialization      string `json:"initialization"`
+	Session             string `json:"session"`
+	DefaultTarget       string `json:"defaultTarget"`
+	AssistantResult     string `json:"assistantResult"`
+	TerminalStopReason  string `json:"terminalStopReason"`
+	Provider            string `json:"provider"`
+	ProviderInvocations int    `json:"providerInvocations"`
+	Cleanup             string `json:"cleanup"`
+	Outcome             string `json:"outcome"`
 }
 
 func newPinnedAcpxScenario(t *testing.T) *pinnedAcpxScenario {
@@ -84,15 +119,27 @@ func newPinnedAcpxScenario(t *testing.T) *pinnedAcpxScenario {
 	if runtime.GOOS == "windows" {
 		serverName += ".exe"
 	}
-	return &pinnedAcpxScenario{
+	scenario := &pinnedAcpxScenario{
 		home:          filepath.Join(root, "home"),
 		project:       filepath.Join(root, "project"),
 		npmCache:      filepath.Join(root, "npm-cache"),
+		temporary:     filepath.Join(root, "temporary"),
 		repoRoot:      repositoryRoot(t),
 		serverPath:    filepath.Join(root, "bin", serverName),
 		providerDir:   filepath.Join(root, "provider"),
 		providerProof: filepath.Join(root, "provider", "invocations"),
 	}
+	for _, directory := range []string{
+		scenario.home,
+		scenario.npmCache,
+		scenario.temporary,
+	} {
+		if err := os.MkdirAll(directory, 0o755); err != nil {
+			t.Fatal("real ACP evidence setup failed: create disposable runtime directory")
+		}
+	}
+	scenario.revision = repositoryRevision(t, scenario.repoRoot)
+	return scenario
 }
 
 func buildCurrentYouBinary(t *testing.T, scenario *pinnedAcpxScenario) {
@@ -175,11 +222,14 @@ func (scenario *pinnedAcpxScenario) assertPinnedVersion(t *testing.T) {
 
 func (scenario *pinnedAcpxScenario) newSession(t *testing.T) acpxSessionResult {
 	t.Helper()
+	// The client can create the session before it writes an invalid or
+	// incomplete machine-readable result. Mark cleanup as necessary before the
+	// request so t.Cleanup still closes any session that may have been created.
+	scenario.sessionMayExist = true
 	output, err := scenario.run("create-session", "--format", "json", realClientAgentName, "sessions", "new")
 	if err != nil {
 		t.Fatal(err)
 	}
-	scenario.sessionActive = true
 	return parseAcpxSessionResult(t, output, "session_ensured")
 }
 
@@ -208,22 +258,62 @@ func (scenario *pinnedAcpxScenario) closeSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scenario.sessionActive = false
 	if closed := parseAcpxSessionResult(t, output, "session_closed"); closed.ACPSessionID == "" {
 		t.Fatal("real ACP evidence cleanup failed: closed session has no ACP session identity")
 	}
+	scenario.sessionMayExist = false
 }
 
 func (scenario *pinnedAcpxScenario) registerSessionCleanup(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() {
-		if !scenario.sessionActive {
-			return
+		if scenario.sessionMayExist {
+			if _, err := scenario.run("cleanup-session", "--format", "json", realClientAgentName, "sessions", "close"); err != nil {
+				t.Error("real ACP evidence cleanup failed: close disposable session")
+			} else {
+				scenario.sessionMayExist = false
+			}
 		}
-		if _, err := scenario.run("cleanup-session", "--format", "json", realClientAgentName, "sessions", "close"); err != nil {
+		if err := scenario.queueOwnerStopped(); err != nil {
 			t.Error(err)
 		}
 	})
+}
+
+func (scenario *pinnedAcpxScenario) emitEvidence(t *testing.T) {
+	t.Helper()
+	evidence := realClientEvidence{
+		Revision:            scenario.revision,
+		AcpxVersion:         pinnedAcpxVersion,
+		Initialization:      "negotiated",
+		Session:             "created",
+		DefaultTarget:       defaultFactoryBuilderTarget,
+		AssistantResult:     "non-empty",
+		TerminalStopReason:  "end_turn",
+		Provider:            deterministicProviderName,
+		ProviderInvocations: 1,
+		Cleanup:             "complete",
+		Outcome:             "passed",
+	}
+	payload, err := json.Marshal(evidence)
+	if err != nil {
+		t.Fatal("real ACP evidence failed: encode sanitized terminal facts")
+	}
+	if outputPath := strings.TrimSpace(os.Getenv(realClientEvidenceOutputEnv)); outputPath != "" {
+		if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+			t.Fatal("real ACP evidence failed: create sanitized evidence directory")
+		}
+		if err := os.WriteFile(outputPath, payload, 0o600); err != nil {
+			t.Fatal("real ACP evidence failed: retain sanitized terminal facts")
+		}
+	}
+	t.Logf(
+		"real ACP evidence: revision=%s acpx=%s initialization=negotiated session=created target=%s assistant_result=non-empty terminal=end_turn provider=%s provider_invocations=1 cleanup=complete outcome=passed",
+		scenario.revision,
+		pinnedAcpxVersion,
+		defaultFactoryBuilderTarget,
+		deterministicProviderName,
+	)
 }
 
 func (scenario *pinnedAcpxScenario) run(phase string, args ...string) ([]byte, error) {
@@ -232,8 +322,7 @@ func (scenario *pinnedAcpxScenario) run(phase string, args ...string) ([]byte, e
 }
 
 func (scenario *pinnedAcpxScenario) environment() []string {
-	environment := append([]string(nil), os.Environ()...)
-	for name, value := range map[string]string{
+	return allowlistedEnvironment(map[string]string{
 		"HOME":                              scenario.home,
 		"USERPROFILE":                       scenario.home,
 		"APPDATA":                           filepath.Join(scenario.home, "appdata"),
@@ -241,45 +330,78 @@ func (scenario *pinnedAcpxScenario) environment() []string {
 		"XDG_CONFIG_HOME":                   filepath.Join(scenario.home, "config"),
 		"XDG_CACHE_HOME":                    filepath.Join(scenario.home, "cache"),
 		"npm_config_cache":                  scenario.npmCache,
+		"TMP":                               scenario.temporary,
+		"TEMP":                              scenario.temporary,
+		"TMPDIR":                            scenario.temporary,
 		"YOU_DEFAULT_WORKER_MODEL_PROVIDER": deterministicProviderName,
 		providerObservationEnv:              scenario.providerProof,
 		"PATH":                              scenario.providerDir + string(os.PathListSeparator) + os.Getenv("PATH"),
-	} {
-		environment = replaceEnvironmentValue(environment, name, value)
+	})
+}
+
+func allowlistedEnvironment(overrides map[string]string) []string {
+	environment := make([]string, 0, len(overrides)+6)
+	if _, hasPathOverride := overrides["PATH"]; !hasPathOverride {
+		environment = append(environment, "PATH="+os.Getenv("PATH"))
+	}
+	if runtime.GOOS == "windows" {
+		for _, name := range []string{"ComSpec", "PATHEXT", "SystemDrive", "SystemRoot", "WINDIR"} {
+			if value := os.Getenv(name); value != "" {
+				environment = append(environment, name+"="+value)
+			}
+		}
+	}
+	names := make([]string, 0, len(overrides))
+	for name := range overrides {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		environment = append(environment, name+"="+overrides[name])
 	}
 	return environment
 }
 
-func replaceEnvironmentValue(environment []string, name, value string) []string {
-	filtered := make([]string, 0, len(environment)+1)
-	for _, item := range environment {
-		key, _, found := strings.Cut(item, "=")
-		if found && strings.EqualFold(key, name) {
-			continue
-		}
-		filtered = append(filtered, item)
-	}
-	return append(filtered, name+"="+value)
+func runBoundedCommand(directory string, environment []string, phase, name string, args ...string) ([]byte, error) {
+	return runBoundedCommandWithTimeout(directory, environment, phase, time.Minute, name, args...)
 }
 
-func runBoundedCommand(directory string, environment []string, phase, name string, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	command := exec.CommandContext(ctx, name, args...)
+func runBoundedCommandWithTimeout(directory string, environment []string, phase string, timeout time.Duration, name string, args ...string) ([]byte, error) {
+	command := exec.Command(name, args...)
+	configureCommandProcessTree(command)
 	command.Dir = directory
 	if environment != nil {
 		command.Env = environment
 	}
-	var stderr bytes.Buffer
-	command.Stderr = &stderr
-	output, err := command.Output()
-	if err == nil {
-		return output, nil
+	var output bytes.Buffer
+	command.Stdout = &output
+	command.Stderr = io.Discard
+	if err := command.Start(); err != nil {
+		return nil, fmt.Errorf("real ACP evidence failed during %s: launch", phase)
 	}
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+	completed := make(chan error, 1)
+	go func() {
+		completed <- command.Wait()
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case err := <-completed:
+		if err == nil {
+			return output.Bytes(), nil
+		}
+		if cleanupErr := terminateCommandProcessTree(command); cleanupErr != nil {
+			return nil, fmt.Errorf("real ACP evidence failed during %s: non-zero exit cleanup", phase)
+		}
+		return nil, fmt.Errorf("real ACP evidence failed during %s: non-zero exit", phase)
+	case <-timer.C:
+		cleanupErr := terminateCommandProcessTree(command)
+		<-completed
+		if cleanupErr != nil {
+			return nil, fmt.Errorf("real ACP evidence failed during %s: timeout cleanup", phase)
+		}
 		return nil, fmt.Errorf("real ACP evidence failed during %s: timeout", phase)
 	}
-	return nil, fmt.Errorf("real ACP evidence failed during %s: non-zero exit", phase)
 }
 
 func nodeSupportsPinnedAcpx() bool {
@@ -405,13 +527,20 @@ func (scenario *pinnedAcpxScenario) assertOneDeterministicProviderInvocation(t *
 
 func (scenario *pinnedAcpxScenario) assertQueueOwnerStopped(t *testing.T) {
 	t.Helper()
+	if err := scenario.queueOwnerStopped(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (scenario *pinnedAcpxScenario) queueOwnerStopped() error {
 	entries, err := os.ReadDir(filepath.Join(scenario.home, ".acpx", "queues"))
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		t.Fatal("real ACP evidence cleanup failed: inspect disposable queue state")
+		return errors.New("real ACP evidence cleanup failed: inspect disposable queue state")
 	}
 	if len(entries) != 0 {
-		t.Fatal("real ACP evidence cleanup failed: disposable acpx queue owner remained active")
+		return errors.New("real ACP evidence cleanup failed: disposable acpx queue owner remained active")
 	}
+	return nil
 }
 
 type persistedAcpxSession struct {
@@ -465,4 +594,22 @@ func repositoryRoot(t *testing.T) string {
 		}
 		directory = parent
 	}
+}
+
+func repositoryRevision(t *testing.T, root string) string {
+	t.Helper()
+	output, err := runBoundedCommand(root, allowlistedEnvironment(nil), "read-revision", "git", "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal("real ACP evidence setup failed: resolve repository revision")
+	}
+	revision := strings.TrimSpace(string(output))
+	if len(revision) != 40 {
+		t.Fatal("real ACP evidence setup failed: repository revision was not a full safe identifier")
+	}
+	for _, character := range revision {
+		if !strings.ContainsRune("0123456789abcdef", character) {
+			t.Fatal("real ACP evidence setup failed: repository revision was not a full safe identifier")
+		}
+	}
+	return revision
 }

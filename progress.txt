@@ -1,6 +1,7 @@
 ## Codebase Patterns
 - After changing an authored packaged Factory prompt, run `make packaged-factory-catalog-generate`; the prompt, generated Factory artifacts, and manifest are a single checked-in contract.
 - Process-boundary client tests must isolate every platform configuration root the child process can consult (HOME, USERPROFILE, APPDATA, LOCALAPPDATA, XDG roots, and package cache) beneath the test temp directory.
+- Because `cmd/functionallane` intentionally defaults to `-short`, an opt-in process-boundary test needs its own required non-short CI invocation and a fact-only artifact when its execution is acceptance evidence.
 - For a deterministic process-boundary provider effect, put a disposable provider-compatible executable first on the scenario PATH and retain only its provider identity plus invocation count.
 - Document `pkg/services/events` as the process-local, in-memory, session-scoped source-native observation stream; Recordings owns canonical Factory Event JSONL history, replay, artifacts, and historical projections.
 - Architecture service inventories should name the package that publishes the public owner contract, and diagrams should show direct service operations unless a bounded delivery contract is explicitly involved.
@@ -93,4 +94,15 @@
 - **Learnings for future iterations:**
   - The Factory Builder functional command-runner validates its real provider prompt as part of the public builder-flow coverage; preserve supplied-name instructions when extending that prompt for omitted-name ACP input.
   - `go test ./tests/functional/factory/packaged/factory_builder -count=1 -timeout 2m`, `go test ./packages/packaged-factories -run TestFactoryBuilder -count=1 -timeout 2m`, and `make packaged-factory-catalog-check` validate this contract narrowly.
+---
+
+## 2026-08-04 22:40 -07:00 - ACP-L1-V4-M01-ACPX-REAL-CLIENT-EVIDENCE-002
+- Addressed the blocking real-client review: added a separate required non-short CI run for `acpx@0.13.0`, strict prerequisite failure behavior, and a fact-only terminal artifact containing the revision, protocol/session/result/provider, cleanup, and outcome facts.
+- Replaced inherited child environments with a minimal platform-safe allowlist, isolated transient paths, added Unix process-group and Windows process-tree timeout cleanup, and covered a timed-out descendant process to prove it terminates.
+- Reconciled the scoped quality criterion with the confirmed 87 unrelated repository `backend-size` baseline violations rather than reporting root `make lint` as passing. Updated the ACP reference documentation with the sanitized command, CI evidence, isolation, and cleanup guarantees.
+- Files changed: `.github/workflows/ci.yml`, `docs/reference/serve-acp.md`, `tests/functional/transport/acp/realclient/{pinned_acpx_test.go,pinned_acpx_process_test.go,pinned_acpx_process_unix_test.go,pinned_acpx_process_windows_test.go}`, `prd.json`, `progress.txt`.
+- **Learnings for future iterations:**
+  - An opt-in test must turn missing pinned-runtime prerequisites into a failure in its required CI lane; leaving normal local skips intact avoids forcing a networked client into the short suite.
+  - `exec.CommandContext` only guarantees direct-process cancellation. For owned client trees, use OS-specific group/tree termination and assert a recorded descendant has exited after the timeout path.
+  - A retained real-client artifact can stay safe by encoding only asserted facts and a full repository SHA; never capture the command output, transcript, temp location, or effective environment.
 ---
