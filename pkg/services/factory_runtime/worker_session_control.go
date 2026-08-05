@@ -5,8 +5,10 @@ package factory
 type WorkerSessionControlAction string
 
 const (
-	WorkerSessionControlActionPause  WorkerSessionControlAction = "PAUSE"
-	WorkerSessionControlActionResume WorkerSessionControlAction = "RESUME"
+	WorkerSessionControlActionPause     WorkerSessionControlAction = "PAUSE"
+	WorkerSessionControlActionResume    WorkerSessionControlAction = "RESUME"
+	WorkerSessionControlActionCancel    WorkerSessionControlAction = "CANCEL"
+	WorkerSessionControlActionTerminate WorkerSessionControlAction = "TERMINATE"
 )
 
 // WorkerSessionControlChildOutcome is the detached, per-Worker-Session

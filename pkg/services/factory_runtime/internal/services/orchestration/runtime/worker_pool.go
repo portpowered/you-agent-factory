@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -50,32 +51,78 @@ func (f *factoryImpl) ControlResume(ctx context.Context, req factory.ResumeReque
 }
 
 func (f *factoryImpl) ControlTerminate(ctx context.Context, req factory.TerminateRequest) (factory.TerminateResult, error) {
+	f.workerSessionControlMu.Lock()
+	defer f.workerSessionControlMu.Unlock()
+	action, err := terminateWorkerSessionControlAction(req.WorkerSessionAction)
+	if err != nil {
+		return factory.TerminateResult{}, err
+	}
 	f.mu.Lock()
 	state := f.state
 	switch state {
 	case interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
 		f.mu.Unlock()
+		if strings.TrimSpace(req.TurnID) != "" || strings.TrimSpace(req.ControlID) != "" {
+			f.logRuntimeLifecycleControl(string(action), state, state, "NO_OP")
+			return factory.TerminateResult{
+				Outcome: factory.ControlOutcomeNoOp,
+				WorkerSessionControl: f.controlAssociatedWorkerSessions(
+					ctx, req.TurnID, req.ControlID, action, factory.ControlOutcomeNoOp,
+				),
+			}, nil
+		}
 		return factory.TerminateResult{}, factory.ErrAlreadyStopped
 	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle:
 		f.state = interfaces.FactoryStateCompleted
 		cancel := f.runCancel
 		f.mu.Unlock()
 		f.recordStateChange(state, interfaces.FactoryStateCompleted, req.Reason)
+		// The control has committed before child coordination starts. Canceling
+		// the engine prevents new dispatch planning while the shared control
+		// lock keeps Run's pool shutdown behind the exact Worker Sessions
+		// cancellations below.
 		if cancel != nil {
 			cancel()
 		}
-		stopErr := f.stopDispatchRuntime(ctx, dispatchplanning.RuntimeStopReasonTerminated)
+		workerSessionControl := f.controlAssociatedWorkerSessions(
+			ctx, req.TurnID, req.ControlID, action, factory.ControlOutcomeAccepted,
+		)
+		stopErr := f.stopDispatchRuntimeLocked(ctx, dispatchplanning.RuntimeStopReasonTerminated)
+		f.logRuntimeLifecycleControl(string(action), state, interfaces.FactoryStateCompleted, "ACCEPTED")
 		if cancel == nil {
 			f.completeOnce.Do(func() { close(f.completeCh) })
 		}
-		return factory.TerminateResult{Outcome: factory.ControlOutcomeAccepted}, stopErr
+		return factory.TerminateResult{
+			Outcome:              factory.ControlOutcomeAccepted,
+			WorkerSessionControl: workerSessionControl,
+		}, stopErr
 	default:
 		f.mu.Unlock()
 		return factory.TerminateResult{}, factory.ErrNotRunning
 	}
 }
 
+func terminateWorkerSessionControlAction(action factory.WorkerSessionControlAction) (factory.WorkerSessionControlAction, error) {
+	switch action {
+	case "", factory.WorkerSessionControlActionTerminate:
+		return factory.WorkerSessionControlActionTerminate, nil
+	case factory.WorkerSessionControlActionCancel:
+		return factory.WorkerSessionControlActionCancel, nil
+	default:
+		return "", fmt.Errorf("%w: stop Worker Session action %q", factory.ErrInvalidLifecycleTransition, action)
+	}
+}
+
 func (f *factoryImpl) stopDispatchRuntime(
+	ctx context.Context,
+	reason dispatchplanning.RuntimeStopReason,
+) error {
+	f.workerSessionControlMu.Lock()
+	defer f.workerSessionControlMu.Unlock()
+	return f.stopDispatchRuntimeLocked(ctx, reason)
+}
+
+func (f *factoryImpl) stopDispatchRuntimeLocked(
 	ctx context.Context,
 	reason dispatchplanning.RuntimeStopReason,
 ) error {

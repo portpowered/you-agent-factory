@@ -4,6 +4,7 @@
 - Runtime tests inject a Worker Sessions service by wrapping it in a `WorkerSessionsFactory`, keeping runtime construction dependent on the public factory contract.
 - Scope Factory child controls from `DISPATCH_WORKER_SESSION_ASSOCIATION` events' `context.requestId`, then retain one detached canonical-ledger snapshot per committed control; never rescan live dispatches or reselect on retry.
 - A turn-targeted Factory control must carry the immutable turn and control identities; cache its detached fan-out result by both so retries cannot select associations committed later.
+- When a turn-scoped stop also ends the Factory Runtime, serialize Run's pool teardown behind Worker Sessions fan-out so the pool cannot preempt exact child controls.
 
 ## 2026-08-04 20:18 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-001
 - Implemented typed Worker Session pause, resume, cancel, and terminate controls. Cancel and terminate now target the exact supervised dispatch through `WorkstationPoolBoundary.Cancel`; terminate waits for the established terminal callback, and pause/resume explicitly report unsupported until a truthful resumable capability exists.
@@ -36,4 +37,14 @@
   - Public Runtime pause/resume controls can preserve compatibility with factory-wide callers by treating a blank turn ID as an explicit empty child fan-out.
   - After the Factory lifecycle control commits, fan-out should carry a cancellation-detached context and report individual failures as deterministic child evidence, so a disconnected caller cannot stop later siblings.
   - The aggregate action must not write Worker Session or Factory Runtime terminal state; Worker Sessions and the existing dispatch callback remain the result authorities.
+---
+## 2026-08-04 20:52 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-004
+- Extended Factory Runtime turn-scoped stops with explicit CANCEL and TERMINATE Worker Session actions. `TerminateRequest` now carries the immutable turn/control IDs and returns the ordered, detached fan-out evidence; legacy stop requests default to TERMINATE.
+- Serialized the Run-loop pool teardown behind the committed stop fan-out. Every selected child is attempted through `worker_sessions.Service` using its explicit cancellation path before shared-pool shutdown can run, while child completion remains on the established Worker Sessions/Factory Runtime callback path.
+- Added deterministic coverage for cancel and terminate fan-out ordering, partial-failure continuation, detached caller cancellation, repeated captured-control evidence after a late association, default termination, and invalid actions.
+- Files changed: `pkg/services/factory_runtime/interfaces.go`, `pkg/services/factory_runtime/worker_session_control.go`, `pkg/services/factory_runtime/work_move_errors.go`, `pkg/services/factory_runtime/internal/services/orchestration/runtime/{worker_pool.go,worker_session_control_fanout.go,worker_session_control_fanout_test.go}`, `prd.json`, `progress.txt`.
+- Verification: `go test ./pkg/services/factory_runtime/...`; `go test ./pkg/services/worker_sessions/...`; focused `go test -race` for Runtime fan-out and Worker Sessions controls; `go vet ./pkg/services/factory_runtime/...`; `make verify-fast` pass; `git diff --check`. `make lint` passes UI lint and vet but is blocked by 87 existing repository-wide backend-size violations outside this slice.
+- **Learnings for future iterations:**
+  - A turn-scoped stop must hold the same fan-out lock used by pause/resume until it has attempted every selected Worker Session; otherwise Run can tear down the pool before exact controls are issued.
+  - `WorkerSessionAction` defaults to TERMINATE for compatibility, but a captured CANCEL control must retain CANCEL at the Worker Sessions boundary so terminal state remains truthful.
 ---

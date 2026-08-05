@@ -85,8 +85,8 @@
         "Tests pass"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-04: Extended the captured-turn fan-out contract with explicit CANCEL and TERMINATE Worker Session actions. A turn-scoped stop carries immutable turn/control identities, retains deterministic child evidence for retries, defaults legacy calls to TERMINATE, and serializes Run's pool shutdown behind Worker Sessions fan-out so every selected child is attempted through the singular control plane before teardown. Focused multi-child/partial-failure/retry/context-cancellation tests plus Worker Sessions cancellation races pass; make verify-fast passes. make lint reaches existing repository-wide backend-size debt (87 unrelated violations) after UI lint and vet pass, with no violation in this slice."
     }
   ]
 }

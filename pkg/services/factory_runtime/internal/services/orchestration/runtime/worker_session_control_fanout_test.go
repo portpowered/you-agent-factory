@@ -242,6 +242,123 @@ func TestFactoryControls_EmptyCapturedTurnDoesNotCallWorkerSessions(t *testing.T
 	}
 }
 
+func TestFanOutWorkerSessionControl_StopActionsReachEveryCapturedChild(t *testing.T) {
+	for _, action := range []factory.WorkerSessionControlAction{
+		factory.WorkerSessionControlActionCancel,
+		factory.WorkerSessionControlActionTerminate,
+	} {
+		t.Run(string(action), func(t *testing.T) {
+			boundaryFailure := errors.New("worker session boundary unavailable")
+			service := newWorkerSessionControlSpy(map[workerSessionControlCall]workerSessionControlResponse{
+				{action: action, id: "worker-a"}: {result: workersessions.ControlResult{DispatchID: "dispatch-a", Outcome: workersessions.ControlOutcomeApplied}},
+				{action: action, id: "worker-b"}: {result: workersessions.ControlResult{DispatchID: "dispatch-b", Outcome: workersessions.ControlOutcomeNoop}},
+				{action: action, id: "worker-c"}: {result: workersessions.ControlResult{DispatchID: "dispatch-c", Outcome: workersessions.ControlOutcomeFailed}, err: boundaryFailure},
+			})
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+
+			result := fanOutWorkerSessionControl(ctx, service, capturedWorkerSessionControlTargets{
+				turnID: "turn-stop", workerSessionIDs: []string{"worker-a", "worker-b", "worker-c"},
+			}, action)
+
+			if result.Outcome != factory.WorkerSessionControlAggregateOutcomeFailed {
+				t.Fatalf("aggregate outcome = %q, want FAILED", result.Outcome)
+			}
+			if got, want := service.callsSnapshot(), []workerSessionControlCall{
+				{action: action, id: "worker-a"}, {action: action, id: "worker-b"}, {action: action, id: "worker-c"},
+			}; !reflect.DeepEqual(got, want) {
+				t.Fatalf("control calls = %#v, want %#v", got, want)
+			}
+			if service.observedCanceledContext() {
+				t.Fatal("Worker Sessions received canceled stop fan-out context")
+			}
+		})
+	}
+}
+
+func TestFactoryTerminate_FansOutCapturedCancelAndRetainsOriginalEvidence(t *testing.T) {
+	service := newWorkerSessionControlSpy(map[workerSessionControlCall]workerSessionControlResponse{
+		{action: factory.WorkerSessionControlActionCancel, id: "worker-a"}: {result: workersessions.ControlResult{DispatchID: "dispatch-a", Outcome: workersessions.ControlOutcomeApplied}},
+		{action: factory.WorkerSessionControlActionCancel, id: "worker-b"}: {result: workersessions.ControlResult{DispatchID: "dispatch-b", Outcome: workersessions.ControlOutcomeNoop}},
+		{action: factory.WorkerSessionControlActionCancel, id: "worker-c"}: {result: workersessions.ControlResult{DispatchID: "dispatch-c", Outcome: workersessions.ControlOutcomeFailed}, err: errors.New("boundary unavailable")},
+	})
+	factoryInstance, ledger, err := newTestFactoryWithScriptedLedger(
+		withNet(buildMoveControlNet()), withInlineDispatch(), withWorkerSessions(service),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ledger.Events = append(ledger.Events,
+		workerSessionAssociationEvent(t, 20, "association-b", "turn-captured", "worker-b"),
+		workerSessionAssociationEvent(t, 10, "association-a", "turn-captured", "worker-a"),
+		workerSessionAssociationEvent(t, 30, "association-c", "turn-captured", "worker-c"),
+	)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	control := factoryInstance.(factory.Service)
+	terminated, err := control.ControlTerminate(ctx, factory.TerminateRequest{
+		TurnID: "turn-captured", ControlID: "cancel-intent", WorkerSessionAction: factory.WorkerSessionControlActionCancel,
+	})
+	if err != nil {
+		t.Fatalf("ControlTerminate: %v", err)
+	}
+	if terminated.Outcome != factory.ControlOutcomeAccepted || terminated.WorkerSessionControl.Outcome != factory.WorkerSessionControlAggregateOutcomeFailed {
+		t.Fatalf("terminate result = %#v, want accepted failed fan-out evidence", terminated)
+	}
+	if got, want := workerSessionIDsFromResults(terminated.WorkerSessionControl.Children), []string{"worker-a", "worker-b", "worker-c"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("controlled Worker Session IDs = %v, want %v", got, want)
+	}
+
+	ledger.Events = append(ledger.Events, workerSessionAssociationEvent(t, 40, "association-late", "turn-captured", "worker-late"))
+	repeated, err := control.ControlTerminate(context.Background(), factory.TerminateRequest{
+		TurnID: "turn-captured", ControlID: "cancel-intent", WorkerSessionAction: factory.WorkerSessionControlActionCancel,
+	})
+	if err != nil {
+		t.Fatalf("repeated ControlTerminate: %v", err)
+	}
+	if repeated.Outcome != factory.ControlOutcomeNoOp || !reflect.DeepEqual(repeated.WorkerSessionControl, terminated.WorkerSessionControl) {
+		t.Fatalf("repeated terminate = %#v, want retained no-op evidence %#v", repeated, terminated.WorkerSessionControl)
+	}
+	if got := service.callsSnapshot(); len(got) != 3 {
+		t.Fatalf("Worker Sessions calls after retry = %#v, want original three calls", got)
+	}
+}
+
+func TestFactoryTerminate_DefaultsToWorkerSessionTerminate(t *testing.T) {
+	service := newWorkerSessionControlSpy(map[workerSessionControlCall]workerSessionControlResponse{
+		{action: factory.WorkerSessionControlActionTerminate, id: "worker-a"}: {
+			result: workersessions.ControlResult{DispatchID: "dispatch-a", Outcome: workersessions.ControlOutcomeApplied},
+		},
+	})
+	factoryInstance, ledger, err := newTestFactoryWithScriptedLedger(
+		withNet(buildMoveControlNet()), withInlineDispatch(), withWorkerSessions(service),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ledger.Events = append(ledger.Events, workerSessionAssociationEvent(t, 10, "association-a", "turn-captured", "worker-a"))
+
+	terminated, err := factoryInstance.(factory.Service).ControlTerminate(context.Background(), factory.TerminateRequest{
+		TurnID: "turn-captured", ControlID: "terminate-intent",
+	})
+	if err != nil {
+		t.Fatalf("ControlTerminate: %v", err)
+	}
+	if terminated.WorkerSessionControl.Action != factory.WorkerSessionControlActionTerminate {
+		t.Fatalf("Worker Sessions action = %q, want TERMINATE", terminated.WorkerSessionControl.Action)
+	}
+	if got, want := service.callsSnapshot(), []workerSessionControlCall{{action: factory.WorkerSessionControlActionTerminate, id: "worker-a"}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Worker Sessions calls = %#v, want %#v", got, want)
+	}
+}
+
+func TestTerminateWorkerSessionControlAction_RejectsNonStopActions(t *testing.T) {
+	_, err := terminateWorkerSessionControlAction(factory.WorkerSessionControlActionPause)
+	if !errors.Is(err, factory.ErrInvalidLifecycleTransition) {
+		t.Fatalf("pause action error = %v, want invalid lifecycle transition", err)
+	}
+}
+
 func workerSessionIDsFromResults(results []factory.WorkerSessionControlChildResult) []string {
 	ids := make([]string, 0, len(results))
 	for _, result := range results {
@@ -281,6 +398,14 @@ func (s *workerSessionControlSpy) Pause(ctx context.Context, req workersessions.
 
 func (s *workerSessionControlSpy) Resume(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
 	return s.control(ctx, factory.WorkerSessionControlActionResume, req)
+}
+
+func (s *workerSessionControlSpy) Cancel(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	return s.control(ctx, factory.WorkerSessionControlActionCancel, req)
+}
+
+func (s *workerSessionControlSpy) Terminate(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	return s.control(ctx, factory.WorkerSessionControlActionTerminate, req)
 }
 
 func (s *workerSessionControlSpy) control(ctx context.Context, action factory.WorkerSessionControlAction, req workersessions.ControlRequest) (workersessions.ControlResult, error) {

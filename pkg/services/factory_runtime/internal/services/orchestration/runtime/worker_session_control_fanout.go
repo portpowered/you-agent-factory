@@ -18,11 +18,12 @@ type workerSessionControlKey struct {
 	action    factory.WorkerSessionControlAction
 }
 
-// controlAssociatedWorkerSessions applies one committed pause or resume to
-// the captured turn's canonical Worker Session target set. It always attempts
-// every target in the selector's stable order. Individual Worker Sessions
-// failures remain per-child evidence instead of becoming a fail-fast Factory
-// error, leaving Factory Runtime's existing dispatch-result authority intact.
+// controlAssociatedWorkerSessions applies one committed Factory turn control
+// to the captured turn's canonical Worker Session target set. It always
+// attempts every target in the selector's stable order. Individual Worker
+// Sessions failures remain per-child evidence instead of becoming a fail-fast
+// Factory error, leaving Factory Runtime's existing dispatch-result authority
+// intact.
 func (f *factoryImpl) controlAssociatedWorkerSessions(
 	ctx context.Context,
 	turnID string,
@@ -113,6 +114,10 @@ func callWorkerSessionControl(
 		return service.Pause(ctx, req)
 	case factory.WorkerSessionControlActionResume:
 		return service.Resume(ctx, req)
+	case factory.WorkerSessionControlActionCancel:
+		return service.Cancel(ctx, req)
+	case factory.WorkerSessionControlActionTerminate:
+		return service.Terminate(ctx, req)
 	default:
 		return workersessions.ControlResult{}, workersessions.ErrInvalidSessionID
 	}
