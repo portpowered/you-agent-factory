@@ -18,29 +18,30 @@ top-level Checkpoint service.
 | 4 | IMP-RUN-03 — Dispatch Planning private subservice | **Superseded** | Superseded by L2 `IMP-RUN-DISPATCH`; see reconciliation below |
 | 5 | Orchestration fold / engine-pipeline CLN | **Factory-terminal** | `CLN-RUN-FOLD-SERVICE` + `CLN-RUN-FOLD-ENGINE-PIPELINE` (#1602 / `a9d50a34b`); DEL-RUN-SERVICE (`655e4167e`) + DEL-RUN-ENGINE (#1637 / `6e48c875f`) terminal |
 | 6 | CUT-VIS-RUN / CUT-RUN-WRK / consumer-edge CUTs | Mixed | CUT-VIS-RUN + CUT-RUN-WRK terminal; CUT-RUN-REC admitted with FUN-runtime (`planner-wave-fun-run-cut-run-rec-20260728`) |
-| 7 | **Checkpoint/Recovery** (`IMP-RUN-04`, `checkpoint_recovery`) | **Factory-terminal** (PR #1580) | Durability ownership decided in [`dec-run-rec-durability.md`](dec-run-rec-durability.md). Opaque CheckpointStore + process-local adapter shipped under `factory_runtime/internal/services/checkpoint_recovery`. **Permanent** under D1 — the Recordings-backed durable checkpoint follow-on is cancelled, not deferred. |
+| 7 | **Checkpoint/Recovery** (`IMP-RUN-04`, `checkpoint_recovery`) | **Closed under D1** | The private process-local adapter shipped in PR #1580 is permanent. The Recordings-backed durable checkpoint follow-on and its durable-log/cursor/retention prerequisite are cancelled, not deferred. |
 
-### Step 7 — Checkpoint/Recovery (IMP-RUN-04)
+### Step 7 — Checkpoint/Recovery (IMP-RUN-04) closed under D1
 
-**Decision owner:** [`dec-run-rec-durability.md`](dec-run-rec-durability.md) (accepted).
+**Decision owner:** [`DEC-RUN-REC-DURABILITY`](../../../internal/packaged-service-structure/dec-run-rec-durability.md) (accepted and amended by D1).
 
 The prior open question — who owns opaque Runtime checkpoints versus Recordings
 durable history — is **no longer unowned**. Planners must cite DEC-RUN-REC-DURABILITY
 instead of treating durability as an indefinite verbal hold.
 
-**Admission after DEC-RUN-REC-DURABILITY Factory-complete:**
+**Final state:**
 
-- IMP-RUN-04 (`factory_runtime/checkpoint_recovery`) is **dependency-ready** for
-  a future implementation packet.
-- Recordings durable-log completion is **not** a gate for starting IMP-RUN-04.
-- ~~A Recordings-backed durable CheckpointStore adapter remains explicit
-  follow-on work after Recordings durable log/cursor/retention exists.~~
-  **Cancelled under D1.** There is no durable log to wait for. The shipped
-  process-local adapter is the permanent implementation.
+- The private, process-local `CheckpointStore` adapter shipped with
+  `IMP-RUN-04` is the permanent implementation.
+- A Recordings-backed durable `CheckpointStore` adapter is **cancelled under
+  D1**, not deferred. No durable checkpoint-storage packet, durable event
+  journal, or Recordings durable log/cursor/retention sequence remains to be
+  admitted.
+- The public Runtime checkpoint operations that once motivated a durable
+  follow-on were deleted by L2. This plan does not reopen them.
 
 **Explicit non-goals for the decision packet:**
 
-- No `checkpoint_recovery` implementation in DEC-RUN-REC-DURABILITY.
+- No additional `checkpoint_recovery` implementation or public checkpoint API.
 - No top-level Checkpoint service promotion.
 - No Runtime second canonical event ledger.
 
@@ -101,8 +102,10 @@ Packet consequences:
 
 - `FND-08` (`pkg/services/recordings/events/kinds/`) is unaffected — event
   *kinds* are contract, not stream.
-- `PSS-I05` (`event-backbone`) must be re-scoped before dispatch; a convergence
-  that merges persistence with streaming contradicts D2.
+- `PSS-I05` has been re-scoped to
+  [`event-boundary-d2-rescope.md`](../../../internal/projects/packaged-service-structure/event-boundary-d2-rescope.md):
+  it records residual metadata only and does not converge persistence with
+  streaming.
 - `factory_sessions/internal/{responseeventstore,responsestream,cursors}` migrate
   to `pkg/services/events` under L1. PSS packets must not touch those paths while
   L1 is active.
@@ -114,12 +117,11 @@ composition surfaces. Registering a service is a few additive lines; two packets
 adding two different providers produce a textual conflict, not a semantic one,
 and textual conflicts are resolved by rebase rather than by scheduling.
 
-`PSS-I01` (`root-wire-process`) must be narrowed accordingly — it keeps
-structural surfaces such as the `root.BuildProcess` signature and the
-`profiles.go` provider-set shape, and drops the blanket directory claims. The
-required manifest change is recorded under **Required manifest follow-up** in
-`docs/internal/projects/packaged-service-structure/README.md`; it is not applied
-here because the manifest is validated by `internal/psslease`.
+`PSS-I01` (`root-wire-process`) has already been narrowed to its concrete
+structural contract files in the committed manifest. Ordinary additive edits
+under `pkg/wire/`, `pkg/root/`, and `pkg/initializer/` are shared and resolved
+by normal rebase; only genuine structural contract edits remain exclusive. See
+the canonical README's [applied PSS-I01 narrowing](../../../internal/projects/packaged-service-structure/README.md#applied-manifest-narrowing--pss-i01).
 
 ## Program lane position
 
@@ -154,8 +156,8 @@ proof**.
 
 | Document | Role |
 | --- | --- |
-| [`dec-run-rec-durability.md`](dec-run-rec-durability.md) | DEC-RUN-REC-DURABILITY durability ownership decision |
-| [`checklist.md`](checklist.md) | Granular implementation checklist including IMP-RUN-04 admission |
+| [`DEC-RUN-REC-DURABILITY`](../../../internal/packaged-service-structure/dec-run-rec-durability.md) | Durability ownership decision, amended by D1 |
+| [`checklist.md`](checklist.md) | Granular implementation checklist recording IMP-RUN-04's final status |
 | [`README.md`](README.md) | Local planner index |
 | `docs/temp/meta.md` | Planner hold/admission text for IMP-RUN-04 |
 | `docs/internal/projects/packaged-service-structure/README.md` | Committed program-metadata index |

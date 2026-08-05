@@ -5,38 +5,39 @@ program. Cross-links the committed decision artifacts and planner hold text.
 
 ## Runtime — Checkpoint/Recovery (IMP-RUN-04)
 
-**Decision:** [`dec-run-rec-durability.md`](dec-run-rec-durability.md) (**DEC-RUN-REC-DURABILITY**)
+**Decision:** [`DEC-RUN-REC-DURABILITY`](../../../internal/packaged-service-structure/dec-run-rec-durability.md) (accepted and amended by D1)
 
 **Admission status:** **Factory-terminal** after IMP-RUN-04 PR #1580 merged
 (`3bf957012`). DEC-RUN-REC-DURABILITY remains the ownership decision record;
-Recordings-backed durable checkpoint bytes remain follow-on.
+the private process-local adapter is permanent, and D1 cancels any
+Recordings-backed durable checkpoint storage follow-on.
 
 - [x] DEC-RUN-REC-DURABILITY decision note checked in under
   `docs/temp/projects/packaged-service-structure/`
 - [x] Decision states Runtime owns opaque `checkpoint_recovery` and Recordings
   owns durable history/artifact authority
-- [x] Decision authorizes IMP-RUN-04 to proceed with Runtime opaque CheckpointStore
-  port + process-local/default adapter
-- [x] Decision defers Recordings-backed durable checkpoint storage until after
-  Recordings durable log/cursor/retention
+- [x] IMP-RUN-04 shipped a Runtime opaque CheckpointStore port with a
+  process-local/default adapter
+- [x] D1 cancels Recordings-backed durable checkpoint storage and the proposed
+  Recordings durable log/cursor/retention sequence; neither is deferred
 - [x] Plan Runtime sequence step 7 cites DEC-RUN-REC-DURABILITY; ownership
   decision is no longer open ([`plan.md`](plan.md))
 - [x] **IMP-RUN-04 implementation** (`factory_runtime/checkpoint_recovery`) —
   Factory-terminal via PR #1580 / `3bf957012` (`pss-imp-run-04-checkpoint-recovery`);
-  opaque CheckpointStore + process-local adapter shipped; Recordings-backed
-  durable checkpoint bytes remain follow-on after Recordings durable log
+  opaque CheckpointStore + process-local adapter shipped and permanent under
+  D1; no durable checkpoint follow-on remains
 
-### IMP-RUN-04 implementation packet (future — not this decision packet)
+### Final scope (closed — no future PSS packet)
 
-When admitting IMP-RUN-04 implementation:
+The settled scope remains:
 
 - Runtime-owned opaque CheckpointStore port inside `checkpoint_recovery`
 - Process-local/default adapter sufficient for compatible-restore and
   corrupt-checkpoint proofs
 - No Petri/JavaScript internals on the peer surface
 - No top-level Checkpoint service
-- Recordings-backed durable CheckpointStore adapter remains follow-on after
-  Recordings durable log work
+- No Recordings-backed durable CheckpointStore adapter, durable event journal,
+  or Recordings durable log/cursor/retention work
 
 ## Runtime — Dispatch reconciliation (IMP-RUN-03 superseded by L2 IMP-RUN-DISPATCH)
 
@@ -111,6 +112,6 @@ Expected changed paths for this packet:
 
 | Surface | IMP-RUN-04 guidance |
 | --- | --- |
-| [`plan.md`](plan.md) Runtime sequence step 7 | Decision closed; implementation dependency-ready |
-| `docs/temp/meta.md` | IMP-RUN-04 dependency-ready once DEC Factory-complete |
-| [`dec-run-rec-durability.md`](dec-run-rec-durability.md) | Authoritative ownership and phase table |
+| [`plan.md`](plan.md) Runtime sequence step 7 | Closed under D1; the process-local implementation is permanent |
+| `docs/temp/meta.md` | Historical planner state; it does not admit a checkpoint packet |
+| [`DEC-RUN-REC-DURABILITY`](../../../internal/packaged-service-structure/dec-run-rec-durability.md) | Authoritative ownership decision, amended by D1 |

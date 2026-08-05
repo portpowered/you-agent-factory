@@ -82,8 +82,8 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-04: Reconciled the canonical PSS README, durability decision, and local planner README/plan/checklist with D1/D2/D3. Closed the stale deferred durable-checkpoint and Recordings durable log/cursor/retention language as cancelled; recorded the already-applied PSS-I01 and PSS-I05 narrowing; and redirected obsolete local decision links to the canonical decision. Focused Markdown link/terminology review, make readme-check, and make typecheck pass."
     }
   ]
 }
