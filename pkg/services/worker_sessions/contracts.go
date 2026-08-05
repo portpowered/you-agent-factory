@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -14,9 +15,9 @@ import (
 // deterministic inspection, supervised Start with exactly-once terminal
 // classification, a before-handoff opening record, and an after-output
 // terminal SESSION record, plus PublishRecord for committing source-native
-// Worker observations onto that same topic. StartTurn, Runtime and Provider
-// Session association, persistence, and transport behavior are later ACP
-// Worker Events slices. Controls are exposed here because this service owns
+// Worker observations onto that same topic. StartTurn, Runtime persistence,
+// and transport behavior are later ACP Worker Events slices. Provider Session
+// association and controls are exposed here because this service owns
 // one session's supervision state and is the only route to an admitted
 // workstation dispatch's explicit cancellation boundary.
 type Service interface {
@@ -54,6 +55,24 @@ type Service interface {
 	// failure publishing that record is logged and never changes the
 	// returned, already-committed Session.
 	Start(ctx context.Context, req StartRequest) (StartResult, error)
+
+	// AssociateProviderSession records the exact Providers-owned SessionRef
+	// observed by one currently supervised Worker Session attempt. The caller
+	// must name the session's exact dispatch identity; Worker Sessions derives
+	// the stable Worker Session, turn, and attempt correlation from that
+	// supervised attempt rather than accepting caller-supplied substitutes.
+	// Repeating the same reference is an idempotent duplicate. A different
+	// reference for that attempt is rejected and never replaces the first
+	// accepted association.
+	AssociateProviderSession(context.Context, ProviderSessionAssociationRequest) (ProviderSessionAssociationResult, error)
+
+	// ObserveProviderSession records a trusted live provider observation by its
+	// current Workers dispatch identity. Worker Sessions resolves the owning
+	// Worker Session and its immutable turn/attempt correlation itself, so a
+	// progress publisher cannot attach a reference to a sibling session.
+	// Callers must invoke this before forwarding output that names the observed
+	// Provider Session reference.
+	ObserveProviderSession(context.Context, ProviderSessionObservationRequest) (ProviderSessionAssociationResult, error)
 
 	// PublishRecord validates req, then appends req.Draft, detached, as a
 	// source-native Worker record onto Topic(req.SessionID) using req's
@@ -237,6 +256,99 @@ type StartResult struct {
 	DispatchErr error
 }
 
+// ProviderSessionAssociation is the detached Worker Sessions-owned binding
+// from one Worker Session attempt to the exact Providers-owned Provider
+// Session reference it observed. DispatchID and AttemptID intentionally both
+// retain the existing Workers attempt identity: Workers currently uses the
+// dispatch ID as the Providers attempt ID, and keeping both fields makes that
+// correlation explicit without reconstructing it later. TurnID is empty only
+// for direct Worker Sessions that were not admitted from a Factory turn.
+type ProviderSessionAssociation struct {
+	WorkerSessionID string
+	TurnID          string
+	DispatchID      string
+	AttemptID       string
+	Reference       providers.SessionRef
+}
+
+// Validate checks the association's stable identity and exact Provider
+// Session reference. It is pure and never canonicalizes, resolves, or
+// reconstructs any part of Reference.
+func (association ProviderSessionAssociation) Validate() error {
+	if !validSessionID(association.WorkerSessionID) {
+		return ErrInvalidSessionID
+	}
+	if strings.TrimSpace(association.DispatchID) == "" || strings.TrimSpace(association.AttemptID) == "" ||
+		association.DispatchID != association.AttemptID {
+		return ErrInvalidProviderSessionAssociation
+	}
+	return association.Reference.Validate()
+}
+
+// Clone returns a detached association snapshot.
+func (association ProviderSessionAssociation) Clone() ProviderSessionAssociation {
+	association.Reference = association.Reference.Clone()
+	return association
+}
+
+// ProviderSessionAssociationRequest reports one exact Provider Session
+// reference observed by a Worker attempt. Worker Sessions verifies the
+// session and dispatch against its own supervision state before it records
+// the association.
+type ProviderSessionAssociationRequest struct {
+	WorkerSessionID string
+	DispatchID      string
+	Reference       providers.SessionRef
+}
+
+// Validate checks only caller-owned request fields. Registry-owned attempt,
+// turn, and Worker Session correlation is checked by AssociateProviderSession.
+func (request ProviderSessionAssociationRequest) Validate() error {
+	if !validSessionID(request.WorkerSessionID) {
+		return ErrInvalidSessionID
+	}
+	if strings.TrimSpace(request.DispatchID) == "" {
+		return ErrInvalidProviderSessionAssociation
+	}
+	return request.Reference.Validate()
+}
+
+// ProviderSessionObservationRequest carries the exact typed reference from a
+// Workers-owned live progress observation. Unlike
+// ProviderSessionAssociationRequest, it intentionally does not accept a
+// Worker Session ID: Worker Sessions derives the owner from DispatchID.
+type ProviderSessionObservationRequest struct {
+	DispatchID string
+	Reference  providers.SessionRef
+}
+
+// Validate checks the source-owned dispatch identity and exact typed
+// reference before Worker Sessions resolves its registry-owned owner and
+// correlation.
+func (request ProviderSessionObservationRequest) Validate() error {
+	if strings.TrimSpace(request.DispatchID) == "" {
+		return ErrInvalidProviderSessionAssociation
+	}
+	return request.Reference.Validate()
+}
+
+// ProviderSessionAssociationOutcome distinguishes a new exact association
+// from a retry of the already accepted association for the same attempt.
+type ProviderSessionAssociationOutcome string
+
+const (
+	ProviderSessionAssociationOutcomeAccepted  ProviderSessionAssociationOutcome = "ACCEPTED"
+	ProviderSessionAssociationOutcomeDuplicate ProviderSessionAssociationOutcome = "DUPLICATE"
+)
+
+// ProviderSessionAssociationResult is detached evidence for one association
+// observation. Association is always the registry-owned accepted snapshot on
+// success, including a duplicate observation.
+type ProviderSessionAssociationResult struct {
+	Association ProviderSessionAssociation
+	Outcome     ProviderSessionAssociationOutcome
+}
+
 var (
 	// ErrInvalidSessionID reports a request or session with an empty or
 	// whitespace-only identity.
@@ -267,4 +379,24 @@ var (
 	// SourceSequence that regresses behind one already accepted for the same
 	// (SourceType, SourceID). No record is committed.
 	ErrOutOfOrderPublication = errors.New("worker session: source sequence is out of order")
+	// ErrInvalidProviderSessionAssociation reports a malformed Worker Sessions
+	// association correlation. Invalid provider, kind, or opaque Provider
+	// Session identity retains the more specific Providers-owned typed error.
+	ErrInvalidProviderSessionAssociation = errors.New("worker session: invalid provider session association")
+	// ErrProviderSessionAssociationAttemptMismatch reports an observation
+	// whose dispatch does not match the Worker Session's supervised attempt.
+	ErrProviderSessionAssociationAttemptMismatch = errors.New("worker session: provider session association attempt mismatch")
+	// ErrProviderSessionAssociationNotAvailable reports an observation for a
+	// session that has not reached a live supervised attempt, or for a
+	// terminal attempt that never committed an association.
+	ErrProviderSessionAssociationNotAvailable = errors.New("worker session: provider session association is not available")
+	// ErrProviderSessionAssociationMissing reports a resume requested for a
+	// PAUSED Worker Session that has no exact Provider Session association.
+	// Worker Sessions never falls back to current provider/model selection or
+	// synthesizes a reference from a bare session ID in this case.
+	ErrProviderSessionAssociationMissing = errors.New("worker session: provider session association is missing")
+	// ErrProviderSessionAssociationConflict reports a different exact Provider
+	// Session reference observed after one reference was already committed for
+	// the same Worker Session attempt.
+	ErrProviderSessionAssociationConflict = errors.New("worker session: provider session association conflict")
 )

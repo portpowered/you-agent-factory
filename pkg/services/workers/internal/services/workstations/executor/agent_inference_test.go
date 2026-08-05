@@ -9,6 +9,7 @@ import (
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
@@ -224,6 +225,8 @@ func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testi
 		withAgentPrompts("system prompt", "user prompt"),
 		withAgentOutputSchema(`{"type":"object"}`),
 	)
+	reference := providers.SessionRef{Provider: providers.IDClaude, Kind: "provider-native-thread", ID: "opaque-provider-session"}
+	request.ResumeSession = &reference
 
 	_, err := executor.Execute(context.Background(), request)
 	if err != nil {
@@ -245,6 +248,13 @@ func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testi
 	}
 	if req.Model != "claude-sonnet-4-20250514" || req.ModelProvider != string(modelprovider.ProviderClaude) || req.SessionID != "session-1" {
 		t.Fatalf("request provider fields = model %q provider %q session %q", req.Model, req.ModelProvider, req.SessionID)
+	}
+	if req.ResumeSession == nil || *req.ResumeSession != reference {
+		t.Fatalf("request ResumeSession = %#v, want exact %#v", req.ResumeSession, reference)
+	}
+	request.ResumeSession.ID = "caller-mutated"
+	if req.ResumeSession.ID != "opaque-provider-session" {
+		t.Fatalf("request ResumeSession retained caller mutation: %#v", req.ResumeSession)
 	}
 	if req.EnvVars["PORTOS_TEST_ENV"] != "enabled" {
 		t.Fatalf("request env vars = %#v", req.EnvVars)

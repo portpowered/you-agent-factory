@@ -107,7 +107,18 @@ type ExecuteRequest struct {
 	Worktree           string
 	EnvVars            map[string]string
 	ProcessEnvironment []string
+	// SessionObserver receives a detached exact Provider Session reference as
+	// soon as the native provider reports it, while the attempt is still live.
+	// It is an invocation-scoped observation hook rather than a selection or
+	// resume input: Execute never accepts a pre-existing SessionRef. Callers
+	// must not assume that every provider can report a session before it
+	// completes.
+	SessionObserver SessionObserver
 }
+
+// SessionObserver receives one detached Provider-owned session identity
+// observed during a live execution attempt.
+type SessionObserver func(SessionRef)
 
 // Validate checks request fields whose validity does not depend on catalog
 // state.
@@ -149,6 +160,18 @@ func (request ExecuteRequest) Clone() ExecuteRequest {
 		cloned.InputTokens = append([]any(nil), request.InputTokens...)
 	}
 	return cloned
+}
+
+// ObserveSession forwards one complete detached Provider Session reference to
+// the request's invocation-scoped observer. Native adapters call this only
+// after they have received a provider-authored reference, never from model or
+// runner configuration. Invalid observations are ignored rather than exposed
+// as a plausible resumable identity.
+func (request ExecuteRequest) ObserveSession(reference SessionRef) {
+	if request.SessionObserver == nil || reference.Validate() != nil {
+		return
+	}
+	request.SessionObserver(reference.Clone())
 }
 
 // ExecuteProgress carries bounded in-flight progress facts for one attempt.

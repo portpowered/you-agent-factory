@@ -3,6 +3,8 @@
 - Process-scoped Factory Definitions capabilities should be constructed in `pkg/wire`, retained as an explicit `FactoryDefinitionsRuntimeOpeningDependencies` member, and proven inert before any runtime-opening operation invokes them.
 - When a directory loader resolves one concrete authored root, retain that root as an immutable optional value fact on the compiled source so narrow consumers can report the actual selection without reopening source bytes or widening mutable loader contracts.
 - When a validated effective definition enters Runtime, rebuild the existing mutable loaded source through its public factory with an empty runtime-definition lookup, then transfer the selected-root identity through the narrow public identity receiver; Runtime need not retain authored loader authority.
+- For a resumable provider attempt, bind the provider-authored typed session reference at its native live-observation point; post-result metadata cannot authorize an in-flight pause.
+- For a required CI failure, compare the failing path on the reviewed head and PR base before repairing it; do not expand a delivery lane to fix a defect unchanged on both revisions.
 - For a cross-service behavioral proof that needs one service's internal concrete collaborator, compose the peer through its owner-published `wire.New...` API inside the collaborator's package-level integration test; do not add a test-only production seam.
 - Construct each Factory Session's Worker Sessions service only after its session-owned `WorkstationPoolBoundary` exists, so dispatch and cancellation share the exact same boundary.
 - Worker Session controls must use `context.WithoutCancel` when calling the pool boundary; dispatch termination remains observable through the boundary callback rather than caller-context cancellation.
@@ -17,6 +19,13 @@
 - Any successful `Terminate` no-op caused by an earlier accepted control must join the same supervision callback before returning; `controlDone` only serializes the boundary effect and is not a terminal-result barrier.
 - A committed Chat turn control must carry its immutable `TurnID` plus stable `ControlRequest.RequestID` to Factory Runtime as `TurnID`/`ControlID`; on-demand target cancellation must fan out before invocation-context cancellation and retain that result across runtime replacement.
 - A committed Chat close needs a control-aware target termination operation: preserve its opaque control ID and turn ID through Factory Sessions, fan out before target cleanup, and keep generic close separate for process lifecycle cleanup.
+- Provider Session references must stay as complete providers.SessionRef values bound to the Worker Session's own immutable turn and dispatch correlation; never recreate one from runner, model, current provider, or a bare session ID.
+- When Workers must publish before its session-owned Worker Sessions service is constructed, use a session-local bridge that binds once during Worker Sessions factory construction and forwards typed-reference progress only after association succeeds.
+- `ProviderSessionMetadata` is response-only compatibility data: forward metadata-only fragments unchanged, but only an exact typed `providers.SessionRef` may create a Worker Session association or enable continuation.
+- When a resume path must preserve provider-specific identity, carry a cloned typed providers.SessionRef on the Workers execution request and prioritize it over any legacy bare session-ID compatibility field.
+- An exact Worker Session continuation must validate both Providers `ContinueResult.Reference` and any returned `ExecuteResult.SessionRef` before publishing output; when the execute-level field is omitted, propagate the already-validated exact reference rather than reconstructing one.
+- Preserve provider-specific continuation classifications only on in-process Worker result fields excluded from Factory event serialization, then map whitelisted enum values into the Worker Session terminal snapshot.
+- Worker Sessions root and internal service packages have 100% unit-coverage baselines; cover control interleavings through controlled boundary callbacks and channel handshakes, never sleeps or source-inventory tests.
 
 ## 2026-08-04 20:18 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-001
 - Implemented typed Worker Session pause, resume, cancel, and terminate controls. Cancel and terminate now target the exact supervised dispatch through `WorkstationPoolBoundary.Cancel`; terminate waits for the established terminal callback, and pause/resume explicitly report unsupported until a truthful resumable capability exists.
@@ -281,4 +290,148 @@
 - **Learnings for future iterations:**
   - A fully effective detached Factory definition can retain split-layout behavior when Runtime creates its normal mutable loaded source with an empty runtime-definition lookup; the public source factory performs its own clone and normalization.
   - Moving current-Factory selection into the focused loader removes a Runtime-facing `NamedPathResolver` dependency while preserving direct-source home normalization at the Factory Sessions boundary.
+---
+
+## 2026-08-05 01:24 -07:00 - ACP-L4-W7-PROVIDER-SESSION-CONTINUATION-001
+- Implemented a Worker Sessions-owned detached Provider Session association that retains the exact providers.SessionRef with immutable Worker Session, Factory turn, dispatch, and attempt correlations. The association validates typed Provider identity, is cloned in all returned snapshots, accepts exact duplicate observations, and rejects conflicting, malformed, foreign-attempt, missing-session, and terminal writes without mutating the accepted or sibling association.
+- Connected normal Workers completion to retain the exact provider/kind/opaque ID before terminal publication. Direct Workers-side observation can commit the association before a dependent Worker record is published; absent provider metadata remains explicitly unassociated and is never synthesized from the runner, model, or bare ID.
+- Updated Factory Runtime test doubles for the expanded public Worker Sessions interface and added controlled behavioral coverage for ordering, detachment, duplicate/conflict behavior, invalid/missing/terminal writes, exact completion retention, and no-reference completion.
+- Files changed: pkg/services/worker_sessions/{contracts.go,session.go,internal/service/{service.go,control.go,internal_test.go,start_test.go}}, Factory Runtime test adapters, prd.json, and progress.txt.
+- Verification: go test ./pkg/services/worker_sessions/...; go test -race -count=10 ./pkg/services/worker_sessions/internal/service -run 'Test(Start_RetainsExactProviderSessionAssociationFromWorkerResult|AssociateProviderSession_)'; go test ./pkg/services/factory_runtime/...; go vet ./pkg/services/worker_sessions/... ./pkg/services/factory_runtime/...; and make test all pass. git diff --check passes. make pkg-file-count remains blocked by 48 unrelated pre-existing package-count findings (none in Worker Sessions). make typecheck remains blocked before this Go-only change by the existing missing Bun types and TypeScript 6 baseUrl deprecation errors.
+- **Learnings for future iterations:**
+  - Worker result Provider Session metadata is the trusted handoff from Workers; preserve its Provider, Kind, and opaque ID directly rather than deriving any field during Worker Sessions completion.
+  - The Work dispatch request ID already supplies the stable Factory-turn correlation, while the Workers dispatch ID remains both the dispatch and provider-attempt identity.
+  - Add the public Worker Sessions method to Factory Runtime test adapters at the narrow interface seam; runtime production composition does not need an association-specific dependency.
+---
+
+## 2026-08-05 01:28 -07:00 - ACP-L4-W7-PROVIDER-SESSION-CONTINUATION-001
+- Added the completion-path regression for malformed Provider Session metadata: the session remains explicitly unassociated and emits only safe Worker Session/attempt rejection evidence.
+- Files changed: pkg/services/worker_sessions/internal/service/start_test.go and progress.txt.
+- Verification: go test -count=1 -cover ./pkg/services/worker_sessions/internal/service reports 100.0% statement coverage; the repeated focused race test and git diff --check pass.
+- **Learnings for future iterations:**
+  - A Provider Session returned by Workers is still untrusted input at the Worker Sessions boundary; preserve valid metadata exactly, but reject invalid metadata visibly without synthesizing a resumable state.
+---
+
+## 2026-08-05 01:44 -07:00 - ACP-L4-W7-PROVIDER-SESSION-CONTINUATION-002
+- Implemented truthful Worker Session pause/resume continuation. A Worker Session with a committed exact Provider Session association pauses only by cancelling its exact admitted Workers dispatch; the original runtime completion callback remains pending until the same Worker Session's continuation finishes.
+- Resuming creates one fresh continuation dispatch that preserves the Worker Session's workstation, Factory-turn request, and lineage payload while carrying the stored provider, provider-specific kind, and opaque ID unchanged. Workers propagates and clones this reference through both agent execution paths, and the provider runner routes it exclusively through `providers.Service.Continue`, ahead of the legacy bare `SessionID` compatibility path.
+- Added behavioral coverage for pause/resume ordering, exact reference retention, resumed dispatch correlation, terminal repeated-resume no-op, detachment, and zero ordinary provider execution on the controlled exact-reference path.
+- Files changed: `pkg/services/worker_sessions/internal/service/{control.go,control_test.go}`, `pkg/services/workers/execution_requests.go`, `pkg/services/workers/internal/services/runners/internal/services/agent/internal/service/{runner.go,runner_test.go}`, `pkg/services/workers/internal/services/workstations/executor/{agent.go,agent_inference_test.go,agentrun/executor.go}`, `prd.json`, `progress.txt`.
+- Verification: `go test ./pkg/services/worker_sessions/... ./pkg/services/workers/...`; `go test ./pkg/services/factory_runtime/...`; focused `go test -race -count=10` continuation coverage; focused `go vet` for Worker Sessions, Workers, and Factory Runtime; and `make test` all pass. `git diff --check` passes.
+- **Learnings for future iterations:**
+  - A pause that promises resumability must retain the original Worker Session completion path until its continuation reaches a terminal callback; returning the pause cancellation as the Factory result would falsely terminalize the turn.
+  - A continuation needs a new Workers dispatch identity for pool admission, but it must retain the original Worker Session association and Factory-turn lineage rather than exposing a replacement Worker Session.
+- The exact typed reference must outrank legacy configuration session IDs at the provider edge, or a valid continuation can silently lose its provider-specific session kind.
+---
+
+## 2026-08-05 02:02 -07:00 - ACP-L4-W7-PROVIDER-SESSION-CONTINUATION-003
+- Added stable typed rejection for a paused Worker Session missing its exact Provider Session association, and reject malformed retained associations before any continuation handoff. Rejections leave the session paused and its association unchanged.
+- Preserved Provider continuation classifications for invalid, foreign, stale, unsupported, and operational failures through the runner, Agent/Agent-Run execution paths, and into safe Worker Session terminal evidence. The classifications contain only whitelisted enum values; no provider message or opaque session ID is copied into terminal diagnostics or Factory Event contracts.
+- Added deterministic controlled Provider-edge and Worker Session tables proving zero ordinary provider executions on rejected exact continuations, retained associations, terminal retry no-ops, and repeated race safety.
+- Files changed: `pkg/services/{worker_sessions,workers}/**`, `prd.json`, `progress.txt`.
+- Verification: focused Worker Sessions/Workers/Providers tests and `go vet`; `go test ./pkg/services/workers/... ./pkg/services/providers/... ./pkg/services/factory_runtime/...`; repeated `-race -count=10` Worker Sessions continuation coverage; and `make test` all pass. `make typecheck` remains blocked by pre-existing missing Bun types and TypeScript 6 `baseUrl` deprecation errors. `make pkg-file-count` remains blocked by the documented unrelated 48 baseline violations; no package grew in this story.
+- **Learnings for future iterations:**
+  - Treat an exact Provider Session reference as an input boundary even after it has been stored: validate it again immediately before continuation handoff, and return a typed Worker Session failure instead of attempting repair or fallback.
+  - Keep safe provider continuation classifications as closed enum facts; raw provider messages and opaque IDs may remain inside the owning provider path but must not become Worker Session terminal diagnostics.
+  - Keep Factory Event schemas stable when only in-process control inspection needs additional fidelity by carrying the extra Worker result facts with `json:"-"` and reducing them at the Worker Session boundary.
+---
+
+## 2026-08-05 02:13 -07:00 - ACP-L4-W7-PROVIDER-SESSION-CONTINUATION-004
+- Added a deterministic Factory Runtime package-integration proof for two paused children of one captured turn. The real Worker Sessions service gives each continuation its exact typed Provider Session reference and preserved turn/dispatch correlation; a controlled foreign failure completes before its sibling succeeds without any cross-delivery.
+- Proved duplicate Factory resume retains the committed fan-out result without another continuation, while an associated Worker Session from another turn remains running and is never selected or resumed.
+- Files changed: `pkg/services/factory_runtime/internal/services/orchestration/runtime/captured_turn_terminate_integration_test.go`, `prd.json`, `progress.txt`.
+- Verification: focused test repeated 20 times; focused `-race -count=10`; `go test ./pkg/services/worker_sessions/... ./pkg/services/workers/... ./pkg/services/factory_runtime/...`; focused `go vet` for the same packages; and `git diff --check` all pass.
+- **Learnings for future iterations:**
+  - To prove multi-child continuation isolation, compose the real Factory Runtime fan-out and Worker Sessions service behind an asynchronous controlled Workers boundary, then release child terminal callbacks in a deliberate order; this makes cross-delivery observable without sleeps or polling.
+  - A per-child Provider continuation failure is terminal evidence for that Worker Session only; Factory Runtime still fans out the already accepted resume to every captured sibling and retains its deterministic control result.
+---
+
+## 2026-08-05 02:15 -07:00 - ACP-L4-W7-PROVIDER-SESSION-CONTINUATION-004
+- Re-ran the repository Go unit lane after the completed multi-child continuation integration test; `make test` passes.
+- `make typecheck` remains blocked before this Go-only change by the documented UI environment/configuration baseline: missing Bun type definitions and TypeScript 6 `baseUrl` deprecation errors in three UI tsconfig projects.
+- Files changed: `progress.txt`.
+- **Learnings for future iterations:**
+  - Record repository-wide gate failures with their exact external baseline separately from focused behavior evidence, so the PR can distinguish an unrelated UI toolchain condition from the changed runtime path.
+---
+
+## 2026-08-05 02:34 -07:00 - ACP-L4-W7-PROVIDER-SESSION-CONTINUATION-004
+- Restored the CI-required Worker Sessions coverage baselines without changing production behavior. Added public-contract assertions for detached Provider Session associations, association requests, session ownership validation, control request validation, and safe continuation-classification rejection.
+- Added deterministic internal control-path coverage for rejected/missing/mismatched associations, continuation preparation/reversion, publication failure recovery, duplicate/pre-admission/boundary-error pauses, and an active-control pause interleaving coordinated by channels rather than sleeps.
+- Files changed: `pkg/services/worker_sessions/{session_test.go,terminal_test.go,internal/service/internal_test.go}`, `prd.json`, `progress.txt`.
+- Verification: `go test -count=1 -race ./pkg/services/worker_sessions/internal/service`; `go test -count=1 -cover ./pkg/services/worker_sessions`; `go test -count=1 -cover ./pkg/services/worker_sessions/internal/service`; and `go test -count=1 ./pkg/services/worker_sessions/...` all pass with 100.0% coverage in both enforced packages. `make test-unit-coverage` reaches its coverage runner but cannot execute on this Windows host because the generated `go test` command exceeds the Windows command-length limit; the individual measured packages pass their declared 100.00% baselines locally.
+- **Learnings for future iterations:**
+  - The Worker Sessions coverage policy measures the public contract and internal service independently, so both packages need direct behavioral evidence when a public control flow spans private synchronization helpers.
+  - For a deterministic active-control wait, use an unbuffered channel sender to prove the receiver reached the control wait, then record the terminal winner under the registry lock; this tests the interleaving without sleeps or polling.
+---
+
+## 2026-08-05 03:18 -07:00 - ACP-L4-W7-PROVIDER-SESSION-CONTINUATION-001
+- Addressed the first blocking PR review finding: Factory Runtime now sends Provider runner progress through a session-local Worker Sessions bridge. The bridge resolves the live dispatch owner and commits the exact typed `providers.SessionRef` before forwarding any reference-bearing response fragment.
+- Added trusted observation behavior to Worker Sessions, including dispatch-owner isolation across continuation dispatches. Metadata-only compatibility fields are explicitly suppressed rather than reconstructed into a resumable reference.
+- Added controlled provider/workstation behavioral coverage proving association-before-output and pause/resume with the same exact reference without a direct test-side association; malformed, foreign, and conflicting observations remain isolated and rejected.
+- Files changed: `pkg/services/{worker_sessions,workers}/**`, `pkg/services/factory_runtime/internal/**`, `prd.json`, `progress.txt`.
+- Verification: `go test -count=1 -cover ./pkg/services/worker_sessions ./pkg/services/worker_sessions/internal/service` (both 100.0%); `go test -race -count=1 ./pkg/services/worker_sessions/...`; focused `go vet` plus Workers/Worker Sessions/Factory Runtime suites; `make test`; and `git diff --check` all pass.
+- **Learnings for future iterations:**
+  - A provider-session response projection is not evidence of a resumable provider reference. Only an exact typed reference emitted by Providers may unlock Worker Session continuation.
+  - When construction order prevents direct wiring, bind a one-shot session-local progress bridge before dispatch admission so source progress cannot reach a response stream before its owning Worker Session records the association.
+---
+
+## 2026-08-05 03:32 -07:00 - ACP-L4-W7-PROVIDER-SESSION-CONTINUATION-002
+- Addressed the remaining blocking review findings for continuation controls. A PAUSED Worker Session now reaches `CANCELED` or `TERMINATED` directly without attempting to cancel its already-completed pause dispatch, publishes its terminal record, and releases the original Start wait.
+- Exact Provider continuations now validate both the continuation envelope reference and any returned execution reference before publishing resumed output. A missing, malformed, or mismatched result becomes a safe invalid-continuation failure while retaining the original association; the Worker Sessions terminal boundary independently enforces the same invariant for every Workers adapter path.
+- Files changed: `pkg/services/{worker_sessions,workers,factory_runtime}/**`, `prd.json`, `progress.txt`.
+- Verification: public and internal Worker Sessions coverage are both 100.0%; focused controlled Provider-edge and Worker Sessions regressions pass with `-race -count=5`; `go test ./pkg/services/worker_sessions/... ./pkg/services/workers/... ./pkg/services/factory_runtime/...`; focused `go vet`; `make test`; and `git diff --check` all pass.
+- **Learnings for future iterations:**
+  - A PAUSED Worker Session has no pending original dispatch callback to join; a terminal control must commit and signal its retained supervision directly instead of re-canceling and waiting forever.
+  - `ContinueResult.Reference` and `ExecuteResult.SessionRef` are independent provider-boundary claims. Validate both before exposing resumed output, then keep the accepted Worker Session association immutable on rejection.
+---
+
+## 2026-08-05 03:46 -07:00 - ACP-L4-W7-PROVIDER-SESSION-CONTINUATION-001
+- Corrected the Provider Session progress bridge after CI exposed a compatibility regression: metadata-only failure and timeout fragments remain visible on existing response streams, while only exact typed references can be associated with a Worker Session.
+- Updated the bridge behavioral test to prove legacy metadata is forwarded without creating an association; reproduced and restored the ACP command-start failure and Agy timeout response-stream functional flows.
+- Files changed: `pkg/services/worker_sessions/{publish.go,publish_test.go}`, `progress.txt`.
+- Verification: focused Worker Sessions bridge test, `TestACPCommandStartFailureMapsToDependencyFailure`, `TestAgyGoldenTimeout`, and `git diff --check` pass.
+- **Learnings for future iterations:**
+  - A compatibility projection can remain observable without granting resumability; association validation belongs only to the exact provider-owned reference.
+  - A response-stream regression can surface in unrelated provider fixtures, so retain provider-specific failure and timeout functional checks after changing a shared progress publisher.
+---
+
+## 2026-08-05 04:02 -07:00 - ACP-L4-W7-PROVIDER-SESSION-CONTINUATION-REVIEW
+- Inspected PR #1799 with thread-aware GitHub review data. Its only blocking conversation comment applies to the older `2864f4e` head; the reviewed `f0c8303` head contains the three requested remediations for live Provider Session association, PAUSED cancel/terminate completion, and continuation-result reference validation. There are no unresolved inline review threads or newer review comments.
+- Confirmed the PR title and description already match the requested name and current `prd.json`. Re-ran the focused Worker Sessions race suite plus Workers and Factory Runtime suites on `f0c8303`; all pass and `git diff --check` is clean.
+- The PR's only failing required CI lane is the shared `customer-factory-emulator-demos` component test, which fails because `ResizeObserver` is missing. The test has identical content and last-touch commit (`5c8260a`) on both `fork/main` and this branch, so it is a separate base regression rather than W7 work and is left out of this single-story delivery lane.
+- Files changed: `progress.txt`.
+- **Learnings for future iterations:**
+  - Thread-aware review inspection is necessary even when top-level comments exist; this PR had no inline threads and no newer feedback after the blocking comment.
+  - Compare a failed CI path against the base before treating it as delivery-lane fallout; exact base/head identity is strong evidence to keep an unrelated repair scoped to its owning work.
+---
+
+## 2026-08-05 04:31 -07:00 - ACP-L4-W7-PROVIDER-SESSION-CONTINUATION-REVIEW
+- Addressed the remaining blocking PR feedback: Providers now exposes a live, invocation-scoped exact `SessionRef` observation hook. Codex and Claude emit their native streaming session identities immediately, and ACP emits the identity as soon as its provider session opens, before its prompt completes.
+- Wired the real Agent runner to publish that trusted exact reference through the existing session-local Worker Sessions bridge. The bridge commits the association but suppresses its internal bookkeeping fragment from the customer response stream, so a running Worker Session can truthfully pause and resume through `Providers.Continue` using the same opaque reference.
+- Added controlled behavioral coverage for native live observation, actual provider/Agent/Worker Sessions composition, exact pause/resume continuation, and registry request wiring. The integration test starts the real runner, obtains a native Codex thread through the production seam, pauses without fabricated Worker fragments or direct association calls, then verifies the resumed command receives that same ID.
+- Files changed: `pkg/services/providers/execute_contract.go`, `pkg/services/providers/internal/services/acp/internal/service/{service.go,protocol_failure_classification_test.go}`, `pkg/services/providers/internal/services/execution/internal/adapters/{codex,claude}/**`, `pkg/services/workers/internal/services/runners/{wire,internal/services/agent/internal/service}/**`, `pkg/services/workers/progress_observations.go`, `pkg/services/worker_sessions/{publish.go,publish_test.go}`, `progress.txt`.
+- Verification: focused live-composition and adapter tests; `go test ./pkg/services/providers/... ./pkg/services/worker_sessions/... ./pkg/services/workers/... -count=1`; targeted `go test -race`; `go vet` for those service families; `make test`; `git diff --check`.
+- **Learnings for future iterations:**
+  - Provider session creation and provider result delivery are different lifecycle moments; the Worker Sessions control plane needs the former, while response streams should only receive customer-visible output.
+  - An invocation-scoped callback is safe to preserve through the Providers continuation request because it carries no selectable session input; native adapters still own the identity and only publish validated typed references.
+  - Controlled command/ACP edges plus channels can prove an observation happened during a live attempt without sleeps, polling, fabricated Worker fragments, or direct association calls.
+---
+
+## 2026-08-05 05:11 -07:00 - ACP-L4-W7-PROVIDER-SESSION-CONTINUATION-REVIEW
+- Re-inspected PR #1799 using flat GitHub conversation reads and thread-aware GraphQL data. The two blocking comments both target superseded heads; there are no unresolved review threads, newer review submissions, or additional actionable feedback on the current `9299cc803` head.
+- Investigated the initially failing Backend Functional Coverage job. Its first two attempts failed in changing, unrelated functional scenarios; the focused ACP scenarios from the failure logs passed 20 deterministic local repetitions each, and the other failed paths were unchanged from `origin/main`. A third rerun on the exact reviewed head passed every required check, including Backend Functional Coverage.
+- Files changed: `progress.txt`.
+- Verification: `go test -count=20 ./tests/functional/providers/acp -run '^TestProvidersACPSerializesConcurrentPromptsOnOneStdioConnection$'`; `go test -count=20 ./tests/functional/providers/acp -run '^TestFactoryRunRetainsLegacyNamedExecutorProviderCompatibility$'`; `gh pr checks 1799 --required`; thread-aware `fetch_comments.py`; and `git diff --check origin/main...HEAD` all pass. PR #1799 is open, clean, and points at the reviewed head.
+- **Learnings for future iterations:**
+  - A CI-only functional failure must be evaluated across reruns and against the PR base before changing a feature path; unrelated failures that rotate between unchanged functional packages are evidence of shared-suite instability, not an authorization to expand the story.
+  - When an existing PR already has the requested title and full `prd.json` body, update its head rather than creating a duplicate pull request.
+---
+
+## 2026-08-05 05:43 -07:00 - ACP-L3-DEF-CONSOLIDATE-AUTHORED-VALIDATION
+- Merged current `fork/main` to resolve PR #1800's mergeability conflict. Mainline provider-session continuation work merged automatically; only task-local `prd.json` and `progress.txt` conflicted.
+- Retained this task's completed four-story PRD and delivery record, while preserving incoming reusable patterns and all non-conflicting mainline progress history.
+- Files changed: merged `fork/main`; reconciled `prd.json` and `progress.txt`.
+- Verification: Factory Sessions Runtime-opening, all Factory Definitions, and canonical Wire tests pass after the merge; JSON parsing and `git diff --check` are clean.
+- **Learnings for future iterations:**
+  - When independent worktrees use task-local PRD files, resolve a shared-file merge conflict by preserving the active branch's PRD and appending both progress histories; source ownership remains independent of task tracking.
 ---

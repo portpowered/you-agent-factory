@@ -17,6 +17,11 @@ type Session struct {
 	// for every non-terminal state, and for the W1 CANCELED/TERMINATED
 	// states that W2 does not produce.
 	Result *TerminalResult
+	// ProviderSessionAssociation is the optional exact Providers-owned
+	// reference observed for this session's supervised attempt. A nil value is
+	// explicit absence: Worker Sessions never synthesizes it from a runner,
+	// model, current provider, or bare session ID.
+	ProviderSessionAssociation *ProviderSessionAssociation
 }
 
 // Validate reports whether s has a non-empty stable identity, exactly one
@@ -44,6 +49,14 @@ func (s Session) Validate() error {
 	default:
 		if s.Result != nil {
 			return fmt.Errorf("%w: non-terminal state must not carry a TerminalResult", ErrInvalidTerminalResult)
+		}
+	}
+	if s.ProviderSessionAssociation != nil {
+		if err := s.ProviderSessionAssociation.Validate(); err != nil {
+			return err
+		}
+		if s.ProviderSessionAssociation.WorkerSessionID != s.ID {
+			return fmt.Errorf("%w: provider session association worker session id disagrees", ErrInvalidProviderSessionAssociation)
 		}
 	}
 	return nil
