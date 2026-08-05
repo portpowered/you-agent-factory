@@ -1,96 +1,89 @@
 {
-  "project": "Project Worker Sessions as Stable ACP Child Tool Calls",
-  "branchName": "ACP-L4-W5-CHILD-TOOL-CALL-PROJECTION",
-  "description": "Project every Factory child Worker Session into its own stable ACP tool call by consuming W3 ordered Worker Session records, the W4 dispatch-to-Worker-Session association, and sequencer-assigned ItemID and ParentItemID. Map the existing Worker vocabulary through a pure exhaustive ACP SessionUpdate mapper, render queued children honestly, isolate concurrent and failed children, and bound content with explicit elision without changing generic Chat delivery, Runtime behavior, or storage.",
+  "project": "Reconcile ACP Architecture and Public Vocabulary Documentation",
+  "branchName": "ACP-L1-V4-H04-DOCUMENTATION-RECONCILIATION",
+  "description": "Reconcile the architecture, public data model, event-stream guide, and still-stale packaged-service-structure planning notes with current ACP service ownership, customer vocabulary, event lifetimes, and settled D1/D2/D3 decisions without changing production behavior or generated artifacts.",
   "context": {
-    "customerAsk": "Use sequencer-assigned ItemID and ParentItemID plus the published dispatch-to-Worker-Session association to render each Factory child Worker Session as an isolated ACP tool call. Preserve parent-before-child ordering, stable identity across retained and live replay, pending rendering for RESERVED and STARTING children, per-session delta isolation, bounded content with explicit elision, exhaustive existing Worker record vocabulary mapping, partial-failure isolation, and zero fabricated records. Keep L1 T03 generic delivery unchanged, resolve blocking review feedback, and merge the implementation.",
-    "problem": "W3 publishes one ordered Events topic per Worker Session and W4 exposes the canonical dispatch-to-Worker-Session association, but generic ACP Chat streaming does not yet turn those correlated child records into distinct stable tool calls. Without W5, concurrent or queued child activity is ambiguous or invisible, identity may be reconstructed inconsistently across reconnect, child failures may contaminate siblings, and unbounded content may be silently lost or overwhelm clients.",
-    "solution": "Add a pure ACP boundary projection that recognizes child ownership only from the canonical association, uses the sequencer's stored item lineage as immutable ACP identity, and gives every supported Worker kind/phase pair an explicit projected, no-output, or typed-error outcome. Render RESERVED and STARTING as pending, map lifecycle and child content truthfully using workers.ToolPayload, keep state and budgets isolated per parent item, and derive explicit bounded elision from canonical gap or bounding evidence. Consume the existing T03 retained/live/reconnect path unchanged and add no storage or runtime behavior."
+    "customerAsk": "Reconcile the documentation debt recorded in docs/internal/projects/acp-program/README.md section 6. Use the actual Chat Sessions, Events, and Worker Sessions service owners; add concise public definitions for Chat Session, Worker Session, Target Episode, and Turn; preserve the separation between ephemeral FactoryResponseEvent, the process-local Events stream, and the canonical Recordings Factory Event ledger; replace or explicitly supersede the third event hierarchy with the existing workers.Kind/workers.Phase vocabulary; update only stale D1/D2/D3 packaged-service-structure notes; verify the documentation; and carry delivery through actual PR merge.",
+    "problem": "The architecture docs name obsolete or nonexistent service packages and imply a universal durable event bus, the public data model omits ACP session and episode vocabulary, the event-stream guide describes an unimplemented third hierarchy, and stale PSS checklist language contradicts settled no-storage, event-ownership, and composition decisions.",
+    "solution": "Correct the canonical documentation surfaces to describe actual service ownership and state lifetimes, define the new customer terms and their relationships, document source-native Worker Kind/Phase observations separately from Recordings-owned Factory history, and remove or supersede only PSS statements that still contradict D1, D2, or D3. Keep the work documentation-only and verify it with focused terminology/link review and existing repository quality gates."
   },
   "acceptanceCriteria": [
-    "Every canonical dispatch-to-Worker-Session association produces exactly one ACP child tool_call with a stable sequencer-assigned identity; RESERVED and STARTING render as pending, active work renders as in_progress, and terminal outcomes render exactly once with truthful ACP semantics.",
-    "Each associated child tool call is emitted before its updates, every child update targets only that Worker's tool-call identity through stored ItemID and ParentItemID, and no transport-local identity, registration barrier, heuristic, or neighboring-record inference is used.",
-    "A pure exhaustive mapper defines an explicit projection, declared no-output, or typed rejection for every supported workers.Kind and workers.Phase pair, and native TOOL records preserve the existing workers.ToolPayload vocabulary without a new taxonomy.",
-    "Concurrent and queued Worker Sessions remain isolated: interleaved records update only their intended child, one child's malformed record or failure does not terminate or rewrite siblings, and generic top-level Chat projection remains unchanged.",
-    "Retained catch-up, live continuation, and reconnect reproduce the same tool-call IDs, parent lineage, statuses, content order, and explicit gap/elision outcomes without duplicate or fabricated updates.",
-    "Per-child projected content is bounded by explicit record and byte limits; omitted spans or oversized values surface deterministic ACP-visible elision while retained identities and terminal outcomes remain unchanged.",
-    "Quality gate: Typecheck, formatting, lint, focused mapper and ACP delivery tests, deterministic race/repeat evidence, the narrowest relevant repository test tiers, and all required CI checks are terminal and passing on the exact reviewed head.",
-    "Delivery: the implementation/review loop continues until all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file changes are reconciled, required CI is terminal and passing, and the PR is actually merged; opened, green, approved, or ready-to-merge is not complete."
+    "Architecture readers see pkg/services/chat_sessions, pkg/services/events, and pkg/services/worker_sessions as the actual owners, see no nonexistent Docs service, and are not told that services communicate through a universal event bus or that the Events service is a durable ledger.",
+    "The public data model defines Chat Session, Worker Session, Target Episode, and Turn and explains their relationships in customer-facing language without exposing internal Petri-net vocabulary.",
+    "Documentation consistently distinguishes FactoryResponseEvent as ephemeral invocation progress, Events as an in-memory session-scoped stream, and Recordings FactoryEvent JSONL artifacts as canonical Factory history and replay under D1 and D2.",
+    "The event-stream guide uses the existing workers.Kind and workers.Phase vocabulary for Worker observations and the separate canonical Factory Event ledger, with the old third hierarchy removed or explicitly marked superseded rather than normalized into a new model.",
+    "The canonical PSS README and its local plan/checklist contain no still-active statements that contradict D1, D2, or D3; exact referenced package paths and document links resolve, and no unrelated documentation or production/generated surface changes.",
+    "Quality gates pass: focused documentation and link review, make readme-check when applicable, typecheck, lint, and tests required by the repository/PR CI policy.",
+    "Delivery continues through implementation and review until required CI is terminal and passing, every blocking PR conversation is explicitly addressed, current-main and shared-file conflicts are resolved, and the PR is actually merged; an opened, approved, green, or ready-to-merge PR is not complete."
   ],
   "userStories": [
     {
-      "id": "ACP-L4-W5-CHILD-TOOL-CALL-PROJECTION-001",
-      "title": "Render one stable tool-call lifecycle per associated Worker Session",
-      "description": "As a Factory user, I want every child Worker Session to appear immediately as one stable tool call so that queued, running, and terminal child work is understandable without identity changing during streaming or replay.",
+      "id": "ACP-L1-V4-H04-DOCUMENTATION-RECONCILIATION-001",
+      "title": "Present the actual service ownership and communication model",
+      "description": "As a maintainer reading the architecture guide, I want the service inventory and system-flow explanations to name the real owners and communication boundaries so I can design changes against packages and lifetimes that actually exist.",
       "acceptanceCriteria": [
-        "A valid dispatch-to-Worker-Session association and sequenced opening record produce exactly one ACP tool_call whose ID is the stored sequencer-assigned item identity and whose bounded non-sensitive metadata identifies the associated child.",
-        "The opening tool call is delivered before every update that targets it; a child record with an unknown or not-yet-delivered parent is rejected with a typed error and is not emitted out of order.",
-        "RESERVED and STARTING render pending, RUNNING renders in_progress, and COMPLETED, FAILED, and canceled terminal outcomes produce exactly one truthful terminal update without changing canonical lifecycle state.",
-        "Repeated delivery of the canonical association/opening identity resolves to the original tool call and does not emit a duplicate child or mint another ID.",
-        "Child membership derives only from the published association and sequenced lineage, not timing, array position, names, adjacent records, or connection-local maps.",
-        "Focused protocol tests cover pending, running, each terminal outcome, duplicate opening, missing parent, malformed association, and strict parent-before-child delivery.",
-        "Typecheck passes",
-        "Tests pass"
+        "The service inventory identifies Chat Sessions at pkg/services/chat_sessions, Events at pkg/services/events, and Worker Sessions at pkg/services/worker_sessions, with concise responsibilities aligned to current architecture.",
+        "The inventory contains no pkg/services/chat, pkg/services/event_stream, or pkg/services/docs owner and does not imply a Docs product service.",
+        "Architecture prose and diagrams show direct service operations and bounded event delivery where applicable without claiming that every service subscribes to a universal bus.",
+        "Events is described as an in-memory, session-scoped stream for ordering, cursors, subscriptions, retention, gaps, and backpressure; Recordings remains the owner of canonical Factory history, JSONL artifacts, replay, and historical projections.",
+        "Existing architecture diagrams and frontend/backend prose no longer label the process-local Events stream as the durable replay source of truth; references to canonical replay identify the Recordings Factory Event ledger.",
+        "Focused review confirms the named service paths exist and the revised prose agrees with current service ownership; no production or generated file changes.",
+        "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "2026-08-04: Added the pure ACP child lifecycle projection seam, persisted canonical dispatch-to-Worker-Session association metadata in Chat sequencing, and wired associated Worker Session lifecycle records through Factory history/live observation, Worker topic live delivery, and retained terminal sweep. ACP delivery now uses stored ItemID/ParentItemID for pending, running, and terminal lifecycle updates; focused retained/live/replay, malformed-lineage, duplicate, and parent-before-child tests pass."
+      "notes": "2026-08-04: Reconciled docs/architecture/architecture.md with the implemented Chat Sessions, Events, Worker Sessions, and Recordings boundaries. Replaced the universal Event Bus diagrams and prose with direct service operations and bounded session-topic delivery; identified Recordings FactoryEvent JSONL artifacts as the canonical replay/history source; and corrected the frontend diagrams and prose to consume Recordings-backed Factory history. Focused owner-path/obsolete-terminology review and make typecheck pass."
     },
     {
-      "id": "ACP-L4-W5-CHILD-TOOL-CALL-PROJECTION-002",
-      "title": "Map Worker records exhaustively into isolated child updates",
-      "description": "As a Factory user, I want each Worker's messages, reasoning, tools, progress, and lifecycle details kept inside that Worker's tool call so that concurrent activity and partial failures remain attributable.",
+      "id": "ACP-L1-V4-H04-DOCUMENTATION-RECONCILIATION-002",
+      "title": "Define ACP session and episode vocabulary in the public data model",
+      "description": "As a customer or integrator, I want concise definitions for Chat Session, Worker Session, Target Episode, and Turn so I can understand how a conversation invokes a target and how its work is grouped.",
       "acceptanceCriteria": [
-        "A pure mapper accepts one detached sequenced Worker record and returns exactly one ACP SessionUpdate, declared no output, or a typed malformed/unsupported error without IO, state lookup, identity allocation, cursor mutation, or notification.",
-        "Table-driven tests cover every legal current workers.Kind and workers.Phase pair across SESSION, RUN, TURN, MESSAGE, REASONING, TOOL, FILE_CHANGE, PLAN, PROGRESS, USAGE, ERROR, and STREAM_GAP and assert the selected projection or no-output outcome.",
-        "Meaningful MESSAGE, REASONING, FILE_CHANGE, PLAN, PROGRESS, USAGE, and ERROR content maps into bounded parent-child content in source order, while lifecycle-only records with no customer value have declared no-output outcomes.",
-        "TOOL records use the existing workers.ToolPayload fields and existing delta payload, do not invent a taxonomy, and remain nested within the owning Factory child tool call.",
-        "Unknown values, illegal pairs, malformed JSON, or invalid phase-specific payloads return typed errors with no partial update or fabricated fallback.",
-        "Interleaved records for at least two Worker Sessions update only the tool call named by stored lineage, and a failed or malformed record for one child leaves its sibling unaffected.",
-        "Generic top-level Chat delivery, cursor acknowledgement, retained/live handoff, and reconnect remain behaviorally unchanged from L1 T03.",
-        "Typecheck passes",
-        "Tests pass"
+        "Chat Session is defined as the customer-facing conversation/control context that can address a target and contains ordered turns, without presenting it as canonical Factory replay history.",
+        "Target Episode is defined as one bounded attempt to run or interact with a selected target within a Chat Session, and its relationship to the selected Factory or other target is explicit.",
+        "Worker Session is defined as the execution/control context for a Worker participating in a Target Episode, including the possibility of multiple Worker Sessions where orchestration requires them.",
+        "Turn is defined as one ordered user/agent interaction unit within a Chat Session and is related clearly to the Target Episode and any Worker activity it triggers.",
+        "The relationship text or diagram uses customer-facing vocabulary and preserves the internal/customer model boundary; it does not expose Petri tokens, places, transitions, or markings.",
+        "FactoryResponseEvent remains explicitly ephemeral and process-local, outside the canonical Recordings FactoryEvent replay ledger, and the surrounding definitions agree with D1 and D2.",
+        "Typecheck passes"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "2026-08-04: Extended the canonical Worker child bridge to sequence every associated Worker record after its SESSION/STARTED opening, then added an exhaustive pure ACP child mapper. MESSAGE, REASONING, TOOL, FILE_CHANGE, PLAN, PROGRESS, USAGE, ERROR, and STREAM_GAP now target the stored parent tool-call identity; RUN and TURN are validated declared no-output. Malformed child projection is typed and skips only that child during retained/live delivery, leaving sibling records ordered and intact. Focused mapper, bridge, retained delivery, race-repeat, vet, ACP package, and repository short tests pass."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "ACP-L4-W5-CHILD-TOOL-CALL-PROJECTION-003",
-      "title": "Bound child content with explicit elision",
-      "description": "As an ACP client user, I want long-running child activity to remain renderable while being told exactly when content was omitted so that bounded output never masquerades as complete history.",
+      "id": "ACP-L1-V4-H04-DOCUMENTATION-RECONCILIATION-003",
+      "title": "Document the two shipped event vocabularies without a third taxonomy",
+      "description": "As an implementer consuming event output, I want the event-stream guide to describe the source-native Worker observation vocabulary separately from canonical Factory history so I do not implement against an invented normalized hierarchy.",
       "acceptanceCriteria": [
-        "Each Worker tool call enforces named deterministic maximum retained/projected record and serialized-byte limits using established semantic priorities, and one noisy child cannot consume a sibling's budget.",
-        "A valid STREAM_GAP/UPDATED record projects an explicit bounded elision/gap indication before retained catch-up and preserves its reported unavailable range without reconstructing missing content.",
-        "An otherwise projectable value that exceeds its limit is deterministically bounded and includes an explicit ACP-visible elision indication rather than silent truncation or invented text.",
-        "Bounding preserves ItemID, ParentItemID, retained order, nested ToolCallID, and terminal outcome and does not rewrite canonical records or consume a new published identity.",
-        "Terminal and failure evidence is retained ahead of transient progress when applying content limits.",
-        "Focused tests cover record-count pressure, byte pressure, one oversized value, multiple unavailable spans, sibling isolation, retained terminal evidence, and zero silent or fabricated content.",
-        "Typecheck passes",
-        "Tests pass"
+        "Worker observations are described using the declared workers.Kind values SESSION, RUN, TURN, MESSAGE, REASONING, TOOL, FILE_CHANGE, PLAN, PROGRESS, USAGE, ERROR, and STREAM_GAP and workers.Phase values STARTED, DELTA, UPDATED, COMPLETED, FAILED, and CANCELED.",
+        "The guide explains that valid Kind/Phase combinations and their typed payloads are source-native Worker contracts; it does not imply that every Kind accepts every Phase.",
+        "Canonical Factory history is documented separately as Recordings-owned FactoryEvent values and JSONL artifacts used for replay and historical inspection.",
+        "The prior nested Factory/Worker/User/Agent/Tool hierarchy is removed or clearly labeled as superseded conceptual material that is not a supported contract.",
+        "The guide does not introduce a replacement normalized event taxonomy, rename shipped enum values, or conflate Events stream retention with durable Factory history.",
+        "Focused comparison against the current public Worker declarations and Recordings documentation confirms the examples and terminology are accurate; no enum, runtime, OpenAPI, or generated changes.",
+        "Typecheck passes"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "2026-08-04: Added deterministic per-child ACP projection budgets with named record and serialized-byte limits. Ordinary pressure produces one explicit elision, a reserved slot retains failure/gap evidence, and lifecycle terminal updates remain unchanged. The attachment-scoped ledger keys budgets by stored child parent ItemID so retained and live delivery share accounting while concurrent siblings remain isolated. Added focused record/byte/gap/terminal tests and retained delivery coverage for one noisy child plus an unaffected sibling. 2026-08-04 review follow-up: a fresh resumed attachment now reconstructs each child budget from canonical sequenced records through its acknowledged cursor before projecting later records; record- and byte-pressure reconnect tests prove prefix-plus-resume exactly equals a fresh full replay, including the same explicit elision. 2026-08-04 CI follow-up: added isolated malformed-input, protected-evidence, cache-restoration, and subscription/sequence-failure coverage; each touched package now clears its checked-in unit-coverage floor. 2026-08-04 notifier-retry follow-up: child projection accounting now commits only after its ACP update is successfully notified; record- and byte-pressure retry tests prove a failed notification consumes no allowance and then reproduces the clean full replay."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "ACP-L4-W5-CHILD-TOOL-CALL-PROJECTION-004",
-      "title": "Prove concurrent, queued, retained, and live child coordination",
-      "description": "As a Factory user reconnecting to active work, I want concurrent and queued children to retain the same isolated tool calls across retained and live delivery so that the execution view is stable despite timing and partial failure.",
+      "id": "ACP-L1-V4-H04-DOCUMENTATION-RECONCILIATION-004",
+      "title": "Close the remaining stale PSS decision language",
+      "description": "As a program planner, I want the canonical packaged-service-structure notes and their local checklist to reflect settled D1, D2, and D3 decisions so no future packet is admitted for canceled storage work or blocked behind a nonexistent composition lease.",
       "acceptanceCriteria": [
-        "A focused ACP scenario with at least two concurrently active Worker Sessions on independently runnable provider paths observes one stable tool call per association, interleaved isolated deltas, and the correct terminal status for each child.",
-        "A queued scenario observes all associated children as pending before capacity is available and preserves each original ID and pending state until that child is admitted.",
-        "A partial-failure scenario delivers one child's failed terminal update while a sibling continues ordered updates and completes normally without globally failing prompt delivery solely because that child failed.",
-        "A retained prefix followed by live continuation yields the same ordered ACP updates and identities as full live delivery, and reconnect from an acknowledged position emits only later available records with original lineage.",
-        "Duplicate records produce no duplicate tool calls or updates, and every ACP update corresponds to a canonical sequenced record or an explicit deterministic projection of canonical gap/bounding evidence.",
-        "Concurrency and handoff tests use controlled edges, committed records, or lifecycle outcomes instead of arbitrary sleeps and pass under focused race/repeat execution.",
-        "No changes are made to T03 generic response/reconnect code, Runtime dispatch/control behavior, provider concurrency policy, Worker Session transitions, or storage.",
-        "Typecheck passes",
-        "Tests pass"
+        "Still-stale checklist or plan statements that defer Recordings-backed checkpoint storage or Recordings durable log/cursor/retention are changed to state that this work is canceled, not deferred, under D1.",
+        "PSS guidance consistently states that Recordings owns canonical Factory JSONL history and replay while Events owns only the in-memory, session-scoped stream behavior under D2.",
+        "PSS guidance consistently states that ordinary additive edits under pkg/wire, pkg/root, and pkg/initializer are shared composition surfaces resolved by normal rebase and do not create an exclusive composition lease under D3; genuine structural contract edits remain subject to explicit ownership controls.",
+        "Already-correct README/plan language is preserved rather than rewritten, and only contradictory or incomplete local checklist/plan text is reconciled.",
+        "The documentation does not reopen checkpoint APIs, add storage-engine work, alter PSS packet implementation scope, or schedule L4 Worker control work.",
+        "Focused link and terminology review plus make readme-check pass where applicable, and the diff remains limited to the requested documentation and task artifacts.",
+        "Typecheck passes"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": "2026-08-04: Added a deterministic ACP delivery scenario for two associated Worker Sessions. It proves RESERVED and STARTING openings remain pending, interleaved live deltas stay isolated by stored tool-call parent, a failed child does not prevent a sibling completion, reconnect resumes from the acknowledged cursor, and retained+live+reconnect output exactly matches a fresh full retained replay. Focused race-repeat delivery evidence passes."
+      "passes": false,
+      "notes": ""
     }
   ]
 }
