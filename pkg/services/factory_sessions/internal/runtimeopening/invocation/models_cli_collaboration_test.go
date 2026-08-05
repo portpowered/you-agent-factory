@@ -68,7 +68,7 @@ func TestModelsPresentationRoot_ReturnsNilForUnsetOperation(t *testing.T) {
 	}
 }
 
-func TestModelsPresentationRoot_DelegatesToRuntimeOpeningFactory(t *testing.T) {
+func TestModelsPresentationRoot_DelegatesToRuntimeOpening(t *testing.T) {
 	t.Parallel()
 
 	op := &operation{openRuntime: &runtimeopening.Factory{}}

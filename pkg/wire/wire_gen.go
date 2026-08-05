@@ -393,7 +393,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		Workers:            workersDependencies,
 		OperatorSettings:   operatorSettingsDependencies,
 	}
-	v57, err := wire.NewRuntimeOpeningFactory(v56)
+	v57, err := wire.NewRuntimeOpening(v56)
 	if err != nil {
 		return nil, err
 	}
@@ -782,7 +782,7 @@ var servicesSet = wire4.NewSet(
 	provideInitialFactorySnapshotFactory, wire2.NewRuntimeFactory, wire2.NewAssembly, wire4.Bind(new(wire.FactoryRuntimeAssembler), new(*wire2.Assembly)), wire4.Struct(new(wire.ProviderSessionsRuntimeOpeningDependencies), "*"), wire4.Struct(new(wire.FactoryRuntimeOpeningDependencies), "*"), wire4.Struct(new(wire.FactoryDefinitionsRuntimeOpeningDependencies), "*"), wire4.Struct(new(wire.FactorySessionsRuntimeOpeningDependencies), "*"), wire4.Struct(new(wire.WorkRuntimeOpeningDependencies), "*"), wire4.Struct(new(wire.AutomationsRuntimeOpeningDependencies), "*"), wire4.Struct(new(wire.ModelsRuntimeOpeningDependencies), "*"), wire4.Struct(new(wire.RecordingsRuntimeOpeningDependencies), "*"), wire4.Struct(new(wire.WorkersRuntimeOpeningDependencies), "*"), wire4.Struct(new(wire.OperatorSettingsRuntimeOpeningDependencies), "*"), wire4.Struct(new(wire.RuntimeOpeningDependencies), "*"), provideLoadedFactorySourceFactory,
 	provideLoadedFactoryLoader,
 	provideReplayArtifactLoader,
-	provideReplayRuntimeConfigDecoder, wire.NewRuntimeOpeningFactory,
+	provideReplayRuntimeConfigDecoder, wire.NewRuntimeOpening,
 )
 
 var providerSessionServiceSet = wire4.NewSet(
@@ -883,7 +883,7 @@ var BundleSet = wire4.NewSet(
 	providePackagedFactoryDefinitions,
 	providePackagedFactoryCatalog,
 	provideSystemInitializationService,
-	provideSystemInitializationOperation, wire4.Bind(new(wire.RuntimeOpener), new(*wire.RuntimeOpeningFactory)), wire4.Bind(new(wire.InvocationRuntimeOpening), new(*wire.RuntimeOpeningFactory)), wire4.Bind(new(wire.ExecutionRuntimeOpening), new(*wire.RuntimeOpeningFactory)), provideApplicationRuntimeAdapter,
+	provideSystemInitializationOperation, wire4.Bind(new(wire.ApplicationRuntimeOpening), new(*wire.RuntimeOpening)), wire4.Bind(new(wire.InvocationRuntimeOpening), new(*wire.RuntimeOpening)), wire4.Bind(new(wire.ExecutionRuntimeOpening), new(*wire.RuntimeOpening)), provideApplicationRuntimeAdapter,
 	provideLifecycleRunnerFactory,
 	provideWorkStopSummaryProjector,
 	provideRuntimeOpeningRequestFactory,

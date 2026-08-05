@@ -610,7 +610,7 @@ type openResult struct {
 	err    error
 }
 
-// sequencedOpener is an invocationRuntimeOpener test double that returns a
+// sequencedOpener is an invocation runtime-opening test double that returns a
 // distinct result for each successive OpenInvocationRuntime call, in order --
 // letting a test drive two calls that must return two independently
 // closeable runtimes instead of fakeOpener's single fixed result.

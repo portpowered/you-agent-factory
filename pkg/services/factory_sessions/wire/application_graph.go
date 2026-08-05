@@ -76,7 +76,6 @@ type (
 
 	ApplicationRuntimeInputs        = applicationopening.RuntimeInputs
 	ApplicationRuntimeInputResolver = applicationopening.RuntimeInputResolver
-	RuntimeOpener                   = applicationopening.RuntimeOpener
 	RuntimeAdapter                  = applicationopening.RuntimeAdapter
 	ApplicationService              = applicationopening.Service
 
@@ -92,6 +91,7 @@ type (
 
 	RuntimeOpeningExternalEffects                = runtimeopening.ExternalEffects
 	RuntimeOpeningDependencies                   = runtimeopening.Dependencies
+	ApplicationRuntimeOpening                    = runtimeopening.ApplicationRuntimeOpening
 	InvocationRuntimeOpening                     = runtimeopening.InvocationRuntimeOpening
 	ExecutionRuntimeOpening                      = runtimeopening.ExecutionRuntimeOpening
 	ProviderSessionsRuntimeOpeningDependencies   = runtimeopening.ProviderSessionsDependencies
@@ -122,7 +122,7 @@ type (
 	WorkerCommandRunnerAdapter                   = runtimeopening.WorkerCommandRunnerAdapter
 	ProviderFromCommandRunnerFactory             = runtimeopening.ProviderFromCommandRunnerFactory
 	FactoryRuntimeAssembler                      = runtimeopening.FactoryRuntimeAssembler
-	RuntimeOpeningFactory                        = runtimeopening.Factory
+	RuntimeOpening                               = runtimeopening.Factory
 	RuntimeRoot                                  = runtimeopening.RuntimeRoot
 	ModelPullMetricsRecorder                     = factorysessioncontracts.ModelPullMetricsRecorder
 	InvocationArtifactFileSystem                 = factorysessioncontracts.InvocationArtifactFileSystem
@@ -148,7 +148,7 @@ var (
 	NewExecutionOpeningFactory = executionopening.NewFactory
 )
 
-func NewRuntimeOpeningFactory(deps RuntimeOpeningDependencies) (*RuntimeOpeningFactory, error) {
+func NewRuntimeOpening(deps RuntimeOpeningDependencies) (*RuntimeOpening, error) {
 	return runtimeopening.NewFactory(deps)
 }
 
@@ -158,7 +158,7 @@ func NewLifecyclePlanOperation() LifecyclePlanOperation {
 
 func NewApplicationService(
 	resolveInputs ApplicationRuntimeInputResolver,
-	openRuntime RuntimeOpener,
+	openRuntime ApplicationRuntimeOpening,
 	adaptRuntime RuntimeAdapter,
 	planLifecycle LifecyclePlanOperation,
 ) (*ApplicationService, error) {

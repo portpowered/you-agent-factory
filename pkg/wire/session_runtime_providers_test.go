@@ -255,7 +255,7 @@ func TestProvideApplicationProcessLifecycle_ComposesProvidersAndFactoryTargetClo
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
 
-	var opening factorysessionwire.InvocationRuntimeOpening = &factorysessionwire.RuntimeOpeningFactory{}
+	var opening factorysessionwire.InvocationRuntimeOpening = &factorysessionwire.RuntimeOpening{}
 	factoryTarget, err := factorysessionwire.NewOnDemandFactoryTargetService(
 		opening,
 		factorysessionwire.RuntimeOpeningExternalEffects{},

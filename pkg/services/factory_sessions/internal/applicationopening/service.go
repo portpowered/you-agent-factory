@@ -31,15 +31,6 @@ type RuntimeInputResolver func(
 	*zap.Logger,
 ) (RuntimeInputs, error)
 
-type RuntimeOpener interface {
-	OpenApplicationRuntime(
-		context.Context,
-		*factorysessions.RuntimeOpeningRequest,
-		runtimeopening.ExternalEffects,
-		*zap.Logger,
-	) (roles.OpenedApplicationRuntime, error)
-}
-
 // RuntimeAdapter binds the exact HTTP and optional visualization components
 // selected by Wire to one opened Factory Session. It contains no product
 // lifecycle selection or ordering policy.
@@ -54,14 +45,14 @@ type RuntimeAdapter func(
 // runtime-opening and application-binding operations.
 type Service struct {
 	resolveInputs RuntimeInputResolver
-	openRuntime   RuntimeOpener
+	openRuntime   runtimeopening.ApplicationRuntimeOpening
 	adaptRuntime  RuntimeAdapter
 	planLifecycle roles.LifecyclePlanOperation
 }
 
 func New(
 	resolveInputs RuntimeInputResolver,
-	openRuntime RuntimeOpener,
+	openRuntime runtimeopening.ApplicationRuntimeOpening,
 	adaptRuntime RuntimeAdapter,
 	planLifecycle roles.LifecyclePlanOperation,
 ) (*Service, error) {

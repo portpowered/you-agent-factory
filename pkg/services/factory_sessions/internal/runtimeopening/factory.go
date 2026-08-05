@@ -23,6 +23,18 @@ import (
 // into the Workers-owned command port.
 type WorkerCommandRunnerAdapter func(platformprocess.CommandRunner) workers.CommandRunner
 
+// ApplicationRuntimeOpening opens the application view of one Factory Sessions
+// runtime. Consumers receive this narrow operation rather than the
+// process-scoped grouped construction type.
+type ApplicationRuntimeOpening interface {
+	OpenApplicationRuntime(
+		context.Context,
+		*factorysessions.RuntimeOpeningRequest,
+		ExternalEffects,
+		*zap.Logger,
+	) (roles.OpenedApplicationRuntime, error)
+}
+
 // InvocationRuntimeOpening opens the invocation-only view of one Factory
 // Sessions runtime. Consumers receive this narrow operation rather than the
 // process-scoped grouped construction type.
@@ -204,8 +216,9 @@ type Factory struct {
 }
 
 var (
-	_ InvocationRuntimeOpening = (*Factory)(nil)
-	_ ExecutionRuntimeOpening  = (*Factory)(nil)
+	_ ApplicationRuntimeOpening = (*Factory)(nil)
+	_ InvocationRuntimeOpening  = (*Factory)(nil)
+	_ ExecutionRuntimeOpening   = (*Factory)(nil)
 )
 
 func NewFactory(dependencies Dependencies) (*Factory, error) {
