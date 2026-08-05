@@ -79,7 +79,18 @@ func (s *Store) Sequence(ctx context.Context, req chatsessions.SequenceRequest) 
 	if known, resolved := record.sequencedBySource[wantIdentity]; resolved {
 		return resolveSequencedDuplicate(req, known.SchemaID, known.Item, known.Position)
 	}
+	return s.sequenceNewItem(ctx, req, record, wantIdentity)
+}
 
+// sequenceNewItem commits one source identity that this Store has not already
+// resolved. Sequence holds s.mu while calling this helper, which keeps the
+// append and each in-memory index update in the same serialization boundary.
+func (s *Store) sequenceNewItem(
+	ctx context.Context,
+	req chatsessions.SequenceRequest,
+	record sessionRecord,
+	wantIdentity sequencedSourceIdentity,
+) (chatsessions.SequenceResult, error) {
 	item := chatsessions.SequencedItem{
 		ItemID:                   s.newID(),
 		ParentItemID:             req.ParentItemID,

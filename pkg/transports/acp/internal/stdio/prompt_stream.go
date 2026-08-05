@@ -76,11 +76,13 @@ type attachmentCache struct {
 	resumeIDBySession map[string]string
 	loadedSessions    map[string]bool
 	// workerChildBudgets retains only this connection's deterministic ACP
-	// projection accounting. It is keyed first by Chat Session, then by the
-	// sequencer-assigned child tool-call identity, so interleaved workers can
-	// never consume one another's record or byte allowance. The canonical
-	// source records remain unmodified.
-	workerChildBudgets map[string]map[string]mapping.ChildProjectionBudget
+	// projection accounting after a new attachment has restored it from the
+	// canonical records through its stored cursor. It is keyed first by Chat
+	// Session, then by the sequencer-assigned child tool-call identity, so
+	// interleaved workers can never consume one another's record or byte
+	// allowance. The canonical source records remain unmodified.
+	workerChildBudgets           map[string]map[string]mapping.ChildProjectionBudget
+	workerChildBudgetInitialized map[string]bool
 }
 
 // attachmentCacheContextKey is the unexported context key attachmentCache is
@@ -187,6 +189,40 @@ func (c *attachmentCache) setResumeAttachmentID(sessionID, attachmentID string) 
 	c.resumeIDBySession[sessionID] = attachmentID
 }
 
+// beginWorkerChildBudget restores each session's child projection accounting
+// at most once per connection. The caller reconstructs that accounting from
+// canonical records through the attachment's already-acknowledged cursor
+// before it delivers any later record, so reconnect cannot grant a new
+// per-child allowance.
+func (c *attachmentCache) beginWorkerChildBudget(sessionID string) bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.workerChildBudgetInitialized == nil {
+		c.workerChildBudgetInitialized = make(map[string]bool)
+	}
+	if c.workerChildBudgetInitialized[sessionID] {
+		return false
+	}
+	c.workerChildBudgetInitialized[sessionID] = true
+	return true
+}
+
+// resetWorkerChildBudgetInitialization makes a failed canonical restoration
+// retryable. A failed restoration never delivers a later child record, so it
+// cannot leave an attachment with a silently reset allowance.
+func (c *attachmentCache) resetWorkerChildBudgetInitialization(sessionID string) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.workerChildBudgetInitialized, sessionID)
+	delete(c.workerChildBudgets, sessionID)
+}
+
 // boundWorkerChildProjection applies the pure mapping package's named bounds
 // to one already-associated child update. Both live and retained drains share
 // this connection-scoped cache, so a child cannot escape its budget merely by
@@ -227,6 +263,83 @@ func (c *attachmentCache) boundWorkerChildProjection(
 	}
 	byParent[parentItemID] = next
 	return bounded, nil
+}
+
+// restoreWorkerChildProjectionBudget reconstructs the exact per-child budget
+// state an attachment had already consumed before this connection resumed it.
+// The attachment cursor is canonical durable state; this transport replays
+// only canonical Chat Session records through that cursor and deliberately
+// does not notify or acknowledge while reconstructing. If the retained log
+// cannot supply that prefix, delivery fails closed rather than treating an
+// incomplete prefix as a fresh content allowance.
+func (s *Server) restoreWorkerChildProjectionBudget(ctx context.Context, sessionID string, afterSequence uint64) (err error) {
+	cache := attachmentCacheFromContext(ctx)
+	if cache == nil || !cache.beginWorkerChildBudget(sessionID) {
+		return nil
+	}
+	defer func() {
+		if err != nil {
+			cache.resetWorkerChildBudgetInitialization(sessionID)
+		}
+	}()
+	if afterSequence == 0 {
+		return nil
+	}
+
+	topic := chatsessions.EventsTopic(sessionID)
+	cursor := events.Cursor{Topic: topic}
+	through := events.AggregateSequence(afterSequence)
+	for cursor.Position < through {
+		read, readErr := s.events.Read(ctx, events.ReadRequest{Topic: topic, From: cursor, Limit: retainedReadBatchLimit})
+		if readErr != nil {
+			return readErr
+		}
+		switch read.Outcome {
+		case events.ReadOutcomeAtHead:
+			return errStreamGapEncountered
+		case events.ReadOutcomeInvalidCursor:
+			return errStreamGapEncountered
+		case events.ReadOutcomeGap:
+			return fmt.Errorf("acp: cannot reconstruct child projection budget through cursor %d after retention gap at %d", through, read.Gap.EarliestRetained)
+		case events.ReadOutcomeProgress:
+			for _, rec := range read.Records {
+				if rec.ID.Position > through {
+					return nil
+				}
+				if rebuildErr := s.rebuildWorkerChildProjectionBudget(cache, sessionID, rec); rebuildErr != nil {
+					return rebuildErr
+				}
+			}
+			cursor = read.Next
+		default:
+			return fmt.Errorf("acp: child projection budget read returned unexpected outcome %d", read.Outcome)
+		}
+	}
+	return nil
+}
+
+// rebuildWorkerChildProjectionBudget applies one already-delivered associated
+// record to its child budget without reproducing the ACP notification. It
+// mirrors drainRecords' malformed-child isolation: a bad child item had no
+// projected update originally, so it cannot affect a healthy sibling's
+// reconstructed allowance.
+func (s *Server) rebuildWorkerChildProjectionBudget(cache *attachmentCache, sessionID string, rec events.Record) error {
+	var item chatsessions.SequencedItem
+	if err := json.Unmarshal(rec.Payload, &item); err != nil {
+		return fmt.Errorf("%w: %v", errMalformedSequencedEnvelope, err)
+	}
+	if item.WorkerSessionAssociation == nil {
+		return nil
+	}
+	update, err := mapping.ProjectWorkerChild(item)
+	if err != nil {
+		s.logWorkerChildProjectionSkipped(item)
+		return nil
+	}
+	if _, err = cache.boundWorkerChildProjection(sessionID, item, update); err != nil {
+		s.logWorkerChildProjectionSkipped(item)
+	}
+	return nil
 }
 
 // resumeAttachmentID returns the optional exact attachment identity this
@@ -388,6 +501,9 @@ func (s *Server) streamTurnUpdates(
 	if !ok {
 		return false, nil
 	}
+	if restoreErr := s.restoreWorkerChildProjectionBudget(ctx, sessionID, attachment.AfterSequence); restoreErr != nil {
+		return false, restoreErr
+	}
 
 	topic := chatsessions.EventsTopic(sessionID)
 	cursor := events.Cursor{Topic: topic, Position: events.AggregateSequence(attachment.AfterSequence)}
@@ -482,6 +598,9 @@ func (s *Server) liveDrainTurnUpdates(ctx context.Context, connectionID, session
 
 	attachment, ok, err := s.ensureAttachment(ctx, connectionID, sessionID)
 	if err != nil || !ok {
+		return false
+	}
+	if s.restoreWorkerChildProjectionBudget(ctx, sessionID, attachment.AfterSequence) != nil {
 		return false
 	}
 

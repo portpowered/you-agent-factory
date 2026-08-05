@@ -14,7 +14,6 @@ import (
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
@@ -642,14 +641,6 @@ func (f *fakeFactoryTargetService) SubscribeFactoryResponseEvents(
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.responseCursor, f.responseErr
-}
-
-func (*fakeFactoryTargetService) SubscribeFactoryEventsForSession(
-	context.Context,
-	string,
-	*factorydefinitions.FactoryEventReconnectCursor,
-) (*factorydefinitions.FactoryEventStream, error) {
-	return &factorydefinitions.FactoryEventStream{}, nil
 }
 
 func defaultTestCatalogResult() chatsessions.ResolveFactoryTargetCatalogResult {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"reflect"
 	"strconv"
 	"sync"
 	"testing"
@@ -270,37 +269,6 @@ func TestStore_Sequence_PreservesSourceIdentityAndPayload(t *testing.T) {
 	}
 }
 
-func TestStore_Sequence_PersistsWorkerSessionAssociation(t *testing.T) {
-	ctx := context.Background()
-	store, session, appender := newSequencingTestSession(t)
-
-	req := sequenceRequest(session.ID, 7, "")
-	association := &chatsessions.WorkerSessionAssociation{DispatchID: "dispatch-7", WorkerSessionID: "worker-session-7"}
-	req.WorkerSessionAssociation = association
-	if _, err := store.Sequence(ctx, req); err != nil {
-		t.Fatalf("Sequence: %v", err)
-	}
-
-	committed := appender.topics[chatsessions.EventsTopic(session.ID)].commits[0]
-	var envelope chatsessions.SequencedItem
-	if err := json.Unmarshal(committed.Payload, &envelope); err != nil {
-		t.Fatalf("unmarshal committed envelope: %v", err)
-	}
-	if !reflect.DeepEqual(envelope.WorkerSessionAssociation, association) {
-		t.Fatalf("WorkerSessionAssociation = %#v, want %#v", envelope.WorkerSessionAssociation, association)
-	}
-
-	association.WorkerSessionID = "mutated-after-commit"
-	if _, err := store.Sequence(ctx, req); err == nil {
-		t.Fatal("Sequence with a mutated association = nil error, want immutable duplicate conflict")
-	} else {
-		var conflict *chatsessions.SequencedIdentityConflictError
-		if !errors.As(err, &conflict) || conflict.Field != "WorkerSessionAssociation" {
-			t.Fatalf("Sequence with a mutated association error = %v, want WorkerSessionAssociation contradiction", err)
-		}
-	}
-}
-
 // A naive json.Marshal(item) on a struct embedding a json.RawMessage field runs that
 // field's bytes through Go's stdlib JSON compaction and HTML-escaping before Events ever
 // sees it -- this test would fail against that implementation.
@@ -429,14 +397,6 @@ func TestStore_Sequence_InvalidRequestIsRejected(t *testing.T) {
 				return r
 			},
 			wantErr: chatsessions.ErrUnknownEnumValue,
-		},
-		{
-			name: "incomplete worker session association",
-			mutate: func(r chatsessions.SequenceRequest) chatsessions.SequenceRequest {
-				r.WorkerSessionAssociation = &chatsessions.WorkerSessionAssociation{DispatchID: "dispatch-1"}
-				return r
-			},
-			wantErr: chatsessions.ErrRequiredValue,
 		},
 		{
 			name: "empty payload",

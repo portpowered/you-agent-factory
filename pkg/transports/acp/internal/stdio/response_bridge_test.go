@@ -4,15 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
+	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
+	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/mapping"
 )
 
 func TestDispatchFactoryInvocation_NilResponseBridgeCallsInvokeDirectly(t *testing.T) {
@@ -274,6 +278,278 @@ func TestLiveDrainKeepsConcurrentWorkerChildrenStableAcrossRetainedAndReconnect(
 	}
 	combined := append(append(append([]acpsdk.SessionNotification{}, (*retained)...), live...), (*resumed)...)
 	assertEqualWorkerChildNotifications(t, *full, combined)
+}
+
+func TestStreamTurnUpdatesDeliversAssociatedWorkerLifecycleWithStoredLineage(t *testing.T) {
+	server, eventsSvc := newStreamingTestServer(t, &fakeFactoryTargetService{})
+	eventsSvc.seedWorkerChildItem(t, streamingTestSessionID, "worker-tool-call", "", "dispatch-1", "worker-session-1", workers.PhaseStarted, "STARTING")
+	eventsSvc.seedWorkerChildItem(t, streamingTestSessionID, "worker-running", "worker-tool-call", "dispatch-1", "worker-session-1", workers.PhaseUpdated, "RUNNING")
+	eventsSvc.seedWorkerChildItem(t, streamingTestSessionID, "worker-completed", "worker-tool-call", "dispatch-1", "worker-session-1", workers.PhaseCompleted, "COMPLETED")
+
+	var notified []acpsdk.SessionNotification
+	notify := func(n acpsdk.SessionNotification) error {
+		notified = append(notified, n)
+		return nil
+	}
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	deliveredMessage, err := server.streamTurnUpdates(ctx, "conn-worker", streamingTestSessionID, 1, notify)
+	if err != nil {
+		t.Fatalf("streamTurnUpdates() error = %v", err)
+	}
+	if deliveredMessage {
+		t.Fatal("streamTurnUpdates() deliveredMessage = true, want false for child lifecycle-only updates")
+	}
+	if len(notified) != 3 {
+		t.Fatalf("notification count = %d, want opening plus two lifecycle updates", len(notified))
+	}
+
+	opening := notified[0].Update.ToolCall
+	if opening == nil || opening.ToolCallId != "worker-tool-call" || opening.Status != acpsdk.ToolCallStatusPending {
+		t.Fatalf("opening = %#v, want pending tool call with stored ItemID", opening)
+	}
+	for index, wantStatus := range []acpsdk.ToolCallStatus{acpsdk.ToolCallStatusInProgress, acpsdk.ToolCallStatusCompleted} {
+		update := notified[index+1].Update.ToolCallUpdate
+		if update == nil || update.ToolCallId != "worker-tool-call" || update.Status == nil || *update.Status != wantStatus {
+			t.Fatalf("lifecycle notification %d = %#v, want parent worker-tool-call with status %q", index+1, update, wantStatus)
+		}
+	}
+}
+
+func TestStreamTurnUpdatesKeepsInterleavedWorkerContentInsideItsOwningToolCall(t *testing.T) {
+	server, eventsSvc := newStreamingTestServer(t, &fakeFactoryTargetService{})
+	eventsSvc.seedWorkerChildItem(t, streamingTestSessionID, "worker-a", "", "dispatch-a", "worker-a-session", workers.PhaseStarted, "STARTING")
+	eventsSvc.seedWorkerChildItem(t, streamingTestSessionID, "worker-b", "", "dispatch-b", "worker-b-session", workers.PhaseStarted, "STARTING")
+	eventsSvc.seedWorkerChildRecord(t, streamingTestSessionID, "worker-a-message", "worker-a", "dispatch-a", "worker-a-session", workers.KindMessage, workers.PhaseDelta,
+		workers.MessageDeltaPayload{ContentBlockKind: workers.ContentBlockText, TextDelta: "a-message"})
+	eventsSvc.seedWorkerChildRecord(t, streamingTestSessionID, "worker-b-progress", "worker-b", "dispatch-b", "worker-b-session", workers.KindProgress, workers.PhaseUpdated,
+		workers.ProgressPayload{Label: "b-progress"})
+	// This record is valid JSON but an invalid ErrorPayload. The pure mapper
+	// rejects it; retained delivery must acknowledge only this malformed child
+	// item and continue its sibling's canonical update order.
+	eventsSvc.seedWorkerChildRecord(t, streamingTestSessionID, "worker-a-bad", "worker-a", "dispatch-a", "worker-a-session", workers.KindError, workers.PhaseUpdated,
+		workers.ErrorPayload{Code: "bad"})
+	eventsSvc.seedWorkerChildRecord(t, streamingTestSessionID, "worker-b-message", "worker-b", "dispatch-b", "worker-b-session", workers.KindMessage, workers.PhaseDelta,
+		workers.MessageDeltaPayload{ContentBlockKind: workers.ContentBlockText, TextDelta: "b-message"})
+
+	var notified []acpsdk.SessionNotification
+	notify := func(n acpsdk.SessionNotification) error {
+		notified = append(notified, n)
+		return nil
+	}
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	if _, err := server.streamTurnUpdates(ctx, "conn-worker-content", streamingTestSessionID, 1, notify); err != nil {
+		t.Fatalf("streamTurnUpdates() error = %v", err)
+	}
+	if len(notified) != 5 {
+		t.Fatalf("notification count = %d, want two openings and three valid isolated updates", len(notified))
+	}
+	if notified[0].Update.ToolCall == nil || notified[0].Update.ToolCall.ToolCallId != "worker-a" ||
+		notified[1].Update.ToolCall == nil || notified[1].Update.ToolCall.ToolCallId != "worker-b" {
+		t.Fatalf("openings = %#v, %#v, want stable tool calls for both children", notified[0].Update, notified[1].Update)
+	}
+	for index, want := range []struct {
+		parent string
+		text   string
+	}{
+		{"worker-a", "a-message"},
+		{"worker-b", "b-progress"},
+		{"worker-b", "b-message"},
+	} {
+		update := notified[index+2].Update.ToolCallUpdate
+		if update == nil || update.ToolCallId != acpsdk.ToolCallId(want.parent) {
+			t.Fatalf("notification %d update = %#v, want parent %q", index+2, update, want.parent)
+		}
+		if len(update.Content) != 1 || update.Content[0].Content == nil || update.Content[0].Content.Content.Text == nil ||
+			update.Content[0].Content.Content.Text.Text != want.text {
+			t.Fatalf("notification %d content = %#v, want %q", index+2, update.Content, want.text)
+		}
+	}
+}
+
+func TestStreamTurnUpdatesBoundsNoisyChildWithoutReducingSiblingBudget(t *testing.T) {
+	server, eventsSvc := newStreamingTestServer(t, &fakeFactoryTargetService{})
+	eventsSvc.seedWorkerChildItem(t, streamingTestSessionID, "worker-a", "", "dispatch-a", "worker-a-session", workers.PhaseStarted, "STARTING")
+	eventsSvc.seedWorkerChildItem(t, streamingTestSessionID, "worker-b", "", "dispatch-b", "worker-b-session", workers.PhaseStarted, "STARTING")
+	for index := 0; index < mapping.DefaultChildProjectionMaxRecords-1; index++ {
+		eventsSvc.seedWorkerChildRecord(t, streamingTestSessionID, fmt.Sprintf("worker-a-progress-%03d", index), "worker-a", "dispatch-a", "worker-a-session",
+			workers.KindProgress, workers.PhaseUpdated, workers.ProgressPayload{Label: fmt.Sprintf("a-progress-%03d", index)})
+	}
+	eventsSvc.seedWorkerChildRecord(t, streamingTestSessionID, "worker-b-message", "worker-b", "dispatch-b", "worker-b-session",
+		workers.KindMessage, workers.PhaseDelta, workers.MessageDeltaPayload{ContentBlockKind: workers.ContentBlockText, TextDelta: "b-survives"})
+	eventsSvc.seedWorkerChildRecord(t, streamingTestSessionID, "worker-a-error", "worker-a", "dispatch-a", "worker-a-session",
+		workers.KindError, workers.PhaseFailed, workers.ErrorPayload{Code: "upstream", Message: "failed"})
+	eventsSvc.seedWorkerChildItem(t, streamingTestSessionID, "worker-a-failed", "worker-a", "dispatch-a", "worker-a-session", workers.PhaseFailed, "FAILED")
+
+	var notified []acpsdk.SessionNotification
+	notify := func(n acpsdk.SessionNotification) error {
+		notified = append(notified, n)
+		return nil
+	}
+	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+	if _, err := server.streamTurnUpdates(ctx, "conn-bounded-workers", streamingTestSessionID, 1, notify); err != nil {
+		t.Fatalf("streamTurnUpdates() error = %v", err)
+	}
+
+	childAContentNotifications := mapping.DefaultChildProjectionMaxRecords - 1
+	siblingIndex := 2 + childAContentNotifications
+	if len(notified) != siblingIndex+3 {
+		t.Fatalf("notification count = %d, want %d (openings, bounded A, B, failure, terminal)", len(notified), siblingIndex+3)
+	}
+	childAElision := notified[siblingIndex-1].Update.ToolCallUpdate
+	if childAElision == nil || childAElision.ToolCallId != "worker-a" ||
+		len(childAElision.Content) != 1 || childAElision.Content[0].Content == nil || childAElision.Content[0].Content.Content.Text == nil ||
+		childAElision.Content[0].Content.Content.Text.Text == "" {
+		t.Fatalf("worker A bound notification = %#v, want explicit parent-addressed elision", childAElision)
+	}
+	sibling := notified[siblingIndex].Update.ToolCallUpdate
+	if sibling == nil || sibling.ToolCallId != "worker-b" || len(sibling.Content) != 1 || sibling.Content[0].Content == nil || sibling.Content[0].Content.Content.Text == nil ||
+		sibling.Content[0].Content.Content.Text.Text != "b-survives" {
+		t.Fatalf("worker B notification = %#v, want unaffected sibling content", sibling)
+	}
+	failure := notified[siblingIndex+1].Update.ToolCallUpdate
+	if failure == nil || failure.ToolCallId != "worker-a" || len(failure.Content) != 1 || failure.Content[0].Content == nil || failure.Content[0].Content.Content.Text == nil ||
+		failure.Content[0].Content.Content.Text.Text != "Worker error content was elided because its per-child projection limit was reached." {
+		t.Fatalf("worker A failure notification = %#v, want retained failure elision", failure)
+	}
+	terminal := notified[siblingIndex+2].Update.ToolCallUpdate
+	if terminal == nil || terminal.ToolCallId != "worker-a" || terminal.Status == nil || *terminal.Status != acpsdk.ToolCallStatusFailed {
+		t.Fatalf("worker A terminal notification = %#v, want unchanged failed status", terminal)
+	}
+}
+
+// TestReconnectRestoresWorkerChildBudget proves a fresh ACP connection uses
+// the resumed attachment's cursor to rebuild child accounting before
+// projecting a later record. Both record and byte pressure must emit the same
+// explicit elision in prefix-plus-resume delivery as a fresh full replay.
+func TestReconnectRestoresWorkerChildBudget(t *testing.T) {
+	tests := []struct {
+		name   string
+		prefix func(*fakeEventsService)
+		suffix workers.MessageDeltaPayload
+	}{
+		{
+			name: "record pressure",
+			prefix: func(eventsSvc *fakeEventsService) {
+				for index := 0; index < mapping.DefaultChildProjectionMaxRecords-2; index++ {
+					eventsSvc.seedWorkerChildRecord(t, streamingTestSessionID, fmt.Sprintf("worker-a-prefix-%03d", index), "worker-a", "dispatch-a", "worker-a-session",
+						workers.KindMessage, workers.PhaseDelta, workers.MessageDeltaPayload{ContentBlockKind: workers.ContentBlockText, TextDelta: fmt.Sprintf("prefix-%03d", index)})
+				}
+			},
+			suffix: workers.MessageDeltaPayload{ContentBlockKind: workers.ContentBlockText, TextDelta: "after record pressure"},
+		},
+		{
+			name: "byte pressure",
+			prefix: func(eventsSvc *fakeEventsService) {
+				eventsSvc.seedWorkerChildRecord(t, streamingTestSessionID, "worker-a-byte-prefix", "worker-a", "dispatch-a", "worker-a-session",
+					workers.KindMessage, workers.PhaseDelta, workers.MessageDeltaPayload{ContentBlockKind: workers.ContentBlockText, TextDelta: strings.Repeat("p", 40000)})
+			},
+			suffix: workers.MessageDeltaPayload{ContentBlockKind: workers.ContentBlockText, TextDelta: strings.Repeat("s", 40000)},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server, eventsSvc := newStreamingTestServer(t, &fakeFactoryTargetService{})
+			eventsSvc.seedWorkerChildItem(t, streamingTestSessionID, "worker-a", "", "dispatch-a", "worker-a-session", workers.PhaseStarted, "STARTING")
+			tt.prefix(eventsSvc)
+
+			initialCache := &attachmentCache{}
+			initialNotify, initial := captureNotifier()
+			initialCtx := contextWithAttachmentCache(context.Background(), initialCache)
+			if _, err := server.streamTurnUpdates(initialCtx, "conn-initial", streamingTestSessionID, 1, initialNotify); err != nil {
+				t.Fatalf("initial streamTurnUpdates() error = %v", err)
+			}
+			attachment, ok := initialCache.get(streamingTestSessionID)
+			if !ok {
+				t.Fatal("initial attachment was not cached")
+			}
+			server.detachAttachments(context.Background(), initialCache)
+
+			eventsSvc.seedWorkerChildRecord(t, streamingTestSessionID, "worker-a-resumed", "worker-a", "dispatch-a", "worker-a-session",
+				workers.KindMessage, workers.PhaseDelta, tt.suffix)
+			resumedCache := &attachmentCache{}
+			resumedCache.setResumeAttachmentID(streamingTestSessionID, attachment.ID)
+			resumedNotify, resumed := captureNotifier()
+			resumedCtx := contextWithAttachmentCache(context.Background(), resumedCache)
+			if _, err := server.streamTurnUpdates(resumedCtx, "conn-resumed", streamingTestSessionID, 1, resumedNotify); err != nil {
+				t.Fatalf("resumed streamTurnUpdates() error = %v", err)
+			}
+			assertExplicitWorkerChildElision(t, *resumed, "worker-a")
+
+			fullNotify, full := captureNotifier()
+			fullCtx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
+			if _, err := server.streamTurnUpdates(fullCtx, "conn-full", streamingTestSessionID, 1, fullNotify); err != nil {
+				t.Fatalf("full streamTurnUpdates() error = %v", err)
+			}
+			combined := append(append([]acpsdk.SessionNotification{}, (*initial)...), (*resumed)...)
+			assertEqualWorkerChildNotifications(t, *full, combined)
+		})
+	}
+}
+
+func assertExplicitWorkerChildElision(t *testing.T, notifications []acpsdk.SessionNotification, parent string) {
+	t.Helper()
+	if len(notifications) != 1 {
+		t.Fatalf("resumed notification count = %d, want one explicit elision", len(notifications))
+	}
+	update := notifications[0].Update.ToolCallUpdate
+	if update == nil || update.ToolCallId != acpsdk.ToolCallId(parent) || len(update.Content) != 1 ||
+		update.Content[0].Content == nil || update.Content[0].Content.Content.Text == nil ||
+		!strings.Contains(update.Content[0].Content.Content.Text.Text, "elided") {
+		t.Fatalf("resumed notification = %#v, want explicit elision for %q", notifications[0].Update, parent)
+	}
+}
+
+// seedWorkerChildItem builds the exact association-carrying Chat envelope the
+// response bridge commits for one canonical Worker Session record. It keeps
+// transport delivery assertions on the retained path rather than calling a
+// child mapper directly.
+func (f *fakeEventsService) seedWorkerChildItem(
+	t *testing.T,
+	sessionID, itemID, parentItemID, dispatchID, workerSessionID string,
+	phase workers.Phase,
+	status string,
+) {
+	t.Helper()
+	f.seedWorkerChildRecord(t, sessionID, itemID, parentItemID, dispatchID, workerSessionID,
+		workers.KindSession, phase, workers.SessionPayload{Status: status})
+}
+
+// seedWorkerChildRecord is the complete associated Worker envelope fixture:
+// retained ACP delivery must retain every current workers.Kind, not only the
+// SESSION lifecycle records that establish the parent tool call.
+func (f *fakeEventsService) seedWorkerChildRecord(
+	t *testing.T,
+	sessionID, itemID, parentItemID, dispatchID, workerSessionID string,
+	kind workers.Kind,
+	phase workers.Phase,
+	payload any,
+) {
+	t.Helper()
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal worker child payload: %v", err)
+	}
+	itemRaw, err := json.Marshal(chatsessions.SequencedItem{
+		ItemID:                   itemID,
+		ParentItemID:             parentItemID,
+		WorkerSessionAssociation: &chatsessions.WorkerSessionAssociation{DispatchID: dispatchID, WorkerSessionID: workerSessionID},
+		Kind:                     kind,
+		Phase:                    phase,
+		Payload:                  raw,
+	})
+	if err != nil {
+		t.Fatalf("marshal worker child sequenced envelope: %v", err)
+	}
+	f.seedRaw(sessionID, itemRaw)
+}
+
+func (*fakeFactoryTargetService) SubscribeFactoryEventsForSession(
+	context.Context,
+	string,
+	*factorydefinitions.FactoryEventReconnectCursor,
+) (*factorydefinitions.FactoryEventStream, error) {
+	return &factorydefinitions.FactoryEventStream{}, nil
 }
 
 func collectWorkerChildNotifications(t *testing.T, notifications <-chan acpsdk.SessionNotification, count int) []acpsdk.SessionNotification {
