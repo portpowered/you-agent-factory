@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- For a resumable provider attempt, bind the provider-authored typed session reference at its native live-observation point; post-result metadata cannot authorize an in-flight pause.
 - For a required CI failure, compare the failing path on the reviewed head and PR base before repairing it; do not expand a delivery lane to fix a defect unchanged on both revisions.
 - For a cross-service behavioral proof that needs one service's internal concrete collaborator, compose the peer through its owner-published `wire.New...` API inside the collaborator's package-level integration test; do not add a test-only production seam.
 - Construct each Factory Session's Worker Sessions service only after its session-owned `WorkstationPoolBoundary` exists, so dispatch and cancellation share the exact same boundary.
@@ -354,4 +355,16 @@
 - **Learnings for future iterations:**
   - Thread-aware review inspection is necessary even when top-level comments exist; this PR had no inline threads and no newer feedback after the blocking comment.
   - Compare a failed CI path against the base before treating it as delivery-lane fallout; exact base/head identity is strong evidence to keep an unrelated repair scoped to its owning work.
+---
+
+## 2026-08-05 04:31 -07:00 - ACP-L4-W7-PROVIDER-SESSION-CONTINUATION-REVIEW
+- Addressed the remaining blocking PR feedback: Providers now exposes a live, invocation-scoped exact `SessionRef` observation hook. Codex and Claude emit their native streaming session identities immediately, and ACP emits the identity as soon as its provider session opens, before its prompt completes.
+- Wired the real Agent runner to publish that trusted exact reference through the existing session-local Worker Sessions bridge. The bridge commits the association but suppresses its internal bookkeeping fragment from the customer response stream, so a running Worker Session can truthfully pause and resume through `Providers.Continue` using the same opaque reference.
+- Added controlled behavioral coverage for native live observation, actual provider/Agent/Worker Sessions composition, exact pause/resume continuation, and registry request wiring. The integration test starts the real runner, obtains a native Codex thread through the production seam, pauses without fabricated Worker fragments or direct association calls, then verifies the resumed command receives that same ID.
+- Files changed: `pkg/services/providers/execute_contract.go`, `pkg/services/providers/internal/services/acp/internal/service/{service.go,protocol_failure_classification_test.go}`, `pkg/services/providers/internal/services/execution/internal/adapters/{codex,claude}/**`, `pkg/services/workers/internal/services/runners/{wire,internal/services/agent/internal/service}/**`, `pkg/services/workers/progress_observations.go`, `pkg/services/worker_sessions/{publish.go,publish_test.go}`, `progress.txt`.
+- Verification: focused live-composition and adapter tests; `go test ./pkg/services/providers/... ./pkg/services/worker_sessions/... ./pkg/services/workers/... -count=1`; targeted `go test -race`; `go vet` for those service families; `make test`; `git diff --check`.
+- **Learnings for future iterations:**
+  - Provider session creation and provider result delivery are different lifecycle moments; the Worker Sessions control plane needs the former, while response streams should only receive customer-visible output.
+  - An invocation-scoped callback is safe to preserve through the Providers continuation request because it carries no selectable session input; native adapters still own the identity and only publish validated typed references.
+  - Controlled command/ACP edges plus channels can prove an observation happened during a live attempt without sleeps, polling, fabricated Worker fragments, or direct association calls.
 ---
