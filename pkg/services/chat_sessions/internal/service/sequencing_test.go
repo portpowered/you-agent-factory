@@ -474,6 +474,14 @@ var contradictoryDuplicateCases = []contradictoryDuplicateCase{
 		wantField: "ParentItemID",
 	},
 	{
+		name: "contradictory worker session association",
+		mutate: func(r chatsessions.SequenceRequest) chatsessions.SequenceRequest {
+			r.WorkerSessionAssociation = &chatsessions.WorkerSessionAssociation{DispatchID: "dispatch-2", WorkerSessionID: "worker-session-2"}
+			return r
+		},
+		wantField: "WorkerSessionAssociation",
+	},
+	{
 		name: "contradictory kind",
 		mutate: func(r chatsessions.SequenceRequest) chatsessions.SequenceRequest {
 			r.Kind = workers.KindTool
@@ -522,6 +530,9 @@ func runContradictoryDuplicateCase(t *testing.T, ctx context.Context, tt contrad
 	store, session, appender := newSequencingTestSession(t)
 
 	original := sequenceRequest(session.ID, 1, "")
+	if tt.wantField == "WorkerSessionAssociation" {
+		original.WorkerSessionAssociation = &chatsessions.WorkerSessionAssociation{DispatchID: "dispatch-1", WorkerSessionID: "worker-session-1"}
+	}
 	first, err := store.Sequence(ctx, original)
 	if err != nil {
 		t.Fatalf("Sequence (first): %v", err)

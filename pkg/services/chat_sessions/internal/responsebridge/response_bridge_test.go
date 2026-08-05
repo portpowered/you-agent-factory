@@ -11,7 +11,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -20,6 +22,7 @@ type bridgeSequencer struct {
 	sequences               []chatsessions.SequenceRequest
 	advances                []chatsessions.AdvanceStreamHeadRequest
 	sequenceErr             error
+	advanceErr              error
 	sequenceSawCancelledCtx bool
 	didFirst                chan struct{}
 }
@@ -44,18 +47,27 @@ func (s *bridgeSequencer) Sequence(ctx context.Context, req chatsessions.Sequenc
 func (s *bridgeSequencer) AdvanceStreamHead(_ context.Context, req chatsessions.AdvanceStreamHeadRequest) (chatsessions.AdvanceStreamHeadResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.advanceErr != nil {
+		return chatsessions.AdvanceStreamHeadResult{}, s.advanceErr
+	}
 	s.advances = append(s.advances, req)
 	return chatsessions.AdvanceStreamHeadResult{Session: chatsessions.Session{Version: req.ExpectedVersion + 1}}, nil
 }
 
 type bridgeTarget struct {
 	factorysessions.TargetExecutionService
-	cursor *factorysessions.ResponseEventCursor
-	err    error
+	cursor           *factorysessions.ResponseEventCursor
+	err              error
+	factoryEvents    *factorydefinitions.FactoryEventStream
+	factoryEventsErr error
 }
 
 func (t bridgeTarget) SubscribeFactoryResponseEvents(_ context.Context, _ factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error) {
 	return t.cursor, t.err
+}
+
+func (t bridgeTarget) SubscribeFactoryEventsForSession(_ context.Context, _ string, _ *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error) {
+	return t.factoryEvents, t.factoryEventsErr
 }
 
 func TestServiceRunSequencesFactoryEventsAndPreservesInvokeResult(t *testing.T) {
@@ -78,7 +90,7 @@ func TestServiceRunSequencesFactoryEventsAndPreservesInvokeResult(t *testing.T) 
 	}
 
 	want := factorysessions.InvocationResult{RequestID: "turn-1", Status: factorysessions.InvocationTerminalStatusCompleted}
-	got, err := New(sequencer, bridgeTarget{cursor: cursor}, logging.NoopLogger{}).Run(context.Background(), "chat-1", 4, "factory-1", nil,
+	got, err := New(sequencer, bridgeTarget{cursor: cursor}, nil, logging.NoopLogger{}).Run(context.Background(), "chat-1", 4, "factory-1", nil,
 		func(context.Context) (factorysessions.InvocationResult, error) {
 			<-sequencer.didFirst
 			return want, nil
@@ -131,7 +143,7 @@ func TestServiceRunDrainsTerminalTailWithNonCancelledContext(t *testing.T) {
 	}
 
 	want := factorysessions.InvocationResult{RequestID: "turn-1", Status: factorysessions.InvocationTerminalStatusCompleted}
-	got, err := New(sequencer, bridgeTarget{cursor: cursor}, logging.NoopLogger{}).Run(context.Background(), "chat-1", 4, "factory-1", nil,
+	got, err := New(sequencer, bridgeTarget{cursor: cursor}, nil, logging.NoopLogger{}).Run(context.Background(), "chat-1", 4, "factory-1", nil,
 		func(context.Context) (factorysessions.InvocationResult, error) {
 			<-nextStarted
 			close(invokeReturned)
@@ -170,7 +182,7 @@ func TestServiceRunReturnsTerminalTailSequencingFailure(t *testing.T) {
 	}
 
 	want := factorysessions.InvocationResult{RequestID: "turn-1", Status: factorysessions.InvocationTerminalStatusCompleted}
-	got, err := New(sequencer, bridgeTarget{cursor: cursor}, logging.NoopLogger{}).Run(context.Background(), "chat-1", 4, "factory-1", nil,
+	got, err := New(sequencer, bridgeTarget{cursor: cursor}, nil, logging.NoopLogger{}).Run(context.Background(), "chat-1", 4, "factory-1", nil,
 		func(context.Context) (factorysessions.InvocationResult, error) {
 			<-nextStarted
 			return want, nil
@@ -187,12 +199,251 @@ func TestServiceRunReturnsTerminalTailSequencingFailure(t *testing.T) {
 func TestServiceRunDoesNotReplaceInvokeFailureWhenSubscriptionFails(t *testing.T) {
 	wantErr := errors.New("invoke failed")
 	want := factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusFailed}
-	got, err := New(&bridgeSequencer{didFirst: make(chan struct{})}, bridgeTarget{err: errors.New("subscribe failed")}, logging.NoopLogger{}).Run(
+	got, err := New(&bridgeSequencer{didFirst: make(chan struct{})}, bridgeTarget{err: errors.New("subscribe failed")}, nil, logging.NoopLogger{}).Run(
 		context.Background(), "chat-1", 1, "factory-1", nil,
 		func(context.Context) (factorysessions.InvocationResult, error) { return want, wantErr },
 	)
 	if !errors.Is(err, wantErr) || !reflect.DeepEqual(got, want) {
 		t.Fatalf("Run() = (%+v, %v), want (%+v, %v)", got, err, want, wantErr)
+	}
+}
+
+// bridgeWorkerEvents models a Worker Session topic with a real aggregate
+// cursor: retained tests read it only during the terminal sweep, while live
+// tests consume the same records from Subscribe before the sweep sees head.
+// It keeps the response bridge test focused on the producer boundary without
+// importing Events' private Store implementation across its package boundary.
+type bridgeWorkerEvents struct {
+	events.Service
+
+	mu              sync.Mutex
+	records         map[events.Topic][]events.Record
+	deliverLive     bool
+	liveDelivered   chan struct{}
+	liveDeliveredMu sync.Once
+}
+
+var _ events.Service = (*bridgeWorkerEvents)(nil)
+
+func (f *bridgeWorkerEvents) Read(_ context.Context, req events.ReadRequest) (events.ReadResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	records := f.records[req.Topic]
+	head := events.AggregateSequence(len(records))
+	if req.From.Position >= head {
+		return events.ReadResult{
+			Outcome:  events.ReadOutcomeAtHead,
+			Next:     events.Cursor{Topic: req.Topic, Position: head},
+			Retained: events.RetainedRange{Topic: req.Topic, Earliest: 1, Head: head},
+		}, nil
+	}
+	start := int(req.From.Position)
+	end := start + req.Limit
+	if end > len(records) {
+		end = len(records)
+	}
+	page := append([]events.Record(nil), records[start:end]...)
+	return events.ReadResult{
+		Records:  page,
+		Next:     events.Cursor{Topic: req.Topic, Position: page[len(page)-1].ID.Position},
+		Outcome:  events.ReadOutcomeProgress,
+		Retained: events.RetainedRange{Topic: req.Topic, Earliest: 1, Head: head},
+	}, nil
+}
+
+func (f *bridgeWorkerEvents) Subscribe(_ context.Context, req events.SubscribeRequest) (events.Subscription, error) {
+	position := req.From.Position
+	return func(ctx context.Context) events.Delivery {
+		if f.deliverLive {
+			f.mu.Lock()
+			records := f.records[req.Topic]
+			if position < events.AggregateSequence(len(records)) {
+				record := records[int(position)]
+				position = record.ID.Position
+				last := position == events.AggregateSequence(len(records))
+				f.mu.Unlock()
+				if last && f.liveDelivered != nil {
+					f.liveDeliveredMu.Do(func() { close(f.liveDelivered) })
+				}
+				return events.Delivery{Kind: events.DeliveryRecord, Record: record, Cursor: events.Cursor{Topic: req.Topic, Position: position}}
+			}
+			f.mu.Unlock()
+		}
+		<-ctx.Done()
+		return events.Delivery{Kind: events.DeliveryCanceled}
+	}, nil
+}
+
+func workerLifecycleRecord(t *testing.T, workerSessionID string, position events.AggregateSequence, phase workers.Phase, status string) events.Record {
+	t.Helper()
+	return workerDraftRecord(t, workerSessionID, position, workers.Draft{
+		Kind: workers.KindSession, Phase: phase,
+		Payload: json.RawMessage(`{"status":"` + status + `"}`),
+	})
+}
+
+func workerDraftRecord(t *testing.T, workerSessionID string, position events.AggregateSequence, draft workers.Draft) events.Record {
+	t.Helper()
+	payload, err := json.Marshal(draft)
+	if err != nil {
+		t.Fatalf("marshal worker draft: %v", err)
+	}
+	topic := workersessions.Topic(workerSessionID)
+	return events.Record{
+		ID:             events.RecordID{Topic: topic, Position: position},
+		SourceType:     "worker_session",
+		SourceID:       events.SourceID(workerSessionID),
+		SourceSequence: events.SourceSequence(position),
+		SourceEventID:  events.SourceEventID("worker-event-" + string(rune('0'+position))),
+		SchemaID:       "workers.draft.v1",
+		Payload:        payload,
+	}
+}
+
+func workerAssociationStream(t *testing.T, dispatchID, workerSessionID string) *factorydefinitions.FactoryEventStream {
+	t.Helper()
+	payload, err := json.Marshal(factorydefinitions.DispatchWorkerSessionAssociationEventPayload{WorkerSessionID: workerSessionID})
+	if err != nil {
+		t.Fatalf("marshal worker association: %v", err)
+	}
+	closed := make(chan factorydefinitions.FactoryEvent)
+	close(closed)
+	return &factorydefinitions.FactoryEventStream{
+		History: []factorydefinitions.FactoryEvent{{
+			Type:    factorydefinitions.FactoryEventTypeDispatchWorkerSessionAssoc,
+			Context: factorydefinitions.FactoryEventContext{DispatchID: &dispatchID},
+			Payload: payload,
+		}},
+		Events: closed,
+	}
+}
+
+func closedResponseCursor() *factorysessions.ResponseEventCursor {
+	return &factorysessions.ResponseEventCursor{
+		NextEvents: func(context.Context) ([]factorysessions.FactoryResponseEvent, error) {
+			return nil, factorysessions.ErrResponseEventSubscriptionClosed
+		},
+		DrainEvents: func() ([]factorysessions.FactoryResponseEvent, error) {
+			return nil, factorysessions.ErrResponseEventSubscriptionClosed
+		},
+		DetachCursor: func() {},
+	}
+}
+
+func TestServiceRunSequencesAssociatedWorkerLifecycleFromRetainedTail(t *testing.T) {
+	const workerSessionID = "worker-session-1"
+	sequencer := &bridgeSequencer{didFirst: make(chan struct{})}
+	workerEvents := &bridgeWorkerEvents{records: map[events.Topic][]events.Record{
+		workersessions.Topic(workerSessionID): {
+			workerLifecycleRecord(t, workerSessionID, 1, workers.PhaseStarted, "STARTING"),
+			workerLifecycleRecord(t, workerSessionID, 2, workers.PhaseUpdated, "RUNNING"),
+			workerLifecycleRecord(t, workerSessionID, 3, workers.PhaseCompleted, "COMPLETED"),
+		},
+	}}
+	target := bridgeTarget{cursor: closedResponseCursor(), factoryEvents: workerAssociationStream(t, "dispatch-1", workerSessionID)}
+
+	got, err := New(sequencer, target, workerEvents, logging.NoopLogger{}).Run(
+		context.Background(), "chat-1", 4, "factory-1", nil,
+		func(context.Context) (factorysessions.InvocationResult, error) {
+			return factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}, nil
+		},
+	)
+	if err != nil || got.Status != factorysessions.InvocationTerminalStatusCompleted {
+		t.Fatalf("Run() = (%+v, %v), want completed result and nil", got, err)
+	}
+	if len(sequencer.sequences) != 3 || len(sequencer.advances) != 3 {
+		t.Fatalf("sequence/advance counts = %d/%d, want all three retained worker records", len(sequencer.sequences), len(sequencer.advances))
+	}
+	assertAssociatedWorkerLifecycle(t, sequencer.sequences, workerSessionID)
+}
+
+func TestServiceRunSequencesAssociatedWorkerContentRecordsWithOpeningParent(t *testing.T) {
+	const workerSessionID = "worker-session-content"
+	sequencer := &bridgeSequencer{didFirst: make(chan struct{})}
+	workerEvents := &bridgeWorkerEvents{records: map[events.Topic][]events.Record{
+		workersessions.Topic(workerSessionID): {
+			workerLifecycleRecord(t, workerSessionID, 1, workers.PhaseStarted, "STARTING"),
+			workerDraftRecord(t, workerSessionID, 2, workers.Draft{Kind: workers.KindMessage, Phase: workers.PhaseDelta, Payload: json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"answer"}`)}),
+			workerDraftRecord(t, workerSessionID, 3, workers.Draft{Kind: workers.KindTool, Phase: workers.PhaseDelta, Payload: json.RawMessage(`{"toolCallId":"native-tool","outputDelta":"tool output"}`)}),
+			workerDraftRecord(t, workerSessionID, 4, workers.Draft{Kind: workers.KindProgress, Phase: workers.PhaseUpdated, Payload: json.RawMessage(`{"label":"working"}`)}),
+			workerDraftRecord(t, workerSessionID, 5, workers.Draft{Kind: workers.KindError, Phase: workers.PhaseUpdated, Payload: json.RawMessage(`{"code":"retry","message":"temporary"}`)}),
+			workerLifecycleRecord(t, workerSessionID, 6, workers.PhaseCompleted, "COMPLETED"),
+		},
+	}}
+	target := bridgeTarget{cursor: closedResponseCursor(), factoryEvents: workerAssociationStream(t, "dispatch-content", workerSessionID)}
+
+	got, err := New(sequencer, target, workerEvents, logging.NoopLogger{}).Run(
+		context.Background(), "chat-1", 4, "factory-1", nil,
+		func(context.Context) (factorysessions.InvocationResult, error) {
+			return factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}, nil
+		},
+	)
+	if err != nil || got.Status != factorysessions.InvocationTerminalStatusCompleted {
+		t.Fatalf("Run() = (%+v, %v), want completed result and nil", got, err)
+	}
+	if len(sequencer.sequences) != 6 || len(sequencer.advances) != 6 {
+		t.Fatalf("sequence/advance counts = %d/%d, want every associated Worker record", len(sequencer.sequences), len(sequencer.advances))
+	}
+	assertAssociatedWorkerLifecycle(t, sequencer.sequences, workerSessionID)
+	for index, want := range []workers.Kind{
+		workers.KindSession, workers.KindMessage, workers.KindTool, workers.KindProgress, workers.KindError, workers.KindSession,
+	} {
+		if got := sequencer.sequences[index].Kind; got != want {
+			t.Fatalf("sequence %d kind = %q, want %q", index, got, want)
+		}
+	}
+}
+
+func TestServiceRunSequencesAssociatedWorkerLifecycleLiveBeforeInvokeReturns(t *testing.T) {
+	const workerSessionID = "worker-session-live"
+	sequencer := &bridgeSequencer{didFirst: make(chan struct{})}
+	liveDelivered := make(chan struct{})
+	workerEvents := &bridgeWorkerEvents{
+		deliverLive: true, liveDelivered: liveDelivered,
+		records: map[events.Topic][]events.Record{workersessions.Topic(workerSessionID): {
+			workerLifecycleRecord(t, workerSessionID, 1, workers.PhaseStarted, "STARTING"),
+			workerLifecycleRecord(t, workerSessionID, 2, workers.PhaseUpdated, "RUNNING"),
+			workerLifecycleRecord(t, workerSessionID, 3, workers.PhaseFailed, "FAILED"),
+		}},
+	}
+	target := bridgeTarget{cursor: closedResponseCursor(), factoryEvents: workerAssociationStream(t, "dispatch-live", workerSessionID)}
+
+	_, err := New(sequencer, target, workerEvents, logging.NoopLogger{}).Run(
+		context.Background(), "chat-1", 4, "factory-1", nil,
+		func(context.Context) (factorysessions.InvocationResult, error) {
+			<-liveDelivered
+			return factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(sequencer.sequences) != 3 || len(sequencer.advances) != 3 {
+		t.Fatalf("sequence/advance counts = %d/%d, want exactly the live worker records", len(sequencer.sequences), len(sequencer.advances))
+	}
+	assertAssociatedWorkerLifecycle(t, sequencer.sequences, workerSessionID)
+	if sequencer.sequences[2].Phase != workers.PhaseFailed {
+		t.Fatalf("terminal phase = %q, want FAILED", sequencer.sequences[2].Phase)
+	}
+}
+
+func assertAssociatedWorkerLifecycle(t *testing.T, sequences []chatsessions.SequenceRequest, workerSessionID string) {
+	t.Helper()
+	for index, sequence := range sequences {
+		if sequence.WorkerSessionAssociation == nil || sequence.WorkerSessionAssociation.WorkerSessionID != workerSessionID {
+			t.Fatalf("sequence %d association = %#v, want canonical worker %q", index, sequence.WorkerSessionAssociation, workerSessionID)
+		}
+		if sequence.SourceType != workerEventSourceType || sequence.SourceID != events.SourceID(workerSessionID) {
+			t.Fatalf("sequence %d source = (%q, %q), want worker topic identity", index, sequence.SourceType, sequence.SourceID)
+		}
+	}
+	if sequences[0].Phase != workers.PhaseStarted || sequences[0].ParentItemID != "" {
+		t.Fatalf("opening sequence = %#v, want top-level STARTED", sequences[0])
+	}
+	for index := 1; index < len(sequences); index++ {
+		if sequences[index].ParentItemID != "chat-item-1" {
+			t.Fatalf("sequence %d ParentItemID = %q, want stored opening identity chat-item-1", index, sequences[index].ParentItemID)
+		}
 	}
 }
 
@@ -228,6 +479,7 @@ func TestServiceRunLogsSafeSuccessfulOutcome(t *testing.T) {
 	_, err := New(
 		&bridgeSequencer{didFirst: make(chan struct{})},
 		bridgeTarget{cursor: cursor},
+		nil,
 		logger,
 	).Run(context.Background(), "chat-1", 1, "factory-1", nil,
 		func(context.Context) (factorysessions.InvocationResult, error) {
@@ -259,6 +511,7 @@ func TestServiceRunLogsSafeFailedOutcome(t *testing.T) {
 	_, err := New(
 		&bridgeSequencer{didFirst: make(chan struct{})},
 		bridgeTarget{err: errors.New(unsafeSubscriptionError)},
+		nil,
 		logger,
 	).Run(context.Background(), "chat-1", 1, "factory-1", nil,
 		func(context.Context) (factorysessions.InvocationResult, error) {

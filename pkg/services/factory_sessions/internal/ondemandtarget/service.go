@@ -33,6 +33,7 @@ import (
 
 	"go.uber.org/zap"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
@@ -688,6 +689,23 @@ func (s *Service) SubscribeFactoryResponseEvents(
 	}
 	req.SessionID = factorysessions.DefaultSessionID
 	return active.opened.Sessions.SubscribeFactoryResponseEvents(ctx, req)
+}
+
+// SubscribeFactoryEventsForSession exposes the canonical Factory Event
+// history/live stream for the exact on-demand runtime identified by sessionID.
+// The wrapper identity is translated to the opened runtime's internal default
+// identity exactly as InvokeFactorySession and SubscribeFactoryResponseEvents
+// already do, so no caller can accidentally observe another activated target.
+func (s *Service) SubscribeFactoryEventsForSession(
+	ctx context.Context,
+	sessionID string,
+	reconnect *factorydefinitions.FactoryEventReconnectCursor,
+) (*factorydefinitions.FactoryEventStream, error) {
+	active, err := s.lookup(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return active.opened.Sessions.SubscribeFactoryEventsForSession(ctx, factorysessions.DefaultSessionID, reconnect)
 }
 
 // Cancel cancels the exact runtime a prior StartAsync call opened for

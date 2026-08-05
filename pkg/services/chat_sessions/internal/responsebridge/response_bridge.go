@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
@@ -31,6 +32,7 @@ type Sequencer interface {
 type Service struct {
 	sequencer     Sequencer
 	factoryTarget factorysessions.TargetExecutionService
+	workerEvents  events.Service
 	logger        logging.Logger
 }
 
@@ -38,11 +40,13 @@ type Service struct {
 func New(
 	sequencer Sequencer,
 	factoryTarget factorysessions.TargetExecutionService,
+	workerEvents events.Service,
 	logger logging.Logger,
 ) *Service {
 	return &Service{
 		sequencer:     sequencer,
 		factoryTarget: factoryTarget,
+		workerEvents:  workerEvents,
 		logger:        logging.EnsureLogger(logger),
 	}
 }
@@ -85,7 +89,22 @@ func (s *Service) Run(
 	liveCtx, cancelLive := context.WithCancel(ctx)
 	defer cancelLive()
 	deliveryCtx := context.WithoutCancel(ctx)
-	state := drainState{currentVersion: sessionVersion, chatItemIDByFactoryItemID: make(map[string]string)}
+	state := drainState{
+		currentVersion:            sessionVersion,
+		chatItemIDByFactoryItemID: make(map[string]string),
+		childrenByWorkerSessionID: make(map[string]*workerChild),
+		workerSessionIDByDispatch: make(map[string]string),
+	}
+	children, childSubscribeErr := s.startWorkerChildren(liveCtx, deliveryCtx, chatSessionID, factorySessionID, &state)
+	if childSubscribeErr != nil {
+		result, invokeErr := invoke(ctx)
+		if invokeErr != nil {
+			failureClass = "factory_invocation"
+			return result, invokeErr
+		}
+		failureClass = "worker_event_subscription"
+		return result, fmt.Errorf("subscribe factory worker events: %w", childSubscribeErr)
+	}
 	bridgeDone := make(chan struct{})
 	var liveBridgeErr error
 	go func() {
@@ -105,6 +124,7 @@ func (s *Service) Run(
 	cancelLive()
 	<-bridgeDone
 	<-drainDone
+	childErr := children.finish(deliveryCtx)
 	bridgeErr := liveBridgeErr
 	if bridgeErr == nil {
 		bridgeErr = s.drainTail(deliveryCtx, cursor, chatSessionID, &state)
@@ -116,6 +136,10 @@ func (s *Service) Run(
 	if bridgeErr != nil {
 		failureClass = "response_event_bridge"
 		return result, fmt.Errorf("sequence factory response events: %w", bridgeErr)
+	}
+	if childErr != nil {
+		failureClass = "worker_event_bridge"
+		return result, fmt.Errorf("sequence worker session events: %w", childErr)
 	}
 	return result, nil
 }
@@ -157,8 +181,11 @@ func (s *Service) logOutcome(
 }
 
 type drainState struct {
+	mu                        sync.Mutex
 	currentVersion            uint64
 	chatItemIDByFactoryItemID map[string]string
+	childrenByWorkerSessionID map[string]*workerChild
+	workerSessionIDByDispatch map[string]string
 }
 
 func (s *Service) drainLive(
@@ -205,11 +232,15 @@ func (s *Service) sequenceBatch(
 	batch []factorysessions.FactoryResponseEvent,
 ) error {
 	for _, event := range batch {
+		state.mu.Lock()
 		version, err := s.sequence(ctx, chatSessionID, state.currentVersion, state.chatItemIDByFactoryItemID, event)
+		if err == nil {
+			state.currentVersion = version
+		}
+		state.mu.Unlock()
 		if err != nil {
 			return err
 		}
-		state.currentVersion = version
 	}
 	return nil
 }

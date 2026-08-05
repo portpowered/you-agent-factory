@@ -1,6 +1,10 @@
 package factorysessions
 
-import "context"
+import (
+	"context"
+
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+)
 
 // TargetExecutionService is the narrow, owner-published Factory Sessions
 // capability for asynchronous target start, captured-session invocation,
@@ -26,6 +30,12 @@ type TargetExecutionService interface {
 	Cancel(context.Context, string, ControlRequest) (LifecycleControlResult, error)
 	CloseFactorySession(context.Context, string) error
 	SubscribeFactoryResponseEvents(context.Context, ResponseEventSubscriptionRequest) (*ResponseEventCursor, error)
+	// SubscribeFactoryEventsForSession exposes the canonical Factory Event
+	// stream for one target-execution session. The stream includes the
+	// dispatch-to-Worker-Session association records that downstream Chat
+	// projection uses to establish child ownership before reading a Worker
+	// Session topic.
+	SubscribeFactoryEventsForSession(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error)
 }
 
 // Service satisfies TargetExecutionService structurally; this assertion
