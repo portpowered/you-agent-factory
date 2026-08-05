@@ -23,7 +23,8 @@ import (
 )
 
 type operation struct {
-	openRuntime       *runtimeopening.Factory
+	openRuntime       runtimeopening.InvocationRuntimeOpening
+	modelsRoot        models.Service
 	effects           runtimeopening.ExternalEffects
 	workingDirectory  platformfilesystem.WorkingDirectory
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver
@@ -40,7 +41,8 @@ type operation struct {
 // invocations. Each call opens dynamic Factory Session state without rebuilding
 // or selecting application dependencies.
 func NewOperation(
-	openRuntime *runtimeopening.Factory,
+	openRuntime runtimeopening.InvocationRuntimeOpening,
+	modelsRoot models.Service,
 	effects runtimeopening.ExternalEffects,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
@@ -72,6 +74,7 @@ func NewOperation(
 	}
 	return &operation{
 		openRuntime:       openRuntime,
+		modelsRoot:        modelsRoot,
 		effects:           effects,
 		workingDirectory:  workingDirectory,
 		resolveCurrentDir: resolveCurrentDir,

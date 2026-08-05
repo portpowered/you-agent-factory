@@ -332,6 +332,8 @@ var BundleSet = wire.NewSet(
 	provideSystemInitializationService,
 	provideSystemInitializationOperation,
 	wire.Bind(new(factorysessionwire.RuntimeOpener), new(*factorysessionwire.RuntimeOpeningFactory)),
+	wire.Bind(new(factorysessionwire.InvocationRuntimeOpening), new(*factorysessionwire.RuntimeOpeningFactory)),
+	wire.Bind(new(factorysessionwire.ExecutionRuntimeOpening), new(*factorysessionwire.RuntimeOpeningFactory)),
 	provideApplicationRuntimeAdapter,
 	provideLifecycleRunnerFactory,
 	provideWorkStopSummaryProjector,

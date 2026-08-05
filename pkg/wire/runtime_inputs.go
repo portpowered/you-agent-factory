@@ -18,6 +18,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -186,7 +187,7 @@ func isNilRuntimeInput(value any) bool {
 }
 
 func provideSessionExecutionOpeningFactory(
-	runtimes *factorysessionwire.RuntimeOpeningFactory,
+	runtimes factorysessionwire.ExecutionRuntimeOpening,
 	edges serviceedges.Edges,
 	build factorysessionwire.StandaloneSessionExecutionFactory,
 	invocation factorysessionwire.WorkerInvocationFactory,
@@ -208,7 +209,8 @@ func provideSessionExecutionOpeningFactory(
 }
 
 func provideInvocationOperation(
-	openRuntime *factorysessionwire.RuntimeOpeningFactory,
+	openRuntime factorysessionwire.InvocationRuntimeOpening,
+	modelsRoot models.Service,
 	edges serviceedges.Edges,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
@@ -219,6 +221,7 @@ func provideInvocationOperation(
 ) (factorysessionwire.InvocationOperation, error) {
 	return factorysessionwire.NewInvocationOperation(
 		openRuntime,
+		modelsRoot,
 		projectRuntimeOpeningExternalEffects(edges),
 		workingDirectory,
 		resolveCurrentDir,

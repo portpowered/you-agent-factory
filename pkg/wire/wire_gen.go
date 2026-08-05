@@ -418,7 +418,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	modelInvocationTimeout := provideModelInvocationTimeout()
-	v65, err := provideInvocationOperation(v57, edges2, workingDirectory, v4, v64, modelInvocationTimeout, runtimeArtifactRootResolver, v25)
+	v65, err := provideInvocationOperation(v57, modelsService, edges2, workingDirectory, v4, v64, modelInvocationTimeout, runtimeArtifactRootResolver, v25)
 	if err != nil {
 		return nil, err
 	}
@@ -883,7 +883,7 @@ var BundleSet = wire4.NewSet(
 	providePackagedFactoryDefinitions,
 	providePackagedFactoryCatalog,
 	provideSystemInitializationService,
-	provideSystemInitializationOperation, wire4.Bind(new(wire.RuntimeOpener), new(*wire.RuntimeOpeningFactory)), provideApplicationRuntimeAdapter,
+	provideSystemInitializationOperation, wire4.Bind(new(wire.RuntimeOpener), new(*wire.RuntimeOpeningFactory)), wire4.Bind(new(wire.InvocationRuntimeOpening), new(*wire.RuntimeOpeningFactory)), wire4.Bind(new(wire.ExecutionRuntimeOpening), new(*wire.RuntimeOpeningFactory)), provideApplicationRuntimeAdapter,
 	provideLifecycleRunnerFactory,
 	provideWorkStopSummaryProjector,
 	provideRuntimeOpeningRequestFactory,

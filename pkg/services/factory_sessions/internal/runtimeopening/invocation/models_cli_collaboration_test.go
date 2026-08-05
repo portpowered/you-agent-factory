@@ -105,6 +105,7 @@ func TestOpenModelsPresentationScope_PropagatesRuntimeOpenFailure(t *testing.T) 
 	factoryDir := t.TempDir()
 	op, err := NewOperation(
 		&runtimeopening.Factory{},
+		nil,
 		runtimeopening.ExternalEffects{},
 		workingDirectoryStub{dir: factoryDir},
 		func(root string) (string, error) {

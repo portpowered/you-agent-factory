@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	invocationwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/wire"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 )
 
 // The aliases in this file are the service-owned construction vocabulary used
@@ -91,6 +92,8 @@ type (
 
 	RuntimeOpeningExternalEffects                = runtimeopening.ExternalEffects
 	RuntimeOpeningDependencies                   = runtimeopening.Dependencies
+	InvocationRuntimeOpening                     = runtimeopening.InvocationRuntimeOpening
+	ExecutionRuntimeOpening                      = runtimeopening.ExecutionRuntimeOpening
 	ProviderSessionsRuntimeOpeningDependencies   = runtimeopening.ProviderSessionsDependencies
 	FactoryRuntimeOpeningDependencies            = runtimeopening.FactoryRuntimeDependencies
 	FactoryDefinitionsRuntimeOpeningDependencies = runtimeopening.FactoryDefinitionsDependencies
@@ -163,7 +166,8 @@ func NewApplicationService(
 }
 
 func NewInvocationOperation(
-	openRuntime *RuntimeOpeningFactory,
+	openRuntime InvocationRuntimeOpening,
+	modelsRoot models.Service,
 	effects RuntimeOpeningExternalEffects,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
@@ -174,6 +178,7 @@ func NewInvocationOperation(
 ) (InvocationOperation, error) {
 	return invocationwire.NewOperation(
 		openRuntime,
+		modelsRoot,
 		effects,
 		workingDirectory,
 		resolveCurrentDir,
