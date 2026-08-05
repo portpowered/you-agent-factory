@@ -74,6 +74,12 @@ func (s *countingWorkerSessionsService) AssociateProviderSession(
 	return s.inner.AssociateProviderSession(ctx, req)
 }
 
+func (s *countingWorkerSessionsService) ObserveProviderSession(
+	ctx context.Context, req workersessions.ProviderSessionObservationRequest,
+) (workersessions.ProviderSessionAssociationResult, error) {
+	return s.inner.ObserveProviderSession(ctx, req)
+}
+
 func (s *countingWorkerSessionsService) Pause(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
 	return s.inner.Pause(ctx, req)
 }

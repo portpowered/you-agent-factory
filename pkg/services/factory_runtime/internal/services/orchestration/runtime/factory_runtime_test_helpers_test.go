@@ -171,6 +171,10 @@ func (s *fakeWorkerSessionsService) AssociateProviderSession(context.Context, wo
 	return workersessions.ProviderSessionAssociationResult{}, nil
 }
 
+func (s *fakeWorkerSessionsService) ObserveProviderSession(context.Context, workersessions.ProviderSessionObservationRequest) (workersessions.ProviderSessionAssociationResult, error) {
+	return workersessions.ProviderSessionAssociationResult{}, nil
+}
+
 func (s *fakeWorkerSessionsService) Pause(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {
 	return workersessions.ControlResult{}, nil
 }

@@ -442,6 +442,11 @@ func TestCancel_BeforeBoundaryAdmissionEitherWaitsOrTerminatesTheExactSupervisio
 	if err != nil || noOp.Outcome != workersessions.ControlOutcomeNoop {
 		t.Fatalf("repeated pre-admission Cancel() = %#v, %v, want NOOP", noOp, err)
 	}
+	requestedSupervision := newSupervision("dispatch-requested", "")
+	requestedSupervision.requestedAction = workersessions.ControlActionPause
+	if attempt := requestedSupervision.beginCancellation(workersessions.ControlActionCancel); attempt.kind != cancellationAttemptNoop {
+		t.Fatalf("beginCancellation() after a requested action = %#v, want noop", attempt)
+	}
 
 	r.reserveIfAbsent("worker-3")
 	if _, err := r.transitionToStarting("worker-3"); err != nil {

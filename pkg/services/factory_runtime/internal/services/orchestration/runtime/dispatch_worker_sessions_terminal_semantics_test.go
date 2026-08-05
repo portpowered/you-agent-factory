@@ -193,6 +193,12 @@ func (s *preHandoffFailedWorkerSessionsService) AssociateProviderSession(
 	return workersessions.ProviderSessionAssociationResult{}, nil
 }
 
+func (s *preHandoffFailedWorkerSessionsService) ObserveProviderSession(
+	context.Context, workersessions.ProviderSessionObservationRequest,
+) (workersessions.ProviderSessionAssociationResult, error) {
+	return workersessions.ProviderSessionAssociationResult{}, nil
+}
+
 func (s *preHandoffFailedWorkerSessionsService) Pause(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {
 	return workersessions.ControlResult{}, nil
 }

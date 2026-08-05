@@ -36,6 +36,7 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 				fragment.Metadata["sequence"] = "publisher-mutated"
 			}
 			fragment.ProviderSessionRef.ID = "publisher-mutated"
+			fragment.ProviderSessionReference.ID = "publisher-mutated"
 		},
 	})
 	if err != nil {
@@ -56,6 +57,9 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 			Kind:       workers.ProgressFragmentKind,
 			Type:       "planning",
 			Payload:    "first",
+			ProviderSessionReference: &providers.SessionRef{
+				Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1",
+			},
 			ProviderSessionRef: &workers.ProviderSessionMetadata{
 				Provider: string(providers.IDCodex),
 				Kind:     providers.SessionIDKind,
@@ -68,6 +72,9 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 			Kind:       workers.ProgressFragmentKind,
 			Type:       "responding",
 			Payload:    "second",
+			ProviderSessionReference: &providers.SessionRef{
+				Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1",
+			},
 			ProviderSessionRef: &workers.ProviderSessionMetadata{
 				Provider: string(providers.IDCodex),
 				Kind:     providers.SessionIDKind,
@@ -80,6 +87,9 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 			Kind:       workers.ProgressFragmentKind,
 			Type:       "message.completed",
 			Payload:    "fixture output",
+			ProviderSessionReference: &providers.SessionRef{
+				Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1",
+			},
 			ProviderSessionRef: &workers.ProviderSessionMetadata{
 				Provider: string(providers.IDCodex),
 				Kind:     providers.SessionIDKind,
@@ -90,6 +100,9 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 			DispatchID: "dispatch-agent-1",
 			Kind:       workers.CompletedFragmentKind,
 			Type:       "COMPLETED",
+			ProviderSessionReference: &providers.SessionRef{
+				Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1",
+			},
 			ProviderSessionRef: &workers.ProviderSessionMetadata{
 				Provider: string(providers.IDCodex),
 				Kind:     providers.SessionIDKind,
@@ -124,6 +137,9 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 }
 
 func cloneProgressFragment(fragment workers.ProgressFragment) workers.ProgressFragment {
+	fragment.ProviderSessionReference = workers.CloneProviderSessionReference(
+		fragment.ProviderSessionReference,
+	)
 	fragment.ProviderSessionRef = workers.CloneProviderSessionMetadata(
 		fragment.ProviderSessionRef,
 	)

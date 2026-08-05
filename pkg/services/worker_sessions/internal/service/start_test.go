@@ -213,6 +213,168 @@ func TestStart_RetainsExactProviderSessionAssociationFromWorkerResult(t *testing
 	}
 }
 
+// TestStart_ProviderProgressCommitsAssociationBeforeOutputAndEnablesResume
+// proves the production progress bridge, rather than a test-side direct
+// AssociateProviderSession call, commits the exact typed reference while the
+// attempt is live. The downstream response publisher observes the committed
+// association first, a foreign dispatch cannot publish or replace it, and the
+// subsequent pause/resume carries that same reference into the new attempt.
+func TestStart_ProviderProgressCommitsAssociationBeforeOutputAndEnablesResume(t *testing.T) {
+	boundary := newControlledBoundary()
+	registry := newControlledRegistry(t, boundary)
+	reference := providers.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     providers.SessionIDKind,
+		ID:       "provider-session-live-1",
+	}
+
+	var forwarded []workers.ProgressFragment
+	publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
+		current, err := registry.Get(context.Background(), workersessions.GetRequest{ID: "worker-1"})
+		if err != nil || current.ProviderSessionAssociation == nil {
+			t.Fatalf("Get() before forwarding provider output = %#v, %v, want committed association", current, err)
+		}
+		if got := current.ProviderSessionAssociation.Reference; got != reference {
+			t.Fatalf("association before forwarding = %#v, want %#v", got, reference)
+		}
+		forwarded = append(forwarded, workers.ProgressFragment{
+			DispatchID:         fragment.DispatchID,
+			Kind:               fragment.Kind,
+			ProviderSessionRef: workers.CloneProviderSessionMetadata(fragment.ProviderSessionRef),
+		})
+	})
+	publisher.Bind(registry)
+
+	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
+	publisher.Publish(workers.ProgressFragment{
+		DispatchID:               "dispatch-1",
+		Kind:                     workers.ProgressFragmentKind,
+		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
+		ProviderSessionRef: &workers.ProviderSessionMetadata{
+			Provider: reference.Provider.String(),
+			Kind:     reference.Kind,
+			ID:       reference.ID,
+		},
+	})
+	if len(forwarded) != 1 || forwarded[0].DispatchID != "dispatch-1" ||
+		forwarded[0].ProviderSessionRef == nil || forwarded[0].ProviderSessionRef.ID != reference.ID {
+		t.Fatalf("forwarded provider output = %#v, want one associated dispatch-1 fragment", forwarded)
+	}
+	// The typed source reference and the response-stream metadata must agree;
+	// otherwise output would advertise a different Provider Session than the
+	// one Worker Sessions retained.
+	publisher.Publish(workers.ProgressFragment{
+		DispatchID:               "dispatch-1",
+		Kind:                     workers.ProgressFragmentKind,
+		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
+		ProviderSessionRef: &workers.ProviderSessionMetadata{
+			Provider: reference.Provider.String(), Kind: reference.Kind, ID: "mismatched-metadata-session",
+		},
+	})
+	if len(forwarded) != 1 {
+		t.Fatalf("forwarded output after mismatched metadata = %#v, want no inconsistent output", forwarded)
+	}
+
+	// A reference-bearing fragment from a sibling/foreign dispatch is rejected
+	// by Worker Sessions and never reaches the response publisher.
+	publisher.Publish(workers.ProgressFragment{
+		DispatchID:               "foreign-dispatch",
+		Kind:                     workers.ProgressFragmentKind,
+		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
+		ProviderSessionRef: &workers.ProviderSessionMetadata{
+			Provider: reference.Provider.String(), Kind: reference.Kind, ID: "foreign-session",
+		},
+	})
+	if len(forwarded) != 1 {
+		t.Fatalf("forwarded provider output after foreign dispatch = %#v, want no cross-session output", forwarded)
+	}
+
+	boundary.setCancel(func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+		boundary.complete(canceledDispatchResult("dispatch-1"), workers.ErrWorkstationDispatchCanceled)
+		return workers.WorkstationDispatchCancelResult{DispatchID: "dispatch-1", Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
+	})
+	paused, err := registry.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+	if err != nil || paused.Outcome != workersessions.ControlOutcomeApplied || paused.Session.State != workersessions.StatePaused {
+		t.Fatalf("Pause() = %#v, %v, want associated PAUSED session", paused, err)
+	}
+
+	resumed, err := registry.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+	if err != nil || resumed.Outcome != workersessions.ControlOutcomeApplied {
+		t.Fatalf("Resume() = %#v, %v, want applied exact continuation", resumed, err)
+	}
+	continuation := boundary.currentRequest()
+	if continuation.Execution.ResumeSession == nil || *continuation.Execution.ResumeSession != reference {
+		t.Fatalf("continuation ResumeSession = %#v, want exact %#v", continuation.Execution.ResumeSession, reference)
+	}
+
+	boundary.complete(completedDispatchResult(resumed.DispatchID), nil)
+	if result := <-started; result.Session.State != workersessions.StateCompleted ||
+		result.Session.ProviderSessionAssociation == nil || result.Session.ProviderSessionAssociation.Reference != reference {
+		t.Fatalf("Start() terminal result = %#v, want completed session retaining %#v", result, reference)
+	}
+}
+
+// TestObserveProviderSession_RejectsUntrustedAndConflictingObservations
+// exercises the trust boundary used by the live progress bridge: malformed
+// source facts, an unknown dispatch, and a reference rewrite are all rejected
+// without changing the first trusted association.
+func TestObserveProviderSession_RejectsUntrustedAndConflictingObservations(t *testing.T) {
+	boundary := newControlledBoundary()
+	registry := newControlledRegistry(t, boundary)
+	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
+
+	trusted := providers.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     providers.SessionIDKind,
+		ID:       "provider-session-trusted-1",
+	}
+	if _, err := registry.ObserveProviderSession(context.Background(), workersessions.ProviderSessionObservationRequest{
+		DispatchID: "dispatch-1",
+		Reference: providers.SessionRef{
+			Kind: trusted.Kind,
+			ID:   trusted.ID,
+		},
+	}); !errors.Is(err, providers.ErrInvalidID) {
+		t.Fatalf("ObserveProviderSession() with invalid reference error = %v, want Providers ErrInvalidID", err)
+	}
+	if _, err := registry.ObserveProviderSession(context.Background(), workersessions.ProviderSessionObservationRequest{
+		DispatchID: "foreign-dispatch",
+		Reference:  trusted,
+	}); !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
+		t.Fatalf("ObserveProviderSession() for foreign dispatch error = %v, want ErrProviderSessionAssociationAttemptMismatch", err)
+	}
+
+	accepted, err := registry.ObserveProviderSession(context.Background(), workersessions.ProviderSessionObservationRequest{
+		DispatchID: "dispatch-1",
+		Reference:  trusted,
+	})
+	if err != nil || accepted.Outcome != workersessions.ProviderSessionAssociationOutcomeAccepted {
+		t.Fatalf("ObserveProviderSession() = %#v, %v, want accepted", accepted, err)
+	}
+	duplicate, err := registry.ObserveProviderSession(context.Background(), workersessions.ProviderSessionObservationRequest{
+		DispatchID: "dispatch-1",
+		Reference:  trusted,
+	})
+	if err != nil || duplicate.Outcome != workersessions.ProviderSessionAssociationOutcomeDuplicate {
+		t.Fatalf("duplicate ObserveProviderSession() = %#v, %v, want duplicate", duplicate, err)
+	}
+	conflicting := trusted
+	conflicting.ID = "provider-session-conflict"
+	if _, err := registry.ObserveProviderSession(context.Background(), workersessions.ProviderSessionObservationRequest{
+		DispatchID: "dispatch-1",
+		Reference:  conflicting,
+	}); !errors.Is(err, workersessions.ErrProviderSessionAssociationConflict) {
+		t.Fatalf("conflicting ObserveProviderSession() error = %v, want ErrProviderSessionAssociationConflict", err)
+	}
+
+	snapshot, err := registry.Get(context.Background(), workersessions.GetRequest{ID: "worker-1"})
+	if err != nil || snapshot.ProviderSessionAssociation == nil || snapshot.ProviderSessionAssociation.Reference != trusted {
+		t.Fatalf("Get() association after rejected observations = %#v, %v, want %#v", snapshot.ProviderSessionAssociation, err, trusted)
+	}
+	boundary.complete(completedDispatchResult("dispatch-1"), nil)
+	<-started
+}
+
 // TestAssociateProviderSession_CommitsBeforeDependentWorkerRecord proves a
 // Worker attempt can record its exact reference before it emits a source
 // record whose ProviderSessionRef relies on that association. The resulting

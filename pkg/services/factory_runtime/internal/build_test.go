@@ -292,6 +292,10 @@ func (s *stubWorkerSessionsService) AssociateProviderSession(context.Context, wo
 	return workersessions.ProviderSessionAssociationResult{}, nil
 }
 
+func (s *stubWorkerSessionsService) ObserveProviderSession(context.Context, workersessions.ProviderSessionObservationRequest) (workersessions.ProviderSessionAssociationResult, error) {
+	return workersessions.ProviderSessionAssociationResult{}, nil
+}
+
 func (s *stubWorkerSessionsService) Pause(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {
 	return workersessions.ControlResult{}, nil
 }

@@ -66,6 +66,14 @@ type Service interface {
 	// accepted association.
 	AssociateProviderSession(context.Context, ProviderSessionAssociationRequest) (ProviderSessionAssociationResult, error)
 
+	// ObserveProviderSession records a trusted live provider observation by its
+	// current Workers dispatch identity. Worker Sessions resolves the owning
+	// Worker Session and its immutable turn/attempt correlation itself, so a
+	// progress publisher cannot attach a reference to a sibling session.
+	// Callers must invoke this before forwarding output that names the observed
+	// Provider Session reference.
+	ObserveProviderSession(context.Context, ProviderSessionObservationRequest) (ProviderSessionAssociationResult, error)
+
 	// PublishRecord validates req, then appends req.Draft, detached, as a
 	// source-native Worker record onto Topic(req.SessionID) using req's
 	// complete Events idempotency identity. PublishRecord only accepts a
@@ -299,6 +307,25 @@ func (request ProviderSessionAssociationRequest) Validate() error {
 	if !validSessionID(request.WorkerSessionID) {
 		return ErrInvalidSessionID
 	}
+	if strings.TrimSpace(request.DispatchID) == "" {
+		return ErrInvalidProviderSessionAssociation
+	}
+	return request.Reference.Validate()
+}
+
+// ProviderSessionObservationRequest carries the exact typed reference from a
+// Workers-owned live progress observation. Unlike
+// ProviderSessionAssociationRequest, it intentionally does not accept a
+// Worker Session ID: Worker Sessions derives the owner from DispatchID.
+type ProviderSessionObservationRequest struct {
+	DispatchID string
+	Reference  providers.SessionRef
+}
+
+// Validate checks the source-owned dispatch identity and exact typed
+// reference before Worker Sessions resolves its registry-owned owner and
+// correlation.
+func (request ProviderSessionObservationRequest) Validate() error {
 	if strings.TrimSpace(request.DispatchID) == "" {
 		return ErrInvalidProviderSessionAssociation
 	}

@@ -53,6 +53,7 @@ func (s *service) Execute(
 				request.Dispatch.DispatchID,
 				normalizedErr,
 				response.ProviderSession,
+				request.ResumeSession,
 				"",
 			)
 			return response, normalizedErr
@@ -69,12 +70,13 @@ func (s *service) Execute(
 				request.Dispatch.DispatchID,
 				normalizedErr,
 				response.ProviderSession,
+				failure.SessionRef,
 				failure.Message,
 			)
 			return response, normalizedErr
 		}
 		normalizedErr := normalizeExecutionError(ctx, err)
-		s.publishTerminalFailure(request.Dispatch.DispatchID, normalizedErr, nil, "")
+		s.publishTerminalFailure(request.Dispatch.DispatchID, normalizedErr, nil, nil, "")
 		return workers.RunnerExecutionResult{}, normalizedErr
 	}
 	result = result.Clone()
@@ -89,11 +91,12 @@ func (s *service) Execute(
 	s.publishProgress(request.Dispatch.DispatchID, result, response.ProviderSession)
 	if !hasTerminalRunProgress(result.Diagnostics) {
 		s.publish(workers.ProgressFragment{
-			DispatchID:         request.Dispatch.DispatchID,
-			Kind:               workers.CompletedFragmentKind,
-			Type:               "COMPLETED",
-			ProviderSessionRef: workers.CloneProviderSessionMetadata(response.ProviderSession),
-			ExternalEventType:  "STREAM_COMPLETED",
+			DispatchID:               request.Dispatch.DispatchID,
+			Kind:                     workers.CompletedFragmentKind,
+			Type:                     "COMPLETED",
+			ProviderSessionReference: workers.CloneProviderSessionReference(result.SessionRef),
+			ProviderSessionRef:       workers.CloneProviderSessionMetadata(response.ProviderSession),
+			ExternalEventType:        "STREAM_COMPLETED",
 		})
 	}
 	return response, nil
@@ -116,6 +119,7 @@ func (s *service) publishTerminalFailure(
 	dispatchID string,
 	err error,
 	session *workers.ProviderSessionMetadata,
+	reference *providers.SessionRef,
 	providerMessage string,
 ) {
 	eventType := "FAILED"
@@ -142,13 +146,14 @@ func (s *service) publishTerminalFailure(
 		metadata = nil
 	}
 	s.publish(workers.ProgressFragment{
-		DispatchID:         dispatchID,
-		Kind:               workers.FailedFragmentKind,
-		Type:               eventType,
-		Payload:            boundedFailureMessage(message),
-		ProviderSessionRef: workers.CloneProviderSessionMetadata(session),
-		ExternalEventType:  "STREAM_FAILED",
-		Metadata:           metadata,
+		DispatchID:               dispatchID,
+		Kind:                     workers.FailedFragmentKind,
+		Type:                     eventType,
+		Payload:                  boundedFailureMessage(message),
+		ProviderSessionReference: workers.CloneProviderSessionReference(reference),
+		ProviderSessionRef:       workers.CloneProviderSessionMetadata(session),
+		ExternalEventType:        "STREAM_FAILED",
+		Metadata:                 metadata,
 	})
 }
 
@@ -161,6 +166,7 @@ func (s *service) publishFailureProgress(
 		return
 	}
 	s.publishProgress(dispatchID, providers.ExecuteResult{
+		SessionRef:  workers.CloneProviderSessionReference(failure.SessionRef),
 		Diagnostics: failure.Diagnostics,
 	}, session)
 }
@@ -177,7 +183,7 @@ func (s *service) publishProgress(
 				terminalMessages = append(terminalMessages, progress)
 				continue
 			}
-			s.publishProviderProgress(dispatchID, progress, session)
+			s.publishProviderProgress(dispatchID, progress, session, result.SessionRef)
 		}
 	}
 	if len(terminalMessages) == 0 && strings.TrimSpace(result.Content) != "" {
@@ -189,7 +195,7 @@ func (s *service) publishProgress(
 	// Publish authoritative completed messages after provider run/turn lifecycle
 	// completion so all transports observe the same terminal ordering.
 	for _, progress := range terminalMessages {
-		s.publishProviderProgress(dispatchID, progress, session)
+		s.publishProviderProgress(dispatchID, progress, session, result.SessionRef)
 	}
 }
 
@@ -197,14 +203,16 @@ func (s *service) publishProviderProgress(
 	dispatchID string,
 	progress providers.ExecuteProgress,
 	session *workers.ProviderSessionMetadata,
+	reference *providers.SessionRef,
 ) {
 	s.publish(workers.ProgressFragment{
-		DispatchID:         dispatchID,
-		Kind:               workers.ProgressFragmentKind,
-		Type:               progress.Phase,
-		Payload:            progress.Detail,
-		ProviderSessionRef: workers.CloneProviderSessionMetadata(session),
-		Metadata:           cloneMetadata(progress.Metadata),
+		DispatchID:               dispatchID,
+		Kind:                     workers.ProgressFragmentKind,
+		Type:                     progress.Phase,
+		Payload:                  progress.Detail,
+		ProviderSessionReference: workers.CloneProviderSessionReference(reference),
+		ProviderSessionRef:       workers.CloneProviderSessionMetadata(session),
+		Metadata:                 cloneMetadata(progress.Metadata),
 	})
 }
 

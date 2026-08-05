@@ -40,9 +40,14 @@ type registry struct {
 	sessions     map[string]workersessions.Session
 	publications map[string]*publication
 	supervisions map[string]*supervision
-	boundary     workers.WorkstationPoolBoundary
-	events       EventsAppender
-	logger       logging.Logger
+	// dispatchOwners is the Worker Sessions-owned reverse lookup from the
+	// currently supervised Workers dispatch to its stable session identity.
+	// Provider progress names dispatches, never Worker Sessions, so this map is
+	// the only accepted route from a provider observation to its owner.
+	dispatchOwners map[string]string
+	boundary       workers.WorkstationPoolBoundary
+	events         EventsAppender
+	logger         logging.Logger
 }
 
 // Compile-time proof that production registry seals the W1+W2 root contract
@@ -64,12 +69,13 @@ func New(boundary workers.WorkstationPoolBoundary, eventsAppender EventsAppender
 		return nil, ErrMissingEventsAppender
 	}
 	return &registry{
-		sessions:     make(map[string]workersessions.Session),
-		publications: make(map[string]*publication),
-		supervisions: make(map[string]*supervision),
-		boundary:     boundary,
-		events:       eventsAppender,
-		logger:       logging.EnsureLogger(logger),
+		sessions:       make(map[string]workersessions.Session),
+		publications:   make(map[string]*publication),
+		supervisions:   make(map[string]*supervision),
+		dispatchOwners: make(map[string]string),
+		boundary:       boundary,
+		events:         eventsAppender,
+		logger:         logging.EnsureLogger(logger),
 	}, nil
 }
 
@@ -277,18 +283,57 @@ func (r *registry) AssociateProviderSession(
 	return result, nil
 }
 
+// ObserveProviderSession commits one typed reference reported by the Workers
+// progress path. The source identifies only its dispatch; resolving that
+// dispatch under the registry lock keeps one child observation from being
+// attached to another Worker Session.
+func (r *registry) ObserveProviderSession(
+	_ context.Context,
+	req workersessions.ProviderSessionObservationRequest,
+) (workersessions.ProviderSessionAssociationResult, error) {
+	if err := req.Validate(); err != nil {
+		r.logger.Info("worker session provider session observation rejected", "attemptID", req.DispatchID, "outcome", "invalid")
+		return workersessions.ProviderSessionAssociationResult{}, err
+	}
+
+	r.mu.Lock()
+	ownerID, exists := r.dispatchOwners[req.DispatchID]
+	if !exists {
+		r.mu.Unlock()
+		r.logger.Info("worker session provider session observation rejected", "attemptID", req.DispatchID, "outcome", "unknown_dispatch")
+		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationAttemptMismatch
+	}
+	result, err := r.associateProviderSessionLocked(workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: ownerID,
+		DispatchID:      req.DispatchID,
+		Reference:       req.Reference.Clone(),
+	})
+	r.mu.Unlock()
+	if err != nil {
+		r.logger.Info("worker session provider session observation rejected", "sessionID", ownerID, "attemptID", req.DispatchID, "outcome", "rejected")
+		return workersessions.ProviderSessionAssociationResult{}, err
+	}
+	r.logger.Info("worker session provider session observation", "sessionID", ownerID, "attemptID", req.DispatchID, "outcome", string(result.Outcome))
+	return result, nil
+}
+
 func (r *registry) associateProviderSession(
 	req workersessions.ProviderSessionAssociationRequest,
 ) (workersessions.ProviderSessionAssociationResult, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.associateProviderSessionLocked(req)
+}
 
+func (r *registry) associateProviderSessionLocked(
+	req workersessions.ProviderSessionAssociationRequest,
+) (workersessions.ProviderSessionAssociationResult, error) {
 	session, exists := r.sessions[req.WorkerSessionID]
 	if !exists {
 		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrSessionNotFound
 	}
 	supervision := r.supervisions[req.WorkerSessionID]
-	if supervision == nil || supervision.dispatchID != req.DispatchID {
+	if supervision == nil || r.dispatchOwners[req.DispatchID] != req.WorkerSessionID {
 		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationAttemptMismatch
 	}
 

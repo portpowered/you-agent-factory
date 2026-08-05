@@ -269,6 +269,7 @@ func (r *registry) registerSupervision(
 	}
 	supervision := newSupervision(dispatchID, turnID, executions...)
 	r.supervisions[id] = supervision
+	r.dispatchOwners[dispatchID] = id
 	return supervision, true
 }
 
@@ -592,6 +593,8 @@ func (r *registry) prepareContinuation(
 	continuedReference := reference.Clone()
 	continuation.Execution.ResumeSession = &continuedReference
 	supervision.dispatchID = continuation.Execution.Dispatch.DispatchID
+	delete(r.dispatchOwners, previousDispatchID)
+	r.dispatchOwners[supervision.dispatchID] = id
 	supervision.publishing = true
 	supervision.accepted = false
 	supervision.continuing = true
@@ -603,19 +606,23 @@ func (r *registry) prepareContinuation(
 }
 
 func (r *registry) revertContinuation(id string, supervision *supervision, previousDispatchID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	supervision.mu.Lock()
+	currentDispatchID := supervision.dispatchID
 	supervision.dispatchID = previousDispatchID
 	supervision.publishing = false
 	supervision.continuing = false
 	supervision.accepted = true
 	supervision.mu.Unlock()
 
-	r.mu.Lock()
+	delete(r.dispatchOwners, currentDispatchID)
+	r.dispatchOwners[previousDispatchID] = id
 	if session, exists := r.sessions[id]; exists && session.State == workersessions.StateStarting {
 		session.State = workersessions.StatePaused
 		r.sessions[id] = session
 	}
-	r.mu.Unlock()
 }
 
 func (r *registry) finishContinuationPublication(supervision *supervision) {

@@ -14,6 +14,7 @@
 - A committed Chat turn control must carry its immutable `TurnID` plus stable `ControlRequest.RequestID` to Factory Runtime as `TurnID`/`ControlID`; on-demand target cancellation must fan out before invocation-context cancellation and retain that result across runtime replacement.
 - A committed Chat close needs a control-aware target termination operation: preserve its opaque control ID and turn ID through Factory Sessions, fan out before target cleanup, and keep generic close separate for process lifecycle cleanup.
 - Provider Session references must stay as complete providers.SessionRef values bound to the Worker Session's own immutable turn and dispatch correlation; never recreate one from runner, model, current provider, or a bare session ID.
+- When Workers must publish before its session-owned Worker Sessions service is constructed, use a session-local bridge that binds once during Worker Sessions factory construction and forwards typed-reference progress only after association succeeds.
 - When a resume path must preserve provider-specific identity, carry a cloned typed providers.SessionRef on the Workers execution request and prioritize it over any legacy bare session-ID compatibility field.
 - Preserve provider-specific continuation classifications only on in-process Worker result fields excluded from Factory event serialization, then map whitelisted enum values into the Worker Session terminal snapshot.
 - Worker Sessions root and internal service packages have 100% unit-coverage baselines; cover control interleavings through controlled boundary callbacks and channel handshakes, never sleeps or source-inventory tests.
@@ -309,4 +310,15 @@
 - **Learnings for future iterations:**
   - The Worker Sessions coverage policy measures the public contract and internal service independently, so both packages need direct behavioral evidence when a public control flow spans private synchronization helpers.
   - For a deterministic active-control wait, use an unbuffered channel sender to prove the receiver reached the control wait, then record the terminal winner under the registry lock; this tests the interleaving without sleeps or polling.
+---
+
+## 2026-08-05 03:18 -07:00 - ACP-L4-W7-PROVIDER-SESSION-CONTINUATION-001
+- Addressed the first blocking PR review finding: Factory Runtime now sends Provider runner progress through a session-local Worker Sessions bridge. The bridge resolves the live dispatch owner and commits the exact typed `providers.SessionRef` before forwarding any reference-bearing response fragment.
+- Added trusted observation behavior to Worker Sessions, including dispatch-owner isolation across continuation dispatches. Metadata-only compatibility fields are explicitly suppressed rather than reconstructed into a resumable reference.
+- Added controlled provider/workstation behavioral coverage proving association-before-output and pause/resume with the same exact reference without a direct test-side association; malformed, foreign, and conflicting observations remain isolated and rejected.
+- Files changed: `pkg/services/{worker_sessions,workers}/**`, `pkg/services/factory_runtime/internal/**`, `prd.json`, `progress.txt`.
+- Verification: `go test -count=1 -cover ./pkg/services/worker_sessions ./pkg/services/worker_sessions/internal/service` (both 100.0%); `go test -race -count=1 ./pkg/services/worker_sessions/...`; focused `go vet` plus Workers/Worker Sessions/Factory Runtime suites; `make test`; and `git diff --check` all pass.
+- **Learnings for future iterations:**
+  - A provider-session response projection is not evidence of a resumable provider reference. Only an exact typed reference emitted by Providers may unlock Worker Session continuation.
+  - When construction order prevents direct wiring, bind a one-shot session-local progress bridge before dispatch admission so source progress cannot reach a response stream before its owning Worker Session records the association.
 ---
