@@ -198,6 +198,10 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+      - uses: actions/setup-node@v4
+        if: needs.classify.outputs.run_backend == 'true' && matrix.suite == 'functional'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
       - name: Build backend
         if: needs.classify.outputs.run_backend == 'true' && matrix.suite == 'unit'
         run: make build
@@ -209,6 +213,7 @@ jobs:
         run: bash scripts/ci/run-functional-test-viz.sh
         env:
           FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
+          INFINITE_YOU_RUN_ACPX_REAL_CLIENT: "1"
       - name: Publish functional test job summary
         if: always() && needs.classify.outputs.run_backend == 'true' && matrix.suite == 'functional'
         run: bash scripts/ci/publish-functional-test-summary.sh

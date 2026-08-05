@@ -55,6 +55,49 @@ A generic client configuration:
 }
 ```
 
+## Prove A Pinned Headless Client Launch
+
+The repository also keeps a non-editor interoperability check for the pinned
+headless [`acpx@0.13.0`](https://www.npmjs.com/package/acpx/v/0.13.0) client.
+It builds the current checkout before the client starts it; it never selects a
+globally installed `you` or `acpx` executable.
+
+```bash
+INFINITE_YOU_RUN_ACPX_REAL_CLIENT=1 go test ./tests/functional/transport/acp/realclient/... -run TestPinnedAcpxCreatesDefaultFactoryBuilderSession
+```
+
+It requires `npm`/`npx` and Node.js 22.13.0 or later, the runtime declared by
+the pinned acpx package. The default functional suite deliberately leaves this
+networked, process-boundary proof disabled; the repository CI enables it in its
+functional lane.
+
+The check runs the effective client command in this shape, with a fresh
+temporary home, project directory, npm cache, and server binary on every run:
+
+```bash
+(cd <disposable-project> && npx --yes --package acpx@0.13.0 acpx --format json you-real-client sessions new)
+```
+
+Its disposable `<disposable-project>/.acpxrc.json` uses the portable custom
+agent form required by acpx on Windows and supported on every host:
+
+```json
+{
+  "agents": {
+    "you-real-client": {
+      "argv": ["<disposable-you-binary>", "serve", "acp"]
+    }
+  }
+}
+```
+
+The machine-readable `session_ensured` fact must include client and ACP session
+identities. The disposable acpx session record must show a negotiated protocol
+version and `target` selection of `factory:@you/factory-builder`. The test then
+uses `sessions close` and removes every scenario-owned client record, cache,
+and process. Failures report a bounded launch phase only; they do not print ACP
+frames, configuration contents, environment values, or host paths.
+
 ## Exchange One ACP Prompt
 
 After the client starts the child process, it exchanges ACP JSON-RPC over

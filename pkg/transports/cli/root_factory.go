@@ -43,7 +43,7 @@ func requiresSystemInitialization(commandPath string, args []string) bool {
 	switch commandPath {
 	case "you":
 		return len(args) > 0
-	case "you mcp serve", "you run":
+	case "you mcp serve", "you serve acp", "you run":
 		return true
 	default:
 		return false

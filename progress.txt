@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Process-boundary client tests must isolate every platform configuration root the child process can consult (HOME, USERPROFILE, APPDATA, LOCALAPPDATA, XDG roots, and package cache) beneath the test temp directory.
 - Document `pkg/services/events` as the process-local, in-memory, session-scoped source-native observation stream; Recordings owns canonical Factory Event JSONL history, replay, artifacts, and historical projections.
 - Architecture service inventories should name the package that publishes the public owner contract, and diagrams should show direct service operations unless a bounded delivery contract is explicitly involved.
 - Define ACP customer terms from the detached `chat_sessions` and `worker_sessions` public contracts; use customer-facing relationship diagrams and keep their event lifetimes separate from Recordings history.
@@ -52,4 +53,15 @@
 - **Learnings for future iterations:**
   - A Markdown link can be correct while adjacent checklist/inventory prose still names an obsolete path; review both when reconciling moved decision records.
   - The local PSS checklist is active verification guidance, so its expected-path inventory must be maintained as rigorously as its links.
+---
+
+## 2026-08-04 21:35 -07:00 - ACP-L1-V4-M01-ACPX-REAL-CLIENT-EVIDENCE-001
+- Added an isolated, bounded `acpx@0.13.0` acceptance test that builds the checked-out CLI, launches `you serve acp` through structured custom-agent argv, and verifies machine-readable session creation, protocol negotiation, and the shipped Factory Builder target before closing the session.
+- Corrected `you serve acp` startup to run system initialization, ensuring the shipped packaged Factory catalog is available for a fresh ACP client home; added focused CLI regression coverage.
+- Documented the safe reproduction path and enabled the opt-in real-client proof in the functional CI lane. Updated the UI compiler configuration to acknowledge the TypeScript 5.9 `baseUrl` deprecation so the existing typecheck gate remains green.
+- Files changed: `.github/workflows/ci.yml`, `docs/reference/serve-acp.md`, `pkg/transports/cli/root_factory.go`, `pkg/transports/cli/root_serve_test.go`, `tests/functional/transport/acp/realclient/pinned_acpx_test.go`, `ui/tsconfig.app.json`, `prd.json`, `progress.txt`.
+- **Learnings for future iterations:**
+  - `acpx@0.13.0` requires Node.js 22.13.0 or newer; the functional CI lane must install Node 22 before it runs the opt-in evidence test.
+  - Fresh `you serve acp` state needs system initialization so its default `factory:@you/factory-builder` target is installed before ACP `session/new` resolves the catalog.
+  - Run `bun install --frozen-lockfile` from `ui/` before `make typecheck` in a fresh worktree; the shared `tsconfig.app.json` setting is inherited by each typecheck project.
 ---
