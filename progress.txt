@@ -368,3 +368,13 @@
   - An invocation-scoped callback is safe to preserve through the Providers continuation request because it carries no selectable session input; native adapters still own the identity and only publish validated typed references.
   - Controlled command/ACP edges plus channels can prove an observation happened during a live attempt without sleeps, polling, fabricated Worker fragments, or direct association calls.
 ---
+
+## 2026-08-05 05:11 -07:00 - ACP-L4-W7-PROVIDER-SESSION-CONTINUATION-REVIEW
+- Re-inspected PR #1799 using flat GitHub conversation reads and thread-aware GraphQL data. The two blocking comments both target superseded heads; there are no unresolved review threads, newer review submissions, or additional actionable feedback on the current `9299cc803` head.
+- Investigated the initially failing Backend Functional Coverage job. Its first two attempts failed in changing, unrelated functional scenarios; the focused ACP scenarios from the failure logs passed 20 deterministic local repetitions each, and the other failed paths were unchanged from `origin/main`. A third rerun on the exact reviewed head passed every required check, including Backend Functional Coverage.
+- Files changed: `progress.txt`.
+- Verification: `go test -count=20 ./tests/functional/providers/acp -run '^TestProvidersACPSerializesConcurrentPromptsOnOneStdioConnection$'`; `go test -count=20 ./tests/functional/providers/acp -run '^TestFactoryRunRetainsLegacyNamedExecutorProviderCompatibility$'`; `gh pr checks 1799 --required`; thread-aware `fetch_comments.py`; and `git diff --check origin/main...HEAD` all pass. PR #1799 is open, clean, and points at the reviewed head.
+- **Learnings for future iterations:**
+  - A CI-only functional failure must be evaluated across reruns and against the PR base before changing a feature path; unrelated failures that rotate between unchanged functional packages are evidence of shared-suite instability, not an authorization to expand the story.
+  - When an existing PR already has the requested title and full `prd.json` body, update its head rather than creating a duplicate pull request.
+---
