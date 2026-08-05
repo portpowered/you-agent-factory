@@ -281,3 +281,21 @@
   - Keep safe provider continuation classifications as closed enum facts; raw provider messages and opaque IDs may remain inside the owning provider path but must not become Worker Session terminal diagnostics.
   - Keep Factory Event schemas stable when only in-process control inspection needs additional fidelity by carrying the extra Worker result facts with `json:"-"` and reducing them at the Worker Session boundary.
 ---
+
+## 2026-08-05 02:13 -07:00 - ACP-L4-W7-PROVIDER-SESSION-CONTINUATION-004
+- Added a deterministic Factory Runtime package-integration proof for two paused children of one captured turn. The real Worker Sessions service gives each continuation its exact typed Provider Session reference and preserved turn/dispatch correlation; a controlled foreign failure completes before its sibling succeeds without any cross-delivery.
+- Proved duplicate Factory resume retains the committed fan-out result without another continuation, while an associated Worker Session from another turn remains running and is never selected or resumed.
+- Files changed: `pkg/services/factory_runtime/internal/services/orchestration/runtime/captured_turn_terminate_integration_test.go`, `prd.json`, `progress.txt`.
+- Verification: focused test repeated 20 times; focused `-race -count=10`; `go test ./pkg/services/worker_sessions/... ./pkg/services/workers/... ./pkg/services/factory_runtime/...`; focused `go vet` for the same packages; and `git diff --check` all pass.
+- **Learnings for future iterations:**
+  - To prove multi-child continuation isolation, compose the real Factory Runtime fan-out and Worker Sessions service behind an asynchronous controlled Workers boundary, then release child terminal callbacks in a deliberate order; this makes cross-delivery observable without sleeps or polling.
+  - A per-child Provider continuation failure is terminal evidence for that Worker Session only; Factory Runtime still fans out the already accepted resume to every captured sibling and retains its deterministic control result.
+---
+
+## 2026-08-05 02:15 -07:00 - ACP-L4-W7-PROVIDER-SESSION-CONTINUATION-004
+- Re-ran the repository Go unit lane after the completed multi-child continuation integration test; `make test` passes.
+- `make typecheck` remains blocked before this Go-only change by the documented UI environment/configuration baseline: missing Bun type definitions and TypeScript 6 `baseUrl` deprecation errors in three UI tsconfig projects.
+- Files changed: `progress.txt`.
+- **Learnings for future iterations:**
+  - Record repository-wide gate failures with their exact external baseline separately from focused behavior evidence, so the PR can distinguish an unrelated UI toolchain condition from the changed runtime path.
+---

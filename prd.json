@@ -86,8 +86,8 @@
         "Tests pass."
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added a deterministic package-integration continuation proof that composes the real Factory Runtime captured-turn fan-out with the real Worker Sessions service and a controlled Workers boundary. Two paused children of one captured turn each receive their own exact Codex providers.SessionRef and retained turn correlation; a foreign continuation failure completes first while the sibling still completes with its own association and fresh dispatch. A direct Worker Session associated with another turn remains running, duplicate Factory resume returns retained no-op evidence without another provider continuation, and terminal Worker Session snapshots retain their exact dispatch/reference and safe per-child failure classification. Verified with repeated and race execution, focused Factory Runtime/Worker Sessions/Workers suites, focused go vet, and make test. Typecheck remains blocked by the documented unrelated UI Bun/TypeScript environment configuration failures."
     }
   ]
 }
