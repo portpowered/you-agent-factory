@@ -19,10 +19,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 )
 
-// fakeOpener is a minimal invocationRuntimeOpener test double: it records
+// fakeOpener is a minimal InvocationRuntimeOpening test double: it records
 // every call and returns a fixed opened runtime/error, letting these tests
-// exercise Service without constructing *runtimeopening.Factory's own large
-// production dependency graph.
+// exercise Service without constructing the grouped production dependency
+// graph.
 type fakeOpener struct {
 	calls  []factorysessions.RuntimeOpeningRequest
 	opened roles.OpenedInvocationRuntime
@@ -156,10 +156,10 @@ func (f *fakeSessions) CloseFactorySession(ctx context.Context, sessionID string
 	return err
 }
 
-func newTestService(t *testing.T, opener invocationRuntimeOpener, resolve RuntimeResolver, generateID factorysessions.SessionIDGenerator) *Service {
+func newTestService(t *testing.T, opener runtimeopening.InvocationRuntimeOpening, resolve RuntimeResolver, generateID factorysessions.SessionIDGenerator) *Service {
 	t.Helper()
 	return &Service{
-		factory:           opener,
+		opening:           opener,
 		resolve:           resolve,
 		generateID:        generateID,
 		logger:            zap.NewNop(),
@@ -173,11 +173,11 @@ func newTestService(t *testing.T, opener invocationRuntimeOpener, resolve Runtim
 // newTestServiceWithObservedLogger is newTestService, but with a real,
 // observable logger (instead of a no-op one) for tests that assert on what
 // this Service actually logs.
-func newTestServiceWithObservedLogger(t *testing.T, opener invocationRuntimeOpener, resolve RuntimeResolver, generateID factorysessions.SessionIDGenerator) (*Service, *observer.ObservedLogs) {
+func newTestServiceWithObservedLogger(t *testing.T, opener runtimeopening.InvocationRuntimeOpening, resolve RuntimeResolver, generateID factorysessions.SessionIDGenerator) (*Service, *observer.ObservedLogs) {
 	t.Helper()
 	core, observed := observer.New(zapcore.DebugLevel)
 	return &Service{
-		factory:           opener,
+		opening:           opener,
 		resolve:           resolve,
 		generateID:        generateID,
 		logger:            zap.New(core),
@@ -197,7 +197,7 @@ func sequentialIDs(prefix string) func() string {
 }
 
 func TestNewRejectsMissingRequiredDependencies(t *testing.T) {
-	factory := &runtimeopening.Factory{}
+	var factory runtimeopening.InvocationRuntimeOpening = &runtimeopening.Factory{}
 	resolve := func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
 		return factorysessions.RuntimeOpeningRequest{}, nil
 	}
@@ -206,22 +206,67 @@ func TestNewRejectsMissingRequiredDependencies(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		factory    *runtimeopening.Factory
+		opening    runtimeopening.InvocationRuntimeOpening
 		resolve    RuntimeResolver
 		generateID factorysessions.SessionIDGenerator
 		logger     *zap.Logger
 	}{
-		{"missing factory", nil, resolve, generateID, logger},
+		{"missing opening", nil, resolve, generateID, logger},
 		{"missing resolve", factory, nil, generateID, logger},
 		{"missing generateID", factory, resolve, nil, logger},
 		{"missing logger", factory, resolve, generateID, nil},
+		{"typed nil opening", typedNilInvocationRuntimeOpening(), resolve, generateID, logger},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := New(tt.factory, runtimeopening.ExternalEffects{}, tt.resolve, tt.generateID, tt.logger); err == nil {
+			if _, err := New(tt.opening, runtimeopening.ExternalEffects{}, tt.resolve, tt.generateID, tt.logger); err == nil {
 				t.Fatal("New() error = nil, want a construction error")
 			}
 		})
+	}
+}
+
+func typedNilInvocationRuntimeOpening() runtimeopening.InvocationRuntimeOpening {
+	var opening *runtimeopening.Factory
+	return opening
+}
+
+// TestNewUsesInvocationOpeningCapabilityLazily proves construction accepts
+// the owner-published invocation opening capability without opening a runtime,
+// then opens the selected target exactly once when StartAsync actually runs.
+func TestNewUsesInvocationOpeningCapabilityLazily(t *testing.T) {
+	opener := &fakeOpener{opened: roles.OpenedInvocationRuntime{
+		Sessions:  &fakeSessions{},
+		Lifecycle: &fakeLifecycle{},
+	}}
+	var opening runtimeopening.InvocationRuntimeOpening = opener
+	svc, err := New(
+		opening,
+		runtimeopening.ExternalEffects{},
+		func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+			return factorysessions.RuntimeOpeningRequest{}, nil
+		},
+		func() string { return "target-runtime" },
+		zap.NewNop(),
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if len(opener.calls) != 0 {
+		t.Fatalf("OpenInvocationRuntime calls after New() = %d, want 0", len(opener.calls))
+	}
+
+	started, err := svc.StartAsync(context.Background(), factorysessions.StartRequest{
+		Source: factorysessions.Source{FactoryID: "@you/review"},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync() error = %v", err)
+	}
+	if started.SessionID != "target-runtime" {
+		t.Fatalf("StartAsync() SessionID = %q, want target-runtime", started.SessionID)
+	}
+	if len(opener.calls) != 1 {
+		t.Fatalf("OpenInvocationRuntime calls after StartAsync() = %d, want 1", len(opener.calls))
 	}
 }
 
