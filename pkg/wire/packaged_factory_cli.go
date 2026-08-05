@@ -8,16 +8,18 @@ import (
 )
 
 func provideInstallPackagedFactoryOperation(
-	catalog factorydefinitions.PackagedFactoryCatalogOperations,
-	installer factorydefinitions.PackagedFactoryInstallationOperations,
+	packaging factorydefinitions.Packaging,
 ) factorydefinitions.InstallPackagedFactoryOperation {
-	return factorydefinitions.NewInstallPackagedFactoryOperation(catalog, installer)
+	if packaging == nil {
+		return nil
+	}
+	return packaging.InstallPackagedFactory
 }
 
 func providePackagedFactoryNameCompletionOperation(
-	catalog factorydefinitions.PackagedFactoryCatalogOperations,
+	packaging factorydefinitions.Packaging,
 ) cobracompletion.PackagedFactoryNamesOperation {
-	return cobracompletion.NewPackagedFactoryNames(catalog)
+	return cobracompletion.NewPackagedFactoryNames(packaging)
 }
 
 func provideInstallPackagedFactoryCLI(

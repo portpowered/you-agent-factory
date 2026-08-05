@@ -19,6 +19,8 @@ import (
 	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
 	authoringlayoutprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare"
 	factorypersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence"
+	distributionpackagedcatalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedcatalog"
+	distributionpackaging "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packaging"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
@@ -468,6 +470,222 @@ func TestInstallPackagedFactory_FailedReplacePreservesCommittedLayout(t *testing
 		t.Fatal("replace with invalid payload error = nil")
 	}
 	assertDirectorySnapshotUnchanged(t, created.FactoryDir, before)
+}
+
+func TestPackagingCapability_InstallsDetachedPublishedRepresentationsAndArtifacts(t *testing.T) {
+	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	if err != nil {
+		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
+	}
+	definition, ok := catalog.Lookup("@you/full-flow")
+	if !ok {
+		t.Fatal("published catalog is missing @you/full-flow")
+	}
+	capability := newPackagingCapability(t, definition)
+
+	listed, err := capability.ListBuiltInPackagedFactories(
+		t.Context(),
+		factorydefinitions.ListBuiltInPackagedFactoriesRequest{},
+	)
+	if err != nil || len(listed.Entries) != 1 || listed.Entries[0].Name != definition.Name {
+		t.Fatalf("ListBuiltInPackagedFactories() = %#v, %v", listed, err)
+	}
+	resolved, err := capability.ResolveBuiltInPackagedFactory(
+		t.Context(),
+		factorydefinitions.ResolveBuiltInPackagedFactoryRequest{Name: definition.Name},
+	)
+	if err != nil {
+		t.Fatalf("ResolveBuiltInPackagedFactory() error = %v", err)
+	}
+	resolved.Definition.JSON[0] = 'x'
+	again, err := capability.ResolveBuiltInPackagedFactory(
+		t.Context(),
+		factorydefinitions.ResolveBuiltInPackagedFactoryRequest{Name: definition.Name},
+	)
+	if err != nil || again.Definition.JSON[0] == 'x' {
+		t.Fatalf("ResolveBuiltInPackagedFactory() did not return detached source bytes: %#v, %v", again, err)
+	}
+
+	for _, test := range []struct {
+		format   factorydefinitions.PackagedFactoryFormat
+		rootFile string
+	}{
+		{factorydefinitions.PackagedFactoryFormatJSON, "factory.json"},
+		{factorydefinitions.PackagedFactoryFormatYAML, "factory.yaml"},
+		{factorydefinitions.PackagedFactoryFormatYML, "factory.yml"},
+	} {
+		test := test
+		t.Run(string(test.format), func(t *testing.T) {
+			installed, installErr := capability.InstallPackagedFactory(
+				t.Context(),
+				factorydefinitions.InstallPackagedFactoryRequest{
+					RootDir: t.TempDir(),
+					Name:    definition.Name,
+					Format:  test.format,
+				},
+			)
+			if installErr != nil {
+				t.Fatalf("InstallPackagedFactory() error = %v", installErr)
+			}
+			if installed.Outcome != factorydefinitions.PackagedFactoryInstallCreated ||
+				installed.Format != test.format ||
+				installed.Definition.Name != definition.Name {
+				t.Fatalf("InstallPackagedFactory() = %#v", installed)
+			}
+			assertSingleAuthoredRoot(t, installed.Definition.FactoryDir, test.rootFile)
+			assertBundledAssets(t, definition, installed.Definition.FactoryDir)
+			assertPortableMaterializedContent(t, installed.Definition.FactoryDir)
+		})
+	}
+}
+
+func TestPackagingCapability_TypedPreflightFailuresPreserveTargets(t *testing.T) {
+	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	if err != nil {
+		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
+	}
+	definition, ok := catalog.Lookup("@you/full-flow")
+	if !ok {
+		t.Fatal("published catalog is missing @you/full-flow")
+	}
+	root := t.TempDir()
+	valid := newPackagingCapability(t, definition)
+	created, err := valid.InstallPackagedFactory(
+		t.Context(),
+		factorydefinitions.InstallPackagedFactoryRequest{RootDir: root, Name: definition.Name},
+	)
+	if err != nil {
+		t.Fatalf("initial InstallPackagedFactory() error = %v", err)
+	}
+	before := snapshotDirectoryContents(t, created.Definition.FactoryDir)
+
+	tests := []struct {
+		name       string
+		definition factorydefinitions.PackagedDefinition
+		format     factorydefinitions.PackagedFactoryFormat
+		want       error
+	}{
+		{
+			name: "malformed definition",
+			definition: func() factorydefinitions.PackagedDefinition {
+				broken := definition
+				broken.JSON = []byte(`{"name":"broken","workers":[`)
+				broken.Integrity = factorydefinitions.PackagedFactoryIntegrity{}
+				return broken
+			}(),
+			want: factorydefinitions.ErrMalformedPackagedFactory,
+		},
+		{
+			name: "unavailable format",
+			definition: func() factorydefinitions.PackagedDefinition {
+				jsonOnly := definition
+				jsonOnly.Formats = []factorydefinitions.PackagedFactoryFormat{factorydefinitions.PackagedFactoryFormatJSON}
+				return jsonOnly
+			}(),
+			format: factorydefinitions.PackagedFactoryFormatYAML,
+			want:   factorydefinitions.ErrUnsupportedPackagedFactoryFormat,
+		},
+		{
+			name: "root integrity mismatch",
+			definition: func() factorydefinitions.PackagedDefinition {
+				mismatched := definition
+				mismatched.Integrity.JSONSHA256 = strings.Repeat("0", 64)
+				return mismatched
+			}(),
+			want: factorydefinitions.ErrPackagedFactoryIntegrity,
+		},
+		{
+			name: "artifact integrity mismatch",
+			definition: func() factorydefinitions.PackagedDefinition {
+				mismatched := definition
+				mismatched.Integrity.BundledFiles = append(
+					[]factorydefinitions.PackagedFactoryArtifactIntegrity(nil),
+					mismatched.Integrity.BundledFiles...,
+				)
+				mismatched.Integrity.BundledFiles[0].SHA256 = strings.Repeat("0", 64)
+				return mismatched
+			}(),
+			want: factorydefinitions.ErrPackagedFactoryIntegrity,
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			capability := newPackagingCapability(t, test.definition)
+			result, installErr := capability.InstallPackagedFactory(
+				t.Context(),
+				factorydefinitions.InstallPackagedFactoryRequest{
+					RootDir: root,
+					Name:    definition.Name,
+					Format:  test.format,
+					Replace: true,
+				},
+			)
+			if !errors.Is(installErr, test.want) {
+				t.Fatalf("InstallPackagedFactory() error = %v, want errors.Is(%v)", installErr, test.want)
+			}
+			if result != (factorydefinitions.InstallPackagedFactoryResult{}) {
+				t.Fatalf("InstallPackagedFactory() result = %#v, want no partial success", result)
+			}
+			assertDirectorySnapshotUnchanged(t, created.Definition.FactoryDir, before)
+
+			absentRoot := t.TempDir()
+			result, installErr = capability.InstallPackagedFactory(
+				t.Context(),
+				factorydefinitions.InstallPackagedFactoryRequest{
+					RootDir: absentRoot,
+					Name:    definition.Name,
+					Format:  test.format,
+				},
+			)
+			if !errors.Is(installErr, test.want) {
+				t.Fatalf("InstallPackagedFactory(absent target) error = %v, want errors.Is(%v)", installErr, test.want)
+			}
+			if result != (factorydefinitions.InstallPackagedFactoryResult{}) {
+				t.Fatalf("InstallPackagedFactory(absent target) result = %#v, want no partial success", result)
+			}
+			entries, readErr := os.ReadDir(absentRoot)
+			if readErr != nil || len(entries) != 0 {
+				t.Fatalf("failed install created target entries: %v, %v", entries, readErr)
+			}
+		})
+	}
+
+	missingRoot := t.TempDir()
+	result, missingErr := valid.InstallPackagedFactory(
+		t.Context(),
+		factorydefinitions.InstallPackagedFactoryRequest{RootDir: missingRoot, Name: "@you/missing"},
+	)
+	if !errors.Is(missingErr, factorydefinitions.ErrPackagedFactoryMissing) ||
+		!errors.Is(missingErr, factorydefinitions.ErrUnknownPackagedFactoryIdentity) {
+		t.Fatalf("InstallPackagedFactory(missing) error = %v", missingErr)
+	}
+	if result != (factorydefinitions.InstallPackagedFactoryResult{}) {
+		t.Fatalf("InstallPackagedFactory(missing) result = %#v, want no partial success", result)
+	}
+	entries, readErr := os.ReadDir(missingRoot)
+	if readErr != nil || len(entries) != 0 {
+		t.Fatalf("missing package target entries = %v, %v; want absent", entries, readErr)
+	}
+}
+
+func newPackagingCapability(
+	t *testing.T,
+	definitions ...factorydefinitions.PackagedDefinition,
+) factorydefinitions.Packaging {
+	t.Helper()
+	catalog, err := distributionpackagedcatalog.NewCatalog(definitions)
+	if err != nil {
+		t.Fatalf("NewCatalog() error = %v", err)
+	}
+	capability, err := distributionpackaging.New(
+		catalog,
+		New(packagedInstallationTestPersistence(), platformfilesystem.Local{}),
+	)
+	if err != nil {
+		t.Fatalf("New packaging capability: %v", err)
+	}
+	return capability
 }
 
 type directoryEntrySnapshot struct {

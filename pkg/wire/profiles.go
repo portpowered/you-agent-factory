@@ -388,6 +388,17 @@ func providePackagedFactoryInstallation(
 	}
 }
 
+// providePackagedFactoryCapability constructs the single focused Packaging
+// capability consumed by customer-facing package operations. Legacy catalog and
+// installer callback bundles remain only for the out-of-scope bootstrap path.
+func providePackagedFactoryCapability(
+	definitions []factorydefinitions.PackagedDefinition,
+	persistence factorydefinitions.Persistence,
+	fileSystem factorydefinitions.PackagedInstallationFileSystem,
+) (factorydefinitions.Packaging, error) {
+	return factorydefinitionswire.NewPackaging(definitions, persistence, fileSystem)
+}
+
 func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLoader) factorysessionwire.DurableExecutionFactory {
 	return func(
 		definition factorydefinitions.RuntimeOpeningRequest,

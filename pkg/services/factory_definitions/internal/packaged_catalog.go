@@ -13,3 +13,12 @@ func NewPackagedFactoryCatalog(
 ) (factorydefinitions.PackagedFactoryCatalogOperations, error) {
 	return distributionpackagedcatalog.New(definitions)
 }
+
+// NewPackagedFactoryCatalogService constructs the direct catalog capability
+// used by focused Packaging consumers. The legacy operations constructor above
+// remains only for out-of-scope compatibility forwarding.
+func NewPackagedFactoryCatalogService(
+	definitions []factorydefinitions.PackagedDefinition,
+) (factorydefinitions.PackagedFactoryCatalog, error) {
+	return distributionpackagedcatalog.NewCatalog(definitions)
+}

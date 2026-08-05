@@ -75,11 +75,20 @@ func LoadDefinitionCatalog(source fs.FS) (DefinitionCatalog, error) {
 		if err := validatePublishedArtifactPair(schema, entry, jsonPayload, yamlPayload, context); err != nil {
 			return DefinitionCatalog{}, err
 		}
+		integrity, err := factorydefinitions.BuildPackagedFactoryIntegrity(jsonPayload, yamlPayload)
+		if err != nil {
+			return DefinitionCatalog{}, fmt.Errorf("%s integrity: %w", context, err)
+		}
+		// Preserve the manifest declarations as the package publication contract
+		// rather than recomputing representation digests at installation time.
+		integrity.JSONSHA256 = entry.JSON.SHA256
+		integrity.YAMLSHA256 = entry.YAML.SHA256
 		definitions = append(definitions, factorydefinitions.PackagedDefinition{
-			Name:    entry.PublicName,
-			Project: entry.Project,
-			JSON:    append([]byte(nil), jsonPayload...),
-			YAML:    append([]byte(nil), yamlPayload...),
+			Name:      entry.PublicName,
+			Project:   entry.Project,
+			JSON:      append([]byte(nil), jsonPayload...),
+			YAML:      append([]byte(nil), yamlPayload...),
+			Integrity: integrity,
 			Formats: []factorydefinitions.PackagedFactoryFormat{
 				factorydefinitions.PackagedFactoryFormatJSON,
 				factorydefinitions.PackagedFactoryFormatYAML,
@@ -128,5 +137,9 @@ func clonePackagedDefinition(definition factorydefinitions.PackagedDefinition) f
 	definition.JSON = append([]byte(nil), definition.JSON...)
 	definition.YAML = append([]byte(nil), definition.YAML...)
 	definition.Formats = append([]factorydefinitions.PackagedFactoryFormat(nil), definition.Formats...)
+	definition.Integrity.BundledFiles = append(
+		[]factorydefinitions.PackagedFactoryArtifactIntegrity(nil),
+		definition.Integrity.BundledFiles...,
+	)
 	return definition
 }

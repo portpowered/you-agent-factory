@@ -2,13 +2,16 @@ package packagedinstallation
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
+	"gopkg.in/yaml.v3"
 )
 
 type Service struct {
@@ -68,17 +71,57 @@ func (service *Service) InstallPackagedFactory(
 		return result, installError(definition.Name, namedFactoriesRoot, err)
 	}
 	result.Format = normalizedFormat
-	targetDir, err := namedfactorypath.MapDir(namedFactoriesRoot, definition.Name)
-	if err != nil {
-		return result, installError(definition.Name, namedFactoriesRoot, err)
-	}
-	result.FactoryDir = targetDir
 	if service == nil || service.fileSystem == nil {
 		return result, installError(definition.Name, namedFactoriesRoot, fmt.Errorf("packaged Factory installation filesystem is required"))
 	}
 	if service == nil || service.persistence == nil {
 		return result, installError(definition.Name, namedFactoriesRoot, fmt.Errorf("Factory Definitions persistence service is required"))
 	}
+	// Prepare validates the complete Factory aggregate, including portable
+	// bundled-file paths and contents, before target inspection or mutation.
+	prepared, err := service.persistence.PrepareFactoryLayout(ctx, definition.Name, payload)
+	if err != nil {
+		return result, installError(
+			definition.Name,
+			namedFactoriesRoot,
+			factorydefinitions.NewPackagedFactoryInputError(
+				factorydefinitions.PackagedFactoryErrorMalformed,
+				definition.Name,
+				normalizedFormat,
+				"",
+				err,
+			),
+		)
+	}
+	if prepared == nil {
+		return result, installError(
+			definition.Name,
+			namedFactoriesRoot,
+			factorydefinitions.NewPackagedFactoryInputError(
+				factorydefinitions.PackagedFactoryErrorMalformed,
+				definition.Name,
+				normalizedFormat,
+				"",
+				fmt.Errorf("prepared Factory layout is required"),
+			),
+		)
+	}
+	prepared.RootFileName = rootFileName
+	targetDir, err := namedfactorypath.MapDir(namedFactoriesRoot, definition.Name)
+	if err != nil {
+		return result, installError(
+			definition.Name,
+			namedFactoriesRoot,
+			factorydefinitions.NewPackagedFactoryInputError(
+				factorydefinitions.PackagedFactoryErrorMalformed,
+				definition.Name,
+				normalizedFormat,
+				"",
+				err,
+			),
+		)
+	}
+	result.FactoryDir = targetDir
 	if _, err := service.fileSystem.Stat(targetDir); err == nil {
 		if err := service.persistence.ValidateFactoryLayout(targetDir); err != nil {
 			return result, installError(definition.Name, namedFactoriesRoot, fmt.Errorf("existing target %s is invalid: %w", targetDir, err))
@@ -89,8 +132,7 @@ func (service *Service) InstallPackagedFactory(
 				namedFactoriesRoot,
 				definition.Name,
 				targetDir,
-				payload,
-				rootFileName,
+				prepared,
 				result,
 			)
 		}
@@ -119,8 +161,7 @@ func (service *Service) InstallPackagedFactory(
 		namedFactoriesRoot,
 		definition.Name,
 		targetDir,
-		payload,
-		rootFileName,
+		prepared,
 		result,
 	)
 }
@@ -130,25 +171,12 @@ func (service *Service) createPackagedFactory(
 	namedFactoriesRoot string,
 	name string,
 	targetDir string,
-	payload []byte,
-	rootFileName string,
+	prepared *factorydefinitions.PreparedFactoryLayoutPayload,
 	result factorydefinitions.PackagedFactoryInstallResult,
 ) (factorydefinitions.PackagedFactoryInstallResult, error) {
 	if err := ctx.Err(); err != nil {
 		return result, installError(name, namedFactoriesRoot, err)
 	}
-	prepared, err := service.persistence.PrepareFactoryLayout(ctx, name, payload)
-	if err != nil {
-		return result, installError(name, namedFactoriesRoot, err)
-	}
-	if prepared == nil {
-		return result, installError(
-			name,
-			namedFactoriesRoot,
-			fmt.Errorf("prepared Factory layout is required"),
-		)
-	}
-	prepared.RootFileName = rootFileName
 	factoryDir, err := service.persistence.CreateNamedFactory(namedFactoriesRoot, name, prepared)
 	if err != nil {
 		return result, installError(name, namedFactoriesRoot, err)
@@ -163,25 +191,12 @@ func (service *Service) replaceExistingPackagedFactory(
 	namedFactoriesRoot string,
 	name string,
 	targetDir string,
-	payload []byte,
-	rootFileName string,
+	prepared *factorydefinitions.PreparedFactoryLayoutPayload,
 	result factorydefinitions.PackagedFactoryInstallResult,
 ) (factorydefinitions.PackagedFactoryInstallResult, error) {
 	if err := ctx.Err(); err != nil {
 		return result, installError(name, namedFactoriesRoot, err)
 	}
-	prepared, err := service.persistence.PrepareFactoryLayout(ctx, name, payload)
-	if err != nil {
-		return result, installError(name, namedFactoriesRoot, err)
-	}
-	if prepared == nil {
-		return result, installError(
-			name,
-			namedFactoriesRoot,
-			fmt.Errorf("prepared Factory layout is required"),
-		)
-	}
-	prepared.RootFileName = rootFileName
 	factoryDir, err := service.persistence.ReplaceNamedFactory(namedFactoriesRoot, name, prepared)
 	if err != nil {
 		return result, installError(name, namedFactoriesRoot, err)
@@ -218,31 +233,117 @@ func selectPayload(
 	definition factorydefinitions.PackagedDefinition,
 	format factorydefinitions.PackagedFactoryFormat,
 ) ([]byte, string, factorydefinitions.PackagedFactoryFormat, error) {
+	if strings.TrimSpace(definition.Name) == "" {
+		return nil, "", "", factorydefinitions.NewPackagedFactoryInputError(
+			factorydefinitions.PackagedFactoryErrorMalformed,
+			definition.Name,
+			format,
+			"",
+			fmt.Errorf("package identity is required"),
+		)
+	}
 	if format == "" {
 		format = factorydefinitions.PackagedFactoryFormatJSON
+	}
+	if !supportsFormat(definition.Formats, format) {
+		return nil, "", "", factorydefinitions.NewPackagedFactoryInputError(
+			factorydefinitions.PackagedFactoryErrorUnsupported,
+			definition.Name,
+			format,
+			"",
+			fmt.Errorf("package does not publish the selected representation"),
+		)
+	}
+	if _, err := factorydefinitions.BuildPackagedFactoryIntegrity(definition.JSON, definition.YAML); err != nil {
+		return nil, "", "", factorydefinitions.NewPackagedFactoryInputError(
+			factorydefinitions.PackagedFactoryErrorMalformed,
+			definition.Name,
+			format,
+			"",
+			err,
+		)
+	}
+	if err := factorydefinitions.VerifyPackagedFactoryIntegrity(definition, format); err != nil {
+		return nil, "", "", err
 	}
 	switch format {
 	case factorydefinitions.PackagedFactoryFormatJSON:
 		if len(definition.JSON) == 0 {
-			return nil, "", "", fmt.Errorf("packaged Factory does not publish JSON")
+			return nil, "", "", factorydefinitions.NewPackagedFactoryInputError(
+				factorydefinitions.PackagedFactoryErrorUnsupported,
+				definition.Name,
+				format,
+				"",
+				fmt.Errorf("package does not publish JSON"),
+			)
 		}
 		return append([]byte(nil), definition.JSON...),
 			factorydefinitions.FactoryConfigFile, format, nil
 	case factorydefinitions.PackagedFactoryFormatYAML:
 		if len(definition.YAML) == 0 {
-			return nil, "", "", fmt.Errorf("packaged Factory does not publish YAML")
+			return nil, "", "", factorydefinitions.NewPackagedFactoryInputError(
+				factorydefinitions.PackagedFactoryErrorUnsupported,
+				definition.Name,
+				format,
+				"",
+				fmt.Errorf("package does not publish YAML"),
+			)
 		}
-		return append([]byte(nil), definition.JSON...),
-			"factory.yaml", format, nil
+		payload, err := canonicalYAMLPayload(definition.YAML)
+		return payload, "factory.yaml", format, err
 	case factorydefinitions.PackagedFactoryFormatYML:
 		if len(definition.YAML) == 0 {
-			return nil, "", "", fmt.Errorf("packaged Factory does not publish YAML")
+			return nil, "", "", factorydefinitions.NewPackagedFactoryInputError(
+				factorydefinitions.PackagedFactoryErrorUnsupported,
+				definition.Name,
+				format,
+				"",
+				fmt.Errorf("package does not publish YAML"),
+			)
 		}
-		return append([]byte(nil), definition.JSON...),
-			"factory.yml", format, nil
+		payload, err := canonicalYAMLPayload(definition.YAML)
+		return payload, "factory.yml", format, err
 	default:
-		return nil, "", "", fmt.Errorf("unsupported packaged Factory format %q", format)
+		return nil, "", "", factorydefinitions.NewPackagedFactoryInputError(
+			factorydefinitions.PackagedFactoryErrorUnsupported,
+			definition.Name,
+			format,
+			"",
+			fmt.Errorf("unsupported packaged Factory format %q", format),
+		)
 	}
+}
+
+func supportsFormat(
+	formats []factorydefinitions.PackagedFactoryFormat,
+	format factorydefinitions.PackagedFactoryFormat,
+) bool {
+	if len(formats) == 0 {
+		return true
+	}
+	for _, candidate := range formats {
+		if candidate == format ||
+			((format == factorydefinitions.PackagedFactoryFormatYAML || format == factorydefinitions.PackagedFactoryFormatYML) &&
+				candidate == factorydefinitions.PackagedFactoryFormatYAML) {
+			return true
+		}
+	}
+	return false
+}
+
+func canonicalYAMLPayload(payload []byte) ([]byte, error) {
+	var document any
+	if err := yaml.Unmarshal(payload, &document); err != nil {
+		return nil, fmt.Errorf("decode packaged Factory YAML: %w", err)
+	}
+	canonical, err := json.Marshal(document)
+	if err != nil {
+		return nil, fmt.Errorf("encode packaged Factory YAML as JSON: %w", err)
+	}
+	if len(canonical) == 0 || canonical[0] != '{' {
+		return nil, fmt.Errorf("packaged Factory YAML must be an object")
+	}
+	return canonical, nil
 }
 
 func installError(name, namedFactoriesRoot string, err error) error {

@@ -295,6 +295,7 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideExpandFactoryConfigOperation,
 	provideConfigureInitOperation,
 	provideACPCLIService,
+	providePackagedFactoryCapability,
 	provideInstallPackagedFactoryOperation,
 	provideInstallPackagedFactoryCLI,
 	provideQueryFactoryOperation,

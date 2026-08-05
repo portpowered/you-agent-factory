@@ -20,16 +20,16 @@ type PackagedFactoryNamesOperation func(
 // NewPackagedFactoryNames binds the Definitions-owned embedded catalog to
 // stable public-name completion.
 func NewPackagedFactoryNames(
-	catalog factorydefinitions.PackagedFactoryCatalogOperations,
+	packaging factorydefinitions.Packaging,
 ) PackagedFactoryNamesOperation {
 	return func(
 		ctx context.Context,
 		enteredPrefix string,
 	) ([]cobra.Completion, cobra.ShellCompDirective) {
-		if completionCancelled(ctx) || catalog.List == nil {
+		if completionCancelled(ctx) || packaging == nil {
 			return packagedFactoryNameFailure()
 		}
-		listed, err := catalog.ListBuiltInPackagedFactories(
+		listed, err := packaging.ListBuiltInPackagedFactories(
 			ctx,
 			factorydefinitions.ListBuiltInPackagedFactoriesRequest{},
 		)

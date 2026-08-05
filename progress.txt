@@ -13,6 +13,7 @@
 - Any successful `Terminate` no-op caused by an earlier accepted control must join the same supervision callback before returning; `controlDone` only serializes the boundary effect and is not a terminal-result barrier.
 - A committed Chat turn control must carry its immutable `TurnID` plus stable `ControlRequest.RequestID` to Factory Runtime as `TurnID`/`ControlID`; on-demand target cancellation must fan out before invocation-context cancellation and retain that result across runtime replacement.
 - A committed Chat close needs a control-aware target termination operation: preserve its opaque control ID and turn ID through Factory Sessions, fan out before target cleanup, and keep generic close separate for process lifecycle cleanup.
+- Factory portable payloads must derive and verify root and bundled-artifact integrity, then prepare the complete layout before any create or replace operation; reuse that prepared layout for the eventual atomic write.
 
 ## 2026-08-04 20:18 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-001
 - Implemented typed Worker Session pause, resume, cancel, and terminate controls. Cancel and terminate now target the exact supervised dispatch through `WorkstationPoolBoundary.Cancel`; terminate waits for the established terminal callback, and pause/resume explicitly report unsupported until a truthful resumable capability exists.
@@ -233,4 +234,16 @@
 - Verification: JSON parsing confirms all four L4 W6 stories remain `passes:true`; focused Factory Runtime, Worker Sessions, and Factory Sessions suites plus `-race -count=10` integration verification pass; `git diff --check` is clean.
 - **Learnings for future iterations:**
   - Task-local PRD/progress conflicts can coexist with independent mainline progress entries; retain the active task records in the conflicted section and preserve non-conflicting mainline history.
+---
+
+## 2026-08-05 05:06 -07:00 - ACP-L3-DEF-CONSOLIDATE-PACKAGING-SNAPSHOTS-001
+- Published the direct Factory Definitions `Packaging` capability and direct catalog/install ports. The canonical CLI composition and packaged-name completion now consume that capability rather than catalog/installer callback aggregates, while legacy forwarding remains for later System Initialization migration.
+- Added detached package integrity contracts and publication facts for JSON/YAML source bytes and bundled artifacts. Installation now validates the requested representation, declared checksums, Factory-relative artifact paths, and the complete portable layout before inspecting or mutating a target, then preserves the requested `factory.json`, `factory.yaml`, or `factory.yml` root during atomic materialization.
+- Added behavioral round trips for JSON, YAML, and YML package installation plus byte-preserved bundled assets, detached resolve values, typed missing/malformed/unsupported/integrity failures, and unchanged existing and absent targets on every failed preflight path.
+- Files changed: `internal/packagedfactorycatalog/definition_catalog.go`, `pkg/services/factory_definitions/{packages_contract.go,packaged_installation.go,internal/packaged_catalog.go,internal/services/distribution/{packagedcatalog,packagedinstallation,packaging},wire/packaged_catalog_ports.go}`, `pkg/wire/{profiles.go,packaged_factory_cli.go,wire.go,wire_gen.go}`, `pkg/transports/cli/cobracompletion/packaged_factory_names.go`, `prd.json`, `progress.txt`.
+- Verification: focused Packaging tests; `go test ./pkg/services/factory_definitions/... ./internal/packagedfactorycatalog ./pkg/wire ./pkg/transports/cli/cobracompletion -count=1`; focused `go vet`; `make packaged-factory-catalog-check`; deterministic consecutive `make generate-wire`; `make typecheck`; `make test`; `git diff --check`. `make pkg-boundary` remains blocked by 141 pre-existing repository-wide violations outside this story.
+- **Learnings for future iterations:**
+  - A focused capability can wrap direct internal ports while preserving aggregate callback forwarding only for unmigrated consumers; migrate each coherent consumer independently.
+  - YAML and YML installation must canonicalize the selected YAML source for validation while retaining the caller-selected authored root filename at write time.
+  - A generated wire diff is expected while composition changes; compare the generated file hash across a second generation to prove reproducibility.
 ---
