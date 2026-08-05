@@ -192,6 +192,7 @@ var servicesSet = wire.NewSet(
 	provideFactoryStarterWorkApplier,
 	providePortableBundledDocsPruner,
 	provideFactoryDefinitionLoader,
+	provideValidatedAuthoredFactoryDefinitionLoader,
 	provideFactoryRuntimeClockResolver,
 	provideFactoryRuntimeSessionLoggerFactory,
 	provideReplayExecutionFactory,

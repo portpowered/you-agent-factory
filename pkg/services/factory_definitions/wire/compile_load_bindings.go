@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	authoredloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoredloading"
 	internalauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
 	compilationloadedsource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource"
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
@@ -16,6 +17,31 @@ import (
 // wire composition. Root pkg/wire binds through this alias instead of public
 // transitional loading shims.
 type Loader = compilationloading.Loader
+
+// NewValidatedAuthoredFactoryDefinitionLoader constructs the narrow public
+// authored-source capability from the existing Definitions-owned loader and
+// validator. It performs no source reads, validation, materialization, cache
+// work, or lifecycle activation during construction.
+func NewValidatedAuthoredFactoryDefinitionLoader(
+	loadCurrent factorydefinitions.LoadedFactoryLoader,
+	loadSelected factorydefinitions.LoadedFactoryLoader,
+	validator factorydefinitions.Validator,
+) (factorydefinitions.ValidatedAuthoredFactoryDefinitionLoader, error) {
+	if loadCurrent == nil {
+		return nil, fmt.Errorf("construct validated authored Factory Definition loader: current-directory loader is required")
+	}
+	if loadSelected == nil {
+		return nil, fmt.Errorf("construct validated authored Factory Definition loader: selected-source loader is required")
+	}
+	if validator == nil {
+		return nil, fmt.Errorf("construct validated authored Factory Definition loader: validator is required")
+	}
+	service := authoredloading.New(loadCurrent, loadSelected, validator)
+	if service == nil {
+		return nil, fmt.Errorf("construct validated authored Factory Definition loader: implementation rejected dependencies")
+	}
+	return service, nil
+}
 
 // NewLoader binds Factory Definitions loading to the selected authored and
 // canonical representation adapters through compilation-owned loading.

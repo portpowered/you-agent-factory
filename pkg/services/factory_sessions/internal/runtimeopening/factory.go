@@ -102,6 +102,7 @@ type FactoryDefinitionsDependencies struct {
 	Validator                     factorydefinitions.Validator
 	NamedPaths                    factorydefinitions.NamedPathResolver
 	Factory                       FactoryDefinitionsFactory
+	AuthoredDefinitionLoader      factorydefinitions.ValidatedAuthoredFactoryDefinitionLoader
 	InitialFactorySnapshotFactory factorydefinitions.InitialFactorySnapshotFactory
 	LoadFactory                   factorydefinitions.LoadedFactoryLoader
 	NewLoadedFactory              factorydefinitions.LoadedFactorySourceFactory
@@ -189,6 +190,7 @@ type Factory struct {
 	automationHostedSourcesFactory   AutomationHostedSourcesFactory
 	workersLocalRuntimeHooksFactory  WorkersLocalRuntimeHooksFactory
 	factoryDefinitionsFactory        FactoryDefinitionsFactory
+	authoredDefinitionLoader         factorydefinitions.ValidatedAuthoredFactoryDefinitionLoader
 	factoryScaffoldInitializer       factorysessions.FactoryScaffoldInitializer
 	editableFactoryValidator         factorysessions.EditableFactoryValidator
 	initialFactorySnapshotFactory    factorydefinitions.InitialFactorySnapshotFactory
@@ -257,6 +259,7 @@ func NewFactory(dependencies Dependencies) (*Factory, error) {
 		automationHostedSourcesFactory:   automations.HostedSourcesFactory,
 		workersLocalRuntimeHooksFactory:  workersDependencies.LocalRuntimeHooksFactory,
 		factoryDefinitionsFactory:        factoryDefinitions.Factory,
+		authoredDefinitionLoader:         factoryDefinitions.AuthoredDefinitionLoader,
 		factoryScaffoldInitializer:       factorySessions.FactoryScaffoldInitializer,
 		editableFactoryValidator:         factorySessions.EditableFactoryValidator,
 		initialFactorySnapshotFactory:    factoryDefinitions.InitialFactorySnapshotFactory,
@@ -339,6 +342,7 @@ func (dependencies Dependencies) validateFactoryDefinitions() error {
 		runtimeOpeningRequirement{"validator", group.Validator},
 		runtimeOpeningRequirement{"named path resolver", group.NamedPaths},
 		runtimeOpeningRequirement{"factory", group.Factory},
+		runtimeOpeningRequirement{"validated authored definition loader", group.AuthoredDefinitionLoader},
 		runtimeOpeningRequirement{"initial factory snapshot factory", group.InitialFactorySnapshotFactory},
 		runtimeOpeningRequirement{"loaded factory loader", group.LoadFactory},
 		runtimeOpeningRequirement{"loaded factory source factory", group.NewLoadedFactory},

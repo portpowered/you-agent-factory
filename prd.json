@@ -1,93 +1,92 @@
 {
-  "project": "Fan Factory Turn Control Out to Associated Worker Sessions",
-  "branchName": "ACP-L4-W6-WORKER-CONTROL-FANOUT",
-  "description": "Complete ACP L4 W6 by routing a committed, captured Factory turn's pause, resume, cancel, or terminate control to every canonically associated descendant Worker Session through the singular Worker Sessions control plane, using WorkstationPoolBoundary.Cancel wherever accepted workstation work must be stopped, while preserving idempotency, captured-turn isolation, deterministic partial-failure and race outcomes, and Factory Runtime result authority.",
+  "project": "Consolidate Factory Definitions Authored Loading and Validation",
+  "branchName": "ACP-L3-DEF-CONSOLIDATE-AUTHORED-VALIDATION",
+  "description": "Publish one narrow Factory Definitions-owned capability that deterministically selects, loads, validates, and returns a detached authored Factory definition, then migrate one coherent Factory Runtime-facing loading path without changing live state ownership, Factory Sessions controls, Events, Recordings, packaged distribution, or generated transports.",
   "context": {
-    "customerAsk": "Route pause, resume, cancel, and terminate from a committed Factory turn control to every currently associated descendant Worker Session through the Worker Sessions control plane and WorkstationPoolBoundary.Cancel where cancellation is required. Preserve idempotency, deterministic terminal and control outcomes, captured-turn isolation, no effect on a later turn, and Factory Runtime result authority. Prove multi-child fan-out, queued/running/terminal children, cancel-versus-completion races, pause/resume, partial failures, and no context-cancellation bypass, then continue through review and actual merge.",
-    "problem": "Factory children now execute through controllable Worker Sessions and have canonical W4 associations, but committed Factory turn controls do not yet coordinate those descendants. Direct cancellation or context propagation would bypass Worker Sessions, could miss queued work, could affect a replacement turn, and could compete with Factory Runtime's canonical result handling. Fail-fast fan-out could also leave later children uncontrolled after one child fails.",
-    "solution": "After the W4 public association-event contract alignment is complete, extend the singular Worker Sessions service with exact-session control over its existing process-local supervision state and map cancellation-required actions to the Workers workstation-pool cancellation boundary. Add Factory-side coordination that selects one immutable, deduplicated, deterministic target set from the captured turn's canonical associations, attempts every child, and returns ordered per-child and aggregate outcomes. Leave ACP parsing and control-intent resolution with L1 owners and leave dispatch terminal result authority with Factory Runtime."
+    "customerAsk": "Create and use a small Factory Definitions-owned authored-source and validation capability that supplies a selected, immutable, validated Factory definition. Keep authored loading and semantic validation in Factory Definitions, preserve current-directory and bundled/layout behavior and typed failure outcomes, and migrate one coherent Runtime-facing consumer without changing runtime state ownership or the D1/D2 boundaries.",
+    "problem": "Factory Definitions currently exposes authored loading and validation through broad aggregate, mutable loaded-source, function-type, and compatibility contracts. Factory Runtime therefore lacks one focused public dependency guaranteeing deterministic selection and Definitions-owned validation, which invites excess authority, mutation aliasing, inconsistent failures, construction-time I/O, and future reach-through into Factory Sessions.",
+    "solution": "Expose a focused Factory Definitions capability that accepts explicit selection context, composes the existing Definitions-owned source selection, authored decoding, split/bundled layout resolution, effective loading, and semantic validation, and returns a detached definition with typed failures. Construct it inertly through the owning provider and canonical wire graph, then inject it into one existing Runtime-facing loading path while leaving unrelated compatibility and all state, event, recording, distribution, and transport behavior unchanged."
   },
   "acceptanceCriteria": [
-    "After the W4 public association-event contract alignment is merged, a committed Factory turn pause, resume, cancel, or terminate is fanned out through worker_sessions.Service to every Worker Session canonically associated with that captured Factory Session and turn at the fan-out linearization point, with stable deduplication and deterministic result order.",
-    "Worker Sessions returns explicit applied, idempotent no-op/already-terminal, unsupported, and operation-failure outcomes as applicable for queued, running, paused, and terminal targets; repeated control never repeats an underlying side effect or changes a committed terminal outcome.",
-    "Cancel and terminate paths that require workstation cancellation call WorkstationPoolBoundary.Cancel for the exact associated dispatch, including queued and running work, and accepted work is never controlled by canceling the Start, publisher, fan-out, or request context.",
-    "A committed control is permanently scoped to its immutable captured Factory Session and turn; an association or turn that belongs to a later replacement turn, another Factory Session, or an unrelated direct Worker execution receives no call.",
-    "Fan-out attempts every selected child despite individual unsupported outcomes or failures, returns deterministic per-child evidence and an aggregate outcome, and never replaces Factory Runtime's accepted dispatch result, terminal ordering, or result authority during a control/completion race.",
-    "Typecheck, lint, focused Worker Sessions and Factory Runtime/service integration tests, race/repeat tests for the concurrency paths, and all required CI checks are terminal and passing; tests use controlled edges or observable state transitions rather than arbitrary sleeps or meta-test inventories.",
-    "The implementation/review loop continues until all blocking PR conversation feedback is explicitly addressed, shared-file and W4 baseline conflicts are reconciled, required CI is terminal and passing on the reviewed head, and the PR is actually merged; an open, green, approved, or ready-to-merge PR is not complete."
+    "Factory Definitions publishes a narrow authored-source and validation capability that accepts explicit selection context and returns one selected, detached, validated Factory definition without exposing implementation packages, validator collaborators, session handles, or unrelated Definitions operations.",
+    "Valid supported authored inputs preserve current-directory resolution, root-file precedence, split-layout and bundled-content behavior, effective base-directory semantics, and result immutability.",
+    "Missing input, malformed configuration, unresolved authored content, and blocking validation findings produce distinguishable actionable Factory Definitions-owned typed failures and never return a partial definition.",
+    "One coherent Runtime-facing loading path consumes only the declared public capability and preserves its successful and failing behavior without importing Definitions internals or reaching through Factory Sessions.",
+    "Capability construction performs no I/O, validation, materialization, caching, state mutation, or lifecycle activation; Runtime state ownership, Factory Session controls, Factory Events, Recordings JSONL history/replay, packaged distribution, and generated/public transports remain unchanged.",
+    "Quality gates pass: typecheck/Go compilation, formatting, lint, package-boundary checks, focused Factory Definitions and Runtime tests, make verify-fast, and the required CI tier.",
+    "Delivery continues through implementation and correctness-first review until required CI is terminal and passing, every blocking PR conversation is explicitly addressed, shared-file and merge conflicts are resolved, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "ACP-L4-W6-WORKER-CONTROL-FANOUT-001",
-      "title": "Control one exact Worker Session safely",
-      "description": "As a Factory control coordinator, I want Worker Sessions to control one exact supervised child so that lifecycle changes and cancellation use the owning control plane and cannot drift to another attempt.",
+      "id": "ACP-L3-DEF-CONSOLIDATE-AUTHORED-VALIDATION-001",
+      "title": "Publish an inert focused capability",
+      "description": "As a service consumer, I want a small Factory Definitions-owned loading and validation contract so that I can request a validated definition without receiving unrelated authority.",
       "acceptanceCriteria": [
-        "The singular Worker Sessions service accepts validated pause, resume, cancel, and terminate requests that identify one stable Worker Session and its currently supervised attempt, and returns a detached typed result describing the requested action and its observable outcome.",
-        "Pause applies only to a state where the existing execution capability can truthfully pause; resume applies only to the matching paused session. Unsupported actions and repeated pause/resume return stable non-error outcomes and do not fabricate a state transition.",
-        "Cancel and terminate actions that require stopping accepted workstation work invoke WorkstationPoolBoundary.Cancel with the exact dispatch identity for both queued and running sessions; an already canceled or otherwise terminal dispatch maps to an idempotent no-op/already-terminal result.",
-        "Invalid or unknown identity is distinguishable from a valid unsupported or terminal target, and a genuine Workers boundary failure is returned without committing a false Worker Session lifecycle outcome.",
-        "Canceling the caller, Start, publisher, or fan-out context is neither used nor accepted as the mechanism for stopping an admitted dispatch; explicit cancellation still reaches a detached accepted dispatch through the Workers boundary.",
-        "Focused behavioral tests cover queued, running, paused, completed, failed, and already-canceled sessions, duplicate controls, underlying failures, and context cancellation using deterministic synchronization.",
+        "The public capability exposes one cohesive operation with plain Factory Definitions request, result, value, and typed-error vocabulary; request data does not contain filesystems, loaders, validators, loggers, Runtime types, or Factory Session types.",
+        "The success result contains only the selected source identity and detached effective-definition facts needed by the declared consumer.",
+        "Production composition constructs the capability once from explicit dependencies and injects it directly; no dependency bag, service locator, lazy constructor, child graph, or per-session service construction is introduced.",
+        "A construction test using observable fake effects proves construction performs no file reads/writes, validation, bundled-file materialization, caching, or lifecycle work before the operation is invoked.",
+        "Existing public compatibility entry points required by consumers outside this slice remain available; this story does not perform broad alias retirement.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "2026-08-04: Added the Worker Sessions Pause, Resume, Cancel, and Terminate control contract with detached typed results. Worker Sessions now supervises each dispatch through the exact runtime WorkstationPoolBoundary and stores the stable dispatch identity privately; cancel/terminate call Boundary.Cancel with a cancellation-detached context. Cancel is idempotent, pause/resume truthfully report unsupported until a resumable provider capability exists, and terminate waits for the terminal callback before reporting. Focused control behavior, race-repeat, Worker Sessions, Factory Runtime/internal, and wire tests pass."
+      "notes": "2026-08-05: Published the process-scoped ValidatedAuthoredFactoryDefinitionLoader with one plain request/result operation and typed safe failure vocabulary. Canonical Wire constructs it once from the existing Definitions-owned loader and validator, Runtime Opening retains the exact inert instance, and focused tests prove construction performs no loading or validation while returned effective facts are detached. Focused Factory Definitions/Runtime tests, go vet, typecheck, and make verify-fast pass; repository pkg-file-count/pkg-boundary still report pre-existing baseline debt outside this story."
     },
     {
-      "id": "ACP-L4-W6-WORKER-CONTROL-FANOUT-002",
-      "title": "Select only descendants of the captured Factory turn",
-      "description": "As a Factory control coordinator, I want a committed control bound to one immutable turn's canonical child associations so that every applicable descendant is targeted once and later work is isolated.",
+      "id": "ACP-L3-DEF-CONSOLIDATE-AUTHORED-VALIDATION-002",
+      "title": "Load a deterministic immutable authored definition",
+      "description": "As a Factory Runtime-facing consumer, I want valid authored inputs to resolve to the same detached effective definition so that representation and layout choices do not change Runtime intent.",
       "acceptanceCriteria": [
-        "Implementation starts from the merged, aligned W4 public association-event contract and does not introduce a private association registry, inferred dispatch scan, second event vocabulary, or persistence path.",
-        "For one committed control, the coordinator selects the unique Worker Session identities associated with the captured Factory Session and turn at a defined linearization point, orders them deterministically, and invokes each selected identity at most once even if an association event is retried or observed more than once.",
-        "Multiple concurrent child associations for the captured turn are included when committed before the selection point; an association committed after that point has a deterministic non-inclusion outcome and is not silently rebound by a retry to a different target set.",
-        "Worker Sessions associated with a later replacement turn, another Factory Session, or a direct execution are excluded, and repeating the old committed control after a new turn is admitted has no effect on that new turn.",
-        "An empty captured association set resolves as a defined idempotent no-op and performs no Worker Sessions call.",
-        "Focused integration and race/repeat tests prove multi-child selection, duplicate association delivery, association/control ordering, empty selection, and cross-turn/cross-session isolation without timing sleeps.",
+        "Explicit JSON, YAML, and YML Factory files retain their supported decoding and selected-source identity behavior.",
+        "An explicit project/current directory retains existing current-Factory resolution, and a direct Factory directory retains the existing unambiguous factory.json, factory.yaml, or factory.yml root selection rules.",
+        "Split worker/workstation definitions, authored bodies/prompts, portable bundled files, starter content, and Runtime base-directory facts retain the existing accepted loading semantics applicable to the migrated path.",
+        "The operation applies the existing blocking structural/effective validation policy before returning success.",
+        "Mutating request bytes, loader-owned buffers, nested values in one returned result, or caller-local projections cannot change a retained result or a later result for unchanged authored input.",
+        "Focused Factory Definitions tests directly prove valid single-file, current/direct directory, split-layout, bundled-content, and mutation-isolation behavior.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "2026-08-04: The W4 canonical dispatch-to-Worker-Session association now retains the dispatch execution request ID in FactoryEvent.context.requestId. Factory Runtime captures one immutable, sorted-and-deduplicated Worker Session target set from that session-scoped canonical ledger for the committed turn; duplicate associations select once, later commits remain outside an already captured set, and later-turn/direct/other-session events are excluded. Focused Runtime and Recordings tests plus focused go vet pass."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "ACP-L4-W6-WORKER-CONTROL-FANOUT-003",
-      "title": "Fan pause and resume across all selected children",
-      "description": "As an operator controlling a Factory turn, I want pause and resume attempted for every selected child so that one unsupported or failed child cannot hide the state of the rest.",
+      "id": "ACP-L3-DEF-CONSOLIDATE-AUTHORED-VALIDATION-003",
+      "title": "Return typed actionable load and validation failures",
+      "description": "As a caller, I want loading and validation failures to remain specific and actionable so that I can distinguish configuration mistakes and stop before Runtime uses invalid state.",
       "acceptanceCriteria": [
-        "A committed pause or resume invokes the matching Worker Sessions operation for every deterministically selected descendant and does not stop at the first unsupported outcome or operation failure.",
-        "Per-child results retain Worker Session identity and typed applied, no-op/already-terminal, unsupported, or failed outcomes in deterministic order, and the aggregate result truthfully distinguishes full application, idempotent no-op, unsupported/partial application, and operation failure according to the existing control vocabulary.",
-        "Repeating the same pause or resume is idempotent: already paused, already resumed/running, and terminal children receive no repeated underlying side effect, while earlier per-child failure does not permit a retry to target a later Factory turn.",
-        "A pause or resume racing child completion yields one valid terminal-or-controlled outcome for that child and cannot overwrite its committed Worker Session terminal result or Factory Runtime result.",
-        "Focused behavioral tests cover mixed running/paused/terminal children, duplicate pause and resume, partial unsupported outcomes, one and multiple child failures, and pause/resume versus completion races.",
+        "A missing selected source or directory without a supported definition returns a typed missing-definition outcome with safe source context and no partial success value.",
+        "Invalid JSON/YAML or content that cannot represent a Factory returns a typed malformed-definition outcome that preserves an inspectable cause without exposing authored payload contents.",
+        "Missing split definitions, unsafe or unresolved bundled/layout references, and other resolution failures remain distinguishable from syntax failures where the existing behavior distinguishes them.",
+        "Blocking structural or semantic findings return a typed validation failure with actionable existing finding fields; non-blocking warnings and hints retain the selected existing validation-profile behavior.",
+        "Cancellation and dependency failures preserve their cause and never return a usable definition.",
+        "Focused behavioral tests directly cover missing input, malformed configuration, unresolved authored content, blocking validation, non-blocking findings, and cancellation/dependency failure without meta-tests over files, methods, routes, or registrations.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "2026-08-04: Factory Runtime pause/resume controls now accept immutable turn and control identities, capture the canonical association snapshot once per committed control, and fan out in deterministic order solely through Worker Sessions. Public results retain detached per-child applied/no-op/unsupported/failed evidence plus aggregate APPLIED/NOOP/UNSUPPORTED/PARTIAL/FAILED outcomes. Repeated controls return the original evidence without reselecting late children, child errors do not stop siblings, and fan-out ignores caller cancellation after the parent control commits. Focused fan-out, repeat/isolation, empty-selection, full Runtime, Worker Sessions, race, and vet verification pass."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "ACP-L4-W6-WORKER-CONTROL-FANOUT-004",
-      "title": "Fan cancel and terminate without stealing result authority",
-      "description": "As an operator stopping a Factory turn, I want cancel or terminate to reach every selected child while Factory Runtime remains authoritative for each dispatch's final result.",
+      "id": "ACP-L3-DEF-CONSOLIDATE-AUTHORED-VALIDATION-004",
+      "title": "Migrate one Runtime-facing loading path",
+      "description": "As a Factory Runtime maintainer, I want one existing loading path to consume only the validated-definition capability so that Runtime receives trustworthy input through the intended ownership boundary.",
       "acceptanceCriteria": [
-        "A committed cancel or terminate invokes the matching Worker Sessions operation for every selected descendant, including queued and running work, and continues through terminal, unsupported, or failed children instead of failing fast.",
-        "Every cancellation-required child is stopped only through its exact WorkstationPoolBoundary.Cancel identity; the fan-out coordinator does not call Workers or provider internals directly and does not use parent-context cancellation as a substitute.",
-        "If control wins a child race, the existing Workers/Worker Sessions result path reports the established canceled terminal outcome exactly once; if normal completion wins, control reports the defined no-op/already-terminal outcome and the completed result remains unchanged.",
-        "Partial failures are returned with deterministic per-child identity and aggregate evidence after all selected children have been attempted; successful siblings remain controlled, and failure does not create a fabricated Factory terminal result or a second terminal callback.",
-        "Repeated cancel/terminate and an old control retried after a replacement turn are harmless: no underlying cancellation is duplicated, no later turn is affected, and the existing captured-control owner receives enough truthful evidence to resolve COMPLETED, NOOP, or SUPERSEDED without this slice inventing another state machine.",
-        "Focused integration plus race/repeat tests cover multi-child queued/running/terminal mixtures, cancel and terminate idempotency, partial failures, cancel-versus-completion ordering, exact-once terminal result acceptance, and no context-cancellation bypass.",
+        "One coherent existing Runtime-facing definition-loading path receives the focused capability directly through canonical construction and no longer receives separate broad loader or validator authority solely for that behavior.",
+        "Equivalent valid inputs produce the same selected Factory identity, effective definition, directories, split/bundled content, and Runtime construction outcome as before migration.",
+        "Missing, malformed, unresolved, and validation failures propagate with their typed classification and prevent Runtime construction from observing partial definition state.",
+        "The migrated consumer imports only public Factory Definitions contracts for this behavior and does not import Definitions internals, Factory Sessions internals, session registries, Runtime handles, response streams, or replacement-state types.",
+        "Focused integration and composition tests prove narrow direct injection, inert construction, valid loading, and representative typed failure propagation.",
+        "Regression evidence shows no change to mutable Runtime state ownership, Factory Session lifecycle or controls, invocation outcomes, Factory Event semantics, Recordings snapshots/history/replay, packaged distribution, or transport/generated contracts.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 4,
-      "reviewNotes": "2026-08-04: Addressed the final committed-terminate ingress finding. ACP close now forwards its immutable turn and opaque control ID to Factory Sessions, which invokes captured Runtime TERMINATE fan-out before invocation cancellation or target cleanup; retries cannot bind to a replacement runtime. 2026-08-05: Added the requested real collaboration proof from the Factory Sessions target-termination boundary through Factory Runtime selection, Worker Sessions, and a controlled Workers boundary. It proves deterministic exact cancellation of captured children before target cleanup under a canceled caller context, retains the Worker Sessions callback-owned terminal results, and leaves a live replacement-turn child untouched.",
-      "passes": true,
-      "notes": "2026-08-04: Extended the captured-turn fan-out contract with explicit CANCEL and TERMINATE Worker Session actions. A turn-scoped stop carries immutable turn/control identities, retains deterministic child evidence for retries, defaults legacy calls to TERMINATE, and serializes Run's pool shutdown behind Worker Sessions fan-out so every selected child is attempted through the singular control plane before teardown. 2026-08-04 review remediation: Worker Sessions now reserves the exact control identity before its canonical association is published; the production asynchronous WorkstationPoolBoundary waits for a Workers-owned cancellable-admission acknowledgment before Publish returns; and an already-terminal boundary cancellation waits for and returns the established completed terminal snapshot as a no-op. Deterministic review-race tests, repeated race runs, vet, full short Go tests, and 100% Worker Sessions package coverage pass. The all-package coverage runner cannot start locally because its 573 expanded Windows package arguments exceed the command-line limit; CI runs that lane on Linux. The branch also merges current `fork/main` and resolves its task-local PRD/progress conflict in favor of this L4 task's records. 2026-08-04 final review remediation: the Workers admission acknowledgement now reaches Worker Sessions before both asynchronous and synchronous boundary publication returns, so an admitted `Async:false` dispatch remains exactly cancellable while its publish call waits for completion. Deterministic real-boundary tests prove that terminate reaches the running dispatch before natural completion and that the Factory fan-out continues to a later synchronous child; focused and full short Go verification pass. 2026-08-04 CI coverage remediation: a late-admission lifecycle test proves an already terminal Worker Session remains absorbing and retains its established terminal result; the package is restored to its required 100% statement coverage. 2026-08-04 final termination remediation: an exact Workers boundary can report `ALREADY_CANCELED` after committing cancellation but before its callback reaches Worker Sessions. Terminate now waits for that authoritative callback and returns the resulting canceled terminal snapshot as a no-op; ordinary Cancel preserves its intentional non-joining no-op behavior. A deterministic production-boundary test proves the join without sleeps or polling. 2026-08-04 repeated-control remediation: every no-op Terminate path now joins the associated callback before returning a refreshed terminal snapshot, including Cancel-then-Terminate and concurrent Terminate calls; deterministic tests prove exactly one boundary cancellation and callback-joined results. 2026-08-04 customer-control remediation: ACP now forwards its committed turn and stable control identity through Factory Sessions. The on-demand target uses the exact captured Factory Runtime to fan CANCEL before invocation-context cancellation or teardown, retains the Runtime result across replacement activation, and pause/resume forwarding preserves the same identity. Deterministic ACP, Factory Sessions, and Runtime tests prove exact captured control, replacement isolation, and no context-cancellation bypass."
+      "passes": false,
+      "notes": ""
     }
   ]
 }

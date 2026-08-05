@@ -229,6 +229,10 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	packagedInstallationFileSystem := provideFactoryDefinitionPackagedInstallationFileSystem(edges2)
 	packagedFactoryInstallationOperations := providePackagedFactoryInstallation(v20, packagedInstallationFileSystem)
 	v21 := provideFactoryDefinitionsFactory(v20, v14, v9, v10, namedPathResolver, namedFactoryCatalogFileSystem, clock, versionFileSystem, effectiveFactoryCatalogOperation, packagedFactoryCatalogOperations, packagedFactoryInstallationOperations, v13, v15, portablefilesFileSystem, directoryReplacementStore)
+	validatedAuthoredFactoryDefinitionLoader, err := provideValidatedAuthoredFactoryDefinitionLoader(v14, v16)
+	if err != nil {
+		return nil, err
+	}
 	initialFactorySnapshotFactory := provideInitialFactorySnapshotFactory(v9, v10)
 	v22 := provideLoadedFactoryLoader(v14)
 	v23 := provideLoadedFactorySourceFactory()
@@ -238,6 +242,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		Validator:                     v16,
 		NamedPaths:                    namedPathResolver,
 		Factory:                       v21,
+		AuthoredDefinitionLoader:      validatedAuthoredFactoryDefinitionLoader,
 		InitialFactorySnapshotFactory: initialFactorySnapshotFactory,
 		LoadFactory:                   v22,
 		NewLoadedFactory:              v23,
@@ -763,6 +768,7 @@ var servicesSet = wire4.NewSet(
 	provideFactoryStarterWorkApplier,
 	providePortableBundledDocsPruner,
 	provideFactoryDefinitionLoader,
+	provideValidatedAuthoredFactoryDefinitionLoader,
 	provideFactoryRuntimeClockResolver,
 	provideFactoryRuntimeSessionLoggerFactory,
 	provideReplayExecutionFactory,

@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -373,6 +374,24 @@ func provideLoadedFactoryLoader(
 	return func(factoryDir string, workstationLoader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 		return loader.LoadSourceFromFactoryDir(factoryDir, workstationLoader)
 	}
+}
+
+// provideValidatedAuthoredFactoryDefinitionLoader constructs the process-scoped
+// Factory Definitions capability once from the existing direct loader and
+// validator collaborators. Runtime-opening receives this exact inert instance;
+// it does not construct a per-session child service.
+func provideValidatedAuthoredFactoryDefinitionLoader(
+	loader *factorydefinitionswire.Loader,
+	validator factorydefinitions.Validator,
+) (factorydefinitions.ValidatedAuthoredFactoryDefinitionLoader, error) {
+	if loader == nil {
+		return nil, fmt.Errorf("construct validated authored Factory Definition loader: Factory Definitions loader is required")
+	}
+	return factorydefinitionswire.NewValidatedAuthoredFactoryDefinitionLoader(
+		loader.LoadRuntimeSource,
+		loader.LoadSourceFromFactoryDir,
+		validator,
+	)
 }
 
 func provideReplayArtifactStorage() platformreplay.Storage {

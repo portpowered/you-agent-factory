@@ -140,6 +140,63 @@ func TestNewCatalogPathsServicePerformsNoIOAtConstruction(t *testing.T) {
 	}
 }
 
+func TestNewValidatedAuthoredFactoryDefinitionLoaderPerformsNoWorkAtConstruction(t *testing.T) {
+	t.Parallel()
+
+	var loadCalls, validationCalls int
+	loadCurrent := func(
+		string,
+		factorydefinitions.WorkstationLoader,
+	) (factorydefinitions.MutableLoadedFactorySource, error) {
+		loadCalls++
+		panic("current Factory loading invoked during inert construction")
+	}
+	loadSelected := func(
+		string,
+		factorydefinitions.WorkstationLoader,
+	) (factorydefinitions.MutableLoadedFactorySource, error) {
+		loadCalls++
+		panic("selected Factory loading invoked during inert construction")
+	}
+	validator := validatedAuthoredLoaderConstructionValidator{
+		validateBlockingLoad: func(context.Context, *factorydefinitions.FactoryConfig) factorydefinitions.ValidationResult {
+			validationCalls++
+			panic("Factory validation invoked during inert construction")
+		},
+	}
+
+	service, err := factorydefinitionswire.NewValidatedAuthoredFactoryDefinitionLoader(
+		loadCurrent,
+		loadSelected,
+		validator,
+	)
+	if err != nil {
+		t.Fatalf("NewValidatedAuthoredFactoryDefinitionLoader: %v", err)
+	}
+	if service == nil {
+		t.Fatal("NewValidatedAuthoredFactoryDefinitionLoader returned nil service")
+	}
+	if loadCalls != 0 || validationCalls != 0 {
+		t.Fatalf(
+			"construction invoked loading=%d validation=%d calls, want no I/O, materialization, or validation",
+			loadCalls,
+			validationCalls,
+		)
+	}
+}
+
+type validatedAuthoredLoaderConstructionValidator struct {
+	factorydefinitions.Validator
+	validateBlockingLoad func(context.Context, *factorydefinitions.FactoryConfig) factorydefinitions.ValidationResult
+}
+
+func (v validatedAuthoredLoaderConstructionValidator) ValidateBlockingLoad(
+	ctx context.Context,
+	config *factorydefinitions.FactoryConfig,
+) factorydefinitions.ValidationResult {
+	return v.validateBlockingLoad(ctx, config)
+}
+
 func TestCatalogPathsServiceResolveNamedFactoryPrefersProjectOverGlobal(t *testing.T) {
 	t.Parallel()
 
