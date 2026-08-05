@@ -6,6 +6,7 @@
 - A turn-targeted Factory control must carry the immutable turn and control identities; cache its detached fan-out result by both so retries cannot select associations committed later.
 - When a turn-scoped stop also ends the Factory Runtime, serialize Run's pool teardown behind Worker Sessions fan-out so the pool cannot preempt exact child controls.
 - An asynchronous `WorkstationPoolBoundary.Publish` must not return until Workers has admitted the dispatch into an exact cancellable queue or running set (or has already returned a terminal result); Worker Sessions may then safely issue exact cancellation.
+- A pool boundary that offers synchronous completion must forward Workers' cancellable-admission acknowledgement before it waits for the terminal result; otherwise a valid running dispatch becomes unreachable to its supervising control plane.
 
 ## 2026-08-04 20:18 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-001
 - Implemented typed Worker Session pause, resume, cancel, and terminate controls. Cancel and terminate now target the exact supervised dispatch through `WorkstationPoolBoundary.Cancel`; terminate waits for the established terminal callback, and pause/resume explicitly report unsupported until a truthful resumable capability exists.
@@ -58,11 +59,21 @@
 - **Learnings for future iterations:**
   - Association publication is only a safe external control point after the exact Worker Session identity has been reserved; record the association before opening lifecycle records, but never before reserving the identity.
   - An `ALREADY_TERMINAL` cancellation result is not a failure: wait for the authoritative terminal callback and return the preserved terminal snapshot as a no-op.
-  - When adding a synchronization callback to a public execution interface, update all focused test fakes to acknowledge admission before delegating to their existing dispatch behavior.
+- When adding a synchronization callback to a public execution interface, update all focused test fakes to acknowledge admission before delegating to their existing dispatch behavior.
 ---
 ## 2026-08-04 21:38 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-004
 - Merged current `fork/main` to resolve the PR's reported conflict. The only overlap was the task-local `prd.json` and `progress.txt`, which respectively belong to this L4 task; the incoming documentation and packaged-factory changes were retained unchanged.
 - Files changed: merged current `fork/main`; resolved `prd.json` and `progress.txt`.
 - **Learnings for future iterations:**
   - Task-local PRD and progress artifacts are branch-specific. When a normal current-main merge conflicts only in those files, retain the active task's artifacts while preserving all independent mainline files.
+---
+
+## 2026-08-04 22:00 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-004
+- Addressed the final blocking review finding for synchronous pool dispatch. `WorkstationPoolBoundary.PublishWithAdmission` now forwards the Workers-owned admission signal to Worker Sessions before either asynchronous publication returns or synchronous publication waits for terminal completion. Worker Sessions marks the exact dispatch controllable at that signal, then still lets the existing callback own its terminal result.
+- Added deterministic production-boundary coverage for a running `Async:false` dispatch: terminate reaches its exact dispatch before natural completion and returns the established canceled terminal result. Added a Factory Runtime fan-out integration test that starts two synchronous Worker Sessions through the real boundary and proves the first controlled child completes before the second is attempted.
+- Files changed: `pkg/services/workers/workstation_pool_boundary_{contracts,impl}.go`, `pkg/services/worker_sessions/internal/service/**`, `pkg/services/worker_sessions/wire/wire_test.go`, `pkg/services/factory_runtime/internal/services/orchestration/runtime/worker_session_control_fanout_test.go`, `prd.json`, `progress.txt`.
+- Verification: focused Worker Sessions/Runtime/Workers tests; `go test -race -count=10` for all production-boundary race cases and the synchronous fan-out case; focused `go vet`; `go test ./pkg/services/worker_sessions/... ./pkg/services/factory_runtime/... ./pkg/services/workers/...`; `make test`; `git diff --check`.
+- **Learnings for future iterations:**
+  - Workers admission is a control-plane fact, not a completion fact: synchronous callers must see it while their publish call is still blocked on the terminal callback.
+  - A production-boundary fan-out test can prove sibling progress deterministically by blocking each admitted dispatch on exact cancellation rather than using timers or polling.
 ---

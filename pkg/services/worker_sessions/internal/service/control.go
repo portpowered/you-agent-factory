@@ -175,9 +175,10 @@ func (r *registry) publishRegisteredAttempt(
 		WorkstationName: req.Execution.WorkstationName,
 		Execution:       workers.CloneWorkstationExecutionRequest(req.Execution.Execution),
 	}
-	publishErr := r.boundary.Publish(
+	publishErr := r.boundary.PublishWithAdmission(
 		context.WithoutCancel(ctx),
 		handoff,
+		func() { r.acceptSupervision(req.ID, supervision) },
 		func(_ context.Context, _ workers.WorkstationDispatchRequest, result workers.WorkstationDispatchResult, dispatchErr error) {
 			r.completeSupervision(req.ID, supervision, result, dispatchErr)
 		},
@@ -196,12 +197,7 @@ func (r *registry) publishRegisteredAttempt(
 		return workersessions.StartResult{Session: final}, nil
 	}
 
-	supervision.mu.Lock()
-	supervision.accepted = true
-	supervision.publishing = false
-	supervision.mu.Unlock()
-	supervision.signalPublished()
-	r.transitionToRunning(req.ID)
+	r.finishSupervisionPublication(supervision)
 	<-supervision.done
 
 	final, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
@@ -209,6 +205,29 @@ func (r *registry) publishRegisteredAttempt(
 	result, dispatchErr := supervision.result, supervision.err
 	supervision.mu.Unlock()
 	return workersessions.StartResult{Session: final, Dispatch: result, DispatchErr: dispatchErr}, nil
+}
+
+// acceptSupervision records Workers' exact cancellable-admission point. It
+// deliberately runs from the pool boundary callback rather than after Publish
+// returns: synchronous Publish waits for terminal completion, but its admitted
+// dispatch must remain controllable throughout that wait.
+func (r *registry) acceptSupervision(id string, supervision *supervision) {
+	supervision.mu.Lock()
+	supervision.accepted = true
+	supervision.publishing = false
+	supervision.mu.Unlock()
+	supervision.signalPublished()
+	r.transitionToRunning(id)
+}
+
+// finishSupervisionPublication releases any control waiting for a publish
+// that reached a terminal result before Workers admitted it. An admitted
+// attempt has already been released by acceptSupervision.
+func (r *registry) finishSupervisionPublication(supervision *supervision) {
+	supervision.mu.Lock()
+	supervision.publishing = false
+	supervision.mu.Unlock()
+	supervision.signalPublished()
 }
 
 func (r *registry) registerSupervision(id, dispatchID string) (*supervision, bool) {

@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -19,6 +20,8 @@ type admissionControlledExecution struct {
 	dispatchEntered     chan struct{}
 	dispatchEnteredOnce sync.Once
 	allowAdmission      chan struct{}
+	admitted            chan struct{}
+	admittedOnce        sync.Once
 	cancelCalls         chan workers.WorkstationDispatchCancelRequest
 	complete            chan struct{}
 	completionCommitted chan struct{}
@@ -32,6 +35,7 @@ func newAdmissionControlledExecution(completionWins bool) *admissionControlledEx
 	return &admissionControlledExecution{
 		dispatchEntered:     make(chan struct{}),
 		allowAdmission:      make(chan struct{}),
+		admitted:            make(chan struct{}),
 		cancelCalls:         make(chan workers.WorkstationDispatchCancelRequest, 1),
 		complete:            make(chan struct{}),
 		completionCommitted: make(chan struct{}),
@@ -73,6 +77,7 @@ func (e *admissionControlledExecution) DispatchWorkstationWithAdmission(
 	if admitted != nil {
 		admitted()
 	}
+	e.admittedOnce.Do(func() { close(e.admitted) })
 	select {
 	case <-e.complete:
 	case <-ctx.Done():
@@ -111,6 +116,16 @@ func newProductionBoundaryRegistry(t *testing.T, execution workers.WorkstationEx
 		Service:    execution,
 		RouteNames: []string{"review"},
 		Async:      true,
+	})
+	return newControlledRegistry(t, boundary)
+}
+
+func newSynchronousProductionBoundaryRegistry(t *testing.T, execution workers.WorkstationExecutionService) workersessions.Service {
+	t.Helper()
+	boundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
+		Service:    execution,
+		RouteNames: []string{"review"},
+		Async:      false,
 	})
 	return newControlledRegistry(t, boundary)
 }
@@ -187,5 +202,48 @@ func TestCancel_ProductionBoundaryCompletionWinReturnsNoopAndPreservesCompletedS
 	}
 	if final.DispatchErr != nil {
 		t.Fatalf("Start() dispatch error = %v, want nil", final.DispatchErr)
+	}
+}
+
+func TestTerminate_ProductionSynchronousBoundaryCancelsAdmittedDispatchBeforePublishReturns(t *testing.T) {
+	execution := newAdmissionControlledExecution(false)
+	registry := newSynchronousProductionBoundaryRegistry(t, execution)
+	started := make(chan workersessions.StartResult, 1)
+	startErr := make(chan error, 1)
+	go func() {
+		result, err := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+		started <- result
+		startErr <- err
+	}()
+	<-execution.dispatchEntered
+	close(execution.allowAdmission)
+	<-execution.admitted
+
+	select {
+	case <-execution.complete:
+		t.Fatal("synchronous dispatch completed before explicit control")
+	default:
+	}
+
+	terminated := make(chan workersessions.ControlResult, 1)
+	terminateErr := make(chan error, 1)
+	go func() {
+		result, err := registry.Terminate(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		terminated <- result
+		terminateErr <- err
+	}()
+	if call := <-execution.cancelCalls; call.DispatchID != "dispatch-1" {
+		t.Fatalf("Terminate dispatch ID = %q, want dispatch-1", call.DispatchID)
+	}
+	result := <-terminated
+	if err := <-terminateErr; err != nil || result.Outcome != workersessions.ControlOutcomeApplied || result.Session.State != workersessions.StateTerminated {
+		t.Fatalf("Terminate() = %#v, %v, want applied TERMINATED result", result, err)
+	}
+	final := <-started
+	if err := <-startErr; err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+	if final.Session.State != workersessions.StateTerminated || final.Dispatch.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled || !errors.Is(final.DispatchErr, workers.ErrWorkstationDispatchCanceled) {
+		t.Fatalf("Start() after synchronous cancellation = %#v, want one terminated canceled result", final)
 	}
 }

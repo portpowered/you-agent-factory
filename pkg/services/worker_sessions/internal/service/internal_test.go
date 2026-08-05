@@ -31,6 +31,10 @@ func (b failingPublishBoundary) Publish(context.Context, workers.WorkstationDisp
 	return b.err
 }
 
+func (b failingPublishBoundary) PublishWithAdmission(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAdmissionFunc, workers.WorkstationDispatchAcceptFunc) error {
+	return b.err
+}
+
 func (u unusedExecution) StartWorkstationPool(context.Context, workers.WorkstationPoolStartRequest) (workers.WorkstationPoolStartResult, error) {
 	u.t.Fatal("unexpected StartWorkstationPool call")
 	return workers.WorkstationPoolStartResult{}, nil
@@ -63,6 +67,11 @@ func (u unusedExecution) Start(context.Context) error {
 
 func (u unusedExecution) Publish(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAcceptFunc) error {
 	u.t.Fatal("unexpected boundary Publish call")
+	return nil
+}
+
+func (u unusedExecution) PublishWithAdmission(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAdmissionFunc, workers.WorkstationDispatchAcceptFunc) error {
+	u.t.Fatal("unexpected boundary PublishWithAdmission call")
 	return nil
 }
 

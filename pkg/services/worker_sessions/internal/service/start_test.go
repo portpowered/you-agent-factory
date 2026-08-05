@@ -116,7 +116,7 @@ func TestStart_WhitespacePaddedNestedDispatchWorkstationName_RejectedBeforeEffec
 	}
 }
 
-func TestStart_ValidNewIdentity_ObservesStartingDuringInFlightHandoff(t *testing.T) {
+func TestStart_ValidNewIdentity_ObservesRunningDuringAdmittedInFlightHandoff(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
 	execution := &fakeExecution{
@@ -145,8 +145,8 @@ func TestStart_ValidNewIdentity_ObservesStartingDuringInFlightHandoff(t *testing
 	if err != nil {
 		t.Fatalf("Get() during in-flight Start() error = %v, want nil", err)
 	}
-	if session.State != workersessions.StateStarting {
-		t.Fatalf("Get() during in-flight Start() state = %q, want STARTING", session.State)
+	if session.State != workersessions.StateRunning {
+		t.Fatalf("Get() during admitted in-flight Start() state = %q, want RUNNING", session.State)
 	}
 
 	close(release)

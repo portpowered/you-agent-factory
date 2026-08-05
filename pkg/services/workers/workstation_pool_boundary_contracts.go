@@ -44,6 +44,17 @@ type WorkstationPoolBoundary interface {
 		WorkstationDispatchRequest,
 		WorkstationDispatchAcceptFunc,
 	) error
+	// PublishWithAdmission preserves Publish's terminal callback and return
+	// semantics while exposing the Workers-owned point at which the exact
+	// dispatch becomes cancellable. The callback is independent of Publish's
+	// return so synchronous publishers can be controlled while waiting for
+	// their terminal result.
+	PublishWithAdmission(
+		context.Context,
+		WorkstationDispatchRequest,
+		WorkstationDispatchAdmissionFunc,
+		WorkstationDispatchAcceptFunc,
+	) error
 	Cancel(context.Context, WorkstationDispatchCancelRequest) (WorkstationDispatchCancelResult, error)
 	Stop(context.Context) error
 }

@@ -61,7 +61,11 @@ func (stubExecution) CancelWorkstationDispatch(
 func (stubExecution) Start(context.Context) error { return nil }
 
 func (stubExecution) Publish(ctx context.Context, request workers.WorkstationDispatchRequest, accept workers.WorkstationDispatchAcceptFunc) error {
-	result, err := stubExecution{}.DispatchWorkstation(ctx, request)
+	return stubExecution{}.PublishWithAdmission(ctx, request, nil, accept)
+}
+
+func (stubExecution) PublishWithAdmission(ctx context.Context, request workers.WorkstationDispatchRequest, admitted workers.WorkstationDispatchAdmissionFunc, accept workers.WorkstationDispatchAcceptFunc) error {
+	result, err := stubExecution{}.DispatchWorkstationWithAdmission(ctx, request, admitted)
 	accept(context.Background(), request, result, err)
 	return nil
 }

@@ -7,8 +7,13 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestFanOutWorkerSessionControl_AttemptsEveryCapturedChildInStableOrder(t *testing.T) {
@@ -276,6 +281,69 @@ func TestFanOutWorkerSessionControl_StopActionsReachEveryCapturedChild(t *testin
 	}
 }
 
+func TestFanOutWorkerSessionControl_ContinuesPastSynchronousProductionChild(t *testing.T) {
+	execution := newSynchronousFanOutExecution("dispatch-a", "dispatch-b")
+	boundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
+		Service:    execution,
+		RouteNames: []string{"review"},
+		Async:      false,
+	})
+	events, err := eventswire.NewService(logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("New events service: %v", err)
+	}
+	workerSessions, err := workersessionswire.NewService(boundary, events, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("New Worker Sessions service: %v", err)
+	}
+	starts := make(chan workersessions.StartResult, 2)
+	startErrs := make(chan error, 2)
+	for _, identity := range []struct{ sessionID, dispatchID string }{
+		{sessionID: "worker-a", dispatchID: "dispatch-a"},
+		{sessionID: "worker-b", dispatchID: "dispatch-b"},
+	} {
+		go func(sessionID, dispatchID string) {
+			started, startErr := workerSessions.Start(context.Background(), workersessions.StartRequest{
+				ID: sessionID,
+				Execution: workers.WorkstationDispatchRequest{
+					WorkstationName: "review",
+					Execution: workers.WorkstationExecutionRequest{Dispatch: work.WorkDispatch{
+						DispatchID: dispatchID, WorkstationName: "review",
+					}},
+				},
+			})
+			starts <- started
+			startErrs <- startErr
+		}(identity.sessionID, identity.dispatchID)
+	}
+	<-execution.admitted("dispatch-a")
+	<-execution.admitted("dispatch-b")
+
+	result := fanOutWorkerSessionControl(context.Background(), workerSessions, capturedWorkerSessionControlTargets{
+		turnID: "turn-synchronous", workerSessionIDs: []string{"worker-a", "worker-b"},
+	}, factory.WorkerSessionControlActionTerminate)
+	if result.Outcome != factory.WorkerSessionControlAggregateOutcomeApplied {
+		t.Fatalf("fan-out outcome = %q, want APPLIED", result.Outcome)
+	}
+	if got, want := workerSessionIDsFromResults(result.Children), []string{"worker-a", "worker-b"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("fan-out children = %v, want %v", got, want)
+	}
+	for _, wantDispatchID := range []string{"dispatch-a", "dispatch-b"} {
+		if cancellation := <-execution.cancelCalls; cancellation.DispatchID != wantDispatchID {
+			t.Fatalf("boundary cancellation dispatch = %q, want %q", cancellation.DispatchID, wantDispatchID)
+		}
+	}
+	for range 2 {
+		started := <-starts
+		if startErr := <-startErrs; startErr != nil ||
+			started.Session.State != workersessions.StateTerminated ||
+			started.Dispatch.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled ||
+			!errors.Is(started.DispatchErr, workers.ErrWorkstationDispatchCanceled) {
+			t.Fatalf("synchronous Start() result = %#v, %v, want one terminated canceled result", started, startErr)
+		}
+	}
+}
+
 func TestFactoryTerminate_FansOutCapturedCancelAndRetainsOriginalEvidence(t *testing.T) {
 	service := newWorkerSessionControlSpy(map[workerSessionControlCall]workerSessionControlResponse{
 		{action: factory.WorkerSessionControlActionCancel, id: "worker-a"}: {result: workersessions.ControlResult{DispatchID: "dispatch-a", Outcome: workersessions.ControlOutcomeApplied}},
@@ -433,3 +501,98 @@ func (s *workerSessionControlSpy) observedCanceledContext() bool {
 }
 
 var _ workersessions.Service = (*workerSessionControlSpy)(nil)
+
+// synchronousFanOutExecution models two Workers-admitted dispatches behind the
+// real synchronous pool boundary. Each dispatch can finish only by exact
+// cancellation, so the test observes the control path without sleeps or an
+// artificial completion race.
+type synchronousFanOutExecution struct {
+	mu          sync.Mutex
+	dispatches  map[string]*synchronousFanOutDispatch
+	cancelCalls chan workers.WorkstationDispatchCancelRequest
+}
+
+type synchronousFanOutDispatch struct {
+	admitted     chan struct{}
+	admittedOnce sync.Once
+	canceled     chan struct{}
+	canceledOnce sync.Once
+}
+
+var _ workers.WorkstationExecutionService = (*synchronousFanOutExecution)(nil)
+
+func newSynchronousFanOutExecution(dispatchIDs ...string) *synchronousFanOutExecution {
+	execution := &synchronousFanOutExecution{
+		dispatches:  make(map[string]*synchronousFanOutDispatch),
+		cancelCalls: make(chan workers.WorkstationDispatchCancelRequest, 2),
+	}
+	for _, dispatchID := range dispatchIDs {
+		execution.dispatches[dispatchID] = &synchronousFanOutDispatch{admitted: make(chan struct{}), canceled: make(chan struct{})}
+	}
+	return execution
+}
+
+func (*synchronousFanOutExecution) StartWorkstationPool(context.Context, workers.WorkstationPoolStartRequest) (workers.WorkstationPoolStartResult, error) {
+	return workers.WorkstationPoolStartResult{Outcome: workers.WorkstationPoolLifecycleOutcomeStarted}, nil
+}
+
+func (*synchronousFanOutExecution) StopWorkstationPool(context.Context) (workers.WorkstationPoolStopResult, error) {
+	return workers.WorkstationPoolStopResult{Outcome: workers.WorkstationPoolLifecycleOutcomeStopped}, nil
+}
+
+func (e *synchronousFanOutExecution) DispatchWorkstation(ctx context.Context, request workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+	return e.DispatchWorkstationWithAdmission(ctx, request, nil)
+}
+
+func (e *synchronousFanOutExecution) DispatchWorkstationWithAdmission(
+	_ context.Context,
+	request workers.WorkstationDispatchRequest,
+	admitted workers.WorkstationDispatchAdmissionFunc,
+) (workers.WorkstationDispatchResult, error) {
+	dispatchID := request.Execution.Dispatch.DispatchID
+	e.mu.Lock()
+	dispatch := e.dispatches[dispatchID]
+	e.mu.Unlock()
+	if dispatch == nil {
+		return workers.WorkstationDispatchResult{}, workers.ErrUnknownWorkstationDispatch
+	}
+	if admitted != nil {
+		admitted()
+	}
+	dispatch.admittedOnce.Do(func() { close(dispatch.admitted) })
+	<-dispatch.canceled
+	return workers.WorkstationDispatchResult{
+		DispatchID:      dispatchID,
+		WorkstationName: request.WorkstationName,
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCanceled,
+		Result: workers.WorkResult{
+			DispatchID: dispatchID,
+			Outcome:    workers.OutcomeFailed,
+			Error:      workers.ErrWorkstationDispatchCanceled.Error(),
+		},
+	}, workers.ErrWorkstationDispatchCanceled
+}
+
+func (e *synchronousFanOutExecution) CancelWorkstationDispatch(
+	_ context.Context,
+	request workers.WorkstationDispatchCancelRequest,
+) (workers.WorkstationDispatchCancelResult, error) {
+	e.mu.Lock()
+	dispatch := e.dispatches[request.DispatchID]
+	e.mu.Unlock()
+	if dispatch == nil {
+		return workers.WorkstationDispatchCancelResult{}, workers.ErrUnknownWorkstationDispatch
+	}
+	e.cancelCalls <- request
+	dispatch.canceledOnce.Do(func() { close(dispatch.canceled) })
+	return workers.WorkstationDispatchCancelResult{
+		DispatchID: request.DispatchID,
+		Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
+	}, nil
+}
+
+func (e *synchronousFanOutExecution) admitted(dispatchID string) <-chan struct{} {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.dispatches[dispatchID].admitted
+}

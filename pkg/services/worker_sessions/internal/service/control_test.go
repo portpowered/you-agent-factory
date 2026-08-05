@@ -36,11 +36,18 @@ func newControlledBoundary() *controlledBoundary {
 func (*controlledBoundary) Start(context.Context) error { return nil }
 
 func (b *controlledBoundary) Publish(_ context.Context, request workers.WorkstationDispatchRequest, accept workers.WorkstationDispatchAcceptFunc) error {
+	return b.PublishWithAdmission(context.Background(), request, nil, accept)
+}
+
+func (b *controlledBoundary) PublishWithAdmission(_ context.Context, request workers.WorkstationDispatchRequest, admitted workers.WorkstationDispatchAdmissionFunc, accept workers.WorkstationDispatchAcceptFunc) error {
 	b.mu.Lock()
 	b.request = request
 	b.accept = accept
 	b.mu.Unlock()
 	b.startedOnce.Do(func() { close(b.started) })
+	if admitted != nil {
+		admitted()
+	}
 	return nil
 }
 

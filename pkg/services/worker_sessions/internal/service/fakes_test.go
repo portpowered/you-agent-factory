@@ -112,10 +112,14 @@ func (b executionBoundary) Start(ctx context.Context) error {
 }
 
 func (b executionBoundary) Publish(ctx context.Context, req workers.WorkstationDispatchRequest, accept workers.WorkstationDispatchAcceptFunc) error {
+	return b.PublishWithAdmission(ctx, req, nil, accept)
+}
+
+func (b executionBoundary) PublishWithAdmission(ctx context.Context, req workers.WorkstationDispatchRequest, admitted workers.WorkstationDispatchAdmissionFunc, accept workers.WorkstationDispatchAcceptFunc) error {
 	if err := b.Start(ctx); err != nil {
 		return err
 	}
-	result, err := b.execution.DispatchWorkstation(ctx, req)
+	result, err := b.execution.DispatchWorkstationWithAdmission(ctx, req, admitted)
 	accept(context.Background(), req, result, err)
 	return nil
 }

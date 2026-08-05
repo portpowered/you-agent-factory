@@ -146,6 +146,15 @@ func (b *workstationPoolBoundary) Publish(
 	request WorkstationDispatchRequest,
 	accept WorkstationDispatchAcceptFunc,
 ) error {
+	return b.PublishWithAdmission(ctx, request, nil, accept)
+}
+
+func (b *workstationPoolBoundary) PublishWithAdmission(
+	ctx context.Context,
+	request WorkstationDispatchRequest,
+	admission WorkstationDispatchAdmissionFunc,
+	accept WorkstationDispatchAcceptFunc,
+) error {
 	if err := b.Start(ctx); err != nil {
 		return err
 	}
@@ -157,19 +166,26 @@ func (b *workstationPoolBoundary) Publish(
 		result, err := b.service.DispatchWorkstationWithAdmission(
 			context.WithoutCancel(ctx),
 			request,
-			func() { admittedOnce.Do(func() { close(admitted) }) },
+			func() {
+				admittedOnce.Do(func() {
+					if admission != nil {
+						admission()
+					}
+					close(admitted)
+				})
+			},
 		)
 		accept(context.Background(), request, result, err)
 	}
+	go execute()
 	if b.async {
-		go execute()
 		select {
 		case <-admitted:
 		case <-finished:
 		}
 		return nil
 	}
-	execute()
+	<-finished
 	return nil
 }
 
