@@ -20,11 +20,14 @@ import (
 )
 
 const (
-	factoryBuilderName       = "@you/factory-builder"
-	graphFactoryName         = "release-note-review"
-	graphFactoryRequest      = "Review submitted release notes and return an approved summary."
-	graphFactoryPrimaryReply = "Release-note review completed."
-	factoryYAMLFile          = "factory.yaml"
+	factoryBuilderName             = "@you/factory-builder"
+	graphFactoryName               = "release-note-review"
+	graphFactoryRequest            = "Review submitted release notes and return an approved summary."
+	graphFactoryPrimaryReply       = "Release-note review completed."
+	javascriptFactoryName          = "release-synthesis"
+	javascriptFactoryRequest       = "Run two independent analyses and return one synthesized result."
+	javascriptFactoryPrimaryResult = "Synthesized two independent analyses."
+	factoryYAMLFile                = "factory.yaml"
 )
 
 // TestFactoryBuilderCreatesAndInstallsValidatedGraphFactory proves the public
@@ -38,9 +41,11 @@ func TestFactoryBuilderCreatesAndInstallsValidatedGraphFactory(t *testing.T) {
 	runner := &factoryBuilderCommandRunner{
 		targetName:      graphFactoryName,
 		customerRequest: graphFactoryRequest,
+		orchestrator:    "graph",
 		environment:     environment,
 		operatorRoot:    filepath.Join(homeDir, ".you-agent-factory", "factories"),
 		candidateYAML:   representativeGraphFactoryYAML,
+		builderResult:   "Factory release-note-review (graph): validation passed and installed through the named Factory create command.",
 	}
 	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
 	support.CleanupProcess(t, process)
@@ -59,7 +64,7 @@ func TestFactoryBuilderCreatesAndInstallsValidatedGraphFactory(t *testing.T) {
 	if err := process.Execute(builder.Input); err != nil {
 		t.Fatalf("Process.Execute(factory builder) error = %v\nstdout:\n%s\nstderr:\n%s", err, builder.Stdout(), builder.Stderr())
 	}
-	assertBuilderCompleted(t, support.DecodeInvocationResponseJSON(t, builder.Stdout()))
+	assertBuilderCompleted(t, support.DecodeInvocationResponseJSON(t, builder.Stdout()), graphFactoryName, "graph")
 	if builder.Stderr() != "" {
 		t.Fatalf("factory builder stderr = %q, want empty successful invocation stderr", builder.Stderr())
 	}
@@ -73,7 +78,54 @@ func TestFactoryBuilderCreatesAndInstallsValidatedGraphFactory(t *testing.T) {
 	}
 }
 
-func assertBuilderCompleted(t *testing.T, response factoryapi.InvocationResponse) {
+// TestFactoryBuilderCreatesAndInstallsValidatedJavaScriptFactory proves the
+// Builder validates and persists a JavaScript Factory through the same public
+// named-Factory path as graph definitions before its intended child work runs.
+func TestFactoryBuilderCreatesAndInstallsValidatedJavaScriptFactory(t *testing.T) {
+	homeDir := t.TempDir()
+	workingDirectory := t.TempDir()
+	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	runner := &factoryBuilderCommandRunner{
+		targetName:      javascriptFactoryName,
+		customerRequest: javascriptFactoryRequest,
+		orchestrator:    "javascript",
+		environment:     environment,
+		operatorRoot:    filepath.Join(homeDir, ".you-agent-factory", "factories"),
+		candidateYAML:   representativeJavaScriptFactoryYAML,
+		builderResult:   "Factory release-synthesis (javascript): validation passed and installed through the named Factory create command.",
+	}
+	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
+	support.CleanupProcess(t, process)
+	runner.process = process
+
+	builder := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run", "--named", factoryBuilderName, "--no-record",
+		"--factory-name", javascriptFactoryName,
+		"--orchestrator", "javascript",
+		"--builder-provider", "CODEX",
+		"--builder-model", "gpt-5",
+		javascriptFactoryRequest,
+	})
+	builder.Input.Env = environment
+	builder.Input.WorkingDirectory = workingDirectory
+	if err := process.Execute(builder.Input); err != nil {
+		t.Fatalf("Process.Execute(factory builder) error = %v\nstdout:\n%s\nstderr:\n%s", err, builder.Stdout(), builder.Stderr())
+	}
+	assertBuilderCompleted(t, support.DecodeInvocationResponseJSON(t, builder.Stdout()), javascriptFactoryName, "javascript")
+	if builder.Stderr() != "" {
+		t.Fatalf("factory builder stderr = %q, want empty successful invocation stderr", builder.Stderr())
+	}
+
+	installedPath := filepath.Join(homeDir, ".you-agent-factory", "factories", javascriptFactoryName)
+	assertBuilderStageIsWorkspaceScoped(t, workingDirectory, runner.StagePath())
+	assertInstalledJavaScriptFactory(t, process, environment, installedPath, runner.operatorRoot)
+	assertInstalledJavaScriptFactoryRuns(t, process, environment, workingDirectory, installedPath)
+	if got := runner.InstalledFactoryCallCount(); got != 2 {
+		t.Fatalf("installed Factory provider command call count = %d, want two intended analysis calls", got)
+	}
+}
+
+func assertBuilderCompleted(t *testing.T, response factoryapi.InvocationResponse, factoryName, orchestrator string) {
 	t.Helper()
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("Builder invocation status = %q, want %q; response = %#v", response.Status, factoryapi.InvocationTerminalStatusCompleted, response)
@@ -85,7 +137,7 @@ func assertBuilderCompleted(t *testing.T, response factoryapi.InvocationResponse
 	if err != nil {
 		t.Fatalf("Builder primary result as text part: %v", err)
 	}
-	for _, want := range []string{graphFactoryName, "graph", "validation passed", "installed"} {
+	for _, want := range []string{factoryName, orchestrator, "validation passed", "installed"} {
 		if !strings.Contains(strings.ToLower(part.Text), strings.ToLower(want)) {
 			t.Fatalf("Builder primary result = %q, want %q", part.Text, want)
 		}
@@ -130,18 +182,123 @@ func assertInstalledGraphFactory(
 		t.Fatalf("decode flattened installed Factory: %v\npayload:\n%s", err, payload)
 	}
 	assertRepresentativeGraphDefinition(t, definition)
-	assertInstalledFactoryIsListed(t, process, environment, operatorRoot)
+	assertInstalledFactoryIsListed(t, process, environment, operatorRoot, graphFactoryName)
 }
 
-func assertInstalledFactoryIsListed(t *testing.T, process support.Process, environment []string, operatorRoot string) {
+func assertInstalledFactoryIsListed(t *testing.T, process support.Process, environment []string, operatorRoot, factoryName string) {
 	t.Helper()
 	list := support.FakeInputs(t.Context(), []string{"you", "--json", "factory", "list", "--dir", operatorRoot})
 	list.Input.Env = environment
 	if err := process.Execute(list.Input); err != nil {
 		t.Fatalf("Process.Execute(list installed Factory) error = %v\nstdout:\n%s\nstderr:\n%s", err, list.Stdout(), list.Stderr())
 	}
-	if !strings.Contains(list.Stdout(), graphFactoryName) {
-		t.Fatalf("factory list output = %q, want installed Factory %q", list.Stdout(), graphFactoryName)
+	if !strings.Contains(list.Stdout(), factoryName) {
+		t.Fatalf("factory list output = %q, want installed Factory %q", list.Stdout(), factoryName)
+	}
+}
+
+func assertInstalledJavaScriptFactory(
+	t *testing.T,
+	process support.Process,
+	environment []string,
+	installedPath, operatorRoot string,
+) {
+	t.Helper()
+	installedConfig := filepath.Join(installedPath, factorydefinitions.FactoryConfigFile)
+	validate := support.FakeInputs(t.Context(), []string{"you", "factory", "config", "validate", installedConfig})
+	validate.Input.Env = environment
+	validate.Input.WorkingDirectory = filepath.Dir(installedPath)
+	if err := process.Execute(validate.Input); err != nil {
+		t.Fatalf("Process.Execute(validate installed JavaScript Factory) error = %v\nstdout:\n%s\nstderr:\n%s", err, validate.Stdout(), validate.Stderr())
+	}
+
+	payload, err := support.FlattenFactoryConfigWithProcessAndEnv(t, process, environment, installedPath)
+	if err != nil {
+		t.Fatalf("flatten installed JavaScript Factory: %v", err)
+	}
+	var definition map[string]any
+	if err := json.Unmarshal(payload, &definition); err != nil {
+		t.Fatalf("decode flattened JavaScript Factory: %v\npayload:\n%s", err, payload)
+	}
+	assertRepresentativeJavaScriptDefinition(t, definition)
+	assertInstalledFactoryIsListed(t, process, environment, operatorRoot, javascriptFactoryName)
+}
+
+func assertRepresentativeJavaScriptDefinition(t *testing.T, definition map[string]any) {
+	t.Helper()
+	if definition["name"] != javascriptFactoryName {
+		t.Fatalf("installed JavaScript Factory name = %#v, want %q", definition["name"], javascriptFactoryName)
+	}
+	orchestrator, ok := definition["orchestrator"].(map[string]any)
+	if !ok || orchestrator["kind"] != "JAVASCRIPT" {
+		t.Fatalf("orchestrator = %#v, want JAVASCRIPT", definition["orchestrator"])
+	}
+	javascript, ok := orchestrator["javascript"].(map[string]any)
+	if !ok {
+		t.Fatalf("javascript orchestrator config = %#v, want metadata, args schema, policy, and inline source", orchestrator["javascript"])
+	}
+	inlineSource, ok := javascript["inlineSource"].(map[string]any)
+	if !ok || inlineSource["encoding"] != "utf-8" || strings.TrimSpace(fmt.Sprint(inlineSource["inline"])) == "" {
+		t.Fatalf("JavaScript inline source = %#v, want non-empty utf-8 source", javascript["inlineSource"])
+	}
+	argsSchema, ok := javascript["argsSchema"].(map[string]any)
+	if !ok || argsSchema["type"] != "object" || !hasStringValue(argsSchema["required"], "briefs") {
+		t.Fatalf("JavaScript argsSchema = %#v, want required briefs object input", javascript["argsSchema"])
+	}
+	defaultPolicy, ok := javascript["defaultPolicy"].(map[string]any)
+	if !ok || defaultPolicy["mode"] != "READ_ONLY" || defaultPolicy["maxAgents"] != float64(2) || defaultPolicy["concurrency"] != float64(2) || defaultPolicy["allowNetwork"] != false {
+		t.Fatalf("JavaScript defaultPolicy = %#v, want bounded read-only two-agent policy", javascript["defaultPolicy"])
+	}
+	signature, ok := definition["invocationSignature"].(map[string]any)
+	if !ok || !hasInvocationParameter(signature["parameters"], "briefs") {
+		t.Fatalf("invocationSignature = %#v, want required briefs input", definition["invocationSignature"])
+	}
+}
+
+func hasStringValue(value any, want string) bool {
+	values, ok := value.([]any)
+	if !ok {
+		return false
+	}
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func assertInstalledJavaScriptFactoryRuns(
+	t *testing.T,
+	process support.Process,
+	environment []string,
+	workingDirectory, installedPath string,
+) {
+	t.Helper()
+	run := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run", "--factory", filepath.Join(installedPath, factorydefinitions.FactoryConfigFile), "--no-record",
+		"--provider", "CODEX", "--model", "gpt-5",
+		"--briefs", "Analyze the release plan and identify important risks.",
+	})
+	run.Input.Env = environment
+	run.Input.WorkingDirectory = workingDirectory
+	if err := process.Execute(run.Input); err != nil {
+		t.Fatalf("Process.Execute(run installed JavaScript Factory) error = %v\nstdout:\n%s\nstderr:\n%s", err, run.Stdout(), run.Stderr())
+	}
+	response := support.DecodeInvocationResponseJSON(t, run.Stdout())
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("installed JavaScript Factory invocation status = %q, want %q", response.Status, factoryapi.InvocationTerminalStatusCompleted)
+	}
+	if response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
+		t.Fatalf("installed JavaScript Factory primaryResult = %#v, want one JSON part", response.PrimaryResult)
+	}
+	part, err := (*response.PrimaryResult)[0].AsWorkJsonContentPart()
+	if err != nil {
+		t.Fatalf("installed JavaScript Factory primary result as JSON: %v", err)
+	}
+	result, ok := part.Json.(map[string]any)
+	if !ok || result["summary"] != javascriptFactoryPrimaryResult || result["analysisCount"] != float64(2) {
+		t.Fatalf("installed JavaScript Factory primary result = %#v, want synthesized two-analysis result", part.Json)
 	}
 }
 
@@ -249,9 +406,11 @@ type factoryBuilderCommandRunner struct {
 	process         support.Process
 	targetName      string
 	customerRequest string
+	orchestrator    string
 	environment     []string
 	operatorRoot    string
 	candidateYAML   string
+	builderResult   string
 
 	mu                           sync.Mutex
 	stagePath                    string
@@ -276,9 +435,7 @@ func (runner *factoryBuilderCommandRunner) Run(ctx context.Context, request plat
 				return platformprocess.CommandResult{}, err
 			}
 		}
-		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(
-			"Factory release-note-review (graph): validation passed and installed through the named Factory create command.",
-		)}, nil
+		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(runner.builderResult)}, nil
 	}
 	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(graphFactoryPrimaryReply)}, nil
 }
@@ -318,7 +475,7 @@ func (runner *factoryBuilderCommandRunner) assertProviderInstructions(request pl
 		"You are Factory Builder.",
 		runner.customerRequest,
 		"New Factory name: `" + runner.targetName + "`",
-		"Requested orchestrator: `graph`",
+		"Requested orchestrator: `" + runner.orchestrator + "`",
 	} {
 		if !strings.Contains(prompt, want) {
 			return fmt.Errorf("Factory Builder provider prompt must include %q", want)
@@ -402,4 +559,58 @@ workstations:
     onFailure:
       - workType: release-note-review
         state: failed
+`
+
+const representativeJavaScriptFactoryYAML = `name: release-synthesis
+description:
+  type: LOCALIZABLE_ASSET
+  value: Runs two independent release analyses and returns their synthesis.
+invocationSignature:
+  parameters:
+    - name: briefs
+      description: Release briefs to analyze and synthesize.
+      externalName: briefs
+      required: true
+      bindings:
+        - kind: POSITIONAL
+          position: 1
+        - kind: NAMED
+orchestrator:
+  kind: JAVASCRIPT
+  javascript:
+    metadata:
+      purpose: bounded-release-synthesis
+    argsSchema:
+      type: object
+      required:
+        - briefs
+      properties:
+        briefs:
+          type: string
+      additionalProperties: false
+    defaultPolicy:
+      mode: READ_ONLY
+      maxAgents: 2
+      concurrency: 2
+      allowNetwork: false
+    inlineSource:
+      encoding: utf-8
+      inline: |
+        return (async function () {
+          phase("analyze");
+          const analyses = await parallel([
+            {
+              label: "analysis-alpha",
+              prompt: "Analyze these release briefs for strengths and risks: " + args.briefs,
+            },
+            {
+              label: "analysis-beta",
+              prompt: "Independently analyze these release briefs for omissions and risks: " + args.briefs,
+            },
+          ]);
+          workflow.final({
+            summary: "Synthesized two independent analyses.",
+            analysisCount: analyses.length,
+          });
+        })();
 `
