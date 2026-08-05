@@ -15,6 +15,9 @@ The primary abstractions the backend works off of are:
 - models
 - automations
 - recordings
+- chat sessions
+- worker sessions
+- events
 
 ### interactions
 - A factory is a place where workers do work in workstations.
@@ -76,22 +79,22 @@ The services are meant to be deep, providing a simple abstraction that users of 
 ```mermaid
 flowchart LR
     api[transports like API/CI/MCP]
-    svc[Factory Session Service]
+    factorySessions[Factory Sessions Service]
+    chatSessions[Chat Sessions Service]
     runtime[Factory Runtime Service]
     build[Factory Definitions Service]
     auto[Automation Service]
     work[Work Service]
     ops[Operator Settings Service]
-    recs[Recordings service]
-    workers[Worker Execution Service]
+    recordings[Recordings Service]
+    events[Events Service\nprocess-local, session-scoped]
+    workerSessions[Worker Sessions Service]
+    workers[Workers Service]
     models[Model Runtime Service]
-    docs[Documents Service]
-    wsession[Worker Session Service]
     provider[Provider Service]
-    events[Event Bus Service]
-    chat[Chat Presentation Service]
 
-    api --> svc
+    api --> factorySessions
+    api --> chatSessions
     api --> runtime
     api --> build
     api --> auto
@@ -99,43 +102,33 @@ flowchart LR
     api --> ops
     api --> workers
     api --> models
-    api --> recs
-    api --> chat
+    api --> recordings
 
-    chat --constructs worker sessions when appropriate --> wsession
-    chat --receives events to publish to downstream on event change--> events
-    chat --constructs session when appropriate--> svc
-    chat --submits work to responsible workers --> work
-
-    wsession --> events
-    wsession --> workers
+    chatSessions --starts or controls a selected Factory target--> factorySessions
+    chatSessions --sequences ACP source records--> events
+    workerSessions --publishes Worker observations--> events
+    workerSessions --supervises a Worker attempt--> workers
     workers --> provider
 
-    recs --> ops
+    recordings --> ops
     build --> ops
 
     work --> runtime
-    work --> events
-
-    svc --publish creation/manipulations/deletions of active factories--> events
-    svc --validates runtime is appropriate working if needed--> runtime
-    svc --parse factory definition request into real definition--> build
-
-    events --> auto
-    events --> work
-    events --> runtime
-    events --> wsession
-    events --> svc
-    events --> models
-    events --publishes appropriate events--> recs
     auto --submits work triggers on request--> work
-    auto --submits events on request --> events
-
-    runtime --publishes system target state on change events--> events
+    factorySessions --opens and controls runtime execution--> runtime
+    factorySessions --records Factory history--> recordings
+    runtime --emits canonical Factory event candidates--> recordings
 
     workers --invokes models when appropriate --> models
 
 ```
+
+Service peers call the narrow operation owned by the service that owns the
+decision. Where ACP delivery needs an ordered observation stream, a producer
+appends source-native records to an explicit session topic in Events and an
+attached consumer reads or subscribes to that topic. This bounded delivery
+path is not a universal bus: services do not all subscribe to Events, and
+Events neither decides Factory policy nor persists Factory history.
 
 The important rule is that no generic process facade owns all runtime behavior.
 Transports receive narrow service interfaces, while `pkg/wire` composes their
@@ -162,16 +155,15 @@ roots must not be recreated.
 | Work domain | `pkg/services/work` | Own canonical Work, Work Request, content, dispatch identity, relations, payload lineage, query/selection, graph, pure invocation input and return policy, and materialization. Cron/time-work orchestration belongs to `pkg/services/automations`. Exclude Factory Session orchestration, worker/provider execution, Petri token state, and generic platform clocks. |
 | Automations | `pkg/services/automations` | Own cron, filesystem watcher, script poller, hosted-source, reconciliation, and invocation scheduling behavior that observes or admits Work. |
 | Provider Sessions | `pkg/services/provider_sessions` | Own provider-session discovery and provider transcript/session inspection. |
+| Chat Sessions | `pkg/services/chat_sessions` | Own the customer conversation and control context used by ACP: selected targets, ordered turns, target episodes, attachments, and control intents. It sequences source-native observation records onto the Chat Session's Events topic but does not own Factory replay history. |
+| Events | `pkg/services/events` | Own the process-local, in-memory session-scoped stream used for source-native record ordering, source attachment, cursors, retained reads, subscriptions, retention gaps, and backpressure. It is not a durable journal or canonical Factory event ledger. |
+| Worker Sessions | `pkg/services/worker_sessions` | Own stable Worker Session identity, attempt supervision, lifecycle classification, and publication of source-native Worker observations to that Worker Session's Events topic. It does not own Worker execution policy or Factory replay history. |
 | Operator settings | `pkg/services/operator_settings` | Own operator configuration documents, defaults, input inventory, and effective settings resolution. |
 | Factory visualization | `pkg/services/factory_visualization` | Own runtime presentation, live-view projections, and response-event presentation. |
 | System initialization | `pkg/services/system_initialization` | Own system bootstrap and rollback operations. |
-| Docs | `pkg/services/docs` | Owns prepackaged documentation resources for access via the models |
-| Event Stream | `pkg/services/event_stream` | Owns a event journal of all operations within the system. Manages subscriptions and publication. Services subscribe to the event stream on initialization. |
-| Worker Sessions | `pkg/services/worker_sessions` | Operating similarly the worker session management like the factory session management. Responsible for submission tot he workers and maintaining long running state and events, and deletions. |
-| Chat | `pkg/services/chat` | Owns the transformed event stream of a factory and its corresponding associated event streams and exposing chat like control plane. i.e. for the ACP protocol, is the one responsble for creating the factory session, resume pause abstractions, and transformign the request event stream from the worker sessions into sub agent tool calls, as well as exposing plan abtractions, configuration operations like effort/model/session, etc |
 
 
-| Platform infrastructure | `pkg/platform` | Own cross-cutting logging, replay artifact filesystem mechanics, metrics, cursor storage, and non-domain clocks. Logging is canonical in `pkg/platform/logging`; collision-safe filesystem mechanics are canonical in `pkg/platform/replay`, while Factory event construction, reduction, recording lifecycle, deterministic delivery, and projections remain Recordings-owned; file-backed runtime metric recording is canonical in `pkg/platform/metrics` behind service-owned contracts; and real or deterministic clocks are canonical in `pkg/platform/clock` behind service-owned clock contracts. Platform implementations do not choose Factory, Factory Session, worker, model, scheduling, or Work policy. |
+| Platform infrastructure | `pkg/platform` | Own cross-cutting logging, recording-artifact filesystem mechanics, metrics, cursor storage, and non-domain clocks. Logging is canonical in `pkg/platform/logging`; collision-safe filesystem mechanics are canonical in `pkg/platform/replay`, while Factory event construction, reduction, recording lifecycle, deterministic delivery, JSONL artifacts, replay, and projections remain Recordings-owned; file-backed runtime metric recording is canonical in `pkg/platform/metrics` behind service-owned contracts; and real or deterministic clocks are canonical in `pkg/platform/clock` behind service-owned clock contracts. Platform implementations do not choose Factory, Factory Session, worker, model, scheduling, or Work policy. |
 | Repository-only test support | `internal/testutil` or package-local `_test.go` files | Keep cross-package fixtures, mocks, assertions, and runtime or replay harnesses internal to this repository. Keep helpers coupled to one package beside that package's tests, and never import repository-only support from production code. |
 
 When a change crosses rows, choose the owner that owns the durable state or
@@ -180,78 +172,51 @@ owner. Customer-facing Factory Session behavior belongs in Factory Session
 owners; Petri-net concepts stay behind the internal runtime boundary.
 
 ## System State
-Note that some of this is largely inspirational, but partially migrated towards, still few services need to be created.
 
-### Cross package interaction
+### Cross-package interaction
 
-Largely the communication of services is done either via the services:
-1. calling the service APIs directly
-2. receiving event callbacks from registrations to the event stream and then acting upon the event stream.
+Services communicate through their narrow public operations. A service uses
+Events only when its contract needs short-lived, ordered delivery of
+source-native observations for a specific session; that is a bounded delivery
+mechanism, not an alternative control plane. Factory Runtime and Factory
+Sessions coordinate their injected collaborators directly, and Workers consume
+Provider and Model capabilities through their service contracts.
 
-There is intentionally no other communication between the services besides those two channels to reduce the concurrent problems of complexity. This also enables batching and transactionality of operations.
+### System state of a Factory Session
 
-
-### System state of a session
-
-The system largely operates off of a concept of a "factory session", which are instances of a loop along with its accoutrements, such as crons, daemon sse hooks, and other pollers.
-
-There is a bit of complex wiring between factory sessions and runtime so we break it out as follows:
-
-a factory session is responsible for:
-1. retrieving the config/definition
-2. converting all the config/definition and turning it into a declaration of what all services need to be activated
-3. wiring the runtime factory with the appropriate set of definitions to execute and publishing to the event stream
-4. having the various runtimes pull from the event stream
-
-For example:
-
-1. bob asks for a factory session to do some work
-2. factory session gets the definition fo the factory, and figures out what all things needs to be deployed.
-3. factory session sends session instantiation to the event stream for a specific session id under the appropriate topic event.
-4. downstream services listen upon the event stream to trigger appropriate downstream objects as subscriptions.
-5. factory session correspondingly subscribes to events on said event stream channel.
-
-The factory runtime is generally unaware of how the workers, recordsings, models, etc are running, it only knows that it has the service event hooks wired to push to them. Same is true for all the other services.
+A Factory Session is the runtime and control context for one Factory
+execution. Factory Sessions resolves the Factory definition, opens the
+injected Factory Runtime assembly, applies supported controls, and records the
+resulting canonical Factory facts through Recordings. Automations admit Work
+through Work's operations; they are not activated by subscribing every service
+to Events.
 
 ```mermaid
 sequenceDiagram
     participant User
     participant UI as User interface
     participant TRANS as Transports
-    participant SESS as Session Service
-    participant EVT as Evt Stream
-    participant RUN as Factory Runtime Service
-    participant WRKR as Worker Session Service
-    participant AUTO as Automations Service
-    participant WORK as Work Service
+    participant SESS as Factory Sessions
+    participant RUN as Factory Runtime
+    participant REC as Recordings Factory Event ledger
+    participant WORK as Work
+    participant AUTO as Automations
 
-    User->>UI: Initialize session
-    UI->>TRANS: Send command or request to initiate session via transports
-    TRANS->>SESS: Create session definition
-    SESS->>EVT: Send Evt on session creation
-    EVT->>RUN: Instantiate the factory session runtime instance
-    EVT->>AUTO: Instantiate automations as appropriate to teh factory definition
-    RUN->>EVT: Send event on system loop change
-    EVT->>WRKR: Send event on dispatch request as system loop change
-    WRKR->>EVT: Send an event on dispatch completion
-    EVT->>RUN: receive on work dispatch complete, to trigger next session tick
-    alt if using single dispatch mode
-        RUN->>RUN: iterate till done
-        RUN->>EVT: Session done
-        EVT->>SESS: Session done event receive
-        SESS->>USER: DONE
-    else if used in service
-        USER->>UI: Submit new work element
-        UI->>TRANS: Send req
-        TRANS->>WORK: Submit work
-        WORK->>WorkSubmission: Submit Work
-        EVT->RUN:Work request event
-        RUN->RUN: process work request to determine if dispatch or something else
+    User->>UI: Start a Factory Session or submit Work
+    UI->>TRANS: Send a command or request
+    alt Factory Session operation
+        TRANS->>SESS: Open, read, or control a Factory Session
+        SESS->>RUN: Open or control injected runtime assembly
+        RUN->>REC: Append canonical Factory event candidates
+        SESS->>REC: Record lifecycle and artifact facts
+        REC-->>SESS: Read/replay canonical Factory history
+    else Work or automation operation
+        TRANS->>WORK: Submit Work
+        AUTO->>WORK: Admit scheduled Work
+        WORK->>RUN: Submit runtime work operation
+        RUN->>REC: Append resulting canonical Factory facts
     end
-
 ```
-
-When the ser
 
 ### Core Loop
 
@@ -283,9 +248,14 @@ flowchart LR
 
 The loop is intentionally closed: workers and agents do not mutate the world directly. They produce outputs that re-enter the system as events, which keeps the state transition history explicit and replayable.
 
-### Event Stream
+### Canonical Factory history and bounded event delivery
 
-The world is derived from an ordered event stream rather than a collection of opaque mutable objects. This stream is the durable source of truth for replay, synchronization, and historical inspection.
+The Factory world is derived from ordered canonical `FactoryEvent` facts rather
+than opaque mutable objects. Recordings owns this durable Factory Event ledger:
+it writes JSONL recording artifacts, supports replay and historical
+inspection, and provides the facts used to derive Factory state. It is distinct
+from `pkg/services/events`, whose process-local retained topics provide only
+session-scoped observation delivery.
 
 ```mermaid
 flowchart TB
@@ -297,25 +267,29 @@ flowchart TB
         e5[Loop State Changes]
     end
 
-    stream[Ordered Event Stream]
-    replay[Replay Engine]
+    ledger[Recordings Factory Event ledger\ncanonical JSONL history]
+    replay[Recordings replay]
     snap[World State at Tick N]
     hist[Historical World State at Tick X]
     customer[Customer or Consumer View]
 
-    e1 --> stream
-    e2 --> stream
-    e3 --> stream
-    e4 --> stream
-    e5 --> stream
-    stream --> replay
+    e1 --> ledger
+    e2 --> ledger
+    e3 --> ledger
+    e4 --> ledger
+    e5 --> ledger
+    ledger --> replay
     replay --> snap
-    stream --> hist
+    ledger --> hist
     snap --> customer
     hist --> customer
 ```
 
-At any tick, the current world is the composition of all prior events. Because the stream is deterministic, customers can receive the same event history and reconstruct a consistent view at any chosen timestamp or tick.
+At any tick, the current world is the composition of prior canonical Factory
+events. Recordings replay makes that history available for consistent
+historical inspection. An Events subscription may provide low-latency
+session-scoped observations while the process retains them, but it cannot
+replace the Factory Event ledger for replay or history.
 
 `SESSION_LIFECYCLE_CONTROL` events record accepted Factory Session pause, resume,
 and related lifecycle controls. Replay and status reads use those events together
@@ -324,7 +298,10 @@ aligned with live control operations.
 
 # Front End
 
-The frontend is an embedded React application that consumes the backend event stream and derives a customer-facing world view from it. The UI emphasizes composable dashboards and visualizations rather than owning the authoritative system state.
+The frontend is an embedded React application that reads canonical Factory
+history and live `FactoryEvent` updates from Recordings, then derives a
+customer-facing world view. The UI emphasizes composable dashboards and
+visualizations rather than owning the authoritative system state.
 
 ## Frontend Composition
 
@@ -346,37 +323,47 @@ flowchart TB
     grid --> detail
 ```
 
-The React layer receives events, derives projections for the current world, and renders that state through cards, charts, and flow-oriented views.
+The React layer receives canonical Factory events, derives projections for the
+current world, and renders that state through cards, charts, and flow-oriented
+views.
 
 ## Frontend and Backend Integration
 
-The frontend and backend are connected by an event-oriented contract. The backend owns execution, scheduling, and replayable history; the frontend subscribes to that history, derives projections, and sends user actions back as submissions.
+The frontend and backend are connected by an event-oriented contract. The
+backend owns execution, scheduling, and Recordings-backed replayable Factory
+history; the frontend reads that history, derives projections, and sends user
+actions back as submissions. The process-local Events service is not the
+dashboard's durable replay source.
 
 ```mermaid
 sequenceDiagram
     participant User
     participant UI as React Frontend
     participant API as Backend API
-    participant Engine as Core Loop Engine
-    participant Stream as Event Stream
+    participant Engine as Factory Runtime
+    participant Ledger as Recordings Factory Event ledger
 
     User->>UI: Submit work or inspect state
     UI->>API: Send command or request
-    API->>Engine: Normalize into domain event
-    Engine->>Stream: Append emitted events
-    Stream-->>Engine: Replay into latest world state
-    Stream-->>UI: Stream events or snapshots
+    API->>Engine: Invoke the owning service operation
+    Engine->>Ledger: Append canonical Factory events
+    Ledger-->>API: Read or replay Factory history
+    API-->>UI: Stream Factory events or snapshots
     UI->>UI: Rebuild derived world view
     UI-->>User: Render updated dashboard
 ```
 
-This split keeps the frontend lightweight and keeps the backend authoritative. The same event stream that powers execution can also power dashboards, audit history, and deterministic replay.
+This split keeps the frontend lightweight and keeps the backend authoritative.
+The Recordings Factory Event ledger supplies dashboards, audit history, and
+deterministic replay; an Events topic remains a separate, in-memory delivery
+surface for the session that owns it.
 
 ### Editor state
 
 The graph editor state represents the website's way of managing the world state.
 
-The event stream is cloud-backed input, but the dashboard snapshot used by current activity is client-computed from events:
+The dashboard reads a scoped canonical Factory Event stream, and its current
+activity snapshot is client-computed from those events:
 
 You can sort of see here that basically as events get streamed in, the events get streamed in.
 
@@ -388,12 +375,14 @@ You can sort of see here that basically as events get streamed in, the events ge
 6. from that flow library projection and the editor state we create a fnal state that is called the view model.
 7. the state changes from the view model are projected out to the components, and components render and operate against changes by sending hook calls into the view model.
 8. the view model is responsible for injecting calls into the editor state, which is then responsible for sending API calls to the backend.
-9. the backend, as it finishes changes sends back events to the event stream denoting the world stat echanges as a consequences of API operations.
+9. the backend records canonical Factory events denoting the state changes
+   caused by API operations, and the dashboard reads those events through the
+   Factory Event surface.
 
 
 ```mermaid
 flowchart LR
-  stream["Cloud event stream\nFactoryEvent SSE"]:::cloud
+  stream["Recordings Factory Event stream\nFactoryEvent SSE"]:::cloud
   hook["useFactoryEventStream"]:::client
   events["FactoryEvent[]\nuseFactoryTimelineStore"]:::client
   replay["reconstructWorldState"]:::client
