@@ -141,6 +141,7 @@ type activationControl struct {
 type capturedTurnControlKey struct {
 	turnID    string
 	controlID string
+	action    factoryruntime.WorkerSessionControlAction
 }
 
 // New constructs the on-demand activation over the given Factory Sessions
@@ -741,7 +742,7 @@ func (s *Service) Cancel(
 	if err != nil {
 		return factorysessions.LifecycleControlResult{}, err
 	}
-	if err := controlCapturedTurn(ctx, control, active, request); err != nil {
+	if err := controlCapturedTurn(ctx, control, active, request, factoryruntime.WorkerSessionControlActionCancel); err != nil {
 		return factorysessions.LifecycleControlResult{}, err
 	}
 	if !active.beginCancellation() {
@@ -780,17 +781,19 @@ func (s *Service) Cancel(
 	}, nil
 }
 
-// controlCapturedTurn forwards a committed ACP turn cancellation to the
-// exact Factory Runtime that was active when this target control began. It
-// runs before invocation-context cancellation and cleanup so Factory Runtime
-// remains the authority that fans CANCEL through Worker Sessions. The result
-// is retained by the target generation lock, rather than its replaceable
-// activation, so a retry can never bind the same control to a later turn.
+// controlCapturedTurn forwards a committed ACP turn control to the exact
+// Factory Runtime that was active when this target control began. It runs
+// before invocation-context cancellation and cleanup so Factory Runtime
+// remains the authority that fans the requested action through Worker
+// Sessions. The result is retained by the target generation lock, rather than
+// its replaceable activation, so a retry can never bind the same control to a
+// later turn.
 func controlCapturedTurn(
 	ctx context.Context,
 	control *activationControl,
 	active *activatedRuntime,
 	request factorysessions.ControlRequest,
+	action factoryruntime.WorkerSessionControlAction,
 ) error {
 	turnID := strings.TrimSpace(request.TurnID)
 	if turnID == "" {
@@ -798,18 +801,18 @@ func controlCapturedTurn(
 	}
 	controlID := strings.TrimSpace(request.RequestID)
 	if controlID == "" {
-		return errors.New("cancel captured Factory turn: control request id is required")
+		return errors.New("control captured Factory turn: control request id is required")
 	}
-	key := capturedTurnControlKey{turnID: turnID, controlID: controlID}
+	key := capturedTurnControlKey{turnID: turnID, controlID: controlID, action: action}
 	if _, ok := control.capturedTurnControls[key]; ok {
 		return nil
 	}
 	if active == nil || active.opened.Lifecycle == nil {
-		return errors.New("cancel captured Factory turn: runtime lifecycle is required")
+		return errors.New("control captured Factory turn: runtime lifecycle is required")
 	}
 	hosted := active.opened.Lifecycle.CurrentRuntimeBundle()
 	if hosted == nil || hosted.RuntimeService() == nil {
-		return errors.New("cancel captured Factory turn: Factory Runtime is required")
+		return errors.New("control captured Factory turn: Factory Runtime is required")
 	}
 	result, err := hosted.RuntimeService().ControlTerminate(
 		context.WithoutCancel(ctx),
@@ -817,17 +820,44 @@ func controlCapturedTurn(
 			Reason:              request.Reason,
 			TurnID:              turnID,
 			ControlID:           controlID,
-			WorkerSessionAction: factoryruntime.WorkerSessionControlActionCancel,
+			WorkerSessionAction: action,
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("cancel captured Factory turn: %w", err)
+		return fmt.Errorf("control captured Factory turn: %w", err)
 	}
 	if control.capturedTurnControls == nil {
 		control.capturedTurnControls = make(map[capturedTurnControlKey]factoryruntime.TerminateResult)
 	}
 	control.capturedTurnControls[key] = result
 	return nil
+}
+
+// TerminateFactorySession routes a committed close control through the exact
+// Factory Runtime before closing the captured target. A blank turn remains a
+// generic target close, preserving process-lifecycle cleanup behavior.
+func (s *Service) TerminateFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.ControlRequest,
+) error {
+	control, ok := s.lockControl(sessionID)
+	if !ok {
+		return nil
+	}
+	defer s.unlockControl(control)
+
+	active, err := s.lookup(sessionID)
+	if errors.Is(err, factorysessions.ErrSessionNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err := controlCapturedTurn(ctx, control, active, request, factoryruntime.WorkerSessionControlActionTerminate); err != nil {
+		return err
+	}
+	return s.closeCapturedActivation(ctx, sessionID, control, active)
 }
 
 // replaceActivation swaps a closed, canceled runtime for its freshly opened
@@ -875,6 +905,15 @@ func (s *Service) CloseFactorySession(ctx context.Context, sessionID string) err
 	if err != nil {
 		return err
 	}
+	return s.closeCapturedActivation(ctx, sessionID, control, active)
+}
+
+func (s *Service) closeCapturedActivation(
+	ctx context.Context,
+	sessionID string,
+	control *activationControl,
+	active *activatedRuntime,
+) error {
 	invocation, err := active.close(ctx)
 	active.resolveCancellation(invocation, err == nil)
 	if err != nil {

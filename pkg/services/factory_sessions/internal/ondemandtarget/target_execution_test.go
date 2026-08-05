@@ -226,6 +226,74 @@ func TestCancelFansCapturedTurnBeforeInvocationCancellation(t *testing.T) {
 	}
 }
 
+// TestTerminateFactorySessionFansCapturedTurnBeforeCleanup proves a committed
+// ACP close controls the exact active Factory Runtime before invocation or
+// runtime cleanup can stop the target. The original captured control never
+// reaches a later replacement because termination evicts its runtime.
+func TestTerminateFactorySessionFansCapturedTurnBeforeCleanup(t *testing.T) {
+	invocationStarted := make(chan struct{})
+	var invocationContext context.Context
+	sessions := &fakeSessions{invoke: func(ctx context.Context, _ string, _ factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
+		invocationContext = ctx
+		close(invocationStarted)
+		<-ctx.Done()
+		return factorysessions.InvocationResult{}, ctx.Err()
+	}}
+	originalRuntime := &recordingTurnControlRuntime{}
+	originalRuntime.onTerminate = func() {
+		select {
+		case <-invocationContext.Done():
+			t.Error("captured Factory turn termination ran after invocation context cancellation")
+		default:
+		}
+	}
+	lifecycle := &fakeLifecycle{hosted: fakeHostedInstance{runtime: originalRuntime}}
+	svc := newTestService(t, &fakeOpener{opened: roles.OpenedInvocationRuntime{
+		Sessions: sessions, Lifecycle: lifecycle,
+	}}, func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+		return factorysessions.RuntimeOpeningRequest{}, nil
+	}, sequentialIDs("wrapper"))
+
+	started, err := svc.StartAsync(context.Background(), factorysessions.StartRequest{})
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+	invoked := make(chan error, 1)
+	go func() {
+		_, invokeErr := svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{})
+		invoked <- invokeErr
+	}()
+	<-invocationStarted
+
+	control := factorysessions.ControlRequest{
+		RequestID: "control-close-1",
+		Reason:    "acp session/close",
+		TurnID:    "turn-close-1",
+	}
+	if err := svc.TerminateFactorySession(context.Background(), started.SessionID, control); err != nil {
+		t.Fatalf("TerminateFactorySession: %v", err)
+	}
+	if err := <-invoked; err != nil {
+		t.Fatalf("InvokeFactorySession after TerminateFactorySession: %v", err)
+	}
+	calls := originalRuntime.terminateCalls()
+	if len(calls) != 1 {
+		t.Fatalf("original Factory Runtime ControlTerminate calls = %#v, want one", calls)
+	}
+	if got := calls[0]; got.TurnID != control.TurnID || got.ControlID != control.RequestID || got.WorkerSessionAction != factoryruntime.WorkerSessionControlActionTerminate {
+		t.Fatalf("original Factory Runtime control = %#v, want captured TERMINATE identity", got)
+	}
+	if lifecycle.stopCalls != 1 {
+		t.Fatalf("StopLifecycle calls = %d, want one cleanup after the captured control", lifecycle.stopCalls)
+	}
+	if err := svc.TerminateFactorySession(context.Background(), started.SessionID, control); err != nil {
+		t.Fatalf("repeated TerminateFactorySession: %v, want idempotent success", err)
+	}
+	if got := originalRuntime.terminateCalls(); len(got) != 1 {
+		t.Fatalf("original Factory Runtime ControlTerminate calls after retry = %#v, want one", got)
+	}
+}
+
 // TestCancelUnknownIdentityReportsSessionNotFound proves Cancel against an
 // identity this service never started fails with the existing
 // ErrSessionNotFound sentinel (preserving errors.Is compatibility) and makes
@@ -997,11 +1065,11 @@ func TestServiceSatisfiesPublishedTargetExecutionCapability(t *testing.T) {
 		t.Fatalf("SubscribeFactoryEventsForSession() = (%#v, %v), want captured stream and nil", stream, err)
 	}
 
-	if err := client.CloseFactorySession(context.Background(), started.SessionID); err != nil {
-		t.Fatalf("CloseFactorySession() via TargetExecutionService error = %v", err)
+	if err := client.TerminateFactorySession(context.Background(), started.SessionID, factorysessions.ControlRequest{}); err != nil {
+		t.Fatalf("TerminateFactorySession() via TargetExecutionService error = %v", err)
 	}
 	if err := client.CloseFactorySession(context.Background(), started.SessionID); err != nil {
-		t.Fatalf("repeated CloseFactorySession() via TargetExecutionService error = %v, want idempotent success", err)
+		t.Fatalf("CloseFactorySession() after target terminate via TargetExecutionService error = %v, want idempotent success", err)
 	}
 	if _, err := client.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{}); !errors.Is(err, factorysessions.ErrSessionNotFound) {
 		t.Fatalf("InvokeFactorySession() after close via TargetExecutionService error = %v, want ErrSessionNotFound", err)

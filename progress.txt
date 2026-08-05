@@ -11,6 +11,7 @@
 - When Workers reports `ALREADY_CANCELED`, its terminal callback can still be in flight; `Terminate` must join that callback before returning its idempotent terminal snapshot, while ordinary `Cancel` may retain its non-joining no-op contract.
 - Any successful `Terminate` no-op caused by an earlier accepted control must join the same supervision callback before returning; `controlDone` only serializes the boundary effect and is not a terminal-result barrier.
 - A committed Chat turn control must carry its immutable `TurnID` plus stable `ControlRequest.RequestID` to Factory Runtime as `TurnID`/`ControlID`; on-demand target cancellation must fan out before invocation-context cancellation and retain that result across runtime replacement.
+- A committed Chat close needs a control-aware target termination operation: preserve its opaque control ID and turn ID through Factory Sessions, fan out before target cleanup, and keep generic close separate for process lifecycle cleanup.
 
 ## 2026-08-04 20:18 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-001
 - Implemented typed Worker Session pause, resume, cancel, and terminate controls. Cancel and terminate now target the exact supervised dispatch through `WorkstationPoolBoundary.Cancel`; terminate waits for the established terminal callback, and pause/resume explicitly report unsupported until a truthful resumable capability exists.
@@ -121,4 +122,13 @@
 - **Learnings for future iterations:**
   - The control request's existing stable request ID is the natural Factory Runtime `ControlID`; only the captured turn ID needs to cross the Factory Sessions boundary explicitly.
   - An on-demand target's activation can be replaced under a stable opaque ID, so turn-control evidence belongs to the generation lock, not the activation object.
+---
+## 2026-08-04 23:57 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-004
+- Addressed the remaining blocking customer-terminate ingress finding. ACP `session/close` now carries its committed turn and opaque control identity into Factory Sessions' control-aware target termination operation, which fans `TERMINATE` through the exact captured Factory Runtime before any invocation cancellation or runtime teardown.
+- Preserved target cleanup's generic close behavior for process lifecycle callers while retaining captured TERMINATE evidence under the generation lock, so retries cannot select a replacement runtime or turn.
+- Added deterministic ACP close ingress and on-demand target tests proving exact captured identities, pre-cleanup termination, idempotent retry behavior, and no invocation-context cancellation bypass.
+- Files changed: `pkg/transports/acp/internal/stdio/**`, `pkg/services/factory_sessions/{target_execution_contract.go,internal/ondemandtarget/**}`, `prd.json`, `progress.txt`.
+- **Learnings for future iterations:**
+  - A generic runtime close does not carry customer turn ownership; exposing a distinct target-termination seam prevents an otherwise correct Runtime fan-out from being bypassed at ingress.
+  - Keep opaque downstream control IDs action-specific, so separate committed CANCEL and TERMINATE controls cannot collide while each remains safely retryable.
 ---
