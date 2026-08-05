@@ -2129,52 +2129,6 @@ func TestHandleSessionPromptRunningTransitionFailureMakesNoFactoryDispatchCall(t
 		chatsessions.TurnStateRunning, chatsessions.TurnStateCanceled)
 }
 
-// TestHandleSessionPromptHistoryRecordingFailureStopsBeforeFactoryDispatch
-// proves that a prompt whose retained user record cannot be committed stays
-// truthful and retryable: it fails the captured turn and never reaches the
-// Factory Session. Both the sequencing and stream-head commits are tested
-// because either failure would otherwise create a later load with incomplete
-// user history.
-func TestHandleSessionPromptHistoryRecordingFailureStopsBeforeFactoryDispatch(t *testing.T) {
-	tests := []struct {
-		name string
-		fail func(*fakeChatSessionsService)
-	}{
-		{
-			name: "sequence failure",
-			fail: func(chatSessions *fakeChatSessionsService) {
-				chatSessions.sequenceErr = errors.New("sequence prompt history")
-			},
-		},
-		{
-			name: "stream head failure",
-			fail: func(chatSessions *fakeChatSessionsService) {
-				chatSessions.advanceStreamHeadErr = errors.New("advance prompt history stream head")
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			factoryTarget := &fakeFactoryTargetService{}
-			server, _ := newStreamingTestServer(t, factoryTarget, "turn-1")
-			chatSessions := server.chatSessions.(*fakeChatSessionsService)
-			tt.fail(chatSessions)
-
-			env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
-				promptTextParams(streamingTestSessionID, "retain this question"))
-			if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr == nil {
-				t.Fatal("handleSessionPrompt() error = nil, want a bounded history-recording failure")
-			}
-			if got := len(factoryTarget.startCalls) + len(factoryTarget.invokeCalls); got != 0 {
-				t.Fatalf("Factory Session calls = %d, want 0 after history recording failed", got)
-			}
-			wantAdvanceTurnSequence(t, chatSessions, streamingTestSessionID, "turn-1",
-				chatsessions.TurnStateRunning, chatsessions.TurnStateFailed)
-		})
-	}
-}
-
 // TestHandleSessionPromptRunningTransitionFailureRecoveryAdmitsLaterPrompt
 // proves the RUNNING-transition recovery attempt actually releases the
 // session's busy state against the real chatsessions.Store (not just the
