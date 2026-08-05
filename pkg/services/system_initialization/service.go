@@ -11,11 +11,7 @@
 // published initialize or rollback slices.
 package systeminitialization
 
-import (
-	"context"
-
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-)
+import "context"
 
 // SystemConfigOutcome reports whether initialization created or preserved the
 // operator configuration.
@@ -77,6 +73,3 @@ type Service interface {
 	// interface.
 	Initialize(context.Context, Request) (Result, error)
 }
-
-type PackagedFactoryInstaller = factorydefinitions.PackagedFactoryInstaller
-type PackagedFactoryCatalogOperations = factorydefinitions.PackagedFactoryCatalogOperations

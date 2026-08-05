@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- When a bootstrap workflow needs pre-mutation package preflight and later installation, retain only the ordered public package names after `Packaging.List` plus `Packaging.Resolve`; invoke `Packaging.Install` after the workflow's existing configuration steps so callers never hold package payloads or callback bundles.
 - For a cross-service behavioral proof that needs one service's internal concrete collaborator, compose the peer through its owner-published `wire.New...` API inside the collaborator's package-level integration test; do not add a test-only production seam.
 - Construct each Factory Session's Worker Sessions service only after its session-owned `WorkstationPoolBoundary` exists, so dispatch and cancellation share the exact same boundary.
 - Worker Session controls must use `context.WithoutCancel` when calling the pool boundary; dispatch termination remains observable through the boundary callback rather than caller-context cancellation.
@@ -258,4 +259,15 @@
 - **Learnings for future iterations:**
   - A Factory snapshot's public JSON representation needs a composition-injected decoder for portable artifact restoration; keep that decoder inside Factory Definitions construction rather than exposing it to capability callers.
   - Validate snapshot identity and bundled-content integrity before creating a staging directory, then stage the source and artifacts together so a failed publish cannot partially mutate an existing target.
+---
+
+## 2026-08-05 05:49 -07:00 - ACP-L3-DEF-CONSOLIDATE-PACKAGING-SNAPSHOTS-003
+- Migrated System Initialization from catalog and installer callback aggregates to one directly injected Factory Definitions `Packaging` capability. Bootstrap retains its deterministic published order, JSON representation selection, create/skip results, repeat-run behavior, and partial-failure rollback facts.
+- Preserved the pre-existing preflight boundary by listing and resolving each published identity before configuration or Factory installation mutation, retaining only public names. Installation then calls the focused capability, so typed missing, malformed, unsupported, and integrity errors remain available through the Bootstrap partial failure.
+- Replaced source-topology coverage with behavioral tests for focused-capability construction, inert construction, create/skip preservation, typed package failure propagation, and canonical-wire bootstrap behavior.
+- Files changed: `pkg/services/system_initialization/{service.go,initializer_routing_test.go,initialize_definitions_root_boundary_test.go,internal/workflow/{workflow.go,workflow_test.go},wire/{wire.go,wire_test.go}}`, `pkg/wire/{profiles.go,system_initialization_composition_test.go,wire.go,wire_gen.go}`, `prd.json`, `progress.txt`.
+- Verification: `make generate-wire`; `go test ./pkg/services/factory_definitions/... ./pkg/services/system_initialization/... ./pkg/wire -count=1`; focused `go vet`; `make typecheck`; `make test`; `git diff --check`. `make pkg-boundary` is blocked by the repository-wide 142-violation baseline outside this story.
+- **Learnings for future iterations:**
+  - A bootstrap consumer can preserve catalog validation timing while depending only on a focused capability by resolving identities before mutation and retaining only their public names for later installation.
+  - Inert-construction proof should observe that no injected capability operation or filesystem edge has run before `Initialize`, then exercise the same direct capability after construction; source-file inventories do not prove that runtime boundary.
 ---

@@ -19,11 +19,10 @@ import (
 // satisfies the singular peer-facing Service contract without exposing
 // additional Bootstrap authority interfaces to peers.
 type Initializer struct {
-	operatorSettings  OperatorSettings
-	packagedCatalog   factorydefinitions.PackagedFactoryCatalogOperations
-	packagedInstaller factorydefinitions.PackagedFactoryInstaller
-	inspectPath       InspectPath
-	migrationFiles    LegacyFactoryMigrationFileSystem
+	operatorSettings OperatorSettings
+	packaging        factorydefinitions.Packaging
+	inspectPath      InspectPath
+	migrationFiles   LegacyFactoryMigrationFileSystem
 }
 
 var _ systeminitialization.Service = (*Initializer)(nil)
@@ -31,19 +30,15 @@ var _ systeminitialization.Service = (*Initializer)(nil)
 // New constructs the canonical workflow from already-selected collaborators.
 func New(
 	operatorSettings OperatorSettings,
-	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
-	packagedInstaller factorydefinitions.PackagedFactoryInstaller,
+	packaging factorydefinitions.Packaging,
 	inspectPath InspectPath,
 	migrationFiles LegacyFactoryMigrationFileSystem,
 ) (*Initializer, error) {
 	if operatorSettings == nil {
 		return nil, fmt.Errorf("construct system initialization: Operator Settings service is required")
 	}
-	if packagedInstaller == nil {
-		return nil, fmt.Errorf("construct system initialization: Factory Definitions packaged installer is required")
-	}
-	if packagedCatalog.List == nil || packagedCatalog.Resolve == nil {
-		return nil, fmt.Errorf("construct system initialization: Factory Definitions packaged catalog is required")
+	if packaging == nil {
+		return nil, fmt.Errorf("construct system initialization: Factory Definitions packaging capability is required")
 	}
 	if inspectPath == nil {
 		return nil, fmt.Errorf("construct system initialization: inspect path edge is required")
@@ -52,11 +47,10 @@ func New(
 		return nil, fmt.Errorf("construct system initialization: legacy Factory migration filesystem is required")
 	}
 	return &Initializer{
-		operatorSettings:  operatorSettings,
-		packagedCatalog:   packagedCatalog,
-		packagedInstaller: packagedInstaller,
-		inspectPath:       inspectPath,
-		migrationFiles:    migrationFiles,
+		operatorSettings: operatorSettings,
+		packaging:        packaging,
+		inspectPath:      inspectPath,
+		migrationFiles:   migrationFiles,
 	}, nil
 }
 
@@ -84,11 +78,8 @@ func (initializer *Initializer) Initialize(
 	if initializer.operatorSettings == nil {
 		return systeminitialization.Result{}, fmt.Errorf("initialize system: Operator Settings service is required")
 	}
-	if initializer.packagedInstaller == nil {
-		return systeminitialization.Result{}, fmt.Errorf("initialize system: Factory Definitions packaged installer is required")
-	}
-	if initializer.packagedCatalog.List == nil || initializer.packagedCatalog.Resolve == nil {
-		return systeminitialization.Result{}, fmt.Errorf("initialize system: Factory Definitions packaged catalog is required")
+	if initializer.packaging == nil {
+		return systeminitialization.Result{}, fmt.Errorf("initialize system: Factory Definitions packaging capability is required")
 	}
 	if initializer.inspectPath == nil {
 		return systeminitialization.Result{}, fmt.Errorf("initialize system: inspect path edge is required")
@@ -97,7 +88,7 @@ func (initializer *Initializer) Initialize(
 		return systeminitialization.Result{}, fmt.Errorf("initialize system: legacy Factory migration filesystem is required")
 	}
 
-	definitions, err := resolvePackagedDefinitions(ctx, initializer.packagedCatalog)
+	packagedFactoryNames, err := resolvePackagedFactoryNames(ctx, initializer.packaging)
 	if err != nil {
 		return systeminitialization.Result{}, err
 	}
@@ -157,12 +148,12 @@ func (initializer *Initializer) Initialize(
 		}
 	}
 
-	installed, err := initializer.packagedInstaller.EnsurePackagedFactories(
+	packagedFactories, err := installPackagedFactories(
 		ctx,
+		initializer.packaging,
 		namedFactoriesRoot,
-		definitions,
+		packagedFactoryNames,
 	)
-	packagedFactories := projectPackagedFactoryResults(installed)
 	if err != nil {
 		return systeminitialization.Result{}, partialInitializeFailure(
 			"packaged factory install failed",
@@ -183,20 +174,23 @@ func (initializer *Initializer) Initialize(
 	}, nil
 }
 
-func resolvePackagedDefinitions(
+func resolvePackagedFactoryNames(
 	ctx context.Context,
-	catalog factorydefinitions.PackagedFactoryCatalogOperations,
-) ([]factorydefinitions.PackagedDefinition, error) {
-	listed, err := catalog.ListBuiltInPackagedFactories(
+	packaging factorydefinitions.Packaging,
+) ([]string, error) {
+	listed, err := packaging.ListBuiltInPackagedFactories(
 		ctx,
 		factorydefinitions.ListBuiltInPackagedFactoriesRequest{},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list packaged Factories for system initialization: %w", err)
 	}
-	definitions := make([]factorydefinitions.PackagedDefinition, 0, len(listed.Entries))
+	names := make([]string, 0, len(listed.Entries))
 	for _, entry := range listed.Entries {
-		resolved, err := catalog.ResolveBuiltInPackagedFactory(
+		// Preserve the existing preflight boundary: every published identity
+		// resolves before Bootstrap changes the customer configuration. Retain
+		// only the public name; Packaging owns detached package content.
+		_, err := packaging.ResolveBuiltInPackagedFactory(
 			ctx,
 			factorydefinitions.ResolveBuiltInPackagedFactoryRequest{Name: entry.Name},
 		)
@@ -207,19 +201,34 @@ func resolvePackagedDefinitions(
 				err,
 			)
 		}
-		definitions = append(definitions, resolved.Definition)
+		names = append(names, entry.Name)
 	}
-	return definitions, nil
+	return names, nil
 }
 
-func projectPackagedFactoryResults(installed []factorydefinitions.PackagedFactoryInstallResult) []systeminitialization.PackagedFactoryResult {
-	results := make([]systeminitialization.PackagedFactoryResult, 0, len(installed))
-	for _, result := range installed {
+func installPackagedFactories(
+	ctx context.Context,
+	packaging factorydefinitions.Packaging,
+	namedFactoriesRoot string,
+	names []string,
+) ([]systeminitialization.PackagedFactoryResult, error) {
+	results := make([]systeminitialization.PackagedFactoryResult, 0, len(names))
+	for _, name := range names {
+		installed, err := packaging.InstallPackagedFactory(ctx, factorydefinitions.InstallPackagedFactoryRequest{
+			RootDir: namedFactoriesRoot,
+			Name:    name,
+			Format:  factorydefinitions.PackagedFactoryFormatJSON,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("install packaged Factory %q for system initialization: %w", name, err)
+		}
 		results = append(results, systeminitialization.PackagedFactoryResult{
-			Name: result.Name, FactoryDir: result.FactoryDir, Outcome: systeminitialization.PackagedFactoryOutcome(result.Outcome),
+			Name:       installed.Definition.Name,
+			FactoryDir: installed.Definition.FactoryDir,
+			Outcome:    systeminitialization.PackagedFactoryOutcome(installed.Outcome),
 		})
 	}
-	return results
+	return results, nil
 }
 
 func partialInitializeFailure(

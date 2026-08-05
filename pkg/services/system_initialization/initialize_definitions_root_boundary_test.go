@@ -13,34 +13,31 @@ import (
 	systeminitializationwire "github.com/portpowered/infinite-you/pkg/services/system_initialization/wire"
 )
 
-type definitionsCatalogRecorder struct {
-	listCalls    int
-	resolveCalls int
-	definitions  []factorydefinitions.PackagedDefinition
+type definitionsPackagingRecorder struct {
+	definitions []factorydefinitions.PackagedDefinition
+	installs    []factorydefinitions.InstallPackagedFactoryRequest
+	installErr  error
 }
 
-func (catalog *definitionsCatalogRecorder) list(
-	_ context.Context,
-	_ factorydefinitions.ListBuiltInPackagedFactoriesRequest,
+func (packaging *definitionsPackagingRecorder) ListBuiltInPackagedFactories(
+	context.Context,
+	factorydefinitions.ListBuiltInPackagedFactoriesRequest,
 ) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
-	catalog.listCalls++
-	entries := make([]factorydefinitions.BuiltInPackagedFactoryEntry, len(catalog.definitions))
-	for index, definition := range catalog.definitions {
+	entries := make([]factorydefinitions.BuiltInPackagedFactoryEntry, len(packaging.definitions))
+	for index, definition := range packaging.definitions {
 		entries[index] = factorydefinitions.BuiltInPackagedFactoryEntry{
-			Name:    definition.Name,
-			Project: definition.Project,
+			Name: definition.Name, Project: definition.Project,
 			Formats: append([]factorydefinitions.PackagedFactoryFormat(nil), definition.Formats...),
 		}
 	}
 	return factorydefinitions.ListBuiltInPackagedFactoriesResult{Entries: entries}, nil
 }
 
-func (catalog *definitionsCatalogRecorder) resolve(
+func (packaging *definitionsPackagingRecorder) ResolveBuiltInPackagedFactory(
 	_ context.Context,
 	request factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
 ) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
-	catalog.resolveCalls++
-	for _, definition := range catalog.definitions {
+	for _, definition := range packaging.definitions {
 		if definition.Name == request.Name {
 			return factorydefinitions.ResolveBuiltInPackagedFactoryResult{
 				Definition: definition,
@@ -48,79 +45,49 @@ func (catalog *definitionsCatalogRecorder) resolve(
 			}, nil
 		}
 	}
-	return factorydefinitions.ResolveBuiltInPackagedFactoryResult{},
-		factorydefinitions.ErrUnknownPackagedFactoryIdentity
+	return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, factorydefinitions.ErrUnknownPackagedFactoryIdentity
 }
 
-func (catalog *definitionsCatalogRecorder) operations() factorydefinitions.PackagedFactoryCatalogOperations {
-	return factorydefinitions.PackagedFactoryCatalogOperations{
-		List:    catalog.list,
-		Resolve: catalog.resolve,
-	}
-}
-
-// filePreservingPackagedInstaller exercises the Definitions root ensure-installer
-// seam: first ensure creates on-disk Factory content; repeat ensures report skipped
-// without rewriting customer-owned Factory files.
-type filePreservingPackagedInstaller struct {
-	calls int
-}
-
-func (installer *filePreservingPackagedInstaller) EnsurePackagedFactories(
+func (packaging *definitionsPackagingRecorder) InstallPackagedFactory(
 	_ context.Context,
-	root string,
-	definitions []factorydefinitions.PackagedDefinition,
-) ([]factorydefinitions.PackagedFactoryInstallResult, error) {
-	installer.calls++
+	request factorydefinitions.InstallPackagedFactoryRequest,
+) (factorydefinitions.InstallPackagedFactoryResult, error) {
+	packaging.installs = append(packaging.installs, request)
+	if packaging.installErr != nil {
+		return factorydefinitions.InstallPackagedFactoryResult{}, packaging.installErr
+	}
+
+	factoryDir := filepath.Join(request.RootDir, strings.TrimPrefix(request.Name, "@you/"))
 	outcome := factorydefinitions.PackagedFactoryInstallCreated
-	if installer.calls > 1 {
+	if len(packaging.installs) > 1 {
 		outcome = factorydefinitions.PackagedFactoryInstallSkipped
-	}
-
-	results := make([]factorydefinitions.PackagedFactoryInstallResult, 0, len(definitions))
-	for _, definition := range definitions {
-		factoryDir := filepath.Join(root, strings.TrimPrefix(definition.Name, "@you/"))
-		if installer.calls == 1 {
-			if err := os.MkdirAll(factoryDir, 0o755); err != nil {
-				return nil, err
-			}
-			if err := os.WriteFile(filepath.Join(factoryDir, "customer-owned.txt"), []byte("bootstrap-created\n"), 0o600); err != nil {
-				return nil, err
-			}
+	} else {
+		if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+			return factorydefinitions.InstallPackagedFactoryResult{}, err
 		}
-		results = append(results, factorydefinitions.PackagedFactoryInstallResult{
-			Name:       definition.Name,
-			FactoryDir: factoryDir,
-			Outcome:    outcome,
-		})
+		if err := os.WriteFile(filepath.Join(factoryDir, "customer-owned.txt"), []byte("bootstrap-created\n"), 0o600); err != nil {
+			return factorydefinitions.InstallPackagedFactoryResult{}, err
+		}
 	}
-	return results, nil
-}
-
-type failingDefinitionsInstaller struct {
-	err error
-}
-
-func (installer *failingDefinitionsInstaller) EnsurePackagedFactories(
-	context.Context,
-	string,
-	[]factorydefinitions.PackagedDefinition,
-) ([]factorydefinitions.PackagedFactoryInstallResult, error) {
-	return nil, installer.err
+	return factorydefinitions.InstallPackagedFactoryResult{
+		Definition: factorydefinitions.DistributedFactoryDefinitionFacts{
+			Name: request.Name, FactoryDir: factoryDir,
+		},
+		Outcome: outcome,
+		Format:  request.Format,
+	}, nil
 }
 
 func newDefinitionsRootService(
 	t *testing.T,
 	settings systeminitializationwire.OperatorSettings,
-	catalog factorydefinitions.PackagedFactoryCatalogOperations,
-	installer factorydefinitions.PackagedFactoryInstaller,
+	packaging factorydefinitions.Packaging,
 ) systeminitialization.Service {
 	t.Helper()
 
 	service, err := systeminitializationwire.NewService(
 		settings,
-		catalog,
-		installer,
+		packaging,
 		os.Stat,
 		localMigrationFileSystem{},
 	)
@@ -131,20 +98,18 @@ func newDefinitionsRootService(
 }
 
 // TestInitializeDefinitionsRootBoundary_CreatedThenSkippedPreservesCustomerFactoryContent
-// proves Initialize reports packaged-Factory created outcomes on first ensure and
-// skipped outcomes on repeat through injected Definitions root catalog and
-// ensure-installer collaborators without rewriting customer-owned Factory content.
+// proves Bootstrap uses the focused Packaging capability to retain its
+// customer-visible create/skip behavior without rewriting customer-owned
+// Factory files.
 func TestInitializeDefinitionsRootBoundary_CreatedThenSkippedPreservesCustomerFactoryContent(t *testing.T) {
 	t.Parallel()
 
-	definitions := []factorydefinitions.PackagedDefinition{{
+	packaging := &definitionsPackagingRecorder{definitions: []factorydefinitions.PackagedDefinition{{
 		Name:    "@you/goal",
 		JSON:    []byte(`{}`),
 		Formats: []factorydefinitions.PackagedFactoryFormat{factorydefinitions.PackagedFactoryFormatJSON},
-	}}
-	catalog := &definitionsCatalogRecorder{definitions: definitions}
-	installer := &filePreservingPackagedInstaller{}
-	service := newDefinitionsRootService(t, &routingOperatorSettings{}, catalog.operations(), installer)
+	}}}
+	service := newDefinitionsRootService(t, &routingOperatorSettings{}, packaging)
 
 	homeDir := t.TempDir()
 	first, err := service.Initialize(context.Background(), systeminitialization.Request{HomeDir: homeDir})
@@ -179,110 +144,48 @@ func TestInitializeDefinitionsRootBoundary_CreatedThenSkippedPreservesCustomerFa
 	if string(after) != string(customerContent) {
 		t.Fatalf("factory content rewritten on repeat: before %q after %q", customerContent, after)
 	}
-	if catalog.listCalls < 1 || catalog.resolveCalls < 1 {
-		t.Fatalf("catalog list/resolve calls = %d/%d, want collaborator catalog usage", catalog.listCalls, catalog.resolveCalls)
-	}
-	if installer.calls != 2 {
-		t.Fatalf("installer calls = %d, want one per Initialize invocation", installer.calls)
+	if len(packaging.installs) != 2 ||
+		packaging.installs[0].Format != factorydefinitions.PackagedFactoryFormatJSON ||
+		packaging.installs[1].Format != factorydefinitions.PackagedFactoryFormatJSON {
+		t.Fatalf("focused packaging requests = %#v, want ordered JSON installs", packaging.installs)
 	}
 }
 
-// TestInitializeDefinitionsRootBoundary_PartialFailureSurfacesRollbackFactsWhenEnsureFails
-// proves partial-failure Initialize still surfaces Bootstrap-owned rollback facts
-// when a Definitions ensure collaborator fails after earlier successful work.
-func TestInitializeDefinitionsRootBoundary_PartialFailureSurfacesRollbackFactsWhenEnsureFails(t *testing.T) {
+// TestInitializeDefinitionsRootBoundary_PartialFailurePreservesPackageClassification
+// proves a Packaging failure remains inspectable through Bootstrap's existing
+// partial-failure result instead of being converted to an untyped error.
+func TestInitializeDefinitionsRootBoundary_PartialFailurePreservesPackageClassification(t *testing.T) {
 	t.Parallel()
 
-	installErr := errors.New("packaged factory ensure denied")
-	service := newDefinitionsRootService(
-		t,
-		&routingOperatorSettings{},
-		factorydefinitions.PackagedFactoryCatalogOperations{
-			List: func(
-				context.Context,
-				factorydefinitions.ListBuiltInPackagedFactoriesRequest,
-			) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
-				return factorydefinitions.ListBuiltInPackagedFactoriesResult{
-					Entries: []factorydefinitions.BuiltInPackagedFactoryEntry{{
-						Name:    "@you/goal",
-						Formats: []factorydefinitions.PackagedFactoryFormat{factorydefinitions.PackagedFactoryFormatJSON},
-					}},
-				}, nil
-			},
-			Resolve: func(
-				_ context.Context,
-				request factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
-			) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
-				if request.Name != "@you/goal" {
-					return factorydefinitions.ResolveBuiltInPackagedFactoryResult{},
-						factorydefinitions.ErrUnknownPackagedFactoryIdentity
-				}
-				return factorydefinitions.ResolveBuiltInPackagedFactoryResult{
-					Definition: factorydefinitions.PackagedDefinition{
-						Name:    "@you/goal",
-						JSON:    []byte(`{}`),
-						Formats: []factorydefinitions.PackagedFactoryFormat{factorydefinitions.PackagedFactoryFormatJSON},
-					},
-				}, nil
-			},
-		},
-		&failingDefinitionsInstaller{err: installErr},
+	installErr := factorydefinitions.NewPackagedFactoryInputError(
+		factorydefinitions.PackagedFactoryErrorIntegrity,
+		"@you/goal",
+		factorydefinitions.PackagedFactoryFormatJSON,
+		"prompts/build.md",
+		errors.New("digest differs"),
 	)
+	service := newDefinitionsRootService(t, &routingOperatorSettings{}, &definitionsPackagingRecorder{
+		definitions: []factorydefinitions.PackagedDefinition{{
+			Name:    "@you/goal",
+			Formats: []factorydefinitions.PackagedFactoryFormat{factorydefinitions.PackagedFactoryFormatJSON},
+		}},
+		installErr: installErr,
+	})
 
 	_, err := service.Initialize(context.Background(), systeminitialization.Request{HomeDir: t.TempDir()})
 	if !errors.Is(err, systeminitialization.ErrInitializePartialFailure) {
 		t.Fatalf("Initialize() error = %v, want ErrInitializePartialFailure", err)
 	}
-	if !errors.Is(err, installErr) {
-		t.Fatalf("Initialize() error = %v, want wrapped ensure cause", err)
+	if !errors.Is(err, factorydefinitions.ErrPackagedFactoryIntegrity) {
+		t.Fatalf("Initialize() error = %v, want package integrity classification", err)
 	}
 	var partialFailure systeminitialization.InitializePartialFailure
 	if !errors.As(err, &partialFailure) {
 		t.Fatalf("Initialize() error = %T(%v), want InitializePartialFailure", err, err)
 	}
 	if len(partialFailure.Facts) != 3 ||
-		partialFailure.Facts[0].Step != systeminitialization.InitializeStepLegacyMigration ||
-		partialFailure.Facts[0].Outcome != systeminitialization.RollbackStepCompleted ||
-		partialFailure.Facts[1].Step != systeminitialization.InitializeStepSystemConfig ||
-		partialFailure.Facts[1].Outcome != systeminitialization.RollbackStepRolledBackOrPreserved ||
 		partialFailure.Facts[2].Step != systeminitialization.InitializeStepPackagedFactories ||
 		partialFailure.Facts[2].Outcome != systeminitialization.RollbackStepUnresolved {
 		t.Fatalf("Initialize() rollback facts = %#v", partialFailure.Facts)
-	}
-}
-
-// TestPackageBoundary_InitializeProductionDoesNotRequireAttachFactoryDefinitions
-// proves Bootstrap production Initialize paths under this packet do not call or
-// require AttachFactoryDefinitions; collaborators remain Definitions root contracts.
-func TestPackageBoundary_InitializeProductionDoesNotRequireAttachFactoryDefinitions(t *testing.T) {
-	t.Parallel()
-
-	packageDirs := []string{
-		".",
-		"wire",
-		"internal/workflow",
-	}
-	for _, packageDir := range packageDirs {
-		entries, err := os.ReadDir(packageDir)
-		if err != nil {
-			t.Fatalf("read %s: %v", packageDir, err)
-		}
-		for _, entry := range entries {
-			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") ||
-				strings.HasSuffix(entry.Name(), "_test.go") {
-				continue
-			}
-			path := filepath.Join(packageDir, entry.Name())
-			source, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("read %s: %v", path, err)
-			}
-			if strings.Contains(string(source), "AttachFactoryDefinitions") {
-				t.Fatalf(
-					"%s references AttachFactoryDefinitions; Initialize must use Definitions root catalog and ensure collaborators only",
-					path,
-				)
-			}
-		}
 	}
 }

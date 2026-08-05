@@ -50,96 +50,123 @@ func (fake *fakeOperatorSettings) EnsureLocalBackendScope(path string) (operator
 }
 
 type fakePackagedInstaller struct {
-	calls   []packagedInstallCall
-	results []factorydefinitions.PackagedFactoryInstallResult
-	err     error
+	definitions []factorydefinitions.PackagedDefinition
+	calls       []packagedInstallCall
+	results     []factorydefinitions.InstallPackagedFactoryResult
+	err         error
 }
 
-type failingPackagedCatalog struct {
+type failingPackaging struct {
 	err error
 }
 
-func (catalog failingPackagedCatalog) ListBuiltInPackagedFactories(
+func (packaging failingPackaging) ListBuiltInPackagedFactories(
 	context.Context,
 	factorydefinitions.ListBuiltInPackagedFactoriesRequest,
 ) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
-	return factorydefinitions.ListBuiltInPackagedFactoriesResult{}, catalog.err
+	return factorydefinitions.ListBuiltInPackagedFactoriesResult{}, packaging.err
 }
 
-func (failingPackagedCatalog) ResolveBuiltInPackagedFactory(
+func (failingPackaging) ResolveBuiltInPackagedFactory(
 	context.Context,
 	factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
 ) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
 	return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, errors.New("unexpected resolve")
 }
 
+func (failingPackaging) InstallPackagedFactory(
+	context.Context,
+	factorydefinitions.InstallPackagedFactoryRequest,
+) (factorydefinitions.InstallPackagedFactoryResult, error) {
+	return factorydefinitions.InstallPackagedFactoryResult{}, errors.New("unexpected install")
+}
+
 type packagedInstallCall struct {
-	root        string
-	definitions []factorydefinitions.PackagedDefinition
+	root   string
+	name   string
+	format factorydefinitions.PackagedFactoryFormat
 }
 
 func newTestInitializer(
 	t *testing.T,
 	settings OperatorSettings,
-	installer factorydefinitions.PackagedFactoryInstaller,
+	packaging factorydefinitions.Packaging,
 	definitions []factorydefinitions.PackagedDefinition,
 ) *Initializer {
 	t.Helper()
-	catalog := newTestPackagedCatalog(definitions)
-	initializer, err := New(settings, catalog, installer, os.Stat, localMigrationFileSystem{})
+	if definitions == nil {
+		definitions = []factorydefinitions.PackagedDefinition{{
+			Name:    "@you/goal",
+			Formats: []factorydefinitions.PackagedFactoryFormat{factorydefinitions.PackagedFactoryFormatJSON},
+		}}
+	}
+	if configurable, ok := packaging.(interface {
+		setDefinitions([]factorydefinitions.PackagedDefinition)
+	}); ok {
+		configurable.setDefinitions(definitions)
+	}
+	initializer, err := New(settings, packaging, os.Stat, localMigrationFileSystem{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 	return initializer
 }
 
-func newTestPackagedCatalog(
-	definitions []factorydefinitions.PackagedDefinition,
-) factorydefinitions.PackagedFactoryCatalogOperations {
-	cloned := append([]factorydefinitions.PackagedDefinition(nil), definitions...)
-	sort.Slice(cloned, func(i, j int) bool { return cloned[i].Name < cloned[j].Name })
-	return factorydefinitions.PackagedFactoryCatalogOperations{
-		List: func(
-			context.Context,
-			factorydefinitions.ListBuiltInPackagedFactoriesRequest,
-		) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
-			entries := make([]factorydefinitions.BuiltInPackagedFactoryEntry, len(cloned))
-			for index, definition := range cloned {
-				entries[index] = factorydefinitions.BuiltInPackagedFactoryEntry{
-					Name: definition.Name, Project: definition.Project,
-					Formats: append([]factorydefinitions.PackagedFactoryFormat(nil), definition.Formats...),
-				}
-			}
-			return factorydefinitions.ListBuiltInPackagedFactoriesResult{Entries: entries}, nil
-		},
-		Resolve: func(
-			_ context.Context,
-			request factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
-		) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
-			for _, definition := range cloned {
-				if definition.Name == request.Name {
-					return factorydefinitions.ResolveBuiltInPackagedFactoryResult{
-						Definition: definition,
-						Formats:    append([]factorydefinitions.PackagedFactoryFormat(nil), definition.Formats...),
-					}, nil
-				}
-			}
-			return factorydefinitions.ResolveBuiltInPackagedFactoryResult{},
-				factorydefinitions.ErrUnknownPackagedFactoryIdentity
-		},
-	}
+func (fake *fakePackagedInstaller) setDefinitions(definitions []factorydefinitions.PackagedDefinition) {
+	fake.definitions = append(fake.definitions[:0], definitions...)
+	sort.Slice(fake.definitions, func(i, j int) bool { return fake.definitions[i].Name < fake.definitions[j].Name })
 }
 
-func (fake *fakePackagedInstaller) EnsurePackagedFactories(
+func (fake *fakePackagedInstaller) ListBuiltInPackagedFactories(
+	context.Context,
+	factorydefinitions.ListBuiltInPackagedFactoriesRequest,
+) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
+	entries := make([]factorydefinitions.BuiltInPackagedFactoryEntry, len(fake.definitions))
+	for index, definition := range fake.definitions {
+		entries[index] = factorydefinitions.BuiltInPackagedFactoryEntry{
+			Name: definition.Name, Project: definition.Project,
+			Formats: append([]factorydefinitions.PackagedFactoryFormat(nil), definition.Formats...),
+		}
+	}
+	return factorydefinitions.ListBuiltInPackagedFactoriesResult{Entries: entries}, nil
+}
+
+func (fake *fakePackagedInstaller) ResolveBuiltInPackagedFactory(
 	_ context.Context,
-	root string,
-	definitions []factorydefinitions.PackagedDefinition,
-) ([]factorydefinitions.PackagedFactoryInstallResult, error) {
+	request factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
+) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
+	for _, definition := range fake.definitions {
+		if definition.Name == request.Name {
+			return factorydefinitions.ResolveBuiltInPackagedFactoryResult{
+				Definition: definition,
+				Formats:    append([]factorydefinitions.PackagedFactoryFormat(nil), definition.Formats...),
+			}, nil
+		}
+	}
+	return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, factorydefinitions.ErrUnknownPackagedFactoryIdentity
+}
+
+func (fake *fakePackagedInstaller) InstallPackagedFactory(
+	_ context.Context,
+	request factorydefinitions.InstallPackagedFactoryRequest,
+) (factorydefinitions.InstallPackagedFactoryResult, error) {
 	fake.calls = append(fake.calls, packagedInstallCall{
-		root:        root,
-		definitions: append([]factorydefinitions.PackagedDefinition(nil), definitions...),
+		root: request.RootDir, name: request.Name, format: request.Format,
 	})
-	return append([]factorydefinitions.PackagedFactoryInstallResult(nil), fake.results...), fake.err
+	if fake.err != nil {
+		return factorydefinitions.InstallPackagedFactoryResult{}, fake.err
+	}
+	index := len(fake.calls) - 1
+	if index < len(fake.results) {
+		return fake.results[index], nil
+	}
+	return factorydefinitions.InstallPackagedFactoryResult{
+		Definition: factorydefinitions.DistributedFactoryDefinitionFacts{
+			Name: request.Name, FactoryDir: strings.TrimPrefix(request.Name, "@you/"),
+		},
+		Outcome: factorydefinitions.PackagedFactoryInstallCreated,
+		Format:  request.Format,
+	}, nil
 }
 
 func TestInitializeFreshHomeReturnsTypedCreatedResultsThroughPeerRoots(t *testing.T) {
@@ -152,9 +179,8 @@ func TestInitializeFreshHomeReturnsTypedCreatedResultsThroughPeerRoots(t *testin
 		Formats: []factorydefinitions.PackagedFactoryFormat{factorydefinitions.PackagedFactoryFormatJSON},
 	}}
 	settings := &fakeOperatorSettings{}
-	installer := &fakePackagedInstaller{results: []factorydefinitions.PackagedFactoryInstallResult{{
-		Name:       "@you/goal",
-		FactoryDir: "goal",
+	installer := &fakePackagedInstaller{results: []factorydefinitions.InstallPackagedFactoryResult{{
+		Definition: factorydefinitions.DistributedFactoryDefinitionFacts{Name: "@you/goal", FactoryDir: "goal"},
 		Outcome:    factorydefinitions.PackagedFactoryInstallCreated,
 	}}}
 
@@ -186,8 +212,8 @@ func TestInitializeFreshHomeReturnsTypedCreatedResultsThroughPeerRoots(t *testin
 	}
 	if len(installer.calls) != 1 ||
 		installer.calls[0].root != wantFactoriesRoot ||
-		len(installer.calls[0].definitions) != 1 ||
-		installer.calls[0].definitions[0].Name != "@you/goal" {
+		installer.calls[0].name != "@you/goal" ||
+		installer.calls[0].format != factorydefinitions.PackagedFactoryFormatJSON {
 		t.Fatalf("Factory Definitions installer calls = %#v, want one install at %q", installer.calls, wantFactoriesRoot)
 	}
 }
@@ -253,29 +279,26 @@ func TestInitializeRepeatInvocationReportsSkippedOutcomesForSystemConfigAndPacka
 }
 
 type repeatAwarePackagedInstaller struct {
+	fakePackagedInstaller
 	calls int
 }
 
-func (installer *repeatAwarePackagedInstaller) EnsurePackagedFactories(
+func (installer *repeatAwarePackagedInstaller) InstallPackagedFactory(
 	_ context.Context,
-	root string,
-	definitions []factorydefinitions.PackagedDefinition,
-) ([]factorydefinitions.PackagedFactoryInstallResult, error) {
+	request factorydefinitions.InstallPackagedFactoryRequest,
+) (factorydefinitions.InstallPackagedFactoryResult, error) {
 	installer.calls++
 	outcome := factorydefinitions.PackagedFactoryInstallCreated
 	if installer.calls > 1 {
 		outcome = factorydefinitions.PackagedFactoryInstallSkipped
 	}
-	results := make([]factorydefinitions.PackagedFactoryInstallResult, 0, len(definitions))
-	for _, definition := range definitions {
-		results = append(results, factorydefinitions.PackagedFactoryInstallResult{
-			Name:       definition.Name,
-			FactoryDir: strings.TrimPrefix(definition.Name, "@you/"),
-			Outcome:    outcome,
-		})
-	}
-	_ = root
-	return results, nil
+	return factorydefinitions.InstallPackagedFactoryResult{
+		Definition: factorydefinitions.DistributedFactoryDefinitionFacts{
+			Name: request.Name, FactoryDir: strings.TrimPrefix(request.Name, "@you/"),
+		},
+		Outcome: outcome,
+		Format:  request.Format,
+	}, nil
 }
 
 func TestInit_FreshHomeCreatesOperatorSystemConfig(t *testing.T) {
@@ -393,8 +416,7 @@ func TestInit_RejectsSystemConfigParentThatIsAFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	inspect := func(string) (os.FileInfo, error) { return occupied, nil }
-	catalog := newTestPackagedCatalog(nil)
-	initializer, err := New(&fakeOperatorSettings{}, catalog, &fakePackagedInstaller{}, inspect, localMigrationFileSystem{})
+	initializer, err := New(&fakeOperatorSettings{}, &fakePackagedInstaller{}, inspect, localMigrationFileSystem{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -421,8 +443,7 @@ func TestInit_PropagatesInjectedConfigInspectionFailure(t *testing.T) {
 		return nil, inspectErr
 	}
 
-	catalog := newTestPackagedCatalog(nil)
-	initializer, constructionErr := New(&fakeOperatorSettings{}, catalog, &fakePackagedInstaller{}, inspect, localMigrationFileSystem{})
+	initializer, constructionErr := New(&fakeOperatorSettings{}, &fakePackagedInstaller{}, inspect, localMigrationFileSystem{})
 	if constructionErr != nil {
 		t.Fatalf("New() error = %v", constructionErr)
 	}
@@ -457,15 +478,16 @@ func TestInit_FreshHomeMaterializesPackagedDefaultFactories(t *testing.T) {
 			factorydefinitions.PackagedFactoryFormatJSON,
 		},
 	}}
-	installer := &fakePackagedInstaller{results: []factorydefinitions.PackagedFactoryInstallResult{{
-		Name: "@you/goal", FactoryDir: "goal", Outcome: factorydefinitions.PackagedFactoryInstallCreated,
+	installer := &fakePackagedInstaller{results: []factorydefinitions.InstallPackagedFactoryResult{{
+		Definition: factorydefinitions.DistributedFactoryDefinitionFacts{Name: "@you/goal", FactoryDir: "goal"},
+		Outcome:    factorydefinitions.PackagedFactoryInstallCreated,
 	}}}
 	result, err := newTestInitializer(t, &fakeOperatorSettings{}, installer, definitions).
 		Initialize(t.Context(), systeminitialization.Request{HomeDir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(installer.calls) != 1 || len(installer.calls[0].definitions) != 1 ||
+	if len(installer.calls) != 1 || installer.calls[0].name != "@you/goal" ||
 		len(result.PackagedFactories) != 1 || result.PackagedFactories[0].Outcome != systeminitialization.PackagedFactoryCreated {
 		t.Fatalf("calls/result = %#v, %#v", installer.calls, result)
 	}
@@ -611,11 +633,7 @@ func TestInitializeCatalogFailureReturnsBeforeInstallationOrConfigMutation(t *te
 	catalogErr := errors.New("embedded manifest invalid")
 	initializer, err := New(
 		settings,
-		factorydefinitions.PackagedFactoryCatalogOperations{
-			List:    failingPackagedCatalog{err: catalogErr}.ListBuiltInPackagedFactories,
-			Resolve: failingPackagedCatalog{}.ResolveBuiltInPackagedFactory,
-		},
-		installer,
+		failingPackaging{err: catalogErr},
 		os.Stat,
 		localMigrationFileSystem{},
 	)
@@ -638,17 +656,14 @@ func TestInitializeCatalogFailureReturnsBeforeInstallationOrConfigMutation(t *te
 }
 
 func TestNewRequiresInjectedServices(t *testing.T) {
-	catalog := newTestPackagedCatalog(nil)
-	if initializer, err := New(nil, catalog, &fakePackagedInstaller{}, os.Stat, localMigrationFileSystem{}); err == nil || initializer != nil {
+	packaging := &fakePackagedInstaller{}
+	if initializer, err := New(nil, packaging, os.Stat, localMigrationFileSystem{}); err == nil || initializer != nil {
 		t.Fatalf("New(nil Operator Settings) = (%#v, %v), want nil and error", initializer, err)
 	}
-	if initializer, err := New(&fakeOperatorSettings{}, catalog, nil, os.Stat, localMigrationFileSystem{}); err == nil || initializer != nil {
-		t.Fatalf("New(nil packaged installer) = (%#v, %v), want nil and error", initializer, err)
+	if initializer, err := New(&fakeOperatorSettings{}, nil, os.Stat, localMigrationFileSystem{}); err == nil || initializer != nil {
+		t.Fatalf("New(nil packaging capability) = (%#v, %v), want nil and error", initializer, err)
 	}
-	if initializer, err := New(&fakeOperatorSettings{}, factorydefinitions.PackagedFactoryCatalogOperations{}, &fakePackagedInstaller{}, os.Stat, localMigrationFileSystem{}); err == nil || initializer != nil {
-		t.Fatalf("New(nil packaged catalog) = (%#v, %v), want nil and error", initializer, err)
-	}
-	if initializer, err := New(&fakeOperatorSettings{}, catalog, &fakePackagedInstaller{}, nil, localMigrationFileSystem{}); err == nil || initializer != nil || !strings.Contains(err.Error(), "inspect path edge is required") {
+	if initializer, err := New(&fakeOperatorSettings{}, packaging, nil, localMigrationFileSystem{}); err == nil || initializer != nil || !strings.Contains(err.Error(), "inspect path edge is required") {
 		t.Fatalf("New(nil inspect path) = (%#v, %v), want nil and inspect-path error", initializer, err)
 	}
 }

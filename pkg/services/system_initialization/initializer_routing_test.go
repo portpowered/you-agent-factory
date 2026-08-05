@@ -33,19 +33,6 @@ func (settings *routingOperatorSettings) EnsureLocalBackendScope(path string) (o
 	return operatorsettings.ResolvedBackendScope{}, nil
 }
 
-type routingPackagedInstaller struct {
-	called bool
-}
-
-func (installer *routingPackagedInstaller) EnsurePackagedFactories(
-	context.Context,
-	string,
-	[]factorydefinitions.PackagedDefinition,
-) ([]factorydefinitions.PackagedFactoryInstallResult, error) {
-	installer.called = true
-	return nil, nil
-}
-
 type localMigrationFileSystem struct{}
 
 func (localMigrationFileSystem) Stat(path string) (os.FileInfo, error)      { return os.Stat(path) }
@@ -54,7 +41,9 @@ func (localMigrationFileSystem) ReadDir(path string) ([]os.DirEntry, error) { re
 func (localMigrationFileSystem) MkdirAll(path string, mode os.FileMode) error {
 	return os.MkdirAll(path, mode)
 }
-func (localMigrationFileSystem) Rename(oldPath, newPath string) error { return os.Rename(oldPath, newPath) }
+func (localMigrationFileSystem) Rename(oldPath, newPath string) error {
+	return os.Rename(oldPath, newPath)
+}
 
 // TestRootService_InitializeRoutesThroughInternalWorkflow proves the published
 // root Service.Initialize seam is fulfilled through internal workflow ownership
@@ -63,24 +52,13 @@ func TestRootService_InitializeRoutesThroughInternalWorkflow(t *testing.T) {
 	t.Parallel()
 
 	settings := &routingOperatorSettings{}
-	installer := &routingPackagedInstaller{}
+	packaging := &definitionsPackagingRecorder{definitions: []factorydefinitions.PackagedDefinition{{
+		Name:    "@you/goal",
+		Formats: []factorydefinitions.PackagedFactoryFormat{factorydefinitions.PackagedFactoryFormatJSON},
+	}}}
 	service, err := systeminitializationwire.NewService(
 		settings,
-		factorydefinitions.PackagedFactoryCatalogOperations{
-			List: func(
-				context.Context,
-				factorydefinitions.ListBuiltInPackagedFactoriesRequest,
-			) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
-				return factorydefinitions.ListBuiltInPackagedFactoriesResult{}, nil
-			},
-			Resolve: func(
-				context.Context,
-				factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
-			) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
-				return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, nil
-			},
-		},
-		installer,
+		packaging,
 		os.Stat,
 		localMigrationFileSystem{},
 	)
@@ -107,8 +85,8 @@ func TestRootService_InitializeRoutesThroughInternalWorkflow(t *testing.T) {
 	if len(settings.loadCalls) != 1 || settings.loadCalls[0] != wantConfigPath {
 		t.Fatalf("LoadFileConfig calls = %#v, want [%q]", settings.loadCalls, wantConfigPath)
 	}
-	if !installer.called {
-		t.Fatalf("installer.called = false, want packaged install after Settings commands")
+	if len(packaging.installs) != 1 || packaging.installs[0].Name != "@you/goal" {
+		t.Fatalf("packaging requests = %#v, want one goal install after Settings commands", packaging.installs)
 	}
 }
 
@@ -128,24 +106,9 @@ func TestRootService_InitializeSkipPathConstructsSettingsLoadCommandThroughRootC
 	}
 
 	settings := &routingOperatorSettings{}
-	installer := &routingPackagedInstaller{}
 	service, err := systeminitializationwire.NewService(
 		settings,
-		factorydefinitions.PackagedFactoryCatalogOperations{
-			List: func(
-				context.Context,
-				factorydefinitions.ListBuiltInPackagedFactoriesRequest,
-			) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
-				return factorydefinitions.ListBuiltInPackagedFactoriesResult{}, nil
-			},
-			Resolve: func(
-				context.Context,
-				factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
-			) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
-				return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, nil
-			},
-		},
-		installer,
+		&definitionsPackagingRecorder{},
 		os.Stat,
 		localMigrationFileSystem{},
 	)

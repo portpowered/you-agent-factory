@@ -71,8 +71,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Migrated System Initialization to a single injected Factory Definitions Packaging capability. Bootstrap preserves published catalog preflight before config mutation, deterministic JSON install order, create/skip behavior, idempotent repeat runs, typed package failure propagation, and inert direct construction. Verified focused Factory Definitions/System Initialization/wire suites, generated wire output, vet, typecheck, and make test; the repository-wide package-boundary gate remains blocked by its shared baseline."
     }
   ]
 }

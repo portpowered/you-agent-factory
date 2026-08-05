@@ -335,9 +335,7 @@ func provideModelInvocationOperation(
 }
 
 func provideSystemInitializationService(
-	persistence factorydefinitions.Persistence,
-	packagedInstallationFileSystem factorydefinitions.PackagedInstallationFileSystem,
-	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
+	packaging factorydefinitions.Packaging,
 	loadOperatorConfig operatorsettings.ConfigLoader,
 	ensureOperatorBackendScope operatorsettings.BackendScopeEnsurer,
 	inspectPath systeminitializationwire.InspectPath,
@@ -348,8 +346,7 @@ func provideSystemInitializationService(
 			Load:   loadOperatorConfig,
 			Ensure: ensureOperatorBackendScope,
 		},
-		packagedCatalog,
-		factorydefinitionswire.NewPackagedFactoryInstaller(persistence, packagedInstallationFileSystem),
+		packaging,
 		inspectPath,
 		migrationFiles,
 	)
@@ -389,8 +386,9 @@ func providePackagedFactoryInstallation(
 }
 
 // providePackagedFactoryCapability constructs the single focused Packaging
-// capability consumed by customer-facing package operations. Legacy catalog and
-// installer callback bundles remain only for the out-of-scope bootstrap path.
+// capability consumed by customer-facing package operations and System
+// Initialization. Legacy catalog and installer callback bundles remain only
+// for unmigrated Factory Definitions compatibility consumers.
 func providePackagedFactoryCapability(
 	definitions []factorydefinitions.PackagedDefinition,
 	persistence factorydefinitions.Persistence,

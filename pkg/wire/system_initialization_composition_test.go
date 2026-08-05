@@ -83,7 +83,7 @@ func bootstrapCompositionTestPersistence(t *testing.T) factorydefinitions.Persis
 	return persistence
 }
 
-func bootstrapCompositionGoalCatalog(t *testing.T) factorydefinitions.PackagedFactoryCatalogOperations {
+func bootstrapCompositionGoalPackaging(t *testing.T) factorydefinitions.Packaging {
 	t.Helper()
 
 	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
@@ -94,11 +94,15 @@ func bootstrapCompositionGoalCatalog(t *testing.T) factorydefinitions.PackagedFa
 	if !ok {
 		t.Fatal("published catalog is missing @you/goal")
 	}
-	packagedCatalog, err := providePackagedFactoryCatalog([]factorydefinitions.PackagedDefinition{definition})
+	packaging, err := providePackagedFactoryCapability(
+		[]factorydefinitions.PackagedDefinition{definition},
+		bootstrapCompositionTestPersistence(t),
+		platformfilesystem.Local{},
+	)
 	if err != nil {
-		t.Fatalf("providePackagedFactoryCatalog() error = %v", err)
+		t.Fatalf("providePackagedFactoryCapability() error = %v", err)
 	}
-	return packagedCatalog
+	return packaging
 }
 
 func TestProvideSystemInitializationServiceComposedInitializeCreatesThenSkipsPackagedFactories(t *testing.T) {
@@ -133,9 +137,7 @@ func TestProvideSystemInitializationServiceComposedInitializeCreatesThenSkipsPac
 	ensureOperatorBackendScope := provideOperatorBackendScopeEnsurer(settings)
 
 	service, err := provideSystemInitializationService(
-		bootstrapCompositionTestPersistence(t),
-		platformfilesystem.Local{},
-		bootstrapCompositionGoalCatalog(t),
+		bootstrapCompositionGoalPackaging(t),
 		loadOperatorConfig,
 		ensureOperatorBackendScope,
 		provideSystemInitializationInspectPath(edges),
