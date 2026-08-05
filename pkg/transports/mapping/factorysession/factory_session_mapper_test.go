@@ -1,12 +1,14 @@
 package factorysession_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"testing"
 	"time"
 
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
@@ -949,5 +951,84 @@ func assertRequestValidationError(t *testing.T, err error) {
 	var validationErr *apisurface.RequestValidationError
 	if !errors.As(err, &validationErr) {
 		t.Fatalf("error = %T, want RequestValidationError", err)
+	}
+}
+
+type invocationServiceFake struct {
+	result factorysessionexecution.InvocationResult
+	err    error
+
+	sessionID string
+	request   factorysessionexecution.InvocationRequest
+}
+
+var _ factorysessionexecution.InvocationService = (*invocationServiceFake)(nil)
+
+func (fake *invocationServiceFake) InvokeFactorySession(
+	_ context.Context,
+	sessionID string,
+	request factorysessionexecution.InvocationRequest,
+) (factorysessionexecution.InvocationResult, error) {
+	fake.sessionID = sessionID
+	fake.request = request
+	return fake.result, fake.err
+}
+
+func TestInvocationAPI_UsesOwnerCapabilityAndPreservesTerminalOutcome(t *testing.T) {
+	t.Parallel()
+
+	requestID := "request-1"
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	timeoutMillis := int64(2500)
+	part := factoryapi.WorkContentPart{}
+	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+		Type: factoryapi.WorkContentPartTypeText,
+		Text: "hello",
+	}); err != nil {
+		t.Fatalf("FromWorkTextContentPart: %v", err)
+	}
+	content := factoryapi.WorkContent{part}
+	owner := &invocationServiceFake{result: factorysessionexecution.InvocationResult{
+		RequestID: requestID,
+		TraceID:   "trace-1",
+		Status:    factorysessionexecution.InvocationTerminalStatusTimedOut,
+		PrimaryResult: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
+			Text: "partial response retained",
+		}},
+		ErrorCode: string(factorysessionexecution.InvocationErrorCodeTimedOut),
+		Message:   "invocation timed out",
+		SessionID: "session-1",
+		WorkID:    "work-1",
+		WorkName:  "task",
+		WorkState: "waiting",
+	}}
+
+	result, err := factorysession.NewInvocationAPI(owner).InvokeFactorySession(
+		context.Background(),
+		"session-1",
+		factoryapi.InvocationRequest{
+			RequestId: &requestID, SourceKind: &sourceKind,
+			TimeoutMillis: &timeoutMillis, Content: &content,
+		},
+	)
+	if err != nil {
+		t.Fatalf("InvokeFactorySession: %v", err)
+	}
+	if owner.sessionID != "session-1" || owner.request.RequestID == nil ||
+		*owner.request.RequestID != requestID || owner.request.TimeoutMillis == nil ||
+		*owner.request.TimeoutMillis != timeoutMillis || owner.request.SourceKind == nil ||
+		*owner.request.SourceKind != factorysessionexecution.InvocationInputSourceKindText ||
+		!owner.request.ContentProvided || len(owner.request.Content) != 1 ||
+		owner.request.Content[0].Text != "hello" {
+		t.Fatalf("owner request = %#v for session %q, want normalized input", owner.request, owner.sessionID)
+	}
+	if result.RequestID != requestID || result.TraceID != "trace-1" ||
+		string(result.Status) != string(factoryapi.InvocationTerminalStatusTimedOut) ||
+		result.ErrorCode != string(factorysessionexecution.InvocationErrorCodeTimedOut) ||
+		result.Message != "invocation timed out" || result.SessionID != "session-1" ||
+		result.WorkID != "work-1" || result.WorkName != "task" || result.WorkState != "waiting" ||
+		len(result.PrimaryResult) != 1 || result.PrimaryResult[0].Text != "partial response retained" {
+		t.Fatalf("terminal outcome = %#v, want preserved timeout result", result)
 	}
 }

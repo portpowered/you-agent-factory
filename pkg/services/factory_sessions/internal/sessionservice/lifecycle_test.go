@@ -23,11 +23,13 @@ func (h *unifiedLifecycleGatewayHost) DurableExecution() factorysessionexecution
 
 type lifecycleGatewayHost struct {
 	openTestHost
-	factory   factory.Service
-	stopCalls []string
+	factory             factory.Service
+	sessionFactoryCalls []string
+	stopCalls           []string
 }
 
-func (h *lifecycleGatewayHost) SessionFactory(_ string) (factory.Service, error) {
+func (h *lifecycleGatewayHost) SessionFactory(sessionID string) (factory.Service, error) {
+	h.sessionFactoryCalls = append(h.sessionFactoryCalls, sessionID)
 	return h.factory, nil
 }
 

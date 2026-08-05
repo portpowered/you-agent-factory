@@ -1,6 +1,7 @@
 package factorysessions
 
 import (
+	"context"
 	"fmt"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -30,8 +31,22 @@ type DefinitionHost = factorydefinitions.SessionHost
 //   - Timeout / caller-cancellation outcomes: InvocationResult with distinct
 //     Status and ErrorCode values (TIMED_OUT / CANCELED)
 //
-// Invocation remains part of the singular root Service aggregate. This file
-// does not publish a separate peer-facing invoker interface.
+// InvocationService is the narrow, owner-published Factory Sessions capability
+// for one-shot invocation. It retains the singular Service as the only session
+// authority: Service satisfies this interface structurally, and the interface
+// neither constructs nor locates a session service.
+//
+// It intentionally exposes no live-session control, durable execution,
+// opening, listing, or inspection method. Consumers that only invoke a captured
+// Factory Session can therefore depend on this single owner-published operation.
+type InvocationService interface {
+	InvokeFactorySession(context.Context, string, InvocationRequest) (InvocationResult, error)
+}
+
+// Service satisfies InvocationService structurally. Keep this assertion at the
+// owner root so a change to the published invocation contract cannot drift from
+// the singular service implementation.
+var _ InvocationService = (Service)(nil)
 
 // InvocationResult is the plain root session-scoped outcome of one Factory
 // Session invocation after input resolution and result selection.

@@ -31,16 +31,12 @@ func NewFactoryDefinitionAPI(service factorydefinitions.Service) apisurface.Fact
 	return factorydefinitionmapping.NewAPI(definitions, definitions)
 }
 
-func NewInvocationAPI(invocations factorysessionmapping.SessionInvoker) apisurface.InvocationAPI {
+func NewInvocationAPI(invocations factorysessions.InvocationService) apisurface.InvocationAPI {
 	return factorysessionmapping.NewInvocationAPI(invocations)
 }
 
 func NewDurableAPI(
 	execution factorysessionmapping.DurableExecution,
-	sessions factorysessions.Service,
 ) apisurface.DurableSessionAPI {
-	return factorysessionmapping.NewDurableAPI(
-		execution,
-		sessions,
-	)
+	return factorysessionmapping.NewDurableAPI(execution)
 }

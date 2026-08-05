@@ -14,34 +14,17 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
-// DurableLifecycleAPI is the bounded lifecycle-routing seam used by the
-// durable HTTP adapter. Live-session routing remains owned by the caller.
-type DurableLifecycleAPI interface {
-	PauseDurableFactorySession(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
-	ResumeDurableFactorySession(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
-	CancelDurableFactorySession(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
-	TerminateDurableFactorySession(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
-	ApproveDurableFactorySession(context.Context, string, factorysessionexecution.ApproveRequest) (factorysessionexecution.LifecycleControlResult, error)
-	RetryDurableFactorySessionDispatch(context.Context, string, factorysessionexecution.RetryDispatchRequest) (factorysessionexecution.LifecycleControlResult, error)
-	InterruptDurableFactorySessionDispatch(context.Context, string, factorysessionexecution.InterruptDispatchRequest) (factorysessionexecution.LifecycleControlResult, error)
-	ReadDurableFactorySessionEventStream(context.Context, string, factorysessionexecution.EventReconnectRequest) (*interfaces.FactoryEventStream, error)
-	ProbeDurableFactorySessionEvents(context.Context, string, factorysessionexecution.EventReconnectRequest) error
-}
-
 // DurableAPI owns public durable-session request/result translation over the
-// execution service and the bounded lifecycle router. Compatibility facades
-// and composed transports both delegate to this adapter.
+// Factory Sessions-owned durable capability. It materializes finite event
+// streams from the same capability rather than widening a consumer into the
+// broad Factory Sessions aggregate.
 type DurableAPI struct {
 	execution DurableExecution
-	lifecycle DurableLifecycleAPI
 }
 
 // NewDurableAPI composes the canonical durable HTTP collaborator.
-func NewDurableAPI(
-	execution DurableExecution,
-	lifecycle DurableLifecycleAPI,
-) *DurableAPI {
-	return &DurableAPI{execution: execution, lifecycle: lifecycle}
+func NewDurableAPI(execution DurableExecution) *DurableAPI {
+	return &DurableAPI{execution: execution}
 }
 
 func (api *DurableAPI) executionService() (DurableExecution, error) {
@@ -112,10 +95,11 @@ func (api *DurableAPI) GetDurableFactorySessionResult(ctx context.Context, sessi
 }
 
 func (api *DurableAPI) ReadDurableFactorySessionEvents(ctx context.Context, sessionID string, reconnect factorysessionexecution.EventReconnectRequest) (*interfaces.FactoryEventStream, error) {
-	if api == nil || api.lifecycle == nil {
-		return nil, factorysessionexecution.ErrExecutionServiceNotConfigured
+	execution, err := api.executionService()
+	if err != nil {
+		return nil, err
 	}
-	stream, err := api.lifecycle.ReadDurableFactorySessionEventStream(ctx, sessionID, reconnect)
+	result, err := execution.ReadEvents(ctx, sessionID, reconnect)
 	if err != nil {
 		if errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) {
 			return nil, apisurface.ErrFactorySessionNotFound
@@ -125,7 +109,7 @@ func (api *DurableAPI) ReadDurableFactorySessionEvents(ctx context.Context, sess
 		}
 		return nil, err
 	}
-	return stream, nil
+	return factorysessionexecution.MaterializeEventReadStream(result), nil
 }
 
 func (api *DurableAPI) SubscribeDurableFactoryResponseEvents(
@@ -171,10 +155,11 @@ func (api *DurableAPI) SubscribeDurableFactoryResponseEvents(
 }
 
 func (api *DurableAPI) ProbeDurableFactorySessionEvents(ctx context.Context, sessionID string, reconnect factorysessionexecution.EventReconnectRequest) error {
-	if api == nil || api.lifecycle == nil {
-		return factorysessionexecution.ErrExecutionServiceNotConfigured
+	execution, err := api.executionService()
+	if err != nil {
+		return err
 	}
-	err := api.lifecycle.ProbeDurableFactorySessionEvents(ctx, sessionID, reconnect)
+	_, err = execution.ReadEvents(ctx, sessionID, reconnect)
 	if errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) {
 		return apisurface.ErrFactorySessionNotFound
 	}
@@ -242,37 +227,65 @@ func (api *DurableAPI) GetDurableFactorySessionArtifact(ctx context.Context, ses
 }
 
 func (api *DurableAPI) PauseDurableFactorySession(ctx context.Context, sessionID string, control factorysessionexecution.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	result, err := api.lifecycle.PauseDurableFactorySession(ctx, sessionID, control)
+	execution, err := api.executionService()
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := execution.Pause(ctx, sessionID, control)
 	return lifecycleResultToAPI(result, err)
 }
 
 func (api *DurableAPI) ResumeDurableFactorySession(ctx context.Context, sessionID string, control factorysessionexecution.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	result, err := api.lifecycle.ResumeDurableFactorySession(ctx, sessionID, control)
+	execution, err := api.executionService()
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := execution.Resume(ctx, sessionID, control)
 	return lifecycleResultToAPI(result, err)
 }
 
 func (api *DurableAPI) CancelDurableFactorySession(ctx context.Context, sessionID string, control factorysessionexecution.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	result, err := api.lifecycle.CancelDurableFactorySession(ctx, sessionID, control)
+	execution, err := api.executionService()
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := execution.Cancel(ctx, sessionID, control)
 	return lifecycleResultToAPI(result, err)
 }
 
 func (api *DurableAPI) TerminateDurableFactorySession(ctx context.Context, sessionID string, control factorysessionexecution.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	result, err := api.lifecycle.TerminateDurableFactorySession(ctx, sessionID, control)
+	execution, err := api.executionService()
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := execution.Terminate(ctx, sessionID, control)
 	return lifecycleResultToAPI(result, err)
 }
 
 func (api *DurableAPI) ApproveDurableFactorySession(ctx context.Context, sessionID string, approve factorysessionexecution.ApproveRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	result, err := api.lifecycle.ApproveDurableFactorySession(ctx, sessionID, approve)
+	execution, err := api.executionService()
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := execution.Approve(ctx, sessionID, approve)
 	return lifecycleResultToAPI(result, err)
 }
 
 func (api *DurableAPI) RetryDurableFactorySessionDispatch(ctx context.Context, sessionID string, retry factorysessionexecution.RetryDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	result, err := api.lifecycle.RetryDurableFactorySessionDispatch(ctx, sessionID, retry)
+	execution, err := api.executionService()
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := execution.RetryDispatch(ctx, sessionID, retry)
 	return lifecycleResultToAPI(result, err)
 }
 
 func (api *DurableAPI) InterruptDurableFactorySessionDispatch(ctx context.Context, sessionID string, interrupt factorysessionexecution.InterruptDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	result, err := api.lifecycle.InterruptDurableFactorySessionDispatch(ctx, sessionID, interrupt)
+	execution, err := api.executionService()
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := execution.InterruptDispatch(ctx, sessionID, interrupt)
 	return lifecycleResultToAPI(result, err)
 }
 

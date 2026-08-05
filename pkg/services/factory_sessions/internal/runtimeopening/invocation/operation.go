@@ -195,15 +195,29 @@ func (o *operation) invokeFactoryOnHostedLiveRuntime(
 	if err != nil {
 		return outcome, err
 	}
-	outcome.Result, resultErr = hosted.Invoker.InvokeFactorySession(
+	invocationResult, err := hosted.Invoker.InvokeFactorySession(
 		ctx, factorysessions.DefaultSessionID, request,
 	)
+	outcome.Result = factoryInvocationResultFromSessionInvocation(invocationResult)
+	resultErr = err
 	if liveEvents != nil {
 		resultErr = joinTeardownErrorUnlessResultDetermined(
 			outcome, resultErr, liveEvents.finish(ctx, hosted.Sessions, outcome.Result), target.Logger,
 		)
 	}
 	return outcome, resultErr
+}
+
+func factoryInvocationResultFromSessionInvocation(
+	result factorysessions.InvocationResult,
+) factorydefinitions.FactoryInvocationResult {
+	return factorydefinitions.FactoryInvocationResult{
+		RequestID: result.RequestID, TraceID: result.TraceID,
+		Status:        factorydefinitions.InvocationTerminalStatus(result.Status),
+		PrimaryResult: result.PrimaryResult, ErrorCode: result.ErrorCode,
+		Message: result.Message, SessionID: result.SessionID, WorkID: result.WorkID,
+		WorkName: result.WorkName, WorkState: result.WorkState,
+	}
 }
 
 func (o *operation) invokeFactoryOnEphemeralRuntime(

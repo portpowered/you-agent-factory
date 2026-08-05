@@ -17,7 +17,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	mappingcomposition "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
-	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
 )
 
@@ -55,9 +54,6 @@ func (*sessionRole) GetFactorySession(context.Context, string) (factorysessions.
 	}, nil
 }
 
-type durableLifecycleRole struct {
-	factorysessionmapping.DurableLifecycleAPI
-}
 type workRole struct{ work.Service }
 type modelRole struct{ models.Service }
 type workerRole struct{ workers.Service }
@@ -289,7 +285,6 @@ func TestHandlerBindsStandaloneDurableExecution(t *testing.T) {
 	}
 	bound, err := handler.BindDurableExecution(
 		&sessionRole{},
-		&durableLifecycleRole{},
 		zap.NewNop(),
 	)
 	if err != nil || bound == nil {
@@ -302,13 +297,11 @@ func TestHandlerRejectsIncompleteDurableExecutionBinding(t *testing.T) {
 
 	valid := &Handler{sessionRequests: &requestPreparationRole{}}
 	execution := &sessionRole{}
-	lifecycle := &durableLifecycleRole{}
 	for name, bind := range map[string]func() (http.Handler, error){
 		"handler": func() (http.Handler, error) {
-			return (*Handler)(nil).BindDurableExecution(execution, lifecycle, zap.NewNop())
+			return (*Handler)(nil).BindDurableExecution(execution, zap.NewNop())
 		},
-		"execution": func() (http.Handler, error) { return valid.BindDurableExecution(nil, lifecycle, zap.NewNop()) },
-		"lifecycle": func() (http.Handler, error) { return valid.BindDurableExecution(execution, nil, zap.NewNop()) },
+		"execution": func() (http.Handler, error) { return valid.BindDurableExecution(nil, zap.NewNop()) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			if bound, err := bind(); err == nil || bound != nil {

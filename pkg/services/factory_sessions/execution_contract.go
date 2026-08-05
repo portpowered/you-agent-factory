@@ -1,6 +1,7 @@
 package factorysessions
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -789,8 +790,54 @@ func (e *ResumeError) Error() string {
 //   - *DurableResumeError for missing checkpoint / invalid resume state
 //   - *DurableControlError for rejected lifecycle transitions
 //
-// Durable operations remain methods on the singular root Service aggregate; this
-// file does not publish a separate peer-facing durable-execution interface.
+// DurableExecutionService is the narrow, owner-published Factory Sessions
+// capability for durable start, restart-resume, lifecycle control, and
+// inspection. It uses only the root request, result, and typed-error
+// vocabulary documented below. The singular Service satisfies this interface
+// structurally, so publishing the capability neither constructs nor locates a
+// second session authority.
+//
+// The interface deliberately excludes live-session open, list, get, pause,
+// resume, and close operations. Durable callers use the unprefixed lifecycle
+// methods because those methods route solely to the durable execution owner;
+// the separately named *LiveFactorySession methods remain outside this
+// capability.
+type DurableExecutionService interface {
+	StartAsync(context.Context, DurableStartRequest) (DurableAsyncStartResult, error)
+	StartSync(context.Context, DurableStartRequest) (DurableSyncStartResult, error)
+	ResumeInterruptedSession(context.Context, string, DurableResumeRequest) (DurableAsyncStartResult, error)
+	GetSession(context.Context, string) (DurableInspectResult, error)
+	Pause(context.Context, string, DurableControlRequest) (DurableControlResult, error)
+	Resume(context.Context, string, DurableControlRequest) (DurableControlResult, error)
+	Cancel(context.Context, string, DurableControlRequest) (DurableControlResult, error)
+	Terminate(context.Context, string, DurableControlRequest) (DurableControlResult, error)
+	Approve(context.Context, string, ApproveRequest) (DurableControlResult, error)
+	RetryDispatch(context.Context, string, RetryDispatchRequest) (DurableControlResult, error)
+	InterruptDispatch(context.Context, string, InterruptDispatchRequest) (DurableControlResult, error)
+	GetResult(context.Context, string, ResultRequest) (ResultReadResult, error)
+	ListDispatches(context.Context, string) (ListDispatchesResult, error)
+	QueryDispatches(context.Context, DispatchQueryRequest) (ListDispatchesResult, error)
+	GetDispatch(context.Context, string, string) (DispatchDetail, error)
+	ListArtifacts(context.Context, string) (ListArtifactsResult, error)
+	GetArtifact(context.Context, string, string) (ArtifactDetail, error)
+	ReadEvents(context.Context, string, EventReconnectRequest) (EventReadResult, error)
+}
+
+// SessionInventoryService is the owner-published capability for scoped
+// Factory Session inventory reads. Its request can intentionally select live,
+// durable, or combined inventory, so it remains separate from
+// DurableExecutionService and does not widen durable callers into live control.
+type SessionInventoryService interface {
+	ListSessions(context.Context, ListSessionsRequest) (ListSessionsResult, error)
+}
+
+// Service satisfies DurableExecutionService structurally. Keep this assertion
+// at the owner root so signature drift fails during the focused package build.
+var _ DurableExecutionService = (Service)(nil)
+
+// Service also satisfies the independent scoped inventory capability.
+var _ SessionInventoryService = (Service)(nil)
+
 // Slice-named aliases are the peer-facing durable vocabulary; nested
 // internal/execution types are not the peer-facing source of truth.
 

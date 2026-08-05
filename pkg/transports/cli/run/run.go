@@ -36,33 +36,6 @@ import (
 
 type RunConfig = runconfig.Config
 
-type hostedInvokerAdapter struct {
-	service factorysessions.Service
-}
-
-func (adapter hostedInvokerAdapter) InvokeFactorySession(
-	ctx context.Context,
-	sessionID string,
-	request factorysessions.InvocationRequest,
-) (interfaces.FactoryInvocationResult, error) {
-	result, err := adapter.service.InvokeFactorySession(ctx, sessionID, request)
-	if err != nil {
-		return interfaces.FactoryInvocationResult{}, err
-	}
-	return interfaces.FactoryInvocationResult{
-		RequestID:     result.RequestID,
-		TraceID:       result.TraceID,
-		Status:        interfaces.InvocationTerminalStatus(result.Status),
-		PrimaryResult: result.PrimaryResult,
-		ErrorCode:     result.ErrorCode,
-		Message:       result.Message,
-		SessionID:     result.SessionID,
-		WorkID:        result.WorkID,
-		WorkName:      result.WorkName,
-		WorkState:     result.WorkState,
-	}, nil
-}
-
 // ModelCacheDirEnvironment selects the managed local-model cache root at the
 // customer process boundary.
 const ModelCacheDirEnvironment = "INFINITE_YOU_OMNIVOICE_CACHE_DIR"
@@ -265,7 +238,7 @@ func openHostedRuntime(
 		openingRequest.Ports.RuntimeHTTPServicesBound = func(http factorysessions.RuntimeHTTPServices) {
 			operation.hostedLiveInvocation = &factorysessions.HostedLiveInvocation{
 				Sessions: http.FactorySessions,
-				Invoker:  hostedInvokerAdapter{service: http.FactorySessions},
+				Invoker:  http.FactorySessions,
 			}
 		}
 	}

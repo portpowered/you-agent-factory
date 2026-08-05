@@ -67,7 +67,7 @@ func TestDirectJavaScriptRunOperationOwnsOpeningRequestPolicyAndCleanup(t *testi
 			}
 			operation, err := NewDirectJavaScriptRunOperation(
 				builder, runSync, func() string { return "direct-test-id" },
-				func(roles.OwnedExecutionService, roles.DirectJavaScriptLifecycle, factorysessions.DirectJavaScriptRunRequest) (lifecycle.Component, error) {
+				func(roles.OwnedExecutionService, factorysessions.DirectJavaScriptRunRequest) (lifecycle.Component, error) {
 					return nil, nil
 				},
 			)
@@ -113,7 +113,7 @@ func TestDirectJavaScriptRunOperationJoinsExecutionAndCloseFailures(t *testing.T
 			return runFailure
 		},
 		func() string { return "direct-test-id" },
-		func(roles.OwnedExecutionService, roles.DirectJavaScriptLifecycle, factorysessions.DirectJavaScriptRunRequest) (lifecycle.Component, error) {
+		func(roles.OwnedExecutionService, factorysessions.DirectJavaScriptRunRequest) (lifecycle.Component, error) {
 			return nil, nil
 		},
 	)
@@ -147,7 +147,7 @@ func TestDirectJavaScriptRunOperationGatesHostedCompletionOnReadiness(t *testing
 			return nil
 		},
 		func() string { return "direct-test-id" },
-		func(_ roles.OwnedExecutionService, _ roles.DirectJavaScriptLifecycle, request factorysessions.DirectJavaScriptRunRequest) (lifecycle.Component, error) {
+		func(_ roles.OwnedExecutionService, request factorysessions.DirectJavaScriptRunRequest) (lifecycle.Component, error) {
 			return lifecycle.NewRunner(func(ctx context.Context) error {
 				ready.Store(true)
 				request.RuntimeHostObserver(factorysessions.RuntimeHostBinding{Port: request.Host.Port})
