@@ -71,6 +71,49 @@
       ]
     },
     {
+      "name": "@you/factory-builder",
+      "project": "builtin-factory-builder",
+      "slug": "factory-builder",
+      "json": {
+        "locator": "generated/factories/factory-builder/factory.json",
+        "sha256": "91898667baa0d0f3b2a4c113d0c9a5170c5925d80a951a311efac86e26470ffe"
+      },
+      "yaml": {
+        "locator": "generated/factories/factory-builder/factory.yaml",
+        "sha256": "dca646398880f4a414fe7122c2c4c14ee9441f9bd4d157d225526a04c25d55f5"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Creates and installs one validated graph or JavaScript Factory from a customer request."
+      },
+      "examples": [
+        {
+          "name": "graph-factory",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Create a reusable graph Factory for a bounded review workflow."
+          },
+          "args": {
+            "factoryName": "release-note-review",
+            "orchestrator": "graph",
+            "request": "Review submitted release notes and return an approved summary."
+          }
+        },
+        {
+          "name": "javascript-factory",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Create a reusable JavaScript Factory for a bounded synthesis workflow."
+          },
+          "args": {
+            "factoryName": "release-synthesis",
+            "orchestrator": "javascript",
+            "request": "Run two independent analyses and return one synthesized result."
+          }
+        }
+      ]
+    },
+    {
       "name": "@you/full-flow",
       "project": "builtin-full-flow",
       "slug": "full-flow",

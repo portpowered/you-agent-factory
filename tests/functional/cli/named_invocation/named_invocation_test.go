@@ -31,6 +31,7 @@ const (
 	packagedSubagentFactoryName         = "@you/subagent"
 	packagedSubagentWorkerName          = "subagent-worker"
 	packagedSubagentRunWorkstationName  = "run-subagent"
+	packagedFactoryBuilderName          = "@you/factory-builder"
 	wantHermeticInvocationPrimaryResult = "mock worker accepted"
 )
 
@@ -102,6 +103,55 @@ func TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer(t *te
 	}
 	if listenerStarts != 0 {
 		t.Fatalf("HTTP listener start calls = %d, want 0", listenerStarts)
+	}
+}
+
+func TestFactoryBuilderIsListedAndNamedHelpResolvesWithoutExecution(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test for packaged Factory Builder discovery")
+	}
+
+	homeDir := t.TempDir()
+	workingDirectory := t.TempDir()
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+
+	listOutput, listStderr := executeCustomerCommand(
+		t, process, environment, workingDirectory, []string{"you", "factory", "list"},
+	)
+	if listStderr != "" {
+		t.Fatalf("factory list stderr = %q", listStderr)
+	}
+	if !strings.Contains(listOutput, packagedFactoryBuilderName) {
+		t.Fatalf("factory list output missing %q:\n%s", packagedFactoryBuilderName, listOutput)
+	}
+
+	helpOutput, helpStderr := executeCustomerCommand(
+		t, process, environment, workingDirectory,
+		[]string{"you", "run", "--named", packagedFactoryBuilderName, "--help"},
+	)
+	if helpStderr != "" {
+		t.Fatalf("Factory Builder help stderr = %q", helpStderr)
+	}
+	for _, fragment := range []string{
+		"Creates and installs one validated graph or JavaScript Factory from a customer request.",
+		"--factory-name",
+		"--orchestrator",
+		"--builder-provider",
+		"--builder-model",
+	} {
+		if !strings.Contains(helpOutput, fragment) {
+			t.Fatalf("Factory Builder help missing %q:\n%s", fragment, helpOutput)
+		}
+	}
+	factoryDir := filepath.Join(
+		append([]string{homeDir, ".you-agent-factory", "factories"}, strings.Split(packagedFactoryBuilderName, "/")...)...,
+	)
+	if _, err := os.Stat(filepath.Join(factoryDir, "factory.json")); err != nil {
+		t.Fatalf("Factory Builder was not materialized for named help: %v", err)
 	}
 }
 

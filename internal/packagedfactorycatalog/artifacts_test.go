@@ -52,8 +52,8 @@ func TestGenerateArtifactsProducesEquivalentSelfContainedPairsForCompleteInvento
 	if err != nil {
 		t.Fatalf("GenerateArtifacts: %v", err)
 	}
-	if len(artifacts) != 14 {
-		t.Fatalf("artifacts = %d, want 14", len(artifacts))
+	if len(artifacts) != 15 {
+		t.Fatalf("artifacts = %d, want 15", len(artifacts))
 	}
 
 	bySlug := make(map[string]packagedfactorycatalog.ArtifactPair, len(artifacts))
