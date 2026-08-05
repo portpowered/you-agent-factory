@@ -27,7 +27,7 @@ func TestSessionsLifecycleAndRuntimeOpeningActivateThroughRootBuildProcessAfterL
 	t.Parallel()
 
 	recorder := newSessionActivationRecorder(t)
-	dir := support.ScaffoldFactory(t, sessionsLifecycleRuntimeOpeningConfig())
+	dir := support.ScaffoldFactory(t, sessionsLifecycleRuntimeOpeningFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		UseMockWorkers:            true,
@@ -128,7 +128,7 @@ func TestSessionsLifecycleAndRuntimeOpeningActivateThroughRootBuildProcessAfterL
 	}
 }
 
-func sessionsLifecycleRuntimeOpeningConfig() map[string]any {
+func sessionsLifecycleRuntimeOpeningFactoryConfig() map[string]any {
 	return map[string]any{
 		"workTypes": []map[string]any{{
 			"name": "task",
