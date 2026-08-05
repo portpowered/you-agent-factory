@@ -456,3 +456,11 @@
   - The coverage manifest is a closed measured-package inventory; adding a tested Go package requires its floor in the same delivery change.
   - On this Windows workspace, the full coverage runner can exceed the OS process command-length limit when constructing the backend cover-package argument; run focused coverage locally and use the required Linux CI lane for the complete profile.
 ---
+
+## 2026-08-05 06:10 -07:00 - ACP-L3-DEF-CONSOLIDATE-AUTHORED-VALIDATION-004
+- Added the required functional-coverage manifest floor for `authoredloading`. The Factory Definitions acceptance suite covers 38/58 statements (65.5172%), so its exact truncated lower bound is recorded as `65.51%`; the complete functional suite includes this package and can only add coverage.
+- Files changed: `docs/internal/baselines/go-functional-coverage-package-minimums.json`, `progress.txt`.
+- Verification: focused acceptance coverage profile and duplicate-block merge calculation report 38/58 statements (65.5172%); the complete functional probe confirms the new package is measured. Its unrelated Windows fixture failures are outside this authored-loading slice.
+- **Learnings for future iterations:**
+  - Functional coverage merges repeated source blocks across test packages by taking the observed hit union. A known-included package profile is a valid deterministic lower bound when a host-specific full probe cannot complete cleanly.
+---

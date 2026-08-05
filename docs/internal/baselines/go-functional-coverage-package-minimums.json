@@ -313,6 +313,10 @@
       "minimum": 40.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoredloading",
+      "minimum": 65.51
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout",
       "exception": {
         "kind": "measurement",
