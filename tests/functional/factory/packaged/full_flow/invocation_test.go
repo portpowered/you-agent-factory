@@ -26,7 +26,7 @@ func TestPackagedFullFlowRunsParallelWorktreesMergesAndReplansToCompletion(t *te
 	repository := initializeFullFlowRepository(t)
 	home := t.TempDir()
 	factoryDir := support.InstallPackagedFactory(t, home, factorydefinitions.PackagedFullFlowFactoryName)
-	runner := &fullFlowRunner{repository: repository}
+	runner := &fullFlowRunner{repository: repository, detectConcurrentImplementations: true}
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: factoryDir, WorkingDirectory: repository, WaitForServiceModeRuntime: true,
 		Args:  []string{"--provider", "CODEX", "--model", "gpt-5"},
@@ -220,15 +220,16 @@ func TestPackagedFullFlowEnforcesCallerSelectedCycleBound(t *testing.T) {
 }
 
 type fullFlowRunner struct {
-	mu                  sync.Mutex
-	repository          string
-	plannerCalls        int
-	active              int
-	maxActive           int
-	merges              []string
-	unexpected          string
-	stallImplementation bool
-	implementationCalls int
+	mu                              sync.Mutex
+	repository                      string
+	plannerCalls                    int
+	active                          int
+	maxActive                       int
+	merges                          []string
+	unexpected                      string
+	stallImplementation             bool
+	implementationCalls             int
+	detectConcurrentImplementations bool
 }
 
 func (runner *fullFlowRunner) Run(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -263,7 +264,11 @@ func (runner *fullFlowRunner) Run(_ context.Context, request platformprocess.Com
 			runner.maxActive = runner.active
 		}
 		runner.mu.Unlock()
-		time.Sleep(75 * time.Millisecond)
+		if runner.detectConcurrentImplementations {
+			runner.awaitConcurrentImplementation()
+		} else {
+			time.Sleep(75 * time.Millisecond)
+		}
 		if runner.stallImplementation {
 			runner.mu.Lock()
 			runner.active--
@@ -322,6 +327,25 @@ func (runner *fullFlowRunner) UnexpectedPrompt() string {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	return runner.unexpected
+}
+
+// awaitConcurrentImplementation holds a dispatch active until a second
+// implementation call is observed running concurrently, or a generous
+// deadline passes. Polling for the peer instead of racing a fixed sleep
+// window keeps the parallel-dispatch assertion accurate under CI scheduling
+// jitter: it returns as soon as concurrency is observed and never waits
+// longer than the deadline when dispatch is genuinely serial.
+func (runner *fullFlowRunner) awaitConcurrentImplementation() {
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		runner.mu.Lock()
+		active := runner.active
+		runner.mu.Unlock()
+		if active >= 2 {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 }
 
 func (runner *fullFlowRunner) Observations() (int, int, []string, int) {
