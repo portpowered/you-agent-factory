@@ -14,7 +14,7 @@ CLI manifests/generators, or provider registry/conductor surfaces.
 | `internal/psslease` | Decode/validate FND-10 contract; focused fixture tests |
 | `internal/ownershipinventory` | Builds/validates the PSS-F01 freeze using FND-10 mechanics |
 | `docs/temp/projects/packaged-service-structure/plan.md` | Source plan prose and Changed-Path Lease Matrix |
-| [`docs/temp/projects/packaged-service-structure/dec-run-rec-durability.md`](../../../temp/projects/packaged-service-structure/dec-run-rec-durability.md) | DEC-RUN-REC-DURABILITY — Runtime checkpoint vs Recordings history ownership |
+| [`docs/internal/packaged-service-structure/dec-run-rec-durability.md`](../../packaged-service-structure/dec-run-rec-durability.md) | DEC-RUN-REC-DURABILITY — Runtime checkpoint vs Recordings history ownership |
 | [`docs/internal/projects/acp-program/README.md`](../acp-program/README.md) | ACP Program lane map — owns D1/D2/D3 and the L2 extraction this program now consumes |
 | `docs/internal/projects/root-consolidation/` | **L2** — root consolidation extracted from this program; PSS depends on it |
 
@@ -125,7 +125,7 @@ sequence. Planners cite them by ID; they are not re-derived here.
 
 ### D1 — no storage engine, ever (supersedes a DEC-RUN-REC-DURABILITY follow-on)
 
-[`DEC-RUN-REC-DURABILITY`](../../../temp/projects/packaged-service-structure/dec-run-rec-durability.md)
+[`DEC-RUN-REC-DURABILITY`](../../packaged-service-structure/dec-run-rec-durability.md)
 remains the accepted decision for checkpoint-versus-history ownership. Its
 anticipated follow-on — "Recordings-backed durable checkpoint bytes after
 Recordings durable log/cursor/retention" — is now **cancelled, not deferred**.
@@ -288,7 +288,7 @@ binding for PSS:
   stays a Runtime-private, parent-private subservice. It is not exposed
   through the root, a transport, or a peer dependency.
 - **The Recordings-backed durable checkpoint storage follow-on described in
-  [`dec-run-rec-durability.md`](../../packaged-service-structure/dec-run-rec-durability.md#recordings-backed-durable-checkpoint-storage-follow-on)
+  [`dec-run-rec-durability.md`](../../packaged-service-structure/dec-run-rec-durability.md#recordings-backed-durable-checkpoint-storage-cancelled-under-d1)
   is cancelled, not deferred**, consistent with D1 above. Recordings JSONL
   artifacts remain the sole canonical history and replay authority; no
   durable checkpoint adapter, journal, or new persistence engine is scheduled.

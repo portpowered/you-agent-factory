@@ -21,8 +21,6 @@ type validationLedger struct {
 
 type validationFactoryRecord struct {
 	Name                 string   `json:"name"`
-	ContractTestPackage  string   `json:"contractTestPackage"`
-	ContractTests        []string `json:"contractTests"`
 	CanaryStatus         string   `json:"canaryStatus"`
 	RepresentativeStatus string   `json:"representativeStatus"`
 	GoalStatus           string   `json:"goalStatus"`
@@ -71,13 +69,6 @@ func assertValidationEvidence(t *testing.T, root string, record validationFactor
 	if !validGoalStatuses[record.GoalStatus] {
 		t.Fatalf("validation ledger Factory %q has invalid goal status %q", record.Name, record.GoalStatus)
 	}
-	testRoot := filepath.Join(root, filepath.FromSlash(record.ContractTestPackage))
-	testPayload := readGoTestPackage(t, testRoot)
-	for _, testName := range record.ContractTests {
-		if !strings.Contains(testPayload, "func "+testName+"(") {
-			t.Fatalf("validation ledger Factory %q references missing contract test %q in %s", record.Name, testName, record.ContractTestPackage)
-		}
-	}
 	for _, evidencePath := range record.ExperimentRecords {
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(evidencePath))); err != nil {
 			t.Fatalf("validation ledger Factory %q experiment record %q: %v", record.Name, evidencePath, err)
@@ -106,26 +97,6 @@ func readValidationLedger(t *testing.T, root string) validationLedger {
 		t.Fatalf("validation ledger schemaVersion = %q, want 1", ledger.SchemaVersion)
 	}
 	return ledger
-}
-
-func readGoTestPackage(t *testing.T, directory string) string {
-	t.Helper()
-	entries, err := os.ReadDir(directory)
-	if err != nil {
-		t.Fatalf("read contract test package %s: %v", directory, err)
-	}
-	var combined strings.Builder
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), "_test.go") {
-			continue
-		}
-		payload, err := os.ReadFile(filepath.Join(directory, entry.Name()))
-		if err != nil {
-			t.Fatalf("read contract test %s: %v", entry.Name(), err)
-		}
-		combined.Write(payload)
-	}
-	return combined.String()
 }
 
 func validationRepositoryRoot(t *testing.T) string {

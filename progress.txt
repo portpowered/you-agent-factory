@@ -60,3 +60,9 @@
   - An `ALREADY_TERMINAL` cancellation result is not a failure: wait for the authoritative terminal callback and return the preserved terminal snapshot as a no-op.
   - When adding a synchronization callback to a public execution interface, update all focused test fakes to acknowledge admission before delegating to their existing dispatch behavior.
 ---
+## 2026-08-04 21:38 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-004
+- Merged current `fork/main` to resolve the PR's reported conflict. The only overlap was the task-local `prd.json` and `progress.txt`, which respectively belong to this L4 task; the incoming documentation and packaged-factory changes were retained unchanged.
+- Files changed: merged current `fork/main`; resolved `prd.json` and `progress.txt`.
+- **Learnings for future iterations:**
+  - Task-local PRD and progress artifacts are branch-specific. When a normal current-main merge conflicts only in those files, retain the active task's artifacts while preserving all independent mainline files.
+---

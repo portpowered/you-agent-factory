@@ -7,11 +7,13 @@
 | Date | 2026-07-28 (UTC) |
 | Gates | IMP-RUN-04 (`checkpoint_recovery` implementation) |
 
-This decision record fixes durable ownership between Factory Runtime opaque
-checkpoint recovery and Recordings durable history/artifact authority. It is the
-authoritative scope contract for admitting IMP-RUN-04 without waiting for
-Recordings durable-log deployment. Customer-facing vocabulary remains `Factory
-Runtime`, `Recordings`, `Factory Session`, and `Work`; see
+This decision record preserves the implementation-time ownership boundary
+between Factory Runtime opaque checkpoint recovery and Recordings canonical
+history/artifact authority. `IMP-RUN-04` is complete; D1 supersedes its former
+durable-checkpoint follow-on. The private process-local adapter is permanent,
+and no Recordings-backed checkpoint store or durable log/cursor/retention work
+is scheduled. Customer-facing vocabulary remains `Factory Runtime`,
+`Recordings`, `Factory Session`, and `Work`; see
 `docs/architecture/data-model.md`.
 
 ## Context
@@ -51,10 +53,10 @@ independent deployable in this program.
 
 - canonical Factory events,
 - replay artifacts, and
-- any future durable checkpoint byte storage.
+- JSONL history used for replay and historical inspection.
 
-Runtime must **not** become a second canonical event ledger. Checkpoint bytes
-may be stored through Recordings in a follow-on adapter, but canonical event
+Runtime must **not** become a second canonical event ledger. D1 cancels durable
+checkpoint-byte storage rather than assigning it to Recordings; canonical event
 history and replay authority stay with Recordings.
 
 ### Sessions durable_execution stays on root contracts
@@ -64,12 +66,11 @@ history and replay authority stay with Recordings.
 internals. Session lifecycle and resume admission do not take a direct
 dependency on `checkpoint_recovery` package paths.
 
-### IMP-RUN-04 may start now (CheckpointStore port)
+### IMP-RUN-04 is complete (CheckpointStore port)
 
-**IMP-RUN-04 is authorized to proceed now** against a Runtime-owned opaque
-**CheckpointStore** port inside `checkpoint_recovery`. The port is the stable
-seam between capture/load/restore logic and byte persistence; peers interact
-through Runtime root contracts and do not import CheckpointStore types or
+**IMP-RUN-04 shipped** a Runtime-owned opaque **CheckpointStore** port inside
+`checkpoint_recovery`. The port remains a Runtime-private seam for
+process-local checkpoint recovery; peers do not import CheckpointStore types or
 checkpoint bytes.
 
 For IMP-RUN-04 admission and proof obligations:
@@ -78,25 +79,22 @@ For IMP-RUN-04 admission and proof obligations:
   otherwise process-scoped default storage sufficient for the packet) is
   **sufficient** to prove **compatible restore** and **corrupt-checkpoint**
   handling.
-- **Recordings durable-log completion is not a gate** for starting IMP-RUN-04.
-  Opaque checkpoint capture, codec selection, compatibility policy, and restore
-  proofs may land before Recordings durable log, cursor, or retention exist.
+- The implementation is permanent under D1. It does not create a durable
+  checkpoint API, Recordings storage adapter, or storage-engine follow-on.
 
-### Recordings-backed durable checkpoint storage (follow-on)
+### Recordings-backed durable checkpoint storage (cancelled under D1)
 
 A **Recordings-backed durable CheckpointStore adapter** is explicitly
-**deferred** until **after** Recordings durable log, cursor, and retention
-exist. That adapter persists opaque checkpoint bytes through Recordings durable
-artifact authority; codec selection and compatibility remain Runtime-owned.
+**cancelled, not deferred**. D1 prohibits the durable event journal, embedded
+database, and write-ahead-log work that such an adapter would require.
 
-| Phase | Scope | Recordings durable-log gate? |
+| State | Scope | Recordings durable-log gate? |
 | --- | --- | --- |
-| **Start now** (IMP-RUN-04) | Runtime opaque CheckpointStore port + process-local/default adapter; compatible-restore and corrupt-checkpoint proofs | **No** — may proceed without Recordings durable log |
-| **Follow-on** | Recordings-backed durable CheckpointStore adapter for checkpoint byte persistence | **Yes** — requires Recordings durable log/cursor/retention first |
+| **Complete** (IMP-RUN-04) | Runtime-private, process-local CheckpointStore adapter; compatible-restore and corrupt-checkpoint proofs | Not applicable — no durable storage is introduced |
+| **Cancelled** | Recordings-backed durable CheckpointStore adapter for checkpoint byte persistence | No gate — this work must not be scheduled |
 
-Maintainers reading only this decision should treat **IMP-RUN-04 may start now**
-and **Recordings-backed durable checkpoint bytes are follow-on** as distinct,
-non-interchangeable phases.
+Maintainers should treat the process-local implementation as permanent and the
+durable-checkpoint proposal as cancelled under D1.
 
 ## Ownership summary
 
@@ -104,8 +102,8 @@ non-interchangeable phases.
 | --- | --- | --- |
 | Opaque checkpoint capture/load/compatibility/restore | Runtime `checkpoint_recovery` | Versioned opaque blobs; Runtime-owned codec |
 | Canonical event history and replay artifacts | Recordings | Durable history authority |
-| CheckpointStore port (opaque persistence seam) | Runtime `checkpoint_recovery` | IMP-RUN-04 may start with process-local/default adapter |
-| Future durable checkpoint byte persistence | Recordings (storage) + Runtime (codec/compatibility) | Recordings-backed CheckpointStore adapter; follow-on after durable log/cursor/retention |
+| CheckpointStore port (opaque recovery seam) | Runtime `checkpoint_recovery` | Private process-local implementation shipped in IMP-RUN-04 |
+| Durable checkpoint byte persistence | **Cancelled under D1** | No Recordings-backed adapter or durable-log/cursor/retention work is scheduled |
 | Resume identity coordination | Sessions via Recordings + Runtime roots | No checkpoint-internals import on Sessions |
 | Top-level Checkpoint service | **Excluded** | Checkpoint/Recovery stays a Runtime nested subservice |
 
@@ -114,14 +112,15 @@ non-interchangeable phases.
 This decision packet **does not**:
 
 - implement `checkpoint_recovery` code (IMP-RUN-04),
-- implement Recordings durable log/cursor/retention,
+- schedule Recordings durable log/cursor/retention or durable checkpoint storage,
 - create a top-level Checkpoint service package,
 - change Runtime or Recordings public package layout beyond docs/checklist/meta,
 - make Runtime a second canonical event ledger.
 
-Changed-path lease proof and reviewer verification commands live in
-[`checklist.md`](checklist.md) (**DEC-RUN-REC-DURABILITY changed-path lease
-proof**) and the lease matrix in [`plan.md`](plan.md).
+Changed-path lease proof and reviewer verification commands live in the PSS
+[`checklist`](../../temp/projects/packaged-service-structure/checklist.md)
+(**DEC-RUN-REC-DURABILITY changed-path lease proof**) and the lease matrix in
+the [`plan`](../../temp/projects/packaged-service-structure/plan.md).
 
 ## Consequences
 
@@ -135,8 +134,8 @@ proof**) and the lease matrix in [`plan.md`](plan.md).
 ### Negative / costs
 
 - Runtime must own codec evolution and compatibility policy for checkpoint blobs.
-- A Recordings-backed durable store adapter remains follow-on work after
-  Recordings durable log/cursor/retention exists.
+- Checkpoints do not persist across a process lifetime through a new storage
+  engine or Recordings-backed adapter.
 
 ## Amendment — IMP-RUN-04 closed (ACP-L2-DEL-RUN-CKPT)
 
@@ -157,8 +156,8 @@ record in
 
 | Document | Role |
 | --- | --- |
-| PSS plan ([`plan.md`](plan.md)) | Runtime sequence step 7 / Checkpoint/Recovery row |
-| PSS checklist ([`checklist.md`](checklist.md)) | IMP-RUN-04 admission status |
+| PSS plan ([`plan.md`](../../temp/projects/packaged-service-structure/plan.md)) | Runtime sequence step 7 / Checkpoint/Recovery row |
+| PSS checklist ([`checklist.md`](../../temp/projects/packaged-service-structure/checklist.md)) | IMP-RUN-04 final status |
 | Planner meta (`docs/temp/meta.md`) | IMP-RUN-04 hold/admission text |
 | Ownership inventory | `docs/internal/baselines/ownership-inventory.json` (`factory_runtime/checkpoint_recovery`) |
 | PSS program README | `docs/internal/projects/packaged-service-structure/README.md` |
