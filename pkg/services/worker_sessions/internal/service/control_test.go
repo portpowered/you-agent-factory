@@ -198,6 +198,104 @@ func TestTerminate_WaitsForAcceptedDispatchCallbackBeforeReportingTerminal(t *te
 	}
 }
 
+func TestTerminate_AfterCancelWaitsForTheEstablishedTerminalCallback(t *testing.T) {
+	boundary := newControlledBoundary()
+	registry := newControlledRegistry(t, boundary)
+	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
+	boundary.setCancel(func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+		return workers.WorkstationDispatchCancelResult{
+			DispatchID: "dispatch-1", Outcome: workers.WorkstationDispatchCancelOutcomeCanceled,
+		}, nil
+	})
+
+	canceled, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+	if err != nil || canceled.Outcome != workersessions.ControlOutcomeApplied || canceled.Session.State != workersessions.StateRunning {
+		t.Fatalf("Cancel() = %#v, %v, want applied control while callback remains pending", canceled, err)
+	}
+
+	terminated := make(chan workersessions.ControlResult, 1)
+	terminateErr := make(chan error, 1)
+	go func() {
+		result, callErr := registry.Terminate(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		terminated <- result
+		terminateErr <- callErr
+	}()
+	select {
+	case result := <-terminated:
+		t.Fatalf("Terminate() returned before the prior Cancel callback: %#v", result)
+	default:
+	}
+
+	boundary.complete(canceledDispatchResult("dispatch-1"), workers.ErrWorkstationDispatchCanceled)
+	result := <-terminated
+	if callErr := <-terminateErr; callErr != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Terminate() = %#v, %v, want joined CANCELED NOOP", result, callErr)
+	}
+	if calls := boundary.cancellations(); len(calls) != 1 || calls[0].DispatchID != "dispatch-1" {
+		t.Fatalf("boundary cancellation calls = %#v, want one exact call", calls)
+	}
+	if final := <-started; final.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Start() after Cancel then Terminate = %#v, want CANCELED", final)
+	}
+}
+
+func TestTerminate_ConcurrentCallsShareOneCancellationAndJoinTheCallback(t *testing.T) {
+	boundary := newControlledBoundary()
+	registry := newControlledRegistry(t, boundary)
+	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
+	cancelReturned := make(chan struct{})
+	boundary.setCancel(func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+		close(cancelReturned)
+		return workers.WorkstationDispatchCancelResult{
+			DispatchID: "dispatch-1", Outcome: workers.WorkstationDispatchCancelOutcomeCanceled,
+		}, nil
+	})
+
+	first := make(chan workersessions.ControlResult, 1)
+	firstErr := make(chan error, 1)
+	go func() {
+		result, callErr := registry.Terminate(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		first <- result
+		firstErr <- callErr
+	}()
+	<-boundary.cancelCalled
+	<-cancelReturned
+
+	second := make(chan workersessions.ControlResult, 1)
+	secondErr := make(chan error, 1)
+	go func() {
+		result, callErr := registry.Terminate(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		second <- result
+		secondErr <- callErr
+	}()
+	select {
+	case result := <-first:
+		t.Fatalf("first Terminate() returned before callback: %#v", result)
+	default:
+	}
+	select {
+	case result := <-second:
+		t.Fatalf("second Terminate() returned before callback: %#v", result)
+	default:
+	}
+
+	boundary.complete(canceledDispatchResult("dispatch-1"), workers.ErrWorkstationDispatchCanceled)
+	firstResult := <-first
+	if callErr := <-firstErr; callErr != nil || firstResult.Outcome != workersessions.ControlOutcomeApplied || firstResult.Session.State != workersessions.StateTerminated {
+		t.Fatalf("first Terminate() = %#v, %v, want joined TERMINATED applied result", firstResult, callErr)
+	}
+	secondResult := <-second
+	if callErr := <-secondErr; callErr != nil || secondResult.Outcome != workersessions.ControlOutcomeNoop || secondResult.Session.State != workersessions.StateTerminated {
+		t.Fatalf("second Terminate() = %#v, %v, want joined TERMINATED NOOP", secondResult, callErr)
+	}
+	if calls := boundary.cancellations(); len(calls) != 1 || calls[0].DispatchID != "dispatch-1" {
+		t.Fatalf("boundary cancellation calls = %#v, want one exact call", calls)
+	}
+	if final := <-started; final.Session.State != workersessions.StateTerminated {
+		t.Fatalf("Start() after concurrent Terminate() = %#v, want TERMINATED", final)
+	}
+}
+
 func TestControl_UnsupportedPauseResumeAndBoundaryFailureLeaveLifecycleTruthful(t *testing.T) {
 	boundary := newControlledBoundary()
 	registry := newControlledRegistry(t, boundary)

@@ -464,6 +464,16 @@ func (r *registry) controlTarget(id string) (workersessions.Session, *supervisio
 }
 
 func (r *registry) controlNoop(id string, action workersessions.ControlAction, session workersessions.Session, supervision *supervision) workersessions.ControlResult {
+	// Every successful Terminate result promises the terminal callback's
+	// snapshot, including a no-op caused by an earlier Cancel or Terminate.
+	// The prior control closes controlDone before that callback can complete,
+	// so the callback channel is the only authoritative join point here.
+	if action == workersessions.ControlActionTerminate && supervision != nil {
+		<-supervision.done
+		if current, err := r.Get(context.Background(), workersessions.GetRequest{ID: id}); err == nil {
+			session = current
+		}
+	}
 	result := workersessions.ControlResult{Session: session, Action: action, Outcome: workersessions.ControlOutcomeNoop}
 	if supervision != nil {
 		result.DispatchID = supervision.dispatchID

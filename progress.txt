@@ -9,6 +9,7 @@
 - A pool boundary that offers synchronous completion must forward Workers' cancellable-admission acknowledgement before it waits for the terminal result; otherwise a valid running dispatch becomes unreachable to its supervising control plane.
 - A late admission callback must never move a terminal Worker Session back to `RUNNING`; terminal lifecycle snapshots are absorbing under every control/completion interleaving.
 - When Workers reports `ALREADY_CANCELED`, its terminal callback can still be in flight; `Terminate` must join that callback before returning its idempotent terminal snapshot, while ordinary `Cancel` may retain its non-joining no-op contract.
+- Any successful `Terminate` no-op caused by an earlier accepted control must join the same supervision callback before returning; `controlDone` only serializes the boundary effect and is not a terminal-result barrier.
 
 ## 2026-08-04 20:18 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-001
 - Implemented typed Worker Session pause, resume, cancel, and terminate controls. Cancel and terminate now target the exact supervised dispatch through `WorkstationPoolBoundary.Cancel`; terminate waits for the established terminal callback, and pause/resume explicitly report unsupported until a truthful resumable capability exists.
@@ -98,4 +99,14 @@
 - **Learnings for future iterations:**
   - A Workers `ALREADY_CANCELED` response is a terminal control fact, but it does not guarantee that Worker Sessions has observed the result callback yet.
   - Model cancellation/callback interleavings through production-boundary fakes with explicit channels so terminal joins are observable without timing assumptions.
+---
+
+## 2026-08-04 22:49 -07:00 - ACP-L4-W6-WORKER-CONTROL-FANOUT-004
+- Addressed the remaining blocking review feedback for repeated and cross-action termination. Every Worker Sessions no-op `Terminate` now joins its authoritative dispatch callback and reloads the terminal snapshot, including `Cancel` followed by `Terminate` and concurrent duplicate `Terminate` calls.
+- Added deterministic callback-held behavioral tests that prove Cancel-then-Terminate and concurrent Terminate both return only after the callback, retain the established terminal state, and issue exactly one exact boundary cancellation.
+- Files changed: `pkg/services/worker_sessions/internal/service/control.go`, `pkg/services/worker_sessions/internal/service/control_test.go`, `prd.json`, `progress.txt`.
+- Verification: focused Worker Sessions controls and production-boundary races with `-race -count=10`; Worker Sessions 100.0% statement coverage; Worker Sessions, Factory Runtime, and Workers package suites; focused `go vet`; `git diff --check`.
+- **Learnings for future iterations:**
+  - `controlDone` proves the single cancellation side effect completed, not that the Worker Sessions terminal callback has committed; the `done` channel is the terminal-result join barrier.
+  - A Terminate retry after Cancel must preserve the canceled result rather than manufacture a terminated result, while still waiting for the same callback.
 ---
