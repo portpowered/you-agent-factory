@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	acpwire "github.com/portpowered/infinite-you/pkg/transports/acp/wire"
 	"github.com/spf13/pflag"
 )
@@ -26,6 +27,10 @@ type fakeACPServer struct {
 	gotOut   io.Writer
 	serveErr error
 	onServe  func(ctx context.Context, in io.Reader, out io.Writer) error
+}
+
+func noOpServeSystemInitializer() startupcli.Initializer {
+	return startupcli.Functions{InitializeSystemFunc: func(context.Context, string) error { return nil }}
 }
 
 func (f *fakeACPServer) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
@@ -200,7 +205,7 @@ func TestServeACPCommand_DispatchesToInjectedACPServerWithExactStreamsAndContext
 	factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI})
 	factory.acpServer = fake
 
-	root := factory.NewCommand(nil, nil, nil)
+	root := factory.NewCommand(func() (string, error) { return "operator-home", nil }, nil, noOpServeSystemInitializer())
 	stdin := strings.NewReader("acp protocol input")
 	var stdout bytes.Buffer
 	root.SetIn(stdin)
@@ -230,12 +235,39 @@ func TestServeACPCommand_DispatchesToInjectedACPServerWithExactStreamsAndContext
 	}
 }
 
+func TestServeACPCommandInitializesSystemBeforeServing(t *testing.T) {
+	fake := &fakeACPServer{}
+	factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI})
+	factory.acpServer = fake
+
+	var initializedHome string
+	initializer := startupcli.Functions{InitializeSystemFunc: func(_ context.Context, homeDir string) error {
+		initializedHome = homeDir
+		return nil
+	}}
+	root := factory.NewCommand(func() (string, error) { return "operator-home", nil }, nil, initializer)
+	root.SetIn(strings.NewReader(""))
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"serve", "acp"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if initializedHome != "operator-home" {
+		t.Fatalf("initialized home = %q, want operator-home", initializedHome)
+	}
+	if fake.calls != 1 {
+		t.Fatalf("Serve call count = %d, want 1 after system initialization", fake.calls)
+	}
+}
+
 func TestServeACPCommand_CleanEOFSucceeds(t *testing.T) {
 	fake := &fakeACPServer{serveErr: nil}
 	factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI})
 	factory.acpServer = fake
 
-	root := factory.NewCommand(nil, nil, nil)
+	root := factory.NewCommand(func() (string, error) { return "operator-home", nil }, nil, noOpServeSystemInitializer())
 	root.SetIn(strings.NewReader(""))
 	var stdout, stderr bytes.Buffer
 	root.SetOut(&stdout)
@@ -259,7 +291,7 @@ func TestServeACPCommand_CancellationPropagatesFromProcessContext(t *testing.T) 
 	factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI})
 	factory.acpServer = fake
 
-	root := factory.NewCommand(nil, nil, nil)
+	root := factory.NewCommand(func() (string, error) { return "operator-home", nil }, nil, noOpServeSystemInitializer())
 	root.SetIn(strings.NewReader(""))
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
@@ -326,7 +358,7 @@ func TestServeACPCommand_CancellationClosesStdinToUnblockRealServerMidRead(t *te
 	})
 	signalingStdin := newReadStartSignal(stdinRead)
 
-	root := factory.NewCommand(nil, nil, nil)
+	root := factory.NewCommand(func() (string, error) { return "operator-home", nil }, nil, noOpServeSystemInitializer())
 	root.SetIn(signalingStdin)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
@@ -403,7 +435,7 @@ func TestServeACPCommand_ServeFailuresAreSanitizedOnStderr(t *testing.T) {
 			factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI})
 			factory.acpServer = fake
 
-			root := factory.NewCommand(nil, nil, nil)
+			root := factory.NewCommand(func() (string, error) { return "operator-home", nil }, nil, noOpServeSystemInitializer())
 			root.SetIn(strings.NewReader(""))
 			var stdout, stderr bytes.Buffer
 			root.SetOut(&stdout)

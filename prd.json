@@ -1,89 +1,59 @@
 {
-  "project": "Reconcile ACP Architecture and Public Vocabulary Documentation",
-  "branchName": "ACP-L1-V4-H04-DOCUMENTATION-RECONCILIATION",
-  "description": "Reconcile the architecture, public data model, event-stream guide, and still-stale packaged-service-structure planning notes with current ACP service ownership, customer vocabulary, event lifetimes, and settled D1/D2/D3 decisions without changing production behavior or generated artifacts.",
+  "project": "Prove the ACP Server with a Pinned Headless Real Client",
+  "branchName": "ACP-L1-V4-M01-ACPX-REAL-CLIENT-EVIDENCE",
+  "description": "Add the smallest repeatable non-editor interoperability evidence by using pinned headless acpx@0.13.0 through npx to launch the repository-built you serve acp server, initialize ACP, create a session on the default factory:@you/factory-builder target, complete one deterministic prompt/result exchange, and retain only sanitized evidence facts. Correct production behavior only if this run exposes a directly blocking defect.",
   "context": {
-    "customerAsk": "Reconcile the documentation debt recorded in docs/internal/projects/acp-program/README.md section 6. Use the actual Chat Sessions, Events, and Worker Sessions service owners; add concise public definitions for Chat Session, Worker Session, Target Episode, and Turn; preserve the separation between ephemeral FactoryResponseEvent, the process-local Events stream, and the canonical Recordings Factory Event ledger; replace or explicitly supersede the third event hierarchy with the existing workers.Kind/workers.Phase vocabulary; update only stale D1/D2/D3 packaged-service-structure notes; verify the documentation; and carry delivery through actual PR merge.",
-    "problem": "The architecture docs name obsolete or nonexistent service packages and imply a universal durable event bus, the public data model omits ACP session and episode vocabulary, the event-stream guide describes an unimplemented third hierarchy, and stale PSS checklist language contradicts settled no-storage, event-ownership, and composition decisions.",
-    "solution": "Correct the canonical documentation surfaces to describe actual service ownership and state lifetimes, define the new customer terms and their relationships, document source-native Worker Kind/Phase observations separately from Recordings-owned Factory history, and remove or supersede only PSS statements that still contradict D1, D2, or D3. Keep the work documentation-only and verify it with focused terminology/link review and existing repository quality gates."
+    "customerAsk": "Drive the repository-built you serve acp stdio server with pinned headless acpx@0.13.0 without a global acpx installation. Prove initialization, session creation with the default @you/factory-builder target, and one real prompt/result exchange using deterministic repository-supported provider effects. Retain only sanitized commands and evidence facts, do not widen into other clients or ACP lanes, and carry delivery through actual PR merge.",
+    "problem": "The repository's own clients prove ACP framing and Factory prompting, but there is no retained evidence that an independently packaged real client can launch the built server, negotiate the protocol, observe the default Factory Builder target, cause provider execution, consume assistant output, and receive a terminal result. A manual raw transcript would not be repeatable and could leak prompts, responses, credentials, provider commands, session history, or host paths.",
+    "solution": "Add one isolated, bounded acceptance path that builds the current you binary, invokes exactly acpx@0.13.0 through npx with a portable structured custom-agent argv for you serve acp, uses deterministic supported provider execution, asserts the required initialization/session/default-target/prompt/result/provider facts, cleans up all scenario state and processes, and emits only a redacted evidence summary. If the run reveals a reproducible blocking server defect, make only the narrow correction with focused behavioral coverage and rerun the same real-client path."
   },
   "acceptanceCriteria": [
-    "Architecture readers see pkg/services/chat_sessions, pkg/services/events, and pkg/services/worker_sessions as the actual owners, see no nonexistent Docs service, and are not told that services communicate through a universal event bus or that the Events service is a durable ledger.",
-    "The public data model defines Chat Session, Worker Session, Target Episode, and Turn and explains their relationships in customer-facing language without exposing internal Petri-net vocabulary.",
-    "Documentation consistently distinguishes FactoryResponseEvent as ephemeral invocation progress, Events as an in-memory session-scoped stream, and Recordings FactoryEvent JSONL artifacts as canonical Factory history and replay under D1 and D2.",
-    "The event-stream guide uses the existing workers.Kind and workers.Phase vocabulary for Worker observations and the separate canonical Factory Event ledger, with the old third hierarchy removed or explicitly marked superseded rather than normalized into a new model.",
-    "The canonical PSS README and its local plan/checklist contain no still-active statements that contradict D1, D2, or D3; exact referenced package paths and document links resolve, and no unrelated documentation or production/generated surface changes.",
-    "Quality gates pass: focused documentation and link review, make readme-check when applicable, typecheck, lint, and tests required by the repository/PR CI policy.",
+    "A documented repository command builds the current you executable and runs it as you serve acp under the real acpx@0.13.0 package via npx; it does not require or silently use a global acpx executable and does not implement another ACP client.",
+    "The real client successfully negotiates ACP and creates a session whose current target is the shipped default factory:@you/factory-builder, using a structured custom-agent argument vector that works on supported host platforms.",
+    "The same bounded run submits one ephemeral prompt, observes non-empty assistant result evidence plus a truthful terminal prompt result, and records exactly one expected deterministic provider invocation without asserting or retaining prompt or response payload text.",
+    "The run is isolated and bounded: acpx config, session, history, and cache state used by the scenario is disposable; server and provider child processes terminate; failures return a non-zero result with safe actionable classification; and deterministic observation replaces arbitrary sleeps.",
+    "Retained project documentation or test evidence identifies the repository revision, exact acpx version, sanitized command shape, initialization, session, default-target and result facts, terminal outcome, provider-invocation count, and applicable verification results while excluding prompts, raw transcript content, credentials, environment secrets, raw provider commands, and host-specific paths. Production changes occur only for a concrete defect reproduced by this run and include focused behavioral regression coverage.",
+    "Scoped quality gates pass: typecheck, documentation smoke, focused ACP and acpx tests, existing ACP functional coverage, and all required CI checks applicable to any narrow production correction. The repository-wide `make lint` baseline currently has 87 unrelated backend-size violations; that failure is retained as repository debt rather than reported as a passing ACP-lane check.",
     "Delivery continues through implementation and review until required CI is terminal and passing, every blocking PR conversation is explicitly addressed, current-main and shared-file conflicts are resolved, and the PR is actually merged; an opened, approved, green, or ready-to-merge PR is not complete."
   ],
   "userStories": [
     {
-      "id": "ACP-L1-V4-H04-DOCUMENTATION-RECONCILIATION-001",
-      "title": "Present the actual service ownership and communication model",
-      "description": "As a maintainer reading the architecture guide, I want the service inventory and system-flow explanations to name the real owners and communication boundaries so I can design changes against packages and lifetimes that actually exist.",
+      "id": "ACP-L1-V4-M01-ACPX-REAL-CLIENT-EVIDENCE-001",
+      "title": "Launch the built ACP server through pinned acpx",
+      "description": "As an ACP maintainer, I want a repeatable headless real-client launch path so I can verify that the independently packaged client actually initializes the repository-built stdio server and creates a session on the shipped default Factory target.",
       "acceptanceCriteria": [
-        "The service inventory identifies Chat Sessions at pkg/services/chat_sessions, Events at pkg/services/events, and Worker Sessions at pkg/services/worker_sessions, with concise responsibilities aligned to current architecture.",
-        "The inventory contains no pkg/services/chat, pkg/services/event_stream, or pkg/services/docs owner and does not imply a Docs product service.",
-        "Architecture prose and diagrams show direct service operations and bounded event delivery where applicable without claiming that every service subscribes to a universal bus.",
-        "Events is described as an in-memory, session-scoped stream for ordering, cursors, subscriptions, retention, gaps, and backpressure; Recordings remains the owner of canonical Factory history, JSONL artifacts, replay, and historical projections.",
-        "Existing architecture diagrams and frontend/backend prose no longer label the process-local Events stream as the durable replay source of truth; references to canonical replay identify the Recordings Factory Event ledger.",
-        "Focused review confirms the named service paths exist and the revised prose agrees with current service ownership; no production or generated file changes.",
+        "The acceptance path builds the current repository you executable before the run and configures acpx to launch that exact artifact with the argument vector serve, acp; it does not resolve an unrelated installed you binary.",
+        "The client is invoked as pinned acpx@0.13.0 through npx with non-interactive package installation behavior, and the evidence confirms the effective acpx version; no global acpx installation is required.",
+        "acpx uses its supported structured custom-agent argv configuration so executable paths and arguments remain unambiguous on Windows and other supported hosts.",
+        "Client configuration, session metadata and history, working state, and runtime artifacts for the scenario are isolated under disposable locations and cannot consume a developer's existing acpx sessions or credentials.",
+        "The real client completes initialize and session/new; the observable session configuration reports factory:@you/factory-builder as the current/default target.",
+        "A protocol or startup failure terminates the bounded run, returns non-zero, and reports only a safe phase/error classification without dumping JSON-RPC payloads, environment values, or local paths.",
+        "Tests pass",
         "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "2026-08-04: Reconciled docs/architecture/architecture.md with the implemented Chat Sessions, Events, Worker Sessions, and Recordings boundaries. Replaced the universal Event Bus diagrams and prose with direct service operations and bounded session-topic delivery; identified Recordings FactoryEvent JSONL artifacts as the canonical replay/history source; and corrected the frontend diagrams and prose to consume Recordings-backed Factory history. Focused owner-path/obsolete-terminology review and make typecheck pass."
+      "notes": "Implemented an opt-in, CI-enabled pinned acpx@0.13.0 process-boundary test that builds the current CLI, launches it with structured argv, asserts session_ensured, protocol negotiation, and the default Factory Builder target, and closes the disposable session. The run exposed a fresh-state catalog defect, corrected by initializing system packages before you serve acp. Verified with Node 22.13, focused ACP/CLI tests, docs smoke, and typecheck."
     },
     {
-      "id": "ACP-L1-V4-H04-DOCUMENTATION-RECONCILIATION-002",
-      "title": "Define ACP session and episode vocabulary in the public data model",
-      "description": "As a customer or integrator, I want concise definitions for Chat Session, Worker Session, Target Episode, and Turn so I can understand how a conversation invokes a target and how its work is grouped.",
+      "id": "ACP-L1-V4-M01-ACPX-REAL-CLIENT-EVIDENCE-002",
+      "title": "Complete one deterministic real-client prompt and retain safe evidence",
+      "description": "As a customer evaluating ACP compatibility, I want the real headless client to complete one prompt against the default Factory Builder target so I can trust that initialization leads to actual Factory and provider execution and a terminal result, not merely a successful handshake.",
       "acceptanceCriteria": [
-        "Chat Session is defined as the customer-facing conversation/control context that can address a target and contains ordered turns, without presenting it as canonical Factory replay history.",
-        "Target Episode is defined as one bounded attempt to run or interact with a selected target within a Chat Session, and its relationship to the selected Factory or other target is explicit.",
-        "Worker Session is defined as the execution/control context for a Worker participating in a Target Episode, including the possibility of multiple Worker Sessions where orchestration requires them.",
-        "Turn is defined as one ordered user/agent interaction unit within a Chat Session and is related clearly to the Target Episode and any Worker activity it triggers.",
-        "The relationship text or diagram uses customer-facing vocabulary and preserves the internal/customer model boundary; it does not expose Petri tokens, places, transitions, or markings.",
-        "FactoryResponseEvent remains explicitly ephemeral and process-local, outside the canonical Recordings FactoryEvent replay ledger, and the surrounding definitions agree with D1 and D2.",
+        "Starting from the initialized acpx session, the acceptance path submits exactly one bounded ephemeral text prompt and observes at least one non-empty assistant result fact followed by one terminal prompt result with the truthful shipped stop reason.",
+        "The prompt uses a deterministic repository-supported provider execution path; retained provider evidence proves the expected provider identity or class, invocation count of exactly one for the bounded turn, and successful terminal outcome without retaining the prompt, generated response, raw command line, credentials, or unsafe arguments.",
+        "Assertions use acpx's machine-readable output or stable session facts rather than scraping human-formatted terminal text, while retained evidence summarizes protocol facts rather than storing a raw transcript.",
+        "The run closes input or session ownership as supported, waits on observable process completion rather than arbitrary sleeps, and leaves no you serve acp, provider, queue-owner, or scenario-owned acpx process running.",
+        "The canonical ACP documentation or test surface includes the sanitized reproduction command or template, exact acpx@0.13.0 pin, prerequisites, asserted initialization, default-target, prompt-result and provider facts, revision evidence, and cleanup behavior; placeholders replace repository roots, temporary directories, session IDs, and other host-specific values.",
+        "Runtime prompt text, assistant text, raw JSON-RPC frames, credentials, secret-bearing environment values, raw provider commands, host-specific paths, and disposable acpx history are absent from committed evidence and PR conversation artifacts.",
+        "If and only if this run reproduces a production defect that directly prevents the required exchange, the implementation corrects only that defect, adds focused behavioral coverage for the observed failure at the owning transport or service boundary, and reruns the acpx acceptance path; otherwise production ACP code remains unchanged.",
+        "Existing retention and STREAM_GAP, legal Kind and Phase projection, and broad safe-logging tests are not duplicated or expanded without a new client-observed defect in that exact behavior.",
+        "Tests pass",
         "Typecheck passes"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "2026-08-04: Added customer-facing Chat Session, Target Episode, Turn, and Worker Session definitions plus their relationship diagram to docs/architecture/data-model.md. Clarified that FactoryResponseEvent is ephemeral and process-local, outside the Recordings-owned canonical FactoryEvent replay ledger. Verified the terms against the Chat Sessions and Worker Sessions public contracts; make typecheck passes."
-    },
-    {
-      "id": "ACP-L1-V4-H04-DOCUMENTATION-RECONCILIATION-003",
-      "title": "Document the two shipped event vocabularies without a third taxonomy",
-      "description": "As an implementer consuming event output, I want the event-stream guide to describe the source-native Worker observation vocabulary separately from canonical Factory history so I do not implement against an invented normalized hierarchy.",
-      "acceptanceCriteria": [
-        "Worker observations are described using the declared workers.Kind values SESSION, RUN, TURN, MESSAGE, REASONING, TOOL, FILE_CHANGE, PLAN, PROGRESS, USAGE, ERROR, and STREAM_GAP and workers.Phase values STARTED, DELTA, UPDATED, COMPLETED, FAILED, and CANCELED.",
-        "The guide explains that valid Kind/Phase combinations and their typed payloads are source-native Worker contracts; it does not imply that every Kind accepts every Phase.",
-        "Canonical Factory history is documented separately as Recordings-owned FactoryEvent values and JSONL artifacts used for replay and historical inspection.",
-        "The prior nested Factory/Worker/User/Agent/Tool hierarchy is removed or clearly labeled as superseded conceptual material that is not a supported contract.",
-        "The guide does not introduce a replacement normalized event taxonomy, rename shipped enum values, or conflate Events stream retention with durable Factory history.",
-        "Focused comparison against the current public Worker declarations and Recordings documentation confirms the examples and terminology are accurate; no enum, runtime, OpenAPI, or generated changes.",
-        "Typecheck passes"
-      ],
-      "priority": 3,
-      "passes": true,
-      "notes": "2026-08-04: Replaced the unsupported nested Factory/Worker/User/Agent/Tool outline in docs/architecture/event-streams.md with the shipped workers.Kind and workers.Phase vocabulary, typed-payload guidance, and source-native combination caveat. Documented the Events stream as process-local/session-scoped delivery and Recordings FactoryEvent JSONL artifacts as the separate canonical replay history. Verified the terminology against pkg/services/workers/response_drafts.go, pkg/services/events/doc.go, and pkg/services/recordings contracts; make typecheck passes."
-    },
-    {
-      "id": "ACP-L1-V4-H04-DOCUMENTATION-RECONCILIATION-004",
-      "title": "Close the remaining stale PSS decision language",
-      "description": "As a program planner, I want the canonical packaged-service-structure notes and their local checklist to reflect settled D1, D2, and D3 decisions so no future packet is admitted for canceled storage work or blocked behind a nonexistent composition lease.",
-      "acceptanceCriteria": [
-        "Still-stale checklist or plan statements that defer Recordings-backed checkpoint storage or Recordings durable log/cursor/retention are changed to state that this work is canceled, not deferred, under D1.",
-        "PSS guidance consistently states that Recordings owns canonical Factory JSONL history and replay while Events owns only the in-memory, session-scoped stream behavior under D2.",
-        "PSS guidance consistently states that ordinary additive edits under pkg/wire, pkg/root, and pkg/initializer are shared composition surfaces resolved by normal rebase and do not create an exclusive composition lease under D3; genuine structural contract edits remain subject to explicit ownership controls.",
-        "Already-correct README/plan language is preserved rather than rewritten, and only contradictory or incomplete local checklist/plan text is reconciled.",
-        "The documentation does not reopen checkpoint APIs, add storage-engine work, alter PSS packet implementation scope, or schedule L4 Worker control work.",
-        "Focused link and terminology review plus make readme-check pass where applicable, and the diff remains limited to the requested documentation and task artifacts.",
-        "Typecheck passes"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": "2026-08-04: Reconciled the canonical PSS README, durability decision, and local planner README/plan/checklist with D1/D2/D3. Closed the stale deferred durable-checkpoint and Recordings durable log/cursor/retention language as cancelled; recorded the already-applied PSS-I01 and PSS-I05 narrowing; and redirected obsolete local decision links to the canonical decision. Focused Markdown link/terminology review, make readme-check, and make typecheck pass. 2026-08-04 review follow-up: corrected the two remaining checklist decision-path statements to the canonical internal decision record so every active reference resolves."
+      "notes": "Extended the pinned acpx@0.13.0 process-boundary proof through one ephemeral prompt, a non-empty assistant result fact, one end_turn result, and exactly one disposable Codex-shaped provider invocation. The real run exposed an ACP text-to-signature normalization defect for the shipped Factory Builder target; Factory Sessions now routes compatibility text to a signature's primary positional or stdin parameter, and Factory Builder safely derives an omitted name. Follow-up review hardens the process boundary with an allowlisted environment, process-tree cleanup on every terminal path, failure-path descendant termination coverage, a non-short required CI execution, and a sanitized terminal artifact that records the repository revision. Windows now assigns each owned client command to a kill-on-close Job Object, so descendants terminate even after a non-zero direct-parent exit; Unix retains the owned process group. The Node 22 CI lane is configured to run that proof; focused Factory Sessions coverage, packaged-factory generation/coverage, docs smoke, and typecheck remain the supporting verification. The repository-wide lint target remains blocked by 87 pre-existing backend-size findings outside this story and is explicitly retained as repository debt in the scoped quality criterion."
     }
   ]
 }

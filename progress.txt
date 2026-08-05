@@ -1,4 +1,11 @@
 ## Codebase Patterns
+- When a review rejects a new docs-string inventory assertion, remove the new marker check; if an existing legacy smoke contract requires a term, preserve that term as accurate canonical documentation rather than expanding the inventory.
+- For an owned Windows subprocess tree that must be cleaned after its direct parent exits, retain a kill-on-close Job Object handle until post-run cleanup; `taskkill` by an already-reaped parent PID cannot prove descendant termination.
+- When a platform-specific cleanup mechanism changes, update the canonical customer-facing reference alongside the behavioral regression evidence; describe a fallback as a fallback, not as the primary guarantee.
+- After changing an authored packaged Factory prompt, run `make packaged-factory-catalog-generate`; the prompt, generated Factory artifacts, and manifest are a single checked-in contract.
+- Process-boundary client tests must isolate every platform configuration root the child process can consult (HOME, USERPROFILE, APPDATA, LOCALAPPDATA, XDG roots, and package cache) beneath the test temp directory.
+- Because `cmd/functionallane` intentionally defaults to `-short`, an opt-in process-boundary test needs its own required non-short CI invocation and a fact-only artifact when its execution is acceptance evidence.
+- For a deterministic process-boundary provider effect, put a disposable provider-compatible executable first on the scenario PATH and retain only its provider identity plus invocation count.
 - Document `pkg/services/events` as the process-local, in-memory, session-scoped source-native observation stream; Recordings owns canonical Factory Event JSONL history, replay, artifacts, and historical projections.
 - Architecture service inventories should name the package that publishes the public owner contract, and diagrams should show direct service operations unless a bounded delivery contract is explicitly involved.
 - Define ACP customer terms from the detached `chat_sessions` and `worker_sessions` public contracts; use customer-facing relationship diagrams and keep their event lifetimes separate from Recordings history.
@@ -52,4 +59,87 @@
 - **Learnings for future iterations:**
   - A Markdown link can be correct while adjacent checklist/inventory prose still names an obsolete path; review both when reconciling moved decision records.
   - The local PSS checklist is active verification guidance, so its expected-path inventory must be maintained as rigorously as its links.
+---
+
+## 2026-08-04 21:35 -07:00 - ACP-L1-V4-M01-ACPX-REAL-CLIENT-EVIDENCE-001
+- Added an isolated, bounded `acpx@0.13.0` acceptance test that builds the checked-out CLI, launches `you serve acp` through structured custom-agent argv, and verifies machine-readable session creation, protocol negotiation, and the shipped Factory Builder target before closing the session.
+- Corrected `you serve acp` startup to run system initialization, ensuring the shipped packaged Factory catalog is available for a fresh ACP client home; added focused CLI regression coverage.
+- Documented the safe reproduction path and enabled the opt-in real-client proof in the functional CI lane. Updated the UI compiler configuration to acknowledge the TypeScript 5.9 `baseUrl` deprecation so the existing typecheck gate remains green.
+- Files changed: `.github/workflows/ci.yml`, `docs/reference/serve-acp.md`, `pkg/transports/cli/root_factory.go`, `pkg/transports/cli/root_serve_test.go`, `tests/functional/transport/acp/realclient/pinned_acpx_test.go`, `ui/tsconfig.app.json`, `prd.json`, `progress.txt`.
+- **Learnings for future iterations:**
+  - `acpx@0.13.0` requires Node.js 22.13.0 or newer; the functional CI lane must install Node 22 before it runs the opt-in evidence test.
+  - Fresh `you serve acp` state needs system initialization so its default `factory:@you/factory-builder` target is installed before ACP `session/new` resolves the catalog.
+  - Run `bun install --frozen-lockfile` from `ui/` before `make typecheck` in a fresh worktree; the shared `tsconfig.app.json` setting is inherited by each typecheck project.
+---
+
+## 2026-08-04 21:50 -07:00 - ACP-L1-V4-M01-ACPX-REAL-CLIENT-EVIDENCE-002
+- Extended the pinned `acpx@0.13.0` acceptance path through one ephemeral prompt against the shipped Factory Builder target. It asserts a non-empty assistant-result fact, one `end_turn` result, and exactly one disposable Codex-shaped provider invocation without retaining prompt, response, JSON-RPC, command, credential, or host-path payloads.
+- Corrected the directly observed ACP blocking defect: Factory Sessions now maps text compatibility input to a Factory signature's primary positional or stdin parameter. The Factory Builder package accepts an omitted name and safely directs Builder to derive one or report a collision, allowing the default ACP target to admit an ordinary text turn.
+- Regenerated packaged Factory artifacts and updated the canonical ACP and Factory-authoring documentation with the sanitized command, evidence facts, and no-transcript boundary.
+- Files changed: `docs/reference/{authoring-factories,serve-acp}.md`, `packages/packaged-factories/{factories/factory-builder/{factory.yaml,prompts/build-factory.md},factory_builder_test.go,generated/{factories/factory-builder/{factory.json,factory.yaml},manifest.json}}`, `pkg/services/factory_sessions/internal/invocation/{session_owner.go,session_owner_test.go}`, `tests/functional/transport/acp/realclient/pinned_acpx_test.go`, `prd.json`, `progress.txt`.
+- **Learnings for future iterations:**
+  - ACP `session/prompt` exposes text content rather than named Factory arguments; Factory Sessions must normalize that text through a signature's declared primary input before runtime interpolation.
+  - A real-client acceptance test can exercise the production Codex subprocess adapter with a scenario-local executable, while a marker containing only `codex` proves identity and cardinality without preserving provider traffic.
+  - Regenerate `packages/packaged-factories/generated/` with `make packaged-factory-catalog-generate` after changing an authored packaged Factory.
+---
+
+## 2026-08-04 21:59 -07:00 - ACP-L1-V4-M01-ACPX-REAL-CLIENT-EVIDENCE-002
+- Verified the completed real-client story with the focused Factory Sessions and packaged-Factory tests, generated-catalog check, documentation CLI smoke test, pinned Node 22.13 acpx prompt run, and UI typecheck. Updated the packaged-docs smoke contract to use the sanitized assistant-result fact rather than the removed raw protocol marker.
+- Files changed: `tests/functional/smoke/cli_docs_smoke_test.go`, `prd.json`, `progress.txt` (with the story's previously recorded implementation files).
+- **Learnings for future iterations:**
+  - The docs CLI smoke test checks literal embedded Markdown; choose a marker that does not span a source line break when documenting a sanitized protocol fact.
+  - `make lint` currently stops at 87 pre-existing backend-size findings outside this story; capture that baseline constraint separately from focused change verification.
+---
+
+## 2026-08-04 22:11 -07:00 - ACP-L1-V4-M01-ACPX-REAL-CLIENT-EVIDENCE-002
+- Repaired the failed Backend Functional Coverage lane by retaining the existing supplied-name prompt forms alongside the new optional-name guidance, then regenerated the packaged Factory catalog.
+- Files changed: `packages/packaged-factories/factories/factory-builder/prompts/build-factory.md`, `packages/packaged-factories/generated/factories/factory-builder/{factory.json,factory.yaml}`, `packages/packaged-factories/generated/manifest.json`, `progress.txt`.
+- **Learnings for future iterations:**
+  - The Factory Builder functional command-runner validates its real provider prompt as part of the public builder-flow coverage; preserve supplied-name instructions when extending that prompt for omitted-name ACP input.
+  - `go test ./tests/functional/factory/packaged/factory_builder -count=1 -timeout 2m`, `go test ./packages/packaged-factories -run TestFactoryBuilder -count=1 -timeout 2m`, and `make packaged-factory-catalog-check` validate this contract narrowly.
+---
+
+## 2026-08-04 22:40 -07:00 - ACP-L1-V4-M01-ACPX-REAL-CLIENT-EVIDENCE-002
+- Addressed the blocking real-client review: added a separate required non-short CI run for `acpx@0.13.0`, strict prerequisite failure behavior, and a fact-only terminal artifact containing the revision, protocol/session/result/provider, cleanup, and outcome facts.
+- Replaced inherited child environments with a minimal platform-safe allowlist, isolated transient paths, added Unix process-group and Windows process-tree timeout cleanup, and covered a timed-out descendant process to prove it terminates.
+- Reconciled the scoped quality criterion with the confirmed 87 unrelated repository `backend-size` baseline violations rather than reporting root `make lint` as passing. Updated the ACP reference documentation with the sanitized command, CI evidence, isolation, and cleanup guarantees.
+- Files changed: `.github/workflows/ci.yml`, `docs/reference/serve-acp.md`, `tests/functional/transport/acp/realclient/{pinned_acpx_test.go,pinned_acpx_process_test.go,pinned_acpx_process_unix_test.go,pinned_acpx_process_windows_test.go}`, `prd.json`, `progress.txt`.
+- **Learnings for future iterations:**
+  - An opt-in test must turn missing pinned-runtime prerequisites into a failure in its required CI lane; leaving normal local skips intact avoids forcing a networked client into the short suite.
+  - `exec.CommandContext` only guarantees direct-process cancellation. For owned client trees, use OS-specific group/tree termination and assert a recorded descendant has exited after the timeout path.
+  - A retained real-client artifact can stay safe by encoding only asserted facts and a full repository SHA; never capture the command output, transcript, temp location, or effective environment.
+---
+
+## 2026-08-04 23:00 -07:00 - ACP-L1-V4-M01-ACPX-REAL-CLIENT-EVIDENCE-002
+- Addressed the outstanding blocking PR feedback for the Windows non-zero-exit path. Every bounded real-client command now has an owned process tree; Windows uses a kill-on-close Job Object and Unix retains its process group through cleanup.
+- Added a behavioral process-boundary regression that starts a descendant, has its direct parent exit non-zero, and verifies the descendant has terminated. The existing timeout case continues to prove timeout cleanup.
+- Files changed: `tests/functional/transport/acp/realclient/{pinned_acpx_test.go,pinned_acpx_process_test.go,pinned_acpx_process_unix_test.go,pinned_acpx_process_windows_test.go}`, `prd.json`, `progress.txt`.
+- **Learnings for future iterations:**
+  - On Windows, cleanup by parent PID is insufficient after `Wait` reaps that parent; a Job Object retained by the scenario owns remaining descendants independently of that PID.
+  - The process-boundary test helper can use a controlled non-zero parent exit plus a recorded descendant PID to verify cleanup without inspecting internal implementation state.
+  - `go test ./tests/functional/transport/acp/realclient -count=10 -timeout 45s` and a Windows cross-compile provide focused regression evidence when the local host cannot execute Windows process semantics.
+---
+
+## 2026-08-04 23:18 -07:00 - ACP-L1-V4-M01-ACPX-REAL-CLIENT-EVIDENCE-002
+- Rechecked active PR #1798 after its final process-cleanup commit. The historical blocking feedback is satisfied at the current head: Windows owns each child tree with a kill-on-close Job Object, and the non-zero-parent behavioral regression proves its descendant terminates. No unresolved review threads remain; all required CI checks for the implementation head are successful.
+- Updated the PR description from the current `prd.json` so its retained scope and acceptance evidence match the checked-in plan.
+- Files changed: `progress.txt`, PR #1798 description.
+- **Learnings for future iterations:**
+  - A branch can be associated with a PR in its fork/upstream repository even when `gh pr view` against the local `origin` cannot find it; resolve the PR URL returned by `gh pr create` and query that repository explicitly.
+  - The GitHub issue-comment feed can retain historical blocking comments after their requested commit lands; inspect thread resolution, comment target heads, current diff, and current required checks together before treating feedback as outstanding.
+---
+
+## 2026-08-04 23:35 -07:00 - ACP-L1-V4-M01-ACPX-REAL-CLIENT-EVIDENCE-002
+- Corrected the canonical ACP guide after final PR review: Windows process-tree cleanup is established by a retained kill-on-close Job Object, while `taskkill /T` is only a fallback if Job Object ownership cannot be established. The guide now also names both timeout and non-zero-parent descendant-termination coverage.
+- Files changed: `docs/reference/serve-acp.md`, `progress.txt`.
+- **Learnings for future iterations:**
+  - Reference documentation for process guarantees must name the mechanism that establishes the guarantee on every terminal path; a PID-based fallback cannot describe reaped-parent cleanup as the primary behavior.
+---
+
+## 2026-08-05 00:11 -07:00 - ACP-L1-V4-M01-ACPX-REAL-CLIENT-EVIDENCE-002
+- Addressed the current PR review findings by removing the new ACP marker inventory from the legacy docs smoke test and the unrelated UI TypeScript compiler suppression. The canonical ACP guide retains the existing `session/update` and `stopReason` facts as accurate protocol documentation, while real-client process-boundary coverage remains the behavioral proof.
+- Files changed: `docs/reference/serve-acp.md`, `tests/functional/smoke/cli_docs_smoke_test.go`, `ui/tsconfig.app.json`, `progress.txt`.
+- **Learnings for future iterations:**
+  - Historical docs smoke assertions can require legacy protocol terms even when a feature change must not add new marker-inventory coverage; retain the accurate terminology in its canonical guide and prove the feature through the owning runtime boundary.
+  - `make docs-reference-smoke`, `make typecheck`, and `go test ./tests/functional/transport/acp/realclient -count=1 -timeout 90s` are focused follow-up evidence for this review correction.
 ---

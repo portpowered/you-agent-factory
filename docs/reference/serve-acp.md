@@ -55,34 +55,78 @@ A generic client configuration:
 }
 ```
 
-## Exchange One ACP Prompt
+## Prove A Pinned Headless Client Launch
 
-After the client starts the child process, it exchanges ACP JSON-RPC over
-stdin and stdout. A representative exchange:
+The repository also keeps a non-editor interoperability check for the pinned
+headless [`acpx@0.13.0`](https://www.npmjs.com/package/acpx/v/0.13.0) client.
+It builds the current checkout before the client starts it; it never selects a
+globally installed `you` or `acpx` executable.
 
-```jsonc
-// -> stdin: negotiate the protocol
-{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{"fs":{"readTextFile":true,"writeTextFile":true},"terminal":true}}}
-
-// -> stdin: open a session against the operator's configured Factory target
-{"jsonrpc":"2.0","id":2,"method":"session/new","params":{"cwd":"/absolute/path/to/project","mcpServers":[]}}
-
-// -> stdin: send one ordinary text prompt using the returned sessionId
-{"jsonrpc":"2.0","id":3,"method":"session/prompt","params":{"sessionId":"<sessionId from session/new>","prompt":[{"type":"text","text":"Summarize the changelog."}]}}
-
-// <- stdout: a session/update notification carries the agent's final text before the session/prompt response
-{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"<sessionId>","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"..."}}}}
-
-// <- stdout: the terminal session/prompt response
-{"jsonrpc":"2.0","id":3,"result":{"stopReason":"end_turn"}}
+```bash
+INFINITE_YOU_RUN_ACPX_REAL_CLIENT=1 INFINITE_YOU_REQUIRE_ACPX_REAL_CLIENT=1 INFINITE_YOU_ACPX_EVIDENCE_OUTPUT=<sanitized-evidence.json> go test -v ./tests/functional/transport/acp/realclient/... -run '^TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt$' -count=1
 ```
 
-The client observes this implemented V1 contract: `initialize`, `session/new`
-with the operator's configured Factory target, and exactly one ordinary text
-prompt ending in one terminal `session/prompt` response. Events streaming,
-attachment cursors, `session/load`, `session/resume`, `session/close`, control
-fan-out, L4 Worker Events, persistence, remote ACP, and Factory Builder work
-are not implemented in this V1 slice and are not advertised.
+It requires `npm`/`npx` and Node.js 22.13.0 or later, the runtime declared by
+the pinned acpx package. The default functional suite deliberately leaves this
+networked, process-boundary proof disabled. CI runs it separately from the
+short functional coverage command, without `-short`, and treats a missing Node
+or acpx prerequisite as a failure. The required CI step retains one sanitized
+JSON artifact containing only the revision, acpx version, initialization,
+session, target, result, provider-count, cleanup, and terminal-outcome facts.
+
+The check runs the effective client command in this shape, with a fresh
+temporary home, project directory, npm cache, and server binary on every run:
+
+```bash
+(cd <disposable-project> && npx --yes --package acpx@0.13.0 acpx --format json you-real-client sessions new)
+```
+
+Its disposable `<disposable-project>/.acpxrc.json` uses the portable custom
+agent form required by acpx on Windows and supported on every host:
+
+```json
+{
+  "agents": {
+    "you-real-client": {
+      "argv": ["<disposable-you-binary>", "serve", "acp"]
+    }
+  }
+}
+```
+
+The machine-readable `session_ensured` fact must include client and ACP session
+identities. The disposable acpx session record must show a negotiated protocol
+version and `target` selection of `factory:@you/factory-builder`.
+
+The same scenario invokes acpx's `prompt` command exactly once with ephemeral
+text. Its disposable provider command follows the supported Codex subprocess
+protocol, records only the provider identity, and is selected through the
+scenario's scoped operator default. The child process receives a narrow
+allowlist of runtime variables plus scenario-owned home, cache, temporary, and
+provider values; it does not inherit credentials, proxy settings, or other
+developer environment. The proof asserts a non-empty assistant result fact,
+one `end_turn` terminal result, and exactly one `codex` provider invocation; it
+does not assert, save, or print prompt text, assistant text, JSON-RPC frames,
+provider arguments, environment values, or host paths. Cleanup owns the
+complete process tree through a dedicated process group on Unix and a retained
+kill-on-close Job Object on Windows (`taskkill /T` is only a fallback when job
+ownership cannot be established). Timeout and non-zero-parent failure-path
+tests verify the recorded scenario descendant exits. The test then uses `sessions close`, observes that
+the disposable acpx queue owner has stopped, and removes every scenario-owned
+client record, cache, and process. Failures report a bounded phase only.
+
+## Exchange One ACP Prompt
+
+After the client starts the child process, the check observes the implemented
+V1 contract through acpx's JSON output: `initialize`, `session/new` with the
+operator's configured Factory target, one ordinary text prompt, a non-empty
+assistant result `session/update`, and one terminal `session/prompt` response
+whose `stopReason` is the shipped `end_turn` reason. It retains no transcript
+or payloads. Events
+streaming, attachment cursors, `session/load`, `session/resume`, `session/close`,
+control fan-out, L4 Worker Events, persistence, and remote ACP remain outside
+this V1 slice. The check proves the prompt/result transport path, not the
+semantic correctness of a Factory Builder authoring outcome.
 
 ## Distinguish This From Related ACP And MCP Surfaces
 
@@ -107,6 +151,7 @@ on:
 | Discovery, help, and command-tree contracts for `you serve` and `you serve acp` | `pkg/transports/cli/root_serve_test.go` |
 | Exact stdin/stdout/context forwarding, clean EOF, cancellation, and sanitized stderr-only failure diagnostics | `pkg/transports/cli/root_serve_test.go` |
 | One real Factory prompt through `root.BuildProcess`: `initialize` -> `session/new` -> `session/prompt`, with protocol-only stdout | `tests/functional/cli/serve_acp/serve_acp_prompt_test.go` |
+| Pinned independent-client startup and one sanitized default-Factory prompt with one deterministic provider invocation | `tests/functional/transport/acp/realclient/pinned_acpx_test.go` |
 
 These tests prove the stdio protocol contract and command wiring, not a
 specific ACP client's UI or configuration parser.

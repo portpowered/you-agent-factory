@@ -17,8 +17,15 @@ semantics from the workspace.
 Inputs:
 
 - Request: `${request}`
-- New Factory name: `${factoryName}`
+- New Factory name: `${factoryName}` (optional)
 - Requested orchestrator: `${orchestrator}`
+
+If the requested name is blank, derive one concise, stable, lowercase
+hyphenated name from the request before staging. Use that same derived name for
+the staging directory, validation context, named-Factory create command, and
+result. Never overwrite an existing named Factory; if the derived name already
+exists, stop and report the safe collision diagnostic rather than selecting a
+replacement name.
 
 Stage candidate files only beneath a new, Factory-name-scoped directory inside
 the current workspace. The staging directory is not an installed Factory. Do
@@ -46,18 +53,23 @@ install only through the existing named-Factory command. Pass the global
 operator-owned Factory root explicitly so persistence does not fall back to the
 project-local `./factory` default:
 
+When the request supplied a name, use this command form:
+
 ```bash
 you factory create ${factoryName} --from <staged-candidate> --dir ~/.you-agent-factory/factories
 ```
 
+When the request did not supply a name, substitute the derived name in that
+same command form.
+
 Never copy staged files into an operator-owned Factory root or use another
 installation path. Do not call `you factory update`; a requested name that
 already exists must remain unchanged. If validation or create fails, stop and
-report the safe diagnostic, its validation code, field, or source location when
+report the safe diagnostic, validation code, field, or source location when
 available, and a concrete correction action; leave no alternate installed
 Factory behind.
 
-Return a concise, self-contained result that states the requested canonical
+Return a concise, self-contained result that states the chosen canonical
 Factory name, orchestrator kind, validation outcome, and whether the named
 Factory was installed. Refer to the named-Factory destination rather than
 printing a staging path. Redact credentials, secrets, raw provider commands,
