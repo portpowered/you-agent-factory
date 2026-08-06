@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { assertPackedExportTargets } from "../../scripts/package-export-validation.mjs";
+import { normalizeStagedMtimes } from "../../scripts/package-release-candidate.mjs";
 import {
   assertCandidateSetEvidence,
   FRONTEND_ONLY_CANDIDATE_SCOPE,
@@ -151,6 +152,7 @@ async function stagePackage({ packageSpec, version, stagingRoot }) {
     );
   }
   await writeFile(manifestPath, `${JSON.stringify(patched, null, 2)}\n`);
+  await normalizeStagedMtimes(stagedDirectory);
   return { manifest: patched, stagedDirectory };
 }
 
