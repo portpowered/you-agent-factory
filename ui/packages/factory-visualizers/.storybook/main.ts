@@ -44,6 +44,20 @@ const config: StorybookConfig = {
             ),
           },
           {
+            find: "@you-agent-factory/components/primitives",
+            replacement: path.resolve(
+              packageRoot,
+              "../components/src/primitives/index.ts",
+            ),
+          },
+          {
+            find: "@you-agent-factory/components/factory-emulator",
+            replacement: path.resolve(
+              packageRoot,
+              "../components/src/factory-emulator/index.ts",
+            ),
+          },
+          {
             find: "@you-agent-factory/components",
             replacement: path.resolve(
               packageRoot,

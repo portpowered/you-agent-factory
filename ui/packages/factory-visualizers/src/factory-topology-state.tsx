@@ -1,9 +1,5 @@
 import { Button, Text } from "@you-agent-factory/components/primitives";
-import {
-  Component,
-  type ErrorInfo,
-  type ReactNode,
-} from "react";
+import { Component, type ErrorInfo, type ReactNode } from "react";
 
 import type { FactoryTopologyReplayMessages } from "./factory-topology-replay";
 import {

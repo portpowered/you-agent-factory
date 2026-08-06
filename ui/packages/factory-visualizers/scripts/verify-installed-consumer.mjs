@@ -325,6 +325,7 @@ async function writeConsumer(root, tarballs) {
     devDependencies: {
       "@types/react": "19.2.2",
       "@types/react-dom": "19.2.2",
+      "@vitejs/plugin-react-swc": "4.1.0",
       typescript: "5.9.3",
       vite: "7.1.7",
     },
@@ -334,6 +335,8 @@ async function writeConsumer(root, tarballs) {
     "index.html":
       '<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Visualizer consumer</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>\n',
     "src/main.tsx": mainSource,
+    "vite.config.ts":
+      'import react from "@vitejs/plugin-react-swc";\nimport { defineConfig } from "vite";\n\nexport default defineConfig({ plugins: [react()] });\n',
     "src/styles.css":
       "* { box-sizing: border-box; } html, body { margin: 0; } main { display: grid; gap: 1rem; margin: auto; max-width: 72rem; padding: 1rem; } .factory-topology-replay { min-height: 18rem; }\n",
     "tsconfig.json": `${JSON.stringify(

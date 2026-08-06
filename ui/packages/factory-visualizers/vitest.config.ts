@@ -1,5 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import react from "@vitejs/plugin-react-swc";
 import { defineConfig } from "vitest/config";
 
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
@@ -7,6 +8,7 @@ const uiRoot = path.resolve(packageRoot, "../..");
 const uiNodeModules = path.join(uiRoot, "node_modules");
 
 export default defineConfig({
+  plugins: [react()],
   resolve: {
     alias: {
       "@testing-library/jest-dom/vitest": path.join(
@@ -20,6 +22,14 @@ export default defineConfig({
       "@you-agent-factory/components/graphs": path.resolve(
         packageRoot,
         "../components/src/graphs/index.ts",
+      ),
+      "@you-agent-factory/components/primitives": path.resolve(
+        packageRoot,
+        "../components/src/primitives/index.ts",
+      ),
+      "@you-agent-factory/components/factory-emulator": path.resolve(
+        packageRoot,
+        "../components/src/factory-emulator/index.ts",
       ),
       "@you-agent-factory/components": path.resolve(
         packageRoot,
