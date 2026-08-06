@@ -331,7 +331,7 @@ func TestProvideChatSessionsFactoryTargetCatalogServicePreservesCancelledContext
 // chatsessions.Service (via provideChatSessionsService), exactly as
 // pkg/wire/chat_sessions_composition_test.go already does -- this is the one
 // place both sibling services' /wire packages may legally be imported
-// together (see the Codebase Patterns note in this repo's progress.txt).
+// together (see docs/internal/development/codebase-patterns.md).
 //
 // No customer-reachable transport path (CLI/HTTP/MCP/ACP) exists yet for
 // Sequence, AdvanceStreamHead, or AcknowledgeAttachment -- they are brand
