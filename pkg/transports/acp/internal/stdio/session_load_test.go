@@ -170,7 +170,7 @@ func TestHandleSessionLoadAndResumeUnknownSessionReturnsBoundedRejection(t *test
 // proves a Server constructed without the Chat Sessions collaborator reports
 // a bounded failure rather than panicking.
 func TestHandleSessionLoadAndResumeWithoutCollaboratorsReportsBoundedFailure(t *testing.T) {
-	server := New(nil, nil, nil, nil, nil, nil, nil)
+	server := New(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionLoad, validSessionLoadParams)
 	if _, rpcErr := server.handleSessionLoad(context.Background(), env); rpcErr == nil {

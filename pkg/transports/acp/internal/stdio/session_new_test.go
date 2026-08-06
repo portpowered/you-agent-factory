@@ -692,14 +692,14 @@ func newTestServerWithFactoryTarget(
 	homeDir string,
 ) *Server {
 	resolveHomeDir := func() (string, error) { return homeDir, nil }
-	return New(nil, chatSessions, catalog, factoryTarget, nil, resolveHomeDir, nil)
+	return New(nil, chatSessions, catalog, factoryTarget, nil, resolveHomeDir, nil, nil)
 }
 
 // newTestServerWithResponseBridge is newTestServerWithFactoryTarget plus an
 // explicit acp.ResponseBridge collaborator, for tests that need to observe
 // dispatchFactoryInvocation actually reaching the injected response bridge
 // (rather than calling InvokeFactorySession directly, the responseBridge==nil
-// no-op path every other test in this package already exercises).
+// no-op path every other test in this package already exercises, nil).
 func newTestServerWithResponseBridge(
 	chatSessions *fakeChatSessionsService,
 	catalog *fakeFactoryTargetCatalogService,
@@ -708,7 +708,7 @@ func newTestServerWithResponseBridge(
 	responseBridge acp.ResponseBridge,
 ) *Server {
 	resolveHomeDir := func() (string, error) { return homeDir, nil }
-	return New(nil, chatSessions, catalog, factoryTarget, nil, resolveHomeDir, responseBridge)
+	return New(nil, chatSessions, catalog, factoryTarget, nil, resolveHomeDir, responseBridge, nil)
 }
 
 func numberIdentityEnvelope(t *testing.T, connID identity.ConnectionID, wireID int64, method string, params string) envelope.Envelope {
@@ -960,7 +960,7 @@ func TestServeDispatchesSessionNewOverRealJSONRPCFraming(t *testing.T) {
 func TestServeRespondsMethodNotFoundForEveryUnimplementedMethodStillExcludesSessionNew(t *testing.T) {
 	input := `{"jsonrpc":"2.0","id":9,"method":"session/new","params":{"cwd":"/work/project","mcpServers":[]}}` + "\n"
 	out := &bytes.Buffer{}
-	server := New(nil, nil, nil, nil, nil, nil, nil)
+	server := New(nil, nil, nil, nil, nil, nil, nil, nil)
 	if err := server.Serve(context.Background(), strings.NewReader(input), out); err != nil {
 		t.Fatalf("Serve() error = %v", err)
 	}
@@ -975,7 +975,7 @@ func TestServeRespondsMethodNotFoundForEveryUnimplementedMethodStillExcludesSess
 }
 
 func TestHandleSessionNewWithoutCollaboratorsReportsBoundedFailure(t *testing.T) {
-	server := New(nil, nil, nil, nil, nil, nil, nil)
+	server := New(nil, nil, nil, nil, nil, nil, nil, nil)
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionNew, validSessionNewParams)
 
 	result, rpcErr := server.handleSessionNew(context.Background(), env)
@@ -1053,7 +1053,7 @@ func TestClassifyDependencyFailureMapsContextCauseToRequestCancelled(t *testing.
 func TestHandleSessionNewResolveHomeDirFailureReturnsNoEffect(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{}
 	catalog := &fakeFactoryTargetCatalogService{result: defaultTestCatalogResult()}
-	server := New(nil, chatSessions, catalog, nil, nil, func() (string, error) { return "", errors.New("resolve home dir boom") }, nil)
+	server := New(nil, chatSessions, catalog, nil, nil, func() (string, error) { return "", errors.New("resolve home dir boom") }, nil, nil)
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionNew, validSessionNewParams)
 	result, rpcErr := server.handleSessionNew(context.Background(), env)
@@ -1074,7 +1074,7 @@ func TestHandleSessionNewResolveHomeDirFailureReturnsNoEffect(t *testing.T) {
 func TestHandleSessionNewBlankHomeDirFailureReturnsNoEffect(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{}
 	catalog := &fakeFactoryTargetCatalogService{result: defaultTestCatalogResult()}
-	server := New(nil, chatSessions, catalog, nil, nil, func() (string, error) { return "", nil }, nil)
+	server := New(nil, chatSessions, catalog, nil, nil, func() (string, error) { return "", nil }, nil, nil)
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionNew, validSessionNewParams)
 	result, rpcErr := server.handleSessionNew(context.Background(), env)

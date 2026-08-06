@@ -540,7 +540,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	targetExecutionService := provideACPServerFactoryTargetService(v79)
 	v80 := provideChatSessionsResponseBridge(chatsessionsService, targetExecutionService, eventsService, loggingLogger)
 	responseBridge := provideACPServerResponseBridge(v80)
-	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, targetExecutionService, eventsService, wireAcpServerResolveHomeDir, responseBridge)
+	wireRecorder, err := provideACPWireRecorder(reserver, wireRuntimeArtifactClock, wireAcpServerResolveHomeDir)
+	if err != nil {
+		return nil, err
+	}
+	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, targetExecutionService, eventsService, wireAcpServerResolveHomeDir, responseBridge, wireRecorder)
 	commandOperations := cli.CommandOperations{
 		ObserveCLI:                        cliObserver,
 		NamedFactoryCatalog:               v,
@@ -655,6 +659,7 @@ var servicesSet = wire4.NewSet(
 	provideChatSessionsResponseBridge,
 	provideACPServerResponseBridge,
 	provideACPServer,
+	provideACPWireRecorder,
 	provideOperatorConfigDecoder,
 	provideOperatorConfigEncoder,
 	provideSystemInitializationInspectPath,

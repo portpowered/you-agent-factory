@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformruntimeartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
+	"github.com/portpowered/infinite-you/pkg/platform/wiretranscript"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	chatsessionswire "github.com/portpowered/infinite-you/pkg/services/chat_sessions/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -153,8 +155,59 @@ func provideACPServer(
 	eventsService events.Service,
 	resolveHomeDir acpServerResolveHomeDir,
 	responseBridge acp.ResponseBridge,
+	wireRecorder acp.WireRecorder,
 ) acp.Server {
-	return acpwire.NewServer(logger, chatSessions, catalog, factoryTarget, eventsService, resolveHomeDir, responseBridge)
+	return acpwire.NewServer(
+		logger, chatSessions, catalog, factoryTarget, eventsService,
+		resolveHomeDir, responseBridge, wireRecorder,
+	)
+}
+
+// ACP wire recording is on by default. The point of the artifact is that a
+// customer who hits a problem already has the evidence; a recorder they must
+// know to enable before reproducing is one they will not have running when it
+// matters.
+const (
+	acpWireLogEnvironment    = "YOU_ACP_WIRE_LOG"
+	acpWireLogDirEnvironment = "YOU_ACP_WIRE_LOG_DIR"
+	acpWireLogDisabledValue  = "off"
+)
+
+// provideACPWireRecorder constructs the per-connection ACP wire transcript
+// opener.
+//
+// The environment is read here, in the composition root, rather than inside
+// the transport or any service. The recorder writes only to its own file
+// handle, so it structurally cannot reach the protocol stream that `you serve
+// acp` reserves on stdout.
+func provideACPWireRecorder(
+	paths platformruntimeartifact.Reserver,
+	clock runtimeArtifactClock,
+	resolveHomeDir acpServerResolveHomeDir,
+) (acp.WireRecorder, error) {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv(acpWireLogEnvironment)), acpWireLogDisabledValue) {
+		return nil, nil
+	}
+	opener, err := wiretranscript.NewOpener(paths)
+	if err != nil {
+		return nil, err
+	}
+	root := strings.TrimSpace(os.Getenv(acpWireLogDirEnvironment))
+	return func(connectionID string) (acp.WireTranscript, error) {
+		directory := root
+		if directory == "" {
+			home, homeErr := resolveHomeDir()
+			if homeErr != nil {
+				return nil, homeErr
+			}
+			directory = wiretranscript.Root(home)
+		}
+		return opener.Open(wiretranscript.OpeningRequest{
+			RootDirectory: directory,
+			ConnectionID:  connectionID,
+			StartTimeUTC:  clock(),
+		})
+	}, nil
 }
 
 // provideACPServerResponseBridge constructs the production response-bridge

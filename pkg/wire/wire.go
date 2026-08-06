@@ -73,6 +73,7 @@ var servicesSet = wire.NewSet(
 	provideChatSessionsResponseBridge,
 	provideACPServerResponseBridge,
 	provideACPServer,
+	provideACPWireRecorder,
 	provideOperatorConfigDecoder,
 	provideOperatorConfigEncoder,
 	provideSystemInitializationInspectPath,
