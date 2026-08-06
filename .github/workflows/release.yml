@@ -19,7 +19,6 @@ env:
   BUN_VERSION: 1.3.12
   GORELEASER_VERSION: v2.12.7
   NODE_VERSION: 24
-  NPM_VERSION: 11.15.0
 
 jobs:
   resolve-release-tag:
@@ -111,15 +110,33 @@ jobs:
           path: .artifacts/public-release-candidate/
           if-no-files-found: error
 
+  # npm's Trusted Publisher (OIDC) configuration for these packages pins the
+  # trusted workflow to development-package.yml (no Environment restriction
+  # is configured, so the workflow filename is the whole trust boundary).
+  # Publish npm packages by calling that workflow's publish-tagged-release
+  # job as a reusable workflow, so the OIDC token's job_workflow_ref claim
+  # says development-package.yml even though this run was started here.
+  publish-npm-packages:
+    name: Publish npm Packages (via Development Package)
+    needs:
+      - resolve-release-tag
+      - prepare-public-package-candidate
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/development-package.yml
+    with:
+      candidate-artifact-name: public-release-candidate-${{ github.run_id }}
+      expected-source-commit: ${{ github.event.workflow_run.head_sha }}
+
   publish-release:
     name: Publish GitHub Release
     needs:
       - resolve-release-tag
-      - prepare-public-package-candidate
+      - publish-npm-packages
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      id-token: write
     steps:
       - name: Check out release commit
         uses: actions/checkout@v4
@@ -144,31 +161,6 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Set up trusted-publishing-compatible Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Pin trusted-publishing-compatible npm
-        run: npm install --global npm@${{ env.NPM_VERSION }}
-
-      - name: Install dashboard dependencies
-        working-directory: ui
-        run: bun install --frozen-lockfile
-
-      - name: Download the preserved complete public package candidate
-        uses: actions/download-artifact@v4
-        with:
-          name: public-release-candidate-${{ github.run_id }}
-          path: .artifacts/public-release-candidate
-
-      - name: Reconcile, publish, and verify the complete reviewed public package set
-        run: >-
-          node scripts/public-release-package-publish.mjs
-          --candidate-directory .artifacts/public-release-candidate
-          --expected-source-commit "${{ github.event.workflow_run.head_sha }}"
-          --workspace-directory .
 
       - name: Publish GitHub release assets from the tagged commit
         env:
