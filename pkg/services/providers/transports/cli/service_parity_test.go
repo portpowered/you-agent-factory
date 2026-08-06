@@ -80,8 +80,8 @@ func TestConstructedService_ListInvokesProvidersRootListProviders(t *testing.T) 
 	}); err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if root.listProvidersCalls != 1 {
-		t.Fatalf("ListProviders calls = %d, want 1", root.listProvidersCalls)
+	if listCalls, _, _ := root.callCounts(); listCalls != 1 {
+		t.Fatalf("ListProviders calls = %d, want 1", listCalls)
 	}
 	if !strings.Contains(out.String(), "codex\tCodex\tselectable\tready\tnone") {
 		t.Fatalf("stdout = %q, want codex row", out.String())
@@ -288,8 +288,8 @@ func TestConstructedService_ShowInvokesProvidersRootGetProvider(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Show() error = %v", err)
 	}
-	if root.getProviderCalls != 1 {
-		t.Fatalf("GetProvider calls = %d, want 1", root.getProviderCalls)
+	if _, getCalls, _ := root.callCounts(); getCalls != 1 {
+		t.Fatalf("GetProvider calls = %d, want 1", getCalls)
 	}
 	got := out.String()
 	for _, want := range []string{

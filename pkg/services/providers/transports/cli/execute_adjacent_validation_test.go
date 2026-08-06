@@ -142,7 +142,7 @@ func TestProvidersCLIAdapter_ListAndShowDoNotInvokeExecute(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Show() = %v", err)
 	}
-	if root.executeCalls != 0 {
-		t.Fatalf("Execute calls = %d, want 0 for catalog-only adapter paths", root.executeCalls)
+	if _, _, executeCalls := root.callCounts(); executeCalls != 0 {
+		t.Fatalf("Execute calls = %d, want 0 for catalog-only adapter paths", executeCalls)
 	}
 }

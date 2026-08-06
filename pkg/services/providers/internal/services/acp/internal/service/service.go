@@ -250,7 +250,7 @@ type daemon struct {
 	initialized acpsdk.InitializeResponse
 	finished    chan error
 	tree        platformprocess.SubprocessTree
-	stderr      bytes.Buffer
+	stderr      syncBuffer
 
 	window cancelwindow.Window
 
@@ -1179,3 +1179,33 @@ func (*client) WaitForTerminalExit(context.Context, acpsdk.WaitForTerminalExitRe
 }
 
 var _ acpsdk.Client = (*client)(nil)
+
+// syncBuffer is a bytes.Buffer guarded for concurrent use.
+//
+// The daemon hands its stderr buffer to os/exec, which copies the child's
+// stderr on its own goroutine for the process' whole lifetime, while the
+// executing goroutine reads the accumulated text whenever it builds a failure
+// diagnostic. Those are genuinely concurrent, so the buffer cannot be a bare
+// bytes.Buffer.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func (b *syncBuffer) Reset() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.buf.Reset()
+}
