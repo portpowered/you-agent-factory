@@ -169,12 +169,34 @@ func rootACPNewSessionTarget(t *testing.T, server acp.Server, workingDirectory s
 	if err := server.Serve(context.Background(), strings.NewReader(request), &output); err != nil {
 		t.Fatalf("ACP Serve(session/new) error = %v", err)
 	}
+	// A connection emits session/update notifications alongside responses
+	// (session/new advertises its available commands), so select the
+	// correlated response frame rather than decoding the whole buffer.
 	var response struct {
+		Method string               `json:"method"`
 		Result json.RawMessage      `json:"result"`
 		Error  *acpsdk.RequestError `json:"error"`
 	}
-	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
-		t.Fatalf("decode session/new response %q: %v", output.String(), err)
+	found := false
+	for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		response = struct {
+			Method string               `json:"method"`
+			Result json.RawMessage      `json:"result"`
+			Error  *acpsdk.RequestError `json:"error"`
+		}{}
+		if err := json.Unmarshal([]byte(line), &response); err != nil {
+			t.Fatalf("decode session/new response %q: %v", line, err)
+		}
+		if response.Method == "" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("no session/new response frame in %q", output.String())
 	}
 	if response.Error != nil {
 		t.Fatalf("session/new response error = %+v", response.Error)

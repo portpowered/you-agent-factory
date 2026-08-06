@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
@@ -523,7 +524,7 @@ func semanticProgress(fragment responsestream.Event) (responseevents.Kind, respo
 	case "file_change":
 		return responseevents.KindFileChange, responseevents.PhaseUpdated, responseevents.FileChangePayload{Path: metadata["path"], Operation: metadata["operation"], Summary: fragment.Payload}
 	case "plan":
-		return responseevents.KindPlan, responseevents.PhaseUpdated, responseevents.PlanPayload{Summary: firstNonEmptyProgress(fragment.Payload, "ACP plan updated")}
+		return responseevents.KindPlan, responseevents.PhaseUpdated, planPayloadFromFragment(fragment, metadata)
 	case "usage":
 		return responseevents.KindUsage, responseevents.PhaseUpdated, responseevents.UsagePayload{TotalTokens: parseProgressInt64(metadata["used_tokens"])}
 	case "error":
@@ -651,4 +652,47 @@ func synthesizedEventID(ctx Context, fragment responsestream.Event) string {
 	)
 	sum := sha256.Sum256([]byte(material))
 	return "evt-legacy-" + hex.EncodeToString(sum[:8])
+}
+
+// planPayloadFromFragment recovers a plan's individual steps from the
+// provider's own reported entries.
+//
+// The ACP client already captures the entry list; keeping only a summary
+// string discarded it, so nothing downstream could render an actual plan no
+// matter what the provider reported. A provider that reports no usable entries
+// still yields the summary, which is the prior behavior.
+func planPayloadFromFragment(
+	fragment responsestream.Event,
+	metadata map[string]string,
+) responseevents.PlanPayload {
+	payload := responseevents.PlanPayload{
+		Summary: firstNonEmptyProgress(fragment.Payload, "ACP plan updated"),
+	}
+	raw := strings.TrimSpace(metadata["entries"])
+	if raw == "" {
+		return payload
+	}
+	var entries []struct {
+		Content string `json:"content"`
+		Title   string `json:"title"`
+		Status  string `json:"status"`
+	}
+	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
+		return payload
+	}
+	for index, entry := range entries {
+		description := strings.TrimSpace(entry.Content)
+		if description == "" {
+			description = strings.TrimSpace(entry.Title)
+		}
+		if description == "" {
+			continue
+		}
+		payload.Steps = append(payload.Steps, responseevents.PlanStep{
+			ID:          strconv.Itoa(index + 1),
+			Description: description,
+			Status:      entry.Status,
+		})
+	}
+	return payload
 }

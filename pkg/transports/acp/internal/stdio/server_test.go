@@ -253,17 +253,35 @@ func initializeLine(rawID string) string {
 // assertSingleResponseLine asserts out holds exactly one complete
 // newline-terminated JSON object -- no interleaving, no partial frame -- and
 // returns it decoded.
+// assertSingleResponseLine returns the one correlated response frame in out.
+//
+// A connection legitimately emits session/update notifications alongside
+// responses -- session/new advertises its available commands, for example --
+// so notifications are skipped rather than counted. Exactly one response must
+// remain, which is what these cells are actually asserting.
 func assertSingleResponseLine(t *testing.T, out *bytes.Buffer) rpcMessage {
 	t.Helper()
-	lines := nonEmptyResponseLines(t, out)
-	if len(lines) != 1 {
-		t.Fatalf("got %d response lines, want 1: %q", len(lines), out.Bytes())
+	var responses []rpcMessage
+	for _, line := range nonEmptyResponseLines(t, out) {
+		var frame struct {
+			Method string `json:"method"`
+		}
+		if err := json.Unmarshal(line, &frame); err != nil {
+			t.Fatalf("unmarshal frame: %v", err)
+		}
+		if frame.Method != "" {
+			continue
+		}
+		var resp rpcMessage
+		if err := json.Unmarshal(line, &resp); err != nil {
+			t.Fatalf("unmarshal response: %v", err)
+		}
+		responses = append(responses, resp)
 	}
-	var resp rpcMessage
-	if err := json.Unmarshal(lines[0], &resp); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
+	if len(responses) != 1 {
+		t.Fatalf("got %d response lines, want 1: %q", len(responses), out.Bytes())
 	}
-	return resp
+	return responses[0]
 }
 
 // nonEmptyResponseLines splits out's contents into its newline-delimited

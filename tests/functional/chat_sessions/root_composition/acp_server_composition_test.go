@@ -138,17 +138,34 @@ func assertSessionNewReturnsDefaultTarget(t *testing.T, server acp.Server, cwd, 
 	return string(created.SessionId)
 }
 
+// decodeRPCMessage returns the one correlated response frame in out.
+//
+// A connection legitimately interleaves session/update notifications with
+// responses -- session/new advertises its available commands -- so
+// notifications are skipped rather than mistaken for the response.
 func decodeRPCMessage(t *testing.T, out *bytes.Buffer) rpcMessage {
 	t.Helper()
-	line, err := bufio.NewReader(bytes.NewReader(out.Bytes())).ReadString('\n')
-	if err != nil {
-		t.Fatalf("read response line: %v", err)
+	reader := bufio.NewReader(bytes.NewReader(out.Bytes()))
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read response line: %v", err)
+		}
+		var frame struct {
+			Method string `json:"method"`
+		}
+		if err := json.Unmarshal([]byte(line), &frame); err != nil {
+			t.Fatalf("unmarshal response line %q: %v", line, err)
+		}
+		if frame.Method != "" {
+			continue
+		}
+		var msg rpcMessage
+		if err := json.Unmarshal([]byte(line), &msg); err != nil {
+			t.Fatalf("unmarshal response line %q: %v", line, err)
+		}
+		return msg
 	}
-	var msg rpcMessage
-	if err := json.Unmarshal([]byte(line), &msg); err != nil {
-		t.Fatalf("unmarshal response line %q: %v", line, err)
-	}
-	return msg
 }
 
 // seedEveryInstalledPackagedFactory materializes every published built-in

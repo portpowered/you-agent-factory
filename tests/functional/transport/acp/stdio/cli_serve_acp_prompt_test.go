@@ -265,13 +265,21 @@ func assertLineIsProtocolFrame(t *testing.T, line string) {
 	}
 }
 
+// readRPCResponse returns the next correlated response frame, skipping any
+// session/update notifications the connection emits alongside it. session/new
+// advertises its available commands, so a notification can legitimately
+// precede the response it belongs to.
 func readRPCResponse(t *testing.T, r *bufio.Reader) rpcFrame {
 	t.Helper()
-	frame := readRPCFrame(t, r)
-	if frame.Method != "" {
-		t.Fatalf("expected a response frame, got notification method %q", frame.Method)
+	for {
+		frame := readRPCFrame(t, r)
+		if frame.Method == "" {
+			return frame
+		}
+		if frame.Method != string(acpsdk.ClientMethodSessionUpdate) {
+			t.Fatalf("expected a response frame, got notification method %q", frame.Method)
+		}
 	}
-	return frame
 }
 
 func readRPCNotification(t *testing.T, r *bufio.Reader) rpcFrame {
