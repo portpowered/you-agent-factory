@@ -1,6 +1,6 @@
 # Packaged Factories
 
-YOU ships **fourteen** first-party Factories under the `@you/` namespace. They
+YOU ships **fifteen** first-party Factories under the `@you/` namespace. They
 are authored in `packages/packaged-factories/factories/`, published through the
 catalog manifest at `packages/packaged-factories/generated/manifest.json`, and
 materialized lazily under `~/.you-agent-factory/factories` (Windows:
@@ -15,6 +15,7 @@ boundary with `you run --named <name> --help` (shorthand: `you run -a <name>
 
 | Factory | Orchestrator | Description |
 |---------|--------------|-------------|
+| `@you/factory-builder` | Graph | Creates and installs one validated graph or JavaScript Factory from a customer request. Answers with usage guidance when the request is a question rather than a build request. |
 | `@you/classify` | Graph | Classifies a request by complexity and routes it to the configured small, medium, or large model lane. |
 | `@you/deep-research` | JavaScript | Breaks a research question into bounded specialist investigations and synthesizes their findings. |
 | `@you/full-flow` | Graph | Plans parallel implementation waves in isolated worktrees, merges completed tasks, and replans until the project is complete. |
@@ -119,7 +120,7 @@ you run --named @you/classify \
 
 ## Materialization and editing
 
-1. `you factory list` — see the fourteen catalog entries.
+1. `you factory list` — see the fifteen catalog entries.
 2. `you run --named @you/goal --help` — materializes `@you/goal` without running
    work when you only need the generated help / local copy.
 3. Edit the materialized Factory under

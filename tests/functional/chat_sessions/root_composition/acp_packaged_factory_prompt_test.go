@@ -213,3 +213,75 @@ func TestPackagedPlanParallelCompletesOneACPPromptTurn(t *testing.T) {
 		t.Fatalf("streamed assistant text = %q, want the merged result", text)
 	}
 }
+
+// builderGreetingACPRunner routes every turn to Factory Builder's help branch
+// and records whether the build workstation ever ran.
+type builderGreetingACPRunner struct {
+	mu     sync.Mutex
+	builds int
+}
+
+func (runner *builderGreetingACPRunner) Run(
+	_ context.Context,
+	request process.CommandRequest,
+) (process.CommandResult, error) {
+	prompt := string(request.Stdin)
+	switch {
+	case strings.Contains(prompt, "return exactly one lowercase label: `build` or `help`"):
+		return process.CommandResult{Stdout: support.CodexSuccessStdout("help")}, nil
+	case strings.Contains(prompt, "You are Factory Builder."):
+		runner.mu.Lock()
+		runner.builds++
+		runner.mu.Unlock()
+		return process.CommandResult{Stdout: support.CodexSuccessStdout("should not have built")}, nil
+	default:
+		return process.CommandResult{Stdout: support.CodexSuccessStdout(
+			"Factory Builder creates one reusable Factory from a description of what you want it to do.",
+		)}, nil
+	}
+}
+
+func (runner *builderGreetingACPRunner) buildCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.builds
+}
+
+// TestFactoryBuilderGreetsOnAVagueFirstACPTurn is problems.md 4.1 proven at the
+// surface where it actually bites: @you/factory-builder is the ACP default
+// target, so "hi" used to go straight into authoring and installing a Factory.
+func TestFactoryBuilderGreetsOnAVagueFirstACPTurn(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test driving root.BuildProcess through the you serve acp CLI command")
+	}
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	seedInstalledPackagedFactory(t, home, "@you/factory-builder")
+	support.SeedACPAgentProfile(t, home,
+		"factory:@you/factory-builder", []string{"factory:@you/factory-builder"})
+
+	runner := &builderGreetingACPRunner{}
+	cwd := t.TempDir()
+	stdin, stdout := startServeACPHarness(t, home, cwd, serviceedges.Edges{ProviderCommandRunner: runner})
+
+	sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)
+	promptResp, notifications := driveServeACPSessionPrompt(t, stdin, stdout, sessionID, "hi")
+	if promptResp.Error != nil {
+		t.Fatalf("session/prompt response error = %+v, want a successful result", promptResp.Error)
+	}
+	var decoded acpsdk.PromptResponse
+	if err := json.Unmarshal(promptResp.Result, &decoded); err != nil {
+		t.Fatalf("unmarshal PromptResponse: %v", err)
+	}
+	if decoded.StopReason != acpsdk.StopReasonEndTurn {
+		t.Fatalf("stopReason = %q, want %q", decoded.StopReason, acpsdk.StopReasonEndTurn)
+	}
+	if got := runner.buildCount(); got != 0 {
+		t.Fatalf("build workstation ran %d times for a greeting, want 0", got)
+	}
+	if text := agentMessageText(t, notifications); !strings.Contains(text, "reusable Factory") {
+		t.Fatalf("streamed assistant text = %q, want Factory Builder usage guidance", text)
+	}
+}

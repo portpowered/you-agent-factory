@@ -42,7 +42,10 @@ func TestFactoryBuilderPublishedInvocation(t *testing.T) {
 	if factoryBuilder.Name != factoryBuilderSlug || factoryBuilder.ID != "builtin-factory-builder" {
 		t.Fatalf("published Factory Builder identity = %#v", factoryBuilder)
 	}
-	assertFactoryBuilderParameter(t, factoryBuilder.InvocationSignature.Parameters, "request", "to", true, nil)
+	// request is deliberately optional: a bare invocation, and an ACP client's
+	// first vague turn, must reach the help route rather than fail with a
+	// missing-required-input diagnostic.
+	assertFactoryBuilderParameter(t, factoryBuilder.InvocationSignature.Parameters, "request", "to", false, nil)
 	assertFactoryBuilderParameter(t, factoryBuilder.InvocationSignature.Parameters, "factoryName", "factory-name", false, nil)
 	assertFactoryBuilderParameter(t, factoryBuilder.InvocationSignature.Parameters, "orchestrator", "orchestrator", false, []string{"graph", "javascript"})
 	assertFactoryBuilderParameter(t, factoryBuilder.InvocationSignature.Parameters, "builderProvider", "builder-provider", false, nil)

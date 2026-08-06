@@ -10,9 +10,13 @@ invocationReturn:
 invocationSignature:
   parameters:
     - name: request
-      description: Requested behavior for the reusable Factory to create.
+      description: Requested behavior for the reusable Factory to create. Omit it to receive usage guidance instead of building anything.
       externalName: to
-      required: true
+      # Optional so `you run --named @you/factory-builder` with no arguments,
+      # and an ACP client's first vague turn, both reach the help route rather
+      # than failing with a missing-required-input diagnostic.
+      defaultValues:
+        - ""
       bindings:
         - kind: POSITIONAL
           position: 1
@@ -72,6 +76,10 @@ workTypes:
     states:
       - name: init
         type: INITIAL
+      - name: build
+        type: PROCESSING
+      - name: help
+        type: PROCESSING
       - name: complete
         type: TERMINAL
       - name: failed
@@ -80,6 +88,18 @@ resources:
   - name: factory-builder-slot
     capacity: 1
 workers:
+  - name: builder-router
+    type: AGENT_WORKER
+    skipPermissions: true
+    modelProvider: ${builderProvider}
+    model: ${builderModel}
+    body: "Decide whether a message is an actual request to create a reusable Factory or a question about what this Factory does. Return exactly one lowercase label: build or help."
+  - name: builder-helper
+    type: AGENT_WORKER
+    skipPermissions: true
+    modelProvider: ${builderProvider}
+    model: ${builderModel}
+    body: "Answer with the authored Factory Builder usage guidance exactly as supplied, without inventing flags, commands, or capabilities."
   - name: factory-builder
     type: AGENT_WORKER
     skipPermissions: true
@@ -88,6 +108,40 @@ workers:
     agentTools:
       policy: ENABLED
 workstations:
+  - name: route-request
+    type: CLASSIFIER_WORKSTATION
+    worker: builder-router
+    workPropagation:
+      mode: PRESERVE_INPUT
+    inputs:
+      - workType: factory-build
+        state: init
+    classificationRoutes:
+      - label: build
+        outputs:
+          - workType: factory-build
+            state: build
+      - label: help
+        outputs:
+          - workType: factory-build
+            state: help
+    onFailure:
+      - workType: factory-build
+        state: failed
+    promptFile: prompts/route-request.md
+  - name: answer-help
+    type: AGENT_RUN
+    worker: builder-helper
+    inputs:
+      - workType: factory-build
+        state: help
+    outputs:
+      - workType: factory-build
+        state: complete
+    onFailure:
+      - workType: factory-build
+        state: failed
+    promptFile: prompts/help.md
   - name: build-factory
     type: AGENT_RUN
     worker: factory-builder
@@ -96,7 +150,7 @@ workstations:
         capacity: 1
     inputs:
       - workType: factory-build
-        state: init
+        state: build
     outputs:
       - workType: factory-build
         state: complete
