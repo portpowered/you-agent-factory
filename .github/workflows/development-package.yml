@@ -27,11 +27,15 @@ permissions:
 # publishing npm packages itself, so the OIDC token's job_workflow_ref
 # claim always says development-package.yml regardless of which workflow
 # triggered the run.
+#
+# Jobs here cannot gate on github.event_name to tell a direct push apart
+# from a workflow_call invocation: within a job defined by a called
+# reusable workflow, github.event_name reflects the CALLING workflow's
+# original trigger event (e.g. workflow_run for release.yml), not
+# workflow_call. Gate on whether the workflow_call-only
+# expected-source-commit input was actually provided instead.
 concurrency:
-  group: >-
-    development-package-${{ github.event_name }}-${{
-      github.event_name == 'workflow_call' && inputs.expected-source-commit || github.ref
-    }}
+  group: development-package-${{ inputs.expected-source-commit || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -42,7 +46,7 @@ env:
 jobs:
   prepare-main-candidate:
     name: Prepare Protected Main Candidate
-    if: github.event_name == 'push' && github.repository == 'portpowered/you-agent-factory'
+    if: ${{ inputs.expected-source-commit == '' && github.repository == 'portpowered/you-agent-factory' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -70,7 +74,7 @@ jobs:
 
   publish-main-candidate:
     name: Publish and Verify Protected Main Candidate
-    if: github.event_name == 'push' && github.repository == 'portpowered/you-agent-factory'
+    if: ${{ inputs.expected-source-commit == '' && github.repository == 'portpowered/you-agent-factory' }}
     needs: prepare-main-candidate
     environment: development-publishing
     runs-on: ubuntu-latest
@@ -99,7 +103,7 @@ jobs:
 
   publish-tagged-release:
     name: Publish Tagged Release Candidate
-    if: github.event_name == 'workflow_call'
+    if: ${{ inputs.expected-source-commit != '' }}
     environment: development-publishing
     runs-on: ubuntu-latest
     timeout-minutes: 25
