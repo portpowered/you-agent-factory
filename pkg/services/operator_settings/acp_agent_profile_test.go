@@ -65,10 +65,6 @@ func TestACPAgentProfileNormalizeRejectsInvalidShapes(t *testing.T) {
 			profile: ACPAgentProfile{DefaultTarget: "factory:@you/factory-builder", AllowedTargets: []string{"factory:@you/factory-builder", "local/software-auto"}},
 		},
 		{
-			name:    "empty allowlist",
-			profile: ACPAgentProfile{DefaultTarget: "factory:@you/factory-builder", AllowedTargets: nil},
-		},
-		{
 			name: "duplicate entries after normalization",
 			profile: ACPAgentProfile{
 				DefaultTarget:  "factory:@you/factory-builder",
@@ -130,20 +126,63 @@ func TestACPAgentProfileCloneDoesNotAliasAllowedTargets(t *testing.T) {
 	}
 }
 
-func TestDefaultACPAgentProfileIsFactoryBuilderOnly(t *testing.T) {
+func TestDefaultACPAgentProfileIsUnrestrictedWithFactoryBuilderDefault(t *testing.T) {
 	t.Parallel()
 
 	profile := DefaultACPAgentProfile()
 	if profile.DefaultTarget != DefaultACPAgentProfileTarget {
 		t.Fatalf("DefaultTarget = %q, want %q", profile.DefaultTarget, DefaultACPAgentProfileTarget)
 	}
-	if len(profile.AllowedTargets) != 1 || profile.AllowedTargets[0] != DefaultACPAgentProfileTarget {
-		t.Fatalf("AllowedTargets = %#v, want exactly [%q]", profile.AllowedTargets, DefaultACPAgentProfileTarget)
+	// An operator who authored no profile has restricted nothing, so every
+	// installed Factory stays selectable and Factory Builder is merely the
+	// target that starts current.
+	if !profile.IsUnrestricted() {
+		t.Fatalf("IsUnrestricted() = false, want true; AllowedTargets = %#v", profile.AllowedTargets)
 	}
 	if normalized, err := profile.Normalize(); err != nil {
 		t.Fatalf("DefaultACPAgentProfile() must already be normalized, got error = %v", err)
-	} else if normalized.DefaultTarget != profile.DefaultTarget {
+	} else if normalized.DefaultTarget != profile.DefaultTarget || !normalized.IsUnrestricted() {
 		t.Fatalf("DefaultACPAgentProfile() normalized to a different value: %#v", normalized)
+	}
+}
+
+func TestACPAgentProfileNormalizeTreatsEmptyAllowlistAsUnrestricted(t *testing.T) {
+	t.Parallel()
+
+	// Reaching Normalize with no entries means the operator omitted the
+	// restriction: the decode boundary rejects an explicitly authored empty
+	// array before it can get here.
+	profile := ACPAgentProfile{DefaultTarget: "factory:@you/goal"}
+	normalized, err := profile.Normalize()
+	if err != nil {
+		t.Fatalf("Normalize() error = %v, want nil", err)
+	}
+	if !normalized.IsUnrestricted() {
+		t.Fatalf("IsUnrestricted() = false, want true; AllowedTargets = %#v", normalized.AllowedTargets)
+	}
+	if normalized.DefaultTarget != "factory:@you/goal" {
+		t.Fatalf("DefaultTarget = %q, want %q", normalized.DefaultTarget, "factory:@you/goal")
+	}
+}
+
+func TestACPAgentProfileNormalizeKeepsAuthoredRestriction(t *testing.T) {
+	t.Parallel()
+
+	profile := ACPAgentProfile{
+		DefaultTarget:  "factory:@you/goal",
+		AllowedTargets: []string{"factory:@you/goal", "factory:@you/classify"},
+	}
+	normalized, err := profile.Normalize()
+	if err != nil {
+		t.Fatalf("Normalize() error = %v, want nil", err)
+	}
+	if normalized.IsUnrestricted() {
+		t.Fatal("IsUnrestricted() = true, want false for an authored allowlist")
+	}
+	if len(normalized.AllowedTargets) != 2 ||
+		normalized.AllowedTargets[0] != "factory:@you/goal" ||
+		normalized.AllowedTargets[1] != "factory:@you/classify" {
+		t.Fatalf("AllowedTargets = %#v, want authored order preserved", normalized.AllowedTargets)
 	}
 }
 

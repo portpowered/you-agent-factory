@@ -29,6 +29,46 @@ banner, progress text, help output, or error text. No prompt, credential,
 provider command, unsafe path, or private topology detail is written to
 either stream.
 
+## Choose Which Factory Answers A Prompt
+
+`session/new` returns one select configuration option, `target`, in the `model`
+category. ACP clients render it wherever they render a model picker, so
+selecting a Factory works the same way selecting a model does. Switching it
+mid-session uses `session/set_config_option` with `configId: "target"`, or the
+`/factory <target>` prompt command.
+
+By default every installed Factory is selectable, and `factory:@you/factory-builder`
+starts as the current target. On a home where `you serve acp` has run at least
+once, that means all packaged `@you/*` Factories appear in the picker.
+
+To restrict the list, author `workers.acp.agentProfile` in the operator config:
+
+```json
+{
+  "workers": {
+    "acp": {
+      "agentProfile": {
+        "defaultTarget": "factory:@you/goal",
+        "allowedTargets": ["factory:@you/goal", "factory:@you/classify"]
+      }
+    }
+  }
+}
+```
+
+| `allowedTargets` | Meaning |
+|------------------|---------|
+| Omitted | Unrestricted. Every installed Factory is selectable. |
+| A non-empty list | Only those targets are selectable, in the authored order. `defaultTarget` must be one of them. |
+| `[]` | Rejected. Omit the property instead; an empty list is treated as a malformed restriction rather than as "no restriction". |
+
+Only Factories that are actually installed appear. A packaged Factory that has
+been listed but never materialized to disk is not selectable. Targets are
+unversioned `factory:<ref>` references, and unrestricted mode offers scoped
+names such as `@you/goal`; a locally authored Factory whose name cannot be
+expressed as a `factory:` reference is skipped rather than offered and then
+rejected.
+
 ## Shutdown Behavior
 
 | Trigger | Outcome |

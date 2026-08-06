@@ -5,7 +5,6 @@ import (
 	"errors"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"sort"
 	"strings"
 
@@ -122,9 +121,29 @@ func (s *Service) resolveFactoryTargetCatalog(
 		return chatsessions.ResolveFactoryTargetCatalogResult{}, err
 	}
 
+	choicesByValue := allowedInstalledChoices(profile, installed)
+	if len(choicesByValue) == 0 {
+		return chatsessions.ResolveFactoryTargetCatalogResult{}, &chatsessions.FactoryTargetCatalogError{
+			Err: chatsessions.ErrFactoryTargetCatalogEmpty,
+		}
+	}
+
 	current := req.CurrentTarget
-	if current == "" {
+	callerSuppliedTarget := current != ""
+	if !callerSuppliedTarget {
 		current = profile.DefaultTarget
+		// An unrestricted profile carries the built-in default target, which
+		// the operator never chose and may not have installed (a home where
+		// initialization never ran, or where Factory Builder was deleted).
+		// Falling back to the first selectable choice keeps session/new
+		// working there. A caller-supplied target, and an operator who
+		// authored an allowlist, both named a target deliberately and still
+		// get the strict not-installed error below.
+		if profile.IsUnrestricted() {
+			if _, ok := choicesByValue[current]; !ok {
+				current = firstFactoryTargetValue(choicesByValue)
+			}
+		}
 	}
 	if !isWellFormedFactoryTargetReference(current) {
 		// current has not passed lexical validation: it may be arbitrary
@@ -135,13 +154,6 @@ func (s *Service) resolveFactoryTargetCatalog(
 		}
 	}
 
-	choicesByValue := allowedInstalledChoices(profile.AllowedTargets, installed)
-	if len(choicesByValue) == 0 {
-		return chatsessions.ResolveFactoryTargetCatalogResult{}, &chatsessions.FactoryTargetCatalogError{
-			Err: chatsessions.ErrFactoryTargetCatalogEmpty,
-		}
-	}
-
 	bareName := strings.TrimPrefix(current, operatorsettings.ACPFactoryTargetNamespace)
 	if _, installedOK := installed[bareName]; !installedOK {
 		return chatsessions.ResolveFactoryTargetCatalogResult{}, &chatsessions.FactoryTargetCatalogError{
@@ -149,7 +161,11 @@ func (s *Service) resolveFactoryTargetCatalog(
 			Err:    chatsessions.ErrFactoryTargetNotInstalled,
 		}
 	}
-	if !slices.Contains(profile.AllowedTargets, current) {
+	// Membership in the projected catalog, not in the raw allowlist: this is
+	// the same check for a restricted profile, and correct for an unrestricted
+	// one. ErrFactoryTargetNotAllowed therefore stays reachable only when a
+	// restriction was actually authored.
+	if _, allowedOK := choicesByValue[current]; !allowedOK {
 		return chatsessions.ResolveFactoryTargetCatalogResult{}, &chatsessions.FactoryTargetCatalogError{
 			Target: current,
 			Err:    chatsessions.ErrFactoryTargetNotAllowed,
@@ -197,13 +213,38 @@ func (s *Service) resolveInstalledFactories(
 	return installed, nil
 }
 
-// allowedInstalledChoices intersects the profile's allowlist with the
-// installed catalog, deduplicating on target value and preserving each
-// installed entry's display name.
+// allowedInstalledChoices projects the selectable FACTORY choices for a
+// profile, deduplicating on target value and preserving each installed entry's
+// display name.
+//
+// An unrestricted profile (no authored allowlist) offers every installed
+// Factory whose canonical name can be expressed as a well-formed factory:
+// target reference. That filter is load-bearing rather than defensive: the
+// installed catalog also holds project-local and operator-authored Factories
+// with arbitrary names, and session/set_config_option revalidates whatever the
+// client picks through the same grammar. Emitting an inexpressible name would
+// produce a picker entry the client can select but the server must then
+// reject.
 func allowedInstalledChoices(
-	allowedTargets []string,
+	profile operatorsettings.ACPAgentProfile,
 	installed map[string]factorydefinitions.EffectiveFactoryCatalogEntry,
 ) map[string]chatsessions.FactoryTargetCatalogChoice {
+	if profile.IsUnrestricted() {
+		choicesByValue := make(map[string]chatsessions.FactoryTargetCatalogChoice, len(installed))
+		for name, entry := range installed {
+			target := operatorsettings.ACPFactoryTargetNamespace + name
+			if !isWellFormedFactoryTargetReference(target) {
+				continue
+			}
+			choicesByValue[target] = chatsessions.FactoryTargetCatalogChoice{
+				Value: target,
+				Name:  factoryDisplayName(entry),
+			}
+		}
+		return choicesByValue
+	}
+
+	allowedTargets := profile.AllowedTargets
 	choicesByValue := make(map[string]chatsessions.FactoryTargetCatalogChoice, len(allowedTargets))
 	for _, target := range allowedTargets {
 		if _, exists := choicesByValue[target]; exists {
@@ -271,6 +312,22 @@ func (s *Service) validateWorkingRootCompatibility(
 		}
 	}
 	return nil
+}
+
+// firstFactoryTargetValue returns the lexically smallest target value in the
+// projected catalog, independent of map iteration order. Callers use it to
+// pick a deterministic current target when the profile's default is not
+// selectable.
+func firstFactoryTargetValue(
+	choicesByValue map[string]chatsessions.FactoryTargetCatalogChoice,
+) string {
+	first := ""
+	for value := range choicesByValue {
+		if first == "" || value < first {
+			first = value
+		}
+	}
+	return first
 }
 
 // orderedFactoryTargetChoices returns current first, followed by every other

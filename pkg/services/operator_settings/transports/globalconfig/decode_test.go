@@ -165,6 +165,42 @@ func TestEncode_RoundTripsACPAgentProfilePreservingOrderAndNamespace(t *testing.
 	}
 }
 
+func TestEncode_RoundTripsUnrestrictedACPAgentProfileByOmittingAllowedTargets(t *testing.T) {
+	// An unrestricted profile must encode without an allowedTargets key at
+	// all. Emitting an empty array instead would produce a document that
+	// Decode rejects, so the profile would not survive its own round trip.
+	want := operatorsettings.Config{
+		Workers: operatorsettings.WorkerSettings{ACP: operatorsettings.ACPSettings{
+			AgentProfile: &operatorsettings.ACPAgentProfile{
+				DefaultTarget: "factory:@you/goal",
+			},
+		}},
+	}
+
+	payload, err := globalconfig.Encode(want)
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+	if strings.Contains(string(payload), `"allowedTargets"`) {
+		t.Fatalf("Encode() payload = %s, want no allowedTargets key for an unrestricted profile", payload)
+	}
+
+	got, err := globalconfig.Decode(payload)
+	if err != nil {
+		t.Fatalf("Decode(Encode()) error = %v", err)
+	}
+	if got.Workers.ACP.AgentProfile == nil {
+		t.Fatal("round trip AgentProfile = nil, want authored profile preserved")
+	}
+	if !got.Workers.ACP.AgentProfile.IsUnrestricted() {
+		t.Fatalf("round trip AgentProfile = %#v, want unrestricted", *got.Workers.ACP.AgentProfile)
+	}
+	if got.Workers.ACP.AgentProfile.DefaultTarget != "factory:@you/goal" {
+		t.Fatalf("round trip DefaultTarget = %q, want %q",
+			got.Workers.ACP.AgentProfile.DefaultTarget, "factory:@you/goal")
+	}
+}
+
 func TestEncode_OmitsAgentProfileWhenAbsent(t *testing.T) {
 	payload, err := globalconfig.Encode(operatorsettings.Config{
 		Defaults: operatorsettings.Defaults{WorkerModelProvider: "CODEX"},
@@ -191,9 +227,12 @@ func TestDecode_RejectsMalformedStoredACPAgentProfile(t *testing.T) {
 		want string
 	}{
 		{
+			// An authored empty array must stay a rejection rather than
+			// silently widening into "every installed Factory is selectable",
+			// which is how an omitted allowedTargets is read.
 			name: "empty allowlist",
 			json: `{"workers":{"acp":{"agentProfile":{"defaultTarget":"factory:@you/factory-builder","allowedTargets":[]}}}}`,
-			want: "allowedTargets must not be empty",
+			want: "allowedTargets must not be empty; omit it to leave the profile unrestricted",
 		},
 		{
 			name: "default outside factory namespace",

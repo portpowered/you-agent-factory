@@ -90,8 +90,22 @@ func mapConfig(generated factoryapi.GlobalConfig) (operatorsettings.Config, erro
 	}
 	if generated.Workers != nil && generated.Workers.Acp != nil && generated.Workers.Acp.AgentProfile != nil {
 		profile := operatorsettings.ACPAgentProfile{
-			DefaultTarget:  generated.Workers.Acp.AgentProfile.DefaultTarget,
-			AllowedTargets: append([]string(nil), generated.Workers.Acp.AgentProfile.AllowedTargets...),
+			DefaultTarget: generated.Workers.Acp.AgentProfile.DefaultTarget,
+		}
+		// An omitted allowedTargets means unrestricted, so it stays nil here.
+		// An authored-but-empty array must be rejected rather than folded into
+		// that same nil: silently widening "allow nothing" into "allow every
+		// installed Factory" is the opposite of what the operator wrote. This
+		// boundary is the only place the two shapes are still
+		// distinguishable, because appending an empty slice onto a nil slice
+		// yields nil.
+		if allowed := generated.Workers.Acp.AgentProfile.AllowedTargets; allowed != nil {
+			if len(*allowed) == 0 {
+				return operatorsettings.Config{}, fmt.Errorf(
+					"workers.acp.agentProfile.allowedTargets must not be empty; omit it to leave the profile unrestricted",
+				)
+			}
+			profile.AllowedTargets = append([]string(nil), *allowed...)
 		}
 		config.Workers.ACP.AgentProfile = &profile
 	}
@@ -195,8 +209,14 @@ func Encode(config operatorsettings.Config) ([]byte, error) {
 		}
 		if config.Workers.ACP.AgentProfile != nil {
 			acp.AgentProfile = &factoryapi.GlobalConfigACPAgentProfile{
-				DefaultTarget:  config.Workers.ACP.AgentProfile.DefaultTarget,
-				AllowedTargets: append([]string(nil), config.Workers.ACP.AgentProfile.AllowedTargets...),
+				DefaultTarget: config.Workers.ACP.AgentProfile.DefaultTarget,
+			}
+			// Omit allowedTargets entirely for an unrestricted profile, so the
+			// encoded document round-trips back to unrestricted rather than to
+			// an empty array the schema would reject.
+			if !config.Workers.ACP.AgentProfile.IsUnrestricted() {
+				allowed := append([]string(nil), config.Workers.ACP.AgentProfile.AllowedTargets...)
+				acp.AgentProfile.AllowedTargets = &allowed
 			}
 		}
 		generated.Workers = &factoryapi.GlobalConfigWorkers{Acp: acp}

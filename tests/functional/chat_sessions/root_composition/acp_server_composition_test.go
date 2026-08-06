@@ -150,3 +150,223 @@ func decodeRPCMessage(t *testing.T, out *bytes.Buffer) rpcMessage {
 	}
 	return msg
 }
+
+// seedEveryInstalledPackagedFactory materializes every published built-in
+// packaged Factory under home's global named-Factory root, reproducing the
+// state a real `you serve acp` process reaches after system initialization
+// runs. It returns the installed names.
+func seedEveryInstalledPackagedFactory(t *testing.T, home string) []string {
+	t.Helper()
+
+	published, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	if err != nil {
+		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
+	}
+	names := published.Names()
+	if len(names) == 0 {
+		t.Fatal("published packaged Factory catalog is empty")
+	}
+	for _, name := range names {
+		seedInstalledPackagedFactory(t, home, name)
+	}
+	return names
+}
+
+// factoryTargetSelectOption drives one real session/new call and returns the
+// created session id together with the Factory target select option, so a
+// caller can assert over the full choice list rather than only the current
+// value.
+func factoryTargetSelectOption(
+	t *testing.T,
+	server acp.Server,
+	cwd string,
+) (string, acpsdk.SessionConfigOptionSelect) {
+	t.Helper()
+
+	var out bytes.Buffer
+	newSessionLine := fmt.Sprintf(
+		`{"jsonrpc":"2.0","id":1,"method":"session/new","params":{"cwd":%q,"mcpServers":[]}}`+"\n",
+		cwd,
+	)
+	if err := server.Serve(context.Background(), strings.NewReader(newSessionLine), &out); err != nil {
+		t.Fatalf("Serve(session/new) error = %v", err)
+	}
+
+	resp := decodeRPCMessage(t, &out)
+	if resp.Error != nil {
+		t.Fatalf("session/new response error = %+v, want a successful result", resp.Error)
+	}
+	var created acpsdk.NewSessionResponse
+	if err := json.Unmarshal(resp.Result, &created); err != nil {
+		t.Fatalf("unmarshal session/new result: %v", err)
+	}
+	if len(created.ConfigOptions) != 1 || created.ConfigOptions[0].Select == nil {
+		t.Fatalf("session/new configOptions = %+v, want exactly one Factory target picker option", created.ConfigOptions)
+	}
+	return string(created.SessionId), *created.ConfigOptions[0].Select
+}
+
+// selectOptionChoices returns the flat choice list the Factory target option
+// always uses. The ACP select option models its choices as a
+// grouped/ungrouped union; this transport only ever emits the ungrouped
+// variant.
+func selectOptionChoices(t *testing.T, option acpsdk.SessionConfigOptionSelect) []acpsdk.SessionConfigSelectOption {
+	t.Helper()
+	if option.Options.Ungrouped == nil {
+		t.Fatalf("Factory target option choices = %+v, want the ungrouped variant", option.Options)
+	}
+	return *option.Options.Ungrouped
+}
+
+func selectOptionValues(t *testing.T, option acpsdk.SessionConfigOptionSelect) []string {
+	t.Helper()
+	choices := selectOptionChoices(t, option)
+	values := make([]string, 0, len(choices))
+	for _, choice := range choices {
+		values = append(values, string(choice.Value))
+	}
+	return values
+}
+
+// TestACPServerWithNoAuthoredAgentProfileOffersEveryInstalledFactory proves the
+// customer-visible model-enumeration behavior: an operator who never authored
+// workers.acp.agentProfile sees every installed Factory in the ACP client's
+// picker, not just Factory Builder.
+func TestACPServerWithNoAuthoredAgentProfileOffersEveryInstalledFactory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	installed := seedEveryInstalledPackagedFactory(t, home)
+	// Deliberately no SeedACPAgentProfile call: an absent profile must mean
+	// "unrestricted", which is the whole point of this cell.
+
+	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("root.BuildProcess() error = %v", err)
+	}
+	server := process.ACPServer()
+	if server == nil {
+		t.Fatal("Process.ACPServer() returned a nil acp.Server")
+	}
+
+	sessionID, option := factoryTargetSelectOption(t, server, t.TempDir())
+	if sessionID == "" {
+		t.Fatal("session/new returned a blank sessionId")
+	}
+
+	choices := selectOptionChoices(t, option)
+	if len(choices) != len(installed) {
+		t.Fatalf("Factory target choices = %d (%v), want one per installed Factory (%d)",
+			len(choices), selectOptionValues(t, option), len(installed))
+	}
+	if string(option.CurrentValue) != "factory:@you/factory-builder" {
+		t.Fatalf("currentValue = %q, want factory:@you/factory-builder to start current",
+			option.CurrentValue)
+	}
+
+	got := make(map[string]bool, len(choices))
+	for _, choice := range choices {
+		got[string(choice.Value)] = true
+		if strings.TrimSpace(choice.Name) == "" {
+			t.Fatalf("choice %q has a blank display name", choice.Value)
+		}
+	}
+	for _, name := range installed {
+		if !got["factory:"+name] {
+			t.Fatalf("installed Factory %q is missing from the ACP picker; got %v",
+				name, selectOptionValues(t, option))
+		}
+	}
+	// The four packaged Factories problems.md calls out by name must all be
+	// reachable, since that is the reported defect.
+	for _, required := range []string{
+		"factory:@you/plan-parallel",
+		"factory:@you/classify",
+		"factory:@you/goal",
+		"factory:@you/loop",
+	} {
+		if !got[required] {
+			t.Fatalf("%q is not selectable; got %v", required, selectOptionValues(t, option))
+		}
+	}
+}
+
+// TestACPServerAuthoredAllowedTargetsStillRestrictsCatalog proves
+// allowedTargets remains a real opt-in restriction after the default became
+// unrestricted.
+func TestACPServerAuthoredAllowedTargetsStillRestrictsCatalog(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	seedEveryInstalledPackagedFactory(t, home)
+	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{
+		"factory:@you/goal",
+		"factory:@you/classify",
+	})
+
+	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("root.BuildProcess() error = %v", err)
+	}
+
+	_, option := factoryTargetSelectOption(t, process.ACPServer(), t.TempDir())
+	want := []string{"factory:@you/goal", "factory:@you/classify"}
+	got := selectOptionValues(t, option)
+	if len(got) != len(want) {
+		t.Fatalf("Factory target choices = %v, want exactly %v", got, want)
+	}
+	if string(option.CurrentValue) != "factory:@you/goal" {
+		t.Fatalf("currentValue = %q, want factory:@you/goal", option.CurrentValue)
+	}
+}
+
+// TestACPServerSetConfigOptionSelectsAnotherInstalledFactory proves an
+// unrestricted operator can actually switch the session onto a different
+// installed Factory, not merely see it listed.
+func TestACPServerSetConfigOptionSelectsAnotherInstalledFactory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	seedEveryInstalledPackagedFactory(t, home)
+
+	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("root.BuildProcess() error = %v", err)
+	}
+	server := process.ACPServer()
+
+	cwd := t.TempDir()
+	sessionID, option := factoryTargetSelectOption(t, server, cwd)
+	if string(option.CurrentValue) == "factory:@you/plan-parallel" {
+		t.Fatal("precondition: plan-parallel must not already be current")
+	}
+
+	var out bytes.Buffer
+	line := fmt.Sprintf(
+		`{"jsonrpc":"2.0","id":1,"method":"session/set_config_option","params":`+
+			`{"sessionId":%q,"configId":"target","value":"factory:@you/plan-parallel"}}`+"\n",
+		sessionID,
+	)
+	if err := server.Serve(context.Background(), strings.NewReader(line), &out); err != nil {
+		t.Fatalf("Serve(session/set_config_option) error = %v", err)
+	}
+
+	resp := decodeRPCMessage(t, &out)
+	if resp.Error != nil {
+		t.Fatalf("session/set_config_option error = %+v, want success", resp.Error)
+	}
+	var updated acpsdk.SetSessionConfigOptionResponse
+	if err := json.Unmarshal(resp.Result, &updated); err != nil {
+		t.Fatalf("unmarshal set_config_option result: %v", err)
+	}
+	if len(updated.ConfigOptions) != 1 || updated.ConfigOptions[0].Select == nil {
+		t.Fatalf("configOptions = %+v, want the refreshed Factory target option", updated.ConfigOptions)
+	}
+	if string(updated.ConfigOptions[0].Select.CurrentValue) != "factory:@you/plan-parallel" {
+		t.Fatalf("currentValue = %q, want factory:@you/plan-parallel",
+			updated.ConfigOptions[0].Select.CurrentValue)
+	}
+}
