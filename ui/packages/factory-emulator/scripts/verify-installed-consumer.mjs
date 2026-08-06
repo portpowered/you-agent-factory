@@ -1,12 +1,5 @@
 import { execFile } from "node:child_process";
-import {
-  access,
-  mkdir,
-  mkdtemp,
-  readFile,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -22,7 +15,6 @@ const packageRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
-const clientRoot = path.resolve(packageRoot, "../client");
 
 async function npmCommand() {
   if (process.platform !== "win32") return { args: [], executable: "npm" };
@@ -40,28 +32,6 @@ async function npmCommand() {
     ],
     executable: process.execPath,
   };
-}
-
-async function prepareClientPackage(npm) {
-  const clientNodeModules = path.join(clientRoot, "node_modules");
-  try {
-    await access(path.join(clientNodeModules, "typescript", "package.json"));
-    return undefined;
-  } catch {
-    await execFileAsync(
-      npm.executable,
-      [
-        ...npm.args,
-        "install",
-        "--ignore-scripts",
-        "--no-audit",
-        "--no-fund",
-        "--package-lock=false",
-      ],
-      { cwd: clientRoot, maxBuffer: 10 * 1024 * 1024 },
-    );
-    return clientNodeModules;
-  }
 }
 
 const typeConsumer = `import type { FactoryDefinition, FactoryEvent } from "@you-agent-factory/client";
@@ -332,7 +302,6 @@ async function writeConsumer(consumerRoot, clientTarball, emulatorTarball) {
 const temporaryRoot = await mkdtemp(
   path.join(tmpdir(), "factory-emulator-consumer-"),
 );
-let preparedClientNodeModules;
 try {
   const clientPackRoot = path.join(temporaryRoot, "client-pack");
   const emulatorPackRoot = path.join(temporaryRoot, "emulator-pack");
@@ -343,7 +312,6 @@ try {
     mkdir(consumerRoot),
   ]);
   const npm = await npmCommand();
-  preparedClientNodeModules = await prepareClientPackage(npm);
   const client = await packClient(clientPackRoot);
   const emulator = await packEmulator(emulatorPackRoot);
   await writeConsumer(consumerRoot, client.tarballPath, emulator.tarballPath);
@@ -373,7 +341,4 @@ try {
   process.stdout.write(`[factory-emulator-consumer] ${stdout}`);
 } finally {
   await rm(temporaryRoot, { force: true, recursive: true });
-  if (preparedClientNodeModules !== undefined) {
-    await rm(preparedClientNodeModules, { force: true, recursive: true });
-  }
 }
