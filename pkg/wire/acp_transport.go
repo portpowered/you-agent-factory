@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformruntimeartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
@@ -188,7 +189,7 @@ func provideACPWireRecorder(
 	if strings.EqualFold(strings.TrimSpace(os.Getenv(acpWireLogEnvironment)), acpWireLogDisabledValue) {
 		return nil, nil
 	}
-	opener, err := wiretranscript.NewOpener(paths)
+	opener, err := wiretranscript.NewOpener(paths, wireTranscriptClock(clock))
 	if err != nil {
 		return nil, err
 	}
@@ -245,3 +246,10 @@ func provideChatSessionsResponseBridge(
 ) *chatsessionswire.ResponseBridge {
 	return chatsessionswire.NewResponseBridge(chatSessions, factoryTarget, eventsService, logger)
 }
+
+// wireTranscriptClock adapts the injected runtime-artifact clock to the
+// transcript package's Clock, so the transcript never reaches for time.Now
+// itself.
+type wireTranscriptClock runtimeArtifactClock
+
+func (c wireTranscriptClock) Now() time.Time { return c() }

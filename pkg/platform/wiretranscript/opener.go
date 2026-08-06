@@ -72,14 +72,22 @@ type OpeningRequest struct {
 }
 
 // Opener reserves transcript paths and creates rolling writers.
-type Opener struct{ paths platformartifact.Reserver }
+type Opener struct {
+	paths platformartifact.Reserver
+	clock Clock
+}
 
-// NewOpener returns an Opener over a runtime-artifact path reserver.
-func NewOpener(paths platformartifact.Reserver) (*Opener, error) {
+// NewOpener returns an Opener over a runtime-artifact path reserver and the
+// caller's clock. The clock is required rather than defaulted so this package
+// holds no hidden time source of its own.
+func NewOpener(paths platformartifact.Reserver, clock Clock) (*Opener, error) {
 	if paths == nil {
 		return nil, fmt.Errorf("wire transcript path reserver is required")
 	}
-	return &Opener{paths: paths}, nil
+	if clock == nil {
+		return nil, fmt.Errorf("wire transcript clock is required")
+	}
+	return &Opener{paths: paths, clock: clock}, nil
 }
 
 // Sink is one open transcript file.
@@ -110,7 +118,7 @@ func (opener *Opener) Open(request OpeningRequest) (*Sink, error) {
 	}
 	start := request.StartTimeUTC
 	if start.IsZero() {
-		start = time.Now()
+		start = opener.clock.Now()
 	}
 	start = start.UTC()
 
@@ -127,5 +135,5 @@ func (opener *Opener) Open(request OpeningRequest) (*Sink, error) {
 		MaxAge:     config.MaxAgeDays,
 		Compress:   config.Compress,
 	}
-	return &Sink{Writer: NewWriter(rolling, nil), path: path}, nil
+	return &Sink{Writer: NewWriter(rolling, opener.clock), path: path}, nil
 }

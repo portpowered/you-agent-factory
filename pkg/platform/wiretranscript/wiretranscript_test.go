@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/wiretranscript"
 )
@@ -34,7 +35,7 @@ func TestRecordedFramesAreVerbatim(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	writer := wiretranscript.NewWriter(&out, nil)
+	writer := wiretranscript.NewWriter(&out, testClock{})
 	for _, frame := range frames {
 		if err := writer.Record("c1", wiretranscript.PeerAgent, wiretranscript.DirectionIn,
 			wiretranscript.StreamStdout, []byte(frame+"\n")); err != nil {
@@ -63,7 +64,7 @@ func TestSequenceIsGapFreeUnderConcurrentWriters(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
-	writer := wiretranscript.NewWriter(&out, nil)
+	writer := wiretranscript.NewWriter(&out, testClock{})
 
 	const writers, perWriter = 8, 50
 	var group sync.WaitGroup
@@ -102,7 +103,7 @@ func TestMalformedLineIsRecordedNotDropped(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
-	writer := wiretranscript.NewWriter(&out, nil)
+	writer := wiretranscript.NewWriter(&out, testClock{})
 	if err := writer.Record("c1", wiretranscript.PeerAgent, wiretranscript.DirectionIn,
 		wiretranscript.StreamStdout, []byte("{not json\n")); err != nil {
 		t.Fatalf("Record() error = %v", err)
@@ -133,7 +134,7 @@ func TestOversizedFrameIsTruncatedNotDropped(t *testing.T) {
 
 	huge := `{"blob":"` + strings.Repeat("x", wiretranscript.MaxFrameBytes+2048) + `"}`
 	var out bytes.Buffer
-	writer := wiretranscript.NewWriter(&out, nil)
+	writer := wiretranscript.NewWriter(&out, testClock{})
 	if err := writer.Record("c1", wiretranscript.PeerAgent, wiretranscript.DirectionIn,
 		wiretranscript.StreamStdout, []byte(huge+"\n")); err != nil {
 		t.Fatalf("Record() error = %v", err)
@@ -164,7 +165,7 @@ func TestTeeReaderPassesBytesThroughUnchanged(t *testing.T) {
 
 	payload := `{"a":1}` + "\n" + `{"b":2}` + "\n" + `{"partial":3}`
 	var out bytes.Buffer
-	writer := wiretranscript.NewWriter(&out, nil)
+	writer := wiretranscript.NewWriter(&out, testClock{})
 
 	reader := wiretranscript.TeeReader(strings.NewReader(payload), writer,
 		"c1", wiretranscript.PeerClient, wiretranscript.StreamStdin)
@@ -196,7 +197,7 @@ func TestTeeWriterPassesBytesThroughUnchanged(t *testing.T) {
 
 	var sink bytes.Buffer
 	var out bytes.Buffer
-	writer := wiretranscript.NewWriter(&out, nil)
+	writer := wiretranscript.NewWriter(&out, testClock{})
 	tee := wiretranscript.TeeWriter(&sink, writer, "c1", wiretranscript.PeerAgent, wiretranscript.StreamStdout)
 
 	frames := []string{`{"id":1,"result":{}}` + "\n", `{"method":"session/update"}` + "\n"}
@@ -228,7 +229,7 @@ func TestTeeWriterPassesBytesThroughUnchanged(t *testing.T) {
 func TestNilRecorderIsATotalNoOp(t *testing.T) {
 	t.Parallel()
 
-	if got := wiretranscript.NewWriter(nil, nil); got != nil {
+	if got := wiretranscript.NewWriter(nil, testClock{}); got != nil {
 		t.Fatal("NewWriter(nil) returned a non-nil writer")
 	}
 	var writer *wiretranscript.Writer
@@ -252,7 +253,7 @@ func TestEnvelopeDoesNotEscapeHTML(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
-	writer := wiretranscript.NewWriter(&out, nil)
+	writer := wiretranscript.NewWriter(&out, testClock{})
 	if err := writer.Record("c1", wiretranscript.PeerAgent, wiretranscript.DirectionIn,
 		wiretranscript.StreamStderr, []byte("warn <a> & <b>\n")); err != nil {
 		t.Fatalf("Record() error = %v", err)
@@ -271,3 +272,9 @@ func TestEnvelopeDoesNotEscapeHTML(t *testing.T) {
 		t.Fatalf("Text = %q, want the literal stderr line", decoded.Text)
 	}
 }
+
+// testClock is a fixed clock; these cells assert structure and ordering, never
+// wall-clock values.
+type testClock struct{}
+
+func (testClock) Now() time.Time { return time.Unix(1700000000, 0).UTC() }

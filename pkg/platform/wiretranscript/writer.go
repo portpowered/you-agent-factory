@@ -13,12 +13,10 @@ import (
 // consume a whole rotation budget, and is never silently dropped either.
 const MaxFrameBytes = 256 * 1024
 
-// Clock supplies record timestamps.
+// Clock supplies record timestamps. It is injected rather than defaulted so a
+// transcript's timestamps come from the caller's own clock, which is also what
+// makes them reproducible in tests.
 type Clock interface{ Now() time.Time }
-
-type systemClock struct{}
-
-func (systemClock) Now() time.Time { return time.Now() }
 
 // Writer serializes records onto an underlying sink as JSONL.
 //
@@ -34,14 +32,12 @@ type Writer struct {
 	closed   bool
 }
 
-// NewWriter returns a Writer emitting to out. A nil out yields a nil Writer,
-// which is a no-op, so callers can treat "recording disabled" as one shape.
+// NewWriter returns a Writer emitting to out. A nil out or clock yields a nil
+// Writer, which is a total no-op, so callers can treat "recording disabled" as
+// one shape rather than branching at every call site.
 func NewWriter(out io.Writer, clock Clock) *Writer {
-	if out == nil {
+	if out == nil || clock == nil {
 		return nil
-	}
-	if clock == nil {
-		clock = systemClock{}
 	}
 	encoder := json.NewEncoder(out)
 	// Protocol payloads routinely contain <, >, and &. Escaping them would
