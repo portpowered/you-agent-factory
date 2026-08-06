@@ -1,0 +1,256 @@
+{
+  "agent": "you",
+  "command": [
+    "you-baseline",
+    "serve",
+    "acp"
+  ],
+  "capturedAtUtc": "2026-08-06T19:57:52Z",
+  "scenarios": [
+    "01-initialize",
+    "02-capabilities-full",
+    "03-config-and-models",
+    "04-thinking-and-tools",
+    "05-subagent"
+  ],
+  "envKeysProvided": {
+    "ANTHROPIC_API_KEY": false,
+    "ANTHROPIC_BASE_URL": false,
+    "CURSOR_API_ENDPOINT": false,
+    "CURSOR_API_KEY": false,
+    "HOME": true,
+    "PATH": true,
+    "SHELL": true,
+    "TMPDIR": true,
+    "USER": true
+  },
+  "permissionChoices": null,
+  "unknownClientMethods": null,
+  "observation": {
+    "agentMethodsAccepted": {
+      "initialize": 5,
+      "session/new": 5,
+      "session/prompt": 3,
+      "session/set_config_option": 1
+    },
+    "agentMethodsRejected": {
+      "session/select_model": -32601,
+      "session/set_mode": -32601,
+      "session/set_model": -32601
+    },
+    "clientMethodsInvoked": {
+      "session/update": 11
+    },
+    "sessionUpdateVariants": {
+      "available_commands_update": 5,
+      "tool_call": 3,
+      "tool_call_update": 3
+    },
+    "results": {
+      "initialize": {
+        "agentCapabilities": {
+          "_meta": {
+            "portpowered.infinite-you/attachment-resume": true
+          },
+          "auth": {},
+          "loadSession": true,
+          "mcpCapabilities": {},
+          "promptCapabilities": {},
+          "sessionCapabilities": {
+            "close": {},
+            "resume": {}
+          }
+        },
+        "authMethods": [],
+        "protocolVersion": 1
+      },
+      "session/new": {
+        "configOptions": [
+          {
+            "category": "model",
+            "currentValue": "factory:@you/factory-builder",
+            "id": "target",
+            "name": "Factory",
+            "options": [
+              {
+                "name": "factory-builder",
+                "value": "factory:@you/factory-builder"
+              },
+              {
+                "name": "classify",
+                "value": "factory:@you/classify"
+              },
+              {
+                "name": "deep-research",
+                "value": "factory:@you/deep-research"
+              },
+              {
+                "name": "full-flow",
+                "value": "factory:@you/full-flow"
+              },
+              {
+                "name": "fusion",
+                "value": "factory:@you/fusion"
+              },
+              {
+                "name": "goal",
+                "value": "factory:@you/goal"
+              },
+              {
+                "name": "loop",
+                "value": "factory:@you/loop"
+              },
+              {
+                "name": "plan-execute",
+                "value": "factory:@you/plan-execute"
+              },
+              {
+                "name": "plan-parallel",
+                "value": "factory:@you/plan-parallel"
+              },
+              {
+                "name": "quorum",
+                "value": "factory:@you/quorum"
+              },
+              {
+                "name": "review",
+                "value": "factory:@you/review"
+              },
+              {
+                "name": "spawn",
+                "value": "factory:@you/spawn"
+              },
+              {
+                "name": "subagent",
+                "value": "factory:@you/subagent"
+              },
+              {
+                "name": "tournament",
+                "value": "factory:@you/tournament"
+              },
+              {
+                "name": "tts",
+                "value": "factory:@you/tts"
+              }
+            ],
+            "type": "select"
+          }
+        ],
+        "sessionId": "b29e3071-222f-446b-9684-3f0f6598b3bc"
+      },
+      "session/prompt": {
+        "_meta": {
+          "portpowered.infinite-you/attachment-id": "4e29d23a-e561-48f6-be68-0d3f8dd4afc1"
+        },
+        "stopReason": "end_turn"
+      },
+      "session/set_config_option": {
+        "configOptions": [
+          {
+            "category": "model",
+            "currentValue": "factory:@you/tts",
+            "id": "target",
+            "name": "Factory",
+            "options": [
+              {
+                "name": "tts",
+                "value": "factory:@you/tts"
+              },
+              {
+                "name": "classify",
+                "value": "factory:@you/classify"
+              },
+              {
+                "name": "deep-research",
+                "value": "factory:@you/deep-research"
+              },
+              {
+                "name": "factory-builder",
+                "value": "factory:@you/factory-builder"
+              },
+              {
+                "name": "full-flow",
+                "value": "factory:@you/full-flow"
+              },
+              {
+                "name": "fusion",
+                "value": "factory:@you/fusion"
+              },
+              {
+                "name": "goal",
+                "value": "factory:@you/goal"
+              },
+              {
+                "name": "loop",
+                "value": "factory:@you/loop"
+              },
+              {
+                "name": "plan-execute",
+                "value": "factory:@you/plan-execute"
+              },
+              {
+                "name": "plan-parallel",
+                "value": "factory:@you/plan-parallel"
+              },
+              {
+                "name": "quorum",
+                "value": "factory:@you/quorum"
+              },
+              {
+                "name": "review",
+                "value": "factory:@you/review"
+              },
+              {
+                "name": "spawn",
+                "value": "factory:@you/spawn"
+              },
+              {
+                "name": "subagent",
+                "value": "factory:@you/subagent"
+              },
+              {
+                "name": "tournament",
+                "value": "factory:@you/tournament"
+              }
+            ],
+            "type": "select"
+          }
+        ]
+      }
+    },
+    "snapshots": [
+      "01-initialize/capabilities",
+      "02-capabilities-full/capabilities-full",
+      "03-config-and-models/advertisement",
+      "03-config-and-models/post-set",
+      "04-thinking-and-tools/thinking-and-tools",
+      "05-subagent/subagent"
+    ]
+  },
+  "transcriptFiles": {
+    "01-initialize": "01-initialize.raw.jsonl",
+    "02-capabilities-full": "02-capabilities-full.raw.jsonl",
+    "03-config-and-models": "03-config-and-models.raw.jsonl",
+    "04-thinking-and-tools": "04-thinking-and-tools.raw.jsonl",
+    "05-subagent": "05-subagent.raw.jsonl"
+  },
+  "stepNotes": {
+    "01-initialize": [
+      "Empty clientCapabilities mirrors what our own production ACP client sends, so the advertised capabilities are directly comparable.",
+      "Proves the session is live, so an empty capability advertisement is not mistaken for a dead session."
+    ],
+    "02-capabilities-full": [
+      "Diffing this against 01 shows what an agent withholds when a client claims it cannot read files."
+    ],
+    "03-config-and-models": [
+      "Collects any available_commands_update or current_mode_update the agent pushes unprompted.",
+      "Method naming for model switching is unstable across agents. A -32601 here is baseline data, not a failure."
+    ],
+    "04-thinking-and-tools": [
+      "Yields agent_thought_chunk plus tool_call and tool_call_update with their kinds, status progression, and content block shapes."
+    ],
+    "05-subagent": [
+      "A null result is a valid finding: if a subagent surfaces only as an ordinary tool_call, the matrix records that rather than failing."
+    ]
+  }
+}

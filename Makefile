@@ -490,6 +490,35 @@ test-backend-verification:
 test-backend-functional:
 	$(MAKE) test-functional-coverage
 
+ACP_BASELINE_DIR       ?= docs/internal/projects/acp-program/baselines
+ACP_BASELINE_ARTIFACTS ?= .artifacts/acp-baseline
+
+.PHONY: acp-baseline-self acp-baseline-capture acp-baseline-compare acp-baseline-check
+
+# Capture our own `you serve acp` through the shared scenario scripts. Needs no
+# external agent and no provider credentials, so it is safe anywhere.
+acp-baseline-self:
+	$(GO) build -o $(ACP_BASELINE_ARTIFACTS)/you ./cmd/factory
+	$(GO) run ./cmd/acpbaseline capture -agent '$(ACP_BASELINE_ARTIFACTS)/you serve acp' \
+		-name you -out $(ACP_BASELINE_ARTIFACTS) -publish $(ACP_BASELINE_DIR)/you/$(shell date -u +%Y-%m-%d)
+
+# Capture a third-party ACP agent. Requires that agent installed and
+# authenticated; exits 3 with instructions when it is not. Raw transcripts hold
+# full prompt and response content and stay under .artifacts (gitignored).
+#   make acp-baseline-capture ACP_AGENT='cursor-agent acp' ACP_BASELINE_NAME=cursor-agent
+acp-baseline-capture:
+	$(GO) run ./cmd/acpbaseline capture -agent '$(ACP_AGENT)' -name '$(ACP_BASELINE_NAME)' \
+		-out $(ACP_BASELINE_ARTIFACTS) -publish $(ACP_BASELINE_DIR)/$(ACP_BASELINE_NAME)/$(shell date -u +%Y-%m-%d)
+
+acp-baseline-compare:
+	$(GO) run ./cmd/acpbaseline compare \
+		$(foreach m,$(wildcard $(ACP_BASELINE_DIR)/*/*/capability-matrix.json),-matrix $(m)) \
+		-out $(ACP_BASELINE_DIR)/comparison-matrix.md
+
+# Commit guard: committed baselines are digested, secret-free, and in budget.
+acp-baseline-check:
+	$(GO) run ./cmd/acpbaseline verify -dir $(ACP_BASELINE_DIR)
+
 long-tests:
 	$(info Running opt-in long and specialty suites: UI performance + managed runtime coverage + real local inference coverage)
 	$(call run_verification_step,test-ui-performance,UI Performance specialty lane)
