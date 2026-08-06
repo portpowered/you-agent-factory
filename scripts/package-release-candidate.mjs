@@ -6,6 +6,7 @@ import {
 	readFile,
 	readdir,
 	rm,
+	utimes,
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -13,6 +14,28 @@ import { join, resolve } from "node:path";
 
 export const DEVELOPMENT_DIST_TAG = "dev";
 export const SHORT_SHA_LENGTH = 12;
+
+// npm pack embeds each staged file's mtime into the tarball. Left alone, a
+// re-publish attempt of an already-published version -- from a fresh
+// checkout at a different wall-clock time, but the exact same source
+// commit -- packs different tarball bytes and trips the registry's
+// immutable-version-digest check even though nothing about the release
+// actually changed. Normalize every staged file to a fixed timestamp
+// before packing so identical source always packs identical bytes.
+const DETERMINISTIC_STAGED_MTIME = new Date("2020-01-01T00:00:00Z");
+
+export async function normalizeStagedMtimes(root, timestamp = DETERMINISTIC_STAGED_MTIME) {
+	const entries = await readdir(root, { withFileTypes: true });
+	await Promise.all(
+		entries.map(async (entry) => {
+			const entryPath = join(root, entry.name);
+			if (entry.isDirectory()) {
+				await normalizeStagedMtimes(entryPath, timestamp);
+			}
+			await utimes(entryPath, timestamp, timestamp);
+		}),
+	);
+}
 
 const STABLE_SEMVER_PATTERN =
 	/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -164,6 +187,7 @@ export async function prepareReleaseCandidate({
 			contractManifestPath,
 			validatedSourceCommit,
 		);
+		await normalizeStagedMtimes(stagedPackage);
 
 		const packed = await pack({
 			packageDirectory: stagedPackage,
