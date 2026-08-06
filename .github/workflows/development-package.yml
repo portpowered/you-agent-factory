@@ -3,12 +3,35 @@ name: Development Package
 on:
   push:
     branches: [main]
+  workflow_call:
+    inputs:
+      candidate-artifact-name:
+        description: >-
+          Name of the already-uploaded artifact holding the complete,
+          reviewed public package candidate (api + packaged-factories +
+          frontend) to reconcile and publish as a tagged release.
+        required: true
+        type: string
+      expected-source-commit:
+        description: Commit SHA the candidate must have been built from.
+        required: true
+        type: string
 
 permissions:
   contents: read
 
+# npm's Trusted Publisher (OIDC) configuration for these packages has no
+# GitHub Environment restriction, but it does pin the trusted workflow
+# filename to this one. release.yml therefore calls the
+# publish-tagged-release job below as a reusable workflow instead of
+# publishing npm packages itself, so the OIDC token's job_workflow_ref
+# claim always says development-package.yml regardless of which workflow
+# triggered the run.
 concurrency:
-  group: development-package-${{ github.ref }}
+  group: >-
+    development-package-${{ github.event_name }}-${{
+      github.event_name == 'workflow_call' && inputs.expected-source-commit || github.ref
+    }}
   cancel-in-progress: true
 
 env:
@@ -19,7 +42,7 @@ env:
 jobs:
   prepare-main-candidate:
     name: Prepare Protected Main Candidate
-    if: github.repository == 'portpowered/you-agent-factory'
+    if: github.event_name == 'push' && github.repository == 'portpowered/you-agent-factory'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -47,7 +70,7 @@ jobs:
 
   publish-main-candidate:
     name: Publish and Verify Protected Main Candidate
-    if: github.repository == 'portpowered/you-agent-factory'
+    if: github.event_name == 'push' && github.repository == 'portpowered/you-agent-factory'
     needs: prepare-main-candidate
     environment: development-publishing
     runs-on: ubuntu-latest
@@ -73,3 +96,45 @@ jobs:
           npm run publish:public-packages --
           --candidate-directory ../.artifacts/public-development-candidate
           --tag dev --provenance
+
+  publish-tagged-release:
+    name: Publish Tagged Release Candidate
+    if: github.event_name == 'workflow_call'
+    environment: development-publishing
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected-source-commit }}
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - run: npm install --global npm@${{ env.NPM_VERSION }}
+
+      - name: Install dashboard dependencies
+        working-directory: ui
+        run: bun install --frozen-lockfile
+
+      - name: Download the preserved complete public package candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.candidate-artifact-name }}
+          path: .artifacts/public-release-candidate
+
+      - name: Reconcile, publish, and verify the complete reviewed public package set
+        run: >-
+          node scripts/public-release-package-publish.mjs
+          --candidate-directory .artifacts/public-release-candidate
+          --expected-source-commit "${{ inputs.expected-source-commit }}"
+          --workspace-directory .
