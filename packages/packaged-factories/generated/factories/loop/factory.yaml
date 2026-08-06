@@ -10,6 +10,10 @@ examples:
         value: Check dependency updates once per hour.
       name: hourly-dependency-check
 id: builtin-loop
+invocationReturn:
+    policy: EXPLICIT
+    terminalState: complete
+    workTypeName: scheduled-execution
 invocationSignature:
     parameters:
         - bindings:
@@ -23,13 +27,13 @@ invocationSignature:
           required: true
         - bindings:
             - kind: NAMED
+          defaultValue: 1h
           description: Positive duration interval from 1s through 168h, such as 30s, 5m, 1h, or 1h30m.
           externalName: every
           name: every
-          required: true
         - bindings:
             - kind: NAMED
-          defaultValue: "false"
+          defaultValue: "true"
           description: Run once immediately after the controller Work is admitted.
           externalName: trigger-at-start
           name: triggerAtStart
@@ -94,6 +98,7 @@ workstations:
     - behavior: CRON
       cron:
         every: ${every}
+        triggerAtStart: true
       inputs:
         - state: active
           workType: loop-controller

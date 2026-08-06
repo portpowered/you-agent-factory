@@ -23,10 +23,10 @@ invocationSignature:
           required: true
         - bindings:
             - kind: NAMED
+          defaultValue: "2"
           description: Single-elimination bracket depth from 1 through 3.
           externalName: rounds
           name: rounds
-          required: true
           typeHint: NUMBER_STRING
         - bindings:
             - kind: NAMED
@@ -86,12 +86,12 @@ orchestrator:
                     minLength: 1
                     type: string
                 rounds:
+                    default: 2
                     maximum: 3
                     minimum: 1
                     type: integer
             required:
                 - request
-                - rounds
             type: object
         defaultPolicy:
             allowConnectors: false
@@ -140,7 +140,7 @@ orchestrator:
                         "description": "Single-elimination bracket depth from 1 through 3.",
                         "externalName": "rounds",
                         "typeHint": "NUMBER_STRING",
-                        "required": true,
+                        "defaultValue": "2",
                         "bindings": [
                           {
                             "kind": "NAMED"
@@ -225,8 +225,7 @@ orchestrator:
                   "argsSchema": {
                     "type": "object",
                     "required": [
-                      "request",
-                      "rounds"
+                      "request"
                     ],
                     "properties": {
                       "request": {
@@ -235,6 +234,7 @@ orchestrator:
                       },
                       "rounds": {
                         "type": "integer",
+                        "default": 2,
                         "minimum": 1,
                         "maximum": 3
                       },

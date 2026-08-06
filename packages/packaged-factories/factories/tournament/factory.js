@@ -32,7 +32,7 @@
         "description": "Single-elimination bracket depth from 1 through 3.",
         "externalName": "rounds",
         "typeHint": "NUMBER_STRING",
-        "required": true,
+        "defaultValue": "2",
         "bindings": [
           {
             "kind": "NAMED"
@@ -117,8 +117,7 @@
   "argsSchema": {
     "type": "object",
     "required": [
-      "request",
-      "rounds"
+      "request"
     ],
     "properties": {
       "request": {
@@ -127,6 +126,7 @@
       },
       "rounds": {
         "type": "integer",
+        "default": 2,
         "minimum": 1,
         "maximum": 3
       },
