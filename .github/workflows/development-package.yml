@@ -217,17 +217,6 @@ jobs:
 
       - run: npm install --global npm@${{ env.NPM_VERSION }}
 
-      - name: Debug npm trusted-publishing OIDC token claims (temporary)
-        run: |
-          set -euo pipefail
-          token="$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=npm:registry.npmjs.org" | jq -r .value)"
-          payload="$(echo "$token" | cut -d. -f2 | tr '_-' '/+')"
-          case $((${#payload} % 4)) in
-            2) payload="${payload}==" ;;
-            3) payload="${payload}=" ;;
-          esac
-          echo "$payload" | base64 -d | jq '{job_workflow_ref, workflow_ref, repository, repository_owner, repository_id, environment, ref, sha, event_name, runner_environment, aud, iss}'
-
       - name: Install dashboard dependencies
         working-directory: ui
         run: bun install --frozen-lockfile
@@ -277,6 +266,10 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dashboard dependencies
+        working-directory: ui
+        run: bun install --frozen-lockfile
 
       - name: Publish GitHub release assets from the tagged commit
         env:
