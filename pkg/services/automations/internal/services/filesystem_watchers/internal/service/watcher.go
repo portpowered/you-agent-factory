@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -30,20 +31,25 @@ import (
 // request items so downstream guards can correlate generated work with the
 // parent execution.
 type watcher struct {
-	dir     string
-	submit  filesystemwatchers.WorkRequestSubmitter
-	logger  *zap.Logger
+	dir    string
+	submit filesystemwatchers.WorkRequestSubmitter
+	logger *zap.Logger
 	// knownWorkTypes restricts submissions to known work types.
 	// If nil, all subdirectories are accepted.
-	knownWorkTypes      map[string]bool
-	knownWorkStates     map[string]map[string]bool
-	files               filesystemwatchers.InputFileSystem
-	walkDirectory       filesystemwatchers.DirectoryWalker
-	workRequestIDs      work.RequestIDGenerator
-	newWatcher          fileEventWatcherFactory
-	clock               clockwork.Clock
-	debounceWindow      time.Duration
-	handledIdentities   filesystemwatchers.HandledIdentities
+	knownWorkTypes    map[string]bool
+	knownWorkStates   map[string]map[string]bool
+	files             filesystemwatchers.InputFileSystem
+	walkDirectory     filesystemwatchers.DirectoryWalker
+	workRequestIDs    work.RequestIDGenerator
+	newWatcher        fileEventWatcherFactory
+	clock             clockwork.Clock
+	debounceWindow    time.Duration
+	handledIdentities filesystemwatchers.HandledIdentities
+	// lazyHandledIdentity is created on first use behind lazyHandledOnce. The
+	// watch loop and per-file handling run concurrently, so an unguarded lazy
+	// init could hand two goroutines different stores and silently defeat
+	// duplicate-observation suppression.
+	lazyHandledOnce     sync.Once
 	lazyHandledIdentity *memoryHandledIdentities
 }
 
@@ -192,9 +198,9 @@ func (fw *watcher) handledIdentityStore() filesystemwatchers.HandledIdentities {
 	if fw.handledIdentities != nil {
 		return fw.handledIdentities
 	}
-	if fw.lazyHandledIdentity == nil {
+	fw.lazyHandledOnce.Do(func() {
 		fw.lazyHandledIdentity = newMemoryHandledIdentities()
-	}
+	})
 	return fw.lazyHandledIdentity
 }
 
