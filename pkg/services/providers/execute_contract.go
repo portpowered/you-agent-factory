@@ -114,11 +114,22 @@ type ExecuteRequest struct {
 	// must not assume that every provider can report a session before it
 	// completes.
 	SessionObserver SessionObserver
+	// ProgressObserver receives each bounded progress fact as soon as the
+	// provider reports it, while the attempt is still live. Like
+	// SessionObserver it is an invocation-scoped observation hook, never a
+	// selection or resume input. An adapter that cannot report progress before
+	// it completes simply leaves the observer uncalled and returns its facts
+	// in ExecuteDiagnostics.Progress as before.
+	ProgressObserver ProgressObserver
 }
 
 // SessionObserver receives one detached Provider-owned session identity
 // observed during a live execution attempt.
 type SessionObserver func(SessionRef)
+
+// ProgressObserver receives one bounded progress fact observed during a live
+// execution attempt.
+type ProgressObserver func(ExecuteProgress)
 
 // Validate checks request fields whose validity does not depend on catalog
 // state.
@@ -174,6 +185,16 @@ func (request ExecuteRequest) ObserveSession(reference SessionRef) {
 	request.SessionObserver(reference.Clone())
 }
 
+// ObserveProgress forwards one detached progress fact to the request's
+// invocation-scoped observer. It is nil-safe so an adapter can report progress
+// unconditionally without first checking whether a caller is listening.
+func (request ExecuteRequest) ObserveProgress(progress ExecuteProgress) {
+	if request.ProgressObserver == nil {
+		return
+	}
+	request.ProgressObserver(progress.Clone())
+}
+
 // ExecuteProgress carries bounded in-flight progress facts for one attempt.
 // Providers exposes this detached value for peer contracts without requiring
 // transport or Workers provider streaming types.
@@ -195,6 +216,13 @@ type ExecuteDiagnostics struct {
 	DurationMillis int64
 	Progress       []ExecuteProgress
 	Metadata       map[string]string
+	// ProgressAlreadyObserved reports that every fact in Progress was already
+	// delivered through ExecuteRequest.ProgressObserver, in this exact order,
+	// while the attempt was still live. A caller that published those live
+	// observations MUST NOT republish Progress, or every fact appears twice.
+	// Adapters that do not stream leave this false and Progress remains the
+	// only delivery.
+	ProgressAlreadyObserved bool
 }
 
 // Clone returns a detached diagnostics copy.

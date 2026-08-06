@@ -366,7 +366,11 @@ func assertAgentProviderRequest(t *testing.T, request providers.ExecuteRequest) 
 	if request.SessionObserver == nil {
 		t.Fatal("Providers.Execute request omitted live Provider Session observer")
 	}
+	if request.ProgressObserver == nil {
+		t.Fatal("Providers.Execute request omitted live provider progress observer")
+	}
 	request.SessionObserver = nil
+	request.ProgressObserver = nil
 	want := providers.ExecuteRequest{
 		Provider:        providers.IDCodex,
 		AttemptID:       "dispatch-agent-1",
