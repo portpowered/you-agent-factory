@@ -422,6 +422,30 @@ func readInvocationFactoryEvents(
 	return events, nil
 }
 
+// InvokeOpenedJavaScriptFactory invokes one already-opened
+// JavaScript-orchestrator Factory runtime through durable workflow execution.
+//
+// A JavaScript Factory's whole workflow is its program, so it declares no work
+// types and cannot be invoked through the Work-submission path, which begins
+// by resolving the single work type carrying handlingBehavior DEFAULT. Every
+// consumer that invokes an opened runtime therefore has to branch on
+// factorydefinitions.IsJavaScriptOrchestratorFactory first, and this is the
+// one implementation of the branch's JavaScript side -- exported so the
+// on-demand target activation ACP dispatch uses reaches exactly the path this
+// package's own one-shot operation uses, rather than growing a second copy
+// that can drift from it.
+func InvokeOpenedJavaScriptFactory(
+	ctx context.Context,
+	opened roles.OpenedInvocationRuntime,
+	projection factorysessions.ProjectionContext,
+	target roles.InvocationTarget,
+	request factorysessions.InvocationRequest,
+	generateSessionID factorysessions.SessionIDGenerator,
+	consume factorysessions.FactoryEventConsumer,
+) (factorydefinitions.FactoryInvocationResult, error) {
+	return invokeJavaScriptFactory(ctx, opened, projection, target, request, generateSessionID, consume)
+}
+
 func invokeJavaScriptFactory(
 	ctx context.Context,
 	opened roles.OpenedInvocationRuntime,

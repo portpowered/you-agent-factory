@@ -70,7 +70,7 @@ func provideACPServerFactoryTargetRuntimeResolver(
 		if resolved == nil {
 			return factorysessions.RuntimeOpeningRequest{}, factorydefinitions.ErrNamedFactoryNotFound
 		}
-		defaults, err := resolveOperatorDefaults(homeDir, operatorsettings.Defaults{}, operatorsettings.FlagOverrides{})
+		defaults, err := resolveOperatorDefaults(homeDir, acpOperatorDefaultsEnvironment(), operatorsettings.FlagOverrides{})
 		if err != nil {
 			return factorysessions.RuntimeOpeningRequest{}, err
 		}
@@ -89,6 +89,30 @@ func provideACPServerFactoryTargetRuntimeResolver(
 			},
 			OperatorDefaults: defaults,
 		}, nil
+	}
+}
+
+// acpOperatorDefaultsEnvironment reads the operator-default environment layer
+// for an ACP-selected Factory target runtime.
+//
+// The CLI has always supplied this layer (see resolveOperatorDefaults in
+// pkg/transports/cli), so `YOU_DEFAULT_WORKER_MODEL_PROVIDER` selects the
+// Worker provider for `you run`. The ACP resolver passed an empty layer, which
+// silently dropped both variables and left the runtime with whatever the
+// persisted Operator Settings document alone supplied.
+//
+// That gap is invisible for a Factory whose workers name their own provider,
+// and fatal for one whose workers do not -- a JavaScript Factory's agent.run
+// children carry no provider, so with no operator default their dispatch is
+// rejected before any provider runs. An ACP client cannot pass `--provider`,
+// so the environment is the only layer it has.
+//
+// Reading the process environment directly matches how this file already
+// resolves its own wire-log configuration.
+func acpOperatorDefaultsEnvironment() operatorsettings.Defaults {
+	return operatorsettings.Defaults{
+		WorkerModelProvider: strings.TrimSpace(os.Getenv(operatorsettings.EnvDefaultWorkerModelProvider)),
+		WorkerModel:         strings.TrimSpace(os.Getenv(operatorsettings.EnvDefaultWorkerModel)),
 	}
 }
 

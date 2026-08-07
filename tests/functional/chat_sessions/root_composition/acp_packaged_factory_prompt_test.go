@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -283,5 +284,113 @@ func TestFactoryBuilderGreetsOnAVagueFirstACPTurn(t *testing.T) {
 	}
 	if text := agentMessageText(t, notifications); !strings.Contains(text, "reusable Factory") {
 		t.Fatalf("streamed assistant text = %q, want Factory Builder usage guidance", text)
+	}
+}
+
+// spawnACPRunner answers @you/spawn's three agent roles by prompt shape.
+// Order-based queuing cannot work here: spawn runs its task agents through
+// the workflow's own parallel() call, so the task prompts arrive concurrently
+// and in no fixed order.
+type spawnACPRunner struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (runner *spawnACPRunner) Run(
+	_ context.Context,
+	request process.CommandRequest,
+) (process.CommandResult, error) {
+	runner.mu.Lock()
+	runner.calls++
+	runner.mu.Unlock()
+
+	prompt := string(request.Stdin)
+	switch {
+	case strings.Contains(prompt, "You are a task planner"):
+		return process.CommandResult{Stdout: support.CodexSuccessStdout(
+			`["first independent task","second independent task","third independent task"]`,
+		)}, nil
+	case strings.Contains(prompt, "You are the final merger"):
+		return process.CommandResult{Stdout: support.CodexSuccessStdout("merged spawn result over ACP")}, nil
+	default:
+		return process.CommandResult{Stdout: support.CodexSuccessStdout("independent task finding")}, nil
+	}
+}
+
+func (runner *spawnACPRunner) callCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.calls
+}
+
+// TestPackagedJavaScriptFactoryCompletesOneACPPromptTurn proves a
+// JavaScript-orchestrator packaged Factory is invocable over ACP.
+//
+// @you/spawn declares no workTypes at all -- its whole workflow is the
+// JavaScript program in factory.js. The ACP dispatch path activates its
+// runtime through factory_sessions' on-demand target activation, which used
+// to invoke every Factory through the Work-submission path alone. That path
+// begins by resolving the single work type carrying handlingBehavior DEFAULT,
+// so a Factory with no work types failed with "expected exactly one work type
+// with handlingBehavior DEFAULT for simplified prompt runs" before a single
+// Worker ran -- surfacing to the client as a bare dependency_unavailable.
+//
+// The CLI never had this defect: its one-shot invocation operation branches on
+// factorydefinitions.IsJavaScriptOrchestratorFactory first and runs the
+// workflow through durable execution. So `you run --named @you/spawn` worked
+// while the identical Factory over ACP could not start, breaking the CLI/API
+// invocation equivalence this repository requires.
+//
+// This cell asserts the whole turn, not just the absence of that error: the
+// workflow's planner, its three parallel task agents, and its merger all run,
+// and the merged result reaches the client as streamed assistant text.
+func TestPackagedJavaScriptFactoryCompletesOneACPPromptTurn(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test driving root.BuildProcess through the you serve acp CLI command")
+	}
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	// A JavaScript Factory's agent.run children carry no provider of their
+	// own -- @you/spawn passes an empty executorProvider/modelProvider -- so
+	// the operator default is what selects their runner. An ACP client cannot
+	// pass `--provider`, which is how the CLI supplies one.
+	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "codex")
+	t.Setenv(operatorsettings.EnvDefaultWorkerModel, "gpt-5")
+	seedInstalledPackagedFactory(t, home, "@you/spawn")
+	support.SeedACPAgentProfile(t, home, "factory:@you/spawn", []string{"factory:@you/spawn"})
+
+	runner := &spawnACPRunner{}
+	cwd := t.TempDir()
+	stdin, stdout := startServeACPHarness(t, home, cwd, serviceedges.Edges{ProviderCommandRunner: runner})
+
+	sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)
+	if sessionID == "" {
+		t.Fatal("session/new returned a blank sessionId")
+	}
+
+	promptResp, notifications := driveServeACPSessionPrompt(
+		t, stdin, stdout, sessionID, "research three independent angles on this question",
+	)
+	if promptResp.Error != nil {
+		t.Fatalf("session/prompt response error = %+v (provider calls = %d), want a successful final result",
+			promptResp.Error, runner.callCount())
+	}
+	var decoded acpsdk.PromptResponse
+	if err := json.Unmarshal(promptResp.Result, &decoded); err != nil {
+		t.Fatalf("unmarshal PromptResponse: %v", err)
+	}
+	if decoded.StopReason != acpsdk.StopReasonEndTurn {
+		t.Fatalf("stopReason = %q, want %q", decoded.StopReason, acpsdk.StopReasonEndTurn)
+	}
+	if text := agentMessageText(t, notifications); !strings.Contains(text, "merged spawn result over ACP") {
+		t.Fatalf("streamed assistant text = %q, want the merged workflow result", text)
+	}
+	// One planner, three parallel tasks (spawn's default count), one merger.
+	// Asserting the exact count proves the workflow actually executed rather
+	// than short-circuiting to a result some other way.
+	if got := runner.callCount(); got != 5 {
+		t.Fatalf("provider call count = %d, want 5 (planner, three tasks, merger)", got)
 	}
 }
