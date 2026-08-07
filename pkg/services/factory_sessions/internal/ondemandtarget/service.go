@@ -39,7 +39,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/invocation"
 )
 
 // Service satisfies io.Closer so a process lifecycle plan can register it as
@@ -687,74 +686,6 @@ func (s *Service) InvokeFactorySession(
 	result.SessionID = sessionID
 	s.logger.Info("on-demand Factory target invoke completed", zap.String("status", string(result.Status)))
 	return result, nil
-}
-
-// invokeOnActivatedRuntime runs one invocation against an activated runtime
-// through the path that runtime's own orchestrator requires.
-//
-// A JavaScript-orchestrator Factory's whole workflow is its program: it
-// declares no work types, so the Work-submission path every other Factory uses
-// fails while resolving the single handlingBehavior DEFAULT work type, before
-// any Worker runs. Routing it to durable workflow execution instead is what
-// keeps a Factory invocable through this activation -- the one ACP dispatch
-// uses -- and not only through the CLI's one-shot invocation operation, which
-// has always made this same distinction.
-//
-// A projection read that fails is not treated as fatal here. It is only how
-// this decides which path to take, and the Work-submission path reports its
-// own failure precisely; failing the invocation on the read alone would
-// replace a specific error with a vaguer one.
-func (s *Service) invokeOnActivatedRuntime(
-	ctx context.Context,
-	active *activatedRuntime,
-	request factorysessions.InvocationRequest,
-) (factorysessions.InvocationResult, error) {
-	projection, err := active.opened.Sessions.GetFactorySession(ctx, factorysessions.DefaultSessionID)
-	if err != nil || !factorydefinitions.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
-		return active.opened.Sessions.InvokeFactorySession(ctx, factorysessions.DefaultSessionID, request)
-	}
-	// consume is nil: this activation's callers observe a running invocation
-	// through SubscribeFactoryResponseEvents against the runtime's own
-	// response stream, not through an invocation-scoped event consumer.
-	result, err := invocation.InvokeOpenedJavaScriptFactory(
-		ctx, active.opened, projection.Context, active.invocationTarget(), request, s.generateID, nil,
-	)
-	return sessionInvocationResult(result), err
-}
-
-// invocationTarget rebuilds the invocation-target view of this activation's
-// own opening request. Only the fields the JavaScript workflow path reads are
-// populated: the Factory directory a relative workflow sourceRef resolves
-// against, and the mock-worker configuration that selects a fake child
-// executor.
-func (a *activatedRuntime) invocationTarget() roles.InvocationTarget {
-	return roles.InvocationTarget{
-		FactoryDir:        a.config.FactoryDefinition.Directory,
-		FactorySourcePath: a.config.FactoryDefinition.SourcePath,
-		ExecutionBaseDir:  a.config.FactoryDefinition.ExecutionBaseDir,
-		MockWorkersConfig: a.config.Workers.MockWorkers,
-	}
-}
-
-// sessionInvocationResult converts the Factory Definitions-owned invocation
-// result the workflow path returns into the Factory Sessions-owned result this
-// service publishes. The two carry the same fields; they are distinct types
-// because they belong to distinct service contracts.
-func sessionInvocationResult(
-	result factorydefinitions.FactoryInvocationResult,
-) factorysessions.InvocationResult {
-	return factorysessions.InvocationResult{
-		RequestID:     result.RequestID,
-		TraceID:       result.TraceID,
-		Status:        factorysessions.InvocationTerminalStatus(result.Status),
-		PrimaryResult: result.PrimaryResult,
-		ErrorCode:     result.ErrorCode,
-		Message:       result.Message,
-		SessionID:     result.SessionID,
-		WorkID:        result.WorkID,
-		WorkName:      result.WorkName,
-		WorkState:     result.WorkState,
-	}
 }
 
 // SubscribeFactoryResponseEvents subscribes to the exact runtime a prior
