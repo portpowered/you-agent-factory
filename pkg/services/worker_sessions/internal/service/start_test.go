@@ -219,6 +219,11 @@ func TestStart_RetainsExactProviderSessionAssociationFromWorkerResult(t *testing
 // attempt is live. The downstream response publisher observes the committed
 // association first, a foreign dispatch cannot publish or replace it, and the
 // subsequent pause/resume carries that same reference into the new attempt.
+//
+// It drives that through the dispatch terminal signal, which is what still
+// reaches the downstream publisher: Worker-authored output is committed to the
+// Worker Session topic instead (see TestPublish_RoutesWorkerOutputToTheTopic),
+// so it is no longer observable at this seam.
 func TestStart_ProviderProgressCommitsAssociationBeforeOutputAndEnablesResume(t *testing.T) {
 	boundary := newControlledBoundary()
 	registry := newControlledRegistry(t, boundary)
@@ -248,7 +253,7 @@ func TestStart_ProviderProgressCommitsAssociationBeforeOutputAndEnablesResume(t 
 	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
 	publisher.Publish(workers.ProgressFragment{
 		DispatchID:               "dispatch-1",
-		Kind:                     workers.ProgressFragmentKind,
+		Kind:                     workers.CompletedFragmentKind,
 		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
 		ProviderSessionRef: &workers.ProviderSessionMetadata{
 			Provider: reference.Provider.String(),
@@ -265,7 +270,7 @@ func TestStart_ProviderProgressCommitsAssociationBeforeOutputAndEnablesResume(t 
 	// one Worker Sessions retained.
 	publisher.Publish(workers.ProgressFragment{
 		DispatchID:               "dispatch-1",
-		Kind:                     workers.ProgressFragmentKind,
+		Kind:                     workers.CompletedFragmentKind,
 		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
 		ProviderSessionRef: &workers.ProviderSessionMetadata{
 			Provider: reference.Provider.String(), Kind: reference.Kind, ID: "mismatched-metadata-session",
@@ -279,7 +284,7 @@ func TestStart_ProviderProgressCommitsAssociationBeforeOutputAndEnablesResume(t 
 	// by Worker Sessions and never reaches the response publisher.
 	publisher.Publish(workers.ProgressFragment{
 		DispatchID:               "foreign-dispatch",
-		Kind:                     workers.ProgressFragmentKind,
+		Kind:                     workers.CompletedFragmentKind,
 		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
 		ProviderSessionRef: &workers.ProviderSessionMetadata{
 			Provider: reference.Provider.String(), Kind: reference.Kind, ID: "foreign-session",

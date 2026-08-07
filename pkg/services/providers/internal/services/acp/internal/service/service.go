@@ -1091,6 +1091,11 @@ func mapSessionUpdate(update acpsdk.SessionUpdate) ([]providers.ExecuteProgress,
 					"provider_session_id": "",
 					"path":                content.Diff.Path,
 					"operation":           operation,
+					// ACP models a diff as content inside the tool call that
+					// produced it. Carrying the owning call's id keeps that
+					// ownership, so a consumer can attach the change to its
+					// tool call instead of presenting an orphaned edit.
+					"tool_call_id": string(update.ToolCallUpdate.ToolCallId),
 				},
 			})
 		}

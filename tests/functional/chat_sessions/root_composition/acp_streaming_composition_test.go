@@ -143,7 +143,7 @@ func TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText(
 		t.Fatalf("stopReason = %q, want %q", decodedResult.StopReason, acpsdk.StopReasonEndTurn)
 	}
 
-	assertServeACPStreamingNotifications(t, notifications, string(rawEnvelopeStdout), wantPrimaryResultText)
+	assertServeACPStreamingNotifications(t, notifications, wantPrimaryResultText)
 }
 
 // startServeACPHarness builds the real *application.Process against home and
@@ -233,7 +233,7 @@ func startServeACPHarness(t *testing.T, home, cwd string, edges serviceedges.Edg
 // guarantees. Zero thought/usage/session-info notifications remain accurate:
 // this fixture's single provider call produces no REASONING/USAGE/SESSION
 // response events for the bridge to forward.
-func assertServeACPStreamingNotifications(t *testing.T, notifications []acpsdk.SessionNotification, wantRawEnvelopeText, wantPrimaryResultText string) {
+func assertServeACPStreamingNotifications(t *testing.T, notifications []acpsdk.SessionNotification, wantPrimaryResultText string) {
 	t.Helper()
 
 	var messageTexts []string
@@ -255,14 +255,17 @@ func assertServeACPStreamingNotifications(t *testing.T, notifications []acpsdk.S
 		}
 	}
 
-	if len(messageTexts) != 2 {
-		t.Fatalf("agent_message_chunk notifications = %d (%q), want exactly 2 -- see this test's own doc comment on the known upstream duplicate-final-message issue", len(messageTexts), messageTexts)
+	// Exactly one, not two. The second chunk this cell used to observe was the
+	// Worker's own raw decision-envelope stdout, published as a separate
+	// assistant message by a second upstream producer -- the duplicate this
+	// test's name is about. Worker output is now content inside that Worker's
+	// tool call rather than assistant output, so only the Factory's own
+	// extracted primary result reaches the customer as a message.
+	if len(messageTexts) != 1 {
+		t.Fatalf("agent_message_chunk notifications = %d (%q), want exactly 1 -- the Factory's own result; a Worker's raw output belongs inside its tool call", len(messageTexts), messageTexts)
 	}
-	if !strings.Contains(messageTexts[0], wantRawEnvelopeText) {
-		t.Fatalf("first agent_message_chunk text = %q, want it to contain the provider adapter's own raw decision-envelope stdout %q", messageTexts[0], wantRawEnvelopeText)
-	}
-	if !strings.Contains(messageTexts[1], wantPrimaryResultText) {
-		t.Fatalf("second (final) agent_message_chunk text = %q, want it to contain the genuine completed outcome's extracted primary result %q", messageTexts[1], wantPrimaryResultText)
+	if !strings.Contains(messageTexts[0], wantPrimaryResultText) {
+		t.Fatalf("agent_message_chunk text = %q, want it to contain the genuine completed outcome's extracted primary result %q", messageTexts[0], wantPrimaryResultText)
 	}
 	if thoughtChunks != 0 || usageUpdates != 0 || sessionInfoUpdates != 0 {
 		t.Fatalf("thought/usage/session-info notifications = %d/%d/%d, want 0/0/0: this fixture's provider call publishes no REASONING/USAGE/SESSION response events",

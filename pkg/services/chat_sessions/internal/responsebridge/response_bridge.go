@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -233,6 +234,10 @@ func (s *Service) sequenceBatch(
 ) error {
 	for _, event := range batch {
 		state.mu.Lock()
+		if carriedByWorkerSession(state, event) {
+			state.mu.Unlock()
+			continue
+		}
 		version, err := s.sequence(ctx, chatSessionID, state.currentVersion, state.chatItemIDByFactoryItemID, event)
 		if err == nil {
 			state.currentVersion = version
@@ -243,6 +248,29 @@ func (s *Service) sequenceBatch(
 		}
 	}
 	return nil
+}
+
+// carriedByWorkerSession reports whether this Factory response event describes
+// work already reaching the Chat Session through its Worker's own topic.
+//
+// A Worker is a tool call, so its output belongs inside that tool call, and the
+// Worker topic is what delivers it there with the association and parent
+// lineage the child projection needs. The same observation is also published to
+// the Factory Session response-event stream, which the CLI, dashboard, and HTTP
+// SSE feed read -- so it arrives here a second time, carrying no association
+// and no parent. Sequencing that copy would give the Worker a second, top-level
+// voice alongside its tool call, which is exactly what a Worker must not have.
+//
+// The dispatch association is the discriminator rather than the record's Kind:
+// membership is a canonical fact this bridge already tracks, whereas a
+// Kind-based rule would have to guess, and would silently start dropping
+// Factory-authored records the day a Factory emits one of the same kinds.
+func carriedByWorkerSession(state *drainState, event factorysessions.FactoryResponseEvent) bool {
+	dispatchID := strings.TrimSpace(event.DispatchID)
+	if dispatchID == "" {
+		return false
+	}
+	return state.workerSessionIDByDispatch[dispatchID] != ""
 }
 
 func (s *Service) sequence(

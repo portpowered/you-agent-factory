@@ -108,6 +108,10 @@ type promptProgressStream struct {
 	started    map[string]bool
 	items      map[string]map[string]bool
 	content    map[string]map[string]string
+	// streamed records the items whose content already reached the observer as
+	// deltas. Their synthetic closing marker must not repeat that content: a
+	// consumer that renders every fact as appended text would show it twice.
+	streamed map[string]map[string]bool
 }
 
 // newPromptProgressStream begins a turn, emitting the synthetic run start
@@ -120,6 +124,7 @@ func newPromptProgressStream(observe providers.ProgressObserver) *promptProgress
 		started:    map[string]bool{},
 		items:      map[string]map[string]bool{},
 		content:    map[string]map[string]string{},
+		streamed:   map[string]map[string]bool{},
 	}
 	stream.emit(providers.ExecuteProgress{
 		Phase:    "started",
@@ -184,6 +189,12 @@ func (stream *promptProgressStream) Observe(updates []providers.ExecuteProgress)
 			}
 			stream.items[kind][itemID] = update.Phase == "completed"
 			stream.content[kind][itemID] += update.Detail
+			if update.Phase == "delta" {
+				if stream.streamed[kind] == nil {
+					stream.streamed[kind] = map[string]bool{}
+				}
+				stream.streamed[kind][itemID] = true
+			}
 		}
 		stream.emit(update)
 	}
@@ -209,9 +220,18 @@ func (stream *promptProgressStream) closeOpenItems(markPartial bool) {
 			if markPartial && kind == "message" {
 				metadata["partial"] = "true"
 			}
+			// This marker exists to close an item the turn left implicitly
+			// finished. Repeating content the observer already received as
+			// deltas would duplicate it for any consumer that renders each
+			// fact as it arrives, so only an item that never streamed carries
+			// its accumulated detail here.
+			detail := ""
+			if !stream.streamed[kind][itemID] {
+				detail = stream.content[kind][itemID]
+			}
 			stream.emit(providers.ExecuteProgress{
 				Phase:    "completed",
-				Detail:   stream.content[kind][itemID],
+				Detail:   detail,
 				Metadata: metadata,
 			})
 		}
