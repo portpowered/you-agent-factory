@@ -6,6 +6,7 @@ export const FRONTEND_PUBLIC_PACKAGE_NAMES = Object.freeze([
 	"@you-agent-factory/factory-replay",
 	"@you-agent-factory/factory-emulator",
 	"@you-agent-factory/components",
+	"@you-agent-factory/factory-graph",
 	"@you-agent-factory/factory-visualizers",
 ]);
 

@@ -34,6 +34,7 @@ export const PUBLIC_PACKAGES = Object.freeze([
     directory: "factory-emulator",
   },
   { name: "@you-agent-factory/components", directory: "components" },
+  { name: "@you-agent-factory/factory-graph", directory: "factory-graph" },
   {
     name: "@you-agent-factory/factory-visualizers",
     directory: "factory-visualizers",
