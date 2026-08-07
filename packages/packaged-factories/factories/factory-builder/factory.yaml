@@ -125,9 +125,16 @@ workstations:
         outputs:
           - workType: factory-build
             state: help
+    # An unclassifiable request is answered with usage guidance, not failed.
+    # Classification has no default route, so any label the model returns that
+    # is neither build nor help lands here -- and a request we cannot read is
+    # exactly the case this Factory exists to answer helpfully rather than
+    # guess at. Routing it to failed instead makes the whole invocation fail,
+    # which over ACP reports as a failed prompt for what is really just an
+    # unclear ask.
     onFailure:
       - workType: factory-build
-        state: failed
+        state: help
     promptFile: prompts/route-request.md
   - name: answer-help
     type: AGENT_RUN

@@ -139,6 +139,11 @@ func deliverPromptText(notify promptNotifier, sessionID string, text []string) e
 // suppressed, since a message delivered live is never re-observed by that
 // later sweep (both share one attachment cursor).
 type dispatchOutcome struct {
+	// failure is the JSON-RPC error a non-completed invocation must answer
+	// with. ACP has no failure StopReason, so a failed Factory run cannot be
+	// reported inside a successful prompt response; answering end_turn instead
+	// makes a failed run indistinguishable from a successful one.
+	failure        *acpsdk.RequestError
 	outcome        protocol.PromptOutcome
 	terminal       chatsessions.TurnState
 	sessionVersion uint64
@@ -567,6 +572,12 @@ func (s *Server) dispatchFactoryTurn(
 	} else if notifyErr := s.deliverPromptUpdates(ctx, startResult, dispatched.sessionVersion, reqIdentity, dispatched.liveDelivered, dispatched.outcome.Text); notifyErr != nil {
 		terminal = chatsessions.TurnStateFailed
 		rpcErr = classifyDependencyFailure(notifyErr)
+	} else if dispatched.failure != nil {
+		// The turn's own updates are delivered first: whatever the Worker did
+		// before the invocation failed is still what happened, and a client
+		// that sees the error should also see the work behind it. Only the
+		// prompt result itself becomes an error.
+		rpcErr = dispatched.failure
 	} else {
 		resp := acpsdk.PromptResponse{
 			Meta:       attachmentResumeMetadata(ctx, startResult.Session.ID),
@@ -853,6 +864,7 @@ func (s *Server) startFactorySessionForEpisode(
 
 	return dispatchOutcome{
 		outcome:        protocol.MapFactoryInvocationOutcome(outcome),
+		failure:        protocol.FactoryInvocationFailure(outcome),
 		terminal:       factoryInvocationTurnState(outcome.Status),
 		sessionVersion: bindResult.Session.Version,
 		liveDelivered:  liveDelivered,
@@ -951,6 +963,7 @@ func (s *Server) invokeFactorySessionForEpisode(
 
 	return dispatchOutcome{
 		outcome:        protocol.MapFactoryInvocationOutcome(invokeResult),
+		failure:        protocol.FactoryInvocationFailure(invokeResult),
 		terminal:       factoryInvocationTurnState(invokeResult.Status),
 		sessionVersion: sessionVersion,
 		liveDelivered:  liveDelivered,

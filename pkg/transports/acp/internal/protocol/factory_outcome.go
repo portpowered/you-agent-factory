@@ -35,6 +35,50 @@ func MapFactoryInvocationOutcome(result factorysessions.InvocationResult) Prompt
 	}
 }
 
+// FactoryInvocationFailure reports the JSON-RPC error a non-completed Factory
+// invocation must answer "session/prompt" with, or nil when the invocation
+// reached a completed outcome.
+//
+// ACP has no failure StopReason: the vocabulary is end_turn, max_tokens,
+// max_turn_requests, refusal, and cancelled, none of which means "this run
+// broke". A failed invocation therefore cannot be expressed in a successful
+// prompt response at all, and reporting one as end_turn makes a failed run
+// indistinguishable from a successful one. The protocol's own failure channel
+// is the JSON-RPC error response, which is what this returns.
+//
+// Only InvocationErrorCode crosses the boundary, never Message. The error code
+// is a closed, Factory Session-owned vocabulary; Message is free-form
+// diagnostic text that can carry provider commands, paths, and credentials,
+// which is why PromptOutcome refuses to serialize it and why this maps the
+// code rather than passing the message through.
+//
+// A cancelled or timed-out invocation is not a failure: both have a truthful
+// StopReason (cancelled), so they keep answering with a successful response.
+func FactoryInvocationFailure(result factorysessions.InvocationResult) *acpsdk.RequestError {
+	if !failedInvocationStatus(string(result.Status)) {
+		return nil
+	}
+	return acpsdk.NewInternalError(map[string]any{"reason": boundedInvocationErrorCode(result.ErrorCode)})
+}
+
+func failedInvocationStatus(status string) bool {
+	return status == string(factorysessions.InvocationTerminalStatusFailed)
+}
+
+// boundedInvocationErrorCode narrows the published error code to the declared
+// vocabulary. An unrecognized value is replaced rather than forwarded: the
+// whole reason this is safe to disclose is that its value set is closed, so a
+// code this transport does not recognize is treated as unbounded text.
+func boundedInvocationErrorCode(code string) string {
+	switch factorysessions.InvocationErrorCode(code) {
+	case factorysessions.InvocationErrorCodeCanceled,
+		factorysessions.InvocationErrorCodeRuntimeFailure,
+		factorysessions.InvocationErrorCodeTimedOut:
+		return code
+	}
+	return string(factorysessions.InvocationErrorCodeRuntimeFailure)
+}
+
 // mapFactoryTerminalStatus is the total mapping MapFactoryInvocationOutcome
 // applies to the published InvocationTerminalStatus vocabulary
 // ("COMPLETED"/"CANCELED"/"FAILED"/"TIMED_OUT"). A published completed

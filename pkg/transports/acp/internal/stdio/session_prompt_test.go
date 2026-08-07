@@ -1187,8 +1187,9 @@ func TestHandleSessionPromptLaterTurnMapsInvocationOutcomeToFinalStopReason(t *t
 			env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 				promptTextParams("session-1", "a later message"))
 			result, rpcErr := server.handleSessionPrompt(context.Background(), env)
-			if rpcErr != nil {
-				t.Fatalf("handleSessionPrompt() error = %+v, want success", rpcErr)
+			wantPromptFailureForStatus(t, tc.status, rpcErr)
+			if tc.status == factorysessions.InvocationTerminalStatusFailed {
+				return
 			}
 
 			var resp acpsdk.PromptResponse
@@ -1963,9 +1964,8 @@ func TestHandleSessionPromptFirstTurnAdvancesByInvokeOutcome(t *testing.T) {
 
 			env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 				promptTextParams("session-1", "hello there"))
-			if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr != nil {
-				t.Fatalf("handleSessionPrompt() error = %+v, want success (a published Factory failure still yields a normal final ACP response)", rpcErr)
-			}
+			_, rpcErr := server.handleSessionPrompt(context.Background(), env)
+			wantPromptFailureForStatus(t, tc.status, rpcErr)
 
 			wantAdvanceTurnSequence(t, chatSessions, "session-1", "turn-1", chatsessions.TurnStateRunning, tc.want)
 		})
@@ -2003,9 +2003,8 @@ func TestHandleSessionPromptLaterTurnAdvancesByInvocationOutcome(t *testing.T) {
 
 			env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 				promptTextParams("session-1", "a later message"))
-			if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr != nil {
-				t.Fatalf("handleSessionPrompt() error = %+v, want success (a Factory-level failure still yields a normal final ACP response)", rpcErr)
-			}
+			_, rpcErr := server.handleSessionPrompt(context.Background(), env)
+			wantPromptFailureForStatus(t, tc.status, rpcErr)
 
 			wantAdvanceTurnSequence(t, chatSessions, "session-1", "turn-2", chatsessions.TurnStateRunning, tc.want)
 		})
@@ -3484,4 +3483,31 @@ func TestServeAsyncWriteFailureStopsAllFurtherConnectionActivity(t *testing.T) {
 			t.Fatalf("writer was called %d times after later input arrived, want still exactly 1 (no new response write)", writer.calls)
 		}
 	})
+}
+
+// wantPromptFailureForStatus asserts the prompt answer that matches a Factory
+// invocation's terminal status.
+//
+// ACP has no failure StopReason, so a FAILED invocation cannot be reported
+// inside a successful prompt response; it answers with the protocol's own
+// failure channel instead, carrying only the closed InvocationErrorCode
+// vocabulary. Every other terminal status still yields a normal response.
+func wantPromptFailureForStatus(t *testing.T, status factorysessions.InvocationTerminalStatus, rpcErr *acpsdk.RequestError) {
+	t.Helper()
+	if status != factorysessions.InvocationTerminalStatusFailed {
+		if rpcErr != nil {
+			t.Fatalf("handleSessionPrompt() error = %+v, want a normal final ACP response for %q", rpcErr, status)
+		}
+		return
+	}
+	if rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a failed invocation to fail the prompt rather than report end_turn")
+	}
+	encoded, marshalErr := json.Marshal(rpcErr)
+	if marshalErr != nil {
+		t.Fatalf("marshal prompt failure: %v", marshalErr)
+	}
+	if !strings.Contains(string(encoded), "INVOCATION_RUNTIME_FAILURE") {
+		t.Fatalf("prompt failure = %s, want the bounded invocation error code", encoded)
+	}
 }

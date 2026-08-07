@@ -146,7 +146,7 @@ workstations:
           workType: factory-build
       name: route-request
       onFailure:
-        - state: failed
+        - state: help
           workType: factory-build
       promptFile: prompts/route-request.md
       type: CLASSIFIER_WORKSTATION

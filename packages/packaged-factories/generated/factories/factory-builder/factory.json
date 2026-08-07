@@ -210,7 +210,7 @@
       "name": "route-request",
       "onFailure": [
         {
-          "state": "failed",
+          "state": "help",
           "workType": "factory-build"
         }
       ],

@@ -76,11 +76,11 @@
       "slug": "factory-builder",
       "json": {
         "locator": "generated/factories/factory-builder/factory.json",
-        "sha256": "36c5023cbcce3e5d4f2908145dfb75cb0a795b93ec5b0c291503b4307f2a87ca"
+        "sha256": "beac46555e0fdc31fa0c9970bac481c82fba923822793104abe5631a3a2cd7ec"
       },
       "yaml": {
         "locator": "generated/factories/factory-builder/factory.yaml",
-        "sha256": "a0b7f5095cc140d8b13cfc021b028a96d182f016442f962a400f9747ad0f76a0"
+        "sha256": "ec58844286e535fd05218edd87e8a78e59ab679f2f7e2fda6c9458d0c5abf939"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
