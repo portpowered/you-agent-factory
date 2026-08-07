@@ -394,3 +394,93 @@ func TestPackagedJavaScriptFactoryCompletesOneACPPromptTurn(t *testing.T) {
 		t.Fatalf("provider call count = %d, want 5 (planner, three tasks, merger)", got)
 	}
 }
+
+// deepResearchACPRunner answers @you/deep-research's lead and specialist
+// prompts. Every role gets ordinary prose: this Factory's own workflow, not
+// its Workers, is what assembles the structured result this cell is about.
+type deepResearchACPRunner struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (runner *deepResearchACPRunner) Run(
+	_ context.Context,
+	_ process.CommandRequest,
+) (process.CommandResult, error) {
+	runner.mu.Lock()
+	runner.calls++
+	runner.mu.Unlock()
+	return process.CommandResult{Stdout: support.CodexSuccessStdout("deep research finding over ACP")}, nil
+}
+
+func (runner *deepResearchACPRunner) callCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.calls
+}
+
+// TestPackagedJavaScriptFactoryWithStructuredResultStreamsItsResult proves a
+// Factory that succeeds with a structured (JSON) primary result still delivers
+// that result to an ACP client.
+//
+// @you/deep-research returns its synthesis as a JSON primary-result part
+// rather than a text one. The prompt outcome mapper projected only `text`
+// parts, so this Factory produced a completed turn -- stopReason end_turn, no
+// error -- carrying no assistant message whatsoever. On the wire that is
+// indistinguishable from a Factory that ran and had nothing to say, and it is
+// strictly worse than the CLI, which at least reports "invocation primary
+// result is not plain text; use --json" rather than rendering silence.
+//
+// A successful invocation must return its result. The cell asserts the
+// Factory's own output reaches the client, not merely that some text did.
+func TestPackagedJavaScriptFactoryWithStructuredResultStreamsItsResult(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test driving root.BuildProcess through the you serve acp CLI command")
+	}
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "codex")
+	t.Setenv(operatorsettings.EnvDefaultWorkerModel, "gpt-5")
+	seedInstalledPackagedFactory(t, home, "@you/deep-research")
+	support.SeedACPAgentProfile(t, home, "factory:@you/deep-research", []string{"factory:@you/deep-research"})
+
+	runner := &deepResearchACPRunner{}
+	cwd := t.TempDir()
+	stdin, stdout := startServeACPHarness(t, home, cwd, serviceedges.Edges{ProviderCommandRunner: runner})
+
+	sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)
+	if sessionID == "" {
+		t.Fatal("session/new returned a blank sessionId")
+	}
+
+	promptResp, notifications := driveServeACPSessionPrompt(
+		t, stdin, stdout, sessionID, "research what this repository does and synthesize it",
+	)
+	if promptResp.Error != nil {
+		t.Fatalf("session/prompt response error = %+v (provider calls = %d), want a successful final result",
+			promptResp.Error, runner.callCount())
+	}
+	var decoded acpsdk.PromptResponse
+	if err := json.Unmarshal(promptResp.Result, &decoded); err != nil {
+		t.Fatalf("unmarshal PromptResponse: %v", err)
+	}
+	if decoded.StopReason != acpsdk.StopReasonEndTurn {
+		t.Fatalf("stopReason = %q, want %q", decoded.StopReason, acpsdk.StopReasonEndTurn)
+	}
+	if runner.callCount() == 0 {
+		t.Fatal("provider call count = 0, want the workflow's own lead and specialist agents to have run")
+	}
+
+	assistantText := agentMessageText(t, notifications)
+	if strings.TrimSpace(assistantText) == "" {
+		t.Fatalf("streamed assistant text is empty for a succeeded invocation (provider calls = %d); "+
+			"a completed turn must carry the Factory's result, structured or not", runner.callCount())
+	}
+	// The delivered text must be this Factory's own synthesis, not a
+	// placeholder standing in for it.
+	if !strings.Contains(assistantText, "deep research finding over ACP") {
+		t.Fatalf("streamed assistant text = %q, want it to carry the workflow's own synthesized findings", assistantText)
+	}
+}

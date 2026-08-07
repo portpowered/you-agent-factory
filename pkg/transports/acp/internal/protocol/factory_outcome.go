@@ -1,6 +1,8 @@
 package protocol
 
 import (
+	"strings"
+
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -9,8 +11,10 @@ import (
 
 // PromptOutcome is the bounded, safe-to-serialize projection of one Factory
 // Session outcome this transport maps into a "session/prompt" result: only
-// the deterministic ACP stop reason and the text extracted from supported
-// public primary-result content parts, in stable input order. It never
+// the deterministic ACP stop reason and the text projected from the
+// invocation's own published primary-result content parts, in stable input
+// order. Those parts are the Factory's answer to the customer, which is why
+// they cross this boundary at all. It never
 // carries an invocation's raw ErrorCode, Message, session/work identifiers,
 // or any other internal field -- a caller must not fall back to serializing
 // the source result itself when this projection's Text is empty.
@@ -23,11 +27,12 @@ type PromptOutcome struct {
 // completed Factory Session invocation (InvokeFactorySession, or the
 // synchronous activation StartAsync's own on-demand implementation
 // performs for a first turn) outcome to the bounded ACP prompt outcome this
-// transport returns. Text is projected only from the invocation's published
-// "text" primary-result parts, in the same order they appear on
-// result.PrimaryResult; an absent PrimaryResult or one containing only
-// unsupported part kinds (image/audio/JSON/binary) yields a nil Text rather
-// than fabricated content.
+// transport returns. Text is projected from the invocation's published
+// primary-result parts in the same order they appear on result.PrimaryResult:
+// its "text" parts when it has any, and otherwise its structured "json" parts
+// serialized as-is, so a Factory that succeeds always returns its result. An
+// absent PrimaryResult, or one carrying only parts with no text form at all
+// (image/audio/binary), yields a nil Text rather than fabricated content.
 func MapFactoryInvocationOutcome(result factorysessions.InvocationResult) PromptOutcome {
 	return PromptOutcome{
 		StopReason: mapFactoryTerminalStatus(string(result.Status)),
@@ -101,17 +106,51 @@ func mapFactoryTerminalStatus(status string) acpsdk.StopReason {
 	}
 }
 
-// primaryResultText extracts, in stable input order, only the "text" parts
-// of a published Factory Session primary result. Every other supported
-// public content part kind (image/audio/JSON/binary) is skipped rather than
-// fabricated into text.
+// primaryResultText projects a result's published text, preferring the
+// Factory's own text parts and falling back to serializing its structured
+// parts when it published no text at all.
+//
+// The fallback exists because a Factory that succeeds must return its result.
+// @you/deep-research publishes its synthesis as a JSON part rather than a text
+// one, so a text-only projection produced a completed turn carrying no
+// assistant message -- on the wire, indistinguishable from a Factory that ran
+// and had nothing to say.
+//
+// It is a fallback rather than an addition: when a Factory publishes text, that
+// text is what it chose to say, and appending a structured part beside it would
+// show a customer the same answer twice in two shapes.
 func primaryResultText(parts []work.WorkContentPart) []string {
+	if text := textPrimaryResultParts(parts); len(text) > 0 {
+		return text
+	}
+	return structuredPrimaryResultParts(parts)
+}
+
+func textPrimaryResultParts(parts []work.WorkContentPart) []string {
 	var text []string
 	for _, part := range parts {
 		if part.Type.Normalized() != work.WorkContentPartTypeText {
 			continue
 		}
 		text = append(text, part.Text)
+	}
+	return text
+}
+
+// structuredPrimaryResultParts serializes JSON parts in the order they were
+// published. Only JSON is projected: an image, audio, or binary part has no
+// text form, so rendering one would fabricate content rather than deliver it.
+func structuredPrimaryResultParts(parts []work.WorkContentPart) []string {
+	var text []string
+	for _, part := range parts {
+		if part.Type.Normalized() != work.WorkContentPartTypeJSON {
+			continue
+		}
+		encoded := strings.TrimSpace(string(part.JSON))
+		if encoded == "" {
+			continue
+		}
+		text = append(text, encoded)
 	}
 	return text
 }
