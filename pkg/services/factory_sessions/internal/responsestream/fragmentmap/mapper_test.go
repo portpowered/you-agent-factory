@@ -903,3 +903,98 @@ func TestMapFragment_CompactionMappingIsDeterministic(t *testing.T) {
 		t.Fatalf("mapping is not deterministic:\nfirst=%#v\nsecond=%#v", first, second)
 	}
 }
+
+// TestMapFragment_ACPPlanCarriesItsEntries covers the plan payload built from
+// an ACP plan update.
+//
+// The ACP client already captures the entry list, and keeping only a summary
+// string discarded it, so nothing downstream could render a real plan no
+// matter what the provider reported. These cells pin that the entries survive,
+// and that a provider reporting none still yields the prior summary-only
+// behavior rather than an error.
+func TestMapFragment_ACPPlanCarriesItsEntries(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name        string
+		payload     string
+		entries     string
+		wantSummary string
+		wantSteps   []responseevents.PlanStep
+	}{
+		{
+			name:        "entries become ordered steps",
+			payload:     "ACP plan",
+			entries:     `[{"content":"first","status":"in_progress"},{"title":"second"}]`,
+			wantSummary: "ACP plan",
+			wantSteps: []responseevents.PlanStep{
+				{ID: "1", Description: "first", Status: "in_progress"},
+				{ID: "2", Description: "second"},
+			},
+		},
+		{
+			// A title is the fallback description, so an entry carrying only a
+			// title is still renderable rather than dropped.
+			name:        "an entry with neither content nor title is skipped",
+			payload:     "",
+			entries:     `[{"content":"  ","title":"  "},{"content":"kept"}]`,
+			wantSummary: "ACP plan updated",
+			wantSteps:   []responseevents.PlanStep{{ID: "2", Description: "kept"}},
+		},
+		{
+			name:        "no entries leaves the summary alone",
+			payload:     "just a summary",
+			entries:     "",
+			wantSummary: "just a summary",
+		},
+		{
+			name:        "malformed entries leave the summary alone",
+			payload:     "still a summary",
+			entries:     "{not json",
+			wantSummary: "still a summary",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			metadata := map[string]string{"kind": "plan", "item_id": "plan"}
+			if tc.entries != "" {
+				metadata["entries"] = tc.entries
+			}
+			events, err := fragmentmap.MapFragment(
+				fragmentmap.Context{FactorySessionID: "session-1", RunID: "run-1"},
+				responsestream.Event{
+					Kind: responsestream.EventKindProgressFragment,
+					Type: responsestream.EventTypeProgress,
+					// A bare native type keeps this on the metadata-driven
+					// path rather than the dotted native-adapter one.
+					ExternalEventType: "updated",
+					Payload:           tc.payload,
+					DispatchID:        "dispatch-1",
+					Metadata:          metadata,
+				},
+			)
+			if err != nil {
+				t.Fatalf("MapFragment() error = %v", err)
+			}
+			if len(events) != 1 {
+				t.Fatalf("mapped events = %d, want exactly 1", len(events))
+			}
+			if events[0].Kind != responseevents.KindPlan || events[0].Phase != responseevents.PhaseUpdated {
+				t.Fatalf("mapped event = %q/%q, want PLAN/UPDATED", events[0].Kind, events[0].Phase)
+			}
+			var payload responseevents.PlanPayload
+			if err := json.Unmarshal(events[0].Payload, &payload); err != nil {
+				t.Fatalf("decode PlanPayload: %v", err)
+			}
+			if payload.Summary != tc.wantSummary {
+				t.Fatalf("summary = %q, want %q", payload.Summary, tc.wantSummary)
+			}
+			if !reflect.DeepEqual(payload.Steps, tc.wantSteps) {
+				t.Fatalf("steps = %+v, want %+v", payload.Steps, tc.wantSteps)
+			}
+		})
+	}
+}

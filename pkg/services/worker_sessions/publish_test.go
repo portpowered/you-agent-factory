@@ -3,6 +3,8 @@ package workersessions_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
@@ -406,5 +408,467 @@ func TestPublish_KeepsEachWorkerSessionSequenceIndependent(t *testing.T) {
 	}
 	if len(bySession["d1"]) != 3 || len(bySession["d2"]) != 2 {
 		t.Fatalf("records per session = %v, want d1:3 d2:2", bySession)
+	}
+}
+
+// rejectingWorkerRecordSpy fails every publication so the drop path is
+// exercised rather than assumed.
+type rejectingWorkerRecordSpy struct {
+	workersessions.Service
+	err error
+}
+
+func (s *rejectingWorkerRecordSpy) ObserveProviderSession(
+	context.Context, workersessions.ProviderSessionObservationRequest,
+) (workersessions.ProviderSessionAssociationResult, error) {
+	return workersessions.ProviderSessionAssociationResult{}, nil
+}
+
+func (s *rejectingWorkerRecordSpy) PublishRecord(
+	context.Context, workersessions.PublishRecordRequest,
+) (workersessions.PublishRecordResult, error) {
+	return workersessions.PublishRecordResult{}, s.err
+}
+
+type recordingLogger struct{ messages []string }
+
+func (l *recordingLogger) Warn(msg string, args ...any) {
+	entry := msg
+	for index := 0; index+1 < len(args); index += 2 {
+		entry += " " + fmt.Sprint(args[index]) + "=" + fmt.Sprint(args[index+1])
+	}
+	l.messages = append(l.messages, entry)
+}
+
+// TestPublish_ReportsARejectedWorkerRecordWithoutFailingTheDispatch covers the
+// race this routing must survive: a Worker's terminal record can begin
+// committing while a final observation is still in flight, and PublishRecord
+// then refuses it. Losing that one record is acceptable; losing it silently is
+// not, because a Worker whose output stops early would be undiagnosable.
+func TestPublish_ReportsARejectedWorkerRecordWithoutFailingTheDispatch(t *testing.T) {
+	cases := []struct {
+		name        string
+		err         error
+		wantOutcome string
+	}{
+		{"closed window", workersessions.ErrPublicationNotOpen, "outcome=publication_not_open"},
+		{"out of order", workersessions.ErrOutOfOrderPublication, "outcome=out_of_order"},
+		{"unknown session", workersessions.ErrSessionNotFound, "outcome=session_not_found"},
+		{"anything else", errors.New("boom"), "outcome=rejected"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			logger := &recordingLogger{}
+			var forwarded int
+			publisher := workersessions.NewProviderSessionObservationPublisher(
+				func(workers.ProgressFragment) { forwarded++ }).WithLogger(logger)
+			publisher.Bind(&rejectingWorkerRecordSpy{err: tc.err})
+
+			publisher.Publish(workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "delta", Payload: "hello",
+				Metadata: map[string]string{"kind": "message", "item_id": "m1"},
+			})
+
+			if len(logger.messages) != 1 {
+				t.Fatalf("warnings = %v, want exactly one -- a dropped observation must be diagnosable", logger.messages)
+			}
+			if !strings.Contains(logger.messages[0], tc.wantOutcome) {
+				t.Fatalf("warning = %q, want it to carry %q", logger.messages[0], tc.wantOutcome)
+			}
+			if strings.Contains(logger.messages[0], "hello") {
+				t.Fatalf("warning leaked payload content: %q", logger.messages[0])
+			}
+			// The dispatch continues regardless: Publish has a no-return
+			// signature precisely so one record cannot fail a Worker.
+			if forwarded != 1 {
+				t.Fatalf("forwarded = %d, want 1 even though publication was rejected", forwarded)
+			}
+		})
+	}
+}
+
+// TestPublish_IgnoresFragmentsThatNameNoWorkerSession covers the guards that
+// keep a malformed or unroutable observation from reaching PublishRecord.
+func TestPublish_IgnoresFragmentsThatNameNoWorkerSession(t *testing.T) {
+	cases := []struct {
+		name     string
+		bind     bool
+		fragment workers.ProgressFragment
+	}{
+		{
+			name: "no dispatch to address",
+			bind: true,
+			fragment: workers.ProgressFragment{
+				Kind: workers.ProgressFragmentKind, Type: "delta", Payload: "hi",
+				Metadata: map[string]string{"kind": "message", "item_id": "m1"},
+			},
+		},
+		{
+			name: "no bound worker sessions service",
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "delta", Payload: "hi",
+				Metadata: map[string]string{"kind": "message", "item_id": "m1"},
+			},
+		},
+		{
+			name: "an unrecognized phase word",
+			bind: true,
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "sideways", Payload: "hi",
+				Metadata: map[string]string{"kind": "message", "item_id": "m1"},
+			},
+		},
+		{
+			name: "a native type carrying no phase at all",
+			bind: true,
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "undotted", Payload: "hi",
+			},
+		},
+		{
+			name: "a file change with no path",
+			bind: true,
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "updated",
+				Metadata: map[string]string{"kind": "file_change", "item_id": "f1", "operation": "created"},
+			},
+		},
+		{
+			name: "usage with no token count",
+			bind: true,
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "updated",
+				Metadata: map[string]string{"kind": "usage", "item_id": "usage"},
+			},
+		},
+		{
+			name: "a tool fact with no tool call id",
+			bind: true,
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "updated", Payload: "t",
+				Metadata: map[string]string{"kind": "tool", "status": "completed"},
+			},
+		},
+		{
+			name: "generic progress with nothing to label it",
+			bind: true,
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind,
+				Metadata: map[string]string{"kind": "mystery"},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			spy := &workerRecordSpy{}
+			publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
+			if tc.bind {
+				publisher.Bind(spy)
+			}
+			publisher.Publish(tc.fragment)
+			if len(spy.published) != 0 {
+				t.Fatalf("published %+v, want nothing committed", spy.published)
+			}
+		})
+	}
+}
+
+// TestPublish_CommitsRemainingWorkerVocabulary covers the fact kinds the
+// primary table does not, so every branch that can reach a Worker topic is
+// exercised at least once.
+func TestPublish_CommitsRemainingWorkerVocabulary(t *testing.T) {
+	cases := []struct {
+		name      string
+		fragment  workers.ProgressFragment
+		wantKind  workers.Kind
+		wantPhase workers.Phase
+	}{
+		{
+			name: "acp plan with structured entries",
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "updated",
+				Metadata: map[string]string{
+					"kind": "plan", "item_id": "plan",
+					"entries": `[{"content":"Finish the turn","priority":"high","status":"in_progress"},{"content":""}]`,
+				},
+			},
+			wantKind: workers.KindPlan, wantPhase: workers.PhaseUpdated,
+		},
+		{
+			name: "a plan with no structure falls back to its summary",
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "updated", Payload: "do the thing",
+				Metadata: map[string]string{"kind": "plan", "item_id": "plan"},
+			},
+			wantKind: workers.KindPlan, wantPhase: workers.PhaseUpdated,
+		},
+		{
+			name: "acp usage",
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "updated",
+				Metadata: map[string]string{"kind": "usage", "item_id": "usage", "used_tokens": "17"},
+			},
+			wantKind: workers.KindUsage, wantPhase: workers.PhaseUpdated,
+		},
+		{
+			name: "a provider error",
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "failed",
+				Metadata: map[string]string{"kind": "error", "item_id": "e1"},
+			},
+			wantKind: workers.KindError, wantPhase: workers.PhaseUpdated,
+		},
+		{
+			name: "a run start",
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "started",
+				Metadata: map[string]string{"kind": "run", "item_id": "run"},
+			},
+			wantKind: workers.KindRun, wantPhase: workers.PhaseStarted,
+		},
+		{
+			name: "a tool call opening",
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "started", Payload: "Inspect",
+				Metadata: map[string]string{
+					"kind": "tool", "item_id": "t1", "status": "pending", "raw_input": `{"scope":"factory"}`,
+				},
+			},
+			wantKind: workers.KindTool, wantPhase: workers.PhaseStarted,
+		},
+		{
+			name: "a cancelled tool call",
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "updated", Payload: "Inspect",
+				Metadata: map[string]string{"kind": "tool", "item_id": "t1", "status": "cancelled"},
+			},
+			wantKind: workers.KindTool, wantPhase: workers.PhaseCanceled,
+		},
+		{
+			name: "a failed tool call",
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "updated", Payload: "Inspect",
+				Metadata: map[string]string{"kind": "tool", "item_id": "t1", "status": "failed"},
+			},
+			wantKind: workers.KindTool, wantPhase: workers.PhaseFailed,
+		},
+		{
+			name: "a tool output increment with no title",
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "updated",
+				Metadata: map[string]string{
+					"kind": "tool", "item_id": "t1", "status": "in_progress", "raw_output": `{"ok":true}`,
+				},
+			},
+			wantKind: workers.KindTool, wantPhase: workers.PhaseDelta,
+		},
+		{
+			name: "an unnamed tool call still commits",
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "started",
+				Metadata: map[string]string{"kind": "tool", "item_id": "t1", "status": "pending"},
+			},
+			wantKind: workers.KindTool, wantPhase: workers.PhaseStarted,
+		},
+		{
+			name: "a completed native message snapshot",
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "message.completed", Payload: "done",
+				Metadata: map[string]string{"item_id": "m1", "partial": "true"},
+			},
+			wantKind: workers.KindMessage, wantPhase: workers.PhaseCompleted,
+		},
+		{
+			name: "a completed native reasoning snapshot",
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "reasoning.completed", Payload: "thought",
+				Metadata: map[string]string{"item_id": "r1"},
+			},
+			wantKind: workers.KindReasoning, wantPhase: workers.PhaseCompleted,
+		},
+		{
+			name: "a cancelled run",
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "canceled",
+				Metadata: map[string]string{"kind": "turn", "item_id": "turn"},
+			},
+			wantKind: workers.KindRun, wantPhase: workers.PhaseCanceled,
+		},
+		{
+			name: "an unrecognized fact kind becomes labelled progress",
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Payload: "detail",
+				Metadata: map[string]string{"kind": "mystery", "native_type": "vendor/thing"},
+			},
+			wantKind: workers.KindProgress, wantPhase: workers.PhaseUpdated,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			spy := &workerRecordSpy{}
+			publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
+			publisher.Bind(spy)
+			publisher.Publish(tc.fragment)
+
+			if len(spy.published) != 1 {
+				t.Fatalf("published %d record(s), want exactly 1", len(spy.published))
+			}
+			req := spy.published[0]
+			if req.Draft.Kind != tc.wantKind || req.Draft.Phase != tc.wantPhase {
+				t.Fatalf("draft = %q/%q, want %q/%q",
+					req.Draft.Kind, req.Draft.Phase, tc.wantKind, tc.wantPhase)
+			}
+			if err := req.Validate(); err != nil {
+				t.Fatalf("Validate() error = %v, want nil", err)
+			}
+		})
+	}
+}
+
+// TestPublish_ResponseFragmentsAlsoReachTheWorkerTopic covers the second
+// Worker-authored fragment kind: the runner's own terminal content.
+func TestPublish_ResponseFragmentsAlsoReachTheWorkerTopic(t *testing.T) {
+	spy := &workerRecordSpy{}
+	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
+	publisher.Bind(spy)
+	publisher.Publish(workers.ProgressFragment{
+		DispatchID: "d1", Kind: workers.ResponseFragmentKind, Type: "delta", Payload: "final",
+		Metadata: map[string]string{"kind": "message", "item_id": "m1"},
+	})
+	if len(spy.published) != 1 {
+		t.Fatalf("published %d record(s), want the response fragment committed too", len(spy.published))
+	}
+}
+
+// TestWithLogger_IsSafeOnANilPublisher keeps the option usable in the same
+// nil-tolerant style as the rest of this type.
+func TestWithLogger_IsSafeOnANilPublisher(t *testing.T) {
+	var publisher *workersessions.ProviderSessionObservationPublisher
+	if got := publisher.WithLogger(&recordingLogger{}); got != nil {
+		t.Fatalf("WithLogger() on a nil publisher = %v, want nil", got)
+	}
+}
+
+// TestPublish_DropsFactsThatCannotBecomeALegalRecord covers the conversions
+// that resolve to a Kind/Phase pair or payload the Workers vocabulary refuses.
+// Dropping them here is what keeps PublishRecord from rejecting a record and
+// losing the observation with no explanation.
+func TestPublish_DropsFactsThatCannotBecomeALegalRecord(t *testing.T) {
+	cases := []struct {
+		name     string
+		fragment workers.ProgressFragment
+	}{
+		{
+			// MESSAGE has no CANCELED phase. The pair is resolved here but
+			// refused by workers.ValidateDraft.
+			name: "a message phase the vocabulary does not declare",
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "canceled", Payload: "hi",
+				Metadata: map[string]string{"kind": "message", "item_id": "m1"},
+			},
+		},
+		{
+			name: "a message delta with no text",
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "delta",
+				Metadata: map[string]string{"kind": "message", "item_id": "m1"},
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			spy := &workerRecordSpy{}
+			publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
+			publisher.Bind(spy)
+			publisher.Publish(tc.fragment)
+			if len(spy.published) != 0 {
+				t.Fatalf("published %+v, want nothing committed", spy.published)
+			}
+		})
+	}
+}
+
+// TestPublish_CoversTheRemainingPhaseVocabulary exercises the phase words and
+// tool statuses the other tables do not reach.
+func TestPublish_CoversTheRemainingPhaseVocabulary(t *testing.T) {
+	cases := []struct {
+		name      string
+		fragment  workers.ProgressFragment
+		wantKind  workers.Kind
+		wantPhase workers.Phase
+	}{
+		{
+			// A provider reporting an ongoing message change means DELTA;
+			// no content kind declares UPDATED.
+			name: "a message reported as updated is an increment",
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "updated", Payload: "more",
+				Metadata: map[string]string{"kind": "message", "item_id": "m1"},
+			},
+			wantKind: workers.KindMessage, wantPhase: workers.PhaseDelta,
+		},
+		{
+			name: "an unrecognized tool status is treated as an increment",
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "updated", Payload: "partial output",
+				Metadata: map[string]string{"kind": "tool", "item_id": "t1", "status": "vendor-specific"},
+			},
+			wantKind: workers.KindTool, wantPhase: workers.PhaseDelta,
+		},
+		{
+			name: "a completed tool call carries its raw output",
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "updated", Payload: "Inspect",
+				Metadata: map[string]string{
+					"kind": "tool", "item_id": "t1", "status": "completed", "raw_output": `{"ok":true}`,
+				},
+			},
+			wantKind: workers.KindTool, wantPhase: workers.PhaseCompleted,
+		},
+		{
+			name: "a native message start",
+			fragment: workers.ProgressFragment{
+				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "message.started", Payload: "hi",
+				Metadata: map[string]string{"item_id": "m1"},
+			},
+			wantKind: workers.KindMessage, wantPhase: workers.PhaseStarted,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			spy := &workerRecordSpy{}
+			publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
+			publisher.Bind(spy)
+			publisher.Publish(tc.fragment)
+			if len(spy.published) != 1 {
+				t.Fatalf("published %d record(s), want exactly 1", len(spy.published))
+			}
+			req := spy.published[0]
+			if req.Draft.Kind != tc.wantKind || req.Draft.Phase != tc.wantPhase {
+				t.Fatalf("draft = %q/%q, want %q/%q", req.Draft.Kind, req.Draft.Phase, tc.wantKind, tc.wantPhase)
+			}
+			if err := req.Validate(); err != nil {
+				t.Fatalf("Validate() error = %v, want nil", err)
+			}
+		})
+	}
+}
+
+// TestPublish_WithoutALoggerStaysSilentAndSafe proves reporting is optional:
+// a publisher constructed without a logger must still never fail a dispatch
+// when a record is refused.
+func TestPublish_WithoutALoggerStaysSilentAndSafe(t *testing.T) {
+	var forwarded int
+	publisher := workersessions.NewProviderSessionObservationPublisher(
+		func(workers.ProgressFragment) { forwarded++ })
+	publisher.Bind(&rejectingWorkerRecordSpy{err: workersessions.ErrPublicationNotOpen})
+	publisher.Publish(workers.ProgressFragment{
+		DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "delta", Payload: "hello",
+		Metadata: map[string]string{"kind": "message", "item_id": "m1"},
+	})
+	if forwarded != 1 {
+		t.Fatalf("forwarded = %d, want 1", forwarded)
 	}
 }

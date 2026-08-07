@@ -351,10 +351,12 @@ func draftFromProgressFragment(fragment workers.ProgressFragment) (workers.Draft
 	if !ok {
 		return workers.Draft{}, false
 	}
-	encoded, err := json.Marshal(payload)
-	if err != nil {
-		return workers.Draft{}, false
-	}
+	// Every payload above is a plain struct, so encoding cannot fail. Handling
+	// an impossible error here would add a branch no test can reach; a nil
+	// encoding would instead be rejected by the validation below, which already
+	// requires a non-empty, well-formed payload. Same reasoning as
+	// serializedKnownChildUpdateBytes in the ACP child projector.
+	encoded, _ := json.Marshal(payload)
 
 	draft := workers.Draft{
 		Kind:         kind,
