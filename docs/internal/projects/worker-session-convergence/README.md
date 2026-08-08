@@ -133,20 +133,23 @@ content inside.
 
 ## 6. What is still red, and why
 
-Nine functional cells still fail. None of them are about the route -- children
-reach the provider, run concurrently, and open tool calls. All four are facts
-the durable-session projection used to get from the deleted executor and now
-gets from nobody.
+Six functional cells still fail, in three buckets. None are about the route --
+children reach the provider, run concurrently, cancel, and open tool calls.
+Each is a fact the durable session used to get from the deleted executor.
+
+Closed since this list was first written: child failure classification
+(`InvokeWorkerResult` now carries the Workers-owned failure type and retry
+verdict) and workflow cancellation (`InvokeWorker` now issues `Cancel` on the
+Worker Session, and a resumed child takes a `.../resume/N` identity).
 
 | Failing cells | Missing fact | Where it has to come from |
 | --- | --- | --- |
-| `TestJavaScriptParallelPartialFailureUsesDocumentedPolicy` | `failureDetail`, `failureClassification`, `retryable` on a failed child record | `InvokeWorkerResult` narrows to `Diagnostic` alone. It needs the closed-vocabulary `FailureDetail.Reason` and the retryable flag as well -- both are safe to cross; `InvocationResult.Message` still must not. |
 | `TestJavaScriptChildProgressPublishesCanonicalResponseEvents`, `TestJavaScriptTerminalResultFollowsFinalResponseEvent` | child provider progress on the Factory Session response-event surface | Progress now flows Workers -> `ProviderSessionObservationPublisher` -> the runtime progress stream. It no longer reaches the durable session's own response-event store, which the JavaScript service used to write through `sessionProgressPublisher`. |
-| `TestJavaScriptInterruptedSessionResumes...`, `TestJavaScriptResumeRestoresCheckpoint...`, `TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault`, `TestFactorySessionResumeDoesNotRepeatCompletedDispatch`, `TestFactorySessionHistoryIsNotPersistedByDefault`, `TestAPIPartialResultIsAvailableBeforeTerminalCompletion` | workflow cancellation reaching the running child | `InvokeWorker` deliberately calls `InvokeSession` under `context.WithoutCancel`, because Worker Sessions owns cancellation. Nothing yet translates a canceled workflow into `Cancel` on that Worker Session. |
+| `TestJavaScriptInterruptedSessionResumes...`, `TestJavaScriptResumeRestoresCheckpoint...`, `TestFactorySessionResumeDoesNotRepeatCompletedDispatch` | a resumed child reaching Workers at all | The resumed dispatch now reserves its `.../resume/N` session and is refused with `START_FAILURE` -- the Workers pool the resumed session reaches will not admit it. Diagnosed only this far: `Pool.start` returns `AlreadyRunning` and **discards** the new route snapshot, so which pool a resumed session gets, and whether its provider-invocation route survives, is the next thing to establish. |
 | `TestJavaScriptMockWorkersReplaceOnlyNamedChildren` | mock-worker substitution for a named child | The provider-invocation route is built from the session command runner; per-child mock matching is not applied to it. |
 
-The first three are the load-bearing ones. Cancellation is the only one that is
-a behaviour regression rather than a projection gap.
+Resume is the load-bearing one: it is a behaviour regression, not a projection
+gap. The other two are projection gaps.
 
 ## 7. Behaviour changes worth knowing
 
