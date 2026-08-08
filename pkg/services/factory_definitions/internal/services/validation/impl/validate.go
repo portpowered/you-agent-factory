@@ -23,6 +23,7 @@ func ValidateStructural(cfg *factorydefinitions.FactoryConfig) Result {
 	targets = append(targets, duplicateIdentifierTargets(cfg)...)
 	targets = append(targets, duplicateWorkStateTargets(cfg)...)
 	targets = append(targets, ValidateGraphTopology(cfg).Targets...)
+	targets = append(targets, unsupportedSameNameAllChildrenCompleteJoinArityTargets(cfg)...)
 	targets = append(targets, conflictingWorkstationOutputTargets(cfg)...)
 	targets = append(targets, missingOutcomeRouteTargets(cfg)...)
 	targets = append(targets, ManagedRuntimeDependencyTargets(cfg)...)
