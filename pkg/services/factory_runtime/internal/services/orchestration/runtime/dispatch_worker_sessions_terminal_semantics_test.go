@@ -166,6 +166,24 @@ func (s *preHandoffFailedWorkerSessionsService) List(
 	return workersessions.ListResult{}, nil
 }
 
+func (s *preHandoffFailedWorkerSessionsService) ListObservations(
+	context.Context, workersessions.ListObservationsRequest,
+) (workersessions.ListObservationsResult, error) {
+	return workersessions.ListObservationsResult{}, nil
+}
+
+func (s *preHandoffFailedWorkerSessionsService) GetObservation(
+	context.Context, workersessions.GetObservationRequest,
+) (workersessions.Observation, error) {
+	return workersessions.Observation{}, nil
+}
+
+func (s *preHandoffFailedWorkerSessionsService) StreamObservations(
+	context.Context, workersessions.StreamObservationsRequest,
+) (workersessions.ObservationSubscription, error) {
+	return nil, nil
+}
+
 func (s *preHandoffFailedWorkerSessionsService) InvokeSession(
 	_ context.Context, req workersessions.InvokeSessionRequest,
 ) (workersessions.InvokeSessionResult, error) {

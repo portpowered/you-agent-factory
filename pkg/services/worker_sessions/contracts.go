@@ -40,6 +40,22 @@ type Service interface {
 	// filter value returns a typed validation error and no partial result.
 	List(ctx context.Context, req ListRequest) (ListResult, error)
 
+	// ListObservations returns detached, provider-neutral observations
+	// correlated with one Work identity. It is backed by Worker Sessions'
+	// lifecycle state, the exact Providers-owned association, and normalized
+	// Provider Sessions projection facts; it does not expose recording stores,
+	// provider readers, or filesystem paths.
+	ListObservations(ctx context.Context, req ListObservationsRequest) (ListObservationsResult, error)
+
+	// GetObservation returns one detached observation identified by its exact
+	// Providers-owned provider/kind/id reference.
+	GetObservation(ctx context.Context, req GetObservationRequest) (Observation, error)
+
+	// StreamObservations returns a cancellable retained-then-live stream over
+	// the canonical Worker Session Events topic for the exact Provider Session
+	// reference.
+	StreamObservations(ctx context.Context, req StreamObservationsRequest) (ObservationSubscription, error)
+
 	// InvokeSession validates req, then establishes or reuses one stable Worker
 	// Session identity in StateReserved, transitions StateStarting, and hands
 	// a detached clone of req.Execution to the one directly injected

@@ -4,6 +4,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -17,9 +18,10 @@ import (
 // peer worker_sessions service stays inside pkg/wire.
 func provideWorkerSessionsFactory(
 	eventsService events.Service,
+	providerSessions providersessions.Service,
 	logger logging.Logger,
 ) factoryruntime.WorkerSessionsFactory {
 	return func(boundary workers.WorkstationPoolBoundary) (workersessions.Service, error) {
-		return workersessionswire.NewService(boundary, eventsService, logger)
+		return workersessionswire.NewService(boundary, eventsService, logger, providerSessions)
 	}
 }

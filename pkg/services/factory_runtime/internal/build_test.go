@@ -269,6 +269,18 @@ func (s *stubWorkerSessionsService) List(context.Context, workersessions.ListReq
 	return workersessions.ListResult{}, nil
 }
 
+func (s *stubWorkerSessionsService) ListObservations(context.Context, workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
+	return workersessions.ListObservationsResult{}, nil
+}
+
+func (s *stubWorkerSessionsService) GetObservation(context.Context, workersessions.GetObservationRequest) (workersessions.Observation, error) {
+	return workersessions.Observation{}, nil
+}
+
+func (s *stubWorkerSessionsService) StreamObservations(context.Context, workersessions.StreamObservationsRequest) (workersessions.ObservationSubscription, error) {
+	return nil, nil
+}
+
 func (s *stubWorkerSessionsService) InvokeSession(ctx context.Context, req workersessions.InvokeSessionRequest) (workersessions.InvokeSessionResult, error) {
 	handoff := workers.WorkstationDispatchRequest{
 		WorkstationName: req.Execution.WorkstationName,

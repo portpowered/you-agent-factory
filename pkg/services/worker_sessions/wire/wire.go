@@ -12,6 +12,7 @@ package wire
 
 import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
 
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -33,6 +34,16 @@ func NewService(
 	boundary workers.WorkstationPoolBoundary,
 	eventsAppender EventsAppender,
 	logger logging.Logger,
+	providerSessions ...providersessions.Service,
 ) (workersessions.Service, error) {
-	return internalservice.New(boundary, eventsAppender, logger)
+	var projection providersessions.Service
+	if len(providerSessions) > 0 {
+		projection = providerSessions[0]
+	}
+	return internalservice.New(
+		boundary,
+		eventsAppender,
+		logger,
+		internalservice.WithProviderSessions(projection),
+	)
 }

@@ -77,7 +77,7 @@ func (stubExecution) Cancel(context.Context, workers.WorkstationDispatchCancelRe
 func (stubExecution) Stop(context.Context) error { return nil }
 
 func TestNewService_ConstructsAWorkingServiceFromInjectedExecution(t *testing.T) {
-	service, err := wire.NewService(stubExecution{}, newTestEventsAppender(t), logging.NoopLogger{})
+	service, err := wire.NewService(stubExecution{}, newTestEventsAppender(t), logging.NoopLogger{}, nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v, want nil", err)
 	}
@@ -92,13 +92,13 @@ func TestNewService_ConstructsAWorkingServiceFromInjectedExecution(t *testing.T)
 }
 
 func TestNewService_RejectsNilExecution(t *testing.T) {
-	if _, err := wire.NewService(nil, newTestEventsAppender(t), logging.NoopLogger{}); err == nil {
+	if _, err := wire.NewService(nil, newTestEventsAppender(t), logging.NoopLogger{}, nil); err == nil {
 		t.Fatalf("NewService(nil, ...) unexpectedly succeeded")
 	}
 }
 
 func TestNewService_RejectsNilEventsAppender(t *testing.T) {
-	if _, err := wire.NewService(stubExecution{}, nil, logging.NoopLogger{}); err == nil {
+	if _, err := wire.NewService(stubExecution{}, nil, logging.NoopLogger{}, nil); err == nil {
 		t.Fatalf("NewService(execution, nil, ...) unexpectedly succeeded")
 	}
 }

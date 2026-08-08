@@ -43,6 +43,12 @@ func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeS
 		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "not_startable")
 		return workersessions.InvokeSessionResult{}, err
 	}
+	r.ensureObservation(
+		req.ID,
+		attemptID,
+		req.Execution.Execution.Dispatch.Execution.RequestID,
+		req.Execution.Execution.Dispatch.Execution.WorkIDs,
+	)
 
 	if err := r.publishOpeningRecord(ctx, req.ID, attemptID); err != nil {
 		terminal := failedTerminal(workersessions.FailureCauseEventPublicationFailure, safeDetail(workersessions.FailureCauseEventPublicationFailure, nil))

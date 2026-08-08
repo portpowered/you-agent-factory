@@ -11,8 +11,10 @@ import (
 	"sort"
 	"sync"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -35,19 +37,30 @@ type EventsAppender interface {
 	Append(context.Context, events.AppendRequest) (events.AppendResult, error)
 }
 
+// EventsReader is the narrow canonical source needed by the observation
+// stream. An events.Service satisfies it structurally; tests and alternate
+// construction paths may provide only the read/subscribe capabilities.
+type EventsReader interface {
+	Subscribe(context.Context, events.SubscribeRequest) (events.Subscription, error)
+}
+
 type registry struct {
 	mu           sync.RWMutex
 	sessions     map[string]workersessions.Session
 	publications map[string]*publication
 	supervisions map[string]*supervision
+	observations map[string]*observation
 	// dispatchOwners is the Worker Sessions-owned reverse lookup from the
 	// currently supervised Workers dispatch to its stable session identity.
 	// Provider progress names dispatches, never Worker Sessions, so this map is
 	// the only accepted route from a provider observation to its owner.
-	dispatchOwners map[string]string
-	boundary       workers.WorkstationPoolBoundary
-	events         EventsAppender
-	logger         logging.Logger
+	dispatchOwners   map[string]string
+	boundary         workers.WorkstationPoolBoundary
+	events           EventsAppender
+	eventReader      EventsReader
+	providerSessions providersessions.Service
+	clock            platformclock.Source
+	logger           logging.Logger
 }
 
 // Compile-time proof that production registry seals the W1+W2 root contract
@@ -61,22 +74,34 @@ var _ workersessions.Service = (*registry)(nil)
 // before-handoff publication barrier commits through. A nil logger falls
 // back to logging.NoopLogger. A nil execution or nil eventsAppender is
 // rejected: Start has no meaningful behavior without either.
-func New(boundary workers.WorkstationPoolBoundary, eventsAppender EventsAppender, logger logging.Logger) (workersessions.Service, error) {
+func New(boundary workers.WorkstationPoolBoundary, eventsAppender EventsAppender, logger logging.Logger, options ...Option) (workersessions.Service, error) {
 	if boundary == nil {
 		return nil, ErrMissingExecution
 	}
 	if eventsAppender == nil {
 		return nil, ErrMissingEventsAppender
 	}
-	return &registry{
+	registry := &registry{
 		sessions:       make(map[string]workersessions.Session),
 		publications:   make(map[string]*publication),
 		supervisions:   make(map[string]*supervision),
+		observations:   make(map[string]*observation),
 		dispatchOwners: make(map[string]string),
 		boundary:       boundary,
 		events:         eventsAppender,
+		clock:          platformclock.Real{},
 		logger:         logging.EnsureLogger(logger),
-	}, nil
+	}
+	if reader, ok := eventsAppender.(EventsReader); ok {
+		registry.eventReader = reader
+	}
+	for _, option := range options {
+		if option != nil {
+			option(registry)
+		}
+	}
+	registry.clock = platformclock.Ensure(registry.clock)
+	return registry, nil
 }
 
 func (r *registry) Reserve(_ context.Context, req workersessions.ReserveRequest) (workersessions.Session, error) {
@@ -209,6 +234,7 @@ func (r *registry) commitTerminal(id string, state workersessions.State, result 
 	session.State = state
 	session.Result = cloneTerminalResult(&result)
 	r.sessions[id] = session
+	r.finishObservationLocked(id, r.clock.Now())
 	return cloneSession(session), true
 }
 
@@ -264,6 +290,7 @@ func (r *registry) commitControlTerminal(id string, state workersessions.State) 
 	existing.State = state
 	existing.Result = nil
 	r.sessions[id] = existing
+	r.finishObservationLocked(id, r.clock.Now())
 	return cloneSession(existing), true
 }
 

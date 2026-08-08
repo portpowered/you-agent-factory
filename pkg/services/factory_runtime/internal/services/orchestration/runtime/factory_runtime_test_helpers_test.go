@@ -151,6 +151,18 @@ func (s *fakeWorkerSessionsService) List(context.Context, workersessions.ListReq
 	return workersessions.ListResult{}, nil
 }
 
+func (s *fakeWorkerSessionsService) ListObservations(context.Context, workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
+	return workersessions.ListObservationsResult{}, nil
+}
+
+func (s *fakeWorkerSessionsService) GetObservation(context.Context, workersessions.GetObservationRequest) (workersessions.Observation, error) {
+	return workersessions.Observation{}, nil
+}
+
+func (s *fakeWorkerSessionsService) StreamObservations(context.Context, workersessions.StreamObservationsRequest) (workersessions.ObservationSubscription, error) {
+	return nil, nil
+}
+
 func (s *fakeWorkerSessionsService) InvokeSession(ctx context.Context, req workersessions.InvokeSessionRequest) (workersessions.InvokeSessionResult, error) {
 	handoff := workers.WorkstationDispatchRequest{
 		WorkstationName: req.Execution.WorkstationName,
