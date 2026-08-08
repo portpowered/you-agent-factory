@@ -12,6 +12,7 @@
 - Operator-only external smoke tests gate before executable discovery and use root.BuildProcess with an empty edge set; ordinary functional lanes inject only command-runner effects and never inherit the live gate.
 - Cross-platform filesystem permission tests must account for Windows mode-bit semantics while retaining strict POSIX assertions; Windows protection is provided by ACLs rather than POSIX permission bits.
 - Compare repository-wide quality-check output with the current base before attributing legacy findings; keep newly added Go tests within the backend-size limits by extracting case assertions into helpers.
+- Quality gates backed by deletion-only baselines are evaluated against the current origin/main and the lane-owned diff; report unrelated baseline debt instead of absorbing out-of-scope cleanup into feature work.
 
 ## [2026-08-08 14:03 -07:00] - wo-b1-antigravity-provider-golden-traces-001
 - What was implemented
@@ -171,4 +172,25 @@
 - **Learnings for future iterations:**
   - The offline and operator-gated commands are independently reproducible; keep the environment gate before `exec.LookPath` so default verification cannot probe AGY.
   - Treat inherited repository-wide backend-size findings as a delivery blocker to report, not as permission to weaken or bypass the lint check.
+---
+
+## [2026-08-08 16:40 -07:00] - wo-b1-antigravity-provider-golden-traces-005
+- What was implemented
+  - Committed the final recorded-stream test extraction and merged the current `origin/main` with both the AGY structured-output helpers and upstream workstation prompt-source helpers preserved.
+  - Removed the branch-only lint snapshot workaround that became stale after `origin/main` landed the repository's inline exemption and deletion-only baseline policy.
+  - Marked story 005 complete after confirming the operator smoke remains separately gated and ordinary AGY verification remains offline.
+- Files changed
+  - `pkg/services/providers/internal/services/execution/internal/adapters/agy/stream_test.go`
+  - `pkg/services/workers/internal/services/workstations/executor/helpers.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/providers/agy/... -count=1` passes using the real recorded traces.
+  - `$env:YOU_AGY_LIVE_SMOKE=''; go test ./tests/functional/providers/agy/... -run '^TestAgyLiveSmoke$' -count=1` passes with the live smoke skipped.
+  - `go test ./pkg/services/providers/... ./pkg/services/workers/... ./pkg/wire/... -count=1`, focused `go vet`, and `go run ./cmd/backendsizecheck -root .` pass.
+  - `make verify-fast` passes dashboard typecheck, MCP contract checks, 355 UI files/2,970 UI tests, 191 Bun tests, and the short Go suite.
+  - Repository-wide `make lint`/`pkg-maint` still reports the one unrelated main-branch complexity finding in `pkg/services/work/internal/services/state_access/internal/service/read_test.go`; no AGY-owned lint finding was introduced and no live AGY call was made.
+- **Learnings for future iterations:**
+  - Fetch `origin/main` before interpreting baseline failures; upstream can convert an apparent feature blocker into a documented deletion-only or diff-scoped baseline case.
+  - Resolve generated baseline conflicts from the exact upstream blob and validate with the owning checker before staging; large JSON output can be truncated by tooling.
 ---
