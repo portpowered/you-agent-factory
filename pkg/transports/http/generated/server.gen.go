@@ -76,8 +76,11 @@ const (
 	ErrorResponseCodeMETHODNOTALLOWED                           ErrorResponseCode = "METHOD_NOT_ALLOWED"
 	ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED              ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
 	ErrorResponseCodeNOTFOUND                                   ErrorResponseCode = "NOT_FOUND"
+	ErrorResponseCodePROJECTIONUNAVAILABLE                      ErrorResponseCode = "PROJECTION_UNAVAILABLE"
+	ErrorResponseCodePROVIDERUNSUPPORTED                        ErrorResponseCode = "PROVIDER_UNSUPPORTED"
 	ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND               ErrorResponseCode = "RESPONSE_EVENT_SESSION_NOT_FOUND"
 	ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED                 ErrorResponseCode = "RESPONSE_EVENT_STREAM_EXPIRED"
+	ErrorResponseCodeSESSIONKINDUNSUPPORTED                     ErrorResponseCode = "SESSION_KIND_UNSUPPORTED"
 	ErrorResponseCodeSTALEFACTORYVERSION                        ErrorResponseCode = "STALE_FACTORY_VERSION"
 )
 
@@ -7260,6 +7263,18 @@ type ListWorkerSessionsBySessionIdParams struct {
 	WorkId string `form:"workId" json:"workId"`
 }
 
+// GetWorkerSessionObservationBySessionIdParams defines parameters for GetWorkerSessionObservationBySessionId.
+type GetWorkerSessionObservationBySessionIdParams struct {
+	// Provider Provider that issued the correlated session identity.
+	Provider LoadableProviderSessionProvider `form:"provider" json:"provider"`
+
+	// Kind Provider-session identifier kind.
+	Kind LoadableProviderSessionKind `form:"kind" json:"kind"`
+
+	// Id Provider-issued session identifier, not a filesystem path.
+	Id string `form:"id" json:"id"`
+}
+
 // GetProviderSessionDetailsParams defines parameters for GetProviderSessionDetails.
 type GetProviderSessionDetailsParams struct {
 	// Provider Provider that emitted the session identifier. Only codex sessions are currently loadable.
@@ -9804,6 +9819,9 @@ type ServerInterface interface {
 	// List Worker Sessions correlated with one Work item
 	// (GET /factory-sessions/{session_id}/worker-sessions)
 	ListWorkerSessionsBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, params ListWorkerSessionsBySessionIdParams)
+	// Show one Worker Session observation
+	// (GET /factory-sessions/{session_id}/worker-sessions/detail)
+	GetWorkerSessionObservationBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, params GetWorkerSessionObservationBySessionIdParams)
 	// Validate factory definition
 	// (POST /factory-validations)
 	ValidateFactory(w http.ResponseWriter, r *http.Request)
@@ -11013,6 +11031,79 @@ func (siw *ServerInterfaceWrapper) ListWorkerSessionsBySessionId(w http.Response
 	handler.ServeHTTP(w, r)
 }
 
+// GetWorkerSessionObservationBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) GetWorkerSessionObservationBySessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetWorkerSessionObservationBySessionIdParams
+
+	// ------------- Required query parameter "provider" -------------
+
+	if paramValue := r.URL.Query().Get("provider"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "provider"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "provider", r.URL.Query(), &params.Provider)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "provider", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "kind" -------------
+
+	if paramValue := r.URL.Query().Get("kind"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "kind", r.URL.Query(), &params.Kind)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "id" -------------
+
+	if paramValue := r.URL.Query().Get("id"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "id"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "id", r.URL.Query(), &params.Id)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetWorkerSessionObservationBySessionId(w, r, sessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ValidateFactory operation middleware
 func (siw *ServerInterfaceWrapper) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 
@@ -11394,6 +11485,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/work/{id}/move", wrapper.MoveWorkBySessionId).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions", wrapper.ListWorkerSessionsBySessionId).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/detail", wrapper.GetWorkerSessionObservationBySessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-validations", wrapper.ValidateFactory).Methods("POST")
 

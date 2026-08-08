@@ -13,6 +13,7 @@ import (
 )
 
 const workerSessionsListHandlerID = "you.worker-sessions.list.handler"
+const workerSessionsShowHandlerID = "you.worker-sessions.show.handler"
 
 // NewWorkerSessionsFamilyCommand builds the detached `you worker-sessions`
 // observation family from generated metadata and a stable handler registry.
@@ -54,6 +55,13 @@ func NewWorkerSessionsFamilyCommandFromManifest(
 		return nil, fmt.Errorf("build worker sessions family command: handler %q must provide RunE", workerSessionsListHandlerID)
 	}
 	workerSessionsHandler := registered
+	showRegistered, err := registry.LookupHandlers(workerSessionsShowHandlerID)
+	if err != nil {
+		return nil, fmt.Errorf("build worker sessions family command: %w", err)
+	}
+	if showRegistered.RunE == nil || showRegistered.ResolvedRunE != nil {
+		return nil, fmt.Errorf("build worker sessions family command: handler %q must provide RunE", workerSessionsShowHandlerID)
+	}
 	rootRecord, err := manifest.CommandByID("you")
 	if err != nil {
 		return nil, fmt.Errorf("build worker sessions family command: %w", err)
@@ -70,6 +78,14 @@ func NewWorkerSessionsFamilyCommandFromManifest(
 					}
 				}
 				return workerSessionsHandler.RunE(cmd, args)
+			},
+			workerSessionsShowHandlerID: func(cmd *cobra.Command, args []string, _ map[string]any, _ resolvedinput.Inputs) error {
+				if showRegistered.PreRunE != nil {
+					if err := showRegistered.PreRunE(cmd, args); err != nil {
+						return err
+					}
+				}
+				return showRegistered.RunE(cmd, args)
 			},
 		},
 		GuardUnknownSubcommands: true,
@@ -119,6 +135,13 @@ func validateWorkerSessionsManifest(manifest climanifest.Manifest) error {
 	}
 	if !list.Runnable || list.Handler == nil || list.Handler.ID != workerSessionsListHandlerID {
 		return fmt.Errorf("command %q must declare runnable handler %q", list.ID, workerSessionsListHandlerID)
+	}
+	show, err := manifest.CommandByID("you.worker-sessions.show")
+	if err != nil {
+		return err
+	}
+	if !show.Runnable || show.Handler == nil || show.Handler.ID != workerSessionsShowHandlerID {
+		return fmt.Errorf("command %q must declare runnable handler %q", show.ID, workerSessionsShowHandlerID)
 	}
 	if root, err := manifest.CommandByID("you"); err != nil {
 		return err

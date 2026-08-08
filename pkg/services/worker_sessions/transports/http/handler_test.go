@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -152,10 +153,152 @@ func TestListWorkerSessionsBySessionIDReturnsNotFoundForMissingWork(t *testing.T
 	}
 }
 
+func TestGetWorkerSessionObservationBySessionIDProjectsFailureDiagnostics(t *testing.T) {
+	total := 17
+	duration := int64(2500)
+	failure := &workersessions.FailureCause{
+		Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "provider exited with status 1",
+		ProviderFailureKind: providers.ExecuteFailureKindDependency,
+	}
+	service := &fakeObservationService{getResult: workersessions.Observation{
+		WorkerSessionID:          "worker-session-1",
+		ProviderSession:          providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"},
+		ProviderSessionAvailable: true,
+		WorkIDs:                  []string{"work-1"}, TurnID: "turn-1", AttemptID: "attempt-1",
+		State: workersessions.StateFailed, Duration: durationPtr(2500 * time.Millisecond),
+		DurationBasis: workersessions.DurationBasisRecordedTimestamps,
+		TokenUsage:    &workersessions.TokenUsage{TotalTokens: &total}, Transcript: workersessions.TranscriptAvailabilityAvailable,
+		Failure: failure,
+		Parse:   workersessions.ParseDiagnostics{EventCount: 4, Errors: []workersessions.ParseDiagnostic{{Code: "provider_session_parse_error", LineNumber: 3, Message: "malformed event"}}},
+	}}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest("GET", "/factory-sessions/session-1/worker-sessions/detail?provider=codex&kind=session_id&id=provider-session-1", nil)
+
+	handler.GetWorkerSessionObservationBySessionId(recorder, request, factoryapi.SessionID("session-1"), factoryapi.GetWorkerSessionObservationBySessionIdParams{
+		Provider: factoryapi.LoadableProviderSessionProvider("codex"), Kind: factoryapi.LoadableProviderSessionKind("session_id"), Id: "provider-session-1",
+	})
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.WorkerSessionObservation
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.WorkerSessionId != "worker-session-1" || response.State != factoryapi.WorkerSessionObservationStateFailed || response.AttemptId != "attempt-1" {
+		t.Fatalf("identity/state = %#v, want failed attempt projection", response)
+	}
+	if response.Failure == nil || response.Failure.Detail != "provider exited with status 1" || response.Failure.ProviderFailureKind == nil {
+		t.Fatalf("failure = %#v, want structured failure diagnostics", response.Failure)
+	}
+	if response.TokenUsage == nil || response.TokenUsage.TotalTokens == nil || *response.TokenUsage.TotalTokens != total || response.DurationMillis == nil || *response.DurationMillis != duration {
+		t.Fatalf("usage/duration = %#v/%v, want %d/%d", response.TokenUsage, response.DurationMillis, total, duration)
+	}
+	if response.Parse.EventCount != 4 || len(response.Parse.Errors) != 1 {
+		t.Fatalf("parse = %#v, want event and parse diagnostics", response.Parse)
+	}
+	if service.getProviderSession != (providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"}) {
+		t.Fatalf("service identity = %#v, want exact provider session ref", service.getProviderSession)
+	}
+}
+
+func TestAdapterGetWorkerSessionObservationUsesExactProviderSessionIdentity(t *testing.T) {
+	service := &fakeObservationService{getResult: workersessions.Observation{
+		WorkerSessionID: "worker-session-1", ProviderSessionAvailable: true,
+		ProviderSession: providers.SessionRef{Provider: providers.IDCursor, Kind: providers.SessionIDKind, ID: "cursor-session-1"},
+		AttemptID:       "attempt-1", State: workersessions.StateCompleted,
+		DurationBasis: workersessions.DurationBasisUnavailable, Transcript: workersessions.TranscriptAvailabilityUnavailable,
+	}}
+	adapter := NewAdapter(service, workServiceStub{})
+	response, err := adapter.GetWorkerSessionObservation(context.Background(), "session-1", " cursor ", " session_id ", " cursor-session-1 ")
+	if err != nil {
+		t.Fatalf("GetWorkerSessionObservation() error = %v", err)
+	}
+	if response.WorkerSessionId != "worker-session-1" || response.ProviderSession == nil || response.ProviderSession.Id != "cursor-session-1" {
+		t.Fatalf("response = %#v, want detached observation", response)
+	}
+	want := providers.SessionRef{Provider: providers.IDCursor, Kind: providers.SessionIDKind, ID: "cursor-session-1"}
+	if service.getProviderSession != want {
+		t.Fatalf("service identity = %#v, want %#v", service.getProviderSession, want)
+	}
+}
+
+func TestGetWorkerSessionObservationBySessionIDMapsMissingAndUnavailable(t *testing.T) {
+	for _, testCase := range []struct {
+		name   string
+		err    error
+		status int
+		code   factoryapi.ErrorResponseCode
+	}{
+		{name: "missing", err: workersessions.ErrObservationSessionNotFound, status: http.StatusNotFound, code: factoryapi.ErrorResponseCodeNOTFOUND},
+		{name: "unavailable", err: workersessions.ErrObservationProjectionUnavailable, status: http.StatusInternalServerError, code: factoryapi.ErrorResponseCode("PROJECTION_UNAVAILABLE")},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			service := &fakeObservationService{getErr: testCase.err}
+			handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest("GET", "/factory-sessions/session-1/worker-sessions/detail", nil)
+			handler.GetWorkerSessionObservationBySessionId(recorder, request, factoryapi.SessionID("session-1"), factoryapi.GetWorkerSessionObservationBySessionIdParams{
+				Provider: factoryapi.LoadableProviderSessionProvider("codex"), Kind: factoryapi.LoadableProviderSessionKind("session_id"), Id: "missing",
+			})
+			if recorder.Code != testCase.status {
+				t.Fatalf("status = %d, want %d; body=%s", recorder.Code, testCase.status, recorder.Body.String())
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode error response: %v", err)
+			}
+			if response.Code != testCase.code {
+				t.Fatalf("error code = %q, want %q", response.Code, testCase.code)
+			}
+		})
+	}
+}
+
+func TestGetWorkerSessionObservationBySessionIDRejectsUnsupportedIdentity(t *testing.T) {
+	service := &fakeObservationService{}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	for _, testCase := range []struct {
+		name     string
+		provider string
+		kind     string
+		code     factoryapi.ErrorResponseCode
+	}{
+		{name: "provider", provider: "other", kind: "session_id", code: factoryapi.ErrorResponseCode("PROVIDER_UNSUPPORTED")},
+		{name: "kind", provider: "codex", kind: "rollout", code: factoryapi.ErrorResponseCode("SESSION_KIND_UNSUPPORTED")},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest("GET", "/factory-sessions/session-1/worker-sessions/detail", nil)
+			handler.GetWorkerSessionObservationBySessionId(recorder, request, factoryapi.SessionID("session-1"), factoryapi.GetWorkerSessionObservationBySessionIdParams{
+				Provider: factoryapi.LoadableProviderSessionProvider(testCase.provider), Kind: factoryapi.LoadableProviderSessionKind(testCase.kind), Id: "session-1",
+			})
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400", recorder.Code)
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode error response: %v", err)
+			}
+			if response.Code != testCase.code {
+				t.Fatalf("error code = %q, want %q", response.Code, testCase.code)
+			}
+			if service.getCalled {
+				t.Fatal("observation service called for unsupported identity")
+			}
+		})
+	}
+}
+
 type fakeObservationService struct {
-	result     workersessions.ListObservationsResult
-	listErr    error
-	listCalled bool
+	result             workersessions.ListObservationsResult
+	listErr            error
+	listCalled         bool
+	getResult          workersessions.Observation
+	getErr             error
+	getCalled          bool
+	getProviderSession providers.SessionRef
 }
 
 func (f *fakeObservationService) ListObservations(context.Context, workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
@@ -163,8 +306,10 @@ func (f *fakeObservationService) ListObservations(context.Context, workersession
 	return f.result, f.listErr
 }
 
-func (*fakeObservationService) GetObservation(context.Context, workersessions.GetObservationRequest) (workersessions.Observation, error) {
-	return workersessions.Observation{}, nil
+func (f *fakeObservationService) GetObservation(_ context.Context, request workersessions.GetObservationRequest) (workersessions.Observation, error) {
+	f.getCalled = true
+	f.getProviderSession = request.ProviderSession
+	return f.getResult, f.getErr
 }
 
 func (*fakeObservationService) StreamObservations(context.Context, workersessions.StreamObservationsRequest) (workersessions.ObservationSubscription, error) {
@@ -185,3 +330,5 @@ func (s workServiceStub) GetWork(context.Context, string, string) (work.ReadMode
 
 var _ workersessions.ObservationService = (*fakeObservationService)(nil)
 var _ work.Service = workServiceStub{}
+
+func durationPtr(value time.Duration) *time.Duration { return &value }

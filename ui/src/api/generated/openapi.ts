@@ -48,6 +48,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/{session_id}/worker-sessions/detail": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Show one Worker Session observation
+     * @description Returns one authoritative Worker Session observation for the exact Provider Session identity in the explicitly selected Factory Session. The response is derived from Worker Sessions lifecycle state, Work correlation, Provider Session projection facts, and canonical timing; it never exposes provider storage paths or raw rollout content.
+     */
+    get: operations["getWorkerSessionObservationBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions/{session_id}/invocations": {
     parameters: {
       query?: never;
@@ -5968,6 +5988,39 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  getWorkerSessionObservationBySessionId: {
+    parameters: {
+      query: {
+        /** @description Provider that issued the correlated session identity. */
+        provider: components["schemas"]["LoadableProviderSessionProvider"];
+        /** @description Provider-session identifier kind. */
+        kind: components["schemas"]["LoadableProviderSessionKind"];
+        /** @description Provider-issued session identifier, not a filesystem path. */
+        id: string;
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description One detached Worker Session observation. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionObservation"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   invokeFactorySessionBySessionId: {
     parameters: {
       query?: never;
@@ -7438,6 +7491,12 @@ export const ErrorResponseCode = {
   RESPONSE_EVENT_SESSION_NOT_FOUND: "RESPONSE_EVENT_SESSION_NOT_FOUND",
   // The retained Factory Response Event stream is no longer available.
   RESPONSE_EVENT_STREAM_EXPIRED: "RESPONSE_EVENT_STREAM_EXPIRED",
+  // The requested Provider Session provider is not loadable by this API.
+  PROVIDER_UNSUPPORTED: "PROVIDER_UNSUPPORTED",
+  // The requested Provider Session identifier kind is not loadable by this API.
+  SESSION_KIND_UNSUPPORTED: "SESSION_KIND_UNSUPPORTED",
+  // The correlated Worker Session projection is temporarily unavailable.
+  PROJECTION_UNAVAILABLE: "PROJECTION_UNAVAILABLE",
   // The requested resource does not exist.
   NOT_FOUND: "NOT_FOUND",
   // The server failed while handling an otherwise valid request.

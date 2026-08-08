@@ -156,34 +156,7 @@ type listJSONTokenUsage struct {
 func encodeListJSON(output io.Writer, result factoryapi.ListWorkerSessionsResponse) error {
 	sessions := make([]listJSONObservation, 0, len(result.Sessions))
 	for _, session := range result.Sessions {
-		var tokenUsage *listJSONTokenUsage
-		if session.TokenUsage != nil {
-			tokenUsage = &listJSONTokenUsage{
-				CacheWriteTokens:      session.TokenUsage.CacheWriteTokens,
-				CachedInputTokens:     session.TokenUsage.CachedInputTokens,
-				InputTokens:           session.TokenUsage.InputTokens,
-				OutputTokens:          session.TokenUsage.OutputTokens,
-				ReasoningOutputTokens: session.TokenUsage.ReasoningOutputTokens,
-				TotalTokens:           session.TokenUsage.TotalTokens,
-			}
-		}
-		sessions = append(sessions, listJSONObservation{
-			AttemptID:                session.AttemptId,
-			DurationBasis:            session.DurationBasis,
-			DurationMillis:           session.DurationMillis,
-			EndedAt:                  session.EndedAt,
-			Failure:                  session.Failure,
-			Parse:                    session.Parse,
-			ProviderSession:          session.ProviderSession,
-			ProviderSessionAvailable: session.ProviderSessionAvailable,
-			StartedAt:                session.StartedAt,
-			State:                    session.State,
-			TokenUsage:               tokenUsage,
-			Transcript:               session.Transcript,
-			TurnID:                   session.TurnId,
-			WorkIDs:                  session.WorkIds,
-			WorkerSessionID:          session.WorkerSessionId,
-		})
+		sessions = append(sessions, observationJSON(session))
 	}
 	return json.NewEncoder(output).Encode(listJSONResponse{Sessions: sessions})
 }

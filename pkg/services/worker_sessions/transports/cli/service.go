@@ -4,6 +4,7 @@ package cli
 // Service exposes Worker Sessions CLI operations to Cobra composition.
 type Service interface {
 	List(ListConfig) error
+	Show(ShowConfig) error
 }
 
 type service struct{}
@@ -12,3 +13,5 @@ type service struct{}
 func New() Service { return service{} }
 
 func (service) List(config ListConfig) error { return list(config) }
+
+func (service) Show(config ShowConfig) error { return show(config) }

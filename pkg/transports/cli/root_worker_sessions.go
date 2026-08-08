@@ -21,6 +21,11 @@ func productionWorkerSessionsCommand(
 	}); err != nil {
 		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
 	}
+	if err := registry.Register("you.worker-sessions.show.handler", func(cmd *cobra.Command, _ []string) error {
+		return executeGeneratedWorkerSessionsShow(cmd, globals, diagnostics, options.ShowWorkerSession)
+	}); err != nil {
+		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
+	}
 	command, err := climanifestcobra.NewWorkerSessionsFamilyCommand(registry)
 	if err != nil {
 		panic(fmt.Sprintf("build worker sessions family command: %v", err))
@@ -57,6 +62,48 @@ func executeGeneratedWorkerSessionsList(
 	return list(workersessionscli.ListConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
 		WorkID: workID, OutputFormat: outputFormat, JSON: jsonOutput,
+		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
+		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,
+	})
+}
+
+func executeGeneratedWorkerSessionsShow(
+	cmd *cobra.Command,
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	show workersessionscli.ShowOperation,
+) error {
+	if show == nil {
+		return fmt.Errorf("worker sessions show service is required")
+	}
+	values, err := generatedCommandInputs(cmd)
+	if err != nil {
+		return err
+	}
+	provider, err := commandInputValue[string](values, "you.worker-sessions.show.flag.provider")
+	if err != nil {
+		return err
+	}
+	kind, err := commandInputValue[string](values, "you.worker-sessions.show.flag.kind")
+	if err != nil {
+		return err
+	}
+	id, err := commandInputValue[string](values, "you.worker-sessions.show.flag.id")
+	if err != nil {
+		return err
+	}
+	sessionID, err := commandInputValue[string](values, "you.worker-sessions.show.flag.session")
+	if err != nil {
+		return err
+	}
+	outputFormat, err := commandInputValue[string](values, "you.worker-sessions.show.flag.output")
+	if err != nil {
+		return err
+	}
+	jsonOutput := globals.json || strings.EqualFold(strings.TrimSpace(outputFormat), "json")
+	return show(workersessionscli.ShowConfig{
+		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
+		Provider: provider, Kind: kind, ID: id, OutputFormat: outputFormat, JSON: jsonOutput,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
 		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,
 	})

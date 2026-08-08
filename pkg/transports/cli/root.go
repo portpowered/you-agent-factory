@@ -93,6 +93,7 @@ type ShowWorkOperation func(workcli.ShowConfig) error
 type MoveWorkOperation func(workcli.MoveConfig) error
 type VisualizeWorkOperation func(workcli.VisualizeConfig) error
 type ListWorkerSessionsOperation = workersessionscli.ListOperation
+type ShowWorkerSessionsOperation = workersessionscli.ShowOperation
 type NamedFactoryRootsResolver func(homeDir, workingDir string) (interfaces.NamedFactoryRoots, error)
 
 // CommandOperations is the complete inert CLI operation graph assembled by Wire.
@@ -138,6 +139,7 @@ type CommandOperations struct {
 	MoveWork                          MoveWorkOperation
 	VisualizeWork                     VisualizeWorkOperation
 	ListWorkerSessions                ListWorkerSessionsOperation
+	ShowWorkerSession                 ShowWorkerSessionsOperation
 	OpenRunSelection                  runcli.SelectionFactory
 	ACP                               acpcli.Service
 	ACPServer                         acp.Server
@@ -191,6 +193,7 @@ type CommandFactory struct {
 	MoveWork               func(workcli.MoveConfig) error
 	VisualizeWork          func(workcli.VisualizeConfig) error
 	ListWorkerSessions     workersessionscli.ListOperation
+	ShowWorkerSession      workersessionscli.ShowOperation
 	openRunSelection       runcli.SelectionFactory
 	acp                    acpcli.Service
 	acpServer              acp.Server
@@ -240,6 +243,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		MoveWork:                          operations.MoveWork,
 		VisualizeWork:                     operations.VisualizeWork,
 		ListWorkerSessions:                operations.ListWorkerSessions,
+		ShowWorkerSession:                 operations.ShowWorkerSession,
 		openRunSelection:                  operations.OpenRunSelection,
 		acp:                               operations.ACP,
 		acpServer:                         operations.ACPServer,

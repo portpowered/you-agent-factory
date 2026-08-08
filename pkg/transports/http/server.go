@@ -81,6 +81,21 @@ func (s *Server) ListWorkerSessionsBySessionId(
 	s.workerSessionsHTTP.ListWorkerSessionsBySessionId(w, r, sessionID, params)
 }
 
+// GetWorkerSessionObservationBySessionId forwards the generated operation to
+// the Worker Sessions owner handler.
+func (s *Server) GetWorkerSessionObservationBySessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	params factoryapi.GetWorkerSessionObservationBySessionIdParams,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.GetWorkerSessionObservationBySessionId(w, r, sessionID, params)
+}
+
 var noModTime = time.Time{}
 
 // Handler returns the http.Handler for testing and composition.
