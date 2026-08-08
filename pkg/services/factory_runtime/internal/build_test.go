@@ -56,6 +56,7 @@ func TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities(t *testing.T
 			return nil, nil
 		},
 		testRuntimeWorkers{},
+		nil,
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
 	)
@@ -97,6 +98,7 @@ func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 			return nil, nil
 		},
 		testRuntimeWorkers{},
+		nil,
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
 	)
@@ -139,6 +141,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 			return nil, nil
 		},
 		testRuntimeWorkers{},
+		nil,
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
 	)
@@ -181,6 +184,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 			return nil, nil
 		},
 		testRuntimeWorkers{},
+		nil,
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
 	)

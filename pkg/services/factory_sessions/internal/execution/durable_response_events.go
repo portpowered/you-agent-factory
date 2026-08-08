@@ -14,12 +14,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// LiveChildInvocationFactory rebuilds one live child invocation executor with
-// session-scoped provider progress publishing.
-type LiveChildInvocationFactory func(workers.ProgressPublisher) (workers.InvocationExecutor, error)
-
 func (s *JavaScriptRuntimeService) ensureSessionResponseEventsIfNeeded(state *runtimeSessionState) error {
-	if s == nil || s.liveChildInvocation == nil {
+	// Only a runtime-backed session publishes provider progress through this
+	// store: its children are Workers, invoked through the Factory Runtime bound
+	// as the worker invoker. A fake session, a replay, or the standalone
+	// `you run script.js` composition has no such runtime and needs no store.
+	if s == nil || !s.workerInvokerBound() {
 		return nil
 	}
 	if state == nil {
@@ -101,23 +101,6 @@ func (s *JavaScriptRuntimeService) publishSessionResponseEvent(
 		return s.responseStreams.Publish(state.responseEvents, event)
 	}
 	return state.responseEvents.Publish(event)
-}
-
-func (s *JavaScriptRuntimeService) liveChildExecutor(
-	sessionID string,
-	state *runtimeSessionState,
-) workers.InvocationExecutor {
-	if s.liveChildInvocation != nil {
-		var publisher workers.ProgressPublisher
-		if state != nil {
-			publisher = s.sessionProgressPublisher(sessionID, state)
-		}
-		executor, err := s.liveChildInvocation(publisher)
-		if err == nil && executor != nil {
-			return executor
-		}
-	}
-	return s.providerExecutor
 }
 
 // SubscribeResponseEvents opens one durable-session response-event cursor.

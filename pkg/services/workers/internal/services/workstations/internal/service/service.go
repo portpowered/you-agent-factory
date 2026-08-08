@@ -273,8 +273,16 @@ func (p *Pool) dispatch(
 	defer route.release(entry)
 
 	execution := workers.CloneWorkstationExecutionRequest(request.Execution)
-	execution.RunnerID = route.binding.RunnerSelection.RunnerID
-	execution.RunnerSelectionSource = route.binding.RunnerSelection.Source
+	// A route that resolved a runner owns that choice, and overriding the
+	// request is what keeps an authored workstation's runner authoritative.
+	// A route that resolved none does not pin one, and every dispatch through
+	// it carries its own -- which is the provider-invocation route, where one
+	// child may run on codex and the next on claude. Overwriting there would
+	// blank the only selection that exists.
+	if selection := route.binding.RunnerSelection; selection.RunnerID != "" {
+		execution.RunnerID = selection.RunnerID
+		execution.RunnerSelectionSource = selection.Source
+	}
 	result, executeErr := execute(executionCtx, route.binding.Executor, execution)
 	result.DispatchID = execution.Dispatch.DispatchID
 	result.TransitionID = execution.Dispatch.TransitionID

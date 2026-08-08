@@ -43,6 +43,7 @@ func openRuntime(
 	replayExecutionFactory recordings.ReplayExecutionFactory,
 	workersRuntimeFactory WorkersRuntimeFactory,
 	workersRuntimeExecutorsFactory factoryruntime.WorkersRuntimeExecutorsFactory,
+	providerInvocationFactory factoryruntime.ProviderInvocationExecutorFactory,
 	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	automationHostedSourcesFactory AutomationHostedSourcesFactory,
 	workersLocalRuntimeHooksFactory WorkersLocalRuntimeHooksFactory,
@@ -320,6 +321,7 @@ func openRuntime(
 			logger,
 			serviceService,
 			sessionBuildFactory,
+			providerInvocationFactory,
 			workersRuntimeExecutorsFactory,
 			workersMockCommandRunnerFactory,
 			runtimeService.InferenceProgressPublisherFactory(logger),
@@ -439,6 +441,13 @@ func openRuntime(
 	if !ok {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: session runtime does not implement Factory Runtime root Service")
 	}
+	// A JavaScript workflow's children are Workers, and Workers are supervised
+	// by the runtime that owns this session's Worker Sessions service and
+	// canonical ledger. That runtime only exists here, after the execution
+	// service it must be handed to was already constructed, so the binding is
+	// late by necessity rather than by preference -- the same ordering
+	// Root.BindActiveService resolves the same way.
+	bindWorkerInvoker(durableExecution.Service, rootRuntime)
 	opened := assembleRuntimeProducts(
 		factoryDefinitionOwner,
 		service4,
@@ -484,4 +493,21 @@ func bindRuntimeRecordingLifecycle(
 		return fmt.Errorf("construct runtime scope: bind runtime recording: %w", err)
 	}
 	return nil
+}
+
+// workerInvokerBinder is the narrow capability a durable execution service
+// exposes when its orchestrator runs Workers of its own.
+type workerInvokerBinder interface {
+	BindWorkerInvoker(func(sessionID string) factoryruntime.Service)
+}
+
+// bindWorkerInvoker hands one session's Factory Runtime to its execution
+// service. An execution backend with no Workers of its own does not implement
+// the binder, and skipping it is correct rather than a missing wire.
+func bindWorkerInvoker(execution any, runtime factoryruntime.Service) {
+	binder, ok := execution.(workerInvokerBinder)
+	if !ok || runtime == nil {
+		return
+	}
+	binder.BindWorkerInvoker(func(string) factoryruntime.Service { return runtime })
 }

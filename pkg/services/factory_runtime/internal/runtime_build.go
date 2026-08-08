@@ -62,6 +62,7 @@ func NewRuntimeBuild(
 	workerExecution workers.RuntimeService,
 	workerSessionsFactory factory.WorkerSessionsFactory,
 	sessionBuildFactory workers.SessionBuildFactory,
+	providerInvocationFactory factory.ProviderInvocationExecutorFactory,
 	runtimeExecutorsFactory factory.WorkersRuntimeExecutorsFactory,
 	mockCommandRunnerFactory factory.WorkersMockCommandRunnerFactory,
 	progressFactory ProgressPublisherFactory,
@@ -155,6 +156,7 @@ func NewRuntimeBuild(
 				workerSessionsFactory,
 				runtimeExecutorsFactory,
 				providerSessionProgress,
+				providerInvocationFactory,
 				runtimeFactory,
 				dispatchCompleted,
 				worldStateProjector,
@@ -196,6 +198,7 @@ func buildBundle(
 	workerSessionsFactory factory.WorkerSessionsFactory,
 	runtimeExecutorsFactory factory.WorkersRuntimeExecutorsFactory,
 	providerSessionProgress *workersessions.ProviderSessionObservationPublisher,
+	providerInvocationFactory factory.ProviderInvocationExecutorFactory,
 	runtimeFactory *RuntimeFactory,
 	dispatchCompleted func(string),
 	worldStateProjector factory.WorldStateProjector,
@@ -244,6 +247,22 @@ func buildBundle(
 		return nil, fmt.Errorf("Worker Sessions factory is required")
 	}
 	workerSessionsFactory = bindProviderSessionProgress(workerSessionsFactory, providerSessionProgress)
+
+	// The provider-invocation route is built from the same session-local
+	// progress bridge Workers publishes through, so a Worker with no authored
+	// workstation still reports against its own Worker Session rather than
+	// against the Factory Session stream. An absent factory leaves the route
+	// unbound, which is how a runtime declares it hosts no such Worker.
+	var providerInvocation workers.WorkstationRequestExecutor
+	if providerInvocationFactory != nil {
+		providerInvocation, err = providerInvocationFactory(
+			spec.ProviderCommandRunner,
+			providerSessionProgress.Publish,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("construct provider-invocation Worker executor: %w", err)
+		}
+	}
 
 	return runtimeFactory.Build(
 		ctx,
@@ -294,6 +313,7 @@ func buildBundle(
 			)
 		},
 		workerExecution,
+		providerInvocation,
 		workerSessionsFactory,
 		dispatchCompleted,
 	)

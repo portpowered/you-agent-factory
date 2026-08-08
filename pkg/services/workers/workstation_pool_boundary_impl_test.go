@@ -176,3 +176,75 @@ func TestWorkstationPoolBoundaryBindingsPreserveLegacyConcurrency(t *testing.T) 
 		)
 	}
 }
+
+type poolBoundaryRequestExecutor struct{}
+
+func (poolBoundaryRequestExecutor) Execute(
+	context.Context,
+	WorkstationExecutionRequest,
+) (WorkResult, error) {
+	return WorkResult{Outcome: OutcomeAccepted}, nil
+}
+
+// TestWorkstationPoolBoundaryBindsProviderInvocationAsWorkstationRole proves the
+// provider-invocation route joins the pool as an ordinary workstation-kind
+// binding.
+//
+// The pool rejects a start request carrying any other role kind, so a
+// worker-kind binding here made every route in the snapshot unusable, not just
+// this one: the first dispatch of the session failed to start. The kind is
+// about how the pool routes, and every pool route is a workstation route. What
+// is absent from a provider-invocation Worker is an authored workstation
+// definition, and that absence lives in the executor.
+func TestWorkstationPoolBoundaryBindsProviderInvocationAsWorkstationRole(t *testing.T) {
+	boundary := NewWorkstationPoolBoundary(WorkstationPoolBoundaryConfig{
+		Executors:          map[string]WorkerExecutor{"swe": poolBoundaryTestExecutor{}},
+		RouteNames:         []string{"swe"},
+		ProviderInvocation: poolBoundaryRequestExecutor{},
+	})
+	pool, ok := boundary.(*workstationPoolBoundary)
+	if !ok {
+		t.Fatalf("boundary type = %T, want *workstationPoolBoundary", boundary)
+	}
+
+	var found *AssembledRuntimeBinding
+	for i := range pool.bindings {
+		if pool.bindings[i].RoleName == ProviderInvocationRoute {
+			found = &pool.bindings[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("bindings = %+v, want one named %q", pool.bindings, ProviderInvocationRoute)
+	}
+	if found.RoleKind != RuntimeBuildRoleKindWorkstation {
+		t.Fatalf("RoleKind = %q, want %q", found.RoleKind, RuntimeBuildRoleKindWorkstation)
+	}
+	if found.Executor == nil {
+		t.Fatal("Executor = nil, want the supplied provider-invocation executor")
+	}
+	if found.RunnerSelection.RunnerID != "" {
+		t.Fatalf(
+			"RunnerSelection.RunnerID = %q, want empty so each dispatch keeps its own runner",
+			found.RunnerSelection.RunnerID,
+		)
+	}
+}
+
+// TestWorkstationPoolBoundaryOmitsProviderInvocationRouteWhenAbsent proves a
+// session with no provider-invocation executor has no such route at all, rather
+// than a route present and failing at dispatch time.
+func TestWorkstationPoolBoundaryOmitsProviderInvocationRouteWhenAbsent(t *testing.T) {
+	boundary := NewWorkstationPoolBoundary(WorkstationPoolBoundaryConfig{
+		Executors:  map[string]WorkerExecutor{"swe": poolBoundaryTestExecutor{}},
+		RouteNames: []string{"swe"},
+	})
+	pool, ok := boundary.(*workstationPoolBoundary)
+	if !ok {
+		t.Fatalf("boundary type = %T, want *workstationPoolBoundary", boundary)
+	}
+	for _, binding := range pool.bindings {
+		if binding.RoleName == ProviderInvocationRoute {
+			t.Fatalf("bindings contain %q, want it omitted entirely", ProviderInvocationRoute)
+		}
+	}
+}

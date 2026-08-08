@@ -563,16 +563,17 @@ func provideFactorySessionExecutionFactory(
 	sessionIDs factorysessions.SessionIDGenerator,
 	responseEventIDs factorysessions.ResponseEventIDGenerator,
 	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
-	invocationWithProgress factorysessionwire.WorkerInvocationWithProgressFactory,
 	allocator workers.PTYAllocator,
 	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
-	registry workers.ProviderRegistry,
-	registryRebinder workerswire.ProviderRegistryRebinder,
-	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
-	conductorInvocationWithProgress factorysessionwire.ConductorInvocationWithProgressFactory,
 	edges serviceedges.Edges,
 	eventsService events.Service,
 ) factorysessionwire.FactorySessionExecutionFactory {
+	// The allocator, runner adapter, and edges are read only to decide whether
+	// this process can reach a provider at all. No invocation executor is built
+	// here any more: a runtime-backed session's children are Workers, and the
+	// provider edge they use is the one Workers already composes for that
+	// session, reached through workers.ProviderInvocationRoute. Rebuilding a
+	// second edge here is exactly the bypass this convergence removed.
 	return func(
 		projectRoot string,
 		persistencePolicy factorysessions.PersistencePolicy,
@@ -581,52 +582,24 @@ func provideFactorySessionExecutionFactory(
 		workerPresetIDs map[string]struct{},
 		workerSettings factoryruntime.JavaScriptWorkerSettings,
 		mockWorkers *workers.MockWorkersConfig,
-		acpIntegrations []operatorsettings.ACPIntegration,
+		_ []operatorsettings.ACPIntegration,
 	) (factorysessionwire.DurableExecutionService, error) {
-		executor := workerswire.NewExecutor(provider)
-		var liveChildInvocation factorysessionwire.LiveChildInvocationFactory
-		// An explicit process provider is already the complete invocation edge.
-		// Do not construct a second registered-provider path that would bypass it.
-		if edges.ProviderOverride == nil && adaptRunner != nil && allocator != nil {
-			commandRunner, err := provideWorkersProviderCommandRunner(edges)
-			if err != nil {
-				return nil, fmt.Errorf("resolve provider runner for live child invocation: %w", err)
-			}
-			runner := commandRunner
-			runtimeRegistry := registry
-			if mockWorkers != nil &&
-				mockWorkers.UnmatchedDispatchPolicy.PassthroughUnmatched() &&
-				runtimeRegistry != nil &&
-				registryRebinder != nil &&
-				workersMockCommandRunnerFactory != nil &&
-				conductorInvocationWithProgress != nil {
-				runner = workersMockCommandRunnerFactory(mockWorkers, nil, runner)
-				var reboundProviders providers.Service
-				_, reboundProviders, err = registryRebinder(runner)
-				if err != nil {
-					return nil, fmt.Errorf("rebind provider registry for live child invocation: %w", err)
-				}
-				liveChildInvocation = func(publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
-					return conductorInvocationWithProgress(reboundProviders, runner, allocator, publisher)
-				}
-			} else if mockWorkers == nil &&
-				runtimeRegistry != nil &&
-				conductorInvocationWithProgress != nil {
-				liveChildInvocation = func(publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
-					return conductorInvocationWithProgress(nil, runner, allocator, publisher)
-				}
-			} else if mockWorkers == nil && invocationWithProgress != nil {
-				liveChildInvocation = func(publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
-					return invocationWithProgress(runner, allocator, publisher)
-				}
-			}
+		// Whether this session runs children live is the same question the
+		// deleted live-child block answered, asked the same way: an explicit
+		// provider, or a reachable provider command edge that mock workers are
+		// not standing in for. What changed is only that the answer no longer
+		// carries an executor -- the route does.
+		mockAllowsLive := mockWorkers == nil || mockWorkers.UnmatchedDispatchPolicy.PassthroughUnmatched()
+		childExecutorMode := factorysessions.ChildExecutorModeFake
+		if provider != nil ||
+			(mockAllowsLive && edges.ProviderOverride == nil && adaptRunner != nil && allocator != nil) {
+			childExecutorMode = factorysessions.ChildExecutorModeLive
 		}
-		_ = acpIntegrations
 		return factorysessionwire.NewDurableExecution(
 			projectRoot,
 			persistencePolicy,
 			stores,
-			executor,
+			childExecutorMode,
 			clock,
 			syncWaits,
 			factoryruntimewire.NewJavaScriptCheckpointSummaries(),
@@ -636,7 +609,6 @@ func provideFactorySessionExecutionFactory(
 			workerSettings,
 			recordingWriter,
 			sessionIDs,
-			liveChildInvocation,
 			responseEventIDs,
 			responseEventRetentionLimits,
 			eventsService,
@@ -1014,6 +986,53 @@ func provideWorkersRuntimeExecutorsFactory() factoryruntime.WorkersRuntimeExecut
 
 func provideWorkersMockCommandRunnerFactory() factoryruntime.WorkersMockCommandRunnerFactory {
 	return workerswire.NewMockCommandRunner
+}
+
+// provideProviderInvocationExecutorFactory composes the executor behind
+// workers.ProviderInvocationRoute -- the route a Worker takes when its caller,
+// not an authored workstation, resolved its prompt, model, and provider.
+//
+// It is deliberately built from the same conductor invocation boundary a Petri
+// Worker's provider execution uses, over the session's own command runner, so
+// a JavaScript workflow child and a Petri Worker differ in what schedules them
+// and in nothing else.
+//
+// An explicit process provider override is already the complete invocation
+// edge, so the route is built directly on it and no registered-provider path is
+// constructed alongside it. Skipping the route entirely there would leave every
+// provider-invocation Worker unroutable in exactly the compositions that
+// substitute a provider on purpose -- functional API servers and replays.
+func provideProviderInvocationExecutorFactory(
+	conductorInvocation factorysessionwire.ConductorInvocationWithProgressFactory,
+	allocator workers.PTYAllocator,
+	edges serviceedges.Edges,
+) factoryruntime.ProviderInvocationExecutorFactory {
+	return func(
+		sessionCommandRunner workers.CommandRunner,
+		publisher workers.ProgressPublisher,
+	) (workers.WorkstationRequestExecutor, error) {
+		if edges.ProviderOverride != nil {
+			return workerswire.NewProviderInvocationExecutor(
+				workerswire.NewExecutor(edges.ProviderOverride),
+			), nil
+		}
+		if conductorInvocation == nil || allocator == nil {
+			return nil, nil
+		}
+		runner := sessionCommandRunner
+		if runner == nil {
+			resolved, err := provideWorkersProviderCommandRunner(edges)
+			if err != nil {
+				return nil, fmt.Errorf("resolve provider runner for provider-invocation Worker: %w", err)
+			}
+			runner = resolved
+		}
+		invocation, err := conductorInvocation(nil, runner, allocator, publisher)
+		if err != nil {
+			return nil, fmt.Errorf("construct provider-invocation Worker boundary: %w", err)
+		}
+		return workerswire.NewProviderInvocationExecutor(invocation), nil
+	}
 }
 
 func provideWorkersLocalRuntimeHooksFactory() factorysessionwire.WorkersLocalRuntimeHooksFactory {

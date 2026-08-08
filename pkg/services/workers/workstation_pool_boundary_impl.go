@@ -48,9 +48,16 @@ func NewWorkstationPoolBoundary(cfg WorkstationPoolBoundaryConfig) WorkstationPo
 	adapter := workerExecutorRequestAdapter{executors: cfg.Executors}
 	bindings := assembleWorkstationPoolBindings(cfg.RouteNames, adapter, capacity, queueCapacity)
 	if cfg.ProviderInvocation != nil {
+		// The role kind is workstation, not worker, because every route in this
+		// pool is a pool route: it has a name, an executor, a capacity, and a
+		// queue, and the pool admits and cancels it identically. What is absent
+		// from a provider-invocation Worker is an authored workstation
+		// definition, and that absence lives in the executor -- which renders
+		// no prompt and prepares no worktree -- rather than in how the pool
+		// routes to it.
 		bindings = append(bindings, AssembledRuntimeBinding{
 			RoleName:      ProviderInvocationRoute,
-			RoleKind:      RuntimeBuildRoleKindWorker,
+			RoleKind:      RuntimeBuildRoleKindWorkstation,
 			Executor:      cfg.ProviderInvocation,
 			Capacity:      capacity,
 			QueueCapacity: queueCapacity,

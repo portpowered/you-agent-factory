@@ -9,10 +9,9 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	internalcontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/livechild"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
@@ -212,7 +211,7 @@ func resolvedDialect(resolved ResolvedSource) string {
 type JavaScriptRuntimeService struct {
 	projectRoot             string
 	childExecutorMode       string
-	providerExecutor        workers.InvocationExecutor
+	directChildInvocation   workers.InvocationExecutor
 	persistence             runtimepersist.Store
 	clock                   factory.Clock
 	syncWaits               SyncWaitScheduler
@@ -224,9 +223,13 @@ type JavaScriptRuntimeService struct {
 	workerSettings          factory.JavaScriptWorkerSettings
 	recordingWriter         recording.PortableRecordingWriter
 	generateSessionID       internalcontracts.SessionIDGenerator
-	liveChildInvocation     LiveChildInvocationFactory
 	generateResponseEventID factorysessions.ResponseEventIDGenerator
 	responseStreams         responsestreamservice.Service
+	// resolveWorkerInvoker is guarded by its own lock, not the session lock.
+	// It is bound once, after construction, and read on paths that already hold
+	// the session lock; sharing one mutex between them deadlocks.
+	invokerMu            sync.RWMutex
+	resolveWorkerInvoker WorkerInvokerResolver
 
 	mu            sync.RWMutex
 	sessions      map[string]*runtimeSessionState
@@ -242,7 +245,7 @@ var _ Service = (*JavaScriptRuntimeService)(nil)
 func NewJavaScriptRuntimeService(
 	projectRoot string,
 	childExecutorMode string,
-	providerExecutor workers.InvocationExecutor,
+	directChildInvocation workers.InvocationExecutor,
 	persistence runtimepersist.Store,
 	clock factory.Clock,
 	syncWaits SyncWaitScheduler,
@@ -254,7 +257,6 @@ func NewJavaScriptRuntimeService(
 	workerSettings factory.JavaScriptWorkerSettings,
 	recordingWriter recording.PortableRecordingWriter,
 	generateSessionID internalcontracts.SessionIDGenerator,
-	liveChildInvocation LiveChildInvocationFactory,
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams responsestreamservice.Service,
 ) *JavaScriptRuntimeService {
@@ -265,7 +267,7 @@ func NewJavaScriptRuntimeService(
 	service := &JavaScriptRuntimeService{
 		projectRoot:             projectRoot,
 		childExecutorMode:       normalizeChildExecutorMode(childExecutorMode),
-		providerExecutor:        providerExecutor,
+		directChildInvocation:   directChildInvocation,
 		clock:                   clock,
 		syncWaits:               syncWaits,
 		checkpointSummaries:     checkpointSummaries,
@@ -276,7 +278,6 @@ func NewJavaScriptRuntimeService(
 		workerSettings:          workerSettings,
 		recordingWriter:         recordingWriter,
 		generateSessionID:       generateSessionID,
-		liveChildInvocation:     liveChildInvocation,
 		generateResponseEventID: generateResponseEventID,
 		responseStreams:         responseStreams,
 		persistence:             persistence,
@@ -318,7 +319,7 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 	if err != nil {
 		return AsyncStartResult{}, err
 	}
-	if err := validateLiveChildProviderExecutor(resolveChildExecutorMode(s.childExecutorMode, normalized), s.providerExecutor, s.liveChildInvocation); err != nil {
+	if err := validateChildExecutorMode(resolveChildExecutorMode(s.childExecutorMode, normalized)); err != nil {
 		return AsyncStartResult{}, err
 	}
 	resolved := prepared.ResolvedSource
@@ -387,7 +388,7 @@ func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartReque
 	if err != nil {
 		return SyncStartResult{}, err
 	}
-	if err := validateLiveChildProviderExecutor(resolveChildExecutorMode(s.childExecutorMode, normalized), s.providerExecutor, s.liveChildInvocation); err != nil {
+	if err := validateChildExecutorMode(resolveChildExecutorMode(s.childExecutorMode, normalized)); err != nil {
 		return SyncStartResult{}, err
 	}
 	resolved := prepared.ResolvedSource
@@ -919,15 +920,25 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 		return hooks
 	}
 	hooks.NewChildExecutor = func(childSessionID string, records factory.JavaScriptChildRecordSink, policy factory.JavaScriptPolicy) factory.JavaScriptChildExecutor {
-		s.mu.RLock()
-		state := s.sessions[sessionID]
-		s.mu.RUnlock()
-		executor := s.liveChildExecutor(sessionID, state)
-		return livechild.NewRetryingProviderChildExecutor(
+		// Which executor serves a session is decided by which composition built
+		// this service, not by anything on the request. A runtime-backed session
+		// invokes its children as Workers through the Factory Runtime that owns
+		// its Worker Sessions service; the standalone `you run script.js`
+		// composition builds no runtime and reaches the provider directly.
+		if invoke := s.workerInvoker(sessionID); invoke != nil {
+			return newChildWorkerExecutor(
+				childSessionID,
+				invoke,
+				records,
+				s.childValues,
+				policy.MaxRetries,
+				s.projectRoot,
+			)
+		}
+		return newDirectChildExecutor(
 			childSessionID,
-			executor,
+			s.directChildInvocation,
 			records,
-			policy.MaxRetries,
 			s.childValues,
 			s.projectRoot,
 		)

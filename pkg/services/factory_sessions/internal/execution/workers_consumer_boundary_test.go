@@ -26,7 +26,6 @@ func TestExecutionServiceRolesNameWorkersRootContracts(t *testing.T) {
 	t.Parallel()
 
 	var (
-		_ LiveChildInvocationFactory
 		_ workers.InvocationExecutor
 		_ workers.Provider
 		_ workers.ProgressPublisher

@@ -39,6 +39,7 @@ type testFactoryConfig struct {
 	scheduler                 scheduler.Scheduler
 	workerExecutors           map[string]workers.WorkerExecutor
 	workerService             workers.WorkstationExecutionService
+	providerInvocation        workers.WorkstationRequestExecutor
 	workerSessions            workersessions.Service
 	runtimeConfig             interfaces.RuntimeDefinitionLookup
 	workflowContext           *factory_context.FactoryContext
@@ -75,7 +76,7 @@ func newTestFactory(opts ...testFactoryOption) (factory.Factory, error) {
 		return workerSessionsService, nil
 	}
 	return New(
-		cfg.net, cfg.scheduler, cfg.workerExecutors, workerService, workerSessionsFactory, cfg.runtimeConfig,
+		cfg.net, cfg.scheduler, cfg.workerExecutors, workerService, cfg.providerInvocation, workerSessionsFactory, cfg.runtimeConfig,
 		cfg.workflowContext, cfg.runtimeMode, cfg.logger, cfg.clock,
 		cfg.inlineDispatch, cfg.eventHistory, nil,
 		nil, nil, cfg.submissionHooks,

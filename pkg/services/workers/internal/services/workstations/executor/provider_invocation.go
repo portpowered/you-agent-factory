@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // ProviderInvocationExecutor executes one Worker that has no authored

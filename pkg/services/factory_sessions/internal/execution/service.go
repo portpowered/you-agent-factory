@@ -4,6 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
+	"time"
+
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	internalcontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
@@ -11,9 +15,6 @@ import (
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"sort"
-	"strings"
-	"time"
 )
 
 func reconcileAppendOnlyCanonicalEvents(previous, projected []json.RawMessage) []json.RawMessage {
@@ -333,7 +334,7 @@ func (choice PersistenceChoice) resolve() (runtimepersist.Store, error) {
 func NewJavaScriptExecutionService(
 	projectRoot string,
 	childExecutorMode string,
-	executor workers.InvocationExecutor,
+	directChildInvocation workers.InvocationExecutor,
 	persistenceChoice PersistenceChoice,
 	clock factory.Clock,
 	syncWaits SyncWaitScheduler,
@@ -345,7 +346,6 @@ func NewJavaScriptExecutionService(
 	workerSettings factory.JavaScriptWorkerSettings,
 	recordingWriter recording.PortableRecordingWriter,
 	generateSessionID internalcontracts.SessionIDGenerator,
-	liveChildInvocation LiveChildInvocationFactory,
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams responsestreamservice.Service,
 ) (Service, error) {
@@ -372,8 +372,8 @@ func NewJavaScriptExecutionService(
 		return nil, NewValidationError("childValues", "Factory Runtime JavaScript child values are required")
 	}
 	childExecutorMode = normalizeChildExecutorMode(childExecutorMode)
-	if childExecutorMode == ChildExecutorModeLive && executor == nil && liveChildInvocation == nil {
-		return nil, NewValidationError("runtime.childExecutorMode", "worker invocation executor is required for live child execution")
+	if err := validateChildExecutorMode(childExecutorMode); err != nil {
+		return nil, err
 	}
 	if recordingWriter == nil {
 		return nil, NewValidationError("recordingWriter", "portable recording writer is required")
@@ -386,12 +386,11 @@ func NewJavaScriptExecutionService(
 		return nil, err
 	}
 	return NewJavaScriptRuntimeService(
-		projectRoot, childExecutorMode, executor, persistence, clock, syncWaits,
+		projectRoot, childExecutorMode, directChildInvocation, persistence, clock, syncWaits,
 		checkpointSummaries,
 		workflowDefinitions, orchestration, childValues,
 		workerPresetIDs, workerSettings, recordingWriter,
 		generateSessionID,
-		liveChildInvocation,
 		generateResponseEventID,
 		responseStreams,
 	), nil
