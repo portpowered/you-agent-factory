@@ -32,7 +32,7 @@ type agyRecordedStreamCase struct {
 func TestAgyRootParsesRecordedStreamJSONResultsAndUsage(t *testing.T) {
 	t.Parallel()
 
-	rootDir := filepath.Join(testutil.MustRepoRoot(t), "docs", "temp", "agy-traces")
+	rootDir := filepath.Join(testutil.MustRepoRoot(t), "tests", "functional", "providers", "agy", "testdata")
 	tests := []agyRecordedStreamCase{
 		{
 			name:             "simple text",
@@ -396,9 +396,11 @@ func TestAgyCommandEffectRequiresStructuredOutputAfterExitZero(t *testing.T) {
 
 	trace, err := os.ReadFile(filepath.Join(
 		testutil.MustRepoRoot(t),
-		"docs",
-		"temp",
-		"agy-traces",
+		"tests",
+		"functional",
+		"providers",
+		"agy",
+		"testdata",
 		"agy-trace-simple-text.stream.jsonl",
 	))
 	if err != nil {
@@ -462,7 +464,7 @@ func progressPhases(progress []providers.ExecuteProgress) string {
 
 func readAgyTrace(t *testing.T, name string) []byte {
 	t.Helper()
-	path := filepath.Join(testutil.MustRepoRoot(t), "docs", "temp", "agy-traces", name)
+	path := filepath.Join(testutil.MustRepoRoot(t), "tests", "functional", "providers", "agy", "testdata", name)
 	trace, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read recorded trace %q: %v", name, err)

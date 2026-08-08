@@ -13,6 +13,7 @@
 - Cross-platform filesystem permission tests must account for Windows mode-bit semantics while retaining strict POSIX assertions; Windows protection is provided by ACLs rather than POSIX permission bits.
 - Compare repository-wide quality-check output with the current base before attributing legacy findings; keep newly added Go tests within the backend-size limits by extracting case assertions into helpers.
 - Quality gates backed by deletion-only baselines are evaluated against the current origin/main and the lane-owned diff; report unrelated baseline debt instead of absorbing out-of-scope cleanup into feature work.
+- Keep shared recorded test assets under a tracked `testdata` directory; `docs/temp/**` is intentionally gitignored and cannot be the source for CI replay assertions.
 
 ## [2026-08-08 14:03 -07:00] - wo-b1-antigravity-provider-golden-traces-001
 - What was implemented
@@ -32,9 +33,6 @@
 - **Learnings for future iterations:**
   - AGY print mode is a typed command-runner path; its stream output parsing belongs in the next story and must not be inferred from subprocess exit status here.
   - Existing Agy PTY golden tests opt into `AgyPTYHost`; avoid changing that seam when testing the new ProviderCommandRunner route.
-  - The real trace assets under `docs/temp/agy-traces` are available to package tests through `testutil.MustRepoRoot` and should remain the source for later parser/functional assertions.
----
-
 ## [2026-08-08 14:20 -07:00] - wo-b1-antigravity-provider-golden-traces-002
 - What was implemented
   - Replaced AGY plain stdout selection for print-mode output with a bounded stream-JSON parser that ignores init/step/tool records and requires the terminal `event: "result"` object.
@@ -193,4 +191,25 @@
 - **Learnings for future iterations:**
   - Fetch `origin/main` before interpreting baseline failures; upstream can convert an apparent feature blocker into a documented deletion-only or diff-scoped baseline case.
   - Resolve generated baseline conflicts from the exact upstream blob and validate with the owning checker before staging; large JSON output can be truncated by tooling.
+---
+
+## [2026-08-08 16:57 -07:00] - wo-b1-antigravity-provider-golden-traces-005
+- What was implemented
+  - Moved the real AGY recordings and media fixtures from the local `docs/temp/agy-traces` working area into tracked `tests/functional/providers/agy/testdata` so offline replay is present in clean CI checkouts.
+  - Updated package-level parser/command tests and root.BuildProcess functional golden tests to consume the tracked recordings and aligned the PRD asset references.
+- Files changed
+  - `tests/functional/providers/agy/testdata/` (real AGY traces, media fixtures, and README)
+  - `pkg/services/providers/internal/services/execution/internal/adapters/agy/command_test.go`
+  - `pkg/services/providers/internal/services/execution/internal/adapters/agy/stream_test.go`
+  - `tests/functional/providers/agy/golden_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/providers/internal/services/execution/internal/adapters/agy/... -count=1` passes.
+  - `go test ./tests/functional/providers/agy/... -count=1` passes from the tracked real recordings.
+  - The previous CI unit/functional coverage failures were confirmed to be missing ignored fixture files in the checkout; a fresh CI run is required after this commit.
+  - The full Windows `make test-unit-coverage` command remains unable to start locally because its expanded Go command exceeds the Windows process command-line limit; Linux CI is the authoritative coverage environment.
+- **Learnings for future iterations:**
+  - Local ignored working assets can make focused tests appear green while clean CI fails immediately; verify every replay fixture with `git ls-files` before declaring an offline gate reproducible.
+  - Keep the real recordings in tracked `testdata` and leave `docs/temp` for disposable operator working material.
 ---

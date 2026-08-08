@@ -261,7 +261,7 @@ func agyGoldenWorkstationConfig(prompt, schema string) string {
 func readAgyGoldenAsset(t *testing.T, name string) []byte {
 	t.Helper()
 
-	path := testutil.MustRepoPath(t, filepath.Join("docs", "temp", "agy-traces", name))
+	path := testutil.MustRepoPath(t, filepath.Join("tests", "functional", "providers", "agy", "testdata", name))
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read AGY golden asset %s: %v", name, err)

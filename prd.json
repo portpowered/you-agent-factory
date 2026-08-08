@@ -5,13 +5,13 @@
   "context": {
     "customerAsk": "Enable modelProvider: ANTIGRAVITY workers to run workstation prompts such as watching an MP4 path and writing a review grounded in both video and audio, using existing Provider, Worker, and public contract boundaries and real offline AGY recordings.",
     "problem": "The repository has partial Antigravity identity, routing, PTY composition, and tests, but still lacks the recorded agy -p command behavior, mandatory --add-dir workspace exposure, media timeout and effort forwarding, authoritative result and usage parsing, structured output, and refusal-aware task outcomes. AGY may exit 0 and report SUCCESS after declining a task, so subprocess success can produce false task success.",
-    "solution": "Finish the single Providers-owned Antigravity adapter: construct direct shell-free agy -p argv for every Worker dispatch, parse final stream-JSON results and JSON envelopes into existing provider-neutral results and diagnostics, use explicit structured response contracts for task success, and replay every real docs/temp/agy-traces asset through ProviderCommandRunner and root.BuildProcess in ordinary offline tests."
+    "solution": "Finish the single Providers-owned Antigravity adapter: construct direct shell-free agy -p argv for every Worker dispatch, parse final stream-JSON results and JSON envelopes into existing provider-neutral results and diagnostics, use explicit structured response contracts for task success, and replay every real tracked tests/functional/providers/agy/testdata asset through ProviderCommandRunner and root.BuildProcess in ordinary offline tests."
   },
   "acceptanceCriteria": [
     "A worker configured with modelProvider: ANTIGRAVITY runs through the existing Provider, Worker, and public contracts and can review a prompted video path with output that reflects recorded visual and audio ground truth.",
     "Because print-mode cwd is not the workspace, every dispatch uses the shell-free agy -p shape with --add-dir <working-directory> and forwards output format, optional schema, permissions, model, low|medium|high effort, and --print-timeout; timeout defaults to 5m and permits the recorded 8m media case, while model validation permits only gemini-3.6-flash-high, gemini-3.6-flash-medium, gemini-3.6-flash-low, gemini-3.5-flash-high, gemini-3.5-flash-medium, gemini-3.5-flash-low, gemini-3.1-pro-high, gemini-3.1-pro-low, claude-sonnet-4-6, claude-opus-4-6-thinking, and gpt-oss-120b-medium from the recorded inventory.",
     "Exit code 0 cannot establish task success; the final stream-JSON result is parsed for response, duration_seconds, num_turns, and input/output/thinking/cache_read/total usage, while JSON output supports conversation_id, status, response, structured_output, json_schema, and usage; malformed, incomplete, empty, and refusal outcomes produce non-empty actionable failures.",
-    "Offline golden coverage consumes docs/temp/agy-traces/agy-trace-simple-text.stream.jsonl, agy-trace-file-read.stream.jsonl, agy-trace-video-watch.stream.jsonl, agy-trace-structured.json, clip-fixture.mp4, groundtruth-fixture.mp4, agy-trace-groundtruth-verbose.stream.jsonl, agy-trace-clipqa-schema.stream.jsonl, agy-trace-missing-file.stream.jsonl, and README.md, never live AGY or invented fixtures, and asserts both recorded visual and audio facts including the deterministic ground truth.",
+        "Offline golden coverage consumes the tracked tests/functional/providers/agy/testdata/agy-trace-simple-text.stream.jsonl, agy-trace-file-read.stream.jsonl, agy-trace-video-watch.stream.jsonl, agy-trace-structured.json, clip-fixture.mp4, groundtruth-fixture.mp4, agy-trace-groundtruth-verbose.stream.jsonl, agy-trace-clipqa-schema.stream.jsonl, agy-trace-missing-file.stream.jsonl, and README.md, never live AGY or invented fixtures, and asserts both recorded visual and audio facts including the deterministic ground truth.",
     "AGY status SUCCESS cannot establish task success: because the recorded missing-file refusal appears only in prose, tasks requiring a verdict complete only from a present, valid, successful structured response contract; rate-limited AGY calls stay out of ordinary tests and at most one separately operator-gated live smoke is skipped by default.",
     "Provider ownership, Worker consumption, injected effects, logging, and public contracts remain aligned; generated contracts are synchronized with make generate-api or make interfaces-all when applicable, and go test ./tests/functional/providers/agy/... -count=1, make verify-fast, applicable typecheck, lint, and tests pass.",
     "The implementation and review loop continues until required CI is terminal and passing, every blocking PR conversation item is explicitly addressed, merge conflicts and shared-file changes are resolved, and the PR is actually merged; opened, green, approved, or ready-to-merge is not complete."
@@ -25,7 +25,7 @@
         "A selected Antigravity worker invokes agy -p <prompt> --output-format stream-json as typed argv without shell interpolation and includes --disable-slash-commands.",
         "Every invocation includes --add-dir <working-directory>, even when the subprocess working directory is the same path, and prompted file paths pass through unchanged for AGY to parse.",
         "Worker model, canonical AGY effort low|medium|high, effective skip-permissions policy, and print timeout map to --model, --effort, --dangerously-skip-permissions, and --print-timeout; the default is 5m and media work can request at least 8m.",
-        "Supported model validation uses only the model inventory recorded in docs/temp/agy-traces/README.md, and unsupported model or effort values fail before launch with non-empty diagnostics.",
+        "Supported model validation uses only the model inventory recorded in tests/functional/providers/agy/testdata/README.md, and unsupported model or effort values fail before launch with non-empty diagnostics.",
         "ProviderCommandRunner tests prove exact argv and timeout behavior with the real file-read and video scenarios without live AGY.",
         "Typecheck passes",
         "Tests pass"
@@ -43,7 +43,7 @@
         "The result maps response, duration_seconds, num_turns, and input/output/thinking/cache_read/total token usage into existing Provider result, progress, and diagnostics contracts without dropping recorded zero values.",
         "Empty streams, malformed JSON lines, missing final results, missing responses, truncated output, and nonzero process failures return deterministic non-empty safe diagnostics and never fabricate success.",
         "Exit code 0 and result.status SUCCESS are retained as execution facts but cannot alone satisfy a task-level response contract.",
-        "Offline tests consume agy-trace-simple-text.stream.jsonl, agy-trace-file-read.stream.jsonl, and agy-trace-video-watch.stream.jsonl directly.",
+        "Offline tests consume the tracked agy-trace-simple-text.stream.jsonl, agy-trace-file-read.stream.jsonl, and agy-trace-video-watch.stream.jsonl recordings directly.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -60,7 +60,7 @@
         "Valid structured output is returned in the form expected by existing Worker schema validation, and the echoed schema agrees with the requested contract.",
         "A missing, malformed, schema-invalid, or explicitly failing structured verdict produces a task failure with non-empty diagnostics even when process exit is 0 and AGY status is SUCCESS.",
         "The clip-QA schema preserves action_completed, spec_deviations, temporal_artifacts, audio_content, unexpected_speech, verdict, and confidence and returns the recorded pass verdict.",
-        "Offline tests consume agy-trace-structured.json, agy-trace-clipqa-schema.stream.jsonl, and agy-trace-missing-file.stream.jsonl directly.",
+        "Offline tests consume the tracked agy-trace-structured.json, agy-trace-clipqa-schema.stream.jsonl, and agy-trace-missing-file.stream.jsonl recordings directly.",
         "When public contracts change, authored contract sources and generated Go and TypeScript consumers are synchronized with the applicable repository generation command and generated files are not hand-edited.",
         "Typecheck passes",
         "Tests pass"
@@ -79,7 +79,7 @@
         "The deterministic video case asserts 4.000 seconds, 320x240, 100 frames at 25 fps, PHASE 1, PHASE 2, the red-to-blue cut at 2.000 seconds, and the 440.00 Hz tone ending in silence at 2.000 seconds.",
         "The real clip case asserts its visual review plus ambient drone, clock ticking, and no speech; paths remain prompt text and no wrapper-layer multimodal transform is added.",
         "The missing-file refusal reaches failed Work with actionable diagnostics rather than completed Work despite exit 0 and AGY SUCCESS.",
-        "Offline functional coverage consumes clip-fixture.mp4, groundtruth-fixture.mp4, agy-trace-groundtruth-verbose.stream.jsonl, and the other relevant real traces without live AGY.",
+        "Offline functional coverage consumes the tracked clip-fixture.mp4, groundtruth-fixture.mp4, agy-trace-groundtruth-verbose.stream.jsonl, and the other relevant real recordings without live AGY.",
         "Typecheck passes",
         "Tests pass"
       ],

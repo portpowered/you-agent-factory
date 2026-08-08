@@ -118,7 +118,7 @@ func TestCommandEffectBuildsArgvForRecordedFileAndVideoTraces(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := testutil.MustRepoRoot(t)
-	workspace := filepath.Join(repoRoot, "docs", "temp", "agy-traces")
+	workspace := filepath.Join(repoRoot, "tests", "functional", "providers", "agy", "testdata")
 	tests := []struct {
 		name       string
 		trace      string
