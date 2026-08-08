@@ -1,7 +1,8 @@
 # Worker Session Convergence
 
-Status: landed for every runtime-backed session; the standalone `you run
-script.js` composition is not converted
+Status: the route is landed and the ACP gate is green; four durable-session
+projection gaps remain (§6). The standalone `you run script.js` composition is
+not converted.
 Date: 2026-08-08
 Branch: `worker-session-convergence`
 Gate: `TestJavaScriptFactoryChildrenAreVisibleAsWorkers`
@@ -130,11 +131,30 @@ separate project, and until it happens `you run script.js` children remain
 invisible to a client: there is no Factory whose tool call they could be
 content inside.
 
-## 6. Behaviour changes worth knowing
+## 6. What is still red, and why
 
-- A runtime-backed session's child no longer writes its own QUEUED and RUNNING
-  dispatch records. Those are the Worker Session's lifecycle records now; two
-  sources for one fact can disagree.
+Nine functional cells still fail. None of them are about the route -- children
+reach the provider, run concurrently, and open tool calls. All four are facts
+the durable-session projection used to get from the deleted executor and now
+gets from nobody.
+
+| Failing cells | Missing fact | Where it has to come from |
+| --- | --- | --- |
+| `TestJavaScriptParallelPartialFailureUsesDocumentedPolicy` | `failureDetail`, `failureClassification`, `retryable` on a failed child record | `InvokeWorkerResult` narrows to `Diagnostic` alone. It needs the closed-vocabulary `FailureDetail.Reason` and the retryable flag as well -- both are safe to cross; `InvocationResult.Message` still must not. |
+| `TestJavaScriptChildProgressPublishesCanonicalResponseEvents`, `TestJavaScriptTerminalResultFollowsFinalResponseEvent` | child provider progress on the Factory Session response-event surface | Progress now flows Workers -> `ProviderSessionObservationPublisher` -> the runtime progress stream. It no longer reaches the durable session's own response-event store, which the JavaScript service used to write through `sessionProgressPublisher`. |
+| `TestJavaScriptInterruptedSessionResumes...`, `TestJavaScriptResumeRestoresCheckpoint...`, `TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault`, `TestFactorySessionResumeDoesNotRepeatCompletedDispatch`, `TestFactorySessionHistoryIsNotPersistedByDefault`, `TestAPIPartialResultIsAvailableBeforeTerminalCompletion` | workflow cancellation reaching the running child | `InvokeWorker` deliberately calls `InvokeSession` under `context.WithoutCancel`, because Worker Sessions owns cancellation. Nothing yet translates a canceled workflow into `Cancel` on that Worker Session. |
+| `TestJavaScriptMockWorkersReplaceOnlyNamedChildren` | mock-worker substitution for a named child | The provider-invocation route is built from the session command runner; per-child mock matching is not applied to it. |
+
+The first three are the load-bearing ones. Cancellation is the only one that is
+a behaviour regression rather than a projection gap.
+
+## 7. Behaviour changes worth knowing
+
+- A child's queued/running/terminal dispatch records survive the convergence.
+  They are the durable session's own projection -- what its progress counts and
+  dispatch inspection read -- and the Worker Session's lifecycle records, which
+  live on the Worker topic and feed the transport, are a different thing.
+  Removing them silently zeroed every session's progress counts.
 - Live-child construction no longer validates that an invocation executor
   exists. A runtime-backed session's invoker is bound *after* construction, so
   there is nothing a constructor could check. What is still rejected is an
@@ -142,7 +162,7 @@ content inside.
 - The durable response-event store is now provisioned for sessions with a bound
   worker invoker, rather than for sessions with a live-child invocation factory.
 
-## 7. Not in scope
+## 8. Not in scope
 
 - Merging `ProviderInferenceRequest` and `WorkstationExecutionRequest` (~85%
   duplicate; should converge, but not needed to make children Workers)
