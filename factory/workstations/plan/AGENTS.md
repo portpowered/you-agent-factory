@@ -75,7 +75,13 @@ The JSON file must be implementation-ready and contain:
 - `context.solution`
 - `acceptanceCriteria` with 3-7 project-level criteria plus a final quality-gate
   criterion for typecheck, lint, and tests and a delivery criterion requiring
-  the implementation/review loop to continue until the PR is actually merged
+  the implementation/review loop to continue until the PR is actually merged.
+  Phrase the lint criterion as "no NEW lint violations relative to current
+  main, and the gates green on main (backend-size, pkg-maint, pkg-file-count,
+  pkg-structure, vet) stay green" — NOT as a blanket "make lint passes":
+  `make lint` cannot pass end-to-end on main while the pkg-boundary target
+  carries pre-existing packaged-service-structure migration debt (recorded
+  2026-08-08), and an unsatisfiable criterion stalls the review loop.
 - `userStories` with sequential  ids, title, description,
   acceptanceCriteria, priority, `passes: false`, and empty `notes`
 - Ids for storeis should be shaped like {{ (index .Inputs 0).Name }}-001, 002, etc. 
