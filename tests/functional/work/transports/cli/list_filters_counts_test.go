@@ -1,4 +1,4 @@
-package work
+package cli_test
 
 import (
 	"encoding/json"
@@ -52,7 +52,6 @@ func TestWorkListFiltersAndCounts(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, workListFiltersCountsFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
 	})
 
