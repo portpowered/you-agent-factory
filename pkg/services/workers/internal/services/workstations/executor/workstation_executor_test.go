@@ -1434,6 +1434,163 @@ func TestWorkstationExecutor_ClassifierTrimsLabelAndIgnoresNonFailureOutcomeKind
 	}
 }
 
+func TestWorkstationExecutor_ScriptClassifierUsesFinalStdoutLineAndPreservesDiagnostics(t *testing.T) {
+	stdout := "checking payload\r\n\t needs_review \t\r\n\r\n"
+	stderr := "script diagnostic\n"
+	mock := &wsMockExecutor{result: workerexecution.WorkResult{
+		Outcome: workerexecution.OutcomeAccepted,
+		// Script runners trim the result content, while command diagnostics
+		// retain the exact streams for inspection.
+		Output: strings.TrimSpace(stdout),
+		Diagnostics: &workerexecution.WorkDiagnostics{Command: &workerexecution.CommandDiagnostic{
+			Stdout: stdout,
+			Stderr: stderr,
+		}},
+	}}
+	we := newTestWorkstationExecutor(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.FactoryWorkerConfig{
+				"script-worker": {Type: interfaces.WorkerTypeScript, Body: "script"},
+			},
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"classifier": {Type: interfaces.WorkstationTypeClassify, PromptTemplate: "classify"},
+			},
+		},
+		mock,
+	)
+
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
+		DispatchID:      "d-script-classifier-line",
+		TransitionID:    "t-script-classifier-line",
+		WorkerType:      "script-worker",
+		WorkstationName: "classifier",
+		InputTokens:     InputTokens(factoryruntime.RuntimeToken{ID: "tok-1"}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeAccepted || result.Output != "needs_review" {
+		t.Fatalf("result = %#v, want accepted needs_review label", result)
+	}
+	if result.SelectedClassificationLabel != "" {
+		t.Fatalf("selected classification label = %q, want empty before route matching", result.SelectedClassificationLabel)
+	}
+	if result.Diagnostics == nil || result.Diagnostics.Command == nil {
+		t.Fatalf("diagnostics = %#v, want command diagnostics", result.Diagnostics)
+	}
+	if result.Diagnostics.Command.Stdout != stdout || result.Diagnostics.Command.Stderr != stderr {
+		t.Fatalf("command diagnostics = %#v, want unmodified stdout/stderr", result.Diagnostics.Command)
+	}
+}
+
+func TestWorkstationExecutor_ScriptClassifierRejectsWhitespaceOnlyStdoutAndPreservesDiagnostics(t *testing.T) {
+	stdout := " \r\n\t  \n"
+	stderr := "script warning"
+	mock := &wsMockExecutor{result: workerexecution.WorkResult{
+		Outcome: workerexecution.OutcomeAccepted,
+		Output:  "",
+		Diagnostics: &workerexecution.WorkDiagnostics{Command: &workerexecution.CommandDiagnostic{
+			Stdout: stdout,
+			Stderr: stderr,
+		}},
+	}}
+	we := newTestWorkstationExecutor(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.FactoryWorkerConfig{
+				"script-worker": {Type: interfaces.WorkerTypeScript, Body: "script"},
+			},
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"classifier": {Type: interfaces.WorkstationTypeClassify, PromptTemplate: "classify"},
+			},
+		},
+		mock,
+	)
+
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
+		DispatchID:      "d-script-classifier-empty",
+		TransitionID:    "t-script-classifier-empty",
+		WorkerType:      "script-worker",
+		WorkstationName: "classifier",
+		InputTokens:     InputTokens(factoryruntime.RuntimeToken{ID: "tok-1"}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
+	}
+	if result.Error != "classifier output invalid: empty label" {
+		t.Fatalf("Error = %q, want actionable missing-label diagnostic", result.Error)
+	}
+	if result.SelectedClassificationLabel != "" {
+		t.Fatalf("selected classification label = %q, want empty on failure", result.SelectedClassificationLabel)
+	}
+	if result.Diagnostics == nil || result.Diagnostics.Command == nil ||
+		result.Diagnostics.Command.Stdout != stdout || result.Diagnostics.Command.Stderr != stderr {
+		t.Fatalf("command diagnostics = %#v, want unmodified stdout/stderr", result.Diagnostics)
+	}
+}
+
+func TestWorkstationExecutor_InferenceClassifierRetainsWholeOutputInterpretation(t *testing.T) {
+	output := "provider diagnostic\nneeds_review"
+	mock := &wsMockExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: output}}
+	we := newTestWorkstationExecutor(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.FactoryWorkerConfig{
+				"model-worker": {Type: interfaces.WorkerTypeModel, Body: "model"},
+			},
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"classifier": {Type: interfaces.WorkstationTypeClassify, PromptTemplate: "classify"},
+			},
+		},
+		mock,
+	)
+
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
+		DispatchID:      "d-inference-classifier-whole-output",
+		TransitionID:    "t-inference-classifier-whole-output",
+		WorkerType:      "model-worker",
+		WorkstationName: "classifier",
+		InputTokens:     InputTokens(factoryruntime.RuntimeToken{ID: "tok-1"}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeAccepted || result.Output != output {
+		t.Fatalf("result = %#v, want accepted whole inference output", result)
+	}
+}
+
+func TestWorkstationExecutor_NonClassifierScriptRetainsWholeOutputInterpretation(t *testing.T) {
+	output := "script diagnostic\nscript result"
+	mock := &wsMockExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: output}}
+	we := newTestWorkstationExecutor(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.FactoryWorkerConfig{
+				"script-worker": {Type: interfaces.WorkerTypeScript, Body: "script"},
+			},
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"standard": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "run"},
+			},
+		},
+		mock,
+	)
+
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
+		DispatchID:      "d-script-whole-output",
+		TransitionID:    "t-script-whole-output",
+		WorkerType:      "script-worker",
+		WorkstationName: "standard",
+		InputTokens:     InputTokens(factoryruntime.RuntimeToken{ID: "tok-1"}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeAccepted || result.Output != output {
+		t.Fatalf("result = %#v, want accepted whole script output", result)
+	}
+}
+
 func TestWorkstationExecutor_ClassifierRejectsJSONStringLabel(t *testing.T) {
 	mock := &wsMockExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "\"needs_review\""}}
 	we := newTestWorkstationExecutor(

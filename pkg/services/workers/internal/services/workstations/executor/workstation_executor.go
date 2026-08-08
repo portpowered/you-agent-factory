@@ -245,7 +245,10 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 		return result, err
 	}
 	if workstationDef.Type == factorydefinitions.WorkstationTypeClassify {
-		return normalizeClassifierWorkResult(result), nil
+		return normalizeClassifierWorkResult(
+			result,
+			workerDef.Type == factorydefinitions.WorkerTypeScript,
+		), nil
 	}
 	return result, nil
 }
@@ -762,14 +765,20 @@ func (we *WorkstationExecutor) executeInnerWorker(ctx context.Context, request w
 	return result, nil
 }
 
-func normalizeClassifierWorkResult(result workerexecution.WorkResult) workerexecution.WorkResult {
+func normalizeClassifierWorkResult(result workerexecution.WorkResult, scriptBacked bool) workerexecution.WorkResult {
 	if result.Outcome == workerexecution.OutcomeFailed {
+		result.SelectedClassificationLabel = ""
 		return result
 	}
 
-	label, err := normalizeClassifierLabel(result.Output)
+	output := result.Output
+	if scriptBacked {
+		output = finalScriptClassifierLine(result)
+	}
+	label, err := normalizeClassifierLabel(output)
 	if err != nil {
 		result.Outcome = workerexecution.OutcomeFailed
+		result.SelectedClassificationLabel = ""
 		result.Error = classifierOutputErrorDetail(result.Output, err)
 		return result
 	}
@@ -778,6 +787,19 @@ func normalizeClassifierWorkResult(result workerexecution.WorkResult) workerexec
 	result.Output = label
 	result.Feedback = ""
 	return result
+}
+
+func finalScriptClassifierLine(result workerexecution.WorkResult) string {
+	output := result.Output
+	if result.Diagnostics != nil && result.Diagnostics.Command != nil {
+		output = result.Diagnostics.Command.Stdout
+	}
+	trimmed := strings.TrimSpace(output)
+	if trimmed == "" {
+		return ""
+	}
+	lines := strings.Split(trimmed, "\n")
+	return strings.TrimSpace(lines[len(lines)-1])
 }
 
 func normalizeClassifierLabel(output string) (string, error) {
