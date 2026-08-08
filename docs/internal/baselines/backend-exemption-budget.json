@@ -381,9 +381,9 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_definitions/authoredlayout/writer.go#interpreterFlagModeForArg",
+      "target": "pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout/writer.go#interpreterFlagModeForArg",
       "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+      "removalReason": "Refactor this moved complexity into focused helpers and remove the exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -406,12 +406,6 @@
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/factory_definitions/internal/services/catalog/persistence/named_factory_persistence_test.go#TestPersistNamedFactoryOwnsCreateReplaceAndCurrentPointerPolicy",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_definitions/internal/services/catalog/persistence/service.go#service.persistNamedFactory",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
@@ -441,57 +435,63 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_definitions/portableconfig/materialization.go#PruneRemovedDocs",
+      "target": "pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig/materialization.go#PruneRemovedDocs",
       "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+      "removalReason": "Refactor this moved complexity into focused helpers and remove the exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_runtime/runtime/factory_event_history_test.go#assertBatchRequestReplayEvents",
+      "target": "pkg/services/factory_runtime/internal/build.go#RuntimeFactory.Build",
       "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+      "removalReason": "Refactor this moved complexity into focused helpers and remove the exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_runtime/runtime/factory_event_history_test.go#assertGeneratedBatchEvents",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration/runtime/factory_event_history_test.go#assertBatchRequestReplayEvents",
       "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+      "removalReason": "Refactor this moved complexity into focused helpers and remove the exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_runtime/runtime/factory_event_history_test.go#assertOrderedEventPayloads",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration/runtime/factory_event_history_test.go#assertGeneratedBatchEvents",
       "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+      "removalReason": "Refactor this moved complexity into focused helpers and remove the exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_runtime/runtime/factory_modes_test.go#TestFactoryEventHistory_SubscribeReplaysHistoryThenStreamsLiveEvents",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration/runtime/factory_event_history_test.go#assertOrderedEventPayloads",
       "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+      "removalReason": "Refactor this moved complexity into focused helpers and remove the exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_runtime/runtime/factory_modes_test.go#TestGetEngineStateSnapshot_AggregatesRuntimeLifecycleUptimeAndTopology",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration/runtime/factory_modes_test.go#TestFactoryEventHistory_SubscribeReplaysHistoryThenStreamsLiveEvents",
       "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+      "removalReason": "Refactor this moved complexity into focused helpers and remove the exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_runtime/runtime/factory_runtime_test_helpers_test.go#assertSafeBoundaryRequestView",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration/runtime/factory_modes_test.go#TestGetEngineStateSnapshot_AggregatesRuntimeLifecycleUptimeAndTopology",
       "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+      "removalReason": "Refactor this moved complexity into focused helpers and remove the exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_runtime/subsystems/subsystem_transitioner_worker_batch_test.go#assertGeneratedWorkerBatchSubmissions",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration/runtime/factory_runtime_test_helpers_test.go#assertSafeBoundaryRequestView",
       "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+      "removalReason": "Refactor this moved complexity into focused helpers and remove the exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_runtime/token/clone_test.go#TestCloneToken_PreserveNilAndEmptyValues",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration/subsystems/subsystem_transitioner_worker_batch_test.go#assertGeneratedWorkerBatchSubmissions",
       "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
+      "removalReason": "Refactor this moved complexity into focused helpers and remove the exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration/token/clone_test.go#TestCloneToken_PreserveNilAndEmptyValues",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor this moved complexity into focused helpers and remove the exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -741,12 +741,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/store_query.go#QueryBlobsTable",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session store schema probing stays grouped until extraction refactor."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/store_query.go#QueryMetaTable",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session store schema probing stays grouped until extraction refactor."
@@ -897,6 +891,18 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/workers/internal/progress_composition_test.go#TestNewRequiresCompositionSelectedWorkerEffects",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor this moved complexity into focused helpers and remove the exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/workers/internal/runtime_options.go#Service.BuildRuntimeExecutors",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor this moved complexity into focused helpers and remove the exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/workers/internal/services/runtime_assembly/construction/service.go#Service.Build",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
@@ -940,24 +946,6 @@
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/workers/internal/services/workstations/executor/workstation_executor_test.go#TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/workers/service/boundary_test.go#TestExecutorBuilderIsOwnedByWorkerExecutionService",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/workers/service/progress_composition_test.go#TestNewRequiresCompositionSelectedWorkerEffects",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/workers/service/runtime_options.go#Service.BuildRuntimeExecutors",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
@@ -1017,9 +1005,15 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/transports/cli/command_factory_injection_test.go#TestNewCommandFactoryPreservesInjectedOperations",
+      "target": "pkg/transports/cli/command_factory_injection_test.go#TestNewCommandFactoryPreservesInjectedModelsCLIAdapter",
       "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
+      "removalReason": "Refactor this moved complexity into focused helpers and remove the exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/command_factory_injection_test.go#TestNewCommandFactoryPreservesInjectedRuntimeCLIAdapter",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor this moved complexity into focused helpers and remove the exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -1338,6 +1332,36 @@
       "target": "pkg/services/factory_definitions/internal/services/catalog/persistence/service_test.go#TestServiceRoutesPersistenceThroughFlatCapabilities",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_runtime/internal/assembly.go#Assembly.Assemble",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor this moved function into focused helpers and remove the exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_runtime/internal/build.go#RuntimeFactory.Build",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor this moved function into focused helpers and remove the exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_runtime/internal/build.go#assembleRuntimeBundle",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor this moved function into focused helpers and remove the exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_runtime/internal/runtime_build.go#NewRuntimeBuild",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor this moved function into focused helpers and remove the exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_runtime/internal/runtime_build.go#buildBundle",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor this moved function into focused helpers and remove the exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",

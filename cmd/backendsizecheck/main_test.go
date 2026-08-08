@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -131,6 +132,59 @@ func TestRunReportsFileAndFunctionViolationsWithPackageFileAndLimitDetails(t *te
 	}
 	if got := err.Error(); got != "[agent-factory:backend-size] found 2 size violation(s)" {
 		t.Fatalf("run() error = %q, want violation count", got)
+	}
+}
+
+func TestRunUsesDeletionOnlyBaselineAndRejectsNewOrRegressedFindings(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoFile(t, repoRoot, "pkg/service/legacy.go", strings.Join([]string{
+		"package service",
+		"",
+		"func Legacy() {",
+		"\tprintln(\"one\")",
+		"\tprintln(\"two\")",
+		"}",
+	}, "\n"))
+	writeSizeBaseline(t, repoRoot, backendSizeBaselineEntry{
+		Rule: backendSizeFunctionRule, Target: "pkg/service/legacy.go#Legacy", Actual: 4, Limit: 3,
+	})
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	if err := run(config{root: repoRoot, fileLineLimit: 100, funcLineLimit: 3}, stdout, stderr); err != nil {
+		t.Fatalf("run() with recorded finding error = %v, stderr = %q", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "1 deletion-only baseline entries remain") {
+		t.Fatalf("run() stdout = %q, want baseline count", stdout.String())
+	}
+
+	writeGoFile(t, repoRoot, "pkg/service/new.go", strings.Join([]string{
+		"package service",
+		"",
+		"func New() {",
+		"\tprintln(\"one\")",
+		"\tprintln(\"two\")",
+		"}",
+	}, "\n"))
+	stderr.Reset()
+	if err := run(config{root: repoRoot, fileLineLimit: 100, funcLineLimit: 3}, stdout, stderr); err == nil || !strings.Contains(err.Error(), "found 1 size violation(s)") {
+		t.Fatalf("run() new finding error = %v, stderr = %q", err, stderr.String())
+	}
+
+	writeGoFile(t, repoRoot, "pkg/service/legacy.go", strings.Join([]string{
+		"package service",
+		"",
+		"func Legacy() {",
+		"\tprintln(\"one\")",
+		"\tprintln(\"two\")",
+		"\tprintln(\"three\")",
+		"}",
+	}, "\n"))
+	stderr.Reset()
+	if err := run(config{root: repoRoot, fileLineLimit: 100, funcLineLimit: 3}, stdout, stderr); err == nil || !strings.Contains(err.Error(), "regression(s)") {
+		t.Fatalf("run() regressed finding error = %v, stderr = %q", err, stderr.String())
 	}
 }
 
@@ -360,5 +414,23 @@ func writeExemptionBaseline(t *testing.T, repoRoot string, entries ...exemptionb
 	}
 	if err := os.WriteFile(baselinePath, data, 0o644); err != nil {
 		t.Fatalf("write exemption baseline: %v", err)
+	}
+}
+
+func writeSizeBaseline(t *testing.T, repoRoot string, entries ...backendSizeBaselineEntry) {
+	t.Helper()
+	slices.SortFunc(entries, func(left, right backendSizeBaselineEntry) int {
+		return strings.Compare(backendSizeBaselineKey(left.Rule, left.Target), backendSizeBaselineKey(right.Rule, right.Target))
+	})
+	data, err := json.Marshal(backendSizeBaseline{Version: backendSizeBaselineVersion, Stage: backendSizeBaselineStage, Entries: entries})
+	if err != nil {
+		t.Fatalf("marshal backend-size baseline: %v", err)
+	}
+	baselinePath := filepath.Join(repoRoot, filepath.FromSlash(backendSizeBaselinePath))
+	if err := os.MkdirAll(filepath.Dir(baselinePath), 0o755); err != nil {
+		t.Fatalf("create backend-size baseline directory: %v", err)
+	}
+	if err := os.WriteFile(baselinePath, data, 0o644); err != nil {
+		t.Fatalf("write backend-size baseline: %v", err)
 	}
 }
