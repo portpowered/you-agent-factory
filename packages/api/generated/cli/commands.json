@@ -6352,6 +6352,285 @@
         ]
       }
     },
+    "you.work.watch": {
+      "id": "you.work.watch",
+      "name": "watch",
+      "path": "you work watch",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.work.watch",
+        "documentation": {
+          "title": {
+            "id": "you.work.watch.title",
+            "canonicalEnglish": "Watch Work state transitions from a running factory"
+          },
+          "description": {
+            "id": "you.work.watch.description",
+            "canonicalEnglish": "Watch Work state transitions from a running you-agent-factory service.\n\nBy default the command targets the default compatibility session. Use --session to route the watch to one specific live factory session instead.\n\nEvery stdout line is one complete JSON object in the you.work.watch.v1 NDJSON contract with session, event, sequence, Work, transition, source, and terminal fields. Diagnostics remain on stderr. Use --follow to keep the stream attached after observed Work reaches a terminal state."
+          }
+        },
+        "examples": [
+          "you work watch",
+          "you work watch --session session-beta --follow"
+        ],
+        "visibility": "public",
+        "sourceHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.work.watch",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "watch [--session <session>] [--follow]",
+        "example": "  # Emit one NDJSON transition per observed Work state change.\n  you work watch\n\n  # Keep watching after terminal Work transitions.\n  you work watch --session session-beta --follow"
+      },
+      "flags": {
+        "you.work.watch.flag.debug": {
+          "id": "you.work.watch.flag.debug",
+          "long": "debug",
+          "shorthand": "d",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.watch.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.work.watch.flag.json": {
+          "id": "you.work.watch.flag.json",
+          "long": "json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.watch.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.work.watch.flag.server": {
+          "id": "you.work.watch.flag.server",
+          "long": "server",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
+          "valueType": "string",
+          "required": false,
+          "default": "http://localhost:7437",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.watch.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.work.watch.flag.verbose": {
+          "id": "you.work.watch.flag.verbose",
+          "long": "verbose",
+          "shorthand": "v",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.watch.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.work.watch.flag.follow": {
+          "id": "you.work.watch.flag.follow",
+          "long": "follow",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.watch.flag.follow",
+            "state": "active",
+            "since": "1.0.0"
+          },
+          "usage": "continue watching after observed Work reaches a terminal state"
+        },
+        "you.work.watch.flag.port": {
+          "id": "you.work.watch.flag.port",
+          "long": "port",
+          "usage": "deprecated; use --server",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "int",
+          "required": false,
+          "default": "0",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "hidden",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.watch.flag.port",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.work.watch.flag.session": {
+          "id": "you.work.watch.flag.session",
+          "long": "session",
+          "usage": "target one live factory session; omit to use the default compatibility session",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.watch.flag.session",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "handler": {
+        "id": "you.work.watch.handler"
+      },
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "outputs": {
+        "you.work.watch.output.ndjson": {
+          "id": "you.work.watch.output.ndjson",
+          "channel": "stdout",
+          "format": "json"
+        }
+      },
+      "exits": {
+        "you.work.watch.exit.success": {
+          "id": "you.work.watch.exit.success",
+          "code": 0,
+          "kind": "success"
+        },
+        "you.work.watch.exit.failure": {
+          "id": "you.work.watch.exit.failure",
+          "code": 1,
+          "kind": "failure"
+        },
+        "you.work.watch.exit.usage": {
+          "id": "you.work.watch.exit.usage",
+          "code": 1,
+          "kind": "usage"
+        }
+      },
+      "sideEffects": {
+        "you.work.watch.side-effect.network": {
+          "id": "you.work.watch.side-effect.network",
+          "kind": "network"
+        }
+      },
+      "constraints": {
+        "runtime": [
+          "local"
+        ],
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ]
+      }
+    },
     "you.work.show": {
       "id": "you.work.show",
       "name": "show",

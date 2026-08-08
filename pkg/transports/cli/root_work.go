@@ -634,6 +634,8 @@ func newWorkFamilyBindings() climanifestcobra.WorkFamilyBindings {
 		"you.work.list.flag.max-results":    scalarTarget(0),
 		"you.work.list.flag.next-token":     scalarTarget(""),
 		"you.work.list.flag.session":        scalarTarget(""),
+		"you.work.watch.flag.follow":        scalarTarget(false),
+		"you.work.watch.flag.session":       scalarTarget(""),
 		"you.work.show.flag.session":        scalarTarget(""),
 		"you.work.move.flag.session":        scalarTarget(""),
 		"you.work.move.flag.request-id":     scalarTarget(""),

@@ -36,6 +36,7 @@ func TestNewWorkRegistryRegistersContractedRunnableIDs(t *testing.T) {
 	}
 	for _, commandID := range []string{
 		"you.work.list",
+		"you.work.watch",
 		"you.work.show",
 		"you.work.move",
 		"you.work.visualize",
@@ -356,6 +357,7 @@ func TestRunnableWorkCommandIDsFromGeneratedManifest(t *testing.T) {
 		"you.work.move",
 		"you.work.show",
 		"you.work.visualize",
+		"you.work.watch",
 	}
 	if len(ids) != len(want) {
 		t.Fatalf("runnable IDs = %#v, want %#v", ids, want)
@@ -978,6 +980,7 @@ func TestVerifyWorkRunnableCoverageAcceptsCompleteRegistry(t *testing.T) {
 	registry := commandregistry.NewRegistry()
 	for _, commandID := range []string{
 		"you.work.list",
+		"you.work.watch",
 		"you.work.show",
 		"you.work.move",
 		"you.work.visualize",

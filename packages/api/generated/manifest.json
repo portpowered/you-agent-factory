@@ -31,7 +31,7 @@
       "path": "generated/cli/command-manifest.schema.json"
     },
     "generated.cli.commands": {
-      "artifactHash": "70e91984a12ff5de624f2c4335b7dea63bf81a12be142b9c72466a9348d7b07a",
+      "artifactHash": "b7e069c83980c44dda2b93fc47d16120a01ca0f71c248e475308b5829846d63e",
       "documentation": {
         "documentation": {
           "description": {
@@ -48,7 +48,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.cli.commands",
-        "sourceHash": "70e91984a12ff5de624f2c4335b7dea63bf81a12be142b9c72466a9348d7b07a",
+        "sourceHash": "b7e069c83980c44dda2b93fc47d16120a01ca0f71c248e475308b5829846d63e",
         "visibility": "public"
       },
       "family": "cli",
