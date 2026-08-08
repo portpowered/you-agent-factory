@@ -28,6 +28,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/{session_id}/worker-sessions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Worker Sessions correlated with one Work item
+     * @description Returns authoritative Worker Session observations for the requested Work item in the explicitly selected Factory Session. A known Work with no correlated sessions returns an empty sessions array; an unknown Work returns NOT_FOUND.
+     */
+    get: operations["listWorkerSessionsBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions/{session_id}/invocations": {
     parameters: {
       query?: never;
@@ -1021,6 +1041,72 @@ export interface components {
     ListWorkCountSummary: {
       /** @description Complete filtered Work total before page slicing. */
       total: number;
+    };
+    ListWorkerSessionsResponse: {
+      /** @description Deterministically ordered Worker Session observations correlated with the requested Work. */
+      sessions: components["schemas"]["WorkerSessionObservation"][];
+    };
+    WorkerSessionObservation: {
+      /** @description Stable Worker Session identity. */
+      workerSessionId: string;
+      providerSession?: components["schemas"]["WorkerSessionProviderSessionRef"];
+      /** @description Whether a provider-session identity is available for this attempt. */
+      providerSessionAvailable: boolean;
+      /** @description Work identities correlated with this Worker Session attempt. */
+      workIds: string[];
+      /** @description Optional turn correlation identifier. */
+      turnId: string | null;
+      /** @description Stable attempt or dispatch identity. */
+      attemptId: string;
+      /** @enum {string} */
+      state: WorkerSessionObservationState;
+      /** Format: date-time */
+      startedAt: string | null;
+      /** Format: date-time */
+      endedAt: string | null;
+      /**
+       * Format: int64
+       * @description Projected duration in milliseconds when authoritative timing exists.
+       */
+      durationMillis: number | null;
+      /** @enum {string} */
+      durationBasis: WorkerSessionObservationDurationBasis;
+      tokenUsage?: components["schemas"]["ProviderSessionTokenUsage"];
+      /** @enum {string} */
+      transcript: WorkerSessionObservationTranscript;
+      failure?: components["schemas"]["WorkerSessionFailure"];
+      parse: components["schemas"]["WorkerSessionParseDiagnostics"];
+    };
+    WorkerSessionProviderSessionRef: {
+      /** @description Provider identity that issued the correlated session. */
+      provider: string;
+      /** @description Provider-defined identifier kind. */
+      kind: string;
+      /** @description Provider-issued session identifier. */
+      id: string;
+    };
+    WorkerSessionFailure: {
+      /** @description Bounded Worker Session failure classification. */
+      kind: string;
+      /** @description Customer-safe failure detail derived by Worker Sessions. */
+      detail: string;
+      /** @description Optional bounded Providers failure classification. */
+      providerFailureKind: string | null;
+      /** @description Optional bounded continuation rejection classification. */
+      providerContinuationFailureKind: string | null;
+      /** @description Optional bounded unsupported continuation outcome. */
+      providerContinuationOutcome: string | null;
+    };
+    WorkerSessionParseDiagnostic: {
+      code: string;
+      lineNumber: number;
+      message: string;
+    };
+    WorkerSessionParseDiagnostics: {
+      eventCount: number;
+      malformedLineCount: number;
+      unknownEventCount: number;
+      errors: components["schemas"]["WorkerSessionParseDiagnostic"][];
     };
     PaginationContext: {
       maxResults: number;
@@ -5853,6 +5939,35 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  listWorkerSessionsBySessionId: {
+    parameters: {
+      query: {
+        /** @description Work identity whose Worker Session attempts should be listed. */
+        workId: string;
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Deterministically ordered Worker Session observations. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListWorkerSessionsResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   invokeFactorySessionBySessionId: {
     parameters: {
       query?: never;
@@ -7174,6 +7289,31 @@ export const SubmitWorkDocumentItemType = {
 } as const;
 export type SubmitWorkDocumentItemType =
   (typeof SubmitWorkDocumentItemType)[keyof typeof SubmitWorkDocumentItemType];
+export const WorkerSessionObservationState = {
+  WorkerSessionObservationStateReserved: "RESERVED",
+  WorkerSessionObservationStateStarting: "STARTING",
+  WorkerSessionObservationStateRunning: "RUNNING",
+  WorkerSessionObservationStatePaused: "PAUSED",
+  WorkerSessionObservationStateCompleted: "COMPLETED",
+  WorkerSessionObservationStateFailed: "FAILED",
+  WorkerSessionObservationStateCanceled: "CANCELED",
+  WorkerSessionObservationStateTerminated: "TERMINATED",
+} as const;
+export type WorkerSessionObservationState =
+  (typeof WorkerSessionObservationState)[keyof typeof WorkerSessionObservationState];
+export const WorkerSessionObservationDurationBasis = {
+  UNAVAILABLE: "UNAVAILABLE",
+  ACTIVE_CLOCK: "ACTIVE_CLOCK",
+  RECORDED_TIMESTAMPS: "RECORDED_TIMESTAMPS",
+} as const;
+export type WorkerSessionObservationDurationBasis =
+  (typeof WorkerSessionObservationDurationBasis)[keyof typeof WorkerSessionObservationDurationBasis];
+export const WorkerSessionObservationTranscript = {
+  UNAVAILABLE: "UNAVAILABLE",
+  AVAILABLE: "AVAILABLE",
+} as const;
+export type WorkerSessionObservationTranscript =
+  (typeof WorkerSessionObservationTranscript)[keyof typeof WorkerSessionObservationTranscript];
 export const ManagedRuntimeLifecycleState = {
   // Managed install and cache lifecycle does not apply, such as for cloud-backed runtimes.
   NOT_APPLICABLE: "NOT_APPLICABLE",
@@ -7314,7 +7454,7 @@ export type FactorySessionTargetRefKind =
 export const FactoryStopKind = {
   PAUSED: "PAUSED",
   BLOCKED: "BLOCKED",
-  NEEDS_HUMAN: "NEEDS_HUMAN",
+  NEEDSHUMAN: "NEEDS_HUMAN",
   INTERRUPTED: "INTERRUPTED",
 } as const;
 export type FactoryStopKind =

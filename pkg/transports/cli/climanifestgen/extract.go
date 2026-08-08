@@ -29,6 +29,12 @@ func ExtractWorkersFamily(manifest climanifest.Manifest) (climanifest.Manifest, 
 	return extractFamily(manifest, "workers", WorkersFamilyCommandIDs)
 }
 
+// ExtractWorkerSessionsFamily returns customer-facing worker-session
+// observation commands.
+func ExtractWorkerSessionsFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
+	return extractFamily(manifest, "worker sessions", WorkerSessionsFamilyCommandIDs)
+}
+
 // ExtractRunSubmitFamily returns manifest metadata for exactly the run/submit
 // command IDs declared in commands.json.
 func ExtractRunSubmitFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {

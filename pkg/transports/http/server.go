@@ -16,6 +16,7 @@ import (
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
+	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	dashboardui "github.com/portpowered/infinite-you/ui"
 	"go.uber.org/zap"
@@ -31,6 +32,7 @@ type Server struct {
 	*workAdapter
 	modelsHTTP           *modelshttp.Handler
 	providerSessionsHTTP *providersessionshttp.Handler
+	workerSessionsHTTP   *workersessionshttp.Handler
 	logger               *zap.Logger
 	router               *mux.Router
 }
@@ -47,6 +49,7 @@ func NewServer(
 	modelsHTTP *modelshttp.Handler,
 	providerSessionsHTTP *providersessionshttp.Handler,
 	logger *zap.Logger,
+	workerSessions ...*workersessionshttp.Handler,
 ) *Server {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -56,8 +59,26 @@ func NewServer(
 		workAdapter:            &workAdapter{Adapter: workHTTP},
 		modelsHTTP:             modelsHTTP, providerSessionsHTTP: providerSessionsHTTP, logger: logger,
 	}
+	if len(workerSessions) > 0 {
+		srv.workerSessionsHTTP = workerSessions[0]
+	}
 	srv.router = srv.buildRouter()
 	return srv
+}
+
+// ListWorkerSessionsBySessionId forwards the generated operation to the
+// Worker Sessions owner handler.
+func (s *Server) ListWorkerSessionsBySessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	params factoryapi.ListWorkerSessionsBySessionIdParams,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.ListWorkerSessionsBySessionId(w, r, sessionID, params)
 }
 
 var noModTime = time.Time{}

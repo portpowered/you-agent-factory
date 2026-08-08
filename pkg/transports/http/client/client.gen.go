@@ -976,6 +976,31 @@ const (
 	WorkerModelProviderCodex       WorkerModelProvider = "CODEX"
 )
 
+// Defines values for WorkerSessionObservationDurationBasis.
+const (
+	WorkerSessionObservationDurationBasisACTIVECLOCK        WorkerSessionObservationDurationBasis = "ACTIVE_CLOCK"
+	WorkerSessionObservationDurationBasisRECORDEDTIMESTAMPS WorkerSessionObservationDurationBasis = "RECORDED_TIMESTAMPS"
+	WorkerSessionObservationDurationBasisUNAVAILABLE        WorkerSessionObservationDurationBasis = "UNAVAILABLE"
+)
+
+// Defines values for WorkerSessionObservationState.
+const (
+	WorkerSessionObservationStateCanceled   WorkerSessionObservationState = "CANCELED"
+	WorkerSessionObservationStateCompleted  WorkerSessionObservationState = "COMPLETED"
+	WorkerSessionObservationStateFailed     WorkerSessionObservationState = "FAILED"
+	WorkerSessionObservationStatePaused     WorkerSessionObservationState = "PAUSED"
+	WorkerSessionObservationStateReserved   WorkerSessionObservationState = "RESERVED"
+	WorkerSessionObservationStateRunning    WorkerSessionObservationState = "RUNNING"
+	WorkerSessionObservationStateStarting   WorkerSessionObservationState = "STARTING"
+	WorkerSessionObservationStateTerminated WorkerSessionObservationState = "TERMINATED"
+)
+
+// Defines values for WorkerSessionObservationTranscript.
+const (
+	WorkerSessionObservationTranscriptAVAILABLE   WorkerSessionObservationTranscript = "AVAILABLE"
+	WorkerSessionObservationTranscriptUNAVAILABLE WorkerSessionObservationTranscript = "UNAVAILABLE"
+)
+
 // Defines values for WorkerType.
 const (
 	WorkerTypeAgentWorker     WorkerType = "AGENT_WORKER"
@@ -4555,6 +4580,12 @@ type ListWorkResponse struct {
 	Results           []Work                `json:"results"`
 }
 
+// ListWorkerSessionsResponse defines model for ListWorkerSessionsResponse.
+type ListWorkerSessionsResponse struct {
+	// Sessions Deterministically ordered Worker Session observations correlated with the requested Work.
+	Sessions []WorkerSessionObservation `json:"sessions"`
+}
+
 // LoadableProviderSessionKind Canonical provider-session identifier kind for provider-session detail requests that can be loaded by the API.
 type LoadableProviderSessionKind string
 
@@ -6591,6 +6622,90 @@ type WorkerModelProvider string
 
 // WorkerProvider Worker execution mechanism. Canonical values are ACP and SCRIPT_WRAP; extensible lowercase identities remain accepted for compatibility with existing factories.
 type WorkerProvider = string
+
+// WorkerSessionFailure defines model for WorkerSessionFailure.
+type WorkerSessionFailure struct {
+	// Detail Customer-safe failure detail derived by Worker Sessions.
+	Detail string `json:"detail"`
+
+	// Kind Bounded Worker Session failure classification.
+	Kind string `json:"kind"`
+
+	// ProviderContinuationFailureKind Optional bounded continuation rejection classification.
+	ProviderContinuationFailureKind *string `json:"providerContinuationFailureKind"`
+
+	// ProviderContinuationOutcome Optional bounded unsupported continuation outcome.
+	ProviderContinuationOutcome *string `json:"providerContinuationOutcome"`
+
+	// ProviderFailureKind Optional bounded Providers failure classification.
+	ProviderFailureKind *string `json:"providerFailureKind"`
+}
+
+// WorkerSessionObservation defines model for WorkerSessionObservation.
+type WorkerSessionObservation struct {
+	// AttemptId Stable attempt or dispatch identity.
+	AttemptId     string                                `json:"attemptId"`
+	DurationBasis WorkerSessionObservationDurationBasis `json:"durationBasis"`
+
+	// DurationMillis Projected duration in milliseconds when authoritative timing exists.
+	DurationMillis  *int64                           `json:"durationMillis"`
+	EndedAt         *time.Time                       `json:"endedAt"`
+	Failure         *WorkerSessionFailure            `json:"failure,omitempty"`
+	Parse           WorkerSessionParseDiagnostics    `json:"parse"`
+	ProviderSession *WorkerSessionProviderSessionRef `json:"providerSession,omitempty"`
+
+	// ProviderSessionAvailable Whether a provider-session identity is available for this attempt.
+	ProviderSessionAvailable bool                               `json:"providerSessionAvailable"`
+	StartedAt                *time.Time                         `json:"startedAt"`
+	State                    WorkerSessionObservationState      `json:"state"`
+	TokenUsage               *ProviderSessionTokenUsage         `json:"tokenUsage,omitempty"`
+	Transcript               WorkerSessionObservationTranscript `json:"transcript"`
+
+	// TurnId Optional turn correlation identifier.
+	TurnId *string `json:"turnId"`
+
+	// WorkIds Work identities correlated with this Worker Session attempt.
+	WorkIds []string `json:"workIds"`
+
+	// WorkerSessionId Stable Worker Session identity.
+	WorkerSessionId string `json:"workerSessionId"`
+}
+
+// WorkerSessionObservationDurationBasis defines model for WorkerSessionObservation.DurationBasis.
+type WorkerSessionObservationDurationBasis string
+
+// WorkerSessionObservationState defines model for WorkerSessionObservation.State.
+type WorkerSessionObservationState string
+
+// WorkerSessionObservationTranscript defines model for WorkerSessionObservation.Transcript.
+type WorkerSessionObservationTranscript string
+
+// WorkerSessionParseDiagnostic defines model for WorkerSessionParseDiagnostic.
+type WorkerSessionParseDiagnostic struct {
+	Code       string `json:"code"`
+	LineNumber int    `json:"lineNumber"`
+	Message    string `json:"message"`
+}
+
+// WorkerSessionParseDiagnostics defines model for WorkerSessionParseDiagnostics.
+type WorkerSessionParseDiagnostics struct {
+	Errors             []WorkerSessionParseDiagnostic `json:"errors"`
+	EventCount         int                            `json:"eventCount"`
+	MalformedLineCount int                            `json:"malformedLineCount"`
+	UnknownEventCount  int                            `json:"unknownEventCount"`
+}
+
+// WorkerSessionProviderSessionRef defines model for WorkerSessionProviderSessionRef.
+type WorkerSessionProviderSessionRef struct {
+	// Id Provider-issued session identifier.
+	Id string `json:"id"`
+
+	// Kind Provider-defined identifier kind.
+	Kind string `json:"kind"`
+
+	// Provider Provider identity that issued the correlated session.
+	Provider string `json:"provider"`
+}
 
 // WorkerType Worker implementation families supported by the public factory-config contract.
 type WorkerType string

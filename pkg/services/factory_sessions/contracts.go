@@ -11,6 +11,7 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -124,6 +125,7 @@ type RuntimeHTTPServices struct {
 	ModelsScope      models.RuntimeScopeRef
 	Workers          workers.Service
 	ProviderSessions providersessions.Service
+	WorkerSessions   workersessions.ObservationService
 	WorkerPrompts    workers.PromptTemplates
 	Logger           *zap.Logger
 }

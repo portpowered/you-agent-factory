@@ -7593,6 +7593,233 @@
         "id": "you.docs.handler"
       }
     },
+    "you.worker-sessions": {
+      "id": "you.worker-sessions",
+      "name": "worker-sessions",
+      "path": "you worker-sessions",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions",
+        "documentation": {
+          "title": {
+            "id": "you.worker-sessions.title",
+            "canonicalEnglish": "Inspect Worker Sessions for Work"
+          },
+          "description": {
+            "id": "you.worker-sessions.description",
+            "canonicalEnglish": "Inspect authoritative Worker Session attempts correlated with one Work item."
+          }
+        },
+        "examples": [
+          "you worker-sessions list --work-id work-123",
+          "you worker-sessions list --work-id work-123 --output json"
+        ],
+        "visibility": "public",
+        "sourceHash": "worker-session-cli-visibility"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": false,
+      "usage": {
+        "line": "worker-sessions",
+        "example": "  you worker-sessions list --work-id work-123"
+      }
+    },
+    "you.worker-sessions.list": {
+      "id": "you.worker-sessions.list",
+      "name": "list",
+      "path": "you worker-sessions list",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions.list",
+        "documentation": {
+          "title": {
+            "id": "you.worker-sessions.list.title",
+            "canonicalEnglish": "List Worker Sessions for one Work item"
+          },
+          "description": {
+            "id": "you.worker-sessions.list.description",
+            "canonicalEnglish": "List every authoritative Worker Session attempt correlated with one Work item. The default output is a stable labeled table; use --output json for one machine-readable sessions document."
+          }
+        },
+        "examples": [
+          "you worker-sessions list --work-id work-123",
+          "you worker-sessions list --work-id work-123 --output json"
+        ],
+        "visibility": "public",
+        "sourceHash": "worker-session-cli-visibility-list"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions.list",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "list",
+        "example": "  you worker-sessions list --work-id work-123 --output json"
+      },
+      "flags": {
+        "you.worker-sessions.list.flag.work-id": {
+          "id": "you.worker-sessions.list.flag.work-id",
+          "long": "work-id",
+          "usage": "Work identity whose Worker Session attempts should be listed",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": true,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.list.flag.work-id",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.list.flag.session": {
+          "id": "you.worker-sessions.list.flag.session",
+          "long": "session",
+          "usage": "target one live factory session; omit to use the default compatibility session",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.list.flag.session",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.list.flag.output": {
+          "id": "you.worker-sessions.list.flag.output",
+          "long": "output",
+          "usage": "output format: human (default) or json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "human",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.list.flag.output",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "handler": {
+        "id": "you.worker-sessions.list.handler",
+        "operationId": "listWorkerSessionsBySessionId"
+      },
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "outputs": {
+        "you.worker-sessions.list.output.human": {
+          "id": "you.worker-sessions.list.output.human",
+          "channel": "stdout",
+          "format": "text"
+        },
+        "you.worker-sessions.list.output.json": {
+          "id": "you.worker-sessions.list.output.json",
+          "channel": "stdout",
+          "format": "json"
+        }
+      },
+      "exits": {
+        "you.worker-sessions.list.exit.success": {
+          "id": "you.worker-sessions.list.exit.success",
+          "code": 0,
+          "kind": "success"
+        },
+        "you.worker-sessions.list.exit.failure": {
+          "id": "you.worker-sessions.list.exit.failure",
+          "code": 1,
+          "kind": "failure"
+        },
+        "you.worker-sessions.list.exit.usage": {
+          "id": "you.worker-sessions.list.exit.usage",
+          "code": 1,
+          "kind": "usage"
+        }
+      },
+      "sideEffects": {
+        "you.worker-sessions.list.side-effect.network": {
+          "id": "you.worker-sessions.list.side-effect.network",
+          "kind": "network"
+        }
+      },
+      "constraints": {
+        "runtime": [
+          "local"
+        ],
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ]
+      }
+    },
     "you.workers": {
       "id": "you.workers",
       "name": "workers",

@@ -39,6 +39,8 @@ you work list	list	you work
 you work move	move <work-id> <state-name>	you work
 you work show	show <work-id>	you work
 you work visualize	visualize <batch-file.json>	you work
+you worker-sessions	worker-sessions	you
+you worker-sessions list	list	you worker-sessions
 you workers	workers	you
 you workers acp	acp	you workers
 you workers acp add	add	you workers acp
