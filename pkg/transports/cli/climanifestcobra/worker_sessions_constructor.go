@@ -14,6 +14,7 @@ import (
 
 const workerSessionsListHandlerID = "you.worker-sessions.list.handler"
 const workerSessionsShowHandlerID = "you.worker-sessions.show.handler"
+const workerSessionsStreamHandlerID = "you.worker-sessions.stream.handler"
 
 // NewWorkerSessionsFamilyCommand builds the detached `you worker-sessions`
 // observation family from generated metadata and a stable handler registry.
@@ -62,6 +63,13 @@ func NewWorkerSessionsFamilyCommandFromManifest(
 	if showRegistered.RunE == nil || showRegistered.ResolvedRunE != nil {
 		return nil, fmt.Errorf("build worker sessions family command: handler %q must provide RunE", workerSessionsShowHandlerID)
 	}
+	streamRegistered, err := registry.LookupHandlers(workerSessionsStreamHandlerID)
+	if err != nil {
+		return nil, fmt.Errorf("build worker sessions family command: %w", err)
+	}
+	if streamRegistered.RunE == nil || streamRegistered.ResolvedRunE != nil {
+		return nil, fmt.Errorf("build worker sessions family command: handler %q must provide RunE", workerSessionsStreamHandlerID)
+	}
 	rootRecord, err := manifest.CommandByID("you")
 	if err != nil {
 		return nil, fmt.Errorf("build worker sessions family command: %w", err)
@@ -86,6 +94,14 @@ func NewWorkerSessionsFamilyCommandFromManifest(
 					}
 				}
 				return showRegistered.RunE(cmd, args)
+			},
+			workerSessionsStreamHandlerID: func(cmd *cobra.Command, args []string, _ map[string]any, _ resolvedinput.Inputs) error {
+				if streamRegistered.PreRunE != nil {
+					if err := streamRegistered.PreRunE(cmd, args); err != nil {
+						return err
+					}
+				}
+				return streamRegistered.RunE(cmd, args)
 			},
 		},
 		GuardUnknownSubcommands: true,
@@ -142,6 +158,13 @@ func validateWorkerSessionsManifest(manifest climanifest.Manifest) error {
 	}
 	if !show.Runnable || show.Handler == nil || show.Handler.ID != workerSessionsShowHandlerID {
 		return fmt.Errorf("command %q must declare runnable handler %q", show.ID, workerSessionsShowHandlerID)
+	}
+	stream, err := manifest.CommandByID("you.worker-sessions.stream")
+	if err != nil {
+		return err
+	}
+	if !stream.Runnable || stream.Handler == nil || stream.Handler.ID != workerSessionsStreamHandlerID {
+		return fmt.Errorf("command %q must declare runnable handler %q", stream.ID, workerSessionsStreamHandlerID)
 	}
 	if root, err := manifest.CommandByID("you"); err != nil {
 		return err

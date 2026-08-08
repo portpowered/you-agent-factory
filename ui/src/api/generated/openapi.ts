@@ -48,6 +48,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/{session_id}/worker-sessions/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Stream retained and live Worker Session events
+     * @description Streams the canonical Worker Session Events topic for the exact Provider Session identity in the explicitly selected Factory Session. Retained records are emitted first in aggregate order, followed by live records. Each data frame is serialized JSON matching WorkerSessionEvent. The terminal event is marked TERMINAL for an active session or TERMINAL_REPLAY for an already-terminal session, after which the connection closes successfully. Source failures are emitted as an explicit SOURCE_FAILURE frame so clients can preserve complete records already written and return a typed non-success result.
+     */
+    get: operations["streamWorkerSessionEventsBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions/{session_id}/worker-sessions/detail": {
     parameters: {
       query?: never;
@@ -1096,6 +1116,49 @@ export interface components {
       transcript: WorkerSessionObservationTranscript;
       failure?: components["schemas"]["WorkerSessionFailure"];
       parse: components["schemas"]["WorkerSessionParseDiagnostics"];
+    };
+    WorkerSessionEvent: {
+      delivery: components["schemas"]["WorkerSessionEventDelivery"];
+      /** @description Stable Worker Session identity for this stream. */
+      workerSessionId: string;
+      providerSession: components["schemas"]["WorkerSessionProviderSessionRef"];
+      /** @description Work identities correlated with the streamed attempt. */
+      workIds: string[];
+      /** @description Canonical event record, or null for an explicit source failure. */
+      event: components["schemas"]["WorkerSessionEventRecord"];
+      /** @description Stable source-failure code when delivery is SOURCE_FAILURE. */
+      errorCode: string | null;
+      /** @description Safe source-failure message when delivery is SOURCE_FAILURE. */
+      errorMessage: string | null;
+    };
+    /**
+     * @description Delivery outcome for one Worker Session stream frame. RECORD is a retained or live canonical event, TERMINAL marks the live terminal event, and TERMINAL_REPLAY marks the terminal event in an already-terminal replay. SOURCE_FAILURE is an explicit non-event outcome after the stream has opened.
+     * @enum {string}
+     */
+    WorkerSessionEventDelivery: WorkerSessionEventDelivery;
+    WorkerSessionEventRecord: {
+      /**
+       * Format: int64
+       * @description Aggregate position assigned by the canonical Events ledger.
+       */
+      position: number;
+      /** @description Source-native event family. */
+      sourceType: string;
+      /** @description Source-native event identity. */
+      sourceId: string;
+      /**
+       * Format: int64
+       * @description Source-native monotonic sequence.
+       */
+      sourceSequence: number;
+      /** @description Source-native idempotency event identity. */
+      sourceEventId: string;
+      /** @description Source-native payload schema identity. */
+      schemaId: string;
+      /** @description Source-native canonical event payload. */
+      payload: {
+        [key: string]: unknown;
+      };
     };
     WorkerSessionProviderSessionRef: {
       /** @description Provider identity that issued the correlated session. */
@@ -5988,6 +6051,39 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  streamWorkerSessionEventsBySessionId: {
+    parameters: {
+      query: {
+        /** @description Provider that issued the correlated session identity. */
+        provider: components["schemas"]["LoadableProviderSessionProvider"];
+        /** @description Provider-session identifier kind. */
+        kind: components["schemas"]["LoadableProviderSessionKind"];
+        /** @description Provider-issued session identifier, not a filesystem path. */
+        id: string;
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Retained then live Worker Session event frames. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   getWorkerSessionObservationBySessionId: {
     parameters: {
       query: {
@@ -7367,6 +7463,14 @@ export const WorkerSessionObservationTranscript = {
 } as const;
 export type WorkerSessionObservationTranscript =
   (typeof WorkerSessionObservationTranscript)[keyof typeof WorkerSessionObservationTranscript];
+export const WorkerSessionEventDelivery = {
+  WorkerSessionEventDeliveryRecord: "RECORD",
+  WorkerSessionEventDeliveryTerminal: "TERMINAL",
+  WorkerSessionEventDeliveryTerminalReplay: "TERMINAL_REPLAY",
+  WorkerSessionEventDeliverySourceFailure: "SOURCE_FAILURE",
+} as const;
+export type WorkerSessionEventDelivery =
+  (typeof WorkerSessionEventDelivery)[keyof typeof WorkerSessionEventDelivery];
 export const ManagedRuntimeLifecycleState = {
   // Managed install and cache lifecycle does not apply, such as for cloud-backed runtimes.
   NOT_APPLICABLE: "NOT_APPLICABLE",
@@ -7497,6 +7601,8 @@ export const ErrorResponseCode = {
   SESSION_KIND_UNSUPPORTED: "SESSION_KIND_UNSUPPORTED",
   // The correlated Worker Session projection is temporarily unavailable.
   PROJECTION_UNAVAILABLE: "PROJECTION_UNAVAILABLE",
+  // The canonical Worker Session event stream is temporarily unavailable.
+  WORKER_SESSION_STREAM_UNAVAILABLE: "WORKER_SESSION_STREAM_UNAVAILABLE",
   // The requested resource does not exist.
   NOT_FOUND: "NOT_FOUND",
   // The server failed while handling an otherwise valid request.

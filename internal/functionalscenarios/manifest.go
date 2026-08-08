@@ -26,11 +26,13 @@ const (
 	SSEDeprecatedLaterRemoval = "deprecated-later-removal"
 	SSECurrentlyDeferred      = "currently-deferred"
 
-	sessionEventsStableID  = "sse/getEventsBySessionId"
-	globalEventsStableID   = "sse/getEvents"
-	responseEventsStableID = "sse/getFactoryResponseEventsBySessionId"
+	sessionEventsStableID       = "sse/getEventsBySessionId"
+	globalEventsStableID        = "sse/getEvents"
+	responseEventsStableID      = "sse/getFactoryResponseEventsBySessionId"
+	workerSessionEventsStableID = "sse/streamWorkerSessionEventsBySessionId"
 
-	sessionEventsScope = "session Factory Event stream, including recovery after malformed JSON data"
+	sessionEventsScope       = "session Factory Event stream, including recovery after malformed JSON data"
+	workerSessionEventsScope = "session Worker Session event stream, including retained replay, live delivery, terminal completion, and cancellation"
 )
 
 // Manifest is the reviewed functional-coverage projection of canonical public components.
@@ -113,8 +115,6 @@ func applyReviewedEvidence(scenario *Scenario) {
 		markCovered(scenario, LaneShort, "tests/release/release_smoke_test.go::TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN", InterfaceCLI)
 	case "cli/you.run":
 		markCovered(scenario, LaneShort, "tests/functional/transport/cli/commands/run_wiring_test.go::TestCLIRunFactoryByPath", InterfaceCLI)
-	case "cli/you.serve.acp":
-		markCovered(scenario, LaneShort, "tests/functional/transport/acp/stdio/cli_serve_acp_prompt_test.go::TestServeACP_RootBuildProcessCompletesOneFactoryPrompt", InterfaceCLI)
 	case "cli/you.submit.batch":
 		scenario.Status = StatusCovered
 		scenario.Lane = LaneLong
@@ -162,6 +162,8 @@ func applyReviewedEvidence(scenario *Scenario) {
 		scenario.Status = StatusNotApplicable
 		scenario.ReviewedReason = "Factory response-event stream functional coverage is non-required and currently deferred."
 		scenario.SSE = &SSEDisposition{Required: false, Disposition: SSECurrentlyDeferred, Scope: "session Factory response-event stream"}
+	case workerSessionEventsStableID:
+		scenario.SSE = &SSEDisposition{Required: true, Disposition: SSERequired, Scope: workerSessionEventsScope}
 	}
 }
 
@@ -316,6 +318,8 @@ func validateSSE(prefix string, scenario Scenario) error {
 		wantDisposition, wantScope = SSEDeprecatedLaterRemoval, "deprecated global Factory Event compatibility stream"
 	case responseEventsStableID:
 		wantDisposition, wantScope = SSECurrentlyDeferred, "session Factory response-event stream"
+	case workerSessionEventsStableID:
+		wantRequired, wantDisposition, wantScope = true, SSERequired, workerSessionEventsScope
 	default:
 		return fmt.Errorf("%s: unknown public SSE operation; add a reviewed required or non-required disposition", prefix)
 	}

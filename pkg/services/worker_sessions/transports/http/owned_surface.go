@@ -5,4 +5,5 @@ package http
 var OwnedHTTPOperationIDs = []string{
 	"getWorkerSessionObservationBySessionId",
 	"listWorkerSessionsBySessionId",
+	"streamWorkerSessionEventsBySessionId",
 }

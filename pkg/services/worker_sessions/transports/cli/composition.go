@@ -8,6 +8,9 @@ type ListOperation func(ListConfig) error
 // ShowOperation is the composition-facing Worker Sessions show role.
 type ShowOperation func(ShowConfig) error
 
+// StreamOperation is the composition-facing Worker Sessions event stream role.
+type StreamOperation func(StreamConfig) error
+
 // BindList returns a list operation bound to one injected HTTP protocol.
 func BindList(transport clihttp.Protocol) ListOperation {
 	if transport == nil {
@@ -22,4 +25,12 @@ func BindShow(transport clihttp.Protocol) ShowOperation {
 		return nil
 	}
 	return NewShow(transport)
+}
+
+// BindStream returns a stream operation bound to one injected HTTP protocol.
+func BindStream(transport clihttp.Protocol) StreamOperation {
+	if transport == nil {
+		return nil
+	}
+	return NewStream(transport)
 }

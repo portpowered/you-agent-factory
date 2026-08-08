@@ -55,6 +55,51 @@ func (a *Adapter) GetWorkerSessionObservation(
 	return WorkerSessionObservationToAPI(observation), nil
 }
 
+// StreamWorkerSessionEvents returns the detached identity envelope together
+// with the canonical retained/live subscription for the exact Provider
+// Session reference. The caller owns closing the subscription.
+func (a *Adapter) StreamWorkerSessionEvents(
+	ctx context.Context,
+	sessionID, provider, kind, id string,
+) (factoryapi.WorkerSessionObservation, workersessions.ObservationSubscription, error) {
+	if a == nil || a.observations == nil {
+		return factoryapi.WorkerSessionObservation{}, nil, errors.New("Worker Sessions service is required")
+	}
+	if strings.TrimSpace(sessionID) == "" {
+		return factoryapi.WorkerSessionObservation{}, nil, errors.New("session id is required")
+	}
+	provider = strings.TrimSpace(provider)
+	kind = strings.TrimSpace(kind)
+	id = strings.TrimSpace(id)
+	if provider == "" || kind == "" || id == "" {
+		return factoryapi.WorkerSessionObservation{}, nil, errors.New("provider, kind, and id are required")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return factoryapi.WorkerSessionObservation{}, nil, err
+	}
+
+	request := workersessions.GetObservationRequest{
+		ProviderSession: providers.SessionRef{Provider: providers.ID(provider), Kind: kind, ID: id},
+	}
+	observation, err := a.observations.GetObservation(ctx, request)
+	if err != nil {
+		return factoryapi.WorkerSessionObservation{}, nil, fmt.Errorf("get Worker Session observation: %w", err)
+	}
+	subscription, err := a.observations.StreamObservations(ctx, workersessions.StreamObservationsRequest{
+		ProviderSession: request.ProviderSession,
+	})
+	if err != nil {
+		return factoryapi.WorkerSessionObservation{}, nil, fmt.Errorf("stream Worker Session events: %w", err)
+	}
+	if subscription == nil {
+		return factoryapi.WorkerSessionObservation{}, nil, workersessions.ErrObservationSourceUnavailable
+	}
+	return WorkerSessionObservationToAPI(observation), subscription, nil
+}
+
 // NewAdapter binds the exact roots required by the Worker Sessions list
 // operation.
 func NewAdapter(

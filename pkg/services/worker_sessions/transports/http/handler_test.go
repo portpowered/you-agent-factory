@@ -3,8 +3,10 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -291,6 +293,109 @@ func TestGetWorkerSessionObservationBySessionIDRejectsUnsupportedIdentity(t *tes
 	}
 }
 
+func TestStreamWorkerSessionEventsBySessionIDWritesRetainedAndTerminalFrames(t *testing.T) {
+	service := &fakeObservationService{
+		getResult: workersessions.Observation{
+			WorkerSessionID: "worker-session-1", ProviderSessionAvailable: true,
+			ProviderSession: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"},
+			WorkIDs:         []string{"work-1"}, State: workersessions.StateRunning,
+		},
+		streamSubscription: &fakeObservationSubscription{deliveries: []workersessions.ObservationDelivery{
+			{Kind: workersessions.ObservationDeliveryRecord, Event: workersessions.ObservationEvent{
+				Position: 1, SourceType: "worker_session", SourceID: "worker-session-1", SourceSequence: 1,
+				SourceEventID: "event-1", SchemaID: "worker_session.started", Payload: json.RawMessage(`{"state":"RUNNING"}`),
+			}},
+			{Kind: workersessions.ObservationDeliveryTerminal, Event: workersessions.ObservationEvent{
+				Position: 2, SourceType: "worker_session", SourceID: "worker-session-1", SourceSequence: 2,
+				SourceEventID: "event-2", SchemaID: "worker_session.completed", Payload: json.RawMessage(`{"state":"COMPLETED"}`),
+			}},
+		}},
+	}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest("GET", "/factory-sessions/session-1/worker-sessions/events?provider=codex&kind=session_id&id=provider-session-1", nil)
+
+	handler.StreamWorkerSessionEventsBySessionId(recorder, request, factoryapi.SessionID("session-1"), factoryapi.StreamWorkerSessionEventsBySessionIdParams{
+		Provider: factoryapi.LoadableProviderSessionProvider("codex"), Kind: factoryapi.LoadableProviderSessionKind("session_id"), Id: "provider-session-1",
+	})
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+	}
+	if got := recorder.Header().Get("Content-Type"); got != "text/event-stream" {
+		t.Fatalf("content type = %q, want text/event-stream", got)
+	}
+	frames := decodeSSEFrames(t, recorder.Body.String())
+	if len(frames) != 2 || frames[0].Delivery != "RECORD" || frames[1].Delivery != "TERMINAL" {
+		t.Fatalf("frames = %#v, want RECORD then TERMINAL", frames)
+	}
+	if frames[0].WorkerSessionID != "worker-session-1" || frames[0].ProviderSession == nil || frames[0].ProviderSession.Id != "provider-session-1" {
+		t.Fatalf("frame identity = %#v, want exact worker/provider identity", frames[0])
+	}
+	if frames[0].Event == nil || frames[0].Event.Position != 1 || string(frames[0].Event.Payload) != `{"state":"RUNNING"}` {
+		t.Fatalf("first event = %#v, want canonical event payload", frames[0].Event)
+	}
+	subscription, ok := service.streamSubscription.(*fakeObservationSubscription)
+	if !ok || !subscription.closed {
+		t.Fatal("stream subscription was not closed after terminal delivery")
+	}
+}
+
+func TestStreamWorkerSessionEventsBySessionIDWritesExplicitSourceFailure(t *testing.T) {
+	service := &fakeObservationService{
+		getResult: workersessions.Observation{
+			WorkerSessionID: "worker-session-1", ProviderSessionAvailable: true,
+			ProviderSession: providers.SessionRef{Provider: providers.IDCursor, Kind: providers.SessionIDKind, ID: "cursor-session-1"},
+		},
+		streamSubscription: &fakeObservationSubscription{deliveries: []workersessions.ObservationDelivery{
+			{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationSourceGap},
+		}},
+	}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest("GET", "/factory-sessions/session-1/worker-sessions/events", nil)
+
+	handler.StreamWorkerSessionEventsBySessionId(recorder, request, factoryapi.SessionID("session-1"), factoryapi.StreamWorkerSessionEventsBySessionIdParams{
+		Provider: factoryapi.LoadableProviderSessionProvider("cursor"), Kind: factoryapi.LoadableProviderSessionKind("session_id"), Id: "cursor-session-1",
+	})
+
+	frames := decodeSSEFrames(t, recorder.Body.String())
+	if len(frames) != 1 || frames[0].Delivery != "SOURCE_FAILURE" || frames[0].Event != nil {
+		t.Fatalf("frames = %#v, want one source failure without an event", frames)
+	}
+	if frames[0].ErrorCode == nil || *frames[0].ErrorCode != "WORKER_SESSION_STREAM_GAP" {
+		t.Fatalf("error code = %#v, want WORKER_SESSION_STREAM_GAP", frames[0].ErrorCode)
+	}
+	if frames[0].ErrorMessage == nil || !strings.Contains(*frames[0].ErrorMessage, "retained") {
+		t.Fatalf("error message = %#v, want safe retained-history message", frames[0].ErrorMessage)
+	}
+}
+
+func TestStreamWorkerSessionEventsBySessionIDMapsUnavailableBeforeOpening(t *testing.T) {
+	service := &fakeObservationService{getResult: workersessions.Observation{
+		WorkerSessionID: "worker-session-1", ProviderSessionAvailable: true,
+		ProviderSession: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"},
+	}, streamErr: workersessions.ErrObservationSourceUnavailable}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest("GET", "/factory-sessions/session-1/worker-sessions/events", nil)
+
+	handler.StreamWorkerSessionEventsBySessionId(recorder, request, factoryapi.SessionID("session-1"), factoryapi.StreamWorkerSessionEventsBySessionIdParams{
+		Provider: factoryapi.LoadableProviderSessionProvider("codex"), Kind: factoryapi.LoadableProviderSessionKind("session_id"), Id: "provider-session-1",
+	})
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500; body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if response.Code != factoryapi.ErrorResponseCodeWORKERSESSIONSTREAMUNAVAILABLE {
+		t.Fatalf("error code = %q, want WORKER_SESSION_STREAM_UNAVAILABLE", response.Code)
+	}
+}
+
 type fakeObservationService struct {
 	result             workersessions.ListObservationsResult
 	listErr            error
@@ -299,6 +404,8 @@ type fakeObservationService struct {
 	getErr             error
 	getCalled          bool
 	getProviderSession providers.SessionRef
+	streamSubscription workersessions.ObservationSubscription
+	streamErr          error
 }
 
 func (f *fakeObservationService) ListObservations(context.Context, workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
@@ -312,8 +419,61 @@ func (f *fakeObservationService) GetObservation(_ context.Context, request worke
 	return f.getResult, f.getErr
 }
 
-func (*fakeObservationService) StreamObservations(context.Context, workersessions.StreamObservationsRequest) (workersessions.ObservationSubscription, error) {
-	return nil, nil
+func (f *fakeObservationService) StreamObservations(context.Context, workersessions.StreamObservationsRequest) (workersessions.ObservationSubscription, error) {
+	return f.streamSubscription, f.streamErr
+}
+
+type fakeObservationSubscription struct {
+	deliveries []workersessions.ObservationDelivery
+	index      int
+	closed     bool
+}
+
+func (s *fakeObservationSubscription) Next(ctx context.Context) workersessions.ObservationDelivery {
+	if ctx != nil && errors.Is(ctx.Err(), context.Canceled) {
+		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryCanceled, Err: workersessions.ErrObservationCanceled}
+	}
+	if s.index >= len(s.deliveries) {
+		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryClosed}
+	}
+	delivery := s.deliveries[s.index]
+	s.index++
+	return delivery
+}
+
+func (s *fakeObservationSubscription) Close() {
+	s.closed = true
+}
+
+type sseTestFrame struct {
+	Delivery        string                                      `json:"delivery"`
+	WorkerSessionID string                                      `json:"workerSessionId"`
+	ProviderSession *factoryapi.WorkerSessionProviderSessionRef `json:"providerSession"`
+	Event           *sseTestEvent                               `json:"event"`
+	ErrorCode       *string                                     `json:"errorCode"`
+	ErrorMessage    *string                                     `json:"errorMessage"`
+}
+
+type sseTestEvent struct {
+	Position uint64          `json:"position"`
+	Payload  json.RawMessage `json:"payload"`
+}
+
+func decodeSSEFrames(t *testing.T, body string) []sseTestFrame {
+	t.Helper()
+	var frames []sseTestFrame
+	for _, block := range strings.Split(strings.TrimSpace(body), "\n\n") {
+		line := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(block), "data:"))
+		if line == "" {
+			continue
+		}
+		var frame sseTestFrame
+		if err := json.Unmarshal([]byte(line), &frame); err != nil {
+			t.Fatalf("decode SSE frame %q: %v", line, err)
+		}
+		frames = append(frames, frame)
+	}
+	return frames
 }
 
 type workServiceStub struct {

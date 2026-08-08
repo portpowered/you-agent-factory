@@ -257,7 +257,7 @@
       "interface": "cli",
       "classification": "runnable",
       "status": "covered",
-      "lane": "short",
+      "lane": "long",
       "executionClass": "deterministic",
       "evidence": [
         {
@@ -456,6 +456,46 @@
       ]
     },
     {
+      "stableId": "cli/you.worker-sessions",
+      "name": "you worker-sessions",
+      "interface": "cli",
+      "classification": "grouping",
+      "status": "not-applicable",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
+    },
+    {
+      "stableId": "cli/you.worker-sessions.list",
+      "name": "you worker-sessions list",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.worker-sessions.show",
+      "name": "you worker-sessions show",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.worker-sessions.stream",
+      "name": "you worker-sessions stream",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
       "stableId": "cli/you.workers",
       "name": "you workers",
       "interface": "cli",
@@ -481,7 +521,7 @@
       "interface": "cli",
       "classification": "runnable",
       "status": "covered",
-      "lane": "short",
+      "lane": "long",
       "executionClass": "deterministic",
       "evidence": [
         {
@@ -496,7 +536,7 @@
       "interface": "cli",
       "classification": "runnable",
       "status": "covered",
-      "lane": "short",
+      "lane": "long",
       "executionClass": "deterministic",
       "evidence": [
         {
@@ -511,7 +551,7 @@
       "interface": "cli",
       "classification": "runnable",
       "status": "covered",
-      "lane": "short",
+      "lane": "long",
       "executionClass": "deterministic",
       "evidence": [
         {
@@ -832,6 +872,16 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "rest/getWorkerSessionObservationBySessionId",
+      "name": "getWorkerSessionObservationBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
       "stableId": "rest/interruptFactorySessionDispatch",
       "name": "interruptFactorySessionDispatch",
       "interface": "rest",
@@ -935,6 +985,16 @@
           "boundary": "rest"
         }
       ]
+    },
+    {
+      "stableId": "rest/listWorkerSessionsBySessionId",
+      "name": "listWorkerSessionsBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
       "stableId": "rest/moveWorkBySessionId",
@@ -1052,6 +1112,16 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "rest/streamWorkerSessionEventsBySessionId",
+      "name": "streamWorkerSessionEventsBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
       "stableId": "rest/submitWorkBySessionId",
       "name": "submitWorkBySessionId",
       "interface": "rest",
@@ -1145,6 +1215,21 @@
         "required": false,
         "disposition": "currently-deferred",
         "scope": "session Factory response-event stream"
+      }
+    },
+    {
+      "stableId": "sse/streamWorkerSessionEventsBySessionId",
+      "name": "streamWorkerSessionEventsBySessionId",
+      "interface": "sse",
+      "classification": "event-stream",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary.",
+      "sse": {
+        "required": true,
+        "disposition": "required",
+        "scope": "session Worker Session event stream, including retained replay, live delivery, terminal completion, and cancellation"
       }
     }
   ]
