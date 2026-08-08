@@ -7,9 +7,21 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 )
+
+func newConfiguredProvidersService(
+	options []providerswire.Option,
+	edges serviceedges.Edges,
+	agyRunner workers.CommandRunner,
+) (providers.Service, error) {
+	if edges.AgyPTYHost == nil {
+		options = append(options, providerswire.WithAgyCommandRunner(agyRunner))
+	}
+	return providerswire.NewService(options...)
+}
 
 // provideRuntimeProviderBindings builds graph-worker provider bindings over the
 // Factory Runtime's effective command runner, including mock and replay wrappers.
