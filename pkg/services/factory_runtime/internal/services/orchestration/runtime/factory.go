@@ -306,13 +306,7 @@ func buildRuntimeSubsystems(cfg *runtimeConfig, sched scheduler.Scheduler, logge
 			cfg.decisionEnvelopes,
 		),
 		subsystems.NewCascadingFailure(cfg.net, logger, cfg.clock.Now),
-		subsystems.NewTerminationCheckWithRuntime(
-			cfg.net,
-			logger,
-			cfg.runtimeMode,
-			cfg.runtimeConfig,
-			cfg.clock.Now,
-		),
+		subsystems.NewTerminationCheckWithRuntime(cfg.net, logger, cfg.runtimeMode, cfg.runtimeConfig, cfg.clock.Now),
 	}
 }
 
