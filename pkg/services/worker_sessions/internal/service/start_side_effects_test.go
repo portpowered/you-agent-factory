@@ -336,7 +336,7 @@ func TestStart_ProviderSessionInspectionFailureReachesTerminalEventWithSafeCause
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
-	result, err := registry.Start(context.Background(), validStartRequest("worker-inspection-failure", "dispatch-inspection-failure"))
+	result, err := registry.InvokeSession(context.Background(), validStartRequest("worker-inspection-failure", "dispatch-inspection-failure"))
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
@@ -418,7 +418,7 @@ func TestStart_ZeroExitTaskCompleteArtifactWithIngestionFailureIsNotPhantomSucce
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
-	result, err := registry.Start(context.Background(), validStartRequest("worker-contradictory-ingestion", "dispatch-contradictory-ingestion"))
+	result, err := registry.InvokeSession(context.Background(), validStartRequest("worker-contradictory-ingestion", "dispatch-contradictory-ingestion"))
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
