@@ -1,0 +1,22 @@
+## Codebase Patterns
+- Public CLI commands are authored in `contracts/cli/commands.json`; update the matching family ID list, constructor bindings, handler registry, and generated CLI artifacts together.
+- Run `go run ./cmd/climanifestgen -root .` for CLI family artifacts and `go run ./cmd/contractsgenerate -root .` for published contract staging; `climanifest-check`, `contracts-check`, and CLI contract smoke catch drift.
+- CLI identity and input baselines are rewritten through the `UPDATE_CLI_BASELINES=1` test helpers; run writers one package at a time because command and input baselines are shared files.
+- Generated Work leaves without authored positional arguments preserve the existing inventory behavior; apply `cobra.NoArgs` only when a new command explicitly requires rejecting positional input.
+
+## [2026-08-08 14:07 -07:00] - wo-c2-work-watch-event-stream-001
+- What was implemented
+  - Added the public generated `you work watch [--session <session>] [--follow]` Work-family command and stable handler/config bindings.
+  - Added `you.work.watch.v1` NDJSON rendering with required transition fields, optional-field omission, JSON escaping, one-write line emission, validation, and write-error reporting.
+  - Added parsing, validation, rendering, command-tree, registry, stdout/stderr separation, and generated-contract coverage.
+  - Regenerated CLI family metadata, published CLI contract artifacts, command/input identity baselines, and command-tree baseline.
+- Files changed
+  - `contracts/cli/commands.json`, `packages/api/generated/cli/commands.json`, `packages/api/generated/manifest.json`
+  - `contracts/testdata/baseline/cli-command-inputs.json`, `contracts/testdata/baseline/cli-commands.json`, `pkg/transports/cli/baseline/testdata/command_tree.txt`
+  - `pkg/services/work/transports/cli/watch.go`, `pkg/services/work/transports/cli/watch_test.go`, `pkg/transports/cli/work/watch.go`
+  - Work CLI constructor, manifest generator, registry, generated metadata, root bindings, and focused tests
+- **Learnings for future iterations:**
+  - The event-stream operation is not wired yet; the compatibility registry intentionally reports `work watch service is required` until story 002 supplies the canonical stream operation.
+  - Keep the watch renderer transport-neutral so later stream/reducer code can emit complete lines without importing Cobra.
+  - The repository’s public CLI contract includes both generated package staging and committed identity/help baselines; updating only the authored manifest is incomplete.
+---
