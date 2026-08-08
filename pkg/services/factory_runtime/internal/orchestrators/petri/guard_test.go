@@ -755,6 +755,66 @@ func TestAllWithParentGuard_RuntimeStateAndPopulationChecks(t *testing.T) {
 	}
 }
 
+func TestAllWithParentGuard_AllConfiguredTerminalPlacesSatisfyCompleteness(t *testing.T) {
+	parent := &factorytoken.Token{ID: "parent-token", Color: factorytoken.Color{WorkID: "parent-1"}}
+	complete := factorytoken.Token{
+		ID:      "child-complete",
+		PlaceID: "child:complete",
+		Color:   factorytoken.Color{WorkID: "child-1", WorkTypeID: "child", ParentID: "parent-1"},
+	}
+	skipped := complete
+	skipped.ID = "child-skipped"
+	skipped.PlaceID = "child:skipped"
+	processing := skipped
+	processing.ID = "child-processing"
+	processing.PlaceID = "child:processing"
+
+	category := func(placeID string) string {
+		switch placeID {
+		case "child:complete", "child:skipped":
+			return runtimeStateCategoryTerminal
+		default:
+			return "PROCESSING"
+		}
+	}
+	guard := &AllWithParentGuard{MatchBinding: "parent"}
+	bindings := map[string]*factorytoken.Token{"parent": parent}
+	projection := ParentChildRegistrationProjection{
+		"parent-1": {Children: []factorytoken.Token{complete, skipped}, Complete: true},
+	}
+	snapshot := &MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+		complete.ID: &complete,
+		skipped.ID:  &skipped,
+	}}
+
+	matched, ok := guard.EvaluateRuntime(
+		RuntimeGuardContext{StateCategoryForPlace: category, ParentChildRegistrations: projection},
+		[]factorytoken.Token{complete},
+		bindings,
+		snapshot,
+	)
+	if !ok || len(matched) != 1 || matched[0].ID != complete.ID {
+		t.Fatalf("terminal children in distinct places should satisfy fan-in: matched=%v ok=%t", matched, ok)
+	}
+
+	processingSnapshot := &MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+		complete.ID:   &complete,
+		processing.ID: &processing,
+	}}
+	processingProjection := ParentChildRegistrationProjection{
+		"parent-1": {Children: []factorytoken.Token{complete, processing}, Complete: true},
+	}
+	matched, ok = guard.EvaluateRuntime(
+		RuntimeGuardContext{StateCategoryForPlace: category, ParentChildRegistrations: processingProjection},
+		[]factorytoken.Token{complete},
+		bindings,
+		processingSnapshot,
+	)
+	if ok || len(matched) != 0 {
+		t.Fatalf("processing child in another place should keep fan-in blocked: matched=%v ok=%t", matched, ok)
+	}
+}
+
 func TestAllWithParentGuard_RejectsUnknownAndMismatchedRegistrationProjection(t *testing.T) {
 	parent := &factorytoken.Token{ID: "parent-token", Color: factorytoken.Color{WorkID: "parent-1"}}
 	first := factorytoken.Token{

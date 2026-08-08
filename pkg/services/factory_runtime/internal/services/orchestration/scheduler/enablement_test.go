@@ -288,6 +288,50 @@ func TestEnablementEvaluator_AllChildrenCompleteWaitsForProcessingAndLateChild(t
 	}
 }
 
+func TestEnablementEvaluator_AllChildrenCompleteAcceptsDistinctTerminalPlaces(t *testing.T) {
+	eval := NewEnablementEvaluator(nil, testNow, nil)
+	n := &state.Net{
+		Places: map[string]*petri.Place{
+			"parent:waiting": {ID: "parent:waiting", TypeID: "parent", State: "waiting"},
+			"child:complete": {ID: "child:complete", TypeID: "child", State: "complete"},
+			"child:skipped":  {ID: "child:skipped", TypeID: "child", State: "skipped"},
+		},
+		WorkTypes: map[string]*state.WorkType{
+			"parent": {ID: "parent", States: []state.StateDefinition{{Value: "waiting", Category: state.StateCategoryProcessing}}},
+			"child": {ID: "child", States: []state.StateDefinition{
+				{Value: "complete", Category: state.StateCategoryTerminal},
+				{Value: "skipped", Category: state.StateCategoryTerminal},
+			}},
+		},
+		Transitions: map[string]*petri.Transition{
+			"join": {
+				ID:   "join",
+				Name: "join",
+				InputArcs: []petri.Arc{
+					{ID: "parent-in", Name: "parent", PlaceID: "parent:waiting", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
+					{ID: "children-in", Name: "children", PlaceID: "child:complete", Direction: petri.ArcInput, Mode: interfaces.ArcModeObserve, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityAll}, Guard: &petri.AllWithParentGuard{MatchBinding: "parent"}},
+				},
+			},
+		},
+	}
+
+	parent := &factorytoken.Token{ID: "tok-parent", PlaceID: "parent:waiting", Color: factorytoken.Color{WorkID: "parent-1", WorkTypeID: "parent", DataType: factorytoken.DataTypeWork}}
+	complete := &factorytoken.Token{ID: "tok-child-complete", PlaceID: "child:complete", Color: factorytoken.Color{WorkID: "child-1", WorkTypeID: "child", ParentID: "parent-1", DataType: factorytoken.DataTypeWork}}
+	skipped := &factorytoken.Token{ID: "tok-child-skipped", PlaceID: "child:skipped", Color: factorytoken.Color{WorkID: "child-2", WorkTypeID: "child", ParentID: "parent-1", DataType: factorytoken.DataTypeWork}}
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{parent.ID: parent, complete.ID: complete, skipped.ID: skipped})
+	marking.ParentChildRegistrations = petri.ParentChildRegistrationProjection{
+		"parent-1": {Children: []factorytoken.Token{*complete, *skipped}, Complete: true},
+	}
+
+	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+	if len(enabled) != 1 {
+		t.Fatalf("fan-in enabled transitions = %d, want exactly 1", len(enabled))
+	}
+	if got := tokenIDs(enabled[0].Bindings["children"]); strings.Join(got, ",") != complete.ID {
+		t.Fatalf("fan-in binding surface = %v, want [%s] while validating both terminal places", got, complete.ID)
+	}
+}
+
 func TestEnablementEvaluator_SameNameGuardEnablesOnMatchingNames(t *testing.T) {
 	eval := NewEnablementEvaluator(nil, testNow, nil)
 	n := sameNameGuardNet()

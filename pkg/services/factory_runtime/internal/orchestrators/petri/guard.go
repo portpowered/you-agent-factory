@@ -325,6 +325,7 @@ func (g *AllWithParentGuard) evaluate(ctx RuntimeGuardContext, candidates []fact
 		if len(registered) != len(registeredIDs) {
 			return nil, false
 		}
+		targetPlaces := tokenPlaceSet(matched)
 		for identity, child := range registered {
 			if !registeredIDs[identity] {
 				return nil, false
@@ -332,16 +333,21 @@ func (g *AllWithParentGuard) evaluate(ctx RuntimeGuardContext, candidates []fact
 			if ctx.StateCategoryForPlace != nil && ctx.StateCategoryForPlace(child.PlaceID) != runtimeStateCategoryTerminal {
 				return nil, false
 			}
-		}
-		matchedIDs := tokenIdentitySet(matched)
-		if len(matchedIDs) != len(registeredIDs) {
-			return nil, false
-		}
-		for identity := range registeredIDs {
-			if !matchedIDs[identity] {
+			if ctx.StateCategoryForPlace == nil && !targetPlaces[child.PlaceID] {
 				return nil, false
 			}
 		}
+		matchedIDs := tokenIdentitySet(matched)
+		for identity := range matchedIDs {
+			if !registeredIDs[identity] {
+				return nil, false
+			}
+		}
+		// The guarded arc is the binding surface for the transition and may
+		// expose only one of several terminal places. The registration
+		// projection above is the completeness denominator; requiring its
+		// identities to equal matchedIDs would reject valid fan-in when
+		// another registered child is terminal in a different place.
 		return matched, true
 	}
 
