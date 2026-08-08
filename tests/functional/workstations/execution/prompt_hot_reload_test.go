@@ -2,6 +2,8 @@ package execution
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -59,24 +61,18 @@ func TestRunningSessionReloadsPromptOnNextDispatch(t *testing.T) {
 	daemon := support.StartProcessCommand(t, process, inputs.Input)
 
 	baseURL := server.WaitForURL(t)
-	startedSession := support.GetDefaultSession(t, baseURL)
-	firstSubmission := support.SubmitDefaultSessionWork(t, baseURL, promptReloadWorkRequest("first-work"))
-	if !firstSubmission.Accepted {
-		t.Fatalf("first Work submission was not accepted: %#v", firstSubmission)
-	}
+	startedSession := showPromptReloadSession(t, process, baseURL, "")
+	submitPromptReloadWork(t, process, baseURL, "first-work")
 
 	firstRequest := runner.waitForFirstRequest(t)
 	support.WriteAgentConfig(t, dir, promptReloadWorkerName, promptReloadWorkerConfig(promptReloadNewWorkerPrompt))
 	support.WriteWorkstationConfig(t, dir, promptReloadWorkstationName, promptReloadWorkstationConfig(promptReloadNewStationPrompt))
 	close(firstRelease)
-	support.WaitForSessionTerminalStatus(t, baseURL, startedSession.Id, 15*time.Second)
+	waitForPromptReloadSessionTerminal(t, process, baseURL, startedSession.Id)
 
-	secondSubmission := support.SubmitDefaultSessionWork(t, baseURL, promptReloadWorkRequest("second-work"))
-	if !secondSubmission.Accepted {
-		t.Fatalf("second Work submission was not accepted: %#v", secondSubmission)
-	}
+	submitPromptReloadWork(t, process, baseURL, "second-work")
 	secondRequest := runner.waitForSecondRequest(t)
-	support.WaitForSessionTerminalStatus(t, baseURL, startedSession.Id, 15*time.Second)
+	waitForPromptReloadSessionTerminal(t, process, baseURL, startedSession.Id)
 
 	if got := len(runner.requestsSnapshot()); got != 2 {
 		t.Fatalf("provider command requests = %d, want exactly two; requests=%#v", got, runner.requestsSnapshot())
@@ -84,7 +80,7 @@ func TestRunningSessionReloadsPromptOnNextDispatch(t *testing.T) {
 	assertClaudePromptRequest(t, firstRequest, promptReloadOldWorkerPrompt, promptReloadOldStationPrompt)
 	assertClaudePromptRequest(t, secondRequest, promptReloadNewWorkerPrompt, promptReloadNewStationPrompt)
 
-	finishedSession := support.GetDefaultSession(t, baseURL)
+	finishedSession := showPromptReloadSession(t, process, baseURL, startedSession.Id)
 	if finishedSession.Id != startedSession.Id {
 		t.Fatalf("Factory Session ID changed across prompt reload dispatches: started=%q finished=%q", startedSession.Id, finishedSession.Id)
 	}
@@ -108,16 +104,109 @@ func promptReloadWorkstationConfig(prompt string) string {
 		"---\n" + prompt + "\n"
 }
 
-func promptReloadWorkRequest(name string) factoryapi.SubmitWorkRequest {
-	return factoryapi.SubmitWorkRequest{
-		Name:         stringPointer(name),
-		Payload:      map[string]string{"title": name},
-		WorkTypeName: "task",
+type promptReloadSubmitResult struct {
+	EndpointPath string  `json:"endpointPath"`
+	Name         string  `json:"name"`
+	SessionID    string  `json:"sessionId"`
+	WorkID       *string `json:"workId"`
+	WorkTypeName string  `json:"workTypeName"`
+}
+
+func submitPromptReloadWork(t testing.TB, process support.Process, serverURL, name string) promptReloadSubmitResult {
+	t.Helper()
+
+	payload, err := json.Marshal(map[string]string{"title": name})
+	if err != nil {
+		t.Fatalf("marshal %s payload: %v", name, err)
+	}
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you",
+		"--server", serverURL,
+		"--json",
+		"submit",
+		"--name", name,
+		"--work-type-name", "task",
+		"--payload", "-",
+	})
+	inputs.Input.Stdin = strings.NewReader(string(payload))
+	stdinIsTTY := false
+	inputs.Input.StdinIsTTY = &stdinIsTTY
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(submit %s) error = %v\nstdout:\n%s\nstderr:\n%s", name, err, inputs.Stdout(), inputs.Stderr())
+	}
+
+	var result promptReloadSubmitResult
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &result); err != nil {
+		t.Fatalf("decode CLI submit %s response: %v\nstdout:\n%s", name, err, inputs.Stdout())
+	}
+	if result.Name != name || result.WorkTypeName != "task" {
+		t.Fatalf("CLI submit %s response = %#v, want accepted task work", name, result)
+	}
+	return result
+}
+
+func showPromptReloadSession(t testing.TB, process support.Process, serverURL, sessionID string) factoryapi.FactorySession {
+	t.Helper()
+	session, err := readPromptReloadSession(t, process, serverURL, sessionID)
+	if err != nil {
+		t.Fatalf("read Factory Session %q through CLI: %v", sessionID, err)
+	}
+	return session
+}
+
+func readPromptReloadSession(t testing.TB, process support.Process, serverURL, sessionID string) (factoryapi.FactorySession, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	args := []string{"you", "--server", serverURL, "--json", "session", "show"}
+	if sessionID != "" {
+		args = append(args, sessionID)
+	}
+	inputs := support.FakeInputs(ctx, args)
+	if err := process.Execute(inputs.Input); err != nil {
+		return factoryapi.FactorySession{}, fmt.Errorf("Process.Execute(session show): %w; stdout=%s; stderr=%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	var session factoryapi.FactorySession
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &session); err != nil {
+		return factoryapi.FactorySession{}, fmt.Errorf("decode session JSON: %w; stdout=%s", err, inputs.Stdout())
+	}
+	if session.Id == "" {
+		return factoryapi.FactorySession{}, fmt.Errorf("session JSON omitted id: %s", inputs.Stdout())
+	}
+	return session, nil
+}
+
+func waitForPromptReloadSessionTerminal(t testing.TB, process support.Process, serverURL, sessionID string) factoryapi.FactorySession {
+	t.Helper()
+
+	// The provider edge synchronizes prompt capture, but only the public session
+	// projection reports terminal runtime state. Bounded CLI reads are therefore
+	// the customer-visible observation boundary for this asynchronous transition.
+	deadline := time.NewTimer(15 * time.Second)
+	defer deadline.Stop()
+	poll := time.NewTicker(10 * time.Millisecond)
+	defer poll.Stop()
+	var lastErr error
+	var lastSession factoryapi.FactorySession
+	for {
+		lastSession, lastErr = readPromptReloadSession(t, process, serverURL, sessionID)
+		if lastErr == nil && promptReloadSessionIsTerminal(lastSession) {
+			return lastSession
+		}
+		select {
+		case <-poll.C:
+		case <-deadline.C:
+			t.Fatalf("timed out waiting for Factory Session %q to become terminal: last=%#v error=%v", sessionID, lastSession, lastErr)
+		}
 	}
 }
 
-func stringPointer(value string) *string {
-	return &value
+func promptReloadSessionIsTerminal(session factoryapi.FactorySession) bool {
+	completed := session.Runtime.Progress.Categories.Terminal + session.Runtime.Progress.Categories.Failed
+	if completed == 0 || session.Runtime.Progress.Categories.Initial != 0 || session.Runtime.Progress.Categories.Processing != 0 || session.Runtime.Progress.InFlightCount != 0 {
+		return false
+	}
+	return session.Runtime.Status == factoryapi.FactorySessionStatusIDLE || session.Runtime.Status == factoryapi.FactorySessionStatusFINISHED
 }
 
 func assertClaudePromptRequest(t *testing.T, request platformprocess.CommandRequest, wantWorker, wantWorkstation string) {
