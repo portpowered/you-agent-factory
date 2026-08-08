@@ -546,6 +546,31 @@ func TestEnablementEvaluator_SameNameJoinGatesSecondaryDependency(t *testing.T) 
 	}
 }
 
+func TestEnablementEvaluator_DependencyBindingPreflightHandlesNestedGuards(t *testing.T) {
+	evaluator := NewEnablementEvaluator(nil, testNow, nil)
+	transition := &petri.Transition{
+		InputArcs: []petri.Arc{{
+			Guard: &petri.AllGuard{Guards: []petri.Guard{
+				&petri.SameNameGuard{MatchBinding: "peer"},
+				&petri.DependencyGuard{},
+			}},
+		}},
+	}
+
+	if !transitionUsesDependencyGuard(transition) {
+		t.Fatal("expected nested dependency guard to be detected")
+	}
+	if transitionUsesDependencyGuard(nil) {
+		t.Fatal("nil transition must not report a dependency guard")
+	}
+	if guardUsesDependencyGuard(&petri.AllGuard{Guards: []petri.Guard{&petri.SameNameGuard{}}}) {
+		t.Fatal("unrelated nested guard must not report a dependency guard")
+	}
+	if evaluator.bindingDependenciesMet(transition, nil, nil) {
+		t.Fatal("dependency binding must fail closed when its marking snapshot is missing")
+	}
+}
+
 func sameNameDependencyNet(peerFirst bool) *state.Net {
 	peerArc := petri.Arc{
 		ID:          "idea-in",
