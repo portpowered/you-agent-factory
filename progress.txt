@@ -3,6 +3,7 @@
 - Run `go run ./cmd/climanifestgen -root .` for CLI family artifacts and `go run ./cmd/contractsgenerate -root .` for published contract staging; `climanifest-check`, `contracts-check`, and CLI contract smoke catch drift.
 - CLI identity and input baselines are rewritten through the `UPDATE_CLI_BASELINES=1` test helpers; run writers one package at a time because command and input baselines are shared files.
 - Generated Work leaves without authored positional arguments preserve the existing inventory behavior; apply `cobra.NoArgs` only when a new command explicitly requires rejecting positional input.
+- Long-lived CLI event streams use a dedicated no-timeout `clihttp.Protocol` and consume the canonical SSE route through generated Factory Event payload types.
 
 ## [2026-08-08 14:07 -07:00] - wo-c2-work-watch-event-stream-001
 - What was implemented
@@ -18,5 +19,22 @@
 - **Learnings for future iterations:**
   - The event-stream operation is not wired yet; the compatibility registry intentionally reports `work watch service is required` until story 002 supplies the canonical stream operation.
   - Keep the watch renderer transport-neutral so later stream/reducer code can emit complete lines without importing Cobra.
-  - The repository’s public CLI contract includes both generated package staging and committed identity/help baselines; updating only the authored manifest is incomplete.
+- The repository’s public CLI contract includes both generated package staging and committed identity/help baselines; updating only the authored manifest is incomplete.
+---
+
+## [2026-08-08 14:28 -07:00] - wo-c2-work-watch-event-stream-002
+- What was implemented
+  - Wired the Work watch operation to the selected Factory Session’s canonical Factory Event SSE stream, with retained events delivered before live events and no Work list/snapshot polling.
+  - Added a sequence-integrity reducer that projects Factory/Work metadata, emits only `WORK_STATE_CHANGE` transitions, suppresses exact replay duplicates, rejects conflicting IDs and non-monotonic canonical sequences, and derives terminal state from authoritative WorkState metadata.
+  - Added finite-mode terminal stopping, final-line-before-exit behavior, already-terminal retained-cohort handling, and an injected no-timeout HTTP protocol for long-lived streams.
+  - Regenerated Wire output and added reducer, finite fake-stream, and real HTTP SSE route/parser coverage.
+- Files changed
+  - `pkg/services/work/transports/cli/watch_reducer.go`, `pkg/services/work/transports/cli/watch_stream.go`, `pkg/services/work/transports/cli/watch.go`, `pkg/services/work/transports/cli/watch_test.go`
+  - `pkg/transports/cli/root.go`, `pkg/transports/cli/root_work.go`, `pkg/transports/cli/sessionpath/sessionpath.go`, `pkg/transports/cli/work/watch.go`
+  - `pkg/wire/cli_commands.go`, `pkg/wire/wire.go`, `pkg/wire/wire_gen.go`
+  - `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - The session event endpoint already provides retained-then-live ordering; the CLI needs only one long-lived GET and a reducer, not a client-side polling or snapshot path.
+  - Factory definition WorkState types should be preferred when classifying terminal transitions; Work payload state types are useful only as a fallback when definition metadata has not arrived.
+  - Follow mode, cancellation, and reconnect cursor/backoff behavior are intentionally still isolated for Story 003; finite completion currently closes immediately after rendering the terminal transition.
 ---

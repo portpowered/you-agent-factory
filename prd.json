@@ -51,8 +51,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented the Work watch operation over the canonical Factory Session Factory Event SSE stream. The reducer consumes retained history and live delivery in canonical context.sequence order, suppresses exact replay duplicates, rejects conflicting event IDs and non-monotonic sequences, projects only WORK_STATE_CHANGE events, tracks an explicit Work cohort, and derives terminal status from Factory WorkState metadata. Finite mode emits the final terminal transition before exiting and handles already-terminal retained cohorts. Added reducer, finite-stream, and real SSE parser/route tests; regenerated Wire and verified focused plus CLI/Work/Wire package tests. Stories 003 and 004 remain for follow/cancellation/reconnect and public end-to-end coverage."
     },
     {
       "id": "wo-c2-work-watch-event-stream-003",
