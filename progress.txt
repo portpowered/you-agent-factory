@@ -36,5 +36,16 @@
 - **Learnings for future iterations:**
   - The session event endpoint already provides retained-then-live ordering; the CLI needs only one long-lived GET and a reducer, not a client-side polling or snapshot path.
   - Factory definition WorkState types should be preferred when classifying terminal transitions; Work payload state types are useful only as a fallback when definition metadata has not arrived.
-  - Follow mode, cancellation, and reconnect cursor/backoff behavior are intentionally still isolated for Story 003; finite completion currently closes immediately after rendering the terminal transition.
+- Follow mode, cancellation, and reconnect cursor/backoff behavior are intentionally still isolated for Story 003; finite completion currently closes immediately after rendering the terminal transition.
+---
+
+## [2026-08-08 14:32 -07:00] - wo-c2-work-watch-event-stream-002 verification follow-up
+- What was implemented
+  - No additional story code; completed broader verification for the Story 002 implementation.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - `go test ./pkg/wire/... ./pkg/transports/cli/... ./pkg/services/work/... -count=1` passes after Wire generation.
+  - `make verify-fast` is currently blocked by the environment’s UI dependency/toolchain state: TypeScript cannot find the `bun` type definitions and rejects the existing deprecated `baseUrl` option.
+  - `make test` reaches the full short Go suite but fails an unrelated Windows permission-mode assertion in `pkg/platform/runtimeartifact` (`0666` observed versus `0600` expected); the Work/CLI/Wire packages remain green.
 ---
