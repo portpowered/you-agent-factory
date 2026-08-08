@@ -77,7 +77,7 @@ func TestPublishRecord_RetryOfOlderAcceptedIdentity_AfterNewerSequenceAccepted_R
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
 
-	if _, err := svc.Start(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := svc.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 	if second.Outcome != workersessions.PublishOutcomeAccepted {
@@ -137,7 +137,7 @@ func TestPublishRecord_ConcurrentPublishesForOneSource_NeverCommitOutOfOrder(t *
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
 
-	if _, err := svc.Start(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := svc.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 
@@ -230,7 +230,7 @@ func TestPublishRecord_SourceIdentityTupleMembersRemainDistinct(t *testing.T) {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
 
-	if _, err := svc.Start(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := svc.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 	if len(seen) != len(variants) {
@@ -283,10 +283,10 @@ func TestPublishRecord_IdenticalTupleAcrossSessionTopics_DoesNotCollapse(t *test
 	}
 	ctx := context.Background()
 
-	if _, err := svc.Start(ctx, validStartRequest("worker-1", "worker-1")); err != nil {
+	if _, err := svc.InvokeSession(ctx, validStartRequest("worker-1", "worker-1")); err != nil {
 		t.Fatalf("Start(worker-1) error = %v, want nil", err)
 	}
-	if _, err := svc.Start(ctx, validStartRequest("worker-2", "worker-2")); err != nil {
+	if _, err := svc.InvokeSession(ctx, validStartRequest("worker-2", "worker-2")); err != nil {
 		t.Fatalf("Start(worker-2) error = %v, want nil", err)
 	}
 
@@ -333,7 +333,7 @@ func TestPublishRecord_PagedReadDeliversRecordsExactlyOnceInContiguousOrder(t *t
 	}
 	ctx := context.Background()
 
-	if _, err := svc.Start(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := svc.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 	const wantTotal = published + 2 // + the opening record and the terminal record
@@ -433,7 +433,7 @@ func TestPublishRecord_SubscriptionFromLastReadCursorDeliversOnlyLaterRecords(t 
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
 
-	if _, err := svc.Start(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := svc.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 }
@@ -492,7 +492,7 @@ func TestPublishRecord_ConcurrentDuplicateDeliveryConvergesOnOneRecord(t *testin
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
 
-	if _, err := svc.Start(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := svc.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 

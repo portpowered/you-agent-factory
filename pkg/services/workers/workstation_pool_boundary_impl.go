@@ -47,6 +47,15 @@ func NewWorkstationPoolBoundary(cfg WorkstationPoolBoundaryConfig) WorkstationPo
 	}
 	adapter := workerExecutorRequestAdapter{executors: cfg.Executors}
 	bindings := assembleWorkstationPoolBindings(cfg.RouteNames, adapter, capacity, queueCapacity)
+	if cfg.ProviderInvocation != nil {
+		bindings = append(bindings, AssembledRuntimeBinding{
+			RoleName:      ProviderInvocationRoute,
+			RoleKind:      RuntimeBuildRoleKindWorker,
+			Executor:      cfg.ProviderInvocation,
+			Capacity:      capacity,
+			QueueCapacity: queueCapacity,
+		})
+	}
 	return &workstationPoolBoundary{
 		service:  cfg.Service,
 		bindings: bindings,

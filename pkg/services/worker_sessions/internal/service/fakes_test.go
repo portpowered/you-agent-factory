@@ -135,8 +135,8 @@ func (b executionBoundary) Stop(ctx context.Context) error {
 
 // validStartRequest returns a minimally well-formed StartRequest for id,
 // naming attemptID as its resolved attempt (dispatch) identity.
-func validStartRequest(id, attemptID string) workersessions.StartRequest {
-	return workersessions.StartRequest{
+func validStartRequest(id, attemptID string) workersessions.InvokeSessionRequest {
+	return workersessions.InvokeSessionRequest{
 		ID: id,
 		Execution: workers.WorkstationDispatchRequest{
 			WorkstationName: "review",

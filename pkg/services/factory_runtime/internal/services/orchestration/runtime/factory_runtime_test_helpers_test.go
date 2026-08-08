@@ -150,13 +150,13 @@ func (s *fakeWorkerSessionsService) List(context.Context, workersessions.ListReq
 	return workersessions.ListResult{}, nil
 }
 
-func (s *fakeWorkerSessionsService) Start(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
+func (s *fakeWorkerSessionsService) InvokeSession(ctx context.Context, req workersessions.InvokeSessionRequest) (workersessions.InvokeSessionResult, error) {
 	handoff := workers.WorkstationDispatchRequest{
 		WorkstationName: req.Execution.WorkstationName,
 		Execution:       req.Execution.Execution,
 	}
 	dispatchResult, dispatchErr := s.execution.DispatchWorkstation(ctx, handoff)
-	return workersessions.StartResult{
+	return workersessions.InvokeSessionResult{
 		Session:     workersessions.Session{ID: req.ID, State: workersessions.StateCompleted},
 		Dispatch:    dispatchResult,
 		DispatchErr: dispatchErr,

@@ -109,7 +109,7 @@ func TestPublishRecord_AppendsValidatedDetachedSourceNativeDraftsInOrder(t *test
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
 
-	if _, err := svc.Start(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := svc.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 
@@ -203,7 +203,7 @@ func TestPublishRecord_EventsAppendFailure_ReturnsErrorExplicitly(t *testing.T) 
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
 
-	if _, err := svc.Start(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := svc.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 	if publishErr == nil {
@@ -248,7 +248,7 @@ func TestPublishRecord_DuplicateSourceIdentity_ReturnsOriginalWithoutNewRecord(t
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
 
-	if _, err := svc.Start(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := svc.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 	if first.Outcome != workersessions.PublishOutcomeAccepted {
@@ -302,7 +302,7 @@ func TestPublishRecord_CallerPayloadMutationAfterPublish_DoesNotAffectRetainedRe
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
 
-	if _, err := svc.Start(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := svc.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 
@@ -359,7 +359,7 @@ func TestPublishRecord_ConcurrentSessionIsolation(t *testing.T) {
 		wg.Add(1)
 		go func(sessionID string) {
 			defer wg.Done()
-			if _, err := svc.Start(ctx, validStartRequest(sessionID, sessionID)); err != nil {
+			if _, err := svc.InvokeSession(ctx, validStartRequest(sessionID, sessionID)); err != nil {
 				panic(err)
 			}
 		}(sessionID)
@@ -412,7 +412,7 @@ func TestPublishRecord_RejectsPublicationAfterTerminal(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	if _, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 
@@ -466,7 +466,7 @@ func TestPublishRecord_LateOutputLosesRaceAgainstTerminal_IsRejectedNotInsertedA
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
 
-	if _, err := svc.Start(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := svc.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 
@@ -515,7 +515,7 @@ func TestPublishRecord_OutOfOrderSourceSequence_IsRejected(t *testing.T) {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
 
-	if _, err := svc.Start(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := svc.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 	if !errors.Is(outOfOrderErr, workersessions.ErrOutOfOrderPublication) {

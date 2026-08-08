@@ -9,8 +9,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func validStartRequestForContractTest() workersessions.StartRequest {
-	return workersessions.StartRequest{
+func validStartRequestForContractTest() workersessions.InvokeSessionRequest {
+	return workersessions.InvokeSessionRequest{
 		ID: "worker-1",
 		Execution: workers.WorkstationDispatchRequest{
 			WorkstationName: "review",

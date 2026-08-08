@@ -126,11 +126,11 @@ func completedDispatchResult(dispatchID string) workers.WorkstationDispatchResul
 	}
 }
 
-func startControlledSession(t *testing.T, registry workersessions.Service, boundary *controlledBoundary, id, dispatchID string) <-chan workersessions.StartResult {
+func startControlledSession(t *testing.T, registry workersessions.Service, boundary *controlledBoundary, id, dispatchID string) <-chan workersessions.InvokeSessionResult {
 	t.Helper()
-	result := make(chan workersessions.StartResult, 1)
+	result := make(chan workersessions.InvokeSessionResult, 1)
 	go func() {
-		started, err := registry.Start(context.Background(), validStartRequest(id, dispatchID))
+		started, err := registry.InvokeSession(context.Background(), validStartRequest(id, dispatchID))
 		if err != nil {
 			t.Errorf("Start() error = %v", err)
 		}
@@ -654,7 +654,7 @@ func TestControl_BeforeStartCancellationAndTerminationPreventWorkersHandoff(t *t
 			if err != nil || result.Outcome != workersessions.ControlOutcomeApplied || result.Session.State != tc.state {
 				t.Fatalf("%s before Start = %#v, %v, want applied %s", tc.name, result, err, tc.state)
 			}
-			started, err := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+			started, err := registry.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1"))
 			if err != nil || !errors.Is(started.DispatchErr, workers.ErrWorkstationDispatchCanceled) ||
 				started.Dispatch.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled {
 				t.Fatalf("Start() after %s = %#v, %v, want canceled dispatch without handoff", tc.name, started, err)
