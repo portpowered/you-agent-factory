@@ -303,3 +303,68 @@ func TestInferenceRequestForExecutionRequest_DefaultWorkingDirectoryDoesNotRequi
 		}
 	}
 }
+
+func TestAgentExecutorAcceptsSchemaValidatedStructuredOutput(t *testing.T) {
+	const schema = `{"type":"object","properties":{"verdict":{"type":"string","enum":["pass","reroll"]},"confidence":{"type":"number"}},"required":["verdict","confidence"]}`
+	provider := &agentMockProvider{response: workerexecution.InferenceResponse{
+		Content: `{"verdict":"pass","confidence":0.95}`,
+	}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*workerconfig.FactoryWorkerConfig{
+			"clip-qa": {Model: "gemini-3.6-flash-high", ModelProvider: workerexecution.RunnerIDAntigravity},
+		},
+	}, provider, nil, time.Now)
+
+	result, err := executor.Execute(context.Background(), testAgentRequest(
+		work.WorkDispatch{DispatchID: "structured-pass", TransitionID: "qa", WorkerType: "clip-qa"},
+		withAgentOutputSchema(schema),
+	))
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("outcome = %q, want %q", result.Outcome, workerexecution.OutcomeAccepted)
+	}
+	if result.Output != `{"verdict":"pass","confidence":0.95}` {
+		t.Fatalf("output = %q, want structured JSON", result.Output)
+	}
+	if result.FailureMetadata != nil {
+		t.Fatalf("failure metadata = %#v, want nil", result.FailureMetadata)
+	}
+}
+
+func TestAgentExecutorFailsExplicitStructuredRerollVerdict(t *testing.T) {
+	const schema = `{"type":"object","properties":{"verdict":{"type":"string","enum":["pass","reroll"]}},"required":["verdict"]}`
+	provider := &agentMockProvider{response: workerexecution.InferenceResponse{
+		Content: `{"verdict":"reroll"}`,
+	}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*workerconfig.FactoryWorkerConfig{
+			"clip-qa": {Model: "gemini-3.6-flash-high", ModelProvider: workerexecution.RunnerIDAntigravity},
+		},
+	}, provider, nil, time.Now)
+
+	result, err := executor.Execute(context.Background(), testAgentRequest(
+		work.WorkDispatch{DispatchID: "structured-reroll", TransitionID: "qa", WorkerType: "clip-qa"},
+		withAgentOutputSchema(schema),
+	))
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("outcome = %q, want %q", result.Outcome, workerexecution.OutcomeFailed)
+	}
+	if result.Error == "" || result.FailureMetadata == nil || result.FailureMetadata.Type != workerexecution.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("failure = %#v, want actionable permanent bad-request failure", result)
+	}
+}
+
+func TestParseOutputAgainstSchemaRejectsSchemaInvalidStructuredOutput(t *testing.T) {
+	_, err := parseOutputAgainstSchema(
+		`{"verdict":"pass"}`,
+		[]byte(`{"type":"object","required":["confidence"]}`),
+	)
+	if err == nil {
+		t.Fatal("parseOutputAgainstSchema() error = nil, want schema validation failure")
+	}
+}

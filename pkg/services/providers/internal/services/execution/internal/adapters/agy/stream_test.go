@@ -2,9 +2,11 @@ package agy_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -220,6 +222,128 @@ func TestAgyRootPreservesRecordedZeroUsageValues(t *testing.T) {
 	}
 }
 
+func TestAgyRootReturnsRecordedStructuredJSONEnvelope(t *testing.T) {
+	t.Parallel()
+
+	trace := readAgyTrace(t, "agy-trace-structured.json")
+	var envelope struct {
+		StructuredOutput json.RawMessage `json:"structured_output"`
+		JSONSchema       json.RawMessage `json:"json_schema"`
+	}
+	if err := json.Unmarshal(trace, &envelope); err != nil {
+		t.Fatalf("decode structured trace: %v", err)
+	}
+	if len(envelope.JSONSchema) == 0 || len(envelope.StructuredOutput) == 0 {
+		t.Fatal("structured trace did not contain schema and structured output")
+	}
+
+	effect := agy.EffectFunc(func(
+		_ context.Context,
+		_ execution.ContinuationRequest,
+		observe func([]byte) error,
+	) (agy.EffectResult, error) {
+		return agy.EffectResult{Metadata: map[string]string{"output_format": "json"}}, observe(trace)
+	})
+	result, err := newAgyRoot(t, effect).Execute(t.Context(), providers.ExecuteRequest{
+		Provider:     providers.IDAntigravity,
+		AttemptID:    "agy-recorded-structured",
+		OutputSchema: string(envelope.JSONSchema),
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	var got, want any
+	if err := json.Unmarshal([]byte(result.Content), &got); err != nil {
+		t.Fatalf("decode provider content: %v", err)
+	}
+	if err := json.Unmarshal(envelope.StructuredOutput, &want); err != nil {
+		t.Fatalf("decode recorded structured output: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("structured content = %#v, want %#v", got, want)
+	}
+}
+
+func TestAgyRootReturnsRecordedClipQAStructuredVerdict(t *testing.T) {
+	t.Parallel()
+
+	trace := readAgyTrace(t, "agy-trace-clipqa-schema.stream.jsonl")
+	var terminal struct {
+		Result struct {
+			StructuredOutput json.RawMessage `json:"structured_output"`
+			JSONSchema       json.RawMessage `json:"json_schema"`
+		} `json:"result"`
+	}
+	lastLine := strings.Split(strings.TrimSpace(string(trace)), "\n")
+	if err := json.Unmarshal([]byte(lastLine[len(lastLine)-1]), &terminal); err != nil {
+		t.Fatalf("decode clip-QA terminal trace: %v", err)
+	}
+
+	effect := agy.EffectFunc(func(
+		_ context.Context,
+		_ execution.ContinuationRequest,
+		observe func([]byte) error,
+	) (agy.EffectResult, error) {
+		for _, chunk := range splitAgyTrace(trace, 53) {
+			if err := observe(chunk); err != nil {
+				return agy.EffectResult{}, err
+			}
+		}
+		return agy.EffectResult{Metadata: map[string]string{"output_format": "stream-json"}}, nil
+	})
+	result, err := newAgyRoot(t, effect).Execute(t.Context(), providers.ExecuteRequest{
+		Provider:     providers.IDAntigravity,
+		AttemptID:    "agy-recorded-clipqa",
+		OutputSchema: string(terminal.Result.JSONSchema),
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	var output map[string]any
+	if err := json.Unmarshal([]byte(result.Content), &output); err != nil {
+		t.Fatalf("decode clip-QA output: %v", err)
+	}
+	if output["verdict"] != "pass" || output["audio_content"] != "noise" || output["unexpected_speech"] != false {
+		t.Fatalf("clip-QA output = %#v, want pass/noise/no speech", output)
+	}
+	for _, key := range []string{
+		"action_completed", "spec_deviations", "temporal_artifacts",
+		"audio_content", "unexpected_speech", "verdict", "confidence",
+	} {
+		if _, ok := output[key]; !ok {
+			t.Fatalf("clip-QA output missing %q: %#v", key, output)
+		}
+	}
+}
+
+func TestAgyRootRejectsRecordedMissingFileWithoutStructuredVerdict(t *testing.T) {
+	t.Parallel()
+
+	trace := readAgyTrace(t, "agy-trace-missing-file.stream.jsonl")
+	schema := string(readRecordedClipQASchema(t))
+	effect := agy.EffectFunc(func(
+		_ context.Context,
+		_ execution.ContinuationRequest,
+		observe func([]byte) error,
+	) (agy.EffectResult, error) {
+		return agy.EffectResult{Metadata: map[string]string{"output_format": "stream-json"}}, observe(trace)
+	})
+	result, err := newAgyRoot(t, effect).Execute(t.Context(), providers.ExecuteRequest{
+		Provider:     providers.IDAntigravity,
+		AttemptID:    "agy-recorded-missing-file",
+		OutputSchema: schema,
+	})
+	if err == nil {
+		t.Fatal("Execute() error = nil, want structured contract failure")
+	}
+	if result.Content != "" {
+		t.Fatalf("result content = %q, want empty on refusal", result.Content)
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "structured_output") {
+		t.Fatalf("error = %v, want actionable structured-output diagnostic", err)
+	}
+}
+
 func TestAgyCommandEffectRequiresStructuredOutputAfterExitZero(t *testing.T) {
 	t.Parallel()
 
@@ -287,4 +411,29 @@ func progressPhases(progress []providers.ExecuteProgress) string {
 		phases[index] = fact.Phase
 	}
 	return strings.Join(phases, "|")
+}
+
+func readAgyTrace(t *testing.T, name string) []byte {
+	t.Helper()
+	path := filepath.Join(testutil.MustRepoRoot(t), "docs", "temp", "agy-traces", name)
+	trace, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read recorded trace %q: %v", name, err)
+	}
+	return trace
+}
+
+func readRecordedClipQASchema(t *testing.T) []byte {
+	t.Helper()
+	trace := readAgyTrace(t, "agy-trace-clipqa-schema.stream.jsonl")
+	lines := strings.Split(strings.TrimSpace(string(trace)), "\n")
+	var terminal struct {
+		Result struct {
+			JSONSchema json.RawMessage `json:"json_schema"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &terminal); err != nil {
+		t.Fatalf("decode recorded clip-QA schema: %v", err)
+	}
+	return terminal.Result.JSONSchema
 }

@@ -1,9 +1,11 @@
 package executor
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 type CommandRunner = workerexecution.CommandRunner
@@ -142,6 +145,71 @@ func cloneEnvVars(envVars map[string]string) map[string]string {
 		clone[key] = value
 	}
 	return clone
+}
+
+func parseOutputAgainstSchema(content string, schemaPayload []byte) (any, error) {
+	if strings.TrimSpace(content) == "" {
+		return nil, fmt.Errorf("response is empty")
+	}
+	if len(bytes.TrimSpace(schemaPayload)) == 0 {
+		return nil, fmt.Errorf("output schema is empty")
+	}
+
+	schemaDocument, err := jsonschema.UnmarshalJSON(bytes.NewReader(schemaPayload))
+	if err != nil {
+		return nil, fmt.Errorf("output schema is malformed: %w", err)
+	}
+	compiler := jsonschema.NewCompiler()
+	compiler.DefaultDraft(jsonschema.Draft2020)
+	const schemaID = "worker-output-schema.json"
+	if err := compiler.AddResource(schemaID, schemaDocument); err != nil {
+		return nil, fmt.Errorf("output schema is invalid: %w", err)
+	}
+	compiled, err := compiler.Compile(schemaID)
+	if err != nil {
+		return nil, fmt.Errorf("output schema is invalid: %w", err)
+	}
+
+	document, err := jsonschema.UnmarshalJSON(bytes.NewReader([]byte(content)))
+	if err != nil {
+		return nil, fmt.Errorf("response is not valid JSON: %w", err)
+	}
+	if err := compiled.Validate(document); err != nil {
+		return nil, fmt.Errorf("response does not satisfy output schema: %w", err)
+	}
+	return document, nil
+}
+
+func structuredOutputFailure(content string) string {
+	var object map[string]any
+	if err := json.Unmarshal([]byte(content), &object); err != nil || object == nil {
+		return ""
+	}
+
+	for _, key := range []string{"verdict", "status", "outcome"} {
+		value, ok := object[key].(string)
+		if !ok {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case "fail", "failed", "failure", "error", "reroll", "reject", "rejected":
+			return fmt.Sprintf("%s=%s", key, strings.TrimSpace(value))
+		}
+	}
+	for _, key := range []string{"action_completed", "success", "completed"} {
+		value, ok := object[key].(bool)
+		if ok && !value {
+			return fmt.Sprintf("%s=false", key)
+		}
+	}
+	return ""
+}
+
+func structuredOutputFailureMetadata() *workerexecution.WorkFailureMetadata {
+	return &workerexecution.WorkFailureMetadata{
+		Family: workerexecution.WorkFailureFamilyTerminal,
+		Type:   workerexecution.WorkFailureTypePermanentBadRequest,
+	}
 }
 
 const (

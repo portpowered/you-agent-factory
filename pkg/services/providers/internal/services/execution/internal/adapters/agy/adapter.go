@@ -88,9 +88,17 @@ func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
 			failure = attachPartialTimeoutProgress(failure, effectResult.CapturedStdout, effectErr)
 			return providers.ExecuteResult{SessionRef: sessionRef}, failure
 		}
+		expectedSchema := request.OutputSchema
+		if _, nativePrintOutput := effectResult.Metadata["output_format"]; !nativePrintOutput {
+			// The legacy PTY compatibility effect returns final text rather than
+			// AGY's print-mode response envelope. Structured contracts are
+			// enforced by the command-runner path that advertises its format.
+			expectedSchema = ""
+		}
 		parsed, parseFailure := parseAgyOutput(
 			stdout.Bytes(),
 			strings.EqualFold(effectResult.Metadata["output_format"], outputFormatStream),
+			expectedSchema,
 		)
 		if parseFailure != nil {
 			sessionRef := cloneSessionRef(effectResult.SessionRef)

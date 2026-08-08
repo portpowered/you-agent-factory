@@ -77,6 +77,43 @@ func TestCommandEffectBuildsRecordedPrintArgv(t *testing.T) {
 	}
 }
 
+func TestCommandEffectSelectsJSONModeForStructuredOutput(t *testing.T) {
+	t.Parallel()
+
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte(`{"conversation_id":"structured-command","status":"SUCCESS","response":"ok","structured_output":{"ok":true},"json_schema":{"type":"object"},"duration_seconds":0,"num_turns":0,"usage":{"input_tokens":0,"output_tokens":0,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":0}}`),
+	})
+	effect := agy.NewCommandEffect(workers.AdaptCommandRunner(runner))
+	workspace := t.TempDir()
+	schema := `{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]}`
+	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{
+		ExecuteRequest: providers.ExecuteRequest{
+			Provider:         providers.IDAntigravity,
+			AttemptID:        "agy-structured-dispatch",
+			Model:            "gemini-3.6-flash-low",
+			OutputSchema:     schema,
+			WorkingDirectory: workspace,
+			UserMessage:      "return a structured result",
+		},
+	}, func([]byte) error { return nil })
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	wantArgs := []string{
+		"-p", "return a structured result",
+		"--output-format", "json",
+		"--add-dir", workspace,
+		"--disable-slash-commands",
+		"--json-schema", schema,
+		"--model", "gemini-3.6-flash-low",
+		"--print-timeout", "5m",
+	}
+	request := runner.LastRequest()
+	if !reflect.DeepEqual(request.Args, wantArgs) {
+		t.Fatalf("argv = %#v, want %#v", request.Args, wantArgs)
+	}
+}
+
 func TestCommandEffectBuildsArgvForRecordedFileAndVideoTraces(t *testing.T) {
 	t.Parallel()
 

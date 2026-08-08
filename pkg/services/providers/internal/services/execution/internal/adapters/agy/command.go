@@ -2,6 +2,7 @@ package agy
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -47,7 +48,7 @@ func NewCommandEffect(runner workers.CommandRunner) Effect {
 		result, runErr := runCommand(commandContext, runner, command, observe)
 		effectResult := EffectResult{
 			DurationMillis: time.Since(started).Milliseconds(),
-			Metadata:       map[string]string{"output_format": outputFormatStream},
+			Metadata:       map[string]string{"output_format": outputFormatForRequest(request)},
 			SessionRef:     sessionRefFromRequest(request.ResumeSession),
 			CapturedStdout: append([]byte(nil), result.Stdout...),
 		}
@@ -104,12 +105,16 @@ func buildAgyArgs(request execution.ContinuationRequest) ([]string, error) {
 	}
 	args := []string{
 		"-p", request.UserMessage,
-		"--output-format", outputFormatStream,
+		"--output-format", outputFormatForRequest(request),
 		"--add-dir", workDir,
 		"--disable-slash-commands",
 	}
-	if request.OutputSchema != "" {
-		args = append(args, "--json-schema", request.OutputSchema)
+	outputSchema := strings.TrimSpace(request.OutputSchema)
+	if outputSchema != "" {
+		if !json.Valid([]byte(outputSchema)) {
+			return nil, fmt.Errorf("agy: output schema must be valid JSON")
+		}
+		args = append(args, "--json-schema", outputSchema)
 	}
 	if model != "" {
 		args = append(args, "--model", model)
@@ -127,6 +132,13 @@ func buildAgyArgs(request execution.ContinuationRequest) ([]string, error) {
 		}
 	}
 	return args, nil
+}
+
+func outputFormatForRequest(request execution.ContinuationRequest) string {
+	if strings.TrimSpace(request.OutputSchema) != "" {
+		return agyOutputFormatJSON
+	}
+	return outputFormatStream
 }
 
 func runCommand(

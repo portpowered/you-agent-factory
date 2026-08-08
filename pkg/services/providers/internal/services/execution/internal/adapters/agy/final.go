@@ -42,7 +42,7 @@ func boundedText(value string) string {
 
 // ParseFinalOutputForTest exposes final-only selection for adapter tests.
 func ParseFinalOutputForTest(stdout []byte) (string, *providers.ExecuteFailure) {
-	parsed, failure := parseAgyOutput(stdout, false)
+	parsed, failure := parseAgyOutput(stdout, false, "")
 	return parsed.Content, failure
 }
 

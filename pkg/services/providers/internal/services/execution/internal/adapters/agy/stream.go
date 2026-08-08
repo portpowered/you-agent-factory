@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -24,10 +25,12 @@ const (
 )
 
 type parsedAgyOutput struct {
-	Content      string
-	SessionRef   *providers.SessionRef
-	Diagnostics  providers.ExecuteDiagnostics
-	DurationSeen bool
+	Content          string
+	StructuredOutput json.RawMessage
+	JSONSchema       json.RawMessage
+	SessionRef       *providers.SessionRef
+	Diagnostics      providers.ExecuteDiagnostics
+	DurationSeen     bool
 }
 
 type agyStreamRecord struct {
@@ -37,20 +40,24 @@ type agyStreamRecord struct {
 }
 
 type agyResultRecord struct {
-	Status          string          `json:"status"`
-	Response        *string         `json:"response"`
-	DurationSeconds json.RawMessage `json:"duration_seconds"`
-	NumTurns        json.RawMessage `json:"num_turns"`
-	Usage           json.RawMessage `json:"usage"`
+	Status           string          `json:"status"`
+	Response         *string         `json:"response"`
+	DurationSeconds  json.RawMessage `json:"duration_seconds"`
+	NumTurns         json.RawMessage `json:"num_turns"`
+	StructuredOutput json.RawMessage `json:"structured_output"`
+	JSONSchema       json.RawMessage `json:"json_schema"`
+	Usage            json.RawMessage `json:"usage"`
 }
 
 type agyJSONEnvelope struct {
-	ConversationID  string          `json:"conversation_id"`
-	Status          string          `json:"status"`
-	Response        *string         `json:"response"`
-	DurationSeconds json.RawMessage `json:"duration_seconds"`
-	NumTurns        json.RawMessage `json:"num_turns"`
-	Usage           json.RawMessage `json:"usage"`
+	ConversationID   string          `json:"conversation_id"`
+	Status           string          `json:"status"`
+	Response         *string         `json:"response"`
+	DurationSeconds  json.RawMessage `json:"duration_seconds"`
+	NumTurns         json.RawMessage `json:"num_turns"`
+	StructuredOutput json.RawMessage `json:"structured_output"`
+	JSONSchema       json.RawMessage `json:"json_schema"`
+	Usage            json.RawMessage `json:"usage"`
 }
 
 type agyUsageRecord struct {
@@ -61,7 +68,11 @@ type agyUsageRecord struct {
 	TotalTokens     *int64 `json:"total_tokens"`
 }
 
-func parseAgyOutput(stdout []byte, requireStreamJSON bool) (parsedAgyOutput, *providers.ExecuteFailure) {
+func parseAgyOutput(
+	stdout []byte,
+	requireStreamJSON bool,
+	expectedSchema string,
+) (parsedAgyOutput, *providers.ExecuteFailure) {
 	trimmed := bytes.TrimSpace(stdout)
 	if len(trimmed) == 0 {
 		if requireStreamJSON {
@@ -80,7 +91,14 @@ func parseAgyOutput(stdout []byte, requireStreamJSON bool) (parsedAgyOutput, *pr
 			)
 		}
 		content, failure := parseFinalOutput(stdout)
-		return parsedAgyOutput{Content: content}, failure
+		parsed := parsedAgyOutput{Content: content}
+		if failure != nil {
+			return parsed, failure
+		}
+		if err := applyStructuredContract(&parsed, expectedSchema); err != nil {
+			return parsedAgyOutput{}, malformedAgyOutputFailure(agyOutputFormatJSON, err)
+		}
+		return parsed, nil
 	}
 
 	if envelope, isEnvelope := singleJSONEnvelope(trimmed); isEnvelope {
@@ -88,11 +106,17 @@ func parseAgyOutput(stdout []byte, requireStreamJSON bool) (parsedAgyOutput, *pr
 		if err != nil {
 			return parsedAgyOutput{}, malformedAgyOutputFailure(agyOutputFormatJSON, err)
 		}
+		if err := applyStructuredContract(&parsed, expectedSchema); err != nil {
+			return parsedAgyOutput{}, malformedAgyOutputFailure(agyOutputFormatJSON, err)
+		}
 		return parsed, nil
 	}
 
 	parsed, err := parseAgyStream(trimmed)
 	if err != nil {
+		return parsedAgyOutput{}, malformedAgyOutputFailure(agyOutputFormatStream, err)
+	}
+	if err := applyStructuredContract(&parsed, expectedSchema); err != nil {
 		return parsedAgyOutput{}, malformedAgyOutputFailure(agyOutputFormatStream, err)
 	}
 	return parsed, nil
@@ -162,11 +186,13 @@ func parseAgyEnvelope(raw []byte) (parsedAgyOutput, error) {
 		return parsedAgyOutput{}, fmt.Errorf("JSON envelope is missing response and status")
 	}
 	result, err := json.Marshal(agyResultRecord{
-		Status:          envelope.Status,
-		Response:        envelope.Response,
-		DurationSeconds: envelope.DurationSeconds,
-		NumTurns:        envelope.NumTurns,
-		Usage:           envelope.Usage,
+		Status:           envelope.Status,
+		Response:         envelope.Response,
+		DurationSeconds:  envelope.DurationSeconds,
+		NumTurns:         envelope.NumTurns,
+		StructuredOutput: envelope.StructuredOutput,
+		JSONSchema:       envelope.JSONSchema,
+		Usage:            envelope.Usage,
 	})
 	if err != nil {
 		return parsedAgyOutput{}, fmt.Errorf("marshal JSON envelope result: %w", err)
@@ -248,7 +274,9 @@ func parseAgyResult(
 	}
 
 	parsed := parsedAgyOutput{
-		Content: content,
+		Content:          content,
+		StructuredOutput: append(json.RawMessage(nil), result.StructuredOutput...),
+		JSONSchema:       append(json.RawMessage(nil), result.JSONSchema...),
 		Diagnostics: providers.ExecuteDiagnostics{
 			DurationMillis: durationSecondsToMillis(durationSeconds),
 			Progress:       progress,
@@ -264,6 +292,45 @@ func parseAgyResult(
 		}
 	}
 	return parsed, nil
+}
+
+func applyStructuredContract(parsed *parsedAgyOutput, expectedSchema string) error {
+	expected := strings.TrimSpace(expectedSchema)
+	if expected == "" {
+		return nil
+	}
+	if !json.Valid([]byte(expected)) {
+		return fmt.Errorf("requested JSON schema is malformed")
+	}
+	if missingJSONValue(parsed.StructuredOutput) {
+		return fmt.Errorf("result is missing structured_output for the requested JSON schema")
+	}
+	if !json.Valid(parsed.StructuredOutput) {
+		return fmt.Errorf("result structured_output is malformed")
+	}
+	if missingJSONValue(parsed.JSONSchema) {
+		return fmt.Errorf("result is missing the echoed json_schema")
+	}
+	if !json.Valid(parsed.JSONSchema) {
+		return fmt.Errorf("result json_schema is malformed")
+	}
+	if !equivalentJSON([]byte(expected), parsed.JSONSchema) {
+		return fmt.Errorf("result json_schema does not match the requested JSON schema")
+	}
+	parsed.Content = strings.TrimSpace(string(parsed.StructuredOutput))
+	return nil
+}
+
+func equivalentJSON(left, right []byte) bool {
+	var leftValue any
+	var rightValue any
+	if err := json.Unmarshal(left, &leftValue); err != nil {
+		return false
+	}
+	if err := json.Unmarshal(right, &rightValue); err != nil {
+		return false
+	}
+	return reflect.DeepEqual(leftValue, rightValue)
 }
 
 func parseUsage(raw json.RawMessage) (agyUsageRecord, error) {
@@ -343,6 +410,12 @@ func singleJSONEnvelope(raw []byte) ([]byte, bool) {
 		return nil, false
 	}
 	if _, hasResponse := fields["response"]; hasResponse {
+		return raw, true
+	}
+	if _, hasStructuredOutput := fields["structured_output"]; hasStructuredOutput {
+		return raw, true
+	}
+	if _, hasJSONSchema := fields["json_schema"]; hasJSONSchema {
 		return raw, true
 	}
 	return nil, false
