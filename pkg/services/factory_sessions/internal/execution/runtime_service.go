@@ -231,6 +231,14 @@ type JavaScriptRuntimeService struct {
 	invokerMu            sync.RWMutex
 	resolveWorkerInvoker WorkerInvokerResolver
 
+	// workerSessions maps one Workers dispatch identity to the durable session
+	// that owns that Worker. A Worker's progress arrives from Workers, which
+	// knows only the dispatch it belongs to, so this is what routes a child's
+	// output back to the response-event store its own session reads. It has its
+	// own lock for the same reason invokerMu does.
+	workerSessionsMu sync.RWMutex
+	workerSessions   map[string]string
+
 	mu            sync.RWMutex
 	sessions      map[string]*runtimeSessionState
 	startReplay   map[string]startReplayRecord
@@ -931,6 +939,7 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 				invoke,
 				records,
 				s.childValues,
+				s.observeWorkerDispatch,
 				policy.MaxRetries,
 				s.projectRoot,
 			)

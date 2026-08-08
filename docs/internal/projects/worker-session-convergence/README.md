@@ -1,8 +1,8 @@
 # Worker Session Convergence
 
-Status: the route is landed and the ACP gate is green; four durable-session
-projection gaps remain (§6). The standalone `you run script.js` composition is
-not converted.
+Status: the route is landed, the ACP gate is green, and every functional cell
+the convergence regressed is green again (§6). The standalone `you run
+script.js` composition is not converted.
 Date: 2026-08-08
 Branch: `worker-session-convergence`
 Gate: `TestJavaScriptFactoryChildrenAreVisibleAsWorkers`
@@ -131,25 +131,90 @@ separate project, and until it happens `you run script.js` children remain
 invisible to a client: there is no Factory whose tool call they could be
 content inside.
 
-## 6. What is still red, and why
+## 6. What the convergence broke, and how each was closed
 
-Six functional cells still fail, in three buckets. None are about the route --
-children reach the provider, run concurrently, cancel, and open tool calls.
-Each is a fact the durable session used to get from the deleted executor.
+Seven functional cells failed after the route landed. None were about the route --
+children reached the provider, ran concurrently, cancelled, and opened tool
+calls. Each was a fact the durable session used to get from the deleted
+executor. All seven are green.
 
-Closed since this list was first written: child failure classification
-(`InvokeWorkerResult` now carries the Workers-owned failure type and retry
-verdict) and workflow cancellation (`InvokeWorker` now issues `Cancel` on the
-Worker Session, and a resumed child takes a `.../resume/N` identity).
+### 6.1 Resume -- a dispatch ID is single-use for the life of a Workers pool
 
-| Failing cells | Missing fact | Where it has to come from |
-| --- | --- | --- |
-| `TestJavaScriptChildProgressPublishesCanonicalResponseEvents`, `TestJavaScriptTerminalResultFollowsFinalResponseEvent` | child provider progress on the Factory Session response-event surface | Progress now flows Workers -> `ProviderSessionObservationPublisher` -> the runtime progress stream. It no longer reaches the durable session's own response-event store, which the JavaScript service used to write through `sessionProgressPublisher`. |
-| `TestJavaScriptInterruptedSessionResumes...`, `TestJavaScriptResumeRestoresCheckpoint...`, `TestFactorySessionResumeDoesNotRepeatCompletedDispatch` | a resumed child reaching Workers at all | The resumed dispatch now reserves its `.../resume/N` session and is refused with `START_FAILURE` -- the Workers pool the resumed session reaches will not admit it. Diagnosed only this far: `Pool.start` returns `AlreadyRunning` and **discards** the new route snapshot, so which pool a resumed session gets, and whether its provider-invocation route survives, is the next thing to establish. |
-| `TestJavaScriptMockWorkersReplaceOnlyNamedChildren` | mock-worker substitution for a named child | The provider-invocation route is built from the session command runner; per-child mock matching is not applied to it. |
+`TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren`,
+`TestJavaScriptResumeRestoresCheckpointAndFinalResult`,
+`TestFactorySessionResumeDoesNotRepeatCompletedDispatch`
 
-Resume is the load-bearing one: it is a behaviour regression, not a projection
-gap. The other two are projection gaps.
+A resumed child reserved its `.../resume/N` Worker Session and was then refused
+by Workers with `START_FAILURE`. The cause is one line: `Pool.accept` rejects a
+dispatch ID already present in `p.dispatches`, and **nothing ever removes an
+entry from that map**. A dispatch ID is therefore single-use for the whole life
+of a pool, and a resumed child re-runs under its original ID.
+
+The identity handed to Workers is now the Worker Session identity, which
+Runtime already mints uniquely per attempt. For every Worker but a resumed one
+that is the same value, so nothing else moves. Pinned by
+`TestInvokeWorker_ARerunDispatchReachesWorkersUnderItsOwnIdentity`, with
+`TestInvokeWorker_FirstAttemptUsesTheCallerDispatchIdentity` keeping the common
+case honest.
+
+The same defect had a second face the tests did not cover: every durable
+session of one Factory shares that Factory's pool, and child dispatch
+identities restart at `dispatch-1` per session. Two concurrent sessions would
+have collided. The Workers-facing identity is now scoped by session --
+`<sessionID>/dispatch-N` -- while the session's own records keep the
+unqualified identity its customer sees. Pinned by
+`TestChildWorkerExecutor_ScopesTheWorkersIdentityToItsSession`.
+
+### 6.2 Mock workers -- the registry, not just the conductor
+
+`TestJavaScriptMockWorkersReplaceOnlyNamedChildren`
+
+Two facts were missing, and both had to be restored:
+
+- **The worker name never reached Workers.** A mock worker matches on
+  `CommandRequest.WorkerType`, which is the authored worker preset. The route
+  was sending the child's *label*. `InvokeWorkerRequest.Label` is replaced by
+  `WorkerName`, because Runtime never had a use for a label and its presence
+  invited exactly this substitution. `SkipPermissions` was being dropped on the
+  same floor and is carried too. Pinned by
+  `TestInvokeWorker_CarriesTheAuthoredWorkerNameAndPermissionPolicy`.
+- **The Providers registry was not rebuilt around the session's runner.**
+  Providers resolves a command runner when a provider is *registered*, so
+  handing the conductor a mock-decorated runner reached the adapter and never
+  the process. The deleted `livechild` wiring called `registryRebinder(runner)`
+  for this reason; the provider-invocation factory now does the same whenever
+  the session composed its own runner.
+
+### 6.3 A failed Worker took the whole execution down with it
+
+`TestProvidersACPRestartsAfterCrashWithoutReplayingUncertainPrompt`
+
+Not one of the six -- this one was found late, and it is the sharpest of the
+lot. The failed-child record carried the provider's session reference without
+its provider. Mapping a session's runtime facts to canonical events rejects
+that pair, so the *whole* execution failed: an ACP peer that crashed surfaced
+as HTTP 500 rather than a FAILED session, and the restart-without-replay
+behaviour the cell exists to prove never got a chance to run. The provider now
+travels with its reference, as the deleted executor always had it.
+
+### 6.4 Response events -- Worker output had nowhere to land
+
+`TestJavaScriptChildProgressPublishesCanonicalResponseEvents`,
+`TestJavaScriptTerminalResultFollowsFinalResponseEvent`
+
+`sessionProgressPublisher` was handed to `livechild` and, once `livechild` was
+deleted, had **zero production callers**. A child's provider progress reached
+the runtime and stopped there, leaving the dashboard, the SSE feed, and the
+CLI's NDJSON contract with a session that produced nothing.
+
+Worker progress now fans out: the runtime publishes as before, and the durable
+execution service receives the same fragments and routes each to the session
+that started that Worker. Workers addresses a fragment only by dispatch, so the
+session registers its Worker's dispatch identity before invoking and releases
+it after -- which is what the session-scoped identity in §6.1 makes
+unambiguous. A dispatch no session owns is ignored, so a Petri Worker's
+progress still goes only where it already went. Pinned by the three
+`TestPublishWorkerProgress_*` cells.
 
 ## 7. Behaviour changes worth knowing
 
@@ -164,6 +229,11 @@ gap. The other two are projection gaps.
   unsupported child-executor mode.
 - The durable response-event store is now provisioned for sessions with a bound
   worker invoker, rather than for sessions with a live-child invocation factory.
+- A JavaScript child's Workers dispatch identity is `<sessionID>/dispatch-N`
+  rather than `dispatch-N`. Nothing customer-facing changed: the session's own
+  dispatch records, its API, and its CLI output all keep the unqualified
+  identity. Only the pool, the Worker Session, and the ACP tool call see the
+  scoped one, and all three want an identity unique across the process.
 
 ## 8. Not in scope
 

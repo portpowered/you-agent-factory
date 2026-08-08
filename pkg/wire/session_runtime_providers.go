@@ -1004,6 +1004,7 @@ func provideWorkersMockCommandRunnerFactory() factoryruntime.WorkersMockCommandR
 // substitute a provider on purpose -- functional API servers and replays.
 func provideProviderInvocationExecutorFactory(
 	conductorInvocation factorysessionwire.ConductorInvocationWithProgressFactory,
+	registryRebinder workerswire.ProviderRegistryRebinder,
 	allocator workers.PTYAllocator,
 	edges serviceedges.Edges,
 ) factoryruntime.ProviderInvocationExecutorFactory {
@@ -1019,20 +1020,54 @@ func provideProviderInvocationExecutorFactory(
 		if conductorInvocation == nil || allocator == nil {
 			return nil, nil
 		}
-		runner := sessionCommandRunner
-		if runner == nil {
-			resolved, err := provideWorkersProviderCommandRunner(edges)
-			if err != nil {
-				return nil, fmt.Errorf("resolve provider runner for provider-invocation Worker: %w", err)
-			}
-			runner = resolved
+		selectedProviders, runner, err := providerInvocationProviderEdge(
+			registryRebinder,
+			edges,
+			sessionCommandRunner,
+		)
+		if err != nil {
+			return nil, err
 		}
-		invocation, err := conductorInvocation(nil, runner, allocator, publisher)
+		invocation, err := conductorInvocation(selectedProviders, runner, allocator, publisher)
 		if err != nil {
 			return nil, fmt.Errorf("construct provider-invocation Worker boundary: %w", err)
 		}
 		return workerswire.NewProviderInvocationExecutor(invocation), nil
 	}
+}
+
+// providerInvocationProviderEdge resolves the provider edge one session's
+// provider-invocation Workers run through.
+//
+// A session that composed its own provider command runner -- which is what
+// --with-mock-workers does -- must also have the Providers registry rebuilt
+// around that runner. Providers resolves a runner when a provider is
+// registered, so handing only the conductor the session's runner reaches the
+// adapter but never the process the provider actually starts, and every mocked
+// Worker would run for real. A session that composed none takes the process
+// edge and the registry the application already built.
+func providerInvocationProviderEdge(
+	registryRebinder workerswire.ProviderRegistryRebinder,
+	edges serviceedges.Edges,
+	sessionCommandRunner workers.CommandRunner,
+) (providers.Service, workers.CommandRunner, error) {
+	if sessionCommandRunner == nil {
+		runner, err := provideWorkersProviderCommandRunner(edges)
+		if err != nil {
+			return nil, nil, fmt.Errorf("resolve provider runner for provider-invocation Worker: %w", err)
+		}
+		return nil, runner, nil
+	}
+	if registryRebinder == nil {
+		return nil, nil, fmt.Errorf(
+			"provider-invocation Worker requires a provider registry rebinder for a session-composed runner",
+		)
+	}
+	_, rebound, err := registryRebinder(sessionCommandRunner)
+	if err != nil {
+		return nil, nil, fmt.Errorf("rebind provider registry for provider-invocation Worker: %w", err)
+	}
+	return rebound, sessionCommandRunner, nil
 }
 
 func provideWorkersLocalRuntimeHooksFactory() factorysessionwire.WorkersLocalRuntimeHooksFactory {

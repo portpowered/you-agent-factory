@@ -40,12 +40,18 @@ func (f *factoryImpl) InvokeWorker(
 	}
 
 	dispatchID := strings.TrimSpace(req.DispatchID)
-	execution := providerInvocationExecutionRequest(f, req, dispatchID)
-
 	sessionID, err := f.reserveWorkerSession(ctx, dispatchID)
 	if err != nil {
 		return factory.InvokeWorkerResult{}, err
 	}
+	// Workers is given the Worker Session identity, not the caller's. Workers
+	// treats a dispatch ID as single-use for its pool's whole life -- an
+	// accepted dispatch is never removed from the pool's record map -- so a
+	// re-run under the caller's original ID is refused before it reaches an
+	// executor. The Worker Session identity is the one already minted uniquely
+	// per attempt, and for every Worker but a resumed one it is that same
+	// caller ID.
+	execution := providerInvocationExecutionRequest(f, req, sessionID)
 	f.eventHistory.RecordDispatchWorkerSessionAssociation(
 		f.currentTick(),
 		dispatchID,
@@ -74,7 +80,7 @@ func (f *factoryImpl) InvokeWorker(
 	if err != nil {
 		return factory.InvokeWorkerResult{}, err
 	}
-	return invokeWorkerResultFrom(dispatchID, result), nil
+	return invokeWorkerResultFrom(dispatchID, sessionID, result), nil
 }
 
 // reserveWorkerSession claims the Worker Session identity for one dispatch.
@@ -160,10 +166,15 @@ func providerInvocationExecutionRequest(
 	if f.cfg != nil && f.cfg.workflowContext != nil {
 		requestID = strings.TrimSpace(f.cfg.workflowContext.SessionID)
 	}
+	// The worker name is the Workers-facing worker type: it is what a
+	// mock-worker configuration matches on at the subprocess boundary, and an
+	// unnamed Worker must leave it empty so an unmatched dispatch stays
+	// unmatched rather than colliding with some other worker's name.
+	workerName := strings.TrimSpace(req.WorkerName)
 	dispatch := work.WorkDispatch{
 		DispatchID:      dispatchID,
 		WorkstationName: workers.ProviderInvocationRoute,
-		WorkerType:      strings.TrimSpace(req.Label),
+		WorkerType:      workerName,
 		Execution: work.ExecutionMetadata{
 			RequestID: requestID,
 		},
@@ -172,7 +183,8 @@ func providerInvocationExecutionRequest(
 		WorkstationName: workers.ProviderInvocationRoute,
 		Execution: workers.WorkstationExecutionRequest{
 			Dispatch:         dispatch,
-			WorkerType:       strings.TrimSpace(req.Label),
+			WorkerType:       workerName,
+			SkipPermissions:  req.SkipPermissions,
 			RunnerID:         strings.TrimSpace(req.RunnerID),
 			ExecutorProvider: strings.TrimSpace(req.ExecutorProvider),
 			FactorySessionID: requestID,
@@ -193,6 +205,7 @@ func providerInvocationExecutionRequest(
 // can carry command lines and credentials.
 func invokeWorkerResultFrom(
 	dispatchID string,
+	sessionID string,
 	result workersessions.InvokeSessionResult,
 ) factory.InvokeWorkerResult {
 	outcome := factory.InvokeWorkerOutcomeFailed
@@ -205,7 +218,7 @@ func invokeWorkerResultFrom(
 
 	invoked := factory.InvokeWorkerResult{
 		DispatchID:      dispatchID,
-		WorkerSessionID: dispatchID,
+		WorkerSessionID: sessionID,
 		Outcome:         outcome,
 		Output:          result.Dispatch.Result.Output,
 		Attempts:        result.Attempts,

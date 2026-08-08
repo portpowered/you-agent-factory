@@ -14,11 +14,16 @@ import (
 type InvokeWorkerRequest struct {
 	// DispatchID is the orchestrator-minted identity for this Worker. It
 	// becomes the Worker Session identity too, exactly as a Petri dispatch's
-	// does, so one dispatch is never two Workers.
+	// does, so one dispatch is never two Workers. The one exception is a
+	// re-run: an orchestrator resuming an interrupted Worker submits the same
+	// DispatchID, and that second Worker is given its own derived identity.
 	DispatchID string
-	// Label is the human-facing name for this Worker, used only for
-	// observation.
-	Label string
+	// WorkerName is the authored worker this Worker runs as, when its caller
+	// named one. It is what a mock-worker configuration matches a named preset
+	// on, so a Worker that arrives without it can never be the mock an
+	// operator configured. An unnamed Worker leaves it empty, exactly as an
+	// unmatched dispatch does.
+	WorkerName string
 	// Prompt is the fully resolved user message. Runtime does not render,
 	// template, or augment it.
 	Prompt string
@@ -73,9 +78,10 @@ const (
 
 // InvokeWorkerResult is the detached outcome of one Worker invocation.
 type InvokeWorkerResult struct {
-	// DispatchID and WorkerSessionID are the same value, retained as separate
-	// fields so callers correlating either identity do not have to know they
-	// coincide.
+	// DispatchID is the identity the caller submitted, and WorkerSessionID the
+	// identity the Worker actually ran under. They are the same value for
+	// every Worker but a re-run of an interrupted one, which keeps its
+	// caller-facing identity while running as its own Worker.
 	DispatchID      string
 	WorkerSessionID string
 	Outcome         InvokeWorkerOutcome

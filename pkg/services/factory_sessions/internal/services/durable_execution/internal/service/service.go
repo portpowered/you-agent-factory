@@ -8,6 +8,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // Service keeps the durable execution implementation private while preserving
@@ -91,3 +92,20 @@ func (s *Service) RecordPetriTokenMutations(
 }
 
 var _ durableexecution.Service = (*Service)(nil)
+
+// PublishWorkerProgress forwards one Worker's progress to the underlying
+// JavaScript runtime, which routes it to the durable session that started that
+// Worker. A backend whose children are not Workers does not implement it, and
+// its sessions have no such output to record.
+func (s *Service) PublishWorkerProgress(fragment workers.ProgressFragment) {
+	if s == nil || s.Service == nil {
+		return
+	}
+	observer, ok := s.Service.(interface {
+		PublishWorkerProgress(workers.ProgressFragment)
+	})
+	if !ok {
+		return
+	}
+	observer.PublishWorkerProgress(fragment)
+}

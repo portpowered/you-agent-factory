@@ -324,7 +324,10 @@ func openRuntime(
 			providerInvocationFactory,
 			workersRuntimeExecutorsFactory,
 			workersMockCommandRunnerFactory,
-			runtimeService.InferenceProgressPublisherFactory(logger),
+			fanOutWorkerProgress(
+				runtimeService.InferenceProgressPublisherFactory(logger),
+				durableExecution.Service,
+			),
 			runtimeService.DispatchCompletionObserverFactory(),
 			mutationOwner.RecordPetriTokenMutations,
 			recordingProjections.ReconstructFactoryWorldState,
@@ -493,6 +496,46 @@ func bindRuntimeRecordingLifecycle(
 		return fmt.Errorf("construct runtime scope: bind runtime recording: %w", err)
 	}
 	return nil
+}
+
+// workerProgressObserver is the narrow capability a durable execution service
+// exposes when the Workers its orchestrator starts produce output that session
+// must record.
+type workerProgressObserver interface {
+	PublishWorkerProgress(workers.ProgressFragment)
+}
+
+// fanOutWorkerProgress adds the durable execution service to one runtime's
+// Worker progress publication.
+//
+// A Worker's output reaches its runtime, which routes it to the live session's
+// response stream. A JavaScript workflow child is a Worker of that runtime but
+// belongs to a durable session, whose response-event store is its own; without
+// this the child's output would reach the runtime and stop there, and the
+// dashboard, the SSE feed, and the CLI's NDJSON contract would all show a
+// session that produced nothing. The durable service ignores any dispatch it
+// does not own, so a Petri Worker's progress still goes only where it went
+// before.
+func fanOutWorkerProgress(
+	publishers func(string) workers.ProgressPublisher,
+	execution any,
+) func(string) workers.ProgressPublisher {
+	observer, ok := execution.(workerProgressObserver)
+	if !ok {
+		return publishers
+	}
+	return func(sessionID string) workers.ProgressPublisher {
+		var next workers.ProgressPublisher
+		if publishers != nil {
+			next = publishers(sessionID)
+		}
+		return func(fragment workers.ProgressFragment) {
+			if next != nil {
+				next(fragment)
+			}
+			observer.PublishWorkerProgress(fragment)
+		}
+	}
 }
 
 // workerInvokerBinder is the narrow capability a durable execution service

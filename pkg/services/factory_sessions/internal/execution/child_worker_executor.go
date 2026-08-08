@@ -74,15 +74,23 @@ type childWorkerExecutor struct {
 	invoke      factory.Service
 	records     factory.JavaScriptChildRecordSink
 	childValues factory.JavaScriptChildValues
+	observe     workerDispatchObserver
 	workingDir  string
 	maxAttempts int
 }
+
+// workerDispatchObserver claims one Workers dispatch identity for the session
+// that started it, so the Worker's progress can be routed back to that
+// session's own response-event store. The returned function releases the
+// claim.
+type workerDispatchObserver func(workerDispatchID, sessionID string) func()
 
 func newChildWorkerExecutor(
 	sessionID string,
 	invoke factory.Service,
 	records factory.JavaScriptChildRecordSink,
 	childValues factory.JavaScriptChildValues,
+	observe workerDispatchObserver,
 	maxRetries int,
 	workingDir string,
 ) *childWorkerExecutor {
@@ -97,6 +105,7 @@ func newChildWorkerExecutor(
 		invoke:      invoke,
 		records:     records,
 		childValues: childValues,
+		observe:     observe,
 		workingDir:  strings.TrimSpace(workingDir),
 		maxAttempts: attempts,
 	}
@@ -123,56 +132,31 @@ func (e *childWorkerExecutor) Execute(
 	}
 
 	dispatchID, childIndex := e.childDispatchIdentity(req)
-	// The runner is resolved here, by the caller, because that is the whole
-	// premise of the provider-invocation route: no workstation definition exists
-	// downstream to resolve it from. A child names its runner through
-	// executorProvider, or falls back to the command it asked for and then to
-	// its model provider, which is how a workflow written as
-	// agent.run({modelProvider: "codex"}) selects one.
-	runnerID, err := workers.RunnerIdentityForWorker(req.ExecutorProvider, req.ModelProvider)
+	base, err := e.openChild(req, dispatchID, childIndex)
 	if err != nil {
 		return factory.JavaScriptChildExecutionResult{}, err
 	}
-	if runnerID == "" {
-		runnerID = firstNonBlank(req.Command, req.ModelProvider)
-	}
-	artifactID := e.records.NextChildArtifactID()
-	artifactRef := factory.FormatArtifactURI(e.sessionID, artifactID)
 
-	base := factory.JavaScriptChildDispatchRecord{
-		RunnerID:        runnerID,
-		DispatchID:      dispatchID,
-		ChildIndex:      childIndex,
-		Attempt:         1,
-		Label:           req.Label,
-		PromptDigest:    e.childValues.TextDigest(req.Prompt),
-		Preset:          req.Preset,
-		ModelProvider:   req.ModelProvider,
-		Model:           req.Model,
-		ReasoningEffort: req.ReasoningEffort,
-		SkipPermissions: req.SkipPermissions,
-		Command:         req.Command,
-		Sandbox:         req.Sandbox,
-		SchemaDigest:    e.childValues.SchemaDigest(req.OutputSchema),
-		ExecutionMode:   factory.JavaScriptChildExecutionModeLive,
-		ArtifactRef:     artifactRef,
-	}
-
-	// These are the durable session's own dispatch-projection records, not
-	// Worker Session lifecycle records: they are what the session's progress
-	// counts and dispatch inspection read, and nothing else writes them.
-	e.records.AppendChildDispatch(base, factory.JavaScriptChildDispatchStatusQueued)
-	e.records.AppendChildDispatch(base, factory.JavaScriptChildDispatchStatusRunning)
+	// The Workers dispatch identity is scoped to this session. Every durable
+	// session of one Factory shares that Factory's Workers pool, and a pool
+	// treats a dispatch ID as single-use, so two sessions both running their
+	// own "dispatch-1" would collide: the second would be refused outright, and
+	// its Worker's progress could not be told apart from the first's. The
+	// session's own records keep the unqualified identity, which is the one its
+	// customer sees.
+	workerDispatchID := e.workerDispatchIdentity(dispatchID)
+	releaseWorker := e.observeWorker(workerDispatchID)
+	defer releaseWorker()
 
 	invoked, err := e.invoke.InvokeWorker(ctx, factory.InvokeWorkerRequest{
-		DispatchID:       dispatchID,
-		Label:            req.Label,
+		DispatchID:       workerDispatchID,
+		WorkerName:       req.Preset,
 		Prompt:           req.Prompt,
 		Model:            req.Model,
 		ModelProvider:    req.ModelProvider,
 		ReasoningEffort:  req.ReasoningEffort,
 		ExecutorProvider: req.ExecutorProvider,
-		RunnerID:         runnerID,
+		RunnerID:         base.RunnerID,
 		OutputSchema:     childOutputSchemaJSON(req.OutputSchema),
 		WorkingDirectory: e.workingDir,
 		SkipPermissions:  req.SkipPermissions,
@@ -203,10 +187,59 @@ func (e *childWorkerExecutor) Execute(
 		Status:             factory.JavaScriptChildDispatchStatusCompleted,
 		ExecutionMode:      factory.JavaScriptChildExecutionModeLive,
 		Output:             output,
-		ArtifactRef:        artifactRef,
+		ArtifactRef:        base.ArtifactRef,
 		ProviderSessionRef: invoked.ProviderSessionRef,
 		Request:            req,
 	}, nil
+}
+
+// openChild resolves everything the session records about one child before its
+// Worker runs, and commits the queued and running dispatch facts.
+//
+// The runner is resolved here, by the caller, because that is the whole premise
+// of the provider-invocation route: no workstation definition exists downstream
+// to resolve it from. A child names its runner through executorProvider, or
+// falls back to the command it asked for and then to its model provider, which
+// is how a workflow written as agent.run({modelProvider: "codex"}) selects one.
+func (e *childWorkerExecutor) openChild(
+	req factory.JavaScriptChildExecutionRequest,
+	dispatchID string,
+	childIndex int,
+) (factory.JavaScriptChildDispatchRecord, error) {
+	runnerID, err := workers.RunnerIdentityForWorker(req.ExecutorProvider, req.ModelProvider)
+	if err != nil {
+		return factory.JavaScriptChildDispatchRecord{}, err
+	}
+	if runnerID == "" {
+		runnerID = firstNonBlank(req.Command, req.ModelProvider)
+	}
+	artifactID := e.records.NextChildArtifactID()
+
+	base := factory.JavaScriptChildDispatchRecord{
+		RunnerID:        runnerID,
+		DispatchID:      dispatchID,
+		ChildIndex:      childIndex,
+		Attempt:         1,
+		Label:           req.Label,
+		PromptDigest:    e.childValues.TextDigest(req.Prompt),
+		Preset:          req.Preset,
+		ModelProvider:   req.ModelProvider,
+		Model:           req.Model,
+		ReasoningEffort: req.ReasoningEffort,
+		SkipPermissions: req.SkipPermissions,
+		Command:         req.Command,
+		Sandbox:         req.Sandbox,
+		SchemaDigest:    e.childValues.SchemaDigest(req.OutputSchema),
+		ExecutionMode:   factory.JavaScriptChildExecutionModeLive,
+		ArtifactRef:     factory.FormatArtifactURI(e.sessionID, artifactID),
+	}
+
+	// These are the durable session's own dispatch-projection records, not
+	// Worker Session lifecycle records: they are what the session's progress
+	// counts and dispatch inspection read, and nothing else writes them.
+	e.records.AppendChildDispatch(base, factory.JavaScriptChildDispatchStatusQueued)
+	e.records.AppendChildDispatch(base, factory.JavaScriptChildDispatchStatusRunning)
+	return base, nil
 }
 
 func (e *childWorkerExecutor) failedChild(
@@ -223,6 +256,12 @@ func (e *childWorkerExecutor) failedChild(
 	providerSessionRef := invoked.ProviderSessionRef
 	failed := base
 	failed.Status = factory.JavaScriptChildDispatchStatusFailed
+	// The provider travels with its session reference or not at all. A
+	// reference on its own is rejected when the session's runtime facts are
+	// mapped to canonical events, which fails the whole execution rather than
+	// the child -- so a failed Worker would surface as an internal error
+	// instead of a failed session.
+	failed.Provider = invoked.Provider
 	failed.ProviderSessionRef = providerSessionRef
 	failed.Retryable = invoked.Retryable
 	if reason := strings.TrimSpace(invoked.FailureReason); reason != "" {
@@ -245,6 +284,24 @@ func (e *childWorkerExecutor) failedChild(
 		ProviderSessionRef: providerSessionRef,
 		Request:            req,
 	}, fmt.Errorf("%s", diagnostic)
+}
+
+// workerDispatchIdentity qualifies one child's dispatch identity with the
+// session that owns it. A session with no identity of its own -- which only a
+// test composes -- keeps the child identity unchanged.
+func (e *childWorkerExecutor) workerDispatchIdentity(dispatchID string) string {
+	sessionID := strings.TrimSpace(e.sessionID)
+	if sessionID == "" {
+		return dispatchID
+	}
+	return sessionID + "/" + dispatchID
+}
+
+func (e *childWorkerExecutor) observeWorker(workerDispatchID string) func() {
+	if e.observe == nil {
+		return func() {}
+	}
+	return e.observe(workerDispatchID, e.sessionID)
 }
 
 func (e *childWorkerExecutor) childDispatchIdentity(

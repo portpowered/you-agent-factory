@@ -113,6 +113,7 @@ func providerInvocationRequest(
 		ModelProvider:      request.ModelProvider,
 		ReasoningEffort:    request.ReasoningEffort,
 		ResumeSession:      cloneResumeSession(request.ResumeSession),
+		SkipPermissions:    request.SkipPermissions,
 	}
 }
 
