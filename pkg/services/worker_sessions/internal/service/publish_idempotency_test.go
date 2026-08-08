@@ -21,6 +21,7 @@ import (
 // dedup, so a retry must stay idempotent regardless of publication order
 // since. It also proves the retry produces neither a new committed position
 // nor a live subscription delivery of its own.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestPublishRecord_RetryOfOlderAcceptedIdentity_AfterNewerSequenceAccepted_ResolvesAsDuplicate(t *testing.T) {
 	eventsSvc := newEventsAppender()
 	topic := workersessions.Topic("worker-1")

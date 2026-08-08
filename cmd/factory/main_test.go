@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 )
 
 func TestMainDelegatesExitCodeToRootProcess(t *testing.T) {
@@ -47,6 +49,11 @@ func TestProcessExitCodePreservesDeclaredLifecycleContract(t *testing.T) {
 	}{
 		{name: "success", want: exitSuccess},
 		{name: "failure", err: errors.New("failed"), want: exitFailure},
+		{
+			name: "incomplete finite drain",
+			err:  &factoryruntime.IncompleteDrainError{NonTerminalWorkCount: 1},
+			want: exitFailure,
+		},
 		{
 			name:       "run cancellation normalized by lifecycle",
 			contextErr: context.Canceled,

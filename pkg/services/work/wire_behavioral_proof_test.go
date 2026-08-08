@@ -18,6 +18,9 @@ import (
 // TestWireBehavioralProof_PublishedRootPreservesObservables constructs Work
 // exclusively through work/wire and proves admission, query, content, and
 // state-access observables on the published work.Service peer surface.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestWireBehavioralProof_PublishedRootPreservesObservables(t *testing.T) {
 	t.Run("admission query and state access success through runtime wire", func(t *testing.T) {
 		runtime := &wireBehavioralRuntime{

@@ -561,6 +561,12 @@ type FactoryWorkstationConfig struct {
 	WorkingDirectory      string                      `json:"working_directory,omitempty" yaml:"workingDirectory,omitempty"`
 	Worktree              string                      `json:"worktree,omitempty" yaml:"worktree,omitempty"`
 	Env                   map[string]string           `json:"env,omitempty" yaml:"env,omitempty"`
+	// PromptSourcePath is runtime-only identity for a file-backed authored
+	// workstation prompt. PromptSourceIsTemplate distinguishes a referenced
+	// prompt file from the workstation AGENTS.md body. Both values are fixed
+	// when the authored layout is loaded and are never persisted.
+	PromptSourcePath       string `json:"-" yaml:"-"`
+	PromptSourceIsTemplate bool   `json:"-" yaml:"-"`
 }
 
 // ClassificationRouteConfig declares one authored classifier label and the

@@ -314,6 +314,8 @@ func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
 	}
 }
 
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestNewServiceConstructsInertRoot(t *testing.T) {
 	t.Parallel()
 

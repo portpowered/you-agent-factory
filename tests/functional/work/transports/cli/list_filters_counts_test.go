@@ -1,0 +1,319 @@
+package cli_test
+
+import (
+	"encoding/json"
+	"os"
+	"strings"
+	"testing"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+)
+
+const workListFiltersCountsRequestID = "work-list-filters-counts-batch"
+
+type workListFiltersCountsWork struct {
+	Name         string
+	WorkID       string
+	WorkTypeName string
+}
+
+type workListFiltersCountsBatch struct {
+	RequestID string                         `json:"requestId"`
+	Type      string                         `json:"type"`
+	Works     []workListFiltersCountsRequest `json:"works"`
+}
+
+type workListFiltersCountsRequest struct {
+	Name         string            `json:"name"`
+	WorkID       string            `json:"workId"`
+	WorkTypeName string            `json:"workTypeName"`
+	Payload      map[string]string `json:"payload"`
+}
+
+type workListFiltersCountsSubmitResponse struct {
+	WorkCount int `json:"workCount"`
+	Works     []struct {
+		WorkID string `json:"workId"`
+	} `json:"works"`
+}
+
+type workListFiltersCountsMoveResponse struct {
+	WorkID   string `json:"workId"`
+	NewState string `json:"newState"`
+}
+
+// TestWorkListFiltersAndCounts proves the production monitoring path through
+// root.BuildProcess and Process.Execute. A single session contains every
+// customer-visible state category, then the public CLI proves composition,
+// failed-state terminality, zero matches, and count stability across pages.
+func TestWorkListFiltersAndCounts(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, workListFiltersCountsFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+	})
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	home := t.TempDir()
+
+	works := []workListFiltersCountsWork{
+		{Name: "task-initial", WorkID: "work-task-initial", WorkTypeName: "task"},
+		{Name: "task-processing", WorkID: "work-task-processing", WorkTypeName: "task"},
+		{Name: "task-terminal", WorkID: "work-task-terminal", WorkTypeName: "task"},
+		{Name: "task-failed", WorkID: "work-task-failed", WorkTypeName: "task"},
+		{Name: "other-initial", WorkID: "work-other-initial", WorkTypeName: "other"},
+		{Name: "other-terminal", WorkID: "work-other-terminal", WorkTypeName: "other"},
+	}
+	submitWorkListFiltersCountsBatch(t, process, home, server.URL(), works)
+
+	for _, move := range []struct {
+		workID string
+		state  string
+	}{
+		{workID: "work-task-processing", state: "processing"},
+		{workID: "work-task-terminal", state: "complete"},
+		{workID: "work-task-failed", state: "failed"},
+		{workID: "work-other-terminal", state: "complete"},
+	} {
+		moveWorkListFiltersCountsWork(t, process, home, server.URL(), move.workID, move.state)
+	}
+
+	filtered := listWorkListFiltersCounts(t, process, home, server.URL(),
+		"--non-terminal", "--work-type", "task", "--counts")
+	assertWorkListFiltersCountsSummary(t, filtered, 2, 2)
+	assertWorkListFiltersCountsIDs(t, filtered, map[string]bool{
+		"work-task-initial":    true,
+		"work-task-processing": true,
+	})
+	for _, item := range filtered.Results {
+		if item.State == nil ||
+			(item.State.Type != factoryapi.WorkStateTypeINITIAL &&
+				item.State.Type != factoryapi.WorkStateTypePROCESSING) {
+			t.Fatalf("non-terminal result has terminal state: %#v", item)
+		}
+	}
+
+	page := listWorkListFiltersCounts(t, process, home, server.URL(),
+		"--non-terminal", "--work-type", "task", "--counts", "--max-results", "1")
+	assertWorkListFiltersCountsSummary(t, page, 2, 1)
+	if page.PaginationContext == nil || page.PaginationContext.NextToken == nil ||
+		strings.TrimSpace(*page.PaginationContext.NextToken) == "" {
+		t.Fatalf("first filtered page missing next token: %#v", page.PaginationContext)
+	}
+
+	secondPage := listWorkListFiltersCounts(t, process, home, server.URL(),
+		"--non-terminal", "--work-type", "task", "--counts", "--max-results", "1",
+		"--next-token", *page.PaginationContext.NextToken)
+	assertWorkListFiltersCountsSummary(t, secondPage, 2, 1)
+	assertDisjointWorkListFiltersCountsPages(t, page, secondPage)
+
+	terminal := listWorkListFiltersCounts(t, process, home, server.URL(),
+		"--terminal", "--work-type", "task", "--counts")
+	assertWorkListFiltersCountsSummary(t, terminal, 2, 2)
+	assertWorkListFiltersCountsIDs(t, terminal, map[string]bool{
+		"work-task-terminal": true,
+		"work-task-failed":   true,
+	})
+
+	byState := listWorkListFiltersCounts(t, process, home, server.URL(),
+		"--state", "init", "--work-type", "task", "--counts")
+	assertWorkListFiltersCountsSummary(t, byState, 1, 1)
+	assertWorkListFiltersCountsIDs(t, byState, map[string]bool{"work-task-initial": true})
+
+	zero := listWorkListFiltersCounts(t, process, home, server.URL(),
+		"--non-terminal", "--work-type", "other", "--state", "complete", "--counts")
+	assertWorkListFiltersCountsSummary(t, zero, 0, 0)
+
+	human := executeWorkListFiltersCountsCLI(t, process, home,
+		"--server", server.URL(), "work", "list", "--non-terminal", "--work-type", "task", "--counts")
+	if !strings.Contains(human, "Total: 2") {
+		t.Fatalf("human filtered list missing stable total:\n%s", human)
+	}
+	zeroHuman := executeWorkListFiltersCountsCLI(t, process, home,
+		"--server", server.URL(), "work", "list", "--non-terminal", "--work-type", "other", "--state", "complete", "--counts")
+	if !strings.Contains(zeroHuman, "Total: 0") || !strings.Contains(zeroHuman, "No work found.") {
+		t.Fatalf("human zero-match list missing total or empty treatment:\n%s", zeroHuman)
+	}
+}
+
+func workListFiltersCountsFactoryConfig() map[string]any {
+	states := []map[string]string{
+		{"name": "init", "type": "INITIAL"},
+		{"name": "processing", "type": "PROCESSING"},
+		{"name": "complete", "type": "TERMINAL"},
+		{"name": "failed", "type": "FAILED"},
+	}
+	return map[string]any{
+		"name": "work-list-filters-counts",
+		"workTypes": []map[string]any{
+			{"name": "task", "states": states},
+			{"name": "other", "states": states},
+		},
+		"workers": []map[string]string{{"name": "unused-worker"}},
+	}
+}
+
+func submitWorkListFiltersCountsBatch(
+	t *testing.T,
+	process support.Process,
+	home string,
+	serverURL string,
+	works []workListFiltersCountsWork,
+) {
+	t.Helper()
+	requests := make([]workListFiltersCountsRequest, 0, len(works))
+	for _, item := range works {
+		requests = append(requests, workListFiltersCountsRequest{
+			Name:         item.Name,
+			WorkID:       item.WorkID,
+			WorkTypeName: item.WorkTypeName,
+			Payload:      map[string]string{"scenario": item.Name},
+		})
+	}
+	payload, err := json.Marshal(workListFiltersCountsBatch{
+		RequestID: workListFiltersCountsRequestID,
+		Type:      "FACTORY_REQUEST_BATCH",
+		Works:     requests,
+	})
+	if err != nil {
+		t.Fatalf("marshal Work list scenario batch: %v", err)
+	}
+	output := executeWorkListFiltersCountsCLI(t, process, home, "--server", serverURL,
+		"--json", "submit", "batch", string(payload))
+	var submitted workListFiltersCountsSubmitResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &submitted); err != nil {
+		t.Fatalf("decode Work list scenario submission: %v\noutput:\n%s", err, output)
+	}
+	if submitted.WorkCount != len(works) || len(submitted.Works) != len(works) {
+		t.Fatalf("submission acknowledgment = %#v, want %d works", submitted, len(works))
+	}
+	for index, item := range works {
+		if submitted.Works[index].WorkID != item.WorkID {
+			t.Fatalf("submitted work[%d] id = %q, want %q", index, submitted.Works[index].WorkID, item.WorkID)
+		}
+	}
+}
+
+func moveWorkListFiltersCountsWork(
+	t *testing.T,
+	process support.Process,
+	home string,
+	serverURL string,
+	workID string,
+	state string,
+) {
+	t.Helper()
+	output := executeWorkListFiltersCountsCLI(t, process, home, "--server", serverURL,
+		"--json", "work", "move", workID, state)
+	var moved workListFiltersCountsMoveResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &moved); err != nil {
+		t.Fatalf("decode move %s to %s: %v\noutput:\n%s", workID, state, err, output)
+	}
+	if moved.WorkID != workID || moved.NewState != state {
+		t.Fatalf("move response = %#v, want work %q at %q", moved, workID, state)
+	}
+}
+
+func listWorkListFiltersCounts(
+	t *testing.T,
+	process support.Process,
+	home string,
+	serverURL string,
+	flags ...string,
+) factoryapi.ListWorkResponse {
+	t.Helper()
+	args := append([]string{"--server", serverURL, "--json", "work", "list"}, flags...)
+	output := executeWorkListFiltersCountsCLI(t, process, home, args...)
+	var listed factoryapi.ListWorkResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &listed); err != nil {
+		t.Fatalf("decode Work list response: %v\noutput:\n%s", err, output)
+	}
+	return listed
+}
+
+func executeWorkListFiltersCountsCLI(
+	t *testing.T,
+	process support.Process,
+	home string,
+	args ...string,
+) string {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), append([]string{"you"}, args...))
+	inputs.Input.Env = workListFiltersCountsEnvironment(home)
+	inputs.Input.WorkingDirectory = home
+	stdinIsTTY := true
+	inputs.Input.StdinIsTTY = &stdinIsTTY
+	inputs.Input.Stdin = strings.NewReader("")
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(%s) error = %v\nstdout:\n%s\nstderr:\n%s",
+			strings.Join(args, " "), err, inputs.Stdout(), inputs.Stderr())
+	}
+	return inputs.Stdout()
+}
+
+func workListFiltersCountsEnvironment(home string) []string {
+	result := make([]string, 0, len(os.Environ())+2)
+	for _, entry := range os.Environ() {
+		name := strings.SplitN(entry, "=", 2)[0]
+		if strings.EqualFold(name, "HOME") || strings.EqualFold(name, "USERPROFILE") {
+			continue
+		}
+		result = append(result, entry)
+	}
+	return append(result, "HOME="+home, "USERPROFILE="+home)
+}
+
+func assertWorkListFiltersCountsSummary(
+	t *testing.T,
+	response factoryapi.ListWorkResponse,
+	wantTotal int,
+	wantPageSize int,
+) {
+	t.Helper()
+	if response.Counts == nil || response.Counts.Total != wantTotal {
+		t.Fatalf("Work list counts = %#v, want total %d", response.Counts, wantTotal)
+	}
+	if len(response.Results) != wantPageSize {
+		t.Fatalf("Work list page size = %d, want %d: %#v", len(response.Results), wantPageSize, response.Results)
+	}
+}
+
+func assertWorkListFiltersCountsIDs(
+	t *testing.T,
+	response factoryapi.ListWorkResponse,
+	want map[string]bool,
+) {
+	t.Helper()
+	seen := make(map[string]bool, len(response.Results))
+	for _, item := range response.Results {
+		workID := support.StringPointerValue(item.WorkId)
+		if !want[workID] {
+			t.Fatalf("unexpected Work %q in filtered response: %#v", workID, response.Results)
+		}
+		seen[workID] = true
+	}
+	if len(seen) != len(want) {
+		t.Fatalf("filtered Work IDs = %#v, want all of %#v", seen, want)
+	}
+}
+
+func assertDisjointWorkListFiltersCountsPages(
+	t *testing.T,
+	first factoryapi.ListWorkResponse,
+	second factoryapi.ListWorkResponse,
+) {
+	t.Helper()
+	firstIDs := make(map[string]bool, len(first.Results))
+	for _, item := range first.Results {
+		firstIDs[support.StringPointerValue(item.WorkId)] = true
+	}
+	for _, item := range second.Results {
+		workID := support.StringPointerValue(item.WorkId)
+		if firstIDs[workID] {
+			t.Fatalf("filtered pagination repeated Work %q: first=%#v second=%#v", workID, first.Results, second.Results)
+		}
+	}
+}

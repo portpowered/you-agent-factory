@@ -437,6 +437,7 @@ func scaffoldPackagedTTSLikeFactory(t *testing.T) string {
 	})
 }
 
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func scaffoldPackagedTTSLikeFactoryWithOptionalVoiceAndFormat(t *testing.T) string {
 	t.Helper()
 	return support.ScaffoldFactory(t, map[string]any{

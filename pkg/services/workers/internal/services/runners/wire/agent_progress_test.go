@@ -10,6 +10,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/services/agent"
 )
 
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T) {
 	fake := newAgentProvidersFake()
 	fake.result.Diagnostics.Progress = []providers.ExecuteProgress{

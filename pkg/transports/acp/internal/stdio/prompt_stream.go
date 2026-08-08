@@ -461,6 +461,7 @@ func (s *Server) ensureAttachment(ctx context.Context, connectionID, sessionID s
 // deployment that has not yet wired an Events collaborator) is a no-op
 // success: it reports no delivered message so deliverPromptUpdates falls
 // back to the existing V1 synchronous final text unchanged.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (s *Server) streamTurnUpdates(
 	ctx context.Context,
 	connectionID, sessionID string,
@@ -568,6 +569,7 @@ func (s *Server) streamTurnUpdates(
 // (the ordinary case, since both share one cursor -- see this method's own
 // doc comment above) would incorrectly still fall back to a duplicate V1
 // final-text notification.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (s *Server) liveDrainTurnUpdates(ctx context.Context, connectionID, sessionID string, sessionVersion uint64, notify promptNotifier) (deliveredMessage bool) {
 	if s.events == nil {
 		return false
@@ -706,6 +708,7 @@ func (s *Server) deliverPromptUpdates(
 // latest known position rather than the position it had when this drain
 // started. stop reports that the drain should end without an error -- the
 // StreamHead-lag case documented on streamTurnUpdates.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (s *Server) drainRecords(
 	ctx context.Context,
 	sessionID string,

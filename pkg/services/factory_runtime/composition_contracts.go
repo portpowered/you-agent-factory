@@ -2,6 +2,7 @@ package factory
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -35,6 +36,10 @@ var (
 	// scope outside the published orchestration-neutral observation vocabulary.
 	ErrInvalidObservationScope = errors.New("factory runtime invalid observation scope")
 
+	// ErrIncompleteDrain identifies a finite runtime that became quiescent with
+	// admitted customer Work still in a non-terminal state.
+	ErrIncompleteDrain = errors.New("factory session drained with non-terminal work")
+
 	// ErrDuplicateDispatchIntent indicates a plan/publish request conflicted with
 	// an existing dispatch intent that is not eligible for idempotent re-delivery.
 	ErrDuplicateDispatchIntent = dispatchplanning.ErrDuplicateDispatchIntent
@@ -47,6 +52,23 @@ var (
 	// outside the published result-boundary vocabulary peers may submit.
 	ErrInvalidDispatchResultBoundary = dispatchplanning.ErrInvalidDispatchResultBoundary
 )
+
+// IncompleteDrainError preserves the authoritative non-terminal Work count
+// while allowing callers to branch on ErrIncompleteDrain.
+type IncompleteDrainError struct {
+	NonTerminalWorkCount int
+}
+
+func (e *IncompleteDrainError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return fmt.Sprintf("factory session drained with %d non-terminal work items; run is incomplete", e.NonTerminalWorkCount)
+}
+
+func (e *IncompleteDrainError) Unwrap() error {
+	return ErrIncompleteDrain
+}
 
 type WorkersRuntimeExecutorsFactory func(
 	workers.RuntimeService,

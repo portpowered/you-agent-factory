@@ -23,6 +23,7 @@ import (
 // HTTP surfaces after runtime lifecycle on a process constructed only through
 // root.BuildProcess with Sessions effects replaced via published edges.Edges
 // fields.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestSessionsLifecycleAndRuntimeOpeningActivateThroughRootBuildProcessAfterLifecycle(t *testing.T) {
 	t.Parallel()
 

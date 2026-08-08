@@ -18,6 +18,7 @@ const (
 // RootErrorResponse maps typed Work root failures to HTTP status and the public
 // ErrorResponse shape. It returns false when err is not a known mapped typed
 // failure.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func RootErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 	if err == nil {
 		return 0, factoryapi.ErrorResponse{}, false

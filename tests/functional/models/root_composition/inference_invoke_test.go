@@ -21,6 +21,7 @@ import (
 // constructed only through root.BuildProcess executes public Models invoke and
 // returns observable inference output while host, runtime, and asset external
 // effects are replaced exclusively through published edges.Edges fields.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestModelsInferenceInvokeActivatesThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 

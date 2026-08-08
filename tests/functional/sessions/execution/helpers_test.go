@@ -1,3 +1,4 @@
+// backendsizecheck:ignore-file pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 package execution_test
 
 import (

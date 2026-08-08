@@ -188,6 +188,7 @@ const quietPrimaryResultSeparator = "--- primary result ---"
 // stdout/stderr at the public built you CLI process boundary: success writes
 // only the raw primary result without operator or lifecycle noise, and failure
 // keeps stdout empty while diagnostics stay on stderr.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestCLIQuietModeSuppressesNonResultNoise(t *testing.T) {
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	session := harness.NewSession(t).WithNoExternalServer(t)

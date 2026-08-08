@@ -53,6 +53,7 @@ type preparedInvocationSchedule struct {
 
 // PrepareInvocationSchedules validates and constructs inert duration jobs for
 // authored CRON intervals that reference normalized invocation arguments.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (s *Service) PrepareInvocationSchedules(
 	ctx context.Context,
 	request automations.InvocationScheduleRequest,

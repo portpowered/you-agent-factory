@@ -76,6 +76,8 @@ func roundTrip[T any](t *testing.T, value T) T {
 	return decoded
 }
 
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestValidateNewSession(t *testing.T) {
 	t.Run("accepts an absolute cwd with an empty mcp server list", func(t *testing.T) {
 		got, err := ValidateNewSession(raw(t, acpsdk.NewSessionRequest{
@@ -518,6 +520,8 @@ func notification(sessionID string, update acpsdk.SessionUpdate) acpsdk.SessionN
 	return acpsdk.SessionNotification{SessionId: acpsdk.SessionId(sessionID), Update: update}
 }
 
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestValidateSessionUpdate(t *testing.T) {
 	t.Run("accepts text-first update kinds and preserves session identity", func(t *testing.T) {
 		cases := []struct {

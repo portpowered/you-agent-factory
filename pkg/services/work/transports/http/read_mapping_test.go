@@ -19,6 +19,9 @@ func TestListOptionsFromAPI_MapsQueryParameters(t *testing.T) {
 	name := factoryapi.WorkListName("story")
 	workTypeName := factoryapi.WorkListWorkTypeName("prd")
 	traceID := factoryapi.WorkListTraceId("trace-1")
+	terminal := factoryapi.WorkListTerminal(true)
+	nonTerminal := factoryapi.WorkListNonTerminal(false)
+	counts := factoryapi.WorkListCounts(true)
 
 	options, err := ListOptionsFromAPI(factoryapi.ListWorkBySessionIdParams{
 		StateName:    &stateName,
@@ -26,9 +29,12 @@ func TestListOptionsFromAPI_MapsQueryParameters(t *testing.T) {
 		Name:         &name,
 		WorkTypeName: &workTypeName,
 		TraceId:      &traceID,
+		Terminal:     &terminal,
+		NonTerminal:  &nonTerminal,
 		SortBy:       &sortBy,
 		MaxResults:   &maxResults,
 		NextToken:    &nextToken,
+		Counts:       &counts,
 	})
 	if err != nil {
 		t.Fatalf("ListOptionsFromAPI: %v", err)
@@ -38,9 +44,12 @@ func TestListOptionsFromAPI_MapsQueryParameters(t *testing.T) {
 		options.Name != "story" ||
 		options.WorkTypeName != "prd" ||
 		options.TraceID != "trace-1" ||
+		!options.Terminal ||
+		options.NonTerminal ||
 		options.SortBy != work.SortByStateType ||
 		options.MaxResults != 25 ||
-		options.NextToken != "Y3Vyc29y" {
+		options.NextToken != "Y3Vyc29y" ||
+		!options.Counts {
 		t.Fatalf("options = %#v, want mapped list query", options)
 	}
 }
@@ -53,6 +62,19 @@ func TestListOptionsFromAPI_RejectsInvalidStateTypeBeforeRoot(t *testing.T) {
 		StateType: &invalid,
 	}); err == nil {
 		t.Fatal("ListOptionsFromAPI must reject unsupported state.type before root invocation")
+	}
+}
+
+func TestListOptionsFromAPI_MapsNonTerminalFlag(t *testing.T) {
+	t.Parallel()
+
+	nonTerminal := factoryapi.WorkListNonTerminal(true)
+	options, err := ListOptionsFromAPI(factoryapi.ListWorkBySessionIdParams{NonTerminal: &nonTerminal})
+	if err != nil {
+		t.Fatalf("ListOptionsFromAPI: %v", err)
+	}
+	if !options.NonTerminal || options.Terminal {
+		t.Fatalf("options = %#v, want non-terminal-only selection", options)
 	}
 }
 
@@ -77,6 +99,18 @@ func TestListWorkResponseToAPI_EncodesDetachedReadModels(t *testing.T) {
 		response.PaginationContext.NextToken == nil ||
 		*response.PaginationContext.NextToken != "next-page" {
 		t.Fatalf("response = %#v, want encoded list page", response)
+	}
+}
+
+func TestListWorkResponseToAPI_EncodesRequestedCountIncludingZero(t *testing.T) {
+	t.Parallel()
+
+	response := ListWorkResponseToAPI(work.ListResult{
+		MaxResults: 50,
+		Counts:     &work.ListCountSummary{Total: 0},
+	})
+	if response.Counts == nil || response.Counts.Total != 0 {
+		t.Fatalf("counts = %#v, want explicit zero total", response.Counts)
 	}
 }
 

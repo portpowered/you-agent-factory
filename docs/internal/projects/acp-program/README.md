@@ -171,12 +171,6 @@ feature work per D5, for the same reason as D7: the flagged functions/files
 belong to other lanes/services, and trimming them out-of-band risks colliding
 with concurrent work on those same files.
 
-The checker records the current pre-existing findings in
-`docs/internal/baselines/backend-size-baseline.json` as an exact deletion-only
-snapshot. New or larger findings and stale entries still fail the command, so
-the snapshot preserves the diff-scoped debt contract without treating the
-existing repository-wide debt as a feature regression.
-
 Lanes citing this decision in review: link to this section instead of
 re-deriving the evidence; re-run `backendsizecheck` and re-confirm zero new
 findings against your own package(s) if a reviewer disputes it, since

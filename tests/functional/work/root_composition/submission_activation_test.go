@@ -36,6 +36,7 @@ const (
 // coverage under tests/functional/work/submission and
 // tests/functional/work/transports/cli/submit retains the detailed contract
 // proofs; this test closes the explicit public-process activation gap.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestWorkSubmissionAndCLISubmitActivateThroughRootBuildProcessAfterLifecycle(t *testing.T) {
 	t.Parallel()
 

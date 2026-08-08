@@ -916,12 +916,17 @@ func TestResolvedWorkAdaptersReportEveryMissingStableInput(t *testing.T) {
 	stringInput := func(id string) resolvedTestValue {
 		return resolvedTestValue{id: id, source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("value")}
 	}
+	boolInput := func(id string) resolvedTestValue {
+		return resolvedTestValue{id: id, source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(false)}
+	}
 	local := []resolvedTestValue{
 		stringInput("you.work.list.flag.state-name"), stringInput("you.work.list.flag.state-type"),
 		stringInput("you.work.list.flag.name"), stringInput("you.work.list.flag.work-type-name"),
 		stringInput("you.work.list.flag.trace-id"), stringInput("you.work.list.flag.sort-by"),
+		boolInput("you.work.list.flag.terminal"), boolInput("you.work.list.flag.non-terminal"),
 		{id: "you.work.list.flag.max-results", source: resolvedinput.SourceCLIFlag, value: resolvedinput.IntValue(1)},
-		stringInput("you.work.list.flag.next-token"), stringInput("you.work.list.flag.session"),
+		stringInput("you.work.list.flag.next-token"), boolInput("you.work.list.flag.counts"),
+		stringInput("you.work.list.flag.session"),
 		stringInput("you.work.show.arg.0"), stringInput("you.work.show.flag.session"),
 		stringInput("you.work.move.arg.0"), stringInput("you.work.move.arg.1"),
 		stringInput("you.work.move.flag.session"), stringInput("you.work.move.flag.request-id"),
@@ -943,7 +948,7 @@ func TestResolvedWorkAdaptersReportEveryMissingStableInput(t *testing.T) {
 		missing []string
 	}{
 		{"list", commandregistry.ResolvedListRunE(commandregistry.ResolvedListBinding{ListWork: noList}),
-			[]string{"you.work.list.flag.state-name", "you.work.list.flag.state-type", "you.work.list.flag.name", "you.work.list.flag.work-type-name", "you.work.list.flag.trace-id", "you.work.list.flag.sort-by", "you.work.list.flag.max-results", "you.work.list.flag.next-token", "you.work.list.flag.session"}},
+			[]string{"you.work.list.flag.state-name", "you.work.list.flag.state-type", "you.work.list.flag.name", "you.work.list.flag.work-type-name", "you.work.list.flag.trace-id", "you.work.list.flag.sort-by", "you.work.list.flag.terminal", "you.work.list.flag.non-terminal", "you.work.list.flag.max-results", "you.work.list.flag.next-token", "you.work.list.flag.counts", "you.work.list.flag.session"}},
 		{"show", commandregistry.ResolvedShowRunE(commandregistry.ResolvedShowBinding{ShowWork: noShow}),
 			[]string{"you.work.show.arg.0", "you.work.show.flag.session"}},
 		{"move", commandregistry.ResolvedMoveRunE(commandregistry.ResolvedMoveBinding{MoveWork: noMove}),

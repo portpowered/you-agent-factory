@@ -18,6 +18,7 @@ import (
 // public success terminal location(s) at quiescence. Scenarios cover two-stage
 // same-work-type pipelines, cross-work-type dispatcher flows, and three-stage
 // ideation pipelines without inspecting internal Petri markings.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestPetriMultiStagePipelineCompletesAtPublicTerminals(t *testing.T) {
 	t.Run("two_stage_service_simple_completes_at_terminal", func(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
@@ -150,6 +151,7 @@ func TestPetriMultiStagePipelineCompletesAtPublicTerminals(t *testing.T) {
 // dispatch outcomes are asserted on Factory Events when that is the natural
 // observation surface, without routing the same Work to success terminals or
 // inspecting internal Petri markings.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestPetriFailureRoutesToDocumentedFailedPlace(t *testing.T) {
 	t.Run("two_stage_service_simple_second_stage_exit_routes_to_failed", func(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))

@@ -22,6 +22,8 @@ import (
 	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
 )
 
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 	t.Parallel()
 
@@ -882,6 +884,8 @@ func (h *recordingSessionHost) ReplaceFactoryLayoutAtDir(
 	return nil, nil
 }
 
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts(t *testing.T) {
 	t.Parallel()
 

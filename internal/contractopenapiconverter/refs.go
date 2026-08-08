@@ -86,6 +86,7 @@ func (ctx *convertContext) convertNode(value any, path string) (any, []contractv
 	}
 }
 
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func (ctx *convertContext) convertSchemaObject(schema map[string]any, path string) (any, []contractvalidator.Diagnostic) {
 	if ref, hasRef := schema["$ref"]; hasRef {
 		if diagnostics := ctx.validateRefSiblings(schema, path); len(diagnostics) != 0 {

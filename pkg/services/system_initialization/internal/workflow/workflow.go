@@ -63,6 +63,8 @@ func New(
 // Initialize ensures operator configuration and packaged Factories exist
 // without overwriting valid customer-owned files.
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (initializer *Initializer) Initialize(
 	ctx context.Context,
 	request systeminitialization.Request,

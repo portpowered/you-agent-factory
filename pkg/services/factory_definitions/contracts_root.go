@@ -50,6 +50,8 @@ type ModelProvider = contracts.ModelProvider
 type RuntimeConfigLookup = contracts.RuntimeConfigLookup
 type RuntimeDefinitionLookup = contracts.RuntimeDefinitionLookup
 type RuntimeFactoryConfigLookup = contracts.RuntimeFactoryConfigLookup
+type PromptSource = contracts.PromptSource
+type RuntimePromptSourceLookup = contracts.RuntimePromptSourceLookup
 type WorkstationKind = contracts.WorkstationKind
 type WorkstationLimits = contracts.WorkstationLimits
 type Workstation = contracts.Workstation
@@ -287,6 +289,8 @@ type (
 	RequiredToolConfig                               = contracts.RequiredToolConfig
 	RuntimeMode                                      = contracts.RuntimeMode
 	RuntimeStatus                                    = contracts.RuntimeStatus
+	TerminationClassification                        = contracts.TerminationClassification
+	TerminationResult                                = contracts.TerminationResult
 	RuntimeWorkstationLookup                         = contracts.RuntimeWorkstationLookup
 	SubmissionHookContext[TSnapshot any]             = contracts.SubmissionHookContext[TSnapshot]
 	SubmissionHookResult                             = contracts.SubmissionHookResult
@@ -358,6 +362,8 @@ const (
 	RuntimeStatusActive                           = contracts.RuntimeStatusActive
 	RuntimeStatusFinished                         = contracts.RuntimeStatusFinished
 	RuntimeStatusIdle                             = contracts.RuntimeStatusIdle
+	TerminationClassificationComplete             = contracts.TerminationClassificationComplete
+	TerminationClassificationIncomplete           = contracts.TerminationClassificationIncomplete
 	SystemTimeExpiryTransitionID                  = contracts.SystemTimeExpiryTransitionID
 	SystemTimePendingState                        = contracts.SystemTimePendingState
 	SystemTimeWorkTypeID                          = contracts.SystemTimeWorkTypeID

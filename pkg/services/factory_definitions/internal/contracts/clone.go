@@ -19,6 +19,17 @@ func CloneFactoryConfig(cfg *FactoryConfig) (*FactoryConfig, error) {
 	if err := json.Unmarshal(data, &cloned); err != nil {
 		return nil, fmt.Errorf("decode Factory definition clone: %w", err)
 	}
+	for index := range cloned.Workers {
+		if index < len(cfg.Workers) {
+			cloned.Workers[index].PromptSourcePath = cfg.Workers[index].PromptSourcePath
+		}
+	}
+	for index := range cloned.Workstations {
+		if index < len(cfg.Workstations) {
+			cloned.Workstations[index].PromptSourcePath = cfg.Workstations[index].PromptSourcePath
+			cloned.Workstations[index].PromptSourceIsTemplate = cfg.Workstations[index].PromptSourceIsTemplate
+		}
+	}
 	return &cloned, nil
 }
 
@@ -44,7 +55,10 @@ func cloneValue[T any](value T) T {
 }
 
 func CloneWorkstationConfig(def FactoryWorkstationConfig) FactoryWorkstationConfig {
-	return cloneValue(def)
+	cloned := cloneValue(def)
+	cloned.PromptSourcePath = def.PromptSourcePath
+	cloned.PromptSourceIsTemplate = def.PromptSourceIsTemplate
+	return cloned
 }
 
 func CloneModelOperations(operations []ModelOperation) []ModelOperation {

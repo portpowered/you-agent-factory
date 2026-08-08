@@ -131,6 +131,9 @@ func applyWorkerRuntimeDefinition(
 	if runtimeDefinition.Body != "" {
 		worker.Body = runtimeDefinition.Body
 	}
+	if runtimeDefinition.PromptSourcePath != "" {
+		worker.PromptSourcePath = runtimeDefinition.PromptSourcePath
+	}
 	if len(runtimeDefinition.Resources) > 0 {
 		worker.Resources = append(
 			[]factorydefinitions.ResourceConfig(nil),
@@ -256,6 +259,10 @@ func applyWorkstationRuntimeTemplate(
 	}
 	if runtimeDefinition.PromptTemplate != "" {
 		workstation.PromptTemplate = runtimeDefinition.PromptTemplate
+	}
+	if runtimeDefinition.PromptSourcePath != "" {
+		workstation.PromptSourcePath = runtimeDefinition.PromptSourcePath
+		workstation.PromptSourceIsTemplate = runtimeDefinition.PromptSourceIsTemplate
 	}
 	if runtimeDefinition.WorkingDirectory != "" {
 		workstation.WorkingDirectory = runtimeDefinition.WorkingDirectory

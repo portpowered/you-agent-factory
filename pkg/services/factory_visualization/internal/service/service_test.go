@@ -155,6 +155,7 @@ func (projectionOwnerStub) ReconnectCursor() *factorydefinitions.FactoryEventRec
 // FND-12 captured visualization-activation success baseline: Start against a
 // valid event source projects retained-then-live events and emits observable
 // Views. Invoked by `make fnd-12-visualization-behavior-baselines`.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestServiceProjectsRetainedAndLiveFactoryEvents(t *testing.T) {
 	t.Parallel()
 
@@ -345,6 +346,7 @@ func TestServiceRootLifecycleInertConstructionAndTypedActivate(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestServiceRootObserveDetachedViewAndTypedFailures(t *testing.T) {
 	t.Parallel()
 

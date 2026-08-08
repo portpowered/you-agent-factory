@@ -128,3 +128,40 @@ func TestNormalizeListAcceptsEveryStateType(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeListPreservesTerminalityAndCountOptions(t *testing.T) {
+	t.Parallel()
+
+	options := stateaccessquery.ListOptions{
+		StateName:    "review",
+		WorkTypeName: "story",
+		NonTerminal:  true,
+		Counts:       true,
+	}
+	query, err := stateaccessquery.NormalizeList(options)
+	if err != nil {
+		t.Fatalf("NormalizeList() error = %v", err)
+	}
+	if got := query.Options(); got != options {
+		t.Fatalf("Options() = %#v, want %#v", got, options)
+	}
+	if got, want := query.FilterSummary(), "state.name,workTypeName,nonTerminal"; got != want {
+		t.Fatalf("FilterSummary() = %q, want %q", got, want)
+	}
+}
+
+func TestNormalizeListRejectsContradictoryTerminality(t *testing.T) {
+	t.Parallel()
+
+	_, err := stateaccessquery.NormalizeList(stateaccessquery.ListOptions{
+		Terminal:    true,
+		NonTerminal: true,
+	})
+	if err == nil || err.Error() != "terminal and nonTerminal cannot both be selected" {
+		t.Fatalf("NormalizeList() error = %v, want contradictory terminality validation", err)
+	}
+	var validation *stateaccessquery.ValidationError
+	if !errors.As(err, &validation) || validation.Field != stateaccessquery.FilterTerminal {
+		t.Fatalf("NormalizeList() error = %#v, want field %q validation", err, stateaccessquery.FilterTerminal)
+	}
+}

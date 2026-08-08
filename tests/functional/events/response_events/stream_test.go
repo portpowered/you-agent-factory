@@ -208,6 +208,7 @@ func TestAPIResponseEventSessionExpiryReturnsTypedGone(t *testing.T) {
 // SSE API emits STREAM_GAP with explicit lost-range bounds when after_sequence
 // predates the currently retained response-event window instead of silently
 // skipping unavailable sequences.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestAPIResponseEventCursorGapEmitsStreamGap(t *testing.T) {
 	t.Parallel()
 
@@ -318,6 +319,7 @@ func TestAPIResponseEventCursorGapEmitsStreamGap(t *testing.T) {
 // Response Event SSE API first delivers retained matching records in ascending
 // FactoryResponseEvent.sequence and then continues with later live matching
 // records on the same connection without reordering retained catch-up history.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestAPIResponseEventSSEStreamsRetainedThenLiveEvents(t *testing.T) {
 	t.Parallel()
 

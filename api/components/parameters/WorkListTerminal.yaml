@@ -1,0 +1,8 @@
+name: terminal
+in: query
+required: false
+description: >-
+  Optional terminality filter. When true, selects Work in canonical TERMINAL
+  or FAILED states. It composes with every other supplied list filter.
+schema:
+  type: boolean

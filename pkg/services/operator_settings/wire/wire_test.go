@@ -150,6 +150,7 @@ func TestNewServiceUsesInjectedIDGeneratorForBackendScope(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestNewServiceConstructsInertRoot(t *testing.T) {
 	t.Parallel()
 

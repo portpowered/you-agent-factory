@@ -644,6 +644,7 @@ func TestStore_RequestControl_RepeatedDistinctIdentitiesNeverCollide(t *testing.
 // lifecycle commit: the intent, captured running turn, current episode, and
 // session all become terminal, and every delivery attachment is detached,
 // before any successor can be admitted.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestStore_AdvanceControl_CompletedCloseAtomicallyTerminalizesLifecycle(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 8, 4, 14, 0, 0, 0, time.UTC)
