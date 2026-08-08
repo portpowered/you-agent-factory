@@ -1327,3 +1327,63 @@ func TestConcurrentStart_DistinctSessions_TerminalizeIndependentlyWithoutCrossAs
 		}
 	}
 }
+
+// TestInvokeSession_RetryableFailureUsesOneSessionAcrossAttempts proves the
+// retry loop keeps the Worker Session identity and publication window stable
+// while minting a distinct attempt dispatch ID. The first timeout is a
+// retryable Workers result; the second attempt completes authoritatively.
+func TestInvokeSession_RetryableFailureUsesOneSessionAcrossAttempts(t *testing.T) {
+	var calls int
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			calls++
+			if calls == 1 {
+				return workers.WorkstationDispatchResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Result: workers.WorkResult{
+						DispatchID: req.Execution.Dispatch.DispatchID,
+						Outcome:    workers.OutcomeFailed,
+						FailureMetadata: &workers.WorkFailureMetadata{
+							Family: workers.WorkFailureFamilyRetryable,
+							Type:   workers.WorkFailureTypeTimeout,
+						},
+					},
+				}, nil
+			}
+			return workers.WorkstationDispatchResult{
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+				},
+			}, nil
+		},
+	}
+	registry := newRegistryWithExecution(execution)
+	request := validStartRequest("worker-retry", "dispatch-1")
+	request.Retry = workersessions.RetryPolicy{MaxAttempts: 2}
+
+	result, err := registry.InvokeSession(context.Background(), request)
+	if err != nil {
+		t.Fatalf("InvokeSession() error = %v, want nil", err)
+	}
+	if result.Session.State != workersessions.StateCompleted {
+		t.Fatalf("InvokeSession() state = %q, want COMPLETED", result.Session.State)
+	}
+	if result.Attempts != 2 {
+		t.Fatalf("InvokeSession() attempts = %d, want 2", result.Attempts)
+	}
+	requests := execution.requests()
+	if len(requests) != 2 {
+		t.Fatalf("Workers received %d dispatches, want 2", len(requests))
+	}
+	if got := requests[0].Execution.Dispatch.DispatchID; got != "dispatch-1" {
+		t.Fatalf("first attempt dispatch ID = %q, want dispatch-1", got)
+	}
+	if got := requests[1].Execution.Dispatch.DispatchID; got != "dispatch-1/attempt/2" {
+		t.Fatalf("retry attempt dispatch ID = %q, want dispatch-1/attempt/2", got)
+	}
+	if result.Session.ID != request.ID {
+		t.Fatalf("retry session ID = %q, want %q", result.Session.ID, request.ID)
+	}
+}
