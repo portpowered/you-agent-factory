@@ -9,9 +9,11 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	agy "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestAgyRootParsesRecordedStreamJSONResultsAndUsage(t *testing.T) {
@@ -215,6 +217,54 @@ func TestAgyRootPreservesRecordedZeroUsageValues(t *testing.T) {
 		if got := result.Diagnostics.Metadata[key]; got != "0" {
 			t.Fatalf("metadata[%q] = %q, want explicit zero", key, got)
 		}
+	}
+}
+
+func TestAgyCommandEffectRequiresStructuredOutputAfterExitZero(t *testing.T) {
+	t.Parallel()
+
+	trace, err := os.ReadFile(filepath.Join(
+		testutil.MustRepoRoot(t),
+		"docs",
+		"temp",
+		"agy-traces",
+		"agy-trace-simple-text.stream.jsonl",
+	))
+	if err != nil {
+		t.Fatalf("read recorded trace: %v", err)
+	}
+	tests := []struct {
+		name       string
+		stdout     []byte
+		wantResult bool
+	}{
+		{name: "recorded stream", stdout: trace, wantResult: true},
+		{name: "plain exit zero", stdout: []byte("SUCCESS but no stream result"), wantResult: false},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: test.stdout})
+			effect := agy.NewCommandEffect(workers.AdaptCommandRunner(runner))
+			result, err := newAgyRoot(t, effect).Execute(t.Context(), providers.ExecuteRequest{
+				Provider:  providers.IDAntigravity,
+				AttemptID: "agy-command-parse-" + strings.ReplaceAll(test.name, " ", "-"),
+				Model:     "gemini-3.6-flash-low",
+			})
+			if test.wantResult {
+				if err != nil || result.Content != "TRACE_OK" {
+					t.Fatalf("Execute() = (%#v, %v), want recorded TRACE_OK", result, err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("Execute() error = nil, want strict stream parse failure")
+			}
+			if result.Content != "" {
+				t.Fatalf("result content = %q, want empty on strict parse failure", result.Content)
+			}
+		})
 	}
 }
 
