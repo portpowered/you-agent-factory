@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -113,6 +114,66 @@ func TestRunReportsFileFunctionAndComplexityViolationsWithClearFields(t *testing
 	}
 	if got := err.Error(); got != "[agent-factory:pkg-maint] found 3 maintainability violation(s)" {
 		t.Fatalf("run() error = %q, want violation count", got)
+	}
+}
+
+func TestRunUsesDeletionOnlyBaselineAndRejectsNewOrRegressedFindings(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoFile(t, repoRoot, "pkg/service/legacy.go", strings.Join([]string{
+		"package service",
+		"",
+		"func Legacy() int {",
+		"\tif true {",
+		"\t\treturn 1",
+		"\t}",
+		"\treturn 0",
+		"}",
+	}, "\n"))
+	writePkgMaintBaseline(t, repoRoot, pkgMaintBaselineEntry{
+		Rule: "cyclomatic-complexity", Target: "pkg/service/legacy.go#Legacy", Actual: 2, Limit: 1,
+	})
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	if err := run(config{root: repoRoot, fileLineLimit: 100, functionLineLimit: 100, cyclomaticLimit: 1}, stdout, stderr); err != nil {
+		t.Fatalf("run() with recorded finding error = %v, stderr = %q", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "1 deletion-only baseline entries remain") {
+		t.Fatalf("run() stdout = %q, want baseline count", stdout.String())
+	}
+
+	writeGoFile(t, repoRoot, "pkg/service/new.go", strings.Join([]string{
+		"package service",
+		"",
+		"func New(value int) int {",
+		"\tif value > 0 {",
+		"\t\treturn 1",
+		"\t}",
+		"\treturn 0",
+		"}",
+	}, "\n"))
+	stderr.Reset()
+	if err := run(config{root: repoRoot, fileLineLimit: 100, functionLineLimit: 100, cyclomaticLimit: 1}, stdout, stderr); err == nil || !strings.Contains(err.Error(), "found 1 maintainability violation(s)") {
+		t.Fatalf("run() new finding error = %v, stderr = %q", err, stderr.String())
+	}
+
+	writeGoFile(t, repoRoot, "pkg/service/legacy.go", strings.Join([]string{
+		"package service",
+		"",
+		"func Legacy() int {",
+		"\tif true {",
+		"\t\tif true {",
+		"\t\t\treturn 1",
+		"\t\t}",
+		"\t}",
+		"\treturn 0",
+		"}",
+	}, "\n"))
+	stderr.Reset()
+	if err := run(config{root: repoRoot, fileLineLimit: 100, functionLineLimit: 100, cyclomaticLimit: 1}, stdout, stderr); err == nil || !strings.Contains(err.Error(), "regression(s)") {
+		t.Fatalf("run() regressed finding error = %v, stderr = %q", err, stderr.String())
 	}
 }
 
@@ -403,5 +464,23 @@ func writeExemptionBaseline(t *testing.T, repoRoot string, entries ...exemptionb
 	}
 	if err := os.WriteFile(baselinePath, data, 0o644); err != nil {
 		t.Fatalf("write exemption baseline: %v", err)
+	}
+}
+
+func writePkgMaintBaseline(t *testing.T, repoRoot string, entries ...pkgMaintBaselineEntry) {
+	t.Helper()
+	slices.SortFunc(entries, func(left, right pkgMaintBaselineEntry) int {
+		return strings.Compare(pkgMaintBaselineKey(left.Rule, left.Target), pkgMaintBaselineKey(right.Rule, right.Target))
+	})
+	data, err := json.Marshal(pkgMaintBaseline{Version: pkgMaintBaselineVersion, Stage: pkgMaintBaselineStage, Entries: entries})
+	if err != nil {
+		t.Fatalf("marshal pkg-maint baseline: %v", err)
+	}
+	baselinePath := filepath.Join(repoRoot, filepath.FromSlash(pkgMaintBaselinePath))
+	if err := os.MkdirAll(filepath.Dir(baselinePath), 0o755); err != nil {
+		t.Fatalf("create pkg-maint baseline directory: %v", err)
+	}
+	if err := os.WriteFile(baselinePath, data, 0o644); err != nil {
+		t.Fatalf("write pkg-maint baseline: %v", err)
 	}
 }

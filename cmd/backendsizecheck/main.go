@@ -79,23 +79,44 @@ func run(cfg config, stdout io.Writer, stderr io.Writer) error {
 		return fmt.Errorf("[agent-factory:backend-size] found %d exemption budget violation(s)", len(budgetDifferences))
 	}
 
+	repoRoot, err := filepath.Abs(cfg.root)
+	if err != nil {
+		return fmt.Errorf("resolve repo root: %w", err)
+	}
+	baseline, err := loadBackendSizeBaseline(repoRoot)
+	if err != nil {
+		return err
+	}
 	violations, err := scanRepo(cfg.root, cfg.fileLineLimit, cfg.funcLineLimit)
 	if err != nil {
 		return err
 	}
-	if len(violations) == 0 {
-		fmt.Fprintf(stdout, "[agent-factory:backend-size] all owned Go backend files are within file limit %d and function limit %d\n", cfg.fileLineLimit, cfg.funcLineLimit)
+	comparison := compareBackendSizeBaseline(violations, baseline)
+	for _, finding := range comparison.New {
+		writeViolation(stderr, "new size violation", finding)
+	}
+	for _, finding := range comparison.Regressed {
+		writeViolation(stderr, "backend-size regression", finding)
+	}
+	for _, entry := range comparison.Stale {
+		fmt.Fprintf(stderr, "[agent-factory:backend-size] stale baseline: %s %s; remove this entry from %s\n", entry.Rule, entry.Target, backendSizeBaselinePath)
+	}
+	if len(comparison.New) == 0 && len(comparison.Regressed) == 0 && len(comparison.Stale) == 0 {
+		fmt.Fprintf(stdout, "[agent-factory:backend-size] all owned Go backend files are within file limit %d and function limit %d (%d deletion-only baseline entries remain)\n", cfg.fileLineLimit, cfg.funcLineLimit, len(baseline.Entries))
 		return nil
 	}
-
-	for _, finding := range violations {
-		if finding.function == "" {
-			fmt.Fprintf(stderr, "%s | file %s has %d lines (limit %d)\n", finding.packagePath, finding.filePath, finding.actual, finding.limit)
-			continue
-		}
-		fmt.Fprintf(stderr, "%s | function %s in %s has %d lines (limit %d)\n", finding.packagePath, finding.function, finding.filePath, finding.actual, finding.limit)
+	if len(comparison.Regressed) == 0 && len(comparison.Stale) == 0 {
+		return fmt.Errorf("[agent-factory:backend-size] found %d size violation(s)", len(comparison.New))
 	}
-	return fmt.Errorf("[agent-factory:backend-size] found %d size violation(s)", len(violations))
+	return fmt.Errorf("[agent-factory:backend-size] found %d new size violation(s), %d regression(s), and %d stale baseline entries", len(comparison.New), len(comparison.Regressed), len(comparison.Stale))
+}
+
+func writeViolation(stderr io.Writer, label string, finding violation) {
+	if finding.function == "" {
+		fmt.Fprintf(stderr, "[agent-factory:backend-size] %s: %s | file %s has %d lines (limit %d)\n", label, finding.packagePath, finding.filePath, finding.actual, finding.limit)
+		return
+	}
+	fmt.Fprintf(stderr, "[agent-factory:backend-size] %s: %s | function %s in %s has %d lines (limit %d)\n", label, finding.packagePath, finding.function, finding.filePath, finding.actual, finding.limit)
 }
 
 func scanRepo(root string, fileLineLimit int, funcLineLimit int) ([]violation, error) {
