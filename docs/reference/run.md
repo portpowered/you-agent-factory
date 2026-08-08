@@ -212,6 +212,19 @@ one-shot run completes, or a continuous run is cancelled, the command cancels
 and joins the listener and runtime before returning. Listener startup failure
 cancels a waiting run and produces no browser effect.
 
+For a finite server-enabled run, an empty queue or a queue whose Work is all
+terminal succeeds. If the runtime drains while `N` customer Work items remain
+non-terminal, the run is unsuccessful, but it still joins the owned listener
+and runtime before returning. Human CLI stderr contains exactly:
+
+```text
+Error: factory session drained with N non-terminal work items; run is incomplete
+```
+
+The failed run does not print a success or completion claim to stdout. Add
+`--continuously` when an idle server-enabled run should remain live for later
+Work instead of applying finite drain classification.
+
 Add `--with-site` to imply the same API server, serve the embedded dashboard,
 and open it exactly once after listener and runtime readiness:
 

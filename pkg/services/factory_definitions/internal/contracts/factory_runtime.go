@@ -40,6 +40,25 @@ const (
 	RuntimeModeService RuntimeMode = "SERVICE"
 )
 
+// TerminationClassification describes the outcome of a finite runtime drain.
+// It is carried with the tick result so the engine can preserve the final
+// submission-drain race protection before converting an incomplete drain into
+// a runtime error.
+type TerminationClassification string
+
+const (
+	TerminationClassificationComplete   TerminationClassification = "COMPLETE"
+	TerminationClassificationIncomplete TerminationClassification = "INCOMPLETE"
+)
+
+// TerminationResult is the authoritative finite-runtime termination decision.
+// NonTerminalWorkCount is the number of distinct customer Work items that were
+// still non-terminal when the runtime became quiescent.
+type TerminationResult struct {
+	Classification       TerminationClassification `json:"classification"`
+	NonTerminalWorkCount int                       `json:"non_terminal_work_count,omitempty"`
+}
+
 // InvocationTerminalStatus is the Factory Session-owned terminal outcome for
 // one invocation. Transport adapters map it to their generated contract.
 type InvocationTerminalStatus = string
@@ -259,6 +278,7 @@ type TickResult struct {
 	ActiveThrottlePauses   []ActiveThrottlePause           `json:"active_throttle_pauses,omitempty"`
 	ThrottlePausesObserved bool                            `json:"throttle_pauses_observed,omitempty"`
 	ShouldTerminate        bool                            `json:"should_terminate,omitempty"`
+	Termination            *TerminationResult              `json:"termination,omitempty"`
 }
 
 // DispatchRecord pairs a WorkDispatch with the marking mutations consumed to fire it.

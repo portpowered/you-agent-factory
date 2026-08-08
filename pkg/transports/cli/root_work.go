@@ -439,6 +439,9 @@ func executeRunCommand(cmd *cobra.Command, args []string, globals *cliGlobalOpti
 		if len(promptArgs) > 0 {
 			err = runcli.MapInvocationFailure(err)
 		}
+		if runcli.WriteIncompleteDrainError(cmd.ErrOrStderr(), err) {
+			return err
+		}
 		if runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json) {
 			return err
 		}
