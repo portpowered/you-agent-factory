@@ -41,6 +41,27 @@ func TestExecuteFailureFromConductorPreservesDiagnosticsWithoutSession(t *testin
 	}
 }
 
+func TestConductorDestinationResultPreservesResponseMetadata(t *testing.T) {
+	completion := inference.SuccessfulCompletion(inference.NewResponse(inference.ResponseInput{
+		Content: "provider response",
+		Metadata: map[string]string{
+			"input_tokens": "89393",
+			"total_tokens": "94015",
+		},
+	}))
+	destination := &conductorDestination{completion: &completion}
+
+	result, err := destination.result(providers.IDAntigravity)
+	if err != nil {
+		t.Fatalf("result() error = %v", err)
+	}
+	if result.Diagnostics == nil ||
+		result.Diagnostics.Metadata["input_tokens"] != "89393" ||
+		result.Diagnostics.Metadata["total_tokens"] != "94015" {
+		t.Fatalf("result diagnostics = %#v, want provider response metadata", result.Diagnostics)
+	}
+}
+
 func TestInvocationRequestFromExecute_ForwardsEnvAndSkipPermissions(t *testing.T) {
 	request := providers.ExecuteRequest{
 		Provider:           providers.IDCursor,

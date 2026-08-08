@@ -81,6 +81,41 @@ func TestSafeWorkDiagnosticsAllowlistAndCloneIsolation(t *testing.T) {
 	}
 }
 
+func TestSafeWorkDiagnosticsPreservesProviderUsageCounters(t *testing.T) {
+	t.Parallel()
+
+	safe := SafeWorkDiagnosticsFromWorkDiagnostics(&WorkDiagnostics{
+		Provider: &ProviderDiagnostic{ResponseMetadata: map[string]string{
+			"input_tokens":            "89393",
+			"output_tokens":           "4622",
+			"thinking_tokens":         "2312",
+			"cache_read_tokens":       "252517",
+			"cache_write_tokens":      "0",
+			"total_tokens":            "94015",
+			"reasoning_tokens":        "0",
+			"reasoning_output_tokens": "0",
+		}},
+	})
+
+	if safe == nil || safe.Provider == nil {
+		t.Fatalf("safe diagnostics = %#v, want provider usage diagnostics", safe)
+	}
+	for key, want := range map[string]string{
+		"input_tokens":            "89393",
+		"output_tokens":           "4622",
+		"thinking_tokens":         "2312",
+		"cache_read_tokens":       "252517",
+		"cache_write_tokens":      "0",
+		"total_tokens":            "94015",
+		"reasoning_tokens":        "0",
+		"reasoning_output_tokens": "0",
+	} {
+		if got := safe.Provider.ResponseMetadata[key]; got != want {
+			t.Fatalf("safe response metadata[%q] = %q, want %q; metadata=%#v", key, got, want, safe.Provider.ResponseMetadata)
+		}
+	}
+}
+
 func TestWorkDiagnosticsFromSafeEventPayloadDecodesCamelCaseWireShape(t *testing.T) {
 	t.Parallel()
 	diagnostics, err := WorkDiagnosticsFromSafeEventPayload(json.RawMessage(`{

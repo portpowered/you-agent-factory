@@ -155,6 +155,11 @@ func (d *conductorDestination) result(providerID providers.ID) (providers.Execut
 			ID:       session.ID(),
 		}
 	}
+	if metadata := response.Metadata(); len(metadata) > 0 {
+		result.Diagnostics = &providers.ExecuteDiagnostics{
+			Metadata: cloneMetadata(metadata),
+		}
+	}
 	return result, nil
 }
 

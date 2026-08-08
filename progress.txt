@@ -1,0 +1,94 @@
+## Codebase Patterns
+- Providers owns provider-native command construction and validation; Workers shapes requests and consumes provider-neutral results.
+- External process effects are injected through `edges.Edges.ProviderCommandRunner` and functional flows are built through `root.BuildProcess`.
+- Provider execution requests are value contracts; new scalar execution facts must be copied at each Worker-to-Provider request construction boundary.
+- Provider-specific command effects can be selected with an explicit Providers wire option while the shared platform runner remains available to existing adapters.
+- Worker-authored native limits are parsed at the workstation boundary into provider-neutral execution metadata so adapters can apply their own defaults without importing worker-definition types.
+- Focused Go tests live beside the owning package, while user-visible cross-service behavior belongs under `tests/functional/<domain>/...`.
+- Provider stream parsers use a bounded line buffer sized for the largest recorded media trace and select only the terminal provider-authored result.
+- Provider-native numeric usage facts are emitted as explicit metadata strings; token-shaped usage keys must be allowlisted in both provider normalization and public safe-diagnostics projections.
+- Structured provider contracts are normalized to JSON content at the Provider boundary; the Worker owns authored-schema validation and task-level verdict semantics.
+- Command effects advertise their native output format in effect metadata so strict print contracts can coexist with legacy PTY compatibility effects.
+
+## [2026-08-08 14:03 -07:00] - wo-b1-antigravity-provider-golden-traces-001
+- What was implemented
+  - Added the Providers-owned shell-free AGY print-mode command effect with `-p`, `--output-format stream-json`, mandatory `--add-dir`, slash-command disabling, model/effort/permission forwarding, and canonical 5-minute or requested media timeout formatting.
+  - Added recorded AGY file-read and video trace dispatch assertions, supported model/effort pre-launch validation, timeout failure coverage, and worker-to-provider timeout propagation for both workstation execution paths.
+  - Wired ordinary `pkg/wire` composition and injected ProviderCommandRunner flows to the AGY command effect while retaining an explicit AgyPTYHost compatibility seam for legacy PTY replay tests.
+- Files changed
+  - `pkg/services/providers/internal/services/execution/internal/adapters/agy/command.go` and `command_test.go`
+  - Providers execution/wire contracts and AGY integration wiring
+  - Worker execution request propagation and focused tests
+  - `pkg/wire/session_runtime_providers.go`
+  - `prd.json`
+- Verification
+  - Focused provider/worker/wire tests, `go vet`, and `go test ./tests/functional/workers/inference/agy -count=1` pass.
+  - `make verify-fast` is blocked before Go checks because the existing UI install lacks `ui/node_modules/bun-types` and the current TypeScript version reports the repository's `baseUrl` deprecation.
+  - `make test` reaches the Go unit lane but is blocked by the unrelated Windows `pkg/platform/runtimeartifact` mode assertion (`0666` vs `0600`) and then a process-file lock.
+- **Learnings for future iterations:**
+  - AGY print mode is a typed command-runner path; its stream output parsing belongs in the next story and must not be inferred from subprocess exit status here.
+  - Existing Agy PTY golden tests opt into `AgyPTYHost`; avoid changing that seam when testing the new ProviderCommandRunner route.
+  - The real trace assets under `docs/temp/agy-traces` are available to package tests through `testutil.MustRepoRoot` and should remain the source for later parser/functional assertions.
+---
+
+## [2026-08-08 14:20 -07:00] - wo-b1-antigravity-provider-golden-traces-002
+- What was implemented
+  - Replaced AGY plain stdout selection for print-mode output with a bounded stream-JSON parser that ignores init/step/tool records and requires the terminal `event: "result"` object.
+  - Mapped recorded response, status, duration seconds, turn count, and complete input/output/thinking/cache-read/total usage into `ExecuteResult`, `ExecuteDiagnostics`, and provider progress facts, preserving explicit zero values and conversation session identity.
+  - Added strict command-effect format metadata, safe actionable failures for empty/malformed/truncated/incomplete/non-terminal output, and a normalized diagnostic allowlist entry for `thinking_tokens` while retaining legacy PTY final-text compatibility.
+- Files changed
+  - `pkg/services/providers/internal/services/execution/internal/adapters/agy/stream.go` and `stream_test.go`
+  - `pkg/services/providers/internal/services/execution/internal/adapters/agy/adapter.go`, `command.go`, and `final.go`
+  - `pkg/services/providers/internal/services/execution/internal/service/result.go`
+  - `prd.json`
+- Verification
+  - `go test ./pkg/services/providers/... ./pkg/services/workers/... -count=1` passes.
+  - `go vet ./pkg/services/providers/internal/services/execution/internal/adapters/agy ./pkg/services/providers/internal/services/execution/internal/service` passes.
+  - `go test ./tests/functional/providers/agy/... -count=1` passes offline; no live AGY invocation was used.
+- **Learnings for future iterations:**
+  - The stream result carries the only authoritative response and its `duration_seconds`/usage facts; intermediate `step_update` text must never become final content.
+  - AGY media traces include records larger than Scanner's default token limit, so parser buffers need an explicit bounded maximum.
+  - The next story can reuse the parsed JSON-envelope path for structured output while keeping task-level verdict validation above provider execution.
+---
+
+## [2026-08-08 14:40 -07:00] - wo-b1-antigravity-provider-golden-traces-003
+- What was implemented
+  - Added schema-aware AGY print dispatch: output-schema requests validate the JSON schema, pass it through `--json-schema`, and select the recorded `--output-format json` envelope behavior.
+  - Extended the AGY parser to retain `structured_output` and echoed `json_schema`, compare the echoed contract semantically, return validated structured JSON as Provider content, and fail safely for missing, malformed, or mismatched contracts.
+  - Added Worker-side JSON Schema validation using the repository's `jsonschema/v6` implementation and refusal-aware task outcomes for explicit `fail`, `reroll`, `reject`, or false-completion verdicts.
+  - Replayed the real structured, clip-QA, and missing-file traces through the Providers root and added observable schema-pass, schema-invalid, and reroll tests.
+- Files changed
+  - `pkg/services/providers/internal/services/execution/internal/adapters/agy/adapter.go`, `command.go`, `command_test.go`, `final.go`, `stream.go`, and `stream_test.go`
+  - `pkg/services/workers/internal/services/workstations/executor/agent.go`, `agent_inference_test.go`, and `helpers.go`
+  - `prd.json`
+- Verification
+  - `go test ./pkg/services/providers/... ./pkg/services/workers/... -count=1` passes.
+  - `go vet ./pkg/services/providers/... ./pkg/services/workers/...` passes.
+  - `go test ./tests/functional/providers/agy ./tests/functional/workers/inference/agy -count=1` passes offline from the recorded fixtures.
+  - No OpenAPI or shared public contract changed, so API/interface generation was not applicable.
+- **Learnings for future iterations:**
+  - AGY's structured JSON envelope and structured stream result share the same contract fields; a single Provider normalizer can support both recorded forms.
+  - JSON Schema validation must compile the authored schema rather than assume a domain-specific result shape; this lets future workstations define their own structured verdicts.
+  - A refusal can be syntactically valid JSON and still be a failed task, so Worker outcome evaluation must inspect explicit verdict/completion fields after schema validation.
+---
+
+## [2026-08-08 15:21 -07:00] - wo-b1-antigravity-provider-golden-traces-004
+- What was implemented
+  - Added root.BuildProcess functional golden tests that inject only `edges.Edges.ProviderCommandRunner`, replay the real clip and ground-truth AGY stream traces and media assets, and assert canonical ANTIGRAVITY selection, exact shell-free argv/workspace, provider session identity, response facts, usage counters, Provider/Worker observations, Factory events, and terminal Work.
+  - Added a real missing-file refusal assertion showing that exit code 0 and AGY `SUCCESS` do not complete Work when the configured stop-token outcome rejects the response; the resulting failed Work retains actionable provider output.
+  - Preserved Provider diagnostics metadata through the AGY integration and Providers root, and allowlisted numeric usage counters in the public-safe Worker diagnostics projection.
+- Files changed
+  - `tests/functional/providers/agy/golden_test.go`
+  - `pkg/services/providers/internal/services/execution/internal/provider/agy/integration.go` and `integration_test.go`
+  - `pkg/services/providers/internal/services/execution/internal/provider/providersroot/conductor_route.go` and `conductor_route_test.go`
+  - `pkg/services/workers/internal/diagnostics/codec.go` and `safe_test.go`
+  - `prd.json`
+- Verification
+  - `go test ./pkg/services/providers/internal/services/execution/internal/provider/agy ./pkg/services/providers/internal/services/execution/internal/provider/providersroot -count=1` passes.
+  - Focused Worker diagnostics/executor/invocation tests, `go vet` for changed packages, `go test ./tests/functional/providers/agy -count=1`, and `go test ./tests/functional/workers/inference/agy -count=1` pass.
+  - No live AGY invocation was used; story 005 owns the remaining repository-wide verification and live-smoke work.
+- **Learnings for future iterations:**
+  - Provider response metadata must be copied through the AGY integration and Providers-root conductor before Worker diagnostics can expose authoritative usage facts.
+  - Numeric provider usage counters are safe public diagnostics, but they require explicit entries in the Worker safe-metadata projection.
+  - AGY structured output is not advertised by the current generated catalog on the canonical root route; keep structured contract assertions at the adapter boundary until the catalog capability is intentionally changed.
+---

@@ -60,6 +60,41 @@ func TestIntegrationRoutesThroughProvidersRoot(t *testing.T) {
 	}
 }
 
+func TestIntegrationPreservesProviderDiagnosticsMetadata(t *testing.T) {
+	t.Parallel()
+
+	fake := &metadataProvidersFake{result: providers.ExecuteResult{
+		Content: "media review",
+		Diagnostics: &providers.ExecuteDiagnostics{
+			Metadata: map[string]string{
+				"input_tokens":    "89393",
+				"thinking_tokens": "2312",
+			},
+		},
+	}}
+	integration := agypkg.NewIntegration(agypkg.IntegrationDependencies{
+		ProvidersService: fake,
+	})
+	request := inference.NewInvocationRequest(inference.InvocationInput{
+		InvocationID: "agy-integration-diagnostics",
+		UserMessage:  "review media",
+		Execution: workers.ProviderInferenceRequest{
+			Dispatch: work.WorkDispatch{DispatchID: "agy-integration-diagnostics"},
+		},
+	})
+	destination := &orderedWriter{}
+	if err := inference.ExecuteInvocation(context.Background(), integration, request, destination); err != nil {
+		t.Fatalf("ExecuteInvocation: %v", err)
+	}
+	if destination.completion == nil || destination.completion.Response() == nil {
+		t.Fatalf("completion = %#v, want success", destination.completion)
+	}
+	metadata := destination.completion.Response().Metadata()
+	if metadata["input_tokens"] != "89393" || metadata["thinking_tokens"] != "2312" {
+		t.Fatalf("completion metadata = %#v, want provider usage facts", metadata)
+	}
+}
+
 func TestIntegrationRoutesRequestedSessionThroughProvidersContinue(t *testing.T) {
 	t.Parallel()
 
@@ -102,6 +137,18 @@ type continuationProvidersFake struct {
 	providers.Service
 	continueRequest providers.ContinueRequest
 	executeCalls    int
+}
+
+type metadataProvidersFake struct {
+	providers.Service
+	result providers.ExecuteResult
+}
+
+func (fake *metadataProvidersFake) Execute(
+	context.Context,
+	providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	return fake.result.Clone(), nil
 }
 
 func (fake *continuationProvidersFake) Execute(

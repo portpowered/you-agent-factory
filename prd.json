@@ -1,0 +1,108 @@
+{
+  "project": "WO-B1 — Complete Antigravity Provider Execution with Real Offline AGY Golden Traces",
+  "branchName": "wo-b1-antigravity-provider-golden-traces",
+  "description": "Complete the existing ANTIGRAVITY provider so workers execute AGY 1.1.11 print mode through the canonical Provider and Worker boundaries, pass media paths directly to AGY, parse authoritative stream-JSON and structured JSON results with complete usage, reject refusal or contract-invalid outcomes, and prove the behavior offline with the real recorded AGY traces.",
+  "context": {
+    "customerAsk": "Enable modelProvider: ANTIGRAVITY workers to run workstation prompts such as watching an MP4 path and writing a review grounded in both video and audio, using existing Provider, Worker, and public contract boundaries and real offline AGY recordings.",
+    "problem": "The repository has partial Antigravity identity, routing, PTY composition, and tests, but still lacks the recorded agy -p command behavior, mandatory --add-dir workspace exposure, media timeout and effort forwarding, authoritative result and usage parsing, structured output, and refusal-aware task outcomes. AGY may exit 0 and report SUCCESS after declining a task, so subprocess success can produce false task success.",
+    "solution": "Finish the single Providers-owned Antigravity adapter: construct direct shell-free agy -p argv for every Worker dispatch, parse final stream-JSON results and JSON envelopes into existing provider-neutral results and diagnostics, use explicit structured response contracts for task success, and replay every real docs/temp/agy-traces asset through ProviderCommandRunner and root.BuildProcess in ordinary offline tests."
+  },
+  "acceptanceCriteria": [
+    "A worker configured with modelProvider: ANTIGRAVITY runs through the existing Provider, Worker, and public contracts and can review a prompted video path with output that reflects recorded visual and audio ground truth.",
+    "Because print-mode cwd is not the workspace, every dispatch uses the shell-free agy -p shape with --add-dir <working-directory> and forwards output format, optional schema, permissions, model, low|medium|high effort, and --print-timeout; timeout defaults to 5m and permits the recorded 8m media case, while model validation permits only gemini-3.6-flash-high, gemini-3.6-flash-medium, gemini-3.6-flash-low, gemini-3.5-flash-high, gemini-3.5-flash-medium, gemini-3.5-flash-low, gemini-3.1-pro-high, gemini-3.1-pro-low, claude-sonnet-4-6, claude-opus-4-6-thinking, and gpt-oss-120b-medium from the recorded inventory.",
+    "Exit code 0 cannot establish task success; the final stream-JSON result is parsed for response, duration_seconds, num_turns, and input/output/thinking/cache_read/total usage, while JSON output supports conversation_id, status, response, structured_output, json_schema, and usage; malformed, incomplete, empty, and refusal outcomes produce non-empty actionable failures.",
+    "Offline golden coverage consumes docs/temp/agy-traces/agy-trace-simple-text.stream.jsonl, agy-trace-file-read.stream.jsonl, agy-trace-video-watch.stream.jsonl, agy-trace-structured.json, clip-fixture.mp4, groundtruth-fixture.mp4, agy-trace-groundtruth-verbose.stream.jsonl, agy-trace-clipqa-schema.stream.jsonl, agy-trace-missing-file.stream.jsonl, and README.md, never live AGY or invented fixtures, and asserts both recorded visual and audio facts including the deterministic ground truth.",
+    "AGY status SUCCESS cannot establish task success: because the recorded missing-file refusal appears only in prose, tasks requiring a verdict complete only from a present, valid, successful structured response contract; rate-limited AGY calls stay out of ordinary tests and at most one separately operator-gated live smoke is skipped by default.",
+    "Provider ownership, Worker consumption, injected effects, logging, and public contracts remain aligned; generated contracts are synchronized with make generate-api or make interfaces-all when applicable, and go test ./tests/functional/providers/agy/... -count=1, make verify-fast, applicable typecheck, lint, and tests pass.",
+    "The implementation and review loop continues until required CI is terminal and passing, every blocking PR conversation item is explicitly addressed, merge conflicts and shared-file changes are resolved, and the PR is actually merged; opened, green, approved, or ready-to-merge is not complete."
+  ],
+  "userStories": [
+    {
+      "id": "wo-b1-antigravity-provider-golden-traces-001",
+      "title": "Dispatch the recorded AGY print command",
+      "description": "As an operator, I want an Antigravity worker dispatch to reproduce the supported AGY headless command contract so its workspace, model policy, and execution limits are reliable.",
+      "acceptanceCriteria": [
+        "A selected Antigravity worker invokes agy -p <prompt> --output-format stream-json as typed argv without shell interpolation and includes --disable-slash-commands.",
+        "Every invocation includes --add-dir <working-directory>, even when the subprocess working directory is the same path, and prompted file paths pass through unchanged for AGY to parse.",
+        "Worker model, canonical AGY effort low|medium|high, effective skip-permissions policy, and print timeout map to --model, --effort, --dangerously-skip-permissions, and --print-timeout; the default is 5m and media work can request at least 8m.",
+        "Supported model validation uses only the model inventory recorded in docs/temp/agy-traces/README.md, and unsupported model or effort values fail before launch with non-empty diagnostics.",
+        "ProviderCommandRunner tests prove exact argv and timeout behavior with the real file-read and video scenarios without live AGY.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Implemented canonical shell-free agy -p print dispatch, workspace attachment, supported model/effort validation, permission and timeout forwarding, ProviderCommandRunner wiring, and offline file-read/video trace argv coverage. Focused provider, worker, wire, vet, and legacy AGY replay checks pass."
+    },
+    {
+      "id": "wo-b1-antigravity-provider-golden-traces-002",
+      "title": "Parse authoritative stream-JSON results and usage",
+      "description": "As a factory operator, I want the final AGY stream result converted into provider output and diagnostics so completed work and its cost are observable and trustworthy.",
+      "acceptanceCriteria": [
+        "The adapter ignores non-terminal init, response, and tool-use records for final selection and parses the final event: result object as authoritative.",
+        "The result maps response, duration_seconds, num_turns, and input/output/thinking/cache_read/total token usage into existing Provider result, progress, and diagnostics contracts without dropping recorded zero values.",
+        "Empty streams, malformed JSON lines, missing final results, missing responses, truncated output, and nonzero process failures return deterministic non-empty safe diagnostics and never fabricate success.",
+        "Exit code 0 and result.status SUCCESS are retained as execution facts but cannot alone satisfy a task-level response contract.",
+        "Offline tests consume agy-trace-simple-text.stream.jsonl, agy-trace-file-read.stream.jsonl, and agy-trace-video-watch.stream.jsonl directly.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Implemented bounded AGY stream-JSON parsing with terminal result selection, authoritative response/duration/turn/usage mapping, conversation session observation, strict malformed/incomplete output failures, and legacy PTY final-text compatibility. Real simple-text, file-read, and video traces plus malformed and zero-usage cases pass through the Providers root; provider/worker packages, vet, and AGY functional checks pass."
+    },
+    {
+      "id": "wo-b1-antigravity-provider-golden-traces-003",
+      "title": "Enforce structured outputs and refusal-aware outcomes",
+      "description": "As a workstation author, I want an output schema to become an AGY structured response contract so refusals and invalid verdicts cannot be mistaken for successful work.",
+      "acceptanceCriteria": [
+        "A workstation output schema passes through --json-schema and selects the recorded JSON-capable output behavior that exposes conversation_id, status, response, structured_output, json_schema, and usage.",
+        "Valid structured output is returned in the form expected by existing Worker schema validation, and the echoed schema agrees with the requested contract.",
+        "A missing, malformed, schema-invalid, or explicitly failing structured verdict produces a task failure with non-empty diagnostics even when process exit is 0 and AGY status is SUCCESS.",
+        "The clip-QA schema preserves action_completed, spec_deviations, temporal_artifacts, audio_content, unexpected_speech, verdict, and confidence and returns the recorded pass verdict.",
+        "Offline tests consume agy-trace-structured.json, agy-trace-clipqa-schema.stream.jsonl, and agy-trace-missing-file.stream.jsonl directly.",
+        "When public contracts change, authored contract sources and generated Go and TypeScript consumers are synchronized with the applicable repository generation command and generated files are not hand-edited.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Implemented AGY structured-output mode and contract enforcement: schema-bearing dispatches use --output-format json with validated --json-schema, while stream-json traces remain supported for recorded clip-QA runs; the parser now exposes and verifies structured_output/json_schema, normalizes valid structured output into Provider content, and rejects missing, malformed, or mismatched contracts with actionable failures. Worker execution now validates arbitrary authored JSON Schema documents and turns explicit reroll/failure verdicts into permanent bad-request task failures. Offline tests replay agy-trace-structured.json, agy-trace-clipqa-schema.stream.jsonl, and agy-trace-missing-file.stream.jsonl directly. Focused and full provider/worker tests, AGY functional tests, and provider/worker vet pass; no public contracts changed, so generation was not applicable."
+    },
+    {
+      "id": "wo-b1-antigravity-provider-golden-traces-004",
+      "title": "Complete multimodal Worker execution through the factory boundary",
+      "description": "As a customer, I want an Antigravity-backed worker to watch a video path and produce a review grounded in both the picture and soundtrack so media quality gates judge the actual artifact.",
+      "acceptanceCriteria": [
+        "A factory built through root.BuildProcess selects the canonical Antigravity Provider from modelProvider: ANTIGRAVITY and dispatches through existing Worker and Provider services without another ACP or provider lane.",
+        "Functional tests replace the external command effect only through edges.Edges.ProviderCommandRunner, replay real AGY traces, and observe argv, Provider response, Worker result, Factory events, and terminal Work outcome.",
+        "The deterministic video case asserts 4.000 seconds, 320x240, 100 frames at 25 fps, PHASE 1, PHASE 2, the red-to-blue cut at 2.000 seconds, and the 440.00 Hz tone ending in silence at 2.000 seconds.",
+        "The real clip case asserts its visual review plus ambient drone, clock ticking, and no speech; paths remain prompt text and no wrapper-layer multimodal transform is added.",
+        "The missing-file refusal reaches failed Work with actionable diagnostics rather than completed Work despite exit 0 and AGY SUCCESS.",
+        "Offline functional coverage consumes clip-fixture.mp4, groundtruth-fixture.mp4, agy-trace-groundtruth-verbose.stream.jsonl, and the other relevant real traces without live AGY.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Added root.BuildProcess functional golden coverage for the canonical ANTIGRAVITY Provider through the injected ProviderCommandRunner. Offline clip and ground-truth video traces now assert exact AGY argv/workspace, provider session identity, response facts, usage counters, Worker dispatch output, Factory observations, and terminal Work. A real missing-file refusal with exit 0 and AGY SUCCESS is asserted as failed/rejected Work with actionable output. Provider response metadata and public-safe numeric usage projection are preserved across the Provider and Worker boundaries; focused provider, worker, diagnostics, vet, and AGY functional tests pass."
+    },
+    {
+      "id": "wo-b1-antigravity-provider-golden-traces-005",
+      "title": "Deliver reproducible offline verification and one gated live smoke",
+      "description": "As a maintainer, I want a deterministic verification path and a separately gated live probe so CI remains reliable and the installed AGY integration can still be checked intentionally.",
+      "acceptanceCriteria": [
+        "The exact offline command go test ./tests/functional/providers/agy/... -count=1 passes from real traces and never invokes an installed AGY binary.",
+        "make verify-fast and applicable focused typecheck, lint, unit, integration, and contract checks pass.",
+        "The separately named operator-only command is $env:YOU_AGY_LIVE_SMOKE='1'; go test ./tests/functional/providers/agy/... -run '^TestAgyLiveSmoke$' -count=1; it is skipped unless gated, excluded from ordinary CI behavior, and is the only live AGY smoke.",
+        "The operator smoke proves one minimal supported end-to-end invocation and reports an actionable skip or failure when credentials, executable, or quota are unavailable.",
+        "If authored OpenAPI or shared schemas change, make generate-api or make interfaces-all is run as appropriate and generated consumers remain synchronized.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
