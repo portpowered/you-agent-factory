@@ -224,9 +224,15 @@ func assertWorkListContractedFlags(t *testing.T, work *cobra.Command) {
 	if err != nil {
 		t.Fatalf("FindCommandByPath(work list) error = %v", err)
 	}
-	for _, flagName := range []string{"session", "max-results", "name"} {
+	for _, flagName := range []string{"session", "max-results", "name", "state", "work-type", "terminal", "non-terminal", "counts"} {
 		if list.Flags().Lookup(flagName) == nil {
 			t.Fatalf("work list missing local flag %q", flagName)
+		}
+	}
+	for _, alias := range []string{"state-name", "work-type-name"} {
+		flag := list.Flags().Lookup(alias)
+		if flag == nil || !flag.Hidden {
+			t.Fatalf("work list alias flag %q = %#v, want hidden compatibility alias", alias, flag)
 		}
 	}
 }
@@ -356,9 +362,12 @@ func testWorkBindings() climanifestcobra.WorkFamilyBindings {
 		"you.work.list.flag.name":           testScalarTarget(""),
 		"you.work.list.flag.work-type-name": testScalarTarget(""),
 		"you.work.list.flag.trace-id":       testScalarTarget(""),
+		"you.work.list.flag.terminal":       testScalarTarget(false),
+		"you.work.list.flag.non-terminal":   testScalarTarget(false),
 		"you.work.list.flag.sort-by":        testScalarTarget(""),
 		"you.work.list.flag.max-results":    testScalarTarget(0),
 		"you.work.list.flag.next-token":     testScalarTarget(""),
+		"you.work.list.flag.counts":         testScalarTarget(false),
 		"you.work.list.flag.session":        testScalarTarget(""),
 		"you.work.show.flag.session":        testScalarTarget(""),
 		"you.work.move.flag.session":        testScalarTarget(""),

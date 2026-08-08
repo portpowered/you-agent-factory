@@ -630,9 +630,12 @@ func newWorkFamilyBindings() climanifestcobra.WorkFamilyBindings {
 		"you.work.list.flag.name":           scalarTarget(""),
 		"you.work.list.flag.work-type-name": scalarTarget(""),
 		"you.work.list.flag.trace-id":       scalarTarget(""),
+		"you.work.list.flag.terminal":       scalarTarget(false),
+		"you.work.list.flag.non-terminal":   scalarTarget(false),
 		"you.work.list.flag.sort-by":        scalarTarget(""),
 		"you.work.list.flag.max-results":    scalarTarget(0),
 		"you.work.list.flag.next-token":     scalarTarget(""),
+		"you.work.list.flag.counts":         scalarTarget(false),
 		"you.work.list.flag.session":        scalarTarget(""),
 		"you.work.show.flag.session":        scalarTarget(""),
 		"you.work.move.flag.session":        scalarTarget(""),
@@ -730,6 +733,18 @@ func executeGeneratedWorkList(
 		}
 	}
 	cfg.MaxResults, err = commandInputValue[int](values, "you.work.list.flag.max-results")
+	if err != nil {
+		return err
+	}
+	cfg.Terminal, err = commandInputValue[bool](values, "you.work.list.flag.terminal")
+	if err != nil {
+		return err
+	}
+	cfg.NonTerminal, err = commandInputValue[bool](values, "you.work.list.flag.non-terminal")
+	if err != nil {
+		return err
+	}
+	cfg.Counts, err = commandInputValue[bool](values, "you.work.list.flag.counts")
 	if err != nil {
 		return err
 	}

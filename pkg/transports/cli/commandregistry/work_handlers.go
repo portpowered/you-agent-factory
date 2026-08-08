@@ -19,9 +19,12 @@ const (
 	workListNameInputID         = "you.work.list.flag.name"
 	workListWorkTypeNameInputID = "you.work.list.flag.work-type-name"
 	workListTraceIDInputID      = "you.work.list.flag.trace-id"
+	workListTerminalInputID     = "you.work.list.flag.terminal"
+	workListNonTerminalInputID  = "you.work.list.flag.non-terminal"
 	workListSortByInputID       = "you.work.list.flag.sort-by"
 	workListMaxResultsInputID   = "you.work.list.flag.max-results"
 	workListNextTokenInputID    = "you.work.list.flag.next-token"
+	workListCountsInputID       = "you.work.list.flag.counts"
 	workListSessionInputID      = "you.work.list.flag.session"
 	workShowWorkIDInputID       = "you.work.show.arg.0"
 	workShowSessionInputID      = "you.work.show.flag.session"
@@ -132,11 +135,23 @@ func resolvedListConfig(
 	if err != nil {
 		return workcli.ListConfig{}, err
 	}
+	terminal, err := inputs.Bool(workListTerminalInputID)
+	if err != nil {
+		return workcli.ListConfig{}, err
+	}
+	nonTerminal, err := inputs.Bool(workListNonTerminalInputID)
+	if err != nil {
+		return workcli.ListConfig{}, err
+	}
 	maxResults, err := inputs.Int(workListMaxResultsInputID)
 	if err != nil {
 		return workcli.ListConfig{}, err
 	}
 	nextToken, err := inputs.String(workListNextTokenInputID)
+	if err != nil {
+		return workcli.ListConfig{}, err
+	}
+	counts, err := inputs.Bool(workListCountsInputID)
 	if err != nil {
 		return workcli.ListConfig{}, err
 	}
@@ -151,8 +166,9 @@ func resolvedListConfig(
 	return workcli.ListConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
 		StateName: stateName, StateType: stateType, Name: name,
-		WorkTypeName: workTypeName, TraceID: traceID, SortBy: sortBy,
-		MaxResults: maxResults, NextToken: nextToken, JSON: globals.json,
+		WorkTypeName: workTypeName, TraceID: traceID, Terminal: terminal,
+		NonTerminal: nonTerminal, SortBy: sortBy, MaxResults: maxResults,
+		NextToken: nextToken, Counts: counts, JSON: globals.json,
 		Verbose: globals.verbose || globals.debug, Debug: globals.debug,
 		Output: cmd.OutOrStdout(),
 	}, nil

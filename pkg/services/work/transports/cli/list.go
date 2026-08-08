@@ -29,9 +29,12 @@ type ListConfig struct {
 	Name         string
 	WorkTypeName string
 	TraceID      string
+	Terminal     bool
+	NonTerminal  bool
 	SortBy       string
 	MaxResults   int
 	NextToken    string
+	Counts       bool
 	JSON         bool
 	Verbose      bool
 	Debug        bool
@@ -76,9 +79,12 @@ func (service *service) List(cfg ListConfig) error {
 		Name:         cfg.Name,
 		WorkTypeName: cfg.WorkTypeName,
 		TraceID:      cfg.TraceID,
+		Terminal:     cfg.Terminal,
+		NonTerminal:  cfg.NonTerminal,
 		SortBy:       cfg.SortBy,
 		MaxResults:   cfg.MaxResults,
 		NextToken:    cfg.NextToken,
+		Counts:       cfg.Counts,
 	})
 	if err != nil {
 		return listConfigError(err)
@@ -147,6 +153,8 @@ func listConfigError(err error) error {
 	switch validationErr.Field {
 	case workdomain.FilterStateType:
 		return fmt.Errorf("--state-type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED")
+	case workdomain.FilterTerminal:
+		return fmt.Errorf("--terminal and --non-terminal cannot both be set")
 	case "sortBy":
 		return fmt.Errorf("--sort-by must be state.type")
 	default:
@@ -193,10 +201,24 @@ func listQueryValues(options workdomain.ListOptions) url.Values {
 	if options.NextToken != "" {
 		values.Set("nextToken", options.NextToken)
 	}
+	if options.Terminal {
+		values.Set(workdomain.FilterTerminal, "true")
+	}
+	if options.NonTerminal {
+		values.Set(workdomain.FilterNonTerminal, "true")
+	}
+	if options.Counts {
+		values.Set("counts", "true")
+	}
 	return values
 }
 
 func renderListResult(output io.Writer, result factoryapi.ListWorkResponse) error {
+	if result.Counts != nil {
+		if _, err := fmt.Fprintf(output, "Total: %d\n", result.Counts.Total); err != nil {
+			return err
+		}
+	}
 	if len(result.Results) == 0 {
 		_, err := fmt.Fprintln(output, "No work found.")
 		return err
