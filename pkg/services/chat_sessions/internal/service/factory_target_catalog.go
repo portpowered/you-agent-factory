@@ -178,7 +178,7 @@ func (s *Service) resolveFactoryTargetCatalog(
 
 	currentChoice := choicesByValue[current]
 	return chatsessions.ResolveFactoryTargetCatalogResult{
-		Choices:       orderedFactoryTargetChoices(choicesByValue, currentChoice),
+		Choices:       orderedFactoryTargetChoices(choicesByValue, currentChoice, profile.AllowedTargets),
 		CurrentTarget: currentChoice.Value,
 	}, nil
 }
@@ -330,13 +330,46 @@ func firstFactoryTargetValue(
 	return first
 }
 
-// orderedFactoryTargetChoices returns current first, followed by every other
-// choice in ascending canonical target-ref order, independent of the
-// supplied map's iteration order.
+// orderedFactoryTargetChoices returns the projected catalog in the order an
+// ACP client renders it.
+//
+// An operator who authored allowedTargets chose that order, and
+// docs/reference/serve-acp.md promises it back to them: a non-empty list is
+// offered "in the authored order". It is preserved exactly, including which
+// entry comes first -- re-sorting it, or hoisting the current target, would
+// silently discard the only reason to author a list rather than take the
+// unrestricted default.
+//
+// An unrestricted profile has no authored order to preserve, so this keeps
+// the deterministic one it has always used: the current target first, then
+// every other installed Factory in canonical reference order, independent of
+// the supplied map's iteration order.
 func orderedFactoryTargetChoices(
 	choicesByValue map[string]chatsessions.FactoryTargetCatalogChoice,
 	current chatsessions.FactoryTargetCatalogChoice,
+	authoredOrder []string,
 ) []chatsessions.FactoryTargetCatalogChoice {
+	if len(authoredOrder) > 0 {
+		ordered := make([]chatsessions.FactoryTargetCatalogChoice, 0, len(choicesByValue))
+		emitted := make(map[string]struct{}, len(choicesByValue))
+		for _, value := range authoredOrder {
+			// An authored target that is not installed was already dropped
+			// from the projected catalog; it is skipped rather than offered.
+			choice, ok := choicesByValue[value]
+			if !ok {
+				continue
+			}
+			// Operator Settings rejects a duplicated allowlist entry, so this
+			// only guards a profile reaching here without that normalization.
+			if _, seen := emitted[value]; seen {
+				continue
+			}
+			emitted[value] = struct{}{}
+			ordered = append(ordered, choice)
+		}
+		return ordered
+	}
+
 	remaining := make([]chatsessions.FactoryTargetCatalogChoice, 0, len(choicesByValue))
 	for value, choice := range choicesByValue {
 		if value == current.Value {

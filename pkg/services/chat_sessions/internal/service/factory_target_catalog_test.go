@@ -147,6 +147,15 @@ func TestResolveFactoryTargetCatalogExcludesInstalledButDisallowed(t *testing.T)
 	}
 }
 
+// TestResolveFactoryTargetCatalogDeterministicOrderingAndDedup pins the two
+// properties this projection owes an ACP client regardless of what the
+// operator authored: it is deduplicated, and it does not vary with the
+// installed catalog's own enumeration order.
+//
+// Authored allowlist order is deliberately NOT varied across these cases.
+// It is a customer-visible input, not incidental ordering noise -- see
+// TestResolveFactoryTargetCatalogPreservesAuthoredAllowlistOrder -- so two
+// different allowlists are expected to produce two different orders.
 func TestResolveFactoryTargetCatalogDeterministicOrderingAndDedup(t *testing.T) {
 	t.Parallel()
 
@@ -158,7 +167,8 @@ func TestResolveFactoryTargetCatalogDeterministicOrderingAndDedup(t *testing.T) 
 	reorderedEntries := []factorydefinitions.EffectiveFactoryCatalogEntry{entries[2], entries[0], entries[1]}
 	duplicatedEntries := append(append([]factorydefinitions.EffectiveFactoryCatalogEntry{}, entries...), entries[1], entries[0])
 
-	wantValues := []string{"factory:@you/factory-builder", "factory:@you/analysis", "factory:@you/review"}
+	authored := []string{"factory:@you/factory-builder", "factory:@you/review", "factory:@you/analysis"}
+	wantValues := authored
 
 	cases := []struct {
 		name           string
@@ -167,22 +177,22 @@ func TestResolveFactoryTargetCatalogDeterministicOrderingAndDedup(t *testing.T) 
 	}{
 		{
 			name:           "canonical enumeration order",
-			allowedTargets: []string{"factory:@you/factory-builder", "factory:@you/review", "factory:@you/analysis"},
+			allowedTargets: authored,
 			entries:        entries,
 		},
 		{
-			name:           "reordered allowlist and reordered installed catalog",
-			allowedTargets: []string{"factory:@you/analysis", "factory:@you/factory-builder", "factory:@you/review"},
+			name:           "reordered installed catalog",
+			allowedTargets: authored,
 			entries:        reorderedEntries,
 		},
 		{
 			name:           "duplicate allowlist entries",
-			allowedTargets: []string{"factory:@you/review", "factory:@you/factory-builder", "factory:@you/review", "factory:@you/analysis", "factory:@you/factory-builder"},
+			allowedTargets: []string{"factory:@you/factory-builder", "factory:@you/review", "factory:@you/factory-builder", "factory:@you/analysis", "factory:@you/review"},
 			entries:        entries,
 		},
 		{
 			name:           "duplicate installed catalog entries",
-			allowedTargets: []string{"factory:@you/factory-builder", "factory:@you/review", "factory:@you/analysis"},
+			allowedTargets: authored,
 			entries:        duplicatedEntries,
 		},
 	}
@@ -213,7 +223,7 @@ func TestResolveFactoryTargetCatalogDeterministicOrderingAndDedup(t *testing.T) 
 			}
 			for index, value := range wantValues {
 				if result.Choices[index].Value != value {
-					t.Fatalf("Choices[%d].Value = %q, want %q (current-first, then ascending)", index, result.Choices[index].Value, value)
+					t.Fatalf("Choices[%d].Value = %q, want %q (authored allowlist order, deduplicated)", index, result.Choices[index].Value, value)
 				}
 			}
 			results = append(results, result)
@@ -224,6 +234,74 @@ func TestResolveFactoryTargetCatalogDeterministicOrderingAndDedup(t *testing.T) 
 		if !reflect.DeepEqual(results[0], results[index]) {
 			t.Fatalf("case %d result %+v is not deeply equivalent to case 0 result %+v despite equivalent profile/catalog facts", index, results[index], results[0])
 		}
+	}
+}
+
+// TestResolveFactoryTargetCatalogPreservesAuthoredAllowlistOrder pins the
+// contract docs/reference/serve-acp.md states for a non-empty allowedTargets:
+// "Only those targets are selectable, in the authored order."
+//
+// Two allowlists holding the same targets in different orders must produce
+// different, authored orders -- including when the default target is not
+// authored first, since hoisting the current target would discard the
+// operator's choice just as thoroughly as re-sorting it would.
+func TestResolveFactoryTargetCatalogPreservesAuthoredAllowlistOrder(t *testing.T) {
+	t.Parallel()
+
+	entries := []factorydefinitions.EffectiveFactoryCatalogEntry{
+		installedFactoryEntry("@you/factory-builder", "Factory Builder"),
+		installedFactoryEntry("@you/review", "Review"),
+		installedFactoryEntry("@you/analysis", "Analysis"),
+	}
+
+	cases := []struct {
+		name           string
+		allowedTargets []string
+		want           []string
+	}{
+		{
+			name:           "default authored first",
+			allowedTargets: []string{"factory:@you/factory-builder", "factory:@you/review", "factory:@you/analysis"},
+			want:           []string{"factory:@you/factory-builder", "factory:@you/review", "factory:@you/analysis"},
+		},
+		{
+			name:           "default authored last",
+			allowedTargets: []string{"factory:@you/review", "factory:@you/analysis", "factory:@you/factory-builder"},
+			want:           []string{"factory:@you/review", "factory:@you/analysis", "factory:@you/factory-builder"},
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			profile := operatorsettings.ACPAgentProfile{
+				DefaultTarget:  "factory:@you/factory-builder",
+				AllowedTargets: testCase.allowedTargets,
+			}
+			service := newTestService(t, profile, entries)
+
+			result, err := service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
+				OperatorSettingsPath: "/operator.json",
+			})
+			if err != nil {
+				t.Fatalf("ResolveFactoryTargetCatalog: unexpected error: %v", err)
+			}
+			var got []string
+			for _, choice := range result.Choices {
+				got = append(got, choice.Value)
+			}
+			if len(got) != len(testCase.want) {
+				t.Fatalf("Choices = %v, want %v", got, testCase.want)
+			}
+			for index, value := range testCase.want {
+				if got[index] != value {
+					t.Fatalf("Choices = %v, want the authored order %v", got, testCase.want)
+				}
+			}
+			if result.CurrentTarget != "factory:@you/factory-builder" {
+				t.Fatalf("CurrentTarget = %q, want the authored default regardless of its position", result.CurrentTarget)
+			}
+		})
 	}
 }
 

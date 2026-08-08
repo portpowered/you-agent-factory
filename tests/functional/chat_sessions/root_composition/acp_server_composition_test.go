@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -385,5 +386,76 @@ func TestACPServerSetConfigOptionSelectsAnotherInstalledFactory(t *testing.T) {
 	if string(updated.ConfigOptions[0].Select.CurrentValue) != "factory:@you/plan-parallel" {
 		t.Fatalf("currentValue = %q, want factory:@you/plan-parallel",
 			updated.ConfigOptions[0].Select.CurrentValue)
+	}
+}
+
+// TestACPServerAuthoredAllowedTargetsAreOfferedInAuthoredOrder proves the
+// ordering half of the allowedTargets contract in docs/reference/serve-acp.md:
+// "A non-empty list | Only those targets are selectable, in the authored
+// order."
+//
+// Order is the whole reason an operator writes a list rather than relying on
+// the unrestricted default. It is what puts the Factory their team reaches for
+// first at the top of the client's picker, and re-sorting it alphabetically
+// silently discards that choice. The authored order deliberately disagrees
+// with both alphabetical order and current-target-first order here, so neither
+// can satisfy this cell by coincidence.
+func TestACPServerAuthoredAllowedTargetsAreOfferedInAuthoredOrder(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	seedEveryInstalledPackagedFactory(t, home)
+	// loop/goal/classify: not alphabetical, and the default is authored
+	// second rather than first.
+	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{
+		"factory:@you/loop",
+		"factory:@you/goal",
+		"factory:@you/classify",
+	})
+
+	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("root.BuildProcess() error = %v", err)
+	}
+
+	_, option := factoryTargetSelectOption(t, process.ACPServer(), t.TempDir())
+	want := []string{"factory:@you/loop", "factory:@you/goal", "factory:@you/classify"}
+	got := selectOptionValues(t, option)
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("Factory target choices = %v, want the authored order %v", got, want)
+	}
+	if string(option.CurrentValue) != "factory:@you/goal" {
+		t.Fatalf("currentValue = %q, want factory:@you/goal", option.CurrentValue)
+	}
+}
+
+// TestACPServerUnrestrictedTargetsAreOfferedCurrentFirstThenSorted pins the
+// other half: with no authored allowlist there is no authored order to
+// preserve, so the catalog stays deterministic on its own terms -- the current
+// target first, then every other installed Factory in canonical reference
+// order.
+func TestACPServerUnrestrictedTargetsAreOfferedCurrentFirstThenSorted(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	seedEveryInstalledPackagedFactory(t, home)
+
+	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("root.BuildProcess() error = %v", err)
+	}
+
+	_, option := factoryTargetSelectOption(t, process.ACPServer(), t.TempDir())
+	got := selectOptionValues(t, option)
+	if len(got) < 3 {
+		t.Fatalf("Factory target choices = %v, want the full installed catalog", got)
+	}
+	if got[0] != string(option.CurrentValue) {
+		t.Fatalf("choices[0] = %q, want the current target %q first", got[0], option.CurrentValue)
+	}
+	if !sort.StringsAreSorted(got[1:]) {
+		t.Fatalf("choices after the current target = %v, want canonical reference order", got[1:])
 	}
 }
