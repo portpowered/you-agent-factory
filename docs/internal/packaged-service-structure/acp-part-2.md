@@ -787,4 +787,3 @@ provider/session events that can survive SDK and protocol-version changes.
 - [ ] Cross-service behavior is proven through functional tests at real edges.
 - [ ] Required generated artifacts and public reference docs are synchronized.
 - [ ] CI and blocking review feedback are complete and the PR is merged.
-

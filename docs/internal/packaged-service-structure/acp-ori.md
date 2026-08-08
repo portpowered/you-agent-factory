@@ -583,4 +583,3 @@ negative and cleanup paths, not merely line execution through SDK success.
 - Richer structured tool/diff presentation without leaking ACP SDK contracts.
 - Authentication discovery/setup UX for unavailable or unauthenticated agents.
 - Versioned process manifests if arbitrary command strings become insufficient.
-
