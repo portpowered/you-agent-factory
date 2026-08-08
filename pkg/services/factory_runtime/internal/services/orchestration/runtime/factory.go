@@ -80,6 +80,7 @@ type runtimeConfig struct {
 	scheduler                 scheduler.Scheduler
 	workerExecutors           map[string]workers.WorkerExecutor
 	workerService             workers.WorkstationExecutionService
+	providerInvocation        workers.WorkstationRequestExecutor
 	workerSessionsFactory     factory.WorkerSessionsFactory
 	workerSessions            workersessions.Service
 	runtimeConfig             interfaces.RuntimeDefinitionLookup
@@ -118,6 +119,7 @@ func New(
 	runtimeScheduler scheduler.Scheduler,
 	workerExecutors map[string]workers.WorkerExecutor,
 	workerService workers.WorkstationExecutionService,
+	providerInvocation workers.WorkstationRequestExecutor,
 	workerSessionsFactory factory.WorkerSessionsFactory,
 	runtimeDefinitions interfaces.RuntimeDefinitionLookup,
 	workflowContext *factory_context.FactoryContext,
@@ -171,6 +173,7 @@ func New(
 		scheduler:                 runtimeScheduler,
 		workerExecutors:           workerExecutors,
 		workerService:             workerService,
+		providerInvocation:        providerInvocation,
 		workerSessionsFactory:     workerSessionsFactory,
 		runtimeConfig:             runtimeDefinitions,
 		workflowContext:           workflowContext,
@@ -431,10 +434,11 @@ func configureRuntimeDispatch(
 	error,
 ) {
 	workersBoundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
-		Service:    cfg.workerService,
-		Executors:  cfg.workerExecutors,
-		RouteNames: runtimeWorkstationRouteNames(cfg.net, cfg.workerExecutors),
-		Async:      !cfg.inlineDispatch && cfg.completionDeliveryPlanner == nil,
+		Service:            cfg.workerService,
+		Executors:          cfg.workerExecutors,
+		RouteNames:         runtimeWorkstationRouteNames(cfg.net, cfg.workerExecutors),
+		ProviderInvocation: cfg.providerInvocation,
+		Async:              !cfg.inlineDispatch && cfg.completionDeliveryPlanner == nil,
 	})
 	workerSessions, err := cfg.workerSessionsFactory(workersBoundary)
 	if err != nil {

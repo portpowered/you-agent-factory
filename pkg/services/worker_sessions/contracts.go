@@ -40,21 +40,32 @@ type Service interface {
 	// filter value returns a typed validation error and no partial result.
 	List(ctx context.Context, req ListRequest) (ListResult, error)
 
-	// Start validates req, then establishes or reuses one stable Worker
+	// InvokeSession validates req, then establishes or reuses one stable Worker
 	// Session identity in StateReserved, transitions StateStarting, and hands
 	// a detached clone of req.Execution to the one directly injected
-	// workers.WorkstationExecutionService. Start is synchronous: it returns
-	// only after the attempt commits its exactly-once absorbing terminal
-	// outcome, classified from the Workers WorkResult first and the adapter
-	// error second. A cancel or terminate that wins after Reserve but before
-	// Workers admission returns the established canceled terminal result
-	// without starting Workers. Invalid requests and conflicting starts return
-	// a typed error before any registry mutation or Workers call. Once
-	// the terminal outcome commits, Start also appends one terminal
+	// workers.WorkstationExecutionService. InvokeSession is synchronous: it
+	// returns only after the attempt commits its exactly-once absorbing
+	// terminal outcome, classified from the Workers WorkResult first and the
+	// adapter error second. A cancel or terminate that wins after Reserve but
+	// before Workers admission returns the established canceled terminal result
+	// without starting Workers. Invalid requests and conflicting invocations
+	// return a typed error before any registry mutation or Workers call. Once
+	// the terminal outcome commits, InvokeSession also appends one terminal
 	// KindSession record (PhaseCompleted or PhaseFailed) to Topic(req.ID); a
 	// failure publishing that record is logged and never changes the
 	// returned, already-committed Session.
-	Start(ctx context.Context, req StartRequest) (StartResult, error)
+	//
+	// InvokeSession is the one operation every orchestrator uses to run a
+	// Worker. It carries no executor: req.Execution.WorkstationName selects an
+	// already-assembled Workers runtime binding by route, so a Petri Worker
+	// names its authored workstation and a JavaScript workflow child names the
+	// reserved provider-invocation route. Neither supplies, constructs, or
+	// injects an executor of its own.
+	//
+	// When req.Retry allows more than one attempt, a retryable failure is
+	// retried under this same session identity and the same open publication
+	// window, so one Worker remains one Worker on the wire across its attempts.
+	InvokeSession(ctx context.Context, req InvokeSessionRequest) (InvokeSessionResult, error)
 
 	// AssociateProviderSession records the exact Providers-owned SessionRef
 	// observed by one currently supervised Worker Session attempt. The caller
@@ -179,22 +190,66 @@ type ListResult struct {
 	Sessions []Session
 }
 
-// StartRequest asks Service to supervise one already-resolved Workers
-// execution attempt under a stable Worker Session identity.
-type StartRequest struct {
+// InvokeSessionRequest asks Service to supervise one already-resolved Workers
+// execution under a stable Worker Session identity.
+type InvokeSessionRequest struct {
 	// ID is the stable Worker Session identity. If ID is not yet registered,
-	// Start reserves it. If ID is already registered in StateReserved, Start
-	// reuses that exact session and never creates a replacement. Any other
-	// existing state is a conflicting start.
+	// InvokeSession reserves it. If ID is already registered in StateReserved,
+	// InvokeSession reuses that exact session and never creates a replacement.
+	// Any other existing state is a conflicting invocation.
 	ID string
-	// Execution is the already-resolved Workers execution request. Start
-	// hands a detached clone of Execution to the injected
+	// Execution is the already-resolved Workers execution request.
+	// InvokeSession hands a detached clone of Execution to the injected
 	// workers.WorkstationExecutionService, so the caller retains exclusive
-	// ownership of Execution's reference-backed fields after Start is
+	// ownership of Execution's reference-backed fields after InvokeSession is
 	// called. Worker Sessions performs no runner selection, prompt
 	// rendering, worktree preparation, provider invocation, or output
 	// shaping on this value.
+	//
+	// Execution.WorkstationName is a route into the immutable runtime-binding
+	// snapshot Workers assembled for this session. It is an authored
+	// workstation name for a Petri Worker and workers.ProviderInvocationRoute
+	// for a JavaScript workflow child; both resolve through the same
+	// route lookup, and neither carries an executor.
 	Execution workers.WorkstationDispatchRequest
+	// Retry bounds how many provider attempts this invocation may make. The
+	// zero value is exactly one attempt, so a caller that says nothing about
+	// retry gets the single-attempt behavior Petri dispatch has always had.
+	Retry RetryPolicy
+}
+
+// RetryPolicy bounds the attempts one InvokeSession call may make.
+//
+// Only the bound is caller-owned. The backoff schedule and the decision that a
+// particular failure is worth retrying both belong to Worker Sessions: a
+// caller-supplied schedule would be re-derived by every caller, and a
+// caller-supplied predicate would let two orchestrators disagree about what
+// "retryable" means when Workers already classifies it exactly once.
+type RetryPolicy struct {
+	// MaxAttempts is the total number of provider attempts, not the number of
+	// retries after the first. Zero and one are both exactly one attempt;
+	// negative values are rejected as invalid rather than silently clamped,
+	// because a negative bound is a caller bug rather than a preference.
+	MaxAttempts int
+}
+
+// Attempts returns the effective attempt budget for p, collapsing the zero
+// value and an explicit single attempt onto the same answer so callers never
+// have to distinguish "unset" from "no retries".
+func (p RetryPolicy) Attempts() int {
+	if p.MaxAttempts < 1 {
+		return 1
+	}
+	return p.MaxAttempts
+}
+
+// Validate reports whether p names a representable attempt budget. Validate is
+// pure and does not mutate p.
+func (p RetryPolicy) Validate() error {
+	if p.MaxAttempts < 0 {
+		return fmt.Errorf("%w: retry MaxAttempts must not be negative", ErrInvalidExecutionRequest)
+	}
+	return nil
 }
 
 // Validate reports whether req carries a non-empty stable identity and a
@@ -208,9 +263,12 @@ type StartRequest struct {
 // registry mutation or Workers call instead of allowing Workers to reject it
 // after effects have already happened. Validate is pure and does not mutate
 // req, the registry, or call Workers.
-func (req StartRequest) Validate() error {
+func (req InvokeSessionRequest) Validate() error {
 	if !validSessionID(req.ID) {
 		return ErrInvalidSessionID
+	}
+	if err := req.Retry.Validate(); err != nil {
+		return err
 	}
 	workstationName := strings.TrimSpace(req.Execution.WorkstationName)
 	if workstationName == "" {
@@ -237,23 +295,31 @@ func (req StartRequest) Validate() error {
 	return nil
 }
 
-// StartResult is the detached snapshot Start returns once the started
+// InvokeSessionResult is the detached snapshot InvokeSession returns once the
 // session's exactly-once terminal outcome has been committed.
-type StartResult struct {
+type InvokeSessionResult struct {
 	Session Session
 	// Dispatch is the raw, detached workers.WorkstationDispatchResult
 	// returned by the underlying workers.WorkstationExecutionService.
 	// DispatchWorkstation call. It is populated whenever the attempt was
-	// actually handed off to Workers, and is the zero value when Start
+	// actually handed off to Workers, and is the zero value when InvokeSession
 	// terminalized before handoff (for example
 	// FailureCauseEventPublicationFailure). Session.Result carries only the
 	// bounded, safe COMPLETED/FAILED classification; Dispatch carries the
 	// full Workers-owned payload a trusted caller needs to preserve existing
 	// Work materialization and output lineage behavior unchanged.
+	//
+	// When more than one attempt ran, Dispatch is the last attempt's result:
+	// it is the outcome the session terminalized on, and the earlier attempts
+	// are visible as their own records on the session's topic.
 	Dispatch workers.WorkstationDispatchResult
 	// DispatchErr is the raw adapter error returned alongside Dispatch, if
 	// any, detached from registry-owned state.
 	DispatchErr error
+	// Attempts is the number of provider attempts actually made, always at
+	// least one for an invocation that reached Workers and zero for one that
+	// terminalized before handoff.
+	Attempts int
 }
 
 // ProviderSessionAssociation is the detached Worker Sessions-owned binding

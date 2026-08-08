@@ -167,3 +167,7 @@ func (fake *runtimeRootFake) AcceptDispatchResult(ctx context.Context, req facto
 	}
 	return factoryruntime.AcceptDispatchResultResult{}, nil
 }
+
+func (fake *runtimeRootFake) InvokeWorker(_ context.Context, _ factoryruntime.InvokeWorkerRequest) (factoryruntime.InvokeWorkerResult, error) {
+	return factoryruntime.InvokeWorkerResult{}, nil
+}

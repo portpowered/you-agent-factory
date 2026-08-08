@@ -153,9 +153,9 @@ func newSynchronousProductionBoundaryRegistry(t *testing.T, execution workers.Wo
 func TestCancel_WaitsForProductionAsyncBoundaryAdmissionBeforeExactCancellation(t *testing.T) {
 	execution := newAdmissionControlledExecution(false)
 	registry := newProductionBoundaryRegistry(t, execution)
-	started := make(chan workersessions.StartResult, 1)
+	started := make(chan workersessions.InvokeSessionResult, 1)
 	go func() {
-		result, err := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+		result, err := registry.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1"))
 		if err != nil {
 			t.Errorf("Start() error = %v", err)
 		}
@@ -194,9 +194,9 @@ func TestCancel_WaitsForProductionAsyncBoundaryAdmissionBeforeExactCancellation(
 func TestCancel_ProductionBoundaryCompletionWinReturnsNoopAndPreservesCompletedSession(t *testing.T) {
 	execution := newAdmissionControlledExecution(true)
 	registry := newProductionBoundaryRegistry(t, execution)
-	started := make(chan workersessions.StartResult, 1)
+	started := make(chan workersessions.InvokeSessionResult, 1)
 	go func() {
-		result, err := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+		result, err := registry.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1"))
 		if err != nil {
 			t.Errorf("Start() error = %v", err)
 		}
@@ -228,10 +228,10 @@ func TestCancel_ProductionBoundaryCompletionWinReturnsNoopAndPreservesCompletedS
 func TestTerminate_ProductionSynchronousBoundaryCancelsAdmittedDispatchBeforePublishReturns(t *testing.T) {
 	execution := newAdmissionControlledExecution(false)
 	registry := newSynchronousProductionBoundaryRegistry(t, execution)
-	started := make(chan workersessions.StartResult, 1)
+	started := make(chan workersessions.InvokeSessionResult, 1)
 	startErr := make(chan error, 1)
 	go func() {
-		result, err := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+		result, err := registry.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1"))
 		started <- result
 		startErr <- err
 	}()
@@ -277,10 +277,10 @@ func TestTerminate_ProductionBoundaryAlreadyCanceledJoinsHeldCallback(t *testing
 		Async:      true,
 	})
 	registry := newControlledRegistry(t, boundary)
-	started := make(chan workersessions.StartResult, 1)
+	started := make(chan workersessions.InvokeSessionResult, 1)
 	startErr := make(chan error, 1)
 	go func() {
-		result, err := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+		result, err := registry.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1"))
 		started <- result
 		startErr <- err
 	}()

@@ -33,6 +33,18 @@ type supervision struct {
 	result          workers.WorkstationDispatchResult
 	err             error
 
+	// retryBudget is the total attempt allowance for this supervision and
+	// attemptsMade counts the attempts actually published. retryPending records
+	// one completed attempt's decision to run another; attemptDone is the
+	// per-attempt release the invocation driver waits on, recreated before each
+	// publish. They are deliberately separate from done: controls wait on done
+	// for the session's final terminal outcome, which a retried attempt has not
+	// reached yet.
+	retryBudget  int
+	attemptsMade int
+	retryPending bool
+	attemptDone  chan struct{}
+
 	published     chan struct{}
 	publishedOnce sync.Once
 	paused        chan struct{}
@@ -62,13 +74,47 @@ func newSupervision(dispatchID, turnID string, executions ...workers.Workstation
 		execution = executions[0]
 	}
 	return &supervision{
-		dispatchID: dispatchID,
-		turnID:     turnID,
-		execution:  cloneWorkstationDispatchRequest(execution),
-		published:  make(chan struct{}),
-		paused:     make(chan struct{}),
-		done:       make(chan struct{}),
+		dispatchID:  dispatchID,
+		turnID:      turnID,
+		execution:   cloneWorkstationDispatchRequest(execution),
+		retryBudget: 1,
+		published:   make(chan struct{}),
+		paused:      make(chan struct{}),
+		done:        make(chan struct{}),
 	}
+}
+
+// beginAttempt installs the release channel for the attempt about to publish
+// and clears the previous attempt's retry decision. The channel is recreated
+// per attempt because each attempt needs its own one-shot release; done stays
+// reserved for the session's single terminal outcome.
+func (s *supervision) beginAttempt() chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.attemptsMade++
+	s.retryPending = false
+	s.attemptDone = make(chan struct{})
+	return s.attemptDone
+}
+
+// finishAttempt releases whichever attempt channel is currently installed.
+// A supervision whose attempt never began (a control that won before any
+// publish) has none, which is not an error.
+func (s *supervision) finishAttempt() {
+	s.mu.Lock()
+	attemptDone := s.attemptDone
+	s.attemptDone = nil
+	s.mu.Unlock()
+	if attemptDone != nil {
+		close(attemptDone)
+	}
+}
+
+// retryDecided reports the attempt's retry decision to the driver.
+func (s *supervision) retryDecided() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.retryPending
 }
 
 func cloneWorkstationDispatchRequest(request workers.WorkstationDispatchRequest) workers.WorkstationDispatchRequest {
@@ -80,7 +126,16 @@ func cloneWorkstationDispatchRequest(request workers.WorkstationDispatchRequest)
 
 func (s *supervision) signalPublished() { s.publishedOnce.Do(func() { close(s.published) }) }
 func (s *supervision) signalPaused()    { s.pausedOnce.Do(func() { close(s.paused) }) }
-func (s *supervision) signalDone()      { s.doneOnce.Do(func() { close(s.done) }) }
+
+// signalDone releases the session's terminal waiters, and releases any attempt
+// still in flight first. Every terminal path -- including the controls that
+// terminalize before Workers ever admitted the dispatch -- reaches the session
+// through signalDone, so binding the two here is what keeps the invocation
+// driver from waiting on an attempt that will never report.
+func (s *supervision) signalDone() {
+	s.finishAttempt()
+	s.doneOnce.Do(func() { close(s.done) })
+}
 
 func (s *supervision) beginCancellation(action workersessions.ControlAction) cancellationAttempt {
 	s.mu.Lock()
@@ -129,110 +184,22 @@ func (s *supervision) finishCancellation(
 	return alreadyTerminal
 }
 
-// Start supervises one resolved dispatch through the injected workstation pool
-// boundary. The boundary is the sole mechanism that starts, cancels, and
-// reports the attempt; the result callback remains authoritative for terminal
-// Workers output, so control cannot fabricate a Factory Runtime result.
-func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
-	attemptID := req.Execution.Execution.Dispatch.DispatchID
-	if err := req.Validate(); err != nil {
-		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "invalid")
-		return workersessions.StartResult{}, err
-	}
-
-	r.reserveIfAbsent(req.ID)
-	r.logger.Info("worker session start accepted", "sessionID", req.ID, "attemptID", attemptID, "outcome", "reserved", "state", string(workersessions.StateReserved))
-	if _, err := r.transitionToStarting(req.ID); err != nil {
-		if terminal, ok := r.preAdmissionControlTerminal(req.ID, attemptID); ok {
-			return workersessions.StartResult{
-				Session:     terminal,
-				Dispatch:    canceledBeforeAdmissionResult(req.Execution),
-				DispatchErr: workers.ErrWorkstationDispatchCanceled,
-			}, nil
-		}
-		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "not_startable")
-		return workersessions.StartResult{}, err
-	}
-
-	if err := r.publishOpeningRecord(ctx, req.ID, attemptID); err != nil {
-		terminal := failedTerminal(workersessions.FailureCauseEventPublicationFailure, safeDetail(workersessions.FailureCauseEventPublicationFailure, nil))
-		final, committed := r.commitTerminal(req.ID, workersessions.StateFailed, terminal)
-		if committed {
-			r.logTerminal(req.ID, attemptID, final)
-			r.publishTerminalRecordOrLog(ctx, req.ID, attemptID, workersessions.StateFailed, *final.Result)
-		}
-		return workersessions.StartResult{Session: final}, nil
-	}
-	return r.startPublishedAttempt(ctx, req, attemptID)
+// baseDispatchID returns the identity every attempt suffix is derived from, so
+// attempt 3 is ".../attempt/3" rather than ".../attempt/2/attempt/3".
+func (s *supervision) baseDispatchID() string {
+	return s.execution.Execution.Dispatch.DispatchID
 }
 
-// startPublishedAttempt begins boundary supervision only after the opening
-// Worker Session record committed. Controls that win before boundary admission
-// terminalize the session without sending a cancellation for unknown work.
-func (r *registry) startPublishedAttempt(ctx context.Context, req workersessions.StartRequest, attemptID string) (workersessions.StartResult, error) {
-	supervision, canStart := r.registerSupervision(req.ID, attemptID, req.Execution.Execution.Dispatch.Execution.RequestID, req.Execution)
-	if !canStart {
-		final, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
-		if final.Terminal() {
-			r.publishTerminalRecordOrLog(ctx, req.ID, attemptID, final.State, workersessions.TerminalResult{})
-		}
-		return workersessions.StartResult{Session: final}, nil
-	}
-	return r.publishRegisteredAttempt(ctx, req, attemptID, supervision, r.beginBoundaryPublish(req.ID, supervision))
+func (s *supervision) attemptCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.attemptsMade
 }
 
-func (r *registry) publishRegisteredAttempt(
-	ctx context.Context,
-	req workersessions.StartRequest,
-	attemptID string,
-	supervision *supervision,
-	canPublish bool,
-) (workersessions.StartResult, error) {
-	if !canPublish {
-		final, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
-		supervision.signalPublished()
-		supervision.signalDone()
-		if final.Terminal() {
-			r.publishTerminalRecordOrLog(ctx, req.ID, attemptID, final.State, workersessions.TerminalResult{})
-		}
-		return workersessions.StartResult{Session: final}, nil
-	}
-
-	r.logger.Info("worker session start", "sessionID", req.ID, "attemptID", attemptID, "outcome", "handoff", "state", string(workersessions.StateStarting))
-	handoff := workers.WorkstationDispatchRequest{
-		WorkstationName: req.Execution.WorkstationName,
-		Execution:       workers.CloneWorkstationExecutionRequest(req.Execution.Execution),
-	}
-	publishErr := r.boundary.PublishWithAdmission(
-		context.WithoutCancel(ctx),
-		handoff,
-		func() { r.acceptSupervision(req.ID, supervision) },
-		func(_ context.Context, _ workers.WorkstationDispatchRequest, result workers.WorkstationDispatchResult, dispatchErr error) {
-			r.completeSupervision(req.ID, supervision, result, dispatchErr)
-		},
-	)
-	if publishErr != nil {
-		final, committed := r.commitTerminal(req.ID, workersessions.StateFailed, classifyTerminal(publishErr, workers.WorkstationDispatchResult{}))
-		supervision.mu.Lock()
-		supervision.err = publishErr
-		supervision.mu.Unlock()
-		supervision.signalPublished()
-		supervision.signalDone()
-		if committed {
-			r.logTerminal(req.ID, attemptID, final)
-			r.publishTerminalRecordOrLog(ctx, req.ID, attemptID, final.State, *final.Result)
-		}
-		return workersessions.StartResult{Session: final}, nil
-	}
-
-	r.finishSupervisionPublication(supervision)
-	<-supervision.done
-
-	final, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
-	supervision.mu.Lock()
-	result, dispatchErr := supervision.result, supervision.err
-	supervision.mu.Unlock()
-	return workersessions.StartResult{Session: final, Dispatch: result, DispatchErr: dispatchErr}, nil
+func (s *supervision) lastResult() workers.WorkstationDispatchResult {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.result
 }
 
 // acceptSupervision records Workers' exact cancellable-admission point. It
@@ -329,12 +296,29 @@ func (r *registry) completeSupervision(id string, supervision *supervision, resu
 		}
 	}
 
+	// A retryable failure with budget left is deliberately not terminal: the
+	// session stays open, its publication window stays open, and the driver
+	// publishes the next attempt. Releasing only the attempt -- never done --
+	// is what keeps controls waiting for the session's real terminal outcome
+	// rather than being satisfied by an attempt that is about to be retried.
+	if r.claimRetryAttempt(supervision, action, result, dispatchErr) {
+		r.logger.Info(
+			"worker session attempt",
+			"sessionID", id,
+			"attemptID", dispatchID,
+			"outcome", "retryable_failure",
+		)
+		supervision.finishAttempt()
+		return
+	}
+
 	state, terminal := dispatchedTerminal(action, result, dispatchErr)
 	final, committed := r.commitTerminal(id, state, terminal)
 	if committed {
 		r.logTerminal(id, dispatchID, final)
 		r.publishTerminalRecordOrLog(context.Background(), id, dispatchID, state, *final.Result)
 	}
+	supervision.finishAttempt()
 	supervision.signalDone()
 }
 

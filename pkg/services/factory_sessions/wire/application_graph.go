@@ -131,7 +131,6 @@ type (
 	StandaloneSessionExecutionFactory   = executionopening.StandaloneSessionExecutionFactory
 	WorkerInvocationFactory             = executionopening.WorkerInvocationFactory
 	WorkerInvocationWithProgressFactory = executionopening.WorkerInvocationWithProgressFactory
-	LiveChildInvocationFactory          = execution.LiveChildInvocationFactory
 	ExecutionOpeningFactory             = executionopening.Factory
 	StdioOpeningService                 = executionopening.StdioOpeningService
 )

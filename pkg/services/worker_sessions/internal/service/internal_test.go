@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -378,7 +379,7 @@ func TestControlGuards_RejectInvalidTransitionsAndPreserveObservableSessionState
 	}
 }
 
-func TestStartPublishedAttempt_ControlAndPublishFailureHaveTerminalObservableOutcomes(t *testing.T) {
+func TestDriveInvocation_ControlAndPublishFailureHaveTerminalObservableOutcomes(t *testing.T) {
 	t.Run("control before boundary publication", func(t *testing.T) {
 		r := newTestRegistry(t)
 		r.reserveIfAbsent("worker-1")
@@ -392,11 +393,11 @@ func TestStartPublishedAttempt_ControlAndPublishFailureHaveTerminalObservableOut
 		if _, committed := r.commitControlTerminal("worker-1", workersessions.StateCanceled); !committed {
 			t.Fatal("commit control terminal did not win before boundary publication")
 		}
-		result, err := r.publishRegisteredAttempt(
-			context.Background(), workersessions.StartRequest{ID: "worker-1"}, "dispatch-1", supervision, false,
+		result, retry := r.publishRegisteredAttempt(
+			context.Background(), "worker-1", dispatchHandoff("dispatch-1"), supervision, false,
 		)
-		if err != nil || result.Session.State != workersessions.StateCanceled {
-			t.Fatalf("startPublishedAttempt() = %#v, %v, want retained CANCELED session", result, err)
+		if retry || result.Session.State != workersessions.StateCanceled {
+			t.Fatalf("publishRegisteredAttempt() = %#v, retry %v, want retained CANCELED session and no retry", result, retry)
 		}
 
 		r.reserveIfAbsent("worker-2")
@@ -406,9 +407,13 @@ func TestStartPublishedAttempt_ControlAndPublishFailureHaveTerminalObservableOut
 		if _, committed := r.commitControlTerminal("worker-2", workersessions.StateCanceled); !committed {
 			t.Fatal("commit control terminal for worker-2 did not win before supervision registration")
 		}
-		result, err = r.startPublishedAttempt(context.Background(), workersessions.StartRequest{ID: "worker-2"}, "dispatch-2")
+		result, err := r.driveInvocation(
+			context.Background(),
+			workersessions.InvokeSessionRequest{ID: "worker-2", Execution: dispatchHandoff("dispatch-2")},
+			"dispatch-2",
+		)
 		if err != nil || result.Session.State != workersessions.StateCanceled {
-			t.Fatalf("startPublishedAttempt() after control = %#v, %v, want retained CANCELED session", result, err)
+			t.Fatalf("driveInvocation() after control = %#v, %v, want retained CANCELED session", result, err)
 		}
 	})
 
@@ -419,11 +424,26 @@ func TestStartPublishedAttempt_ControlAndPublishFailureHaveTerminalObservableOut
 		if _, err := r.transitionToStarting("worker-1"); err != nil {
 			t.Fatalf("transitionToStarting: %v", err)
 		}
-		result, err := r.startPublishedAttempt(context.Background(), workersessions.StartRequest{ID: "worker-1"}, "dispatch-1")
+		result, err := r.driveInvocation(
+			context.Background(),
+			workersessions.InvokeSessionRequest{ID: "worker-1", Execution: dispatchHandoff("dispatch-1")},
+			"dispatch-1",
+		)
 		if err != nil || result.Session.State != workersessions.StateFailed || result.Session.Result == nil {
-			t.Fatalf("startPublishedAttempt() = %#v, %v, want failed terminal session", result, err)
+			t.Fatalf("driveInvocation() = %#v, %v, want failed terminal session", result, err)
 		}
 	})
+}
+
+// dispatchHandoff builds the minimal well-formed dispatch request the
+// invocation driver needs to name one attempt.
+func dispatchHandoff(dispatchID string) workers.WorkstationDispatchRequest {
+	return workers.WorkstationDispatchRequest{
+		WorkstationName: "review",
+		Execution: workers.WorkstationExecutionRequest{
+			Dispatch: work.WorkDispatch{DispatchID: dispatchID, WorkstationName: "review"},
+		},
+	}
 }
 
 func TestCancel_BeforeBoundaryAdmissionEitherWaitsOrTerminatesTheExactSupervision(t *testing.T) {

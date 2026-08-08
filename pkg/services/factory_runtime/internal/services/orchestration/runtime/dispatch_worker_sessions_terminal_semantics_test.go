@@ -166,10 +166,10 @@ func (s *preHandoffFailedWorkerSessionsService) List(
 	return workersessions.ListResult{}, nil
 }
 
-func (s *preHandoffFailedWorkerSessionsService) Start(
-	_ context.Context, req workersessions.StartRequest,
-) (workersessions.StartResult, error) {
-	return workersessions.StartResult{
+func (s *preHandoffFailedWorkerSessionsService) InvokeSession(
+	_ context.Context, req workersessions.InvokeSessionRequest,
+) (workersessions.InvokeSessionResult, error) {
+	return workersessions.InvokeSessionResult{
 		Session: workersessions.Session{
 			ID:    req.ID,
 			State: workersessions.StateFailed,

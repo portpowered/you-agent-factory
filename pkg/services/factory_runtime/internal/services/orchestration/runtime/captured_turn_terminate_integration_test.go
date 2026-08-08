@@ -211,9 +211,9 @@ func startContinuationFanOutWorkerSessions(
 	t *testing.T,
 	service workersessions.Service,
 	execution *continuationFanOutExecution,
-) (<-chan workersessions.StartResult, <-chan error) {
+) (<-chan workersessions.InvokeSessionResult, <-chan error) {
 	t.Helper()
-	starts := make(chan workersessions.StartResult, 3)
+	starts := make(chan workersessions.InvokeSessionResult, 3)
 	errs := make(chan error, 3)
 	for _, child := range []struct{ sessionID, dispatchID, turnID string }{
 		{sessionID: "worker-a", dispatchID: "dispatch-a", turnID: "turn-captured"},
@@ -221,7 +221,7 @@ func startContinuationFanOutWorkerSessions(
 		{sessionID: "worker-direct", dispatchID: "dispatch-direct", turnID: "turn-direct"},
 	} {
 		go func(sessionID, dispatchID, turnID string) {
-			result, err := service.Start(context.Background(), workersessions.StartRequest{
+			result, err := service.InvokeSession(context.Background(), workersessions.InvokeSessionRequest{
 				ID: sessionID,
 				Execution: workers.WorkstationDispatchRequest{WorkstationName: "review", Execution: workers.WorkstationExecutionRequest{
 					Dispatch: work.WorkDispatch{DispatchID: dispatchID, WorkstationName: "review", Execution: work.ExecutionMetadata{RequestID: turnID}},
@@ -252,7 +252,7 @@ func assertContinuationRequest(
 
 func assertContinuationTerminal(
 	t *testing.T,
-	result workersessions.StartResult,
+	result workersessions.InvokeSessionResult,
 	wantDispatchID string,
 	wantState workersessions.State,
 	wantReference providers.SessionRef,
@@ -279,9 +279,9 @@ func startCapturedTurnWorkerSessions(
 	t *testing.T,
 	workerSessions workersessions.Service,
 	execution *synchronousFanOutExecution,
-) (<-chan workersessions.StartResult, <-chan error) {
+) (<-chan workersessions.InvokeSessionResult, <-chan error) {
 	t.Helper()
-	starts := make(chan workersessions.StartResult, 3)
+	starts := make(chan workersessions.InvokeSessionResult, 3)
 	startErrs := make(chan error, 3)
 	children := []struct{ sessionID, dispatchID string }{
 		{sessionID: "worker-a", dispatchID: "dispatch-a"},
@@ -290,7 +290,7 @@ func startCapturedTurnWorkerSessions(
 	}
 	for _, child := range children {
 		go func(sessionID, dispatchID string) {
-			started, startErr := workerSessions.Start(context.Background(), workersessions.StartRequest{
+			started, startErr := workerSessions.InvokeSession(context.Background(), workersessions.InvokeSessionRequest{
 				ID: sessionID,
 				Execution: workers.WorkstationDispatchRequest{
 					WorkstationName: "review",
@@ -350,11 +350,11 @@ func newCapturedTurnTarget(
 
 func assertCapturedWorkerSessionsTerminated(
 	t *testing.T,
-	starts <-chan workersessions.StartResult,
+	starts <-chan workersessions.InvokeSessionResult,
 	startErrs <-chan error,
 ) {
 	t.Helper()
-	terminatedSessions := make(map[string]workersessions.StartResult, 2)
+	terminatedSessions := make(map[string]workersessions.InvokeSessionResult, 2)
 	for range 2 {
 		result := <-starts
 		startErr := <-startErrs

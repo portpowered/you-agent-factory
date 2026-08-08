@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
@@ -166,11 +167,39 @@ func (s *Service) ValidateTopology(
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
 ) factorydefinitions.TopologyValidationResult {
 	result := NewConfigValidator(requiredToolChecker).Validate(cfg)
-	result.Findings = append(
+	result.Findings = appendUniqueTopologyFindings(
 		result.Findings,
-		FactoryDefinitionFindings(s.Validate(ctx, cfg, nil).Targets)...,
+		FactoryDefinitionFindings(s.Validate(ctx, cfg, nil).Targets),
 	)
 	return *result
+}
+
+func appendUniqueTopologyFindings(
+	existing []factorydefinitions.TopologyFinding,
+	additional []Finding,
+) []factorydefinitions.TopologyFinding {
+	seen := make(map[string]struct{}, len(existing)+len(additional))
+	for _, finding := range existing {
+		seen[topologyFindingKey(finding)] = struct{}{}
+	}
+	for _, finding := range additional {
+		key := topologyFindingKey(finding)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		existing = append(existing, finding)
+		seen[key] = struct{}{}
+	}
+	return existing
+}
+
+func topologyFindingKey(finding factorydefinitions.TopologyFinding) string {
+	return strings.Join([]string{
+		string(finding.Severity),
+		strings.TrimPrefix(finding.Path, validationRoot+"."),
+		finding.Message,
+		finding.Rule,
+	}, "\x00")
 }
 
 func (*Service) WorkerWorkstationBehaviorCompatibility(

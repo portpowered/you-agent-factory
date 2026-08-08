@@ -59,7 +59,7 @@ func TestStart_CommitsOpeningRecordBeforeWorkersInvocation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
-	if _, err := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := registry.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 	if readErr != nil {
@@ -100,7 +100,7 @@ func TestStart_SubscriptionFromZeroCursor_ObservesOpeningRecord(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
-	if _, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 
@@ -130,7 +130,7 @@ func TestStart_OpeningRecordPublicationFailure_TerminalizesFailedWithoutCallingW
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
 
-	result, err := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+	result, err := registry.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1"))
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
@@ -160,7 +160,7 @@ func TestStart_InvalidRequest_CreatesNoTopicRecord(t *testing.T) {
 
 	req := validStartRequest("worker-1", "dispatch-1")
 	req.ID = "   "
-	if _, err := registry.Start(context.Background(), req); !errors.Is(err, workersessions.ErrInvalidSessionID) {
+	if _, err := registry.InvokeSession(context.Background(), req); !errors.Is(err, workersessions.ErrInvalidSessionID) {
 		t.Fatalf("Start() error = %v, want ErrInvalidSessionID", err)
 	}
 	if got := appender.callCount(); got != 0 {
@@ -179,7 +179,7 @@ func TestStart_NotStartableSession_CreatesNoTopicRecord(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	if _, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("first Start() error = %v, want nil", err)
 	}
 	callsAfterFirst := appender.callCount()
@@ -187,7 +187,7 @@ func TestStart_NotStartableSession_CreatesNoTopicRecord(t *testing.T) {
 		t.Fatalf("first Start() published %d Events records, want at least 1", callsAfterFirst)
 	}
 
-	if _, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-2")); !errors.Is(err, workersessions.ErrSessionNotStartable) {
+	if _, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-2")); !errors.Is(err, workersessions.ErrSessionNotStartable) {
 		t.Fatalf("second Start() error = %v, want ErrSessionNotStartable", err)
 	}
 	if got := appender.callCount(); got != callsAfterFirst {
@@ -208,7 +208,7 @@ func TestStart_CompletedSession_AppendsTerminalRecordAfterOpeningRecord(t *testi
 	}
 	ctx := context.Background()
 
-	result, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1"))
+	result, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1"))
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
@@ -263,7 +263,7 @@ func TestStart_FailedSession_AppendsTerminalRecordWithClassifiedFailureCause(t *
 	}
 	ctx := context.Background()
 
-	result, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1"))
+	result, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1"))
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
@@ -505,7 +505,7 @@ func TestStart_TerminalRecordFollowsPublishedWorkerOutput(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	if _, err := svc.Start(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := svc.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 
@@ -544,7 +544,7 @@ func TestStart_TerminalRecordPublicationFailure_DoesNotChangeCommittedSession(t 
 	}
 	ctx := context.Background()
 
-	result, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1"))
+	result, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1"))
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
@@ -588,7 +588,7 @@ func TestStart_RepeatedStartOnTerminalSession_PublishesNoSecondTerminalRecord(t 
 	}
 	ctx := context.Background()
 
-	if _, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("first Start() error = %v, want nil", err)
 	}
 	callsAfterFirst := appender.callCount()
@@ -596,7 +596,7 @@ func TestStart_RepeatedStartOnTerminalSession_PublishesNoSecondTerminalRecord(t 
 		t.Fatalf("first Start() published %d Events records, want 2 (opening + terminal)", callsAfterFirst)
 	}
 
-	if _, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-2")); err == nil {
+	if _, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-2")); err == nil {
 		t.Fatalf("second Start() on a terminal session error = nil, want ErrSessionNotStartable")
 	}
 	if got := appender.callCount(); got != callsAfterFirst {
@@ -762,7 +762,7 @@ func TestRegistryLogsStartOutcomes(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	if _, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 

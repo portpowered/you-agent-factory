@@ -9,6 +9,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	runnerinference "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/inference"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
 )
@@ -200,3 +201,11 @@ func (n *NoopExecutor) Execute(_ context.Context, d work.WorkDispatch) (workerex
 
 // Compile-time check.
 var _ WorkerExecutor = (*NoopExecutor)(nil)
+
+func resolveModelOperationBindings(
+	workstationDef *interfaces.FactoryWorkstationConfig,
+	workerDef *interfaces.FactoryWorkerConfig,
+	inputTokens []workerexecution.Token,
+) ([]workerexecution.ResolvedModelOperationBinding, error) {
+	return runnerinference.ResolveInferenceOperationBindings(workstationDef, workerDef, inputTokens)
+}

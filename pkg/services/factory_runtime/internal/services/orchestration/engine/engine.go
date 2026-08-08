@@ -224,6 +224,7 @@ func completedDispatchReasonFromResult(result workerexecution.WorkResult) string
 
 func workResultForCompletedDispatch(result workerexecution.WorkResult, completed interfaces.CompletedDispatch) workerexecution.WorkResult {
 	result.Outcome = completed.Outcome
+	result.SelectedClassificationLabel = completed.SelectedClassificationLabel
 	switch completed.Outcome {
 	case workerexecution.OutcomeFailed:
 		result.Error = completed.Reason

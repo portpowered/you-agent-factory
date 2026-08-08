@@ -160,7 +160,7 @@ func TestDurableExecutionConstructionUsesRootWorkflowContracts(t *testing.T) {
 		factory.JavaScriptWorkerSettings{},
 		boundaryRecordingWriter{},
 		func() string { return "dur-sess-boundary-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-		nil, nil, nil,
+		nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("NewJavaScriptExecutionService: %v", err)

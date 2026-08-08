@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
@@ -14,12 +15,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// LiveChildInvocationFactory rebuilds one live child invocation executor with
-// session-scoped provider progress publishing.
-type LiveChildInvocationFactory func(workers.ProgressPublisher) (workers.InvocationExecutor, error)
-
 func (s *JavaScriptRuntimeService) ensureSessionResponseEventsIfNeeded(state *runtimeSessionState) error {
-	if s == nil || s.liveChildInvocation == nil {
+	// Only a runtime-backed session publishes provider progress through this
+	// store: its children are Workers, invoked through the Factory Runtime bound
+	// as the worker invoker. A fake session, a replay, or the standalone
+	// `you run script.js` composition has no such runtime and needs no store.
+	if s == nil || !s.workerInvokerBound() {
 		return nil
 	}
 	if state == nil {
@@ -103,23 +104,6 @@ func (s *JavaScriptRuntimeService) publishSessionResponseEvent(
 	return state.responseEvents.Publish(event)
 }
 
-func (s *JavaScriptRuntimeService) liveChildExecutor(
-	sessionID string,
-	state *runtimeSessionState,
-) workers.InvocationExecutor {
-	if s.liveChildInvocation != nil {
-		var publisher workers.ProgressPublisher
-		if state != nil {
-			publisher = s.sessionProgressPublisher(sessionID, state)
-		}
-		executor, err := s.liveChildInvocation(publisher)
-		if err == nil && executor != nil {
-			return executor
-		}
-	}
-	return s.providerExecutor
-}
-
 // SubscribeResponseEvents opens one durable-session response-event cursor.
 func (s *JavaScriptRuntimeService) SubscribeResponseEvents(
 	ctx context.Context,
@@ -163,4 +147,64 @@ func completeSessionResponseEvents(state *runtimeSessionState) {
 		return
 	}
 	state.responseEvents.Complete()
+}
+
+// PublishWorkerProgress routes one Worker's progress fragment to the durable
+// session that owns that Worker.
+//
+// A JavaScript child is a Worker, so its output reaches this service the way
+// every Worker's output reaches its runtime: through the Workers progress
+// publisher, addressed by dispatch. Workers knows the dispatch and nothing
+// about durable sessions, which is why the session that started the Worker
+// registers the mapping before it invokes and drops it afterwards. A fragment
+// for a dispatch this service does not own is not its business and is ignored.
+func (s *JavaScriptRuntimeService) PublishWorkerProgress(fragment workers.ProgressFragment) {
+	if s == nil {
+		return
+	}
+	sessionID := s.workerProgressSession(fragment.DispatchID)
+	if sessionID == "" {
+		return
+	}
+	state := s.liveSessionState(sessionID)
+	if state == nil {
+		return
+	}
+	s.sessionProgressPublisher(sessionID, state)(fragment)
+}
+
+// observeWorkerDispatch claims workerDispatchID for sessionID and returns the
+// release its caller must run once the Worker is terminal. Releasing is what
+// keeps the index the size of the Workers actually running rather than of
+// every Worker the process has ever run.
+func (s *JavaScriptRuntimeService) observeWorkerDispatch(workerDispatchID, sessionID string) func() {
+	if s == nil || strings.TrimSpace(workerDispatchID) == "" {
+		return func() {}
+	}
+	s.workerSessionsMu.Lock()
+	if s.workerSessions == nil {
+		s.workerSessions = make(map[string]string)
+	}
+	s.workerSessions[workerDispatchID] = sessionID
+	s.workerSessionsMu.Unlock()
+	return sync.OnceFunc(func() {
+		s.workerSessionsMu.Lock()
+		delete(s.workerSessions, workerDispatchID)
+		s.workerSessionsMu.Unlock()
+	})
+}
+
+func (s *JavaScriptRuntimeService) workerProgressSession(workerDispatchID string) string {
+	s.workerSessionsMu.RLock()
+	defer s.workerSessionsMu.RUnlock()
+	return s.workerSessions[workerDispatchID]
+}
+
+// liveSessionState returns the running session's own state rather than a
+// snapshot, because publishing provisions the response-event store on first
+// use and a copy would provision one nobody reads.
+func (s *JavaScriptRuntimeService) liveSessionState(sessionID string) *runtimeSessionState {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.sessions[sessionID]
 }
