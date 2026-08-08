@@ -674,6 +674,13 @@ still-running service:
 | One-shot `you run --with-server` or `--with-site` | Only for the run lifetime — the listener is joined before the command returns. |
 | Ordinary one-shot `you run` | No — starts no listener and exits when the factory becomes idle or invocation completes. |
 
+Finite server-enabled runs succeed when no Work is admitted or every admitted
+Work item is terminal. If the queue drains around non-terminal Work, the
+Factory Session is incomplete: the command returns failure with
+`Error: factory session drained with N non-terminal work items; run is incomplete`
+on stderr and joins the listener/runtime before returning. Continuous runs
+remain live while idle and end only when cancelled.
+
 For steady operator loops (check running → submit → verify), prefer `you server`
 or `you run --continuously --with-server`. See `you docs agents` for the full
 operator loop and pre-submit checklist.
