@@ -16,6 +16,7 @@ import (
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -30,7 +31,6 @@ import (
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 )
 
 const (
@@ -45,6 +45,9 @@ type standardCLIHTTPProtocol struct {
 type extendedCLIHTTPProtocol struct {
 	clihttp.Protocol
 	timeout time.Duration
+}
+type watchCLIHTTPProtocol struct {
+	clihttp.Protocol
 }
 
 func provideStandardCLIHTTPProtocol() (standardCLIHTTPProtocol, error) {
@@ -299,6 +302,21 @@ func provideListWorkOperation(
 ) cli.ListWorkOperation {
 	return workcli.NewList(transport.Protocol, prepare)
 }
+
+func provideWatchCLIHTTPProtocol() (watchCLIHTTPProtocol, error) {
+	protocol, err := clihttp.NewProtocol(&http.Client{}, platformclock.Real{})
+	if err != nil {
+		return watchCLIHTTPProtocol{}, fmt.Errorf("build watch CLI HTTP protocol: %w", err)
+	}
+	return watchCLIHTTPProtocol{Protocol: protocol}, nil
+}
+
+func provideWatchWorkOperation(
+	transport watchCLIHTTPProtocol,
+) cli.WatchWorkOperation {
+	return workcli.NewWatch(transport.Protocol)
+}
+
 func provideShowWorkOperation(transport standardCLIHTTPProtocol) cli.ShowWorkOperation {
 	return workcli.NewShow(transport.Protocol)
 }

@@ -7,6 +7,8 @@ import (
 	"io"
 	"strings"
 	"time"
+
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 )
 
 // WatchSchemaVersion identifies the stable line-oriented Work watch contract.
@@ -22,6 +24,7 @@ type WatchConfig struct {
 	Follow            bool
 	Output            io.Writer
 	Diagnostics       io.Writer
+	HTTP              clihttp.Protocol
 	Verbose           bool
 	Debug             bool
 }

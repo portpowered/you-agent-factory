@@ -653,6 +653,9 @@ func newWorkHandlerRegistry(
 		ListRunE: func(cmd *cobra.Command, _ []string) error {
 			return executeGeneratedWorkList(cmd, globals, diagnostics, dependencies.ListWork)
 		},
+		WatchRunE: func(cmd *cobra.Command, _ []string) error {
+			return executeGeneratedWorkWatch(cmd, globals, diagnostics, dependencies.WatchWork)
+		},
 		ShowRunE: func(cmd *cobra.Command, args []string) error {
 			return executeGeneratedWorkShow(cmd, args, globals, diagnostics, dependencies.ShowWork)
 		},
@@ -736,6 +739,40 @@ func executeGeneratedWorkList(
 		return err
 	}
 	return list(cfg)
+}
+
+func executeGeneratedWorkWatch(
+	cmd *cobra.Command,
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	watch func(workcli.WatchConfig) error,
+) error {
+	if watch == nil {
+		return fmt.Errorf("work watch service is required")
+	}
+	values, err := generatedCommandInputs(cmd)
+	if err != nil {
+		return err
+	}
+	sessionID, err := commandInputValue[string](values, "you.work.watch.flag.session")
+	if err != nil {
+		return err
+	}
+	follow, err := commandInputValue[bool](values, "you.work.watch.flag.follow")
+	if err != nil {
+		return err
+	}
+	return watch(workcli.WatchConfig{
+		Context:           cmd.Context(),
+		Server:            globals.server,
+		SessionID:         sessionID,
+		SessionIDExplicit: cmd.Flag("session") != nil && cmd.Flag("session").Changed,
+		Follow:            follow,
+		Output:            cmd.OutOrStdout(),
+		Diagnostics:       diagnostics.writer(cmd),
+		Verbose:           diagnostics.verboseEnabled(),
+		Debug:             diagnostics.debug,
+	})
 }
 
 func executeGeneratedWorkShow(

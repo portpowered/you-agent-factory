@@ -454,6 +454,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	deleteFactoryOperation := provideDeleteFactoryOperation(v)
 	listRequestPreparation := work.NewListRequestPreparation()
 	listWorkOperation := provideListWorkOperation(wireStandardCLIHTTPProtocol, listRequestPreparation)
+	wireWatchCLIHTTPProtocol, err := provideWatchCLIHTTPProtocol()
+	if err != nil {
+		return nil, err
+	}
+	watchWorkOperation := provideWatchWorkOperation(wireWatchCLIHTTPProtocol)
 	showWorkOperation := provideShowWorkOperation(wireStandardCLIHTTPProtocol)
 	moveWorkOperation := provideMoveWorkOperation(wireExtendedCLIHTTPProtocol)
 	v70 := provideWorkVisualizationOperation()
@@ -583,6 +588,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		UpdateFactoryFromFile:             updateFactoryFromFileOperation,
 		DeleteFactory:                     deleteFactoryOperation,
 		ListWork:                          listWorkOperation,
+		WatchWork:                         watchWorkOperation,
 		ShowWork:                          showWorkOperation,
 		MoveWork:                          moveWorkOperation,
 		VisualizeWork:                     visualizeWorkOperation,
@@ -846,6 +852,7 @@ var cliCommandOperationsSet = wire4.NewSet(
 	provideOperatorDefaultsResolver,
 	provideStandardCLIHTTPProtocol,
 	provideExtendedCLIHTTPProtocol,
+	provideWatchCLIHTTPProtocol,
 	provideSubmitWorkOperation,
 	provideSubmitBatchOperation,
 	provideSessionsCLIService,
@@ -868,6 +875,7 @@ var cliCommandOperationsSet = wire4.NewSet(
 	provideUpdateFactoryFromFileOperation,
 	provideDeleteFactoryOperation,
 	provideListWorkOperation,
+	provideWatchWorkOperation,
 	provideShowWorkOperation,
 	provideMoveWorkOperation,
 	provideWorkVisualizationOperation,
