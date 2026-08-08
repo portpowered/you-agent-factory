@@ -174,13 +174,14 @@ func (e *EnablementEvaluator) evaluateGuardedArc(
 ) bool {
 	candidates := stableTokens(marking.TokensInPlace(arc.PlaceID))
 	guardMatched, ok := e.evaluateGuard(arc.Guard, petri.RuntimeGuardContext{
-		Now:                   e.now(),
-		CurrentTransitionID:   tr.ID,
-		DispatchHistory:       snapshot.DispatchHistory,
-		ActiveDispatches:      snapshot.Dispatches,
-		RuntimeConfig:         e.runtimeConfig,
-		TransitionWorkers:     transitionWorkerTypes(snapshot.Topology, tr),
-		StateCategoryForPlace: stateCategoryForPlace(snapshot.Topology),
+		Now:                      e.now(),
+		CurrentTransitionID:      tr.ID,
+		DispatchHistory:          snapshot.DispatchHistory,
+		ActiveDispatches:         snapshot.Dispatches,
+		RuntimeConfig:            e.runtimeConfig,
+		TransitionWorkers:        transitionWorkerTypes(snapshot.Topology, tr),
+		StateCategoryForPlace:    stateCategoryForPlace(snapshot.Topology),
+		ParentChildRegistrations: marking.ParentChildRegistrations,
 	}, candidates, guardBindings, marking)
 	if !ok {
 		e.logger.Debug("enablement: transition disabled",
@@ -296,13 +297,14 @@ func singleTokenBindingOrder(tr *petri.Transition) []int {
 
 func singleTokenRuntimeContext(e *EnablementEvaluator, tr *petri.Transition, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) petri.RuntimeGuardContext {
 	return petri.RuntimeGuardContext{
-		Now:                   e.now(),
-		CurrentTransitionID:   tr.ID,
-		DispatchHistory:       snapshot.DispatchHistory,
-		ActiveDispatches:      snapshot.Dispatches,
-		RuntimeConfig:         e.runtimeConfig,
-		TransitionWorkers:     transitionWorkerTypes(snapshot.Topology, tr),
-		StateCategoryForPlace: stateCategoryForPlace(snapshot.Topology),
+		Now:                      e.now(),
+		CurrentTransitionID:      tr.ID,
+		DispatchHistory:          snapshot.DispatchHistory,
+		ActiveDispatches:         snapshot.Dispatches,
+		RuntimeConfig:            e.runtimeConfig,
+		TransitionWorkers:        transitionWorkerTypes(snapshot.Topology, tr),
+		StateCategoryForPlace:    stateCategoryForPlace(snapshot.Topology),
+		ParentChildRegistrations: snapshot.Marking.ParentChildRegistrations,
 	}
 }
 

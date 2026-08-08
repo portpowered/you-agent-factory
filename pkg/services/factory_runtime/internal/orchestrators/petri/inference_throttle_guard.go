@@ -21,6 +21,10 @@ type RuntimeGuardContext struct {
 	// compiled Factory definition without coupling Petri guards to the state
 	// package. It is nil for callers that only have a raw marking.
 	StateCategoryForPlace func(placeID string) string
+	// ParentChildRegistrations is the runtime-owned, ordered registration
+	// projection. Runtime fan-in guards use it as the complete population
+	// denominator instead of inferring registration from one place.
+	ParentChildRegistrations ParentChildRegistrationProjection
 }
 
 type RuntimeGuard interface {

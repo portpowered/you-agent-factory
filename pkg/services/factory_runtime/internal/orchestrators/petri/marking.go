@@ -10,21 +10,74 @@ import (
 // Marking represents the complete state of tokens across places in a petri net.
 // It is the single source of truth. The factory loop reads and writes markings.
 type Marking struct {
-	Tokens       map[string]*factorytoken.Token `json:"tokens"`       // token ID → token (all live tokens)
-	PlaceTokens  map[string][]string            `json:"place_tokens"` // place ID → token IDs (index for fast lookup)
-	TickCount    int                            `json:"tick_count"`
-	WorkflowID   string                         `json:"workflow_id"`
-	TraceContext map[string]string              `json:"trace_context"` // workflow-level trace metadata
+	Tokens                   map[string]*factorytoken.Token    `json:"tokens"`       // token ID → token (all live tokens)
+	PlaceTokens              map[string][]string               `json:"place_tokens"` // place ID → token IDs (index for fast lookup)
+	ParentChildRegistrations ParentChildRegistrationProjection `json:"parent_child_registrations,omitempty"`
+	TickCount                int                               `json:"tick_count"`
+	WorkflowID               string                            `json:"workflow_id"`
+	TraceContext             map[string]string                 `json:"trace_context"` // workflow-level trace metadata
 }
+
+// ParentChildRegistrationSet is the ordered runtime projection of the
+// parent-scoped child work items admitted by canonical work-request facts.
+// Complete is deliberately explicit: a fan-in guard must not infer that the
+// currently visible children are the complete registered population.
+type ParentChildRegistrationSet struct {
+	Children []factorytoken.Token `json:"children"`
+	Complete bool                 `json:"complete"`
+}
+
+// ParentChildRegistrationProjection stores registration facts by parent work
+// ID. The child slice preserves canonical admission order for deterministic
+// snapshots and guard evaluation.
+type ParentChildRegistrationProjection map[string]ParentChildRegistrationSet
 
 // NewMarking creates an empty Marking for the given workflow.
 func NewMarking(workflowID string) *Marking {
 	return &Marking{
-		Tokens:       make(map[string]*factorytoken.Token),
-		PlaceTokens:  make(map[string][]string),
-		WorkflowID:   workflowID,
-		TraceContext: make(map[string]string),
+		Tokens:                   make(map[string]*factorytoken.Token),
+		PlaceTokens:              make(map[string][]string),
+		ParentChildRegistrations: make(ParentChildRegistrationProjection),
+		WorkflowID:               workflowID,
+		TraceContext:             make(map[string]string),
 	}
+}
+
+// RecordParentChildRegistration appends one admitted child to the ordered
+// parent-scoped registration projection. Completion is recorded separately so
+// callers can add every child from an atomic request before exposing the set to
+// the scheduler.
+func (m *Marking) RecordParentChildRegistration(token *factorytoken.Token) {
+	if m == nil || token == nil || token.Color.ParentID == "" || token.Color.WorkID == "" || token.Color.DataType == factorytoken.DataTypeResource {
+		return
+	}
+	if m.ParentChildRegistrations == nil {
+		m.ParentChildRegistrations = make(ParentChildRegistrationProjection)
+	}
+	parentID := token.Color.ParentID
+	set := m.ParentChildRegistrations[parentID]
+	identity := registrationTokenIdentity(*token)
+	for _, child := range set.Children {
+		if registrationTokenIdentity(child) == identity {
+			return
+		}
+	}
+	set.Children = append(set.Children, deepCopyToken(token))
+	set.Complete = false
+	m.ParentChildRegistrations[parentID] = set
+}
+
+// CompleteParentChildRegistration publishes the complete registration fact
+// for a parent after all children from the current canonical request have been
+// recorded. A later request may append another ordered fact and temporarily
+// reopen the set until that request is complete.
+func (m *Marking) CompleteParentChildRegistration(parentID string) {
+	if m == nil || parentID == "" || len(m.ParentChildRegistrations[parentID].Children) == 0 {
+		return
+	}
+	set := m.ParentChildRegistrations[parentID]
+	set.Complete = true
+	m.ParentChildRegistrations[parentID] = set
 }
 
 // AddToken adds a token to the marking and updates the place index.
@@ -72,11 +125,12 @@ func (m *Marking) TokensInPlace(placeID string) []factorytoken.Token {
 // MarkingSnapshot is an immutable deep copy of a Marking, used for
 // subsystem reads and history.
 type MarkingSnapshot struct {
-	Tokens       map[string]*factorytoken.Token `json:"tokens"`
-	PlaceTokens  map[string][]string            `json:"place_tokens"`
-	TickCount    int                            `json:"tick_count"`
-	WorkflowID   string                         `json:"workflow_id"`
-	TraceContext map[string]string              `json:"trace_context"`
+	Tokens                   map[string]*factorytoken.Token    `json:"tokens"`
+	PlaceTokens              map[string][]string               `json:"place_tokens"`
+	ParentChildRegistrations ParentChildRegistrationProjection `json:"parent_child_registrations,omitempty"`
+	TickCount                int                               `json:"tick_count"`
+	WorkflowID               string                            `json:"workflow_id"`
+	TraceContext             map[string]string                 `json:"trace_context"`
 }
 
 // Snapshot returns a deep copy of the marking as an immutable MarkingSnapshot.
@@ -97,13 +151,33 @@ func (m *Marking) Snapshot() MarkingSnapshot {
 	traceCtx := make(map[string]string, len(m.TraceContext))
 	maps.Copy(traceCtx, m.TraceContext)
 
-	return MarkingSnapshot{
-		Tokens:       tokens,
-		PlaceTokens:  placeTokens,
-		TickCount:    m.TickCount,
-		WorkflowID:   m.WorkflowID,
-		TraceContext: traceCtx,
+	registrations := make(ParentChildRegistrationProjection, len(m.ParentChildRegistrations))
+	for parentID, set := range m.ParentChildRegistrations {
+		children := make([]factorytoken.Token, len(set.Children))
+		for i := range set.Children {
+			children[i] = deepCopyToken(&set.Children[i])
+		}
+		registrations[parentID] = ParentChildRegistrationSet{
+			Children: children,
+			Complete: set.Complete,
+		}
 	}
+
+	return MarkingSnapshot{
+		Tokens:                   tokens,
+		PlaceTokens:              placeTokens,
+		ParentChildRegistrations: registrations,
+		TickCount:                m.TickCount,
+		WorkflowID:               m.WorkflowID,
+		TraceContext:             traceCtx,
+	}
+}
+
+func registrationTokenIdentity(token factorytoken.Token) string {
+	if token.Color.WorkID != "" {
+		return "work:" + token.Color.WorkID
+	}
+	return "token:" + token.ID
 }
 
 // TokensInPlace returns all tokens in the given place from the snapshot.

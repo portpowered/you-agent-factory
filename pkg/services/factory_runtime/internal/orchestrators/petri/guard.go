@@ -288,6 +288,9 @@ func (g *AllWithParentGuard) Evaluate(candidates []factorytoken.Token, bindings 
 // denominator because processing children may be in another place or in an
 // active dispatch.
 func (g *AllWithParentGuard) EvaluateRuntime(ctx RuntimeGuardContext, candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, marking *MarkingSnapshot) ([]factorytoken.Token, bool) {
+	if ctx.ParentChildRegistrations == nil {
+		return nil, false
+	}
 	return g.evaluate(ctx, candidates, bindings, marking)
 }
 
@@ -310,6 +313,36 @@ func (g *AllWithParentGuard) evaluate(ctx RuntimeGuardContext, candidates []fact
 				return nil, false
 			}
 		}
+	}
+
+	if ctx.ParentChildRegistrations != nil {
+		registration, known := ctx.ParentChildRegistrations[parentWorkID]
+		if !known || !registration.Complete || len(registration.Children) == 0 {
+			return nil, false
+		}
+		registered := parentChildTokens(marking, ctx.ActiveDispatches, parentWorkID, "")
+		registeredIDs := tokenIdentitySet(registration.Children)
+		if len(registered) != len(registeredIDs) {
+			return nil, false
+		}
+		for identity, child := range registered {
+			if !registeredIDs[identity] {
+				return nil, false
+			}
+			if ctx.StateCategoryForPlace != nil && ctx.StateCategoryForPlace(child.PlaceID) != runtimeStateCategoryTerminal {
+				return nil, false
+			}
+		}
+		matchedIDs := tokenIdentitySet(matched)
+		if len(matchedIDs) != len(registeredIDs) {
+			return nil, false
+		}
+		for identity := range registeredIDs {
+			if !matchedIDs[identity] {
+				return nil, false
+			}
+		}
+		return matched, true
 	}
 
 	registered := parentChildTokens(marking, ctx.ActiveDispatches, parentWorkID, childWorkTypeID)
@@ -461,24 +494,12 @@ type FanoutCountGuard struct {
 }
 
 var _ Guard = (*FanoutCountGuard)(nil)
-var _ RuntimeGuard = (*FanoutCountGuard)(nil)
 
 // Evaluate returns all candidates whose ParentID matches the parent token's WorkID,
 // but only if the total count equals the expected count from the count token.
-func (g *FanoutCountGuard) Evaluate(candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, marking *MarkingSnapshot) ([]factorytoken.Token, bool) {
-	return g.evaluate(RuntimeGuardContext{}, candidates, bindings, marking)
-}
-
-// EvaluateRuntime includes active dispatch inputs in the registered set so a
-// processing child that has already been claimed by a worker cannot disappear
-// from the fan-in denominator while it is out of the marking.
-func (g *FanoutCountGuard) EvaluateRuntime(ctx RuntimeGuardContext, candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, marking *MarkingSnapshot) ([]factorytoken.Token, bool) {
-	return g.evaluate(ctx, candidates, bindings, marking)
-}
-
-func (g *FanoutCountGuard) evaluate(ctx RuntimeGuardContext, candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, marking *MarkingSnapshot) ([]factorytoken.Token, bool) {
+func (g *FanoutCountGuard) Evaluate(candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, _ *MarkingSnapshot) ([]factorytoken.Token, bool) {
 	parent, exists := bindings[g.MatchBinding]
-	if !exists || parent == nil || parent.Color.WorkID == "" {
+	if !exists {
 		return nil, false
 	}
 
@@ -497,34 +518,15 @@ func (g *FanoutCountGuard) evaluate(ctx RuntimeGuardContext, candidates []factor
 	}
 
 	parentWorkID := parent.Color.WorkID
-	matched := matchingParentChildren(candidates, parentWorkID, "")
+	var matched []factorytoken.Token
+	for _, c := range candidates {
+		if c.Color.ParentID == parentWorkID {
+			matched = append(matched, c)
+		}
+	}
+
 	if len(matched) != expectedCount {
 		return nil, false
-	}
-
-	if ctx.StateCategoryForPlace != nil {
-		for _, candidate := range matched {
-			if ctx.StateCategoryForPlace(candidate.PlaceID) != runtimeStateCategoryTerminal {
-				return nil, false
-			}
-		}
-	}
-
-	if marking != nil {
-		childWorkTypeID := firstWorkTypeID(matched)
-		registered := parentChildTokens(marking, ctx.ActiveDispatches, parentWorkID, childWorkTypeID)
-		if len(registered) != expectedCount {
-			return nil, false
-		}
-		matchedIDs := tokenIdentitySet(matched)
-		for identity, child := range registered {
-			if !matchedIDs[identity] {
-				return nil, false
-			}
-			if ctx.StateCategoryForPlace != nil && ctx.StateCategoryForPlace(child.PlaceID) != runtimeStateCategoryTerminal {
-				return nil, false
-			}
-		}
 	}
 
 	return matched, true
