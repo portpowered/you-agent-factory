@@ -15,6 +15,8 @@ const (
 	FilterName         = "name"
 	FilterWorkTypeName = "workTypeName"
 	FilterTraceID      = "traceId"
+	FilterTerminal     = "terminal"
+	FilterNonTerminal  = "nonTerminal"
 
 	SortByStateType = "state.type"
 
@@ -63,6 +65,13 @@ type ListResult struct {
 	Results    []ReadModel
 	MaxResults int
 	NextToken  string
+	Counts     *ListCountSummary
+}
+
+// ListCountSummary describes the complete filtered selection before page
+// slicing. It is present only when requested through ListOptions.Counts.
+type ListCountSummary struct {
+	Total int
 }
 
 // ReadSnapshot is the detached runtime observation consumed only by the Work
@@ -111,9 +120,12 @@ type ListOptions struct {
 	Name         string
 	WorkTypeName string
 	TraceID      string
+	Terminal     bool
+	NonTerminal  bool
 	SortBy       string
 	MaxResults   int
 	NextToken    string
+	Counts       bool
 }
 
 // PreparedListRequest is the detached, validated value returned to transport
@@ -158,9 +170,12 @@ func (q ListQuery) Options() ListOptions {
 		Name:         opts.Name,
 		WorkTypeName: opts.WorkTypeName,
 		TraceID:      opts.TraceID,
+		Terminal:     opts.Terminal,
+		NonTerminal:  opts.NonTerminal,
 		SortBy:       opts.SortBy,
 		MaxResults:   opts.MaxResults,
 		NextToken:    opts.NextToken,
+		Counts:       opts.Counts,
 	}
 }
 
@@ -217,9 +232,12 @@ func listOptionsToQuery(options ListOptions) stateaccessquery.ListOptions {
 		Name:         options.Name,
 		WorkTypeName: options.WorkTypeName,
 		TraceID:      options.TraceID,
+		Terminal:     options.Terminal,
+		NonTerminal:  options.NonTerminal,
 		SortBy:       options.SortBy,
 		MaxResults:   options.MaxResults,
 		NextToken:    options.NextToken,
+		Counts:       options.Counts,
 	}
 }
 
@@ -230,9 +248,12 @@ func listOptionsFromQuery(options stateaccessquery.ListOptions) ListOptions {
 		Name:         options.Name,
 		WorkTypeName: options.WorkTypeName,
 		TraceID:      options.TraceID,
+		Terminal:     options.Terminal,
+		NonTerminal:  options.NonTerminal,
 		SortBy:       options.SortBy,
 		MaxResults:   options.MaxResults,
 		NextToken:    options.NextToken,
+		Counts:       options.Counts,
 	}
 }
 
