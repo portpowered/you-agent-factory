@@ -11,6 +11,7 @@
 - Command effects advertise their native output format in effect metadata so strict print contracts can coexist with legacy PTY compatibility effects.
 - Operator-only external smoke tests gate before executable discovery and use root.BuildProcess with an empty edge set; ordinary functional lanes inject only command-runner effects and never inherit the live gate.
 - Cross-platform filesystem permission tests must account for Windows mode-bit semantics while retaining strict POSIX assertions; Windows protection is provided by ACLs rather than POSIX permission bits.
+- Compare repository-wide quality-check output with the current base before attributing legacy findings; keep newly added Go tests within the backend-size limits by extracting case assertions into helpers.
 
 ## [2026-08-08 14:03 -07:00] - wo-b1-antigravity-provider-golden-traces-001
 - What was implemented
@@ -132,4 +133,24 @@
 - **Learnings for future iterations:**
   - The AGY story-specific verification is green after the Windows guard; do not weaken the POSIX permission assertion to accommodate Windows.
   - Reconcile feature branches with `origin/main` before interpreting repository-wide baseline checks, because the backend-size inventory includes unrelated upstream debt.
+---
+
+## [2026-08-08 16:01 -07:00] - wo-b1-antigravity-provider-golden-traces-005
+- What was implemented
+  - Refactored the recorded stream parser and multimodal root golden tests into named case tables plus helper assertions so this branch contributes no new backend-size violations.
+  - Confirmed the current branch reports 99 backend-size findings, matching the `origin/main` baseline; the two AGY-specific findings reported before this cleanup are gone.
+- Files changed
+  - `pkg/services/providers/internal/services/execution/internal/adapters/agy/stream_test.go`
+  - `tests/functional/providers/agy/golden_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/providers/agy/... -count=1` passes from the real offline traces.
+  - `go test ./tests/functional/providers/agy/... -run '^TestAgyLiveSmoke$' -count=1` passes with the live smoke disabled by default.
+  - `go test ./pkg/services/providers/... ./pkg/services/workers/... -count=1` and focused `go vet` pass.
+  - `make verify-fast` completed typecheck, MCP checks, all 355 UI files/2,970 tests, and the short Go package lane successfully, but its wrapper exceeded the 180-second command limit after the package results were printed.
+  - `make lint` remains blocked only at the repository-wide backend-size gate by the 99-finding `origin/main` baseline; no live AGY call was made.
+- **Learnings for future iterations:**
+  - Baseline comparison showed the AGY implementation was not responsible for the remaining repository-wide size failures after the two new test findings were extracted.
+  - Keep the operator smoke separately gated; the default command must remain offline and side-effect free.
 ---

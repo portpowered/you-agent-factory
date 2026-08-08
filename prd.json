@@ -102,7 +102,7 @@
       ],
       "priority": 5,
       "passes": false,
-      "notes": "Implemented the single operator-gated TestAgyLiveSmoke through the canonical root.BuildProcess path with the real platform subprocess runner, supported gemini-3.6-flash-low recipe, actionable executable skip, and authentication/model/quota failure diagnostics. Ordinary AGY functional tests remain offline and pass, and the gated test skips by default. Merged the latest origin/main cleanly and added a Windows-portable runtime-artifact permission assertion, so make verify-fast, the exact offline AGY command, the default-gated smoke command, focused provider/worker tests, and provider/worker/AGY vet all pass. Full make lint remains blocked by 101 repository-wide backend-size findings from the existing baseline/upstream merge; story remains false pending that repository-wide gate."
+      "notes": "Implemented the single operator-gated TestAgyLiveSmoke through the canonical root.BuildProcess path with the real platform subprocess runner, supported gemini-3.6-flash-low recipe, actionable executable skip, and authentication/model/quota failure diagnostics. Ordinary AGY functional tests remain offline and pass, and the gated test skips by default. Merged the latest origin/main cleanly and added a Windows-portable runtime-artifact permission assertion. Extracted the two AGY-specific backend-size findings from the recorded stream and multimodal tests; current make lint reaches the 99-finding origin/main backend-size baseline, so story remains false pending the repository-wide gate."
     }
   ]
 }
