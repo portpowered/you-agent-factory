@@ -3,6 +3,8 @@ package workersessions
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
@@ -34,6 +36,12 @@ func (o TerminalOutcome) Valid() bool {
 // FailureCauseKind is the bounded W2 typed vocabulary for why a Worker
 // Session terminalized as FAILED.
 type FailureCauseKind string
+
+// MaxFailureCauseDetailRunes bounds the customer-safe diagnostic carried by a
+// failed Worker Session and its terminal event. The terminal contract keeps
+// the classification in Kind and provider fields, so this message never needs
+// to retain an unbounded provider or rollout error.
+const MaxFailureCauseDetailRunes = 512
 
 const (
 	// FailureCauseStartFailure reports that the resolved attempt could not
@@ -75,13 +83,13 @@ func (k FailureCauseKind) Valid() bool {
 // FailureCause is the non-nil typed reason attached to every FAILED terminal
 // result. Kind always reflects the true classification, including
 // EXECUTOR_PANIC. Detail is a bounded, safe diagnostic string derived only
-// from Workers' own closed-vocabulary structured failure classification
-// (WorkResult.FailureMetadata's Family/Type) or a fixed generic placeholder
-// naming the Kind. Detail never contains raw Workers WorkResult.Error text or
-// a raw adapter error message: neither source is established as free of
-// payloads, credentials, environment values, prompts, or raw provider
-// commands, so that free-form text is never attached to Detail in any form.
-// Callers must not treat Detail as a verbatim error message.
+// from Workers' own closed-vocabulary structured failure classification,
+// closed-vocabulary diagnostic context, or a fixed generic placeholder naming
+// the Kind. Detail never contains raw Workers WorkResult.Error text or a raw
+// adapter error message: neither source is established as free of payloads,
+// credentials, environment values, prompts, or raw provider commands, so that
+// free-form text is never attached to Detail in any form. Callers must not
+// treat Detail as a verbatim error message.
 type FailureCause struct {
 	Kind   FailureCauseKind
 	Detail string
@@ -99,11 +107,22 @@ type FailureCause struct {
 	ProviderContinuationOutcome providers.ContinuationOutcome
 }
 
-// Validate reports whether c names one of the four bounded W2 failure kinds.
+// Validate reports whether c names one of the bounded failure kinds and has a
+// trimmed, non-empty, bounded diagnostic detail.
 // Validate is pure and does not mutate c.
 func (c FailureCause) Validate() error {
 	if !c.Kind.Valid() {
 		return fmt.Errorf("%w: %q", ErrInvalidFailureCause, c.Kind)
+	}
+	trimmed := strings.TrimSpace(c.Detail)
+	if trimmed == "" {
+		return fmt.Errorf("%w: empty failure detail", ErrInvalidFailureCause)
+	}
+	if c.Detail != trimmed {
+		return fmt.Errorf("%w: failure detail must be trimmed", ErrInvalidFailureCause)
+	}
+	if utf8.RuneCountInString(trimmed) > MaxFailureCauseDetailRunes {
+		return fmt.Errorf("%w: failure detail exceeds %d runes", ErrInvalidFailureCause, MaxFailureCauseDetailRunes)
 	}
 	providerFailureKind, continuationFailureKind, continuationOutcome := SanitizeProviderFailureClassification(
 		c.ProviderFailureKind,

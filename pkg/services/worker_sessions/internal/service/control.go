@@ -159,7 +159,7 @@ func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (
 		final, committed := r.commitTerminal(req.ID, workersessions.StateFailed, terminal)
 		if committed {
 			r.logTerminal(req.ID, attemptID, final)
-			r.publishTerminalRecordOrLog(ctx, req.ID, attemptID, workersessions.StateFailed, terminal)
+			r.publishTerminalRecordOrLog(ctx, req.ID, attemptID, workersessions.StateFailed, *final.Result)
 		}
 		return workersessions.StartResult{Session: final}, nil
 	}
@@ -333,7 +333,7 @@ func (r *registry) completeSupervision(id string, supervision *supervision, resu
 	final, committed := r.commitTerminal(id, state, terminal)
 	if committed {
 		r.logTerminal(id, dispatchID, final)
-		r.publishTerminalRecordOrLog(context.Background(), id, dispatchID, state, terminal)
+		r.publishTerminalRecordOrLog(context.Background(), id, dispatchID, state, *final.Result)
 	}
 	supervision.signalDone()
 }

@@ -953,10 +953,9 @@ func TestStart_ResultAndErrorDisagreement_TrustsWorkResultOutcomeOverAdapterErro
 	}
 }
 
-func TestStart_ResultSuccessDisagreesWithNonNilAdapterError_TrustsWorkResultOutcome(t *testing.T) {
-	// The WorkResult reports success even though a non-nil adapter error
-	// also came back. Result outcome is authoritative before adapter error:
-	// this must still terminalize COMPLETED.
+func TestStart_ResultSuccessDisagreesWithNonNilAdapterError_TerminalizesFailedWithCause(t *testing.T) {
+	// A successful WorkResult cannot erase a non-nil adapter error. The
+	// contradictory evidence must remain visible as a failed terminal result.
 	execution := &fakeExecution{
 		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
 			return workers.WorkstationDispatchResult{
@@ -975,8 +974,12 @@ func TestStart_ResultSuccessDisagreesWithNonNilAdapterError_TrustsWorkResultOutc
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
-	if result.Session.State != workersessions.StateCompleted {
-		t.Fatalf("Start() state = %q, want COMPLETED because WorkResult.Outcome is authoritative", result.Session.State)
+	if result.Session.State != workersessions.StateFailed {
+		t.Fatalf("Start() state = %q, want FAILED for contradictory completion evidence", result.Session.State)
+	}
+	if result.Session.Result == nil || result.Session.Result.Cause == nil ||
+		strings.TrimSpace(result.Session.Result.Cause.Detail) == "" {
+		t.Fatalf("Start() result = %#v, want a non-empty failure cause", result.Session.Result)
 	}
 }
 

@@ -8,8 +8,8 @@ import (
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
-	"github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor"
 	cursorreader "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader"
+	"github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
@@ -94,15 +94,17 @@ func (r *reader) Read(ctx context.Context, ref providers.SessionRef) (providerse
 		return providersessions.Detail{}, providersessions.ErrOperationCanceled
 	case errors.Is(err, providersessions.ErrResourceLimitExceeded):
 		return providersessions.Detail{}, &providersessions.LookupError{
-			Provider: providersessions.ProviderCursor,
-			Root:     string(r.root),
-			Err:      err,
+			Provider:  providersessions.ProviderCursor,
+			SessionID: ref.ID,
+			Root:      string(r.root),
+			Err:       err,
 		}
 	}
 	return providersessions.Detail{}, &providersessions.LookupError{
-		Provider: providersessions.ProviderCursor,
-		Root:     string(r.root),
-		Err:      normalizeDiscoveryError(err),
+		Provider:  providersessions.ProviderCursor,
+		SessionID: ref.ID,
+		Root:      string(r.root),
+		Err:       normalizeDiscoveryError(err),
 	}
 }
 

@@ -175,7 +175,10 @@ func (s *preHandoffFailedWorkerSessionsService) Start(
 			State: workersessions.StateFailed,
 			Result: &workersessions.TerminalResult{
 				Outcome: workersessions.TerminalOutcomeFailed,
-				Cause:   &workersessions.FailureCause{Kind: workersessions.FailureCauseEventPublicationFailure},
+				Cause: &workersessions.FailureCause{
+					Kind:   workersessions.FailureCauseEventPublicationFailure,
+					Detail: "the Worker Session opening record could not be published",
+				},
 			},
 		},
 	}, nil

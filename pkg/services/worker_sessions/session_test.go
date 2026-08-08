@@ -68,7 +68,7 @@ func TestSession_Validate_CompletedRequiresMatchingCompletedResult(t *testing.T)
 		State: workersessions.StateCompleted,
 		Result: &workersessions.TerminalResult{
 			Outcome: workersessions.TerminalOutcomeFailed,
-			Cause:   &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure},
+			Cause:   &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "execution failed"},
 		},
 	}
 	if err := mismatched.Validate(); !errors.Is(err, workersessions.ErrInvalidTerminalResult) {
@@ -82,7 +82,7 @@ func TestSession_Validate_FailedRequiresMatchingFailedResultWithCause(t *testing
 		State: workersessions.StateFailed,
 		Result: &workersessions.TerminalResult{
 			Outcome: workersessions.TerminalOutcomeFailed,
-			Cause:   &workersessions.FailureCause{Kind: workersessions.FailureCauseExecutorPanic},
+			Cause:   &workersessions.FailureCause{Kind: workersessions.FailureCauseExecutorPanic, Detail: "executor failed"},
 		},
 	}
 	if err := session.Validate(); err != nil {

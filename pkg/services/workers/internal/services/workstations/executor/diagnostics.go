@@ -1,8 +1,10 @@
 package executor
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -10,6 +12,7 @@ import (
 
 func workDiagnosticsForInferenceRequest(req workerexecution.ProviderInferenceRequest) *workerexecution.WorkDiagnostics {
 	requestMetadata := map[string]string{
+		"dispatch_id":       req.Dispatch.DispatchID,
 		"worker_type":       firstNonEmpty(req.WorkerType, req.Dispatch.WorkerType),
 		"workstation_type":  req.WorkstationType,
 		"worktree":          req.Worktree,
@@ -72,9 +75,50 @@ func withInferenceErrorDiagnostics(base *workerexecution.WorkDiagnostics, err er
 	if diagnostics.Provider.ResponseMetadata == nil {
 		diagnostics.Provider.ResponseMetadata = make(map[string]string)
 	}
-	diagnostics.Provider.ResponseMetadata["error"] = err.Error()
+	setSafeFailureMetadata(diagnostics, err)
 	diagnostics.Provider.ResponseMetadata["retry_count"] = fmt.Sprintf("%d", retryCount)
 	return diagnostics
+}
+
+func completionValidationDiagnostics(base *workerexecution.WorkDiagnostics) *workerexecution.WorkDiagnostics {
+	diagnostics := workerexecution.CloneWorkDiagnostics(base)
+	if diagnostics == nil {
+		diagnostics = &workerexecution.WorkDiagnostics{}
+	}
+	if diagnostics.Provider == nil {
+		diagnostics.Provider = &workerexecution.ProviderDiagnostic{}
+	}
+	if diagnostics.Provider.ResponseMetadata == nil {
+		diagnostics.Provider.ResponseMetadata = make(map[string]string)
+	}
+	diagnostics.Provider.ResponseMetadata[workerexecution.ProviderResponseMetadataFailureFamily] = string(workerexecution.WorkFailureFamilyTerminal)
+	diagnostics.Provider.ResponseMetadata[workerexecution.ProviderResponseMetadataFailureType] = string(workerexecution.WorkFailureTypeUnknown)
+	diagnostics.Provider.ResponseMetadata[workerexecution.ProviderResponseMetadataFailureOperation] = "completion_validation"
+	diagnostics.Provider.ResponseMetadata[workerexecution.ProviderResponseMetadataFailureClassification] = "missing_completion_evidence"
+	return diagnostics
+}
+
+func setSafeFailureMetadata(diagnostics *workerexecution.WorkDiagnostics, err error) {
+	if diagnostics == nil || diagnostics.Provider == nil {
+		return
+	}
+	metadata := diagnostics.Provider.ResponseMetadata
+	metadata[workerexecution.ProviderResponseMetadataFailureOperation] = "provider_inference"
+	providerErr := workerexecution.NormalizeProviderExecutionError(err)
+	if providerErr != nil {
+		metadata[workerexecution.ProviderResponseMetadataFailureFamily] = string(providerErr.Family)
+		metadata[workerexecution.ProviderResponseMetadataFailureType] = string(providerErr.Type)
+		return
+	}
+	metadata[workerexecution.ProviderResponseMetadataFailureFamily] = string(workerexecution.WorkFailureFamilyTerminal)
+	if errors.Is(err, context.DeadlineExceeded) {
+		metadata[workerexecution.ProviderResponseMetadataFailureFamily] = string(workerexecution.WorkFailureFamilyRetryable)
+		metadata[workerexecution.ProviderResponseMetadataFailureType] = string(workerexecution.WorkFailureTypeTimeout)
+	} else if errors.Is(err, context.Canceled) {
+		metadata[workerexecution.ProviderResponseMetadataFailureType] = string(workerexecution.WorkFailureTypeUnknown)
+	} else {
+		metadata[workerexecution.ProviderResponseMetadataFailureType] = string(workerexecution.WorkFailureTypeUnknown)
+	}
 }
 
 func mergeWorkDiagnostics(base, overlay *workerexecution.WorkDiagnostics) *workerexecution.WorkDiagnostics {

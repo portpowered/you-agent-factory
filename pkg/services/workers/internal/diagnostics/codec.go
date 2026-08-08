@@ -289,7 +289,9 @@ func safeDiagnosticMetadata(input map[string]string) map[string]string {
 	out := make(map[string]string, len(input))
 	for key, value := range input {
 		if isSafeProviderMetadataKey(key) {
-			out[key] = safeDiagnosticMetadataValue(key, value)
+			if safeValue := safeDiagnosticMetadataValue(key, value); safeValue != "" {
+				out[key] = safeValue
+			}
 		}
 	}
 	if len(out) == 0 {
@@ -299,13 +301,46 @@ func safeDiagnosticMetadata(input map[string]string) map[string]string {
 }
 
 func safeDiagnosticMetadataValue(key, value string) string {
-	switch strings.ToLower(strings.TrimSpace(key)) {
+	key = strings.ToLower(strings.TrimSpace(key))
+	switch key {
 	case "working_directory", "worktree":
 		if isHostSpecificDiagnosticPath(value) {
 			return workerenvdiagnostics.MetadataOnlyCommandEnvValue
 		}
 	}
+	switch key {
+	case "completion_evidence":
+		return closedVocabularyMetadataValue(value, safeCompletionEvidenceValues)
+	case "failure_classification":
+		return closedVocabularyMetadataValue(value, safeFailureClassificationValues)
+	case "failure_family":
+		return closedVocabularyMetadataValue(value, safeFailureFamilyValues)
+	case "failure_operation":
+		return closedVocabularyMetadataValue(value, safeFailureOperationValues)
+	case "failure_stage":
+		return closedVocabularyMetadataValue(value, safeFailureStageValues)
+	case "failure_type":
+		return closedVocabularyMetadataValue(value, safeFailureTypeValues)
+	}
+	return boundedSafeMetadataValue(value)
+}
+
+func closedVocabularyMetadataValue(value string, allowed map[string]struct{}) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if _, ok := allowed[value]; !ok {
+		return ""
+	}
 	return value
+}
+
+const maxSafeMetadataValueRunes = 512
+
+func boundedSafeMetadataValue(value string) string {
+	runes := []rune(value)
+	if len(runes) <= maxSafeMetadataValueRunes {
+		return value
+	}
+	return string(runes[:maxSafeMetadataValueRunes])
 }
 
 var hostSpecificDiagnosticPathPatterns = []*regexp.Regexp{
@@ -330,6 +365,13 @@ func isHostSpecificDiagnosticPath(value string) bool {
 func isSafeProviderMetadataKey(key string) bool {
 	switch strings.ToLower(key) {
 	case "content_bytes",
+		"completion_evidence",
+		"dispatch_id",
+		"failure_classification",
+		"failure_family",
+		"failure_operation",
+		"failure_stage",
+		"failure_type",
 		"opencode_agent",
 		"output_schema",
 		"prompt_source",
@@ -350,6 +392,57 @@ func isSafeProviderMetadataKey(key string) bool {
 	default:
 		return false
 	}
+}
+
+var safeCompletionEvidenceValues = map[string]struct{}{
+	"agent_message":     {},
+	"provider_response": {},
+	"task_complete":     {},
+	"turn_completed":    {},
+}
+
+var safeFailureClassificationValues = map[string]struct{}{
+	"canceled":                    {},
+	"contradictory_completion":    {},
+	"missing_completion_evidence": {},
+	"parse":                       {},
+	"resource_limit":              {},
+	"storage":                     {},
+}
+
+var safeFailureFamilyValues = map[string]struct{}{
+	"retryable": {},
+	"terminal":  {},
+	"throttle":  {},
+}
+
+var safeFailureOperationValues = map[string]struct{}{
+	"completion_validation":      {},
+	"provider_inference":         {},
+	"provider_session_ingestion": {},
+	"worker_dispatch":            {},
+}
+
+var safeFailureStageValues = map[string]struct{}{
+	"cancellation": {},
+	"decode":       {},
+	"final_parse":  {},
+	"flush":        {},
+	"native":       {},
+	"parse":        {},
+	"storage":      {},
+}
+
+var safeFailureTypeValues = map[string]struct{}{
+	"auth_failure":          {},
+	"command_line_too_long": {},
+	"internal_server_error": {},
+	"missing_executable":    {},
+	"misconfigured":         {},
+	"permanent_bad_request": {},
+	"throttled":             {},
+	"timeout":               {},
+	"unknown":               {},
 }
 
 func cloneSafeInvocationDiagnostic(diagnostic *InvocationDiagnostic) *InvocationDiagnostic {

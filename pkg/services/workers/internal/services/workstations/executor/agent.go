@@ -112,6 +112,9 @@ func (ae *AgentExecutor) Execute(ctx context.Context, request workerexecution.Wo
 		return inferenceErrorWorkResult(request.Dispatch, err, diagnostics, retryCount, start, ae.clock), nil
 	}
 	diagnostics = withInferenceResponseDiagnostics(diagnostics, resp, retryCount)
+	if !hasAuthoritativeCompletionEvidence(resp) {
+		return missingCompletionEvidenceWorkResult(request, resp, diagnostics, retryCount, start, ae.clock), nil
+	}
 
 	if ae.decisionEnvelopes != nil &&
 		ae.decisionEnvelopes.UsesGoalRoutingDecisionEnvelope(workstationDef) {
@@ -156,6 +159,26 @@ func (ae *AgentExecutor) Execute(ctx context.Context, request workerexecution.Wo
 		resp.Content = shapedContent
 	}
 	return ae.workResultForInferenceResponse(request, resp, outcome, diagnostics, retryCount, start)
+}
+
+func hasAuthoritativeCompletionEvidence(resp workerexecution.InferenceResponse) bool {
+	if strings.TrimSpace(resp.Content) != "" {
+		return true
+	}
+	values := make([]string, 0, 2)
+	if resp.Diagnostics != nil {
+		values = append(values, resp.Diagnostics.Metadata[workerexecution.ProviderResponseMetadataCompletionEvidence])
+		if resp.Diagnostics.Provider != nil {
+			values = append(values, resp.Diagnostics.Provider.ResponseMetadata[workerexecution.ProviderResponseMetadataCompletionEvidence])
+		}
+	}
+	for _, value := range values {
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case "agent_message", "provider_response", "task_complete", "turn_completed":
+			return true
+		}
+	}
+	return false
 }
 
 func effectiveWorkerDefinition(request workerexecution.WorkstationExecutionRequest, workerDef *interfaces.FactoryWorkerConfig) *interfaces.FactoryWorkerConfig {
@@ -307,6 +330,29 @@ func inferenceErrorWorkResult(dispatch work.WorkDispatch, err error, diagnostics
 		result.ProviderContinuationOutcome = providerErr.ProviderContinuationOutcome
 	}
 	return result
+}
+
+func missingCompletionEvidenceWorkResult(
+	request workerexecution.WorkstationExecutionRequest,
+	resp workerexecution.InferenceResponse,
+	diagnostics *workerexecution.WorkDiagnostics,
+	retryCount int,
+	start time.Time,
+	clock func() time.Time,
+) workerexecution.WorkResult {
+	return workerexecution.WorkResult{
+		DispatchID:   request.Dispatch.DispatchID,
+		TransitionID: request.Dispatch.TransitionID,
+		Outcome:      workerexecution.OutcomeFailed,
+		Error:        "provider completion evidence was missing",
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyTerminal,
+			Type:   workerexecution.WorkFailureTypeUnknown,
+		},
+		ProviderSession: workerexecution.CloneProviderSessionMetadata(resp.ProviderSession),
+		Diagnostics:     completionValidationDiagnostics(diagnostics),
+		Metrics:         agentWorkMetrics(start, retryCount, clock),
+	}
 }
 
 func (ae *AgentExecutor) workResultForInferenceResponse(request workerexecution.WorkstationExecutionRequest, resp workerexecution.InferenceResponse, outcome workerexecution.WorkOutcome, diagnostics *workerexecution.WorkDiagnostics, retryCount int, start time.Time) (workerexecution.WorkResult, error) {

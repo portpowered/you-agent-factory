@@ -3,11 +3,14 @@ package executor
 import (
 	"context"
 	"errors"
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"strings"
 	"testing"
 	"time"
+
+	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
@@ -541,6 +544,92 @@ func TestAgentExecutor_ProviderError_ReturnsFailedResult(t *testing.T) {
 	}
 	if result.Metrics.RetryCount != 0 {
 		t.Fatalf("RetryCount = %d, want 0", result.Metrics.RetryCount)
+	}
+	if result.Diagnostics == nil || result.Diagnostics.Provider == nil {
+		t.Fatalf("Diagnostics = %#v, want structured provider failure diagnostics", result.Diagnostics)
+	}
+	metadata := result.Diagnostics.Provider.ResponseMetadata
+	if _, exists := metadata["error"]; exists || metadata[workerexecution.ProviderResponseMetadataFailureOperation] != "provider_inference" {
+		t.Fatalf("failure diagnostics = %#v, want no raw error and a stable operation", metadata)
+	}
+}
+
+func TestAgentExecutor_EmptySuccessfulResponse_ReturnsMissingCompletionFailure(t *testing.T) {
+	provider := &agentMockProvider{response: workerexecution.InferenceResponse{}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*workerconfig.FactoryWorkerConfig{
+			"worker-a": {Model: "test-model"},
+		},
+	}, provider, nil, time.Now)
+
+	result, err := executor.Execute(context.Background(), testAgentRequest(
+		work.WorkDispatch{DispatchID: "d-empty-completion", TransitionID: "t-empty-completion", WorkerType: "worker-a"},
+		withAgentPrompts("sys", "msg"),
+	))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
+	}
+	if result.FailureMetadata == nil || result.FailureMetadata.Type != workerexecution.WorkFailureTypeUnknown {
+		t.Fatalf("FailureMetadata = %#v, want terminal unknown classification", result.FailureMetadata)
+	}
+	if result.Diagnostics == nil || result.Diagnostics.Provider == nil {
+		t.Fatalf("Diagnostics = %#v, want completion-validation diagnostics", result.Diagnostics)
+	}
+	metadata := result.Diagnostics.Provider.ResponseMetadata
+	if metadata[workerexecution.ProviderResponseMetadataFailureOperation] != "completion_validation" ||
+		metadata[workerexecution.ProviderResponseMetadataFailureClassification] != "missing_completion_evidence" {
+		t.Fatalf("completion diagnostics = %#v, want stable operation/classification", metadata)
+	}
+	if result.Error == "" || strings.Contains(result.Error, "sys") || strings.Contains(result.Error, "msg") {
+		t.Fatalf("Error = %q, want a safe non-empty completion cause", result.Error)
+	}
+}
+
+func TestAgentExecutor_ProviderSessionInspectionFailureIsTerminalAndSafe(t *testing.T) {
+	inspectionErr := &providersessions.LookupError{
+		Provider:  providersessions.ProviderCodex,
+		SessionID: "rollout-inspection-limit",
+		Err:       errors.Join(providersessions.ErrResourceLimitExceeded, errors.New("raw rollout and prompt must not escape")),
+	}
+	provider := &agentMockProvider{err: inspectionErr}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*workerconfig.FactoryWorkerConfig{
+			"worker-a": {Model: "test-model", ModelProvider: string(modelprovider.ProviderCodex)},
+		},
+	}, provider, nil, time.Now)
+
+	result, err := executor.Execute(context.Background(), testAgentRequest(
+		work.WorkDispatch{DispatchID: "d-inspection-limit", TransitionID: "t-inspection-limit", WorkerType: "worker-a"},
+		withAgentPrompts("secret system prompt", "secret user prompt"),
+	))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeFailed || provider.callCount != 1 {
+		t.Fatalf("result = %#v, provider calls = %d, want one terminal failed attempt", result, provider.callCount)
+	}
+	if result.Error != "provider error: unknown: provider session inspection reached its configured limit" {
+		t.Fatalf("result.Error = %q, want bounded inspection cause", result.Error)
+	}
+	if result.ProviderSession == nil || result.ProviderSession.ID != "rollout-inspection-limit" {
+		t.Fatalf("ProviderSession = %#v, want stable inspection session identity", result.ProviderSession)
+	}
+	if strings.Contains(result.Error, "raw rollout") || strings.Contains(result.Error, "prompt") {
+		t.Fatalf("result.Error leaked untrusted inspection context: %q", result.Error)
+	}
+	if result.Diagnostics == nil || result.Diagnostics.Provider == nil {
+		t.Fatalf("Diagnostics = %#v, want provider diagnostics", result.Diagnostics)
+	}
+	if result.Diagnostics.Provider.RequestMetadata["dispatch_id"] != "d-inspection-limit" {
+		t.Fatalf("request metadata = %#v, want stable dispatch id", result.Diagnostics.Provider.RequestMetadata)
+	}
+	metadata := result.Diagnostics.Provider.ResponseMetadata
+	if metadata[workerexecution.ProviderResponseMetadataFailureOperation] != "provider_session_ingestion" ||
+		metadata[workerexecution.ProviderResponseMetadataFailureClassification] != "resource_limit" {
+		t.Fatalf("response metadata = %#v, want stable inspection classification", metadata)
 	}
 }
 

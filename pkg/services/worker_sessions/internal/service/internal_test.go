@@ -233,6 +233,32 @@ func TestCommitTerminal_AlreadyTerminalIdentity_IsAbsorbingAndDoesNotOverwrite(t
 	}
 }
 
+func TestCommitTerminal_NormalizesEmptyFailureCauseBeforeCommit(t *testing.T) {
+	r := newTestRegistry(t)
+	r.reserveIfAbsent("worker-1")
+	if _, err := r.transitionToStarting("worker-1"); err != nil {
+		t.Fatalf("transitionToStarting() error = %v, want nil", err)
+	}
+
+	committed, won := r.commitTerminal("worker-1", workersessions.StateFailed, workersessions.TerminalResult{
+		Outcome: workersessions.TerminalOutcomeFailed,
+		Cause:   &workersessions.FailureCause{Kind: workersessions.FailureCauseAdapterFailure},
+	})
+	if !won {
+		t.Fatal("commitTerminal() committed = false, want true")
+	}
+	if committed.Result == nil || committed.Result.Cause == nil {
+		t.Fatalf("committed result = %#v, want failure cause", committed.Result)
+	}
+	if strings.TrimSpace(committed.Result.Cause.Detail) == "" ||
+		len([]rune(committed.Result.Cause.Detail)) > workersessions.MaxFailureCauseDetailRunes {
+		t.Fatalf("committed failure detail = %q, want non-empty bounded detail", committed.Result.Cause.Detail)
+	}
+	if err := committed.Validate(); err != nil {
+		t.Fatalf("committed.Validate() = %v, want valid normalized terminal", err)
+	}
+}
+
 // TestTransitionToRunning_TerminalSessionRemainsAbsorbing proves a late
 // admission callback cannot resurrect a Worker Session after its terminal
 // result has been committed. This is the guard that preserves the existing
@@ -595,6 +621,62 @@ func TestSafeDetail_WithEmptyFailureMetadata_FallsBackToGenericPlaceholder(t *te
 	want := genericFailureDetail[workersessions.FailureCauseWorkersExecutionFailure]
 	if got != want {
 		t.Fatalf("safeDetail() = %q, want fixed generic placeholder %q", got, want)
+	}
+}
+
+func TestClassifyTerminal_ProviderSessionInspectionFailureRetainsSafeCauseContext(t *testing.T) {
+	dispatchResult := workers.WorkstationDispatchResult{
+		DispatchID: "dispatch-inspection-failure",
+		Result: workers.WorkResult{
+			DispatchID: "dispatch-inspection-failure",
+			Outcome:    workers.OutcomeFailed,
+			FailureMetadata: &workers.WorkFailureMetadata{
+				Family: workers.WorkFailureFamilyTerminal,
+				Type:   workers.WorkFailureTypeUnknown,
+			},
+			Diagnostics: &workers.WorkDiagnostics{
+				Provider: &workers.ProviderDiagnostic{
+					ResponseMetadata: map[string]string{
+						workers.ProviderResponseMetadataFailureOperation:      "provider_session_ingestion",
+						workers.ProviderResponseMetadataFailureClassification: "resource_limit",
+						workers.ProviderResponseMetadataFailureStage:          "final_parse",
+						"raw_rollout": "must not be copied",
+					},
+				},
+			},
+		},
+	}
+
+	terminal := classifyTerminal(nil, dispatchResult)
+	if terminal.Outcome != workersessions.TerminalOutcomeFailed || terminal.Cause == nil {
+		t.Fatalf("terminal = %#v, want failed result with cause", terminal)
+	}
+	if got := terminal.Cause.Detail; got != "family=terminal type=unknown operation=provider_session_ingestion classification=resource_limit stage=final_parse" {
+		t.Fatalf("terminal cause detail = %q, want safe inspection context", got)
+	}
+	if strings.Contains(terminal.Cause.Detail, "raw_rollout") || strings.Contains(terminal.Cause.Detail, "must not") {
+		t.Fatalf("terminal cause detail leaked untrusted diagnostics: %q", terminal.Cause.Detail)
+	}
+	if err := terminal.Validate(); err != nil {
+		t.Fatalf("terminal.Validate() = %v, want valid bounded terminal result", err)
+	}
+}
+
+func TestClassifyTerminal_SuccessWithFailedDispatchUsesExplicitFailureCause(t *testing.T) {
+	terminal := classifyTerminal(nil, workers.WorkstationDispatchResult{
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
+		Result: workers.WorkResult{
+			Outcome: workers.OutcomeAccepted,
+		},
+	})
+	if terminal.Outcome != workersessions.TerminalOutcomeFailed || terminal.Cause == nil {
+		t.Fatalf("terminal = %#v, want failed result with cause", terminal)
+	}
+	if terminal.Cause.Kind != workersessions.FailureCauseAdapterFailure {
+		t.Fatalf("terminal cause kind = %q, want ADAPTER_FAILURE", terminal.Cause.Kind)
+	}
+	if terminal.Cause.Detail != "the dispatch reported failure after a successful Workers result" {
+		t.Fatalf("terminal cause detail = %q, want explicit contradictory-evidence cause", terminal.Cause.Detail)
 	}
 }
 

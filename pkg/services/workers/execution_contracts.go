@@ -407,6 +407,15 @@ const (
 	ProviderResponseMetadataDurationAPIMS = "duration_api_ms"
 	ProviderResponseMetadataInputTokens   = "input_tokens"
 	ProviderResponseMetadataOutputTokens  = "output_tokens"
+	// ProviderResponseMetadataFailure* are bounded, closed-vocabulary failure
+	// facts. They are safe to carry across the worker and terminal-event
+	// boundaries; raw provider errors and rollout payloads are not.
+	ProviderResponseMetadataFailureClassification = "failure_classification"
+	ProviderResponseMetadataFailureFamily         = "failure_family"
+	ProviderResponseMetadataFailureOperation      = "failure_operation"
+	ProviderResponseMetadataFailureStage          = "failure_stage"
+	ProviderResponseMetadataFailureType           = "failure_type"
+	ProviderResponseMetadataCompletionEvidence    = "completion_evidence"
 )
 
 // InvocationDiagnostic records replay-safe invocation metadata derived from
