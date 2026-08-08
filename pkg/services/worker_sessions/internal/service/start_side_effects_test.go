@@ -429,7 +429,7 @@ func TestStart_ZeroExitTaskCompleteArtifactWithIngestionFailureIsNotPhantomSucce
 		t.Fatalf("session failure kind = %q, want ADAPTER_FAILURE", result.Session.Result.Cause.Kind)
 	}
 	detail := result.Session.Result.Cause.Detail
-	for _, want := range []string{"provider_session_ingestion", "resource_limit", "final_parse"} {
+	for _, want := range []string{"family=terminal", "type=unknown", "provider_session_ingestion", "resource_limit", "final_parse"} {
 		if !strings.Contains(detail, want) {
 			t.Fatalf("session failure detail = %q, want %q", detail, want)
 		}

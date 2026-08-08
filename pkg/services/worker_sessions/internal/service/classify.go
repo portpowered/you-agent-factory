@@ -27,7 +27,12 @@ func classifyTerminal(
 		// reached the executor, so it is the only case classified from the
 		// dispatch error alone. No WorkResult exists yet, so there is no
 		// FailureMetadata to derive a safe Detail from.
-		return failedTerminal(workersessions.FailureCauseStartFailure, safeDetail(workersessions.FailureCauseStartFailure, nil))
+		return terminalForDispatchResult(
+			workersessions.FailureCauseStartFailure,
+			safeDetailForDispatchError(workersessions.FailureCauseStartFailure, workResult, dispatchErr, true),
+			workResult,
+			dispatchErr,
+		)
 	}
 
 	switch workResult.Outcome {
@@ -42,11 +47,17 @@ func classifyTerminal(
 			if isExecutorPanicEvidence(dispatchErr, workResult) {
 				kind = workersessions.FailureCauseExecutorPanic
 			}
-			detail := safeDetailWithDiagnostics(kind, workResult.FailureMetadata, workResult.Diagnostics)
+			detail := safeDetailForDispatchError(kind, workResult, dispatchErr, true)
 			if kind != workersessions.FailureCauseExecutorPanic {
-				detail = contradictorySuccessDetail(dispatchErr != nil, safeDiagnosticFailureContext(workResult.Diagnostics))
+				detail = contradictorySuccessDetail(
+					dispatchErr != nil,
+					strings.TrimSpace(strings.Join([]string{
+						safeFailureClassificationForDispatch(kind, workResult, dispatchErr),
+						diagnosticContextForDispatch(workResult, dispatchErr),
+					}, " ")),
+				)
 			}
-			return terminalForWorkResult(kind, detail, workResult)
+			return terminalForDispatchResult(kind, detail, workResult, dispatchErr)
 		}
 		return workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}
 	default: // workers.OutcomeRejected, workers.OutcomeFailed
@@ -57,10 +68,11 @@ func classifyTerminal(
 		case dispatchErr != nil:
 			kind = workersessions.FailureCauseAdapterFailure
 		}
-		return terminalForWorkResult(
+		return terminalForDispatchResult(
 			kind,
-			safeDetailWithDiagnostics(kind, workResult.FailureMetadata, workResult.Diagnostics),
+			safeDetailForDispatchError(kind, workResult, dispatchErr, false),
 			workResult,
+			dispatchErr,
 		)
 	}
 }
@@ -79,6 +91,67 @@ func terminalForWorkResult(
 		workResult.ProviderContinuationOutcome,
 	)
 	return terminal
+}
+
+func terminalForDispatchResult(
+	kind workersessions.FailureCauseKind,
+	detail string,
+	workResult workers.WorkResult,
+	dispatchErr error,
+) workersessions.TerminalResult {
+	terminal := terminalForWorkResult(kind, detail, workResult)
+	providerErr := workers.NormalizeProviderExecutionError(dispatchErr)
+	if providerErr == nil || terminal.Cause == nil {
+		return terminal
+	}
+	terminal.Cause.ProviderFailureKind,
+		terminal.Cause.ProviderContinuationFailureKind,
+		terminal.Cause.ProviderContinuationOutcome = workersessions.SanitizeProviderFailureClassification(
+		providerErr.ProviderFailureKind,
+		providerErr.ProviderContinuationFailureKind,
+		providerErr.ProviderContinuationOutcome,
+	)
+	return terminal
+}
+
+func safeDetailForDispatchError(
+	kind workersessions.FailureCauseKind,
+	workResult workers.WorkResult,
+	dispatchErr error,
+	preferDispatch bool,
+) string {
+	metadata := failureMetadataForDispatch(workResult, dispatchErr, preferDispatch)
+	return safeDetailWithContext(
+		kind,
+		metadata,
+		diagnosticContextForDispatch(workResult, dispatchErr),
+	)
+}
+
+func safeFailureClassificationForDispatch(
+	kind workersessions.FailureCauseKind,
+	workResult workers.WorkResult,
+	dispatchErr error,
+) string {
+	classification := safeDetail(kind, failureMetadataForDispatch(workResult, dispatchErr, true))
+	if classification == genericFailureDetail[kind] {
+		return ""
+	}
+	return classification
+}
+
+func failureMetadataForDispatch(
+	workResult workers.WorkResult,
+	dispatchErr error,
+	preferDispatch bool,
+) *workers.WorkFailureMetadata {
+	metadata := workResult.FailureMetadata
+	if providerErr := workers.NormalizeProviderExecutionError(dispatchErr); providerErr != nil {
+		if preferDispatch || metadata == nil {
+			metadata = workers.WorkFailureMetadataFromProviderError(providerErr)
+		}
+	}
+	return metadata
 }
 
 // isExecutorPanicEvidence reports whether either the adapter error or the
@@ -223,12 +296,49 @@ func safeDetailWithDiagnostics(
 	metadata *workers.WorkFailureMetadata,
 	diagnostics *workers.WorkDiagnostics,
 ) string {
+	return safeDetailWithContext(kind, metadata, safeDiagnosticFailureContext(diagnostics))
+}
+
+func safeDetailWithContext(kind workersessions.FailureCauseKind, metadata *workers.WorkFailureMetadata, context string) string {
 	detail := safeDetail(kind, metadata)
-	context := safeDiagnosticFailureContext(diagnostics)
 	if context == "" {
 		return detail
 	}
 	return detail + " " + context
+}
+
+func diagnosticContextForDispatch(workResult workers.WorkResult, dispatchErr error) string {
+	providerErr := workers.NormalizeProviderExecutionError(dispatchErr)
+	if providerErr == nil {
+		return safeDiagnosticFailureContext(workResult.Diagnostics)
+	}
+	return mergeDiagnosticContexts(workResult.Diagnostics, providerErr.Diagnostics)
+}
+
+func mergeDiagnosticContexts(primary, fallback *workers.WorkDiagnostics) string {
+	parts := make([]string, 0, 3)
+	operation := safeDiagnosticValue(diagnosticValue(primary, "failure_operation"), knownFailureOperations)
+	if operation == "" {
+		operation = safeDiagnosticValue(diagnosticValue(fallback, "failure_operation"), knownFailureOperations)
+	}
+	if operation != "" {
+		parts = append(parts, "operation="+operation)
+	}
+	classification := safeDiagnosticValue(diagnosticValue(primary, "failure_classification"), knownFailureClassifications)
+	if classification == "" {
+		classification = safeDiagnosticValue(diagnosticValue(fallback, "failure_classification"), knownFailureClassifications)
+	}
+	if classification != "" {
+		parts = append(parts, "classification="+classification)
+	}
+	stage := safeDiagnosticValue(diagnosticValue(primary, "failure_stage"), knownFailureStages)
+	if stage == "" {
+		stage = safeDiagnosticValue(diagnosticValue(fallback, "failure_stage"), knownFailureStages)
+	}
+	if stage != "" {
+		parts = append(parts, "stage="+stage)
+	}
+	return strings.Join(parts, " ")
 }
 
 func safeDiagnosticFailureContext(diagnostics *workers.WorkDiagnostics) string {
@@ -249,6 +359,9 @@ func safeDiagnosticFailureContext(diagnostics *workers.WorkDiagnostics) string {
 }
 
 func diagnosticValue(diagnostics *workers.WorkDiagnostics, key string) string {
+	if diagnostics == nil {
+		return ""
+	}
 	if value, ok := diagnostics.Metadata[key]; ok {
 		return value
 	}
