@@ -178,7 +178,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	workerSessionsFactory := provideWorkerSessionsFactory(eventsService, loggingLogger)
+	workerSessionsFactory := provideWorkerSessionsFactory(eventsService, providersessionsService, loggingLogger)
 	v10, err := wire2.NewAssembly(v9, workerSessionsFactory)
 	if err != nil {
 		return nil, err
