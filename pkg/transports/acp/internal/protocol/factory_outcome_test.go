@@ -179,3 +179,92 @@ func TestMapFactoryInvocationOutcome_FallsBackToStructuredParts(t *testing.T) {
 		})
 	}
 }
+
+// TestFactoryInvocationFailure_AnswersOnlyFailedOutcomes pins which outcomes
+// reach ACP's JSON-RPC error channel at all. ACP has no failure stop reason,
+// so a failed invocation cannot be told from a successful one inside a
+// successful prompt response -- but a cancelled or timed-out turn has a
+// truthful stop reason and must keep answering successfully.
+func TestFactoryInvocationFailure_AnswersOnlyFailedOutcomes(t *testing.T) {
+	tests := []struct {
+		name      string
+		status    factorysessions.InvocationTerminalStatus
+		wantError bool
+	}{
+		{"failed", factorysessions.InvocationTerminalStatusFailed, true},
+		{"completed", factorysessions.InvocationTerminalStatusCompleted, false},
+		{"canceled", factorysessions.InvocationTerminalStatusCanceled, false},
+		{"timed out", factorysessions.InvocationTerminalStatusTimedOut, false},
+		{"unknown", factorysessions.InvocationTerminalStatus("SOMETHING_ELSE"), false},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			got := FactoryInvocationFailure(factorysessions.InvocationResult{
+				Status:    testCase.status,
+				ErrorCode: string(factorysessions.InvocationErrorCodeRuntimeFailure),
+			})
+			if testCase.wantError && got == nil {
+				t.Fatalf("FactoryInvocationFailure(%q) = nil, want a JSON-RPC error", testCase.status)
+			}
+			if !testCase.wantError && got != nil {
+				t.Fatalf("FactoryInvocationFailure(%q) = %+v, want nil", testCase.status, got)
+			}
+		})
+	}
+}
+
+// TestFactoryInvocationFailure_DisclosesOnlyBoundedErrorCodes pins the whole
+// disclosure rule in one place, including the branch an unrecognized code
+// takes.
+//
+// The only reason an error code may cross this boundary is that its value set
+// is closed: Factory Sessions owns it and it carries no free-form text. A code
+// this transport does not recognize has no such guarantee -- it may be a new
+// vocabulary entry, or diagnostic text that reached the field by mistake -- so
+// it is replaced rather than forwarded. Both branches are asserted here
+// directly, because relying on other packages' tests to reach them incidentally
+// is what let this coverage lapse in the first place.
+func TestFactoryInvocationFailure_DisclosesOnlyBoundedErrorCodes(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"canceled", string(factorysessions.InvocationErrorCodeCanceled), string(factorysessions.InvocationErrorCodeCanceled)},
+		{"runtime failure", string(factorysessions.InvocationErrorCodeRuntimeFailure), string(factorysessions.InvocationErrorCodeRuntimeFailure)},
+		{"timed out", string(factorysessions.InvocationErrorCodeTimedOut), string(factorysessions.InvocationErrorCodeTimedOut)},
+		{
+			name: "unresolved primary result is outside the disclosed vocabulary",
+			code: "INVOCATION_PRIMARY_RESULT_UNRESOLVED",
+			want: string(factorysessions.InvocationErrorCodeRuntimeFailure),
+		},
+		{
+			name: "diagnostic text is replaced rather than forwarded",
+			code: "provider command: /usr/local/bin/agent --token=sk-live-ABC123",
+			want: string(factorysessions.InvocationErrorCodeRuntimeFailure),
+		},
+		{"blank", "", string(factorysessions.InvocationErrorCodeRuntimeFailure)},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			failure := FactoryInvocationFailure(factorysessions.InvocationResult{
+				Status:    factorysessions.InvocationTerminalStatusFailed,
+				ErrorCode: testCase.code,
+				Message:   "provider stderr: token=sk-live-ABC123",
+			})
+			if failure == nil {
+				t.Fatal("FactoryInvocationFailure returned nil for a failed invocation")
+			}
+			data, ok := failure.Data.(map[string]any)
+			if !ok {
+				t.Fatalf("error data = %#v, want a bounded map", failure.Data)
+			}
+			if len(data) != 1 {
+				t.Fatalf("error data = %#v, want exactly one member", data)
+			}
+			if got := data["reason"]; got != testCase.want {
+				t.Fatalf("reason = %v, want %q", got, testCase.want)
+			}
+		})
+	}
+}
