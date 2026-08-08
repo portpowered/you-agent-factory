@@ -79,3 +79,28 @@ type WorkersMockCommandRunnerFactory func(
 // behind this factory so Factory Runtime never imports a peer service's
 // wire or internal packages directly.
 type WorkerSessionsFactory func(workers.WorkstationPoolBoundary) (workersessions.Service, error)
+
+// ProviderInvocationExecutorFactory constructs the executor serving
+// workers.ProviderInvocationRoute for one session, from that session's own
+// provider command runner and reference-bearing progress publisher.
+//
+// It exists so an orchestrator whose Workers have no authored workstation
+// behind them -- a JavaScript workflow's agent.run children -- still reaches
+// the provider through the same Workers pool, admission, cancellation, and
+// Worker Sessions supervision as a Petri Worker. Wire composes the one
+// canonical construction (workers/wire.NewProviderInvocationExecutor over the
+// Workers-owned invocation boundary) behind this factory so Factory Runtime
+// never imports a peer service's wire or internal packages.
+//
+// The command runner is the session's, not the process's, for the same reason
+// Workers itself is built per session: mock-worker and replay sessions
+// substitute that edge, and a provider-invocation Worker that ignored the
+// substitution would reach a real provider from a session that must not.
+//
+// A nil factory, or one returning a nil executor, omits the route entirely.
+// That is the correct shape for a session with no orchestrator able to produce
+// such a Worker: the route is absent rather than present and failing.
+type ProviderInvocationExecutorFactory func(
+	workers.CommandRunner,
+	workers.ProgressPublisher,
+) (workers.WorkstationRequestExecutor, error)

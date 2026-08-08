@@ -121,6 +121,7 @@ func TestBuildThroughOrchestrationPreservesRunnablePetriTopology(t *testing.T) {
 			return nil, nil
 		},
 		testRuntimeWorkers{},
+		nil,
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
 	)
@@ -182,6 +183,7 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 			return nil, nil
 		},
 		testRuntimeWorkers{},
+		nil,
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
 	)

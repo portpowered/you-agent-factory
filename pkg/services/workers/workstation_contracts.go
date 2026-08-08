@@ -143,6 +143,27 @@ const (
 	RuntimeBuildRoleKindWorkstation RuntimeBuildRoleKind = "workstation"
 )
 
+// ProviderInvocationRoute is the reserved route name for Workers that have no
+// authored workstation behind them. A JavaScript workflow child names it
+// instead of a workstation, so it reaches the same pool boundary, the same
+// admission and cancellation, and the same Worker Session supervision as a
+// Petri Worker while skipping workstation prompt rendering it has no
+// definition for.
+//
+// It is deliberately one route rather than one per child. Workstation routes
+// come from the Factory definition and are snapshotted immutably when a session
+// opens, but agent.run children are discovered while the workflow runs; giving
+// each its own route would mean mutating a snapshot that is immutable by
+// contract. Everything that varies per child already travels on the execution
+// request, so one route serves all of them.
+//
+// The double-underscore fencing marks it as reserved rather than authored. It
+// deliberately carries no leading or trailing whitespace: Worker Sessions'
+// request validation compares the raw nested dispatch name against the trimmed
+// route name, so a padded value would be rejected before it ever reached the
+// pool.
+const ProviderInvocationRoute = "__provider_invocation__"
+
 // RuntimeBuildOpeningOptions carries Workers-owned opening selection facts
 // peers may supply when assembling immutable execution bindings.
 type RuntimeBuildOpeningOptions struct {

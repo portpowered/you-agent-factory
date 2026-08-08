@@ -32,9 +32,6 @@ func newDurableResponseEventsService(t *testing.T) *JavaScriptRuntimeService {
 	service.generateResponseEventID = func() string {
 		return fmt.Sprintf("response-event-%d", next.Add(1))
 	}
-	service.liveChildInvocation = func(publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
-		return &progressCapturingChildExecutor{publisher: publisher}, nil
-	}
 	return service
 }
 
@@ -144,34 +141,6 @@ func TestJavaScriptRuntimeService_SubscribeResponseEvents_RejectsInvalidCursor(t
 	})
 	if !errors.Is(err, factorysessions.ErrInvalidResponseEventCursor) {
 		t.Fatalf("SubscribeResponseEvents error = %v, want ErrInvalidResponseEventCursor", err)
-	}
-}
-
-func TestJavaScriptRuntimeService_LiveChildExecutor_UsesProgressPublisher(t *testing.T) {
-	t.Parallel()
-
-	service := newDurableResponseEventsService(t)
-	sessionID := "dur-sess-child"
-	state := seedResponseEventSession(t, service, sessionID)
-
-	executor := service.liveChildExecutor(sessionID, state)
-	child, ok := executor.(*progressCapturingChildExecutor)
-	if !ok || child.publisher == nil {
-		t.Fatalf("executor = %#v, want progress-aware child executor", executor)
-	}
-}
-
-func TestJavaScriptRuntimeService_LiveChildExecutor_UsesConductorBeforeSessionRegistration(t *testing.T) {
-	t.Parallel()
-
-	service := newDurableResponseEventsService(t)
-	executor := service.liveChildExecutor("dur-sess-starting", nil)
-	child, ok := executor.(*progressCapturingChildExecutor)
-	if !ok {
-		t.Fatalf("executor = %#v, want live child executor", executor)
-	}
-	if child.publisher != nil {
-		t.Fatalf("publisher = %#v, want nil before durable session registration", child.publisher)
 	}
 }
 

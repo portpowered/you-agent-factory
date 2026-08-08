@@ -26,7 +26,7 @@ func TestNewDurable_DefaultPolicyDoesNotCreateProjectDurableSessions(t *testing.
 		projectRoot,
 		factorysessions.PersistencePolicy(""),
 		countingProjectPersistenceStoreFactory(&storeCalls),
-		nil,
+		factorysessions.ChildExecutorModeFake,
 		restartClock{now: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
 		restartSyncWaitScheduler{},
 		checkpointfixtures.CheckpointSummariesFixture{},
@@ -37,7 +37,6 @@ func TestNewDurable_DefaultPolicyDoesNotCreateProjectDurableSessions(t *testing.
 		factoryruntime.JavaScriptWorkerSettings{},
 		restartRecordingWriter{},
 		func() string { return "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-		nil,
 		nil,
 		nil,
 	)
@@ -60,7 +59,7 @@ func TestNewDurable_EnabledPolicyPersistsProjectDurableSessions(t *testing.T) {
 		projectRoot,
 		factorysessions.PersistencePolicyEnabled,
 		projectPersistenceStoreFactory(),
-		nil,
+		factorysessions.ChildExecutorModeFake,
 		restartClock{now: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
 		restartSyncWaitScheduler{},
 		checkpointfixtures.CheckpointSummariesFixture{
@@ -74,7 +73,6 @@ func TestNewDurable_EnabledPolicyPersistsProjectDurableSessions(t *testing.T) {
 		factoryruntime.JavaScriptWorkerSettings{},
 		restartRecordingWriter{},
 		func() string { return "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
-		nil,
 		nil,
 		nil,
 	)

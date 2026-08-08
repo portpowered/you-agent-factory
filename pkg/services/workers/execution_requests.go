@@ -136,6 +136,11 @@ type WorkstationExecutionRequest struct {
 	// kind and opaque identity, so a resumed attempt cannot reconstruct a
 	// reference from the selected runner or model.
 	ResumeSession *providers.SessionRef `json:"-"`
+	// SkipPermissions is the invocation-effective worker policy for a Worker
+	// whose caller resolved it, rather than a workstation definition. A
+	// workstation-backed Worker leaves this false and takes the policy its
+	// runtime was constructed with.
+	SkipPermissions bool `json:"skip_permissions,omitempty"`
 }
 
 type ProviderInferenceRequest struct {

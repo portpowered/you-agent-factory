@@ -342,3 +342,11 @@ func (s *foldHostedRuntimeStub) AcceptDispatchResult(
 		DispatchID: req.DispatchID,
 	}, nil
 }
+
+func (s *foldHostedRuntimeStub) InvokeWorker(_ context.Context, _ factoryruntime.InvokeWorkerRequest) (factoryruntime.InvokeWorkerResult, error) {
+	return factoryruntime.InvokeWorkerResult{}, nil
+}
+
+func (foldNonWireRoot) InvokeWorker(_ context.Context, _ factoryruntime.InvokeWorkerRequest) (factoryruntime.InvokeWorkerResult, error) {
+	return factoryruntime.InvokeWorkerResult{}, nil
+}

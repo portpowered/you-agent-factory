@@ -18,7 +18,7 @@ func NewDurable(
 	projectRoot string,
 	persistencePolicy factorysessions.PersistencePolicy,
 	stores roles.RuntimePersistenceStoreFactory,
-	executor workers.InvocationExecutor,
+	childExecutorMode string,
 	clock factoryruntime.Clock,
 	syncWaits factorysessionexecution.SyncWaitScheduler,
 	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
@@ -29,7 +29,6 @@ func NewDurable(
 	workerSettings factoryruntime.JavaScriptWorkerSettings,
 	recordingWriter recordings.PortableRecordingWriter,
 	generateSessionID factorysessions.SessionIDGenerator,
-	liveChildInvocation factorysessionexecution.LiveChildInvocationFactory,
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams responsestreamservice.Service,
 ) (*Service, error) {
@@ -41,14 +40,14 @@ func NewDurable(
 	if err != nil {
 		return nil, err
 	}
-	childExecutorMode := factorysessions.ChildExecutorModeFake
-	if executor != nil || liveChildInvocation != nil {
-		childExecutorMode = factorysessions.ChildExecutorModeLive
-	}
+	// A runtime-backed live session invokes its children as Workers through its
+	// own Factory Runtime, so it takes no direct provider edge of its own. The
+	// mode still arrives from composition: a session with no provider behind it
+	// runs fake children, exactly as before.
 	execution, err := factorysessionexecution.NewJavaScriptExecutionService(
 		projectRoot,
 		childExecutorMode,
-		executor,
+		nil,
 		persistence,
 		clock,
 		syncWaits,
@@ -60,7 +59,6 @@ func NewDurable(
 		workerSettings,
 		recordingWriter,
 		generateSessionID,
-		liveChildInvocation,
 		generateResponseEventID,
 		responseStreams,
 	)
@@ -127,7 +125,6 @@ func NewStandalone(
 			factoryruntime.JavaScriptWorkerSettings{},
 			recordingWriter,
 			generateSessionID,
-			nil,
 			nil,
 			nil,
 		)

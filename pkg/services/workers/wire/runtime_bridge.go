@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 	"go.uber.org/zap"
 )
@@ -254,6 +255,28 @@ func NewProviderFromCommandRunner(
 	temporaryFileSystems ...platformfilesystem.TemporaryFileSystem,
 ) (workers.Provider, error) {
 	return workersinternal.NewProviderFromService(providersService)
+}
+
+// NewProviderInvocationExecutor constructs the executor behind
+// workers.ProviderInvocationRoute: the Worker whose every selection -- prompt,
+// model, provider, reasoning effort, output schema -- arrives on the execution
+// request rather than being rendered from an authored workstation.
+//
+// This is the one construction that lets an orchestrator whose Workers have no
+// Factory definition behind them -- a JavaScript workflow's agent.run children
+// -- still reach the provider through Workers' own pool, admission, and
+// cancellation, and therefore through Worker Sessions supervision. A nil
+// invocation boundary yields a nil executor so composition treats "no provider
+// invocation available" as an absent route rather than a route that fails at
+// dispatch time.
+func NewProviderInvocationExecutor(
+	invocation workers.InvocationExecutor,
+) workers.WorkstationRequestExecutor {
+	executor := workerexecutor.NewProviderInvocationExecutor(invocation)
+	if executor == nil {
+		return nil
+	}
+	return executor
 }
 
 // ResolveTemplateFields exposes the Workers-owned template resolver for composition.

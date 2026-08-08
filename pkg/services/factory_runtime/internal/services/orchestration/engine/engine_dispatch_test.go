@@ -81,6 +81,23 @@ func TestDispatchRecordsTrackedInRunningDispatches(t *testing.T) {
 	}
 }
 
+func TestWorkResultForCompletedDispatchPreservesResolvedClassificationLabel(t *testing.T) {
+	result := workerexecution.WorkResult{
+		Outcome: workerexecution.OutcomeAccepted,
+		Output:  "needs_review",
+	}
+	completed := interfaces.CompletedDispatch{
+		Outcome:                     workerexecution.OutcomeAccepted,
+		SelectedClassificationLabel: "needs_review",
+	}
+
+	got := workResultForCompletedDispatch(result, completed)
+
+	if got.SelectedClassificationLabel != completed.SelectedClassificationLabel {
+		t.Fatalf("selected classification label = %q, want %q", got.SelectedClassificationLabel, completed.SelectedClassificationLabel)
+	}
+}
+
 func TestDispatchResultHook_RecordsDispatchBeforeSubmittingToHook(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")

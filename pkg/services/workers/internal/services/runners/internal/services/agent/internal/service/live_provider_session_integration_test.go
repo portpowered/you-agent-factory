@@ -48,12 +48,12 @@ func TestLiveProviderSessionObservationEnablesExactWorkerSessionContinuation(t *
 	bridge.Bind(sessions)
 
 	type startOutcome struct {
-		result workersessions.StartResult
+		result workersessions.InvokeSessionResult
 		err    error
 	}
 	started := make(chan startOutcome, 1)
 	go func() {
-		result, err := sessions.Start(context.Background(), liveSessionStartRequest())
+		result, err := sessions.InvokeSession(context.Background(), liveSessionStartRequest())
 		started <- startOutcome{result: result, err: err}
 	}()
 
@@ -89,8 +89,8 @@ func TestLiveProviderSessionObservationEnablesExactWorkerSessionContinuation(t *
 	}
 }
 
-func liveSessionStartRequest() workersessions.StartRequest {
-	return workersessions.StartRequest{
+func liveSessionStartRequest() workersessions.InvokeSessionRequest {
+	return workersessions.InvokeSessionRequest{
 		ID: "worker-live-provider-session",
 		Execution: workers.WorkstationDispatchRequest{
 			WorkstationName: "review",

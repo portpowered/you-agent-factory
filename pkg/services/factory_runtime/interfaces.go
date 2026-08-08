@@ -96,6 +96,26 @@ type Service interface {
 	// ErrInvalidDispatchResultBoundary, ErrNotRunning, or ErrNotFound for typed
 	// dispatch-plan failures.
 	AcceptDispatchResult(ctx context.Context, req AcceptDispatchResultRequest) (AcceptDispatchResultResult, error)
+
+	// InvokeWorker runs one Worker that this session's orchestrator resolved
+	// itself, through the same Worker Sessions supervision a Petri dispatch
+	// gets: a reserved Worker Session identity, a committed dispatch/Worker
+	// Session association on this runtime's canonical Factory Events, and the
+	// established publication window, controls, and retry.
+	//
+	// It exists for orchestrators whose Workers have no authored workstation
+	// behind them -- a JavaScript workflow's agent.run children are Workers,
+	// but the caller has already resolved every selection they need, so there
+	// is no workstation to render. Runtime routes them through
+	// workers.ProviderInvocationRoute rather than a named workstation.
+	//
+	// This is deliberately an operation on the runtime rather than a
+	// collaborator handed out to callers: the association must land on this
+	// runtime's own ledger to be visible to anything reading canonical Factory
+	// Events, and only the runtime owns that ledger.
+	//
+	// Returns ErrNotRunning when the instance is not running.
+	InvokeWorker(ctx context.Context, req InvokeWorkerRequest) (InvokeWorkerResult, error)
 }
 
 // Factory retains the migration-era engine and blocking run-loop surface for
