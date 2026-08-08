@@ -4542,10 +4542,17 @@ type ListModelsResponse struct {
 	Results []ModelSummary `json:"results"`
 }
 
+// ListWorkCountSummary defines model for ListWorkCountSummary.
+type ListWorkCountSummary struct {
+	// Total Complete filtered Work total before page slicing.
+	Total int `json:"total"`
+}
+
 // ListWorkResponse defines model for ListWorkResponse.
 type ListWorkResponse struct {
-	PaginationContext *PaginationContext `json:"paginationContext,omitempty"`
-	Results           []Work             `json:"results"`
+	Counts            *ListWorkCountSummary `json:"counts,omitempty"`
+	PaginationContext *PaginationContext    `json:"paginationContext,omitempty"`
+	Results           []Work                `json:"results"`
 }
 
 // LoadableProviderSessionKind Canonical provider-session identifier kind for provider-session detail requests that can be loaded by the API.
@@ -6966,8 +6973,17 @@ type StateName = string
 // StateType Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.
 type StateType = WorkStateType
 
+// WorkListCounts defines model for WorkListCounts.
+type WorkListCounts = bool
+
 // WorkListName defines model for WorkListName.
 type WorkListName = string
+
+// WorkListNonTerminal defines model for WorkListNonTerminal.
+type WorkListNonTerminal = bool
+
+// WorkListTerminal defines model for WorkListTerminal.
+type WorkListTerminal = bool
 
 // WorkListTraceId defines model for WorkListTraceId.
 type WorkListTraceId = string

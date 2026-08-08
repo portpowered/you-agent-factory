@@ -1,0 +1,9 @@
+name: counts
+in: query
+required: false
+description: >-
+  Optional count request. When true, the response includes counts.total for
+  the complete filtered selection before ordering page slicing and pagination.
+schema:
+  type: boolean
+
