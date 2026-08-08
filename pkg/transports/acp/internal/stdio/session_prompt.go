@@ -139,6 +139,11 @@ func deliverPromptText(notify promptNotifier, sessionID string, text []string) e
 // suppressed, since a message delivered live is never re-observed by that
 // later sweep (both share one attachment cursor).
 type dispatchOutcome struct {
+	// failure is the JSON-RPC error a non-completed invocation must answer
+	// with. ACP has no failure StopReason, so a failed Factory run cannot be
+	// reported inside a successful prompt response; answering end_turn instead
+	// makes a failed run indistinguishable from a successful one.
+	failure        *acpsdk.RequestError
 	outcome        protocol.PromptOutcome
 	terminal       chatsessions.TurnState
 	sessionVersion uint64
@@ -567,6 +572,12 @@ func (s *Server) dispatchFactoryTurn(
 	} else if notifyErr := s.deliverPromptUpdates(ctx, startResult, dispatched.sessionVersion, reqIdentity, dispatched.liveDelivered, dispatched.outcome.Text); notifyErr != nil {
 		terminal = chatsessions.TurnStateFailed
 		rpcErr = classifyDependencyFailure(notifyErr)
+	} else if dispatched.failure != nil {
+		// The turn's own updates are delivered first: whatever the Worker did
+		// before the invocation failed is still what happened, and a client
+		// that sees the error should also see the work behind it. Only the
+		// prompt result itself becomes an error.
+		rpcErr = dispatched.failure
 	} else {
 		resp := acpsdk.PromptResponse{
 			Meta:       attachmentResumeMetadata(ctx, startResult.Session.ID),
@@ -581,11 +592,42 @@ func (s *Server) dispatchFactoryTurn(
 		}
 	}
 
-	if err := s.advanceTurnWithRecovery(ctx, startResult.Session.ID, startResult.Turn.ID, terminal); err != nil {
-		return nil, classifyDependencyFailure(err)
+	advanceErr := s.advanceTurnWithRecovery(ctx, startResult.Session.ID, startResult.Turn.ID, terminal)
+
+	// A turn that a concurrent session/close or session/cancel already
+	// terminalized as CANCELED is a cancellation, not an internal failure.
+	// The dispatch's own error in that case is downstream fallout from the
+	// session being torn away mid-flight -- "factory session not found" while
+	// sequencing worker events -- and reporting it as an internal error tells
+	// the client its request broke when in fact the client cancelled it.
+	// Report the cancellation the same way an ordinary cancelled dispatch and
+	// a redelivered cancelled turn already do.
+	if rpcErr != nil && turnAlreadyCanceled(advanceErr) {
+		cancelled, marshalErr := json.Marshal(acpsdk.PromptResponse{
+			StopReason: turnStateStopReason(chatsessions.TurnStateCanceled),
+		})
+		if marshalErr == nil {
+			return cancelled, nil
+		}
+	}
+
+	if advanceErr != nil {
+		return nil, classifyDependencyFailure(advanceErr)
 	}
 
 	return result, rpcErr
+}
+
+// turnAlreadyCanceled reports whether a terminal advancement failed precisely
+// because the turn had already been terminalized as CANCELED. The transition
+// error carries the recorded from-state, so this is an exact reading of what
+// happened rather than an inference from the failure text.
+func turnAlreadyCanceled(err error) bool {
+	var transition *chatsessions.TransitionError
+	if !errors.As(err, &transition) {
+		return false
+	}
+	return transition.From == string(chatsessions.TurnStateCanceled)
 }
 
 // attachmentResumeMetadata returns the opaque, service-issued attachment
@@ -822,6 +864,7 @@ func (s *Server) startFactorySessionForEpisode(
 
 	return dispatchOutcome{
 		outcome:        protocol.MapFactoryInvocationOutcome(outcome),
+		failure:        protocol.FactoryInvocationFailure(outcome),
 		terminal:       factoryInvocationTurnState(outcome.Status),
 		sessionVersion: bindResult.Session.Version,
 		liveDelivered:  liveDelivered,
@@ -920,6 +963,7 @@ func (s *Server) invokeFactorySessionForEpisode(
 
 	return dispatchOutcome{
 		outcome:        protocol.MapFactoryInvocationOutcome(invokeResult),
+		failure:        protocol.FactoryInvocationFailure(invokeResult),
 		terminal:       factoryInvocationTurnState(invokeResult.Status),
 		sessionVersion: sessionVersion,
 		liveDelivered:  liveDelivered,

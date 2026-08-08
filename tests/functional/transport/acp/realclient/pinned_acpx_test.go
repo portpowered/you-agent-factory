@@ -54,7 +54,7 @@ func TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt(t *testing.T) {
 	assertCreatedSession(t, created)
 	assertNegotiatedDefaultTarget(t, scenario)
 	promptOutput := scenario.prompt(t)
-	scenario.assertOneDeterministicProviderInvocation(t)
+	scenario.assertDeterministicProviderInvocations(t)
 	assertPromptEvidence(t, promptOutput)
 	scenario.closeSession(t)
 	scenario.assertQueueOwnerStopped(t)
@@ -471,18 +471,25 @@ func assertNegotiatedDefaultTarget(t *testing.T, scenario *pinnedAcpxScenario) {
 func assertPromptEvidence(t *testing.T, output []byte) {
 	t.Helper()
 
+	// A Worker is a tool call, so everything it produces -- messages,
+	// reasoning, tool activity -- must arrive as content inside that call, and
+	// the assistant message must come from the Factory rather than from a
+	// Worker speaking directly. Counting both proves the routing end to end
+	// against a real third-party client rather than only against our own.
 	var assistantResult bool
+	var workerToolCalls, workerToolUpdates int
 	terminalStopReasons := make([]string, 0, 1)
 	for _, line := range bytes.Split(bytes.TrimSpace(output), []byte{'\n'}) {
+		// content is deliberately raw: ACP gives it a different shape per
+		// update kind -- an object for agent_message_chunk, an array for
+		// tool_call_update. Decoding it eagerly into one shape makes a valid
+		// frame of the other kind look like malformed output.
 		var frame struct {
 			Method string `json:"method"`
 			Params struct {
 				Update struct {
-					SessionUpdate string `json:"sessionUpdate"`
-					Content       struct {
-						Type string `json:"type"`
-						Text string `json:"text"`
-					} `json:"content"`
+					SessionUpdate string          `json:"sessionUpdate"`
+					Content       json.RawMessage `json:"content"`
 				} `json:"update"`
 			} `json:"params"`
 			Result struct {
@@ -496,11 +503,25 @@ func assertPromptEvidence(t *testing.T, output []byte) {
 		if len(frame.Error) > 0 && string(frame.Error) != "null" {
 			t.Fatal("real ACP evidence failed: acpx prompt reported a protocol error")
 		}
-		if frame.Method == "session/update" &&
-			frame.Params.Update.SessionUpdate == "agent_message_chunk" &&
-			frame.Params.Update.Content.Type == "text" &&
-			strings.TrimSpace(frame.Params.Update.Content.Text) != "" {
-			assistantResult = true
+		if frame.Method == "session/update" && frame.Params.Update.SessionUpdate == "agent_message_chunk" {
+			var content struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			}
+			if err := json.Unmarshal(frame.Params.Update.Content, &content); err != nil {
+				t.Fatal("real ACP evidence failed: assistant message carried an unreadable content block")
+			}
+			if content.Type == "text" && strings.TrimSpace(content.Text) != "" {
+				assistantResult = true
+			}
+		}
+		if frame.Method == "session/update" {
+			switch frame.Params.Update.SessionUpdate {
+			case "tool_call":
+				workerToolCalls++
+			case "tool_call_update":
+				workerToolUpdates++
+			}
 		}
 		if frame.Method == "" && frame.Result.StopReason != "" {
 			terminalStopReasons = append(terminalStopReasons, frame.Result.StopReason)
@@ -509,12 +530,18 @@ func assertPromptEvidence(t *testing.T, output []byte) {
 	if !assistantResult {
 		t.Fatal("real ACP evidence failed: prompt did not produce a non-empty assistant result")
 	}
+	if workerToolCalls == 0 {
+		t.Fatal("real ACP evidence failed: the dispatched Worker did not open a tool call")
+	}
+	if workerToolUpdates == 0 {
+		t.Fatal("real ACP evidence failed: the Worker produced no content inside its tool call")
+	}
 	if len(terminalStopReasons) != 1 || terminalStopReasons[0] != "end_turn" {
 		t.Fatal("real ACP evidence failed: prompt did not return exactly one successful end_turn result")
 	}
 }
 
-func (scenario *pinnedAcpxScenario) assertOneDeterministicProviderInvocation(t *testing.T) {
+func (scenario *pinnedAcpxScenario) assertDeterministicProviderInvocations(t *testing.T) {
 	t.Helper()
 	payload, err := os.ReadFile(scenario.providerProof)
 	if err != nil {
@@ -527,8 +554,12 @@ func (scenario *pinnedAcpxScenario) assertOneDeterministicProviderInvocation(t *
 		}
 		invocations++
 	}
-	if invocations != 1 {
-		t.Fatalf("real ACP evidence failed: deterministic provider invocation count = %d, want 1", invocations)
+	// Two, not one: the default Factory classifies the request and then answers
+	// it, so a single prompt legitimately makes two model calls. The count is
+	// still asserted exactly, because an unbounded number would mean the
+	// Factory looped rather than routed.
+	if invocations != 2 {
+		t.Fatalf("real ACP evidence failed: deterministic provider invocation count = %d, want 2 (classify, then answer)", invocations)
 	}
 }
 

@@ -36,9 +36,22 @@ var ErrACPAgentProfileInvalid = errors.New("ACP Agent profile is invalid")
 // operator's default Factory target and ordered Factory-target allowlist for
 // L1 ACP sessions. Target references are unversioned factory:<ref> strings;
 // Operator Settings never adds a version or digest field.
+//
+// An empty AllowedTargets means unrestricted: every installed Factory is
+// selectable, and DefaultTarget merely selects which one starts current.
+// AllowedTargets is therefore a purely opt-in restriction, and an operator
+// document with no authored profile resolves to an unrestricted profile.
+// Authoring an explicitly empty allowlist is rejected by Normalize, so
+// omitting the field is the only way to express "no restriction".
 type ACPAgentProfile struct {
 	DefaultTarget  string
 	AllowedTargets []string
+}
+
+// IsUnrestricted reports that the profile places no restriction on which
+// installed Factory targets are selectable.
+func (profile ACPAgentProfile) IsUnrestricted() bool {
+	return len(profile.AllowedTargets) == 0
 }
 
 // Clone returns a detached copy whose AllowedTargets slice does not alias the
@@ -53,8 +66,14 @@ func (profile ACPAgentProfile) Clone() ACPAgentProfile {
 // Normalize trims the default target and every allowlist entry, preserves
 // authored allowlist order, and validates local shape and consistency. It
 // rejects a blank default, blank allowlist entries, references outside the
-// factory: namespace, an empty allowlist, duplicate entries after
-// normalization, and a default absent from the normalized allowlist.
+// factory: namespace, duplicate entries after normalization, and a default
+// absent from a non-empty normalized allowlist.
+//
+// An empty allowlist normalizes to an unrestricted profile rather than an
+// error. Callers that decode authored documents are responsible for rejecting
+// an explicitly authored empty array before calling Normalize; the schema's
+// minItems keeps that shape off the wire, so reaching here with no entries
+// means the operator omitted the restriction entirely.
 func (profile ACPAgentProfile) Normalize() (ACPAgentProfile, error) {
 	defaultTarget := strings.TrimSpace(profile.DefaultTarget)
 	if defaultTarget == "" {
@@ -66,7 +85,7 @@ func (profile ACPAgentProfile) Normalize() (ACPAgentProfile, error) {
 		)
 	}
 	if len(profile.AllowedTargets) == 0 {
-		return ACPAgentProfile{}, fmt.Errorf("%w: allowedTargets must not be empty", ErrACPAgentProfileInvalid)
+		return ACPAgentProfile{DefaultTarget: defaultTarget}, nil
 	}
 
 	normalizedAllowed := make([]string, len(profile.AllowedTargets))
@@ -101,13 +120,11 @@ func (profile ACPAgentProfile) Normalize() (ACPAgentProfile, error) {
 	return ACPAgentProfile{DefaultTarget: defaultTarget, AllowedTargets: normalizedAllowed}, nil
 }
 
-// DefaultACPAgentProfile returns the detached safe Factory Builder profile
-// used when an operator document has no authored profile.
+// DefaultACPAgentProfile returns the detached profile used when an operator
+// document has no authored profile: unrestricted, so every installed Factory
+// is selectable, with Factory Builder starting as the current target.
 func DefaultACPAgentProfile() ACPAgentProfile {
-	return ACPAgentProfile{
-		DefaultTarget:  DefaultACPAgentProfileTarget,
-		AllowedTargets: []string{DefaultACPAgentProfileTarget},
-	}
+	return ACPAgentProfile{DefaultTarget: DefaultACPAgentProfileTarget}
 }
 
 func isACPFactoryTargetReference(value string) bool {

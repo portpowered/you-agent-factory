@@ -115,3 +115,60 @@ func TestProvideACPServerFactoryTargetRuntimeResolver(t *testing.T) {
 		}
 	})
 }
+
+// TestProvideACPServerFactoryTargetRuntimeResolverAppliesOperatorDefaultsEnvironment
+// proves the ACP resolver supplies the operator-default environment layer when
+// resolving a Factory target runtime.
+//
+// The CLI has always supplied this layer, so YOU_DEFAULT_WORKER_MODEL_PROVIDER
+// selects the Worker provider for `you run`. The ACP resolver passed an empty
+// operatorsettings.Defaults, silently dropping both variables. That is
+// invisible for a Factory whose workers name their own provider and fatal for
+// one whose workers do not: a JavaScript Factory's agent.run children carry no
+// provider of their own, so with no operator default their dispatch is
+// rejected before any provider runs. An ACP client cannot pass `--provider`,
+// so the process environment is the only layer it has.
+func TestProvideACPServerFactoryTargetRuntimeResolverAppliesOperatorDefaultsEnvironment(t *testing.T) {
+	home := t.TempDir()
+	seedInstalledPackagedFactories(t, home, "@you/review")
+
+	resolver := provideACPServerFactoryTargetRuntimeResolver(
+		func() (string, error) { return home, nil },
+		namedFactoryCatalogForTest(t),
+		operatorDefaultsResolverForTest(t),
+		provideRuntimeArtifactRootResolver(),
+	)
+
+	t.Run("environment selects the default worker provider and model", func(t *testing.T) {
+		t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "codex")
+		t.Setenv(operatorsettings.EnvDefaultWorkerModel, "gpt-5")
+
+		req, err := resolver(context.Background(), "factory:@you/review", "/workspace/project")
+		if err != nil {
+			t.Fatalf("resolver() error = %v", err)
+		}
+		if req.OperatorDefaults.WorkerModelProvider == "" {
+			t.Fatal("resolved OperatorDefaults.WorkerModelProvider is blank, want the value the environment supplied")
+		}
+		if req.OperatorDefaults.WorkerModel != "gpt-5" {
+			t.Fatalf("resolved OperatorDefaults.WorkerModel = %q, want %q",
+				req.OperatorDefaults.WorkerModel, "gpt-5")
+		}
+	})
+
+	t.Run("blank environment supplies no layer of its own", func(t *testing.T) {
+		t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "")
+		t.Setenv(operatorsettings.EnvDefaultWorkerModel, "")
+
+		req, err := resolver(context.Background(), "factory:@you/review", "/workspace/project")
+		if err != nil {
+			t.Fatalf("resolver() error = %v", err)
+		}
+		// An unset variable must not override the persisted Operator Settings
+		// document with a blank, so this asserts the environment contributes
+		// nothing rather than asserting a particular resolved value.
+		if req.OperatorDefaults.WorkerModel == "gpt-5" {
+			t.Fatal("resolved OperatorDefaults.WorkerModel = \"gpt-5\" with no environment set, want the environment layer to contribute nothing")
+		}
+	})
+}

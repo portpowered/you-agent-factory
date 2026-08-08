@@ -1,0 +1,16 @@
+{
+  "name": "04-thinking-and-tools",
+  "description": "How the agent reports thinking and generic tool calls, with filesystem capability advertised so it uses client tools rather than its own shell.",
+  "clientCapabilities": {"fs": {"readTextFile": true, "writeTextFile": true}},
+  "steps": [
+    {"kind": "request", "method": "initialize",
+     "params": {"protocolVersion": 1, "clientCapabilities": "${clientCapabilities}"}},
+    {"kind": "request", "method": "session/new",
+     "params": {"cwd": "${cwd}", "mcpServers": []}},
+    {"kind": "request", "method": "session/prompt",
+     "params": {"sessionId": "${sessionId}", "prompt": [{"type": "text", "text": "Think step by step. Read README.md in this directory, then write a file notes.md containing exactly one sentence summarizing it. Do not ask for confirmation."}]},
+     "note": "Yields agent_thought_chunk plus tool_call and tool_call_update with their kinds, status progression, and content block shapes."},
+    {"kind": "await", "awaitMillis": 1000},
+    {"kind": "snapshot", "name": "thinking-and-tools"}
+  ]
+}

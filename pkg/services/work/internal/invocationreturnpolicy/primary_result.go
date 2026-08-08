@@ -155,7 +155,7 @@ func resolveExplicitPrimaryResult(
 		matches = collectExplicitPrimaryResultMatchesForInvocationTrace(state, requestID, submitted, cfg)
 	}
 	if len(matches) == 0 {
-		matches = collectUniqueExplicitTerminalMatches(state, cfg)
+		matches = collectUniqueExplicitTerminalMatches(state, requestID, cfg)
 	}
 
 	switch len(matches) {
@@ -243,24 +243,6 @@ func invocationTraceIDs(
 		}
 	}
 	return traceIDs
-}
-
-func collectUniqueExplicitTerminalMatches(
-	state InvocationWorldState,
-	cfg *InvocationReturnConfig,
-) []WorkItem {
-	matches := make([]WorkItem, 0, 1)
-	for _, terminalWorkID := range sortedTerminalWorkIDs(state.TerminalWorkByID) {
-		terminal := state.TerminalWorkByID[terminalWorkID]
-		if isFailedTerminalWork(terminal) {
-			continue
-		}
-		if !explicitPrimaryResultMatches(terminal.WorkItem, cfg) {
-			continue
-		}
-		matches = append(matches, terminal.WorkItem)
-	}
-	return matches
 }
 
 func isFailedTerminalWork(terminal InvocationTerminalWork) bool {

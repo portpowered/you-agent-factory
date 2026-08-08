@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -177,7 +178,17 @@ func (s *service) publishProgress(
 	session *workers.ProviderSessionMetadata,
 ) {
 	var terminalMessages []providers.ExecuteProgress
-	if result.Diagnostics != nil {
+	// A provider that streamed its facts live has already delivered every
+	// entry in Progress, in this order, through the attempt's ProgressObserver.
+	// Replaying the slice here would publish each fact a second time.
+	//
+	// The terminal-message reordering below is unaffected: it only ever
+	// matches the dotted "message.completed" phase the native adapters
+	// produce, and a streaming provider reports its message facts as
+	// started/delta/completed instead, so a streamed turn contributes no
+	// terminal messages here in the first place.
+	alreadyObserved := result.Diagnostics != nil && result.Diagnostics.ProgressAlreadyObserved
+	if result.Diagnostics != nil && !alreadyObserved {
 		for _, progress := range result.Diagnostics.Progress {
 			if strings.EqualFold(strings.TrimSpace(progress.Phase), "message.completed") {
 				terminalMessages = append(terminalMessages, progress)
@@ -241,7 +252,11 @@ func (s *service) executeProviderAttempt(
 	request workers.RunnerExecutionRequest,
 ) (providers.ExecuteResult, error) {
 	attempt := providerRequest(request)
-	attempt.SessionObserver = s.observeProviderSession(request.Dispatch.DispatchID)
+	// Both observers share one holder so live progress can be attributed to
+	// the same provider-authored session the association fragment committed.
+	live := &liveProviderSession{}
+	attempt.SessionObserver = s.observeProviderSession(request.Dispatch.DispatchID, live)
+	attempt.ProgressObserver = s.observeProviderProgress(request.Dispatch.DispatchID, live)
 	if request.ResumeSession != nil {
 		reference := request.ResumeSession.Clone()
 		continued, err := s.providers.Continue(ctx, providers.ContinueRequest{
@@ -281,9 +296,13 @@ func (s *service) executeProviderAttempt(
 // the session-local progress bridge while the Provider attempt is still live.
 // The bridge owns association validation and commits it before allowing the
 // later response or terminal fragments for this dispatch to proceed.
-func (s *service) observeProviderSession(dispatchID string) providers.SessionObserver {
+func (s *service) observeProviderSession(
+	dispatchID string,
+	live *liveProviderSession,
+) providers.SessionObserver {
 	return func(reference providers.SessionRef) {
 		reference = reference.Clone()
+		live.set(reference)
 		s.publish(workers.ProgressFragment{
 			DispatchID:               dispatchID,
 			Kind:                     workers.ProviderSessionObservedFragmentKind,
@@ -294,6 +313,57 @@ func (s *service) observeProviderSession(dispatchID string) providers.SessionObs
 				ID:       reference.ID,
 			},
 		})
+	}
+}
+
+// observeProviderProgress publishes each bounded provider progress fact while
+// the attempt is still live, so a Worker's execution trace reaches the
+// response-event stream as it is produced rather than in one burst when the
+// attempt ends.
+//
+// Each fact carries whatever provider session the attempt has already
+// observed, so a streamed trace is attributed to the same provider and session
+// as the buffered diagnostics it replaces. A fact reported before the provider
+// authored a session simply carries none.
+func (s *service) observeProviderProgress(
+	dispatchID string,
+	live *liveProviderSession,
+) providers.ProgressObserver {
+	return func(progress providers.ExecuteProgress) {
+		reference, session := live.snapshot()
+		s.publishProviderProgress(dispatchID, progress, session, reference)
+	}
+}
+
+// liveProviderSession retains the exact provider-authored session reference
+// observed during one attempt. Progress observation and session observation
+// arrive on different callbacks and, for a streaming provider, on different
+// goroutines, so the reference is guarded rather than passed by value.
+type liveProviderSession struct {
+	mu        sync.Mutex
+	reference *providers.SessionRef
+}
+
+func (l *liveProviderSession) set(reference providers.SessionRef) {
+	clone := reference.Clone()
+	l.mu.Lock()
+	l.reference = &clone
+	l.mu.Unlock()
+}
+
+// snapshot returns a detached reference and its matching response metadata, or
+// two nils when the provider has not authored a session yet.
+func (l *liveProviderSession) snapshot() (*providers.SessionRef, *workers.ProviderSessionMetadata) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.reference == nil {
+		return nil, nil
+	}
+	reference := l.reference.Clone()
+	return &reference, &workers.ProviderSessionMetadata{
+		Provider: workers.CanonicalProviderSessionProvider(reference.Provider.String()),
+		Kind:     reference.Kind,
+		ID:       reference.ID,
 	}
 }
 

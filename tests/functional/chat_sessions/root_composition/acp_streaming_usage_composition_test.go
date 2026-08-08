@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -156,63 +157,71 @@ func TestACPServeCommandStreamsUsageUpdateThroughRootBuildProcess(t *testing.T) 
 	assertACPStreamUsageNotifications(t, notifications)
 }
 
-// assertACPStreamUsageNotifications proves all four ACP update classes are
-// observed before the terminal prompt response. The terminal message remains
-// singular even though the provider also supplied live reasoning and metadata.
+// assertACPStreamUsageNotifications proves all four ACP update classes the
+// scripted peer emits reach the customer -- as content inside the Worker's own
+// tool call.
+//
+// That placement is the contract, not an implementation detail: a Worker is a
+// tool call, so its reasoning, usage, and session metadata are content within
+// that call rather than top-level assistant output. Only the Factory's own
+// result speaks to the customer as a message. This cell previously asserted
+// the opposite (thought/usage/session-info as top-level updates), which is the
+// routing that let a Worker impersonate the Factory.
 func assertACPStreamUsageNotifications(t *testing.T, notifications []acpsdk.SessionNotification) {
 	t.Helper()
 
 	var messageTexts []string
-	var thoughtTexts, sessionTitles []string
-	var usedValues []int
-	positions := map[string]int{}
+	var toolCallIDs []string
+	childBody := map[string]string{}
 	for _, n := range notifications {
 		switch {
+		case n.Update.ToolCall != nil:
+			toolCallIDs = append(toolCallIDs, string(n.Update.ToolCall.ToolCallId))
+		case n.Update.ToolCallUpdate != nil:
+			id := string(n.Update.ToolCallUpdate.ToolCallId)
+			for _, content := range n.Update.ToolCallUpdate.Content {
+				if content.Content == nil || content.Content.Content.Text == nil {
+					continue
+				}
+				childBody[id] += content.Content.Content.Text.Text + "\n"
+			}
 		case n.Update.AgentMessageChunk != nil:
-			positions["message"] = len(positions)
-			var text string
 			if n.Update.AgentMessageChunk.Content.Text != nil {
-				text = n.Update.AgentMessageChunk.Content.Text.Text
+				messageTexts = append(messageTexts, n.Update.AgentMessageChunk.Content.Text.Text)
 			}
-			messageTexts = append(messageTexts, text)
 		case n.Update.AgentThoughtChunk != nil:
-			if _, ok := positions["thought"]; !ok {
-				positions["thought"] = len(positions)
-			}
 			if n.Update.AgentThoughtChunk.Content.Text != nil {
-				thoughtTexts = append(thoughtTexts, n.Update.AgentThoughtChunk.Content.Text.Text)
-			}
-		case n.Update.UsageUpdate != nil:
-			positions["usage"] = len(positions)
-			usedValues = append(usedValues, n.Update.UsageUpdate.Used)
-		case n.Update.SessionInfoUpdate != nil:
-			positions["session"] = len(positions)
-			if n.Update.SessionInfoUpdate.Title != nil {
-				sessionTitles = append(sessionTitles, *n.Update.SessionInfoUpdate.Title)
+				t.Fatalf("top-level agent_thought_chunk %q, want it as content inside the Worker's tool call",
+					n.Update.AgentThoughtChunk.Content.Text.Text)
 			}
 		}
 	}
 
-	if len(usedValues) != 1 {
-		t.Fatalf("usage_update notifications = %d, want exactly 1", len(usedValues))
+	if len(toolCallIDs) != 1 {
+		t.Fatalf("worker tool_call openings = %d, want exactly 1", len(toolCallIDs))
 	}
-	if usedValues[0] != 17 {
-		t.Fatalf("usage_update Used = %d, want 17 (the scripted peer's own published value)", usedValues[0])
+	body := childBody[toolCallIDs[0]]
+
+	// Reasoning, usage, and the provider's own session metadata are all Worker
+	// output and must appear inside its tool call.
+	for _, want := range []string{
+		acpStreamUsageReasoningText,
+		"17",
+		acpStreamUsageSessionTitle,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("Worker tool-call content is missing %q; got:\n%s", want, body)
+		}
 	}
-	if len(thoughtTexts) == 0 || thoughtTexts[0] != acpStreamUsageReasoningText {
-		t.Fatalf("agent_thought_chunk texts = %q, want first %q", thoughtTexts, acpStreamUsageReasoningText)
-	}
-	if len(sessionTitles) != 1 || sessionTitles[0] != acpStreamUsageSessionTitle {
-		t.Fatalf("session_info_update titles = %q, want exactly %q", sessionTitles, acpStreamUsageSessionTitle)
-	}
+
+	// The Factory's own extracted result remains the one assistant message.
 	if len(messageTexts) != 1 {
-		t.Fatalf("agent_message_chunk notifications = %d (%q), want exactly 1", len(messageTexts), messageTexts)
+		t.Fatalf("agent_message_chunk notifications = %d (%q), want exactly 1 (the Factory's result)",
+			len(messageTexts), messageTexts)
 	}
-	if messageTexts[0] != acpStreamUsageCompletionText {
-		t.Fatalf("agent_message_chunk text = %q, want %q", messageTexts[0], acpStreamUsageCompletionText)
-	}
-	if !(positions["thought"] < positions["usage"] && positions["usage"] < positions["session"] && positions["session"] < positions["message"]) {
-		t.Fatalf("first update positions = %#v, want thought < usage < session-info < message", positions)
+	if !strings.Contains(messageTexts[0], acpStreamUsageCompletionText) {
+		t.Fatalf("agent_message_chunk text = %q, want it to contain %q",
+			messageTexts[0], acpStreamUsageCompletionText)
 	}
 }
 

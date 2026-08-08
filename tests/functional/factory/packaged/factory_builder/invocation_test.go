@@ -590,6 +590,7 @@ func hasInvocationParameter(value any, name string) bool {
 }
 
 type factoryBuilderCommandRunner struct {
+	routingCalls            int
 	process                 support.Process
 	targetName              string
 	customerRequest         string
@@ -611,6 +612,16 @@ type factoryBuilderCommandRunner struct {
 }
 
 func (runner *factoryBuilderCommandRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	// Every Builder invocation is now routed first: the classifier decides
+	// whether the message is a build request or a question. These cells all
+	// supply genuine build requests, so the router answers "build" and the
+	// build workstation runs exactly as before.
+	if isBuilderRoutingPrompt(request) {
+		runner.mu.Lock()
+		runner.routingCalls++
+		runner.mu.Unlock()
+		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("build")}, nil
+	}
 	runner.mu.Lock()
 	builderRequest := strings.Contains(string(request.Stdin), "You are Factory Builder.")
 	prepareBuilder := builderRequest && !runner.builderPrepared
@@ -895,3 +906,10 @@ orchestrator:
           });
         })();
 `
+
+// isBuilderRoutingPrompt reports whether a provider call is the Factory
+// Builder's routing classification rather than a build or an installed-Factory
+// command.
+func isBuilderRoutingPrompt(request platformprocess.CommandRequest) bool {
+	return strings.Contains(string(request.Stdin), "return exactly one lowercase label: `build` or `help`")
+}

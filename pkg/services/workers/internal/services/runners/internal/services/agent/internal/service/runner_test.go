@@ -62,9 +62,14 @@ func TestExecuteForwardsEnvThroughProviderRequest(t *testing.T) {
 	}
 	got := fake.request
 	observer := got.SessionObserver
+	progressObserver := got.ProgressObserver
 	got.SessionObserver = nil
+	got.ProgressObserver = nil
 	if observer == nil {
 		t.Fatal("Providers.Execute request SessionObserver = nil, want live provider session observation")
+	}
+	if progressObserver == nil {
+		t.Fatal("Providers.Execute request ProgressObserver = nil, want live provider progress observation")
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Providers.Execute request = %#v, want %#v", got, want)

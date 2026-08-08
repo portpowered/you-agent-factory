@@ -37,6 +37,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
 	"github.com/portpowered/infinite-you/pkg/platform/taskgroup"
+	"github.com/portpowered/infinite-you/pkg/platform/wiretranscript"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -89,6 +90,7 @@ type Server struct {
 	events         events.Service
 	resolveHomeDir func() (string, error)
 	responseBridge acp.ResponseBridge
+	wireRecorder   acp.WireRecorder
 }
 
 // promptFlightRegistry coalesces duplicate session/prompt requests for the
@@ -156,6 +158,7 @@ func New(
 	eventsService events.Service,
 	resolveHomeDir func() (string, error),
 	responseBridge acp.ResponseBridge,
+	wireRecorder acp.WireRecorder,
 ) *Server {
 	return &Server{
 		logger:         logging.EnsureLogger(logger),
@@ -165,6 +168,7 @@ func New(
 		events:         eventsService,
 		resolveHomeDir: resolveHomeDir,
 		responseBridge: responseBridge,
+		wireRecorder:   wireRecorder,
 	}
 }
 
@@ -292,6 +296,17 @@ func scanCompleteLines(data []byte, atEOF bool) (advance int, token []byte, err 
 // ever happen after Serve returns: the goroutine that could have issued one
 // has, by construction, already finished.
 func (s *Server) serveConnection(ctx context.Context, connectionID identity.ConnectionID, in io.Reader, out io.Writer) error {
+	// Wrapping the connection's own pipes records every byte in both
+	// directions, including frames the decoder later rejects and any future
+	// write path that does not go through today's two response funnels.
+	// Hooking those funnels individually would capture neither.
+	if transcript := s.openWireTranscript(connectionID); transcript != nil {
+		defer func() { _ = transcript.Close() }()
+		conn := string(connectionID)
+		in = wiretranscript.TeeReader(in, transcript, conn, wiretranscript.PeerClient, wiretranscript.StreamStdin)
+		out = wiretranscript.TeeWriter(out, transcript, conn, wiretranscript.PeerAgent, wiretranscript.StreamStdout)
+	}
+
 	scanner := bufio.NewScanner(in)
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
 	scanner.Split(scanCompleteLines)
@@ -633,4 +648,25 @@ func writeNotification(out io.Writer, params acpsdk.SessionNotification) error {
 		return io.ErrShortWrite
 	}
 	return nil
+}
+
+// openWireTranscript opens this connection's recording, or returns nil when
+// recording is disabled or cannot be opened. A recording failure is logged and
+// then ignored: a diagnostic artifact must never cost a customer their
+// session.
+func (s *Server) openWireTranscript(connectionID identity.ConnectionID) acp.WireTranscript {
+	if s.wireRecorder == nil {
+		return nil
+	}
+	transcript, err := s.wireRecorder(string(connectionID))
+	if err != nil || transcript == nil {
+		s.logger.Warn("acp wire transcript unavailable", "connectionId", string(connectionID))
+		return nil
+	}
+	// The path is the whole point of the feature: a customer has to be able to
+	// find the file. It is a location they own, not payload, so naming it is
+	// consistent with the payload-free logging invariant.
+	s.logger.Info("acp wire transcript opened",
+		"connectionId", string(connectionID), "path", transcript.Path())
+	return transcript
 }

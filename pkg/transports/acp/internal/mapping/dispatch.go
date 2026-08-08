@@ -72,6 +72,8 @@ func Project(draft workers.Draft) (*acpsdk.SessionUpdate, error) {
 		return ProjectUsage(draft)
 	case workers.KindStreamGap:
 		return ProjectStreamGap(draft)
+	case workers.KindPlan:
+		return ProjectPlan(draft)
 	default:
 		return nil, nil
 	}

@@ -2,6 +2,10 @@ package workersessions
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
@@ -19,6 +23,23 @@ type ProviderSessionObservationPublisher struct {
 	mu       sync.RWMutex
 	observer Service
 	next     workers.ProgressPublisher
+
+	// records serializes Worker record publication per Worker Session. Every
+	// observation a Worker emits is committed to that Worker's own topic, and
+	// PublishRecord requires non-decreasing SourceSequence within one source,
+	// so sequence assignment and the commit that consumes it must happen under
+	// one lock per session. A counter shared across sessions would interleave
+	// two Workers' sequences and reject valid records.
+	records   sync.Mutex
+	sequences map[string]uint64
+	logger    Logger
+}
+
+// Logger is the bounded operator-visible reporting surface this publisher
+// needs. It is declared here rather than imported so the package keeps its
+// existing dependency set.
+type Logger interface {
+	Warn(msg string, args ...any)
 }
 
 // NewProviderSessionObservationPublisher creates an unbound progress bridge.
@@ -86,9 +107,142 @@ func (p *ProviderSessionObservationPublisher) Publish(fragment workers.ProgressF
 	if fragment.Kind == workers.ProviderSessionObservedFragmentKind {
 		return
 	}
+
+	// A Worker is a tool call, and everything a Worker produces is content
+	// inside that tool call. Worker-authored observations are therefore
+	// committed to that Worker's own topic, where the Chat Session sequences
+	// them as children of its opening record rather than as its own top-level
+	// output.
+	//
+	// They also continue downstream. The Factory Session response-event stream
+	// is what the CLI's NDJSON contract, the dashboard, and the HTTP SSE feed
+	// read; suppressing Worker output here would leave every one of those
+	// surfaces with nothing to show. The Chat Session is the consumer that must
+	// not see it twice, and it declines the duplicate itself -- see
+	// responsebridge's carriedByWorkerSession -- because it is the only
+	// consumer that also reads the Worker topic.
+	if isWorkerAuthoredFragment(fragment) {
+		p.publishWorkerRecord(observer, fragment)
+	}
 	if next != nil {
 		next(fragment)
 	}
+}
+
+// isWorkerAuthoredFragment reports whether a fragment carries output the
+// Worker itself produced, as opposed to the dispatch lifecycle signal the
+// owning Factory Session consumes.
+func isWorkerAuthoredFragment(fragment workers.ProgressFragment) bool {
+	switch fragment.Kind {
+	case workers.ProgressFragmentKind, workers.ResponseFragmentKind:
+		return true
+	default:
+		return false
+	}
+}
+
+// publishWorkerRecord commits one Worker-authored observation to that Worker
+// Session's topic.
+//
+// The Worker Session id is the dispatch id (see Factory Runtime's
+// startThroughWorkerSessions), so the fragment already names the session it
+// belongs to and no separate correlation is needed.
+//
+// A rejected record loses that record and nothing else: Publish has a
+// no-return signature by design, and one malformed or late observation must
+// never fail the dispatch that produced it. Rejection is reported rather than
+// swallowed, because a silently dropped Worker observation is precisely the
+// failure this routing exists to remove.
+func (p *ProviderSessionObservationPublisher) publishWorkerRecord(
+	observer Service,
+	fragment workers.ProgressFragment,
+) {
+	sessionID := strings.TrimSpace(fragment.DispatchID)
+	if observer == nil || sessionID == "" {
+		return
+	}
+	draft, ok := draftFromProgressFragment(fragment)
+	if !ok {
+		return
+	}
+
+	p.records.Lock()
+	defer p.records.Unlock()
+	if p.sequences == nil {
+		p.sequences = map[string]uint64{}
+	}
+	p.sequences[sessionID]++
+	sequence := p.sequences[sessionID]
+
+	_, err := observer.PublishRecord(context.Background(), PublishRecordRequest{
+		SessionID:      sessionID,
+		Draft:          draft,
+		SourceType:     WorkerObservationSourceType,
+		SourceID:       events.SourceID(sessionID),
+		SourceSequence: events.SourceSequence(sequence),
+		SourceEventID:  events.SourceEventID(sessionID + "/" + strconv.FormatUint(sequence, 10)),
+		SchemaID:       WorkerObservationSchemaID,
+	})
+	if err != nil {
+		p.reportRejectedRecord(sessionID, draft, err)
+	}
+}
+
+// WorkerObservationSourceType and WorkerObservationSchemaID identify Worker
+// observations on a Worker Session topic. They are stable: the Events
+// idempotency identity built from them is what makes a retried publication
+// resolve to its original record rather than committing a duplicate.
+const (
+	WorkerObservationSourceType events.SourceType = "worker_observation"
+	WorkerObservationSchemaID   events.SchemaID   = "workers.draft.v1"
+)
+
+func (p *ProviderSessionObservationPublisher) reportRejectedRecord(
+	sessionID string,
+	draft workers.Draft,
+	err error,
+) {
+	if p == nil || p.logger == nil {
+		return
+	}
+	// A closed publication window is the expected race, not a defect: the
+	// terminal record can commit while a final observation is still in
+	// flight. It is still reported, so a Worker whose output stops early is
+	// diagnosable rather than mysterious.
+	p.logger.Warn(
+		"worker session dropped a worker observation",
+		"worker_session_id", sessionID,
+		"kind", string(draft.Kind),
+		"phase", string(draft.Phase),
+		"outcome", rejectedRecordOutcome(err),
+	)
+}
+
+func rejectedRecordOutcome(err error) string {
+	switch {
+	case errors.Is(err, ErrPublicationNotOpen):
+		return "publication_not_open"
+	case errors.Is(err, ErrOutOfOrderPublication):
+		return "out_of_order"
+	case errors.Is(err, ErrSessionNotFound):
+		return "session_not_found"
+	default:
+		return "rejected"
+	}
+}
+
+// WithLogger attaches the bounded operator-visible reporting surface used when
+// a Worker observation cannot be committed. A nil logger leaves reporting off
+// rather than failing construction, matching this type's existing
+// never-fail-the-dispatch contract.
+func (p *ProviderSessionObservationPublisher) WithLogger(logger Logger) *ProviderSessionObservationPublisher {
+	if p == nil {
+		return p
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.logger = logger
+	return p
 }
 
 // PublishOutcome distinguishes a newly committed Worker record from a
@@ -159,4 +313,311 @@ type PublishRecordResult struct {
 	// Topic(SessionID), in commit order.
 	AggregateSequence events.AggregateSequence
 	Outcome           PublishOutcome
+}
+
+// draftFromProgressFragment converts one Workers progress observation into the
+// source-native workers.Draft that gets committed to the Worker Session topic.
+//
+// A Worker is a tool call, and everything a Worker produces is content inside
+// that tool call, so every observation a Worker emits belongs on its own
+// topic rather than on the owning Factory Session's response stream. This is
+// the one place that translation happens.
+//
+// Two provider vocabularies arrive here and both must be handled, because a
+// Factory can dispatch either kind of Worker:
+//
+//   - ACP execution carries a fact kind in Metadata["kind"] with a bare phase
+//     in Type ("delta", "updated", ...).
+//   - The native claude/codex adapters carry a dotted "noun.phase" in Type
+//     with no Metadata["kind"] at all.
+//
+// It reports ok=false for an observation that carries no committable record,
+// which is not an error: a provider emits plenty of transient detail that has
+// no declared Worker vocabulary, and inventing a record for it would be worse
+// than omitting it.
+//
+// Every returned Draft is a legal Kind/Phase pair carrying the payload shape
+// that pair requires. That is load-bearing rather than incidental: a draft
+// that violates it is rejected by workers.ValidateDraft inside PublishRecord
+// and the observation is lost, which is exactly the failure mode this routing
+// exists to remove.
+func draftFromProgressFragment(fragment workers.ProgressFragment) (workers.Draft, bool) {
+	kind, phase, ok := progressFactVocabulary(fragment)
+	if !ok {
+		return workers.Draft{}, false
+	}
+
+	payload, ok := progressDraftPayload(kind, phase, fragment)
+	if !ok {
+		return workers.Draft{}, false
+	}
+	// Every payload above is a plain struct, so encoding cannot fail. Handling
+	// an impossible error here would add a branch no test can reach; a nil
+	// encoding would instead be rejected by the validation below, which already
+	// requires a non-empty, well-formed payload. Same reasoning as
+	// serializedKnownChildUpdateBytes in the ACP child projector.
+	encoded, _ := json.Marshal(payload)
+
+	draft := workers.Draft{
+		Kind:         kind,
+		Phase:        phase,
+		Payload:      encoded,
+		ItemID:       strings.TrimSpace(fragment.Metadata["item_id"]),
+		ParentItemID: progressDraftParentItemID(kind, fragment.Metadata),
+	}
+	// The Kind/Phase pair policy and the per-pair payload rules are owned by
+	// workers. Asking the owner is what keeps this converter from drifting
+	// against them; a local copy of the table would be one more thing to keep
+	// in sync, and a disagreement would surface as a silently lost observation
+	// rather than a failing test.
+	if err := workers.ValidateDraft(draft); err != nil {
+		return workers.Draft{}, false
+	}
+	return draft, true
+}
+
+// progressFactVocabulary resolves the fact's Kind and Phase from whichever of
+// the two provider vocabularies it uses.
+func progressFactVocabulary(fragment workers.ProgressFragment) (workers.Kind, workers.Phase, bool) {
+	rawKind := strings.ToLower(strings.TrimSpace(fragment.Metadata["kind"]))
+	rawPhase := strings.ToLower(strings.TrimSpace(fragment.Type))
+
+	// The native adapters put "noun.phase" in Type. Splitting it here keeps
+	// both vocabularies converging on one Kind/Phase resolution below rather
+	// than growing two parallel converters that drift.
+	if rawKind == "" {
+		noun, dotted, found := strings.Cut(rawPhase, ".")
+		if !found {
+			return "", "", false
+		}
+		rawKind, rawPhase = noun, dotted
+	}
+
+	switch rawKind {
+	case "message":
+		phase, ok := progressPhase(rawPhase, workers.KindMessage)
+		return workers.KindMessage, phase, ok
+	case "reasoning":
+		phase, ok := progressPhase(rawPhase, workers.KindReasoning)
+		return workers.KindReasoning, phase, ok
+	case "tool":
+		// A tool call's transition is carried by its ACP status, not by the
+		// fact's phase: a client sends tool_call once and then any number of
+		// tool_call_updates whose only distinguishing field is Status.
+		if status := strings.TrimSpace(fragment.Metadata["status"]); status != "" {
+			rawPhase = toolStatusPhase(status)
+		}
+		phase, ok := progressPhase(rawPhase, workers.KindTool)
+		return workers.KindTool, phase, ok
+	case "run", "turn":
+		phase, ok := progressPhase(rawPhase, workers.KindRun)
+		return workers.KindRun, phase, ok
+	case "file_change":
+		return workers.KindFileChange, workers.PhaseUpdated, true
+	case "plan":
+		return workers.KindPlan, workers.PhaseUpdated, true
+	case "usage":
+		return workers.KindUsage, workers.PhaseUpdated, true
+	case "error":
+		return workers.KindError, workers.PhaseUpdated, true
+	default:
+		// Including "session": a provider's own session metadata is not this
+		// Worker Session's lifecycle, and committing it as a SESSION record
+		// would collide with the opening and terminal records worker_sessions
+		// owns. It survives as labelled progress instead.
+		return workers.KindProgress, workers.PhaseUpdated, true
+	}
+}
+
+// progressPhase maps a provider-native phase word onto a declared Worker
+// phase. Whether the resulting Kind/Phase pair is legal is decided by
+// workers.ValidateDraft at the end of the conversion, so this only has to
+// recognize the word.
+func progressPhase(raw string, _ workers.Kind) (workers.Phase, bool) {
+	var phase workers.Phase
+	switch raw {
+	case "started", "start":
+		phase = workers.PhaseStarted
+	case "delta":
+		phase = workers.PhaseDelta
+	case "completed", "complete":
+		phase = workers.PhaseCompleted
+	case "failed":
+		phase = workers.PhaseFailed
+	case "canceled", "cancelled":
+		phase = workers.PhaseCanceled
+	case "updated":
+		// No content kind declares UPDATED. A provider that reports an
+		// ongoing change means DELTA in this vocabulary.
+		phase = workers.PhaseDelta
+	default:
+		return "", false
+	}
+	return phase, true
+}
+
+// toolStatusPhase maps the ACP tool-call status vocabulary onto a phase word.
+func toolStatusPhase(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "pending":
+		return "started"
+	case "in_progress":
+		return "delta"
+	case "completed":
+		return "completed"
+	case "failed":
+		return "failed"
+	case "cancelled", "canceled":
+		return "canceled"
+	default:
+		return "delta"
+	}
+}
+
+// progressDraftPayload builds the payload shape the resolved Kind/Phase pair
+// requires, reporting false when the fact does not carry enough to satisfy it.
+func progressDraftPayload(
+	kind workers.Kind,
+	phase workers.Phase,
+	fragment workers.ProgressFragment,
+) (any, bool) {
+	metadata := fragment.Metadata
+	detail := fragment.Payload
+
+	switch kind {
+	case workers.KindMessage:
+		if phase == workers.PhaseDelta {
+			if detail == "" {
+				return nil, false
+			}
+			return workers.MessageDeltaPayload{
+				ContentBlockIndex: 0, ContentBlockKind: workers.ContentBlockText, TextDelta: detail,
+			}, true
+		}
+		return workers.MessagePayload{
+			Role:          "assistant",
+			ContentBlocks: []workers.ContentBlock{{Kind: workers.ContentBlockText, Text: detail}},
+			Partial:       strings.EqualFold(strings.TrimSpace(metadata["partial"]), "true"),
+		}, true
+	case workers.KindReasoning:
+		if phase == workers.PhaseDelta {
+			return workers.ReasoningPayload{SummaryDelta: detail}, true
+		}
+		return workers.ReasoningPayload{Summary: detail}, true
+	case workers.KindTool:
+		return toolDraftPayload(phase, detail, metadata)
+	case workers.KindRun:
+		return workers.RunPayload{Status: strings.ToLower(string(phase))}, true
+	case workers.KindFileChange:
+		path := strings.TrimSpace(metadata["path"])
+		operation := strings.TrimSpace(metadata["operation"])
+		if path == "" || operation == "" {
+			return nil, false
+		}
+		return workers.FileChangePayload{Path: path, Operation: operation, Summary: detail}, true
+	case workers.KindPlan:
+		return planDraftPayload(detail, metadata), true
+	case workers.KindUsage:
+		total, err := strconv.ParseInt(strings.TrimSpace(metadata["used_tokens"]), 10, 64)
+		if err != nil {
+			return nil, false
+		}
+		return workers.UsagePayload{TotalTokens: total}, true
+	case workers.KindError:
+		code := strings.TrimSpace(metadata["error_code"])
+		if code == "" {
+			code = "provider_failure"
+		}
+		message := detail
+		if message == "" {
+			message = "provider execution failed"
+		}
+		return workers.ErrorPayload{Code: code, Message: message}, true
+	default:
+		label := strings.TrimSpace(metadata["native_type"])
+		if label == "" {
+			label = strings.TrimSpace(fragment.Type)
+		}
+		if label == "" {
+			return nil, false
+		}
+		return workers.ProgressPayload{Label: label, Message: detail}, true
+	}
+}
+
+func toolDraftPayload(phase workers.Phase, detail string, metadata map[string]string) (any, bool) {
+	toolCallID := strings.TrimSpace(metadata["item_id"])
+	if toolCallID == "" {
+		return nil, false
+	}
+	if phase == workers.PhaseDelta {
+		// ToolDeltaPayload requires an output increment. A status-only update
+		// carries nothing the opening record did not already say.
+		output := detail
+		if output == "" {
+			output = strings.TrimSpace(metadata["raw_output"])
+		}
+		if output == "" {
+			return nil, false
+		}
+		return workers.ToolDeltaPayload{ToolCallID: toolCallID, OutputDelta: output}, true
+	}
+
+	name := strings.TrimSpace(detail)
+	if name == "" {
+		name = strings.TrimSpace(metadata["tool_name"])
+	}
+	if name == "" {
+		name = "tool"
+	}
+	payload := workers.ToolPayload{
+		ToolCallID: toolCallID, ToolName: name, Status: strings.TrimSpace(metadata["status"]),
+	}
+	if raw := json.RawMessage(metadata["raw_input"]); json.Valid(raw) {
+		payload.ArgumentsSummary = raw
+	}
+	if raw := json.RawMessage(metadata["raw_output"]); json.Valid(raw) {
+		payload.ResultSummary = raw
+	}
+	return payload, true
+}
+
+// planDraftPayload decodes the structured entries an ACP plan update carries,
+// falling back to the rendered summary when a provider supplied no structure.
+func planDraftPayload(detail string, metadata map[string]string) workers.PlanPayload {
+	var entries []struct {
+		Content  string `json:"content"`
+		Priority string `json:"priority"`
+		Status   string `json:"status"`
+	}
+	if raw := strings.TrimSpace(metadata["entries"]); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &entries); err == nil {
+			steps := make([]workers.PlanStep, 0, len(entries))
+			for index, entry := range entries {
+				content := strings.TrimSpace(entry.Content)
+				if content == "" {
+					continue
+				}
+				steps = append(steps, workers.PlanStep{
+					ID:          "step-" + strconv.Itoa(index+1),
+					Description: content,
+					Status:      entry.Status,
+				})
+			}
+			if len(steps) > 0 {
+				return workers.PlanPayload{Steps: steps}
+			}
+		}
+	}
+	return workers.PlanPayload{Summary: detail}
+}
+
+// progressDraftParentItemID resolves the lineage a fact declares. Only a file
+// change has one: ACP carries a diff as content inside the tool call that
+// produced it, and that ownership must survive into the committed record.
+func progressDraftParentItemID(kind workers.Kind, metadata map[string]string) string {
+	if kind != workers.KindFileChange {
+		return ""
+	}
+	return strings.TrimSpace(metadata["tool_call_id"])
 }

@@ -651,7 +651,7 @@ func TestHandleSessionPromptEqualWireIDsAcrossConnectionsRemainDistinct(t *testi
 // configured reports a bounded internal failure rather than panicking or
 // dispatching a Factory effect.
 func TestHandleSessionPromptWithoutCollaboratorsReportsBoundedFailure(t *testing.T) {
-	server := New(nil, nil, nil, nil, nil, nil, nil)
+	server := New(nil, nil, nil, nil, nil, nil, nil, nil)
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams("session-1", "hello there"))
 
@@ -1187,8 +1187,9 @@ func TestHandleSessionPromptLaterTurnMapsInvocationOutcomeToFinalStopReason(t *t
 			env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 				promptTextParams("session-1", "a later message"))
 			result, rpcErr := server.handleSessionPrompt(context.Background(), env)
-			if rpcErr != nil {
-				t.Fatalf("handleSessionPrompt() error = %+v, want success", rpcErr)
+			wantPromptFailureForStatus(t, tc.status, rpcErr)
+			if tc.status == factorysessions.InvocationTerminalStatusFailed {
+				return
 			}
 
 			var resp acpsdk.PromptResponse
@@ -1963,9 +1964,8 @@ func TestHandleSessionPromptFirstTurnAdvancesByInvokeOutcome(t *testing.T) {
 
 			env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 				promptTextParams("session-1", "hello there"))
-			if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr != nil {
-				t.Fatalf("handleSessionPrompt() error = %+v, want success (a published Factory failure still yields a normal final ACP response)", rpcErr)
-			}
+			_, rpcErr := server.handleSessionPrompt(context.Background(), env)
+			wantPromptFailureForStatus(t, tc.status, rpcErr)
 
 			wantAdvanceTurnSequence(t, chatSessions, "session-1", "turn-1", chatsessions.TurnStateRunning, tc.want)
 		})
@@ -2003,9 +2003,8 @@ func TestHandleSessionPromptLaterTurnAdvancesByInvocationOutcome(t *testing.T) {
 
 			env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 				promptTextParams("session-1", "a later message"))
-			if _, rpcErr := server.handleSessionPrompt(context.Background(), env); rpcErr != nil {
-				t.Fatalf("handleSessionPrompt() error = %+v, want success (a Factory-level failure still yields a normal final ACP response)", rpcErr)
-			}
+			_, rpcErr := server.handleSessionPrompt(context.Background(), env)
+			wantPromptFailureForStatus(t, tc.status, rpcErr)
 
 			wantAdvanceTurnSequence(t, chatSessions, "session-1", "turn-2", chatsessions.TurnStateRunning, tc.want)
 		})
@@ -2159,7 +2158,7 @@ func TestHandleSessionPromptRunningTransitionFailureRecoveryAdmitsLaterPrompt(t 
 		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-1"},
 		invokeResult: factorysessions.InvocationResult{SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted},
 	}
-	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil)
+	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil)
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "first message"))
@@ -2208,7 +2207,7 @@ func TestHandleSessionPromptPendingFactorySessionSurvivesNewServerInstance(t *te
 		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-pending"},
 		invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted},
 	}
-	firstServer := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil)
+	firstServer := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil)
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "first message"))
@@ -2222,7 +2221,7 @@ func TestHandleSessionPromptPendingFactorySessionSurvivesNewServerInstance(t *te
 	// A brand-new Server, sharing only the underlying store (not the failed
 	// firstServer instance or its wrapper), stands in for a restarted
 	// transport process.
-	secondServer := New(nil, store, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil)
+	secondServer := New(nil, store, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil)
 
 	secondEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "second message"))
@@ -2320,7 +2319,7 @@ func TestHandleSessionPromptTerminalTransitionFailureRecoveryAdmitsLaterPrompt(t
 		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-1"},
 		invokeResult: factorysessions.InvocationResult{SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted},
 	}
-	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil)
+	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil)
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "first message"))
@@ -2388,7 +2387,7 @@ func TestHandleSessionPromptFailedTerminalTransitionFailureRecoveryAdmitsLaterPr
 			SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted,
 		},
 	}
-	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil)
+	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil)
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "first message"))
@@ -2726,7 +2725,7 @@ func TestHandleSessionCancelCommitsCapturedIntentBeforeFactoryCancel(t *testing.
 	base, session, turn := newActiveBoundControlSession(t, "fs-control-1")
 	chatSessions := &controlRecordingChatSessions{Service: base}
 	factoryTarget := &fakeFactoryTargetService{cancelEntered: make(chan struct{}), cancelRelease: make(chan struct{})}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil)
 	env := cancelNotificationEnvelope(t, "cancel-control-1", session.ID)
 
 	done := make(chan struct{})
@@ -2783,7 +2782,7 @@ func TestHandleSessionCancelCompletionRaceResolvesNoopWithoutFactoryEffect(t *te
 	release := make(chan struct{})
 	chatSessions := &controlRecordingChatSessions{Service: base, commitEntered: make(chan struct{}), commitRelease: release}
 	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil)
 	env := cancelNotificationEnvelope(t, "cancel-noop-1", session.ID)
 
 	done := make(chan struct{})
@@ -2820,7 +2819,7 @@ func TestHandleSessionCancelSupersededRaceCannotReachReplacementTurn(t *testing.
 	release := make(chan struct{})
 	chatSessions := &controlRecordingChatSessions{Service: base, commitEntered: make(chan struct{}), commitRelease: release}
 	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil)
 	env := cancelNotificationEnvelope(t, "cancel-superseded-1", session.ID)
 
 	done := make(chan struct{})
@@ -2867,7 +2866,7 @@ func TestHandleSessionCancelRepeatedIdentityDoesNotDuplicateFactoryCancel(t *tes
 	base, session, _ := newActiveBoundControlSession(t, "fs-control-repeat")
 	chatSessions := &controlRecordingChatSessions{Service: base}
 	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil)
 	env := cancelNotificationEnvelope(t, "cancel-repeat-1", session.ID)
 
 	server.handleSessionCancel(context.Background(), env)
@@ -2976,7 +2975,7 @@ func TestHandleSessionCancelCommittedSafetyCases(t *testing.T) {
 	for index, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			factoryTarget := &fakeFactoryTargetService{}
-			server := New(nil, test.chatSessions, nil, factoryTarget, nil, nil, nil)
+			server := New(nil, test.chatSessions, nil, factoryTarget, nil, nil, nil, nil)
 			server.handleSessionCancel(context.Background(), cancelNotificationEnvelope(t, fmt.Sprintf("cancel-safety-%d", index), current.Session.ID))
 
 			factoryTarget.mu.Lock()
@@ -3001,7 +3000,7 @@ func TestHandleSessionCancelCommittedSafetyCases(t *testing.T) {
 func TestHandleSessionCancelRejectsUncorrelatedIdentityWithoutEffects(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{}
 	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil)
 
 	server.handleSessionCancel(context.Background(), envelope.Envelope{
 		Params: json.RawMessage(`{"sessionId":"session-cancel-identity"}`),
@@ -3269,7 +3268,7 @@ func TestHandleSessionCancelDependencyFailureLeavesTurnRunningAndRetryable(t *te
 	base, session, turn := newActiveBoundControlSession(t, "fs-cancel-failure")
 	chatSessions := &controlRecordingChatSessions{Service: base}
 	factoryTarget := &fakeFactoryTargetService{cancelErr: errors.New("provider secret at /unsafe/path")}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil)
 	env := cancelNotificationEnvelope(t, "cancel-failure-1", session.ID)
 
 	server.handleSessionCancel(context.Background(), env)
@@ -3484,4 +3483,31 @@ func TestServeAsyncWriteFailureStopsAllFurtherConnectionActivity(t *testing.T) {
 			t.Fatalf("writer was called %d times after later input arrived, want still exactly 1 (no new response write)", writer.calls)
 		}
 	})
+}
+
+// wantPromptFailureForStatus asserts the prompt answer that matches a Factory
+// invocation's terminal status.
+//
+// ACP has no failure StopReason, so a FAILED invocation cannot be reported
+// inside a successful prompt response; it answers with the protocol's own
+// failure channel instead, carrying only the closed InvocationErrorCode
+// vocabulary. Every other terminal status still yields a normal response.
+func wantPromptFailureForStatus(t *testing.T, status factorysessions.InvocationTerminalStatus, rpcErr *acpsdk.RequestError) {
+	t.Helper()
+	if status != factorysessions.InvocationTerminalStatusFailed {
+		if rpcErr != nil {
+			t.Fatalf("handleSessionPrompt() error = %+v, want a normal final ACP response for %q", rpcErr, status)
+		}
+		return
+	}
+	if rpcErr == nil {
+		t.Fatal("handleSessionPrompt() error = nil, want a failed invocation to fail the prompt rather than report end_turn")
+	}
+	encoded, marshalErr := json.Marshal(rpcErr)
+	if marshalErr != nil {
+		t.Fatalf("marshal prompt failure: %v", marshalErr)
+	}
+	if !strings.Contains(string(encoded), "INVOCATION_RUNTIME_FAILURE") {
+		t.Fatalf("prompt failure = %s, want the bounded invocation error code", encoded)
+	}
 }

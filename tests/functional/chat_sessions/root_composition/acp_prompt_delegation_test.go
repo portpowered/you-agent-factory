@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
@@ -61,20 +62,17 @@ func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *t
 	// ProviderCommandRunner *can* drive this exact @you/goal fixture --
 	// tests/functional/cli/named_invocation/named_invocation_test.go already
 	// does, via testutil.NewProviderCommandRunner -- so the substitution here
-	// is not technical necessity, it is deliberately matching the simplest
-	// fake that reproduces the one outcome this test asserts on: a genuine
-	// published FAILED status from @you/goal's own goal loop, which needs a
-	// real child worker dispatch neither fake alone satisfies (see this
-	// file's doc comment). Swapping to ProviderCommandRunner would require
-	// discovering and queuing the exact raw subprocess Stdout bytes this
-	// Factory's execution adapter expects across however many dispatch
-	// rounds precede the real failure, coupling this test to that adapter's
-	// wire format for no additional coverage of the on-demand-activation
-	// behavior this test exists to prove; ProviderOverride's higher-level
-	// workers.InferenceResponse shape isolates this test from that coupling.
-	// Both edges are equally real external-effect ports serviceedges.Edges
-	// accepts.
-	provider := testutil.NewMockProvider(workers.InferenceResponse{Content: "acknowledged\n<COMPLETE>"})
+	// is not technical necessity, it is the simplest edge that satisfies
+	// @you/goal's own decision-envelope contract on every dispatch round this
+	// test's several turns produce. Swapping to ProviderCommandRunner would
+	// require queuing the exact raw subprocess Stdout bytes this Factory's
+	// execution adapter expects for each of those rounds, coupling this test
+	// to that adapter's wire format for no additional coverage of the
+	// on-demand-activation behavior this test exists to prove;
+	// ProviderOverride's higher-level workers.InferenceResponse shape
+	// isolates this test from that coupling. Both edges are equally real
+	// external-effect ports serviceedges.Edges accepts.
+	provider := newAcceptedGoalProvider()
 	// Factory Session runtime activations are counted through the shared
 	// FactorySessionIDGenerator edge. That generator is also consumed for
 	// other identifiers the opened runtime mints internally while
@@ -111,13 +109,6 @@ func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *t
 	if firstResp.Error != nil {
 		t.Fatalf("first session/prompt response error = %+v, want a successful final result", firstResp.Error)
 	}
-	// The seeded @you/goal packaged Factory's own business workflow reaches a
-	// real published FAILED terminal status against this bare mock provider
-	// (its goal loop needs an actual child worker dispatch a mock alone can't
-	// satisfy -- see this file's doc comment) -- a genuine downstream Factory
-	// failure this production composition must still map to the documented
-	// end_turn safe fallback rather than an ACP-level error, exactly like
-	// this transport's already-unit-tested mapping does.
 	assertPromptResponseStopReason(t, firstResp, acpsdk.StopReasonEndTurn)
 	callsAfterFirstTurn := factorySessionIDCalls.Load()
 	if callsAfterFirstTurn == 0 {
@@ -133,6 +124,103 @@ func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *t
 		t.Fatalf("Factory Session ID generator calls after the second (already-bound) turn = %d, want unchanged from %d (no second Factory Session activation)", got, callsAfterFirstTurn)
 	}
 }
+
+// TestACPPromptDelegationFailedFactoryInvocationReportsAnACPError proves the
+// production composition reports a Factory invocation that reached a real
+// published FAILED terminal status as a JSON-RPC error, not as a successful
+// prompt result.
+//
+// This is the one outcome ACP's own vocabulary cannot express any other way.
+// StopReason is a closed set -- end_turn, max_tokens, max_turn_requests,
+// refusal, cancelled -- with no failure member, so a failed run reported
+// through a successful PromptResponse is indistinguishable from a completed
+// one: the client renders a finished turn and the customer never learns their
+// work did not run. ACP's failure channel is the error response, so that is
+// where a failure belongs.
+//
+// The error's data is deliberately narrow. It carries only the invocation's
+// error code, which is a closed three-value vocabulary
+// (factorysessions.InvocationErrorCode*), and never the invocation's Message,
+// which is free-form provider diagnostics that can contain a command line,
+// a path, or a credential. protocol.FactoryInvocationFailure bounds an
+// unrecognized code to INVOCATION_RUNTIME_FAILURE rather than passing it
+// through, so a future status cannot widen what reaches the wire.
+func TestACPPromptDelegationFailedFactoryInvocationReportsAnACPError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test driving root.BuildProcess Factory Session dispatch")
+	}
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	seedInstalledPackagedFactory(t, home, "@you/goal")
+	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
+
+	// An exhausted MockProvider answers every inference with unparseable
+	// filler, which @you/goal's decision-envelope executor cannot classify.
+	// Its authored `onFailure` routes that to the `failed` FAILED state, so
+	// the invocation publishes a genuine FAILED terminal status -- a real
+	// downstream Factory failure produced by the Factory's own workflow,
+	// not an injected one.
+	provider := testutil.NewMockProvider()
+	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{ProviderOverride: provider})
+	if err != nil {
+		t.Fatalf("root.BuildProcess() error = %v", err)
+	}
+	closeProcessCleanly(t, process)
+	server := process.ACPServer()
+	if server == nil {
+		t.Fatal("Process.ACPServer() returned a nil acp.Server")
+	}
+
+	cwd := t.TempDir()
+	sessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
+	if sessionID == "" {
+		t.Fatal("session/new returned a blank sessionId")
+	}
+
+	resp := sendSessionPrompt(t, server, sessionID, "please help with this goal")
+	if resp.Error == nil {
+		t.Fatalf("session/prompt response error = nil with result %s, want a JSON-RPC error for a FAILED Factory invocation", resp.Result)
+	}
+	if resp.Error.Code != internalErrorCode {
+		t.Errorf("error code = %d, want %d (internal error)", resp.Error.Code, internalErrorCode)
+	}
+	// Decoding Data into map[string]string asserts the bounded shape as well
+	// as the value: exactly one string member. Any structured payload the
+	// mapper might later attach -- a nested result, a message, an identifier
+	// -- fails to decode here rather than reaching a customer's client.
+	encodedData, err := json.Marshal(resp.Error.Data)
+	if err != nil {
+		t.Fatalf("marshal error data: %v", err)
+	}
+	var data map[string]string
+	if err := json.Unmarshal(encodedData, &data); err != nil {
+		t.Fatalf("error data %s is not a flat string map: %v", encodedData, err)
+	}
+	if len(data) != 1 {
+		t.Fatalf("error data = %s, want exactly one member (the bounded invocation error code)", encodedData)
+	}
+	if data["reason"] != string(factorysessions.InvocationErrorCodeRuntimeFailure) {
+		t.Errorf("error data reason = %q, want %q", data["reason"], factorysessions.InvocationErrorCodeRuntimeFailure)
+	}
+
+	// A failed invocation must release the session's busy state like any
+	// other terminal outcome: the next prompt is still admitted and reaches
+	// its own dispatch rather than being rejected as busy.
+	secondResp := sendSessionPrompt(t, server, sessionID, "a retry after the failed invocation")
+	if secondResp.Error == nil {
+		t.Fatal("second session/prompt response error = nil, want the same bounded failure, not a fabricated success")
+	}
+	if strings.Contains(strings.ToLower(secondResp.Error.Error()), "busy") {
+		t.Errorf("second session/prompt error = %v, want a fresh dispatch failure rather than a stranded busy rejection", secondResp.Error)
+	}
+}
+
+// internalErrorCode is JSON-RPC's reserved internal-error code, which
+// acpsdk.NewInternalError sets.
+const internalErrorCode = -32603
 
 // TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes
 // proves that when the admitted episode's Factory target can no longer
@@ -326,7 +414,7 @@ func runPromptDeliveries(t *testing.T, homePrefix string, deliveries int) int32 
 	seedInstalledPackagedFactory(t, home, "@you/goal")
 	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
 
-	provider := testutil.NewMockProvider(workers.InferenceResponse{Content: "acknowledged\n<COMPLETE>"})
+	provider := newAcceptedGoalProvider()
 	var factorySessionIDCalls atomic.Int32
 	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{
 		ProviderOverride: provider,
@@ -483,6 +571,28 @@ func responseLinesOnlyErr(out *bytes.Buffer) []rpcMessage {
 	return responses
 }
 
+// acceptedGoalProvider is a workers.Provider that answers every inference
+// with the one decision envelope the seeded @you/goal packaged Factory's
+// `outcomeFormat: decision-envelope` executor contract accepts as complete,
+// so its goal loop reaches its authored `complete` terminal state.
+//
+// It answers *every* call rather than a fixed queue on purpose: the tests
+// using it drive several turns, and each turn's dispatch runs @you/goal's own
+// REPEATER workstation, so the number of inferences is a property of that
+// Factory's workflow rather than something a test should have to predict. A
+// queue that ran dry would fall back to unparseable filler, route through
+// `onFailure`, and fail the invocation -- turning a delegation test red for a
+// reason that has nothing to do with delegation.
+type acceptedGoalProvider struct{}
+
+func newAcceptedGoalProvider() acceptedGoalProvider { return acceptedGoalProvider{} }
+
+func (acceptedGoalProvider) Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
+	return workers.InferenceResponse{
+		Content: `{"decision":"accepted","feedback":"","output":"goal reached over ACP"}`,
+	}, nil
+}
+
 // blockingProvider wraps a workers.Provider and blocks its first Infer call
 // until release is closed, closing started exactly once when that call
 // begins. A test uses this to deterministically observe that a Factory
@@ -530,7 +640,7 @@ func TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch(t
 	seedInstalledPackagedFactory(t, home, "@you/goal")
 	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
 
-	provider := newBlockingProvider(testutil.NewMockProvider(workers.InferenceResponse{Content: "acknowledged\n<COMPLETE>"}))
+	provider := newBlockingProvider(newAcceptedGoalProvider())
 	var factorySessionIDCalls atomic.Int32
 	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{
 		ProviderOverride: provider,

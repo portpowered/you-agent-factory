@@ -18,6 +18,7 @@ const (
 	acpOutcomeUsageUpdate    acpOutcome = "USAGE_UPDATE"
 	acpOutcomeSessionInfo    acpOutcome = "SESSION_INFO_UPDATE"
 	acpOutcomeGapNotice      acpOutcome = "GAP_NOTICE"
+	acpOutcomePlan           acpOutcome = "PLAN"
 	acpOutcomeErrorOutOfBand acpOutcome = "ERROR_OUT_OF_BAND"
 	acpOutcomeNoOutput       acpOutcome = "NO_OUTPUT"
 )
@@ -71,7 +72,7 @@ var declaredACPL1Outcomes = []acpOutcomeDeclaration{
 	{KindTool, PhaseCanceled, acpOutcomeNoOutput},
 
 	{KindFileChange, PhaseUpdated, acpOutcomeNoOutput},
-	{KindPlan, PhaseUpdated, acpOutcomeNoOutput},
+	{KindPlan, PhaseUpdated, acpOutcomePlan},
 	{KindProgress, PhaseUpdated, acpOutcomeNoOutput},
 
 	{KindUsage, PhaseUpdated, acpOutcomeUsageUpdate},
@@ -208,7 +209,7 @@ func TestACPL1OutcomeParity_DeclaresExpectedOutcomeFamilies(t *testing.T) {
 		{KindTool, PhaseCanceled}:  acpOutcomeNoOutput,
 
 		{KindFileChange, PhaseUpdated}: acpOutcomeNoOutput,
-		{KindPlan, PhaseUpdated}:       acpOutcomeNoOutput,
+		{KindPlan, PhaseUpdated}:       acpOutcomePlan,
 		{KindProgress, PhaseUpdated}:   acpOutcomeNoOutput,
 
 		{KindUsage, PhaseUpdated}: acpOutcomeUsageUpdate,

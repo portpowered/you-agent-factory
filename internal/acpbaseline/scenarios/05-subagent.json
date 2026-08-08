@@ -1,0 +1,16 @@
+{
+  "name": "05-subagent",
+  "description": "How the agent represents a subagent, and the complete event log around one.",
+  "clientCapabilities": {"fs": {"readTextFile": true, "writeTextFile": true}},
+  "steps": [
+    {"kind": "request", "method": "initialize",
+     "params": {"protocolVersion": 1, "clientCapabilities": "${clientCapabilities}"}},
+    {"kind": "request", "method": "session/new",
+     "params": {"cwd": "${cwd}", "mcpServers": []}},
+    {"kind": "request", "method": "session/prompt",
+     "params": {"sessionId": "${sessionId}", "prompt": [{"type": "text", "text": "Spawn a subagent to independently count how many files are in this directory. Wait for it and report only the number."}]},
+     "note": "A null result is a valid finding: if a subagent surfaces only as an ordinary tool_call, the matrix records that rather than failing."},
+    {"kind": "await", "awaitMillis": 1000},
+    {"kind": "snapshot", "name": "subagent"}
+  ]
+}

@@ -331,7 +331,7 @@ func newStreamingTestServer(t *testing.T, factoryTarget *fakeFactoryTargetServic
 	eventsSvc := &fakeEventsService{}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
 	resolveHomeDir := func() (string, error) { return "/home/operator", nil }
-	server := New(nil, chatSessions, catalog, factoryTarget, eventsSvc, resolveHomeDir, nil)
+	server := New(nil, chatSessions, catalog, factoryTarget, eventsSvc, resolveHomeDir, nil, nil)
 	return server, eventsSvc
 }
 
@@ -1644,7 +1644,9 @@ func TestLiveDrainTurnUpdatesGapAcknowledgeFailureStopsDrain(t *testing.T) {
 	seedRetentionGap(t, eventsSvc, streamingTestSessionID)
 
 	ctx := contextWithAttachmentCache(context.Background(), &attachmentCache{})
-	notify := func(acpsdk.SessionNotification) error { return errors.New("notify failed") }
+	notify := func(acpsdk.SessionNotification) error {
+		return errors.New("notify failed")
+	}
 
 	drainDone := make(chan bool, 1)
 	go func() {

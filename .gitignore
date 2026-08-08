@@ -20,6 +20,10 @@ prd.json
 prd.md
 progress.md
 progress.txt
+problems.md
+## Stray Go coverage profile written to the repo root. Anchored so it cannot
+## also match the ui/coverage directory, which ui/coverage/* already covers.
+/coverage
 
 tasks/todo
 tasks/done

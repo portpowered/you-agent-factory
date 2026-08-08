@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -220,23 +221,36 @@ func TestStarterWithListenerReportsBindingServesAndRejectsReuse(t *testing.T) {
 	starter := StarterWithListener(listener)
 	ctx, cancel := context.WithCancel(t.Context())
 	exit := make(chan error, 1)
+	// OnBound fires on the starter's goroutine while this one polls for the
+	// binding, so the value has to be published under a lock rather than read
+	// straight out of a shared variable.
+	var boundMu sync.Mutex
 	var bound Binding
+	readBound := func() Binding {
+		boundMu.Lock()
+		defer boundMu.Unlock()
+		return bound
+	}
 	go func() {
 		exit <- starter(ctx, StartRequest{
 			Handler: http.NotFoundHandler(),
-			OnBound: func(value Binding) { bound = value },
+			OnBound: func(value Binding) {
+				boundMu.Lock()
+				bound = value
+				boundMu.Unlock()
+			},
 		})
 	}()
 	address := listener.Addr().(*net.TCPAddr)
-	for bound.Port == 0 {
+	for readBound().Port == 0 {
 		select {
 		case err := <-exit:
 			t.Fatalf("starter exited before binding: %v", err)
 		case <-time.After(time.Millisecond):
 		}
 	}
-	if bound.Host != address.IP.String() || bound.Port != address.Port {
-		t.Fatalf("binding = %+v, want %s:%d", bound, address.IP, address.Port)
+	if observed := readBound(); observed.Host != address.IP.String() || observed.Port != address.Port {
+		t.Fatalf("binding = %+v, want %s:%d", observed, address.IP, address.Port)
 	}
 	cancel()
 	if err := receiveBefore(t, exit); err != nil {

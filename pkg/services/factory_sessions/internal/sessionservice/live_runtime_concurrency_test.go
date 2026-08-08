@@ -19,6 +19,7 @@ type registryBackedLiveRuntimeHost struct {
 	liveRuntimeEffectHost
 	registry  *sessionregistry.Registry
 	openMu    sync.Mutex
+	stopMu    sync.Mutex
 	nextID    atomic.Int32
 	openCalls atomic.Int32
 }
@@ -69,9 +70,13 @@ func (h *registryBackedLiveRuntimeHost) RequireSession(sessionID string) (*lives
 }
 
 func (h *registryBackedLiveRuntimeHost) StopLiveSession(sessionID string) error {
+	// The concurrency cells stop sessions from several goroutines at once, so
+	// the recorded counters this host keeps must be guarded like its registry.
+	h.stopMu.Lock()
 	h.stopCalls++
 	h.registry.Remove(sessionID)
 	h.sessionIDs = h.registry.IDs()
+	h.stopMu.Unlock()
 	return nil
 }
 

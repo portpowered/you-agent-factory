@@ -29,6 +29,98 @@ banner, progress text, help output, or error text. No prompt, credential,
 provider command, unsafe path, or private topology detail is written to
 either stream.
 
+## Choose Which Factory Answers A Prompt
+
+`session/new` returns one select configuration option, `target`, in the `model`
+category. ACP clients render it wherever they render a model picker, so
+selecting a Factory works the same way selecting a model does. Switching it
+mid-session uses `session/set_config_option` with `configId: "target"`, or the
+`/factory <target>` prompt command.
+
+By default every installed Factory is selectable, and `factory:@you/factory-builder`
+starts as the current target. On a home where `you serve acp` has run at least
+once, that means all packaged `@you/*` Factories appear in the picker.
+
+To restrict the list, author `workers.acp.agentProfile` in the operator config:
+
+```json
+{
+  "workers": {
+    "acp": {
+      "agentProfile": {
+        "defaultTarget": "factory:@you/goal",
+        "allowedTargets": ["factory:@you/goal", "factory:@you/classify"]
+      }
+    }
+  }
+}
+```
+
+| `allowedTargets` | Meaning |
+|------------------|---------|
+| Omitted | Unrestricted. Every installed Factory is selectable. |
+| A non-empty list | Only those targets are selectable, in the authored order. `defaultTarget` must be one of them. |
+| `[]` | Rejected. Omit the property instead; an empty list is treated as a malformed restriction rather than as "no restriction". |
+
+Only Factories that are actually installed appear. A packaged Factory that has
+been listed but never materialized to disk is not selectable. Targets are
+unversioned `factory:<ref>` references, and unrestricted mode offers scoped
+names such as `@you/goal`; a locally authored Factory whose name cannot be
+expressed as a `factory:` reference is skipped rather than offered and then
+rejected.
+
+## Read The ACP Wire Log
+
+Every `you serve acp` connection records its JSON-RPC traffic, in both
+directions, to a file. Recording is on by default so that a customer who hits a
+problem already has the evidence, rather than needing to know to enable
+something before reproducing it.
+
+```
+~/.you-agent-factory/acp-wire/YYYY/MM/DD/<time>-acp-wire-<connection>.log
+```
+
+One file per connection, mode `0600`, JSONL — one record per line:
+
+| Field | Meaning |
+|-------|---------|
+| `v` | Record schema version. |
+| `seq` | Gap-free order across both directions. |
+| `t` | RFC3339 UTC timestamp. |
+| `conn` | Connection identity. |
+| `peer` | `client` or `agent` — who authored the frame. |
+| `dir` | `in` or `out`, relative to `you`. |
+| `stream` | `stdin`, `stdout`, or `stderr`. |
+| `bytes` | Length of the original line. |
+| `frame` | The JSON-RPC frame, recorded verbatim. |
+| `text` | The raw line when it was not valid JSON. |
+| `err` | Why a line was recorded as `text`, or that it was truncated. |
+
+Frames are recorded exactly as they crossed the wire, never re-encoded, so key
+order and unknown fields survive. A line the server rejects is recorded too,
+with `err` explaining why — that frame is usually the one worth reading.
+
+```bash
+# every method seen, in order
+jq -r 'select(.frame) | "\(.dir) \(.frame.method // "response")"' \
+  ~/.you-agent-factory/acp-wire/*/*/*/*.log
+```
+
+> **The log contains full prompt and response content.** It is a transcript of
+> the session, not a sanitized diagnostic. Treat it accordingly before sharing
+> it, and be aware anything you send to the agent appears in it verbatim.
+
+| Environment variable | Effect |
+|----------------------|--------|
+| `YOU_ACP_WIRE_LOG=off` | Disables recording entirely. |
+| `YOU_ACP_WIRE_LOG_DIR=<path>` | Writes transcripts under `<path>` instead of the home directory. |
+
+Files roll at 32 MB, keeping four compressed backups for seven days. A single
+frame larger than 256 KB is recorded truncated and marked, so one oversized
+frame cannot consume the whole budget. Recording never writes to stdout, and a
+recorder that cannot open its file is reported on stderr and then ignored
+rather than failing the connection.
+
 ## Shutdown Behavior
 
 | Trigger | Outcome |

@@ -3,6 +3,7 @@ package mapping
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	acpsdk "github.com/coder/acp-go-sdk"
@@ -397,5 +398,133 @@ func assertMessageID(t *testing.T, got *string, want string) {
 	}
 	if got == nil || *got != want {
 		t.Fatalf("MessageId = %v, want %q", got, want)
+	}
+}
+
+// TestProjectPlan covers the session-level plan projection.
+//
+// A plan is the one record where an unrecognized value must fail rather than
+// default: reporting a plan state the Factory never claimed is worse than
+// reporting none, because the client renders it as the agent's own commitment.
+func TestProjectPlan(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		payload    string
+		wantNil    bool
+		wantErr    bool
+		wantStatus []acpsdk.PlanEntryStatus
+	}{
+		{
+			name: "every declared status maps onto the ACP enum",
+			payload: `{"steps":[
+				{"id":"1","description":"pending by default"},
+				{"id":"2","description":"explicitly pending","status":"pending"},
+				{"id":"3","description":"running","status":"in_progress"},
+				{"id":"4","description":"active alias","status":"ACTIVE"},
+				{"id":"5","description":"done alias","status":"Done"}
+			]}`,
+			wantStatus: []acpsdk.PlanEntryStatus{
+				acpsdk.PlanEntryStatusPending,
+				acpsdk.PlanEntryStatusPending,
+				acpsdk.PlanEntryStatusInProgress,
+				acpsdk.PlanEntryStatusInProgress,
+				acpsdk.PlanEntryStatusCompleted,
+			},
+		},
+		{
+			// Reporting an empty plan would clear whatever the client shows.
+			name:    "a plan with no steps reports nothing",
+			payload: `{"summary":"thinking about it"}`,
+			wantNil: true,
+		},
+		{
+			name:    "a step with no description is malformed",
+			payload: `{"steps":[{"id":"1","description":"  "}]}`,
+			wantErr: true,
+		},
+		{
+			name:    "an unrecognized status fails closed",
+			payload: `{"steps":[{"id":"1","description":"do it","status":"probably"}]}`,
+			wantErr: true,
+		},
+		{
+			name:    "a payload that is not a plan is malformed",
+			payload: `["not","a","plan"]`,
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			update, err := ProjectPlan(workers.Draft{
+				Kind: workers.KindPlan, Phase: workers.PhaseUpdated,
+				Payload: json.RawMessage(tc.payload),
+			})
+			if tc.wantErr {
+				if !errors.Is(err, ErrMalformedRecord) {
+					t.Fatalf("ProjectPlan() error = %v, want ErrMalformedRecord", err)
+				}
+				if update != nil {
+					t.Fatalf("ProjectPlan() update = %+v, want none alongside an error", update)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ProjectPlan() unexpected error = %v", err)
+			}
+			if tc.wantNil {
+				if update != nil {
+					t.Fatalf("ProjectPlan() update = %+v, want none", update)
+				}
+				return
+			}
+			if update == nil || update.Plan == nil {
+				t.Fatalf("ProjectPlan() update = %+v, want a populated plan", update)
+			}
+			if len(update.Plan.Entries) != len(tc.wantStatus) {
+				t.Fatalf("plan entries = %d, want %d", len(update.Plan.Entries), len(tc.wantStatus))
+			}
+			for index, entry := range update.Plan.Entries {
+				if entry.Status != tc.wantStatus[index] {
+					t.Fatalf("entry[%d] status = %q, want %q", index, entry.Status, tc.wantStatus[index])
+				}
+				// ACP has no omitempty on priority, so an unset value would
+				// serialize as an invalid enum on the wire.
+				if entry.Priority != defaultPlanEntryPriority {
+					t.Fatalf("entry[%d] priority = %q, want the declared default %q",
+						index, entry.Priority, defaultPlanEntryPriority)
+				}
+			}
+		})
+	}
+}
+
+// TestProjectAvailableCommands proves the advertisement is derived from the
+// parser's own constant. Advertising a command the server would then reject is
+// worse than advertising nothing.
+func TestProjectAvailableCommands(t *testing.T) {
+	t.Parallel()
+
+	update := ProjectAvailableCommands()
+	if update.AvailableCommandsUpdate == nil {
+		t.Fatal("ProjectAvailableCommands() carried no advertisement")
+	}
+	commands := update.AvailableCommandsUpdate.AvailableCommands
+	if len(commands) != 1 {
+		t.Fatalf("advertised commands = %d, want exactly the one the parser implements", len(commands))
+	}
+	if commands[0].Name != FactoryCommandName {
+		t.Fatalf("advertised command = %q, want %q", commands[0].Name, FactoryCommandName)
+	}
+	if strings.TrimSpace(commands[0].Description) == "" {
+		t.Fatal("advertised command carries no description")
+	}
+	if commands[0].Input == nil || commands[0].Input.Unstructured == nil ||
+		strings.TrimSpace(commands[0].Input.Unstructured.Hint) == "" {
+		t.Fatalf("advertised command input = %+v, want an unstructured hint", commands[0].Input)
 	}
 }

@@ -4104,8 +4104,8 @@ type GlobalConfig struct {
 
 // GlobalConfigACPAgentProfile defines model for GlobalConfigACPAgentProfile.
 type GlobalConfigACPAgentProfile struct {
-	// AllowedTargets Ordered allowlist of unversioned namespaced Factory target references. Order is authored and preserved.
-	AllowedTargets []string `json:"allowedTargets"`
+	// AllowedTargets Optional ordered allowlist of unversioned namespaced Factory target references. Order is authored and preserved. Omit this property to leave the profile unrestricted, which makes every installed Factory selectable. An explicitly empty array is rejected, so omission is the only way to express "no restriction".
+	AllowedTargets *[]string `json:"allowedTargets,omitempty"`
 
 	// DefaultTarget Unversioned namespaced Factory target reference, such as factory:@you/factory-builder. Factory Definitions owns enumeration and canonical reference resolution.
 	DefaultTarget string `json:"defaultTarget"`

@@ -76,11 +76,11 @@
       "slug": "factory-builder",
       "json": {
         "locator": "generated/factories/factory-builder/factory.json",
-        "sha256": "14391b6ccf742b095fc3f0d3c5a8c277c4739edf80886cc38e985ba34d18a2c4"
+        "sha256": "beac46555e0fdc31fa0c9970bac481c82fba923822793104abe5631a3a2cd7ec"
       },
       "yaml": {
         "locator": "generated/factories/factory-builder/factory.yaml",
-        "sha256": "3ab18dab1b185c4059a72186ac0012ff754035a2823c9df01bb78ed6d1b6713c"
+        "sha256": "ec58844286e535fd05218edd87e8a78e59ab679f2f7e2fda6c9458d0c5abf939"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -223,11 +223,11 @@
       "slug": "loop",
       "json": {
         "locator": "generated/factories/loop/factory.json",
-        "sha256": "e50e0050d24c7386b8ae5479162ca8d36dbfca6ec41122013d3f27edb589d396"
+        "sha256": "298f5ab27a90a76fe52a61b7cdb0b73ec366162b9d6ab35fd805af55179602dc"
       },
       "yaml": {
         "locator": "generated/factories/loop/factory.yaml",
-        "sha256": "2286ec1ea401baa37c4a6458e06390a75b2eebe2cf3577acaf7ea2c6215d104f"
+        "sha256": "415a770cca5e53aa4727c58e01f1d96f765d84a3d5c3cb5fcde6001971116339"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -383,11 +383,11 @@
       "slug": "spawn",
       "json": {
         "locator": "generated/factories/spawn/factory.json",
-        "sha256": "dcfc4db717abb64f042faa659dc3bee141491aaae8332e9e725e286e264fcd80"
+        "sha256": "23825eb44eebe7b0d07f7357874907d235a88b7bfe398b8a8fbc344f9872a681"
       },
       "yaml": {
         "locator": "generated/factories/spawn/factory.yaml",
-        "sha256": "a48fec0f5c8a5ffcd2996665649a8b65cabb0eafe385441c84d5f8cbf5780dad"
+        "sha256": "a755018ed500dd7bb32663f2a4313c54c74695ea3f9a58b24fc205be7a332bdd"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -452,11 +452,11 @@
       "slug": "tournament",
       "json": {
         "locator": "generated/factories/tournament/factory.json",
-        "sha256": "0e5535924b73ffbe6b2229ec051ed97517292077983a9c4f174c0b8b154e7081"
+        "sha256": "ff589e1b7e218cad928dc877519c8c17c633abf0cecf999ae4cd16384475085b"
       },
       "yaml": {
         "locator": "generated/factories/tournament/factory.yaml",
-        "sha256": "452c02e0556bec9176431b2804e1f9d254ba6ff70bae0758993921037b05bdc4"
+        "sha256": "c434ea91a7a4026575bfae9b4e9be20778cf4b79bbc2834eb7bfc3442d0da8a8"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",

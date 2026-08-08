@@ -50,10 +50,12 @@
             "kind": "NAMED"
           }
         ],
-        "description": "Requested behavior for the reusable Factory to create.",
+        "defaultValues": [
+          ""
+        ],
+        "description": "Requested behavior for the reusable Factory to create. Omit it to receive usage guidance instead of building anything.",
         "externalName": "to",
-        "name": "request",
-        "required": true
+        "name": "request"
       },
       {
         "bindings": [
@@ -130,6 +132,14 @@
           "type": "INITIAL"
         },
         {
+          "name": "build",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "help",
+          "type": "PROCESSING"
+        },
+        {
           "name": "complete",
           "type": "TERMINAL"
         },
@@ -141,6 +151,22 @@
     }
   ],
   "workers": [
+    {
+      "body": "Decide whether a message is an actual request to create a reusable Factory or a question about what this Factory does. Return exactly one lowercase label: build or help.",
+      "model": "${builderModel}",
+      "modelProvider": "${builderProvider}",
+      "name": "builder-router",
+      "skipPermissions": true,
+      "type": "AGENT_WORKER"
+    },
+    {
+      "body": "Answer with the authored Factory Builder usage guidance exactly as supplied, without inventing flags, commands, or capabilities.",
+      "model": "${builderModel}",
+      "modelProvider": "${builderProvider}",
+      "name": "builder-helper",
+      "skipPermissions": true,
+      "type": "AGENT_WORKER"
+    },
     {
       "agentTools": {
         "policy": "ENABLED"
@@ -154,10 +180,77 @@
   ],
   "workstations": [
     {
-      "body": "You are Factory Builder. Create exactly one new reusable Factory requested below.\nYou have no prior context and must not infer an existing Factory name or change\nan existing Factory.\n\nBefore materializing any candidate, read these canonical public topics in full:\n\n- `you docs agents`\n- `you docs authoring-factories`\n- `you docs config`\n- `you docs javascript-workflows`\n\nTreat those public contracts as authoritative. Use `graph` to author a YAML\ngraph Factory and `javascript` to author a JavaScript orchestrator Factory.\nDo not guess fields, workflow primitives, validation behavior, or persistence\nsemantics from the workspace.\n\nInputs:\n\n- Request: `${request}`\n- New Factory name: `${factoryName}` (optional)\n- Requested orchestrator: `${orchestrator}`\n\nIf the requested name is blank, derive one concise, stable, lowercase\nhyphenated name from the request before staging. Use that same derived name for\nthe staging directory, validation context, named-Factory create command, and\nresult. Never overwrite an existing named Factory; if the derived name already\nexists, stop and report the safe collision diagnostic rather than selecting a\nreplacement name.\n\nStage candidate files only beneath a new, Factory-name-scoped directory inside\nthe current workspace. The staging directory is not an installed Factory. Do\nnot write directly into `./factory`, an operator-owned Factory root, a packaged\nFactory directory, or an existing named Factory. Do not create, update, or\nstart a Factory Session while authoring.\n\nBuild one complete candidate using the applicable public authoring contract.\nFor graph candidates, include every required topology and invocation field. For\nJavaScript candidates, use only supported JavaScript workflow primitives and\nmetadata. Keep provider and model choices optional so ordinary operator defaults\nremain effective unless the caller supplied the Builder override. Do not place\ncredentials, tokens, raw provider commands, or host-specific absolute paths in\nthe candidate or response.\n\nValidate the staged candidate with the public validate-only command:\n\n```bash\nyou factory config validate \u003cstaged-candidate\u003e\n```\n\nCorrect every validation failure before attempting persistence. A successful\nvalidation is a prerequisite, not installation. After validation succeeds,\ninstall only through the existing named-Factory command. Pass the global\noperator-owned Factory root explicitly so persistence does not fall back to the\nproject-local `./factory` default:\n\nWhen the request supplied a name, use this command form:\n\n```bash\nyou factory create ${factoryName} --from \u003cstaged-candidate\u003e --dir ~/.you-agent-factory/factories\n```\n\nWhen the request did not supply a name, substitute the derived name in that\nsame command form.\n\nNever copy staged files into an operator-owned Factory root or use another\ninstallation path. Do not call `you factory update`; a requested name that\nalready exists must remain unchanged. If validation or create fails, stop and\nreport the safe diagnostic, validation code, field, or source location when\navailable, and a concrete correction action; leave no alternate installed\nFactory behind.\n\nReturn a concise, self-contained result that states the chosen canonical\nFactory name, orchestrator kind, validation outcome, and whether the named\nFactory was installed. Refer to the named-Factory destination rather than\nprinting a staging path. Redact credentials, secrets, raw provider commands,\nand unsafe filesystem details.\n",
+      "body": "You have no prior context. Decide what the message below is asking for, then\nreturn exactly one lowercase label: `build` or `help`.\n\nReturn `help` when the message is any of:\n\n- empty, blank, or only whitespace\n- a greeting, such as \"hi\", \"hello\", or \"hey\"\n- a question about what this Factory is, what it can do, or how to use it\n- a request for documentation, examples, options, or flags\n- so vague that you could not name the Factory's purpose, inputs, and outputs\n  from it\n\nReturn `build` only when the message is an actual request to create a reusable\nFactory — that is, when it describes the behavior the new Factory should\nperform. A request may be brief and still be a build request, as long as it\nstates what the Factory should do.\n\nWhen you are genuinely unsure, return `help`. Answering a question costs the\ncustomer one short reply; building the wrong Factory costs them a wrong Factory\ninstalled under a name they did not choose.\n\nReturn only the single label. Do not explain, quote the message, or add\npunctuation.\n\nMessage:\n${request}\n",
+      "classificationRoutes": [
+        {
+          "label": "build",
+          "outputs": [
+            {
+              "state": "build",
+              "workType": "factory-build"
+            }
+          ]
+        },
+        {
+          "label": "help",
+          "outputs": [
+            {
+              "state": "help",
+              "workType": "factory-build"
+            }
+          ]
+        }
+      ],
       "inputs": [
         {
           "state": "init",
+          "workType": "factory-build"
+        }
+      ],
+      "name": "route-request",
+      "onFailure": [
+        {
+          "state": "help",
+          "workType": "factory-build"
+        }
+      ],
+      "promptFile": "prompts/route-request.md",
+      "type": "CLASSIFIER_WORKSTATION",
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      },
+      "worker": "builder-router"
+    },
+    {
+      "body": "The customer has not asked you to build anything yet. Do not create, install,\nvalidate, or modify any Factory. Do not read the workspace or run any command.\n\nReply with the guidance block below reproduced verbatim. You may add at most\none short sentence before it acknowledging what the customer said. Add nothing\nafter it, and never invent flags, commands, capabilities, or documentation\ntopics that do not appear in it.\n\n---\n\n**Factory Builder** creates one reusable Factory from a description of what you\nwant it to do, then installs it so you can run it by name.\n\nTell me what the Factory should do, and I will build it. For example:\n\n- \"Create a Factory that reviews release notes and returns an approved summary.\"\n- \"Build a Factory that runs two independent analyses and merges them into one answer.\"\n\n**Two forms are available**\n\n- `graph` — a YAML topology of workstations and work states. This is the default.\n- `javascript` — a JavaScript orchestrator, for logic that is awkward as a graph.\n\n**From the command line**\n\n```\nyou run --named @you/factory-builder --to \"\u003cwhat the Factory should do\u003e\"\n```\n\nOptional flags:\n\n- `--factory-name \u003cname\u003e` — a stable name to install under. Derived from your request when omitted.\n- `--orchestrator graph|javascript` — which form to author. Defaults to `graph`.\n\n**From an editor over ACP**\n\nJust describe the Factory you want in a message. No flags are needed.\n\n**Documentation**\n\n- `you docs authoring-factories` — work types, states, workstations, and guards\n- `you docs javascript-workflows` — the JavaScript orchestrator form\n- `you docs packaged-factories` — the Factories that ship with `you`\n- `you docs run` — invoking a Factory and passing inputs\n\n---\n\nCustomer message:\n${request}\n",
+      "inputs": [
+        {
+          "state": "help",
+          "workType": "factory-build"
+        }
+      ],
+      "name": "answer-help",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "factory-build"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "complete",
+          "workType": "factory-build"
+        }
+      ],
+      "promptFile": "prompts/help.md",
+      "type": "AGENT_RUN",
+      "worker": "builder-helper"
+    },
+    {
+      "body": "You are Factory Builder. Create exactly one new reusable Factory requested below.\nYou have no prior context and must not infer an existing Factory name or change\nan existing Factory.\n\nBefore materializing any candidate, read these canonical public topics in full:\n\n- `you docs agents`\n- `you docs authoring-factories`\n- `you docs config`\n- `you docs javascript-workflows`\n\nTreat those public contracts as authoritative. Use `graph` to author a YAML\ngraph Factory and `javascript` to author a JavaScript orchestrator Factory.\nDo not guess fields, workflow primitives, validation behavior, or persistence\nsemantics from the workspace.\n\nInputs:\n\n- Request: `${request}`\n- New Factory name: `${factoryName}` (optional)\n- Requested orchestrator: `${orchestrator}`\n\nIf the requested name is blank, derive one concise, stable, lowercase\nhyphenated name from the request before staging. Use that same derived name for\nthe staging directory, validation context, named-Factory create command, and\nresult. Never overwrite an existing named Factory; if the derived name already\nexists, stop and report the safe collision diagnostic rather than selecting a\nreplacement name.\n\nStage candidate files only beneath a new, Factory-name-scoped directory inside\nthe current workspace. The staging directory is not an installed Factory. Do\nnot write directly into `./factory`, an operator-owned Factory root, a packaged\nFactory directory, or an existing named Factory. Do not create, update, or\nstart a Factory Session while authoring.\n\nBuild one complete candidate using the applicable public authoring contract.\nFor graph candidates, include every required topology and invocation field. For\nJavaScript candidates, use only supported JavaScript workflow primitives and\nmetadata. Keep provider and model choices optional so ordinary operator defaults\nremain effective unless the caller supplied the Builder override. Do not place\ncredentials, tokens, raw provider commands, or host-specific absolute paths in\nthe candidate or response.\n\nValidate the staged candidate with the public validate-only command:\n\n```bash\nyou factory config validate \u003cstaged-candidate\u003e\n```\n\nCorrect every validation failure before attempting persistence. A successful\nvalidation is a prerequisite, not installation. After validation succeeds,\ninstall only through the existing named-Factory command. Pass the global\noperator-owned Factory root explicitly so persistence does not fall back to the\nproject-local `./factory` default:\n\nWhen the request supplied a name, use this command form:\n\n```bash\nyou factory create ${factoryName} --from \u003cstaged-candidate\u003e --dir ~/.you-agent-factory/factories\n```\n\nWhen the request did not supply a name, substitute the derived name in that\nsame command form.\n\nNever copy staged files into an operator-owned Factory root or use another\ninstallation path. Do not call `you factory update`; a requested name that\nalready exists must remain unchanged. If validation or create fails, stop and\nreport the safe diagnostic, validation code, field, or source location when\navailable, and a concrete correction action; leave no alternate installed\nFactory behind.\n\nReturn a concise, self-contained result that states the chosen canonical\nFactory name, orchestrator kind, validation outcome, and whether the named\nFactory was installed. Refer to the named-Factory destination rather than\nprinting a staging path. Redact credentials, secrets, raw provider commands,\nand unsafe filesystem details.\n",
+      "inputs": [
+        {
+          "state": "build",
           "workType": "factory-build"
         }
       ],

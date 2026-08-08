@@ -21,6 +21,7 @@ const (
 	outcomeUsageUpdate  dispatchOutcome = "USAGE_UPDATE"
 	outcomeSessionInfo  dispatchOutcome = "SESSION_INFO_UPDATE"
 	outcomeNoUpdate     dispatchOutcome = "NO_UPDATE"
+	outcomePlan         dispatchOutcome = "PLAN"
 )
 
 // dispatchPair is a comparable (Kind, Phase) pair used to key
@@ -72,7 +73,7 @@ var declaredDispatchOutcomes = map[dispatchPair]dispatchOutcome{
 	{workers.KindTool, workers.PhaseCanceled}:  outcomeNoUpdate,
 
 	{workers.KindFileChange, workers.PhaseUpdated}: outcomeNoUpdate,
-	{workers.KindPlan, workers.PhaseUpdated}:       outcomeNoUpdate,
+	{workers.KindPlan, workers.PhaseUpdated}:       outcomePlan,
 	{workers.KindProgress, workers.PhaseUpdated}:   outcomeNoUpdate,
 
 	{workers.KindUsage, workers.PhaseUpdated}: outcomeUsageUpdate,
@@ -149,6 +150,10 @@ func TestProjectDispatch_HandlesEveryCurrentPair(t *testing.T) {
 					if update == nil || update.SessionInfoUpdate == nil {
 						t.Fatalf("Project() update = %+v, want a populated SessionInfoUpdate", update)
 					}
+				case outcomePlan:
+					if update == nil || update.Plan == nil || len(update.Plan.Entries) == 0 {
+						t.Fatalf("Project() update = %+v, want a populated Plan", update)
+					}
 				default:
 					t.Fatalf("no declared dispatch outcome for kind %q phase %q", kind, phase)
 				}
@@ -167,6 +172,14 @@ func fixturePayloadFor(t *testing.T, kind workers.Kind, phase workers.Phase) jso
 	t.Helper()
 
 	switch kind {
+	case workers.KindPlan:
+		return mustMarshal(t, workers.PlanPayload{
+			Summary: "Two-step plan",
+			Steps: []workers.PlanStep{
+				{ID: "1", Description: "Inspect the workspace", Status: "completed"},
+				{ID: "2", Description: "Apply the change", Status: "in_progress"},
+			},
+		})
 	case workers.KindSession:
 		if phase == workers.PhaseUpdated {
 			title := "Renamed session"

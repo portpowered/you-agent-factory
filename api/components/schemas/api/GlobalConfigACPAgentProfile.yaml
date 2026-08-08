@@ -2,7 +2,6 @@ type: object
 additionalProperties: false
 required:
   - defaultTarget
-  - allowedTargets
 properties:
   defaultTarget:
     type: string
@@ -11,7 +10,12 @@ properties:
   allowedTargets:
     type: array
     minItems: 1
-    description: Ordered allowlist of unversioned namespaced Factory target references. Order is authored and preserved.
+    description: >-
+      Optional ordered allowlist of unversioned namespaced Factory target
+      references. Order is authored and preserved. Omit this property to leave
+      the profile unrestricted, which makes every installed Factory selectable.
+      An explicitly empty array is rejected, so omission is the only way to
+      express "no restriction".
     items:
       type: string
       minLength: 1

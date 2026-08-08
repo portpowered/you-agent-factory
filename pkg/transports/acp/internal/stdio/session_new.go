@@ -13,6 +13,7 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
+	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/protocol"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorytarget"
@@ -95,7 +96,29 @@ func (s *Server) handleSessionNew(ctx context.Context, env envelope.Envelope) (j
 	if err != nil {
 		return nil, classifyDependencyFailure(err)
 	}
+	s.advertiseAvailableCommands(ctx, sessionResult.Session.ID)
 	return result, nil
+}
+
+// advertiseAvailableCommands tells the client which prompt commands this
+// session accepts, so a customer can discover /factory rather than having to
+// already know it exists.
+//
+// It is best effort: a client that cannot receive the notification still has a
+// fully usable session, so a delivery failure must not fail session creation.
+// The notifier is already carried on every dispatched request's context, so
+// this needs no plumbing of its own.
+func (s *Server) advertiseAvailableCommands(ctx context.Context, sessionID string) {
+	notify := promptNotifierFromContext(ctx)
+	if notify == nil {
+		return
+	}
+	if err := notify(acpsdk.SessionNotification{
+		SessionId: acpsdk.SessionId(sessionID),
+		Update:    mapping.ProjectAvailableCommands(),
+	}); err != nil {
+		s.logger.Warn("acp available-commands advertisement failed", "sessionId", sessionID)
+	}
 }
 
 // classifyDependencyFailure converts a downstream Chat Sessions/catalog

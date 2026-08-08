@@ -250,7 +250,7 @@ type daemon struct {
 	initialized acpsdk.InitializeResponse
 	finished    chan error
 	tree        platformprocess.SubprocessTree
-	stderr      bytes.Buffer
+	stderr      syncBuffer
 
 	window cancelwindow.Window
 
@@ -310,7 +310,7 @@ func (daemon *daemon) execute(
 	if err := daemon.ensureStarted(ctx, id, cwd, requestEnvironment(request), request); err != nil {
 		return providers.ExecuteResult{}, err
 	}
-	daemon.client.reset(request.SkipPermissions)
+	daemon.client.reset(request.SkipPermissions, request.ProgressObserver)
 	client := daemon.client
 	connection := daemon.connection
 	initialized := daemon.initialized
@@ -349,7 +349,7 @@ func (daemon *daemon) execute(
 	if response.StopReason == acpsdk.StopReasonCancelled {
 		return providers.ExecuteResult{}, withPartial(acpControlCanceledFailure(id), client, id)
 	}
-	return providers.ExecuteResult{Content: client.content(), SessionRef: &providers.SessionRef{Provider: id, Kind: providers.SessionIDKind, ID: string(session.SessionId)}, Diagnostics: &providers.ExecuteDiagnostics{Progress: completedPromptProgress(client.progressFacts()), Metadata: map[string]string{"execution_kind": "acp", "protocol_version": fmt.Sprint(initialized.ProtocolVersion), "model_config": modelConfig}}}, nil
+	return providers.ExecuteResult{Content: client.content(), SessionRef: &providers.SessionRef{Provider: id, Kind: providers.SessionIDKind, ID: string(session.SessionId)}, Diagnostics: &providers.ExecuteDiagnostics{Progress: client.completeProgress(), ProgressAlreadyObserved: request.ProgressObserver != nil, Metadata: map[string]string{"execution_kind": "acp", "protocol_version": fmt.Sprint(initialized.ProtocolVersion), "model_config": modelConfig}}}, nil
 }
 
 // openSession resumes the exact private Provider Session reference through the native ACP
@@ -897,9 +897,12 @@ func withPartial(err error, c *client, provider providers.ID) error {
 				failureProgress = append(failureProgress, progress.Clone())
 			}
 		}
-		progress := failedPromptProgress(c.progressFacts())
-		progress = append(progress, failureProgress...)
-		f.Diagnostics = &providers.ExecuteDiagnostics{Progress: progress, Metadata: map[string]string{"partial_content": c.content()}}
+		progress := c.failProgress(failureProgress...)
+		f.Diagnostics = &providers.ExecuteDiagnostics{
+			Progress:                progress,
+			ProgressAlreadyObserved: c.streamedProgress(),
+			Metadata:                map[string]string{"partial_content": c.content()},
+		}
 		if f.SessionRef == nil {
 			f.SessionRef = c.sessionRef(provider)
 		}
@@ -935,26 +938,41 @@ type client struct {
 	skipPermissions bool
 	text            strings.Builder
 	sessionID       string
-	progress        []providers.ExecuteProgress
+	stream          *promptProgressStream
 }
 
-func (c *client) reset(skipPermissions bool) {
+// reset begins one turn's progress stream. observe may be nil, in which case
+// the turn still normalizes its facts but delivers them only in the returned
+// diagnostics.
+func (c *client) reset(skipPermissions bool, observe providers.ProgressObserver) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.skipPermissions = skipPermissions
 	c.text.Reset()
 	c.sessionID = ""
-	c.progress = nil
+	c.stream = newPromptProgressStream(observe)
 }
 
 func (c *client) SessionUpdate(_ context.Context, n acpsdk.SessionNotification) error {
 	p, text := mapSessionUpdate(n.Update)
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if text != "" {
 		c.text.WriteString(text)
 	}
-	c.progress = append(c.progress, p...)
+	stream := c.stream
+	var pending []providers.ExecuteProgress
+	if stream != nil {
+		stream.Observe(p)
+		pending = stream.takePending()
+	}
+	c.mu.Unlock()
+	// Handed off after the lock is released. This callback runs on the ACP
+	// connection's notification path, and the SDK holds a turn's
+	// session/prompt response until every pre-response notification handler
+	// returns, so downstream publishing must not happen inline here.
+	if stream != nil {
+		stream.Deliver(pending)
+	}
 	return nil
 }
 func (c *client) setSessionID(v string) { c.mu.Lock(); c.sessionID = v; c.mu.Unlock() }
@@ -967,14 +985,52 @@ func (c *client) sessionRef(provider providers.ID) *providers.SessionRef {
 	}
 	return &providers.SessionRef{Provider: provider, Kind: providers.SessionIDKind, ID: c.sessionID}
 }
-func (c *client) progressFacts() []providers.ExecuteProgress {
+
+// completeProgress closes the turn normally and returns its full ordered fact
+// list, which is exactly the sequence already streamed to the observer.
+func (c *client) completeProgress() []providers.ExecuteProgress {
+	return c.closeProgress(func(stream *promptProgressStream) []providers.ExecuteProgress {
+		return stream.Complete()
+	})
+}
+
+// failProgress closes a turn that never reached its own completed marker,
+// folding the transport's own failure diagnostics into the same stream so the
+// returned slice still matches what was observed.
+func (c *client) failProgress(extra ...providers.ExecuteProgress) []providers.ExecuteProgress {
+	return c.closeProgress(func(stream *promptProgressStream) []providers.ExecuteProgress {
+		return stream.Fail(extra...)
+	})
+}
+
+// closeProgress runs one turn-closing step under the client lock, then hands
+// off and joins delivery outside it, so every fact this turn reports has
+// reached the observer by the time the caller inspects the returned slice.
+func (c *client) closeProgress(
+	finish func(*promptProgressStream) []providers.ExecuteProgress,
+) []providers.ExecuteProgress {
+	c.mu.Lock()
+	stream := c.stream
+	var facts, pending []providers.ExecuteProgress
+	if stream != nil {
+		facts = finish(stream)
+		pending = stream.takePending()
+	}
+	c.mu.Unlock()
+	if stream == nil {
+		return nil
+	}
+	stream.Deliver(pending)
+	stream.close()
+	return facts
+}
+
+// streamedProgress reports whether this turn delivered its facts live, so a
+// caller knows not to publish the returned slice a second time.
+func (c *client) streamedProgress() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	out := make([]providers.ExecuteProgress, len(c.progress))
-	for i := range c.progress {
-		out[i] = c.progress[i].Clone()
-	}
-	return out
+	return c.stream != nil && c.stream.observe != nil
 }
 
 func mapSessionUpdate(update acpsdk.SessionUpdate) ([]providers.ExecuteProgress, string) {
@@ -1035,6 +1091,11 @@ func mapSessionUpdate(update acpsdk.SessionUpdate) ([]providers.ExecuteProgress,
 					"provider_session_id": "",
 					"path":                content.Diff.Path,
 					"operation":           operation,
+					// ACP models a diff as content inside the tool call that
+					// produced it. Carrying the owning call's id keeps that
+					// ownership, so a consumer can attach the change to its
+					// tool call instead of presenting an orphaned edit.
+					"tool_call_id": string(update.ToolCallUpdate.ToolCallId),
 				},
 			})
 		}
@@ -1123,3 +1184,33 @@ func (*client) WaitForTerminalExit(context.Context, acpsdk.WaitForTerminalExitRe
 }
 
 var _ acpsdk.Client = (*client)(nil)
+
+// syncBuffer is a bytes.Buffer guarded for concurrent use.
+//
+// The daemon hands its stderr buffer to os/exec, which copies the child's
+// stderr on its own goroutine for the process' whole lifetime, while the
+// executing goroutine reads the accumulated text whenever it builds a failure
+// diagnostic. Those are genuinely concurrent, so the buffer cannot be a bare
+// bytes.Buffer.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func (b *syncBuffer) Reset() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.buf.Reset()
+}

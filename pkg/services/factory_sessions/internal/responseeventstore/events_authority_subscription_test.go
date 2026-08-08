@@ -20,9 +20,10 @@ import (
 // own sequence from the aggregate position Events assigns, then commit that
 // identical identity into the store. This proves substituteFromEvents'
 // delivery behavior directly within the responseeventstore package's own
-// test files, rather than only indirectly through a sibling package's tests
-// (see the story 006 gotcha documented in progress.txt about unit coverage
-// being measured per-package).
+// test files, rather than only indirectly through a sibling package's tests.
+// Unit coverage is measured per-package, so a behavior exercised only from a
+// sibling package's tests counts as uncovered here no matter how thoroughly
+// that sibling exercises it.
 func newEventsAuthorityStore(t *testing.T, eventsService events.Service, factorySessionID string) *responseeventstore.SessionResponseEventStore {
 	t.Helper()
 	topic := events.Topic("factory-session/" + factorySessionID + "/response-events")

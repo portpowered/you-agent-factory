@@ -12,11 +12,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"testing"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	"github.com/portpowered/infinite-you/internal/testutil/acpfixtures"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 // TestSharedConformanceCorpusSessionUpdateMatchesInboundMapper feeds every
@@ -83,13 +85,29 @@ func TestSharedConformanceCorpusSessionUpdateMatchesInboundMapper(t *testing.T) 
 
 		t.Run(c.Name, func(t *testing.T) {
 			tested++
+			// Collect through the live observer rather than a post-hoc
+			// accumulator: that is the delivery path a running attempt
+			// actually uses, so this cell also proves each mapped fact
+			// reaches a listener while the turn is still open.
+			var observedMu sync.Mutex
+			var observed []providers.ExecuteProgress
 			mapperClient := &client{}
+			mapperClient.reset(false, func(fact providers.ExecuteProgress) {
+				observedMu.Lock()
+				observed = append(observed, fact)
+				observedMu.Unlock()
+			})
 			if err := mapperClient.SessionUpdate(context.Background(), acpsdk.SessionNotification{SessionId: acpsdk.SessionId(envelope.SessionID), Update: update}); err != nil {
 				t.Fatalf("SessionUpdate() unexpected error: %v", err)
 			}
-			progress := mapperClient.progressFacts()
+			// Delivery is asynchronous by design, so join it before reading.
+			mapperClient.stream.close()
+			observedMu.Lock()
+			progress := withoutSyntheticMarkers(observed)
+			observedMu.Unlock()
 			if len(progress) != 1 {
-				t.Fatalf("SessionUpdate() produced %d progress facts, want 1", len(progress))
+				t.Fatalf("SessionUpdate() produced %d mapped progress facts, want 1 (observed %d including synthetic markers)",
+					len(progress), len(observed))
 			}
 			got := progress[0]
 
@@ -137,4 +155,22 @@ func TestSharedConformanceCorpusSessionUpdateMatchesInboundMapper(t *testing.T) 
 	if tested == 0 {
 		t.Fatal("no shared session/update cases matched an inbound-mappable update kind")
 	}
+}
+
+// withoutSyntheticMarkers drops the turn-shape markers promptProgressStream
+// synthesizes (the run start marker it emits when the turn opens, and the
+// per-kind start marker it emits for the first message or reasoning item),
+// leaving only the facts mapped directly from a session/update notification.
+func withoutSyntheticMarkers(facts []providers.ExecuteProgress) []providers.ExecuteProgress {
+	mapped := make([]providers.ExecuteProgress, 0, len(facts))
+	for _, fact := range facts {
+		if fact.Metadata["native_type"] == "acp/synthetic_start" {
+			continue
+		}
+		if fact.Metadata["kind"] == "run" {
+			continue
+		}
+		mapped = append(mapped, fact)
+	}
+	return mapped
 }

@@ -2,14 +2,18 @@ package cli_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerscli "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli"
 )
 
+// recordingProvidersRoot is shared by parallel parity subtests, so its call
+// counters are mutated from more than one goroutine and must be guarded.
 type recordingProvidersRoot struct {
 	providers.Service
+	mu                 sync.Mutex
 	listProvidersCalls int
 	getProviderCalls   int
 	executeCalls       int
@@ -25,7 +29,9 @@ func (fake *recordingProvidersRoot) ListProviders(
 	ctx context.Context,
 	_ providers.ListProvidersRequest,
 ) (providers.ListProvidersResult, error) {
+	fake.mu.Lock()
 	fake.listProvidersCalls++
+	fake.mu.Unlock()
 	if fake.listFn != nil {
 		return fake.listFn(ctx)
 	}
@@ -39,7 +45,9 @@ func (fake *recordingProvidersRoot) GetProvider(
 	ctx context.Context,
 	request providers.GetProviderRequest,
 ) (providers.GetProviderResult, error) {
+	fake.mu.Lock()
 	fake.getProviderCalls++
+	fake.mu.Unlock()
 	if fake.getFn != nil {
 		return fake.getFn(ctx, request)
 	}
@@ -53,7 +61,9 @@ func (fake *recordingProvidersRoot) Execute(
 	context.Context,
 	providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
+	fake.mu.Lock()
 	fake.executeCalls++
+	fake.mu.Unlock()
 	return providers.ExecuteResult{}, nil
 }
 
@@ -73,13 +83,21 @@ func TestConstructedService_IsInertAgainstProvidersRoot(t *testing.T) {
 	if service == nil {
 		t.Fatal("New(root) = nil, want Providers CLI service")
 	}
-	if root.listProvidersCalls != 0 {
-		t.Fatalf("ListProviders calls = %d, want 0 during construction", root.listProvidersCalls)
+	listCalls, getCalls, executeCalls := root.callCounts()
+	if listCalls != 0 {
+		t.Fatalf("ListProviders calls = %d, want 0 during construction", listCalls)
 	}
-	if root.getProviderCalls != 0 {
-		t.Fatalf("GetProvider calls = %d, want 0 during construction", root.getProviderCalls)
+	if getCalls != 0 {
+		t.Fatalf("GetProvider calls = %d, want 0 during construction", getCalls)
 	}
-	if root.executeCalls != 0 {
-		t.Fatalf("Execute calls = %d, want 0 during construction", root.executeCalls)
+	if executeCalls != 0 {
+		t.Fatalf("Execute calls = %d, want 0 during construction", executeCalls)
 	}
+}
+
+// callCounts returns a consistent snapshot of the recorded call counters.
+func (fake *recordingProvidersRoot) callCounts() (list, get, execute int) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	return fake.listProvidersCalls, fake.getProviderCalls, fake.executeCalls
 }

@@ -33,6 +33,10 @@ func NewServer(
 	eventsService events.Service,
 	resolveHomeDir func() (string, error),
 	responseBridge acp.ResponseBridge,
+	wireRecorder acp.WireRecorder,
 ) acp.Server {
-	return stdio.New(logger, chatSessions, catalog, factoryTarget, eventsService, resolveHomeDir, responseBridge)
+	return stdio.New(
+		logger, chatSessions, catalog, factoryTarget, eventsService,
+		resolveHomeDir, responseBridge, wireRecorder,
+	)
 }

@@ -661,7 +661,7 @@ func (s *Service) InvokeFactorySession(
 	if err != nil {
 		return factorysessions.InvocationResult{}, err
 	}
-	result, err := active.opened.Sessions.InvokeFactorySession(invocationContext, factorysessions.DefaultSessionID, request)
+	result, err := s.invokeOnActivatedRuntime(invocationContext, active, request)
 	canceled, cancellationRequested := active.finishInvocation(invocation)
 	if canceled {
 		if request.RequestID != nil && result.RequestID == "" {

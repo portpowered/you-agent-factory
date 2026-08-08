@@ -5571,8 +5571,8 @@ export interface components {
     GlobalConfigACPAgentProfile: {
       /** @description Unversioned namespaced Factory target reference, such as factory:@you/factory-builder. Factory Definitions owns enumeration and canonical reference resolution. */
       defaultTarget: string;
-      /** @description Ordered allowlist of unversioned namespaced Factory target references. Order is authored and preserved. */
-      allowedTargets: string[];
+      /** @description Optional ordered allowlist of unversioned namespaced Factory target references. Order is authored and preserved. Omit this property to leave the profile unrestricted, which makes every installed Factory selectable. An explicitly empty array is rejected, so omission is the only way to express "no restriction". */
+      allowedTargets?: string[];
     };
     GlobalConfigACPSettings: {
       /** @description Operator-selected ACP provider integrations. Availability is derived by the Providers catalog and is never persisted here. */

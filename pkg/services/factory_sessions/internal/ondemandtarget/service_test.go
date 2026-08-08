@@ -163,6 +163,26 @@ type fakeSessions struct {
 	factoryEventCalls  []string
 	factoryEventStream *factorydefinitions.FactoryEventStream
 	factoryEventErr    error
+
+	// getSessionResult is the projection Service reads to decide which
+	// orchestrator path an invocation takes. The zero value carries no
+	// FactoryConfig, which reads as "not a JavaScript Factory" and so selects
+	// the Work-submission path every existing cell already expects.
+	getSessionResult factorysessions.SessionProjection
+	getSessionErr    error
+	getSessionCalls  []string
+}
+
+// GetFactorySession is used by Service to choose an invocation's orchestrator
+// path: a JavaScript Factory declares no work types and must run as a durable
+// workflow rather than through Work submission.
+func (f *fakeSessions) GetFactorySession(
+	_ context.Context, sessionID string,
+) (factorysessions.SessionProjection, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.getSessionCalls = append(f.getSessionCalls, sessionID)
+	return f.getSessionResult, f.getSessionErr
 }
 
 func (f *fakeSessions) InvokeFactorySession(
@@ -698,4 +718,89 @@ func (f *sequencedOpener) OpenInvocationRuntime(
 		return roles.OpenedInvocationRuntime{}, fmt.Errorf("sequencedOpener: no result configured for call %d", idx)
 	}
 	return f.results[idx].opened, f.results[idx].err
+}
+
+// TestInvokeFactorySessionRoutesByOrchestratorKind proves this activation
+// chooses an invocation's path from the opened runtime's own orchestrator
+// kind rather than sending every Factory through Work submission.
+//
+// A JavaScript Factory's whole workflow is its program, so it declares no work
+// types. Work submission begins by resolving the single work type carrying
+// handlingBehavior DEFAULT, so routing one there fails with "expected exactly
+// one work type with handlingBehavior DEFAULT for simplified prompt runs"
+// before any Worker runs -- which is what an ACP client saw as a bare
+// dependency_unavailable, while `you run --named` on the identical Factory
+// worked because the CLI's own invocation operation has always branched here.
+//
+// Asserting InvokeFactorySession is *not* called is the whole point: a
+// JavaScript Factory reaching it at all is the defect.
+func TestInvokeFactorySessionRoutesByOrchestratorKind(t *testing.T) {
+	javaScriptConfig := &factorydefinitions.FactoryConfig{
+		Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
+			Kind: factorydefinitions.OrchestratorKindJavaScript,
+		},
+	}
+
+	tests := []struct {
+		name           string
+		factoryConfig  *factorydefinitions.FactoryConfig
+		getSessionErr  error
+		wantWorkSubmit bool
+	}{
+		{
+			name:           "petri factory submits work",
+			factoryConfig:  &factorydefinitions.FactoryConfig{},
+			wantWorkSubmit: true,
+		},
+		{
+			name:           "javascript factory does not submit work",
+			factoryConfig:  javaScriptConfig,
+			wantWorkSubmit: false,
+		},
+		{
+			// An unreadable projection must not fail the invocation on its
+			// own. It only selects a path, and the Work-submission path
+			// reports its own failure precisely.
+			name:           "unreadable projection falls back to work submission",
+			factoryConfig:  javaScriptConfig,
+			getSessionErr:  errors.New("projection unavailable"),
+			wantWorkSubmit: true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			sessions := &fakeSessions{
+				getSessionResult: factorysessions.SessionProjection{
+					Context: factorysessions.ProjectionContext{FactoryCfg: testCase.factoryConfig},
+				},
+				getSessionErr: testCase.getSessionErr,
+			}
+			opener := &fakeOpener{opened: roles.OpenedInvocationRuntime{
+				Sessions:  sessions,
+				Lifecycle: &fakeLifecycle{},
+			}}
+			resolve := func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+				return factorysessions.RuntimeOpeningRequest{}, nil
+			}
+			svc := newTestService(t, opener, resolve, sequentialIDs("wrapper"))
+
+			started, err := svc.StartAsync(context.Background(), factorysessions.StartRequest{
+				Source: factorysessions.Source{FactoryID: "@you/spawn"},
+			})
+			if err != nil {
+				t.Fatalf("StartAsync() error = %v", err)
+			}
+			// The JavaScript path needs an execution runtime this fake does
+			// not provide, so it fails; the assertion is on which path ran,
+			// not on the outcome.
+			_, _ = svc.InvokeFactorySession(context.Background(), started.SessionID, factorysessions.InvocationRequest{})
+
+			submitted := len(sessions.invokeCalls) > 0
+			if submitted != testCase.wantWorkSubmit {
+				t.Fatalf("InvokeFactorySession (Work submission) calls = %v, want submitted = %v",
+					sessions.invokeCalls, testCase.wantWorkSubmit)
+			}
+		})
+	}
 }

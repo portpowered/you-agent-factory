@@ -108,9 +108,13 @@ func TestServeACP_RootBuildProcessCloseThenLoadReplaysRetainedItemIdentities(t *
 	harness.sendPrompt(t, 3, sessionID, "complete before the active close")
 	firstPrompt, originalUpdates := harness.responseWithUpdates(t, 3)
 	assertPromptStopReason(t, firstPrompt, acpsdk.StopReasonEndTurn)
-	originalItemIDs := agentMessageItemIDs(t, originalUpdates)
+	// The retained identity to check is the Worker's tool call. A Worker is a
+	// tool call, so its output is content inside that call rather than an
+	// identified assistant message, and the tool call's id is the
+	// sequencer-assigned identity that must survive a reload.
+	originalItemIDs := workerToolCallIDs(t, originalUpdates)
 	if len(originalItemIDs) == 0 {
-		t.Fatal("completed prompt produced no identified agent message update to retain")
+		t.Fatal("completed prompt produced no identified Worker tool call to retain")
 	}
 	if userIDs := userMessageItemIDs(t, originalUpdates); len(userIDs) != 0 {
 		t.Fatalf("live prompt replayed user message IDs %v, want no echo of client-supplied prompt", userIDs)
@@ -129,8 +133,16 @@ func TestServeACP_RootBuildProcessCloseThenLoadReplaysRetainedItemIdentities(t *
 	if loadResponse.Error != nil {
 		t.Fatalf("session/load response error = %+v, want retained-history success", loadResponse.Error)
 	}
-	if got := agentMessageItemIDs(t, loadedUpdates); !slices.Equal(got, originalItemIDs) {
-		t.Fatalf("loaded agent message IDs = %v, want original sequencer identities %v", got, originalItemIDs)
+	// The reload replays the whole session, so it carries the closed second
+	// prompt's Worker as well as the completed first one. What must hold is
+	// that the first prompt's identities come back unchanged and in order --
+	// a replacement identity, or a reordering, would break every client that
+	// addressed that tool call.
+	loadedItemIDs := workerToolCallIDs(t, loadedUpdates)
+	if len(loadedItemIDs) < len(originalItemIDs) ||
+		!slices.Equal(loadedItemIDs[:len(originalItemIDs)], originalItemIDs) {
+		t.Fatalf("loaded Worker tool call IDs = %v, want them to begin with the original sequencer identities %v",
+			loadedItemIDs, originalItemIDs)
 	}
 	if userIDs := userMessageItemIDs(t, loadedUpdates); len(userIDs) != 2 || userIDs[0] == "" || userIDs[1] == "" {
 		t.Fatalf("loaded user message IDs = %v, want both retained prompt identities", userIDs)
@@ -352,6 +364,25 @@ func assertCloseResponse(t *testing.T, response rpcFrame) {
 	if err := json.Unmarshal(response.Result, &closeResponse); err != nil {
 		t.Fatalf("unmarshal session/close result: %v", err)
 	}
+}
+
+// workerToolCallIDs collects the sequencer-assigned identity of every Worker
+// tool call in a delivered stream. These are assigned by Chat Sessions when the
+// record is sequenced, never minted at projection time, which is what lets them
+// survive session/load and reconnect.
+func workerToolCallIDs(t *testing.T, updates []rpcFrame) []string {
+	t.Helper()
+	ids := make([]string, 0, len(updates))
+	for _, frame := range updates {
+		var notification acpsdk.SessionNotification
+		if err := json.Unmarshal(frame.Params, &notification); err != nil {
+			t.Fatalf("unmarshal session/update notification: %v", err)
+		}
+		if call := notification.Update.ToolCall; call != nil {
+			ids = append(ids, string(call.ToolCallId))
+		}
+	}
+	return ids
 }
 
 func agentMessageItemIDs(t *testing.T, updates []rpcFrame) []string {

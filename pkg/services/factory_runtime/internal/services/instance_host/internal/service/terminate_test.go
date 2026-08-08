@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -45,14 +46,26 @@ func (r *terminalRecording) Finalize(finishedAt time.Time) error {
 var _ recordings.RuntimeRecorder = (*terminalRecording)(nil)
 
 type terminateMetricRecordWriter struct {
+	// mu guards records: terminate emits metrics from more than one
+	// goroutine, so an unguarded append races the assertions.
+	mu      sync.Mutex
 	records []factory.RuntimeMetricRecord
+}
+
+// snapshot returns a consistent copy of the recorded metrics.
+func (w *terminateMetricRecordWriter) snapshot() []factory.RuntimeMetricRecord {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return append([]factory.RuntimeMetricRecord(nil), w.records...)
 }
 
 func (w *terminateMetricRecordWriter) WriteMetric(
 	_ context.Context,
 	record factory.RuntimeMetricRecord,
 ) error {
+	w.mu.Lock()
 	w.records = append(w.records, record)
+	w.mu.Unlock()
 	return nil
 }
 
@@ -287,7 +300,7 @@ func TestStopEmitsLifecycleStopMetricOnce(t *testing.T) {
 	}
 
 	stopCount := 0
-	for _, record := range metricsWriter.records {
+	for _, record := range metricsWriter.snapshot() {
 		if record.MetricName == "runtime.lifecycle.stopped" && record.Value == 1 && record.Outcome == "completed" {
 			stopCount++
 		}
@@ -347,9 +360,10 @@ func TestReplacementSidecarShutdownDoesNotEmitFalseTerminalStop(t *testing.T) {
 		t.Fatalf("Replace() error = %v", err)
 	}
 
-	for _, record := range metricsWriter.records {
+	recorded := metricsWriter.snapshot()
+	for _, record := range recorded {
 		if record.MetricName == "runtime.lifecycle.stopped" {
-			t.Fatalf("metrics %#v contain lifecycle stop during replacement sidecar shutdown", metricsWriter.records)
+			t.Fatalf("metrics %#v contain lifecycle stop during replacement sidecar shutdown", recorded)
 		}
 	}
 }

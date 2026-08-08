@@ -156,12 +156,11 @@ func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 	}
 	writeRPCLine(t, stdinWrite, fmt.Sprintf(`{"jsonrpc":"2.0","id":3,"method":"session/prompt","params":%s}`, promptParams))
 
-	notification := readRPCNotification(t, stdout)
-	if got := agentMessageChunkText(t, notification); got != fixtureFinalAnswerText {
+	promptResp, notifications := readNotificationsUntilResponse(t, stdout)
+	if got := agentMessageChunkTextFrom(t, notifications); got != fixtureFinalAnswerText {
 		t.Fatalf("agent_message_chunk text = %q, want %q", got, fixtureFinalAnswerText)
 	}
 
-	promptResp := readRPCResponse(t, stdout)
 	if promptResp.Error != nil {
 		t.Fatalf("session/prompt response error = %+v, want a successful final result", promptResp.Error)
 	}
@@ -266,13 +265,21 @@ func assertLineIsProtocolFrame(t *testing.T, line string) {
 	}
 }
 
+// readRPCResponse returns the next correlated response frame, skipping any
+// session/update notifications the connection emits alongside it. session/new
+// advertises its available commands, so a notification can legitimately
+// precede the response it belongs to.
 func readRPCResponse(t *testing.T, r *bufio.Reader) rpcFrame {
 	t.Helper()
-	frame := readRPCFrame(t, r)
-	if frame.Method != "" {
-		t.Fatalf("expected a response frame, got notification method %q", frame.Method)
+	for {
+		frame := readRPCFrame(t, r)
+		if frame.Method == "" {
+			return frame
+		}
+		if frame.Method != string(acpsdk.ClientMethodSessionUpdate) {
+			t.Fatalf("expected a response frame, got notification method %q", frame.Method)
+		}
 	}
-	return frame
 }
 
 func readRPCNotification(t *testing.T, r *bufio.Reader) rpcFrame {
@@ -395,4 +402,51 @@ func seedFixtureFactory(t *testing.T, cwd string) string {
 	}
 
 	return factoryDir
+}
+
+// readNotificationsUntilResponse drains every session/update notification the
+// turn emits and returns them alongside the terminal response frame.
+//
+// A turn does not promise that its first notification is the assistant
+// message. Worker Session tool calls are projected as soon as a Worker opens,
+// so a tool_call notification legitimately precedes the message. Reading a
+// single frame and asserting its shape encodes an ordering the transport never
+// guaranteed.
+func readNotificationsUntilResponse(t *testing.T, r *bufio.Reader) (rpcFrame, []acpsdk.SessionNotification) {
+	t.Helper()
+	var notifications []acpsdk.SessionNotification
+	for {
+		frame := readRPCFrame(t, r)
+		if frame.Method == "" {
+			return frame, notifications
+		}
+		if frame.Method != string(acpsdk.ClientMethodSessionUpdate) {
+			t.Fatalf("notification method = %q, want %q", frame.Method, acpsdk.ClientMethodSessionUpdate)
+		}
+		var notification acpsdk.SessionNotification
+		if err := json.Unmarshal(frame.Params, &notification); err != nil {
+			t.Fatalf("unmarshal session/update params: %v", err)
+		}
+		notifications = append(notifications, notification)
+	}
+}
+
+// agentMessageChunkTextFrom concatenates the assistant text delivered across a
+// turn's notifications.
+func agentMessageChunkTextFrom(t *testing.T, notifications []acpsdk.SessionNotification) string {
+	t.Helper()
+	text := ""
+	found := false
+	for _, notification := range notifications {
+		chunk := notification.Update.AgentMessageChunk
+		if chunk == nil || chunk.Content.Text == nil {
+			continue
+		}
+		found = true
+		text += chunk.Content.Text.Text
+	}
+	if !found {
+		t.Fatalf("turn delivered no agent_message_chunk update; got %d notifications", len(notifications))
+	}
+	return text
 }
