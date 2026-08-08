@@ -62,3 +62,7 @@ func TestBindServiceSupportsStatelessPresentationMethods(t *testing.T) {
 		t.Fatalf("FormatDuration() = %q, want %q", got, factoryruntimecli.FormatDuration(duration))
 	}
 }
+
+func (stubRuntimeRoot) InvokeWorker(_ context.Context, _ factoryruntime.InvokeWorkerRequest) (factoryruntime.InvokeWorkerResult, error) {
+	return factoryruntime.InvokeWorkerResult{}, nil
+}

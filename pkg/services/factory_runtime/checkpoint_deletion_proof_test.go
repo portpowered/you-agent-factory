@@ -84,6 +84,10 @@ func (externalConsumerPeer) Observe(context.Context, factory.ObserveRequest) (fa
 func (externalConsumerPeer) PlanDispatch(_ context.Context, req factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {
 	return factory.PlanDispatchResult{Outcome: factory.DispatchPlanOutcomeAccepted, DispatchID: req.DispatchID}, nil
 }
+func (externalConsumerPeer) InvokeWorker(_ context.Context, _ factory.InvokeWorkerRequest) (factory.InvokeWorkerResult, error) {
+	return factory.InvokeWorkerResult{}, nil
+}
+
 func (externalConsumerPeer) AcceptDispatchResult(_ context.Context, req factory.AcceptDispatchResultRequest) (factory.AcceptDispatchResultResult, error) {
 	return factory.AcceptDispatchResultResult{Outcome: factory.DispatchPlanOutcomeRetired, DispatchID: req.DispatchID}, nil
 }
