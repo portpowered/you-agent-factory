@@ -182,9 +182,9 @@ func TestHostedContinuousRunsStayLiveWhileIdle(t *testing.T) {
 			// observation. The bounded fallback is only a test guard for a startup
 			// regression; without it a broken Process.Execute would hang this test.
 			listenerTimer := time.NewTimer(incompleteDrainProcessTimeout)
+			defer listenerTimer.Stop()
 			select {
 			case <-transportReady:
-				listenerTimer.Stop()
 			case <-listenerTimer.C:
 				t.Fatal("continuous hosted run did not start its listener")
 			}
@@ -193,12 +193,12 @@ func TestHostedContinuousRunsStayLiveWhileIdle(t *testing.T) {
 			// bounded observation is therefore required for this negative liveness
 			// assertion: Done must remain open while the continuous run is idle.
 			idleTimer := time.NewTimer(continuousIdleObservation)
+			defer idleTimer.Stop()
 			select {
 			case <-command.Done():
 				t.Fatalf("continuous hosted run exited while idle: err=%v stdout=%q stderr=%q", command.Err(), inputs.Stdout(), inputs.Stderr())
 			case <-idleTimer.C:
 			}
-			idleTimer.Stop()
 
 			command.Stop(t)
 			if err := command.Err(); err != nil && !errors.Is(err, context.Canceled) {
