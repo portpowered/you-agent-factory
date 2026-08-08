@@ -1,4 +1,4 @@
-package guards_batch
+package batch
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -211,6 +212,15 @@ func commandWorkerType(request platformprocess.CommandRequest) string {
 		return "holder"
 	}
 	return "unknown"
+}
+
+func assertGuardSessionPlaces(t *testing.T, listed factoryapi.ListWorkResponse, wants map[string]int) {
+	t.Helper()
+	for placeID, want := range wants {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
+			t.Errorf("%s token count = %d, want %d", placeID, got, want)
+		}
+	}
 }
 
 func (r *fanInGateCommandRunner) releaseHold() {

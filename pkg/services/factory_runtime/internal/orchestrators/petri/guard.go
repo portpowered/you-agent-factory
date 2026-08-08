@@ -306,51 +306,46 @@ func (g *AllWithParentGuard) evaluate(ctx RuntimeGuardContext, candidates []fact
 		return nil, false
 	}
 
-	childWorkTypeID := firstWorkTypeID(matched)
-	if ctx.StateCategoryForPlace != nil {
-		for _, candidate := range matched {
-			if ctx.StateCategoryForPlace(candidate.PlaceID) != runtimeStateCategoryTerminal {
-				return nil, false
-			}
-		}
+	if !allTokensTerminal(ctx, matched) {
+		return nil, false
 	}
 
 	if ctx.ParentChildRegistrations != nil {
-		registration, known := ctx.ParentChildRegistrations[parentWorkID]
-		if !known || !registration.Complete || len(registration.Children) == 0 {
-			return nil, false
-		}
-		registered := parentChildTokens(marking, ctx.ActiveDispatches, parentWorkID, "")
-		registeredIDs := tokenIdentitySet(registration.Children)
-		if len(registered) != len(registeredIDs) {
-			return nil, false
-		}
-		targetPlaces := tokenPlaceSet(matched)
-		for identity, child := range registered {
-			if !registeredIDs[identity] {
-				return nil, false
-			}
-			if ctx.StateCategoryForPlace != nil && ctx.StateCategoryForPlace(child.PlaceID) != runtimeStateCategoryTerminal {
-				return nil, false
-			}
-			if ctx.StateCategoryForPlace == nil && !targetPlaces[child.PlaceID] {
-				return nil, false
-			}
-		}
-		matchedIDs := tokenIdentitySet(matched)
-		for identity := range matchedIDs {
-			if !registeredIDs[identity] {
-				return nil, false
-			}
-		}
-		// The guarded arc is the binding surface for the transition and may
-		// expose only one of several terminal places. The registration
-		// projection above is the completeness denominator; requiring its
-		// identities to equal matchedIDs would reject valid fan-in when
-		// another registered child is terminal in a different place.
-		return matched, true
+		return evaluateRegisteredParentChildren(ctx, parentWorkID, matched, marking)
 	}
 
+	return evaluateVisibleParentChildren(ctx, parentWorkID, firstWorkTypeID(matched), matched, marking)
+}
+
+func evaluateRegisteredParentChildren(ctx RuntimeGuardContext, parentWorkID string, matched []factorytoken.Token, marking *MarkingSnapshot) ([]factorytoken.Token, bool) {
+	registration, known := ctx.ParentChildRegistrations[parentWorkID]
+	if !known || !registration.Complete || len(registration.Children) == 0 {
+		return nil, false
+	}
+
+	registered := parentChildTokens(marking, ctx.ActiveDispatches, parentWorkID, "")
+	registeredIDs := tokenIdentitySet(registration.Children)
+	if len(registered) != len(registeredIDs) {
+		return nil, false
+	}
+
+	targetPlaces := tokenPlaceSet(matched)
+	if !registeredChildrenTerminal(ctx, registered, registeredIDs, targetPlaces) {
+		return nil, false
+	}
+	if !tokensRegistered(matched, registeredIDs) {
+		return nil, false
+	}
+
+	// The guarded arc is the binding surface for the transition and may
+	// expose only one of several terminal places. The registration projection
+	// above is the completeness denominator; requiring its identities to equal
+	// matchedIDs would reject valid fan-in when another registered child is
+	// terminal in a different place.
+	return matched, true
+}
+
+func evaluateVisibleParentChildren(ctx RuntimeGuardContext, parentWorkID, childWorkTypeID string, matched []factorytoken.Token, marking *MarkingSnapshot) ([]factorytoken.Token, bool) {
 	registered := parentChildTokens(marking, ctx.ActiveDispatches, parentWorkID, childWorkTypeID)
 	if len(registered) == 0 {
 		// Preserve direct guard use with no runtime snapshot. The scheduler
@@ -364,22 +359,60 @@ func (g *AllWithParentGuard) evaluate(ctx RuntimeGuardContext, candidates []fact
 
 	matchedIDs := tokenIdentitySet(matched)
 	targetPlaces := tokenPlaceSet(matched)
-	for identity, child := range registered {
-		if !matchedIDs[identity] {
-			return nil, false
-		}
-		if ctx.StateCategoryForPlace == nil && !targetPlaces[child.PlaceID] {
-			return nil, false
-		}
-		if ctx.StateCategoryForPlace != nil && ctx.StateCategoryForPlace(child.PlaceID) != runtimeStateCategoryTerminal {
-			return nil, false
-		}
-	}
-	if len(matchedIDs) != len(registered) {
+	if !visibleChildrenTerminal(ctx, registered, matchedIDs, targetPlaces) {
 		return nil, false
 	}
 
 	return matched, true
+}
+
+func allTokensTerminal(ctx RuntimeGuardContext, tokens []factorytoken.Token) bool {
+	if ctx.StateCategoryForPlace == nil {
+		return true
+	}
+	for _, token := range tokens {
+		if ctx.StateCategoryForPlace(token.PlaceID) != runtimeStateCategoryTerminal {
+			return false
+		}
+	}
+	return true
+}
+
+func registeredChildrenTerminal(ctx RuntimeGuardContext, registered map[string]factorytoken.Token, registeredIDs, targetPlaces map[string]bool) bool {
+	for identity, child := range registered {
+		if !registeredIDs[identity] || !childIsTerminal(ctx, child, targetPlaces) {
+			return false
+		}
+	}
+	return true
+}
+
+func visibleChildrenTerminal(ctx RuntimeGuardContext, registered map[string]factorytoken.Token, matchedIDs, targetPlaces map[string]bool) bool {
+	if len(matchedIDs) != len(registered) {
+		return false
+	}
+	for identity, child := range registered {
+		if !matchedIDs[identity] || !childIsTerminal(ctx, child, targetPlaces) {
+			return false
+		}
+	}
+	return true
+}
+
+func childIsTerminal(ctx RuntimeGuardContext, child factorytoken.Token, targetPlaces map[string]bool) bool {
+	if ctx.StateCategoryForPlace != nil {
+		return ctx.StateCategoryForPlace(child.PlaceID) == runtimeStateCategoryTerminal
+	}
+	return targetPlaces[child.PlaceID]
+}
+
+func tokensRegistered(tokens []factorytoken.Token, registeredIDs map[string]bool) bool {
+	for _, token := range tokens {
+		if !registeredIDs[tokenIdentity(token)] {
+			return false
+		}
+	}
+	return true
 }
 
 // AnyWithParentGuard matches the first candidate whose ParentID matches a bound token's WorkID.
