@@ -96,7 +96,12 @@ func (r *runner) Execute(
 	if err != nil {
 		return workers.RunnerExecutionResult{}, r.normalizeInvocationError(err, request)
 	}
-	return workers.RunnerExecutionResult{Content: result.Content}, nil
+	return workers.RunnerExecutionResult{
+		Content: result.Content,
+		Diagnostics: &workers.WorkDiagnostics{Metadata: map[string]string{
+			workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
+		}},
+	}, nil
 }
 
 func (r *runner) localInvocationRequest(

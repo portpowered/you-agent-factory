@@ -66,6 +66,9 @@ func (r *runner) Execute(
 		if r.config.UnmatchedDispatchPolicy.PassthroughUnmatched() {
 			return workers.RunnerExecutionResult{
 				Content: "mock unmatched passthrough",
+				Diagnostics: &workers.WorkDiagnostics{Metadata: map[string]string{
+					workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
+				}},
 			}, nil
 		}
 		return acceptResult(), nil
@@ -120,6 +123,9 @@ func (r *runner) Execute(
 					Stderr:   string(result.Stderr),
 					ExitCode: result.ExitCode,
 				},
+				Metadata: map[string]string{
+					workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
+				},
 			},
 		}, nil
 	default:
@@ -148,7 +154,10 @@ func acceptResult() workers.RunnerExecutionResult {
 	return workers.RunnerExecutionResult{
 		Content: "mock worker accepted",
 		Diagnostics: &workers.WorkDiagnostics{
-			Metadata: map[string]string{"mock": "accept"},
+			Metadata: map[string]string{
+				"mock": "accept",
+				workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
+			},
 		},
 	}
 }

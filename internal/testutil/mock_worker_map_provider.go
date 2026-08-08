@@ -79,11 +79,19 @@ func (m *MockWorkerMapProvider) Infer(_ context.Context, req workerexecution.Pro
 			} else {
 				return workerexecution.InferenceResponse{
 					Content: resp.Content,
+					Diagnostics: &workerexecution.WorkDiagnostics{Metadata: map[string]string{
+						workerexecution.ProviderResponseMetadataCompletionEvidence: "provider_response",
+					}},
 				}, nil
 			}
 		}
 	} else {
 		return workerexecution.InferenceResponse{}, errors.New("failed")
+	}
+	if m.defaultR.Diagnostics == nil && m.defaultR.Content != "" {
+		m.defaultR.Diagnostics = &workerexecution.WorkDiagnostics{Metadata: map[string]string{
+			workerexecution.ProviderResponseMetadataCompletionEvidence: "provider_response",
+		}}
 	}
 	return m.defaultR, nil
 }

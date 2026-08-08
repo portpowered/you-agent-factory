@@ -330,9 +330,14 @@ func externalRegistrationAttempt(registration Registration) (execution.Registrat
 			if writer.completion.Response == nil {
 				return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindUnknown, Message: "external provider completed without a response"}
 			}
-			result := providers.ExecuteResult{Content: writer.completion.Response.Content}
+			result := providers.ExecuteResult{
+				Content: writer.completion.Response.Content,
+				Diagnostics: &providers.ExecuteDiagnostics{Metadata: map[string]string{
+					workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
+				}},
+			}
 			if writer.progress > 0 {
-				result.Diagnostics = &providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{{Phase: "updated", Detail: "external provider progress"}}}
+				result.Diagnostics.Progress = []providers.ExecuteProgress{{Phase: "updated", Detail: "external provider progress"}}
 			}
 			return result, nil
 		},

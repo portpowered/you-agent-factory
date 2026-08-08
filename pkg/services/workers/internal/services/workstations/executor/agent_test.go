@@ -129,9 +129,26 @@ func (m *agentMockProvider) Infer(_ context.Context, req workerexecution.Provide
 		if idx < len(m.errors) {
 			err = m.errors[idx]
 		}
-		return response, err
+		return authoritativeTestResponse(response), err
 	}
-	return m.response, m.err
+	return authoritativeTestResponse(m.response), m.err
+}
+
+func authoritativeTestResponse(response workerexecution.InferenceResponse) workerexecution.InferenceResponse {
+	if response.Content == "" || response.Diagnostics != nil &&
+		(response.Diagnostics.Metadata[workerexecution.ProviderResponseMetadataCompletionEvidence] != "" ||
+			response.Diagnostics.Provider != nil && response.Diagnostics.Provider.ResponseMetadata[workerexecution.ProviderResponseMetadataCompletionEvidence] != "") {
+		return response
+	}
+	response.Diagnostics = workerexecution.CloneWorkDiagnostics(response.Diagnostics)
+	if response.Diagnostics == nil {
+		response.Diagnostics = &workerexecution.WorkDiagnostics{}
+	}
+	if response.Diagnostics.Metadata == nil {
+		response.Diagnostics.Metadata = make(map[string]string, 1)
+	}
+	response.Diagnostics.Metadata[workerexecution.ProviderResponseMetadataCompletionEvidence] = "provider_response"
+	return response
 }
 
 func testAgentRequest(dispatch work.WorkDispatch, opts ...func(*workerexecution.WorkstationExecutionRequest)) workerexecution.WorkstationExecutionRequest {
@@ -585,6 +602,52 @@ func TestAgentExecutor_EmptySuccessfulResponse_ReturnsMissingCompletionFailure(t
 	}
 	if result.Error == "" || strings.Contains(result.Error, "sys") || strings.Contains(result.Error, "msg") {
 		t.Fatalf("Error = %q, want a safe non-empty completion cause", result.Error)
+	}
+}
+
+func TestAgentExecutor_TaskCompleteWithoutAuthoritativeFinalFails(t *testing.T) {
+	provider := &agentMockProvider{response: workerexecution.InferenceResponse{
+		Content: "partial output before the provider task-complete record",
+		Diagnostics: &workerexecution.WorkDiagnostics{
+			Command: &workerexecution.CommandDiagnostic{ExitCode: 0},
+			Metadata: map[string]string{
+				"artifact_present": "true",
+			},
+			Provider: &workerexecution.ProviderDiagnostic{
+				ResponseMetadata: map[string]string{
+					workerexecution.ProviderResponseMetadataCompletionEvidence: "task_complete",
+				},
+			},
+		},
+	}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*workerconfig.FactoryWorkerConfig{
+			"worker-a": {Model: "test-model"},
+		},
+	}, provider, nil, time.Now)
+
+	result, err := executor.Execute(context.Background(), testAgentRequest(
+		work.WorkDispatch{DispatchID: "d-contradictory-completion", TransitionID: "t-contradictory-completion", WorkerType: "worker-a"},
+		withAgentPrompts("sys", "msg"),
+	))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
+	}
+	if result.Output != "" {
+		t.Fatalf("Output = %q, want partial output withheld on failed completion validation", result.Output)
+	}
+	if result.Error != "provider completion evidence was contradictory" {
+		t.Fatalf("Error = %q, want safe contradictory-completion cause", result.Error)
+	}
+	if result.Diagnostics == nil || result.Diagnostics.Provider == nil {
+		t.Fatalf("Diagnostics = %#v, want completion-validation diagnostics", result.Diagnostics)
+	}
+	metadata := result.Diagnostics.Provider.ResponseMetadata
+	if metadata[workerexecution.ProviderResponseMetadataFailureClassification] != "contradictory_completion" {
+		t.Fatalf("completion diagnostics = %#v, want contradictory_completion classification", metadata)
 	}
 }
 

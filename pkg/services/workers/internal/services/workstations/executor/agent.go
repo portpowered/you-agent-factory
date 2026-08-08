@@ -162,9 +162,26 @@ func (ae *AgentExecutor) Execute(ctx context.Context, request workerexecution.Wo
 }
 
 func hasAuthoritativeCompletionEvidence(resp workerexecution.InferenceResponse) bool {
-	if strings.TrimSpace(resp.Content) != "" {
-		return true
+	if strings.TrimSpace(resp.Content) == "" {
+		return false
 	}
+	for _, value := range completionEvidenceValues(resp) {
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case completionEvidenceAgentMessage, completionEvidenceProviderResponse:
+			return true
+		}
+	}
+	return false
+}
+
+const (
+	completionEvidenceAgentMessage     = "agent_message"
+	completionEvidenceProviderResponse = "provider_response"
+	completionEvidenceTaskComplete     = "task_complete"
+	completionEvidenceTurnCompleted    = "turn_completed"
+)
+
+func completionEvidenceValues(resp workerexecution.InferenceResponse) []string {
 	values := make([]string, 0, 2)
 	if resp.Diagnostics != nil {
 		values = append(values, resp.Diagnostics.Metadata[workerexecution.ProviderResponseMetadataCompletionEvidence])
@@ -172,13 +189,20 @@ func hasAuthoritativeCompletionEvidence(resp workerexecution.InferenceResponse) 
 			values = append(values, resp.Diagnostics.Provider.ResponseMetadata[workerexecution.ProviderResponseMetadataCompletionEvidence])
 		}
 	}
-	for _, value := range values {
+	return values
+}
+
+func completionValidationFailure(resp workerexecution.InferenceResponse) (string, string) {
+	for _, value := range completionEvidenceValues(resp) {
 		switch strings.ToLower(strings.TrimSpace(value)) {
-		case "agent_message", "provider_response", "task_complete", "turn_completed":
-			return true
+		case completionEvidenceTaskComplete, completionEvidenceTurnCompleted:
+			return "provider completion evidence was contradictory", "contradictory_completion"
 		}
 	}
-	return false
+	if strings.TrimSpace(resp.Content) != "" {
+		return "provider completion evidence was incomplete", "missing_completion_evidence"
+	}
+	return "provider completion evidence was missing", "missing_completion_evidence"
 }
 
 func effectiveWorkerDefinition(request workerexecution.WorkstationExecutionRequest, workerDef *interfaces.FactoryWorkerConfig) *interfaces.FactoryWorkerConfig {
@@ -340,17 +364,18 @@ func missingCompletionEvidenceWorkResult(
 	start time.Time,
 	clock func() time.Time,
 ) workerexecution.WorkResult {
+	failureMessage, failureClassification := completionValidationFailure(resp)
 	return workerexecution.WorkResult{
 		DispatchID:   request.Dispatch.DispatchID,
 		TransitionID: request.Dispatch.TransitionID,
 		Outcome:      workerexecution.OutcomeFailed,
-		Error:        "provider completion evidence was missing",
+		Error:        failureMessage,
 		FailureMetadata: &workerexecution.WorkFailureMetadata{
 			Family: workerexecution.WorkFailureFamilyTerminal,
 			Type:   workerexecution.WorkFailureTypeUnknown,
 		},
 		ProviderSession: workerexecution.CloneProviderSessionMetadata(resp.ProviderSession),
-		Diagnostics:     completionValidationDiagnostics(diagnostics),
+		Diagnostics:     completionValidationDiagnostics(diagnostics, failureClassification),
 		Metrics:         agentWorkMetrics(start, retryCount, clock),
 	}
 }

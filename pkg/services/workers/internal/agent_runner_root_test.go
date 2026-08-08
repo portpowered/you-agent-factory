@@ -160,7 +160,10 @@ func newServiceAgentProvidersFake() *serviceAgentProvidersFake {
 		},
 		Diagnostics: &providers.ExecuteDiagnostics{
 			DurationMillis: 42,
-			Metadata:       map[string]string{"fixture": "detached"},
+			Metadata: map[string]string{
+				"fixture": "detached",
+				workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
+			},
 		},
 	}}
 }

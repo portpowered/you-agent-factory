@@ -97,12 +97,17 @@ func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
 			declared.SessionRef = sessionRef
 			return providers.ExecuteResult{SessionRef: sessionRef}, execution.AttemptFailure{Declared: &declared}
 		}
+		metadata := cloneMetadata(effectResult.Metadata)
+		if metadata == nil {
+			metadata = make(map[string]string, 1)
+		}
+		metadata["completion_evidence"] = "provider_response"
 		return providers.ExecuteResult{
 			Content:    content,
 			SessionRef: cloneSessionRef(effectResult.SessionRef),
 			Diagnostics: &providers.ExecuteDiagnostics{
 				DurationMillis: effectResult.DurationMillis,
-				Metadata:       cloneMetadata(effectResult.Metadata),
+				Metadata:       metadata,
 			},
 		}, nil
 	}

@@ -133,6 +133,62 @@ func TestProviderMissingCompletionEvidenceMapsToPublicFailure(t *testing.T) {
 	}
 }
 
+// TestProviderTaskCompletePartialOutputDoesNotAdvanceWork proves that a zero
+// exit code, artifact signal, and task-complete lifecycle record do not stand
+// in for an authoritative final provider response.
+func TestProviderTaskCompletePartialOutputDoesNotAdvanceWork(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
+		modelprovider.ProviderCodex,
+		"gpt-5-codex",
+	))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"provider contradictory completion"}`))
+
+	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{
+		Content: "partial output before provider completion",
+		Diagnostics: &workerexecution.WorkDiagnostics{
+			Command:  &workerexecution.CommandDiagnostic{ExitCode: 0},
+			Metadata: map[string]string{"artifact_present": "true"},
+			Provider: &workerexecution.ProviderDiagnostic{
+				ResponseMetadata: map[string]string{
+					workerexecution.ProviderResponseMetadataCompletionEvidence: "task_complete",
+				},
+			},
+		},
+	})
+	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderOverride: provider},
+		20*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed place tokens = %d, want 1; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
+		t.Fatalf("done place tokens = %d, want 0 without authoritative final evidence", got)
+	}
+	if provider.CallCount() != 1 {
+		t.Fatalf("provider calls = %d, want 1 terminal completion-validation attempt", provider.CallCount())
+	}
+	if session.Runtime.Progress.Categories.Failed != 1 {
+		t.Fatalf("session progress categories = %+v, want one failed work item", session.Runtime.Progress.Categories)
+	}
+
+	dispatches := support.ObserveDispatchEvents(t, events)
+	if len(dispatches) != 1 || dispatches[0].Response == nil {
+		t.Fatalf("dispatch observations = %#v, want one terminal response", dispatches)
+	}
+	response := dispatches[0].Response
+	if response.Outcome != factoryapi.WorkOutcomeFailed {
+		t.Fatalf("dispatch outcome = %q, want failed", response.Outcome)
+	}
+	if response.Error == nil || *response.Error != "provider completion evidence was contradictory" {
+		t.Fatalf("dispatch error = %#v, want safe contradictory-completion diagnostic", response.Error)
+	}
+}
+
 // TestProviderAuthRateLimitAndTimeoutRemainDistinct proves authentication,
 // rate-limit, and timeout provider failures normalize to publicly distinct
 // failure classes through the customer process boundary, including throttle

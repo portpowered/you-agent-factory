@@ -270,7 +270,13 @@ func (availableExecutableLocator) LookPath(file string) (string, error) { return
 
 func (p *legacyProvider) Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
 	p.calls.Add(1)
-	return p.response, p.err
+	response := p.response
+	if response.Content != "" && response.Diagnostics == nil {
+		response.Diagnostics = &workers.WorkDiagnostics{Metadata: map[string]string{
+			workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
+		}}
+	}
+	return response, p.err
 }
 
 func TestACPAgentHelperProcess(t *testing.T) {

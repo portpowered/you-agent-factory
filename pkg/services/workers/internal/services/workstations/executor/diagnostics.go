@@ -80,7 +80,7 @@ func withInferenceErrorDiagnostics(base *workerexecution.WorkDiagnostics, err er
 	return diagnostics
 }
 
-func completionValidationDiagnostics(base *workerexecution.WorkDiagnostics) *workerexecution.WorkDiagnostics {
+func completionValidationDiagnostics(base *workerexecution.WorkDiagnostics, classification string) *workerexecution.WorkDiagnostics {
 	diagnostics := workerexecution.CloneWorkDiagnostics(base)
 	if diagnostics == nil {
 		diagnostics = &workerexecution.WorkDiagnostics{}
@@ -94,7 +94,7 @@ func completionValidationDiagnostics(base *workerexecution.WorkDiagnostics) *wor
 	diagnostics.Provider.ResponseMetadata[workerexecution.ProviderResponseMetadataFailureFamily] = string(workerexecution.WorkFailureFamilyTerminal)
 	diagnostics.Provider.ResponseMetadata[workerexecution.ProviderResponseMetadataFailureType] = string(workerexecution.WorkFailureTypeUnknown)
 	diagnostics.Provider.ResponseMetadata[workerexecution.ProviderResponseMetadataFailureOperation] = "completion_validation"
-	diagnostics.Provider.ResponseMetadata[workerexecution.ProviderResponseMetadataFailureClassification] = "missing_completion_evidence"
+	diagnostics.Provider.ResponseMetadata[workerexecution.ProviderResponseMetadataFailureClassification] = classification
 	return diagnostics
 }
 
