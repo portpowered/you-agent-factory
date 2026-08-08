@@ -7,4 +7,3 @@ description: >-
   cannot be selected together with terminal=true.
 schema:
   type: boolean
-

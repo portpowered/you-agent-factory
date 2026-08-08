@@ -6,4 +6,3 @@ description: >-
   or FAILED states. It composes with every other supplied list filter.
 schema:
   type: boolean
-

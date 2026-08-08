@@ -6,4 +6,3 @@ description: >-
   the complete filtered selection before ordering page slicing and pagination.
 schema:
   type: boolean
-
