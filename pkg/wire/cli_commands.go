@@ -106,6 +106,10 @@ func provideSubmitWorkOperation(read work.PayloadFileReader, transport extendedC
 func provideListWorkerSessionsOperation(transport standardCLIHTTPProtocol) cli.ListWorkerSessionsOperation {
 	return workersessionscli.BindList(transport.Protocol)
 }
+
+func provideShowWorkerSessionOperation(transport standardCLIHTTPProtocol) cli.ShowWorkerSessionsOperation {
+	return workersessionscli.BindShow(transport.Protocol)
+}
 func provideSubmitBatchOperation(
 	transport extendedCLIHTTPProtocol,
 	prepare work.FactoryRequestBatchPreparation,

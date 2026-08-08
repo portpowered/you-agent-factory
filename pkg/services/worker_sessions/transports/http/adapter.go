@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -19,6 +20,39 @@ import (
 type Adapter struct {
 	observations workersessions.ObservationService
 	work         work.Service
+}
+
+// GetWorkerSessionObservation verifies the request identity and returns the
+// one authoritative observation associated with it in the opened session.
+func (a *Adapter) GetWorkerSessionObservation(
+	ctx context.Context,
+	sessionID, provider, kind, id string,
+) (factoryapi.WorkerSessionObservation, error) {
+	if a == nil || a.observations == nil {
+		return factoryapi.WorkerSessionObservation{}, errors.New("Worker Sessions service is required")
+	}
+	if strings.TrimSpace(sessionID) == "" {
+		return factoryapi.WorkerSessionObservation{}, errors.New("session id is required")
+	}
+	provider = strings.TrimSpace(provider)
+	kind = strings.TrimSpace(kind)
+	id = strings.TrimSpace(id)
+	if provider == "" || kind == "" || id == "" {
+		return factoryapi.WorkerSessionObservation{}, errors.New("provider, kind, and id are required")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return factoryapi.WorkerSessionObservation{}, err
+	}
+	observation, err := a.observations.GetObservation(ctx, workersessions.GetObservationRequest{
+		ProviderSession: providers.SessionRef{Provider: providers.ID(provider), Kind: kind, ID: id},
+	})
+	if err != nil {
+		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("get Worker Session observation: %w", err)
+	}
+	return WorkerSessionObservationToAPI(observation), nil
 }
 
 // NewAdapter binds the exact roots required by the Worker Sessions list

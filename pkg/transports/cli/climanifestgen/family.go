@@ -84,6 +84,7 @@ var WorkersFamilyCommandIDs = []string{
 var WorkerSessionsFamilyCommandIDs = []string{
 	"you.worker-sessions",
 	"you.worker-sessions.list",
+	"you.worker-sessions.show",
 }
 
 // IsWorkerSessionsFamilyCommandID reports whether id belongs to the worker

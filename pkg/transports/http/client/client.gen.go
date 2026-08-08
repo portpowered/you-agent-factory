@@ -79,8 +79,11 @@ const (
 	ErrorResponseCodeMETHODNOTALLOWED                           ErrorResponseCode = "METHOD_NOT_ALLOWED"
 	ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED              ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
 	ErrorResponseCodeNOTFOUND                                   ErrorResponseCode = "NOT_FOUND"
+	ErrorResponseCodePROJECTIONUNAVAILABLE                      ErrorResponseCode = "PROJECTION_UNAVAILABLE"
+	ErrorResponseCodePROVIDERUNSUPPORTED                        ErrorResponseCode = "PROVIDER_UNSUPPORTED"
 	ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND               ErrorResponseCode = "RESPONSE_EVENT_SESSION_NOT_FOUND"
 	ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED                 ErrorResponseCode = "RESPONSE_EVENT_STREAM_EXPIRED"
+	ErrorResponseCodeSESSIONKINDUNSUPPORTED                     ErrorResponseCode = "SESSION_KIND_UNSUPPORTED"
 	ErrorResponseCodeSTALEFACTORYVERSION                        ErrorResponseCode = "STALE_FACTORY_VERSION"
 )
 

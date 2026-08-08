@@ -9,6 +9,8 @@ import (
 
 type ListConfig = workersessionscli.ListConfig
 type ListOperation = workersessionscli.ListOperation
+type ShowConfig = workersessionscli.ShowConfig
+type ShowOperation = workersessionscli.ShowOperation
 
 func NewList(transport clihttp.Protocol) ListOperation {
 	return workersessionscli.NewList(transport)
@@ -16,4 +18,12 @@ func NewList(transport clihttp.Protocol) ListOperation {
 
 func BindList(transport clihttp.Protocol) ListOperation {
 	return workersessionscli.BindList(transport)
+}
+
+func NewShow(transport clihttp.Protocol) ShowOperation {
+	return workersessionscli.NewShow(transport)
+}
+
+func BindShow(transport clihttp.Protocol) ShowOperation {
+	return workersessionscli.BindShow(transport)
 }

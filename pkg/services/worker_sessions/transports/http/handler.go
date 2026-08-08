@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -61,6 +62,55 @@ func (h *Handler) ListWorkerSessionsBySessionId(
 	h.writeJSON(w, http.StatusOK, response)
 }
 
+// GetWorkerSessionObservationBySessionId handles the session-scoped exact
+// Provider Session lookup operation.
+func (h *Handler) GetWorkerSessionObservationBySessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	params factoryapi.GetWorkerSessionObservationBySessionIdParams,
+) {
+	if h == nil || h.adapter == nil {
+		writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	if strings.TrimSpace(string(sessionID)) == "" {
+		writeError(w, http.StatusBadRequest, "session id is required", "BAD_REQUEST")
+		return
+	}
+	if r == nil {
+		writeError(w, http.StatusBadRequest, "request is required", "BAD_REQUEST")
+		return
+	}
+	provider, kind, id := string(params.Provider), string(params.Kind), strings.TrimSpace(params.Id)
+	if provider == "" {
+		writeError(w, http.StatusBadRequest, "provider is required", "BAD_REQUEST")
+		return
+	}
+	if kind == "" {
+		writeError(w, http.StatusBadRequest, "kind is required", "BAD_REQUEST")
+		return
+	}
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "id is required", "BAD_REQUEST")
+		return
+	}
+	if provider != string(providers.IDCodex) && provider != string(providers.IDCursor) {
+		writeError(w, http.StatusBadRequest, "unsupported provider", string(factoryapi.ErrorResponseCodePROVIDERUNSUPPORTED))
+		return
+	}
+	if kind != providers.SessionIDKind {
+		writeError(w, http.StatusBadRequest, "unsupported session kind", string(factoryapi.ErrorResponseCodeSESSIONKINDUNSUPPORTED))
+		return
+	}
+	response, err := h.adapter.GetWorkerSessionObservation(r.Context(), string(sessionID), provider, kind, id)
+	if err != nil {
+		h.writeMappedObservationError(w, err)
+		return
+	}
+	h.writeJSON(w, http.StatusOK, response)
+}
+
 func (h *Handler) writeMappedError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, work.ErrWorkNotFound):
@@ -71,6 +121,21 @@ func (h *Handler) writeMappedError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
 	default:
 		writeError(w, http.StatusInternalServerError, "failed to list Worker Sessions", "INTERNAL_ERROR")
+	}
+}
+
+func (h *Handler) writeMappedObservationError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, workersessions.ErrObservationSessionNotFound):
+		writeError(w, http.StatusNotFound, "worker session observation not found", "NOT_FOUND")
+	case errors.Is(err, workersessions.ErrObservationProjectionUnavailable):
+		writeError(w, http.StatusInternalServerError, "worker session observation is unavailable", string(factoryapi.ErrorResponseCodePROJECTIONUNAVAILABLE))
+	case errors.Is(err, context.Canceled), errors.Is(err, workersessions.ErrObservationCanceled):
+		return
+	case strings.Contains(err.Error(), "session id is required"), strings.Contains(err.Error(), "provider, kind, and id are required"):
+		writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+	default:
+		writeError(w, http.StatusInternalServerError, "failed to show Worker Session", "INTERNAL_ERROR")
 	}
 }
 
