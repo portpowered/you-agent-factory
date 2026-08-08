@@ -91,6 +91,17 @@ func assertAgyRecordedStreamCase(t *testing.T, rootDir string, test agyRecordedS
 	if err != nil {
 		t.Fatalf("read recorded trace %q: %v", test.trace, err)
 	}
+	result, observedSession := executeAgyRecordedStream(t, trace, test)
+	assertAgyRecordedResult(t, result, observedSession, test)
+}
+
+func executeAgyRecordedStream(
+	t *testing.T,
+	trace []byte,
+	test agyRecordedStreamCase,
+) (providers.ExecuteResult, providers.SessionRef) {
+	t.Helper()
+
 	effect := agy.EffectFunc(func(
 		_ context.Context,
 		_ execution.ContinuationRequest,
@@ -115,21 +126,50 @@ func assertAgyRecordedStreamCase(t *testing.T, rootDir string, test agyRecordedS
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+	return result, observedSession
+}
+
+func assertAgyRecordedResult(
+	t *testing.T,
+	result providers.ExecuteResult,
+	observedSession providers.SessionRef,
+	test agyRecordedStreamCase,
+) {
+	t.Helper()
 	if !strings.Contains(result.Content, test.wantResponse) {
 		t.Fatalf("response = %q, want %q", result.Content, test.wantResponse)
 	}
-	if result.SessionRef == nil || result.SessionRef.ID != test.wantSession {
-		t.Fatalf("SessionRef = %#v, want %q", result.SessionRef, test.wantSession)
-	}
-	if observedSession.ID != test.wantSession {
-		t.Fatalf("observed session = %#v, want %q", observedSession, test.wantSession)
-	}
+	assertAgyRecordedSession(t, result, observedSession, test.wantSession)
 	if result.Diagnostics == nil {
 		t.Fatal("Diagnostics = nil, want recorded execution facts")
 	}
-	metadata := result.Diagnostics.Metadata
-	if result.Diagnostics.DurationMillis != test.wantDurationMS {
-		t.Fatalf("DurationMillis = %d, want %d", result.Diagnostics.DurationMillis, test.wantDurationMS)
+	assertAgyRecordedDiagnostics(t, *result.Diagnostics, test)
+}
+
+func assertAgyRecordedSession(
+	t *testing.T,
+	result providers.ExecuteResult,
+	observedSession providers.SessionRef,
+	wantSession string,
+) {
+	t.Helper()
+	if result.SessionRef == nil || result.SessionRef.ID != wantSession {
+		t.Fatalf("SessionRef = %#v, want %q", result.SessionRef, wantSession)
+	}
+	if observedSession.ID != wantSession {
+		t.Fatalf("observed session = %#v, want %q", observedSession, wantSession)
+	}
+}
+
+func assertAgyRecordedDiagnostics(
+	t *testing.T,
+	diagnostics providers.ExecuteDiagnostics,
+	test agyRecordedStreamCase,
+) {
+	t.Helper()
+	metadata := diagnostics.Metadata
+	if diagnostics.DurationMillis != test.wantDurationMS {
+		t.Fatalf("DurationMillis = %d, want %d", diagnostics.DurationMillis, test.wantDurationMS)
 	}
 	if metadata["duration_seconds"] != test.wantDurationText ||
 		metadata["num_turns"] != test.wantTurns || metadata["status"] != "SUCCESS" {
@@ -140,7 +180,7 @@ func assertAgyRecordedStreamCase(t *testing.T, rootDir string, test agyRecordedS
 			t.Fatalf("metadata[%q] = %q, want %q; metadata=%#v", key, got, want, metadata)
 		}
 	}
-	if got := progressPhases(result.Diagnostics.Progress); !strings.Contains(got, "run.completed|usage.updated|message.completed") {
+	if got := progressPhases(diagnostics.Progress); !strings.Contains(got, "run.completed|usage.updated|message.completed") {
 		t.Fatalf("progress phases = %q, want terminal and usage facts", got)
 	}
 }
