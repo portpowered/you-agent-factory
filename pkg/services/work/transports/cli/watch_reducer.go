@@ -27,6 +27,7 @@ type watchReducer struct {
 	sessionID  string
 	hasLast    bool
 	last       int
+	lastID     string
 	accepted   map[string]watchAcceptedEvent
 	stateTypes map[string]map[string]factoryapi.WorkStateType
 	cohort     map[string]watchWorkObservation
@@ -75,6 +76,7 @@ func (r *watchReducer) Accept(event factoryapi.FactoryEvent) (WatchTransition, b
 		signature: append([]byte(nil), signature...),
 	}
 	r.last = event.Context.Sequence
+	r.lastID = event.Id
 	r.hasLast = true
 
 	switch event.Type {
@@ -123,6 +125,16 @@ func (r *watchReducer) Accept(event factoryapi.FactoryEvent) (WatchTransition, b
 	}
 
 	return WatchTransition{}, false, r.Completed(), nil
+}
+
+// Cursor returns the last accepted canonical event identity and ordering
+// position. The cursor is ephemeral and belongs only to this watch invocation;
+// callers use it to resume the same stream after a transient disconnect.
+func (r *watchReducer) Cursor() *watchEventCursor {
+	if r == nil || !r.hasLast {
+		return nil
+	}
+	return &watchEventCursor{EventID: r.lastID, Sequence: r.last}
 }
 
 // Completed reports whether at least one observed Work exists and every

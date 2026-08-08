@@ -290,7 +290,7 @@ func TestWatchFiniteStreamWritesFinalTransitionBeforeReturning(t *testing.T) {
 		metadata, request, watchTransitionEvent(t, "move-1", 3, "work-1", "ready", "done", true),
 	}}
 	var output bytes.Buffer
-	err := watchWithSource(WatchConfig{Context: context.Background(), SessionID: "session-1", Output: &output}, watchEventOpenFunc(func(context.Context) (watchEventStream, error) {
+	err := watchWithSource(WatchConfig{Context: context.Background(), SessionID: "session-1", Output: &output}, watchEventOpenFunc(func(context.Context, *watchEventCursor) (watchEventStream, error) {
 		return stream, nil
 	}))
 	if err != nil {

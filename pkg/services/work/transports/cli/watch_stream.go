@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -25,16 +26,16 @@ type watchEventStream interface {
 }
 
 type watchEventOpener interface {
-	Open(context.Context) (watchEventStream, error)
+	Open(context.Context, *watchEventCursor) (watchEventStream, error)
 }
 
-type watchEventOpenFunc func(context.Context) (watchEventStream, error)
+type watchEventOpenFunc func(context.Context, *watchEventCursor) (watchEventStream, error)
 
-func (open watchEventOpenFunc) Open(ctx context.Context) (watchEventStream, error) {
+func (open watchEventOpenFunc) Open(ctx context.Context, cursor *watchEventCursor) (watchEventStream, error) {
 	if open == nil {
 		return nil, fmt.Errorf("work watch event opener is required")
 	}
-	return open(ctx)
+	return open(ctx, cursor)
 }
 
 // NewWatch binds the CLI HTTP protocol to the Work watch operation. The
@@ -57,8 +58,8 @@ func Watch(cfg WatchConfig) error {
 		return fmt.Errorf("CLI HTTP protocol is required")
 	}
 	sessionID := watchSessionID(cfg)
-	return watchWithSource(cfg, watchEventOpenFunc(func(ctx context.Context) (watchEventStream, error) {
-		return openHTTPWatchEventStream(ctx, cfg.HTTP, cfg.Server, sessionID, cfg.Diagnostics, cfg.Verbose)
+	return watchWithSource(cfg, watchEventOpenFunc(func(ctx context.Context, cursor *watchEventCursor) (watchEventStream, error) {
+		return openHTTPWatchEventStream(ctx, cfg.HTTP, cfg.Server, sessionID, cursor, cfg.Diagnostics, cfg.Verbose)
 	}))
 }
 
@@ -70,47 +71,103 @@ func watchSessionID(cfg WatchConfig) string {
 }
 
 func watchWithSource(cfg WatchConfig, opener watchEventOpener) error {
+	return watchWithRetry(cfg, opener, defaultWatchRetryPolicy())
+}
+
+func watchWithRetry(cfg WatchConfig, opener watchEventOpener, retry watchRetryPolicy) error {
+	if err := ValidateWatchConfig(cfg); err != nil {
+		return err
+	}
 	if opener == nil {
 		return fmt.Errorf("work watch event opener is required")
 	}
 	sessionID := watchSessionID(cfg)
-	stream, err := opener.Open(cfg.Context)
-	if err != nil {
-		return fmt.Errorf("open work watch stream for session %q: %w", sessionID, err)
-	}
-	if stream == nil {
-		return fmt.Errorf("open work watch stream for session %q: stream is unavailable", sessionID)
-	}
-	defer stream.Close()
-
 	reducer := newWatchReducer(sessionID)
+	reconnectAttempts := 0
+	for {
+		cursor := reducer.Cursor()
+		stream, err := opener.Open(cfg.Context, cursor)
+		if err != nil {
+			if contextErr := cfg.Context.Err(); contextErr != nil {
+				return contextErr
+			}
+			if !isRetryableWatchError(err) {
+				return fmt.Errorf("open work watch stream for session %q: %w", sessionID, err)
+			}
+			if err := retryWatchReconnect(cfg, retry, sessionID, cursor, reconnectAttempts, err); err != nil {
+				return err
+			}
+			reconnectAttempts++
+			continue
+		}
+		if stream == nil {
+			return fmt.Errorf("open work watch stream for session %q: stream is unavailable", sessionID)
+		}
+
+		closeStream, stopCloseOnCancel := watchStreamCloseOnCancel(cfg.Context, stream)
+		result := consumeWatchStream(cfg, reducer, stream)
+		_ = closeStream()
+		stopCloseOnCancel()
+
+		if result.completed {
+			return nil
+		}
+		if contextErr := cfg.Context.Err(); contextErr != nil {
+			return contextErr
+		}
+		if result.err == nil {
+			return fmt.Errorf("work watch stream for session %q ended without an outcome", sessionID)
+		}
+		if !result.retryable {
+			return fmt.Errorf("work watch stream for session %q: %w", sessionID, result.err)
+		}
+		cursor = reducer.Cursor()
+		if err := retryWatchReconnect(cfg, retry, sessionID, cursor, reconnectAttempts, result.err); err != nil {
+			return err
+		}
+		reconnectAttempts++
+	}
+}
+
+type watchStreamResult struct {
+	err       error
+	completed bool
+	retryable bool
+}
+
+func consumeWatchStream(cfg WatchConfig, reducer *watchReducer, stream watchEventStream) watchStreamResult {
 	for {
 		event, err := stream.Next(cfg.Context)
 		if err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				return err
+			return watchStreamResult{
+				err:       formatWatchReadError(err),
+				retryable: isRetryableWatchError(err),
 			}
-			if errors.Is(err, io.EOF) {
-				if reducer.Completed() && !cfg.Follow {
-					return nil
-				}
-				return fmt.Errorf("work watch stream for session %q closed before finite completion", sessionID)
-			}
-			return fmt.Errorf("read work watch stream for session %q: %w", sessionID, err)
 		}
+
 		transition, emit, completed, err := reducer.Accept(event)
 		if err != nil {
-			return err
+			return watchStreamResult{err: fmt.Errorf("reduce Work watch event %q: %w", event.Id, err)}
 		}
 		if emit {
 			if err := RenderWatchTransition(cfg.Output, transition); err != nil {
-				return err
+				return watchStreamResult{err: err}
 			}
 		}
 		if completed && !cfg.Follow {
-			return nil
+			return watchStreamResult{completed: true}
 		}
 	}
+}
+
+func formatWatchReadError(err error) error {
+	if errors.Is(err, io.EOF) {
+		return io.EOF
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	return fmt.Errorf("read Work watch stream: %w", err)
 }
 
 type httpWatchEventStream struct {
@@ -124,6 +181,7 @@ func openHTTPWatchEventStream(
 	transport clihttp.Protocol,
 	server string,
 	sessionID string,
+	cursor *watchEventCursor,
 	diagnostics io.Writer,
 	verbose bool,
 ) (watchEventStream, error) {
@@ -137,6 +195,12 @@ func openHTTPWatchEventStream(
 	endpoint, err := url.Parse(endpointURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse work watch endpoint: %w", err)
+	}
+	if cursor != nil {
+		query := endpoint.Query()
+		query.Set("after_event_id", cursor.EventID)
+		query.Set("after_sequence", strconv.Itoa(cursor.Sequence))
+		endpoint.RawQuery = query.Encode()
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
 	if err != nil {
@@ -156,19 +220,20 @@ func openHTTPWatchEventStream(
 		return nil, fmt.Errorf("factory not reachable at %s: %w", endpoint.String(), err)
 	}
 	if response.HTTP == nil {
-		return nil, fmt.Errorf("work watch stream returned no HTTP response")
+		return nil, &watchProtocolError{message: "work watch stream returned no HTTP response"}
 	}
 	resp := response.HTTP
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
+		message := ""
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
-			return nil, fmt.Errorf("watch work failed for session %q (%d): %s", sessionID, resp.StatusCode, errResp.Message)
+			message = errResp.Message
 		}
-		return nil, fmt.Errorf("watch work failed for session %q (%d)", sessionID, resp.StatusCode)
+		return nil, &watchHTTPStatusError{sessionID: sessionID, status: resp.StatusCode, message: message}
 	}
 	if !strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream") {
 		defer resp.Body.Close()
-		return nil, fmt.Errorf("watch work stream for session %q returned content type %q", sessionID, resp.Header.Get("Content-Type"))
+		return nil, &watchProtocolError{message: fmt.Sprintf("work watch stream for session %q returned content type %q", sessionID, resp.Header.Get("Content-Type"))}
 	}
 	return &httpWatchEventStream{reader: bufio.NewReader(resp.Body), body: resp.Body}, nil
 }
@@ -236,7 +301,7 @@ func readWatchSSEEvent(reader *bufio.Reader) (factoryapi.FactoryEvent, error) {
 func decodeWatchSSEEvent(data []string) (factoryapi.FactoryEvent, error) {
 	var event factoryapi.FactoryEvent
 	if err := json.Unmarshal([]byte(strings.Join(data, "\n")), &event); err != nil {
-		return factoryapi.FactoryEvent{}, fmt.Errorf("decode canonical Factory Event SSE data: %w", err)
+		return factoryapi.FactoryEvent{}, &watchMalformedEventError{err: err}
 	}
 	return event, nil
 }
