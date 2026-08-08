@@ -40,11 +40,12 @@ func TestResolvedListRunEMapsStableInputsIntoFreshRequests(t *testing.T) {
 		"--server", "https://factory.example", "--json", "--debug",
 		"work", "list",
 		"--session", "session-alpha",
-		"--state-name", "review",
+		"--state", "review",
 		"--state-type", "PROCESSING",
 		"--name", "prd",
-		"--work-type-name", "story",
+		"--work-type", "story",
 		"--trace-id", "trace-1",
+		"--terminal", "--counts",
 		"--sort-by", "state.type",
 		"--max-results", "7",
 		"--next-token", base64.StdEncoding.EncodeToString([]byte("cursor-1")),
@@ -64,7 +65,8 @@ func TestResolvedListRunEMapsStableInputsIntoFreshRequests(t *testing.T) {
 	assertResolvedListConfig(t, requests[0], resolvedListConfigValues{
 		server: "https://factory.example", sessionID: "session-alpha",
 		stateName: "review", stateType: "PROCESSING", name: "prd",
-		workTypeName: "story", traceID: "trace-1", sortBy: "state.type",
+		workTypeName: "story", traceID: "trace-1", terminal: true, counts: true,
+		sortBy:     "state.type",
 		maxResults: 7, nextToken: base64.StdEncoding.EncodeToString([]byte("cursor-1")),
 		json: true, verbose: true, debug: true,
 	})
@@ -790,9 +792,12 @@ type resolvedListConfigValues struct {
 	name         string
 	workTypeName string
 	traceID      string
+	terminal     bool
+	nonTerminal  bool
 	sortBy       string
 	maxResults   int
 	nextToken    string
+	counts       bool
 	json         bool
 	verbose      bool
 	debug        bool
@@ -816,9 +821,11 @@ func assertResolvedListConfig(
 	values := resolvedListConfigValues{
 		server: got.Server, sessionID: got.SessionID,
 		stateName: got.StateName, stateType: got.StateType, name: got.Name,
-		workTypeName: got.WorkTypeName, traceID: got.TraceID, sortBy: got.SortBy,
+		workTypeName: got.WorkTypeName, traceID: got.TraceID,
+		terminal: got.Terminal, nonTerminal: got.NonTerminal, sortBy: got.SortBy,
 		maxResults: got.MaxResults, nextToken: got.NextToken,
-		json: got.JSON, verbose: got.Verbose, debug: got.Debug,
+		counts: got.Counts,
+		json:   got.JSON, verbose: got.Verbose, debug: got.Debug,
 	}
 	if values != want {
 		t.Fatalf("list config values = %#v, want %#v", values, want)

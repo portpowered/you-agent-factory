@@ -79,7 +79,8 @@ func TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs(t *testi
 		listed.StateName != "review" || listed.StateType != "PROCESSING" ||
 		listed.Name != "PRD" || listed.WorkTypeName != "story" || listed.TraceID != "trace-a" ||
 		listed.SortBy != "state.type" || listed.MaxResults != 7 ||
-		listed.NextToken != "cursor-a" || !listed.JSON || !listed.Verbose || !listed.Debug {
+		listed.NextToken != "cursor-a" || listed.Terminal || listed.NonTerminal || listed.Counts ||
+		!listed.JSON || !listed.Verbose || !listed.Debug {
 		t.Fatalf("list config = %#v, want stable local and inherited inputs", listed)
 	}
 	if shown.Server != "https://factory.example" || shown.SessionID != "session-b" ||
@@ -211,6 +212,8 @@ func workFunctionalValue(value any) (resolvedinput.Value, error) {
 		return resolvedinput.StringValue(typed), nil
 	case int:
 		return resolvedinput.IntValue(typed), nil
+	case bool:
+		return resolvedinput.BoolValue(typed), nil
 	default:
 		return resolvedinput.Value{}, fmt.Errorf("unsupported Work input type %T", value)
 	}

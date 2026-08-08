@@ -19,54 +19,20 @@ func (s *Service) ListWork(
 	if err := requireContext(ctx); err != nil {
 		return work.ListResult{}, err
 	}
-	query, err := stateaccessquery.NormalizeList(stateaccessquery.ListOptions{
-		StateName:    options.StateName,
-		StateType:    options.StateType,
-		Name:         options.Name,
-		WorkTypeName: options.WorkTypeName,
-		TraceID:      options.TraceID,
-		SortBy:       options.SortBy,
-		MaxResults:   options.MaxResults,
-		NextToken:    options.NextToken,
-	})
+	query, err := work.NormalizeList(options)
 	if err != nil {
-		return work.ListResult{}, mapQueryValidationError(err)
+		return work.ListResult{}, err
 	}
 	snapshot, err := s.readSnapshot(ctx, sessionID)
 	if err != nil {
 		return work.ListResult{}, err
 	}
 	normalized := query.Options()
-	selection, err := stateaccessquery.NewSelection(
-		optional(normalized.StateName),
-		optional(normalized.StateType),
-		optional(normalized.Name),
-		optional(normalized.WorkTypeName),
-		optional(normalized.TraceID),
-		normalized.SortBy,
-	)
+	selection, err := newSelection(normalized)
 	if err != nil {
 		return work.ListResult{}, mapQueryValidationError(err)
 	}
-	byID := make(map[string]work.ReadModel, len(snapshot.Items))
-	items := make([]stateaccessquery.Item, 0, len(snapshot.Items))
-	for _, item := range snapshot.Items {
-		item = detachReadModel(item)
-		byID[item.CursorID] = item
-		items = append(items, stateaccessquery.Item{
-			ID:                     item.CursorID,
-			Name:                   item.Name,
-			WorkTypeName:           item.WorkTypeName,
-			State:                  stateToQueryState(item.State),
-			TraceID:                item.TraceID,
-			CurrentChainingTraceID: item.CurrentChainingTraceID,
-		})
-	}
-	selected := selection.Apply(items)
-	ordered := make([]work.ReadModel, 0, len(selected))
-	for _, item := range selected {
-		ordered = append(ordered, byID[item.ID])
-	}
+	ordered := orderedReadModels(snapshot, selection)
 	maxResults := normalized.MaxResults
 	if maxResults <= 0 {
 		maxResults = work.DefaultListMaxResults
@@ -80,6 +46,9 @@ func (s *Service) ListWork(
 	result := work.ListResult{
 		Results:    append([]work.ReadModel(nil), ordered[start:end]...),
 		MaxResults: maxResults,
+	}
+	if normalized.Counts {
+		result.Counts = &work.ListCountSummary{Total: len(ordered)}
 	}
 	if end < len(ordered) {
 		result.NextToken = base64.StdEncoding.EncodeToString([]byte(ordered[end-1].CursorID))
@@ -159,6 +128,49 @@ func optional(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+func optionalBool(value bool) *bool {
+	if !value {
+		return nil
+	}
+	return &value
+}
+
+func newSelection(options work.ListOptions) (stateaccessquery.Selection, error) {
+	return stateaccessquery.NewSelectionWithOptions(stateaccessquery.SelectionOptions{
+		StateName:    optional(options.StateName),
+		StateType:    optional(options.StateType),
+		Name:         optional(options.Name),
+		WorkTypeName: optional(options.WorkTypeName),
+		TraceID:      optional(options.TraceID),
+		Terminal:     optionalBool(options.Terminal),
+		NonTerminal:  optionalBool(options.NonTerminal),
+		SortBy:       options.SortBy,
+	})
+}
+
+func orderedReadModels(snapshot work.ReadSnapshot, selection stateaccessquery.Selection) []work.ReadModel {
+	byID := make(map[string]work.ReadModel, len(snapshot.Items))
+	items := make([]stateaccessquery.Item, 0, len(snapshot.Items))
+	for _, item := range snapshot.Items {
+		item = detachReadModel(item)
+		byID[item.CursorID] = item
+		items = append(items, stateaccessquery.Item{
+			ID:                     item.CursorID,
+			Name:                   item.Name,
+			WorkTypeName:           item.WorkTypeName,
+			State:                  stateToQueryState(item.State),
+			TraceID:                item.TraceID,
+			CurrentChainingTraceID: item.CurrentChainingTraceID,
+		})
+	}
+	selected := selection.Apply(items)
+	ordered := make([]work.ReadModel, 0, len(selected))
+	for _, item := range selected {
+		ordered = append(ordered, byID[item.ID])
+	}
+	return ordered
 }
 
 func nextIndex(items []work.ReadModel, cursor string) int {

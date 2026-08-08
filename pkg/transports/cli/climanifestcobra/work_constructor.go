@@ -140,6 +140,13 @@ func buildRunnableWorkLeaf(
 	if err := registerWorkLocalFlags(cmd, record, bindings); err != nil {
 		return nil, err
 	}
+	relationships, err := planStandaloneCommandRelationships(record)
+	if err != nil {
+		return nil, err
+	}
+	if err := projectCobraFlagGroupAnnotations(cmd, record.ID, relationships); err != nil {
+		return nil, err
+	}
 	if err := registry.AttachRunE(cmd, record.ID); err != nil {
 		return nil, err
 	}

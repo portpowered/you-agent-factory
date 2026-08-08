@@ -70,13 +70,18 @@ paths:
         - $ref: '#/components/parameters/WorkListName'
         - $ref: '#/components/parameters/WorkListWorkTypeName'
         - $ref: '#/components/parameters/WorkListTraceId'
+        - $ref: '#/components/parameters/WorkListTerminal'
+        - $ref: '#/components/parameters/WorkListNonTerminal'
+        - $ref: '#/components/parameters/WorkListCounts'
       responses:
         '200':
-          description: Current work tokens for the targeted session.
+          description: Current work tokens for the targeted session. All supplied filters compose with logical AND before deterministic ordering and pagination. When counts=true, counts.total is the complete filtered selection before page slicing and is stable across pages of an unchanged session snapshot.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListWorkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -1353,6 +1358,27 @@ components:
       description: Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly.
       schema:
         type: string
+    WorkListTerminal:
+      name: terminal
+      in: query
+      required: false
+      description: Optional terminality filter. When true, selects Work in canonical TERMINAL or FAILED states. It composes with every other supplied list filter.
+      schema:
+        type: boolean
+    WorkListNonTerminal:
+      name: nonTerminal
+      in: query
+      required: false
+      description: Optional terminality filter. When true, selects Work in INITIAL or PROCESSING states. It composes with every other supplied list filter and cannot be selected together with terminal=true.
+      schema:
+        type: boolean
+    WorkListCounts:
+      name: counts
+      in: query
+      required: false
+      description: Optional count request. When true, the response includes counts.total for the complete filtered selection before ordering page slicing and pagination.
+      schema:
+        type: boolean
     WorkOrTokenID:
       name: id
       in: path
@@ -2134,6 +2160,18 @@ components:
             $ref: '#/components/schemas/Work'
         paginationContext:
           $ref: '#/components/schemas/PaginationContext'
+        counts:
+          $ref: '#/components/schemas/ListWorkCountSummary'
+    ListWorkCountSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - total
+      properties:
+        total:
+          type: integer
+          minimum: 0
+          description: Complete filtered Work total before page slicing.
     PaginationContext:
       type: object
       additionalProperties: false
