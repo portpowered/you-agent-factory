@@ -549,9 +549,9 @@
   "workers": [
     {
       "executorProvider": "SCRIPT_WRAP",
-      "modelProvider": "claude",
-      "model": "claude-sonnet-5",
-      "reasoningEffort": "high",
+      "modelProvider": "codex",
+      "model": "gpt-5.6-luna",
+      "reasoningEffort": "max",
       "name": "processor",
       "skipPermissions": true,
       "stopToken": "\u003cCOMPLETE\u003e",
