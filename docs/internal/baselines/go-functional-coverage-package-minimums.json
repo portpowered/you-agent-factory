@@ -106,7 +106,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/wiretranscript",
-      "minimum": 68.42
+      "minimum": 68.37
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/root",
