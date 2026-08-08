@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
@@ -87,7 +88,10 @@ func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
 			failure = attachPartialTimeoutProgress(failure, effectResult.CapturedStdout, effectErr)
 			return providers.ExecuteResult{SessionRef: sessionRef}, failure
 		}
-		content, parseFailure := parseFinalOutput(stdout.Bytes())
+		parsed, parseFailure := parseAgyOutput(
+			stdout.Bytes(),
+			strings.EqualFold(effectResult.Metadata["output_format"], outputFormatStream),
+		)
 		if parseFailure != nil {
 			sessionRef := cloneSessionRef(effectResult.SessionRef)
 			if sessionRef == nil {
@@ -97,13 +101,24 @@ func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
 			declared.SessionRef = sessionRef
 			return providers.ExecuteResult{SessionRef: sessionRef}, execution.AttemptFailure{Declared: &declared}
 		}
+		sessionRef := cloneSessionRef(parsed.SessionRef)
+		if sessionRef == nil {
+			sessionRef = cloneSessionRef(effectResult.SessionRef)
+		}
+		if parsed.SessionRef != nil {
+			request.ExecuteRequest.ObserveSession(*parsed.SessionRef)
+		}
+		metadata := cloneMetadata(effectResult.Metadata)
+		metadata = mergeMetadata(metadata, parsed.Diagnostics.Metadata)
+		diagnostics := parsed.Diagnostics
+		diagnostics.Metadata = metadata
+		if !parsed.DurationSeen {
+			diagnostics.DurationMillis = effectResult.DurationMillis
+		}
 		return providers.ExecuteResult{
-			Content:    content,
-			SessionRef: cloneSessionRef(effectResult.SessionRef),
-			Diagnostics: &providers.ExecuteDiagnostics{
-				DurationMillis: effectResult.DurationMillis,
-				Metadata:       cloneMetadata(effectResult.Metadata),
-			},
+			Content:     parsed.Content,
+			SessionRef:  sessionRef,
+			Diagnostics: &diagnostics,
 		}, nil
 	}
 }
@@ -166,6 +181,19 @@ func cloneMetadata(metadata map[string]string) map[string]string {
 		cloned[key] = value
 	}
 	return cloned
+}
+
+func mergeMetadata(base, overlay map[string]string) map[string]string {
+	if len(overlay) == 0 {
+		return base
+	}
+	if base == nil {
+		base = make(map[string]string, len(overlay))
+	}
+	for key, value := range overlay {
+		base[key] = value
+	}
+	return base
 }
 
 func cloneSessionRef(sessionRef *providers.SessionRef) *providers.SessionRef {

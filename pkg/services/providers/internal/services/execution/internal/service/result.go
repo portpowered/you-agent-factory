@@ -42,6 +42,7 @@ var allowedSensitiveMetadataKeys = map[string]struct{}{
 	"output_tokens":           {},
 	"reasoning_tokens":        {},
 	"reasoning_output_tokens": {},
+	"thinking_tokens":         {},
 	"cached_input_tokens":     {},
 	"total_tokens":            {},
 	"cache_read_tokens":       {},

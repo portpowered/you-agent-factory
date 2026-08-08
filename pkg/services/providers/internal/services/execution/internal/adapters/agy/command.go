@@ -47,6 +47,7 @@ func NewCommandEffect(runner workers.CommandRunner) Effect {
 		result, runErr := runCommand(commandContext, runner, command, observe)
 		effectResult := EffectResult{
 			DurationMillis: time.Since(started).Milliseconds(),
+			Metadata:       map[string]string{"output_format": outputFormatStream},
 			SessionRef:     sessionRefFromRequest(request.ResumeSession),
 			CapturedStdout: append([]byte(nil), result.Stdout...),
 		}
