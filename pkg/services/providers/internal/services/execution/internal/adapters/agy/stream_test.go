@@ -18,20 +18,22 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+type agyRecordedStreamCase struct {
+	name             string
+	trace            string
+	wantResponse     string
+	wantDurationMS   int64
+	wantDurationText string
+	wantTurns        string
+	wantUsage        map[string]string
+	wantSession      string
+}
+
 func TestAgyRootParsesRecordedStreamJSONResultsAndUsage(t *testing.T) {
 	t.Parallel()
 
 	rootDir := filepath.Join(testutil.MustRepoRoot(t), "docs", "temp", "agy-traces")
-	tests := []struct {
-		name             string
-		trace            string
-		wantResponse     string
-		wantDurationMS   int64
-		wantDurationText string
-		wantTurns        string
-		wantUsage        map[string]string
-		wantSession      string
-	}{
+	tests := []agyRecordedStreamCase{
 		{
 			name:             "simple text",
 			trace:            "agy-trace-simple-text.stream.jsonl",
@@ -77,64 +79,69 @@ func TestAgyRootParsesRecordedStreamJSONResultsAndUsage(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-
-			trace, err := os.ReadFile(filepath.Join(rootDir, test.trace))
-			if err != nil {
-				t.Fatalf("read recorded trace %q: %v", test.trace, err)
-			}
-			effect := agy.EffectFunc(func(
-				_ context.Context,
-				_ execution.ContinuationRequest,
-				observe func([]byte) error,
-			) (agy.EffectResult, error) {
-				for _, chunk := range splitAgyTrace(trace, 37) {
-					if err := observe(chunk); err != nil {
-						return agy.EffectResult{}, err
-					}
-				}
-				return agy.EffectResult{DurationMillis: 999}, nil
-			})
-
-			var observedSession providers.SessionRef
-			result, err := newAgyRoot(t, effect).Execute(t.Context(), providers.ExecuteRequest{
-				Provider:  providers.IDAntigravity,
-				AttemptID: "agy-recorded-" + strings.ReplaceAll(test.name, " ", "-"),
-				SessionObserver: func(reference providers.SessionRef) {
-					observedSession = reference
-				},
-			})
-			if err != nil {
-				t.Fatalf("Execute() error = %v", err)
-			}
-			if !strings.Contains(result.Content, test.wantResponse) {
-				t.Fatalf("response = %q, want %q", result.Content, test.wantResponse)
-			}
-			if result.SessionRef == nil || result.SessionRef.ID != test.wantSession {
-				t.Fatalf("SessionRef = %#v, want %q", result.SessionRef, test.wantSession)
-			}
-			if observedSession.ID != test.wantSession {
-				t.Fatalf("observed session = %#v, want %q", observedSession, test.wantSession)
-			}
-			if result.Diagnostics == nil {
-				t.Fatal("Diagnostics = nil, want recorded execution facts")
-			}
-			if result.Diagnostics.DurationMillis != test.wantDurationMS {
-				t.Fatalf("DurationMillis = %d, want %d", result.Diagnostics.DurationMillis, test.wantDurationMS)
-			}
-			metadata := result.Diagnostics.Metadata
-			if metadata["duration_seconds"] != test.wantDurationText ||
-				metadata["num_turns"] != test.wantTurns || metadata["status"] != "SUCCESS" {
-				t.Fatalf("result metadata = %#v, want duration/turn/status facts", metadata)
-			}
-			for key, want := range test.wantUsage {
-				if got := metadata[key]; got != want {
-					t.Fatalf("metadata[%q] = %q, want %q; metadata=%#v", key, got, want, metadata)
-				}
-			}
-			if got := progressPhases(result.Diagnostics.Progress); !strings.Contains(got, "run.completed|usage.updated|message.completed") {
-				t.Fatalf("progress phases = %q, want terminal and usage facts", got)
-			}
+			assertAgyRecordedStreamCase(t, rootDir, test)
 		})
+	}
+}
+
+func assertAgyRecordedStreamCase(t *testing.T, rootDir string, test agyRecordedStreamCase) {
+	t.Helper()
+
+	trace, err := os.ReadFile(filepath.Join(rootDir, test.trace))
+	if err != nil {
+		t.Fatalf("read recorded trace %q: %v", test.trace, err)
+	}
+	effect := agy.EffectFunc(func(
+		_ context.Context,
+		_ execution.ContinuationRequest,
+		observe func([]byte) error,
+	) (agy.EffectResult, error) {
+		for _, chunk := range splitAgyTrace(trace, 37) {
+			if err := observe(chunk); err != nil {
+				return agy.EffectResult{}, err
+			}
+		}
+		return agy.EffectResult{DurationMillis: 999}, nil
+	})
+
+	var observedSession providers.SessionRef
+	result, err := newAgyRoot(t, effect).Execute(t.Context(), providers.ExecuteRequest{
+		Provider:  providers.IDAntigravity,
+		AttemptID: "agy-recorded-" + strings.ReplaceAll(test.name, " ", "-"),
+		SessionObserver: func(reference providers.SessionRef) {
+			observedSession = reference
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !strings.Contains(result.Content, test.wantResponse) {
+		t.Fatalf("response = %q, want %q", result.Content, test.wantResponse)
+	}
+	if result.SessionRef == nil || result.SessionRef.ID != test.wantSession {
+		t.Fatalf("SessionRef = %#v, want %q", result.SessionRef, test.wantSession)
+	}
+	if observedSession.ID != test.wantSession {
+		t.Fatalf("observed session = %#v, want %q", observedSession, test.wantSession)
+	}
+	if result.Diagnostics == nil {
+		t.Fatal("Diagnostics = nil, want recorded execution facts")
+	}
+	metadata := result.Diagnostics.Metadata
+	if result.Diagnostics.DurationMillis != test.wantDurationMS {
+		t.Fatalf("DurationMillis = %d, want %d", result.Diagnostics.DurationMillis, test.wantDurationMS)
+	}
+	if metadata["duration_seconds"] != test.wantDurationText ||
+		metadata["num_turns"] != test.wantTurns || metadata["status"] != "SUCCESS" {
+		t.Fatalf("result metadata = %#v, want duration/turn/status facts", metadata)
+	}
+	for key, want := range test.wantUsage {
+		if got := metadata[key]; got != want {
+			t.Fatalf("metadata[%q] = %q, want %q; metadata=%#v", key, got, want, metadata)
+		}
+	}
+	if got := progressPhases(result.Diagnostics.Progress); !strings.Contains(got, "run.completed|usage.updated|message.completed") {
+		t.Fatalf("progress phases = %q, want terminal and usage facts", got)
 	}
 }
 

@@ -25,19 +25,21 @@ const (
 	agyGoldenMissingPrompt     = "Watch does-not-exist-xyz.mp4 in the workspace and return the structured clip-QA verdict."
 )
 
+type agyGoldenCase struct {
+	name             string
+	trace            string
+	asset            string
+	prompt           string
+	wantResponseText []string
+	wantUsage        map[string]string
+}
+
 // TestAgyMultimodalGoldenThroughRootBuildProcess replays real AGY media
 // recordings through root.BuildProcess and proves the selected provider,
 // command effect, provider result, Worker result, Factory Events, and terminal
 // Work projection remain aligned.
 func TestAgyMultimodalGoldenThroughRootBuildProcess(t *testing.T) {
-	tests := []struct {
-		name             string
-		trace            string
-		asset            string
-		prompt           string
-		wantResponseText []string
-		wantUsage        map[string]string
-	}{
+	tests := []agyGoldenCase{
 		{
 			name:   "video-watch",
 			trace:  "agy-trace-video-watch.stream.jsonl",
@@ -86,51 +88,57 @@ func TestAgyMultimodalGoldenThroughRootBuildProcess(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-			copyAgyGoldenAsset(t, dir, test.asset)
-			support.WriteAgentConfig(t, dir, "worker", agyGoldenWorkerConfig())
-			support.WriteWorkstationConfig(t, dir, "process", agyGoldenWorkstationConfig(test.prompt, ""))
-			testutil.WriteSeedFile(t, dir, "task", []byte("{\"title\":\"agy multimodal golden\"}"))
-
-			runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-				Stdout: readAgyGoldenAsset(t, test.trace),
-			})
-			_, listed, events, _ := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
-				t,
-				dir,
-				serviceedges.Edges{ProviderCommandRunner: runner},
-				30*time.Second,
-			)
-
-			assertAgyGoldenWorkCompleted(t, listed)
-			if runner.CallCount() != 1 {
-				t.Fatalf("provider command runner calls = %d, want exactly one", runner.CallCount())
-			}
-			assertAgyGoldenCommand(t, runner.LastRequest(), dir, test.prompt, "")
-
-			providerResponse := agyGoldenInferenceResponse(t, events, factoryapi.InferenceOutcomeSucceeded)
-			if providerResponse.ProviderSession == nil ||
-				providerResponse.ProviderSession.Provider == nil ||
-				support.StringPointerValue(providerResponse.ProviderSession.Provider) != string(modelprovider.ProviderAntigravity) {
-				t.Fatalf("provider session = %#v, want Antigravity metadata", providerResponse.ProviderSession)
-			}
-			if providerResponse.ProviderSession.Id == nil ||
-				strings.TrimSpace(support.StringPointerValue(providerResponse.ProviderSession.Id)) == "" {
-				t.Fatalf("provider session = %#v, want real trace session id", providerResponse.ProviderSession)
-			}
-			assertAgyGoldenUsage(t, providerResponse, test.wantUsage)
-			if providerResponse.Response == nil {
-				t.Fatal("provider response is nil")
-			}
-			response := *providerResponse.Response
-			for _, want := range test.wantResponseText {
-				if !strings.Contains(response, want) {
-					t.Fatalf("provider response missing %q: %s", want, response)
-				}
-			}
-			assertAgyGoldenDispatch(t, events, factoryapi.WorkOutcomeAccepted, response)
+			assertAgyMultimodalGoldenCase(t, test)
 		})
 	}
+}
+
+func assertAgyMultimodalGoldenCase(t *testing.T, test agyGoldenCase) {
+	t.Helper()
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	copyAgyGoldenAsset(t, dir, test.asset)
+	support.WriteAgentConfig(t, dir, "worker", agyGoldenWorkerConfig())
+	support.WriteWorkstationConfig(t, dir, "process", agyGoldenWorkstationConfig(test.prompt, ""))
+	testutil.WriteSeedFile(t, dir, "task", []byte("{\"title\":\"agy multimodal golden\"}"))
+
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: readAgyGoldenAsset(t, test.trace),
+	})
+	_, listed, events, _ := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		30*time.Second,
+	)
+
+	assertAgyGoldenWorkCompleted(t, listed)
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner calls = %d, want exactly one", runner.CallCount())
+	}
+	assertAgyGoldenCommand(t, runner.LastRequest(), dir, test.prompt, "")
+
+	providerResponse := agyGoldenInferenceResponse(t, events, factoryapi.InferenceOutcomeSucceeded)
+	if providerResponse.ProviderSession == nil ||
+		providerResponse.ProviderSession.Provider == nil ||
+		support.StringPointerValue(providerResponse.ProviderSession.Provider) != string(modelprovider.ProviderAntigravity) {
+		t.Fatalf("provider session = %#v, want Antigravity metadata", providerResponse.ProviderSession)
+	}
+	if providerResponse.ProviderSession.Id == nil ||
+		strings.TrimSpace(support.StringPointerValue(providerResponse.ProviderSession.Id)) == "" {
+		t.Fatalf("provider session = %#v, want real trace session id", providerResponse.ProviderSession)
+	}
+	assertAgyGoldenUsage(t, providerResponse, test.wantUsage)
+	if providerResponse.Response == nil {
+		t.Fatal("provider response is nil")
+	}
+	response := *providerResponse.Response
+	for _, want := range test.wantResponseText {
+		if !strings.Contains(response, want) {
+			t.Fatalf("provider response missing %q: %s", want, response)
+		}
+	}
+	assertAgyGoldenDispatch(t, events, factoryapi.WorkOutcomeAccepted, response)
 }
 
 // TestAgyClipQAGoldenPassThroughRootBuildProcess proves the real clip-QA
