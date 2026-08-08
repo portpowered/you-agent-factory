@@ -10,6 +10,7 @@
 - Structured provider contracts are normalized to JSON content at the Provider boundary; the Worker owns authored-schema validation and task-level verdict semantics.
 - Command effects advertise their native output format in effect metadata so strict print contracts can coexist with legacy PTY compatibility effects.
 - Operator-only external smoke tests gate before executable discovery and use root.BuildProcess with an empty edge set; ordinary functional lanes inject only command-runner effects and never inherit the live gate.
+- Cross-platform filesystem permission tests must account for Windows mode-bit semantics while retaining strict POSIX assertions; Windows protection is provided by ACLs rather than POSIX permission bits.
 
 ## [2026-08-08 14:03 -07:00] - wo-b1-antigravity-provider-golden-traces-001
 - What was implemented
@@ -112,4 +113,23 @@
   - A live provider smoke can use the empty `edges.Edges{}` selection to exercise production command construction while keeping offline tests on the injected `ProviderCommandRunner` seam.
   - Gate external-cost tests before executable lookup or fixture setup so ordinary package runs are provably side-effect free.
   - Restoring the locked UI dependency tree clears missing Bun type errors, but repository-wide verification can still expose unrelated Windows permission and backend-size baselines.
+---
+
+## [2026-08-08 15:50 -07:00] - wo-b1-antigravity-provider-golden-traces-005
+- What was implemented
+  - Merged the latest `origin/main` into the branch with no conflicts so verification runs against the current base.
+  - Made the runtime-artifact permission test portable on Windows: it retains the strict `0600` assertion on POSIX and checks owner read/write retention under Windows mode semantics.
+- Files changed
+  - `pkg/platform/runtimeartifact/reserve_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/providers/agy/... -count=1` passes using the recorded offline traces.
+  - `go test ./tests/functional/providers/agy/... -run '^TestAgyLiveSmoke$' -count=1` passes with the live test skipped by default.
+  - `make verify-fast` passes typecheck, MCP contract checks, all UI tests, and the short Go suite.
+  - Focused provider/worker functional tests and `go vet ./pkg/services/providers/... ./pkg/services/workers/... ./tests/functional/providers/agy/...` pass.
+  - Full `make lint` remains blocked by 101 repository-wide backend-size findings from the existing baseline/upstream merge, not by a failing AGY-specific check; no live AGY call was made.
+- **Learnings for future iterations:**
+  - The AGY story-specific verification is green after the Windows guard; do not weaken the POSIX permission assertion to accommodate Windows.
+  - Reconcile feature branches with `origin/main` before interpreting repository-wide baseline checks, because the backend-size inventory includes unrelated upstream debt.
 ---

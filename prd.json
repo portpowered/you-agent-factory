@@ -102,7 +102,7 @@
       ],
       "priority": 5,
       "passes": false,
-      "notes": "Implemented the single operator-gated TestAgyLiveSmoke through the canonical root.BuildProcess path with the real platform subprocess runner, supported gemini-3.6-flash-low recipe, actionable executable skip, and authentication/model/quota failure diagnostics. Ordinary AGY functional tests remain offline and pass, and the gated test skips by default. Locked UI dependencies were restored; verify-fast now passes typecheck, MCP contract checks, and all UI tests but remains blocked by the pre-existing Windows pkg/platform/runtimeartifact mode assertion (0666 vs 0600) in the short Go suite, while make lint remains blocked by the repository's existing backend-size baseline. Story remains false until the required repository gates are green."
+      "notes": "Implemented the single operator-gated TestAgyLiveSmoke through the canonical root.BuildProcess path with the real platform subprocess runner, supported gemini-3.6-flash-low recipe, actionable executable skip, and authentication/model/quota failure diagnostics. Ordinary AGY functional tests remain offline and pass, and the gated test skips by default. Merged the latest origin/main cleanly and added a Windows-portable runtime-artifact permission assertion, so make verify-fast, the exact offline AGY command, the default-gated smoke command, focused provider/worker tests, and provider/worker/AGY vet all pass. Full make lint remains blocked by 101 repository-wide backend-size findings from the existing baseline/upstream merge; story remains false pending that repository-wide gate."
     }
   ]
 }
