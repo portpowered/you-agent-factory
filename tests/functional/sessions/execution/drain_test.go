@@ -63,11 +63,7 @@ func TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal(t *testing.T) 
 			inputs.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 
 			command := support.StartProcessCommand(t, process, inputs.Input)
-			select {
-			case <-command.Done():
-			case <-time.After(incompleteDrainProcessTimeout):
-				t.Fatal("finite hosted run did not return after the runtime drained")
-			}
+			waitForCommandDone(t, command, "finite hosted run did not return after the runtime drained")
 			command.AcceptError()
 
 			err := command.Err()
@@ -182,16 +178,27 @@ func TestHostedContinuousRunsStayLiveWhileIdle(t *testing.T) {
 			inputs.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 			command := support.StartProcessCommand(t, process, inputs.Input)
 
+			// The injected listener's binding channel is the deterministic startup
+			// observation. The bounded fallback is only a test guard for a startup
+			// regression; without it a broken Process.Execute would hang this test.
+			listenerTimer := time.NewTimer(incompleteDrainProcessTimeout)
 			select {
 			case <-transportReady:
-			case <-time.After(incompleteDrainProcessTimeout):
+				listenerTimer.Stop()
+			case <-listenerTimer.C:
 				t.Fatal("continuous hosted run did not start its listener")
 			}
+
+			// There is no public idle event at the Process.Execute boundary. A
+			// bounded observation is therefore required for this negative liveness
+			// assertion: Done must remain open while the continuous run is idle.
+			idleTimer := time.NewTimer(continuousIdleObservation)
 			select {
 			case <-command.Done():
 				t.Fatalf("continuous hosted run exited while idle: err=%v stdout=%q stderr=%q", command.Err(), inputs.Stdout(), inputs.Stderr())
-			case <-time.After(continuousIdleObservation):
+			case <-idleTimer.C:
 			}
+			idleTimer.Stop()
 
 			command.Stop(t)
 			if err := command.Err(); err != nil && !errors.Is(err, context.Canceled) {
@@ -245,13 +252,23 @@ func runFiniteHostedCommand(
 	homeDir := t.TempDir()
 	inputs.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	command := support.StartProcessCommand(t, process, inputs.Input)
-	select {
-	case <-command.Done():
-	case <-time.After(incompleteDrainProcessTimeout):
-		t.Fatal("finite hosted run did not return")
-	}
+	waitForCommandDone(t, command, "finite hosted run did not return")
 	command.AcceptError()
 	return command.Err(), inputs.Stdout(), inputs.Stderr(), listenerStarts.Load(), listenerStops.Load(), browserCalls.Load()
+}
+
+func waitForCommandDone(t *testing.T, command *support.ProcessCommand, message string) {
+	t.Helper()
+	// ProcessCommand.Done is the deterministic completion signal. The bounded
+	// fallback is necessary only to turn a regression in the finite-termination
+	// contract into a test failure instead of an indefinitely hung test.
+	timer := time.NewTimer(incompleteDrainProcessTimeout)
+	defer timer.Stop()
+	select {
+	case <-command.Done():
+	case <-timer.C:
+		t.Fatal(message)
+	}
 }
 
 func scaffoldIncompleteDrainFactory(t *testing.T) string {
