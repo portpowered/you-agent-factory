@@ -112,6 +112,55 @@ func (h *Handler) GetWorkerSessionObservationBySessionId(
 	h.writeJSON(w, http.StatusOK, response)
 }
 
+// ReadWorkerSessionTranscriptBySessionId handles the session-scoped finished
+// Worker Session transcript operation.
+func (h *Handler) ReadWorkerSessionTranscriptBySessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	params factoryapi.ReadWorkerSessionTranscriptBySessionIdParams,
+) {
+	if h == nil || h.adapter == nil {
+		writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	if strings.TrimSpace(string(sessionID)) == "" {
+		writeError(w, http.StatusBadRequest, "session id is required", "BAD_REQUEST")
+		return
+	}
+	if r == nil {
+		writeError(w, http.StatusBadRequest, "request is required", "BAD_REQUEST")
+		return
+	}
+	provider, kind, id := string(params.Provider), string(params.Kind), strings.TrimSpace(params.Id)
+	if provider == "" {
+		writeError(w, http.StatusBadRequest, "provider is required", "BAD_REQUEST")
+		return
+	}
+	if kind == "" {
+		writeError(w, http.StatusBadRequest, "kind is required", "BAD_REQUEST")
+		return
+	}
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "id is required", "BAD_REQUEST")
+		return
+	}
+	if provider != string(providers.IDCodex) && provider != string(providers.IDCursor) {
+		writeError(w, http.StatusBadRequest, "unsupported provider", string(factoryapi.ErrorResponseCodePROVIDERUNSUPPORTED))
+		return
+	}
+	if kind != providers.SessionIDKind {
+		writeError(w, http.StatusBadRequest, "unsupported session kind", string(factoryapi.ErrorResponseCodeSESSIONKINDUNSUPPORTED))
+		return
+	}
+	response, err := h.adapter.ReadWorkerSessionTranscript(r.Context(), string(sessionID), provider, kind, id)
+	if err != nil {
+		h.writeMappedTranscriptError(w, err)
+		return
+	}
+	h.writeJSON(w, http.StatusOK, response)
+}
+
 // StreamWorkerSessionEventsBySessionId writes one Server-Sent Events data
 // frame per retained/live Worker Session event. A terminal frame closes a
 // successful stream; source failures remain explicit frames after the HTTP
@@ -315,6 +364,25 @@ func (h *Handler) writeMappedObservationError(w http.ResponseWriter, err error) 
 		writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
 	default:
 		writeError(w, http.StatusInternalServerError, "failed to show Worker Session", "INTERNAL_ERROR")
+	}
+}
+
+func (h *Handler) writeMappedTranscriptError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, workersessions.ErrObservationSessionNotFound):
+		writeError(w, http.StatusNotFound, "worker session transcript not found", "NOT_FOUND")
+	case errors.Is(err, workersessions.ErrObservationTranscriptActive):
+		writeError(w, http.StatusConflict, "worker session is still active; transcript is not final", string(factoryapi.ErrorResponseCodeWORKERSESSIONTRANSCRIPTACTIVE))
+	case errors.Is(err, workersessions.ErrObservationTranscriptUnavailable):
+		writeError(w, http.StatusInternalServerError, "worker session transcript is unavailable", string(factoryapi.ErrorResponseCodeWORKERSESSIONTRANSCRIPTUNAVAILABLE))
+	case errors.Is(err, workersessions.ErrObservationTranscriptProjectionUnavailable):
+		writeError(w, http.StatusInternalServerError, "worker session transcript projection is unavailable", string(factoryapi.ErrorResponseCodeWORKERSESSIONTRANSCRIPTPROJECTIONUNAVAILABLE))
+	case errors.Is(err, context.Canceled), errors.Is(err, workersessions.ErrObservationCanceled):
+		return
+	case strings.Contains(err.Error(), "session id is required"), strings.Contains(err.Error(), "provider, kind, and id are required"):
+		writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+	default:
+		writeError(w, http.StatusInternalServerError, "failed to read Worker Session transcript", "INTERNAL_ERROR")
 	}
 }
 

@@ -96,6 +96,21 @@ func (s *Server) GetWorkerSessionObservationBySessionId(
 	s.workerSessionsHTTP.GetWorkerSessionObservationBySessionId(w, r, sessionID, params)
 }
 
+// ReadWorkerSessionTranscriptBySessionId forwards the generated operation to
+// the Worker Sessions owner handler.
+func (s *Server) ReadWorkerSessionTranscriptBySessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	params factoryapi.ReadWorkerSessionTranscriptBySessionIdParams,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.ReadWorkerSessionTranscriptBySessionId(w, r, sessionID, params)
+}
+
 // StreamWorkerSessionEventsBySessionId forwards the generated operation to
 // the Worker Sessions owner handler.
 func (s *Server) StreamWorkerSessionEventsBySessionId(

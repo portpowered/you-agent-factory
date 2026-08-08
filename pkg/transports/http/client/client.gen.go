@@ -65,27 +65,30 @@ const (
 
 // Defines values for ErrorResponseCode.
 const (
-	ErrorResponseCodeBADREQUEST                                 ErrorResponseCode = "BAD_REQUEST"
-	ErrorResponseCodeEXECUTIONREQUESTIDCONFLICT                 ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
-	ErrorResponseCodeFACTORYALREADYEXISTS                       ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
-	ErrorResponseCodeFACTORYNOTIDLE                             ErrorResponseCode = "FACTORY_NOT_IDLE"
-	ErrorResponseCodeFACTORYSESSIONCONFIGLOADFAILED             ErrorResponseCode = "FACTORY_SESSION_CONFIG_LOAD_FAILED"
-	ErrorResponseCodeFACTORYSESSIONCONTROLREQUESTALREADYAPPLIED ErrorResponseCode = "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED"
-	ErrorResponseCodeINTERNALERROR                              ErrorResponseCode = "INTERNAL_ERROR"
-	ErrorResponseCodeINVALIDFACTORY                             ErrorResponseCode = "INVALID_FACTORY"
-	ErrorResponseCodeINVALIDFACTORYNAME                         ErrorResponseCode = "INVALID_FACTORY_NAME"
-	ErrorResponseCodeINVALIDRESPONSEEVENTCURSOR                 ErrorResponseCode = "INVALID_RESPONSE_EVENT_CURSOR"
-	ErrorResponseCodeINVALIDRESPONSEEVENTFILTER                 ErrorResponseCode = "INVALID_RESPONSE_EVENT_FILTER"
-	ErrorResponseCodeMETHODNOTALLOWED                           ErrorResponseCode = "METHOD_NOT_ALLOWED"
-	ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED              ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
-	ErrorResponseCodeNOTFOUND                                   ErrorResponseCode = "NOT_FOUND"
-	ErrorResponseCodePROJECTIONUNAVAILABLE                      ErrorResponseCode = "PROJECTION_UNAVAILABLE"
-	ErrorResponseCodePROVIDERUNSUPPORTED                        ErrorResponseCode = "PROVIDER_UNSUPPORTED"
-	ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND               ErrorResponseCode = "RESPONSE_EVENT_SESSION_NOT_FOUND"
-	ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED                 ErrorResponseCode = "RESPONSE_EVENT_STREAM_EXPIRED"
-	ErrorResponseCodeSESSIONKINDUNSUPPORTED                     ErrorResponseCode = "SESSION_KIND_UNSUPPORTED"
-	ErrorResponseCodeSTALEFACTORYVERSION                        ErrorResponseCode = "STALE_FACTORY_VERSION"
-	ErrorResponseCodeWORKERSESSIONSTREAMUNAVAILABLE             ErrorResponseCode = "WORKER_SESSION_STREAM_UNAVAILABLE"
+	ErrorResponseCodeBADREQUEST                                   ErrorResponseCode = "BAD_REQUEST"
+	ErrorResponseCodeEXECUTIONREQUESTIDCONFLICT                   ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
+	ErrorResponseCodeFACTORYALREADYEXISTS                         ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
+	ErrorResponseCodeFACTORYNOTIDLE                               ErrorResponseCode = "FACTORY_NOT_IDLE"
+	ErrorResponseCodeFACTORYSESSIONCONFIGLOADFAILED               ErrorResponseCode = "FACTORY_SESSION_CONFIG_LOAD_FAILED"
+	ErrorResponseCodeFACTORYSESSIONCONTROLREQUESTALREADYAPPLIED   ErrorResponseCode = "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED"
+	ErrorResponseCodeINTERNALERROR                                ErrorResponseCode = "INTERNAL_ERROR"
+	ErrorResponseCodeINVALIDFACTORY                               ErrorResponseCode = "INVALID_FACTORY"
+	ErrorResponseCodeINVALIDFACTORYNAME                           ErrorResponseCode = "INVALID_FACTORY_NAME"
+	ErrorResponseCodeINVALIDRESPONSEEVENTCURSOR                   ErrorResponseCode = "INVALID_RESPONSE_EVENT_CURSOR"
+	ErrorResponseCodeINVALIDRESPONSEEVENTFILTER                   ErrorResponseCode = "INVALID_RESPONSE_EVENT_FILTER"
+	ErrorResponseCodeMETHODNOTALLOWED                             ErrorResponseCode = "METHOD_NOT_ALLOWED"
+	ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED                ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
+	ErrorResponseCodeNOTFOUND                                     ErrorResponseCode = "NOT_FOUND"
+	ErrorResponseCodePROJECTIONUNAVAILABLE                        ErrorResponseCode = "PROJECTION_UNAVAILABLE"
+	ErrorResponseCodePROVIDERUNSUPPORTED                          ErrorResponseCode = "PROVIDER_UNSUPPORTED"
+	ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND                 ErrorResponseCode = "RESPONSE_EVENT_SESSION_NOT_FOUND"
+	ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED                   ErrorResponseCode = "RESPONSE_EVENT_STREAM_EXPIRED"
+	ErrorResponseCodeSESSIONKINDUNSUPPORTED                       ErrorResponseCode = "SESSION_KIND_UNSUPPORTED"
+	ErrorResponseCodeSTALEFACTORYVERSION                          ErrorResponseCode = "STALE_FACTORY_VERSION"
+	ErrorResponseCodeWORKERSESSIONSTREAMUNAVAILABLE               ErrorResponseCode = "WORKER_SESSION_STREAM_UNAVAILABLE"
+	ErrorResponseCodeWORKERSESSIONTRANSCRIPTACTIVE                ErrorResponseCode = "WORKER_SESSION_TRANSCRIPT_ACTIVE"
+	ErrorResponseCodeWORKERSESSIONTRANSCRIPTPROJECTIONUNAVAILABLE ErrorResponseCode = "WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE"
+	ErrorResponseCodeWORKERSESSIONTRANSCRIPTUNAVAILABLE           ErrorResponseCode = "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE"
 )
 
 // Defines values for FactoryArtifactAuditMode.
@@ -6764,6 +6767,28 @@ type WorkerSessionProviderSessionRef struct {
 
 	// Provider Provider identity that issued the correlated session.
 	Provider string `json:"provider"`
+}
+
+// WorkerSessionTranscriptResponse defines model for WorkerSessionTranscriptResponse.
+type WorkerSessionTranscriptResponse struct {
+	// AttemptId Stable attempt or dispatch identity.
+	AttemptId string `json:"attemptId"`
+
+	// Entries Ordered normalized transcript entries projected by Provider Sessions.
+	Entries         []ProviderSessionTranscriptEntry `json:"entries"`
+	ProviderSession WorkerSessionProviderSessionRef  `json:"providerSession"`
+
+	// State Terminal Worker Session lifecycle state at transcript read time.
+	State string `json:"state"`
+
+	// TurnId Optional turn correlation identifier.
+	TurnId *string `json:"turnId"`
+
+	// WorkIds Work identities correlated with this Worker Session attempt.
+	WorkIds []string `json:"workIds"`
+
+	// WorkerSessionId Stable Worker Session identity.
+	WorkerSessionId string `json:"workerSessionId"`
 }
 
 // WorkerType Worker implementation families supported by the public factory-config contract.

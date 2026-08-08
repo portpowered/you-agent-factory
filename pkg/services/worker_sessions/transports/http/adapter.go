@@ -55,6 +55,39 @@ func (a *Adapter) GetWorkerSessionObservation(
 	return WorkerSessionObservationToAPI(observation), nil
 }
 
+// ReadWorkerSessionTranscript returns the normalized transcript for one
+// terminal Worker Session identified by its exact Provider Session reference.
+func (a *Adapter) ReadWorkerSessionTranscript(
+	ctx context.Context,
+	sessionID, provider, kind, id string,
+) (factoryapi.WorkerSessionTranscriptResponse, error) {
+	if a == nil || a.observations == nil {
+		return factoryapi.WorkerSessionTranscriptResponse{}, errors.New("Worker Sessions service is required")
+	}
+	if strings.TrimSpace(sessionID) == "" {
+		return factoryapi.WorkerSessionTranscriptResponse{}, errors.New("session id is required")
+	}
+	provider = strings.TrimSpace(provider)
+	kind = strings.TrimSpace(kind)
+	id = strings.TrimSpace(id)
+	if provider == "" || kind == "" || id == "" {
+		return factoryapi.WorkerSessionTranscriptResponse{}, errors.New("provider, kind, and id are required")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return factoryapi.WorkerSessionTranscriptResponse{}, err
+	}
+	result, err := a.observations.ReadTranscript(ctx, workersessions.ReadTranscriptRequest{
+		ProviderSession: providers.SessionRef{Provider: providers.ID(provider), Kind: kind, ID: id},
+	})
+	if err != nil {
+		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("read Worker Session transcript: %w", err)
+	}
+	return WorkerSessionTranscriptToAPI(result), nil
+}
+
 // StreamWorkerSessionEvents returns the detached identity envelope together
 // with the canonical retained/live subscription for the exact Provider
 // Session reference. The caller owns closing the subscription.

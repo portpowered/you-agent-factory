@@ -34,6 +34,12 @@ func WorkerSessionsEventsPath(sessionID string) string {
 	return WorkerSessionsCollectionPath(sessionID) + "/events"
 }
 
+// WorkerSessionsTranscriptPath returns the finished Worker Session transcript
+// route for one factory session.
+func WorkerSessionsTranscriptPath(sessionID string) string {
+	return WorkerSessionsCollectionPath(sessionID) + "/transcript"
+}
+
 // WorkItemPath returns the route for one work item in a factory session.
 func WorkItemPath(sessionID, workID string) string {
 	return fmt.Sprintf("%s/%s", WorkCollectionPath(sessionID), url.PathEscape(workID))

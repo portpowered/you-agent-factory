@@ -51,6 +51,10 @@ type Service interface {
 	// Providers-owned provider/kind/id reference.
 	GetObservation(ctx context.Context, req GetObservationRequest) (Observation, error)
 
+	// ReadTranscript returns the normalized Provider Sessions transcript for one
+	// terminal Worker Session identified by its exact Provider Session reference.
+	ReadTranscript(ctx context.Context, req ReadTranscriptRequest) (ReadTranscriptResult, error)
+
 	// StreamObservations returns a cancellable retained-then-live stream over
 	// the canonical Worker Session Events topic for the exact Provider Session
 	// reference.

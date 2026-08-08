@@ -205,6 +205,79 @@ func TestGetWorkerSessionObservationBySessionIDProjectsFailureDiagnostics(t *tes
 	}
 }
 
+func TestReadWorkerSessionTranscriptBySessionIDProjectsNormalizedEntries(t *testing.T) {
+	text := "assistant response"
+	toolName := "lookup"
+	arguments := `{"key":"value"}`
+	service := &fakeObservationService{readResult: workersessions.ReadTranscriptResult{
+		WorkerSessionID: "worker-session-1",
+		ProviderSession: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"},
+		WorkIDs:         []string{"work-1"}, TurnID: "turn-1", AttemptID: "attempt-1", State: workersessions.StateFailed,
+		Entries: []workersessions.TranscriptEntry{
+			{Order: 1, Type: workersessions.TranscriptToolCall, Name: &toolName, Arguments: &arguments},
+			{Order: 2, Type: workersessions.TranscriptAssistantMessage, Text: &text},
+		},
+	}}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest("GET", "/factory-sessions/session-1/worker-sessions/transcript", nil)
+	handler.ReadWorkerSessionTranscriptBySessionId(recorder, request, factoryapi.SessionID("session-1"), factoryapi.ReadWorkerSessionTranscriptBySessionIdParams{
+		Provider: factoryapi.LoadableProviderSessionProvider("codex"), Kind: factoryapi.LoadableProviderSessionKind("session_id"), Id: "provider-session-1",
+	})
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.WorkerSessionTranscriptResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.WorkerSessionId != "worker-session-1" || response.State != string(workersessions.StateFailed) || response.AttemptId != "attempt-1" || response.TurnId == nil || *response.TurnId != "turn-1" {
+		t.Fatalf("response envelope = %#v, want correlated terminal session", response)
+	}
+	if len(response.Entries) != 2 || response.Entries[0].Type != factoryapi.ProviderSessionTranscriptEntryType(workersessions.TranscriptToolCall) || response.Entries[0].Name == nil || *response.Entries[0].Name != toolName || response.Entries[1].Text == nil || *response.Entries[1].Text != text {
+		t.Fatalf("entries = %#v, want ordered normalized tool and assistant entries", response.Entries)
+	}
+	wantRef := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"}
+	if !service.readCalled || service.readProviderSession != wantRef {
+		t.Fatalf("read request = called=%t ref=%#v, want exact %v", service.readCalled, service.readProviderSession, wantRef)
+	}
+}
+
+func TestReadWorkerSessionTranscriptBySessionIDMapsDistinctTranscriptFailures(t *testing.T) {
+	for _, testCase := range []struct {
+		name   string
+		err    error
+		status int
+		code   factoryapi.ErrorResponseCode
+	}{
+		{name: "missing", err: workersessions.ErrObservationSessionNotFound, status: http.StatusNotFound, code: factoryapi.ErrorResponseCodeNOTFOUND},
+		{name: "active", err: workersessions.ErrObservationTranscriptActive, status: http.StatusConflict, code: factoryapi.ErrorResponseCodeWORKERSESSIONTRANSCRIPTACTIVE},
+		{name: "unavailable", err: workersessions.ErrObservationTranscriptUnavailable, status: http.StatusInternalServerError, code: factoryapi.ErrorResponseCodeWORKERSESSIONTRANSCRIPTUNAVAILABLE},
+		{name: "projection", err: workersessions.ErrObservationTranscriptProjectionUnavailable, status: http.StatusInternalServerError, code: factoryapi.ErrorResponseCodeWORKERSESSIONTRANSCRIPTPROJECTIONUNAVAILABLE},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			service := &fakeObservationService{readErr: testCase.err}
+			handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest("GET", "/factory-sessions/session-1/worker-sessions/transcript", nil)
+			handler.ReadWorkerSessionTranscriptBySessionId(recorder, request, factoryapi.SessionID("session-1"), factoryapi.ReadWorkerSessionTranscriptBySessionIdParams{
+				Provider: factoryapi.LoadableProviderSessionProvider("codex"), Kind: factoryapi.LoadableProviderSessionKind("session_id"), Id: "provider-session-1",
+			})
+			if recorder.Code != testCase.status {
+				t.Fatalf("status = %d, want %d; body=%s", recorder.Code, testCase.status, recorder.Body.String())
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode error response: %v", err)
+			}
+			if response.Code != testCase.code {
+				t.Fatalf("error code = %q, want %q", response.Code, testCase.code)
+			}
+		})
+	}
+}
+
 func TestAdapterGetWorkerSessionObservationUsesExactProviderSessionIdentity(t *testing.T) {
 	service := &fakeObservationService{getResult: workersessions.Observation{
 		WorkerSessionID: "worker-session-1", ProviderSessionAvailable: true,
@@ -397,15 +470,19 @@ func TestStreamWorkerSessionEventsBySessionIDMapsUnavailableBeforeOpening(t *tes
 }
 
 type fakeObservationService struct {
-	result             workersessions.ListObservationsResult
-	listErr            error
-	listCalled         bool
-	getResult          workersessions.Observation
-	getErr             error
-	getCalled          bool
-	getProviderSession providers.SessionRef
-	streamSubscription workersessions.ObservationSubscription
-	streamErr          error
+	result              workersessions.ListObservationsResult
+	listErr             error
+	listCalled          bool
+	getResult           workersessions.Observation
+	getErr              error
+	getCalled           bool
+	getProviderSession  providers.SessionRef
+	readResult          workersessions.ReadTranscriptResult
+	readErr             error
+	readCalled          bool
+	readProviderSession providers.SessionRef
+	streamSubscription  workersessions.ObservationSubscription
+	streamErr           error
 }
 
 func (f *fakeObservationService) ListObservations(context.Context, workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
@@ -417,6 +494,12 @@ func (f *fakeObservationService) GetObservation(_ context.Context, request worke
 	f.getCalled = true
 	f.getProviderSession = request.ProviderSession
 	return f.getResult, f.getErr
+}
+
+func (f *fakeObservationService) ReadTranscript(_ context.Context, request workersessions.ReadTranscriptRequest) (workersessions.ReadTranscriptResult, error) {
+	f.readCalled = true
+	f.readProviderSession = request.ProviderSession
+	return f.readResult, f.readErr
 }
 
 func (f *fakeObservationService) StreamObservations(context.Context, workersessions.StreamObservationsRequest) (workersessions.ObservationSubscription, error) {

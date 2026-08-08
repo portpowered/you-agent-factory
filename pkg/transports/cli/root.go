@@ -94,6 +94,7 @@ type MoveWorkOperation func(workcli.MoveConfig) error
 type VisualizeWorkOperation func(workcli.VisualizeConfig) error
 type ListWorkerSessionsOperation = workersessionscli.ListOperation
 type ShowWorkerSessionsOperation = workersessionscli.ShowOperation
+type ReadWorkerSessionOperation = workersessionscli.ReadOperation
 type StreamWorkerSessionOperation = workersessionscli.StreamOperation
 type NamedFactoryRootsResolver func(homeDir, workingDir string) (interfaces.NamedFactoryRoots, error)
 
@@ -141,6 +142,7 @@ type CommandOperations struct {
 	VisualizeWork                     VisualizeWorkOperation
 	ListWorkerSessions                ListWorkerSessionsOperation
 	ShowWorkerSession                 ShowWorkerSessionsOperation
+	ReadWorkerSession                 ReadWorkerSessionOperation
 	StreamWorkerSession               StreamWorkerSessionOperation
 	OpenRunSelection                  runcli.SelectionFactory
 	ACP                               acpcli.Service
@@ -196,6 +198,7 @@ type CommandFactory struct {
 	VisualizeWork          func(workcli.VisualizeConfig) error
 	ListWorkerSessions     workersessionscli.ListOperation
 	ShowWorkerSession      workersessionscli.ShowOperation
+	ReadWorkerSession      workersessionscli.ReadOperation
 	StreamWorkerSession    workersessionscli.StreamOperation
 	openRunSelection       runcli.SelectionFactory
 	acp                    acpcli.Service
@@ -247,6 +250,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		VisualizeWork:                     operations.VisualizeWork,
 		ListWorkerSessions:                operations.ListWorkerSessions,
 		ShowWorkerSession:                 operations.ShowWorkerSession,
+		ReadWorkerSession:                 operations.ReadWorkerSession,
 		StreamWorkerSession:               operations.StreamWorkerSession,
 		openRunSelection:                  operations.OpenRunSelection,
 		acp:                               operations.ACP,

@@ -14,6 +14,7 @@ import (
 
 const workerSessionsListHandlerID = "you.worker-sessions.list.handler"
 const workerSessionsShowHandlerID = "you.worker-sessions.show.handler"
+const workerSessionsReadHandlerID = "you.worker-sessions.read.handler"
 const workerSessionsStreamHandlerID = "you.worker-sessions.stream.handler"
 
 // NewWorkerSessionsFamilyCommand builds the detached `you worker-sessions`
@@ -63,6 +64,13 @@ func NewWorkerSessionsFamilyCommandFromManifest(
 	if showRegistered.RunE == nil || showRegistered.ResolvedRunE != nil {
 		return nil, fmt.Errorf("build worker sessions family command: handler %q must provide RunE", workerSessionsShowHandlerID)
 	}
+	readRegistered, err := registry.LookupHandlers(workerSessionsReadHandlerID)
+	if err != nil {
+		return nil, fmt.Errorf("build worker sessions family command: %w", err)
+	}
+	if readRegistered.RunE == nil || readRegistered.ResolvedRunE != nil {
+		return nil, fmt.Errorf("build worker sessions family command: handler %q must provide RunE", workerSessionsReadHandlerID)
+	}
 	streamRegistered, err := registry.LookupHandlers(workerSessionsStreamHandlerID)
 	if err != nil {
 		return nil, fmt.Errorf("build worker sessions family command: %w", err)
@@ -94,6 +102,14 @@ func NewWorkerSessionsFamilyCommandFromManifest(
 					}
 				}
 				return showRegistered.RunE(cmd, args)
+			},
+			workerSessionsReadHandlerID: func(cmd *cobra.Command, args []string, _ map[string]any, _ resolvedinput.Inputs) error {
+				if readRegistered.PreRunE != nil {
+					if err := readRegistered.PreRunE(cmd, args); err != nil {
+						return err
+					}
+				}
+				return readRegistered.RunE(cmd, args)
 			},
 			workerSessionsStreamHandlerID: func(cmd *cobra.Command, args []string, _ map[string]any, _ resolvedinput.Inputs) error {
 				if streamRegistered.PreRunE != nil {
@@ -158,6 +174,13 @@ func validateWorkerSessionsManifest(manifest climanifest.Manifest) error {
 	}
 	if !show.Runnable || show.Handler == nil || show.Handler.ID != workerSessionsShowHandlerID {
 		return fmt.Errorf("command %q must declare runnable handler %q", show.ID, workerSessionsShowHandlerID)
+	}
+	read, err := manifest.CommandByID("you.worker-sessions.read")
+	if err != nil {
+		return err
+	}
+	if !read.Runnable || read.Handler == nil || read.Handler.ID != workerSessionsReadHandlerID {
+		return fmt.Errorf("command %q must declare runnable handler %q", read.ID, workerSessionsReadHandlerID)
 	}
 	stream, err := manifest.CommandByID("you.worker-sessions.stream")
 	if err != nil {

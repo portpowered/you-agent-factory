@@ -94,6 +94,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/{session_id}/worker-sessions/transcript": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read one finished Worker Session transcript
+     * @description Returns the normalized, ordered transcript for a terminal Worker Session identified by its exact Provider Session identity in the explicitly selected Factory Session. The response is projected through Provider Sessions and never parses raw rollout files at the CLI boundary.
+     */
+    get: operations["readWorkerSessionTranscriptBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions/{session_id}/invocations": {
     parameters: {
       query?: never;
@@ -1091,6 +1111,21 @@ export interface components {
     ListWorkerSessionsResponse: {
       /** @description Deterministically ordered Worker Session observations correlated with the requested Work. */
       sessions: components["schemas"]["WorkerSessionObservation"][];
+    };
+    WorkerSessionTranscriptResponse: {
+      /** @description Stable Worker Session identity. */
+      workerSessionId: string;
+      providerSession: components["schemas"]["WorkerSessionProviderSessionRef"];
+      /** @description Work identities correlated with this Worker Session attempt. */
+      workIds: string[];
+      /** @description Optional turn correlation identifier. */
+      turnId?: string | null;
+      /** @description Stable attempt or dispatch identity. */
+      attemptId: string;
+      /** @description Terminal Worker Session lifecycle state at transcript read time. */
+      state: string;
+      /** @description Ordered normalized transcript entries projected by Provider Sessions. */
+      entries: components["schemas"]["ProviderSessionTranscriptEntry"][];
     };
     WorkerSessionObservation: {
       /** @description Stable Worker Session identity. */
@@ -6123,6 +6158,48 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  readWorkerSessionTranscriptBySessionId: {
+    parameters: {
+      query: {
+        /** @description Provider that issued the correlated session identity. */
+        provider: components["schemas"]["LoadableProviderSessionProvider"];
+        /** @description Provider-session identifier kind. */
+        kind: components["schemas"]["LoadableProviderSessionKind"];
+        /** @description Provider-issued session identifier, not a filesystem path. */
+        id: string;
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Normalized transcript for a finished Worker Session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionTranscriptResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      /** @description The Worker Session is still active and has no final transcript. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      500: components["responses"]["InternalError"];
+    };
+  };
   invokeFactorySessionBySessionId: {
     parameters: {
       query?: never;
@@ -7609,6 +7686,14 @@ export const ErrorResponseCode = {
   PROJECTION_UNAVAILABLE: "PROJECTION_UNAVAILABLE",
   // The canonical Worker Session event stream is temporarily unavailable.
   WORKER_SESSION_STREAM_UNAVAILABLE: "WORKER_SESSION_STREAM_UNAVAILABLE",
+  // The requested Worker Session has not reached a terminal state.
+  WORKER_SESSION_TRANSCRIPT_ACTIVE: "WORKER_SESSION_TRANSCRIPT_ACTIVE",
+  // The finished Worker Session has no normalized transcript available.
+  WORKER_SESSION_TRANSCRIPT_UNAVAILABLE:
+    "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE",
+  // Provider Sessions could not project the normalized Worker Session transcript.
+  WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE:
+    "WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE",
   // The requested resource does not exist.
   NOT_FOUND: "NOT_FOUND",
   // The server failed while handling an otherwise valid request.
