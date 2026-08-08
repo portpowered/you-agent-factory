@@ -139,7 +139,26 @@ therefore be late-bound: a `func(sessionID string) factory.Service` closure
 supplied after the sessions service exists, or a small lazy provider, rather
 than a constructor argument.
 
+The repo already solves exactly this ordering problem, and the new binding
+should mirror it rather than invent a shape: `Root.BindActiveService` on Factory
+Runtime is a late-bound setter for the same reason — the delegate does not exist
+when the root is constructed. A `BindWorkerInvoker(func(sessionID string)
+factory.Service)` on `JavaScriptRuntimeService`, called by whoever holds both the
+sessions registry and the execution service, is the same pattern.
+
+This is not the "secondary injection path" the convergence exists to remove.
+That phrase means a second way to obtain an **executor**; this binds a resolver
+for the one runtime that already owns the Worker Sessions service. The child
+still executes through exactly one route.
+
 Resolve that and the remaining steps are mechanical.
+
+One caution earned the hard way: adding an operation to `factoryruntime.Service`
+broke Factory Session opening for every session, because `runtimeopening`
+asserts against that interface with a **runtime** type check. The compiler and
+`go vet` were both silent; `pkg/root`'s `BuildProcess` tests caught it. Any
+further change to that interface needs `go test ./pkg/root/` before it is
+believed.
 
 ## 5. Then, in order
 
