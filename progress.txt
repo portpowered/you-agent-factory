@@ -6,6 +6,7 @@
 - Long-lived CLI event streams use a dedicated no-timeout `clihttp.Protocol` and consume the canonical SSE route through generated Factory Event payload types.
 - Reconnectable CLI streams should pass the reducer's last accepted canonical event ID and sequence as server cursors; keep deduplication and ordering in the reducer and cap retries for the whole invocation.
 - Use `context.AfterFunc` to close an active stream body on cancellation so blocked reads and reconnect backoff can unwind without polling or a durable cursor journal.
+- Public event-driven Work observers should drive transitions through the public `you work move` edge in end-to-end fixtures; worker dispatch completion events are distinct from canonical `WORK_STATE_CHANGE` observation.
 
 ## [2026-08-08 14:07 -07:00] - wo-c2-work-watch-event-stream-001
 - What was implemented
@@ -22,8 +23,6 @@
   - The event-stream operation is not wired yet; the compatibility registry intentionally reports `work watch service is required` until story 002 supplies the canonical stream operation.
   - Keep the watch renderer transport-neutral so later stream/reducer code can emit complete lines without importing Cobra.
   - The repository’s public CLI contract includes both generated package staging and committed identity/help baselines; updating only the authored manifest is incomplete.
----
-
 ## [2026-08-08 14:28 -07:00] - wo-c2-work-watch-event-stream-002
 - What was implemented
   - Wired the Work watch operation to the selected Factory Session’s canonical Factory Event SSE stream, with retained events delivered before live events and no Work list/snapshot polling.
@@ -70,4 +69,24 @@
   - A reconnect retry cap should not reset merely because one reopened stream accepted an event; otherwise repeated one-event disconnects can become unbounded.
   - The Factory Event route accepts both canonical cursor fields and gives `after_event_id` precedence, so sending both preserves stable identity while retaining the numeric recovery position.
   - Focused Work CLI, Wire/CLI/Work package, race, vet, and diff checks pass; `make verify-fast` is still blocked by missing Bun type definitions and the existing TypeScript `baseUrl` deprecation, while package-count/boundary checks report unrelated baseline debt.
+---
+
+## [2026-08-08 15:31 -07:00] - wo-c2-work-watch-event-stream-004
+- What was implemented
+  - Added `TestWorkWatchFollowsStateTransitionsUntilTerminal`, a public end-to-end regression that builds processes through `root.BuildProcess`, submits deterministic Work through `Process.Execute`, drives authored transitions through public `you work move`, and observes one finite `you work watch` invocation through the terminal transition.
+  - Asserted complete `you.work.watch.v1` NDJSON lines, selected-session routing, canonical event identity/time, strictly increasing sequence, expected transitions, terminal-last ordering, clean stderr, and successful finite completion without sleeps, list polling, or internal-state shortcuts.
+  - Documented default `~default` session selection, explicit sessions, NDJSON fields/order, finite and `--follow` behavior, cancellation, reconnect cursors/retries, no durable history, and `jq`/PowerShell consumption.
+  - Regenerated the authored CLI contract outputs and intentionally refreshed the CLI command identity baseline through its supported test writer.
+- Files changed
+  - `tests/functional/work/watch/watch_test.go`
+  - `contracts/cli/commands.json`, `contracts/testdata/baseline/cli-commands.json`
+  - `packages/api/generated/cli/commands.json`, `packages/api/generated/manifest.json`, `pkg/transports/cli/generated/family_manifests_gen.go`
+  - `docs/reference/work.md`, `tests/functional/smoke/cli_docs_smoke_test.go`
+  - `prd.json`, `progress.txt`
+- Verification
+  - Exact focused functional test, docs smoke, Work CLI/Wire/command-identity tests, race test, and `git diff --check` pass.
+  - `make verify-fast` passes dashboard typecheck, MCP contract checks, and all UI tests, then remains blocked by the existing unrelated Windows `pkg/platform/runtimeartifact` mode assertion (`0666` observed versus `0600` expected).
+- **Learnings for future iterations:**
+  - A submitted Work with no worker dispatch does not produce a `WORK_STATE_CHANGE` merely because its runtime projection becomes terminal; public `you work move` is the supported edge for emitting explicit authored state transitions in this fixture.
+  - Keep public watch fixtures on one selected session and assert the complete line contract, not only process exit, so regressions in routing or output shape remain visible.
 ---

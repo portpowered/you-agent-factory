@@ -330,6 +330,52 @@ again:
 is tabular (`WORK ID`, `NAME`, `STATE NAME`, `STATE TYPE`, `RELATIONS`); use
 `you --json work list` when scripts need the API-shaped `ListWorkResponse`.
 
+## Watch Work state transitions
+
+Use `you work watch` when a script needs to wait for Work transitions without
+repeatedly calling `you work list`:
+
+```text
+you --server http://localhost:7437 work watch
+you --server http://localhost:7437 work watch --session session-beta --follow
+```
+
+The command targets `~default` when `--session` is omitted. An explicit
+`--session` selects one live Factory Session. Stdout is NDJSON: each complete
+line is one `you.work.watch.v1` object for a canonical Work state transition.
+Required fields are `schemaVersion`, `sessionId`, `eventId`, `sequence`,
+`eventTime`, `workId`, `workTypeName`, `fromState`, `toState`, `source`, and
+`terminal`; `triggerWorkId` and `reason` are omitted when they are absent.
+Lines remain in strictly increasing canonical event sequence order, and other
+Factory Events do not become output lines. Diagnostics stay on stderr.
+
+Finite mode (the default) flushes the terminal transition and exits `0` after
+every Work in the observed cohort is terminal or failed. `--follow` emits
+terminal transitions but stays attached for later transitions until Ctrl-C or
+parent-context cancellation. A transient stream disconnect resumes from the
+last accepted event ID and sequence with bounded retries, suppressing replayed
+lines. Unknown sessions, stale retention cursors, and exhausted retries fail
+with a non-zero diagnostic. Watch does not persist a cursor or promise durable
+history; it observes the live session's canonical event stream.
+
+For `jq`, select terminal lines while preserving one JSON object per line:
+
+```bash
+you --server http://localhost:7437 work watch --session session-beta \
+  | jq -c 'select(.terminal)'
+```
+
+The equivalent PowerShell pipeline is:
+
+```powershell
+you --server http://localhost:7437 work watch --session session-beta |
+  ConvertFrom-Json |
+  Where-Object terminal
+```
+
+Press Ctrl-C to stop a follow stream. The command closes its active stream and
+does not write a partial JSON line.
+
 ## Tags And Prompt Templates
 
 Tags declared on submitted work items are available after the batch request has

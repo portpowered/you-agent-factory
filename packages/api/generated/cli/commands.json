@@ -6367,7 +6367,7 @@
           },
           "description": {
             "id": "you.work.watch.description",
-            "canonicalEnglish": "Watch Work state transitions from a running you-agent-factory service.\n\nBy default the command targets the default compatibility session. Use --session to route the watch to one specific live factory session instead.\n\nEvery stdout line is one complete JSON object in the you.work.watch.v1 NDJSON contract with session, event, sequence, Work, transition, source, and terminal fields. Diagnostics remain on stderr. Use --follow to keep the stream attached after observed Work reaches a terminal state."
+            "canonicalEnglish": "Watch Work state transitions from a running you-agent-factory service.\n\nBy default the command targets the default compatibility session (~default). Use --session to route the watch to one specific live factory session instead.\n\nEvery stdout line is one complete you.work.watch.v1 NDJSON object with sessionId, eventId, sequence, eventTime, workId, workTypeName, fromState, toState, source, and terminal fields. Lines preserve canonical Factory Event order and diagnostics remain on stderr. Finite mode stops after the observed Work cohort reaches terminal states; --follow stays attached until Ctrl-C or parent cancellation. A transient disconnect resumes from the last accepted event ID and sequence with bounded retries, without creating durable watch history or a cursor journal."
           }
         },
         "examples": [
