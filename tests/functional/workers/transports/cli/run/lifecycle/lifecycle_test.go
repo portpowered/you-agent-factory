@@ -86,6 +86,7 @@ func TestCLIRunCleanInvocationCompletesWithoutDashboardStartup(t *testing.T) {
 // hosted public you run --with-server invocation routes through the already-open
 // Factory Session on the live runtime host rather than a detached local one-shot
 // lifecycle, with Factory Event correlation on that hosted session identity.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.T) {
 	t.Parallel()
 

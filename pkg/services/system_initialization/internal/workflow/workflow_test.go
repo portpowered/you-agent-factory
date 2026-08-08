@@ -142,6 +142,7 @@ func (fake *fakePackagedInstaller) EnsurePackagedFactories(
 	return append([]factorydefinitions.PackagedFactoryInstallResult(nil), fake.results...), fake.err
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestInitializeFreshHomeReturnsTypedCreatedResultsThroughPeerRoots(t *testing.T) {
 	t.Parallel()
 
@@ -192,6 +193,7 @@ func TestInitializeFreshHomeReturnsTypedCreatedResultsThroughPeerRoots(t *testin
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestInitializeRepeatInvocationReportsSkippedOutcomesForSystemConfigAndPackagedFactories(t *testing.T) {
 	t.Parallel()
 

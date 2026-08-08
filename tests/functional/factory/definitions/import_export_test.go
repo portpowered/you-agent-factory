@@ -226,6 +226,7 @@ func TestImportExportPreservesNestedDocsScriptsAndMetadata(t *testing.T) {
 // TestInvalidImportDoesNotReplaceCurrentFactory proves an invalid import through
 // the public update path is rejected with a customer-visible failure and leaves
 // the prior Current Factory definition unchanged on public readback.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestInvalidImportDoesNotReplaceCurrentFactory(t *testing.T) {
 	runner := support.NewRecordingCommandRunner("runtime must not execute during invalid import")
 	edges := serviceedges.Edges{ProviderCommandRunner: runner}

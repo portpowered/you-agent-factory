@@ -31,6 +31,9 @@ import (
 // boundary's TextUpdate shape, which this inbound mapper does not produce.
 // user_message_chunk and config_option_update are intentionally out of
 // scope: this mapper does not map them to any observable progress fact.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestSharedConformanceCorpusSessionUpdateMatchesInboundMapper(t *testing.T) {
 	cases, err := acpfixtures.CasesByRole(acpfixtures.RoleSessionUpdate)
 	if err != nil {

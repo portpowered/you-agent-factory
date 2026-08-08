@@ -21,6 +21,9 @@ type inertRecordingsLedger struct {
 // TestInjectBundleComposesRecordingsArtifactExportThroughWireFactory proves the
 // Wire recordings factory wires artifact close/export/read through the singular
 // Recordings root rather than a second peer authority.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestInjectBundleComposesRecordingsArtifactExportThroughWireFactory(t *testing.T) {
 	t.Parallel()
 

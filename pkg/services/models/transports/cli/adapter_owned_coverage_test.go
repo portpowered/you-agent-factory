@@ -366,6 +366,7 @@ func TestOwnedAdapter_CompositionFacadeRoutesOwnedListThroughModelsRoot(t *testi
 
 // TestOwnedAdapter_InvokeResolvesThroughModelsRoot proves invoke
 // catalog->lease->inference ordering through the owned adapter.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestOwnedAdapter_InvokeResolvesThroughModelsRoot(t *testing.T) {
 	t.Parallel()
 

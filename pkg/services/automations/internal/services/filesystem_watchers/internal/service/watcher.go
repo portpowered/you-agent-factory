@@ -126,6 +126,7 @@ func newWatcher(config filesystemwatchers.Config) *watcher {
 }
 
 // Watch starts watching for file events. It blocks until ctx is cancelled.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (fw *watcher) Watch(ctx context.Context) error {
 	watcher, err := fw.newWatcher()
 	if err != nil {

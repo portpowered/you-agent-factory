@@ -26,6 +26,7 @@ func peerConstructProvidersRootIdentity(
 // construct Inspect, Project, and Details identity through Provider Sessions
 // root contracts and Providers-root SessionRef without Workers provider or
 // Providers implementation types.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestRootContracts_ProvidersRootBoundary_IdentityConstruction(t *testing.T) {
 	t.Run("codex", func(t *testing.T) {
 		root := writeCodexSessionFixture(t, "boundary-root-contract-codex")

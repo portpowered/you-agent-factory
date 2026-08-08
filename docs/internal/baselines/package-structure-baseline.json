@@ -1004,6 +1004,46 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/chat_sessions/root_composition/acp_multi_turn_test.go",
+      "target": "chat_sessions"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/chat_sessions/root_composition/acp_packaged_factory_prompt_test.go",
+      "target": "chat_sessions"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/chat_sessions/root_composition/acp_prompt_delegation_test.go",
+      "target": "chat_sessions"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/chat_sessions/root_composition/acp_server_composition_test.go",
+      "target": "chat_sessions"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/chat_sessions/root_composition/acp_streaming_composition_test.go",
+      "target": "chat_sessions"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/chat_sessions/root_composition/acp_streaming_usage_composition_test.go",
+      "target": "chat_sessions"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/chat_sessions/root_composition/acp_worker_child_events_test.go",
+      "target": "chat_sessions"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/chat_sessions/root_composition/doc.go",
+      "target": "chat_sessions"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/cli/factory_run/output/failure_test.go",
       "target": "cli"
     },
@@ -1119,6 +1159,11 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/root_composition/dispatch_worker_sessions_concurrency_activation_test.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/factory_runtime/root_composition/doc.go",
       "target": "factory_runtime"
     },
@@ -1209,6 +1254,11 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/recordings/root_composition/portable_replay_execution_test.go",
+      "target": "recordings"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/recordings/root_composition/portable_transport_activation_test.go",
       "target": "recordings"
     },
@@ -1281,6 +1331,26 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/automations/internal/services/script_pollers/service.go",
       "target": "ScriptPollerCommandRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/chat_sessions/sequencing.go",
+      "target": "EventsTopic"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/chat_sessions/transitions.go",
+      "target": "CloseTargetEpisode"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/chat_sessions/transitions.go",
+      "target": "OpenNextTargetEpisode"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/chat_sessions/transitions.go",
+      "target": "ResolveControlIntentOutcome"
     },
     {
       "rule": "service-root-exported-function",
@@ -1601,6 +1671,11 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/models/local_execution_contract.go",
       "target": "ValidateLocalInvocationRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/operator_settings/acp_agent_profile.go",
+      "target": "DefaultACPAgentProfile"
     },
     {
       "rule": "service-root-exported-function",
@@ -1964,6 +2039,21 @@
     },
     {
       "rule": "service-root-exported-function",
+      "filePath": "pkg/services/worker_sessions/publish.go",
+      "target": "NewProviderSessionObservationPublisher"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/worker_sessions/terminal.go",
+      "target": "SanitizeProviderFailureClassification"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/worker_sessions/topic.go",
+      "target": "Topic"
+    },
+    {
+      "rule": "service-root-exported-function",
       "filePath": "pkg/services/workers/execution_context.go",
       "target": "ResolveProjectID"
     },
@@ -2134,6 +2224,11 @@
     },
     {
       "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/progress_observations.go",
+      "target": "CloneProviderSessionReference"
+    },
+    {
+      "rule": "service-root-exported-function",
       "filePath": "pkg/services/workers/proposal_mappers.go",
       "target": "ProposedOutputFromLegacyWorkResult"
     },
@@ -2284,13 +2379,18 @@
     },
     {
       "rule": "service-root-interface-count",
+      "filePath": "pkg/services/chat_sessions",
+      "target": "pkg/services/chat_sessions/contracts.go:Service,pkg/services/chat_sessions/factory_target_catalog_contract.go:FactoryTargetCatalogService"
+    },
+    {
+      "rule": "service-root-interface-count",
       "filePath": "pkg/services/edges",
-      "target": "<none>"
+      "target": "\u003cnone\u003e"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_definitions",
-      "target": "pkg/services/factory_definitions/activation_contract.go:DefinitionActivationGateway,pkg/services/factory_definitions/authored_layout_filesystem.go:AuthoredLayoutReaderFileSystem,pkg/services/factory_definitions/authored_layout_filesystem.go:AuthoredLayoutWriterFileSystem,pkg/services/factory_definitions/authored_layout_filesystem.go:InputInboxSentinelEnsurer,pkg/services/factory_definitions/config_file_operations.go:FactoryConfigPathSource,pkg/services/factory_definitions/decision_envelope_contract.go:DecisionEnvelopeService,pkg/services/factory_definitions/invocation_interpolation_contract.go:InvocationInterpolationService,pkg/services/factory_definitions/invocation_output_contract.go:InvocationOutputShapingService,pkg/services/factory_definitions/invocation_work_type_contract.go:InvocationWorkTypeService,pkg/services/factory_definitions/loading_effects.go:Clock,pkg/services/factory_definitions/loading_effects.go:LoadingFileSystem,pkg/services/factory_definitions/loading_effects.go:VersionFileSystem,pkg/services/factory_definitions/named_catalog_ports.go:NamedFactoryCatalogFileSystem,pkg/services/factory_definitions/named_path_ports.go:NamedPathFileSystem,pkg/services/factory_definitions/named_path_ports.go:NamedPathResolver,pkg/services/factory_definitions/packaged_installation.go:PackagedFactoryInstaller,pkg/services/factory_definitions/packaged_installation_ports.go:PackagedInstallationFileSystem,pkg/services/factory_definitions/packages_contract.go:PackagedGoalPromptFileSystem,pkg/services/factory_definitions/persistence_ports.go:DirectoryReplacementStore,pkg/services/factory_definitions/persistence_ports.go:PersistenceFileSystem,pkg/services/factory_definitions/portable_bundled_validation.go:PortableBundledFileInspection,pkg/services/factory_definitions/quorum_policy_contract.go:QuorumPolicyService,pkg/services/factory_definitions/replay_runtime.go:ReplayRuntimeConfig,pkg/services/factory_definitions/scaffold_contract.go:ScaffoldFileSystem,pkg/services/factory_definitions/scaffold_contract.go:ScaffoldOutput,pkg/services/factory_definitions/service_contract.go:Service,pkg/services/factory_definitions/service_contract.go:SessionHost,pkg/services/factory_definitions/tts_observability_contract.go:TTSObservabilityService,pkg/services/factory_definitions/validation_contract.go:ValidationOperations,pkg/services/factory_definitions/work_propagation_contract.go:WorkPropagationPolicyService,pkg/services/factory_definitions/workstation_execution_contract.go:WorkstationExecutionPolicyService"
+      "target": "pkg/services/factory_definitions/activation_contract.go:DefinitionActivationGateway,pkg/services/factory_definitions/authored_layout_filesystem.go:AuthoredLayoutReaderFileSystem,pkg/services/factory_definitions/authored_layout_filesystem.go:AuthoredLayoutWriterFileSystem,pkg/services/factory_definitions/authored_layout_filesystem.go:InputInboxSentinelEnsurer,pkg/services/factory_definitions/config_file_operations.go:FactoryConfigPathSource,pkg/services/factory_definitions/current_factory_pointer.go:CatalogPathsService,pkg/services/factory_definitions/decision_envelope_contract.go:DecisionEnvelopeService,pkg/services/factory_definitions/invocation_interpolation_contract.go:InvocationInterpolationService,pkg/services/factory_definitions/invocation_output_contract.go:InvocationOutputShapingService,pkg/services/factory_definitions/invocation_work_type_contract.go:InvocationWorkTypeService,pkg/services/factory_definitions/loading_effects.go:Clock,pkg/services/factory_definitions/loading_effects.go:LoadingFileSystem,pkg/services/factory_definitions/loading_effects.go:VersionFileSystem,pkg/services/factory_definitions/named_catalog_ports.go:NamedFactoryCatalogFileSystem,pkg/services/factory_definitions/named_path_ports.go:NamedPathResolver,pkg/services/factory_definitions/packaged_installation.go:PackagedFactoryInstaller,pkg/services/factory_definitions/packaged_installation_ports.go:PackagedInstallationFileSystem,pkg/services/factory_definitions/packages_contract.go:PackagedGoalPromptFileSystem,pkg/services/factory_definitions/persistence_ports.go:DirectoryReplacementStore,pkg/services/factory_definitions/persistence_ports.go:PersistenceFileSystem,pkg/services/factory_definitions/portable_bundled_validation.go:PortableBundledFileInspection,pkg/services/factory_definitions/quorum_policy_contract.go:QuorumPolicyService,pkg/services/factory_definitions/replay_runtime.go:ReplayRuntimeConfig,pkg/services/factory_definitions/scaffold_contract.go:ScaffoldFileSystem,pkg/services/factory_definitions/scaffold_contract.go:ScaffoldOutput,pkg/services/factory_definitions/service_contract.go:Service,pkg/services/factory_definitions/service_contract.go:SessionHost,pkg/services/factory_definitions/tts_observability_contract.go:TTSObservabilityService,pkg/services/factory_definitions/validation_contract.go:ValidationOperations,pkg/services/factory_definitions/work_propagation_contract.go:WorkPropagationPolicyService,pkg/services/factory_definitions/workstation_execution_contract.go:WorkstationExecutionPolicyService"
     },
     {
       "rule": "service-root-interface-count",
@@ -2306,6 +2406,11 @@
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_runtime/internal/services/orchestration",
       "target": "pkg/services/factory_runtime/internal/services/orchestration/service.go:Binding,pkg/services/factory_runtime/internal/services/orchestration/service.go:Service"
+    },
+    {
+      "rule": "service-root-interface-count",
+      "filePath": "pkg/services/factory_sessions",
+      "target": "pkg/services/factory_sessions/assembly_contract.go:InvocationService,pkg/services/factory_sessions/execution_contract.go:DurableExecutionService,pkg/services/factory_sessions/execution_contract.go:SessionInventoryService,pkg/services/factory_sessions/service_contracts.go:LiveControlService,pkg/services/factory_sessions/service_contracts.go:Service,pkg/services/factory_sessions/target_execution_contract.go:TargetExecutionService"
     },
     {
       "rule": "service-root-interface-count",
@@ -2329,8 +2434,18 @@
     },
     {
       "rule": "service-root-interface-count",
+      "filePath": "pkg/services/providers/internal/services/acp",
+      "target": "pkg/services/providers/internal/services/acp/service.go:ContinuationService,pkg/services/providers/internal/services/acp/service.go:Service"
+    },
+    {
+      "rule": "service-root-interface-count",
+      "filePath": "pkg/services/providers/internal/services/execution",
+      "target": "pkg/services/providers/internal/services/execution/service.go:ContinuationService,pkg/services/providers/internal/services/execution/service.go:Service"
+    },
+    {
+      "rule": "service-root-interface-count",
       "filePath": "pkg/services/recordings",
-      "target": "pkg/services/recordings/contracts.go:Service,pkg/services/recordings/lifecycle_capability.go:RecordingLifecycle,pkg/services/recordings/replay_artifact_capability.go:RecordingReplayArtifacts,pkg/services/recordings/runtime_recording_binder.go:RuntimeRecordingBinder"
+      "target": "pkg/services/recordings/contracts.go:Service,pkg/services/recordings/lifecycle_capability.go:RecordingLifecycle,pkg/services/recordings/replay_artifact_capability.go:RecordingReplayArtifacts,pkg/services/recordings/replay_artifact_capability.go:ReplayInputLoader,pkg/services/recordings/runtime_recording_binder.go:RuntimeRecordingBinder"
     },
     {
       "rule": "service-root-interface-count",
@@ -2346,6 +2461,11 @@
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/work/internal/services/state_access",
       "target": "pkg/services/work/internal/services/state_access/service.go:RecordingsAdapter,pkg/services/work/internal/services/state_access/service.go:Service,pkg/services/work/internal/services/state_access/service.go:SessionAdapter,pkg/services/work/internal/services/state_access/service.go:SessionResolver"
+    },
+    {
+      "rule": "service-root-interface-count",
+      "filePath": "pkg/services/worker_sessions",
+      "target": "pkg/services/worker_sessions/contracts.go:Service,pkg/services/worker_sessions/publish.go:Logger"
     },
     {
       "rule": "service-root-interface-count",
@@ -2752,6 +2872,5 @@
       "filePath": "pkg/services/workers/internal/services/workstations/worktree",
       "target": "pkg/services/workers/internal/services/workstations"
     }
-  ],
-  "violations": []
+  ]
 }

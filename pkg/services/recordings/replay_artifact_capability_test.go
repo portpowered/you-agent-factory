@@ -145,6 +145,7 @@ func finalizedReplayArtifactRecordingAt(
 // validate/encode/decode/summarize/export/read chain preserve identity,
 // scope, canonical order, and summary through the real composed
 // implementation, unchanged from the broader Service surface it adapts.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestRecordingReplayArtifacts_UnchangedBehaviorThroughComposedImplementation(t *testing.T) {
 	t.Parallel()
 	service, replayArtifacts := newTestRecordingReplayArtifacts(t)

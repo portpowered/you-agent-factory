@@ -100,6 +100,7 @@ func TestServeFamily_VisibleInRootHelpAndDistinctFromWorkersAcpAndMcpServe(t *te
 // asserts the complete rendered flag surface (local and inherited) instead
 // of only local flags, so an undeclared or unexpected flag -- including a
 // resurfaced --json/--server -- would fail this test too.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestServeACPCommand_HelpRendersManifestExamplesAndNoLocalFlags(t *testing.T) {
 	var stdout bytes.Buffer
 	root := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI}).NewCommand(nil, nil, nil)

@@ -478,6 +478,7 @@ func mapProgressFragment(ctx Context, fragment responsestream.Event) (responseev
 	}, nil
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func semanticProgress(fragment responsestream.Event) (responseevents.Kind, responseevents.Phase, any) {
 	metadata := fragment.Metadata
 	kind := strings.ToLower(strings.TrimSpace(metadata["kind"]))

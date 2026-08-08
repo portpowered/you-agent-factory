@@ -106,6 +106,7 @@ type ReadResult struct {
 // resolvable position and a gap's resumable position is already carried by
 // Gap; a leftover Next or Retained on either outcome would let a caller
 // observe two contradictory resume states for the same read.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (res ReadResult) Validate() error {
 	switch res.Outcome {
 	case ReadOutcomeProgress:
@@ -250,6 +251,7 @@ type Delivery struct {
 // or Cursor. A Record with only some fields set (for example a stray
 // Payload on a gap or terminal delivery) is rejected the same as a
 // fully-set one: Record.IsZero checks every field, not just ID.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (d Delivery) Validate() error {
 	recordZero := d.Record.IsZero()
 	cursorSet := d.Cursor != (Cursor{})
