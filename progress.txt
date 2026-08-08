@@ -154,3 +154,21 @@
   - Baseline comparison showed the AGY implementation was not responsible for the remaining repository-wide size failures after the two new test findings were extracted.
   - Keep the operator smoke separately gated; the default command must remain offline and side-effect free.
 ---
+
+## [2026-08-08 16:08 -07:00] - wo-b1-antigravity-provider-golden-traces-005
+- What was implemented
+  - Re-ran the complete scoped verification for the operator-gated AGY smoke and offline replay path; no additional code change was necessary because the implementation and tests were already present.
+  - Confirmed the ungated live smoke exits successfully by skipping before executable discovery, while the offline suite uses only the injected ProviderCommandRunner and recorded traces.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/providers/agy/... -count=1` passes.
+  - `$env:YOU_AGY_LIVE_SMOKE=''; go test ./tests/functional/providers/agy/... -run '^TestAgyLiveSmoke$' -count=1` passes with the smoke skipped.
+  - `go vet ./pkg/services/providers/... ./pkg/services/workers/... ./tests/functional/providers/agy/...` passes.
+  - `make verify-fast` passes typecheck, MCP contract checks, all UI tests, and the short Go suite.
+  - `make lint` remains blocked only at `backend-size` by the unchanged 99-finding `origin/main` baseline; no live AGY call was made and no PR exists yet.
+- **Learnings for future iterations:**
+  - The offline and operator-gated commands are independently reproducible; keep the environment gate before `exec.LookPath` so default verification cannot probe AGY.
+  - Treat inherited repository-wide backend-size findings as a delivery blocker to report, not as permission to weaken or bypass the lint check.
+---
