@@ -241,3 +241,42 @@ func TestMarkingParentChildRegistrationProjectionPreservesOrderAndCompleteness(t
 		t.Fatalf("registration snapshot retained caller mutation at place %q", got)
 	}
 }
+
+func TestMarkingParentChildRegistrationProjectionRejectsInvalidAndDuplicateFacts(t *testing.T) {
+	var nilMarking *Marking
+	nilMarking.RecordParentChildRegistration(nil)
+	nilMarking.CompleteParentChildRegistration("parent-1")
+
+	marking := &Marking{}
+	marking.RecordParentChildRegistration(nil)
+	marking.RecordParentChildRegistration(&factorytoken.Token{ID: "no-parent", Color: factorytoken.Color{WorkID: "work-1"}})
+	marking.RecordParentChildRegistration(&factorytoken.Token{ID: "no-work", Color: factorytoken.Color{ParentID: "parent-1"}})
+	marking.RecordParentChildRegistration(&factorytoken.Token{
+		ID:    "resource",
+		Color: factorytoken.Color{WorkID: "resource-1", ParentID: "parent-1", DataType: factorytoken.DataTypeResource},
+	})
+	marking.CompleteParentChildRegistration("missing-parent")
+
+	child := factorytoken.Token{
+		ID:      "child-token-1",
+		PlaceID: "child:complete",
+		Color:   factorytoken.Color{WorkID: "child-1", ParentID: "parent-1"},
+	}
+	marking.RecordParentChildRegistration(&child)
+	marking.CompleteParentChildRegistration("parent-1")
+	duplicate := child
+	duplicate.ID = "duplicate-token"
+	duplicate.PlaceID = "child:processing"
+	marking.RecordParentChildRegistration(&duplicate)
+
+	registration := marking.ParentChildRegistrations["parent-1"]
+	if !registration.Complete || len(registration.Children) != 1 {
+		t.Fatalf("registration projection = %#v, want one complete child after duplicate admission", registration)
+	}
+	if got := registration.Children[0].ID; got != child.ID {
+		t.Fatalf("registration child ID = %q, want original %q", got, child.ID)
+	}
+	if got := registrationTokenIdentity(factorytoken.Token{ID: "token-only"}); got != "token:token-only" {
+		t.Fatalf("token-only registration identity = %q, want token:token-only", got)
+	}
+}

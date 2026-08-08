@@ -38,6 +38,34 @@ func TestInjectTokensCreatesTokenInInitialPlace(t *testing.T) {
 	}
 }
 
+func TestInjectTokensRecordsCompleteParentChildRegistrationProjection(t *testing.T) {
+	n := buildTestNet()
+	marking := petri.NewMarking("test-wf")
+	engine := newTestFactoryEngine(n, marking, nil)
+
+	engine.mu.Lock()
+	engine.injectTokens([]work.SubmitRequest{
+		{WorkID: "parent-work", WorkTypeID: "task"},
+		{
+			WorkID:     "child-work",
+			WorkTypeID: "task",
+			Relations: []work.Relation{{
+				Type:         work.RelationParentChild,
+				TargetWorkID: "parent-work",
+			}},
+		},
+	})
+	engine.mu.Unlock()
+
+	registration := engine.GetMarking().ParentChildRegistrations["parent-work"]
+	if !registration.Complete || len(registration.Children) != 1 {
+		t.Fatalf("parent-child registration = %#v, want one complete child", registration)
+	}
+	if got := registration.Children[0].Color.WorkID; got != "child-work" {
+		t.Fatalf("registered child WorkID = %q, want child-work", got)
+	}
+}
+
 func TestInjectTokensSkipsUnknownWorkType(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")

@@ -755,6 +755,96 @@ func TestAllWithParentGuard_RuntimeStateAndPopulationChecks(t *testing.T) {
 	}
 }
 
+func TestAllWithParentGuard_RejectsUnknownAndMismatchedRegistrationProjection(t *testing.T) {
+	parent := &factorytoken.Token{ID: "parent-token", Color: factorytoken.Color{WorkID: "parent-1"}}
+	first := factorytoken.Token{
+		ID:      "child-first",
+		PlaceID: "child:complete",
+		Color:   factorytoken.Color{WorkID: "child-1", WorkTypeID: "child", ParentID: "parent-1"},
+	}
+	second := first
+	second.ID = "child-second"
+	second.Color.WorkID = "child-2"
+	bindings := map[string]*factorytoken.Token{"parent": parent}
+	guard := &AllWithParentGuard{MatchBinding: "parent"}
+
+	assertBlocked := func(ctx RuntimeGuardContext, candidates []factorytoken.Token, marking *MarkingSnapshot) {
+		t.Helper()
+		matched, ok := guard.EvaluateRuntime(ctx, candidates, bindings, marking)
+		if ok || len(matched) != 0 {
+			t.Fatalf("mismatched registration projection enabled fan-in: matched=%v ok=%t", matched, ok)
+		}
+	}
+
+	baseSnapshot := func(tokens ...factorytoken.Token) *MarkingSnapshot {
+		snapshot := &MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token, len(tokens))}
+		for i := range tokens {
+			token := tokens[i]
+			snapshot.Tokens[token.ID] = &token
+		}
+		return snapshot
+	}
+
+	assertBlocked(RuntimeGuardContext{ParentChildRegistrations: ParentChildRegistrationProjection{
+		"other-parent": {Children: []factorytoken.Token{first}, Complete: true},
+	}}, []factorytoken.Token{first}, baseSnapshot(first))
+	assertBlocked(RuntimeGuardContext{ParentChildRegistrations: ParentChildRegistrationProjection{
+		"parent-1": {Children: []factorytoken.Token{first}, Complete: false},
+	}}, []factorytoken.Token{first}, baseSnapshot(first))
+	assertBlocked(RuntimeGuardContext{ParentChildRegistrations: ParentChildRegistrationProjection{
+		"parent-1": {Complete: true},
+	}}, []factorytoken.Token{first}, baseSnapshot(first))
+
+	// A visible child outside the registered set is a population mismatch.
+	assertBlocked(RuntimeGuardContext{ParentChildRegistrations: ParentChildRegistrationProjection{
+		"parent-1": {Children: []factorytoken.Token{first}, Complete: true},
+	}}, []factorytoken.Token{first}, baseSnapshot(first, second))
+	// A registered child that is not visible is also incomplete.
+	assertBlocked(RuntimeGuardContext{ParentChildRegistrations: ParentChildRegistrationProjection{
+		"parent-1": {Children: []factorytoken.Token{first, second}, Complete: true},
+	}}, []factorytoken.Token{first}, baseSnapshot(first))
+	// The visible runtime identity must agree with the registration identity.
+	assertBlocked(RuntimeGuardContext{ParentChildRegistrations: ParentChildRegistrationProjection{
+		"parent-1": {Children: []factorytoken.Token{first}, Complete: true},
+	}}, []factorytoken.Token{second}, baseSnapshot(first))
+}
+
+func TestAllWithParentGuard_DirectEvaluationChecksSnapshotPopulation(t *testing.T) {
+	parent := &factorytoken.Token{ID: "parent-token", Color: factorytoken.Color{WorkID: "parent-1"}}
+	terminal := factorytoken.Token{
+		ID:      "child-terminal",
+		PlaceID: "child:complete",
+		Color:   factorytoken.Color{WorkID: "child-1", WorkTypeID: "child", ParentID: "parent-1"},
+	}
+	processing := terminal
+	processing.ID = "child-processing"
+	processing.Color.WorkID = "child-2"
+	processing.PlaceID = "child:processing"
+	guard := &AllWithParentGuard{MatchBinding: "parent"}
+	bindings := map[string]*factorytoken.Token{"parent": parent}
+
+	matched, ok := guard.Evaluate(
+		[]factorytoken.Token{terminal},
+		bindings,
+		&MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+			terminal.ID:   &terminal,
+			processing.ID: &processing,
+		}},
+	)
+	if ok || len(matched) != 0 {
+		t.Fatalf("direct evaluation ignored a sibling in another place: matched=%v ok=%t", matched, ok)
+	}
+
+	matched, ok = guard.Evaluate(
+		[]factorytoken.Token{terminal},
+		bindings,
+		&MarkingSnapshot{Tokens: map[string]*factorytoken.Token{terminal.ID: &terminal}},
+	)
+	if !ok || len(matched) != 1 || matched[0].ID != terminal.ID {
+		t.Fatalf("direct evaluation with one visible terminal child = %v, %t; want terminal child", matched, ok)
+	}
+}
+
 func TestParentChildTokenHelpersFilterAndDeduplicateRuntimeFacts(t *testing.T) {
 	valid := factorytoken.Token{ID: "valid", PlaceID: "child:complete", Color: factorytoken.Color{WorkID: "child-1", WorkTypeID: "child", ParentID: "parent-1"}}
 	resource := valid
