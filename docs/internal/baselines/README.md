@@ -8,13 +8,6 @@ Keep package-owned golden files and contract fixtures beside their tests under
 `testdata/baseline`, and keep executable performance budgets beside the code
 they govern.
 
-`backend-size-baseline.json` and `pkg-maint-baseline.json` are exact,
-deletion-only snapshots of pre-existing scanner findings. A new finding or a
-larger recorded finding fails its command; a resolved finding makes its
-baseline entry stale until the entry is removed. These files keep repository
-debt visible without making unrelated feature changes responsible for
-refactoring every existing oversized source surface.
-
 Baseline changes require review of the current findings. Prefer removing stale
 entries and lowering accepted debt over expanding a baseline.
 

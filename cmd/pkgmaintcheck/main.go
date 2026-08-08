@@ -88,44 +88,23 @@ func run(cfg config, stdout io.Writer, stderr io.Writer) error {
 		return fmt.Errorf("[agent-factory:pkg-maint] found %d exemption budget violation(s)", len(budgetDifferences))
 	}
 
-	repoRoot, err := filepath.Abs(cfg.root)
-	if err != nil {
-		return fmt.Errorf("resolve repo root: %w", err)
-	}
-	baseline, err := loadPkgMaintBaseline(repoRoot)
-	if err != nil {
-		return err
-	}
 	violations, err := scanRepo(cfg)
 	if err != nil {
 		return err
 	}
-	comparison := comparePkgMaintBaseline(violations, baseline)
-	for _, finding := range comparison.New {
-		writeViolation(stderr, "new maintainability violation", finding)
-	}
-	for _, finding := range comparison.Regressed {
-		writeViolation(stderr, "pkg-maint regression", finding)
-	}
-	for _, entry := range comparison.Stale {
-		fmt.Fprintf(stderr, "[agent-factory:pkg-maint] stale baseline: %s %s; remove this entry from %s\n", entry.Rule, entry.Target, pkgMaintBaselinePath)
-	}
-	if len(comparison.New) == 0 && len(comparison.Regressed) == 0 && len(comparison.Stale) == 0 {
-		fmt.Fprintf(stdout, "[agent-factory:pkg-maint] pkg maintainability passed (file lines <= %d, function lines <= %d, cyclomatic complexity <= %d; %d deletion-only baseline entries remain)\n", cfg.fileLineLimit, cfg.functionLineLimit, cfg.cyclomaticLimit, len(baseline.Entries))
+	if len(violations) == 0 {
+		fmt.Fprintf(stdout, "[agent-factory:pkg-maint] pkg maintainability passed (file lines <= %d, function lines <= %d, cyclomatic complexity <= %d)\n", cfg.fileLineLimit, cfg.functionLineLimit, cfg.cyclomaticLimit)
 		return nil
 	}
-	if len(comparison.Regressed) == 0 && len(comparison.Stale) == 0 {
-		return fmt.Errorf("[agent-factory:pkg-maint] found %d maintainability violation(s)", len(comparison.New))
-	}
-	return fmt.Errorf("[agent-factory:pkg-maint] found %d new violation(s), %d regression(s), and %d stale baseline entries", len(comparison.New), len(comparison.Regressed), len(comparison.Stale))
-}
 
-func writeViolation(stderr io.Writer, label string, finding violation) {
-	if finding.function == "" {
-		fmt.Fprintf(stderr, "[agent-factory:pkg-maint] %s: %s | rule=%s target=%s actual=%d limit=%d\n", label, finding.packagePath, finding.rule, finding.filePath, finding.actual, finding.limit)
-		return
+	for _, finding := range violations {
+		if finding.function == "" {
+			fmt.Fprintf(stderr, "%s | rule=%s target=%s actual=%d limit=%d\n", finding.packagePath, finding.rule, finding.filePath, finding.actual, finding.limit)
+			continue
+		}
+		fmt.Fprintf(stderr, "%s | rule=%s target=%s file=%s actual=%d limit=%d\n", finding.packagePath, finding.rule, finding.function, finding.filePath, finding.actual, finding.limit)
 	}
-	fmt.Fprintf(stderr, "[agent-factory:pkg-maint] %s: %s | rule=%s target=%s file=%s actual=%d limit=%d\n", label, finding.packagePath, finding.rule, finding.function, finding.filePath, finding.actual, finding.limit)
+	return fmt.Errorf("[agent-factory:pkg-maint] found %d maintainability violation(s)", len(violations))
 }
 
 func scanRepo(cfg config) ([]violation, error) {
