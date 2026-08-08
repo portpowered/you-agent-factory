@@ -75,6 +75,12 @@
       ]
     },
     {
+      "test": "tests/functional/work/watch/watch_test.go::TestWorkWatchFollowsStateTransitionsUntilTerminal",
+      "stableIds": [
+        "cli/you.work.watch"
+      ]
+    },
+    {
       "test": "tests/release/release_smoke_test.go::TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN",
       "stableIds": [
         "cli/you.docs"

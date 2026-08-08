@@ -13,6 +13,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 const (
@@ -158,6 +159,7 @@ func TestWorkWatchFollowsStateTransitionsUntilTerminal(t *testing.T) {
 	if !strings.HasSuffix(watchInputs.Stdout(), "\n") {
 		t.Fatalf("work watch output does not end with a complete line: %q", watchInputs.Stdout())
 	}
+	functionalevidence.Covers(t, "cli/you.work.watch")
 }
 
 type workWatchLine struct {

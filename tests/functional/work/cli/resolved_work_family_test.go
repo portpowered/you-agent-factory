@@ -18,9 +18,10 @@ import (
 )
 
 // TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs proves list,
-// show, move, and visualize work CLI commands execute through resolved handlers.
+// watch, show, move, and visualize work CLI commands execute through resolved handlers.
 func TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs(t *testing.T) {
 	var listed workcli.ListConfig
+	var watched workcli.WatchConfig
 	var shown workcli.ShowConfig
 	var moved workcli.MoveConfig
 	handlers := commandregistry.ResolvedWorkHandlers{
@@ -28,6 +29,13 @@ func TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs(t *testi
 			ListWork: func(cfg workcli.ListConfig) error {
 				listed = cfg
 				_, err := io.WriteString(cfg.Output, "listed\n")
+				return err
+			},
+		}),
+		Watch: commandregistry.ResolvedWatchRunE(commandregistry.ResolvedWatchBinding{
+			WatchWork: func(cfg workcli.WatchConfig) error {
+				watched = cfg
+				_, err := io.WriteString(cfg.Output, "watched\n")
 				return err
 			},
 		}),
@@ -64,6 +72,10 @@ func TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs(t *testi
 		"--sort-by", "state.type", "--max-results", "7", "--next-token", "cursor-a",
 	}, "listed\n")
 	assertResolvedWorkExecution(t, handlers, []string{
+		"--server", "https://factory.example", "--debug", "work", "watch",
+		"--session", "session-w", "--follow",
+	}, "watched\n")
+	assertResolvedWorkExecution(t, handlers, []string{
 		"--server", "https://factory.example", "--json", "work", "show",
 		"--session", "session-b", "work-b",
 	}, "shown\n")
@@ -81,6 +93,10 @@ func TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs(t *testi
 		listed.SortBy != "state.type" || listed.MaxResults != 7 ||
 		listed.NextToken != "cursor-a" || !listed.JSON || !listed.Verbose || !listed.Debug {
 		t.Fatalf("list config = %#v, want stable local and inherited inputs", listed)
+	}
+	if watched.Server != "https://factory.example" || watched.SessionID != "session-w" ||
+		!watched.SessionIDExplicit || !watched.Follow || !watched.Verbose || !watched.Debug {
+		t.Fatalf("watch config = %#v, want stable local and inherited inputs", watched)
 	}
 	if shown.Server != "https://factory.example" || shown.SessionID != "session-b" ||
 		shown.WorkID != "work-b" || !shown.JSON {
@@ -132,7 +148,7 @@ func resolvedWorkFamilyRoot(
 	}
 	manifest.Commands[rootRecord.ID] = rootRecord
 	byCommandID := map[string]commandregistry.ResolvedWorkRunE{
-		"you.work.list": handlers.List, "you.work.show": handlers.Show,
+		"you.work.list": handlers.List, "you.work.watch": handlers.Watch, "you.work.show": handlers.Show,
 		"you.work.move": handlers.Move, "you.work.visualize": handlers.Visualize,
 	}
 	cobraHandlers := make(climanifestcobra.CobraHandlerRegistry, len(byCommandID))
@@ -207,6 +223,8 @@ func resolveWorkFunctionalInputs(
 
 func workFunctionalValue(value any) (resolvedinput.Value, error) {
 	switch typed := value.(type) {
+	case bool:
+		return resolvedinput.BoolValue(typed), nil
 	case string:
 		return resolvedinput.StringValue(typed), nil
 	case int:

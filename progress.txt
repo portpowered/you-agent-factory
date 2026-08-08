@@ -7,6 +7,7 @@
 - Reconnectable CLI streams should pass the reducer's last accepted canonical event ID and sequence as server cursors; keep deduplication and ordering in the reducer and cap retries for the whole invocation.
 - Use `context.AfterFunc` to close an active stream body on cancellation so blocked reads and reconnect backoff can unwind without polling or a durable cursor journal.
 - Public event-driven Work observers should drive transitions through the public `you work move` edge in end-to-end fixtures; worker dispatch completion events are distinct from canonical `WORK_STATE_CHANGE` observation.
+- Adding a runnable CLI leaf also requires a reviewed functional-scenario/evidence mapping and a binding in every generic resolved-family fixture; stable-input test helpers must support each newly introduced flag value kind.
 
 ## [2026-08-08 14:07 -07:00] - wo-c2-work-watch-event-stream-001
 - What was implemented
@@ -89,4 +90,20 @@
 - **Learnings for future iterations:**
   - A submitted Work with no worker dispatch does not produce a `WORK_STATE_CHANGE` merely because its runtime projection becomes terminal; public `you work move` is the supported edge for emitting explicit authored state transitions in this fixture.
   - Keep public watch fixtures on one selected session and assert the complete line contract, not only process exit, so regressions in routing or output shape remain visible.
+---
+
+## [2026-08-08 15:46 -07:00] - wo-c2-work-watch-event-stream-004 CI follow-up
+- What was implemented
+  - Registered `cli/you.work.watch` in the reviewed functional-scenario manifest and evidence registry, with the generator’s existing ACP evidence mappings kept consistent.
+  - Extended the resolved Work-family functional fixture to bind and execute `you work watch`, assert explicit session/follow/inherited debug inputs, and resolve boolean stable input values.
+- Files changed
+  - `internal/functionalscenarios/manifest.go`, `internal/functionalscenarios/manifest_test.go`
+  - `contracts/functional-scenarios.json`, `contracts/functional-scenario-evidence.json`
+  - `tests/functional/work/cli/resolved_work_family_test.go`, `tests/functional/work/watch/watch_test.go`
+- Verification
+  - `make contracts-smoke` passes all contract checks/generation iterations.
+  - The affected Work functional packages and `TestWorkWatchFollowsStateTransitionsUntilTerminal` pass.
+- **Learnings for future iterations:**
+  - CI’s generic resolved-family constructor intentionally fails closed when a new runnable leaf is not in its local handler map; adding the production binding alone is insufficient.
+  - The reviewed functional manifest is generated from explicit `applyReviewedEvidence` decisions, so a new customer-boundary test needs both the source mapping and the checked-in manifest/evidence record.
 ---
