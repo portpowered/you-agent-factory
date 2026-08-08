@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -111,6 +112,184 @@ func (h *Handler) GetWorkerSessionObservationBySessionId(
 	h.writeJSON(w, http.StatusOK, response)
 }
 
+// StreamWorkerSessionEventsBySessionId writes one Server-Sent Events data
+// frame per retained/live Worker Session event. A terminal frame closes a
+// successful stream; source failures remain explicit frames after the HTTP
+// response has opened.
+func (h *Handler) StreamWorkerSessionEventsBySessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	params factoryapi.StreamWorkerSessionEventsBySessionIdParams,
+) {
+	if h == nil || h.adapter == nil {
+		writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	if strings.TrimSpace(string(sessionID)) == "" {
+		writeError(w, http.StatusBadRequest, "session id is required", "BAD_REQUEST")
+		return
+	}
+	if r == nil {
+		writeError(w, http.StatusBadRequest, "request is required", "BAD_REQUEST")
+		return
+	}
+	provider, kind, id := string(params.Provider), string(params.Kind), strings.TrimSpace(params.Id)
+	if provider == "" {
+		writeError(w, http.StatusBadRequest, "provider is required", "BAD_REQUEST")
+		return
+	}
+	if kind == "" {
+		writeError(w, http.StatusBadRequest, "kind is required", "BAD_REQUEST")
+		return
+	}
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "id is required", "BAD_REQUEST")
+		return
+	}
+	if provider != string(providers.IDCodex) && provider != string(providers.IDCursor) {
+		writeError(w, http.StatusBadRequest, "unsupported provider", string(factoryapi.ErrorResponseCodePROVIDERUNSUPPORTED))
+		return
+	}
+	if kind != providers.SessionIDKind {
+		writeError(w, http.StatusBadRequest, "unsupported session kind", string(factoryapi.ErrorResponseCodeSESSIONKINDUNSUPPORTED))
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "Worker Session streaming is unavailable", "WORKER_SESSION_STREAM_UNAVAILABLE")
+		return
+	}
+
+	observation, subscription, err := h.adapter.StreamWorkerSessionEvents(r.Context(), string(sessionID), provider, kind, id)
+	if err != nil {
+		h.writeMappedStreamError(w, err)
+		return
+	}
+	defer subscription.Close()
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	for {
+		delivery := subscription.Next(r.Context())
+		switch delivery.Kind {
+		case workersessions.ObservationDeliveryRecord,
+			workersessions.ObservationDeliveryTerminal,
+			workersessions.ObservationDeliveryTerminalReplay:
+			frame := workerSessionEventFrame(observation, delivery)
+			if err := writeSSEFrame(w, flusher, frame); err != nil {
+				if h.logger != nil {
+					h.logger.Debug("write Worker Session event stream failed", zap.Error(err))
+				}
+				return
+			}
+			if delivery.Kind == workersessions.ObservationDeliveryTerminal || delivery.Kind == workersessions.ObservationDeliveryTerminalReplay {
+				return
+			}
+		case workersessions.ObservationDeliveryCanceled:
+			return
+		case workersessions.ObservationDeliverySourceFailure, workersessions.ObservationDeliveryClosed:
+			code, message := workerSessionStreamFailure(delivery.Err)
+			if err := writeSSEFrame(w, flusher, workerSessionFailureFrame(observation, code, message)); err != nil && h.logger != nil {
+				h.logger.Debug("write Worker Session source failure failed", zap.Error(err))
+			}
+			return
+		default:
+			code, message := workerSessionStreamFailure(fmt.Errorf("unknown Worker Session delivery kind %q", delivery.Kind))
+			if err := writeSSEFrame(w, flusher, workerSessionFailureFrame(observation, code, message)); err != nil && h.logger != nil {
+				h.logger.Debug("write Worker Session unknown delivery failure failed", zap.Error(err))
+			}
+			return
+		}
+	}
+}
+
+type workerSessionEventFramePayload struct {
+	Delivery        workersessions.ObservationDeliveryKind     `json:"delivery"`
+	WorkerSessionID string                                     `json:"workerSessionId"`
+	ProviderSession factoryapi.WorkerSessionProviderSessionRef `json:"providerSession"`
+	WorkIDs         []string                                   `json:"workIds"`
+	Event           *workerSessionEventRecordPayload           `json:"event"`
+	ErrorCode       *string                                    `json:"errorCode"`
+	ErrorMessage    *string                                    `json:"errorMessage"`
+}
+
+type workerSessionEventRecordPayload struct {
+	Position       uint64          `json:"position"`
+	SourceType     string          `json:"sourceType"`
+	SourceID       string          `json:"sourceId"`
+	SourceSequence uint64          `json:"sourceSequence"`
+	SourceEventID  string          `json:"sourceEventId"`
+	SchemaID       string          `json:"schemaId"`
+	Payload        json.RawMessage `json:"payload"`
+}
+
+func workerSessionEventFrame(observation factoryapi.WorkerSessionObservation, delivery workersessions.ObservationDelivery) workerSessionEventFramePayload {
+	return workerSessionEventFrameWithIdentity(observation, delivery.Kind, &workerSessionEventRecordPayload{
+		Position: delivery.Event.Position, SourceType: delivery.Event.SourceType, SourceID: delivery.Event.SourceID,
+		SourceSequence: delivery.Event.SourceSequence, SourceEventID: delivery.Event.SourceEventID,
+		SchemaID: delivery.Event.SchemaID, Payload: append(json.RawMessage(nil), delivery.Event.Payload...),
+	})
+}
+
+func workerSessionFailureFrame(observation factoryapi.WorkerSessionObservation, code, message string) workerSessionEventFramePayload {
+	return workerSessionEventFrameWithIdentity(observation, workersessions.ObservationDeliverySourceFailure, nil, &code, &message)
+}
+
+func workerSessionEventFrameWithIdentity(
+	observation factoryapi.WorkerSessionObservation,
+	delivery workersessions.ObservationDeliveryKind,
+	event *workerSessionEventRecordPayload,
+	failure ...*string,
+) workerSessionEventFramePayload {
+	var errorCode, errorMessage *string
+	if len(failure) > 0 {
+		errorCode = failure[0]
+	}
+	if len(failure) > 1 {
+		errorMessage = failure[1]
+	}
+	providerSession := factoryapi.WorkerSessionProviderSessionRef{}
+	if observation.ProviderSession != nil {
+		providerSession = *observation.ProviderSession
+	}
+	return workerSessionEventFramePayload{
+		Delivery: delivery, WorkerSessionID: observation.WorkerSessionId, ProviderSession: providerSession,
+		WorkIDs: append([]string(nil), observation.WorkIds...), Event: event,
+		ErrorCode: errorCode, ErrorMessage: errorMessage,
+	}
+}
+
+func writeSSEFrame(w http.ResponseWriter, flusher http.Flusher, frame workerSessionEventFramePayload) error {
+	payload, err := json.Marshal(frame)
+	if err != nil {
+		return fmt.Errorf("encode Worker Session event frame: %w", err)
+	}
+	if _, err := fmt.Fprintf(w, "data: %s\n\n", payload); err != nil {
+		return err
+	}
+	flusher.Flush()
+	return nil
+}
+
+func workerSessionStreamFailure(err error) (string, string) {
+	switch {
+	case errors.Is(err, workersessions.ErrObservationSourceGap):
+		return "WORKER_SESSION_STREAM_GAP", "retained Worker Session event history is unavailable"
+	case errors.Is(err, workersessions.ErrObservationSourceClosed):
+		return "WORKER_SESSION_STREAM_CLOSED", "Worker Session event source closed before terminal"
+	case errors.Is(err, workersessions.ErrObservationSourceUnavailable):
+		return "WORKER_SESSION_STREAM_UNAVAILABLE", "Worker Session event source is unavailable"
+	default:
+		return "WORKER_SESSION_STREAM_FAILED", "Worker Session event stream failed"
+	}
+}
+
 func (h *Handler) writeMappedError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, work.ErrWorkNotFound):
@@ -136,6 +315,23 @@ func (h *Handler) writeMappedObservationError(w http.ResponseWriter, err error) 
 		writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
 	default:
 		writeError(w, http.StatusInternalServerError, "failed to show Worker Session", "INTERNAL_ERROR")
+	}
+}
+
+func (h *Handler) writeMappedStreamError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, workersessions.ErrObservationSessionNotFound):
+		writeError(w, http.StatusNotFound, "worker session observation not found", "NOT_FOUND")
+	case errors.Is(err, workersessions.ErrObservationProjectionUnavailable):
+		writeError(w, http.StatusInternalServerError, "worker session observation is unavailable", string(factoryapi.ErrorResponseCodePROJECTIONUNAVAILABLE))
+	case errors.Is(err, workersessions.ErrObservationSourceUnavailable), errors.Is(err, workersessions.ErrObservationSourceGap), errors.Is(err, workersessions.ErrObservationSourceClosed):
+		writeError(w, http.StatusInternalServerError, "Worker Session event stream is unavailable", "WORKER_SESSION_STREAM_UNAVAILABLE")
+	case errors.Is(err, context.Canceled), errors.Is(err, workersessions.ErrObservationCanceled):
+		return
+	case strings.Contains(err.Error(), "session id is required"), strings.Contains(err.Error(), "provider, kind, and id are required"):
+		writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+	default:
+		writeError(w, http.StatusInternalServerError, "failed to stream Worker Session events", "INTERNAL_ERROR")
 	}
 }
 

@@ -67,6 +67,12 @@ func TestProcessExitCodePreservesDeclaredLifecycleContract(t *testing.T) {
 			want:       130,
 		},
 		{
+			name:       "worker session stream cancellation normalized by lifecycle",
+			contextErr: context.Canceled,
+			args:       []string{"you", "--server", "http://localhost:7437", "worker-sessions", "stream", "--provider", "codex", "--kind", "session_id", "--id", "provider-session-1"},
+			want:       130,
+		},
+		{
 			name: "wrapped cancellation",
 			err:  fmt.Errorf("stop continuous run: %w", context.Canceled),
 			args: []string{"you", "--server", "http://localhost:7437", "run", "--continuously"},

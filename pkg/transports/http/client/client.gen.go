@@ -85,6 +85,7 @@ const (
 	ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED                 ErrorResponseCode = "RESPONSE_EVENT_STREAM_EXPIRED"
 	ErrorResponseCodeSESSIONKINDUNSUPPORTED                     ErrorResponseCode = "SESSION_KIND_UNSUPPORTED"
 	ErrorResponseCodeSTALEFACTORYVERSION                        ErrorResponseCode = "STALE_FACTORY_VERSION"
+	ErrorResponseCodeWORKERSESSIONSTREAMUNAVAILABLE             ErrorResponseCode = "WORKER_SESSION_STREAM_UNAVAILABLE"
 )
 
 // Defines values for FactoryArtifactAuditMode.
@@ -977,6 +978,14 @@ const (
 	WorkerModelProviderAntigravity WorkerModelProvider = "ANTIGRAVITY"
 	WorkerModelProviderClaude      WorkerModelProvider = "CLAUDE"
 	WorkerModelProviderCodex       WorkerModelProvider = "CODEX"
+)
+
+// Defines values for WorkerSessionEventDelivery.
+const (
+	WorkerSessionEventDeliveryRecord         WorkerSessionEventDelivery = "RECORD"
+	WorkerSessionEventDeliverySourceFailure  WorkerSessionEventDelivery = "SOURCE_FAILURE"
+	WorkerSessionEventDeliveryTerminal       WorkerSessionEventDelivery = "TERMINAL"
+	WorkerSessionEventDeliveryTerminalReplay WorkerSessionEventDelivery = "TERMINAL_REPLAY"
 )
 
 // Defines values for WorkerSessionObservationDurationBasis.
@@ -6625,6 +6634,53 @@ type WorkerModelProvider string
 
 // WorkerProvider Worker execution mechanism. Canonical values are ACP and SCRIPT_WRAP; extensible lowercase identities remain accepted for compatibility with existing factories.
 type WorkerProvider = string
+
+// WorkerSessionEvent defines model for WorkerSessionEvent.
+type WorkerSessionEvent struct {
+	// Delivery Delivery outcome for one Worker Session stream frame. RECORD is a retained or live canonical event, TERMINAL marks the live terminal event, and TERMINAL_REPLAY marks the terminal event in an already-terminal replay. SOURCE_FAILURE is an explicit non-event outcome after the stream has opened.
+	Delivery WorkerSessionEventDelivery `json:"delivery"`
+
+	// ErrorCode Stable source-failure code when delivery is SOURCE_FAILURE.
+	ErrorCode *string `json:"errorCode"`
+
+	// ErrorMessage Safe source-failure message when delivery is SOURCE_FAILURE.
+	ErrorMessage    *string                         `json:"errorMessage"`
+	Event           WorkerSessionEventRecord        `json:"event"`
+	ProviderSession WorkerSessionProviderSessionRef `json:"providerSession"`
+
+	// WorkIds Work identities correlated with the streamed attempt.
+	WorkIds []string `json:"workIds"`
+
+	// WorkerSessionId Stable Worker Session identity for this stream.
+	WorkerSessionId string `json:"workerSessionId"`
+}
+
+// WorkerSessionEventDelivery Delivery outcome for one Worker Session stream frame. RECORD is a retained or live canonical event, TERMINAL marks the live terminal event, and TERMINAL_REPLAY marks the terminal event in an already-terminal replay. SOURCE_FAILURE is an explicit non-event outcome after the stream has opened.
+type WorkerSessionEventDelivery string
+
+// WorkerSessionEventRecord defines model for WorkerSessionEventRecord.
+type WorkerSessionEventRecord struct {
+	// Payload Source-native canonical event payload.
+	Payload map[string]interface{} `json:"payload"`
+
+	// Position Aggregate position assigned by the canonical Events ledger.
+	Position int64 `json:"position"`
+
+	// SchemaId Source-native payload schema identity.
+	SchemaId string `json:"schemaId"`
+
+	// SourceEventId Source-native idempotency event identity.
+	SourceEventId string `json:"sourceEventId"`
+
+	// SourceId Source-native event identity.
+	SourceId string `json:"sourceId"`
+
+	// SourceSequence Source-native monotonic sequence.
+	SourceSequence int64 `json:"sourceSequence"`
+
+	// SourceType Source-native event family.
+	SourceType string `json:"sourceType"`
+}
 
 // WorkerSessionFailure defines model for WorkerSessionFailure.
 type WorkerSessionFailure struct {

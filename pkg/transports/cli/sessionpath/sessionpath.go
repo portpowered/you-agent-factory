@@ -28,6 +28,12 @@ func WorkerSessionsDetailPath(sessionID string) string {
 	return WorkerSessionsCollectionPath(sessionID) + "/detail"
 }
 
+// WorkerSessionsEventsPath returns the retained/live Worker Session event
+// stream route for one factory session.
+func WorkerSessionsEventsPath(sessionID string) string {
+	return WorkerSessionsCollectionPath(sessionID) + "/events"
+}
+
 // WorkItemPath returns the route for one work item in a factory session.
 func WorkItemPath(sessionID, workID string) string {
 	return fmt.Sprintf("%s/%s", WorkCollectionPath(sessionID), url.PathEscape(workID))

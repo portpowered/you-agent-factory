@@ -7613,7 +7613,8 @@
         },
         "examples": [
           "you worker-sessions list --work-id work-123",
-          "you worker-sessions list --work-id work-123 --output json"
+          "you worker-sessions list --work-id work-123 --output json",
+          "you worker-sessions stream --provider codex --kind session_id --id session-123"
         ],
         "visibility": "public",
         "sourceHash": "worker-session-cli-visibility"
@@ -8043,6 +8044,248 @@
       "sideEffects": {
         "you.worker-sessions.show.side-effect.network": {
           "id": "you.worker-sessions.show.side-effect.network",
+          "kind": "network"
+        }
+      },
+      "constraints": {
+        "runtime": [
+          "local"
+        ],
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ]
+      }
+    },
+    "you.worker-sessions.stream": {
+      "id": "you.worker-sessions.stream",
+      "name": "stream",
+      "path": "you worker-sessions stream",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions.stream",
+        "documentation": {
+          "title": {
+            "id": "you.worker-sessions.stream.title",
+            "canonicalEnglish": "Stream one Worker Session"
+          },
+          "description": {
+            "id": "you.worker-sessions.stream.description",
+            "canonicalEnglish": "Stream retained and live canonical Worker Session events for one exact Provider Session identity. The stream ends successfully on a terminal event and reports source failures explicitly."
+          }
+        },
+        "examples": [
+          "you worker-sessions stream --provider codex --kind session_id --id session-123",
+          "you worker-sessions stream --provider codex --kind session_id --id session-123 --output json"
+        ],
+        "visibility": "public",
+        "sourceHash": "worker-session-cli-visibility-stream"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions.stream",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "stream",
+        "example": "  you worker-sessions stream --provider codex --kind session_id --id session-123"
+      },
+      "flags": {
+        "you.worker-sessions.stream.flag.provider": {
+          "id": "you.worker-sessions.stream.flag.provider",
+          "long": "provider",
+          "usage": "provider that issued the correlated session identity",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": true,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.stream.flag.provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.stream.flag.kind": {
+          "id": "you.worker-sessions.stream.flag.kind",
+          "long": "kind",
+          "usage": "provider-session identifier kind",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": true,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.stream.flag.kind",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.stream.flag.id": {
+          "id": "you.worker-sessions.stream.flag.id",
+          "long": "id",
+          "usage": "provider-issued session identifier",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": true,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.stream.flag.id",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.stream.flag.session": {
+          "id": "you.worker-sessions.stream.flag.session",
+          "long": "session",
+          "usage": "target one live factory session; omit to use the default compatibility session",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.stream.flag.session",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.stream.flag.output": {
+          "id": "you.worker-sessions.stream.flag.output",
+          "long": "output",
+          "usage": "output format: human (default) or json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "human",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.stream.flag.output",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "handler": {
+        "id": "you.worker-sessions.stream.handler",
+        "operationId": "streamWorkerSessionEventsBySessionId"
+      },
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "outputs": {
+        "you.worker-sessions.stream.output.human": {
+          "id": "you.worker-sessions.stream.output.human",
+          "channel": "stdout",
+          "format": "text"
+        },
+        "you.worker-sessions.stream.output.json": {
+          "id": "you.worker-sessions.stream.output.json",
+          "channel": "stdout",
+          "format": "json"
+        }
+      },
+      "exits": {
+        "you.worker-sessions.stream.exit.success": {
+          "id": "you.worker-sessions.stream.exit.success",
+          "code": 0,
+          "kind": "success"
+        },
+        "you.worker-sessions.stream.exit.failure": {
+          "id": "you.worker-sessions.stream.exit.failure",
+          "code": 1,
+          "kind": "failure"
+        },
+        "you.worker-sessions.stream.exit.usage": {
+          "id": "you.worker-sessions.stream.exit.usage",
+          "code": 1,
+          "kind": "usage"
+        },
+        "you.worker-sessions.stream.exit.cancel": {
+          "id": "you.worker-sessions.stream.exit.cancel",
+          "code": 130,
+          "kind": "cancel"
+        }
+      },
+      "sideEffects": {
+        "you.worker-sessions.stream.side-effect.network": {
+          "id": "you.worker-sessions.stream.side-effect.network",
           "kind": "network"
         }
       },

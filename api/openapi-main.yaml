@@ -122,6 +122,58 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/worker-sessions/events:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: streamWorkerSessionEventsBySessionId
+      summary: Stream retained and live Worker Session events
+      description: >-
+        Streams the canonical Worker Session Events topic for the exact
+        Provider Session identity in the explicitly selected Factory Session.
+        Retained records are emitted first in aggregate order, followed by
+        live records. Each data frame is serialized JSON matching
+        WorkerSessionEvent. The terminal event is marked TERMINAL for an active
+        session or TERMINAL_REPLAY for an already-terminal session, after
+        which the connection closes successfully. Source failures are emitted
+        as an explicit SOURCE_FAILURE frame so clients can preserve complete
+        records already written and return a typed non-success result.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - name: provider
+          in: query
+          required: true
+          description: Provider that issued the correlated session identity.
+          schema:
+            $ref: '#/components/schemas/LoadableProviderSessionProvider'
+        - name: kind
+          in: query
+          required: true
+          description: Provider-session identifier kind.
+          schema:
+            $ref: '#/components/schemas/LoadableProviderSessionKind'
+        - name: id
+          in: query
+          required: true
+          description: Provider-issued session identifier, not a filesystem path.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Retained then live Worker Session event frames.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events where each data frame is serialized JSON matching WorkerSessionEvent.
+              x-event-schema: '#/components/schemas/WorkerSessionEvent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/worker-sessions/detail:
     get:
       tags:
@@ -1706,6 +1758,12 @@ components:
       $ref: './components/schemas/api/ListWorkerSessionsResponse.yaml'
     WorkerSessionObservation:
       $ref: './components/schemas/api/WorkerSessionObservation.yaml'
+    WorkerSessionEvent:
+      $ref: './components/schemas/api/WorkerSessionEvent.yaml'
+    WorkerSessionEventDelivery:
+      $ref: './components/schemas/api/WorkerSessionEventDelivery.yaml'
+    WorkerSessionEventRecord:
+      $ref: './components/schemas/api/WorkerSessionEventRecord.yaml'
     WorkerSessionProviderSessionRef:
       $ref: './components/schemas/api/WorkerSessionProviderSessionRef.yaml'
     WorkerSessionFailure:

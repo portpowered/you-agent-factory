@@ -1,0 +1,35 @@
+type: object
+additionalProperties: false
+required:
+  - delivery
+  - workerSessionId
+  - providerSession
+  - workIds
+  - event
+  - errorCode
+  - errorMessage
+properties:
+  delivery:
+    $ref: './WorkerSessionEventDelivery.yaml'
+  workerSessionId:
+    type: string
+    description: Stable Worker Session identity for this stream.
+  providerSession:
+    $ref: './WorkerSessionProviderSessionRef.yaml'
+  workIds:
+    type: array
+    items:
+      type: string
+    description: Work identities correlated with the streamed attempt.
+  event:
+    $ref: './WorkerSessionEventRecord.yaml'
+    nullable: true
+    description: Canonical event record, or null for an explicit source failure.
+  errorCode:
+    type: string
+    nullable: true
+    description: Stable source-failure code when delivery is SOURCE_FAILURE.
+  errorMessage:
+    type: string
+    nullable: true
+    description: Safe source-failure message when delivery is SOURCE_FAILURE.

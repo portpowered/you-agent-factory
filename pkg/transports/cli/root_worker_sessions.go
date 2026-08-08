@@ -26,6 +26,11 @@ func productionWorkerSessionsCommand(
 	}); err != nil {
 		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
 	}
+	if err := registry.Register("you.worker-sessions.stream.handler", func(cmd *cobra.Command, _ []string) error {
+		return executeGeneratedWorkerSessionsStream(cmd, globals, diagnostics, options.StreamWorkerSession)
+	}); err != nil {
+		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
+	}
 	command, err := climanifestcobra.NewWorkerSessionsFamilyCommand(registry)
 	if err != nil {
 		panic(fmt.Sprintf("build worker sessions family command: %v", err))
@@ -102,6 +107,48 @@ func executeGeneratedWorkerSessionsShow(
 	}
 	jsonOutput := globals.json || strings.EqualFold(strings.TrimSpace(outputFormat), "json")
 	return show(workersessionscli.ShowConfig{
+		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
+		Provider: provider, Kind: kind, ID: id, OutputFormat: outputFormat, JSON: jsonOutput,
+		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
+		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,
+	})
+}
+
+func executeGeneratedWorkerSessionsStream(
+	cmd *cobra.Command,
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	stream workersessionscli.StreamOperation,
+) error {
+	if stream == nil {
+		return fmt.Errorf("worker sessions stream service is required")
+	}
+	values, err := generatedCommandInputs(cmd)
+	if err != nil {
+		return err
+	}
+	provider, err := commandInputValue[string](values, "you.worker-sessions.stream.flag.provider")
+	if err != nil {
+		return err
+	}
+	kind, err := commandInputValue[string](values, "you.worker-sessions.stream.flag.kind")
+	if err != nil {
+		return err
+	}
+	id, err := commandInputValue[string](values, "you.worker-sessions.stream.flag.id")
+	if err != nil {
+		return err
+	}
+	sessionID, err := commandInputValue[string](values, "you.worker-sessions.stream.flag.session")
+	if err != nil {
+		return err
+	}
+	outputFormat, err := commandInputValue[string](values, "you.worker-sessions.stream.flag.output")
+	if err != nil {
+		return err
+	}
+	jsonOutput := globals.json || strings.EqualFold(strings.TrimSpace(outputFormat), "json")
+	return stream(workersessionscli.StreamConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
 		Provider: provider, Kind: kind, ID: id, OutputFormat: outputFormat, JSON: jsonOutput,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),

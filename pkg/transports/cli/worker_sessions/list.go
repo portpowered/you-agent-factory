@@ -11,6 +11,8 @@ type ListConfig = workersessionscli.ListConfig
 type ListOperation = workersessionscli.ListOperation
 type ShowConfig = workersessionscli.ShowConfig
 type ShowOperation = workersessionscli.ShowOperation
+type StreamConfig = workersessionscli.StreamConfig
+type StreamOperation = workersessionscli.StreamOperation
 
 func NewList(transport clihttp.Protocol) ListOperation {
 	return workersessionscli.NewList(transport)
@@ -26,4 +28,12 @@ func NewShow(transport clihttp.Protocol) ShowOperation {
 
 func BindShow(transport clihttp.Protocol) ShowOperation {
 	return workersessionscli.BindShow(transport)
+}
+
+func NewStream(transport clihttp.Protocol) StreamOperation {
+	return workersessionscli.NewStream(transport)
+}
+
+func BindStream(transport clihttp.Protocol) StreamOperation {
+	return workersessionscli.BindStream(transport)
 }
