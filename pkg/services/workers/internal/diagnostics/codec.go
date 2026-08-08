@@ -321,6 +321,8 @@ func safeDiagnosticMetadataValue(key, value string) string {
 		return closedVocabularyMetadataValue(value, safeFailureStageValues)
 	case "failure_type":
 		return closedVocabularyMetadataValue(value, safeFailureTypeValues)
+	case "inspection_limit_category":
+		return closedVocabularyMetadataValue(value, safeInspectionLimitCategoryValues)
 	}
 	return boundedSafeMetadataValue(value)
 }
@@ -372,6 +374,16 @@ func isSafeProviderMetadataKey(key string) bool {
 		"failure_operation",
 		"failure_stage",
 		"failure_type",
+		"inspection_diagnostics_truncated",
+		"inspection_line_count",
+		"inspection_limit_category",
+		"inspection_limit_configured",
+		"inspection_limit_line",
+		"inspection_limit_observed",
+		"inspection_record_count",
+		"inspection_retained_text_truncated",
+		"inspection_source_bytes",
+		"inspection_transcript_truncated",
 		"opencode_agent",
 		"output_schema",
 		"prompt_source",
@@ -443,6 +455,14 @@ var safeFailureTypeValues = map[string]struct{}{
 	"throttled":             {},
 	"timeout":               {},
 	"unknown":               {},
+}
+
+var safeInspectionLimitCategoryValues = map[string]struct{}{
+	"bytes":           {},
+	"lines":           {},
+	"record":          {},
+	"records":         {},
+	"retained_output": {},
 }
 
 func cloneSafeInvocationDiagnostic(diagnostic *InvocationDiagnostic) *InvocationDiagnostic {

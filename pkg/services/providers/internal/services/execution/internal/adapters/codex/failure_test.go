@@ -246,6 +246,48 @@ func TestCodexRootCarriesObservedSessionOnParseFailure(t *testing.T) {
 	}
 }
 
+func TestCodexRootCarriesBoundedRecordLimitThroughFailureDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	stream := `{"type":"thread.started","thread_id":"thread-record-limit"}` + "\n" +
+		`{"type":"item.updated","item":{"id":"oversized-record","type":"agent_message","text":"` +
+		strings.Repeat("x", (1<<20)+1) + `"}}` + "\n"
+	effect := codex.EffectFunc(func(
+		_ context.Context,
+		_ execution.ContinuationRequest,
+		observe func([]byte) error,
+	) (codex.EffectResult, error) {
+		return codex.EffectResult{}, observe([]byte(stream))
+	})
+
+	result, err := newCodexRoot(t, effect).Execute(t.Context(), codexFailureRequest())
+	if !reflect.DeepEqual(result, providers.ExecuteResult{}) {
+		t.Fatalf("Execute() result = %#v, want zero result", result)
+	}
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) || failure.Kind != providers.ExecuteFailureKindDependency {
+		t.Fatalf("Execute() error = %#v, want dependency failure", err)
+	}
+	if !strings.Contains(failure.Message, "record limit") ||
+		!strings.Contains(failure.Message, "configured 1048576") ||
+		!strings.Contains(failure.Message, "thread-record-limit") {
+		t.Fatalf("failure message = %q, want safe record-limit context", failure.Message)
+	}
+	if failure.Diagnostics == nil {
+		t.Fatal("failure diagnostics = nil, want bounded limit context")
+	}
+	metadata := failure.Diagnostics.Metadata
+	if metadata["inspection_limit_category"] != "record" ||
+		metadata["inspection_limit_configured"] != "1048576" ||
+		metadata["inspection_limit_observed"] == "" ||
+		metadata["inspection_limit_line"] != "2" {
+		t.Fatalf("failure limit metadata = %#v, want bounded record facts", metadata)
+	}
+	if strings.Contains(err.Error(), strings.Repeat("x", 128)) {
+		t.Fatalf("failure error leaked oversized rollout content: %v", err)
+	}
+}
+
 func codexFailureRequest() providers.ExecuteRequest {
 	return providers.ExecuteRequest{
 		Provider:     providers.IDCodex,

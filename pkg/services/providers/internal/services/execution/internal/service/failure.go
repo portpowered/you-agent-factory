@@ -69,7 +69,9 @@ func normalizeAttemptFailure(
 		}, request, extraSecrets...)
 	}
 	if hasLifecycle && lifecycle.Declared != nil {
-		return normalizeDeclaredFailure(lifecycle.Declared.Clone(), request, extraSecrets...)
+		declared := lifecycle.Declared.Clone()
+		declared.Diagnostics = mergeLifecycleDiagnostics(declared.Diagnostics, lifecycle.Diagnostics)
+		return normalizeDeclaredFailure(declared, request, extraSecrets...)
 	}
 	if declared, ok := executeFailureAs(attemptErr); ok {
 		return normalizeDeclaredFailure(declared, request, extraSecrets...)
@@ -153,8 +155,12 @@ func lifecycleStageDiagnostics(
 	failure execution.AttemptFailure,
 	ok bool,
 ) *providers.ExecuteDiagnostics {
-	if !ok {
+	if !ok && failure.Diagnostics == nil {
 		return nil
+	}
+	diagnostics := providers.ExecuteDiagnostics{}
+	if failure.Diagnostics != nil {
+		diagnostics = failure.Diagnostics.Clone()
 	}
 	stage := ""
 	switch {
@@ -167,12 +173,49 @@ func lifecycleStageDiagnostics(
 	case failure.NativeError != nil:
 		stage = failureStageNative
 	}
-	if stage == "" {
+	if stage != "" {
+		if diagnostics.Metadata == nil {
+			diagnostics.Metadata = make(map[string]string)
+		}
+		diagnostics.Metadata["failure_stage"] = stage
+	}
+	if diagnostics.Metadata == nil && len(diagnostics.Progress) == 0 && diagnostics.DurationMillis == 0 {
 		return nil
 	}
-	return &providers.ExecuteDiagnostics{
-		Metadata: map[string]string{"failure_stage": stage},
+	return &diagnostics
+}
+
+func mergeLifecycleDiagnostics(
+	declared *providers.ExecuteDiagnostics,
+	lifecycle *providers.ExecuteDiagnostics,
+) *providers.ExecuteDiagnostics {
+	if declared == nil {
+		if lifecycle == nil {
+			return nil
+		}
+		clone := lifecycle.Clone()
+		return &clone
 	}
+	if lifecycle == nil {
+		clone := declared.Clone()
+		return &clone
+	}
+	merged := declared.Clone()
+	overlay := lifecycle.Clone()
+	if len(overlay.Progress) > 0 {
+		merged.Progress = append(merged.Progress, overlay.Progress...)
+	}
+	if merged.Metadata == nil {
+		merged.Metadata = make(map[string]string)
+	}
+	for key, value := range overlay.Metadata {
+		merged.Metadata[key] = value
+	}
+	if overlay.DurationMillis > merged.DurationMillis {
+		merged.DurationMillis = overlay.DurationMillis
+	}
+	merged.ProgressAlreadyObserved = merged.ProgressAlreadyObserved || overlay.ProgressAlreadyObserved
+	return &merged
 }
 
 func containsError(values []error, target error) bool {

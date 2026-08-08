@@ -65,8 +65,12 @@ type ContinuationAttempt func(context.Context, ContinuationRequest) (providers.E
 // deterministic precedence rule and never exposes these native errors to
 // peers.
 type AttemptFailure struct {
-	Declared        *providers.ExecuteFailure
-	SessionRef      *providers.SessionRef
+	Declared   *providers.ExecuteFailure
+	SessionRef *providers.SessionRef
+	// Diagnostics carries bounded adapter facts such as inspection limits and
+	// progress truncation through execution normalization. It intentionally
+	// contains no native error text or raw provider payload.
+	Diagnostics     *providers.ExecuteDiagnostics
 	NativeError     error
 	DecodeError     error
 	FlushError      error

@@ -410,12 +410,22 @@ const (
 	// ProviderResponseMetadataFailure* are bounded, closed-vocabulary failure
 	// facts. They are safe to carry across the worker and terminal-event
 	// boundaries; raw provider errors and rollout payloads are not.
-	ProviderResponseMetadataFailureClassification = "failure_classification"
-	ProviderResponseMetadataFailureFamily         = "failure_family"
-	ProviderResponseMetadataFailureOperation      = "failure_operation"
-	ProviderResponseMetadataFailureStage          = "failure_stage"
-	ProviderResponseMetadataFailureType           = "failure_type"
-	ProviderResponseMetadataCompletionEvidence    = "completion_evidence"
+	ProviderResponseMetadataFailureClassification           = "failure_classification"
+	ProviderResponseMetadataFailureFamily                   = "failure_family"
+	ProviderResponseMetadataFailureOperation                = "failure_operation"
+	ProviderResponseMetadataFailureStage                    = "failure_stage"
+	ProviderResponseMetadataFailureType                     = "failure_type"
+	ProviderResponseMetadataCompletionEvidence              = "completion_evidence"
+	ProviderResponseMetadataInspectionLimitCategory         = "inspection_limit_category"
+	ProviderResponseMetadataInspectionLimitConfigured       = "inspection_limit_configured"
+	ProviderResponseMetadataInspectionLimitObserved         = "inspection_limit_observed"
+	ProviderResponseMetadataInspectionLimitLine             = "inspection_limit_line"
+	ProviderResponseMetadataInspectionSourceBytes           = "inspection_source_bytes"
+	ProviderResponseMetadataInspectionLineCount             = "inspection_line_count"
+	ProviderResponseMetadataInspectionRecordCount           = "inspection_record_count"
+	ProviderResponseMetadataInspectionTranscriptTruncated   = "inspection_transcript_truncated"
+	ProviderResponseMetadataInspectionDiagnosticsTruncated  = "inspection_diagnostics_truncated"
+	ProviderResponseMetadataInspectionRetainedTextTruncated = "inspection_retained_text_truncated"
 )
 
 // InvocationDiagnostic records replay-safe invocation metadata derived from

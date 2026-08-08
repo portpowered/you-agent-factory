@@ -89,10 +89,14 @@ func TestSafeWorkDiagnosticsBoundsFailureMetadataAndKeepsCorrelation(t *testing.
 		Provider: &ProviderDiagnostic{
 			RequestMetadata: map[string]string{"dispatch_id": longValue},
 			ResponseMetadata: map[string]string{
-				"failure_operation":      "provider_session_ingestion",
-				"failure_classification": "resource_limit",
-				"failure_stage":          longValue,
-				"raw_rollout":            longValue,
+				"failure_operation":           "provider_session_ingestion",
+				"failure_classification":      "resource_limit",
+				"failure_stage":               longValue,
+				"inspection_limit_category":   "record",
+				"inspection_limit_configured": "1048576",
+				"inspection_limit_observed":   "1048577",
+				"inspection_limit_line":       "2",
+				"raw_rollout":                 longValue,
 			},
 		},
 	})
@@ -105,6 +109,12 @@ func TestSafeWorkDiagnosticsBoundsFailureMetadataAndKeepsCorrelation(t *testing.
 	if safe.Provider.ResponseMetadata["failure_operation"] != "provider_session_ingestion" ||
 		safe.Provider.ResponseMetadata["failure_classification"] != "resource_limit" {
 		t.Fatalf("response metadata = %#v, want stable failure classification", safe.Provider.ResponseMetadata)
+	}
+	if safe.Provider.ResponseMetadata["inspection_limit_category"] != "record" ||
+		safe.Provider.ResponseMetadata["inspection_limit_configured"] != "1048576" ||
+		safe.Provider.ResponseMetadata["inspection_limit_observed"] != "1048577" ||
+		safe.Provider.ResponseMetadata["inspection_limit_line"] != "2" {
+		t.Fatalf("response metadata = %#v, want bounded inspection limit facts", safe.Provider.ResponseMetadata)
 	}
 	if _, ok := safe.Provider.ResponseMetadata["failure_stage"]; ok {
 		t.Fatal("unrecognized failure stage value was retained")
