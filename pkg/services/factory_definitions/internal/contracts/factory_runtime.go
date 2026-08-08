@@ -102,6 +102,20 @@ type RuntimeFactoryConfigLookup interface {
 	FactoryConfig() *FactoryConfig
 }
 
+// PromptSource identifies the fixed authored file used to refresh one prompt
+// at dispatch time. It is runtime metadata, not Factory configuration.
+type PromptSource struct {
+	Path       string
+	IsTemplate bool
+}
+
+// RuntimePromptSourceLookup exposes authored prompt identity without adding
+// source paths to the customer-facing runtime Factory Definition.
+type RuntimePromptSourceLookup interface {
+	WorkerPromptSource(name string) (PromptSource, bool)
+	WorkstationPromptSource(name string) (PromptSource, bool)
+}
+
 // RuntimeConfigLookup exposes the canonical public runtime-facing lookup
 // contract for consumers that need runtime definitions plus path-aware
 // execution lookups.

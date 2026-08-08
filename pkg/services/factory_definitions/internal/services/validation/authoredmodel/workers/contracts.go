@@ -31,8 +31,13 @@ type Config struct {
 	Linear           *HostedLinearWorkerConfig `json:"linear,omitempty" yaml:"linear,omitempty"`
 	AgentTools       *AgentToolsConfig         `json:"agentTools,omitempty" yaml:"agentTools,omitempty"`
 	Body             string                    `json:"body,omitempty" yaml:"-"`
-	SessionID        string                    `json:"-" yaml:"-"`
-	Concurrency      int                       `json:"-" yaml:"-"`
+	// PromptSourcePath is runtime-only identity for a file-backed authored
+	// worker prompt. It is intentionally not part of the persisted Factory
+	// Definition; the path is fixed when the authored layout is loaded and the
+	// current body is read again for each dispatch.
+	PromptSourcePath string `json:"-" yaml:"-"`
+	SessionID        string `json:"-" yaml:"-"`
+	Concurrency      int    `json:"-" yaml:"-"`
 	// RuntimeDefaultModelProvider and RuntimeDefaultModel retain operator
 	// fallbacks for invocation-interpolated selections. They are effective
 	// runtime metadata and never part of an authored Factory definition.
