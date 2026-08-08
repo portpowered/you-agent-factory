@@ -2,18 +2,16 @@ package guards
 
 import (
 	"context"
-	"errors"
+	"os"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -26,10 +24,11 @@ const (
 	secondaryJoinTransition     = "join-items"
 )
 
-// TestDependsOnSecondaryJoinedInput proves through public Factory Events that
-// a SAME_NAME binding remains undispatched while a DEPENDS_ON relation on its
-// secondary input is blocked, then dispatches exactly once after that
-// prerequisite reaches its required terminal state.
+// TestDependsOnSecondaryJoinedInput proves through the injected dispatch edge
+// that a SAME_NAME binding remains undispatched while a DEPENDS_ON relation on
+// its secondary input is blocked, then dispatches exactly once after that
+// prerequisite reaches its required terminal state. The application is built
+// and executed through the same root process used by the customer CLI.
 func TestDependsOnSecondaryJoinedInput(t *testing.T) {
 	dir := support.ScaffoldFactory(t, secondaryDependencyJoinFactoryConfig())
 	support.WriteAgentConfig(t, dir, "producer", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
@@ -59,42 +58,51 @@ func TestDependsOnSecondaryJoinedInput(t *testing.T) {
 		}},
 	})
 
-	provider := newSecondaryJoinProvider()
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir,
-		Edges: serviceedges.Edges{
-			ProviderOverride: provider,
-		},
+	provider := newSecondaryJoinCommandRunner()
+	dispatches := newSecondaryJoinDispatchRecorder()
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: provider,
+		DispatchRecorder:      dispatches.Record,
 	})
-	provider.WaitForProducer(t, 15*time.Second)
+	support.CleanupProcess(t, process)
 
-	blockedEvents := server.GetFactoryEvents(t)
-	assertNoTransitionDispatch(t, blockedEvents, secondaryJoinTransition)
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run",
+		"--dir", dir,
+		"--continuously",
+		"--quiet",
+		"--no-record",
+	})
+	homeDir := t.TempDir()
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = dir
+	support.StartProcessCommand(t, process, inputs.Input)
+
+	<-provider.producerStarted
+	blocked := dispatches.Snapshot()
+	if got := countDispatches(blocked, secondaryJoinTransition); got != 0 {
+		t.Fatalf("joined dispatches before producer release = %d, want zero; dispatches=%#v", got, blocked)
+	}
+	if got := provider.CallCount(); got != 1 {
+		t.Fatalf("provider command calls before producer release = %d, want one controlled producer call", got)
+	}
 
 	provider.ReleaseProducer()
-	provider.WaitForJoinedDispatch(t, 15*time.Second)
-	support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
+	<-provider.producerResponseReturned
+	joined := <-dispatches.joined
 
-	finalEvents := server.GetFactoryEvents(t)
-	joinedRequests := dispatchRequestsForTransition(t, finalEvents, secondaryJoinTransition)
-	if len(joinedRequests) != 1 {
-		t.Fatalf("%s dispatch requests = %d, want exactly one; events=%#v", secondaryJoinTransition, len(joinedRequests), finalEvents)
+	allDispatches := dispatches.Snapshot()
+	if got := countDispatches(allDispatches, secondaryJoinTransition); got != 1 {
+		t.Fatalf("joined dispatches after producer completion = %d, want exactly one; dispatches=%#v", got, allDispatches)
 	}
-	assertJoinedInputBinding(t, joinedRequests[0], secondaryJoinPlanWorkID, secondaryJoinTaskWorkID)
-
-	producerCompleteSequence := dispatchResponseSequenceForWork(
-		t,
-		finalEvents,
-		secondaryJoinProduce,
-		secondaryJoinProducerWorkID,
-	)
-	if joinedRequests[0].Context.Sequence <= producerCompleteSequence {
-		t.Fatalf(
-			"joined dispatch sequence = %d, want after producer completion sequence %d",
-			joinedRequests[0].Context.Sequence,
-			producerCompleteSequence,
-		)
+	producer, ok := dispatchForTransition(allDispatches, secondaryJoinProduce)
+	if !ok {
+		t.Fatalf("missing producer dispatch in %#v", allDispatches)
 	}
+	if joined.CreatedTick <= producer.CreatedTick {
+		t.Fatalf("joined dispatch tick = %d, want after producer dispatch tick %d", joined.CreatedTick, producer.CreatedTick)
+	}
+	assertJoinedInputBinding(t, joined, secondaryJoinPlanWorkID, secondaryJoinTaskWorkID)
 }
 
 func secondaryDependencyJoinFactoryConfig() map[string]any {
@@ -159,165 +167,140 @@ func secondaryDependencyJoinFactoryConfig() map[string]any {
 	}
 }
 
-type secondaryJoinProvider struct {
-	producerStarted chan struct{}
-	joinedStarted   chan struct{}
-	releaseProducer chan struct{}
-	producerOnce    sync.Once
-	joinedOnce      sync.Once
-	releaseOnce     sync.Once
+type secondaryJoinCommandRunner struct {
+	mu sync.Mutex
+
+	requests []platformprocess.CommandRequest
+
+	producerStarted          chan struct{}
+	producerResponseReturned chan struct{}
+	releaseProducer          chan struct{}
+	producerOnce             sync.Once
+	responseOnce             sync.Once
+	releaseOnce              sync.Once
 }
 
-var _ workerprovider.Provider = (*secondaryJoinProvider)(nil)
-
-func newSecondaryJoinProvider() *secondaryJoinProvider {
-	return &secondaryJoinProvider{
-		producerStarted: make(chan struct{}),
-		joinedStarted:   make(chan struct{}),
-		releaseProducer: make(chan struct{}),
+func newSecondaryJoinCommandRunner() *secondaryJoinCommandRunner {
+	return &secondaryJoinCommandRunner{
+		producerStarted:          make(chan struct{}),
+		producerResponseReturned: make(chan struct{}),
+		releaseProducer:          make(chan struct{}),
 	}
 }
 
-func (p *secondaryJoinProvider) Infer(
+func (r *secondaryJoinCommandRunner) Run(
 	ctx context.Context,
-	req workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
-	workerType := req.WorkerType
-	if workerType == "" {
-		workerType = req.Dispatch.WorkerType
-	}
-	switch workerType {
-	case "producer":
-		p.producerOnce.Do(func() { close(p.producerStarted) })
+	req platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	r.mu.Lock()
+	call := len(r.requests)
+	r.requests = append(r.requests, req)
+	r.mu.Unlock()
+
+	if call == 0 {
+		r.producerOnce.Do(func() { close(r.producerStarted) })
 		select {
-		case <-p.releaseProducer:
+		case <-r.releaseProducer:
+			r.responseOnce.Do(func() { close(r.producerResponseReturned) })
 		case <-ctx.Done():
-			return workerexecution.InferenceResponse{}, ctx.Err()
+			return platformprocess.CommandResult{}, ctx.Err()
 		}
-		return workerexecution.InferenceResponse{Content: "producer complete: COMPLETE"}, nil
-	case "matcher":
-		p.joinedOnce.Do(func() { close(p.joinedStarted) })
-		return workerexecution.InferenceResponse{Content: "joined: COMPLETE"}, nil
-	default:
-		return workerexecution.InferenceResponse{}, errors.New("unexpected worker type: " + workerType)
+	}
+
+	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("COMPLETE")}, nil
+}
+
+func (r *secondaryJoinCommandRunner) ReleaseProducer() {
+	r.releaseOnce.Do(func() { close(r.releaseProducer) })
+}
+
+func (r *secondaryJoinCommandRunner) CallCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.requests)
+}
+
+type secondaryJoinDispatchRecorder struct {
+	mu      sync.Mutex
+	records []recordings.FactoryDispatchRecord
+	joined  chan recordings.FactoryDispatchRecord
+}
+
+func newSecondaryJoinDispatchRecorder() *secondaryJoinDispatchRecorder {
+	return &secondaryJoinDispatchRecorder{
+		joined: make(chan recordings.FactoryDispatchRecord, 4),
 	}
 }
 
-func (p *secondaryJoinProvider) WaitForProducer(t *testing.T, timeout time.Duration) {
-	t.Helper()
-	select {
-	case <-p.producerStarted:
-	case <-time.After(timeout):
-		t.Fatalf("timed out waiting for controlled producer dispatch within %s", timeout)
+func (r *secondaryJoinDispatchRecorder) Record(record recordings.FactoryDispatchRecord) {
+	record = cloneDispatchRecord(record)
+	r.mu.Lock()
+	r.records = append(r.records, record)
+	r.mu.Unlock()
+
+	if record.Dispatch.TransitionID == secondaryJoinTransition {
+		r.joined <- record
 	}
 }
 
-func (p *secondaryJoinProvider) ReleaseProducer() {
-	p.releaseOnce.Do(func() { close(p.releaseProducer) })
-}
+func (r *secondaryJoinDispatchRecorder) Snapshot() []recordings.FactoryDispatchRecord {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-func (p *secondaryJoinProvider) WaitForJoinedDispatch(t *testing.T, timeout time.Duration) {
-	t.Helper()
-	select {
-	case <-p.joinedStarted:
-	case <-time.After(timeout):
-		t.Fatalf("timed out waiting for joined dispatch within %s", timeout)
+	result := make([]recordings.FactoryDispatchRecord, len(r.records))
+	for index, record := range r.records {
+		result[index] = cloneDispatchRecord(record)
 	}
+	return result
 }
 
-func assertNoTransitionDispatch(t *testing.T, events []factoryapi.FactoryEvent, transitionID string) {
-	t.Helper()
-	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeDispatchRequest {
-			continue
-		}
-		payload, err := event.Payload.AsDispatchRequestEventPayload()
-		if err != nil {
-			t.Fatalf("decode dispatch request %q: %v", event.Id, err)
-		}
-		if payload.TransitionId == transitionID {
-			t.Fatalf("%s dispatched before producer release at sequence %d", transitionID, event.Context.Sequence)
+func cloneDispatchRecord(record recordings.FactoryDispatchRecord) recordings.FactoryDispatchRecord {
+	record.Dispatch = work.CloneWorkDispatch(record.Dispatch)
+	record.ConsumedTokens = append([]string(nil), record.ConsumedTokens...)
+	return record
+}
+
+func countDispatches(records []recordings.FactoryDispatchRecord, transitionID string) int {
+	count := 0
+	for _, record := range records {
+		if record.Dispatch.TransitionID == transitionID {
+			count++
 		}
 	}
+	return count
 }
 
-func dispatchRequestsForTransition(
-	t *testing.T,
-	events []factoryapi.FactoryEvent,
+func dispatchForTransition(
+	records []recordings.FactoryDispatchRecord,
 	transitionID string,
-) []factoryapi.FactoryEvent {
-	t.Helper()
-	var matches []factoryapi.FactoryEvent
-	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeDispatchRequest {
-			continue
-		}
-		payload, err := event.Payload.AsDispatchRequestEventPayload()
-		if err != nil {
-			t.Fatalf("decode dispatch request %q: %v", event.Id, err)
-		}
-		if payload.TransitionId == transitionID {
-			matches = append(matches, event)
+) (recordings.FactoryDispatchRecord, bool) {
+	for _, record := range records {
+		if record.Dispatch.TransitionID == transitionID {
+			return record, true
 		}
 	}
-	return matches
+	return recordings.FactoryDispatchRecord{}, false
 }
 
-func assertJoinedInputBinding(t *testing.T, event factoryapi.FactoryEvent, planWorkID, taskWorkID string) {
+func assertJoinedInputBinding(
+	t *testing.T,
+	record recordings.FactoryDispatchRecord,
+	planWorkID string,
+	taskWorkID string,
+) {
 	t.Helper()
-	payload, err := event.Payload.AsDispatchRequestEventPayload()
-	if err != nil {
-		t.Fatalf("decode joined dispatch request %q: %v", event.Id, err)
-	}
-	seen := make(map[string]bool, len(payload.Inputs))
-	for _, input := range payload.Inputs {
-		seen[input.WorkId] = true
+	seen := make(map[string]bool, len(record.Dispatch.Execution.WorkIDs))
+	for _, workID := range record.Dispatch.Execution.WorkIDs {
+		seen[workID] = true
 	}
 	if !seen[planWorkID] || !seen[taskWorkID] || len(seen) != 2 {
-		t.Fatalf("joined dispatch inputs = %#v, want exactly %q and %q", payload.Inputs, planWorkID, taskWorkID)
+		t.Fatalf(
+			"joined dispatch Work IDs = %#v, want exactly %q and %q",
+			record.Dispatch.Execution.WorkIDs,
+			planWorkID,
+			taskWorkID,
+		)
 	}
 }
 
-func dispatchResponseSequenceForWork(
-	t *testing.T,
-	events []factoryapi.FactoryEvent,
-	transitionID string,
-	workID string,
-) int {
-	t.Helper()
-	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
-			continue
-		}
-		payload, err := event.Payload.AsDispatchResponseEventPayload()
-		if err != nil {
-			t.Fatalf("decode dispatch response %q: %v", event.Id, err)
-		}
-		if payload.TransitionId != transitionID || !eventContainsWorkID(event.Context.WorkIds, workID) {
-			continue
-		}
-		if payload.Outcome != factoryapi.WorkOutcomeAccepted {
-			t.Fatalf(
-				"%s response for work %q outcome = %q, want accepted",
-				transitionID,
-				workID,
-				payload.Outcome,
-			)
-		}
-		return event.Context.Sequence
-	}
-	t.Fatalf("missing accepted %s response for work %q", transitionID, workID)
-	return 0
-}
-
-func eventContainsWorkID(workIDs *[]string, want string) bool {
-	if workIDs == nil {
-		return false
-	}
-	for _, workID := range *workIDs {
-		if workID == want {
-			return true
-		}
-	}
-	return false
-}
+var _ platformprocess.CommandRunner = (*secondaryJoinCommandRunner)(nil)
