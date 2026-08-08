@@ -3,7 +3,9 @@ package service_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -729,4 +731,234 @@ func TestCancel_ConcurrentControlsShareOneBoundaryEffect(t *testing.T) {
 	if final := <-started; final.Session.State != workersessions.StateCanceled {
 		t.Fatalf("Start() after shared cancellation = %#v, want CANCELED", final)
 	}
+}
+
+// TestInvokeSession_RetriesARetryableFailureUnderOneWorkerIdentity is the
+// attempt loop's core contract.
+//
+// A retried Worker is still one Worker: its attempts run under the same session
+// identity and the same already-open publication window, so a client sees one
+// tool call whose content continues rather than a second tool call appearing.
+// Only the Workers dispatch identity changes, and it changes to ".../attempt/N"
+// so Workers can tell the attempts apart.
+func TestInvokeSession_RetriesARetryableFailureUnderOneWorkerIdentity(t *testing.T) {
+	var attempts atomic.Int32
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			if attempts.Add(1) == 1 {
+				return retryableFailureResult(req), nil
+			}
+			return acceptedResult(req), nil
+		},
+	}
+	registry := newRegistryWithExecution(execution)
+
+	req := validStartRequest("worker-1", "dispatch-1")
+	req.Retry = workersessions.RetryPolicy{MaxAttempts: 2}
+	result, err := registry.InvokeSession(context.Background(), req)
+	if err != nil {
+		t.Fatalf("InvokeSession: %v", err)
+	}
+	if result.Session.State != workersessions.StateCompleted {
+		t.Fatalf("session state = %q, want COMPLETED after the retry succeeded", result.Session.State)
+	}
+	if result.Attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", result.Attempts)
+	}
+
+	requests := execution.requests()
+	if len(requests) != 2 {
+		t.Fatalf("Workers dispatches = %d, want 2", len(requests))
+	}
+	if got := requests[0].Execution.Dispatch.DispatchID; got != "dispatch-1" {
+		t.Fatalf("first attempt dispatch ID = %q, want the caller's own", got)
+	}
+	if got := requests[1].Execution.Dispatch.DispatchID; got != "dispatch-1/attempt/2" {
+		t.Fatalf("second attempt dispatch ID = %q, want dispatch-1/attempt/2", got)
+	}
+	if strings.TrimSpace(result.Session.ID) != "worker-1" {
+		t.Fatalf("session ID = %q, want the one Worker identity to survive the retry", result.Session.ID)
+	}
+}
+
+// TestInvokeSession_StopsAtTheAttemptBudget proves the budget is a ceiling on
+// attempts, not on retries after the first: a Worker allowed two attempts that
+// fails both is terminal, and Workers is not asked a third time.
+func TestInvokeSession_StopsAtTheAttemptBudget(t *testing.T) {
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			return retryableFailureResult(req), nil
+		},
+	}
+	registry := newRegistryWithExecution(execution)
+
+	req := validStartRequest("worker-1", "dispatch-1")
+	req.Retry = workersessions.RetryPolicy{MaxAttempts: 2}
+	result, err := registry.InvokeSession(context.Background(), req)
+	if err != nil {
+		t.Fatalf("InvokeSession: %v", err)
+	}
+	if !result.Session.Terminal() {
+		t.Fatalf("session state = %q, want a terminal state once the budget is spent", result.Session.State)
+	}
+	if execution.callCount() != 2 {
+		t.Fatalf("Workers dispatches = %d, want exactly the 2-attempt budget", execution.callCount())
+	}
+	if result.Attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", result.Attempts)
+	}
+}
+
+// TestInvokeSession_DefaultPolicyIsOneAttempt pins the property that lets one
+// operation serve both orchestrators. A Petri dispatch has always been one
+// attempt with retryability classified and handed outward for the graph to act
+// on; converging JavaScript children onto this call must not quietly give
+// every Petri Worker attempt-level retry it never had.
+func TestInvokeSession_DefaultPolicyIsOneAttempt(t *testing.T) {
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			return retryableFailureResult(req), nil
+		},
+	}
+	registry := newRegistryWithExecution(execution)
+
+	result, err := registry.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+	if err != nil {
+		t.Fatalf("InvokeSession: %v", err)
+	}
+	if execution.callCount() != 1 {
+		t.Fatalf("Workers dispatches = %d, want 1 for the zero-value retry policy", execution.callCount())
+	}
+	if result.Attempts != 1 {
+		t.Fatalf("attempts = %d, want 1", result.Attempts)
+	}
+}
+
+// TestInvokeSession_DoesNotRetryATerminalFailure keeps the retry decision
+// Workers' own: a failure Workers classifies as terminal is terminal here too,
+// because a second opinion would let two orchestrators disagree about the
+// identical provider failure.
+func TestInvokeSession_DoesNotRetryATerminalFailure(t *testing.T) {
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			result := retryableFailureResult(req)
+			result.Result.FailureMetadata = &workers.WorkFailureMetadata{
+				Family: workers.WorkFailureFamilyTerminal,
+				Type:   workers.WorkFailureTypePermanentBadRequest,
+			}
+			return result, nil
+		},
+	}
+	registry := newRegistryWithExecution(execution)
+
+	req := validStartRequest("worker-1", "dispatch-1")
+	req.Retry = workersessions.RetryPolicy{MaxAttempts: 5}
+	if _, err := registry.InvokeSession(context.Background(), req); err != nil {
+		t.Fatalf("InvokeSession: %v", err)
+	}
+	if execution.callCount() != 1 {
+		t.Fatalf("Workers dispatches = %d, want 1; a terminal classification is not retried", execution.callCount())
+	}
+}
+
+func retryableFailureResult(req workers.WorkstationDispatchRequest) workers.WorkstationDispatchResult {
+	dispatchID := req.Execution.Dispatch.DispatchID
+	return workers.WorkstationDispatchResult{
+		DispatchID:      dispatchID,
+		WorkstationName: req.WorkstationName,
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
+		Result: workers.WorkResult{
+			DispatchID: dispatchID,
+			Outcome:    workers.OutcomeFailed,
+			FailureMetadata: &workers.WorkFailureMetadata{
+				Family: workers.WorkFailureFamilyRetryable,
+				Type:   workers.WorkFailureTypeInternalServerError,
+			},
+		},
+	}
+}
+
+func acceptedResult(req workers.WorkstationDispatchRequest) workers.WorkstationDispatchResult {
+	dispatchID := req.Execution.Dispatch.DispatchID
+	return workers.WorkstationDispatchResult{
+		DispatchID:      dispatchID,
+		WorkstationName: req.WorkstationName,
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
+		Result: workers.WorkResult{
+			DispatchID: dispatchID,
+			Outcome:    workers.OutcomeAccepted,
+		},
+	}
+}
+
+// TestInvokeSession_ControlDuringAnAttemptSpendsNoRetryBudget closes the race
+// between the attempt loop and a control.
+//
+// Every disqualifying condition is checked before the budget, so a Worker a
+// control already owns can never consume an attempt: publishing another would
+// run provider work for a session that has moved on.
+func TestInvokeSession_ControlDuringAnAttemptSpendsNoRetryBudget(t *testing.T) {
+	execution := newGatedRetryExecution()
+	registry := newRegistryWithExecution(execution)
+
+	req := validStartRequest("worker-1", "dispatch-1")
+	req.Retry = workersessions.RetryPolicy{MaxAttempts: 3}
+	done := make(chan workersessions.InvokeSessionResult, 1)
+	go func() {
+		result, err := registry.InvokeSession(context.Background(), req)
+		if err != nil {
+			t.Errorf("InvokeSession: %v", err)
+		}
+		done <- result
+	}()
+
+	<-execution.entered
+	if _, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"}); err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+
+	result := <-done
+	if !result.Session.Terminal() {
+		t.Fatalf("session state = %q, want terminal after the control won", result.Session.State)
+	}
+	if execution.callCount() != 1 {
+		t.Fatalf("Workers dispatches = %d, want 1; a canceled Worker must not consume its retry budget",
+			execution.callCount())
+	}
+}
+
+// gatedRetryExecution holds its first attempt open until a control cancels it,
+// so the retry decision is made for a Worker a control already owns.
+type gatedRetryExecution struct {
+	*fakeExecution
+
+	entered     chan struct{}
+	enteredOnce sync.Once
+	release     chan struct{}
+	releaseOnce sync.Once
+}
+
+func newGatedRetryExecution() *gatedRetryExecution {
+	gated := &gatedRetryExecution{
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	gated.fakeExecution = &fakeExecution{
+		dispatch: func(ctx context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			gated.enteredOnce.Do(func() { close(gated.entered) })
+			select {
+			case <-gated.release:
+			case <-ctx.Done():
+			}
+			return retryableFailureResult(req), nil
+		},
+		cancel: func(_ context.Context, req workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+			gated.releaseOnce.Do(func() { close(gated.release) })
+			return workers.WorkstationDispatchCancelResult{
+				DispatchID: req.DispatchID,
+				Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
+			}, nil
+		},
+	}
+	return gated
 }

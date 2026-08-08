@@ -191,3 +191,17 @@ func (p *blockingExecutionTestProvider) callCount() int {
 	defer p.mu.Unlock()
 	return p.calls
 }
+
+// TestNewExecutorAbsentProviderYieldsNoExecutor lets composition treat "this
+// process has no provider" as an absent invocation edge rather than one that
+// fails at dispatch time. The provider-invocation route depends on exactly
+// this: a nil executor there leaves the route unbound, which is how a runtime
+// declares it hosts no such Worker.
+func TestNewExecutorAbsentProviderYieldsNoExecutor(t *testing.T) {
+	if executor := workerinvocation.NewExecutor(nil); executor != nil {
+		t.Fatalf("NewExecutor(nil) = %#v, want nil", executor)
+	}
+	if executor := workerinvocation.NewExecutor(&executionTestProvider{}); executor == nil {
+		t.Fatal("NewExecutor(provider) = nil, want a constructed invocation adapter")
+	}
+}
