@@ -69,8 +69,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented follow mode over the canonical Factory Event SSE stream, prompt cancellation that closes active reads, bounded cancellation-aware reconnect backoff, after_event_id/after_sequence cursor resume, replay-overlap suppression through the existing reducer, and non-retryable handling for cursor/session/auth/protocol/malformed-event failures. Added deterministic follow, read/backoff cancellation, cursor resume, retention-gap, status classification, malformed-event/transition, retry exhaustion, and HTTP query tests. Focused Work CLI tests, race tests, Wire/CLI/Work package tests, go vet, and diff checks pass. make verify-fast remains environment-blocked by missing Bun types and the existing TypeScript baseUrl deprecation; package-count/boundary gates report unrelated repository baseline debt. Story 004 remains for public end-to-end CLI proof and reference documentation."
     },
     {
       "id": "wo-c2-work-watch-event-stream-004",

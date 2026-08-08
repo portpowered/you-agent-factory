@@ -4,6 +4,8 @@
 - CLI identity and input baselines are rewritten through the `UPDATE_CLI_BASELINES=1` test helpers; run writers one package at a time because command and input baselines are shared files.
 - Generated Work leaves without authored positional arguments preserve the existing inventory behavior; apply `cobra.NoArgs` only when a new command explicitly requires rejecting positional input.
 - Long-lived CLI event streams use a dedicated no-timeout `clihttp.Protocol` and consume the canonical SSE route through generated Factory Event payload types.
+- Reconnectable CLI streams should pass the reducer's last accepted canonical event ID and sequence as server cursors; keep deduplication and ordering in the reducer and cap retries for the whole invocation.
+- Use `context.AfterFunc` to close an active stream body on cancellation so blocked reads and reconnect backoff can unwind without polling or a durable cursor journal.
 
 ## [2026-08-08 14:07 -07:00] - wo-c2-work-watch-event-stream-001
 - What was implemented
@@ -48,4 +50,24 @@
   - `go test ./pkg/wire/... ./pkg/transports/cli/... ./pkg/services/work/... -count=1` passes after Wire generation.
   - `make verify-fast` is currently blocked by the environment’s UI dependency/toolchain state: TypeScript cannot find the `bun` type definitions and rejects the existing deprecated `baseUrl` option.
   - `make test` reaches the full short Go suite but fails an unrelated Windows permission-mode assertion in `pkg/platform/runtimeartifact` (`0666` observed versus `0600` expected); the Work/CLI/Wire packages remain green.
+---
+
+## [2026-08-08 14:49 -07:00] - wo-c2-work-watch-event-stream-003
+- What was implemented
+  - Added `--follow` continuation after terminal Work transitions, including later transitions without finite-mode termination.
+  - Added cancellation-safe active-stream closing for blocked reads and cancellation-aware bounded reconnect backoff.
+  - Added invocation-wide bounded reconnects using `after_event_id` and `after_sequence` from the last accepted canonical Factory Event cursor.
+  - Classified non-retryable HTTP/session/auth/cursor/protocol and malformed-event failures, while preserving exact replay-overlap suppression in the reducer.
+  - Added deterministic tests for follow, read/backoff cancellation, cursor resume, overlap suppression, retention gaps, non-retryable statuses, malformed SSE and transition payloads, retry exhaustion, and reconnect query encoding.
+- Files changed
+  - `pkg/services/work/transports/cli/watch_stream.go`
+  - `pkg/services/work/transports/cli/watch_reconnect.go`
+  - `pkg/services/work/transports/cli/watch_reconnect_test.go`
+  - `pkg/services/work/transports/cli/watch_reducer.go`
+  - `pkg/services/work/transports/cli/watch_test.go`
+  - `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - A reconnect retry cap should not reset merely because one reopened stream accepted an event; otherwise repeated one-event disconnects can become unbounded.
+  - The Factory Event route accepts both canonical cursor fields and gives `after_event_id` precedence, so sending both preserves stable identity while retaining the numeric recovery position.
+  - Focused Work CLI, Wire/CLI/Work package, race, vet, and diff checks pass; `make verify-fast` is still blocked by missing Bun type definitions and the existing TypeScript `baseUrl` deprecation, while package-count/boundary checks report unrelated baseline debt.
 ---
