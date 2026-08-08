@@ -45,6 +45,8 @@ func TestAgyLiveSmoke(t *testing.T) {
 		// An empty edge set deliberately selects the production subprocess runner.
 		// The gate above is the only protection against an external AGY call.
 		serviceedges.Edges{},
+		// AGY's native print timeout is five minutes; the extra observation budget
+		// lets a slow operator call reach a terminal Work without a sleep loop.
 		10*time.Minute,
 	)
 
