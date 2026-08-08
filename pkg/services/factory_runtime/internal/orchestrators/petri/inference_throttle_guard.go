@@ -14,8 +14,13 @@ type RuntimeGuardContext struct {
 	Now                 time.Time
 	CurrentTransitionID string
 	DispatchHistory     []interfaces.CompletedDispatch
+	ActiveDispatches    map[string]*interfaces.DispatchEntry
 	RuntimeConfig       interfaces.RuntimeDefinitionLookup
 	TransitionWorkers   map[string]string
+	// StateCategoryForPlace lets runtime guards classify a token using the
+	// compiled Factory definition without coupling Petri guards to the state
+	// package. It is nil for callers that only have a raw marking.
+	StateCategoryForPlace func(placeID string) string
 }
 
 type RuntimeGuard interface {

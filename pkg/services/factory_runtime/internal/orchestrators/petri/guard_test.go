@@ -3,6 +3,7 @@ package petri
 import (
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -559,6 +560,106 @@ func TestAllWithParentGuard_MissingBinding(t *testing.T) {
 	}
 	if matched != nil {
 		t.Fatalf("expected nil matches, got %v", matched)
+	}
+}
+
+func TestAllWithParentGuard_BlocksWhenRegisteredSiblingIsProcessing(t *testing.T) {
+	parent := &factorytoken.Token{
+		ID:    "parent-token",
+		Color: factorytoken.Color{WorkID: "parent-1"},
+	}
+	terminal := factorytoken.Token{
+		ID:      "child-terminal",
+		PlaceID: "child:complete",
+		Color: factorytoken.Color{
+			WorkID:     "child-1",
+			WorkTypeID: "child",
+			ParentID:   "parent-1",
+		},
+	}
+	processing := terminal
+	processing.ID = "child-processing"
+	processing.PlaceID = "child:processing"
+	processing.Color.WorkID = "child-2"
+
+	guard := &AllWithParentGuard{MatchBinding: "parent"}
+	matched, ok := guard.Evaluate(
+		[]factorytoken.Token{terminal},
+		map[string]*factorytoken.Token{"parent": parent},
+		&MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+			terminal.ID:   &terminal,
+			processing.ID: &processing,
+		}},
+	)
+	if ok || len(matched) != 0 {
+		t.Fatalf("fan-in enabled with a processing sibling: matched=%v ok=%t", matched, ok)
+	}
+}
+
+func TestAllWithParentGuard_LateRegistrationStaysBlockedUntilTerminal(t *testing.T) {
+	parent := &factorytoken.Token{
+		ID:    "parent-token",
+		Color: factorytoken.Color{WorkID: "parent-1"},
+	}
+	first := factorytoken.Token{
+		ID:      "child-first",
+		PlaceID: "child:complete",
+		Color:   factorytoken.Color{WorkID: "child-1", WorkTypeID: "child", ParentID: "parent-1"},
+	}
+	late := first
+	late.ID = "child-late"
+	late.Color.WorkID = "child-2"
+	late.PlaceID = "child:processing"
+	guard := &AllWithParentGuard{MatchBinding: "parent"}
+	bindings := map[string]*factorytoken.Token{"parent": parent}
+
+	initial := MarkingSnapshot{Tokens: map[string]*factorytoken.Token{first.ID: &first}}
+	if matched, ok := guard.Evaluate([]factorytoken.Token{first}, bindings, &initial); !ok || len(matched) != 1 {
+		t.Fatalf("initial terminal child should enable before late registration: matched=%v ok=%t", matched, ok)
+	}
+
+	withLateChild := MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+		first.ID: &first,
+		late.ID:  &late,
+	}}
+	if matched, ok := guard.Evaluate([]factorytoken.Token{first}, bindings, &withLateChild); ok || len(matched) != 0 {
+		t.Fatalf("late processing child should keep fan-in blocked: matched=%v ok=%t", matched, ok)
+	}
+
+	late.PlaceID = "child:complete"
+	terminalSnapshot := MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+		first.ID: &first,
+		late.ID:  &late,
+	}}
+	matched, ok := guard.Evaluate([]factorytoken.Token{first, late}, bindings, &terminalSnapshot)
+	if !ok || len(matched) != 2 {
+		t.Fatalf("fan-in should enable exactly after the late child becomes terminal: matched=%v ok=%t", matched, ok)
+	}
+}
+
+func TestAllWithParentGuard_UsesActiveDispatchAsProcessingChild(t *testing.T) {
+	parent := &factorytoken.Token{ID: "parent-token", Color: factorytoken.Color{WorkID: "parent-1"}}
+	terminal := factorytoken.Token{
+		ID:      "child-terminal",
+		PlaceID: "child:complete",
+		Color:   factorytoken.Color{WorkID: "child-1", WorkTypeID: "child", ParentID: "parent-1"},
+	}
+	processing := terminal
+	processing.ID = "child-processing"
+	processing.Color.WorkID = "child-2"
+	processing.PlaceID = "child:processing"
+
+	guard := &AllWithParentGuard{MatchBinding: "parent"}
+	matched, ok := guard.EvaluateRuntime(
+		RuntimeGuardContext{ActiveDispatches: map[string]*interfaces.DispatchEntry{
+			"dispatch-child": {ConsumedTokens: []factorytoken.Token{processing}},
+		}},
+		[]factorytoken.Token{terminal},
+		map[string]*factorytoken.Token{"parent": parent},
+		&MarkingSnapshot{Tokens: map[string]*factorytoken.Token{terminal.ID: &terminal}},
+	)
+	if ok || len(matched) != 0 {
+		t.Fatalf("fan-in enabled while a processing child was in flight: matched=%v ok=%t", matched, ok)
 	}
 }
 
