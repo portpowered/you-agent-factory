@@ -13,7 +13,6 @@ Have YOU make one agent plan and another agent execute. Fourteen packaged patter
 
 YOU is a cross-platform single binary CLI. YOU supports complex flows via an orchestration graph, or JavaScript. YOU supports scripts, AI, logic nodes, concurrency, parallelism, recursion, retries, task dependencies, crons, conditionals, and a whole bunch of other stuff. Run YOU as a generic CLI for one-offs, or as an API server that you can interact with.
 
-![you-agent-factory dashboard showing concurrent agent workstations, live work routing, and factory flow status](./docs/internal/resources/dashboard.png)
 ![you-agent-factory dashboard demo of concurrent agent dispatch](./docs/internal/resources/dashboard.gif)
 
 ## Installation
@@ -163,6 +162,8 @@ If you want an agent to install or run factories or submit work, tell it to look
 at `you docs agents` or point it at this repo and the
 [agent reference](./docs/reference/agents.md).
 
+You can have the agent use the factory to run other agents if you want. 
+
 ## Features
 
 1. Graph-based flows — define workflows as configuration JSON/YAML
@@ -203,21 +204,6 @@ How **you-agent-factory** fits next to nearby agent and workflow orchestrators. 
 
 ## References
 
-### Collection
-
-- [Harnesses](./docs/reference/harnesses.md) — bundled providers and packaged ACP integrations
-- [Packaged factories](./docs/reference/packaged-factories.md) — the fourteen `@you/*` catalog Factories
-- [Authoring factories (graph)](./docs/reference/authoring-factories.md) — topology, workers, workstations, resources, and routing
-- [JavaScript workflows](./docs/reference/javascript-workflows.md) — JavaScript orchestrator Factories
-- [System configuration](./docs/reference/config.md) — operator init plus Factory validation and authoring contract
-- [CLI reference index](./docs/reference/README.md) — packaged `you docs <topic>` pages
-- [Agents](./docs/reference/agents.md) — agent orientation and CLI-only work submission
-- [Work submission](./docs/reference/work.md) — `you submit`, batch inputs, and dashboard submission
-- [Architecture](./docs/architecture/architecture.md) and [data model](./docs/architecture/data-model.md)
-- [The zen of flow](./docs/reference/the-zen-of-flow.md)
-- [Example factories](./examples/factories/)
-- [Dashboard demo](./docs/internal/resources/dashboard.gif)
-
 ### System configuration reference files
 
 - [API reference](./packages/api/generated/openapi/openapi.yaml)
@@ -243,5 +229,3 @@ Maintainers: edit packaged reference docs under [`docs/reference/`](./docs/refer
 ## License
 
 This repository is released under the [MIT License](./LICENSE.md).
-
-The README hero image (`docs/internal/resources/dashboard.png`) and the animated demo (`docs/internal/resources/dashboard.gif`) are screenshots maintained in this repository and depict the you-agent-factory dashboard UI.
