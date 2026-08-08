@@ -26,6 +26,11 @@ func productionWorkerSessionsCommand(
 	}); err != nil {
 		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
 	}
+	if err := registry.Register("you.worker-sessions.read.handler", func(cmd *cobra.Command, _ []string) error {
+		return executeGeneratedWorkerSessionsRead(cmd, globals, diagnostics, options.ReadWorkerSession)
+	}); err != nil {
+		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
+	}
 	if err := registry.Register("you.worker-sessions.stream.handler", func(cmd *cobra.Command, _ []string) error {
 		return executeGeneratedWorkerSessionsStream(cmd, globals, diagnostics, options.StreamWorkerSession)
 	}); err != nil {
@@ -149,6 +154,48 @@ func executeGeneratedWorkerSessionsStream(
 	}
 	jsonOutput := globals.json || strings.EqualFold(strings.TrimSpace(outputFormat), "json")
 	return stream(workersessionscli.StreamConfig{
+		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
+		Provider: provider, Kind: kind, ID: id, OutputFormat: outputFormat, JSON: jsonOutput,
+		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
+		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,
+	})
+}
+
+func executeGeneratedWorkerSessionsRead(
+	cmd *cobra.Command,
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	read workersessionscli.ReadOperation,
+) error {
+	if read == nil {
+		return fmt.Errorf("worker sessions read service is required")
+	}
+	values, err := generatedCommandInputs(cmd)
+	if err != nil {
+		return err
+	}
+	provider, err := commandInputValue[string](values, "you.worker-sessions.read.flag.provider")
+	if err != nil {
+		return err
+	}
+	kind, err := commandInputValue[string](values, "you.worker-sessions.read.flag.kind")
+	if err != nil {
+		return err
+	}
+	id, err := commandInputValue[string](values, "you.worker-sessions.read.flag.id")
+	if err != nil {
+		return err
+	}
+	sessionID, err := commandInputValue[string](values, "you.worker-sessions.read.flag.session")
+	if err != nil {
+		return err
+	}
+	outputFormat, err := commandInputValue[string](values, "you.worker-sessions.read.flag.output")
+	if err != nil {
+		return err
+	}
+	jsonOutput := globals.json || strings.EqualFold(strings.TrimSpace(outputFormat), "json")
+	return read(workersessionscli.ReadConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
 		Provider: provider, Kind: kind, ID: id, OutputFormat: outputFormat, JSON: jsonOutput,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),

@@ -93,3 +93,31 @@ func TestWorkerSessionsStreamCommandMapsManifestInputsToOperation(t *testing.T) 
 		t.Fatalf("output/config = %#v, want server and json values", got)
 	}
 }
+
+func TestWorkerSessionsReadCommandMapsManifestInputsToOperation(t *testing.T) {
+	var got workersessionscli.ReadConfig
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		ReadWorkerSession: func(config workersessionscli.ReadConfig) error {
+			got = config
+			return nil
+		},
+	})
+	root := factory.NewCommand(nil, nil, nil)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"--json", "--server", "http://factory.test:7437",
+		"worker-sessions", "read", "--provider", "codex", "--kind", "session_id", "--id", "provider-session-1",
+		"--session", "session-1", "--output", "json",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute worker-sessions read: %v", err)
+	}
+	if got.Provider != "codex" || got.Kind != "session_id" || got.ID != "provider-session-1" || got.SessionID != "session-1" {
+		t.Fatalf("operation config = %#v, want manifest identity values", got)
+	}
+	if got.Server != "http://factory.test:7437" || got.OutputFormat != "json" || !got.JSON {
+		t.Fatalf("output/config = %#v, want server and json values", got)
+	}
+}

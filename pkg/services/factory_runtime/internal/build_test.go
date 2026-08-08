@@ -281,6 +281,10 @@ func (s *stubWorkerSessionsService) StreamObservations(context.Context, workerse
 	return nil, nil
 }
 
+func (s *stubWorkerSessionsService) ReadTranscript(context.Context, workersessions.ReadTranscriptRequest) (workersessions.ReadTranscriptResult, error) {
+	return workersessions.ReadTranscriptResult{}, nil
+}
+
 func (s *stubWorkerSessionsService) InvokeSession(ctx context.Context, req workersessions.InvokeSessionRequest) (workersessions.InvokeSessionResult, error) {
 	handoff := workers.WorkstationDispatchRequest{
 		WorkstationName: req.Execution.WorkstationName,

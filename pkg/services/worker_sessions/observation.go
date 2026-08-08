@@ -27,6 +27,11 @@ type ObservationService interface {
 	// Providers-owned provider/kind/id reference.
 	GetObservation(context.Context, GetObservationRequest) (Observation, error)
 
+	// ReadTranscript returns the normalized transcript for one terminal Worker
+	// Session. Active sessions, missing sessions, unavailable transcripts, and
+	// projection failures are distinct typed outcomes.
+	ReadTranscript(context.Context, ReadTranscriptRequest) (ReadTranscriptResult, error)
+
 	// StreamObservations subscribes to the canonical Worker Session event topic
 	// for the exact provider session identity. The subscription first replays
 	// retained Events records and then follows newly committed records.

@@ -8337,6 +8337,243 @@
         ]
       }
     },
+    "you.worker-sessions.read": {
+      "id": "you.worker-sessions.read",
+      "name": "read",
+      "path": "you worker-sessions read",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions.read",
+        "documentation": {
+          "title": {
+            "id": "you.worker-sessions.read.title",
+            "canonicalEnglish": "Read a finished Worker Session transcript"
+          },
+          "description": {
+            "id": "you.worker-sessions.read.description",
+            "canonicalEnglish": "Read the ordered normalized transcript for one finished Worker Session through the Provider Sessions projection. Use --output json for structured entries."
+          }
+        },
+        "examples": [
+          "you worker-sessions read --provider codex --kind session_id --id session-123",
+          "you worker-sessions read --provider codex --kind session_id --id session-123 --output json"
+        ],
+        "visibility": "public",
+        "sourceHash": "worker-session-cli-visibility-read"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions.read",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "read",
+        "example": "  you worker-sessions read --provider codex --kind session_id --id session-123"
+      },
+      "flags": {
+        "you.worker-sessions.read.flag.provider": {
+          "id": "you.worker-sessions.read.flag.provider",
+          "long": "provider",
+          "usage": "provider that issued the correlated session identity",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": true,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.read.flag.provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.read.flag.kind": {
+          "id": "you.worker-sessions.read.flag.kind",
+          "long": "kind",
+          "usage": "provider-session identifier kind",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": true,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.read.flag.kind",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.read.flag.id": {
+          "id": "you.worker-sessions.read.flag.id",
+          "long": "id",
+          "usage": "provider-issued session identifier",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": true,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.read.flag.id",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.read.flag.session": {
+          "id": "you.worker-sessions.read.flag.session",
+          "long": "session",
+          "usage": "target one live factory session; omit to use the default compatibility session",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.read.flag.session",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.read.flag.output": {
+          "id": "you.worker-sessions.read.flag.output",
+          "long": "output",
+          "usage": "output format: human (default) or json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "human",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.read.flag.output",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "handler": {
+        "id": "you.worker-sessions.read.handler",
+        "operationId": "readWorkerSessionTranscriptBySessionId"
+      },
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "outputs": {
+        "you.worker-sessions.read.output.human": {
+          "id": "you.worker-sessions.read.output.human",
+          "channel": "stdout",
+          "format": "text"
+        },
+        "you.worker-sessions.read.output.json": {
+          "id": "you.worker-sessions.read.output.json",
+          "channel": "stdout",
+          "format": "json"
+        }
+      },
+      "exits": {
+        "you.worker-sessions.read.exit.success": {
+          "id": "you.worker-sessions.read.exit.success",
+          "code": 0,
+          "kind": "success"
+        },
+        "you.worker-sessions.read.exit.failure": {
+          "id": "you.worker-sessions.read.exit.failure",
+          "code": 1,
+          "kind": "failure"
+        },
+        "you.worker-sessions.read.exit.usage": {
+          "id": "you.worker-sessions.read.exit.usage",
+          "code": 1,
+          "kind": "usage"
+        }
+      },
+      "sideEffects": {
+        "you.worker-sessions.read.side-effect.network": {
+          "id": "you.worker-sessions.read.side-effect.network",
+          "kind": "network"
+        }
+      },
+      "constraints": {
+        "runtime": [
+          "local"
+        ],
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ]
+      }
+    },
     "you.worker-sessions.stream": {
       "id": "you.worker-sessions.stream",
       "name": "stream",

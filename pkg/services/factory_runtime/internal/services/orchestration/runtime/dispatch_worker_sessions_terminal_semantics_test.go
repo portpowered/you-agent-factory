@@ -184,6 +184,12 @@ func (s *preHandoffFailedWorkerSessionsService) StreamObservations(
 	return nil, nil
 }
 
+func (s *preHandoffFailedWorkerSessionsService) ReadTranscript(
+	context.Context, workersessions.ReadTranscriptRequest,
+) (workersessions.ReadTranscriptResult, error) {
+	return workersessions.ReadTranscriptResult{}, nil
+}
+
 func (s *preHandoffFailedWorkerSessionsService) InvokeSession(
 	_ context.Context, req workersessions.InvokeSessionRequest,
 ) (workersessions.InvokeSessionResult, error) {

@@ -71,6 +71,12 @@ func (s *countingWorkerSessionsService) StreamObservations(
 	return s.inner.StreamObservations(ctx, req)
 }
 
+func (s *countingWorkerSessionsService) ReadTranscript(
+	ctx context.Context, req workersessions.ReadTranscriptRequest,
+) (workersessions.ReadTranscriptResult, error) {
+	return s.inner.ReadTranscript(ctx, req)
+}
+
 func (s *countingWorkerSessionsService) InvokeSession(
 	ctx context.Context, req workersessions.InvokeSessionRequest,
 ) (workersessions.InvokeSessionResult, error) {

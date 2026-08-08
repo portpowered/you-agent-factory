@@ -1,6 +1,8 @@
 package http
 
 import (
+	"time"
+
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -13,6 +15,46 @@ func ListWorkerSessionsResponseToAPI(result workersessions.ListObservationsResul
 		sessions = append(sessions, WorkerSessionObservationToAPI(observation))
 	}
 	return factoryapi.ListWorkerSessionsResponse{Sessions: sessions}
+}
+
+// WorkerSessionTranscriptToAPI maps a detached normalized transcript result to
+// the public session-scoped response without exposing Provider Sessions
+// storage or reader details.
+func WorkerSessionTranscriptToAPI(result workersessions.ReadTranscriptResult) factoryapi.WorkerSessionTranscriptResponse {
+	entries := make([]factoryapi.ProviderSessionTranscriptEntry, len(result.Entries))
+	for index, entry := range result.Entries {
+		entries[index] = factoryapi.ProviderSessionTranscriptEntry{
+			Arguments:        cloneString(entry.Arguments),
+			CallId:           cloneString(entry.CallID),
+			Encrypted:        cloneBool(entry.Encrypted),
+			EncryptedContent: cloneString(entry.EncryptedContent),
+			LineNumber:       cloneInt(entry.LineNumber),
+			Name:             cloneString(entry.Name),
+			Order:            entry.Order,
+			Output:           cloneString(entry.Output),
+			SourceType:       cloneString(entry.SourceType),
+			Status:           cloneString(entry.Status),
+			Summary:          cloneString(entry.Summary),
+			Text:             cloneString(entry.Text),
+			Timestamp:        cloneTime(entry.Timestamp),
+			TurnIndex:        cloneInt(entry.TurnIndex),
+			Type:             factoryapi.ProviderSessionTranscriptEntryType(entry.Type),
+		}
+	}
+	response := factoryapi.WorkerSessionTranscriptResponse{
+		WorkerSessionId: result.WorkerSessionID,
+		ProviderSession: factoryapi.WorkerSessionProviderSessionRef{
+			Provider: string(result.ProviderSession.Provider), Kind: result.ProviderSession.Kind, Id: result.ProviderSession.ID,
+		},
+		WorkIds:   append([]string(nil), result.WorkIDs...),
+		AttemptId: result.AttemptID,
+		State:     string(result.State),
+		Entries:   entries,
+	}
+	if result.TurnID != "" {
+		response.TurnId = stringPtr(result.TurnID)
+	}
+	return response
 }
 
 // WorkerSessionObservationToAPI maps one detached observation.
@@ -96,6 +138,30 @@ func stringPtrIfNonEmpty(value string) *string {
 }
 
 func cloneInt(value *int) *int {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
+}
+
+func cloneBool(value *bool) *bool {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
+}
+
+func cloneString(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
+}
+
+func cloneTime(value *time.Time) *time.Time {
 	if value == nil {
 		return nil
 	}

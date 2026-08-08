@@ -18,12 +18,16 @@ import (
 
 type observationProjectionStub struct {
 	providersessions.Service
-	results   map[providers.SessionRef]providersessions.ProjectResult
-	requested []providers.SessionRef
+	results    map[providers.SessionRef]providersessions.ProjectResult
+	projectErr error
+	requested  []providers.SessionRef
 }
 
 func (s *observationProjectionStub) Project(req providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
 	s.requested = append(s.requested, req.Session)
+	if s.projectErr != nil {
+		return providersessions.ProjectResult{}, s.projectErr
+	}
 	return s.results[req.Session], nil
 }
 
@@ -235,6 +239,118 @@ func TestObservationProjection_ListsCorrelatedAttemptsAndNormalizedFacts(t *test
 	}
 }
 
+func TestReadTranscript_ReturnsFinishedNormalizedEntriesAndCorrelation(t *testing.T) {
+	ref := sessionRef("provider-session-transcript")
+	text := "assistant answer"
+	toolName := "search"
+	arguments := `{"query":"factory"}`
+	output := "tool result"
+	encrypted := true
+	encryptedContent := "encrypted reasoning"
+	projection := &observationProjectionStub{results: map[providers.SessionRef]providersessions.ProjectResult{
+		ref: {
+			Session: ref,
+			Detail: providersessions.Detail{Transcript: []providersessions.TranscriptEntry{
+				{Order: 1, Type: providersessions.TranscriptUserMessage, Text: stringPtr("operator request")},
+				{Order: 2, Type: providersessions.TranscriptToolCall, Name: &toolName, Arguments: &arguments},
+				{Order: 3, Type: providersessions.TranscriptToolOutput, Output: &output},
+				{Order: 4, Type: providersessions.TranscriptReasoning, Encrypted: &encrypted, EncryptedContent: &encryptedContent},
+				{Order: 5, Type: providersessions.TranscriptAssistantMessage, Text: &text},
+			}},
+		},
+	}}
+	registry := newObservationService(t, executionBoundary{execution: executionFor(&ref, workers.OutcomeAccepted, nil, nil)}, newEventsAppender(), platformclock.Real{}, projection)
+	if _, err := registry.Start(context.Background(), startRequest("worker-transcript", "dispatch-transcript", "work-transcript")); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	result, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: ref})
+	if err != nil {
+		t.Fatalf("ReadTranscript() error = %v", err)
+	}
+	if result.WorkerSessionID != "worker-transcript" || result.AttemptID != "dispatch-transcript" || result.TurnID != "turn-worker-transcript" || result.State != workersessions.StateCompleted {
+		t.Fatalf("correlation = %#v, want terminal Worker Session envelope", result)
+	}
+	if len(result.WorkIDs) != 1 || result.WorkIDs[0] != "work-transcript" || len(result.Entries) != 5 {
+		t.Fatalf("work/entries = %#v/%d, want work-transcript and five entries", result.WorkIDs, len(result.Entries))
+	}
+	if result.Entries[1].Type != workersessions.TranscriptToolCall || result.Entries[1].Name == nil || *result.Entries[1].Name != toolName || result.Entries[1].Arguments == nil || *result.Entries[1].Arguments != arguments {
+		t.Fatalf("tool-call entry = %#v, want normalized tool fields", result.Entries[1])
+	}
+	if result.Entries[3].Type != workersessions.TranscriptReasoning || result.Entries[3].Encrypted == nil || !*result.Entries[3].Encrypted || result.Entries[3].EncryptedContent == nil {
+		t.Fatalf("encrypted reasoning entry = %#v, want explicit encrypted fields", result.Entries[3])
+	}
+	if len(projection.requested) != 1 || projection.requested[0] != ref {
+		t.Fatalf("projection requests = %#v, want one exact Provider Session request", projection.requested)
+	}
+	result.Entries[0].Text = stringPtr("mutated")
+	again, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: ref})
+	if err != nil {
+		t.Fatalf("second ReadTranscript() error = %v", err)
+	}
+	if again.Entries[0].Text == nil || *again.Entries[0].Text != "operator request" {
+		t.Fatalf("detached transcript entry = %#v, want provider projection unchanged", again.Entries[0])
+	}
+}
+
+func TestReadTranscript_DistinguishesActiveMissingUnavailableAndCanceled(t *testing.T) {
+	ref := sessionRef("provider-session-active")
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var registry workersessions.Service
+	execution := &fakeExecution{dispatch: func(_ context.Context, request workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+		if _, err := registry.ObserveProviderSession(context.Background(), workersessions.ProviderSessionObservationRequest{DispatchID: request.Execution.Dispatch.DispatchID, Reference: ref}); err != nil {
+			return workers.WorkstationDispatchResult{}, err
+		}
+		close(started)
+		<-release
+		return workers.WorkstationDispatchResult{
+			DispatchID:      request.Execution.Dispatch.DispatchID,
+			TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
+			Result:          workers.WorkResult{DispatchID: request.Execution.Dispatch.DispatchID, Outcome: workers.OutcomeAccepted, ProviderSession: providerMetadata(ref)},
+		}, nil
+	}}
+	projection := &observationProjectionStub{projectErr: providersessions.ErrSessionStorageUnavailable}
+	registry = newObservationService(t, executionBoundary{execution: execution}, newEventsAppender(), platformclock.Real{}, projection)
+	done := make(chan error, 1)
+	go func() {
+		_, err := registry.Start(context.Background(), startRequest("worker-active", "dispatch-active", "work-active"))
+		done <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for active Worker Session")
+	}
+	if _, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationTranscriptActive) {
+		t.Fatalf("ReadTranscript(active) error = %v, want ErrObservationTranscriptActive", err)
+	}
+	close(release)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Start(active) error = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for terminal Worker Session")
+	}
+	if _, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationTranscriptUnavailable) {
+		t.Fatalf("ReadTranscript(unavailable) error = %v, want ErrObservationTranscriptUnavailable", err)
+	}
+	projection.projectErr = errors.New("normalized transcript parser failed")
+	if _, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationTranscriptProjectionUnavailable) {
+		t.Fatalf("ReadTranscript(projection failure) error = %v, want ErrObservationTranscriptProjectionUnavailable", err)
+	}
+	if _, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: sessionRef("missing")}); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		t.Fatalf("ReadTranscript(missing) error = %v, want ErrObservationSessionNotFound", err)
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := registry.ReadTranscript(canceled, workersessions.ReadTranscriptRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("ReadTranscript(canceled) error = %v, want ErrObservationCanceled", err)
+	}
+}
+
 func TestObservationProjection_UsesInjectedClockForActiveDurationAndFreezesTerminalDuration(t *testing.T) {
 	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
 	clock := platformclock.NewDeterministic(base, time.Second)
@@ -430,3 +546,5 @@ func awaitObservationDelivery(t *testing.T, deliveries <-chan workersessions.Obs
 		return workersessions.ObservationDelivery{}
 	}
 }
+
+func stringPtr(value string) *string { return &value }

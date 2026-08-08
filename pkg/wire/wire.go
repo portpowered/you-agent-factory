@@ -295,6 +295,7 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideSubmitBatchOperation,
 	provideListWorkerSessionsOperation,
 	provideShowWorkerSessionOperation,
+	provideReadWorkerSessionOperation,
 	provideStreamWorkerSessionOperation,
 	provideSessionsCLIService,
 	provideModelsCLIService,
