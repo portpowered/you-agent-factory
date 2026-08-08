@@ -146,6 +146,13 @@ func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petr
 			return interfaces.EnabledTransition{}, false
 		}
 	}
+	if !e.bindingDependenciesMet(tr, snapshot, result) {
+		e.logger.Debug("enablement: transition disabled",
+			"transitionID", tr.ID,
+			"transitionName", tr.Name,
+			"reason", "dependency guard failed for selected binding")
+		return interfaces.EnabledTransition{}, false
+	}
 
 	return interfaces.EnabledTransition{
 		TransitionID: tr.ID,
@@ -308,7 +315,7 @@ type singleTokenBindingSearch struct {
 
 func (s *singleTokenBindingSearch) search(position int) bool {
 	if position >= len(s.order) {
-		return true
+		return s.evaluator.bindingDependenciesMet(s.transition, s.snapshot, s.result)
 	}
 
 	arc := &s.transition.InputArcs[s.order[position]]
@@ -323,6 +330,46 @@ func (s *singleTokenBindingSearch) search(position int) bool {
 			continue
 		}
 		return true
+	}
+	return false
+}
+
+func (e *EnablementEvaluator) bindingDependenciesMet(
+	tr *petri.Transition,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	bindings map[string][]factorytoken.Token,
+) bool {
+	if tr == nil || !transitionUsesDependencyGuard(tr) {
+		return true
+	}
+	if snapshot == nil {
+		return false
+	}
+	return (&petri.DependencyGuard{}).AllDependenciesMet(bindings, &snapshot.Marking)
+}
+
+func transitionUsesDependencyGuard(tr *petri.Transition) bool {
+	if tr == nil {
+		return false
+	}
+	for i := range tr.InputArcs {
+		if guardUsesDependencyGuard(tr.InputArcs[i].Guard) {
+			return true
+		}
+	}
+	return false
+}
+
+func guardUsesDependencyGuard(guard petri.Guard) bool {
+	switch typed := guard.(type) {
+	case *petri.DependencyGuard:
+		return true
+	case *petri.AllGuard:
+		for _, nested := range typed.Guards {
+			if guardUsesDependencyGuard(nested) {
+				return true
+			}
+		}
 	}
 	return false
 }
