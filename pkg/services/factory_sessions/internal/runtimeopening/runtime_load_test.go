@@ -34,6 +34,7 @@ type runtimeLoadPortableFailureCase struct {
 	wantCode recordings.ReplayArtifactDiagnosticCode
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestLoadRuntimePreservesValidatedPortableRecording(t *testing.T) {
 	path := testpath.MustRepoPathFromCaller(
 		t,
@@ -468,6 +469,7 @@ func runtimeLoadFactorySnapshot(t *testing.T) *factorydefinitions.FactorySnapsho
 	return snapshot
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestClockForReplayPreservesOverridesAndInjectedDefaults(t *testing.T) {
 	explicit := clockwork.NewFakeClockAt(time.Date(2026, time.July, 20, 1, 0, 0, 0, time.UTC))
 	replay := clockwork.NewFakeClockAt(time.Date(2026, time.July, 20, 2, 0, 0, 0, time.UTC))

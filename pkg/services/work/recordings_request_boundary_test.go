@@ -16,6 +16,7 @@ import (
 // TestWorkConstructsRecordingsRequestsThroughRoot proves CUT-WORK-REC story 003:
 // leased Work state_access Recordings-backed reads construct Recordings queries
 // only through the published Recordings service root contract.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestWorkConstructsRecordingsRequestsThroughRoot(t *testing.T) {
 	t.Parallel()
 

@@ -31,6 +31,8 @@ import (
 // process-edge ports. It composes the accepted root through parent-private catalog
 // Wire and the accepted service assembly without publishing owner types on the
 // returned peer surface.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func NewService(
 	sessionHost factorydefinitions.SessionHost,
 	activationGateway factorydefinitions.DefinitionActivationGateway,
@@ -189,6 +191,7 @@ func NewService(
 	return attachCompilation(withSnapshots, compilation), nil
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func validateDependencies(
 	sessionHost factorydefinitions.SessionHost,
 	activationGateway factorydefinitions.DefinitionActivationGateway,

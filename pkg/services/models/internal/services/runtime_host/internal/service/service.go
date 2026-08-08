@@ -116,6 +116,7 @@ func (s *service) InspectModelHost(
 	return models.InspectModelHostResult{Host: snapshot}, nil
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (s *service) EnsureModelHost(
 	ctx context.Context,
 	request models.EnsureModelHostRequest,

@@ -70,6 +70,7 @@ func (s *RuntimeSidecars) Preseed(ctx context.Context, instance factory.HostedIn
 	return PreseedRuntimeInputs(ctx, s.automation, bundle)
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (s *RuntimeSidecars) Start(ctx context.Context, hosted factory.HostedHandle) error {
 	handle, _ := hosted.(*factoryhost.Handle)
 	if handle == nil || handle.Bundle == nil {

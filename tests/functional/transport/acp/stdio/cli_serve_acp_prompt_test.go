@@ -62,6 +62,7 @@ type rpcFrame struct {
 // which drives Process.ACPServer() directly rather than the CLI command
 // tree; both share support.SeedACPAgentProfile instead of each owning a
 // private copy of that fixture-seeding helper.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test driving you serve acp through root.BuildProcess")

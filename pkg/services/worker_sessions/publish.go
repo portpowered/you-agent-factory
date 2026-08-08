@@ -476,6 +476,7 @@ func toolStatusPhase(status string) string {
 
 // progressDraftPayload builds the payload shape the resolved Kind/Phase pair
 // requires, reporting false when the fact does not carry enough to satisfy it.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func progressDraftPayload(
 	kind workers.Kind,
 	phase workers.Phase,

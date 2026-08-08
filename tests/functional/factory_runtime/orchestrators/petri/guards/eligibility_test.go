@@ -102,6 +102,7 @@ func TestPetriAuthoredEligibilityGuardBlocksDispatchUntilSatisfied(t *testing.T)
 // guard dispatches only when peer Work names correlate, releasing the expected
 // matched Work to its public terminal state while mismatched peers remain idle
 // without the guarded workstation's success outcome.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestPetriParentOrSameNameGuardReleasesExpectedWork(t *testing.T) {
 	t.Run("matching peer names release correlated work", func(t *testing.T) {
 		dir := support.ScaffoldFactory(t, sameNameGuardFactoryConfig())
@@ -231,6 +232,7 @@ func TestPetriParentOrSameNameGuardReleasesExpectedWork(t *testing.T) {
 // VISIT_COUNT and MATCHES_FIELDS eligibility guard failures are observable
 // through public Work and Factory Session surfaces without inspecting internal
 // Petri markings.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestPetriVisitOrMatchGuardFailureIsVisibleInPublicWorkState(t *testing.T) {
 	t.Run("visit count loop breaker routes over-limit work to failed", func(t *testing.T) {
 		dir := support.ScaffoldFactory(t, visitCountLoopBreakerFactoryConfig())

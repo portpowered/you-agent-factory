@@ -33,6 +33,7 @@ const (
 // transcript through the customer process boundary and proves public final-only
 // success without fabricated streaming deltas or structured snapshot events.
 // golden: tests/functional/internal/support/testdata/provider-sessions/agy/final-only-success/manifest.json
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestAgyGoldenFinalOnlySuccess(t *testing.T) {
 	repoRoot := testutil.MustRepoRoot(t)
 	caseDir := filepath.Join(

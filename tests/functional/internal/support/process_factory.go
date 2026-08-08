@@ -243,6 +243,7 @@ func runFactoryToCompletionWithMode(
 	)
 }
 
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func runFactoryToCompletionWithHome(
 	t testing.TB,
 	dir string,

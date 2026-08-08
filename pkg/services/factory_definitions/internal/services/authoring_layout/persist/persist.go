@@ -26,6 +26,7 @@ type Ports struct {
 
 // NamedFactory atomically creates or replaces one named Factory layout under
 // rootDir using staging and commit semantics.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func NamedFactory(
 	ctx context.Context,
 	rootDir string,

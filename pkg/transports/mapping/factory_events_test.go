@@ -22,6 +22,7 @@ func TestFactoryEventsToAPIRejectsMalformedCanonicalPayload(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestFactoryEventAssociationRoundTripPreservesDispatchAndWorkerSessionIDs(t *testing.T) {
 	dispatchID := "dispatch-actual-7"
 	eventTime := time.Date(2026, 8, 4, 16, 30, 0, 0, time.UTC)

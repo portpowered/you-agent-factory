@@ -135,6 +135,9 @@ func (we *WorkstationExecutor) executeLogicalMove(dispatch work.WorkDispatch, st
 }
 
 // executeModelWorkstation renders the prompt and calls the configured worker executor.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, dispatch work.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time) (workerexecution.WorkResult, error) {
 	logger := logging.EnsureLogger(we.Logger)
 	invocationArgs := invocationArgumentsFromDispatch(dispatch)

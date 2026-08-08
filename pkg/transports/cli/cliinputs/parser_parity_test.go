@@ -201,6 +201,8 @@ func productionParserParityRunVariadicCases() []productionParserParityCase {
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity run parser parity cases keep inline verify closures beside argv fixtures for reviewer readability.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func productionParserParityRunFlagCases() []productionParserParityCase {
 	return []productionParserParityCase{
 		{

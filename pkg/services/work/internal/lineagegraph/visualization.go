@@ -29,6 +29,7 @@ type BatchRequestParser func([]byte) (BatchRequest, error)
 
 // NewVisualizationOperation binds the exact filesystem read edge to Work's
 // batch dependency visualization policy.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func NewVisualizationOperation(filesystem VisualizationFileSystem, parse BatchRequestParser) VisualizationOperation {
 	return func(request VisualizationRequest) (string, error) {
 		if filesystem == nil {

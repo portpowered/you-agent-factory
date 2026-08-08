@@ -217,6 +217,7 @@ func TestProjectWorkerChildInterleavingKeepsSiblingParentTargetsIndependent(t *t
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestBoundChildProjectionReservesFailureAndTerminalEvidenceAfterRecordPressure(t *testing.T) {
 	t.Parallel()
 	limits := ChildProjectionLimits{MaxRecords: 4, MaxSerializedBytes: 4096}
@@ -355,6 +356,7 @@ func childAssociation() *chatsessions.WorkerSessionAssociation {
 	return &chatsessions.WorkerSessionAssociation{DispatchID: "dispatch-1", WorkerSessionID: "worker-1"}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func childFixturePayload(t *testing.T, kind workers.Kind, phase workers.Phase) json.RawMessage {
 	t.Helper()
 	switch kind {

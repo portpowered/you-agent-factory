@@ -21,6 +21,7 @@ import (
 // document, identity, resolution, and config outcomes on the published
 // operatorsettings.Service root.
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestWireFoldPreservesDocumentIdentityResolutionAndConfigBehavior(t *testing.T) {
 	t.Parallel()
 

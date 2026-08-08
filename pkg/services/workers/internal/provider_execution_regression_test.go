@@ -223,6 +223,7 @@ func TestBuildModelInvocationExecutorDeliversProviderCommandRunnerFailure(t *tes
 // runner (proved by exact call-count and per-dispatch request identity),
 // with per-dispatch progress isolation. Synchronization is limited to
 // sync.WaitGroup/atomic/the runner's own mutex (no sleeps).
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestConcurrentRepeatedProviderExecutionsRetainConstructionInjectedProviderCommandRunner(t *testing.T) {
 	t.Parallel()
 
