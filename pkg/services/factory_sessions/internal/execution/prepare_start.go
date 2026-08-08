@@ -3,18 +3,24 @@ package factorysessionexecution
 import (
 	"encoding/json"
 	"fmt"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"strings"
 	"time"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 )
 
-func validateLiveChildProviderExecutor(mode string, executor workers.InvocationExecutor, liveChildInvocation LiveChildInvocationFactory) error {
-	if mode == ChildExecutorModeLive && executor == nil && liveChildInvocation == nil {
-		return NewValidationError("runtime.childExecutorMode", "worker invocation executor is required for live child execution")
+// validateChildExecutorMode rejects a child-executor mode this runtime cannot
+// serve. Live children are invoked through the session's Factory Runtime, which
+// is bound after construction, so there is nothing to check at construction
+// time and the check that remains is the mode vocabulary itself.
+func validateChildExecutorMode(mode string) error {
+	switch mode {
+	case ChildExecutorModeLive, ChildExecutorModeFake:
+		return nil
+	default:
+		return NewValidationError("runtime.childExecutorMode", "unsupported child executor mode")
 	}
-	return nil
 }
 
 // StartPrepareContext supplies filesystem and deployment inputs for durable start

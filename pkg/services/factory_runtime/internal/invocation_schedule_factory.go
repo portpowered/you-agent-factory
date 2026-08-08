@@ -99,6 +99,10 @@ func (wrapped *invocationScheduleFactory) AcceptDispatchResult(ctx context.Conte
 	return wrapped.runtimeService().AcceptDispatchResult(ctx, request)
 }
 
+func (wrapped *invocationScheduleFactory) InvokeWorker(ctx context.Context, request factory.InvokeWorkerRequest) (factory.InvokeWorkerResult, error) {
+	return wrapped.runtimeService().InvokeWorker(ctx, request)
+}
+
 func (wrapped *invocationScheduleFactory) SubmitWorkRequest(
 	ctx context.Context,
 	request work.WorkRequest,

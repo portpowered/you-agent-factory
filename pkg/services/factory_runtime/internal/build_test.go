@@ -56,6 +56,7 @@ func TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities(t *testing.T
 			return nil, nil
 		},
 		testRuntimeWorkers{},
+		nil,
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
 	)
@@ -97,6 +98,7 @@ func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 			return nil, nil
 		},
 		testRuntimeWorkers{},
+		nil,
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
 	)
@@ -139,6 +141,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 			return nil, nil
 		},
 		testRuntimeWorkers{},
+		nil,
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
 	)
@@ -181,6 +184,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 			return nil, nil
 		},
 		testRuntimeWorkers{},
+		nil,
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
 	)
@@ -265,7 +269,7 @@ func (s *stubWorkerSessionsService) List(context.Context, workersessions.ListReq
 	return workersessions.ListResult{}, nil
 }
 
-func (s *stubWorkerSessionsService) Start(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
+func (s *stubWorkerSessionsService) InvokeSession(ctx context.Context, req workersessions.InvokeSessionRequest) (workersessions.InvokeSessionResult, error) {
 	handoff := workers.WorkstationDispatchRequest{
 		WorkstationName: req.Execution.WorkstationName,
 		Execution:       req.Execution.Execution,
@@ -275,9 +279,9 @@ func (s *stubWorkerSessionsService) Start(ctx context.Context, req workersession
 	if err := s.boundary.Publish(ctx, handoff, func(_ context.Context, _ workers.WorkstationDispatchRequest, result workers.WorkstationDispatchResult, err error) {
 		dispatchResult, dispatchErr = result, err
 	}); err != nil {
-		return workersessions.StartResult{}, err
+		return workersessions.InvokeSessionResult{}, err
 	}
-	return workersessions.StartResult{
+	return workersessions.InvokeSessionResult{
 		Session:     workersessions.Session{ID: req.ID, State: workersessions.StateCompleted},
 		Dispatch:    dispatchResult,
 		DispatchErr: dispatchErr,

@@ -236,7 +236,6 @@
     "pkg/services/factory_sessions/internal/cursors/persistence",
     "pkg/services/factory_sessions/internal/execution",
     "pkg/services/factory_sessions/internal/execution/fixtures",
-    "pkg/services/factory_sessions/internal/execution/livechild",
     "pkg/services/factory_sessions/internal/execution/recordingreplay",
     "pkg/services/factory_sessions/internal/execution/runtimepersist",
     "pkg/services/factory_sessions/internal/executionopening",
@@ -1544,11 +1543,6 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/execution/fixtures",
-      "disposition": "retain",
-      "destination": "factory_sessions"
-    },
-    {
-      "packagePath": "pkg/services/factory_sessions/internal/execution/livechild",
       "disposition": "retain",
       "destination": "factory_sessions"
     },

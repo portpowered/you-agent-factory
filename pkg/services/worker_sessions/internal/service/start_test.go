@@ -34,7 +34,7 @@ func TestStart_InvalidRequest_ReturnsTypedErrorAndMakesNoWorkersCall(t *testing.
 
 	req := validStartRequest("worker-1", "dispatch-1")
 	req.ID = "   "
-	if _, err := registry.Start(ctx, req); !errors.Is(err, workersessions.ErrInvalidSessionID) {
+	if _, err := registry.InvokeSession(ctx, req); !errors.Is(err, workersessions.ErrInvalidSessionID) {
 		t.Fatalf("Start() error = %v, want ErrInvalidSessionID", err)
 	}
 	if execution.callCount() != 0 {
@@ -58,7 +58,7 @@ func TestStart_BlankNestedDispatchWorkstationName_RejectedBeforeEffects(t *testi
 	req := validStartRequest("worker-1", "dispatch-1")
 	req.Execution.Execution.Dispatch.WorkstationName = "   "
 
-	if _, err := registry.Start(ctx, req); !errors.Is(err, workersessions.ErrInvalidExecutionRequest) {
+	if _, err := registry.InvokeSession(ctx, req); !errors.Is(err, workersessions.ErrInvalidExecutionRequest) {
 		t.Fatalf("Start() error = %v, want ErrInvalidExecutionRequest", err)
 	}
 	if execution.callCount() != 0 {
@@ -81,7 +81,7 @@ func TestStart_MismatchedNestedDispatchWorkstationName_RejectedBeforeEffects(t *
 	req := validStartRequest("worker-1", "dispatch-1")
 	req.Execution.Execution.Dispatch.WorkstationName = "other-route"
 
-	if _, err := registry.Start(ctx, req); !errors.Is(err, workersessions.ErrInvalidExecutionRequest) {
+	if _, err := registry.InvokeSession(ctx, req); !errors.Is(err, workersessions.ErrInvalidExecutionRequest) {
 		t.Fatalf("Start() error = %v, want ErrInvalidExecutionRequest", err)
 	}
 	if execution.callCount() != 0 {
@@ -107,7 +107,7 @@ func TestStart_WhitespacePaddedNestedDispatchWorkstationName_RejectedBeforeEffec
 	req := validStartRequest("worker-1", "dispatch-1")
 	req.Execution.Execution.Dispatch.WorkstationName = " review "
 
-	if _, err := registry.Start(ctx, req); !errors.Is(err, workersessions.ErrInvalidExecutionRequest) {
+	if _, err := registry.InvokeSession(ctx, req); !errors.Is(err, workersessions.ErrInvalidExecutionRequest) {
 		t.Fatalf("Start() error = %v, want ErrInvalidExecutionRequest", err)
 	}
 	if execution.callCount() != 0 {
@@ -137,7 +137,7 @@ func TestStart_ValidNewIdentity_ObservesRunningDuringAdmittedInFlightHandoff(t *
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if _, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
+		if _, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
 			t.Errorf("Start() error = %v, want nil", err)
 		}
 	}()
@@ -182,7 +182,7 @@ func TestStart_RetainsExactProviderSessionAssociationFromWorkerResult(t *testing
 	req := validStartRequest("worker-1", "dispatch-1")
 	req.Execution.Execution.Dispatch.Execution.RequestID = "turn-1"
 
-	started, err := registry.Start(context.Background(), req)
+	started, err := registry.InvokeSession(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
@@ -451,7 +451,7 @@ func TestAssociateProviderSession_CommitsBeforeDependentWorkerRecord(t *testing.
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
-	if _, err := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := registry.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 	if association.Outcome != workersessions.ProviderSessionAssociationOutcomeAccepted {
@@ -501,7 +501,7 @@ func TestAssociateProviderSession_IsIdempotentAndRejectsConflictsWithoutCrossSes
 	} {
 		go func(sessionID, dispatchID string) {
 			defer starts.Done()
-			if _, err := registry.Start(context.Background(), validStartRequest(sessionID, dispatchID)); err != nil {
+			if _, err := registry.InvokeSession(context.Background(), validStartRequest(sessionID, dispatchID)); err != nil {
 				t.Errorf("Start(%q) error = %v, want nil", sessionID, err)
 			}
 		}(identity.sessionID, identity.dispatchID)
@@ -563,7 +563,7 @@ func TestAssociateProviderSession_RejectsMalformedOrForeignAttemptWithoutWriting
 	registry := newRegistryWithExecution(execution)
 	done := make(chan error, 1)
 	go func() {
-		_, err := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+		_, err := registry.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1"))
 		done <- err
 	}()
 	<-started
@@ -608,7 +608,7 @@ func TestAssociateProviderSession_RejectsMissingOrTerminalSessionWithoutWriting(
 		t.Fatalf("AssociateProviderSession() for missing session error = %v, want ErrSessionNotFound", err)
 	}
 
-	if _, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 	if _, err := registry.AssociateProviderSession(ctx, workersessions.ProviderSessionAssociationRequest{
@@ -636,7 +636,7 @@ func TestStart_AbsentProviderSessionDoesNotSynthesizeAssociation(t *testing.T) {
 	req.Execution.Execution.RunnerID = "codex"
 	req.Execution.Execution.Model = "gpt-5"
 
-	started, err := registry.Start(context.Background(), req)
+	started, err := registry.InvokeSession(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
@@ -672,7 +672,7 @@ func TestStart_InvalidProviderSessionResultRemainsExplicitlyUnassociated(t *test
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
 
-	started, err := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+	started, err := registry.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1"))
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
@@ -737,7 +737,7 @@ func TestStart_ReservationIsObservableBeforeWorkersHandoff(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if _, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
+		if _, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
 			t.Errorf("Start() error = %v, want nil", err)
 		}
 	}()
@@ -771,7 +771,7 @@ func TestStart_ReuseAlreadyReservedIdentity_DoesNotCreateAReplacementSession(t *
 		t.Fatalf("Reserve() error = %v, want nil", err)
 	}
 
-	result, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1"))
+	result, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1"))
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
@@ -785,7 +785,7 @@ func TestStart_ExactlyOneDetachedRequestReachesWorkersWithExpectedAttemptIdentit
 	registry := newRegistryWithExecution(execution)
 	ctx := context.Background()
 
-	if _, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 
@@ -829,7 +829,7 @@ func TestStart_ClonesExecutionRequestBeforeHandoff(t *testing.T) {
 	registry := newRegistryWithExecution(execution)
 	ctx := context.Background()
 
-	if _, err := registry.Start(ctx, req); err != nil {
+	if _, err := registry.InvokeSession(ctx, req); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 
@@ -851,7 +851,7 @@ func TestStart_SuccessfulWorkersResult_TerminalizesCompleted(t *testing.T) {
 	registry := newRegistryWithExecution(succeedingExecution())
 	ctx := context.Background()
 
-	result, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1"))
+	result, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1"))
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
@@ -880,7 +880,7 @@ func TestStart_DispatchAdmissionFailure_TerminalizesFailedWithStartFailureCauseA
 	registry := newRegistryWithExecution(execution)
 	ctx := context.Background()
 
-	result, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1"))
+	result, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1"))
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
@@ -912,7 +912,7 @@ func TestStart_OrdinaryFailedWorkResult_TerminalizesFailedWithWorkersExecutionFa
 	registry := newRegistryWithExecution(execution)
 	ctx := context.Background()
 
-	result, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1"))
+	result, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1"))
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
@@ -944,7 +944,7 @@ func TestStart_ResultAndErrorDisagreement_TrustsWorkResultOutcomeOverAdapterErro
 	registry := newRegistryWithExecution(execution)
 	ctx := context.Background()
 
-	result, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1"))
+	result, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1"))
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
@@ -971,7 +971,7 @@ func TestStart_ResultSuccessDisagreesWithNonNilAdapterError_TrustsWorkResultOutc
 	registry := newRegistryWithExecution(execution)
 	ctx := context.Background()
 
-	result, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1"))
+	result, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1"))
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
@@ -997,7 +997,7 @@ func TestStart_ExecutorPanicEvidenceWithNilAdapterError_MapsToExecutorPanicCause
 	registry := newRegistryWithExecution(execution)
 	ctx := context.Background()
 
-	result, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1"))
+	result, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1"))
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
@@ -1026,7 +1026,7 @@ func TestStart_ExecutorPanicTypedAdapterError_MapsToExecutorPanicCause(t *testin
 	registry := newRegistryWithExecution(execution)
 	ctx := context.Background()
 
-	result, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1"))
+	result, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1"))
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
@@ -1051,7 +1051,7 @@ func TestStart_FailedResultWithNonPanicAdapterError_MapsToAdapterFailureCause(t 
 	registry := newRegistryWithExecution(execution)
 	ctx := context.Background()
 
-	result, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1"))
+	result, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1"))
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
@@ -1080,7 +1080,7 @@ func TestStart_FailedResultWithBlankWorkResultError_UsesGenericAdapterFailureDet
 	registry := newRegistryWithExecution(execution)
 	ctx := context.Background()
 
-	result, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1"))
+	result, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1"))
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
@@ -1115,7 +1115,7 @@ func TestStart_FailedResultWithSensitivePromptOrCommandText_NeverExposesItInDeta
 	registry := newRegistryWithExecution(execution)
 	ctx := context.Background()
 
-	result, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1"))
+	result, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1"))
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
@@ -1129,7 +1129,7 @@ func TestStart_DuplicateConflictingStart_ReturnsTypedErrorAndMakesNoWorkersCall(
 	registry := newRegistryWithExecution(execution)
 	ctx := context.Background()
 
-	first, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1"))
+	first, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1"))
 	if err != nil {
 		t.Fatalf("first Start() error = %v, want nil", err)
 	}
@@ -1138,7 +1138,7 @@ func TestStart_DuplicateConflictingStart_ReturnsTypedErrorAndMakesNoWorkersCall(
 	}
 
 	callsBefore := execution.callCount()
-	if _, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-2")); !errors.Is(err, workersessions.ErrSessionNotStartable) {
+	if _, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-2")); !errors.Is(err, workersessions.ErrSessionNotStartable) {
 		t.Fatalf("second Start() on a terminal session error = %v, want ErrSessionNotStartable", err)
 	}
 	if execution.callCount() != callsBefore {
@@ -1198,13 +1198,13 @@ func TestStart_MissingReservedIdentityCollidingWithInFlightStart_ReturnsTypedErr
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if _, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
+		if _, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
 			t.Errorf("first Start() error = %v, want nil", err)
 		}
 	}()
 	<-started
 
-	if _, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-2")); !errors.Is(err, workersessions.ErrSessionNotStartable) {
+	if _, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-2")); !errors.Is(err, workersessions.ErrSessionNotStartable) {
 		t.Fatalf("concurrent Start() on an in-flight session error = %v, want ErrSessionNotStartable", err)
 	}
 	if execution.callCount() != 1 {
@@ -1219,7 +1219,7 @@ func TestStart_TerminalStateIsAbsorbingUnderConcurrentGetAndList(t *testing.T) {
 	registry := newRegistryWithExecution(succeedingExecution())
 	ctx := context.Background()
 
-	if _, err := registry.Start(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
+	if _, err := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
 
@@ -1281,7 +1281,7 @@ func TestConcurrentStart_DistinctSessions_TerminalizeIndependentlyWithoutCrossAs
 			defer wg.Done()
 			id := fmt.Sprintf("worker-%d", i)
 			attemptID := fmt.Sprintf("dispatch-%d", i)
-			result, err := registry.Start(ctx, validStartRequest(id, attemptID))
+			result, err := registry.InvokeSession(ctx, validStartRequest(id, attemptID))
 			if err != nil {
 				t.Errorf("Start(%q) error = %v, want nil", id, err)
 				return

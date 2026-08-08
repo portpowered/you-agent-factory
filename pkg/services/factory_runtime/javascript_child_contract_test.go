@@ -38,6 +38,10 @@ func (p *rootOnlyPeer) Observe(context.Context, factory.ObserveRequest) (factory
 func (p *rootOnlyPeer) PlanDispatch(_ context.Context, req factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {
 	return factory.PlanDispatchResult{Outcome: factory.DispatchPlanOutcomeAccepted, DispatchID: req.DispatchID}, p.err
 }
+func (p *rootOnlyPeer) InvokeWorker(_ context.Context, _ factory.InvokeWorkerRequest) (factory.InvokeWorkerResult, error) {
+	return factory.InvokeWorkerResult{}, p.err
+}
+
 func (p *rootOnlyPeer) AcceptDispatchResult(_ context.Context, req factory.AcceptDispatchResultRequest) (factory.AcceptDispatchResultResult, error) {
 	return factory.AcceptDispatchResultResult{Outcome: factory.DispatchPlanOutcomeRetired, DispatchID: req.DispatchID}, p.err
 }

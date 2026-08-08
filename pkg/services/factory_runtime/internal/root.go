@@ -122,6 +122,22 @@ func (r *Root) AcceptDispatchResult(
 	return factoryruntime.AcceptDispatchResultResult{}, factoryruntime.ErrNotRunning
 }
 
+// InvokeWorker delegates one orchestrator-resolved Worker invocation to the
+// hosted runtime, which owns the Worker Sessions service and the canonical
+// event ledger the invocation's association must land on.
+func (r *Root) InvokeWorker(
+	ctx context.Context,
+	req factoryruntime.InvokeWorkerRequest,
+) (factoryruntime.InvokeWorkerResult, error) {
+	if err := req.Validate(); err != nil {
+		return factoryruntime.InvokeWorkerResult{}, err
+	}
+	if service := r.delegate(); service != nil {
+		return service.InvokeWorker(ctx, req)
+	}
+	return factoryruntime.InvokeWorkerResult{}, factoryruntime.ErrNotRunning
+}
+
 // BindActiveService attaches the hosted runtime delegate that serves published
 // control, observation, and dispatch-plan operations on the wire-constructed
 // root.

@@ -47,9 +47,14 @@ func startThroughWorkerSessions(
 		cfg.clock.Now(),
 	)
 	execute := func() {
-		startResult, startErr := cfg.workerSessions.Start(
+		// Retry is left at its zero value on purpose: Petri dispatch has always
+		// been one attempt, with retryability classified and handed outward for
+		// the graph to act on. Converging JavaScript children onto this call
+		// must not quietly give every Petri Worker attempt-level retry it never
+		// had.
+		startResult, startErr := cfg.workerSessions.InvokeSession(
 			context.WithoutCancel(ctx),
-			workersessions.StartRequest{ID: sessionID, Execution: request},
+			workersessions.InvokeSessionRequest{ID: sessionID, Execution: request},
 		)
 		result, dispatchErr := workerSessionDispatchOutcome(request, startResult, startErr)
 		accept(context.Background(), request, result, dispatchErr)
@@ -75,7 +80,7 @@ func startThroughWorkerSessions(
 // existed.
 func workerSessionDispatchOutcome(
 	request workers.WorkstationDispatchRequest,
-	startResult workersessions.StartResult,
+	startResult workersessions.InvokeSessionResult,
 	startErr error,
 ) (workers.WorkstationDispatchResult, error) {
 	dispatchID := request.Execution.Dispatch.DispatchID
@@ -120,7 +125,7 @@ func workerSessionDispatchOutcome(
 // control won before admission; all other terminal causes (start failure,
 // adapter failure, executor panic, or Workers execution failure) are produced
 // from within the handoff itself.
-func handedOffToWorkers(startResult workersessions.StartResult) bool {
+func handedOffToWorkers(startResult workersessions.InvokeSessionResult) bool {
 	result := startResult.Session.Result
 	if result == nil || result.Cause == nil {
 		return true

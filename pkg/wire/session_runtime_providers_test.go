@@ -132,22 +132,17 @@ func TestProvideConductorInvocationWithProgressFactory_AcceptsSelectedProvidersS
 	}
 }
 
-func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *testing.T) {
+// TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge pins that a
+// runtime-backed durable execution service is composed without any provider,
+// command runner, allocator, or registry of its own. Its children are Workers,
+// and every provider edge they need is the one Workers already composed for the
+// session; a second edge assembled here is the bypass the Worker Session
+// convergence removed. The mock-worker cases matter because the removed code
+// branched on them.
+func TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge(t *testing.T) {
 	t.Parallel()
 
 	edges := serviceedges.Edges{}
-	providersService, err := provideProvidersService(edges)
-	if err != nil {
-		t.Fatalf("provideProvidersService() error = %v", err)
-	}
-	registry, err := provideProviderRegistry(edges, providersService)
-	if err != nil {
-		t.Fatalf("provideProviderRegistry() error = %v", err)
-	}
-	registryRebinder, err := provideProviderRegistryRebinder(providersService, edges)
-	if err != nil {
-		t.Fatalf("provideProviderRegistryRebinder() error = %v", err)
-	}
 	workflowFiles := provideFactoryRuntimeWorkflowSources(edges)
 	workflowHome := provideFactoryRuntimeWorkflowHome(edges)
 	workflowSymlinks := provideFactoryRuntimeWorkflowSourceResolveSymlinks(edges)
@@ -162,14 +157,11 @@ func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *test
 	sessionIDs := provideFactorySessionIDGenerator(edges)
 	responseEventIDs := provideFactorySessionResponseEventIDGenerator(edges)
 	responseEventRetentionLimits := provideFactorySessionResponseEventRetentionLimits(edges)
-	invocationWithProgress := provideWorkerInvocationWithProgressFactory(providersService, edges)
 	allocator, err := provideAgyPTYAllocator(edges)
 	if err != nil {
 		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
 	}
 	adaptRunner := provideWorkerCommandRunnerAdapter()
-	mockRunnerFactory := provideWorkersMockCommandRunnerFactory()
-	conductorInvocation := provideConductorInvocationWithProgressFactory(providersService, edges)
 	eventsService, err := eventswire.NewService()
 	if err != nil {
 		t.Fatalf("construct events service: %v", err)
@@ -183,13 +175,8 @@ func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *test
 		sessionIDs,
 		responseEventIDs,
 		responseEventRetentionLimits,
-		invocationWithProgress,
 		allocator,
 		adaptRunner,
-		registry,
-		registryRebinder,
-		mockRunnerFactory,
-		conductorInvocation,
 		edges,
 		eventsService,
 	)

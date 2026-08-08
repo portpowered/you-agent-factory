@@ -53,6 +53,7 @@ type FactoryRuntimeAssembler interface {
 		*zap.Logger,
 		workers.RuntimeService,
 		workers.SessionBuildFactory,
+		factoryruntime.ProviderInvocationExecutorFactory,
 		factoryruntime.WorkersRuntimeExecutorsFactory,
 		factoryruntime.WorkersMockCommandRunnerFactory,
 		func(string) workers.ProgressPublisher,
