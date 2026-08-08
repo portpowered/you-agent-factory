@@ -202,6 +202,7 @@ var servicesSet = wire.NewSet(
 	provideAgyPTYAllocator,
 	provideWorkersRuntimeFactory,
 	provideWorkersRuntimeExecutorsFactory,
+	provideProviderInvocationExecutorFactory,
 	provideWorkersMockCommandRunnerFactory,
 	provideAutomationHostedSourcesFactory,
 	provideWorkersLocalRuntimeHooksFactory,

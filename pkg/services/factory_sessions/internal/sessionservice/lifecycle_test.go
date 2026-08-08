@@ -320,3 +320,7 @@ func TestService_PauseLiveFactorySession_RejectsNilGateway(t *testing.T) {
 		t.Fatal("PauseLiveFactorySession = nil, want gateway required")
 	}
 }
+
+func (f *gatewayLifecycleFactory) InvokeWorker(_ context.Context, _ factory.InvokeWorkerRequest) (factory.InvokeWorkerResult, error) {
+	return factory.InvokeWorkerResult{}, nil
+}

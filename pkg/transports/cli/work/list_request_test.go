@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -17,6 +19,30 @@ func (prepare listRequestPreparationFunc) PrepareListRequest(
 	options workservice.ListOptions,
 ) (workservice.PreparedListRequest, error) {
 	return prepare(ctx, options)
+}
+
+func TestList_TerminalityFlagsRejectBeforeHTTP(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	var output bytes.Buffer
+	err := NewList(testHTTPProtocol(t), workservice.NewListRequestPreparation())(ListConfig{
+		Context:     context.Background(),
+		Server:      server.URL,
+		Terminal:    true,
+		NonTerminal: true,
+		Output:      &output,
+	})
+	if err == nil || err.Error() != "--terminal and --non-terminal cannot both be set" {
+		t.Fatalf("List() error = %v, want terminality mutual-exclusion error", err)
+	}
+	if requests != 0 {
+		t.Fatalf("HTTP requests = %d, want zero after local validation", requests)
+	}
 }
 
 type testListRequestPreparation struct {

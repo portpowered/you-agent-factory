@@ -296,14 +296,14 @@ func TestFanOutWorkerSessionControl_ContinuesPastSynchronousProductionChild(t *t
 	if err != nil {
 		t.Fatalf("New Worker Sessions service: %v", err)
 	}
-	starts := make(chan workersessions.StartResult, 2)
+	starts := make(chan workersessions.InvokeSessionResult, 2)
 	startErrs := make(chan error, 2)
 	for _, identity := range []struct{ sessionID, dispatchID string }{
 		{sessionID: "worker-a", dispatchID: "dispatch-a"},
 		{sessionID: "worker-b", dispatchID: "dispatch-b"},
 	} {
 		go func(sessionID, dispatchID string) {
-			started, startErr := workerSessions.Start(context.Background(), workersessions.StartRequest{
+			started, startErr := workerSessions.InvokeSession(context.Background(), workersessions.InvokeSessionRequest{
 				ID: sessionID,
 				Execution: workers.WorkstationDispatchRequest{
 					WorkstationName: "review",

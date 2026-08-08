@@ -235,3 +235,39 @@ func TestFactoryImpl_PlanDispatchExecutesThroughWorkerSessionsStart(t *testing.T
 		)
 	}
 }
+
+// newInvokeWorkerTestFactory composes the real Worker Sessions service over the
+// controlled Workers boundary for the InvokeWorker cells, because identity
+// reservation is the behavior those cells test and a fake Reserve would concede
+// it. It lives beside the cutover harness rather than with its own cells
+// because this is the one file in the package that already assembles a real
+// Worker Sessions service, and one such assembly is enough.
+func newInvokeWorkerTestFactory(
+	t *testing.T,
+	boundary *controlledWorkstationBoundary,
+) *factoryImpl {
+	t.Helper()
+	poolBoundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
+		Service:    boundary,
+		RouteNames: []string{workers.ProviderInvocationRoute},
+		Async:      true,
+	})
+	events, err := eventswire.NewService(logging.NoopLogger{})
+	requireNoRootErr(t, err, "New events service")
+	sessions, err := workersessionswire.NewService(poolBoundary, events, logging.NoopLogger{})
+	requireNoRootErr(t, err, "New Worker Sessions service")
+
+	runtime, _, err := newTestFactoryWithScriptedLedger(
+		withNet(buildSimpleNet()),
+		withInlineDispatch(),
+		withWorkerService(boundary),
+		withWorkerSessions(sessions),
+		withLogger(logging.NoopLogger{}),
+	)
+	requireNoRootErr(t, err, "New")
+	impl, ok := runtime.(*factoryImpl)
+	if !ok {
+		t.Fatalf("factory type = %T, want *factoryImpl", runtime)
+	}
+	return impl
+}

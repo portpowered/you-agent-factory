@@ -66,7 +66,7 @@ func newConfiguredJavaScriptRuntimeService(config javaScriptRuntimeServiceConfig
 		workflows, orchestrationJavaScriptFromWorkflows(workflows), workflows,
 		nil, factory.JavaScriptWorkerSettings{}, mustTestRecordingWriter(),
 		testSessionIDGenerator,
-		nil, nil, nil,
+		nil, nil,
 	)
 }
 
@@ -1337,15 +1337,27 @@ func testExecutionServiceDisabledPersistence(t *testing.T, projectRoot string) {
 	if disabled.(*JavaScriptRuntimeService).persistence != nil {
 		t.Fatal("disabled persistence unexpectedly configured a store")
 	}
+	// A live runtime constructs without a provider on purpose: a runtime-backed
+	// session invokes its children as Workers through a Factory Runtime bound
+	// after construction, so there is nothing a constructor could check. What is
+	// still rejected is a mode this service cannot serve at all.
 	if _, err := newExecutionService(ExecutionProviderJavaScriptRuntime, serviceConfig{
 		ProjectRoot:       projectRoot,
 		ChildExecutorMode: ChildExecutorModeLive,
 		Persistence:       DisabledPersistence(),
 		Clock:             durableFixedClock{now: time.Now()},
+	}); err != nil {
+		t.Fatalf("NewExecutionService(live runtime without provider) error = %v, want success", err)
+	}
+	if _, err := newExecutionService(ExecutionProviderJavaScriptRuntime, serviceConfig{
+		ProjectRoot:       projectRoot,
+		ChildExecutorMode: "NONSENSE",
+		Persistence:       DisabledPersistence(),
+		Clock:             durableFixedClock{now: time.Now()},
 	}); err == nil {
-		t.Fatal("NewExecutionService(live runtime without provider) error = nil, want validation error")
+		t.Fatal("NewExecutionService(unsupported child executor mode) error = nil, want validation error")
 	} else if validation, ok := err.(*ValidationError); !ok || validation.Field != "runtime.childExecutorMode" {
-		t.Fatalf("live runtime without provider error = %#v, want runtime.childExecutorMode ValidationError", err)
+		t.Fatalf("unsupported child executor mode error = %#v, want runtime.childExecutorMode ValidationError", err)
 	}
 }
 
@@ -1465,16 +1477,14 @@ func TestPersistenceChoiceForPolicy_EnabledCreatesProjectDurableSessions(t *test
 func testExecutionServiceChildExecutorHelpers(t *testing.T) {
 	t.Helper()
 
-	if err := validateLiveChildProviderExecutor(ChildExecutorModeLive, nil, nil); err == nil {
-		t.Fatal("validateLiveChildProviderExecutor(live,nil,nil) error = nil, want validation error")
+	if err := validateChildExecutorMode(ChildExecutorModeLive); err != nil {
+		t.Fatalf("validateChildExecutorMode(live) error = %v", err)
 	}
-	if err := validateLiveChildProviderExecutor(ChildExecutorModeLive, nil, func(workerexecution.ProgressPublisher) (workerexecution.InvocationExecutor, error) {
-		return nil, nil
-	}); err != nil {
-		t.Fatalf("validateLiveChildProviderExecutor(live,nil,liveChildInvocation) error = %v", err)
+	if err := validateChildExecutorMode(ChildExecutorModeFake); err != nil {
+		t.Fatalf("validateChildExecutorMode(fake) error = %v", err)
 	}
-	if err := validateLiveChildProviderExecutor(ChildExecutorModeFake, nil, nil); err != nil {
-		t.Fatalf("validateLiveChildProviderExecutor(fake,nil,nil) error = %v", err)
+	if err := validateChildExecutorMode("nonsense"); err == nil {
+		t.Fatal("validateChildExecutorMode(nonsense) error = nil, want validation error")
 	}
 
 	smoke := SmokeLiveChildProvider()

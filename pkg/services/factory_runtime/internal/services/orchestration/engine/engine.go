@@ -54,6 +54,7 @@ type FactoryEngine struct {
 	mu                    sync.Mutex
 	transformer           *token_transformer.Transformer
 	acceptingSubmits      bool
+	terminationResult     *interfaces.TerminationResult
 }
 
 // NewFactoryEngine creates a new engine for the given net and marking.
@@ -224,6 +225,7 @@ func completedDispatchReasonFromResult(result workerexecution.WorkResult) string
 
 func workResultForCompletedDispatch(result workerexecution.WorkResult, completed interfaces.CompletedDispatch) workerexecution.WorkResult {
 	result.Outcome = completed.Outcome
+	result.SelectedClassificationLabel = completed.SelectedClassificationLabel
 	switch completed.Outcome {
 	case workerexecution.OutcomeFailed:
 		result.Error = completed.Reason
@@ -439,6 +441,7 @@ func (e *FactoryEngine) Run(ctx context.Context) error {
 	e.logger.Info("engine started")
 	e.mu.Lock()
 	e.runLoopActive = true
+	e.terminationResult = nil
 	e.mu.Unlock()
 	defer func() {
 		e.mu.Lock()
@@ -458,7 +461,7 @@ func (e *FactoryEngine) Run(ctx context.Context) error {
 	}
 	if terminated {
 		e.logger.Info("engine terminated during initial tick pass")
-		return nil
+		return e.terminationError()
 	}
 
 	var dispatchWait <-chan struct{}
@@ -476,8 +479,24 @@ func (e *FactoryEngine) Run(ctx context.Context) error {
 		}
 		if terminated {
 			e.logger.Info("engine terminated")
-			return nil
+			return e.terminationError()
 		}
+	}
+}
+
+func (e *FactoryEngine) terminationError() error {
+	e.mu.Lock()
+	var termination interfaces.TerminationResult
+	if e.terminationResult != nil {
+		termination = *e.terminationResult
+	}
+	e.mu.Unlock()
+
+	if termination.Classification != interfaces.TerminationClassificationIncomplete {
+		return nil
+	}
+	return &factory.IncompleteDrainError{
+		NonTerminalWorkCount: termination.NonTerminalWorkCount,
 	}
 }
 
@@ -545,6 +564,7 @@ func (e *FactoryEngine) tick(ctx context.Context) (bool, bool, error) {
 		e.logger.Debug("engine: skipping automatic tick while factory is paused")
 		return false, false, nil
 	}
+	e.terminationResult = nil
 
 	rtSnapshot, mutated, keepAlive, err := e.beginTick(ctx)
 	if err != nil {
@@ -569,6 +589,12 @@ func (e *FactoryEngine) tick(ctx context.Context) (bool, bool, error) {
 
 		if result.ShouldTerminate {
 			shouldTerminate = true
+			if result.Termination == nil {
+				e.terminationResult = nil
+			} else {
+				termination := *result.Termination
+				e.terminationResult = &termination
+			}
 		}
 
 		rtSnapshot, mutated, err = e.applySubsystemResult(ctx, sub.TickGroup(), result, rtSnapshot, mutated)
@@ -720,6 +746,7 @@ func (e *FactoryEngine) finishTick(keepAlive bool, shouldTerminate bool, totalDi
 	e.runtimeState.Results = nil
 	if keepAlive {
 		shouldTerminate = false
+		e.terminationResult = nil
 	}
 	e.logger.Info("engine: [END] tick complete",
 		"tick", e.runtimeState.TickCount,

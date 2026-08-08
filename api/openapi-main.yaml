@@ -70,13 +70,23 @@ paths:
         - $ref: '#/components/parameters/WorkListName'
         - $ref: '#/components/parameters/WorkListWorkTypeName'
         - $ref: '#/components/parameters/WorkListTraceId'
+        - $ref: '#/components/parameters/WorkListTerminal'
+        - $ref: '#/components/parameters/WorkListNonTerminal'
+        - $ref: '#/components/parameters/WorkListCounts'
       responses:
         '200':
-          description: Current work tokens for the targeted session.
+          description: >-
+            Current work tokens for the targeted session. All supplied filters
+            compose with logical AND before deterministic ordering and
+            pagination. When counts=true, counts.total is the complete
+            filtered selection before page slicing and is stable across pages
+            of an unchanged session snapshot.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListWorkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -1508,6 +1518,12 @@ components:
       $ref: './components/parameters/WorkListWorkTypeName.yaml'
     WorkListTraceId:
       $ref: './components/parameters/WorkListTraceId.yaml'
+    WorkListTerminal:
+      $ref: './components/parameters/WorkListTerminal.yaml'
+    WorkListNonTerminal:
+      $ref: './components/parameters/WorkListNonTerminal.yaml'
+    WorkListCounts:
+      $ref: './components/parameters/WorkListCounts.yaml'
     WorkOrTokenID:
       $ref: './components/parameters/WorkOrTokenID.yaml'
     FactorySessionListScope:
@@ -1612,6 +1628,8 @@ components:
       $ref: './components/schemas/api/MoveWorkRequest.yaml'
     ListWorkResponse:
       $ref: './components/schemas/api/ListWorkResponse.yaml'
+    ListWorkCountSummary:
+      $ref: './components/schemas/api/ListWorkCountSummary.yaml'
     PaginationContext:
       $ref: './components/schemas/api/PaginationContext.yaml'
     TokenResponse:

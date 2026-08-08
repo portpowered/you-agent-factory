@@ -5,14 +5,34 @@ import (
 	"fmt"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // Service keeps the durable execution implementation private while preserving
 // the established execution contract during the package migration.
 type Service struct {
 	durableexecution.Service
+}
+
+// BindWorkerInvoker forwards the session's Factory Runtime to the underlying
+// JavaScript runtime, which invokes its workflow children as Workers through
+// it. An execution backend that runs no Workers of its own -- the fake and
+// replay backends -- does not implement the binder, and skipping it is correct
+// rather than a missing wire.
+func (s *Service) BindWorkerInvoker(resolve func(sessionID string) factoryruntime.Service) {
+	if s == nil || s.Service == nil {
+		return
+	}
+	binder, ok := s.Service.(interface {
+		BindWorkerInvoker(func(sessionID string) factoryruntime.Service)
+	})
+	if !ok {
+		return
+	}
+	binder.BindWorkerInvoker(resolve)
 }
 
 // SubscribeResponseEvents forwards durable-session response-event subscriptions
@@ -72,3 +92,20 @@ func (s *Service) RecordPetriTokenMutations(
 }
 
 var _ durableexecution.Service = (*Service)(nil)
+
+// PublishWorkerProgress forwards one Worker's progress to the underlying
+// JavaScript runtime, which routes it to the durable session that started that
+// Worker. A backend whose children are not Workers does not implement it, and
+// its sessions have no such output to record.
+func (s *Service) PublishWorkerProgress(fragment workers.ProgressFragment) {
+	if s == nil || s.Service == nil {
+		return
+	}
+	observer, ok := s.Service.(interface {
+		PublishWorkerProgress(workers.ProgressFragment)
+	})
+	if !ok {
+		return
+	}
+	observer.PublishWorkerProgress(fragment)
+}

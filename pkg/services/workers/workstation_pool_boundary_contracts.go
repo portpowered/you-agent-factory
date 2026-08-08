@@ -62,12 +62,21 @@ type WorkstationPoolBoundary interface {
 // WorkstationPoolBoundaryConfig assembles one immutable workstation-route
 // snapshot for a runtime session.
 type WorkstationPoolBoundaryConfig struct {
-	Service       WorkstationExecutionService
-	Executors     map[string]WorkerExecutor
-	RouteNames    []string
-	Async         bool
-	Capacity      int
-	QueueCapacity int
+	Service    WorkstationExecutionService
+	Executors  map[string]WorkerExecutor
+	RouteNames []string
+	// ProviderInvocation is the executor for Workers with no authored
+	// workstation behind them, published under ProviderInvocationRoute. It is
+	// assembled as a worker-role binding rather than a workstation-role one
+	// because that is exactly what it is: a Worker whose selections were
+	// already resolved by its caller, so there is no workstation to render.
+	//
+	// A nil value omits the route entirely, which is the correct shape for a
+	// session that has no orchestrator able to produce such a Worker.
+	ProviderInvocation WorkstationRequestExecutor
+	Async              bool
+	Capacity           int
+	QueueCapacity      int
 }
 
 // DefaultRuntimePoolBindingCapacity preserves legacy Factory Runtime pool

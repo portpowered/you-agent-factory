@@ -1,0 +1,9 @@
+type: object
+additionalProperties: false
+required:
+  - total
+properties:
+  total:
+    type: integer
+    minimum: 0
+    description: Complete filtered Work total before page slicing.

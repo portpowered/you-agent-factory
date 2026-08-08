@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	runnerinference "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/inference"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
 )
@@ -200,3 +203,235 @@ func (n *NoopExecutor) Execute(_ context.Context, d work.WorkDispatch) (workerex
 
 // Compile-time check.
 var _ WorkerExecutor = (*NoopExecutor)(nil)
+
+func resolveModelOperationBindings(
+	workstationDef *interfaces.FactoryWorkstationConfig,
+	workerDef *interfaces.FactoryWorkerConfig,
+	inputTokens []workerexecution.Token,
+) ([]workerexecution.ResolvedModelOperationBinding, error) {
+	return runnerinference.ResolveInferenceOperationBindings(workstationDef, workerDef, inputTokens)
+}
+
+func (we *WorkstationExecutor) promptFileReader() interfaces.FileReader {
+	if we.FileSystem == nil {
+		return nil
+	}
+	return we.FileSystem.ReadFile
+}
+
+func (we *WorkstationExecutor) prepareWorkstationDefinition(
+	dispatch work.WorkDispatch,
+	workstationName string,
+	workstationDef *interfaces.FactoryWorkstationConfig,
+	invocationArgs *work.InvocationArguments,
+	readFile interfaces.FileReader,
+	diagnostics *workerexecution.WorkDiagnostics,
+	start time.Time,
+) (*interfaces.FactoryWorkstationConfig, *workerexecution.WorkResult) {
+	snapshot, promptPath, err := we.workstationPromptSnapshot(workstationName, workstationDef)
+	if err != nil {
+		result := promptSourceFailureResult(
+			dispatch,
+			"workstation",
+			workstationName,
+			promptPath,
+			err,
+			diagnostics,
+			we.Now().Sub(start),
+		)
+		return nil, &result
+	}
+	if we.Interpolation == nil {
+		return snapshot, nil
+	}
+	interpolated, err := we.Interpolation.InterpolateWorkstationConfig(*snapshot, invocationArgs, readFile)
+	if err != nil {
+		return nil, promptPreparationFailureResult(dispatch, err, diagnostics, we.Now().Sub(start))
+	}
+	return &interpolated, nil
+}
+
+func (we *WorkstationExecutor) prepareWorkerDefinition(
+	dispatch work.WorkDispatch,
+	workerName string,
+	workerDef *interfaces.FactoryWorkerConfig,
+	invocationArgs *work.InvocationArguments,
+	readFile interfaces.FileReader,
+	diagnostics *workerexecution.WorkDiagnostics,
+	start time.Time,
+) (*interfaces.FactoryWorkerConfig, *workerexecution.WorkResult) {
+	snapshot, promptPath, err := we.workerPromptSnapshot(workerName, workerDef)
+	if err != nil {
+		result := promptSourceFailureResult(
+			dispatch,
+			"worker",
+			workerName,
+			promptPath,
+			err,
+			diagnostics,
+			we.Now().Sub(start),
+		)
+		return nil, &result
+	}
+	if we.Interpolation == nil {
+		return snapshot, nil
+	}
+	interpolated, err := we.Interpolation.InterpolateWorkerConfig(*snapshot, invocationArgs, readFile)
+	if err != nil {
+		return nil, promptPreparationFailureResult(dispatch, err, diagnostics, we.Now().Sub(start))
+	}
+	if strings.TrimSpace(interpolated.ModelProvider) == "" {
+		interpolated.ModelProvider = interpolated.RuntimeDefaultModelProvider
+	}
+	if strings.TrimSpace(interpolated.Model) == "" {
+		interpolated.Model = interpolated.RuntimeDefaultModel
+	}
+	if failed := we.resolveInvocationProvider(dispatch, &interpolated, diagnostics, start); failed != nil {
+		return nil, failed
+	}
+	return &interpolated, nil
+}
+
+func promptPreparationFailureResult(
+	dispatch work.WorkDispatch,
+	err error,
+	diagnostics *workerexecution.WorkDiagnostics,
+	duration time.Duration,
+) *workerexecution.WorkResult {
+	return &workerexecution.WorkResult{
+		DispatchID:   dispatch.DispatchID,
+		TransitionID: dispatch.TransitionID,
+		Outcome:      workerexecution.OutcomeFailed,
+		Error:        err.Error(),
+		Diagnostics:  diagnostics,
+		Metrics:      workerexecution.WorkMetrics{Duration: duration},
+	}
+}
+
+func (we *WorkstationExecutor) workerPromptSnapshot(
+	workerName string,
+	workerDef *interfaces.FactoryWorkerConfig,
+) (*interfaces.FactoryWorkerConfig, string, error) {
+	snapshot := interfaces.CloneWorkerConfig(*workerDef)
+	source := we.workerPromptSource(workerName, workerDef)
+	snapshot.PromptSourcePath = source.Path
+	if err := we.refreshWorkerPrompt(&snapshot); err != nil {
+		return nil, snapshot.PromptSourcePath, err
+	}
+	return &snapshot, snapshot.PromptSourcePath, nil
+}
+
+func (we *WorkstationExecutor) refreshWorkerPrompt(
+	workerDef *interfaces.FactoryWorkerConfig,
+) error {
+	if workerDef == nil || workerDef.PromptSourcePath == "" {
+		return nil
+	}
+	body, err := workerprompting.ResolveAuthoredPromptSource(
+		we.FileSystem,
+		workerDef.PromptSourcePath,
+		true,
+	)
+	if err != nil {
+		return err
+	}
+	workerDef.Body = body
+	return nil
+}
+
+func (we *WorkstationExecutor) workerPromptSource(
+	workerName string,
+	workerDef *interfaces.FactoryWorkerConfig,
+) interfaces.PromptSource {
+	if lookup, ok := we.RuntimeConfig.(interfaces.RuntimePromptSourceLookup); ok {
+		if source, found := lookup.WorkerPromptSource(workerName); found {
+			return source
+		}
+	}
+	if workerDef == nil {
+		return interfaces.PromptSource{}
+	}
+	return interfaces.PromptSource{Path: workerDef.PromptSourcePath}
+}
+
+func (we *WorkstationExecutor) workstationPromptSnapshot(
+	workstationName string,
+	workstationDef *interfaces.FactoryWorkstationConfig,
+) (*interfaces.FactoryWorkstationConfig, string, error) {
+	snapshot := interfaces.CloneWorkstationConfig(*workstationDef)
+	source := we.workstationPromptSource(workstationName, workstationDef)
+	snapshot.PromptSourcePath = source.Path
+	snapshot.PromptSourceIsTemplate = source.IsTemplate
+	if err := we.refreshWorkstationPrompt(&snapshot); err != nil {
+		return nil, snapshot.PromptSourcePath, err
+	}
+	return &snapshot, snapshot.PromptSourcePath, nil
+}
+
+func (we *WorkstationExecutor) refreshWorkstationPrompt(
+	workstationDef *interfaces.FactoryWorkstationConfig,
+) error {
+	if workstationDef == nil || workstationDef.PromptSourcePath == "" {
+		return nil
+	}
+	prompt, err := workerprompting.ResolveAuthoredPromptSource(
+		we.FileSystem,
+		workstationDef.PromptSourcePath,
+		!workstationDef.PromptSourceIsTemplate,
+	)
+	if err != nil {
+		return err
+	}
+	if workstationDef.PromptSourceIsTemplate {
+		workstationDef.PromptTemplate = prompt
+		return nil
+	}
+	workstationDef.Body = prompt
+	workstationDef.PromptTemplate = prompt
+	return nil
+}
+
+func (we *WorkstationExecutor) workstationPromptSource(
+	workstationName string,
+	workstationDef *interfaces.FactoryWorkstationConfig,
+) interfaces.PromptSource {
+	if lookup, ok := we.RuntimeConfig.(interfaces.RuntimePromptSourceLookup); ok {
+		if source, found := lookup.WorkstationPromptSource(workstationName); found {
+			return source
+		}
+	}
+	if workstationDef == nil {
+		return interfaces.PromptSource{}
+	}
+	return interfaces.PromptSource{
+		Path:       workstationDef.PromptSourcePath,
+		IsTemplate: workstationDef.PromptSourceIsTemplate,
+	}
+}
+
+func promptSourceFailureResult(
+	dispatch work.WorkDispatch,
+	role string,
+	name string,
+	path string,
+	err error,
+	diagnostics *workerexecution.WorkDiagnostics,
+	duration time.Duration,
+) workerexecution.WorkResult {
+	return workerexecution.WorkResult{
+		DispatchID:   dispatch.DispatchID,
+		TransitionID: dispatch.TransitionID,
+		Outcome:      workerexecution.OutcomeFailed,
+		Error: fmt.Sprintf(
+			"%s %q prompt source %s: %v",
+			role,
+			name,
+			path,
+			err,
+		),
+		Diagnostics: diagnostics,
+		Metrics: workerexecution.WorkMetrics{
+			Duration: duration,
+		},
+	}
+}

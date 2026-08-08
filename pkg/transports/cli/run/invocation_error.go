@@ -1,9 +1,12 @@
 package run
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"strings"
 
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
 )
 
@@ -26,6 +29,20 @@ type InvocationError = factoryruntimecli.InvocationError
 // stderr. It returns true when err matched an invocation contract error.
 func WriteInvocationError(w io.Writer, err error, quiet bool) bool {
 	return factoryruntimecli.WriteInvocationError(w, err, quiet)
+}
+
+// WriteIncompleteDrainError renders the finite-run failure contract for a
+// drained runtime that still owns non-terminal customer Work. This is kept at
+// the human CLI boundary so the runtime error remains useful to other callers.
+func WriteIncompleteDrainError(w io.Writer, err error) bool {
+	var incompleteDrainErr *factoryruntime.IncompleteDrainError
+	if !errors.As(err, &incompleteDrainErr) {
+		return false
+	}
+	if w != nil {
+		_, _ = fmt.Fprintf(w, "Error: %s\n", incompleteDrainErr.Error())
+	}
+	return true
 }
 
 // MapCurrentFactoryFailure classifies failures from the exact Current Factory

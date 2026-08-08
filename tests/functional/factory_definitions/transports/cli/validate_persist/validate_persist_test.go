@@ -2,6 +2,7 @@ package validate_persist
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -41,6 +43,136 @@ const invalidFactoryWithDanglingWorker = `{
 		"type":"MODEL_WORKSTATION"
 	}]
 }`
+
+const unsupportedThreeInputJoinFactory = `{
+	"name":"unsupported-three-input-join",
+	"workTypes":[
+		{"name":"parent","states":[
+			{"name":"ready","type":"INITIAL"},
+			{"name":"complete","type":"TERMINAL"},
+			{"name":"failed","type":"FAILED"}
+		]},
+		{"name":"same","states":[
+			{"name":"ready","type":"INITIAL"},
+			{"name":"complete","type":"TERMINAL"},
+			{"name":"failed","type":"FAILED"}
+		]},
+		{"name":"child","states":[
+			{"name":"ready","type":"INITIAL"},
+			{"name":"complete","type":"TERMINAL"},
+			{"name":"failed","type":"FAILED"}
+		]}
+	],
+	"workstations":[{
+		"name":"fan-in",
+		"type":"LOGICAL_MOVE",
+		"worker":"",
+		"inputs":[
+			{"workType":"parent","state":"ready"},
+			{"workType":"same","state":"ready","guards":[{"type":"SAME_NAME","matchInput":"parent"}]},
+			{"workType":"child","state":"complete","guards":[{"type":"ALL_CHILDREN_COMPLETE","parentInput":"parent"}]}
+		],
+		"outputs":[{"workType":"parent","state":"complete"}]
+	}]
+}`
+
+const supportedTwoInputJoinFactory = `{
+	"name":"supported-two-input-join",
+	"workTypes":[
+		{"name":"parent","states":[
+			{"name":"ready","type":"INITIAL"},
+			{"name":"complete","type":"TERMINAL"},
+			{"name":"failed","type":"FAILED"}
+		]},
+		{"name":"child","states":[
+			{"name":"ready","type":"INITIAL"},
+			{"name":"complete","type":"TERMINAL"},
+			{"name":"failed","type":"FAILED"}
+		]}
+	],
+	"workstations":[{
+		"name":"two-input-join",
+		"type":"LOGICAL_MOVE",
+		"worker":"",
+		"inputs":[
+			{"workType":"parent","state":"ready","guards":[{"type":"SAME_NAME","matchInput":"child"}]},
+			{"workType":"child","state":"complete","guards":[{"type":"ALL_CHILDREN_COMPLETE","parentInput":"parent"}]}
+		],
+		"outputs":[{"workType":"parent","state":"complete"}]
+	}]
+}`
+
+// TestFactoryValidateRejectsUnsupportedJoinArity proves the supported Factory
+// CLI validate command rejects the regression topology before it can start a
+// runtime, invoke a provider, or persist the invalid definition.
+func TestFactoryValidateRejectsUnsupportedJoinArity(t *testing.T) {
+	home := t.TempDir()
+	sourcePath := writeFactoryFile(t, unsupportedThreeInputJoinFactory)
+	runner := support.NewRecordingCommandRunner("runtime must not execute")
+	apiStarts := 0
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "factory", "config", "validate", sourcePath,
+	})
+	inputs.Input.Env = customerHomeEnvironment(home)
+	inputs.Input.WorkingDirectory = filepath.Dir(sourcePath)
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
+			apiStarts++
+			return nil
+		},
+	})
+
+	err := process.Execute(inputs.Input)
+	if err == nil {
+		t.Fatal("Process.Execute(factory config validate) error = nil, want rejection")
+	}
+
+	diagnostic := err.Error() + "\n" + inputs.Stdout() + "\n" + inputs.Stderr()
+	for _, want := range []string{
+		"Factory validation failed.",
+		"fan-in",
+		"unsupported SAME_NAME plus ALL_CHILDREN_COMPLETE join arity",
+		"observed arity is 3 inputs",
+		"at most 2 inputs are supported",
+		"Split the fan-in into supported two-input workstation stages",
+		"reduce the joined inputs",
+	} {
+		if !strings.Contains(diagnostic, want) {
+			t.Fatalf("validate diagnostic missing %q:\n%s", want, diagnostic)
+		}
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner call count = %d, want 0", runner.CallCount())
+	}
+	if apiStarts != 0 {
+		t.Fatalf("API/runtime host starts = %d, want 0", apiStarts)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".you-agent-factory", "factories", "unsupported-three-input-join")); !os.IsNotExist(err) {
+		t.Fatalf("invalid Factory persistence check error = %v, want not-exist", err)
+	}
+}
+
+// TestFactoryValidateAcceptsSupportedTwoInputJoinArity proves the new
+// rejection rule does not change the existing supported two-input behavior.
+func TestFactoryValidateAcceptsSupportedTwoInputJoinArity(t *testing.T) {
+	sourcePath := writeFactoryFile(t, supportedTwoInputJoinFactory)
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "factory", "config", "validate", sourcePath,
+	})
+	inputs.Input.WorkingDirectory = filepath.Dir(sourcePath)
+	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute(factory config validate) error = %v\nstdout:\n%s\nstderr:\n%s",
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+	if !strings.Contains(inputs.Stdout(), "Factory validation passed.") {
+		t.Fatalf("factory validation output = %q", inputs.Stdout())
+	}
+}
 
 // TestCLIFactoryValidateRejectsInvalidDefinitionActionably proves the public
 // Factory CLI validate command rejects an invalid authored definition with

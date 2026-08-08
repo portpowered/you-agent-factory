@@ -14,6 +14,8 @@ const (
 	FilterName         = "name"
 	FilterWorkTypeName = "workTypeName"
 	FilterTraceID      = "traceId"
+	FilterTerminal     = "terminal"
+	FilterNonTerminal  = "nonTerminal"
 
 	SortByStateType = "state.type"
 
@@ -31,9 +33,12 @@ type ListOptions struct {
 	Name         string
 	WorkTypeName string
 	TraceID      string
+	Terminal     bool
+	NonTerminal  bool
 	SortBy       string
 	MaxResults   int
 	NextToken    string
+	Counts       bool
 }
 
 // PreparedListRequest is the detached, validated value returned to transport
@@ -103,6 +108,12 @@ func NormalizeList(options ListOptions) (ListQuery, error) {
 			fmt.Sprintf("%s must be one of INITIAL, PROCESSING, TERMINAL, or FAILED", FilterStateType),
 		)
 	}
+	if options.Terminal && options.NonTerminal {
+		return ListQuery{}, validationError(
+			FilterTerminal,
+			"terminal and nonTerminal cannot both be selected",
+		)
+	}
 	if options.SortBy != "" && options.SortBy != SortByStateType {
 		return ListQuery{}, validationError("sortBy", fmt.Sprintf("sortBy must be %s", SortByStateType))
 	}
@@ -113,7 +124,7 @@ func NormalizeList(options ListOptions) (ListQuery, error) {
 		return ListQuery{}, err
 	}
 
-	active := make([]string, 0, 6)
+	active := make([]string, 0, 8)
 	for _, entry := range []struct {
 		key   string
 		value string
@@ -123,11 +134,19 @@ func NormalizeList(options ListOptions) (ListQuery, error) {
 		{FilterName, options.Name},
 		{FilterWorkTypeName, options.WorkTypeName},
 		{FilterTraceID, options.TraceID},
-		{"sortBy", options.SortBy},
 	} {
 		if entry.value != "" {
 			active = append(active, entry.key)
 		}
+	}
+	if options.Terminal {
+		active = append(active, FilterTerminal)
+	}
+	if options.NonTerminal {
+		active = append(active, FilterNonTerminal)
+	}
+	if options.SortBy != "" {
+		active = append(active, "sortBy")
 	}
 
 	summary := "none"

@@ -115,6 +115,10 @@ func (f *lifecycleControlFactory) PlanDispatch(
 	}, nil
 }
 
+func (f *lifecycleControlFactory) InvokeWorker(_ context.Context, _ factory.InvokeWorkerRequest) (factory.InvokeWorkerResult, error) {
+	return factory.InvokeWorkerResult{}, nil
+}
+
 func (f *lifecycleControlFactory) AcceptDispatchResult(
 	_ context.Context,
 	req factory.AcceptDispatchResultRequest,

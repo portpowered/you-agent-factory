@@ -1,0 +1,9 @@
+name: nonTerminal
+in: query
+required: false
+description: >-
+  Optional terminality filter. When true, selects Work in INITIAL or
+  PROCESSING states. It composes with every other supplied list filter and
+  cannot be selected together with terminal=true.
+schema:
+  type: boolean

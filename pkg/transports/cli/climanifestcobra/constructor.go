@@ -36,40 +36,62 @@ type flagTarget struct {
 }
 
 func registerFlag(flagSet *pflag.FlagSet, contract climanifest.Flag, target flagTarget, usage string) error {
+	if err := registerFlagValue(flagSet, contract, contract.Long, target, usage, true); err != nil {
+		return err
+	}
+	for _, alias := range contract.Aliases {
+		if err := registerFlagValue(flagSet, contract, alias, target, "", false); err != nil {
+			return err
+		}
+		aliasFlag := flagSet.Lookup(alias)
+		aliasFlag.Hidden = true
+		aliasFlag.NoOptDefVal = contract.NoOptionDefault
+	}
+	return nil
+}
+
+func registerFlagValue(
+	flagSet *pflag.FlagSet,
+	contract climanifest.Flag,
+	name string,
+	target flagTarget,
+	usage string,
+	primary bool,
+) error {
 	switch contract.ValueType {
 	case "bool":
 		if target.boolValue == nil {
-			return fmt.Errorf("missing bool binding for flag %q", contract.Long)
+			return fmt.Errorf("missing bool binding for flag %q", name)
 		}
 		defaultValue, err := strconv.ParseBool(contract.Default)
 		if err != nil {
-			return fmt.Errorf("parse default for flag %q: %w", contract.Long, err)
+			return fmt.Errorf("parse default for flag %q: %w", name, err)
 		}
-		if contract.Shorthand != "" {
-			flagSet.BoolVarP(target.boolValue, contract.Long, contract.Shorthand, defaultValue, usage)
+		if primary && contract.Shorthand != "" {
+			flagSet.BoolVarP(target.boolValue, name, contract.Shorthand, defaultValue, usage)
 		} else {
-			flagSet.BoolVar(target.boolValue, contract.Long, defaultValue, usage)
+			flagSet.BoolVar(target.boolValue, name, defaultValue, usage)
 		}
 	case "string":
 		if target.stringValue == nil {
-			return fmt.Errorf("missing string binding for flag %q", contract.Long)
+			return fmt.Errorf("missing string binding for flag %q", name)
 		}
-		if contract.Shorthand != "" {
-			flagSet.StringVarP(target.stringValue, contract.Long, contract.Shorthand, contract.Default, usage)
+		if primary && contract.Shorthand != "" {
+			flagSet.StringVarP(target.stringValue, name, contract.Shorthand, contract.Default, usage)
 		} else {
-			flagSet.StringVar(target.stringValue, contract.Long, contract.Default, usage)
+			flagSet.StringVar(target.stringValue, name, contract.Default, usage)
 		}
 	case "int":
 		if target.intValue == nil {
-			return fmt.Errorf("missing int binding for flag %q", contract.Long)
+			return fmt.Errorf("missing int binding for flag %q", name)
 		}
 		defaultValue, err := strconv.Atoi(contract.Default)
 		if err != nil {
-			return fmt.Errorf("parse default for flag %q: %w", contract.Long, err)
+			return fmt.Errorf("parse default for flag %q: %w", name, err)
 		}
-		flagSet.IntVar(target.intValue, contract.Long, defaultValue, usage)
+		flagSet.IntVar(target.intValue, name, defaultValue, usage)
 	default:
-		return fmt.Errorf("unsupported flag value type %q for %q", contract.ValueType, contract.Long)
+		return fmt.Errorf("unsupported flag value type %q for %q", contract.ValueType, name)
 	}
 	return nil
 }

@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -241,4 +242,159 @@ func TestWorkstationBehaviorRouter_UsesDispatchWorkerForAgentRunRouting(t *testi
 	if result.Output != "agent-run" {
 		t.Fatalf("Output = %q, want agent-run routing", result.Output)
 	}
+}
+
+// TestNewProviderInvocationExecutor_AbsentInvocationYieldsNoExecutor lets
+// composition treat "no provider invocation available" as an absent route
+// rather than a route that fails at dispatch time.
+func TestNewProviderInvocationExecutor_AbsentInvocationYieldsNoExecutor(t *testing.T) {
+	if executor := NewProviderInvocationExecutor(nil); executor != nil {
+		t.Fatalf("NewProviderInvocationExecutor(nil) = %#v, want nil", executor)
+	}
+}
+
+// TestProviderInvocationExecutor_ResolvesEverySelectionFromTheRequest pins the
+// whole premise of this route: no workstation definition is consulted, so
+// every selection the provider needs must arrive on the execution request and
+// reach the inference request unchanged.
+func TestProviderInvocationExecutor_ResolvesEverySelectionFromTheRequest(t *testing.T) {
+	invocation := &recordingInvocation{result: workerexecution.InvocationResult{
+		Response: workerexecution.InferenceResponse{Content: `{"text":"done"}`},
+	}}
+	executor := NewProviderInvocationExecutor(invocation)
+
+	result, err := executor.Execute(context.Background(), workerexecution.WorkstationExecutionRequest{
+		Dispatch:         work.WorkDispatch{DispatchID: "dispatch-1", TransitionID: "t-1"},
+		WorkerType:       "worker-a",
+		ExecutorProvider: "codex",
+		ModelProvider:    "codex",
+		Model:            "codex-test-model",
+		ReasoningEffort:  "high",
+		SystemPrompt:     "be brief",
+		UserMessage:      "summarize",
+		OutputSchema:     `{"type":"object"}`,
+		WorkingDirectory: "/project",
+		SkipPermissions:  true,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", result.Outcome)
+	}
+	if result.Output != `{"text":"done"}` {
+		t.Fatalf("output = %q, want the provider's content", result.Output)
+	}
+
+	request := invocation.input.Request
+	if request.WorkerType != "worker-a" {
+		t.Fatalf("worker type = %q, want the caller's own", request.WorkerType)
+	}
+	if request.Model != "codex-test-model" || request.ModelProvider != "codex" {
+		t.Fatalf("model selection = %q/%q, want the caller's own", request.ModelProvider, request.Model)
+	}
+	if request.ReasoningEffort != "high" || request.SystemPrompt != "be brief" || request.UserMessage != "summarize" {
+		t.Fatalf("prompt selections did not survive: %#v", request)
+	}
+	if !request.SkipPermissions {
+		t.Fatal("skip-permissions = false; the caller already resolved the invocation-effective policy")
+	}
+	if request.RunnerID != "codex" {
+		t.Fatalf("runner = %q, want the runner derived from the executor provider", request.RunnerID)
+	}
+	if invocation.input.Attempt != 1 {
+		t.Fatalf("attempt = %d, want 1; attempt budgeting belongs to Worker Sessions", invocation.input.Attempt)
+	}
+}
+
+// TestProviderInvocationExecutor_PreservesTheWorkersFailureClassification is
+// the property Worker Sessions consults to decide whether an attempt is worth
+// retrying. Dropping FailureMetadata here would silently make every provider
+// failure terminal.
+func TestProviderInvocationExecutor_PreservesTheWorkersFailureClassification(t *testing.T) {
+	metadata := &workerexecution.WorkFailureMetadata{
+		Family: workerexecution.WorkFailureFamilyRetryable,
+		Type:   workerexecution.WorkFailureTypeInternalServerError,
+	}
+	invocation := &recordingInvocation{
+		err: errors.New("provider execution failed"),
+		result: workerexecution.InvocationResult{
+			FailureMetadata: metadata,
+			FailureDetail: &workerexecution.FailureDetail{
+				Reason:  workerexecution.WorkFailureTypeInternalServerError,
+				Message: "provider returned 500",
+			},
+		},
+	}
+	executor := NewProviderInvocationExecutor(invocation)
+
+	result, err := executor.Execute(context.Background(), workerexecution.WorkstationExecutionRequest{
+		Dispatch: work.WorkDispatch{DispatchID: "dispatch-1", TransitionID: "t-1"},
+	})
+	if err == nil {
+		t.Fatal("Execute error = nil, want the provider failure surfaced")
+	}
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("outcome = %q, want FAILED", result.Outcome)
+	}
+	if result.FailureMetadata != metadata {
+		t.Fatalf("failure metadata = %#v, want the Workers-owned classification preserved", result.FailureMetadata)
+	}
+	if result.DispatchID != "dispatch-1" || result.TransitionID != "t-1" {
+		t.Fatalf("failure identity = %q/%q, want the dispatch's own", result.DispatchID, result.TransitionID)
+	}
+	if result.Error == "" {
+		t.Fatal("failure error = empty, want a non-empty description")
+	}
+}
+
+// TestProviderInvocationExecutor_UnavailableInvocationFailsTheDispatch keeps a
+// misconfigured route a failed Worker rather than a panic that escapes the
+// Workers boundary.
+func TestProviderInvocationExecutor_UnavailableInvocationFailsTheDispatch(t *testing.T) {
+	var executor *ProviderInvocationExecutor
+	result, err := executor.Execute(context.Background(), workerexecution.WorkstationExecutionRequest{
+		Dispatch: work.WorkDispatch{DispatchID: "dispatch-1"},
+	})
+	if err != nil {
+		t.Fatalf("Execute error = %v, want the failure carried on the result", err)
+	}
+	if result.Outcome != workerexecution.OutcomeFailed || result.DispatchID != "dispatch-1" {
+		t.Fatalf("result = %#v, want a failed result for dispatch-1", result)
+	}
+}
+
+// TestProviderInvocationExecutor_ExplicitRunnerWins proves the derived runner
+// is a fallback, not an override: a child that named its runner keeps it, even
+// when its executor provider would have derived a different one.
+func TestProviderInvocationExecutor_ExplicitRunnerWins(t *testing.T) {
+	invocation := &recordingInvocation{}
+	executor := NewProviderInvocationExecutor(invocation)
+
+	if _, err := executor.Execute(context.Background(), workerexecution.WorkstationExecutionRequest{
+		Dispatch:         work.WorkDispatch{DispatchID: "dispatch-1"},
+		RunnerID:         "claude",
+		ExecutorProvider: "codex",
+	}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if got := invocation.input.Request.RunnerID; got != "claude" {
+		t.Fatalf("runner = %q, want the caller's explicit selection", got)
+	}
+}
+
+type recordingInvocation struct {
+	input  workerexecution.InvocationInput
+	result workerexecution.InvocationResult
+	err    error
+}
+
+var _ workerexecution.InvocationExecutor = (*recordingInvocation)(nil)
+
+func (i *recordingInvocation) Execute(
+	_ context.Context,
+	input workerexecution.InvocationInput,
+) (workerexecution.InvocationResult, error) {
+	i.input = input
+	return i.result, i.err
 }

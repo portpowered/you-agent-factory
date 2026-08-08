@@ -18,9 +18,12 @@ func ListOptionsFromAPI(params factoryapi.ListWorkBySessionIdParams) (work.ListO
 		Name:         optional.StringValue(params.Name),
 		WorkTypeName: optional.StringValue(params.WorkTypeName),
 		TraceID:      optional.StringValue(params.TraceId),
+		Terminal:     listParamBool(params.Terminal),
+		NonTerminal:  listParamBool(params.NonTerminal),
 		SortBy:       listParamString(params.SortBy),
 		MaxResults:   optional.IntValue(params.MaxResults),
 		NextToken:    optional.StringValue(params.NextToken),
+		Counts:       listParamBool(params.Counts),
 	}
 	query, err := work.NormalizeList(options)
 	if err != nil {
@@ -40,6 +43,13 @@ func listParamString[T ~string](value *T) string {
 	return string(*value)
 }
 
+func listParamBool[T ~bool](value *T) bool {
+	if value == nil {
+		return false
+	}
+	return bool(*value)
+}
+
 // ListWorkResponseToAPI encodes detached Work list results into the public HTTP
 // success shape.
 func ListWorkResponseToAPI(result work.ListResult) factoryapi.ListWorkResponse {
@@ -55,6 +65,9 @@ func ListWorkResponseToAPI(result work.ListResult) factoryapi.ListWorkResponse {
 	}
 	if result.NextToken != "" {
 		response.PaginationContext.NextToken = &result.NextToken
+	}
+	if result.Counts != nil {
+		response.Counts = &factoryapi.ListWorkCountSummary{Total: result.Counts.Total}
 	}
 	return response
 }

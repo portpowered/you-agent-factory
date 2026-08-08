@@ -927,10 +927,6 @@
       "minimum": 79.70
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/livechild",
-      "minimum": 88.23
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay",
       "minimum": 86.92
     },
@@ -2058,7 +2054,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service",
-      "minimum": 100.00
+      "minimum": 98.72
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire",

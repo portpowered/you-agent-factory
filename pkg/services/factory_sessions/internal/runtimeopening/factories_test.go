@@ -244,6 +244,7 @@ func assertFactoryRuntimeDependenciesRetained(t *testing.T, factory *Factory, de
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime workflows", factory.factoryWorkflows, group.FactoryWorkflows)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime preview", factory.workflowPreview, group.WorkflowPreview)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime executors", factory.workersRuntimeExecutorsFactory, group.WorkersRuntimeExecutorsFactory)
+	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime provider invocation", factory.providerInvocationFactory, group.ProviderInvocationFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime mock runner", factory.workersMockCommandRunnerFactory, group.WorkersMockCommandRunnerFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime assembler", factory.factoryRuntimeAssembler, group.FactoryRuntimeAssembler)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime clock", factory.resolveClock, group.ResolveClock)
@@ -368,6 +369,7 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 		{"Factory Runtime JavaScript workflow definitions", func(d *Dependencies) { d.FactoryRuntime.FactoryWorkflows = nil }},
 		{"Factory Runtime workflow preview operation", func(d *Dependencies) { d.FactoryRuntime.WorkflowPreview = nil }},
 		{"Factory Runtime Workers runtime executors factory", func(d *Dependencies) { d.FactoryRuntime.WorkersRuntimeExecutorsFactory = nil }},
+		{"Factory Runtime provider-invocation executor factory", func(d *Dependencies) { d.FactoryRuntime.ProviderInvocationFactory = nil }},
 		{"Factory Runtime Workers mock command runner factory", func(d *Dependencies) { d.FactoryRuntime.WorkersMockCommandRunnerFactory = nil }},
 		{"Factory Runtime runtime assembler", func(d *Dependencies) { d.FactoryRuntime.FactoryRuntimeAssembler = nil }},
 		{"Factory Runtime clock resolver", func(d *Dependencies) { d.FactoryRuntime.ResolveClock = nil }},
@@ -419,6 +421,7 @@ func validRuntimeOpeningDependencies(calls *int) Dependencies {
 			FactoryWorkflows:                workflowDefinitionsConstructionStub{},
 			WorkflowPreview:                 workflowPreviewConstructionStub{},
 			WorkersRuntimeExecutorsFactory:  inertRuntimeOpeningFunction[factoryruntime.WorkersRuntimeExecutorsFactory](calls),
+			ProviderInvocationFactory:       inertRuntimeOpeningFunction[factoryruntime.ProviderInvocationExecutorFactory](calls),
 			WorkersMockCommandRunnerFactory: inertRuntimeOpeningFunction[factoryruntime.WorkersMockCommandRunnerFactory](calls),
 			FactoryRuntimeAssembler:         factoryRuntimeAssemblerConstructionStub{},
 			ResolveClock:                    inertRuntimeOpeningFunction[factoryruntime.ClockResolver](calls),

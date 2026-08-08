@@ -41,16 +41,19 @@ func TestMergeBuildsDetachedEffectiveDefinition(t *testing.T) {
 		}},
 	}
 	runtimeWorker := &factorydefinitions.FactoryWorkerConfig{
-		Name:  "agent",
-		Model: "runtime-model",
-		Args:  []string{"--runtime"},
-		Auth:  &factorydefinitions.HostedWorkerAuthConfig{},
+		Name:             "agent",
+		Model:            "runtime-model",
+		Args:             []string{"--runtime"},
+		Auth:             &factorydefinitions.HostedWorkerAuthConfig{},
+		PromptSourcePath: "factory/workers/agent/AGENTS.md",
 	}
 	runtimeWorkstation := &factorydefinitions.FactoryWorkstationConfig{
-		Name:             "review",
-		WorkerTypeName:   "agent",
-		StopWords:        []string{"runtime"},
-		RuntimeStopWords: []string{"terminal"},
+		Name:                   "review",
+		WorkerTypeName:         "agent",
+		StopWords:              []string{"runtime"},
+		PromptSourcePath:       "factory/workstations/review/prompt.md",
+		PromptSourceIsTemplate: true,
+		RuntimeStopWords:       []string{"terminal"},
 		Env: map[string]string{
 			"AUTHORED": "overridden",
 			"RUNTIME":  "true",
@@ -75,8 +78,14 @@ func TestMergeBuildsDetachedEffectiveDefinition(t *testing.T) {
 	if got := effective.Workers[0].Model; got != "runtime-model" {
 		t.Fatalf("worker model = %q, want runtime-model", got)
 	}
+	if got := effective.Workers[0].PromptSourcePath; got != runtimeWorker.PromptSourcePath {
+		t.Fatalf("worker prompt source = %q, want %q", got, runtimeWorker.PromptSourcePath)
+	}
 	if got := effective.Workstations[0].Type; got != factorydefinitions.WorkstationTypeModel {
 		t.Fatalf("workstation type = %q, want %q", got, factorydefinitions.WorkstationTypeModel)
+	}
+	if got := effective.Workstations[0].PromptSourcePath; got != runtimeWorkstation.PromptSourcePath || !effective.Workstations[0].PromptSourceIsTemplate {
+		t.Fatalf("workstation prompt source = (%q, %t)", got, effective.Workstations[0].PromptSourceIsTemplate)
 	}
 	if got := effective.Workstations[0].StopWords; len(got) != 3 ||
 		got[0] != "authored" || got[1] != "runtime" || got[2] != "terminal" {

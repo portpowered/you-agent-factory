@@ -5914,7 +5914,7 @@
           },
           "description": {
             "id": "you.work.list.description",
-            "canonicalEnglish": "List work from a running you-agent-factory service.\n\nBy default the command targets the default compatibility session. Use --session to route the request to one specific live factory session instead. Run you session list to discover live session ids.\n\nOptional filters are applied on the server before pagination. --name matches a case-insensitive substring of the work name. --work-type-name matches workTypeName exactly. --trace-id matches traceId or currentChainingTraceId exactly. Combine filters with --max-results and --next-token to page through the filtered result set."
+          "canonicalEnglish": "List work from a running you-agent-factory service.\n\nBy default the command targets the default compatibility session. Use --session to route the request to one specific live factory session instead. Run you session list to discover live session ids.\n\nOptional filters are applied on the server before ordering and pagination. --state matches the current state name exactly (legacy alias: --state-name). --name matches a case-insensitive substring of the work name. --work-type matches workTypeName exactly (legacy alias: --work-type-name). --trace-id matches traceId or currentChainingTraceId exactly. --terminal selects TERMINAL and FAILED work; --non-terminal selects INITIAL and PROCESSING work. The terminality flags are mutually exclusive. Combine all filters with logical AND, plus --max-results and --next-token to page through the filtered result set. --counts adds the total for the complete filtered result set before pagination in human and JSON output."
           }
         },
         "examples": [
@@ -6035,10 +6035,12 @@
         },
         "you.work.list.flag.state-name": {
           "id": "you.work.list.flag.state-name",
-          "long": "state-name",
-          "usage": "filter by current state name",
+          "long": "state",
+          "usage": "filter by exact current state name before ordering and pagination",
           "shorthand": "",
-          "aliases": [],
+          "aliases": [
+            "state-name"
+          ],
           "scope": "local",
           "valueType": "string",
           "required": false,
@@ -6081,6 +6083,54 @@
             "since": "1.0.0"
           }
         },
+        "you.work.list.flag.terminal": {
+          "id": "you.work.list.flag.terminal",
+          "long": "terminal",
+          "usage": "select TERMINAL and FAILED work; mutually exclusive with --non-terminal",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.list.flag.terminal",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.work.list.flag.non-terminal": {
+          "id": "you.work.list.flag.non-terminal",
+          "long": "non-terminal",
+          "usage": "select INITIAL and PROCESSING work; mutually exclusive with --terminal",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.list.flag.non-terminal",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
         "you.work.list.flag.name": {
           "id": "you.work.list.flag.name",
           "long": "name",
@@ -6107,10 +6157,12 @@
         },
         "you.work.list.flag.work-type-name": {
           "id": "you.work.list.flag.work-type-name",
-          "long": "work-type-name",
-          "usage": "filter by exact workTypeName (applied before pagination)",
+          "long": "work-type",
+          "usage": "filter by exact workTypeName before ordering and pagination",
           "shorthand": "",
-          "aliases": [],
+          "aliases": [
+            "work-type-name"
+          ],
           "scope": "local",
           "valueType": "string",
           "required": false,
@@ -6225,6 +6277,30 @@
             "since": "1.0.0"
           }
         },
+        "you.work.list.flag.counts": {
+          "id": "you.work.list.flag.counts",
+          "long": "counts",
+          "usage": "include total for the complete filtered result set before pagination",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.list.flag.counts",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
         "you.work.list.flag.port": {
           "id": "you.work.list.flag.port",
           "long": "port",
@@ -6293,6 +6369,22 @@
         },
         "acrossTiers": "replace",
         "multipleBindings": "reject"
+      },
+      "relationships": {
+        "you.work.list.rel.terminality": {
+          "id": "you.work.list.rel.terminality",
+          "kind": "mutually-exclusive",
+          "participants": [
+            {
+              "id": "you.work.list.flag.terminal",
+              "type": "flag"
+            },
+            {
+              "id": "you.work.list.flag.non-terminal",
+              "type": "flag"
+            }
+          ]
+        }
       },
       "channels": {
         "input": [

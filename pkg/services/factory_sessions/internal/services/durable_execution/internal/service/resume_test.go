@@ -259,7 +259,7 @@ func newResumeBackedExecution(
 		factoryruntime.JavaScriptWorkerSettings{},
 		restartRecordingWriter{},
 		func() string { return resumeOwnerSessionID },
-		nil, nil, nil,
+		nil, nil,
 	)
 }
 

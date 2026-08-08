@@ -8,6 +8,7 @@
 - Use `context.AfterFunc` to close an active stream body on cancellation so blocked reads and reconnect backoff can unwind without polling or a durable cursor journal.
 - Public event-driven Work observers should drive transitions through the public `you work move` edge in end-to-end fixtures; worker dispatch completion events are distinct from canonical `WORK_STATE_CHANGE` observation.
 - Adding a runnable CLI leaf also requires a reviewed functional-scenario/evidence mapping and a binding in every generic resolved-family fixture; stable-input test helpers must support each newly introduced flag value kind.
+- When a shared generated CLI family gains flags, every compatibility or focused test constructor must bind the new stable input IDs before exercising an unrelated leaf.
 
 ## [2026-08-08 14:07 -07:00] - wo-c2-work-watch-event-stream-001
 - What was implemented
@@ -106,4 +107,21 @@
 - **Learnings for future iterations:**
   - CI’s generic resolved-family constructor intentionally fails closed when a new runnable leaf is not in its local handler map; adding the production binding alone is insufficient.
   - The reviewed functional manifest is generated from explicit `applyReviewedEvidence` decisions, so a new customer-boundary test needs both the source mapping and the checked-in manifest/evidence record.
+---
+
+## [2026-08-08 16:30 -07:00] - wo-c2-work-watch-event-stream-004 delivery follow-up
+- What was implemented
+  - Finished the in-progress merge of the current mainline Work list/counts changes into the Work watch branch without dropping the watch command, generated contract entries, or public functional coverage.
+  - Regenerated CLI family and contract artifacts, refreshed command/input identity baselines through the supported writers, and extended the watch test fixture with the merged list filter/count stable inputs.
+- Files changed
+  - Generated CLI/contract baselines and `packages/api/generated/manifest.json`
+  - `tests/functional/work/cli/resolved_work_family_test.go`
+  - `pkg/transports/cli/commandregistry/work_watch_test.go`
+  - `prd.json`, `progress.txt`
+- Verification
+  - `go test ./tests/functional/work/... -run TestWorkWatchFollowsStateTransitionsUntilTerminal -count=1` passes.
+  - `go test ./pkg/transports/cli/... -count=1` and `go test ./pkg/services/work/... ./pkg/wire/... -count=1` pass.
+  - `git diff --check` passes and the merge has no unresolved conflicts.
+- **Learnings for future iterations:**
+  - Mainline merges can add required stable inputs to a shared generated family even when the feature leaf is unchanged; include those bindings in every focused family fixture and rerun the baseline writers after resolving generated conflicts.
 ---

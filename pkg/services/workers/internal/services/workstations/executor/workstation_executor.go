@@ -149,26 +149,21 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 			Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
 		}, nil
 	}
-	var readFile factorydefinitions.FileReader
-	if we.FileSystem != nil {
-		readFile = we.FileSystem.ReadFile
-	}
-	if we.Interpolation != nil {
-		interpolatedWorkstation, err := we.Interpolation.InterpolateWorkstationConfig(*workstationDef, invocationArgs, readFile)
-		if err != nil {
-			return workerexecution.WorkResult{
-				DispatchID:   dispatch.DispatchID,
-				TransitionID: dispatch.TransitionID,
-				Outcome:      workerexecution.OutcomeFailed,
-				Error:        err.Error(),
-				Diagnostics:  invocationDiagnostics,
-				Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
-			}, nil
-		}
-		workstationDef = &interpolatedWorkstation
+	readFile := we.promptFileReader()
+	workstationDef, failed := we.prepareWorkstationDefinition(
+		dispatch,
+		dispatch.WorkstationName,
+		workstationDef,
+		invocationArgs,
+		readFile,
+		invocationDiagnostics,
+		start,
+	)
+	if failed != nil {
+		return *failed, nil
 	}
 	workerName := workstationWorkerName(workstationDef, dispatch)
-	workerDef, ok := we.RuntimeConfig.Worker(workerName)
+	workerConfig, ok := we.RuntimeConfig.Worker(workerName)
 	if !ok {
 		return workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
@@ -178,33 +173,17 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 			Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
 		}, nil
 	}
-	if we.Interpolation != nil {
-		interpolatedWorker, err := we.Interpolation.InterpolateWorkerConfig(*workerDef, invocationArgs, readFile)
-		if err != nil {
-			return workerexecution.WorkResult{
-				DispatchID:   dispatch.DispatchID,
-				TransitionID: dispatch.TransitionID,
-				Outcome:      workerexecution.OutcomeFailed,
-				Error:        err.Error(),
-				Diagnostics:  invocationDiagnostics,
-				Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
-			}, nil
-		}
-		workerDef = &interpolatedWorker
-		if strings.TrimSpace(workerDef.ModelProvider) == "" {
-			workerDef.ModelProvider = workerDef.RuntimeDefaultModelProvider
-		}
-		if strings.TrimSpace(workerDef.Model) == "" {
-			workerDef.Model = workerDef.RuntimeDefaultModel
-		}
-		if failed := we.resolveInvocationProvider(
-			dispatch,
-			workerDef,
-			invocationDiagnostics,
-			start,
-		); failed != nil {
-			return *failed, nil
-		}
+	workerDef, failed := we.prepareWorkerDefinition(
+		dispatch,
+		workerName,
+		workerConfig,
+		invocationArgs,
+		readFile,
+		invocationDiagnostics,
+		start,
+	)
+	if failed != nil {
+		return *failed, nil
 	}
 	effort, effortOK := factorydefinitions.CanonicalizeReasoningEffort(workerDef.ReasoningEffort)
 	if !effortOK {
@@ -245,7 +224,10 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 		return result, err
 	}
 	if workstationDef.Type == factorydefinitions.WorkstationTypeClassify {
-		return normalizeClassifierWorkResult(result), nil
+		return normalizeClassifierWorkResult(
+			result,
+			workerDef.Type == factorydefinitions.WorkerTypeScript,
+		), nil
 	}
 	return result, nil
 }
@@ -762,14 +744,20 @@ func (we *WorkstationExecutor) executeInnerWorker(ctx context.Context, request w
 	return result, nil
 }
 
-func normalizeClassifierWorkResult(result workerexecution.WorkResult) workerexecution.WorkResult {
+func normalizeClassifierWorkResult(result workerexecution.WorkResult, scriptBacked bool) workerexecution.WorkResult {
 	if result.Outcome == workerexecution.OutcomeFailed {
+		result.SelectedClassificationLabel = ""
 		return result
 	}
 
-	label, err := normalizeClassifierLabel(result.Output)
+	output := result.Output
+	if scriptBacked {
+		output = finalScriptClassifierLine(result)
+	}
+	label, err := normalizeClassifierLabel(output)
 	if err != nil {
 		result.Outcome = workerexecution.OutcomeFailed
+		result.SelectedClassificationLabel = ""
 		result.Error = classifierOutputErrorDetail(result.Output, err)
 		return result
 	}
@@ -778,6 +766,19 @@ func normalizeClassifierWorkResult(result workerexecution.WorkResult) workerexec
 	result.Output = label
 	result.Feedback = ""
 	return result
+}
+
+func finalScriptClassifierLine(result workerexecution.WorkResult) string {
+	output := result.Output
+	if result.Diagnostics != nil && result.Diagnostics.Command != nil {
+		output = result.Diagnostics.Command.Stdout
+	}
+	trimmed := strings.TrimSpace(output)
+	if trimmed == "" {
+		return ""
+	}
+	lines := strings.Split(trimmed, "\n")
+	return strings.TrimSpace(lines[len(lines)-1])
 }
 
 func normalizeClassifierLabel(output string) (string, error) {

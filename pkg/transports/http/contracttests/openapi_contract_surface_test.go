@@ -330,6 +330,8 @@ func TestOpenAPIContract_ListWorkReturnsStructuredWorkResults(t *testing.T) {
 	if _, ok := listWorkProperties["paginationContext"].(map[string]any); !ok {
 		t.Fatal("ListWorkResponse.properties.paginationContext is missing")
 	}
+	assertSchemaPropertyRef(t, schemas, "ListWorkResponse", "counts", "#/components/schemas/ListWorkCountSummary")
+	assertRequiredFields(t, schemaObject(t, schemas, "ListWorkCountSummary"), "total")
 
 	work := schemaObject(t, schemas, "Work")
 	workProperties := schemaProperties(t, work, "Work")
@@ -353,6 +355,10 @@ func TestOpenAPIContract_ListWorkReturnsStructuredWorkResults(t *testing.T) {
 	assertParameterRef(t, parameters, "#/components/parameters/WorkListName")
 	assertParameterRef(t, parameters, "#/components/parameters/WorkListWorkTypeName")
 	assertParameterRef(t, parameters, "#/components/parameters/WorkListTraceId")
+	assertParameterRef(t, parameters, "#/components/parameters/WorkListTerminal")
+	assertParameterRef(t, parameters, "#/components/parameters/WorkListNonTerminal")
+	assertParameterRef(t, parameters, "#/components/parameters/WorkListCounts")
+	assertResponseRef(t, listWork, "400", "#/components/responses/BadRequest")
 }
 
 func TestOpenAPIContract_PublicRuntimeAndFactoryWorldSchemasUseCamelCase(t *testing.T) {

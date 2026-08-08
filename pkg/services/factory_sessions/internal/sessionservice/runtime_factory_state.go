@@ -147,6 +147,17 @@ func (fs *SessionRuntime) AcceptDispatchResult(ctx context.Context, req factory.
 	return runtime.AcceptDispatchResult(ctx, req)
 }
 
+// InvokeWorker routes one orchestrator-resolved Worker invocation to the
+// current runtime, which owns the Worker Sessions service and the canonical
+// ledger the invocation's dispatch/Worker Session association must land on.
+func (fs *SessionRuntime) InvokeWorker(ctx context.Context, req factory.InvokeWorkerRequest) (factory.InvokeWorkerResult, error) {
+	runtime := fs.currentRuntimeService()
+	if runtime == nil {
+		return factory.InvokeWorkerResult{}, factory.ErrNotFound
+	}
+	return runtime.InvokeWorker(ctx, req)
+}
+
 func (fs *SessionRuntime) submitWorkFile(ctx context.Context) error {
 	workFile := fs.workFile
 	if fs.initialWorkFiles == nil {
