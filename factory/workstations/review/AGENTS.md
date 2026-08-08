@@ -30,6 +30,18 @@ You are processing work item {{ (index .Inputs 0).WorkID }} of type {{ (index .I
 Run: make test
 Report any failures. Failing checks are a BLOCKING issue.
 
+Known-baseline lint policy (recorded 2026-08-08): `make lint` cannot
+currently pass end-to-end on main — the `pkg-boundary` target carries
+172 pre-existing domain→transport import violations owned by the
+packaged-service-structure migration backlog, and several committed
+PSS inventories (packagetargetmanifestcheck tests) have drifted on
+main. When a PRD requires lint: enforce that the branch introduces NO
+NEW violations relative to current main (compare `make lint` output on
+the PR head vs main), and that the ratcheted gates that ARE green on
+main — backend-size, pkg-maint, pkg-file-count, pkg-structure, vet —
+stay green on the head. Do not block a lane on pre-existing debt it
+did not touch; do record which gate outputs you compared.
+
 If the change involves modification to the website, you should use the playwright browser and READ instructions for docs/internal/processes/manual-qa.md.
 
 ### Step 2.1 — Reconcile CI state before commenting
