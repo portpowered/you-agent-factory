@@ -2,6 +2,7 @@ package service
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -68,7 +69,7 @@ func loadDetails(ctx context.Context, files providersessionsinternal.FileSystem,
 		return providersessions.Detail{}, err
 	}
 
-	parsed, err := parseCodexSessionDetails(ctx, file)
+	parsed, err := parseCodexSessionDetailsForSession(ctx, file, normalizedID)
 	if err != nil {
 		return providersessions.Detail{}, err
 	}
@@ -343,19 +344,13 @@ type ParsedDetails struct {
 // ParseSummary parses a Codex JSONL stream into its inspection summary.
 func ParseSummary(reader io.Reader) (providersessions.ParseSummary, error) {
 	parsed, err := parseCodexSessionDetails(context.Background(), reader)
-	if err != nil {
-		return providersessions.ParseSummary{}, err
-	}
-	return parsed.Summary, nil
+	return parsed.Summary, err
 }
 
 // ParseDetails parses a Codex JSONL stream into summary and transcript data.
 func ParseDetails(reader io.Reader) (ParsedDetails, error) {
 	parsed, err := parseCodexSessionDetails(context.Background(), reader)
-	if err != nil {
-		return ParsedDetails{}, err
-	}
-	return detachParsedDetails(parsed), nil
+	return detachParsedDetails(parsed), err
 }
 
 // Codex JSONL reconstruction preserves source line order for transcript,
@@ -366,7 +361,18 @@ func ParseDetails(reader io.Reader) (ParsedDetails, error) {
 // message records are deduplicated. Function outputs attach to the earliest
 // matching call_id within the reconstructed stream.
 func parseCodexSessionDetails(ctx context.Context, reader io.Reader) (ParsedDetails, error) {
+	return parseCodexSessionDetailsForSession(ctx, reader, "")
+}
+
+func parseCodexSessionDetailsForSession(ctx context.Context, reader io.Reader, sessionID string) (ParsedDetails, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if reader == nil {
+		return ParsedDetails{}, fmt.Errorf("%w: rollout reader is nil", providersessions.ErrSessionStorageUnavailable)
+	}
 	parser := codexSessionParser{
+		sessionID: sessionID,
 		summary: providersessions.ParseSummary{
 			Turns:         []providersessions.TurnSummary{},
 			FunctionCalls: []providersessions.FunctionCallSummary{},
@@ -376,32 +382,55 @@ func parseCodexSessionDetails(ctx context.Context, reader io.Reader) (ParsedDeta
 		},
 		transcript: []providersessions.TranscriptEntry{},
 	}
-	bufferedReader := bufio.NewReader(reader)
+	budgetReader := &codexInspectionReader{reader: reader, budget: &parser.budget}
+	bufferedReader := bufio.NewReaderSize(budgetReader, maxCodexJSONLReadBufferSize)
 	lineNumber := 0
 	for {
 		if err := ctx.Err(); err != nil {
-			return ParsedDetails{}, err
+			return parser.details(), err
 		}
-		lineBytes, readErr := bufferedReader.ReadBytes('\n')
-		if readErr != nil && !errors.Is(readErr, io.EOF) {
-			return ParsedDetails{}, providersessions.ErrSessionStorageUnavailable
+		lineBytes, atEOF, observedLineBytes, readErr := readCodexJSONLLine(bufferedReader)
+		if readErr != nil {
+			switch {
+			case errors.Is(readErr, errCodexInspectionByteLimit):
+				limitErr := parser.stopAtLimit(
+					codexInspectionLimitBytes,
+					maxCodexJSONLBytesPerInspection,
+					parser.budget.bytesRead,
+					lineNumber+1,
+					diagnosticInspectionByteLimit,
+				)
+				return parser.details(), limitErr
+			case errors.Is(readErr, errCodexInspectionRecordLimit):
+				limitErr := parser.stopAtLimit(
+					codexInspectionLimitRecord,
+					maxCodexJSONLLineBytes,
+					observedLineBytes,
+					lineNumber+1,
+					diagnosticInspectionRecordLimit,
+				)
+				return parser.details(), limitErr
+			default:
+				return parser.details(), fmt.Errorf("%w: rollout read failed", providersessions.ErrSessionStorageUnavailable)
+			}
 		}
-		if !parser.budget.recordBytes(int64(len(lineBytes))) {
-			parser.recordInspectionLimit(lineNumber, diagnosticInspectionByteLimit)
-			break
-		}
-		atEOF := errors.Is(readErr, io.EOF)
 		if atEOF && len(lineBytes) == 0 {
 			break
 		}
 
 		lineNumber++
 		if !parser.budget.beginLine() {
-			parser.recordInspectionLimit(lineNumber, diagnosticInspectionLineLimit)
-			break
+			limitErr := parser.stopAtLimit(
+				codexInspectionLimitLines,
+				int64(maxCodexJSONLLinesPerInspection),
+				int64(lineNumber),
+				lineNumber,
+				diagnosticInspectionLineLimit,
+			)
+			return parser.details(), limitErr
 		}
-		line := strings.TrimSpace(string(lineBytes))
-		if line == "" {
+		line := bytes.TrimSpace(lineBytes)
+		if len(line) == 0 {
 			if atEOF {
 				break
 			}
@@ -409,7 +438,7 @@ func parseCodexSessionDetails(ctx context.Context, reader io.Reader) (ParsedDeta
 		}
 		parser.summary.LineCount++
 		var event map[string]any
-		if jsonErr := json.Unmarshal([]byte(line), &event); jsonErr != nil {
+		if jsonErr := json.Unmarshal(line, &event); jsonErr != nil {
 			message := diagnosticInvalidJSONEvent
 			if atEOF {
 				message = diagnosticTruncatedJSONEvent
@@ -421,25 +450,150 @@ func parseCodexSessionDetails(ctx context.Context, reader io.Reader) (ParsedDeta
 			continue
 		}
 		parser.summary.EventCount++
+		parser.currentLine = lineNumber
 		parser.recordEvent(lineNumber, event)
 		if parser.budget.stopParsing {
-			break
+			return parser.details(), parser.limitError()
 		}
 		if atEOF {
 			break
 		}
 	}
-	return ParsedDetails{
-		Summary:    parser.summary,
-		Transcript: parser.transcript,
-	}, nil
+	return parser.details(), nil
+}
+
+var (
+	errCodexInspectionByteLimit   = errors.New("codex rollout byte inspection limit reached")
+	errCodexInspectionRecordLimit = errors.New("codex rollout record inspection limit reached")
+)
+
+const (
+	codexInspectionLimitBytes       = "byte"
+	codexInspectionLimitLines       = "line"
+	codexInspectionLimitRecord      = "record"
+	codexInspectionLimitDiagnostics = "diagnostic"
+)
+
+type codexInspectionReader struct {
+	reader io.Reader
+	budget *parseBudget
+}
+
+func (r *codexInspectionReader) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	remaining := maxCodexJSONLBytesPerInspection - r.budget.bytesRead
+	if remaining <= 0 {
+		return 0, errCodexInspectionByteLimit
+	}
+	if int64(len(p)) > remaining {
+		p = p[:remaining]
+	}
+	n, err := r.reader.Read(p)
+	if n > 0 {
+		r.budget.bytesRead += int64(n)
+	}
+	return n, err
+}
+
+func readCodexJSONLLine(reader *bufio.Reader) ([]byte, bool, int64, error) {
+	var line []byte
+	var lineBytes int64
+	for {
+		fragment, err := reader.ReadSlice('\n')
+		lineBytes += int64(len(fragment))
+		if lineBytes > maxCodexJSONLLineBytes {
+			return nil, false, lineBytes, errCodexInspectionRecordLimit
+		}
+		line = append(line, fragment...)
+		switch {
+		case err == nil:
+			return line, false, lineBytes, nil
+		case errors.Is(err, bufio.ErrBufferFull):
+			continue
+		case errors.Is(err, io.EOF):
+			if len(line) == 0 {
+				return nil, true, lineBytes, nil
+			}
+			return line, true, lineBytes, nil
+		case errors.Is(err, errCodexInspectionByteLimit):
+			return nil, false, lineBytes, err
+		default:
+			return nil, false, lineBytes, err
+		}
+	}
+}
+
+type codexInspectionLimitError struct {
+	sessionID  string
+	category   string
+	configured int64
+	observed   int64
+	line       int
+}
+
+func (e *codexInspectionLimitError) Error() string {
+	session := strings.TrimSpace(e.sessionID)
+	if session == "" {
+		session = "unspecified"
+	}
+	return fmt.Sprintf(
+		"codex provider session %q rollout inspection %s limit reached (configured %d, observed %d, line %d)",
+		session,
+		e.category,
+		e.configured,
+		e.observed,
+		e.line,
+	)
+}
+
+func (e *codexInspectionLimitError) Unwrap() error {
+	return providersessions.ErrResourceLimitExceeded
 }
 
 type codexSessionParser struct {
 	summary          providersessions.ParseSummary
 	transcript       []providersessions.TranscriptEntry
 	currentTurnIndex int
+	currentLine      int
+	sessionID        string
 	budget           parseBudget
+}
+
+func (p *codexSessionParser) details() ParsedDetails {
+	return ParsedDetails{
+		Summary:    p.summary,
+		Transcript: p.transcript,
+	}
+}
+
+func (p *codexSessionParser) stopAtLimit(category string, configured, observed int64, line int, diagnostic string) error {
+	p.budget.setLimit(category, configured, observed, line)
+	p.recordMalformedLine(line, diagnostic)
+	return p.limitError()
+}
+
+func (p *codexSessionParser) limitError() error {
+	category := p.budget.limitCategory
+	if category == "" {
+		category = codexInspectionLimitDiagnostics
+	}
+	configured := p.budget.limitConfigured
+	if configured == 0 {
+		configured = int64(maxCodexDiagnosticRecords)
+	}
+	observed := p.budget.limitObserved
+	if observed == 0 {
+		observed = int64(p.budget.diagnosticRecords + 1)
+	}
+	return &codexInspectionLimitError{
+		sessionID:  p.sessionID,
+		category:   category,
+		configured: configured,
+		observed:   observed,
+		line:       p.budget.limitLine,
+	}
 }
 
 func (p *codexSessionParser) recordMalformedLine(lineNumber int, message string) {
@@ -458,20 +612,28 @@ func (p *codexSessionParser) recordTranscriptLimit(lineNumber int) {
 	p.recordMalformedLine(lineNumber, diagnosticInspectionTranscriptLimit)
 }
 
-func (p *codexSessionParser) recordInspectionLimit(lineNumber int, message string) {
-	if lineNumber <= 0 {
-		if p.summary.LineCount > 0 {
-			lineNumber = p.summary.LineCount
-		} else {
-			lineNumber = 1
-		}
+func (p *codexSessionParser) recordRetainedTextLimit() {
+	if p.budget.retainedTextLimitReported {
+		return
 	}
-	p.budget.stopParsing = true
-	p.recordMalformedLine(lineNumber, message)
+	p.budget.retainedTextLimitReported = true
+	lineNumber := p.currentLine
+	if lineNumber <= 0 {
+		lineNumber = 1
+	}
+	p.recordMalformedLine(lineNumber, diagnosticInspectionRetainedTextLimit)
 }
 
 func (p *codexSessionParser) appendDiagnostic(lineNumber int, message string) {
-	if p.budget.diagnosticsFull {
+	if !p.budget.canRecordDiagnostic() {
+		if !p.budget.stopParsing {
+			p.budget.setLimit(
+				codexInspectionLimitDiagnostics,
+				int64(maxCodexDiagnosticRecords),
+				int64(p.budget.diagnosticRecords+1),
+				lineNumber,
+			)
+		}
 		return
 	}
 	p.summary.ParseErrors = append(p.summary.ParseErrors, providersessions.LineError{
@@ -479,6 +641,26 @@ func (p *codexSessionParser) appendDiagnostic(lineNumber int, message string) {
 		Message:    sanitizeDiagnosticMessage(message),
 	})
 	p.budget.recordedDiagnostic()
+}
+
+func (p *codexSessionParser) boundedString(value string) string {
+	return truncateCodexText(strings.TrimSpace(value), maxCodexRetainedFieldBytes)
+}
+
+func (p *codexSessionParser) boundedStringPtr(value string) *string {
+	return stringPtrIfNotEmpty(p.boundedString(value))
+}
+
+func (p *codexSessionParser) retainedText(value string) string {
+	retained, truncated := p.budget.retainText(value)
+	if truncated {
+		p.recordRetainedTextLimit()
+	}
+	return retained
+}
+
+func (p *codexSessionParser) retainedTextPtr(value string) *string {
+	return stringPtrIfNotEmpty(p.retainedText(value))
 }
 
 func (p *codexSessionParser) recordEvent(lineNumber int, event map[string]any) {
@@ -579,11 +761,11 @@ func (p *codexSessionParser) appendFunctionCall(itemType string, payload map[str
 	call := providersessions.FunctionCallSummary{
 		Order:     order,
 		TurnIndex: intPtr(turn.Index),
-		CallID:    stringPtrIfNotEmpty(firstStringField(payload, "call_id", "callId", "id")),
+		CallID:    p.boundedStringPtr(firstStringField(payload, "call_id", "callId", "id")),
 		Type:      itemType,
-		Name:      stringPtrIfNotEmpty(firstStringField(payload, "name", "tool_name", "toolName")),
-		Arguments: stringPtrIfNotEmpty(firstCompactField(payload, "arguments", "arguments_json", "input")),
-		Status:    stringPtrIfNotEmpty(firstStringField(payload, "status")),
+		Name:      p.boundedStringPtr(firstStringField(payload, "name", "tool_name", "toolName")),
+		Arguments: p.retainedTextPtr(firstCompactField(payload, "arguments", "arguments_json", "input")),
+		Status:    p.boundedStringPtr(firstStringField(payload, "status")),
 	}
 	p.summary.FunctionCalls = append(p.summary.FunctionCalls, call)
 	p.appendTranscriptEntry(providersessions.TranscriptEntry{
@@ -601,15 +783,15 @@ func (p *codexSessionParser) appendFunctionCall(itemType string, payload map[str
 
 func (p *codexSessionParser) attachFunctionOutput(itemType string, payload map[string]any, timestamp *time.Time, lineNumber int, turn *providersessions.TurnSummary) {
 	callID := firstStringField(payload, "call_id", "callId", "id")
-	output := firstCompactField(payload, "output", "content", "result")
+	output := p.retainedTextPtr(firstCompactField(payload, "output", "content", "result"))
 	status := firstStringField(payload, "status")
-	if status == "" && output != "" {
+	if status == "" && output != nil {
 		status = "completed"
 	}
 	for i := range p.summary.FunctionCalls {
 		if stringValue(p.summary.FunctionCalls[i].CallID) == callID && callID != "" {
-			p.summary.FunctionCalls[i].Output = stringPtrIfNotEmpty(output)
-			p.summary.FunctionCalls[i].Status = stringPtrIfNotEmpty(status)
+			p.summary.FunctionCalls[i].Output = output
+			p.summary.FunctionCalls[i].Status = p.boundedStringPtr(status)
 			p.appendToolOutputTranscript(itemType, callID, output, status, timestamp, lineNumber, p.summary.FunctionCalls[i].Name, p.summary.FunctionCalls[i].TurnIndex)
 			return
 		}
@@ -619,10 +801,10 @@ func (p *codexSessionParser) attachFunctionOutput(itemType string, payload map[s
 	call := providersessions.FunctionCallSummary{
 		Order:     order,
 		TurnIndex: intPtr(turn.Index),
-		CallID:    stringPtrIfNotEmpty(callID),
+		CallID:    p.boundedStringPtr(callID),
 		Type:      itemType,
-		Output:    stringPtrIfNotEmpty(output),
-		Status:    stringPtrIfNotEmpty(status),
+		Output:    output,
+		Status:    p.boundedStringPtr(status),
 	}
 	p.summary.FunctionCalls = append(p.summary.FunctionCalls, call)
 	p.appendToolOutputTranscript(itemType, callID, output, status, timestamp, lineNumber, call.Name, call.TurnIndex)
@@ -631,16 +813,16 @@ func (p *codexSessionParser) attachFunctionOutput(itemType string, payload map[s
 func (p *codexSessionParser) appendReasoning(sourceType string, payload map[string]any, timestamp *time.Time, lineNumber int, turn *providersessions.TurnSummary) {
 	turn.ReasoningCount++
 	order := len(p.summary.Reasoning) + 1
-	encryptedContent := firstCompactField(payload, "encrypted_content", "encryptedContent")
-	encrypted := encryptedContent != ""
+	encryptedContent := p.retainedTextPtr(firstCompactField(payload, "encrypted_content", "encryptedContent"))
+	encrypted := encryptedContent != nil
 	reasoning := providersessions.ReasoningSummary{
 		Order:            order,
 		TurnIndex:        intPtr(turn.Index),
 		SourceType:       sourceType,
-		Text:             stringPtrIfNotEmpty(firstReasoningText(payload)),
-		Summary:          stringPtrIfNotEmpty(firstCompactField(payload, "summary")),
+		Text:             p.retainedTextPtr(firstReasoningText(payload)),
+		Summary:          p.retainedTextPtr(firstCompactField(payload, "summary")),
 		Encrypted:        &encrypted,
-		EncryptedContent: stringPtrIfNotEmpty(encryptedContent),
+		EncryptedContent: encryptedContent,
 	}
 	p.summary.Reasoning = append(p.summary.Reasoning, reasoning)
 	p.appendTranscriptEntry(providersessions.TranscriptEntry{
@@ -674,7 +856,7 @@ func (p *codexSessionParser) appendEventMessageTranscript(
 	p.appendTranscriptEntry(providersessions.TranscriptEntry{
 		LineNumber: intPtr(lineNumber),
 		SourceType: stringPtrIfNotEmpty(payloadType),
-		Text:       stringPtrIfNotEmpty(firstMessageText(payload)),
+		Text:       p.retainedTextPtr(firstMessageText(payload)),
 		Timestamp:  timestamp,
 		TurnIndex:  intPtr(turn.Index),
 		Type:       entryType,
@@ -696,7 +878,7 @@ func (p *codexSessionParser) appendResponseMessage(
 	p.appendTranscriptEntry(providersessions.TranscriptEntry{
 		LineNumber: intPtr(lineNumber),
 		SourceType: stringPtrIfNotEmpty("message"),
-		Text:       stringPtrIfNotEmpty(firstMessageText(payload)),
+		Text:       p.retainedTextPtr(firstMessageText(payload)),
 		Timestamp:  timestamp,
 		TurnIndex:  intPtr(turn.Index),
 		Type:       entryType,
@@ -706,7 +888,7 @@ func (p *codexSessionParser) appendResponseMessage(
 func (p *codexSessionParser) appendToolOutputTranscript(
 	itemType string,
 	callID string,
-	output string,
+	output *string,
 	status string,
 	timestamp *time.Time,
 	lineNumber int,
@@ -714,12 +896,12 @@ func (p *codexSessionParser) appendToolOutputTranscript(
 	turnIndex *int,
 ) {
 	p.appendTranscriptEntry(providersessions.TranscriptEntry{
-		CallID:     stringPtrIfNotEmpty(callID),
+		CallID:     p.boundedStringPtr(callID),
 		LineNumber: intPtr(lineNumber),
 		Name:       name,
-		Output:     stringPtrIfNotEmpty(output),
+		Output:     output,
 		SourceType: stringPtrIfNotEmpty(itemType),
-		Status:     stringPtrIfNotEmpty(status),
+		Status:     p.boundedStringPtr(status),
 		Timestamp:  timestamp,
 		TurnIndex:  turnIndex,
 		Type:       providersessions.TranscriptEntryType("tool_output"),
@@ -784,7 +966,8 @@ func (p *codexSessionParser) recordTokenUsage(payload map[string]any) {
 
 func (p *codexSessionParser) recordUnknownEvent(lineNumber int, eventType string, payloadType string) {
 	p.summary.UnknownEventCount++
-	if p.budget.diagnosticsFull {
+	if !p.budget.canRecordDiagnostic() {
+		p.appendDiagnostic(lineNumber, diagnosticInspectionDiagnosticLimit)
 		return
 	}
 	sanitizedEventType := sanitizeUnknownEventLabel(eventType)
@@ -864,7 +1047,7 @@ func stringField(values map[string]any, key string) string {
 		return ""
 	}
 	value, _ := raw.(string)
-	return strings.TrimSpace(value)
+	return truncateCodexText(strings.TrimSpace(value), maxCodexRetainedFieldBytes)
 }
 
 func intField(values map[string]any, key string) (int, bool) {
