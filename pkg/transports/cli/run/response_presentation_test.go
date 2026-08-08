@@ -15,6 +15,7 @@ import (
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -51,6 +52,31 @@ func TestWriteInvocationError_WritesOneStandardErrorResponseForTerminalFailure(t
 	}
 	if response.Message != "goal execution failed [session=session-failed workId=work-failed]" {
 		t.Fatalf("message = %q", response.Message)
+	}
+}
+
+func TestWriteIncompleteDrainError_WritesExactHumanDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	var stderr strings.Builder
+	err := fmt.Errorf("runtime stopped: %w", &factoryruntime.IncompleteDrainError{NonTerminalWorkCount: 3})
+	if !WriteIncompleteDrainError(&stderr, err) {
+		t.Fatal("incomplete drain error was not handled")
+	}
+	if got, want := stderr.String(), "Error: factory session drained with 3 non-terminal work items; run is incomplete\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
+func TestWriteIncompleteDrainError_IgnoresOtherFailures(t *testing.T) {
+	t.Parallel()
+
+	var stderr strings.Builder
+	if WriteIncompleteDrainError(&stderr, errors.New("ordinary failure")) {
+		t.Fatal("ordinary failure was incorrectly classified as incomplete drain")
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 }
 

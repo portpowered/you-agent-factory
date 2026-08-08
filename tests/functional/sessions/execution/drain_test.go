@@ -1,0 +1,301 @@
+package execution_test
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+)
+
+const incompleteDrainProcessTimeout = 15 * time.Second
+const continuousIdleObservation = 500 * time.Millisecond
+
+// TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal proves that a
+// finite hosted run returns a failure after its listener and runtime have
+// joined when the queue drains around non-terminal customer Work.
+func TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal(t *testing.T) {
+	for _, mode := range []struct {
+		name        string
+		flag        string
+		wantBrowser int32
+	}{
+		{name: "server", flag: "--with-server"},
+		{name: "site", flag: "--with-site", wantBrowser: 1},
+	} {
+		mode := mode
+		t.Run(mode.name, func(t *testing.T) {
+			factoryDir := scaffoldIncompleteDrainFactory(t)
+			workFile := writeIncompleteDrainWork(t)
+
+			var listenerStarts, listenerStops, browserCalls atomic.Int32
+			process := support.BuildProcess(t, serviceedges.Edges{
+				APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+					listenerStarts.Add(1)
+					if request.OnBound != nil {
+						request.OnBound(platformhttpserver.Binding{Port: request.Port})
+					}
+					<-ctx.Done()
+					listenerStops.Add(1)
+					return ctx.Err()
+				},
+				BrowserOpener: func(context.Context, string) error {
+					browserCalls.Add(1)
+					return nil
+				},
+			})
+			support.CleanupProcess(t, process)
+
+			inputs := support.FakeInputs(t.Context(), []string{
+				"you", "run", "--dir", factoryDir, "--no-record", "--quiet",
+				mode.flag, "--work", workFile,
+			})
+			inputs.WorkingDirectory = factoryDir
+			homeDir := t.TempDir()
+			inputs.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+
+			command := support.StartProcessCommand(t, process, inputs.Input)
+			select {
+			case <-command.Done():
+			case <-time.After(incompleteDrainProcessTimeout):
+				t.Fatal("finite hosted run did not return after the runtime drained")
+			}
+			command.AcceptError()
+
+			err := command.Err()
+			var incompleteDrainErr *factoryruntime.IncompleteDrainError
+			if err == nil || !errors.As(err, &incompleteDrainErr) {
+				t.Fatalf("Process.Execute() error = %v, want incomplete-drain failure", err)
+			}
+			if incompleteDrainErr.NonTerminalWorkCount != 1 {
+				t.Fatalf("non-terminal Work count = %d, want 1", incompleteDrainErr.NonTerminalWorkCount)
+			}
+
+			if got, want := inputs.Stderr(), "Error: factory session drained with 1 non-terminal work items; run is incomplete\n"; got != want {
+				t.Fatalf("stderr = %q, want %q", got, want)
+			}
+			if stdout := inputs.Stdout(); stdout != "" {
+				t.Fatalf("stdout = %q, want no success or completion output", stdout)
+			}
+			if got := listenerStarts.Load(); got != 1 {
+				t.Fatalf("listener starts = %d, want 1; err=%v stdout=%q stderr=%q", got, err, inputs.Stdout(), inputs.Stderr())
+			}
+			if got := listenerStops.Load(); got != 1 {
+				t.Fatalf("listener stops = %d, want one joined listener", got)
+			}
+			if got := browserCalls.Load(); got != mode.wantBrowser {
+				t.Fatalf("browser calls = %d, want %d", got, mode.wantBrowser)
+			}
+		})
+	}
+}
+
+func TestHostedFiniteRunsKeepEmptyAndTerminalSuccess(t *testing.T) {
+	for _, scenario := range []struct {
+		name     string
+		workFile func(*testing.T) string
+	}{
+		{name: "empty", workFile: nil},
+		{name: "terminal work", workFile: func(t *testing.T) string {
+			return writeDrainWork(t, "complete")
+		}},
+	} {
+		scenario := scenario
+		for _, mode := range []struct {
+			name        string
+			flag        string
+			wantBrowser int32
+		}{
+			{name: "server", flag: "--with-server"},
+			{name: "site", flag: "--with-site", wantBrowser: 1},
+		} {
+			mode := mode
+			t.Run(scenario.name+"/"+mode.name, func(t *testing.T) {
+				factoryDir := scaffoldIncompleteDrainFactory(t)
+				var workFile string
+				if scenario.workFile != nil {
+					workFile = scenario.workFile(t)
+				}
+
+				err, stdout, stderr, listenerStarts, listenerStops, browserCalls := runFiniteHostedCommand(
+					t, factoryDir, workFile, mode.flag,
+				)
+				if err != nil {
+					t.Fatalf("finite hosted run error = %v; stdout=%q stderr=%q", err, stdout, stderr)
+				}
+				if stdout != "" || stderr != "" {
+					t.Fatalf("finite success output = stdout:%q stderr:%q, want quiet output", stdout, stderr)
+				}
+				if listenerStarts != 1 || listenerStops != 1 {
+					t.Fatalf("listener lifecycle = starts:%d stops:%d, want one joined listener", listenerStarts, listenerStops)
+				}
+				if browserCalls != mode.wantBrowser {
+					t.Fatalf("browser calls = %d, want %d", browserCalls, mode.wantBrowser)
+				}
+			})
+		}
+	}
+}
+
+func TestHostedContinuousRunsStayLiveWhileIdle(t *testing.T) {
+	for _, mode := range []struct {
+		name        string
+		flag        string
+		wantBrowser int32
+	}{
+		{name: "server", flag: "--with-server"},
+		{name: "site", flag: "--with-site", wantBrowser: 1},
+	} {
+		mode := mode
+		t.Run(mode.name, func(t *testing.T) {
+			factoryDir := scaffoldIncompleteDrainFactory(t)
+			var listenerStarts, listenerStops, browserCalls atomic.Int32
+			transportReady := make(chan struct{})
+			process := support.BuildProcess(t, serviceedges.Edges{
+				APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+					listenerStarts.Add(1)
+					if request.OnBound != nil {
+						request.OnBound(platformhttpserver.Binding{Port: request.Port})
+					}
+					close(transportReady)
+					<-ctx.Done()
+					listenerStops.Add(1)
+					return ctx.Err()
+				},
+				BrowserOpener: func(context.Context, string) error {
+					browserCalls.Add(1)
+					return nil
+				},
+			})
+			support.CleanupProcess(t, process)
+
+			inputs := support.FakeInputs(t.Context(), []string{
+				"you", "run", "--dir", factoryDir, "--no-record", "--quiet",
+				"--continuously", mode.flag,
+			})
+			inputs.WorkingDirectory = factoryDir
+			homeDir := t.TempDir()
+			inputs.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+			command := support.StartProcessCommand(t, process, inputs.Input)
+
+			select {
+			case <-transportReady:
+			case <-time.After(incompleteDrainProcessTimeout):
+				t.Fatal("continuous hosted run did not start its listener")
+			}
+			select {
+			case <-command.Done():
+				t.Fatalf("continuous hosted run exited while idle: err=%v stdout=%q stderr=%q", command.Err(), inputs.Stdout(), inputs.Stderr())
+			case <-time.After(continuousIdleObservation):
+			}
+
+			command.Stop(t)
+			if err := command.Err(); err != nil && !errors.Is(err, context.Canceled) {
+				t.Fatalf("continuous hosted run cancellation error = %v", err)
+			}
+			if strings.Contains(inputs.Stderr(), "incomplete") {
+				t.Fatalf("continuous stderr = %q, must not report finite incomplete drain", inputs.Stderr())
+			}
+			if listenerStarts.Load() != 1 || listenerStops.Load() != 1 {
+				t.Fatalf("listener lifecycle = starts:%d stops:%d, want one joined listener", listenerStarts.Load(), listenerStops.Load())
+			}
+			if browserCalls.Load() != mode.wantBrowser {
+				t.Fatalf("browser calls = %d, want %d", browserCalls.Load(), mode.wantBrowser)
+			}
+		})
+	}
+}
+
+func runFiniteHostedCommand(
+	t *testing.T,
+	factoryDir, workFile, mode string,
+) (error, string, string, int32, int32, int32) {
+	t.Helper()
+
+	var listenerStarts, listenerStops, browserCalls atomic.Int32
+	process := support.BuildProcess(t, serviceedges.Edges{
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			listenerStarts.Add(1)
+			if request.OnBound != nil {
+				request.OnBound(platformhttpserver.Binding{Port: request.Port})
+			}
+			<-ctx.Done()
+			listenerStops.Add(1)
+			return ctx.Err()
+		},
+		BrowserOpener: func(context.Context, string) error {
+			browserCalls.Add(1)
+			return nil
+		},
+	})
+	support.CleanupProcess(t, process)
+
+	args := []string{
+		"you", "run", "--dir", factoryDir, "--no-record", "--quiet", mode,
+	}
+	if workFile != "" {
+		args = append(args, "--work", workFile)
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.WorkingDirectory = factoryDir
+	homeDir := t.TempDir()
+	inputs.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	command := support.StartProcessCommand(t, process, inputs.Input)
+	select {
+	case <-command.Done():
+	case <-time.After(incompleteDrainProcessTimeout):
+		t.Fatal("finite hosted run did not return")
+	}
+	command.AcceptError()
+	return command.Err(), inputs.Stdout(), inputs.Stderr(), listenerStarts.Load(), listenerStops.Load(), browserCalls.Load()
+}
+
+func scaffoldIncompleteDrainFactory(t *testing.T) string {
+	t.Helper()
+
+	cfg := simplePipelineConfig()
+	workTypes := cfg["workTypes"].([]map[string]any)
+	states := workTypes[0]["states"].([]map[string]string)
+	workTypes[0]["states"] = append(states, map[string]string{
+		"name": "blocked",
+		"type": "PROCESSING",
+	})
+	return scaffoldInvocationFactory(t, map[string]any{"workTypes": workTypes})
+}
+
+func writeIncompleteDrainWork(t *testing.T) string {
+	t.Helper()
+	return writeDrainWork(t, "blocked")
+}
+
+func writeDrainWork(t *testing.T, state string) string {
+	t.Helper()
+
+	data, err := json.Marshal(map[string]any{
+		"requestId": "drained-incomplete",
+		"type":      "FACTORY_REQUEST_BATCH",
+		"works": []map[string]any{{
+			"name":         "blocked-work",
+			"workTypeName": "task",
+			"state":        state,
+			"payload":      map[string]string{"purpose": "drain classification"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal incomplete-drain Work: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "incomplete-drain.json")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write incomplete-drain Work: %v", err)
+	}
+	return path
+}

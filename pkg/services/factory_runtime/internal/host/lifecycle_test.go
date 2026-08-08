@@ -448,3 +448,15 @@ func TestWaitForStart_ReportsRunningReadinessWithoutRootService(t *testing.T) {
 		t.Fatalf("Stop: %v", err)
 	}
 }
+
+func TestWaitForStart_AllowsIncompleteDrainToReachHostedTransport(t *testing.T) {
+	handle := &factoryhost.Handle{
+		Bundle:  &factoryhost.Bundle{Factory: &lifecycleObserverFactory{}},
+		RunDone: make(chan struct{}),
+	}
+	handle.SetRunResult(&factory.IncompleteDrainError{NonTerminalWorkCount: 2})
+
+	if err := factoryhost.WaitForStart(context.Background(), handle); err != nil {
+		t.Fatalf("WaitForStart: %v, want transport-visible startup", err)
+	}
+}
