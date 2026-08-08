@@ -19,7 +19,7 @@
 - **Learnings for future iterations:**
   - The event-stream operation is not wired yet; the compatibility registry intentionally reports `work watch service is required` until story 002 supplies the canonical stream operation.
   - Keep the watch renderer transport-neutral so later stream/reducer code can emit complete lines without importing Cobra.
-- The repository’s public CLI contract includes both generated package staging and committed identity/help baselines; updating only the authored manifest is incomplete.
+  - The repository’s public CLI contract includes both generated package staging and committed identity/help baselines; updating only the authored manifest is incomplete.
 ---
 
 ## [2026-08-08 14:28 -07:00] - wo-c2-work-watch-event-stream-002
@@ -36,7 +36,7 @@
 - **Learnings for future iterations:**
   - The session event endpoint already provides retained-then-live ordering; the CLI needs only one long-lived GET and a reducer, not a client-side polling or snapshot path.
   - Factory definition WorkState types should be preferred when classifying terminal transitions; Work payload state types are useful only as a fallback when definition metadata has not arrived.
-- Follow mode, cancellation, and reconnect cursor/backoff behavior are intentionally still isolated for Story 003; finite completion currently closes immediately after rendering the terminal transition.
+  - Follow mode, cancellation, and reconnect cursor/backoff behavior are intentionally still isolated for Story 003; finite completion currently closes immediately after rendering the terminal transition.
 ---
 
 ## [2026-08-08 14:32 -07:00] - wo-c2-work-watch-event-stream-002 verification follow-up
