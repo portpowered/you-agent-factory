@@ -187,6 +187,25 @@ func TestInferenceRequestForExecutionRequest_ForwardsModelOperationContract(t *t
 	}
 }
 
+func TestInferenceRequestForExecutionRequest_ForwardsAntigravityPrintTimeout(t *testing.T) {
+	got := inferenceRequestForExecutionRequest(
+		testAgentRequest(work.WorkDispatch{
+			DispatchID: "d-agy-timeout",
+			WorkerType: "agy-worker",
+		}),
+		&workerconfig.FactoryWorkerConfig{
+			Model:         "gemini-3.6-flash-high",
+			ModelProvider: string(modelprovider.ProviderAntigravity),
+			Timeout:       "8m",
+		},
+		nil,
+	)
+
+	if got.PrintTimeout != 8*time.Minute {
+		t.Fatalf("PrintTimeout = %s, want 8m", got.PrintTimeout)
+	}
+}
+
 // pkgmaintcheck:ignore-cyclomatic-complexity this inference request contract test keeps the canonical dispatch payload assertions together on the worker seam.
 func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testing.T) {
 	provider := &agentMockProvider{response: workerexecution.InferenceResponse{Content: "done"}}

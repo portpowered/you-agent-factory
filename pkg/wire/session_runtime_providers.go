@@ -121,10 +121,16 @@ func provideConfiguredProvidersService(
 	}
 	if workersRunner != nil {
 		options = append(options, providerswire.WithWorkersCommandRunner(workersRunner))
+		if edges.AgyPTYHost == nil {
+			options = append(options, providerswire.WithAgyCommandRunner(workersRunner))
+		}
 		return providerswire.NewService(options...)
 	}
 	if edges.ProviderCommandRunner != nil {
 		options = append(options, providerswire.WithCommandRunner(edges.ProviderCommandRunner))
+		if edges.AgyPTYHost == nil {
+			options = append(options, providerswire.WithAgyCommandRunner(workers.AdaptCommandRunner(edges.ProviderCommandRunner)))
+		}
 		return providerswire.NewService(options...)
 	}
 	commandRunner, err := providePlatformProcessCommandRunner(edges)
@@ -132,6 +138,13 @@ func provideConfiguredProvidersService(
 		return nil, err
 	}
 	options = append(options, providerswire.WithCommandRunner(commandRunner))
+	// An explicitly supplied PTY host remains a compatibility seam for the
+	// legacy Agy replay tests and hosts that intentionally opt into PTY
+	// transport. Ordinary production composition has no host override and uses
+	// the canonical shell-free print-mode command effect.
+	if edges.AgyPTYHost == nil {
+		options = append(options, providerswire.WithAgyCommandRunner(workers.AdaptCommandRunner(commandRunner)))
+	}
 	return providerswire.NewService(options...)
 }
 

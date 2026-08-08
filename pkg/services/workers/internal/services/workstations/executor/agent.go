@@ -384,6 +384,7 @@ func inferenceRequestForExecutionRequest(request workerexecution.WorkstationExec
 			Source:   request.RunnerSelectionSource,
 		})
 		req.ReasoningEffort = workerDef.ReasoningEffort
+		req.PrintTimeout = workerexecution.PrintTimeoutFromWorkerTimeout(workerDef.Timeout)
 		req.ModelLocality = workerDef.ModelLocality
 		req.SessionID = workerDef.SessionID
 		if workerDef.SessionID != "" {

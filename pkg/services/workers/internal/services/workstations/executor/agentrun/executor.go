@@ -278,6 +278,7 @@ func agentRunInferenceRequest(
 		req.Model = workerDef.Model
 		req.ModelProvider = workerDef.ModelProvider
 		req.ReasoningEffort = workerDef.ReasoningEffort
+		req.PrintTimeout = workerexecution.PrintTimeoutFromWorkerTimeout(workerDef.Timeout)
 		req.ModelLocality = workerDef.ModelLocality
 		req.SessionID = workerDef.SessionID
 	}

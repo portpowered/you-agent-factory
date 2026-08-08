@@ -104,6 +104,7 @@ func executeRequestFromInvocation(request inference.InvocationRequest) providers
 		Model:              request.Model(),
 		ReasoningEffort:    execution.ReasoningEffort,
 		SkipPermissions:    execution.SkipPermissions,
+		PrintTimeout:       execution.PrintTimeout,
 		SystemPrompt:       request.SystemPrompt(),
 		UserMessage:        request.UserMessage(),
 		OutputSchema:       request.OutputSchema(),

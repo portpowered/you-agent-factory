@@ -1,6 +1,8 @@
 package workers
 
 import (
+	"time"
+
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -158,6 +160,7 @@ type ProviderInferenceRequest struct {
 	Model                        string                          `json:"model,omitempty"`
 	ModelProvider                string                          `json:"model_provider,omitempty"`
 	ReasoningEffort              string                          `json:"reasoning_effort,omitempty"`
+	PrintTimeout                 time.Duration                   `json:"-"`
 	ModelLocality                string                          `json:"model_locality,omitempty"`
 	SessionID                    string                          `json:"session_id,omitempty"`
 	// ResumeSession carries an exact typed Providers reference for continuation
@@ -174,6 +177,21 @@ type RunnerExecutionRequest = ProviderInferenceRequest
 type RunnerExecutionResult = InferenceResponse
 
 type SubprocessExecutionRequest = CommandRequest
+
+// PrintTimeoutFromWorkerTimeout parses the worker timeout for native
+// providers that expose their own print-mode deadline. Invalid values return
+// zero; the workstation execution policy remains responsible for reporting
+// the authored timeout error before dispatch.
+func PrintTimeoutFromWorkerTimeout(raw string) time.Duration {
+	if raw == "" {
+		return 0
+	}
+	timeout, err := time.ParseDuration(raw)
+	if err != nil || timeout <= 0 {
+		return 0
+	}
+	return timeout
+}
 
 func CloneWorkstationExecutionRequest(request WorkstationExecutionRequest) WorkstationExecutionRequest {
 	clone := request

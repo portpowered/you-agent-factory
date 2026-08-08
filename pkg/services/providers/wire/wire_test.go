@@ -437,6 +437,7 @@ func TestNewServiceRejectsMissingRequiredConstructionPorts(t *testing.T) {
 					nil,
 					nil,
 					nil,
+					nil,
 					AgyPTYPlatformDependencies{},
 					nil,
 					nil,

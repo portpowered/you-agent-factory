@@ -403,6 +403,7 @@ func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRe
 		Model:              request.Model,
 		ReasoningEffort:    request.ReasoningEffort,
 		SkipPermissions:    request.SkipPermissions,
+		PrintTimeout:       request.PrintTimeout,
 		SystemPrompt:       request.SystemPrompt,
 		UserMessage:        request.UserMessage,
 		InputTokens:        cloneInputTokens(request.InputTokens),
