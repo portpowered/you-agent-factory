@@ -91,29 +91,38 @@ session already registers a full `workers.RuntimeService` through
 recording its association on a ledger nothing reads — the §2.2 failure again,
 one layer down. **Delete it unless the chosen approach genuinely needs it.**
 
-## 4. The decision to make first
+## 4. The approach, and the handle that makes it work
 
-Both options converge on one path; they differ in blast radius.
-
-**A — thread the handle.** Carry the session's Worker Sessions service and
-`RuntimeLedger` through `runtimeopening` into `JavaScriptRuntimeService`, and
-build the child executor there. Mechanical and verifiable, but adds
-collaborators to a composition already carrying seventeen, and leaves the
-workflow running outside the runtime that owns its Workers.
-
-**B — make the runtime own it.** Add one additive root operation to Factory
+**Make the runtime own it.** Add one additive root operation to Factory
 Runtime — an `InvokeWorker`-shaped call that reserves the Worker Session,
 records the association on its own `eventHistory`, and calls
 `workerSessions.InvokeSession` with `ProviderInvocationRoute`. The JavaScript
 child executor then calls that and nothing else.
 
-B is the better architecture and is consistent with what already exists:
-Factory Runtime **already** exposes Worker Session controls to peers
-(`worker_session_control.go`), so Worker Session operations on that root are
-established rather than novel, and CLAUDE.md/D4 explicitly prefers "one
-deliberate operation added to a root over a shim that reaches around it". Its
-cost is that `RunJavaScript` must become session-scoped so the executor can be
-supplied by the runtime.
+This was chosen over threading the ledger and Worker Sessions service through
+`runtimeopening` into `JavaScriptRuntimeService`. Threading is more mechanical,
+but it adds collaborators to a composition already carrying seventeen and
+leaves the workflow running outside the runtime that owns its Workers — the
+same split this project exists to remove. Factory Runtime **already** exposes
+Worker Session controls to peers (`worker_session_control.go`), so a Worker
+Session operation on that root is established rather than novel, and
+CLAUDE.md/D4 explicitly prefers "one deliberate operation added to a root over
+a shim that reaches around it".
+
+The apparent blocker was that Factory Sessions holds no runtime handle. It
+does. The chain is:
+
+```
+live_runtime.Resolve(sessionID)        // factory_sessions/internal/services/live_runtime
+  -> livesession.LiveSession.Runtime   // *factorysessions.LiveRuntime
+  -> LiveRuntime.Factory               // the per-session Factory Runtime
+                                       // (holds cfg.workerSessions + eventHistory)
+```
+
+`JavaScriptRuntimeService` lives in Factory Sessions alongside that resolver,
+so the child executor can reach the exact runtime whose ledger the response
+bridge reads. No new threading through `runtimeopening` is required — which is
+also why §1's standalone workstation pool should be deleted rather than kept.
 
 ## 5. Then, in order
 
