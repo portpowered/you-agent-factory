@@ -149,26 +149,21 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 			Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
 		}, nil
 	}
-	var readFile factorydefinitions.FileReader
-	if we.FileSystem != nil {
-		readFile = we.FileSystem.ReadFile
-	}
-	if we.Interpolation != nil {
-		interpolatedWorkstation, err := we.Interpolation.InterpolateWorkstationConfig(*workstationDef, invocationArgs, readFile)
-		if err != nil {
-			return workerexecution.WorkResult{
-				DispatchID:   dispatch.DispatchID,
-				TransitionID: dispatch.TransitionID,
-				Outcome:      workerexecution.OutcomeFailed,
-				Error:        err.Error(),
-				Diagnostics:  invocationDiagnostics,
-				Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
-			}, nil
-		}
-		workstationDef = &interpolatedWorkstation
+	readFile := we.promptFileReader()
+	workstationDef, failed := we.prepareWorkstationDefinition(
+		dispatch,
+		dispatch.WorkstationName,
+		workstationDef,
+		invocationArgs,
+		readFile,
+		invocationDiagnostics,
+		start,
+	)
+	if failed != nil {
+		return *failed, nil
 	}
 	workerName := workstationWorkerName(workstationDef, dispatch)
-	workerDef, ok := we.RuntimeConfig.Worker(workerName)
+	workerConfig, ok := we.RuntimeConfig.Worker(workerName)
 	if !ok {
 		return workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
@@ -178,33 +173,17 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 			Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
 		}, nil
 	}
-	if we.Interpolation != nil {
-		interpolatedWorker, err := we.Interpolation.InterpolateWorkerConfig(*workerDef, invocationArgs, readFile)
-		if err != nil {
-			return workerexecution.WorkResult{
-				DispatchID:   dispatch.DispatchID,
-				TransitionID: dispatch.TransitionID,
-				Outcome:      workerexecution.OutcomeFailed,
-				Error:        err.Error(),
-				Diagnostics:  invocationDiagnostics,
-				Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
-			}, nil
-		}
-		workerDef = &interpolatedWorker
-		if strings.TrimSpace(workerDef.ModelProvider) == "" {
-			workerDef.ModelProvider = workerDef.RuntimeDefaultModelProvider
-		}
-		if strings.TrimSpace(workerDef.Model) == "" {
-			workerDef.Model = workerDef.RuntimeDefaultModel
-		}
-		if failed := we.resolveInvocationProvider(
-			dispatch,
-			workerDef,
-			invocationDiagnostics,
-			start,
-		); failed != nil {
-			return *failed, nil
-		}
+	workerDef, failed := we.prepareWorkerDefinition(
+		dispatch,
+		workerName,
+		workerConfig,
+		invocationArgs,
+		readFile,
+		invocationDiagnostics,
+		start,
+	)
+	if failed != nil {
+		return *failed, nil
 	}
 	effort, effortOK := factorydefinitions.CanonicalizeReasoningEffort(workerDef.ReasoningEffort)
 	if !effortOK {

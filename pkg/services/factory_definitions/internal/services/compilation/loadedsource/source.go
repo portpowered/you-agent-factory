@@ -18,11 +18,14 @@ type Source struct {
 	factory                     *factorydefinitions.FactoryConfig
 	workers                     map[string]*factorydefinitions.FactoryWorkerConfig
 	workstations                map[string]*factorydefinitions.FactoryWorkstationConfig
+	workerPromptSources         map[string]factorydefinitions.PromptSource
+	workstationPromptSources    map[string]factorydefinitions.PromptSource
 	portableBundledReplacements []factorydefinitions.PortableBundledFileReplacement
 }
 
 var _ factorydefinitions.RuntimeConfigLookup = (*Source)(nil)
 var _ factorydefinitions.RuntimeFactoryConfigLookup = (*Source)(nil)
+var _ factorydefinitions.RuntimePromptSourceLookup = (*Source)(nil)
 var _ factorydefinitions.MutableLoadedFactorySource = (*Source)(nil)
 
 // New constructs an effective loaded source from an authored Factory
@@ -52,7 +55,29 @@ func New(
 		factory:                     effectiveFactory,
 		workers:                     make(map[string]*factorydefinitions.FactoryWorkerConfig, len(effectiveFactory.Workers)),
 		workstations:                make(map[string]*factorydefinitions.FactoryWorkstationConfig, len(effectiveFactory.Workstations)),
+		workerPromptSources:         make(map[string]factorydefinitions.PromptSource),
+		workstationPromptSources:    make(map[string]factorydefinitions.PromptSource),
 		portableBundledReplacements: cloneReplacements(portableBundledReplacements),
+	}
+	for index := range effectiveFactory.Workers {
+		worker := &effectiveFactory.Workers[index]
+		if worker.PromptSourcePath != "" {
+			loaded.workerPromptSources[worker.Name] = factorydefinitions.PromptSource{
+				Path: worker.PromptSourcePath,
+			}
+			worker.PromptSourcePath = ""
+		}
+	}
+	for index := range effectiveFactory.Workstations {
+		workstation := &effectiveFactory.Workstations[index]
+		if workstation.PromptSourcePath != "" {
+			loaded.workstationPromptSources[workstation.Name] = factorydefinitions.PromptSource{
+				Path:       workstation.PromptSourcePath,
+				IsTemplate: workstation.PromptSourceIsTemplate,
+			}
+			workstation.PromptSourcePath = ""
+			workstation.PromptSourceIsTemplate = false
+		}
 	}
 	for index := range effectiveFactory.Workers {
 		worker := factorydefinitions.CloneWorkerConfig(effectiveFactory.Workers[index])
@@ -122,6 +147,22 @@ func (s *Source) Workstation(name string) (*factorydefinitions.FactoryWorkstatio
 	}
 	workstation, ok := s.workstations[name]
 	return workstation, ok
+}
+
+func (s *Source) WorkerPromptSource(name string) (factorydefinitions.PromptSource, bool) {
+	if s == nil {
+		return factorydefinitions.PromptSource{}, false
+	}
+	source, ok := s.workerPromptSources[name]
+	return source, ok
+}
+
+func (s *Source) WorkstationPromptSource(name string) (factorydefinitions.PromptSource, bool) {
+	if s == nil {
+		return factorydefinitions.PromptSource{}, false
+	}
+	source, ok := s.workstationPromptSources[name]
+	return source, ok
 }
 
 func (s *Source) MutateWorkers(
