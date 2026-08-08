@@ -179,11 +179,11 @@ func (e *childWorkerExecutor) Execute(
 		MaxAttempts:      e.maxAttempts,
 	})
 	if err != nil {
-		return e.failedChild(base, req, dispatchID, childIndex, "", err.Error())
+		return e.failedChild(base, req, dispatchID, childIndex, factory.InvokeWorkerResult{Diagnostic: err.Error()})
 	}
 	base.Attempt = invoked.Attempts
 	if invoked.Outcome != factory.InvokeWorkerOutcomeCompleted {
-		return e.failedChild(base, req, dispatchID, childIndex, invoked.ProviderSessionRef, invoked.Diagnostic)
+		return e.failedChild(base, req, dispatchID, childIndex, invoked)
 	}
 
 	output := childWorkerOutput(req, invoked.Output)
@@ -214,15 +214,24 @@ func (e *childWorkerExecutor) failedChild(
 	req factory.JavaScriptChildExecutionRequest,
 	dispatchID string,
 	childIndex int,
-	providerSessionRef string,
-	diagnostic string,
+	invoked factory.InvokeWorkerResult,
 ) (factory.JavaScriptChildExecutionResult, error) {
-	if strings.TrimSpace(diagnostic) == "" {
+	diagnostic := strings.TrimSpace(invoked.Diagnostic)
+	if diagnostic == "" {
 		diagnostic = "Provider execution failed."
 	}
+	providerSessionRef := invoked.ProviderSessionRef
 	failed := base
 	failed.Status = factory.JavaScriptChildDispatchStatusFailed
 	failed.ProviderSessionRef = providerSessionRef
+	failed.Retryable = invoked.Retryable
+	if reason := strings.TrimSpace(invoked.FailureReason); reason != "" {
+		failed.FailureClassification = workers.WorkFailureType(reason)
+		failed.FailureDetail = &workers.FailureDetail{
+			Reason:  workers.WorkFailureType(reason),
+			Message: diagnostic,
+		}
+	}
 	e.records.Append(factory.JavaScriptRuntimeRecord{
 		Kind:          factory.JavaScriptRecordKindChildDispatch,
 		ChildDispatch: &failed,

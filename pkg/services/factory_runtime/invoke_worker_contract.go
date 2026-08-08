@@ -88,6 +88,13 @@ type InvokeWorkerResult struct {
 	// Diagnostic is a bounded, safe failure description. It never carries
 	// provider command lines, paths, or credentials.
 	Diagnostic string
+	// FailureReason is the Workers-owned closed classification for a failed
+	// attempt, and Retryable is that classification's retry verdict. Both are
+	// bounded vocabulary rather than provider text, which is why they may cross
+	// this boundary when the provider's own message may not. They are what a
+	// caller's public dispatch record reports as the cause.
+	FailureReason string
+	Retryable     *bool
 	// Attempts is the number of provider attempts actually made.
 	Attempts int
 }

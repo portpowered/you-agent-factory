@@ -2,7 +2,10 @@ package runtime
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
+	"sync"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -37,13 +40,10 @@ func (f *factoryImpl) InvokeWorker(
 	}
 
 	dispatchID := strings.TrimSpace(req.DispatchID)
-	sessionID := dispatchID
 	execution := providerInvocationExecutionRequest(f, req, dispatchID)
 
-	if _, err := f.cfg.workerSessions.Reserve(
-		context.WithoutCancel(ctx),
-		workersessions.ReserveRequest{ID: sessionID},
-	); err != nil {
+	sessionID, err := f.reserveWorkerSession(ctx, dispatchID)
+	if err != nil {
 		return factory.InvokeWorkerResult{}, err
 	}
 	f.eventHistory.RecordDispatchWorkerSessionAssociation(
@@ -53,6 +53,15 @@ func (f *factoryImpl) InvokeWorker(
 		execution.Execution.Dispatch.Execution.RequestID,
 		f.cfg.clock.Now(),
 	)
+
+	// The caller's cancellation reaches the Worker through the Worker Session's
+	// own control, not through the invocation context. Workers deliberately
+	// detaches the dispatch context -- a dispatch is cancelled by
+	// CancelWorkstationDispatch, never by its caller going away -- so passing a
+	// cancellable context down would be ignored, and the running provider would
+	// keep going after the workflow that asked for it had stopped.
+	stopWatching := f.cancelSessionWhenCallerStops(ctx, sessionID)
+	defer stopWatching()
 
 	result, err := f.cfg.workerSessions.InvokeSession(
 		context.WithoutCancel(ctx),
@@ -66,6 +75,69 @@ func (f *factoryImpl) InvokeWorker(
 		return factory.InvokeWorkerResult{}, err
 	}
 	return invokeWorkerResultFrom(dispatchID, result), nil
+}
+
+// reserveWorkerSession claims the Worker Session identity for one dispatch.
+//
+// A Worker Session identity is normally the dispatch ID, which is what keeps a
+// Worker one tool call. A JavaScript workflow resumed after an interruption
+// re-runs the child that was cut off under its original dispatch ID, so that
+// identity is already taken by the canceled attempt. The resumed run takes
+// ".../resume/N" -- the same shape Worker Sessions already mints for its own
+// resume -- so the interrupted Worker keeps its terminal record and the resumed
+// one is honestly a second Worker rather than a reopened first.
+func (f *factoryImpl) reserveWorkerSession(ctx context.Context, dispatchID string) (string, error) {
+	reserveCtx := context.WithoutCancel(ctx)
+	candidate := dispatchID
+	for attempt := 0; attempt <= maxWorkerSessionResumeAttempts; attempt++ {
+		if attempt > 0 {
+			candidate = fmt.Sprintf("%s/resume/%d", dispatchID, attempt)
+		}
+		_, err := f.cfg.workerSessions.Reserve(
+			reserveCtx,
+			workersessions.ReserveRequest{ID: candidate},
+		)
+		if err == nil {
+			return candidate, nil
+		}
+		if !errors.Is(err, workersessions.ErrSessionAlreadyExists) {
+			return "", err
+		}
+	}
+	return "", fmt.Errorf(
+		"%w: dispatch %q exhausted Worker Session resume identities",
+		factory.ErrInvalidInvokeWorkerRequest,
+		dispatchID,
+	)
+}
+
+// maxWorkerSessionResumeAttempts bounds identity minting so a session that can
+// never be reserved fails instead of looping.
+const maxWorkerSessionResumeAttempts = 64
+
+// cancelSessionWhenCallerStops translates one caller's cancellation into the
+// Worker Session control that actually stops a running Worker. The returned
+// function releases the watcher and must be called before InvokeWorker returns.
+//
+// A caller with no cancellation to observe gets no goroutine at all.
+func (f *factoryImpl) cancelSessionWhenCallerStops(ctx context.Context, sessionID string) func() {
+	if ctx == nil || ctx.Done() == nil {
+		return func() {}
+	}
+	released := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			// The control itself must outlive the cancellation that triggered
+			// it, or it would be refused for the very reason it was issued.
+			_, _ = f.cfg.workerSessions.Cancel(
+				context.WithoutCancel(ctx),
+				workersessions.ControlRequest{ID: sessionID},
+			)
+		case <-released:
+		}
+	}()
+	return sync.OnceFunc(func() { close(released) })
 }
 
 func (f *factoryImpl) currentTick() int {
@@ -147,6 +219,14 @@ func invokeWorkerResultFrom(
 	}
 	if outcome != factory.InvokeWorkerOutcomeCompleted {
 		invoked.Diagnostic = invokeWorkerDiagnostic(result)
+		if metadata := result.Dispatch.Result.FailureMetadata; metadata != nil {
+			invoked.FailureReason = string(metadata.Type)
+			decision := workers.FailureDecisionFromMetadata(metadata)
+			invoked.Retryable = &decision.Retryable
+		}
+		if invoked.FailureReason == "" && result.Session.Result != nil && result.Session.Result.Cause != nil {
+			invoked.FailureReason = string(result.Session.Result.Cause.Kind)
+		}
 	}
 	return invoked
 }
