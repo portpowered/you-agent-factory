@@ -26,6 +26,7 @@ const (
 	codexFunctionalBoundedWalkSessionID = "session-bounded-root"
 	codexFunctionalCanceledSessionID    = "session-canceled-root"
 	codexFunctionalOutsideSessionID     = "session-outside-root"
+	codexFunctionalOversizedSessionID   = "session-oversized-root"
 )
 
 // TestCodexHistoricalInspectionSuccessThroughRootBuildProcess proves a stored
@@ -130,6 +131,33 @@ func TestCodexHistoricalInspectionMalformedJSONLThroughRootBuildProcess(t *testi
 		t.Fatalf("marshal detail: %v", err)
 	}
 	assertCodexProviderSessionErrorBodySafe(t, "malformed-jsonl", string(encoded), homeDir)
+}
+
+// TestCodexHistoricalInspectionOversizedRecordThroughRootBuildProcess proves
+// a physically oversized JSONL record stops inspection with a bounded public
+// failure instead of buffering or returning unbounded rollout content.
+func TestCodexHistoricalInspectionOversizedRecordThroughRootBuildProcess(t *testing.T) {
+	homeDir := t.TempDir()
+	writeCodexRolloutFixture(
+		t,
+		codexSessionsRoot(homeDir),
+		codexFunctionalOversizedSessionID,
+		strings.Repeat("x", 1<<20+1)+"\n",
+	)
+
+	server := startCodexHistoricalInspectionServer(t, homeDir, serviceedges.Edges{})
+	defer server.Stop(t)
+
+	body := getCodexProviderSessionDetailErrorBody(
+		t,
+		server.URL(),
+		codexFunctionalOversizedSessionID,
+		http.StatusInternalServerError,
+	)
+	if !strings.Contains(body, "failed to load provider session details") {
+		t.Fatalf("error body = %q, want safe oversized-record failure", body)
+	}
+	assertCodexProviderSessionErrorBodySafe(t, "oversized-record", body, homeDir)
 }
 
 // TestCodexHistoricalInspectionContainmentRejectionThroughRootBuildProcess proves

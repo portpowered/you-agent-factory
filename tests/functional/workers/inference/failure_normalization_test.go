@@ -10,6 +10,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -84,6 +85,51 @@ func TestProviderNonZeroExitMapsToPublicFailure(t *testing.T) {
 			failure.ProviderSession,
 			providerExitNormalizationSessionID,
 		)
+	}
+}
+
+// TestProviderMissingCompletionEvidenceMapsToPublicFailure proves an otherwise
+// successful provider call cannot advance Work when it returns no authoritative
+// completion evidence.
+func TestProviderMissingCompletionEvidenceMapsToPublicFailure(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
+		modelprovider.ProviderCodex,
+		"gpt-5-codex",
+	))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"provider missing completion evidence"}`))
+
+	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{})
+	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderOverride: provider},
+		20*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed place tokens = %d, want 1; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
+		t.Fatalf("done place tokens = %d, want 0 without completion evidence", got)
+	}
+	if provider.CallCount() != 1 {
+		t.Fatalf("provider calls = %d, want 1 terminal missing-evidence attempt", provider.CallCount())
+	}
+	if session.Runtime.Progress.Categories.Failed != 1 {
+		t.Fatalf("session progress categories = %+v, want one failed work item", session.Runtime.Progress.Categories)
+	}
+
+	dispatches := support.ObserveDispatchEvents(t, events)
+	if len(dispatches) != 1 || dispatches[0].Response == nil {
+		t.Fatalf("dispatch observations = %#v, want one terminal response", dispatches)
+	}
+	response := dispatches[0].Response
+	if response.Outcome != factoryapi.WorkOutcomeFailed {
+		t.Fatalf("dispatch outcome = %q, want failed", response.Outcome)
+	}
+	if response.Error == nil || *response.Error != "provider completion evidence was missing" {
+		t.Fatalf("dispatch error = %#v, want missing-completion diagnostic", response.Error)
 	}
 }
 
@@ -296,7 +342,8 @@ func terminalInferenceFailureObservation(t *testing.T, events []factoryapi.Facto
 	var terminal factoryapi.InferenceResponseEventPayload
 	found := false
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeModelResponse {
+		if event.Type != factoryapi.FactoryEventTypeInferenceResponse &&
+			event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
 		payload, err := support.AsInferenceResponseObservation(event)
