@@ -24,6 +24,7 @@ either.
 | `ProviderInvocationRoute` + worker-role binding | `workers/workstation_contracts.go`, `workstation_pool_boundary_impl.go` |
 | Direct-inference executor | `workers/internal/services/workstations/executor/provider_invocation.go` |
 | Standalone workstation pool | `workers/wire/workstation_pool.go` |
+| `InvokeWorker` root operation — the bridge | `factory_runtime/invoke_worker_contract.go`, `internal/services/orchestration/runtime/invoke_worker.go` |
 
 Three properties worth not re-litigating:
 
@@ -123,6 +124,22 @@ live_runtime.Resolve(sessionID)        // factory_sessions/internal/services/liv
 so the child executor can reach the exact runtime whose ledger the response
 bridge reads. No new threading through `runtimeopening` is required — which is
 also why §1's standalone workstation pool should be deleted rather than kept.
+
+## 4a. The one connection still missing
+
+`InvokeWorker` is implemented and reachable on the runtime. What remains is
+handing `JavaScriptRuntimeService` a way to reach the runtime for its session,
+so `childExecutorHooks` can build a child executor that calls it.
+
+The obstacle is ordering, not availability. The live-session registry that can
+`Resolve(sessionID)` lives on the Factory Sessions service, and
+`FactorySessionExecutionFactory` is a **dependency of** that service — so the
+executor factory cannot depend on it directly without a cycle. The resolver must
+therefore be late-bound: a `func(sessionID string) factory.Service` closure
+supplied after the sessions service exists, or a small lazy provider, rather
+than a constructor argument.
+
+Resolve that and the remaining steps are mechanical.
 
 ## 5. Then, in order
 
