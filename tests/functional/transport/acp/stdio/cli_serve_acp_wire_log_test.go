@@ -209,3 +209,73 @@ func normalizeJSONLine(line string) string {
 	}
 	return string(normalized)
 }
+
+// TestServeACPWireTranscriptIsOwnerReadableOnly proves the permission half of
+// the wire-log contract in docs/reference/serve-acp.md: "One file per
+// connection, mode 0600".
+//
+// The mode is the only thing standing between the transcript and any other
+// user on the host, and the same guide is explicit about what the file holds:
+// "The log contains full prompt and response content. It is a transcript of
+// the session, not a sanitized diagnostic." Recording is also on by default,
+// so a customer who never opted in still gets one of these per connection.
+func TestServeACPWireTranscriptIsOwnerReadableOnly(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test driving you serve acp through root.BuildProcess")
+	}
+
+	home := t.TempDir()
+	cwd := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("root.BuildProcess() error = %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := process.Execute(root.Input{
+		Args:             []string{"you", "serve", "acp"},
+		Env:              environment,
+		Stdin:            strings.NewReader(fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":%s}`, fixtureInitializeParams) + "\n"),
+		Stdout:           &stdout,
+		Stderr:           &stderr,
+		Context:          t.Context(),
+		WorkingDirectory: cwd,
+	}); err != nil {
+		t.Fatalf("serve acp Execute() error = %v", err)
+	}
+
+	transcripts := wireTranscriptFiles(t, filepath.Join(home, ".you-agent-factory", "acp-wire"))
+	if len(transcripts) != 1 {
+		t.Fatalf("wire transcripts = %v, want exactly one for one connection", transcripts)
+	}
+	info, err := os.Stat(transcripts[0])
+	if err != nil {
+		t.Fatalf("Stat(%q) error = %v", transcripts[0], err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("wire transcript mode = %#o, want %#o: the transcript holds full prompt and response content",
+			perm, 0o600)
+	}
+}
+
+// wireTranscriptFiles returns every transcript written under root.
+func wireTranscriptFiles(t *testing.T, root string) []string {
+	t.Helper()
+	var files []string
+	if err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			files = append(files, path)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("walk %q: %v", root, err)
+	}
+	return files
+}

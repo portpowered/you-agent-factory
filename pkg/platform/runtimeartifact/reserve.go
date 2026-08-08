@@ -46,7 +46,14 @@ func (r *reserver) Reserve(root string, at time.Time, kind, suffix string) (stri
 		if err := r.filesystem.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return "", fmt.Errorf("create runtime artifact dir %s: %w", filepath.Dir(path), err)
 		}
-		file, err := r.filesystem.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		// Owner-only. A reserved path becomes a transcript, runtime log, or
+		// metrics stream carrying session content -- the ACP wire transcript
+		// is documented as holding full prompt and response text -- and none
+		// of them is meant to be readable by other users on the host.
+		// Reservation is also the only place this is decided: the rolling
+		// writer that later takes the path over appends to this file and
+		// keeps the mode it already has.
+		file, err := r.filesystem.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 		if err == nil {
 			if closeErr := file.Close(); closeErr != nil {
 				return "", fmt.Errorf("close reserved runtime artifact %s: %w", path, closeErr)

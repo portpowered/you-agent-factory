@@ -99,3 +99,34 @@ func TestReserverAvoidsConcurrentCollisions(t *testing.T) {
 		t.Fatalf("reserved %d unique paths, want %d", len(seen), count)
 	}
 }
+
+// TestReserveCreatesTheArtifactOwnerReadableOnly pins the permission a
+// reserved runtime artifact is created with.
+//
+// A reserved path is where a transcript, runtime log, or metrics stream is
+// then written, and those carry session content -- the ACP wire transcript in
+// particular is documented as "a transcript of the session, not a sanitized
+// diagnostic", holding full prompt and response text. Reservation is also the
+// only place the mode is decided: the rolling writer that takes the path over
+// appends to the file this created and keeps whatever mode it already has, so
+// a permissive reservation is not corrected later.
+func TestReserveCreatesTheArtifactOwnerReadableOnly(t *testing.T) {
+	root := t.TempDir()
+	reserver, err := NewReserver(localFileSystem{})
+	if err != nil {
+		t.Fatalf("NewReserver: %v", err)
+	}
+
+	path, err := reserver.Reserve(root, time.Date(2026, 8, 7, 1, 2, 3, 0, time.UTC), "acp-wire", "conn-1")
+	if err != nil {
+		t.Fatalf("Reserve: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("reserved artifact mode = %#o, want %#o (owner read/write only)", perm, 0o600)
+	}
+}
