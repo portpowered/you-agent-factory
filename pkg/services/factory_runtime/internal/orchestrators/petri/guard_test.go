@@ -663,6 +663,205 @@ func TestAllWithParentGuard_UsesActiveDispatchAsProcessingChild(t *testing.T) {
 	}
 }
 
+func TestAllWithParentGuard_RuntimeStateAndPopulationChecks(t *testing.T) {
+	parent := &factorytoken.Token{ID: "parent-token", Color: factorytoken.Color{WorkID: "parent-1"}}
+	first := factorytoken.Token{
+		ID:      "child-first",
+		PlaceID: "child:complete",
+		Color:   factorytoken.Color{WorkID: "child-1", WorkTypeID: "child", ParentID: "parent-1"},
+	}
+	second := first
+	second.ID = "child-second"
+	second.Color.WorkID = "child-2"
+	bindings := map[string]*factorytoken.Token{"parent": parent}
+	category := func(placeID string) string {
+		if placeID == "child:complete" {
+			return runtimeStateCategoryTerminal
+		}
+		return "PROCESSING"
+	}
+	guard := &AllWithParentGuard{MatchBinding: "parent"}
+
+	snapshot := &MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+		first.ID:  &first,
+		second.ID: &second,
+	}}
+	matched, ok := guard.EvaluateRuntime(
+		RuntimeGuardContext{StateCategoryForPlace: category},
+		[]factorytoken.Token{first, second},
+		bindings,
+		snapshot,
+	)
+	if !ok || len(matched) != 2 {
+		t.Fatalf("terminal registered children = %v, %t; want both children", matched, ok)
+	}
+
+	processingCandidate := second
+	processingCandidate.PlaceID = "child:processing"
+	if matched, ok := guard.EvaluateRuntime(
+		RuntimeGuardContext{StateCategoryForPlace: category},
+		[]factorytoken.Token{first, processingCandidate},
+		bindings,
+		&MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+			first.ID:  &first,
+			second.ID: &second,
+		}},
+	); ok || len(matched) != 0 {
+		t.Fatalf("non-terminal candidate passed runtime state check: %v, %t", matched, ok)
+	}
+
+	processingRegistered := second
+	processingRegistered.PlaceID = "child:processing"
+	if matched, ok := guard.EvaluateRuntime(
+		RuntimeGuardContext{StateCategoryForPlace: category},
+		[]factorytoken.Token{first, second},
+		bindings,
+		&MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+			first.ID:  &first,
+			second.ID: &processingRegistered,
+		}},
+	); ok || len(matched) != 0 {
+		t.Fatalf("non-terminal registered child passed runtime state check: %v, %t", matched, ok)
+	}
+
+	if matched, ok := guard.Evaluate(
+		[]factorytoken.Token{first},
+		bindings,
+		&MarkingSnapshot{Tokens: map[string]*factorytoken.Token{}},
+	); ok || len(matched) != 0 {
+		t.Fatalf("incomplete runtime population passed: %v, %t", matched, ok)
+	}
+}
+
+func TestFanoutCountGuard_RuntimePopulationAndTerminalChecks(t *testing.T) {
+	parent := &factorytoken.Token{ID: "parent-token", Color: factorytoken.Color{WorkID: "parent-1"}}
+	count := &factorytoken.Token{ID: "count-token", Color: factorytoken.Color{Tags: map[string]string{"expected_count": "2"}}}
+	first := factorytoken.Token{
+		ID:      "child-first",
+		PlaceID: "child:complete",
+		Color:   factorytoken.Color{WorkID: "child-1", WorkTypeID: "child", ParentID: "parent-1"},
+	}
+	second := first
+	second.ID = "child-second"
+	second.Color.WorkID = "child-2"
+	bindings := map[string]*factorytoken.Token{"parent": parent, "count": count}
+	category := func(placeID string) string {
+		if placeID == "child:complete" {
+			return runtimeStateCategoryTerminal
+		}
+		return "PROCESSING"
+	}
+	guard := &FanoutCountGuard{MatchBinding: "parent", CountBinding: "count"}
+	snapshot := &MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+		first.ID:  &first,
+		second.ID: &second,
+	}}
+
+	matched, ok := guard.EvaluateRuntime(
+		RuntimeGuardContext{StateCategoryForPlace: category},
+		[]factorytoken.Token{first, second},
+		bindings,
+		snapshot,
+	)
+	if !ok || len(matched) != 2 {
+		t.Fatalf("terminal fanout = %v, %t; want both children", matched, ok)
+	}
+
+	processingCandidate := second
+	processingCandidate.PlaceID = "child:processing"
+	if matched, ok := guard.EvaluateRuntime(
+		RuntimeGuardContext{StateCategoryForPlace: category},
+		[]factorytoken.Token{first, processingCandidate},
+		bindings,
+		snapshot,
+	); ok || len(matched) != 0 {
+		t.Fatalf("non-terminal fanout candidate passed: %v, %t", matched, ok)
+	}
+
+	processingRegistered := second
+	processingRegistered.PlaceID = "child:processing"
+	if matched, ok := guard.EvaluateRuntime(
+		RuntimeGuardContext{StateCategoryForPlace: category},
+		[]factorytoken.Token{first, second},
+		bindings,
+		&MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+			first.ID:  &first,
+			second.ID: &processingRegistered,
+		}},
+	); ok || len(matched) != 0 {
+		t.Fatalf("non-terminal registered fanout passed: %v, %t", matched, ok)
+	}
+
+	third := second
+	third.ID = "child-third"
+	third.Color.WorkID = "child-3"
+	if matched, ok := guard.EvaluateRuntime(
+		RuntimeGuardContext{ActiveDispatches: map[string]*interfaces.DispatchEntry{
+			"dispatch-child": {ConsumedTokens: []factorytoken.Token{third}},
+		}},
+		[]factorytoken.Token{first, second},
+		bindings,
+		snapshot,
+	); ok || len(matched) != 0 {
+		t.Fatalf("in-flight child was omitted from fanout count: %v, %t", matched, ok)
+	}
+
+	if matched, ok := guard.EvaluateRuntime(
+		RuntimeGuardContext{},
+		[]factorytoken.Token{first, second},
+		bindings,
+		&MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+			first.ID: &first,
+			third.ID: &third,
+		}},
+	); ok || len(matched) != 0 {
+		t.Fatalf("fanout accepted a registered child not present in candidates: %v, %t", matched, ok)
+	}
+}
+
+func TestParentChildTokenHelpersFilterAndDeduplicateRuntimeFacts(t *testing.T) {
+	valid := factorytoken.Token{ID: "valid", PlaceID: "child:complete", Color: factorytoken.Color{WorkID: "child-1", WorkTypeID: "child", ParentID: "parent-1"}}
+	resource := valid
+	resource.ID = "resource"
+	resource.Color.DataType = factorytoken.DataTypeResource
+	wrongParent := valid
+	wrongParent.ID = "wrong-parent"
+	wrongParent.Color.ParentID = "parent-2"
+	wrongType := valid
+	wrongType.ID = "wrong-type"
+	wrongType.Color.WorkTypeID = "other"
+	missingWorkID := valid
+	missingWorkID.ID = "missing-work-id"
+	missingWorkID.Color.WorkID = ""
+
+	children := parentChildTokens(
+		&MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+			valid.ID:         &valid,
+			"nil-token":      nil,
+			resource.ID:      &resource,
+			wrongParent.ID:   &wrongParent,
+			wrongType.ID:     &wrongType,
+			missingWorkID.ID: &missingWorkID,
+		}},
+		map[string]*interfaces.DispatchEntry{
+			"nil-dispatch":      nil,
+			"matching-dispatch": {ConsumedTokens: []factorytoken.Token{valid}},
+		},
+		"parent-1",
+		"child",
+	)
+	if len(children) != 1 || children["work:child-1"].ID != valid.ID {
+		t.Fatalf("filtered child population = %#v, want one deduplicated child", children)
+	}
+
+	if got := matchingParentChildren([]factorytoken.Token{valid, wrongType}, "parent-1", "child"); len(got) != 1 || got[0].ID != valid.ID {
+		t.Fatalf("typed parent matches = %#v, want valid child only", got)
+	}
+	if got := tokenIdentity(factorytoken.Token{ID: "token-only"}); got != "token:token-only" {
+		t.Fatalf("token-only identity = %q, want token:token-only", got)
+	}
+}
+
 func TestAnyWithParentGuard_PositiveMatch(t *testing.T) {
 	candidates := []factorytoken.Token{
 		{ID: "child-1", Color: factorytoken.Color{ParentID: "req-100"}},
