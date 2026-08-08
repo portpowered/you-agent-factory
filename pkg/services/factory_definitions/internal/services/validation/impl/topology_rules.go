@@ -631,6 +631,93 @@ func validateUnsupportedHostedWorkerFields(basePath string, worker factorydefini
 
 // --- Rule: per-input guard validation ---
 
+const (
+	maxSupportedSameNameAllChildrenCompleteJoinInputs = 2
+	unsupportedSameNameAllChildrenCompleteJoinRule    = "same-name-all-children-complete-join-arity"
+)
+
+func unsupportedSameNameAllChildrenCompleteJoinArity(ws factorydefinitions.FactoryWorkstationConfig) bool {
+	if len(ws.Inputs) <= maxSupportedSameNameAllChildrenCompleteJoinInputs {
+		return false
+	}
+
+	hasSameName := false
+	hasAllChildrenComplete := false
+	for _, input := range ws.Inputs {
+		if input.Guard == nil {
+			continue
+		}
+		switch input.Guard.Type {
+		case factorydefinitions.GuardTypeSameName:
+			hasSameName = true
+		case factorydefinitions.GuardTypeAllChildrenComplete:
+			hasAllChildrenComplete = true
+		}
+	}
+	return hasSameName && hasAllChildrenComplete
+}
+
+func unsupportedSameNameAllChildrenCompleteJoinMessage(ws factorydefinitions.FactoryWorkstationConfig) string {
+	return fmt.Sprintf(
+		"workstation %q uses an unsupported SAME_NAME plus ALL_CHILDREN_COMPLETE join arity: observed arity is %d inputs, and at most %d inputs are supported for this join shape. Split the fan-in into supported two-input workstation stages or reduce the joined inputs.",
+		ws.Name,
+		len(ws.Inputs),
+		maxSupportedSameNameAllChildrenCompleteJoinInputs,
+	)
+}
+
+// ruleUnsupportedSameNameAllChildrenCompleteJoinArity rejects the only
+// currently unsupported multi-input combination before it reaches the runtime
+// mapper. SAME_NAME and ALL_CHILDREN_COMPLETE are each supported independently,
+// but their combined join shape is bounded to two inputs.
+func ruleUnsupportedSameNameAllChildrenCompleteJoinArity(cfg *factorydefinitions.FactoryConfig) []Finding {
+	if cfg == nil {
+		return nil
+	}
+
+	var findings []Finding
+	for wi, ws := range cfg.Workstations {
+		if !unsupportedSameNameAllChildrenCompleteJoinArity(ws) {
+			continue
+		}
+
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     fmt.Sprintf("workstations[%d](%s).inputs", wi, ws.Name),
+			Message:  unsupportedSameNameAllChildrenCompleteJoinMessage(ws),
+			Rule:     unsupportedSameNameAllChildrenCompleteJoinRule,
+		})
+	}
+	return findings
+}
+
+func unsupportedSameNameAllChildrenCompleteJoinArityTargets(cfg *factorydefinitions.FactoryConfig) []Target {
+	if cfg == nil {
+		return nil
+	}
+
+	var targets []Target
+	for workstationIndex, workstation := range cfg.Workstations {
+		if !unsupportedSameNameAllChildrenCompleteJoinArity(workstation) {
+			continue
+		}
+
+		basePath := fmt.Sprintf("%s.workstations[%d](%s)", validationRoot, workstationIndex, workstation.Name)
+		targets = append(targets, Target{
+			Code:     unsupportedSameNameAllChildrenCompleteJoinRule,
+			Severity: SeverityError,
+			Message:  unsupportedSameNameAllChildrenCompleteJoinMessage(workstation),
+			Subject: Subject{
+				Type:     SubjectTypeWorkstation,
+				ID:       factorydefinitions.CanonicalFactoryGraphWorkstationID(workstation),
+				Location: SubjectLocationInputs,
+			},
+			Path: basePath + ".inputs",
+		})
+	}
+	return targets
+}
+
 func rulePerInputGuards(cfg *factorydefinitions.FactoryConfig) []Finding {
 	var findings []Finding
 	validWorkstations := buildValidWorkstations(cfg)

@@ -57,6 +57,7 @@ func NewConfigValidator(requiredToolChecker RequiredToolChecker) *ConfigValidato
 		ruleAgentWorkerTools,
 		ruleModelInvokeWorkstations,
 		rulePerInputGuards,
+		ruleUnsupportedSameNameAllChildrenCompleteJoinArity,
 		ruleResourceDefinitions,
 		ruleResourceUsage,
 		ruleRequiredTools(cv.requiredToolChecker),
