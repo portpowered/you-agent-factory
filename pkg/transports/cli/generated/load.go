@@ -27,6 +27,12 @@ func WorkersFamilyManifest() (climanifest.Manifest, error) {
 	return workersFamilyManifestValue(), nil
 }
 
+// WorkerSessionsFamilyManifest returns generated worker-session observation
+// command metadata.
+func WorkerSessionsFamilyManifest() (climanifest.Manifest, error) {
+	return workerSessionsFamilyManifestValue(), nil
+}
+
 // FactoryConfigInitFamilyManifest returns generated §4.3 metadata for the
 // factory/config/init command family.
 func FactoryConfigInitFamilyManifest() (climanifest.Manifest, error) {

@@ -35,6 +35,10 @@ const (
 	// WorkersFamilyJSONPath is generated worker-integration command metadata.
 	WorkersFamilyJSONPath = "pkg/transports/cli/generated/workers_family.json"
 
+	// WorkerSessionsFamilyJSONPath is generated worker-session observation
+	// command metadata.
+	WorkerSessionsFamilyJSONPath = "pkg/transports/cli/generated/worker_sessions_family.json"
+
 	// RunSubmitFamilyJSONPath is the generated run/submit-family metadata artifact.
 	RunSubmitFamilyJSONPath = "pkg/transports/cli/generated/run_submit_family.json"
 
@@ -123,6 +127,21 @@ func WorkersArtifact(store generatedartifacts.SourceStore, repositoryRoot string
 	return contractjoiner.MarshalCanonicalJSON(family)
 }
 
+// WorkerSessionsArtifact returns deterministic worker-session observation
+// family metadata.
+func WorkerSessionsArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([]byte, error) {
+	manifestPath := filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath))
+	manifest, err := climanifest.LoadProduction(store, manifestPath)
+	if err != nil {
+		return nil, err
+	}
+	family, err := ExtractWorkerSessionsFamily(manifest)
+	if err != nil {
+		return nil, err
+	}
+	return contractjoiner.MarshalCanonicalJSON(family)
+}
+
 // RunSubmitArtifact returns deterministic generated run/submit-family metadata bytes.
 func RunSubmitArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([]byte, error) {
 	manifestPath := filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath))
@@ -203,6 +222,7 @@ func Artifacts(store generatedartifacts.SourceStore, repositoryRoot string) ([]g
 		{RepresentativeFamilyJSONPath, RepresentativeFamilyArtifact},
 		{WorkFamilyJSONPath, WorkArtifact},
 		{WorkersFamilyJSONPath, WorkersArtifact},
+		{WorkerSessionsFamilyJSONPath, WorkerSessionsArtifact},
 		{SessionFamilyJSONPath, SessionFamilyArtifact},
 		{RunSubmitFamilyJSONPath, RunSubmitArtifact},
 		{FactoryConfigInitFamilyJSONPath, FactoryConfigInitFamilyArtifact},
@@ -228,6 +248,7 @@ func Artifacts(store generatedartifacts.SourceStore, repositoryRoot string) ([]g
 		{Path: RepresentativeFamilyJSONPath, Absent: true},
 		{Path: WorkFamilyJSONPath, Absent: true},
 		{Path: WorkersFamilyJSONPath, Absent: true},
+		{Path: WorkerSessionsFamilyJSONPath, Absent: true},
 		{Path: SessionFamilyJSONPath, Absent: true},
 		{Path: SessionFamilyCommandIDsPath, Payload: sessionCommandIDsSource()},
 		{Path: RepresentativeFamilyCommandIDsPath, Payload: representativeAndWorkCommandIDsSource()},
@@ -254,6 +275,7 @@ func runtimeFamilyManifestsSource(payloads map[string][]byte) ([]byte, error) {
 		{functionName: "sessionFamilyManifestValue", path: SessionFamilyJSONPath},
 		{functionName: "workFamilyManifestValue", path: WorkFamilyJSONPath},
 		{functionName: "workersFamilyManifestValue", path: WorkersFamilyJSONPath},
+		{functionName: "workerSessionsFamilyManifestValue", path: WorkerSessionsFamilyJSONPath},
 		{functionName: "factoryConfigInitFamilyManifestValue", path: FactoryConfigInitFamilyJSONPath},
 		{functionName: "modelsDocsFamilyManifestValue", path: ModelsDocsFamilyJSONPath},
 		{functionName: "runSubmitFamilyManifestValue", path: RunSubmitFamilyJSONPath},

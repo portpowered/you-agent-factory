@@ -8,6 +8,7 @@ import (
 	factorycontext "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
 // Scheduler is the replaceable Factory Runtime transition-selection policy.
@@ -116,6 +117,14 @@ type Service interface {
 	//
 	// Returns ErrNotRunning when the instance is not running.
 	InvokeWorker(ctx context.Context, req InvokeWorkerRequest) (InvokeWorkerResult, error)
+}
+
+// WorkerSessionsObservationProvider exposes the runtime-owned Worker Session
+// observation slice to Factory Sessions transport composition. It remains an
+// optional capability so legacy runtime test doubles do not need to construct
+// a Worker Sessions service.
+type WorkerSessionsObservationProvider interface {
+	WorkerSessionsObservation() workersessions.ObservationService
 }
 
 // Factory retains the migration-era engine and blocking run-loop surface for

@@ -43,6 +43,7 @@ import (
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
+	workersessionscli "github.com/portpowered/infinite-you/pkg/transports/cli/worker_sessions"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -92,6 +93,7 @@ type WatchWorkOperation func(workcli.WatchConfig) error
 type ShowWorkOperation func(workcli.ShowConfig) error
 type MoveWorkOperation func(workcli.MoveConfig) error
 type VisualizeWorkOperation func(workcli.VisualizeConfig) error
+type ListWorkerSessionsOperation = workersessionscli.ListOperation
 type NamedFactoryRootsResolver func(homeDir, workingDir string) (interfaces.NamedFactoryRoots, error)
 
 // CommandOperations is the complete inert CLI operation graph assembled by Wire.
@@ -137,6 +139,7 @@ type CommandOperations struct {
 	ShowWork                          ShowWorkOperation
 	MoveWork                          MoveWorkOperation
 	VisualizeWork                     VisualizeWorkOperation
+	ListWorkerSessions                ListWorkerSessionsOperation
 	OpenRunSelection                  runcli.SelectionFactory
 	ACP                               acpcli.Service
 	ACPServer                         acp.Server
@@ -190,6 +193,7 @@ type CommandFactory struct {
 	ShowWork               func(workcli.ShowConfig) error
 	MoveWork               func(workcli.MoveConfig) error
 	VisualizeWork          func(workcli.VisualizeConfig) error
+	ListWorkerSessions     workersessionscli.ListOperation
 	openRunSelection       runcli.SelectionFactory
 	acp                    acpcli.Service
 	acpServer              acp.Server
@@ -239,6 +243,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		ShowWork:                          operations.ShowWork,
 		MoveWork:                          operations.MoveWork,
 		VisualizeWork:                     operations.VisualizeWork,
+		ListWorkerSessions:                operations.ListWorkerSessions,
 		openRunSelection:                  operations.OpenRunSelection,
 		acp:                               operations.ACP,
 		acpServer:                         operations.ACPServer,

@@ -1,0 +1,21 @@
+type: object
+additionalProperties: false
+required:
+  - eventCount
+  - malformedLineCount
+  - unknownEventCount
+  - errors
+properties:
+  eventCount:
+    type: integer
+    minimum: 0
+  malformedLineCount:
+    type: integer
+    minimum: 0
+  unknownEventCount:
+    type: integer
+    minimum: 0
+  errors:
+    type: array
+    items:
+      $ref: './WorkerSessionParseDiagnostic.yaml'

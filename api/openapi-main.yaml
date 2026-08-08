@@ -21,6 +21,8 @@ tags:
     description: Runtime state, event stream, and trace inspection.
   - name: Provider Sessions
     description: Provider-owned session diagnostics for dashboard inspection.
+  - name: Worker Sessions
+    description: Worker Session observations correlated with Factory Work.
   - name: Models
     description: Model discovery and capability inspection for the current runtime.
   - name: Workflows
@@ -85,6 +87,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListWorkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/worker-sessions:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: listWorkerSessionsBySessionId
+      summary: List Worker Sessions correlated with one Work item
+      description: Returns authoritative Worker Session observations for the requested Work item in the explicitly selected Factory Session. A known Work with no correlated sessions returns an empty sessions array; an unknown Work returns NOT_FOUND.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - name: workId
+          in: query
+          required: true
+          description: Work identity whose Worker Session attempts should be listed.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Deterministically ordered Worker Session observations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListWorkerSessionsResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
@@ -1630,6 +1661,18 @@ components:
       $ref: './components/schemas/api/ListWorkResponse.yaml'
     ListWorkCountSummary:
       $ref: './components/schemas/api/ListWorkCountSummary.yaml'
+    ListWorkerSessionsResponse:
+      $ref: './components/schemas/api/ListWorkerSessionsResponse.yaml'
+    WorkerSessionObservation:
+      $ref: './components/schemas/api/WorkerSessionObservation.yaml'
+    WorkerSessionProviderSessionRef:
+      $ref: './components/schemas/api/WorkerSessionProviderSessionRef.yaml'
+    WorkerSessionFailure:
+      $ref: './components/schemas/api/WorkerSessionFailure.yaml'
+    WorkerSessionParseDiagnostic:
+      $ref: './components/schemas/api/WorkerSessionParseDiagnostic.yaml'
+    WorkerSessionParseDiagnostics:
+      $ref: './components/schemas/api/WorkerSessionParseDiagnostics.yaml'
     PaginationContext:
       $ref: './components/schemas/api/PaginationContext.yaml'
     TokenResponse:

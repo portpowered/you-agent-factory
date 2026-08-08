@@ -1,0 +1,90 @@
+type: object
+additionalProperties: false
+required:
+  - workerSessionId
+  - providerSessionAvailable
+  - workIds
+  - turnId
+  - attemptId
+  - state
+  - startedAt
+  - endedAt
+  - durationMillis
+  - durationBasis
+  - transcript
+  - parse
+properties:
+  workerSessionId:
+    type: string
+    description: Stable Worker Session identity.
+  providerSession:
+    $ref: './WorkerSessionProviderSessionRef.yaml'
+    nullable: true
+  providerSessionAvailable:
+    type: boolean
+    description: Whether a provider-session identity is available for this attempt.
+  workIds:
+    type: array
+    items:
+      type: string
+    description: Work identities correlated with this Worker Session attempt.
+  turnId:
+    type: string
+    nullable: true
+    description: Optional turn correlation identifier.
+  attemptId:
+    type: string
+    description: Stable attempt or dispatch identity.
+  state:
+    type: string
+    enum:
+      - RESERVED
+      - STARTING
+      - RUNNING
+      - PAUSED
+      - COMPLETED
+      - FAILED
+      - CANCELED
+      - TERMINATED
+    x-enum-varnames:
+      - WorkerSessionObservationStateReserved
+      - WorkerSessionObservationStateStarting
+      - WorkerSessionObservationStateRunning
+      - WorkerSessionObservationStatePaused
+      - WorkerSessionObservationStateCompleted
+      - WorkerSessionObservationStateFailed
+      - WorkerSessionObservationStateCanceled
+      - WorkerSessionObservationStateTerminated
+  startedAt:
+    type: string
+    format: date-time
+    nullable: true
+  endedAt:
+    type: string
+    format: date-time
+    nullable: true
+  durationMillis:
+    type: integer
+    format: int64
+    minimum: 0
+    nullable: true
+    description: Projected duration in milliseconds when authoritative timing exists.
+  durationBasis:
+    type: string
+    enum:
+      - UNAVAILABLE
+      - ACTIVE_CLOCK
+      - RECORDED_TIMESTAMPS
+  tokenUsage:
+    $ref: './ProviderSessionTokenUsage.yaml'
+    nullable: true
+  transcript:
+    type: string
+    enum:
+      - UNAVAILABLE
+      - AVAILABLE
+  failure:
+    $ref: './WorkerSessionFailure.yaml'
+    nullable: true
+  parse:
+    $ref: './WorkerSessionParseDiagnostics.yaml'

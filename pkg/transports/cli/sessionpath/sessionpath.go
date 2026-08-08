@@ -22,6 +22,12 @@ func FactoryEventsPath(sessionID string) string {
 	return fmt.Sprintf("/factory-sessions/%s/events", escapedSessionID(sessionID))
 }
 
+// WorkerSessionsCollectionPath returns the Worker Sessions observation route
+// for one factory session.
+func WorkerSessionsCollectionPath(sessionID string) string {
+	return fmt.Sprintf("/factory-sessions/%s/worker-sessions", escapedSessionID(sessionID))
+}
+
 // WorkItemPath returns the route for one work item in a factory session.
 func WorkItemPath(sessionID, workID string) string {
 	return fmt.Sprintf("%s/%s", WorkCollectionPath(sessionID), url.PathEscape(workID))

@@ -9,6 +9,7 @@ import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -58,6 +59,10 @@ func assembleRuntimeProducts(
 	closeResources func() error,
 ) runtimeProducts {
 	workerPrompts, _ := workerService.(workers.PromptTemplates)
+	var workerSessions workersessions.ObservationService
+	if provider, ok := factoryRuntime.(factoryruntime.WorkerSessionsObservationProvider); ok {
+		workerSessions = provider.WorkerSessionsObservation()
+	}
 	inputResolver, _ := sessionInvocation.(roles.InvocationInputResolver)
 	resources := roles.RuntimeResources{
 		Logger: startup.RuntimeLogger(), Close: closeResources,
@@ -73,7 +78,8 @@ func assembleRuntimeProducts(
 		Work:   workService,
 		Models: modelsBind.Root, ModelsScope: modelsBind.Scope,
 		Workers: workerService, ProviderSessions: providerSessions,
-		WorkerPrompts: workerPrompts, Logger: resources.Logger,
+		WorkerSessions: workerSessions,
+		WorkerPrompts:  workerPrompts, Logger: resources.Logger,
 	}
 	return runtimeProducts{
 		application: roles.OpenedApplicationRuntime{

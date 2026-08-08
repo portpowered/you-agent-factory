@@ -20,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
@@ -100,6 +101,10 @@ func provideOperatorDefaultsResolver(settings operatorsettings.Service) operator
 
 func provideSubmitWorkOperation(read work.PayloadFileReader, transport extendedCLIHTTPProtocol) cli.SubmitWorkOperation {
 	return submitcli.NewSubmit(read, transport.Protocol)
+}
+
+func provideListWorkerSessionsOperation(transport standardCLIHTTPProtocol) cli.ListWorkerSessionsOperation {
+	return workersessionscli.BindList(transport.Protocol)
 }
 func provideSubmitBatchOperation(
 	transport extendedCLIHTTPProtocol,

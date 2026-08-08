@@ -79,6 +79,32 @@ var WorkersFamilyCommandIDs = []string{
 	"you.workers.acp.delete",
 }
 
+// WorkerSessionsFamilyCommandIDs are the stable command IDs for worker-session
+// observation on one Factory Session.
+var WorkerSessionsFamilyCommandIDs = []string{
+	"you.worker-sessions",
+	"you.worker-sessions.list",
+}
+
+// IsWorkerSessionsFamilyCommandID reports whether id belongs to the worker
+// session observation family.
+func IsWorkerSessionsFamilyCommandID(id string) bool {
+	return slices.Contains(WorkerSessionsFamilyCommandIDs, id)
+}
+
+// AssertWorkerSessionsFamilyCommandID rejects command IDs outside the worker
+// session observation family.
+func AssertWorkerSessionsFamilyCommandID(id string) error {
+	if IsWorkerSessionsFamilyCommandID(id) {
+		return nil
+	}
+	return fmt.Errorf(
+		"command id %q is outside the worker sessions family %v",
+		id,
+		WorkerSessionsFamilyCommandIDs,
+	)
+}
+
 // RunSubmitFamilyCommandIDs are the only stable command IDs the generator may
 // emit for the run and submit invocation family.
 var RunSubmitFamilyCommandIDs = []string{
