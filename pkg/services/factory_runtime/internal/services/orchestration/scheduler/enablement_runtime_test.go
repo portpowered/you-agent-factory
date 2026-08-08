@@ -44,6 +44,17 @@ func TestStateCategoryForPlaceWithoutTopologyIsUnavailable(t *testing.T) {
 	}
 }
 
+func TestSortedTransitionsUsesNameWhenIDsMatch(t *testing.T) {
+	ordered := sortedTransitions(map[string]*petri.Transition{
+		"z":   {ID: "same", Name: "zulu"},
+		"a":   {ID: "same", Name: "alpha"},
+		"nil": nil,
+	})
+	if len(ordered) != 3 || ordered[0] != nil || ordered[1].Name != "alpha" || ordered[2].Name != "zulu" {
+		t.Fatalf("sorted transitions = %#v, want nil, alpha, zulu", ordered)
+	}
+}
+
 func TestEnablementEvaluator_UsesInjectedClockForCronTimeWindowGuard(t *testing.T) {
 	base := time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC)
 	dueAt := base.Add(2 * time.Minute)
