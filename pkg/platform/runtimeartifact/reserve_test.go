@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -125,6 +126,16 @@ func TestReserveCreatesTheArtifactOwnerReadableOnly(t *testing.T) {
 	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatalf("Stat: %v", err)
+	}
+	if runtime.GOOS == "windows" {
+		// Windows has no POSIX permission bits: os.Chmod only toggles the
+		// read-only attribute, so a 0o600 reservation reads back as 0o666.
+		// Owner-only protection there comes from the profile directory ACL;
+		// assert the mode is not widened beyond the default instead.
+		if perm := info.Mode().Perm(); perm&0o600 != 0o600 {
+			t.Fatalf("reserved artifact mode = %#o, want owner read/write retained", perm)
+		}
+		return
 	}
 	if perm := info.Mode().Perm(); perm != 0o600 {
 		t.Fatalf("reserved artifact mode = %#o, want %#o (owner read/write only)", perm, 0o600)
