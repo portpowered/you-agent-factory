@@ -631,6 +631,55 @@ func validateUnsupportedHostedWorkerFields(basePath string, worker factorydefini
 
 // --- Rule: per-input guard validation ---
 
+const maxSupportedSameNameAllChildrenCompleteJoinInputs = 2
+
+// ruleUnsupportedSameNameAllChildrenCompleteJoinArity rejects the only
+// currently unsupported multi-input combination before it reaches the runtime
+// mapper. SAME_NAME and ALL_CHILDREN_COMPLETE are each supported independently,
+// but their combined join shape is bounded to two inputs.
+func ruleUnsupportedSameNameAllChildrenCompleteJoinArity(cfg *factorydefinitions.FactoryConfig) []Finding {
+	if cfg == nil {
+		return nil
+	}
+
+	var findings []Finding
+	for wi, ws := range cfg.Workstations {
+		if len(ws.Inputs) <= maxSupportedSameNameAllChildrenCompleteJoinInputs {
+			continue
+		}
+
+		hasSameName := false
+		hasAllChildrenComplete := false
+		for _, input := range ws.Inputs {
+			if input.Guard == nil {
+				continue
+			}
+			switch input.Guard.Type {
+			case factorydefinitions.GuardTypeSameName:
+				hasSameName = true
+			case factorydefinitions.GuardTypeAllChildrenComplete:
+				hasAllChildrenComplete = true
+			}
+		}
+		if !hasSameName || !hasAllChildrenComplete {
+			continue
+		}
+
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     fmt.Sprintf("workstations[%d](%s).inputs", wi, ws.Name),
+			Message: fmt.Sprintf(
+				"workstation %q uses an unsupported SAME_NAME plus ALL_CHILDREN_COMPLETE join arity: observed arity is %d inputs, and at most %d inputs are supported for this join shape. Split the fan-in into supported two-input workstation stages or reduce the joined inputs.",
+				ws.Name,
+				len(ws.Inputs),
+				maxSupportedSameNameAllChildrenCompleteJoinInputs,
+			),
+			Rule: "same-name-all-children-complete-join-arity",
+		})
+	}
+	return findings
+}
+
 func rulePerInputGuards(cfg *factorydefinitions.FactoryConfig) []Finding {
 	var findings []Finding
 	validWorkstations := buildValidWorkstations(cfg)
