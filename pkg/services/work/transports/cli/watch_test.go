@@ -40,9 +40,15 @@ func TestRenderWatchTransitionWritesExactEscapedNDJSONContract(t *testing.T) {
 	if !strings.HasSuffix(output.String(), "\n") || strings.Count(output.String(), "\n") != 1 {
 		t.Fatalf("output = %q, want exactly one newline-terminated line", output.String())
 	}
+	assertWatchLineHasExactFields(t, output.Bytes())
+	assertDecodedWatchLineMatchesEscapedTransition(t, output.Bytes(), eventTime)
+}
+
+func assertWatchLineHasExactFields(t *testing.T, line []byte) {
+	t.Helper()
 	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(bytes.TrimSpace(output.Bytes()), &fields); err != nil {
-		t.Fatalf("decode rendered line: %v\n%s", err, output.String())
+	if err := json.Unmarshal(bytes.TrimSpace(line), &fields); err != nil {
+		t.Fatalf("decode rendered line: %v\n%s", err, line)
 	}
 	wantFields := []string{
 		"schemaVersion", "sessionId", "eventId", "sequence", "eventTime",
@@ -57,8 +63,12 @@ func TestRenderWatchTransitionWritesExactEscapedNDJSONContract(t *testing.T) {
 			t.Fatalf("rendered line missing field %q", field)
 		}
 	}
+}
+
+func assertDecodedWatchLineMatchesEscapedTransition(t *testing.T, line []byte, eventTime time.Time) {
+	t.Helper()
 	var got watchLine
-	if err := json.Unmarshal(bytes.TrimSpace(output.Bytes()), &got); err != nil {
+	if err := json.Unmarshal(bytes.TrimSpace(line), &got); err != nil {
 		t.Fatalf("decode typed rendered line: %v", err)
 	}
 	if got.SchemaVersion != WatchSchemaVersion || got.SessionID != "session/\"beta\"" ||

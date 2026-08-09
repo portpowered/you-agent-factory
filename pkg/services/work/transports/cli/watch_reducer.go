@@ -55,18 +55,35 @@ func (r *watchReducer) Accept(event factoryapi.FactoryEvent) (WatchTransition, b
 	if event.Context.Sequence < 0 {
 		return WatchTransition{}, false, false, fmt.Errorf("work watch event %q has negative context.sequence %d", event.Id, event.Context.Sequence)
 	}
+	replay, err := r.acceptOrdering(event)
+	if err != nil {
+		return WatchTransition{}, false, false, err
+	}
+	if replay {
+		return WatchTransition{}, false, r.Completed(), nil
+	}
+	transition, produced, err := r.applyEvent(event)
+	if err != nil {
+		return WatchTransition{}, false, false, err
+	}
+	return transition, produced, r.Completed(), nil
+}
+
+// acceptOrdering validates and records event's canonical ordering position.
+// It reports true when event is an exact replay of an already-accepted event.
+func (r *watchReducer) acceptOrdering(event factoryapi.FactoryEvent) (bool, error) {
 	signature, err := json.Marshal(event)
 	if err != nil {
-		return WatchTransition{}, false, false, fmt.Errorf("fingerprint work watch event %q: %w", event.Id, err)
+		return false, fmt.Errorf("fingerprint work watch event %q: %w", event.Id, err)
 	}
 	if prior, ok := r.accepted[event.Id]; ok {
 		if prior.sequence != event.Context.Sequence || !bytes.Equal(prior.signature, signature) {
-			return WatchTransition{}, false, false, fmt.Errorf("work watch event id %q was reused with conflicting canonical data", event.Id)
+			return false, fmt.Errorf("work watch event id %q was reused with conflicting canonical data", event.Id)
 		}
-		return WatchTransition{}, false, r.Completed(), nil
+		return true, nil
 	}
 	if r.hasLast && event.Context.Sequence <= r.last {
-		return WatchTransition{}, false, false, fmt.Errorf(
+		return false, fmt.Errorf(
 			"work watch canonical sequence regressed or conflicted: event %q has %d after %d",
 			event.Id, event.Context.Sequence, r.last,
 		)
@@ -78,53 +95,81 @@ func (r *watchReducer) Accept(event factoryapi.FactoryEvent) (WatchTransition, b
 	r.last = event.Context.Sequence
 	r.lastID = event.Id
 	r.hasLast = true
+	return false, nil
+}
 
+// applyEvent projects one non-replay canonical event into reducer state and
+// returns a transition only for a WORK_STATE_CHANGE event.
+func (r *watchReducer) applyEvent(event factoryapi.FactoryEvent) (WatchTransition, bool, error) {
 	switch event.Type {
 	case factoryapi.FactoryEventTypeInitialStructureRequest:
-		payload, err := event.Payload.AsInitialStructureRequestEventPayload()
-		if err != nil {
-			return WatchTransition{}, false, false, fmt.Errorf("decode initial Factory metadata for event %q: %w", event.Id, err)
-		}
-		if err := r.replaceFactory(payload.Factory); err != nil {
-			return WatchTransition{}, false, false, fmt.Errorf("apply initial Factory metadata for event %q: %w", event.Id, err)
-		}
+		return WatchTransition{}, false, r.applyInitialStructureRequest(event)
 	case factoryapi.FactoryEventTypeRunRequest:
-		payload, err := event.Payload.AsRunRequestEventPayload()
-		if err != nil {
-			return WatchTransition{}, false, false, fmt.Errorf("decode run Factory metadata for event %q: %w", event.Id, err)
-		}
-		if err := r.replaceFactory(payload.Factory); err != nil {
-			return WatchTransition{}, false, false, fmt.Errorf("apply run Factory metadata for event %q: %w", event.Id, err)
-		}
+		return WatchTransition{}, false, r.applyRunRequestEvent(event)
 	case factoryapi.FactoryEventTypeFactoryChange:
-		payload, err := event.Payload.AsFactoryChangeEventPayload()
-		if err != nil {
-			return WatchTransition{}, false, false, fmt.Errorf("decode changed Factory metadata for event %q: %w", event.Id, err)
-		}
-		if err := r.replaceFactory(payload.Factory); err != nil {
-			return WatchTransition{}, false, false, fmt.Errorf("apply changed Factory metadata for event %q: %w", event.Id, err)
-		}
+		return WatchTransition{}, false, r.applyFactoryChangeEvent(event)
 	case factoryapi.FactoryEventTypeWorkRequest:
-		payload, err := event.Payload.AsWorkRequestEventPayload()
-		if err != nil {
-			return WatchTransition{}, false, false, fmt.Errorf("decode Work cohort event %q: %w", event.Id, err)
-		}
-		if err := r.applyWorkRequest(event, payload); err != nil {
-			return WatchTransition{}, false, false, fmt.Errorf("apply Work cohort event %q: %w", event.Id, err)
-		}
+		return WatchTransition{}, false, r.applyWorkRequestFromEvent(event)
 	case factoryapi.FactoryEventTypeWorkStateChange:
-		payload, err := event.Payload.AsWorkStateChangeEventPayload()
-		if err != nil {
-			return WatchTransition{}, false, false, fmt.Errorf("decode Work transition event %q: %w", event.Id, err)
-		}
-		transition, err := r.applyWorkStateChange(event, payload)
-		if err != nil {
-			return WatchTransition{}, false, false, fmt.Errorf("apply Work transition event %q: %w", event.Id, err)
-		}
-		return transition, true, r.Completed(), nil
+		return r.applyWorkStateChangeFromEvent(event)
 	}
+	return WatchTransition{}, false, nil
+}
 
-	return WatchTransition{}, false, r.Completed(), nil
+func (r *watchReducer) applyInitialStructureRequest(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsInitialStructureRequestEventPayload()
+	if err != nil {
+		return fmt.Errorf("decode initial Factory metadata for event %q: %w", event.Id, err)
+	}
+	if err := r.replaceFactory(payload.Factory); err != nil {
+		return fmt.Errorf("apply initial Factory metadata for event %q: %w", event.Id, err)
+	}
+	return nil
+}
+
+func (r *watchReducer) applyRunRequestEvent(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsRunRequestEventPayload()
+	if err != nil {
+		return fmt.Errorf("decode run Factory metadata for event %q: %w", event.Id, err)
+	}
+	if err := r.replaceFactory(payload.Factory); err != nil {
+		return fmt.Errorf("apply run Factory metadata for event %q: %w", event.Id, err)
+	}
+	return nil
+}
+
+func (r *watchReducer) applyFactoryChangeEvent(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsFactoryChangeEventPayload()
+	if err != nil {
+		return fmt.Errorf("decode changed Factory metadata for event %q: %w", event.Id, err)
+	}
+	if err := r.replaceFactory(payload.Factory); err != nil {
+		return fmt.Errorf("apply changed Factory metadata for event %q: %w", event.Id, err)
+	}
+	return nil
+}
+
+func (r *watchReducer) applyWorkRequestFromEvent(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsWorkRequestEventPayload()
+	if err != nil {
+		return fmt.Errorf("decode Work cohort event %q: %w", event.Id, err)
+	}
+	if err := r.applyWorkRequest(event, payload); err != nil {
+		return fmt.Errorf("apply Work cohort event %q: %w", event.Id, err)
+	}
+	return nil
+}
+
+func (r *watchReducer) applyWorkStateChangeFromEvent(event factoryapi.FactoryEvent) (WatchTransition, bool, error) {
+	payload, err := event.Payload.AsWorkStateChangeEventPayload()
+	if err != nil {
+		return WatchTransition{}, false, fmt.Errorf("decode Work transition event %q: %w", event.Id, err)
+	}
+	transition, err := r.applyWorkStateChange(event, payload)
+	if err != nil {
+		return WatchTransition{}, false, fmt.Errorf("apply Work transition event %q: %w", event.Id, err)
+	}
+	return transition, true, nil
 }
 
 // Cursor returns the last accepted canonical event identity and ordering
