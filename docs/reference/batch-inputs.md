@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-07-01
+last-modified: 2026-08-09
 doc-id: agent-factory/guides/batch-inputs
 ---
 
@@ -90,6 +90,24 @@ Use `DEPENDS_ON` for prerequisite ordering between siblings and `PARENT_CHILD`
 for explicit parent-aware lineage. See [Choose The Relation Type](#choose-the-relation-type)
 for examples and field tables.
 
+## One batch, one name namespace
+
+`works[].name` is the authored name of a Work item in this request. Names must
+be unique across the entire `works[]` array, including when the items have
+different `workTypeName` values. The factory uses those names to resolve
+`relations[]`; it does not use the Work ID, a work type, or a name from another
+submission as an implicit relation endpoint.
+
+Every `sourceWorkName` and `targetWorkName` must match a `works[].name` in the
+same submitted `FACTORY_REQUEST_BATCH`. A relation cannot point at an existing
+Work from an earlier batch, a Work in a different batch, or an item that is not
+also included in this request. If the batch needs that relationship, submit the
+related Work items together and declare the relation by their authored names.
+
+This name scope is separate from request idempotency: reusing a `requestId`
+reconciles the same submission, while changing the `requestId` starts a new
+batch with a new name namespace.
+
 ## Before you submit
 
 Read the checked-in factory topology before authoring batch files:
@@ -114,6 +132,10 @@ factory/inputs/BATCH/default/release-story-set.json
 ```
 
 Write one canonical request body:
+
+This is a valid mixed-work-type batch: every item names its own public
+`workTypeName`, and both relation endpoints are names of items in this same
+`works[]` array.
 
 ```json
 {
@@ -226,11 +248,15 @@ Inline JSON positional (convenient for small batches; shell argument length limi
 you submit batch '{"requestId":"release-story-set","type":"FACTORY_REQUEST_BATCH","works":[{"name":"story-auth","workTypeName":"story","payload":{"title":"Harden auth session handling"}}]}'
 ```
 
-Validate locally without contacting the server (`--dry-run` exits 0 on valid input
-even when the factory is unreachable):
+Validate the public batch envelope locally without contacting the server
+(`--dry-run` exits 0 on valid input even when the factory is unreachable). A
+dry run checks the JSON shape, public field aliases, request discriminator,
+request ID, and non-empty `works[]`; it cannot compare `workTypeName`, `state`,
+or `requiredState` with the running factory's topology or validate the complete
+relation graph.
 
 ```bash
-you submit batch --dry-run ./factory/inputs/BATCH/default/release-story-set.json
+you submit batch --dry-run '{"requestId":"release-story-set","type":"FACTORY_REQUEST_BATCH","works":[{"name":"story-auth","workTypeName":"story","payload":{"title":"Harden auth session handling"}}]}'
 ```
 
 Target a non-default live session with structured output:
@@ -330,10 +356,116 @@ shared work type.
 
 ## How Batches Work
 
-The factory validates the full batch before it creates work tokens. Invalid
-JSON, retired field aliases, duplicate work names, unknown relation names,
-invalid work types, self-relations, and dependency cycles reject the whole
-batch. No partial work is created.
+The factory indexes every `works[].name` and validates the full batch before it
+creates work tokens. Invalid JSON, retired field aliases, duplicate work names,
+unknown same-batch relation endpoints, invalid work types, invalid states,
+self-relations, and dependency cycles reject the whole batch. No partial Work
+is created: a valid item earlier in `works[]` is not admitted when another item
+or relation makes the request invalid.
+
+## Atomic validation and rejection examples
+
+The following focused fragments show invalid public batch shapes. They assume
+the named `workTypeName` values exist in the target factory; the failure shown
+is the batch rule being illustrated. Each request is rejected during admission,
+and the factory creates no Work from any part of that request.
+
+Duplicate names are invalid across the whole batch, not just within one work
+type:
+
+```json
+{
+  "requestId": "duplicate-name",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    { "name": "release", "workTypeName": "story-set" },
+    { "name": "release", "workTypeName": "story" }
+  ]
+}
+```
+
+Relation endpoints must both be present in this request; an existing Work in a
+different submission does not satisfy the lookup:
+
+```json
+{
+  "requestId": "outside-batch-endpoint",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    { "name": "publish", "workTypeName": "story" }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "publish",
+      "targetWorkName": "review"
+    }
+  ]
+}
+```
+
+A relation cannot point to itself:
+
+```json
+{
+  "requestId": "self-relation",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    { "name": "review", "workTypeName": "story" }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "review",
+      "targetWorkName": "review"
+    }
+  ]
+}
+```
+
+`DEPENDS_ON` edges cannot form a cycle:
+
+```json
+{
+  "requestId": "dependency-cycle",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    { "name": "plan", "workTypeName": "story" },
+    { "name": "execute", "workTypeName": "story" }
+  ],
+  "relations": [
+    { "type": "DEPENDS_ON", "sourceWorkName": "plan", "targetWorkName": "execute" },
+    { "type": "DEPENDS_ON", "sourceWorkName": "execute", "targetWorkName": "plan" }
+  ]
+}
+```
+
+`requiredState` must be a state configured on the target Work type:
+
+```json
+{
+  "requestId": "unknown-required-state",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    { "name": "review", "workTypeName": "story" },
+    { "name": "publish", "workTypeName": "story" }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "publish",
+      "targetWorkName": "review",
+      "requiredState": "not-a-configured-state"
+    }
+  ]
+}
+```
+
+The server's admission diagnostic identifies the offending work or relation
+and rule (duplicate name, unknown endpoint, self-dependency, dependency cycle,
+or unknown required state). These checks are distinct from `--dry-run`, which
+does not have the factory topology needed for the last two topology-dependent
+cases.
 
 After validation, the factory normalizes the batch:
 
@@ -429,7 +561,7 @@ Do not use `work_type_id`. Public batch inputs use `workTypeName`; retired
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `name` | Yes | Human-readable work name. Names must be unique within the batch because relations refer to work by name. |
+| `name` | Yes | Authored Work name. Names must be unique across the entire batch because relations refer to Work by name. |
 | `workTypeName` | Usually | Configured work type from `factory.json`. Watched input files can infer this from `factory/inputs/<work_type>/...` when omitted, but `inputs/BATCH` requires it on every work item. |
 | `state` | No | Starting state for this work item. Omit it to use the work type's initial state. Use it on a parent item when fan-in should start from a waiting state. |
 | `workId` | No | Stable unique work ID. Omit this unless an external system needs a specific ID. |

@@ -1,54 +1,90 @@
 {
-  "project": "Make you work watch Retry-Safe and Preserve Failure Exit Codes",
-  "branchName": "wo-c2-fix-watch-event-id-conflict",
-  "description": "Correct you work watch so finite and --follow streams survive legitimate provider dispatch retries that re-emit a model-request event ID with refreshed canonical data, while preserving the you.work.watch.v1 NDJSON contract and making genuine stream aborts exit non-zero.",
+  "project": "WO-D2 — Reference Schemas for Batch Work, States, and Relations",
+  "branchName": "wo-d2-reference-schemas-docs",
+  "description": "Publish canonical packaged reference documentation that makes the FACTORY_REQUEST_BATCH shape, Work state lifecycle, and DEPENDS_ON, PARENT_CHILD, and SAME_NAME semantics implementation-ready for customers. The concrete change extends the established batch-inputs, work, relationships, and guard-linked topics so operators can author valid batches and predict joined-input dispatch, including batch-wide name uniqueness, same-batch-only relation endpoints, and the post-A1 rule that dependencies on every joined input gate dispatch.",
   "context": {
-    "customerAsk": "Make finite and --follow Work watches stream successfully for real Factory Sessions that contain provider dispatch retries, without changing the you.work.watch.v1 NDJSON shape or adding storage; genuine stream aborts must return a non-zero CLI process exit.",
-    "problem": "The strict watch reducer treats any event ID reused with differing payload data as corruption. Real Factory ledgers re-emit model-request IDs at the same request ordinal across provider dispatch retries with refreshed canonical data, so legitimate live history aborts both finite and following watches. The CLI then prints the abort but can leave the shell with exit code 0.",
-    "solution": "Align invocation-local Work watch reduction with canonical Factory Event ordering and Work-transition projection so unrelated retry enrichment cannot abort or distort transition output, then propagate genuine stream errors through the root CLI process boundary as non-zero exits while retaining stderr diagnostics and the existing NDJSON contract."
+    "customerAsk": "Document the FACTORY_REQUEST_BATCH shape, Work states and transitions, and especially the difference between DEPENDS_ON, PARENT_CHILD, and SAME_NAME joining, including exactly what gates dispatch after the A1 fix. Capture the batch-wide unique-name and same-batch relation constraints discovered through live operator failures, publish the guidance through canonical docs/reference topics, execute every shown CLI invocation against the current binary, and verify packaged docs behavior with make docs-reference-smoke and make verify-fast.",
+    "problem": "Operators currently have to infer critical submission and scheduling rules from scattered contract, guard, and runtime material. This caused rejected live submissions for duplicate names and relations outside the submitted batch, while incomplete documentation of SAME_NAME joins and dependency gating delayed diagnosis of dispatch-before-dependency behavior. Work-state names and lifecycle categories are also easy to conflate, so customers cannot reliably predict starting placement, progression, or completion semantics.",
+    "solution": "Extend the canonical docs/reference batch-inputs, work, and relationships topics, with focused links to guards, rather than introducing a parallel schema topic family. Document the public batch fields and atomic constraints, the authored Work-state lifecycle, and a direct comparison of dependency, lineage, and name-join behavior. Include a worked multi-input timeline stating that every DEPENDS_ON relation on every selected join input must be satisfied before dispatch, and prove all displayed CLI commands against the current built binary with real output or behavioral assertions."
   },
   "acceptanceCriteria": [
-    "A fixture ledger containing the same model-request event ID twice with differing canonical data, matching the observed provider retry shape, is accepted without aborting the Work watch.",
-    "Finite and --follow watches emit the fixture's complete ordered Work state-transition history exactly once, and unrelated retry enrichment emits no extra NDJSON lines.",
-    "Watch output retains the exact you.work.watch.v1 NDJSON contract shape, and reconnect/cursor behavior continues from the last accepted canonical Factory Event without durable state.",
-    "Genuine stream-abort errors remain actionable on stderr and cause the built you CLI process to exit non-zero, while successful finite completion remains exit code 0.",
-    "No storage engine, public contract expansion, unrelated event-ledger rewrite, or cut-list item from docs/temp/work-order.md is introduced.",
-    "The named focused verification command go test ./pkg/services/work/transports/cli ./tests/functional/work/watch ./tests/functional/transport/cli/process and make verify-fast pass; Typecheck passes, Tests pass, no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, shared-file and baseline conflicts are reconciled, merge conflicts are resolved, and the PR is actually merged; an opened, green, approved, or ready-to-merge PR is not complete."
+    "you docs batch-inputs gives a complete, internally consistent FACTORY_REQUEST_BATCH reference, including works[], workTypeName, batch-wide unique work names, atomic validation, and the requirement that every relation source and target name a Work item in the same submitted batch.",
+    "you docs work explains authored state names, the INITIAL, PROCESSING, TERMINAL, and FAILED lifecycle categories, initial or explicitly requested placement, workstation-driven transitions, and the observable distinction between successful terminal and failed Work.",
+    "you docs relationships clearly distinguishes DEPENDS_ON, PARENT_CHILD, and SAME_NAME; documents source/target direction; and states that dispatch waits for every DEPENDS_ON relation on every input selected for a join, including secondary SAME_NAME-joined inputs.",
+    "All new or changed examples use public customer vocabulary, live under docs/reference, keep root docs as routing material, stay within the D2 cut list, and avoid unrelated documentation or implementation cleanup.",
+    "Every CLI invocation shown in changed documentation is executed against the current built binary during implementation, with actual stdout/stderr pasted into the PR evidence or asserted in behavioral coverage; the named verification commands go test ./pkg/transports/cli/..., make docs-reference-smoke, and make verify-fast pass.",
+    "Typecheck and tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file changes are reconciled, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "wo-c2-fix-watch-event-id-conflict-001",
-      "title": "Stream Work transitions through provider retry events",
-      "description": "As a factory operator, I want finite and following Work watches to tolerate legitimate provider dispatch retry history so that I can observe every Work transition in a live session without the monitor aborting.",
+      "id": "wo-d2-reference-schemas-docs-001",
+      "title": "Author a valid batch request",
+      "description": "As a factory operator, I want one authoritative batch schema guide so I can submit multiple Work items without discovering naming, work-type, or relation-scope constraints through rejection.",
       "acceptanceCriteria": [
-        "A behavioral fixture places Work state transitions before, between, and after two model-request events that reuse the same event ID with differing canonical data in the observed retry shape.",
-        "Finite mode consumes that ledger, emits the full ordered Work transition history exactly once, and exits successfully when the observed Work cohort becomes terminal.",
-        "--follow consumes the conflicting retry events without aborting and emits Work transitions that occur after them until normal cancellation.",
-        "Model-request retry events do not themselves produce you.work.watch.v1 output, and emitted transition objects retain the existing fields and meanings.",
-        "Exact replay remains idempotent, canonical resume position remains monotonic, and genuinely invalid Work transition data still returns an actionable reducer or stream error.",
-        "Tests pass",
+        "The batch guide identifies the public request discriminator, request-level fields, works[] fields, and relations[] fields, and uses workTypeName rather than retired internal aliases.",
+        "The guide states that Work names must be unique across the entire batch and explains that relations resolve by those names.",
+        "The guide states that each relation's source and target must both name Work in the same submitted batch; relations cannot point to existing Work from an earlier or different submission.",
+        "A valid mixed-work-type example and focused invalid examples make workTypeName, duplicate-name, unknown relation endpoint, self-relation, cycle, and invalid requiredState outcomes reviewer-verifiable, including whole-batch rejection with no partial creation.",
+        "Every CLI invocation added or changed in this story is run against the current binary and its real output is pasted into PR evidence or asserted by behavioral coverage.",
+        "make docs-reference-smoke passes.",
         "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented retry-safe Work-watch reduction for repeated MODEL_REQUEST IDs with refreshed canonical data, preserving strict conflicts for Work events and monotonic ephemeral cursors. Added finite, --follow, exact replay, reconnect, NDJSON, and invalid-transition behavioral coverage. Review follow-up now uses the observed later-sequence/later-event-time retry shape with realistic dispatch context and an intervening model response, and proves reconnect from the later canonical cursor. Corrective follow-up now accepts changed MODEL_REQUEST data only at a strictly later canonical position, updates the remembered retry version, and rejects same-sequence or backward conflicting reuse. Removed the unrelated manifest/inventory meta-test during review follow-up. The focused Work/watch/process command and make verify-fast pass."
+      "notes": "Extended docs/reference/batch-inputs.md with the complete public batch envelope, batch-wide Work-name namespace, same-submission relation endpoint scope, atomic rejection behavior, and focused duplicate/unknown-endpoint/self/cycle/requiredState examples. Verified the documented inline you submit batch --dry-run against bin/you.exe, make docs-reference-smoke, go test ./pkg/transports/cli/..., and make verify-fast."
     },
     {
-      "id": "wo-c2-fix-watch-event-id-conflict-002",
-      "title": "Exit non-zero when a Work watch genuinely aborts",
-      "description": "As an operator or automation author, I want an aborted Work watch to return a non-zero process exit code so that monitoring scripts cannot mistake a failed stream for successful completion.",
+      "id": "wo-d2-reference-schemas-docs-002",
+      "title": "Understand Work states and transitions",
+      "description": "As a factory author or operator, I want the Work reference to explain state categories and transitions so I can predict where submitted Work starts, how it advances, and when it is considered successful or failed.",
       "acceptanceCriteria": [
-        "A process-boundary behavioral test runs the built you work watch command against a deterministic genuine stream-abort condition and observes a non-zero exit code.",
-        "The abort diagnostic is written to stderr with enough session and stream context to identify the failed watch, while stdout contains only complete NDJSON transition lines produced before the abort.",
-        "Successful finite completion retains exit code 0, and normal --follow cancellation retains the repository's established cancellation semantics.",
-        "Stream failures are propagated through command execution and the root process boundary rather than being printed and converted to success.",
-        "Tests pass",
+        "The Work reference distinguishes customer-authored state names from the lifecycle categories INITIAL, PROCESSING, TERMINAL, and FAILED, with the runtime meaning of each category.",
+        "The guide explains that omitted batch works[].state uses the Work type's initial state, while an explicit state must be a valid state on that Work type and intentionally changes starting placement.",
+        "The guide explains that the factory topology and workstation outcome routes define available transitions; it does not imply a universal fixed sequence of state names.",
+        "The guide explains observable completion semantics, including that TERMINAL represents successful completion, FAILED represents failed completion, and both stop ordinary non-terminal processing.",
+        "State guidance cross-links to the batch, factory configuration, workstation, and Work-observation references without duplicating their full contracts.",
+        "Every CLI invocation added or changed in this story is run against the current binary and its real output is pasted into PR evidence or asserted by behavioral coverage.",
+        "make docs-reference-smoke passes.",
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Added a true built cmd/factory process-boundary Work-watch fixture that emits complete NDJSON before a malformed SSE frame, then proves the genuine stream-abort error stays actionable on stderr with session and decode context, returns the child process's non-zero exit code, and leaves stdout with exactly the complete NDJSON transition produced before the abort. The same built binary also proves successful finite completion returns exit code 0. Removed the unrelated manifest/inventory meta-test during review follow-up. The focused Work/watch/process command and make verify-fast pass."
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "wo-d2-reference-schemas-docs-003",
+      "title": "Predict relation and joined-input dispatch behavior",
+      "description": "As a factory author, I want dependency, lineage, and name-join semantics compared directly so I can choose the correct construct and know exactly when a multi-input workstation may dispatch.",
+      "acceptanceCriteria": [
+        "A comparison explains that DEPENDS_ON is a submitted batch relation for prerequisite-state gating, PARENT_CHILD is a submitted batch relation for parent lineage and parent-aware fan-in, and SAME_NAME is a per-input workstation guard that correlates inputs by authored Work name rather than a batch relation.",
+        "Direction is explicit: for DEPENDS_ON, the source is blocked by the target; for PARENT_CHILD, the source is the child and the target is the parent; for SAME_NAME, matchInput identifies the peer input whose selected Work name must equal the guarded input's Work name.",
+        "The guide states that SAME_NAME only selects compatible joined inputs and does not satisfy, replace, or create a dependency or parent lineage.",
+        "The dispatch invariant is explicit: after all join guards select a complete input binding, the scheduler evaluates every DEPENDS_ON relation on every selected input, and any missing target or target not in its requiredState prevents dispatch—including a dependency carried only by a secondary SAME_NAME-joined input.",
+        "A worked two-input example and timeline show that the workstation remains undispatched while the secondary joined input's prerequisite is incomplete and becomes eligible only after that prerequisite reaches the required state, subject to all other guards, capacity, and scheduler rules.",
+        "Every CLI invocation added or changed in this story is run against the current binary and its real output is pasted into PR evidence or asserted by behavioral coverage.",
+        "make docs-reference-smoke passes.",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "wo-d2-reference-schemas-docs-004",
+      "title": "Retrieve trustworthy packaged schema guidance",
+      "description": "As a CLI user, I want the completed guidance available through the packaged docs commands so I can consult the same authoritative material in the environment where I operate a factory.",
+      "acceptanceCriteria": [
+        "The current binary successfully renders the revised batch, Work-state, and relation guidance through you docs batch-inputs, you docs work, and you docs relationships, with discoverable cross-links from the packaged topic index or relevant topic routing text.",
+        "Packaged output contains the same customer-facing semantics as the canonical Markdown, including the same-batch relation boundary and the all-joined-input dependency gate.",
+        "Command examples and captured outputs contain no invented flags, fabricated success messages, or unverified error text; environment-specific identifiers are clearly presented as examples rather than claimed output.",
+        "Focused behavioral verification uses go test ./pkg/transports/cli/...; make docs-reference-smoke and make verify-fast also pass.",
+        "Scope contains no local-model harness, llama-server trace work, new ACP lane, wrapper-layer multimodal transformation, storage engine, or broad root documentation rewrite.",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
     }
   ]
 }
