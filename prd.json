@@ -46,8 +46,8 @@
         "Tests pass, including make docs-reference-smoke"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added distinct operator-ready entries for @you/goal, @you/loop, @you/fusion, @you/classify, and @you/review using the shared seven-part contract. Documented live signatures, every worker role and role-specific provider/model override, operator-default fallback, prerequisites and workspace/session/recording side effects, stopping/routing/retry behavior, and final versus intermediate output shape. Added the deterministic docs smoke fixture docs/examples/packaged-classify-mock-workers.json and its examples index entry. Executed every worked command exactly as shown against a freshly built current-source binary with isolated operator state; all returned the documented mock primary-result shape. make docs-reference-smoke, make verify-fast, and git diff --check pass. Remaining detailed Factory entries remain scoped to stories 003-006."
     },
     {
       "id": "wo-d1-packaged-factories-docs-003",

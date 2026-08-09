@@ -2,6 +2,8 @@
 - Canonical packaged CLI docs live under `docs/reference/`; adding a topic also requires its authored file in `docs/reference/embed.go` and a registry entry in `pkg/transports/cli/docs/docs.go`.
 - The `you run --named <factory> --help` output is the authoritative invocation contract; omitted role provider/model values resolve through operator defaults.
 - Documentation for model-backed workflows should describe observable result shape and status/artifact evidence rather than byte-stable generated prose.
+- Isolate both `HOME` and `USERPROFILE` when verifying packaged named Factories so stale materialized operator copies cannot mask the current catalog source.
+- A classifier mock must emit the provider's valid response protocol and an exact configured route label; the default synthetic mock acceptance text is not a valid `small`/`medium`/`large` classification.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -59,4 +61,26 @@
   - `make lint` completed the UI lint/dead-code checks, `go vet`, backend-size, pkg-maint, pkg-file-count, and related checks, then stopped at the existing `pkg-boundary` baseline with 176 violations. The reported violations are in pre-existing service-boundary/Petri migration surfaces and none are in this story's changed files.
 - **Learnings for future iterations:**
   - Treat the current `pkg-boundary` findings as baseline debt unless a changed file introduces a new violation; this documentation story does not touch those ownership surfaces.
+---
+
+## 2026-08-09 13:36 - wo-d1-packaged-factories-docs-002
+- What was implemented
+  - Added full bounded/iterative operator entries for `@you/goal`, `@you/loop`, `@you/fusion`, `@you/classify`, and `@you/review` to `docs/reference/packaged-factories.md`.
+  - Documented each current live invocation signature, all worker roles, role-specific provider/model overrides, operator-default fallback, prerequisites, workspace/session/recording side effects, stopping/routing/retry behavior, and final versus intermediate output shape.
+  - Added `docs/examples/packaged-classify-mock-workers.json` and indexed it from `docs/examples/README.md` so the classify example can deterministically prove a valid `small` route without a live provider call.
+  - Executed every worked command exactly as shown against a freshly built current-source `bin/you.exe` with isolated `HOME`/`USERPROFILE` state. `goal`, `loop`, `fusion`, and `review` returned `mock worker accepted`; `classify` routed through `small` and returned `mock worker accepted`.
+- Files changed
+  - `docs/reference/packaged-factories.md`
+  - `docs/examples/README.md`
+  - `docs/examples/packaged-classify-mock-workers.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make docs-reference-smoke` — passed.
+  - `make verify-fast` — passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun unit checks, and the short Go suite.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The live packaged catalog is lazily materialized and can be stale in an operator profile; use isolated home variables when collecting current help evidence.
+  - `--with-mock-workers` is enough for most packaged examples, but classifier workflows need a protocol-valid scripted provider response for the exact route label before the selected lane can run.
+  - Keep deterministic documentation fixtures under `docs/examples/` and explain their role so smoke output is not mistaken for a live model guarantee.
 ---

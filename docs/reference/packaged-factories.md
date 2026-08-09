@@ -150,6 +150,314 @@ runtime scheduling. The JavaScript Factories (`@you/deep-research`,
 `@you/spawn`, `@you/tournament`) use the policy-bounded JavaScript orchestrator
 where invocation-shaped fan-out is part of their design.
 
+## Detailed bounded and iterative entries
+
+The five entries in this family all accept one request, but they do different
+things with it: `goal` keeps working toward completion, `loop` schedules
+recurring executions, `fusion` performs a draft/refine pair, `classify` routes
+to one complexity lane, and `review` repeats produce/review attempts until an
+independent reviewer approves. The worked commands below deliberately include
+`--with-mock-workers --no-record --quiet` so they are deterministic smoke
+invocations against the current binary. Remove the mock-worker flag for live
+provider execution after configuring the providers and models described in
+each entry.
+
+### `@you/goal`
+
+**Purpose and suitable use.** Use `@you/goal` for one objective that may need
+several verified passes, such as an implementation or investigation that can
+make observable progress between attempts. It persists the objective and each
+pass's result, then stops when the executor returns the `accepted` decision or
+when the bounded Factory failure path is reached. Choose it for a persistent
+single objective, not for a one-shot answer or a timer-driven recurring check.
+
+**Invocation signature.** The live signature is:
+
+```text
+you run --named @you/goal <to> [--executor-model <value>] [--executor-provider <value>]
+```
+
+`<to>` is required and can be supplied positionally, through `--to`, or via
+stdin. `--executor-provider` and `--executor-model` are optional.
+
+**Worker roles and provider/model overrides.** The Factory has one worker role,
+`goal-executor`. Its provider and model are selected by
+`--executor-provider` and `--executor-model`; omitting either value delegates
+resolution to the operator defaults. These flags configure the executor only;
+they do not create a second review or merge role.
+
+**Prerequisites and side effects.** A usable configured provider/model is
+required for a live pass. Each pass creates runtime/session activity and may
+inspect or change the selected workspace when the objective calls for it. The
+worker maintains a JSON progress file under
+`.you-goals/<factory-session-id>/<work-id>.json`; it keeps the original
+objective and records the iteration, status, last result, and update time. The
+Factory permits up to twelve visits to its execute workstation before routing
+the Work to failure. Normal runs record events unless a run-level option such
+as `--no-record` is supplied. A failed or exhausted goal does not provide a
+successful primary result.
+
+**Expected output shape.** The caller receives the executor's final verified
+result, not the internal progress JSON or a transcript of every attempt. Human
+output is readable text; structured run output exposes a completed invocation
+result with a primary text result and status, while the event stream contains
+the intermediate dispatches and decisions. Generated prose is provider/model
+content and is not byte-stable.
+
+**Worked invocation.**
+
+```bash
+you run --named @you/goal --with-mock-workers --no-record --quiet --executor-provider CODEX --executor-model gpt-5 --to "Check the README headings"
+```
+
+**Observed output evidence.** The exact command above returned:
+
+```text
+mock worker accepted
+```
+
+The mock result demonstrates the successful primary-result shape; it is not a
+claim that a live model will return that wording.
+
+### `@you/loop`
+
+**Purpose and suitable use.** Use `@you/loop` for a request that should be
+executed repeatedly on a duration schedule, such as checking dependencies or
+polling a bounded inbox. Each trigger creates one isolated execution of the
+same request. Choose it when recurrence is the behavior; use `goal` when the
+worker should keep refining one objective toward completion instead.
+
+**Invocation signature.** The live signature is:
+
+```text
+you run --named @you/loop <to> [--every <value>] [--executor-model <value>] [--executor-provider <value>] [--max-consecutive-failures <number>] [--trigger-at-start <value>]
+```
+
+`<to>` is required and accepts positional, `--to`, or stdin input. `--every`
+accepts a positive duration from `1s` through `168h` and defaults to `1h`.
+`--trigger-at-start` defaults to `true`, so the first execution normally does
+not wait for the first full interval. `--max-consecutive-failures` defaults to
+`0`, which means that failures do not stop scheduling; set a positive bound
+when an unattended loop must fail closed. The executor provider and model are
+optional.
+
+**Worker roles and provider/model overrides.** `loop-trigger` is the scheduler
+role and has no provider/model override. `loop-executor` performs each request
+once with no memory of earlier triggers; `--executor-provider` and
+`--executor-model` configure that role, with omitted values using operator
+defaults. The trigger role preserves the complete request and does not rewrite
+it into a summary.
+
+**Prerequisites and side effects.** A live loop needs a configured provider and
+model for every execution. The Factory Session owns an active controller and
+can therefore be long-running; the one-shot invocation returns the first
+completed scheduled execution, while a durable/continuous session can keep
+the controller available for later triggers. Executions are serialized through
+one executor slot, may inspect or change the selected workspace, and can
+create recordings and provider processes. With `--trigger-at-start false`, a
+caller that is waiting for the first result may wait for the interval. A
+positive consecutive-failure bound is the operator's stop condition.
+
+**Expected output shape.** The primary result is one completed scheduled
+execution, not a list of future results and not the controller's internal
+state. Session events and recordings can show later triggers, skipped runs,
+and failure counts. Human output is the selected execution's readable result;
+structured output can be used to inspect status and event metadata. Model
+prose is not deterministic across executions.
+
+**Worked invocation.**
+
+```bash
+you run --named @you/loop --with-mock-workers --no-record --quiet --every 1h --trigger-at-start true --max-consecutive-failures 1 --executor-provider CODEX --executor-model gpt-5 --to "Check dependency updates"
+```
+
+**Observed output evidence.** The exact command above returned:
+
+```text
+mock worker accepted
+```
+
+The immediate trigger is why this smoke command returns without waiting an
+hour; a live session still follows the configured schedule after that first
+execution.
+
+### `@you/fusion`
+
+**Purpose and suitable use.** Use `@you/fusion` when one worker should create a
+complete first draft and a separate worker should validate, repair, and polish
+that draft into the caller's answer. It is a fixed two-stage refinement flow,
+not a recurring loop, classifier, or fan-out/merge over several independent
+branches.
+
+**Invocation signature.** The live signature is:
+
+```text
+you run --named @you/fusion <to> [--first-effort <value>] [--first-model <value>] [--first-provider <value>] [--result-file <file-path>] [--second-effort <value>] [--second-model <value>] [--second-provider <value>]
+```
+
+`<to>` is required and accepts positional, `--to`, or stdin input.
+`--first-provider`/`--first-model` configure the first pass;
+`--second-provider`/`--second-model` configure the refiner. Both effort flags
+accept `low`, `medium`, or `high` and default to `medium`. `--result-file` is
+an optional file-path output hint.
+
+**Worker roles and provider/model overrides.** `fusion-drafter` is the first
+role and uses the `first-*` provider, model, and effort inputs.
+`fusion-refiner` is the second role and uses the matching `second-*` inputs.
+Provider/model values omitted for either role use operator defaults; the two
+roles can intentionally use different providers or models.
+
+**Prerequisites and side effects.** A live run needs both selected provider
+routes and normally performs two model-backed dispatches in sequence. The
+workers may inspect relevant workspace evidence and change the workspace when
+the request asks for implementation work. The first draft is held as
+intermediate Work until the refiner completes. When `--result-file` is
+supplied, the output contract identifies the refined result as file-oriented
+Markdown content; there is no fixed default output path. Normal runs can write
+recordings, session state, provider artifacts, or workspace changes.
+
+**Expected output shape.** The primary returned result is the second worker's
+refined answer. The first worker's draft and the refiner's internal checking
+are intermediate activity, not a second answer set. Without `--result-file`,
+the result is human-readable text by default; with it, callers can treat the
+refined content as the documented Markdown file-oriented result. Generated
+prose is not byte-stable.
+
+**Worked invocation.**
+
+```bash
+you run --named @you/fusion --with-mock-workers --no-record --quiet --first-provider CODEX --second-provider CODEX --to "Draft a release summary"
+```
+
+**Observed output evidence.** The exact command above returned:
+
+```text
+mock worker accepted
+```
+
+This is the final synthetic refiner result; the first-stage mock dispatch is
+not printed by `--quiet`.
+
+### `@you/classify`
+
+**Purpose and suitable use.** Use `@you/classify` when the same request may be
+small, medium, or large and you want a model to select the execution lane.
+The classifier makes one complexity decision, then exactly one of the three
+lane workers handles the request. It is a routed single result, not a quorum
+or a parallel comparison of all three lanes.
+
+**Invocation signature.** The live signature is:
+
+```text
+you run --named @you/classify <to> [--classifier-model <value>] [--classifier-provider <value>] [--large-model <value>] [--large-provider <value>] [--medium-model <value>] [--medium-provider <value>] [--small-model <value>] [--small-provider <value>]
+```
+
+`<to>` is required and accepts positional, `--to`, or stdin input. The
+classifier and each of the small, medium, and large lanes have optional
+provider and model overrides. Omitted values for any role use operator
+defaults. A provider/model override for one lane does not change the other
+lanes.
+
+**Worker roles and provider/model overrides.** `complexity-classifier` uses
+`--classifier-provider` and `--classifier-model` and must return exactly one of
+the labels `small`, `medium`, or `large`. The selected role is one of
+`small-executor`, `medium-executor`, or `large-executor`, configured by its
+matching `--<lane>-provider` and `--<lane>-model` flags. Only the selected lane
+is dispatched after classification.
+
+**Prerequisites and side effects.** A live run needs a usable classifier route
+and a usable provider/model for whichever lane is selected. The classifier
+adds one model-backed step before the selected executor; an invalid label,
+classifier failure, or selected-lane failure leaves the invocation without a
+primary result. Lane workers can inspect or change the selected workspace
+according to the request, and normal runs can create recordings, session
+state, provider processes, and workspace artifacts. The checked-in mock config
+used below is a documentation smoke fixture: it returns the valid `small`
+label through the classifier protocol and leaves the selected executor on the
+default accepted mock behavior.
+
+**Expected output shape.** The caller receives the selected lane executor's
+final result. The `small`/`medium`/`large` classification is an intermediate
+routing decision, not the primary answer; use structured events or recording
+inspection when the selected label itself matters. Human output is the final
+lane result, and model-generated prose is not byte-stable.
+
+**Worked invocation.**
+
+```bash
+you run --named @you/classify --with-mock-workers ./docs/examples/packaged-classify-mock-workers.json --no-record --quiet --classifier-provider CODEX --classifier-model gpt-5 --small-provider CODEX --small-model gpt-5 --medium-provider CODEX --medium-model gpt-5 --large-provider CODEX --large-model gpt-5 --to "Explain the failing test"
+```
+
+**Observed output evidence.** The exact command above returned:
+
+```text
+mock worker accepted
+```
+
+The fixture's classifier response is `small`; `--quiet` intentionally prints
+only the selected executor's primary result.
+
+### `@you/review`
+
+**Purpose and suitable use.** Use `@you/review` when a request needs a
+candidate produced by one worker and independently checked by another. A
+review rejection sends the Work back to the writer with the rejection
+feedback, so the next pass can revise the candidate. Choose it for
+produce-and-review quality control, not for a one-pass answer or a simple
+parallel opinion poll.
+
+**Invocation signature.** The live signature is:
+
+```text
+you run --named @you/review <to> [--reviewer-model <value>] [--reviewer-provider <value>] [--writer-model <value>] [--writer-provider <value>]
+```
+
+`<to>` is required and accepts positional, `--to`, or stdin input. All four
+provider/model flags are optional. The writer flags configure candidate
+production, and the reviewer flags configure independent checking; omitted
+values use operator defaults.
+
+**Worker roles and provider/model overrides.** `review-work-executor` is the
+writer and uses `--writer-provider`/`--writer-model`.
+`review-work-reviewer` is the reviewer and uses
+`--reviewer-provider`/`--reviewer-model`. The reviewer emits a decision
+envelope rather than becoming the caller's final answer. The roles can use
+different provider/model combinations.
+
+**Prerequisites and side effects.** A live run needs both provider routes. The
+writer may inspect or change the selected workspace when the request concerns
+code or artifacts; the reviewer independently checks the request, candidate,
+workspace evidence, compatibility, and verification. Rejections can cause
+additional provider calls and longer execution. The packaged Factory permits
+up to eight reviewer visits before its failure path; there is no user-facing
+attempt flag in the live signature. Normal runs create session/recording
+activity and can leave the workspace or other artifacts changed by an
+accepted writer pass.
+
+**Expected output shape.** The primary returned result is the complete writer
+candidate from the pass that the reviewer accepts. Reviewer rationale and
+rejected candidates are intermediate feedback, not additional primary results.
+Human output is the approved candidate text; structured events expose the
+review decisions and retry activity. If the reviewer never accepts or a
+provider fails, the invocation returns a terminal failure instead of claiming
+approval. Model prose is not byte-stable.
+
+**Worked invocation.**
+
+```bash
+you run --named @you/review --with-mock-workers --no-record --quiet --reviewer-provider CODEX --reviewer-model gpt-5 --writer-provider CODEX --writer-model gpt-5 --to "Draft the release notes"
+```
+
+**Observed output evidence.** The exact command above returned:
+
+```text
+mock worker accepted
+```
+
+The empty mock configuration accepts the writer and reviewer decision
+envelope, so this smoke run reaches the approved primary-result path without
+calling a live provider.
+
 ## Representative invocations
 
 ```bash
