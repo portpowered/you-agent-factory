@@ -92,6 +92,7 @@ const (
 	ArgumentSourceKindStructured           ArgumentSourceKind = "STRUCTURED"
 	ArgumentSourceKindStdin                ArgumentSourceKind = "STDIN"
 	ArgumentSourceKindDefault              ArgumentSourceKind = "DEFAULT"
+	ArgumentSourceKindFile                 ArgumentSourceKind = "FILE"
 	ArgumentSourceKindCompatibilityText    ArgumentSourceKind = "COMPATIBILITY_TEXT"
 	ArgumentSourceKindCompatibilityContent ArgumentSourceKind = "COMPATIBILITY_CONTENT"
 )
@@ -138,6 +139,7 @@ type NormalizeArgumentsInput struct {
 	NamedArgs            []NamedArgumentInput
 	DirectArgs           []NamedArgumentInput
 	StdinText            *string
+	FileText             *string
 	CompatibilityText    *string
 	CompatibilityContent []ContentPart
 }
@@ -246,10 +248,10 @@ func normalizeCompatibilityArguments(input NormalizeArgumentsInput) (NormalizedA
 		}
 	}
 	if len(input.CompatibilityContent) > 0 {
-		if input.CompatibilityText != nil || len(input.PositionalArgs) > 0 || input.StdinText != nil {
+		if input.CompatibilityText != nil || len(input.PositionalArgs) > 0 || input.StdinText != nil || input.FileText != nil {
 			return NormalizedArguments{}, &ArgumentError{
 				Code:    ArgumentErrorCodeSourceConflict,
-				Message: "compatibility content cannot be combined with positional or stdin input",
+				Message: "compatibility content cannot be combined with positional, stdin, or file input",
 			}
 		}
 		resolved, err := ResolveAPITextInputContent(input.CompatibilityContent)
@@ -260,14 +262,14 @@ func normalizeCompatibilityArguments(input NormalizeArgumentsInput) (NormalizedA
 		return NormalizedArguments{CompatibilityInput: &resolved}, nil
 	}
 
-	if input.CompatibilityText != nil && (len(input.PositionalArgs) > 0 || input.StdinText != nil) {
+	if input.CompatibilityText != nil && (len(input.PositionalArgs) > 0 || input.StdinText != nil || input.FileText != nil) {
 		return NormalizedArguments{}, &ArgumentError{
 			Code:    ArgumentErrorCodeSourceConflict,
-			Message: "compatibility text cannot be combined with positional or stdin input",
+			Message: "compatibility text cannot be combined with positional, stdin, or file input",
 		}
 	}
 
-	sources := TextInputSources{StdinText: input.StdinText}
+	sources := TextInputSources{StdinText: input.StdinText, FileText: input.FileText}
 	if input.CompatibilityText != nil {
 		sources.PositionalText = input.CompatibilityText
 	} else if len(input.PositionalArgs) > 0 {
@@ -311,6 +313,9 @@ func normalizeSignatureArguments(input NormalizeArgumentsInput) (NormalizedArgum
 		unknown:   map[string][]string{},
 	}
 
+	if err := applyFileArgument(index, input.FileText, input.PositionalArgs, input.StdinText, input.NamedArgs, input.DirectArgs, &state); err != nil {
+		return NormalizedArguments{}, err
+	}
 	if err := applyPositionalArguments(index, input.PositionalArgs, &state); err != nil {
 		return NormalizedArguments{}, err
 	}
@@ -341,6 +346,7 @@ type signatureIndex struct {
 	orderedSlots     []int
 	positionalBySlot map[int]string
 	namedByKey       map[string]string
+	fileParameter    string
 	stdinParameter   string
 	namedRest        string
 	unknownPolicy    string
@@ -409,9 +415,51 @@ func buildSignatureIndex(signature *InvocationSignatureConfig) (signatureIndex, 
 				index.namedByKey[trimmed] = name
 			}
 		}
+		if isPreferredFileParameter(parameter) && isFileTextParameter(def) {
+			index.fileParameter = name
+		}
 	}
 	sort.Ints(index.orderedSlots)
+	if index.fileParameter == "" {
+		if len(index.orderedSlots) > 0 {
+			candidate := index.positionalBySlot[index.orderedSlots[0]]
+			if isFileTextParameter(index.parameters[candidate]) {
+				index.fileParameter = candidate
+			}
+		} else if index.stdinParameter != "" && isFileTextParameter(index.parameters[index.stdinParameter]) {
+			index.fileParameter = index.stdinParameter
+		} else {
+			for _, parameter := range signature.Parameters {
+				name := strings.TrimSpace(parameter.Name)
+				if name == "" {
+					continue
+				}
+				if index.parameters[name].required && isFileTextParameter(index.parameters[name]) {
+					index.fileParameter = name
+					break
+				}
+			}
+		}
+	}
 	return index, nil
+}
+
+func isPreferredFileParameter(parameter InvocationParameterConfig) bool {
+	for _, candidate := range append([]string{parameter.Name, parameter.ExternalName}, parameter.Aliases...) {
+		if strings.EqualFold(strings.TrimSpace(candidate), "to") {
+			return true
+		}
+	}
+	return false
+}
+
+func isFileTextParameter(def parameterDefinition) bool {
+	switch strings.TrimSpace(def.typeHint) {
+	case "", typeHintString:
+		return true
+	default:
+		return false
+	}
 }
 
 func parameterDefaults(parameter InvocationParameterConfig) []string {
@@ -471,6 +519,79 @@ func applyPositionalArguments(index signatureIndex, positionalArgs []string, sta
 		}
 	}
 	return nil
+}
+
+func applyFileArgument(
+	index signatureIndex,
+	fileText *string,
+	positionalArgs []string,
+	stdinText *string,
+	namedArgs []NamedArgumentInput,
+	directArgs []NamedArgumentInput,
+	state *normalizationState,
+) error {
+	if fileText == nil {
+		return nil
+	}
+	if len(positionalArgs) > 0 || stdinText != nil {
+		positionalText := ""
+		if len(positionalArgs) > 0 {
+			positionalText = strings.Join(positionalArgs, " ")
+		}
+		_, err := ResolveTextInput(TextInputSources{
+			PositionalText: optionalTextPointer(positionalText, len(positionalArgs) > 0),
+			StdinText:      stdinText,
+			FileText:       fileText,
+		})
+		return err
+	}
+	if _, err := ResolveTextInput(TextInputSources{FileText: fileText}); err != nil {
+		return err
+	}
+
+	parameterName := strings.TrimSpace(index.fileParameter)
+	def, ok := index.parameters[parameterName]
+	if !ok {
+		return &ArgumentError{
+			Code:    ArgumentErrorCodeInvalidActiveSignature,
+			Message: "--to-file requires an invocationSignature primary text parameter",
+		}
+	}
+	if key, found := namedArgumentForParameter(index, namedArgs, parameterName); found {
+		return fileArgumentConflict(key)
+	}
+	if key, found := namedArgumentForParameter(index, directArgs, parameterName); found {
+		return fileArgumentConflict(key)
+	}
+	return addArgumentValues(state.arguments, def, []string{*fileText}, ArgumentSource{
+		Kind: ArgumentSourceKindFile,
+		Name: "--to-file",
+	})
+}
+
+func optionalTextPointer(text string, supplied bool) *string {
+	if !supplied {
+		return nil
+	}
+	return &text
+}
+
+func namedArgumentForParameter(index signatureIndex, arguments []NamedArgumentInput, parameterName string) (string, bool) {
+	for _, argument := range arguments {
+		key := strings.TrimSpace(argument.Key)
+		if index.namedByKey[key] == parameterName {
+			return key, true
+		}
+	}
+	return "", false
+}
+
+func fileArgumentConflict(key string) error {
+	return &InputError{
+		Code:               InputErrorCodeSourceConflict,
+		Message:            fmt.Sprintf("invocation input sources conflict: file_text (--to-file), named_text (--%s)", key),
+		ConflictingSources: []InputSourceLabel{InputSourceFileText, InputSourceNamedText},
+	}
 }
 
 func applyNamedArguments(index signatureIndex, namedArgs []NamedArgumentInput, state *normalizationState) error {

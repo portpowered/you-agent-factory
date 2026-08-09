@@ -49,8 +49,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented Work-owned --to-file preparation with injected file reading, UTF-8/non-empty validation, exact text preservation, stable file/named/positional/stdin source conflicts, signature primary-parameter routing, and pre-dispatch rejection for non-prompt run shapes. Added generated CLI contract wiring and a root.BuildProcess functional regression proving a real 30-line UTF-8 file at a path with spaces reaches one Codex ProviderCommandRunner request byte-for-byte; conflict and unreadable-file cases prove zero dispatch. Focused Work/CLI/wire tests and the lifecycle package pass."
     },
     {
       "id": "wo-c3-run-parity-long-prompt-input-003",

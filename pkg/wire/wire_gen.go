@@ -80,7 +80,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	authoredFactorySourceLoader := provideAuthoredFactorySourceLoader(authoredLayoutReaderFileSystem)
 	factoryConfigFileLoader := provideFactoryConfigFileLoader(authoredFactorySourceLoader)
 	requestFileLoader := provideWorkRequestFileLoader()
-	invocationInputPreparation := work.NewInvocationInputPreparation()
+	submittedFileReader := provideWorkSubmittedFileReader(edges2)
+	invocationInputPreparation := work.NewInvocationInputPreparationWithFileReader(submittedFileReader)
 	loggerBuilder := provideTerminalLoggerBuilder()
 	v5 := provideLiveRecordingTargetPlanner()
 	adapter := provideRecordingsCLIAdapter()
@@ -313,7 +314,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		ResolveHome:                    homeDirectoryResolver,
 		ProviderIdentities:             providerIdentityResolver,
 	}
-	submittedFileReader := provideWorkSubmittedFileReader(edges2)
 	contentStagingService, err := provideWorkContentStagingService(edges2)
 	if err != nil {
 		return nil, err
@@ -691,7 +691,7 @@ var servicesSet = wire4.NewSet(
 	provideRuntimeHostOperation,
 	provideProcessRuntimeFactory, wire.NewLifecyclePlanOperation, provideFactoryVisualizationFactory,
 	provideResponsePresentation,
-	provideWorkContentStagingService, work.NewContentPreparation, work.NewRequestPreparationService, work.NewSingleWorkTargetPreparation, work.NewListRequestPreparation, work.NewFactoryRequestBatchPreparation, work.NewInvocationInputPreparation, provideWorkersMockWorkersConfigFileSystem, workers.NewMockWorkersConfigLoader, provideRuntimeArtifactClock,
+	provideWorkContentStagingService, work.NewContentPreparation, work.NewRequestPreparationService, work.NewSingleWorkTargetPreparation, work.NewListRequestPreparation, work.NewFactoryRequestBatchPreparation, work.NewInvocationInputPreparationWithFileReader, provideWorkersMockWorkersConfigFileSystem, workers.NewMockWorkersConfigLoader, provideRuntimeArtifactClock,
 	provideRuntimeArtifactIDGenerator,
 	provideRuntimeArtifactPathReserver,
 	provideRuntimeArtifactRootResolver,

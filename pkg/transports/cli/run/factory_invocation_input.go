@@ -32,6 +32,8 @@ type InvocationInputSource = runconfig.InvocationInputSource
 const (
 	InvocationInputSourcePositional = runconfig.InvocationInputSourcePositional
 	InvocationInputSourceStdin      = runconfig.InvocationInputSourceStdin
+	InvocationInputSourceFile       = runconfig.InvocationInputSourceFile
+	InvocationInputSourceNamed      = runconfig.InvocationInputSourceNamed
 	InvocationInputSourceWorkFile   = runconfig.InvocationInputSourceWorkFile
 )
 
@@ -109,6 +111,10 @@ func InvocationInputSourceFromWork(source work.InputSourceLabel) InvocationInput
 		return InvocationInputSourcePositional
 	case work.InputSourceStdinText:
 		return InvocationInputSourceStdin
+	case work.InputSourceFileText:
+		return InvocationInputSourceFile
+	case work.InputSourceNamedText:
+		return InvocationInputSourceNamed
 	default:
 		return ""
 	}
@@ -122,6 +128,12 @@ func ambiguousInvocationInputError(inputErr *work.InputError) error {
 			sources = append(sources, InvocationInputSourcePositional)
 		case work.InputSourceStdinText:
 			sources = append(sources, InvocationInputSourceStdin)
+		case work.InputSourceFileText:
+			sources = append(sources, InvocationInputSourceFile)
+		case work.InputSourceNamedText:
+			sources = append(sources, InvocationInputSourceNamed)
+		default:
+			sources = append(sources, InvocationInputSource(label))
 		}
 	}
 	return &AmbiguousInvocationInputError{

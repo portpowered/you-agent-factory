@@ -11106,6 +11106,30 @@
             "since": "1.0.0"
           }
         },
+        "you.run.flag.to-file": {
+          "id": "you.run.flag.to-file",
+          "long": "to-file",
+          "usage": "read the exact UTF-8 primary invocation prompt from a regular file; conflicts with --to, positional input, and supplied stdin",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.run.flag.to-file",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
         "you.run.flag.json": {
           "id": "you.run.flag.json",
           "long": "json",

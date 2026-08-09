@@ -11,8 +11,8 @@ import (
 // Invocation/return-policy typed failures peers can distinguish on the root
 // Service slice (PrepareInvocationInput / ResolvePrimaryResult).
 var (
-	ErrInvalidInvocationInput    = errors.New("invalid invocation input")
-	ErrUnsupportedReturnPolicy   = errors.New("unsupported invocation return policy")
+	ErrInvalidInvocationInput  = errors.New("invalid invocation input")
+	ErrUnsupportedReturnPolicy = errors.New("unsupported invocation return policy")
 )
 
 const (
@@ -28,6 +28,7 @@ const (
 	ArgumentSourceKindStructured           ArgumentSourceKind = "STRUCTURED"
 	ArgumentSourceKindStdin                ArgumentSourceKind = "STDIN"
 	ArgumentSourceKindDefault              ArgumentSourceKind = "DEFAULT"
+	ArgumentSourceKindFile                 ArgumentSourceKind = "FILE"
 	ArgumentSourceKindCompatibilityText    ArgumentSourceKind = "COMPATIBILITY_TEXT"
 	ArgumentSourceKindCompatibilityContent ArgumentSourceKind = "COMPATIBILITY_CONTENT"
 )
@@ -74,6 +75,7 @@ type NormalizeArgumentsInput struct {
 	NamedArgs            []NamedArgumentInput
 	DirectArgs           []NamedArgumentInput
 	StdinText            *string
+	FileText             *string
 	CompatibilityText    *string
 	CompatibilityContent []WorkContentPart
 }
@@ -97,6 +99,7 @@ type InvocationInputPreparationRequest struct {
 	Arguments            []string
 	Signature            *InvocationSignatureConfig
 	StdinText            *string
+	FilePath             *string
 	DirectArgs           []NamedArgumentInput
 	CompatibilityContent []WorkContentPart
 }
@@ -311,17 +314,35 @@ func ClassifyFailedInvocation(
 	return primaryResultErrorFromInternal(result), true
 }
 
-func NewInvocationInputPreparation() InvocationInputPreparation {
-	return invocationInputPreparationAdapter{}
+func NewInvocationInputPreparation(readers ...SubmittedFileReader) InvocationInputPreparation {
+	var readFile SubmittedFileReader
+	if len(readers) > 0 {
+		readFile = readers[0]
+	}
+	return newInvocationInputPreparation(readFile)
 }
 
-type invocationInputPreparationAdapter struct{}
+// NewInvocationInputPreparationWithFileReader constructs the injected
+// Work-owned input policy used by production transports.
+func NewInvocationInputPreparationWithFileReader(readFile SubmittedFileReader) InvocationInputPreparation {
+	return newInvocationInputPreparation(readFile)
+}
 
-func (invocationInputPreparationAdapter) PrepareInvocationInput(
+func newInvocationInputPreparation(readFile SubmittedFileReader) InvocationInputPreparation {
+	return invocationInputPreparationAdapter{readFile: readFile}
+}
+
+type invocationInputPreparationAdapter struct {
+	readFile SubmittedFileReader
+}
+
+func (adapter invocationInputPreparationAdapter) PrepareInvocationInput(
 	ctx context.Context,
 	request InvocationInputPreparationRequest,
 ) (PreparedInvocationInput, error) {
-	prepared, err := invocationreturnpolicy.NewInvocationInputPreparation().PrepareInvocationInput(
+	prepared, err := invocationreturnpolicy.NewInvocationInputPreparation(
+		invocationreturnpolicy.InvocationInputFileReader(adapter.readFile),
+	).PrepareInvocationInput(
 		ctx,
 		invocationInputPreparationRequestToInternal(request),
 	)

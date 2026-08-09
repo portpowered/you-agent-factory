@@ -25,6 +25,8 @@ type InvocationInputSource string
 const (
 	InvocationInputSourcePositional InvocationInputSource = "positional prompt"
 	InvocationInputSourceStdin      InvocationInputSource = "stdin"
+	InvocationInputSourceFile       InvocationInputSource = "file prompt"
+	InvocationInputSourceNamed      InvocationInputSource = "named prompt"
 	InvocationInputSourceWorkFile   InvocationInputSource = "work file"
 )
 
@@ -42,6 +44,8 @@ type Config struct {
 
 	InvocationPositionalText      *string
 	InvocationStdinText           *string
+	InvocationFilePath            string
+	InvocationFileExplicit        bool
 	InvocationNormalizedArguments *work.NormalizedArguments
 	PreparedInvocationInput       *work.PreparedInvocationInput
 	RunnerID                      string

@@ -195,7 +195,7 @@ func (s *applicationService) PrepareInvocationInput(
 	ctx context.Context,
 	request work.InvocationInputPreparationRequest,
 ) (work.PreparedInvocationInput, error) {
-	prepared, err := work.NewInvocationInputPreparation().PrepareInvocationInput(ctx, request)
+	prepared, err := work.NewInvocationInputPreparation(s.readSubmittedFile).PrepareInvocationInput(ctx, request)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return work.PreparedInvocationInput{}, err

@@ -44,6 +44,7 @@ Flags:
       --record string                                                                path to write a replay artifact for this run; replay artifacts are sensitive, and default live runs record automatically unless --no-record is used
       --replay string                                                                path to replay an existing sensitive replay artifact
       --skip-permissions                                                             request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration
+      --to-file string                                                               read the exact UTF-8 primary invocation prompt from a regular file; conflicts with --to, positional input, and supplied stdin
       --with-mock-workers string[="__agent_factory_default_mock_workers_config__"]   enable mock-worker execution with an optional mock-workers JSON config path
       --with-server                                                                  serve the Current Factory API for the lifetime of this run without opening a browser
       --with-site                                                                    serve the embedded dashboard and open it once after listener readiness

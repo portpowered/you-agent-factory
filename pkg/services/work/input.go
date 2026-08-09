@@ -13,6 +13,12 @@ const (
 
 	// InputSourceStdinText identifies text supplied through stdin.
 	InputSourceStdinText InputSourceLabel = "stdin_text"
+
+	// InputSourceFileText identifies text loaded from a --to-file path.
+	InputSourceFileText InputSourceLabel = "file_text"
+
+	// InputSourceNamedText identifies a signature-defined named prompt input.
+	InputSourceNamedText InputSourceLabel = "named_text"
 )
 
 // InputErrorCode is the stable machine-readable failure code for invocation
@@ -26,6 +32,9 @@ const (
 
 	// InputErrorCodeEmpty reports that the selected input source had no text.
 	InputErrorCodeEmpty InputErrorCode = "INVOCATION_INPUT_EMPTY"
+
+	// InputErrorCodeInvalidUTF8 reports that a file-backed input was not UTF-8.
+	InputErrorCodeInvalidUTF8 InputErrorCode = "INVOCATION_INPUT_INVALID_UTF8"
 )
 
 // TextInputSources carries text-first input observed by a transport adapter.
@@ -34,6 +43,7 @@ const (
 type TextInputSources struct {
 	PositionalText *string
 	StdinText      *string
+	FileText       *string
 }
 
 // ResolvedInput is the normalized text-first invocation input passed from
@@ -97,6 +107,17 @@ func ResolveTextInput(sources TextInputSources) (ResolvedInput, error) {
 		return resolvedTextInput(InputSourcePositionalText, *sources.PositionalText), nil
 	}
 
+	if sources.FileText != nil {
+		if isLogicallyEmptyText(*sources.FileText) {
+			return ResolvedInput{}, &InputError{
+				Code:    InputErrorCodeEmpty,
+				Message: "invocation --to-file input is empty",
+				Source:  InputSourceFileText,
+			}
+		}
+		return resolvedTextInput(InputSourceFileText, *sources.FileText), nil
+	}
+
 	return ResolvedInput{}, &InputError{
 		Code:    InputErrorCodeEmpty,
 		Message: "invocation input is empty",
@@ -110,6 +131,9 @@ func suppliedTextSources(sources TextInputSources) []InputSourceLabel {
 	}
 	if sources.StdinText != nil {
 		selected = append(selected, InputSourceStdinText)
+	}
+	if sources.FileText != nil {
+		selected = append(selected, InputSourceFileText)
 	}
 	return selected
 }
