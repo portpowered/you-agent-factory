@@ -26,6 +26,7 @@ concept owners below when you need the complete customer-facing contract.
 | `authoring-factories` | Practical factory authoring workflow, runnable examples, and cross-links to run-mode guides | [Author factories](authoring-factories.md) |
 | `run` | Supported local, one-shot, batch, continuous, and mock-worker run shapes | [Run](run.md) |
 | `config` | Operator initialization plus Factory validation, transformation, and minimum authoring contract | [Config](config.md) and [Author factories](authoring-factories.md) |
+| `factory-validation` | Required pre-run static gate, current validation checks, exact source commands, and validation limits | [Factory validation](factory-validation.md) |
 | `mock-workers` | `--with-mock-workers` and the `mockWorkers` JSON contract | [Mock workers](mock-workers.md) |
 | `record-replay` | Default recording, `--record`, `--replay`, and `--no-record` | [Record and replay](record-replay.md) |
 | `work` | Submitted work: session-scoped work routes, tags, and batch cross-links | [Submitted work](work.md) |
@@ -139,6 +140,7 @@ Use these canonical concept owners when you need the current contract.
 
 - [Package docs index](../README.md)
 - [Config](config.md)
+- [Factory validation](factory-validation.md)
 - [Sessions](sessions.md)
 - [Submitted work](work.md)
 - [Workstations](workstations.md)
