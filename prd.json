@@ -32,7 +32,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented retry-safe Work-watch reduction for repeated MODEL_REQUEST IDs with refreshed canonical data, preserving strict conflicts for Work events and monotonic ephemeral cursors. Added finite, --follow, exact replay, reconnect, NDJSON, and invalid-transition behavioral coverage. Review follow-up now uses the observed later-sequence/later-event-time retry shape with realistic dispatch context and an intervening model response, and proves reconnect from the later canonical cursor. Removed the unrelated manifest/inventory meta-test during review follow-up. The focused Work/watch/process command and make verify-fast pass."
+      "notes": "Implemented retry-safe Work-watch reduction for repeated MODEL_REQUEST IDs with refreshed canonical data, preserving strict conflicts for Work events and monotonic ephemeral cursors. Added finite, --follow, exact replay, reconnect, NDJSON, and invalid-transition behavioral coverage. Review follow-up now uses the observed later-sequence/later-event-time retry shape with realistic dispatch context and an intervening model response, and proves reconnect from the later canonical cursor. Corrective follow-up now accepts changed MODEL_REQUEST data only at a strictly later canonical position, updates the remembered retry version, and rejects same-sequence or backward conflicting reuse. Removed the unrelated manifest/inventory meta-test during review follow-up. The focused Work/watch/process command and make verify-fast pass."
     },
     {
       "id": "wo-c2-fix-watch-event-id-conflict-002",

@@ -54,6 +54,32 @@ func TestWatchReducerAcceptsRefreshedModelRequestRetryWithoutProjectingWork(t *t
 	}
 }
 
+func TestWatchReducerRejectsNonIncreasingConflictingModelRequestRetry(t *testing.T) {
+	reducer := newWatchReducer("session-retry-conflict")
+	initial := watchModelRequestEvent(t, watchRetryModelRequestEventID, 4, "gpt-5-codex")
+	if _, _, _, err := reducer.Accept(initial); err != nil {
+		t.Fatalf("Accept(initial) error = %v", err)
+	}
+
+	for _, test := range []struct {
+		name     string
+		sequence int
+	}{
+		{name: "same sequence", sequence: 4},
+		{name: "backward sequence", sequence: 3},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			conflicting := watchModelRequestEvent(t, watchRetryModelRequestEventID, test.sequence, "gpt-5-codex-mini")
+			if _, _, _, err := reducer.Accept(conflicting); err == nil || !strings.Contains(err.Error(), "non-increasing canonical sequence") {
+				t.Fatalf("Accept(conflicting retry) error = %v, want non-increasing sequence failure", err)
+			}
+			if cursor := reducer.Cursor(); cursor == nil || cursor.EventID != initial.Id || cursor.Sequence != initial.Context.Sequence {
+				t.Fatalf("cursor after rejected retry = %#v, want initial model request at sequence %d", cursor, initial.Context.Sequence)
+			}
+		})
+	}
+}
+
 func TestWatchFiniteStreamIgnoresRefreshedModelRequestRetry(t *testing.T) {
 	metadata, request, firstTransition := watchRetrySetup(t)
 	retryInitial := watchModelRequestEvent(t, watchRetryModelRequestEventID, 4, "gpt-5-codex")
