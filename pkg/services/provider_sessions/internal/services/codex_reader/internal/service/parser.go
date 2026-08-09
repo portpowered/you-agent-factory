@@ -166,15 +166,28 @@ func (r *codexInspectionReader) Read(p []byte) (int, error) {
 		return 0, nil
 	}
 	remaining := maxCodexJSONLBytesPerInspection - r.budget.bytesRead
-	if remaining <= 0 {
-		return 0, errCodexInspectionByteLimit
+	if remaining > 0 {
+		if int64(len(p)) > remaining {
+			p = p[:remaining]
+		}
+		n, err := r.reader.Read(p)
+		if n > 0 {
+			r.budget.bytesRead += int64(n)
+		}
+		return n, err
 	}
-	if int64(len(p)) > remaining {
-		p = p[:remaining]
-	}
-	n, err := r.reader.Read(p)
+
+	// The configured cap is inclusive. Probe one byte from the source so an
+	// exact-cap rollout can report EOF successfully, while cap+1 remains a
+	// resource-limit failure. A non-progressing reader cannot establish EOF at
+	// the boundary, so fail closed rather than retrying without a bound.
+	n, err := r.reader.Read(p[:1])
 	if n > 0 {
 		r.budget.bytesRead += int64(n)
+		return n, errCodexInspectionByteLimit
+	}
+	if err == nil {
+		return 0, errCodexInspectionByteLimit
 	}
 	return n, err
 }

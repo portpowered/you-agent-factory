@@ -116,6 +116,48 @@ func TestParseDetailsEnforcesLineAndByteLimitsDeterministically(t *testing.T) {
 	})
 }
 
+func TestParseDetailsHonorsInclusiveByteLimitBoundary(t *testing.T) {
+	content := `{"type":"event_msg","payload":{"type":"agent_message","message":"complete"}}` + "\n"
+	limit := int64(len(content))
+	sessionID := "exact-cap-session"
+
+	t.Run("exact cap succeeds", func(t *testing.T) {
+		restore := overrideCodexInspectionLimits(100, limit, 10, 10)
+		t.Cleanup(restore)
+
+		parsed, err := parseCodexSessionDetailsForSession(context.Background(), strings.NewReader(content), sessionID)
+		if err != nil {
+			t.Fatalf("parseCodexSessionDetailsForSession error = %v, want exact-cap success", err)
+		}
+		if parsed.Summary.EventCount != 1 || len(parsed.Transcript) != 1 {
+			t.Fatalf("parsed = %#v, want the exact-cap completion record retained", parsed)
+		}
+	})
+
+	t.Run("cap plus one fails with bounded context", func(t *testing.T) {
+		restore := overrideCodexInspectionLimits(100, limit, 10, 10)
+		t.Cleanup(restore)
+
+		parsed, err := parseCodexSessionDetailsForSession(context.Background(), strings.NewReader(content+"x"), sessionID)
+		if !errors.Is(err, providersessions.ErrResourceLimitExceeded) {
+			t.Fatalf("parseCodexSessionDetailsForSession error = %v, want resource-limit cause", err)
+		}
+		for _, want := range []string{
+			sessionID,
+			"byte",
+			fmt.Sprintf("configured %d", limit),
+			fmt.Sprintf("observed %d", limit+1),
+		} {
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("error = %v, want %q", err, want)
+			}
+		}
+		if parsed.Summary.EventCount != 1 {
+			t.Fatalf("parsed summary = %#v, want the valid record before cap+1 retained", parsed.Summary)
+		}
+	})
+}
+
 func TestParseDetailsEnforcesTranscriptAndDiagnosticLimits(t *testing.T) {
 	restore := overrideCodexInspectionLimits(100, 1<<20, 1, 1)
 	t.Cleanup(restore)
