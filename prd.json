@@ -32,7 +32,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Generalized watch ordering so every currently defined non-projecting Factory event family uses the same ordered-enrichment policy: exact replay is idempotent, refreshed same-ID data is accepted only at a strictly later canonical sequence, and same/backward conflicting reuse is rejected without moving the cursor. Added reducer coverage for the complete current non-projecting event vocabulary, including the live-shaped model-response ID factory-event/model-response/2cf2a099-909b-4446-8e8d-1453054e093c/model-request/1, plus finite and --follow model-response retry streams. Focused regression command passes."
+      "notes": "Generalized watch ordering so every currently defined non-projecting Factory event family uses the same ordered-enrichment policy: exact replay is idempotent, refreshed same-ID data is accepted only at a strictly later canonical sequence, and same/backward conflicting reuse is rejected without moving the cursor. Added reducer coverage for the complete current non-projecting event vocabulary, including the live-shaped model-response ID factory-event/model-response/2cf2a099-909b-4446-8e8d-1453054e093c/model-request/1, plus finite and --follow model-response retry streams. The focused regression command and make verify-fast pass."
     },
     {
       "id": "wo-c2-fix2-watch-model-response-id-002",
