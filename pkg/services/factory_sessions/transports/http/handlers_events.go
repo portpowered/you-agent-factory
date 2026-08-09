@@ -22,7 +22,7 @@ const (
 	sessionEventStreamLogicalSessionKeyHeader = "X-Factory-Session-Logical-Session-Key-Id"
 	sessionEventStreamFactorySessionHeader    = "X-Factory-Session-Factory-Session-Id"
 	sessionEventStreamGenerationHeader        = "X-Factory-Session-Stream-Generation-Id"
-	sessionEventStreamRetainedCountHeader     = "X-Factory-Session-Retained-Event-Count"
+	sessionEventStreamRetainedCountHeader     = factorysessionexecution.SessionEventStreamRetainedCountHeader
 )
 
 const (

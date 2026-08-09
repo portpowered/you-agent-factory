@@ -16,6 +16,12 @@ func WorkCollectionPath(sessionID string) string {
 	return fmt.Sprintf("/factory-sessions/%s/work", escapedSessionID(sessionID))
 }
 
+// FactoryEventsPath returns the canonical Factory Event stream route for one
+// factory session.
+func FactoryEventsPath(sessionID string) string {
+	return fmt.Sprintf("/factory-sessions/%s/events", escapedSessionID(sessionID))
+}
+
 // WorkItemPath returns the route for one work item in a factory session.
 func WorkItemPath(sessionID, workID string) string {
 	return fmt.Sprintf("%s/%s", WorkCollectionPath(sessionID), url.PathEscape(workID))

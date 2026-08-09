@@ -18,8 +18,8 @@ func TestNewWorkFamilyCommandBuildsContractedPaths(t *testing.T) {
 	if work.Name() != "work" {
 		t.Fatalf("work name = %q, want work", work.Name())
 	}
-	if len(work.Commands()) != 4 {
-		t.Fatalf("work child count = %d, want 4 runnable leaves", len(work.Commands()))
+	if len(work.Commands()) != 5 {
+		t.Fatalf("work child count = %d, want 5 runnable leaves", len(work.Commands()))
 	}
 	if work.Runnable() {
 		t.Fatal("you work must remain non-runnable")
@@ -30,6 +30,7 @@ func TestNewWorkFamilyCommandBuildsContractedPaths(t *testing.T) {
 
 	for _, path := range []string{
 		"work list",
+		"work watch",
 		"work show",
 		"work move",
 		"work visualize",
@@ -109,6 +110,7 @@ func TestNewWorkFamilyCommandRegistersContractedFlagsAndArgs(t *testing.T) {
 	work, _ := mustWorkFamilyTree(t)
 	assertWorkShowContractedFlags(t, work)
 	assertWorkListContractedFlags(t, work)
+	assertWorkWatchContractedFlags(t, work)
 	assertWorkVisualizeContractedFlags(t, work)
 }
 
@@ -166,6 +168,7 @@ func TestNewWorkFamilyCommandRegistersEveryManifestLocalFlag(t *testing.T) {
 		path      string
 	}{
 		{commandID: "you.work.list", path: "work list"},
+		{commandID: "you.work.watch", path: "work watch"},
 		{commandID: "you.work.show", path: "work show"},
 		{commandID: "you.work.move", path: "work move"},
 		{commandID: "you.work.visualize", path: "work visualize"},
@@ -249,6 +252,25 @@ func assertWorkVisualizeContractedFlags(t *testing.T, work *cobra.Command) {
 	}
 }
 
+func assertWorkWatchContractedFlags(t *testing.T, work *cobra.Command) {
+	t.Helper()
+	watch, err := findCommandByPath(work, "work watch")
+	if err != nil {
+		t.Fatalf("FindCommandByPath(work watch) error = %v", err)
+	}
+	for _, flagName := range []string{"session", "follow"} {
+		if watch.Flags().Lookup(flagName) == nil {
+			t.Fatalf("work watch missing local flag %q", flagName)
+		}
+	}
+	if watch.Args == nil {
+		t.Fatal("work watch must reject positional arguments")
+	}
+	if err := watch.Args(watch, []string{"unexpected"}); err == nil {
+		t.Fatal("work watch accepted an unexpected positional argument")
+	}
+}
+
 func TestNewWorkFamilyComponentsReturnsDetachedCommands(t *testing.T) {
 	registry, err := commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
 		ListRunE:      noopRunE,
@@ -264,10 +286,10 @@ func TestNewWorkFamilyComponentsReturnsDetachedCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWorkFamilyComponents() error = %v", err)
 	}
-	if components.Work == nil || components.List == nil || components.Show == nil || components.Move == nil || components.Visualize == nil {
-		t.Fatalf("components = %#v, want detached work/list/show/move/visualize commands", components)
+	if components.Work == nil || components.List == nil || components.Watch == nil || components.Show == nil || components.Move == nil || components.Visualize == nil {
+		t.Fatalf("components = %#v, want detached work/list/watch/show/move/visualize commands", components)
 	}
-	if components.List.Parent() != nil || components.Show.Parent() != nil || components.Move.Parent() != nil || components.Visualize.Parent() != nil {
+	if components.List.Parent() != nil || components.Watch.Parent() != nil || components.Show.Parent() != nil || components.Move.Parent() != nil || components.Visualize.Parent() != nil {
 		t.Fatal("detached leaf components must not be attached before production wiring")
 	}
 }
@@ -369,6 +391,8 @@ func testWorkBindings() climanifestcobra.WorkFamilyBindings {
 		"you.work.list.flag.next-token":     testScalarTarget(""),
 		"you.work.list.flag.counts":         testScalarTarget(false),
 		"you.work.list.flag.session":        testScalarTarget(""),
+		"you.work.watch.flag.follow":        testScalarTarget(false),
+		"you.work.watch.flag.session":       testScalarTarget(""),
 		"you.work.show.flag.session":        testScalarTarget(""),
 		"you.work.move.flag.session":        testScalarTarget(""),
 		"you.work.move.flag.request-id":     testScalarTarget(""),
@@ -382,6 +406,8 @@ func workPathForID(commandID string) string {
 	switch commandID {
 	case "you.work.list":
 		return "work list"
+	case "you.work.watch":
+		return "work watch"
 	case "you.work.show":
 		return "work show"
 	case "you.work.move":
@@ -424,11 +450,12 @@ func TestNewResolvedWorkCommandTreeBuildsOnlyGeneratedWorkFamily(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Find(work) error = %v", err)
 	}
-	if len(work.Commands()) != 4 {
-		t.Fatalf("work children=%d, want 4", len(work.Commands()))
+	if len(work.Commands()) != 5 {
+		t.Fatalf("work children=%d, want 5", len(work.Commands()))
 	}
 	for _, path := range [][]string{
 		{"work", "list"},
+		{"work", "watch"},
 		{"work", "show"},
 		{"work", "move"},
 		{"work", "visualize"},
@@ -595,9 +622,9 @@ func TestNewResolvedWorkCommandReturnsDetachedSubtree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if work.Name() != "work" || work.Parent() != nil || len(work.Commands()) != 4 {
+	if work.Name() != "work" || work.Parent() != nil || len(work.Commands()) != 5 {
 		t.Fatalf(
-			"detached work = name %q parent %v children %d",
+			"detached work = name %q parent %v children %d, want five leaves",
 			work.Name(),
 			work.Parent(),
 			len(work.Commands()),
@@ -629,7 +656,7 @@ func noopResolvedWorkHandlers() commandregistry.ResolvedWorkHandlers {
 		return nil
 	}
 	return commandregistry.ResolvedWorkHandlers{
-		List: noop, Show: noop, Move: noop, Visualize: noop,
+		List: noop, Watch: noop, Show: noop, Move: noop, Visualize: noop,
 	}
 }
 

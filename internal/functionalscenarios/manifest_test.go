@@ -26,6 +26,9 @@ func TestBuildReviewedManifestPublishesTruthfulCoverageAndSSEPolicy(t *testing.T
 	if got := byID["cli/you.work.move"]; got.Status != StatusCovered || got.Lane != LaneLong || len(got.Evidence) != 1 {
 		t.Fatalf("covered CLI scenario = %#v", got)
 	}
+	if got := byID["cli/you.work.watch"]; got.Status != StatusCovered || got.Lane != LaneLong || len(got.Evidence) != 1 {
+		t.Fatalf("covered Work watch CLI scenario = %#v", got)
+	}
 	if got := byID["cli/you.session.dispatches"]; got.Status != StatusMissing || len(got.Evidence) != 0 {
 		t.Fatalf("CLI dispatches scenario = %#v, want truthful missing status", got)
 	}

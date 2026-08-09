@@ -113,6 +113,8 @@ func applyReviewedEvidence(scenario *Scenario) {
 		markCovered(scenario, LaneShort, "tests/release/release_smoke_test.go::TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN", InterfaceCLI)
 	case "cli/you.run":
 		markCovered(scenario, LaneShort, "tests/functional/transport/cli/commands/run_wiring_test.go::TestCLIRunFactoryByPath", InterfaceCLI)
+	case "cli/you.serve.acp":
+		markCovered(scenario, LaneShort, "tests/functional/transport/acp/stdio/cli_serve_acp_prompt_test.go::TestServeACP_RootBuildProcessCompletesOneFactoryPrompt", InterfaceCLI)
 	case "cli/you.submit.batch":
 		scenario.Status = StatusCovered
 		scenario.Lane = LaneLong
@@ -123,6 +125,10 @@ func applyReviewedEvidence(scenario *Scenario) {
 		}
 	case "cli/you.work.move":
 		markCovered(scenario, LaneLong, "tests/functional/transport/cli/commands/work_wiring_test.go::TestCLIWorkMoveChangesState", InterfaceCLI)
+	case "cli/you.work.watch":
+		markCovered(scenario, LaneLong, "tests/functional/work/watch/watch_test.go::TestWorkWatchFollowsStateTransitionsUntilTerminal", InterfaceCLI)
+	case "cli/you.workers.acp.add", "cli/you.workers.acp.delete", "cli/you.workers.list":
+		markCovered(scenario, LaneShort, "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddDeleteAndUnifiedListOneSettingsBackedCatalogEntry", InterfaceCLI)
 	case "rest/submitWorkBySessionId", "rest/listWorkBySessionId", "rest/getStatusBySessionId":
 		markCovered(scenario, LaneLong, "tests/functional/transport/http/server/generated_client_test.go::TestGeneratedClientAndServerSchemaStayAligned", InterfaceREST)
 	case "rest/upsertWorkRequestBySessionId":
