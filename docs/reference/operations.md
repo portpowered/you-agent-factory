@@ -103,6 +103,103 @@ returns the same exit-1 diagnostic rather than reporting success. Use the
 continuous server shape when an operator may need to submit recovery Work
 while the process remains alive.
 
+## Bound retry loops with an explicit route
+
+`VISIT_COUNT` is an inclusive threshold. A guard with `"maxVisits": 3` becomes
+eligible when the watched workstation's visit count is greater than or equal to
+(`>=`) `3`; it is not limited to counts strictly greater than `3`.
+
+For example, if rejected review Work returns to `story:init`, a loop breaker
+watching `review-story` with `maxVisits: 3` sees this sequence:
+
+1. Visits `1` and `2` are below the threshold, so the breaker remains disabled
+   and `review-story` may receive the Work again.
+2. Visit `3` satisfies the guard. When that rejection returns the Work to
+   `story:init`, the breaker is eligible on the same Work history.
+3. The breaker moves the Work to an explicit failed state instead of allowing
+   another review pass.
+
+Use a guarded `LOGICAL_MOVE` to make that route explicit:
+
+```json
+{
+  "name": "review-loop-breaker",
+  "type": "LOGICAL_MOVE",
+  "inputs": [{ "workType": "story", "state": "init" }],
+  "outputs": [{ "workType": "story", "state": "failed" }],
+  "guards": [
+    {
+      "type": "VISIT_COUNT",
+      "workstation": "review-story",
+      "maxVisits": 3
+    }
+  ]
+}
+```
+
+A `VISIT_COUNT` guard on the normal worker workstation only gates that
+workstation; it does not create a failed or terminal destination. Pair the
+guard with a `LOGICAL_MOVE` whose input is the loop's return state and whose
+output is the deliberate failed or terminal state. This is the loop-breaker
+pattern. Do not put a visit guard only on the worker path and assume it will
+stop and classify the Work for you.
+
+## Bound shared resources before dispatch
+
+A top-level resource pool is a finite capacity boundary. A workstation
+requirement is checked when its dispatch is eligible: the dispatch acquires
+the requested number of available units, holds them while it runs, and returns
+them when the dispatch ends, including failure or timeout. With a pool of
+capacity `2` and a workstation requirement of `1`, at most two matching
+dispatches can hold the pool at once. Work that is waiting for an enabled
+transition but cannot acquire a unit remains queued; queued Work does not
+reserve future capacity.
+
+The normal shape is a named pool plus a requirement on the stage that should
+be throttled:
+
+```json
+{
+  "resources": [{ "name": "pipeline-slot", "capacity": 2 }],
+  "workstations": [
+    {
+      "name": "execute-story",
+      "worker": "executor",
+      "inputs": [{ "workType": "story", "state": "init" }],
+      "outputs": [{ "workType": "story", "state": "complete" }],
+      "resources": [{ "name": "pipeline-slot", "capacity": 1 }]
+    }
+  ]
+}
+```
+
+### Avoid priority inversion between stages
+
+Sharing one small pool across stages can produce a priority inversion. A
+downstream stage (or a downstream Work item from another trace) can already be
+eligible and acquire the only `pipeline-slot` while upstream Work needed to
+unlock another path is queued. The downstream dispatch then holds the slot,
+delaying the upstream stage that the operator expected to make progress.
+
+The runtime has deterministic internal candidate ordering, but the resource
+contract does not provide an author-controlled stage priority, reservation, or
+fairness guarantee that makes upstream Work win this race. Do not rely on Work
+names, submission order, or an assumed scheduler priority to reserve a shared
+unit for an upstream stage.
+
+Mitigate the hazard in the factory design:
+
+- Give stages that must make independent progress separate pools, such as
+  `upstream-slot` and `downstream-slot`, and size each pool for its stage's
+  concurrency budget.
+- If a single external quota must remain globally bounded, reserve capacity in
+  the topology instead: make upstream acquire a dedicated reservation before
+  creating or advancing downstream Work, or gate downstream routing until the
+  upstream stage reaches a safe state.
+- Treat a zero-available pool plus queued upstream Work as a scheduling hazard,
+  not proof that the upstream Work is invalid. Revisit which stages share the
+  pool and which stage is allowed to hold it for the longest time.
+
 ## Recover after a process restart
 
 The live Factory Session queue is process-local and in memory. Restarting the
@@ -138,6 +235,10 @@ promise that every provider dispatch can be resumed automatically.
 
 - `you docs run` — supported run shapes, server/site lifecycles, output, and
   exit behavior
+- `you docs guards` — `VISIT_COUNT` attachment and guarded `LOGICAL_MOVE`
+  loop-breaker topology
+- `you docs resources` — pool declarations, requirements, and capacity rules
+- `you docs workstations` — stage routing and workstation authoring fields
 - `you docs sessions` — live Factory Session discovery and lifecycle controls
 - `you docs work` — Work submission, listing, showing, and transition watches
 - `you docs record-replay` — recording and replay artifact boundaries

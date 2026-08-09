@@ -52,8 +52,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Expanded docs/reference/operations.md with inclusive VISIT_COUNT semantics and a current maxVisits: 3 sequence, the guarded LOGICAL_MOVE loop-breaker pattern, lease-style resource acquisition/release, queued Work non-reservation, and the downstream-before-upstream priority-inversion hazard with stage-specific-pool/topology mitigations. The rebuilt bin/you.exe served docs operations, guards, resources, and workstations with exit status 0; operations output included the new markers. Focused scheduler, visit-count, guard, resource-mapping, and functional guard tests passed; make docs-reference-smoke and make verify-fast passed (including typecheck and short UI/Go suites)."
     },
     {
       "id": "wo-d5-operations-page-003",
