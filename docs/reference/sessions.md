@@ -14,6 +14,9 @@ start, inspect, and recover—use `you docs javascript-workflows`. This page own
 general Factory Session discovery, lifecycle controls, routing, and runtime
 inspection shared by every orchestrator kind.
 
+For the canonical real-pipeline lifetime and process-restart recovery runbook,
+use `you docs operations`.
+
 Each live session owns its own runtime state. The service coordinates and
 routes requests between sessions, but runtime state such as loaded factory,
 event history, current work, and relative execution-path resolution is scoped

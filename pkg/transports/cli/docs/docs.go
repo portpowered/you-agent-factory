@@ -20,10 +20,12 @@ const (
 	TopicAuthoringFactories  Topic = "authoring-factories"
 	TopicRun                 Topic = "run"
 	TopicConfig              Topic = "config"
+	TopicFactoryValidation   Topic = "factory-validation"
 	TopicMockWorkers         Topic = "mock-workers"
 	TopicRecordReplay        Topic = "record-replay"
 	TopicGuards              Topic = "guards"
 	TopicRelationships       Topic = "relationships"
+	TopicOperations          Topic = "operations"
 	TopicWork                Topic = "work"
 	TopicSessions            Topic = "sessions"
 	TopicWorkstations        Topic = "workstations"
@@ -50,10 +52,12 @@ const (
 	referenceAuthoringFactoriesPath  = "authoring-factories.md"
 	referenceRunPath                 = "run.md"
 	referenceConfigPath              = "config.md"
+	referenceFactoryValidationPath   = "factory-validation.md"
 	referenceMockWorkersPath         = "mock-workers.md"
 	referenceRecordReplayPath        = "record-replay.md"
 	referenceGuardsPath              = "guards.md"
 	referenceRelationshipsPath       = "relationships.md"
+	referenceOperationsPath          = "operations.md"
 	referenceWorkPath                = "work.md"
 	referenceSessionsPath            = "sessions.md"
 	referenceWorkstationsPath        = "workstations.md"
@@ -82,10 +86,12 @@ var topicDocuments = []topicDocument{
 	{topic: TopicAuthoringFactories, description: "Practical factory authoring workflow, runnable examples, mock workers, and replay.", path: referenceAuthoringFactoriesPath, displayOrder: 10},
 	{topic: TopicRun, description: "Supported local, one-shot, batch, continuous, and mock-worker run shapes.", path: referenceRunPath, displayOrder: 15},
 	{topic: TopicConfig, description: "Operator initialization and Factory validation, flattening, expansion, and minimum authoring contract.", path: referenceConfigPath, displayOrder: 20},
+	{topic: TopicFactoryValidation, description: "Pre-run static Factory validation gate, supported checks, file and directory commands, and validation limits.", path: referenceFactoryValidationPath, displayOrder: 22},
 	{topic: TopicMockWorkers, description: "Mock-worker runs, JSON selection contract, and deterministic accept, reject, and script outcomes.", path: referenceMockWorkersPath, displayOrder: 25},
 	{topic: TopicRecordReplay, description: "Record and replay run modes, artifact paths, sensitivity, and incompatible flag combinations.", path: referenceRecordReplayPath, displayOrder: 26},
 	{topic: TopicGuards, description: "Workstation, input, and factory guards, guarded LOGICAL_MOVE loop breakers, and guard attachment levels.", path: referenceGuardsPath, displayOrder: 27},
 	{topic: TopicRelationships, description: "Batch DEPENDS_ON and PARENT_CHILD relations, runtime SPAWNED_BY lineage, and parent-aware guard linkage.", path: referenceRelationshipsPath, displayOrder: 28},
+	{topic: TopicOperations, description: "Real-pipeline lifetime, finite-drain classification, and same-name restart recovery.", path: referenceOperationsPath, displayOrder: 29},
 	{topic: TopicWork, description: "Submitted work: session-scoped work routes, tags, batch cross-links, and submission contracts.", path: referenceWorkPath, displayOrder: 30},
 	{topic: TopicSessions, description: "Live factory sessions: session list, session show, pause and resume, factory query, status API, dashboard URL, and run modes.", path: referenceSessionsPath, displayOrder: 35},
 	{topic: TopicOrchestrators, description: "Factory, FactoryOrchestrator, FactorySession, Dispatch, FactoryArtifact, FactoryEvent, and dynamic workflow aliases.", path: referenceOrchestratorsPath, displayOrder: 37},

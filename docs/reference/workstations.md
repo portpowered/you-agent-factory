@@ -9,6 +9,9 @@ workstation-scoped execution settings here. Keep worker backend fields in
 `you docs workers` and top-level `factory.json` work type and routing
 context in `you docs config`.
 
+For dispatch-time prompt reload and live Work or Worker Session inspection, use
+`you docs operations`.
+
 ## Split Layout And Ownership
 
 Keep workflow topology in `factory.json`, worker system instructions in

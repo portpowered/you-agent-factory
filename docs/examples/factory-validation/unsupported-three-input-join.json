@@ -1,0 +1,54 @@
+{
+  "name": "unsupported-three-input-join",
+  "workTypes": [
+    {
+      "name": "parent",
+      "states": [
+        { "name": "ready", "type": "INITIAL" },
+        { "name": "complete", "type": "TERMINAL" },
+        { "name": "failed", "type": "FAILED" }
+      ]
+    },
+    {
+      "name": "same",
+      "states": [
+        { "name": "ready", "type": "INITIAL" },
+        { "name": "complete", "type": "TERMINAL" },
+        { "name": "failed", "type": "FAILED" }
+      ]
+    },
+    {
+      "name": "child",
+      "states": [
+        { "name": "ready", "type": "INITIAL" },
+        { "name": "complete", "type": "TERMINAL" },
+        { "name": "failed", "type": "FAILED" }
+      ]
+    }
+  ],
+  "workstations": [
+    {
+      "name": "fan-in",
+      "type": "LOGICAL_MOVE",
+      "inputs": [
+        { "workType": "parent", "state": "ready" },
+        {
+          "workType": "same",
+          "state": "ready",
+          "guards": [{ "type": "SAME_NAME", "matchInput": "parent" }]
+        },
+        {
+          "workType": "child",
+          "state": "complete",
+          "guards": [
+            {
+              "type": "ALL_CHILDREN_COMPLETE",
+              "parentInput": "parent"
+            }
+          ]
+        }
+      ],
+      "outputs": [{ "workType": "parent", "state": "complete" }]
+    }
+  ]
+}
