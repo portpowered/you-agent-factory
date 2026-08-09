@@ -81,8 +81,8 @@
         "Tests pass"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added a built-process functional test that redirects terminal replay-only JSON stdout to a file, parses every non-empty line, verifies canonical event ordering, one final complete replay-summary with matching eventsEmitted, and separate verbose stderr diagnostics without cancellation. Added the canonical sessions reference workflow covering redirect-safe NDJSON, ACTIVE versus terminal completeness, and --follow conflict. Focused CLI tests, docs-reference-smoke, make verify-fast, UI lint/typecheck, pkg-file-count, pkg-structure, and vet pass; make lint/pkg-maint retain the pre-existing constructor.go 1037-line backend-size violation."
     }
   ]
 }

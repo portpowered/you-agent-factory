@@ -4,6 +4,7 @@
 - Stream transport dispatch stays below the package maintainability threshold by delegating lifecycle-specific frame handling to focused helpers.
 - Deterministic Worker Session lifecycle tests can combine the controlled workstation boundary with the real in-memory Events service to verify retained replay ordering without sleeps or cancellation.
 - Detached Cobra command families should project local-only flag relationships without eagerly merging parent persistent flags; otherwise the detached storage can shadow the production root flag when the family is attached.
+- Process-boundary CLI tests should build `./cmd/factory` only when proving OS-level behavior, keep the real server on a root-built process, and assign redirected stdout and diagnostics stderr separately.
 
 ## 2026-08-09 14:24 -07:00 - wo-c1-ext-stream-replay-only-001
 - What was implemented
@@ -45,4 +46,20 @@
   - Cobra's `MarkFlags*` helpers merge parent persistent flags immediately; detached generated families need local-only relationship annotations projected without that merge so their eventual production-root values remain authoritative.
   - Intentional CLI contract additions require refreshing `contracts/testdata/baseline/cli-command-inputs.json` and `contracts/testdata/baseline/cli-commands.json` with `UPDATE_CLI_BASELINES=1` in addition to the normal manifest and contract generators.
   - `make verify-fast`, Worker Sessions CLI tests, full `pkg/transports/cli` tests, CLI inventory/identity/contract/constructor tests, and `make cli-manifest-check` passed.
+---
+
+## 2026-08-09 15:11 -07:00 - wo-c1-ext-stream-replay-only-004
+- What was implemented
+  - Added `TestWorkerSessionsReplayOnlyRedirectsWellFormedNDJSON`, which builds and invokes the published `you` process against a terminal Worker Session, redirects replay-only JSON stdout to a capture file, and verifies every non-empty line is valid NDJSON.
+  - The process-boundary assertion checks canonical increasing event positions, exactly one final `replay-summary`, `complete:true`, stable `session-completed` reason, matching `eventsEmitted`, natural exit without cancellation, and verbose diagnostics isolated on stderr.
+  - Added the canonical `you docs sessions` redirect workflow describing the final completeness marker, ACTIVE versus terminal meaning, live-follow conflict, and stderr diagnostics behavior.
+- Files changed
+  - `tests/functional/provider_sessions/cli/worker_sessions_cli_test.go`
+  - `docs/reference/sessions.md`
+  - `prd.json`
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - A built CLI process can prove shell redirection while the server and provider effects remain deterministic through `root.BuildProcess` and `edges.Edges`; this keeps the process-boundary proof narrow.
+  - The final Worker Session replay summary is a standalone JSON object after the existing event-frame records, so capture assertions should parse the last line with its own summary shape.
+  - `make lint` currently stops on the existing `pkg/transports/cli/climanifestcobra/constructor.go` 1037-line backend-size/pkg-maint violation; the story change does not touch that file.
 ---
