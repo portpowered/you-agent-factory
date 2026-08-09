@@ -2437,12 +2437,12 @@
       "minimum": 62.50
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/workflow",
-      "minimum": 82.73
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/worker_sessions",
       "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/workflow",
+      "minimum": 82.73
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/http",

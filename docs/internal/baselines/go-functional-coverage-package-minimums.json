@@ -3181,6 +3181,10 @@
       "minimum": 27.70
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/worker_sessions",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/workflow",
       "exception": {
         "kind": "measurement",
