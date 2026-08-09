@@ -3,6 +3,7 @@
 - Authored OpenAPI and CLI contracts generate their Go, TypeScript, published metadata, and family-manifest consumers; update the source contract first, then run the repository generators and drift checks.
 - Stream transport dispatch stays below the package maintainability threshold by delegating lifecycle-specific frame handling to focused helpers.
 - Deterministic Worker Session lifecycle tests can combine the controlled workstation boundary with the real in-memory Events service to verify retained replay ordering without sleeps or cancellation.
+- Detached Cobra command families should project local-only flag relationships without eagerly merging parent persistent flags; otherwise the detached storage can shadow the production root flag when the family is attached.
 
 ## 2026-08-09 14:24 -07:00 - wo-c1-ext-stream-replay-only-001
 - What was implemented
@@ -28,6 +29,20 @@
   - `prd.json`
   - `progress.txt`
 - **Learnings for future iterations:**
-  - Terminal replay uses the same retained Events paging path as ACTIVE replay; lifecycle classification changes the delivery kind and summary completeness, not the canonical event records or order.
-  - The CLI must treat `TERMINAL_REPLAY` as an event inside finite mode and wait for `REPLAY_SUMMARY` before returning success.
+- Terminal replay uses the same retained Events paging path as ACTIVE replay; lifecycle classification changes the delivery kind and summary completeness, not the canonical event records or order.
+- The CLI must treat `TERMINAL_REPLAY` as an event inside finite mode and wait for `REPLAY_SUMMARY` before returning success.
+---
+
+## 2026-08-09 15:00 -07:00 - wo-c1-ext-stream-replay-only-003
+- What was implemented
+  - Added the explicit `--follow` live-mode input and stable typed `WORKER_SESSION_STREAM_MODE_CONFLICT` error; `--replay-only --follow` now fails before the stream operation, HTTP request, retained read, follower, or stdout output.
+  - Added the authored CLI relationship, error metadata, help/examples, generated family metadata, published CLI contract, and production handler binding; refreshed the CLI inventory baselines and generated manifest hash.
+  - Fixed detached Cobra local relationship projection so the new mutually-exclusive flags do not eagerly shadow the production root `--server` value when the Worker Sessions family is attached.
+  - Added service and production-root behavioral tests for typed conflict mapping, zero requests/zero output, explicit follow binding, and operation non-invocation.
+- Files changed
+  - `contracts/cli/commands.json`, generated CLI/package artifacts, CLI inventory baselines, Worker Sessions CLI stream/config/tests, CLI family constructor, production root binding/tests, and this progress log.
+- **Learnings for future iterations:**
+  - Cobra's `MarkFlags*` helpers merge parent persistent flags immediately; detached generated families need local-only relationship annotations projected without that merge so their eventual production-root values remain authoritative.
+  - Intentional CLI contract additions require refreshing `contracts/testdata/baseline/cli-command-inputs.json` and `contracts/testdata/baseline/cli-commands.json` with `UPDATE_CLI_BASELINES=1` in addition to the normal manifest and contract generators.
+  - `make verify-fast`, Worker Sessions CLI tests, full `pkg/transports/cli` tests, CLI inventory/identity/contract/constructor tests, and `make cli-manifest-check` passed.
 ---

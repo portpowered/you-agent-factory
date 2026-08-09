@@ -28,6 +28,7 @@ type StreamConfig struct {
 	ID           string
 	OutputFormat string
 	JSON         bool
+	Follow       bool
 	ReplayOnly   bool
 	Verbose      bool
 	Debug        bool
@@ -80,10 +81,21 @@ type streamJSONEvent struct {
 	Payload        json.RawMessage `json:"payload"`
 }
 
+const StreamModeConflictCode = "WORKER_SESSION_STREAM_MODE_CONFLICT"
+
+// NewStreamModeConflictError returns the stable CLI error for selecting both
+// the finite retained replay and the live-follow stream mode.
+func NewStreamModeConflictError() *CLIError {
+	return newCLIError(StreamModeConflictCode, "--replay-only cannot be combined with --follow", nil)
+}
+
 func stream(config StreamConfig) error {
 	config.Provider = strings.TrimSpace(config.Provider)
 	config.Kind = strings.TrimSpace(config.Kind)
 	config.ID = strings.TrimSpace(config.ID)
+	if config.ReplayOnly && config.Follow {
+		return NewStreamModeConflictError()
+	}
 	jsonOutput := config.JSON || strings.EqualFold(strings.TrimSpace(config.OutputFormat), "json")
 	if err := validateStreamConfig(config); err != nil {
 		return emitStreamCLIError(config, jsonOutput, err)

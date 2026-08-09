@@ -159,7 +159,31 @@ func productionWorkerSessionsCommand(
 	if err != nil {
 		panic(fmt.Sprintf("build worker sessions family command: %v", err))
 	}
+	if err := installWorkerSessionsStreamModeConflictGuard(command); err != nil {
+		panic(fmt.Sprintf("build worker sessions stream conflict guard: %v", err))
+	}
 	return command
+}
+
+func installWorkerSessionsStreamModeConflictGuard(command *cobra.Command) error {
+	stream, _, err := command.Find([]string{"stream"})
+	if err != nil {
+		return err
+	}
+	if stream == nil {
+		return fmt.Errorf("worker sessions stream command is unavailable")
+	}
+	previous := stream.PreRunE
+	stream.PreRunE = func(cmd *cobra.Command, args []string) error {
+		if cmd.Flags().Changed("replay-only") && cmd.Flags().Changed("follow") {
+			return workersessionscli.NewStreamModeConflictError()
+		}
+		if previous != nil {
+			return previous(cmd, args)
+		}
+		return nil
+	}
+	return nil
 }
 
 func executeGeneratedWorkerSessionsList(
@@ -275,10 +299,14 @@ func executeGeneratedWorkerSessionsStream(
 	if err != nil {
 		return err
 	}
+	follow, err := commandInputValue[bool](values, "you.worker-sessions.stream.flag.follow")
+	if err != nil {
+		return err
+	}
 	jsonOutput := globals.json || strings.EqualFold(strings.TrimSpace(outputFormat), "json")
 	return stream(workersessionscli.StreamConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
-		Provider: provider, Kind: kind, ID: id, OutputFormat: outputFormat, JSON: jsonOutput, ReplayOnly: replayOnly,
+		Provider: provider, Kind: kind, ID: id, OutputFormat: outputFormat, JSON: jsonOutput, Follow: follow, ReplayOnly: replayOnly,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
 		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,
 	})

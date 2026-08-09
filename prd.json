@@ -64,8 +64,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added explicit --follow CLI metadata and handler binding, stable typed WORKER_SESSION_STREAM_MODE_CONFLICT validation before operation/network/output, and authored mutually-exclusive relationship/error records. Added zero-request/zero-output service and production-root tests, refreshed generated CLI artifacts and CLI inventory baselines, fixed detached Cobra relationship projection so root --server remains authoritative, and passed focused Worker Sessions/CLI tests, make cli-manifest-check, and make verify-fast."
     },
     {
       "id": "wo-c1-ext-stream-replay-only-004",

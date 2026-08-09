@@ -948,6 +948,16 @@ func projectCobraFlagGroupAnnotations(
 				)
 			}
 		}
+		if projected, err := projectLocalFlagGroupAnnotations(cmd, relationship.record.Kind, names); err != nil {
+			return fmt.Errorf(
+				"command %q relationship %q: %w",
+				commandID,
+				relationship.record.ID,
+				err,
+			)
+		} else if projected {
+			continue
+		}
 		switch relationship.record.Kind {
 		case "mutually-exclusive", "conflict":
 			cmd.MarkFlagsMutuallyExclusive(names...)
@@ -958,6 +968,58 @@ func projectCobraFlagGroupAnnotations(
 		}
 	}
 	return nil
+}
+
+const (
+	cobraRequiredAsGroupAnnotation   = "cobra_annotation_required_if_others_set"
+	cobraOneRequiredAnnotation       = "cobra_annotation_one_required"
+	cobraMutuallyExclusiveAnnotation = "cobra_annotation_mutually_exclusive"
+)
+
+// projectLocalFlagGroupAnnotations writes Cobra's standard relationship
+// annotations directly when every participant is a flag declared by the
+// command itself. Calling Cobra's MarkFlags* helpers in that case would first
+// merge detached parent persistent flags into the command. Detached command
+// families are later attached to the production root, so that eager merge can
+// shadow the real root flag storage (for example, --server).
+func projectLocalFlagGroupAnnotations(
+	cmd *cobra.Command,
+	kind string,
+	names []string,
+) (bool, error) {
+	flags := cmd.Flags()
+	for _, name := range names {
+		if flags.Lookup(name) == nil {
+			return false, nil
+		}
+	}
+	annotation, ok := cobraFlagGroupAnnotation(kind)
+	if !ok {
+		return false, nil
+	}
+	group := strings.Join(names, " ")
+	for _, name := range names {
+		flag := flags.Lookup(name)
+		values := append([]string(nil), flag.Annotations[annotation]...)
+		values = append(values, group)
+		if err := flags.SetAnnotation(name, annotation, values); err != nil {
+			return true, err
+		}
+	}
+	return true, nil
+}
+
+func cobraFlagGroupAnnotation(kind string) (string, bool) {
+	switch kind {
+	case "mutually-exclusive", "conflict":
+		return cobraMutuallyExclusiveAnnotation, true
+	case "required-together":
+		return cobraRequiredAsGroupAnnotation, true
+	case "at-least-one":
+		return cobraOneRequiredAnnotation, true
+	default:
+		return "", false
+	}
 }
 
 func relationshipError(relationship plannedRelationship, message string) error {

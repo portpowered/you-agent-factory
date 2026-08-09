@@ -15,6 +15,13 @@ type ReadConfig = workersessionscli.ReadConfig
 type ReadOperation = workersessionscli.ReadOperation
 type StreamConfig = workersessionscli.StreamConfig
 type StreamOperation = workersessionscli.StreamOperation
+type CLIError = workersessionscli.CLIError
+
+const StreamModeConflictCode = workersessionscli.StreamModeConflictCode
+
+func NewStreamModeConflictError() *CLIError {
+	return workersessionscli.NewStreamModeConflictError()
+}
 
 func NewList(transport clihttp.Protocol) ListOperation {
 	return workersessionscli.NewList(transport)

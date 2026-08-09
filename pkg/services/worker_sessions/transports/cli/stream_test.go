@@ -105,6 +105,31 @@ func TestStreamReplayOnlyWritesEventFramesAndFinalSummary(t *testing.T) {
 	}
 }
 
+func TestStreamRejectsReplayOnlyFollowBeforeRequestOrOutput(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	var output bytes.Buffer
+	err := NewStream(testHTTPProtocol(t))(StreamConfig{
+		Context: context.Background(), Server: server.URL, Provider: "codex", Kind: "session_id", ID: "session-1",
+		OutputFormat: "json", Follow: true, ReplayOnly: true, Output: &output,
+	})
+	var typed *CLIError
+	if !errors.As(err, &typed) || typed.Code != StreamModeConflictCode {
+		t.Fatalf("error = %v, want %s", err, StreamModeConflictCode)
+	}
+	if requests != 0 {
+		t.Fatalf("conflicting stream made %d HTTP requests, want 0", requests)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("conflicting stream wrote stdout %q, want empty", output.String())
+	}
+}
+
 func TestStreamReplayOnlyWritesTerminalReplayBeforeCompleteSummary(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
