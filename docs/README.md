@@ -3,7 +3,7 @@ This is the table of contents for the Agent Factory documentation.
 The installed CLI also packages a fixed reference surface under
 `you docs`. Run `you docs` to list the packaged topics, or
 run `you docs <topic>` for packaged topics such as `agents`,
-`authoring-factories`, `config`, `mock-workers`, `record-replay`, `guards`,
+`authoring-factories`, `config`, `factory-validation`, `mock-workers`, `record-replay`, `guards`,
 `relationships`, `work`, `workstations`, `workers`, `resources`, `models`,
 `batch-inputs`, or `templates`.
 
@@ -34,6 +34,10 @@ These are the fixed topic names accepted by `you docs <topic>`.
 - `config` is the packaged `factory.json` topology reference. Run `you docs
   config` for work types, states, workers, workstations, resources,
   portability, and top-level layout fields.
+- `factory-validation` is the packaged pre-run static validation guide. Run
+  `you docs factory-validation` for the required validate-only gate, exact
+  file/directory commands, current checks, and the boundary between static
+  acceptance and runtime execution.
 - `mock-workers` is the packaged mock-worker reference. Run `you docs
   mock-workers` for `--with-mock-workers` and the `mockWorkers` JSON contract.
 - `record-replay` is the packaged record and replay reference. Run `you docs
@@ -81,6 +85,8 @@ These are the fixed topic names accepted by `you docs <topic>`.
     the same guide).
 - Run `you docs config` for the canonical split layout, `factory.json`, and where
   worker, workstation, and input files live.
+- Run `you docs factory-validation` before the first Factory run and after
+  authored topology, guard, route, schema, or split-layout changes.
 - Run `you docs resources` for top-level resource pools and workstation or
   worker resource requirements.
 - Run `you docs templates` for supported Go-template surfaces, the complete
