@@ -820,30 +820,62 @@ func resolveRunFactoryPrompt(
 	factoryChanged := cmd.Flags().Changed("factory")
 	namedChanged := cmd.Flags().Changed("named")
 	workChanged := cmd.Flags().Changed("work")
-	if cfg.InvocationFileExplicit {
-		switch {
-		case workChanged:
-			return fmt.Errorf("--to-file cannot be used with --work")
-		case cfg.Continuously:
-			return fmt.Errorf("--to-file cannot be used with --continuously")
-		case strings.TrimSpace(cfg.ReplayPath) != "":
-			return fmt.Errorf("--to-file cannot be used with --replay")
-		}
+	if err := rejectFileBackedRunShape(cfg, workChanged); err != nil {
+		return err
 	}
 
 	if !factoryChanged && !namedChanged {
-		if cfg.InvocationFileExplicit {
-			return resolveCompatibilityRunFactoryPrompt(cmd, cfg, promptArgs, workChanged, preparation)
-		}
-		return resolveLegacyRunFactoryPrompt(cmd, promptArgs, preparation)
+		return resolveUnselectedRunFactoryPrompt(cmd, cfg, promptArgs, workChanged, preparation)
 	}
 	if factoryChanged && runFactorySourceUsesJavaScript(cfg.FactoryConfigPath) {
-		if cfg.InvocationFileExplicit {
-			return fmt.Errorf("--to-file is not supported for JavaScript workflow invocation")
-		}
+		return rejectJavaScriptFilePrompt(cfg)
+	}
+	return resolveSelectedRunFactoryPrompt(cmd, cfg, promptArgs, workChanged, preparation)
+}
+
+func rejectFileBackedRunShape(cfg *runcli.RunConfig, workChanged bool) error {
+	if !cfg.InvocationFileExplicit {
 		return nil
 	}
+	switch {
+	case workChanged:
+		return fmt.Errorf("--to-file cannot be used with --work")
+	case cfg.Continuously:
+		return fmt.Errorf("--to-file cannot be used with --continuously")
+	case strings.TrimSpace(cfg.ReplayPath) != "":
+		return fmt.Errorf("--to-file cannot be used with --replay")
+	default:
+		return nil
+	}
+}
 
+func resolveUnselectedRunFactoryPrompt(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	promptArgs []string,
+	workChanged bool,
+	preparation work.InvocationInputPreparation,
+) error {
+	if cfg.InvocationFileExplicit {
+		return resolveCompatibilityRunFactoryPrompt(cmd, cfg, promptArgs, workChanged, preparation)
+	}
+	return resolveLegacyRunFactoryPrompt(cmd, promptArgs, preparation)
+}
+
+func rejectJavaScriptFilePrompt(cfg *runcli.RunConfig) error {
+	if cfg.InvocationFileExplicit {
+		return fmt.Errorf("--to-file is not supported for JavaScript workflow invocation")
+	}
+	return nil
+}
+
+func resolveSelectedRunFactoryPrompt(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	promptArgs []string,
+	workChanged bool,
+	preparation work.InvocationInputPreparation,
+) error {
 	signatureSource := filepath.Join(cfg.Dir, interfaces.FactoryConfigFile)
 	if strings.TrimSpace(cfg.FactoryConfigPath) != "" {
 		signatureSource = cfg.FactoryConfigPath

@@ -248,34 +248,17 @@ func normalizeCompatibilityArguments(input NormalizeArgumentsInput) (NormalizedA
 		}
 	}
 	if len(input.CompatibilityContent) > 0 {
-		if input.CompatibilityText != nil || len(input.PositionalArgs) > 0 || input.StdinText != nil || input.FileText != nil {
-			return NormalizedArguments{}, &ArgumentError{
-				Code:    ArgumentErrorCodeSourceConflict,
-				Message: "compatibility content cannot be combined with positional, stdin, or file input",
-			}
-		}
-		resolved, err := ResolveAPITextInputContent(input.CompatibilityContent)
-		if err != nil {
-			return NormalizedArguments{}, err
-		}
-		resolved.Source = InputSourceLabel(ArgumentSourceKindCompatibilityContent)
-		return NormalizedArguments{CompatibilityInput: &resolved}, nil
+		return normalizeCompatibilityContent(input)
 	}
 
-	if input.CompatibilityText != nil && (len(input.PositionalArgs) > 0 || input.StdinText != nil || input.FileText != nil) {
+	if compatibilityTextConflicts(input) {
 		return NormalizedArguments{}, &ArgumentError{
 			Code:    ArgumentErrorCodeSourceConflict,
 			Message: "compatibility text cannot be combined with positional, stdin, or file input",
 		}
 	}
 
-	sources := TextInputSources{StdinText: input.StdinText, FileText: input.FileText}
-	if input.CompatibilityText != nil {
-		sources.PositionalText = input.CompatibilityText
-	} else if len(input.PositionalArgs) > 0 {
-		text := strings.Join(input.PositionalArgs, " ")
-		sources.PositionalText = &text
-	}
+	sources := compatibilityTextSources(input)
 	resolved, err := ResolveTextInput(sources)
 	if err != nil {
 		return NormalizedArguments{}, err
@@ -284,6 +267,39 @@ func normalizeCompatibilityArguments(input NormalizeArgumentsInput) (NormalizedA
 		resolved.Source = InputSourceLabel(ArgumentSourceKindCompatibilityText)
 	}
 	return NormalizedArguments{CompatibilityInput: &resolved}, nil
+}
+
+func normalizeCompatibilityContent(input NormalizeArgumentsInput) (NormalizedArguments, error) {
+	if input.CompatibilityText != nil || len(input.PositionalArgs) > 0 || input.StdinText != nil || input.FileText != nil {
+		return NormalizedArguments{}, &ArgumentError{
+			Code:    ArgumentErrorCodeSourceConflict,
+			Message: "compatibility content cannot be combined with positional, stdin, or file input",
+		}
+	}
+	resolved, err := ResolveAPITextInputContent(input.CompatibilityContent)
+	if err != nil {
+		return NormalizedArguments{}, err
+	}
+	resolved.Source = InputSourceLabel(ArgumentSourceKindCompatibilityContent)
+	return NormalizedArguments{CompatibilityInput: &resolved}, nil
+}
+
+func compatibilityTextConflicts(input NormalizeArgumentsInput) bool {
+	return input.CompatibilityText != nil &&
+		(len(input.PositionalArgs) > 0 || input.StdinText != nil || input.FileText != nil)
+}
+
+func compatibilityTextSources(input NormalizeArgumentsInput) TextInputSources {
+	sources := TextInputSources{StdinText: input.StdinText, FileText: input.FileText}
+	if input.CompatibilityText != nil {
+		sources.PositionalText = input.CompatibilityText
+		return sources
+	}
+	if len(input.PositionalArgs) > 0 {
+		text := strings.Join(input.PositionalArgs, " ")
+		sources.PositionalText = &text
+	}
+	return sources
 }
 
 func compatibilityNamedArgument(input NormalizeArgumentsInput) (string, bool) {
@@ -374,74 +390,97 @@ func buildSignatureIndex(signature *InvocationSignatureConfig) (signatureIndex, 
 		unknownPolicy:    strings.TrimSpace(signature.UnknownNamedArgumentPolicy),
 	}
 	for _, parameter := range signature.Parameters {
-		name := strings.TrimSpace(parameter.Name)
-		if name == "" {
-			return signatureIndex{}, newArgumentError(ArgumentErrorCodeInvalidActiveSignature, "invocationSignature parameter name is required", "", "")
-		}
-		def := parameterDefinition{
-			name:      name,
-			valueMode: normalizedValueMode(parameter.ValueMode),
-			typeHint:  strings.TrimSpace(parameter.TypeHint),
-			required:  parameter.Required,
-			sensitive: parameter.Sensitive,
-			choices:   slices.Clone(parameter.Choices),
-			defaults:  parameterDefaults(parameter),
-		}
-		for _, binding := range parameter.Bindings {
-			switch strings.TrimSpace(binding.Kind) {
-			case bindingKindPositional:
-				index.positionalBySlot[binding.Position] = name
-				index.orderedSlots = append(index.orderedSlots, binding.Position)
-				if def.valueMode == valueModeVariadic {
-					def.variadic = true
-				}
-			case bindingKindNamed:
-				def.named = true
-			case bindingKindStdin:
-				def.stdin = true
-				index.stdinParameter = name
-			case bindingKindNamedRest:
-				def.namedRest = true
-				index.namedRest = name
-			}
-		}
-		index.parameters[name] = def
-		index.namedByKey[name] = name
-		if external := strings.TrimSpace(parameter.ExternalName); external != "" {
-			index.namedByKey[external] = name
-		}
-		for _, alias := range parameter.Aliases {
-			if trimmed := strings.TrimSpace(alias); trimmed != "" {
-				index.namedByKey[trimmed] = name
-			}
-		}
-		if isPreferredFileParameter(parameter) && isFileTextParameter(def) {
-			index.fileParameter = name
+		if err := addSignatureParameter(&index, parameter); err != nil {
+			return signatureIndex{}, err
 		}
 	}
 	sort.Ints(index.orderedSlots)
-	if index.fileParameter == "" {
-		if len(index.orderedSlots) > 0 {
-			candidate := index.positionalBySlot[index.orderedSlots[0]]
-			if isFileTextParameter(index.parameters[candidate]) {
-				index.fileParameter = candidate
-			}
-		} else if index.stdinParameter != "" && isFileTextParameter(index.parameters[index.stdinParameter]) {
-			index.fileParameter = index.stdinParameter
-		} else {
-			for _, parameter := range signature.Parameters {
-				name := strings.TrimSpace(parameter.Name)
-				if name == "" {
-					continue
-				}
-				if index.parameters[name].required && isFileTextParameter(index.parameters[name]) {
-					index.fileParameter = name
-					break
-				}
-			}
+	index.fileParameter = selectFileParameter(signature, index)
+	return index, nil
+}
+
+func addSignatureParameter(index *signatureIndex, parameter InvocationParameterConfig) error {
+	name := strings.TrimSpace(parameter.Name)
+	if name == "" {
+		return newArgumentError(ArgumentErrorCodeInvalidActiveSignature, "invocationSignature parameter name is required", "", "")
+	}
+	definition := parameterDefinition{
+		name:      name,
+		valueMode: normalizedValueMode(parameter.ValueMode),
+		typeHint:  strings.TrimSpace(parameter.TypeHint),
+		required:  parameter.Required,
+		sensitive: parameter.Sensitive,
+		choices:   slices.Clone(parameter.Choices),
+		defaults:  parameterDefaults(parameter),
+	}
+	for _, binding := range parameter.Bindings {
+		applySignatureBinding(index, &definition, name, binding)
+	}
+	index.parameters[name] = definition
+	index.namedByKey[name] = name
+	if external := strings.TrimSpace(parameter.ExternalName); external != "" {
+		index.namedByKey[external] = name
+	}
+	for _, alias := range parameter.Aliases {
+		if trimmed := strings.TrimSpace(alias); trimmed != "" {
+			index.namedByKey[trimmed] = name
 		}
 	}
-	return index, nil
+	if isPreferredFileParameter(parameter) && isFileTextParameter(definition) {
+		index.fileParameter = name
+	}
+	return nil
+}
+
+func applySignatureBinding(
+	index *signatureIndex,
+	definition *parameterDefinition,
+	name string,
+	binding InvocationParameterBindingConfig,
+) {
+	switch strings.TrimSpace(binding.Kind) {
+	case bindingKindPositional:
+		index.positionalBySlot[binding.Position] = name
+		index.orderedSlots = append(index.orderedSlots, binding.Position)
+		if definition.valueMode == valueModeVariadic {
+			definition.variadic = true
+		}
+	case bindingKindNamed:
+		definition.named = true
+	case bindingKindStdin:
+		definition.stdin = true
+		index.stdinParameter = name
+	case bindingKindNamedRest:
+		definition.namedRest = true
+		index.namedRest = name
+	}
+}
+
+func selectFileParameter(signature *InvocationSignatureConfig, index signatureIndex) string {
+	if index.fileParameter != "" {
+		return index.fileParameter
+	}
+	if len(index.orderedSlots) > 0 {
+		candidate := index.positionalBySlot[index.orderedSlots[0]]
+		if isFileTextParameter(index.parameters[candidate]) {
+			return candidate
+		}
+		return ""
+	}
+	if index.stdinParameter != "" && isFileTextParameter(index.parameters[index.stdinParameter]) {
+		return index.stdinParameter
+	}
+	for _, parameter := range signature.Parameters {
+		name := strings.TrimSpace(parameter.Name)
+		if name == "" {
+			continue
+		}
+		definition := index.parameters[name]
+		if definition.required && isFileTextParameter(definition) {
+			return name
+		}
+	}
+	return ""
 }
 
 func isPreferredFileParameter(parameter InvocationParameterConfig) bool {

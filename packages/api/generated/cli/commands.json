@@ -11085,7 +11085,7 @@
         "you.run.flag.factory": {
           "id": "you.run.flag.factory",
           "long": "factory",
-          "usage": "path to a JSON or YAML Factory file, or an unambiguous Factory directory, for portable one-shot runs; use positional text or piped stdin for the invocation input",
+          "usage": "path to a JSON or YAML Factory file, or an unambiguous Factory directory, for portable one-shot runs; use positional text, --to-file, or piped stdin for the invocation input",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -11109,7 +11109,7 @@
         "you.run.flag.to-file": {
           "id": "you.run.flag.to-file",
           "long": "to-file",
-          "usage": "read the exact UTF-8 primary invocation prompt from a regular file; conflicts with --to, positional input, and supplied stdin",
+          "usage": "read one exact, logically non-empty UTF-8 primary prompt from a regular file for one-shot invocation; preserves spaces, Unicode, line endings, blank lines, and a trailing newline; strictly conflicts with signature-defined --to, positional input, and supplied non-empty stdin",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -11253,7 +11253,7 @@
     "you.run.flag.worker-reasoning-effort": {
       "id": "you.run.flag.worker-reasoning-effort",
       "long": "worker-reasoning-effort",
-      "usage": "override the worker reasoning effort for this run; accepts minimal, low, medium, high, xhigh, or max with case and surrounding whitespace normalized",
+      "usage": "override the worker reasoning effort for applicable one-shot worker invocations; accepts canonical authored-Worker values minimal, low, medium, high, xhigh, or max with case and surrounding whitespace normalized; unsupported values fail before dispatch",
       "shorthand": "",
       "scope": "local",
       "valueType": "string",
@@ -11856,6 +11856,62 @@
             {
               "type": "argument",
               "id": "you.run.arg.0"
+            }
+          ]
+        },
+        "you.run.rel.to-file-invocation-input": {
+          "id": "you.run.rel.to-file-invocation-input",
+          "kind": "conflict",
+          "participants": [
+            {
+              "type": "flag",
+              "id": "you.run.flag.to-file"
+            },
+            {
+              "type": "argument",
+              "id": "you.run.arg.0"
+            }
+          ]
+        },
+        "you.run.rel.to-file-work": {
+          "id": "you.run.rel.to-file-work",
+          "kind": "conflict",
+          "participants": [
+            {
+              "type": "flag",
+              "id": "you.run.flag.to-file"
+            },
+            {
+              "type": "flag",
+              "id": "you.run.flag.work"
+            }
+          ]
+        },
+        "you.run.rel.to-file-continuously": {
+          "id": "you.run.rel.to-file-continuously",
+          "kind": "conflict",
+          "participants": [
+            {
+              "type": "flag",
+              "id": "you.run.flag.to-file"
+            },
+            {
+              "type": "flag",
+              "id": "you.run.flag.continuously"
+            }
+          ]
+        },
+        "you.run.rel.to-file-replay": {
+          "id": "you.run.rel.to-file-replay",
+          "kind": "conflict",
+          "participants": [
+            {
+              "type": "flag",
+              "id": "you.run.flag.to-file"
+            },
+            {
+              "type": "flag",
+              "id": "you.run.flag.replay"
             }
           ]
         },

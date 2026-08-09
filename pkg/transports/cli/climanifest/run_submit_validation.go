@@ -163,6 +163,10 @@ func validateRunInputPolicy(run Command) error {
 	for _, relationshipID := range []string{
 		"you.run.rel.selectors",
 		"you.run.rel.work-invocation-input",
+		"you.run.rel.to-file-invocation-input",
+		"you.run.rel.to-file-work",
+		"you.run.rel.to-file-continuously",
+		"you.run.rel.to-file-replay",
 		"you.run.rel.recording",
 		"you.run.rel.quiet-json",
 		"you.run.rel.quiet-output",

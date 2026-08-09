@@ -113,21 +113,33 @@ func (preparation invocationInputPreparation) PrepareInvocationInput(
 	}
 
 	if len(request.DirectArgs) > 0 || len(request.CompatibilityContent) > 0 {
-		result, err := NormalizeArguments(NormalizeArgumentsInput{
-			Signature:            request.Signature,
-			DirectArgs:           request.DirectArgs,
-			FileText:             fileText,
-			CompatibilityContent: request.CompatibilityContent,
-		})
-		if err != nil {
-			return PreparedInvocationInput{}, err
-		}
-		if err := ctx.Err(); err != nil {
-			return PreparedInvocationInput{}, err
-		}
-		return preparedInvocationInputFromNormalized(result), nil
+		return preparation.prepareDirectInvocationInput(ctx, request, fileText)
 	}
+	return preparation.prepareCollectedInvocationInput(ctx, request, fileText)
+}
 
+func (preparation invocationInputPreparation) prepareDirectInvocationInput(
+	ctx context.Context,
+	request InvocationInputPreparationRequest,
+	fileText *string,
+) (PreparedInvocationInput, error) {
+	result, err := NormalizeArguments(NormalizeArgumentsInput{
+		Signature:            request.Signature,
+		DirectArgs:           request.DirectArgs,
+		FileText:             fileText,
+		CompatibilityContent: request.CompatibilityContent,
+	})
+	if err != nil {
+		return PreparedInvocationInput{}, err
+	}
+	return preparedInvocationInputAfterContext(ctx, result)
+}
+
+func (preparation invocationInputPreparation) prepareCollectedInvocationInput(
+	ctx context.Context,
+	request InvocationInputPreparationRequest,
+	fileText *string,
+) (PreparedInvocationInput, error) {
 	positional, named, _, err := parseInvocationArguments(request.Arguments, request.Signature)
 	if err != nil {
 		return PreparedInvocationInput{}, err
@@ -150,6 +162,13 @@ func (preparation invocationInputPreparation) PrepareInvocationInput(
 	if err != nil {
 		return PreparedInvocationInput{}, err
 	}
+	return preparedInvocationInputAfterContext(ctx, result)
+}
+
+func preparedInvocationInputAfterContext(
+	ctx context.Context,
+	result NormalizedArguments,
+) (PreparedInvocationInput, error) {
 	if err := ctx.Err(); err != nil {
 		return PreparedInvocationInput{}, err
 	}

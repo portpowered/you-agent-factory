@@ -84,9 +84,10 @@ func TestCLIRunCleanInvocationCompletesWithoutDashboardStartup(t *testing.T) {
 }
 
 // TestCLIRunToFilePreservesExactPromptAndRejectsBeforeProviderDispatch proves
-// the public one-shot run path carries a real multiline UTF-8 file through the
-// injected provider command edge unchanged, while file conflicts and unreadable
-// paths fail before any runtime/provider effect is activated.
+// the public one-shot run path carries a real multiline UTF-8 file and the
+// canonical xhigh effort through one injected Codex command edge unchanged,
+// while file conflicts and unreadable paths fail before any runtime/provider
+// effect is activated.
 func TestCLIRunToFilePreservesExactPromptAndRejectsBeforeProviderDispatch(t *testing.T) {
 	t.Parallel()
 
@@ -114,6 +115,7 @@ func TestCLIRunToFilePreservesExactPromptAndRejectsBeforeProviderDispatch(t *tes
 	edges := serviceedges.Edges{ProviderCommandRunner: runner}
 	args := []string{
 		"you", "run", "--factory", factoryPath,
+		"--provider", "codex", "--worker-reasoning-effort", "xhigh",
 		"--to-file", promptPath, "--no-record", "--quiet",
 	}
 	inputs := support.FakeInputs(t.Context(), args)
@@ -131,7 +133,15 @@ func TestCLIRunToFilePreservesExactPromptAndRejectsBeforeProviderDispatch(t *tes
 	if got := string(request.Stdin); got != wantPrompt {
 		t.Fatalf("provider stdin = %q, want exact 30-line prompt %q", got, wantPrompt)
 	}
+	support.AssertArgsContainSequence(t, request.Args, []string{
+		"--config", `model_reasoning_effort="xhigh"`,
+	})
+	assertFilePromptConflicts(t, factoryDir, factoryPath, promptPath, args)
+	assertUnreadableFilePrompt(t, factoryDir, factoryPath, promptDir)
+}
 
+func assertFilePromptConflicts(t *testing.T, factoryDir, factoryPath, promptPath string, fileArgs []string) {
+	t.Helper()
 	for _, test := range []struct {
 		name        string
 		args        []string
@@ -147,7 +157,7 @@ func TestCLIRunToFilePreservesExactPromptAndRejectsBeforeProviderDispatch(t *tes
 		},
 		{
 			name:        "file and supplied stdin",
-			args:        args,
+			args:        fileArgs,
 			stdin:       "supplied stdin",
 			stdinIsTTY:  false,
 			wantSources: []string{"file_text", "stdin_text"},
@@ -174,14 +184,17 @@ func TestCLIRunToFilePreservesExactPromptAndRejectsBeforeProviderDispatch(t *tes
 			}
 		})
 	}
+}
 
+func assertUnreadableFilePrompt(t *testing.T, factoryDir, factoryPath, promptDir string) {
+	t.Helper()
 	missingPath := filepath.Join(promptDir, "missing prompt.txt")
-	runner = support.NewShapedProviderCommandRunner()
+	runner := support.NewShapedProviderCommandRunner()
 	missingArgs := []string{
 		"you", "run", "--factory", factoryPath,
 		"--to-file", missingPath, "--no-record", "--quiet",
 	}
-	inputs = support.FakeInputs(t.Context(), missingArgs)
+	inputs := support.FakeInputs(t.Context(), missingArgs)
 	inputs.Input.WorkingDirectory = factoryDir
 	err := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner}).Execute(inputs.Input)
 	if err == nil || !strings.Contains(err.Error(), missingPath) {

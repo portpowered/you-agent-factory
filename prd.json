@@ -66,8 +66,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Published the canonical authored CLI manifest/help contract for --worker-reasoning-effort and --to-file, including applicability and strict source/run-shape conflicts, then regenerated all CLI consumers and baselines. Added the PowerShell-safe packaged run reference and boundary test proving prompt content stays out of argv, plus the combined root.BuildProcess/Process.Execute lifecycle regression proving a real 30-line UTF-8 file and xhigh effort reach one Codex dispatch. Verified CLI/work tests, contract and manifest checks, docs-reference smoke, make verify-fast, backend-size, pkg-maint, and vet; full lint is limited by the repository's existing unrelated pkg-boundary baseline violations."
     }
   ]
 }

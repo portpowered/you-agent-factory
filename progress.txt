@@ -2,6 +2,7 @@
 - Run-scoped Worker selections must be forwarded through both the hosted runtime opening request and the detached Factory Session invocation target before reaching Worker execution.
 - Public CLI behavior should be proven through `root.BuildProcess` and `Process.Execute`, replacing external effects only with injected `edges.Edges` ports.
 - File-backed invocation text must be read through Work's injected `SubmittedFileReader` and carried as prepared input; transports must not re-tokenize prompt bytes.
+- Canonical CLI help and published consumers derive from `contracts/cli/commands.json`; regenerate the manifest/contract artifacts from that source before refreshing CLI baseline fixtures.
 
 ## [2026-08-09 08:40 -07:00] - wo-c3-run-parity-long-prompt-input-001
 - What was implemented
@@ -27,4 +28,18 @@
   - The default Work submitted-file reader is the existing `serviceedges.Edges.WorkSubmittedFileReader` seam; production wiring must pass it into invocation preparation rather than reading files in the CLI transport.
   - A workstation prompt template that renders the first input payload provides an observable exact provider-command assertion without exposing or bypassing the runtime boundary.
   - Verification passed with `go test ./pkg/services/work/... ./pkg/transports/cli/... ./pkg/wire/... -count=1`, the full CLI lifecycle package, and the focused file-backed lifecycle test.
+---
+## [2026-08-09 09:42 -07:00] - wo-c3-run-parity-long-prompt-input-003
+- What was implemented
+  - Published the canonical run contract for `--worker-reasoning-effort` and `--to-file`, including authored effort values, one-shot applicability, exact UTF-8 file semantics, and strict conflicts with signature-defined `--to`, positional input, stdin, and disallowed run shapes.
+  - Regenerated the CLI manifest, generated consumers, contract digest, and CLI help/input baselines from the authored manifest source.
+  - Added the PowerShell-safe packaged `you docs run` workflow and CLI boundary assertions, including the guarantee that prompt content is not transported in argv.
+  - Extended the root.BuildProcess/Process.Execute lifecycle regression to prove a real 30-line UTF-8 file at a path with spaces and canonical xhigh effort reach one Codex ProviderCommandRunner dispatch together.
+  - Split the existing invocation-policy and CLI input-arbitration helpers to keep the new path within repository maintainability limits while preserving JavaScript and legacy input behavior.
+- Files changed
+  - Authored/generated CLI contracts and baselines, Work invocation preparation/normalization, CLI run prompt resolution, packaged run reference, contract/docs/lifecycle tests, and `prd.json`.
+- **Learnings for future iterations:**
+  - Customer-visible CLI help is generated from the authored contract and checked by both manifest validation and baseline fixtures; update source first, regenerate, then refresh baselines with the repository-provided test switch when input inventory changes.
+  - Packaged reference examples should be exercised through the existing `runCLI` boundary test, while exact content and provider arguments belong in the root.BuildProcess functional harness.
+  - `make verify-fast`, the scoped Work/CLI suites, contract checks, manifest check, and docs-reference smoke provide a reliable story gate; the broad lint target currently stops at unrelated pre-existing package-boundary baseline violations.
 ---
