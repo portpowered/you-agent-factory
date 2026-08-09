@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
@@ -213,6 +214,9 @@ func TestEnablementEvaluator_BindsAllTokensForMatchingParentGuard(t *testing.T) 
 		"tok-child-b":     {ID: "tok-child-b", PlaceID: "p-children", Color: factorytoken.Color{WorkID: "c2", ParentID: "w1"}},
 		"tok-child-other": {ID: "tok-child-other", PlaceID: "p-children", Color: factorytoken.Color{WorkID: "c3", ParentID: "other"}},
 	})
+	marking.ParentChildRegistrations = petri.ParentChildRegistrationProjection{
+		"w1": {Children: []factorytoken.Token{*marking.Tokens["tok-child-a"], *marking.Tokens["tok-child-b"]}, Complete: true},
+	}
 
 	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
 	if len(enabled) != 1 {
@@ -223,6 +227,108 @@ func TestEnablementEvaluator_BindsAllTokensForMatchingParentGuard(t *testing.T) 
 	}
 	if got := tokenIDs(enabled[0].Bindings["children"]); strings.Join(got, ",") != "tok-child-a,tok-child-b" {
 		t.Fatalf("children binding tokens = %v, want [tok-child-a tok-child-b]", got)
+	}
+}
+
+func TestEnablementEvaluator_AllChildrenCompleteWaitsForProcessingAndLateChild(t *testing.T) {
+	eval := NewEnablementEvaluator(nil, testNow, nil)
+	n := &state.Net{
+		Places: map[string]*petri.Place{
+			"parent:waiting":   {ID: "parent:waiting", TypeID: "parent", State: "waiting"},
+			"child:complete":   {ID: "child:complete", TypeID: "child", State: "complete"},
+			"child:processing": {ID: "child:processing", TypeID: "child", State: "processing"},
+		},
+		WorkTypes: map[string]*state.WorkType{
+			"parent": {ID: "parent", States: []state.StateDefinition{{Value: "waiting", Category: state.StateCategoryProcessing}}},
+			"child":  {ID: "child", States: []state.StateDefinition{{Value: "processing", Category: state.StateCategoryProcessing}, {Value: "complete", Category: state.StateCategoryTerminal}}},
+		},
+		Transitions: map[string]*petri.Transition{
+			"join": {
+				ID:   "join",
+				Name: "join",
+				InputArcs: []petri.Arc{
+					{ID: "parent-in", Name: "parent", PlaceID: "parent:waiting", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
+					{ID: "children-in", Name: "children", PlaceID: "child:complete", Direction: petri.ArcInput, Mode: interfaces.ArcModeObserve, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityAll}, Guard: &petri.AllWithParentGuard{MatchBinding: "parent"}},
+				},
+			},
+		},
+	}
+
+	parent := &factorytoken.Token{ID: "tok-parent", PlaceID: "parent:waiting", Color: factorytoken.Color{WorkID: "parent-1", WorkTypeID: "parent", DataType: factorytoken.DataTypeWork}}
+	first := &factorytoken.Token{ID: "tok-child-1", PlaceID: "child:complete", Color: factorytoken.Color{WorkID: "child-1", WorkTypeID: "child", ParentID: "parent-1", DataType: factorytoken.DataTypeWork}}
+	processing := &factorytoken.Token{ID: "tok-child-2", PlaceID: "child:processing", Color: factorytoken.Color{WorkID: "child-2", WorkTypeID: "child", ParentID: "parent-1", DataType: factorytoken.DataTypeWork}}
+
+	initial := makeTestSnapshot(map[string]*factorytoken.Token{parent.ID: parent, first.ID: first})
+	initial.ParentChildRegistrations = petri.ParentChildRegistrationProjection{
+		"parent-1": {Children: []factorytoken.Token{*first}, Complete: false},
+	}
+	if enabled := eval.FindEnabledTransitions(context.Background(), n, &initial); len(enabled) != 0 {
+		t.Fatalf("fan-in enabled before the registered set was complete: %#v", enabled)
+	}
+
+	late := makeTestSnapshot(map[string]*factorytoken.Token{parent.ID: parent, first.ID: first, processing.ID: processing})
+	late.ParentChildRegistrations = petri.ParentChildRegistrationProjection{
+		"parent-1": {Children: []factorytoken.Token{*first, *processing}, Complete: false},
+	}
+	if enabled := eval.FindEnabledTransitions(context.Background(), n, &late); len(enabled) != 0 {
+		t.Fatalf("fan-in enabled with a late registration still open: %#v", enabled)
+	}
+
+	processing.PlaceID = "child:complete"
+	terminal := makeTestSnapshot(map[string]*factorytoken.Token{parent.ID: parent, first.ID: first, processing.ID: processing})
+	terminal.ParentChildRegistrations = petri.ParentChildRegistrationProjection{
+		"parent-1": {Children: []factorytoken.Token{*first, *processing}, Complete: true},
+	}
+	enabled := eval.FindEnabledTransitions(context.Background(), n, &terminal)
+	if len(enabled) != 1 {
+		t.Fatalf("fan-in enabled transitions = %d, want exactly 1 after final child terminal", len(enabled))
+	}
+	if got := tokenIDs(enabled[0].Bindings["children"]); strings.Join(got, ",") != "tok-child-1,tok-child-2" {
+		t.Fatalf("fan-in child binding = %v, want both registered children", got)
+	}
+}
+
+func TestEnablementEvaluator_AllChildrenCompleteAcceptsDistinctTerminalPlaces(t *testing.T) {
+	eval := NewEnablementEvaluator(nil, testNow, nil)
+	n := &state.Net{
+		Places: map[string]*petri.Place{
+			"parent:waiting": {ID: "parent:waiting", TypeID: "parent", State: "waiting"},
+			"child:complete": {ID: "child:complete", TypeID: "child", State: "complete"},
+			"child:skipped":  {ID: "child:skipped", TypeID: "child", State: "skipped"},
+		},
+		WorkTypes: map[string]*state.WorkType{
+			"parent": {ID: "parent", States: []state.StateDefinition{{Value: "waiting", Category: state.StateCategoryProcessing}}},
+			"child": {ID: "child", States: []state.StateDefinition{
+				{Value: "complete", Category: state.StateCategoryTerminal},
+				{Value: "skipped", Category: state.StateCategoryTerminal},
+			}},
+		},
+		Transitions: map[string]*petri.Transition{
+			"join": {
+				ID:   "join",
+				Name: "join",
+				InputArcs: []petri.Arc{
+					{ID: "parent-in", Name: "parent", PlaceID: "parent:waiting", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
+					{ID: "children-in", Name: "children", PlaceID: "child:complete", Direction: petri.ArcInput, Mode: interfaces.ArcModeObserve, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityAll}, Guard: &petri.AllWithParentGuard{MatchBinding: "parent"}},
+				},
+			},
+		},
+	}
+
+	parent := &factorytoken.Token{ID: "tok-parent", PlaceID: "parent:waiting", Color: factorytoken.Color{WorkID: "parent-1", WorkTypeID: "parent", DataType: factorytoken.DataTypeWork}}
+	complete := &factorytoken.Token{ID: "tok-child-complete", PlaceID: "child:complete", Color: factorytoken.Color{WorkID: "child-1", WorkTypeID: "child", ParentID: "parent-1", DataType: factorytoken.DataTypeWork}}
+	skipped := &factorytoken.Token{ID: "tok-child-skipped", PlaceID: "child:skipped", Color: factorytoken.Color{WorkID: "child-2", WorkTypeID: "child", ParentID: "parent-1", DataType: factorytoken.DataTypeWork}}
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{parent.ID: parent, complete.ID: complete, skipped.ID: skipped})
+	marking.ParentChildRegistrations = petri.ParentChildRegistrationProjection{
+		"parent-1": {Children: []factorytoken.Token{*complete, *skipped}, Complete: true},
+	}
+
+	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+	if len(enabled) != 1 {
+		t.Fatalf("fan-in enabled transitions = %d, want exactly 1", len(enabled))
+	}
+	if got := tokenIDs(enabled[0].Bindings["children"]); strings.Join(got, ",") != complete.ID {
+		t.Fatalf("fan-in binding surface = %v, want [%s] while validating both terminal places", got, complete.ID)
 	}
 }
 
