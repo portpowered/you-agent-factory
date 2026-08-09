@@ -241,7 +241,7 @@ func recordedDispatchFact(
 		fact.startedAt = firstRecordedTime(dispatch.StartedAt, fact.startedAt)
 		fact.endedAt = recordedDispatchEnd(dispatch, events, dispatchID)
 		fact.workIDs = firstRecordedWorkIDs(dispatch.WorkItemIDs, fact.workIDs)
-		fact.failure = recordedFailure(dispatch.Result.FailureDetail, fact.state)
+		fact.failure = recordedFailure(dispatch.Result.FailureDetail, dispatch.Result.FailureMetadata, fact.state)
 		fact.provider = cloneProviderMetadata(dispatch.ProviderSession)
 	}
 	for _, provider := range providerSessions {
@@ -250,7 +250,7 @@ func recordedDispatchFact(
 		}
 		fact.provider = cloneProviderMetadata(&provider.ProviderSession)
 		fact.workIDs = firstRecordedWorkIDs(provider.WorkItemIDs, fact.workIDs)
-		fact.failure = firstRecordedFailure(fact.failure, recordedFailure(provider.FailureDetail, fact.state))
+		fact.failure = firstRecordedFailure(fact.failure, recordedFailure(provider.FailureDetail, nil, fact.state))
 		break
 	}
 	return fact
@@ -397,13 +397,93 @@ func recordedObservationState(outcome string) workersessions.State {
 	}
 }
 
-func recordedFailure(detail *workers.FailureDetail, state workersessions.State) *workersessions.FailureCause {
-	if detail == nil || !state.Terminal() || state == workersessions.StateCompleted {
+func recordedFailure(
+	detail *workers.FailureDetail,
+	metadata *workers.WorkFailureMetadata,
+	state workersessions.State,
+) *workersessions.FailureCause {
+	if !state.Terminal() || state == workersessions.StateCompleted {
 		return nil
 	}
 	return &workersessions.FailureCause{
-		Kind:   workersessions.FailureCauseWorkersExecutionFailure,
-		Detail: "the Workers execution result was not successful",
+		Kind:                workersessions.FailureCauseWorkersExecutionFailure,
+		Detail:              recordedFailureDetail(detail, metadata),
+		ProviderFailureKind: recordedProviderFailureKind(detail),
+	}
+}
+
+func recordedFailureDetail(detail *workers.FailureDetail, metadata *workers.WorkFailureMetadata) string {
+	if metadata != nil {
+		family, familyKnown := recordedFailureFamily(metadata.Family)
+		typ, typeKnown := recordedFailureType(metadata.Type)
+		if familyKnown && typeKnown && (family != "" || typ != "") {
+			if family == "" {
+				family = "unknown"
+			}
+			if typ == "" {
+				typ = "unknown"
+			}
+			return "family=" + family + " type=" + typ
+		}
+	}
+	if typ, ok := recordedFailureType(detailType(detail)); ok && typ != "" {
+		return "type=" + typ
+	}
+	return "the Workers execution result was not successful"
+}
+
+func detailType(detail *workers.FailureDetail) workers.WorkFailureType {
+	if detail == nil {
+		return ""
+	}
+	return detail.Reason
+}
+
+func recordedFailureFamily(family workers.WorkFailureFamily) (string, bool) {
+	switch family {
+	case "":
+		return "", true
+	case workers.WorkFailureFamilyTerminal, workers.WorkFailureFamilyRetryable, workers.WorkFailureFamilyThrottle:
+		return string(family), true
+	default:
+		return "", false
+	}
+}
+
+func recordedFailureType(typ workers.WorkFailureType) (string, bool) {
+	switch typ {
+	case "":
+		return "", true
+	case workers.WorkFailureTypeAuthFailure,
+		workers.WorkFailureTypePermanentBadRequest,
+		workers.WorkFailureTypeThrottled,
+		workers.WorkFailureTypeInternalServerError,
+		workers.WorkFailureTypeTimeout,
+		workers.WorkFailureTypeUnknown,
+		workers.WorkFailureTypeMisconfigured,
+		workers.WorkFailureTypeCommandLineTooLong,
+		workers.WorkFailureTypeMissingExecutable:
+		return string(typ), true
+	default:
+		return "", false
+	}
+}
+
+func recordedProviderFailureKind(detail *workers.FailureDetail) providers.ExecuteFailureKind {
+	if detail == nil {
+		return ""
+	}
+	switch detail.Reason {
+	case workers.WorkFailureTypeAuthFailure:
+		return providers.ExecuteFailureKindAuthentication
+	case workers.WorkFailureTypeTimeout:
+		return providers.ExecuteFailureKindTimeout
+	case workers.WorkFailureTypeThrottled:
+		return providers.ExecuteFailureKindThrottled
+	case workers.WorkFailureTypeMisconfigured:
+		return providers.ExecuteFailureKindMisconfigured
+	default:
+		return ""
 	}
 }
 
