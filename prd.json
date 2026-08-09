@@ -47,8 +47,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added a root-process Work-watch abort fixture that emits complete NDJSON before a malformed SSE frame, then proves the returned stream error remains actionable on stderr and produces a non-zero process result without leaking partial stdout. Successful finite watch behavior remains covered by the existing Work-watch functional test. The focused Work/watch/process command passes."
     }
   ]
 }
