@@ -187,6 +187,25 @@ func TestInferenceRequestForExecutionRequest_ForwardsModelOperationContract(t *t
 	}
 }
 
+func TestInferenceRequestForExecutionRequest_ForwardsAntigravityPrintTimeout(t *testing.T) {
+	got := inferenceRequestForExecutionRequest(
+		testAgentRequest(work.WorkDispatch{
+			DispatchID: "d-agy-timeout",
+			WorkerType: "agy-worker",
+		}),
+		&workerconfig.FactoryWorkerConfig{
+			Model:         "gemini-3.6-flash-high",
+			ModelProvider: string(modelprovider.ProviderAntigravity),
+			Timeout:       "8m",
+		},
+		nil,
+	)
+
+	if got.PrintTimeout != 8*time.Minute {
+		t.Fatalf("PrintTimeout = %s, want 8m", got.PrintTimeout)
+	}
+}
+
 // pkgmaintcheck:ignore-cyclomatic-complexity this inference request contract test keeps the canonical dispatch payload assertions together on the worker seam.
 func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testing.T) {
 	provider := &agentMockProvider{response: workerexecution.InferenceResponse{Content: "done"}}
@@ -282,5 +301,94 @@ func TestInferenceRequestForExecutionRequest_DefaultWorkingDirectoryDoesNotRequi
 		if capability == workerexecution.RunnerOptionalCapabilityWorkingDirectory {
 			t.Fatalf("capabilities = %#v, want default working directory omitted", got.RequiredOptionalCapabilities)
 		}
+	}
+}
+
+func TestAgentExecutorAcceptsSchemaValidatedStructuredOutput(t *testing.T) {
+	const schema = `{"type":"object","properties":{"verdict":{"type":"string","enum":["pass","reroll"]},"confidence":{"type":"number"}},"required":["verdict","confidence"]}`
+	provider := &agentMockProvider{response: workerexecution.InferenceResponse{
+		Content: `{"verdict":"pass","confidence":0.95}`,
+	}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*workerconfig.FactoryWorkerConfig{
+			"clip-qa": {Model: "gemini-3.6-flash-high", ModelProvider: workerexecution.RunnerIDAntigravity},
+		},
+	}, provider, nil, time.Now)
+
+	result, err := executor.Execute(context.Background(), testAgentRequest(
+		work.WorkDispatch{DispatchID: "structured-pass", TransitionID: "qa", WorkerType: "clip-qa"},
+		withAgentOutputSchema(schema),
+	))
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("outcome = %q, want %q", result.Outcome, workerexecution.OutcomeAccepted)
+	}
+	if result.Output != `{"verdict":"pass","confidence":0.95}` {
+		t.Fatalf("output = %q, want structured JSON", result.Output)
+	}
+	if result.FailureMetadata != nil {
+		t.Fatalf("failure metadata = %#v, want nil", result.FailureMetadata)
+	}
+}
+
+func TestAgentExecutorFailsExplicitStructuredRerollVerdict(t *testing.T) {
+	const schema = `{"type":"object","properties":{"verdict":{"type":"string","enum":["pass","reroll"]}},"required":["verdict"]}`
+	provider := &agentMockProvider{response: workerexecution.InferenceResponse{
+		Content: `{"verdict":"reroll"}`,
+	}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*workerconfig.FactoryWorkerConfig{
+			"clip-qa": {Model: "gemini-3.6-flash-high", ModelProvider: workerexecution.RunnerIDAntigravity},
+		},
+	}, provider, nil, time.Now)
+
+	result, err := executor.Execute(context.Background(), testAgentRequest(
+		work.WorkDispatch{DispatchID: "structured-reroll", TransitionID: "qa", WorkerType: "clip-qa"},
+		withAgentOutputSchema(schema),
+	))
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("outcome = %q, want %q", result.Outcome, workerexecution.OutcomeFailed)
+	}
+	if result.Error == "" || result.FailureMetadata == nil || result.FailureMetadata.Type != workerexecution.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("failure = %#v, want actionable permanent bad-request failure", result)
+	}
+}
+
+func TestParseOutputAgainstSchemaRejectsSchemaInvalidStructuredOutput(t *testing.T) {
+	_, err := parseOutputAgainstSchema(
+		`{"verdict":"pass"}`,
+		[]byte(`{"type":"object","required":["confidence"]}`),
+	)
+	if err == nil {
+		t.Fatal("parseOutputAgainstSchema() error = nil, want schema validation failure")
+	}
+}
+
+func TestPrintTimeoutFromWorkerTimeoutPreservesValidNativePrintLimits(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		raw  string
+		want time.Duration
+	}{
+		{name: "unset", raw: "", want: 0},
+		{name: "media", raw: "8m", want: 8 * time.Minute},
+		{name: "invalid", raw: "not-a-duration", want: 0},
+		{name: "non-positive", raw: "0s", want: 0},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := PrintTimeoutFromWorkerTimeout(test.raw); got != test.want {
+				t.Fatalf("PrintTimeoutFromWorkerTimeout(%q) = %s, want %s", test.raw, got, test.want)
+			}
+		})
 	}
 }

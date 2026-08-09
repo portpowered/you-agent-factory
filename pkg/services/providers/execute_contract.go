@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // ErrExecuteCancelled reports that one provider execution attempt was cancelled
@@ -92,13 +93,17 @@ func sentinelForExecuteFailureKind(kind ExecuteFailureKind) error {
 // exactly one normalized native attempt per call; callers own selection,
 // retry, throttle, and scheduling policy.
 type ExecuteRequest struct {
-	Provider           ID
-	AttemptID          string
-	WorkerType         string
-	WorkstationName    string
-	Model              string
-	ReasoningEffort    string
-	SkipPermissions    bool
+	Provider        ID
+	AttemptID       string
+	WorkerType      string
+	WorkstationName string
+	Model           string
+	ReasoningEffort string
+	SkipPermissions bool
+	// PrintTimeout carries an invocation's requested native print limit. It is
+	// kept as provider-neutral execution metadata so a native adapter can
+	// forward it without importing worker-definition types.
+	PrintTimeout       time.Duration
 	SystemPrompt       string
 	UserMessage        string
 	InputTokens        []any

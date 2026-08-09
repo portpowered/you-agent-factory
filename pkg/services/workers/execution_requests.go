@@ -1,6 +1,8 @@
 package workers
 
 import (
+	"time"
+
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -163,6 +165,7 @@ type ProviderInferenceRequest struct {
 	Model                        string                          `json:"model,omitempty"`
 	ModelProvider                string                          `json:"model_provider,omitempty"`
 	ReasoningEffort              string                          `json:"reasoning_effort,omitempty"`
+	PrintTimeout                 time.Duration                   `json:"-"`
 	ModelLocality                string                          `json:"model_locality,omitempty"`
 	SessionID                    string                          `json:"session_id,omitempty"`
 	// ResumeSession carries an exact typed Providers reference for continuation

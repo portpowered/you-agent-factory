@@ -116,6 +116,7 @@ func provideConfiguredProvidersService(
 	}
 	options := []providerswire.Option{
 		providerswire.WithAgyPTY(agyPTYPlatform),
+		providerswire.WithAgyCommandClock(effectiveProviderCommandClock(edges)),
 		providerswire.WithCommandFactory(providePlatformProcessCommandFactory(edges)),
 		providerswire.WithExecutableLocator(edges.ProvidersExecutableLocator),
 		providerswire.WithACPIntegrations(projectACPIntegrations(integrations)...),
@@ -123,18 +124,25 @@ func provideConfiguredProvidersService(
 	}
 	if workersRunner != nil {
 		options = append(options, providerswire.WithWorkersCommandRunner(workersRunner))
-		return providerswire.NewService(options...)
+		return newConfiguredProvidersService(options, workersRunner)
 	}
 	if edges.ProviderCommandRunner != nil {
 		options = append(options, providerswire.WithCommandRunner(edges.ProviderCommandRunner))
-		return providerswire.NewService(options...)
+		return newConfiguredProvidersService(options, workers.AdaptCommandRunner(edges.ProviderCommandRunner))
 	}
 	commandRunner, err := providePlatformProcessCommandRunner(edges)
 	if err != nil {
 		return nil, err
 	}
 	options = append(options, providerswire.WithCommandRunner(commandRunner))
-	return providerswire.NewService(options...)
+	return newConfiguredProvidersService(options, workers.AdaptCommandRunner(commandRunner))
+}
+
+func effectiveProviderCommandClock(edges serviceedges.Edges) workers.Clock {
+	if edges.Clock != nil {
+		return edges.Clock
+	}
+	return platformclock.Real{}
 }
 
 func projectACPIntegrations(integrations []operatorsettings.ACPIntegration) []providers.ACPIntegration {

@@ -52,6 +52,8 @@ type wireOptions struct {
 	catalog              []catalogwire.Option
 	commandRunner        platformprocess.CommandRunner
 	workersCommandRunner workers.CommandRunner
+	agyCommandRunner     workers.CommandRunner
+	agyCommandClock      workers.Clock
 	agyPTYPlatform       AgyPTYPlatformDependencies
 	acpIntegrations      []providers.ACPIntegration
 	commandFactory       platformprocess.CommandFactory
@@ -149,6 +151,31 @@ func WithWorkersCommandRunner(runner workers.CommandRunner) Option {
 	return workersCommandRunnerOption{runner: runner}
 }
 
+type agyCommandRunnerOption struct {
+	runner workers.CommandRunner
+}
+
+func (o agyCommandRunnerOption) apply(opts *wireOptions) { opts.agyCommandRunner = o.runner }
+
+// WithAgyCommandRunner injects the Providers command-runner effect used by
+// canonical AGY print-mode execution. The PTY option remains available for
+// direct compatibility tests and hosts that intentionally select that seam.
+func WithAgyCommandRunner(runner workers.CommandRunner) Option {
+	return agyCommandRunnerOption{runner: runner}
+}
+
+type agyCommandClockOption struct {
+	clock workers.Clock
+}
+
+func (o agyCommandClockOption) apply(opts *wireOptions) { opts.agyCommandClock = o.clock }
+
+// WithAgyCommandClock injects the timing source used by AGY command
+// diagnostics and duration facts.
+func WithAgyCommandClock(clock workers.Clock) Option {
+	return agyCommandClockOption{clock: clock}
+}
+
 type agyPTYPlatformOption struct {
 	platform AgyPTYPlatformDependencies
 }
@@ -204,10 +231,15 @@ func NewService(options ...Option) (providers.Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	if config.agyCommandClock == nil {
+		config.agyCommandClock = platformclock.Real{}
+	}
 	return newRoot(
 		catalogService,
 		config.commandRunner,
 		config.workersCommandRunner,
+		config.agyCommandRunner,
+		config.agyCommandClock,
 		config.agyPTYPlatform,
 		acp,
 		config.commandFactory,
@@ -232,6 +264,8 @@ func newRoot(
 	catalogService catalog.Service,
 	commandRunner platformprocess.CommandRunner,
 	workersCommandRunner workers.CommandRunner,
+	agyCommandRunner workers.CommandRunner,
+	agyCommandClock workers.Clock,
 	agyPTYPlatform AgyPTYPlatformDependencies,
 	acpIntegrations []providers.ACPIntegration,
 	commandFactory platformprocess.CommandFactory,
@@ -245,7 +279,7 @@ func newRoot(
 	if workersCommandRunner == nil && commandRunner != nil {
 		workersCommandRunner = workers.AdaptCommandRunner(commandRunner)
 	}
-	registrations := executionserviceRegistrations(workersCommandRunner, agyPTYPlatform)
+	registrations := executionserviceRegistrations(workersCommandRunner, agyCommandRunner, agyCommandClock, agyPTYPlatform)
 	acpService, err := acpwire.NewService(acpIntegrations, commandFactory, executableLocator)
 	if err != nil {
 		return nil, err
@@ -360,10 +394,17 @@ func (writer *externalResponseWriter) Close(_ context.Context, completion Comple
 	return nil
 }
 
-func executionserviceRegistrations(workersCommandRunner workers.CommandRunner, agyPTYPlatform AgyPTYPlatformDependencies) []execution.Registration {
+func executionserviceRegistrations(
+	workersCommandRunner workers.CommandRunner,
+	agyCommandRunner workers.CommandRunner,
+	agyCommandClock workers.Clock,
+	agyPTYPlatform AgyPTYPlatformDependencies,
+) []execution.Registration {
 	return executionwire.BuiltInRegistrations(executionwire.BuiltInDependenciesFromWorkersRunner(
 		workersCommandRunner,
 		executionwire.BuiltInRunnerPlatformDependencies{
+			AgyCommandRunner: agyCommandRunner,
+			AgyCommandClock:  agyCommandClock,
 			AgyPTY: executionwire.AgyPTYPlatformDependencies{
 				Allocator: agyPTYPlatform.Allocator,
 				Locator:   agyPTYPlatform.Locator,

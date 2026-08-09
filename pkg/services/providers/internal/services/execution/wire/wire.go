@@ -89,7 +89,9 @@ type AgyPTYPlatformDependencies struct {
 // BuiltInRunnerPlatformDependencies carries optional platform facts for
 // built-in adapter effects constructed from the Workers subprocess runner.
 type BuiltInRunnerPlatformDependencies struct {
-	AgyPTY AgyPTYPlatformDependencies
+	AgyCommandRunner workers.CommandRunner
+	AgyCommandClock  workers.Clock
+	AgyPTY           AgyPTYPlatformDependencies
 }
 
 // BuiltInDependenciesFromWorkersRunner constructs built-in adapter effects
@@ -102,15 +104,23 @@ func BuiltInDependenciesFromWorkersRunner(
 	if len(platform) > 0 {
 		deps = platform[0]
 	}
+	antigravity := agyadapter.NewPTYEffect(agyadapter.PTYEffectOptions{
+		Allocator: deps.AgyPTY.Allocator,
+		ExecutableDependencies: agyadapter.ExecutableDependencies{
+			Locator:   deps.AgyPTY.Locator,
+			Inspector: deps.AgyPTY.Inspector,
+		},
+	})
+	if deps.AgyCommandRunner != nil {
+		commandClock := deps.AgyCommandClock
+		if commandClock == nil {
+			commandClock = platformclock.Real{}
+		}
+		antigravity = agyadapter.NewCommandEffect(deps.AgyCommandRunner, commandClock)
+	}
 	return executionservice.BuiltInDependencies{
-		Antigravity: agyadapter.NewPTYEffect(agyadapter.PTYEffectOptions{
-			Allocator: deps.AgyPTY.Allocator,
-			ExecutableDependencies: agyadapter.ExecutableDependencies{
-				Locator:   deps.AgyPTY.Locator,
-				Inspector: deps.AgyPTY.Inspector,
-			},
-		}),
-		Codex:  codexadapter.NewCommandEffect(runner),
-		Claude: claudeadapter.NewCommandEffect(runner),
+		Antigravity: antigravity,
+		Codex:       codexadapter.NewCommandEffect(runner),
+		Claude:      claudeadapter.NewCommandEffect(runner),
 	}
 }

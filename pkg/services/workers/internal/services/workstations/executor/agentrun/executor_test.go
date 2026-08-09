@@ -47,6 +47,23 @@ func TestAgentRunInferenceRequestFallsBackToModelProviderRunner(t *testing.T) {
 	}
 }
 
+func TestAgentRunInferenceRequestForwardsWorkerTimeoutToPrintTimeout(t *testing.T) {
+	req := agentRunInferenceRequest(
+		workerexecution.WorkstationExecutionRequest{
+			Dispatch: work.WorkDispatch{DispatchID: "dispatch-agy-timeout"},
+		},
+		&interfaces.FactoryWorkerConfig{
+			Model:         "gemini-3.6-flash-high",
+			ModelProvider: "antigravity",
+			Timeout:       "8m",
+		},
+	)
+
+	if req.PrintTimeout != 8*time.Minute {
+		t.Fatalf("PrintTimeout = %s, want 8m", req.PrintTimeout)
+	}
+}
+
 func (s staticInferencer) Infer(ctx context.Context, _ messages.InferenceRequest) (messages.InferenceResult, error) {
 	if s.delay > 0 {
 		timer := time.NewTimer(s.delay)

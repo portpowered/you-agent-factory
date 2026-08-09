@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workstationexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 )
 
 // AgentRunExecutor executes AGENT_RUN workstations through a go-agent-harness adapter.
@@ -278,6 +279,7 @@ func agentRunInferenceRequest(
 		req.Model = workerDef.Model
 		req.ModelProvider = workerDef.ModelProvider
 		req.ReasoningEffort = workerDef.ReasoningEffort
+		req.PrintTimeout = workstationexecutor.PrintTimeoutFromWorkerTimeout(workerDef.Timeout)
 		req.ModelLocality = workerDef.ModelLocality
 		req.SessionID = workerDef.SessionID
 	}

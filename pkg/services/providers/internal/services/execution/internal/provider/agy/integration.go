@@ -93,6 +93,7 @@ func (i *Integration) Invoke(
 	return writer.Close(ctx, inference.SuccessfulCompletion(inference.NewResponse(inference.ResponseInput{
 		Content:         result.Content,
 		ProviderSession: sessionRefToInference(result.SessionRef),
+		Metadata:        executeResultMetadata(result),
 	})))
 }
 
@@ -104,6 +105,7 @@ func executeRequestFromInvocation(request inference.InvocationRequest) providers
 		Model:              request.Model(),
 		ReasoningEffort:    execution.ReasoningEffort,
 		SkipPermissions:    execution.SkipPermissions,
+		PrintTimeout:       execution.PrintTimeout,
 		SystemPrompt:       request.SystemPrompt(),
 		UserMessage:        request.UserMessage(),
 		OutputSchema:       request.OutputSchema(),
@@ -265,6 +267,13 @@ func cloneStringMap(values map[string]string) map[string]string {
 		cloned[key] = value
 	}
 	return cloned
+}
+
+func executeResultMetadata(result providers.ExecuteResult) map[string]string {
+	if result.Diagnostics == nil {
+		return nil
+	}
+	return cloneStringMap(result.Diagnostics.Metadata)
 }
 
 var _ inference.Integration = (*Integration)(nil)

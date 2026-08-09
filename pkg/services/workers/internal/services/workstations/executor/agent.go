@@ -2,7 +2,6 @@ package executor
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -396,6 +395,20 @@ func (ae *AgentExecutor) workResultForInferenceResponse(request workerexecution.
 				Outcome:         workerexecution.OutcomeFailed,
 				Output:          resp.Content,
 				Error:           "output parse failed: " + parseFailure,
+				FailureMetadata: structuredOutputFailureMetadata(),
+				ProviderSession: workerexecution.CloneProviderSessionMetadata(resp.ProviderSession),
+				Diagnostics:     diagnostics,
+				Metrics:         metrics,
+			}, nil
+		}
+		if verdictFailure := structuredOutputFailure(resp.Content); verdictFailure != "" {
+			return workerexecution.WorkResult{
+				DispatchID:      request.Dispatch.DispatchID,
+				TransitionID:    request.Dispatch.TransitionID,
+				Outcome:         workerexecution.OutcomeFailed,
+				Output:          resp.Content,
+				Error:           "structured output verdict failed: " + verdictFailure,
+				FailureMetadata: structuredOutputFailureMetadata(),
 				ProviderSession: workerexecution.CloneProviderSessionMetadata(resp.ProviderSession),
 				Diagnostics:     diagnostics,
 				Metrics:         metrics,
@@ -456,6 +469,7 @@ func inferenceRequestForExecutionRequest(request workerexecution.WorkstationExec
 			Source:   request.RunnerSelectionSource,
 		})
 		req.ReasoningEffort = workerDef.ReasoningEffort
+		req.PrintTimeout = PrintTimeoutFromWorkerTimeout(workerDef.Timeout)
 		req.ModelLocality = workerDef.ModelLocality
 		req.SessionID = workerDef.SessionID
 		if workerDef.SessionID != "" {
@@ -793,25 +807,6 @@ func (ae *AgentExecutor) evaluateOutcome(resp workerexecution.InferenceResponse,
 		return workerexecution.OutcomeContinue
 	}
 	return workerexecution.OutcomeRejected
-}
-
-// parseOutputAgainstSchema parses the response content as JSON and validates
-// it can be unmarshalled into TokenColor structs. The schema parameter is
-// reserved for future schema validation; for MVP, we just validate JSON.
-func parseOutputAgainstSchema(content string, _ []byte) ([]workerexecution.Color, error) {
-	// Try parsing as array of token colors first.
-	var colors []workerexecution.Color
-	if err := json.Unmarshal([]byte(content), &colors); err == nil {
-		return colors, nil
-	}
-
-	// Try parsing as a single token color.
-	var color workerexecution.Color
-	if err := json.Unmarshal([]byte(content), &color); err != nil {
-		return nil, fmt.Errorf("response is not valid JSON: %w", err)
-	}
-
-	return []workerexecution.Color{color}, nil
 }
 
 // Compile-time check.
