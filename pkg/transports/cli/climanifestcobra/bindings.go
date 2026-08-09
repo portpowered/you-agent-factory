@@ -4,11 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
+
+const genericRequiredAnnotation = "infinite-you/required"
+
+type encodedArgumentValue struct {
+	ValueType string          `json:"valueType"`
+	Present   bool            `json:"present"`
+	Value     json.RawMessage `json:"value"`
+}
 
 // CompletionRegistry maps stable manifest input IDs to transport-edge dynamic
 // completion callbacks.
@@ -74,6 +84,62 @@ type GenericBindings struct {
 	SourceValues            SourceCandidateProvider
 	RootInputs              ResolvedInputsBinding
 	GuardUnknownSubcommands bool
+}
+
+// ValidateRequiredFlags preserves Cobra's required-flag checks for handwritten
+// commands and applies manifest-required checks to generic commands. Generic
+// required flags are validated here for observation and in the command handler
+// path so machine-readable handlers can own their JSON error documents.
+func ValidateRequiredFlags(cmd *cobra.Command) error {
+	if cmd == nil {
+		return fmt.Errorf("validate required flags: command is required")
+	}
+	if err := cmd.ValidateRequiredFlags(); err != nil {
+		return err
+	}
+	return validateRequiredFlagAnnotations(cmd)
+}
+
+func validateRequiredFlagAnnotations(cmd *cobra.Command) error {
+	var missing []string
+	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+		if values := flag.Annotations[genericRequiredAnnotation]; len(values) == 0 || values[0] != "true" {
+			return
+		}
+		if flag.Changed {
+			return
+		}
+		if aliases := flag.Annotations["cobra_annotation_flag_aliases"]; len(aliases) > 0 {
+			for _, alias := range aliases {
+				if aliasFlag := cmd.Flags().Lookup(alias); aliasFlag != nil && aliasFlag.Changed {
+					return
+				}
+			}
+		}
+		missing = append(missing, flag.Name)
+	})
+	if len(missing) == 0 {
+		return nil
+	}
+	sort.Strings(missing)
+	return fmt.Errorf("required flag(s) %q not set", "--"+missing[0])
+}
+
+func validateRequiredGenericFlags(cmd *cobra.Command, record climanifest.Command) error {
+	for _, flag := range sortedFlags(record.Flags) {
+		if !flag.Required {
+			continue
+		}
+		names := append([]string{flag.Long}, flag.Aliases...)
+		for _, name := range names {
+			if parsed := lookupCommandFlag(cmd, name); parsed != nil && parsed.Changed {
+				goto nextFlag
+			}
+		}
+		return fmt.Errorf("required flag(s) %q not set", "--"+flag.Long)
+	nextFlag:
+	}
+	return nil
 }
 
 // InputChanged reports whether the CLI explicitly supplied a manifest input.

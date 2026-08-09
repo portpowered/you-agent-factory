@@ -923,23 +923,6 @@ func registerGenericFlag(flagSet *pflag.FlagSet, record climanifest.Flag, value 
 	return nil
 }
 
-func validateRequiredGenericFlags(cmd *cobra.Command, record climanifest.Command) error {
-	for _, flag := range sortedFlags(record.Flags) {
-		if !flag.Required {
-			continue
-		}
-		names := append([]string{flag.Long}, flag.Aliases...)
-		for _, name := range names {
-			if flag := lookupCommandFlag(cmd, name); flag != nil && flag.Changed {
-				goto nextFlag
-			}
-		}
-		return fmt.Errorf("required flag(s) %q not set", "--"+flag.Long)
-	nextFlag:
-	}
-	return nil
-}
-
 func projectCobraFlagGroupAnnotations(
 	cmd *cobra.Command,
 	commandID string,

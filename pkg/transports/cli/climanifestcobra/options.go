@@ -15,52 +15,6 @@ import (
 
 const genericInputAnnotationPrefix = "infinite-you/input-id/"
 const genericArgumentAnnotationPrefix = "infinite-you/argument-value/"
-const genericRequiredAnnotation = "infinite-you/required"
-
-// ValidateRequiredFlags preserves Cobra's required-flag checks for handwritten
-// commands and applies manifest-required checks to generic commands. Generic
-// required flags are validated here for observation and in the command handler
-// path so machine-readable handlers can own their JSON error documents.
-func ValidateRequiredFlags(cmd *cobra.Command) error {
-	if cmd == nil {
-		return fmt.Errorf("validate required flags: command is required")
-	}
-	if err := cmd.ValidateRequiredFlags(); err != nil {
-		return err
-	}
-	return validateRequiredFlagAnnotations(cmd)
-}
-
-func validateRequiredFlagAnnotations(cmd *cobra.Command) error {
-	var missing []string
-	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
-		if values := flag.Annotations[genericRequiredAnnotation]; len(values) == 0 || values[0] != "true" {
-			return
-		}
-		if flag.Changed {
-			return
-		}
-		if aliases := flag.Annotations["cobra_annotation_flag_aliases"]; len(aliases) > 0 {
-			for _, alias := range aliases {
-				if aliasFlag := cmd.Flags().Lookup(alias); aliasFlag != nil && aliasFlag.Changed {
-					return
-				}
-			}
-		}
-		missing = append(missing, flag.Name)
-	})
-	if len(missing) == 0 {
-		return nil
-	}
-	sort.Strings(missing)
-	return fmt.Errorf("required flag(s) %q not set", "--"+missing[0])
-}
-
-type encodedArgumentValue struct {
-	ValueType string          `json:"valueType"`
-	Present   bool            `json:"present"`
-	Value     json.RawMessage `json:"value"`
-}
 
 // InputValues returns the parsed flag and positional inputs declared for cmd,
 // keyed by stable manifest input ID. Returned repeated values are detached copies.
