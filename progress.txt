@@ -50,7 +50,6 @@
   - `make verify-fast` is currently blocked by the environment’s UI dependency/toolchain state: TypeScript cannot find the `bun` type definitions and rejects the existing deprecated `baseUrl` option.
   - `make test` reaches the full short Go suite but fails an unrelated Windows permission-mode assertion in `pkg/platform/runtimeartifact` (`0666` observed versus `0600` expected); the Work/CLI/Wire packages remain green.
 ---
-
 ## [2026-08-08 14:49 -07:00] - wo-c2-work-watch-event-stream-003
 - What was implemented
   - Added `--follow` continuation after terminal Work transitions, including later transitions without finite-mode termination.
@@ -137,4 +136,18 @@
   - The local full `make test-functional-coverage` run reached the functional suite but was stopped by the unrelated flaky `TestFactoryRuntimeMixedDirectAndFactoryChildDispatchesStayIsolatedThroughCLI` provider-prompt failure; no watch test failed.
 - **Learnings for future iterations:**
   - A functional coverage ratchet counts defensive constructor-error branches even when production wiring supplies immutable valid edges; if the branch cannot be reached through a customer flow, keep its error handling and record the measured package floor explicitly rather than weakening the runtime path.
+---
+## [2026-08-08 17:35 -07:00] - wo-c2-work-watch-event-stream-004 unit coverage follow-up
+- What was implemented
+  - Added a package-level production CLI regression that constructs the generated Work command from the real handler registry, executes `you work watch --session session-alpha --follow`, and verifies typed session/follow/global-input mapping, stdout output, and separate diagnostics.
+  - Updated the story record to include the production adapter coverage fix after CI reported the `pkg/transports/cli` unit floor below its 71.22% minimum.
+- Files changed
+  - `pkg/transports/cli/root_work_watch_test.go`
+  - `prd.json`, `progress.txt`
+- Verification
+  - `go test ./pkg/transports/cli -run TestProductionWorkHandlerRegistryExecutesWatch -count=1` passes.
+  - `go test ./pkg/transports/cli/... -count=1` and the focused public Work watch functional test pass.
+  - The local `make test-unit-coverage` invocation is blocked by Windows command-line length while launching the repository-wide coverage subprocess; CI remains the authoritative coverage check.
+- **Learnings for future iterations:**
+  - When a generated command family is covered by a generic resolved fixture, add a package-level test through the production handler registry as well; this catches adapter coverage regressions and validates the real generated command/input handoff.
 ---
