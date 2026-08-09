@@ -333,9 +333,6 @@ func recordedWorkExists(world interfaces.FactoryWorldState, events []interfaces.
 		if containsRecordedWorkID(pointerStringSlice(event.Context.WorkIDs), workID) {
 			return true
 		}
-		if event.Type != interfaces.FactoryEventTypeWorkRequest {
-			continue
-		}
 	}
 	return false
 }
