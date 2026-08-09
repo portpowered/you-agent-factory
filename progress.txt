@@ -297,3 +297,22 @@
   - Public provider-wire compatibility tests can exercise real native PTY policy with a fake platform Host while keeping root command-effect selection deterministic and reviewable.
   - Coverage floors should be measured with the same functional package set that owns the runtime behavior; focused provider packages are useful for isolating regressions when a broader lane has an unrelated platform-specific failure.
 ---
+
+## [2026-08-08 19:10 -07:00] - wo-b1-antigravity-provider-golden-traces-005
+- What was implemented
+  - Completed the final PR follow-up verification for the already-complete five-story AGY implementation; no additional production change was needed.
+  - Confirmed the historical blocking feedback is addressed on the current PR head: canonical command-runner selection remains unconditional for root dispatch, native timeout parsing stays behind the workstation-executor boundary, and the retained PTY compatibility path has public functional coverage.
+  - Confirmed the PR has no inline review threads or review submissions requiring further action.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/providers/agy/... -count=1` passes using tracked offline recordings and does not invoke live AGY.
+  - `go test ./pkg/services/providers/... ./pkg/services/workers/... ./pkg/wire/... -count=1` passes.
+  - `go vet ./pkg/services/providers/... ./pkg/services/workers/... ./pkg/wire/... ./tests/functional/providers/agy/...` passes.
+  - `go run ./cmd/functionalboundarycheck`, `go run ./cmd/pkgstructurecheck`, and `go run ./cmd/backendsizecheck -root .` pass.
+  - PR #1826 is non-draft, mergeable, clean, at local `HEAD` `445c0653e`, with all reported GitHub checks successful; no live AGY smoke was run.
+- **Learnings for future iterations:**
+  - A final PR audit should inspect GraphQL review-thread state separately from flat issue comments; a historical top-level gate comment can remain visible even when no actionable thread exists.
+  - Keep the PR description synchronized from the canonical `prd.json` after recording final verification evidence.
+---
