@@ -1,78 +1,90 @@
 {
-  "project": "WO-D5 Operations Page — Running Real Pipelines",
-  "branchName": "wo-d5-operations-page",
-  "description": "Publish a canonical packaged operations runbook that establishes you run --with-server --continuously as the production-oriented real-pipeline run shape, explains finite drain, stranded Work, restart recovery, retry and resource hazards, and provides a current-binary-verified inspection toolkit.",
+  "project": "WO-D2 — Reference Schemas for Batch Work, States, and Relations",
+  "branchName": "wo-d2-reference-schemas-docs",
+  "description": "Publish canonical packaged reference documentation that makes the FACTORY_REQUEST_BATCH shape, Work state lifecycle, and DEPENDS_ON, PARENT_CHILD, and SAME_NAME semantics implementation-ready for customers. The concrete change extends the established batch-inputs, work, relationships, and guard-linked topics so operators can author valid batches and predict joined-input dispatch, including batch-wide name uniqueness, same-batch-only relation endpoints, and the post-A1 rule that dependencies on every joined input gate dispatch.",
   "context": {
-    "customerAsk": "Create the WO-D5 operations page from docs/temp/work-order.md under docs/reference/. Document --with-server --continuously as the way to run real pipelines; finite and stranded behavior including the A7 exit-1 diagnostic; inclusive VISIT_COUNT and loop breakers; resource capacity and priority inversion; in-memory session loss and same-name Work restoration; dispatch-time prompt hot reload; worker-sessions list/show/stream/read; and work watch --follow. Execute every documented CLI invocation against the current binary and verify packaged docs with make docs-reference-smoke and make verify-fast.",
-    "problem": "Operators currently have to assemble critical lifetime, recovery, scheduling, prompt, and inspection behavior from separate references or live failures. This makes finite drain look like completion, leaves stranded PROCESSING Work unexplained, encourages unsafe resource sharing and ad hoc polling, and can lead operators to assume an in-memory Factory Session queue survives restart.",
-    "solution": "Add one packaged you docs operations runbook that composes the shipped operational contracts into a safe workflow, routes to detailed canonical topics, and uses only examples and outputs exercised against the current built binary. Keep the lane documentation-only and explicitly exclude storage, scheduler, local-model, ACP, and other runtime expansion."
+    "customerAsk": "Document the FACTORY_REQUEST_BATCH shape, Work states and transitions, and especially the difference between DEPENDS_ON, PARENT_CHILD, and SAME_NAME joining, including exactly what gates dispatch after the A1 fix. Capture the batch-wide unique-name and same-batch relation constraints discovered through live operator failures, publish the guidance through canonical docs/reference topics, execute every shown CLI invocation against the current binary, and verify packaged docs behavior with make docs-reference-smoke and make verify-fast.",
+    "problem": "Operators currently have to infer critical submission and scheduling rules from scattered contract, guard, and runtime material. This caused rejected live submissions for duplicate names and relations outside the submitted batch, while incomplete documentation of SAME_NAME joins and dependency gating delayed diagnosis of dispatch-before-dependency behavior. Work-state names and lifecycle categories are also easy to conflate, so customers cannot reliably predict starting placement, progression, or completion semantics.",
+    "solution": "Extend the canonical docs/reference batch-inputs, work, and relationships topics, with focused links to guards, rather than introducing a parallel schema topic family. Document the public batch fields and atomic constraints, the authored Work-state lifecycle, and a direct comparison of dependency, lineage, and name-join behavior. Include a worked multi-input timeline stating that every DEPENDS_ON relation on every selected join input must be satisfied before dispatch, and prove all displayed CLI commands against the current built binary with real output or behavioral assertions."
   },
   "acceptanceCriteria": [
-    "you docs operations presents one canonical real-pipeline runbook under docs/reference/, and related reference pages route operators to it without duplicating the guide in root documentation.",
-    "The runbook distinguishes --with-server --continuously, finite batch drain, server-enabled drain with non-terminal Work, and plain batch waiting on stranded PROCESSING Work; it states exit behavior and reproduces or asserts the current binary's actual A7 diagnostic, including exit status 1.",
-    "The runbook accurately explains inclusive VISIT_COUNT (>=), the guarded loop-breaker pattern, resource capacity acquisition/release, the downstream-before-upstream priority-inversion hazard, and an actionable mitigation without promising scheduler priority that does not exist.",
-    "The runbook states that live Factory Session queue state is in memory and lost on restart, documents direct restoration by resubmitting Work with the same names so worktree templating can resume existing artifacts, and describes dispatch-time prompt hot reload without implying a storage engine or broader runtime changes.",
-    "Every CLI invocation newly shown in the documentation is executed against the current built you binary during implementation, with its real output and exit status pasted into PR evidence or asserted by an existing behavioral check; examples and prose are corrected to match that evidence, never invented.",
-    "Quality gates pass: the named packaged-doc verification command make docs-reference-smoke, make verify-fast, and required typecheck and tests; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "Delivery continues through implementation and review until required CI is terminal and passing, every blocking PR conversation is explicitly addressed, merge conflicts and shared-file changes are reconciled, and the PR is actually merged; opened, green, approved, or ready-to-merge is not complete."
+    "you docs batch-inputs gives a complete, internally consistent FACTORY_REQUEST_BATCH reference, including works[], workTypeName, batch-wide unique work names, atomic validation, and the requirement that every relation source and target name a Work item in the same submitted batch.",
+    "you docs work explains authored state names, the INITIAL, PROCESSING, TERMINAL, and FAILED lifecycle categories, initial or explicitly requested placement, workstation-driven transitions, and the observable distinction between successful terminal and failed Work.",
+    "you docs relationships clearly distinguishes DEPENDS_ON, PARENT_CHILD, and SAME_NAME; documents source/target direction; and states that dispatch waits for every DEPENDS_ON relation on every input selected for a join, including secondary SAME_NAME-joined inputs.",
+    "All new or changed examples use public customer vocabulary, live under docs/reference, keep root docs as routing material, stay within the D2 cut list, and avoid unrelated documentation or implementation cleanup.",
+    "Every CLI invocation shown in changed documentation is executed against the current built binary during implementation, with actual stdout/stderr pasted into the PR evidence or asserted in behavioral coverage; the named verification commands go test ./pkg/transports/cli/..., make docs-reference-smoke, and make verify-fast pass.",
+    "Typecheck and tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file changes are reconciled, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "wo-d5-operations-page-001",
-      "title": "Publish the real-pipeline lifetime and recovery runbook",
-      "description": "As a pipeline operator, I want one packaged runbook that tells me how to keep a real Factory Session alive and how to recover after a process restart so that an idle queue or lost process is not mistaken for completed Work.",
+      "id": "wo-d2-reference-schemas-docs-001",
+      "title": "Author a valid batch request",
+      "description": "As a factory operator, I want one authoritative batch schema guide so I can submit multiple Work items without discovering naming, work-type, or relation-scope constraints through rejection.",
       "acceptanceCriteria": [
-        "you docs operations is available from the packaged docs surface and recommends you run --with-server --continuously as the normal run shape for real pipelines that accept or retain Work across idle periods.",
-        "The guide contrasts continuous operation with finite batch drain and explains that server-enabled finite drain with N non-terminal Work items exits 1 with the current A7 diagnostic, while plain batch mode can continue waiting when Work remains stranded in PROCESSING.",
-        "The guide clearly separates terminal completion, idle/drained state, and non-terminal Work so an operator does not treat process exit or lack of new dispatches as proof that the pipeline completed.",
-        "The guide states that Factory Session queue state is process-local and in-memory, restart loses that queue, and no durable storage engine is available or proposed by this work.",
-        "The recovery procedure tells operators to inspect durable artifacts, resubmit the intended Work using the same Work names, and rely on worktree templating to reconnect resumed dispatches to existing work; it presents the six production recoveries on 2026-08-08/09 as operational evidence, not a durability guarantee.",
-        "Every CLI invocation introduced by this story is run against the current built binary, and the PR records real stdout, stderr, and exit status or names the behavioral assertion that proves them; any mismatch is fixed in the docs.",
+        "The batch guide identifies the public request discriminator, request-level fields, works[] fields, and relations[] fields, and uses workTypeName rather than retired internal aliases.",
+        "The guide states that Work names must be unique across the entire batch and explains that relations resolve by those names.",
+        "The guide states that each relation's source and target must both name Work in the same submitted batch; relations cannot point to existing Work from an earlier or different submission.",
+        "A valid mixed-work-type example and focused invalid examples make workTypeName, duplicate-name, unknown relation endpoint, self-relation, cycle, and invalid requiredState outcomes reviewer-verifiable, including whole-batch rejection with no partial creation.",
+        "Every CLI invocation added or changed in this story is run against the current binary and its real output is pasted into PR evidence or asserted by behavioral coverage.",
         "make docs-reference-smoke passes.",
-        "Tests pass",
         "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Published docs/reference/operations.md as the packaged real-pipeline lifetime and restart-recovery runbook, registered it in the embedded CLI docs surface, added narrow routing links from related packaged/root indexes, and added the intentionally stranded docs/examples/operations-stranded-work.json fixture. Rebuilt the current binary and exercised `you docs operations`, `you run --dir ./factory --with-server` (exit 0), `you run --dir ./factory --with-server --work ./docs/examples/operations-stranded-work.json` (exit 1 with the exact A7 diagnostic on stderr), the same plain batch fixture (exit 1 with the same diagnostic), and `you run --dir ./factory --with-server --continuously` (observed live until cancellation). Focused A7 drain/process tests, make docs-reference-smoke, and make verify-fast pass; verify-fast required the standard make ui-deps install because the checkout initially lacked @types/bun. Six 2026-08-08/09 production recoveries are presented as operational evidence only, not a durability guarantee."
+      "notes": "Extended docs/reference/batch-inputs.md with the complete public batch envelope, batch-wide Work-name namespace, same-submission relation endpoint scope, atomic rejection behavior, and focused duplicate/unknown-endpoint/self/cycle/requiredState examples. Verified the documented inline you submit batch --dry-run against bin/you.exe, make docs-reference-smoke, go test ./pkg/transports/cli/..., and make verify-fast."
     },
     {
-      "id": "wo-d5-operations-page-002",
-      "title": "Explain retry-loop and resource scheduling safety",
-      "description": "As a Factory author operating long pipelines, I want the runbook to explain retry thresholds and shared-resource scheduling hazards so I can prevent infinite loops and avoid starving the upstream work that unlocks a pipeline.",
+      "id": "wo-d2-reference-schemas-docs-002",
+      "title": "Understand Work states and transitions",
+      "description": "As a factory author or operator, I want the Work reference to explain state categories and transitions so I can predict where submitted Work starts, how it advances, and when it is considered successful or failed.",
       "acceptanceCriteria": [
-        "The operations guide states that a VISIT_COUNT threshold is inclusive: the guarded path becomes eligible when the watched visit count is greater than or equal to (>=) maxVisits, with an example whose stated visit sequence matches current runtime behavior.",
-        "The guide presents the guarded LOGICAL_MOVE loop-breaker pattern that diverts exhausted retry/review Work to an explicit failed or terminal state, and distinguishes that pattern from placing only a visit guard on the normal worker path.",
-        "The guide explains that resource pool capacity is held by eligible dispatches and released when their dispatch ends, and that queued Work does not reserve future capacity.",
-        "The guide names the priority-inversion foot-gun: a downstream stage may acquire a shared resource while upstream Work for the same pipeline is queued, delaying the upstream stage needed to make progress.",
-        "The guide gives an actionable authoring or operations mitigation, such as separating stage-specific pools or reserving capacity through topology, and does not claim unsupported scheduler priorities or fairness guarantees.",
-        "Any CLI invocation introduced by this story is executed against the current built binary and has real output and exit evidence in the PR or an existing behavioral assertion; JSON/config examples are reviewed against the current contract rather than treated as CLI output.",
+        "The Work reference distinguishes customer-authored state names from the lifecycle categories INITIAL, PROCESSING, TERMINAL, and FAILED, with the runtime meaning of each category.",
+        "The guide explains that omitted batch works[].state uses the Work type's initial state, while an explicit state must be a valid state on that Work type and intentionally changes starting placement.",
+        "The guide explains that the factory topology and workstation outcome routes define available transitions; it does not imply a universal fixed sequence of state names.",
+        "The guide explains observable completion semantics, including that TERMINAL represents successful completion, FAILED represents failed completion, and both stop ordinary non-terminal processing.",
+        "State guidance cross-links to the batch, factory configuration, workstation, and Work-observation references without duplicating their full contracts.",
+        "Every CLI invocation added or changed in this story is run against the current binary and its real output is pasted into PR evidence or asserted by behavioral coverage.",
         "make docs-reference-smoke passes.",
-        "Tests pass",
         "Typecheck passes"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Expanded docs/reference/operations.md with inclusive VISIT_COUNT semantics and a current maxVisits: 3 sequence, the guarded LOGICAL_MOVE loop-breaker pattern, lease-style resource acquisition/release, queued Work non-reservation, and the downstream-before-upstream priority-inversion hazard with stage-specific-pool/topology mitigations. The rebuilt bin/you.exe served docs operations, guards, resources, and workstations with exit status 0; operations output included the new markers. Focused scheduler, visit-count, guard, resource-mapping, and functional guard tests passed; make docs-reference-smoke and make verify-fast passed (including typecheck and short UI/Go suites)."
+      "notes": "Extended docs/reference/work.md with the customer-authored state-name versus lifecycle-category distinction, INITIAL/PROCESSING/TERMINAL/FAILED meanings, omitted versus explicit works[].state placement, topology-defined transitions, successful versus failed completion semantics, and links to batch, config, workstations, and Work observation sections. Rebuilt bin/you.exe and asserted the new section and cross-links in you docs work output; verified go test ./pkg/transports/cli/..., make docs-reference-smoke, and make verify-fast."
     },
     {
-      "id": "wo-d5-operations-page-003",
-      "title": "Provide the live operations inspection toolkit",
-      "description": "As an operator diagnosing a running pipeline, I want verified commands for observing Work and Worker Sessions and clear prompt reload behavior so I can inspect progress and adjust the next dispatch without restarting the session.",
+      "id": "wo-d2-reference-schemas-docs-003",
+      "title": "Predict relation and joined-input dispatch behavior",
+      "description": "As a factory author, I want dependency, lineage, and name-join semantics compared directly so I can choose the correct construct and know exactly when a multi-input workstation may dispatch.",
       "acceptanceCriteria": [
-        "The guide states that supported worker and workstation prompt files are read at dispatch time, so a saved prompt edit affects the next dispatch but does not mutate an already-running dispatch or restore lost queue state.",
-        "The guide gives purpose-driven, current examples for you worker-sessions list, show, stream, and read, explaining which command locates sessions, inspects metadata or state, follows live events, or reads a completed transcript.",
-        "The guide uses you work watch --follow as the normal event-driven way to observe Work transitions, including the current session-filter syntax when shown, and does not recommend hand-written sleep or poll loops.",
-        "Loading, no-match, completed, live, and command failure outcomes are described only to the extent observed from the current CLI; the guide does not invent output fields, transcript retention, restart replay, or unsupported flags.",
-        "Every CLI invocation introduced by this story is executed against the current built binary, with real stdout, stderr, and exit status pasted into PR evidence or asserted by an existing behavioral check; documentation is corrected when observed behavior differs.",
-        "Related packaged reference topics receive only the narrow cross-links needed to make the operations runbook discoverable; root docs remain routing material and no duplicate operations guide is added elsewhere.",
+        "A comparison explains that DEPENDS_ON is a submitted batch relation for prerequisite-state gating, PARENT_CHILD is a submitted batch relation for parent lineage and parent-aware fan-in, and SAME_NAME is a per-input workstation guard that correlates inputs by authored Work name rather than a batch relation.",
+        "Direction is explicit: for DEPENDS_ON, the source is blocked by the target; for PARENT_CHILD, the source is the child and the target is the parent; for SAME_NAME, matchInput identifies the peer input whose selected Work name must equal the guarded input's Work name.",
+        "The guide states that SAME_NAME only selects compatible joined inputs and does not satisfy, replace, or create a dependency or parent lineage.",
+        "The dispatch invariant is explicit: after all join guards select a complete input binding, the scheduler evaluates every DEPENDS_ON relation on every selected input, and any missing target or target not in its requiredState prevents dispatch—including a dependency carried only by a secondary SAME_NAME-joined input.",
+        "A worked two-input example and timeline show that the workstation remains undispatched while the secondary joined input's prerequisite is incomplete and becomes eligible only after that prerequisite reaches the required state, subject to all other guards, capacity, and scheduler rules.",
+        "Every CLI invocation added or changed in this story is run against the current binary and its real output is pasted into PR evidence or asserted by behavioral coverage.",
         "make docs-reference-smoke passes.",
-        "Tests pass",
         "Typecheck passes"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Expanded docs/reference/operations.md with dispatch-time worker/workstation prompt reload behavior, event-driven `work watch --follow` usage and session filtering, purpose-driven Worker Session list/show/stream/read commands, and only observed no-match and missing-identity outcomes. Added narrow operations links from work, workers, and workstations and smoke markers. Rebuilt the current bin/you.exe and exercised the packaged topics plus server-backed commands: Worker Sessions list returned completed mock attempts with exit 0; a valid no-match Work returned `No worker sessions found.` with exit 0; show/read/stream for a missing `codex` session_id returned exit 1 with `WORKER_SESSION_NOT_FOUND`; `work watch --follow` remained live until cancellation; and the explicit `session-beta` filter returned the observed 404 diagnostic. Existing `TestWorkerSessionsCLI`, `TestWorkWatchFollowsStateTransitionsUntilTerminal`, and `TestRunningSessionReloadsPromptOnNextDispatch` passed, along with make docs-reference-smoke, make build, and make verify-fast (typecheck, 2,970 UI tests, 191 Bun tests, and short Go suite)."
+      "notes": "Extended docs/reference/relationships.md with a direct DEPENDS_ON, PARENT_CHILD, and SAME_NAME comparison; explicit source/target or matchInput direction; the distinction between batch relations and per-input guards; the all-selected-input dependency gate after join binding; and a two-batch worked timeline for a secondary SAME_NAME input whose prerequisite is incomplete. Rebuilt bin/you.exe and verified the rendered you docs relationships output, go test ./pkg/transports/cli/... -count=1, the existing TestDependsOnSecondaryJoinedInput behavioral regression, make docs-reference-smoke, and make verify-fast."
+    },
+    {
+      "id": "wo-d2-reference-schemas-docs-004",
+      "title": "Retrieve trustworthy packaged schema guidance",
+      "description": "As a CLI user, I want the completed guidance available through the packaged docs commands so I can consult the same authoritative material in the environment where I operate a factory.",
+      "acceptanceCriteria": [
+        "The current binary successfully renders the revised batch, Work-state, and relation guidance through you docs batch-inputs, you docs work, and you docs relationships, with discoverable cross-links from the packaged topic index or relevant topic routing text.",
+        "Packaged output contains the same customer-facing semantics as the canonical Markdown, including the same-batch relation boundary and the all-joined-input dependency gate.",
+        "Command examples and captured outputs contain no invented flags, fabricated success messages, or unverified error text; environment-specific identifiers are clearly presented as examples rather than claimed output.",
+        "Focused behavioral verification uses go test ./pkg/transports/cli/...; make docs-reference-smoke and make verify-fast also pass.",
+        "Scope contains no local-model harness, llama-server trace work, new ACP lane, wrapper-layer multimodal transformation, storage engine, or broad root documentation rewrite.",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Rebuilt bin/you.exe and verified the packaged surface directly: you docs batch-inputs, you docs work, and you docs relationships each exited 0 and contained the D2 schema, lifecycle, and joined-input dependency markers; you docs with no topic listed all three discoverable topic commands; and the batch-work compatibility alias matched batch-inputs exactly. Verified go test ./pkg/transports/cli/... -count=1, make docs-reference-smoke, and make verify-fast (typecheck, MCP contract checks, UI tests, and short Go suite)."
     }
   ]
 }
