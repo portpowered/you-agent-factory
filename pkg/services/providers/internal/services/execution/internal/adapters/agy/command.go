@@ -24,8 +24,8 @@ const (
 // NewCommandEffect binds the canonical AGY print-mode invocation to the
 // Providers command-runner boundary. The command runner owns process
 // creation; this adapter owns only AGY's argv and timeout policy.
-func NewCommandEffect(runner workers.CommandRunner) Effect {
-	if runner == nil {
+func NewCommandEffect(runner workers.CommandRunner, clock workers.Clock) Effect {
+	if runner == nil || clock == nil {
 		return nil
 	}
 	return EffectFunc(func(
@@ -33,7 +33,7 @@ func NewCommandEffect(runner workers.CommandRunner) Effect {
 		request execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (EffectResult, error) {
-		started := time.Now()
+		started := clock.Now()
 		command, err := buildCommand(request)
 		if err != nil {
 			return EffectResult{}, providers.ExecuteFailure{
@@ -47,7 +47,7 @@ func NewCommandEffect(runner workers.CommandRunner) Effect {
 		defer cancel()
 		result, runErr := runCommand(commandContext, runner, command, observe)
 		effectResult := EffectResult{
-			DurationMillis: time.Since(started).Milliseconds(),
+			DurationMillis: clock.Now().Sub(started).Milliseconds(),
 			Metadata:       map[string]string{"output_format": outputFormatForRequest(request)},
 			SessionRef:     sessionRefFromRequest(request.ResumeSession),
 			CapturedStdout: append([]byte(nil), result.Stdout...),

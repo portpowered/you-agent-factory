@@ -90,6 +90,7 @@ type AgyPTYPlatformDependencies struct {
 // built-in adapter effects constructed from the Workers subprocess runner.
 type BuiltInRunnerPlatformDependencies struct {
 	AgyCommandRunner workers.CommandRunner
+	AgyCommandClock  workers.Clock
 	AgyPTY           AgyPTYPlatformDependencies
 }
 
@@ -111,7 +112,11 @@ func BuiltInDependenciesFromWorkersRunner(
 		},
 	})
 	if deps.AgyCommandRunner != nil {
-		antigravity = agyadapter.NewCommandEffect(deps.AgyCommandRunner)
+		commandClock := deps.AgyCommandClock
+		if commandClock == nil {
+			commandClock = platformclock.Real{}
+		}
+		antigravity = agyadapter.NewCommandEffect(deps.AgyCommandRunner, commandClock)
 	}
 	return executionservice.BuiltInDependencies{
 		Antigravity: antigravity,

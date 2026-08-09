@@ -1,4 +1,4 @@
-package agy
+package wire
 
 import (
 	"bytes"
@@ -18,16 +18,14 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
 const legacyAgyPTYModel = "gemini-3.6-flash-high"
 
-// TestAgyLegacyPTYCompatibilityThroughProvidersWire preserves functional
+// TestAgyLegacyPTYCompatibilityThroughProvidersWire preserves package-level
 // evidence for the public Providers PTY compatibility seam. Root composition
-// intentionally selects the canonical command-runner effect whenever that
-// edge is present; this scenario exercises the explicit public Providers wire
-// option used by legacy hosts without weakening that root selection policy.
+// intentionally selects the canonical command-runner effect whenever that edge
+// is present; the root wire test owns that selection proof.
 func TestAgyLegacyPTYCompatibilityThroughProvidersWire(t *testing.T) {
 	t.Parallel()
 
@@ -121,19 +119,19 @@ func newLegacyAgyProvidersService(
 		time.Millisecond,
 	)
 	clock.SetTick(1)
-	allocator, err := providerswire.NewAgyPTYAllocator(host, clock)
+	allocator, err := NewAgyPTYAllocator(host, clock)
 	if err != nil {
 		t.Fatalf("NewAgyPTYAllocator() error = %v", err)
 	}
-	service, err := providerswire.NewService(
-		providerswire.WithAgyPTY(providerswire.AgyPTYPlatformDependencies{
+	service, err := NewService(
+		WithAgyPTY(AgyPTYPlatformDependencies{
 			Allocator: allocator,
 			Locator:   legacyAgyExecutableLocator{path: executable},
 			Inspector: platformfilesystem.Local{},
 		}),
 	)
 	if err != nil {
-		t.Fatalf("providerswire.NewService() error = %v", err)
+		t.Fatalf("NewService() error = %v", err)
 	}
 	return service
 }

@@ -25,7 +25,7 @@ func TestCommandEffectBuildsRecordedPrintArgv(t *testing.T) {
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
 		Stdout: []byte("recorded stream output"),
 	})
-	effect := agy.NewCommandEffect(workers.AdaptCommandRunner(runner))
+	effect := newAgyCommandEffect(workers.AdaptCommandRunner(runner))
 	workspace := t.TempDir()
 	prompt := "Watch clip-fixture.mp4; preserve this path and the semicolon."
 	var observed []byte
@@ -83,7 +83,7 @@ func TestCommandEffectSelectsJSONModeForStructuredOutput(t *testing.T) {
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
 		Stdout: []byte(`{"conversation_id":"structured-command","status":"SUCCESS","response":"ok","structured_output":{"ok":true},"json_schema":{"type":"object"},"duration_seconds":0,"num_turns":0,"usage":{"input_tokens":0,"output_tokens":0,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":0}}`),
 	})
-	effect := agy.NewCommandEffect(workers.AdaptCommandRunner(runner))
+	effect := newAgyCommandEffect(workers.AdaptCommandRunner(runner))
 	workspace := t.TempDir()
 	schema := `{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]}`
 	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{
@@ -158,7 +158,7 @@ func TestCommandEffectBuildsArgvForRecordedFileAndVideoTraces(t *testing.T) {
 			}
 
 			runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: trace})
-			effect := agy.NewCommandEffect(workers.AdaptCommandRunner(runner))
+			effect := newAgyCommandEffect(workers.AdaptCommandRunner(runner))
 			_, err = effect.Execute(context.Background(), execution.ContinuationRequest{
 				ExecuteRequest: providers.ExecuteRequest{
 					Provider:         providers.IDAntigravity,
@@ -198,7 +198,7 @@ func TestCommandEffectUsesFiveMinutePrintTimeoutByDefault(t *testing.T) {
 	t.Parallel()
 
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("ok")})
-	effect := agy.NewCommandEffect(workers.AdaptCommandRunner(runner))
+	effect := newAgyCommandEffect(workers.AdaptCommandRunner(runner))
 	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{
 		ExecuteRequest: providers.ExecuteRequest{
 			Provider:         providers.IDAntigravity,
@@ -237,7 +237,7 @@ func TestCommandEffectRejectsUnsupportedModelAndEffortBeforeLaunch(t *testing.T)
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			runner := testutil.NewProviderCommandRunner()
-			effect := agy.NewCommandEffect(workers.AdaptCommandRunner(runner))
+			effect := newAgyCommandEffect(workers.AdaptCommandRunner(runner))
 			_, err := effect.Execute(context.Background(), execution.ContinuationRequest{
 				ExecuteRequest: providers.ExecuteRequest{
 					Provider:         providers.IDAntigravity,
@@ -261,7 +261,7 @@ func TestCommandEffectTimeoutIsProviderFailure(t *testing.T) {
 	t.Parallel()
 
 	runner := blockingCommandRunner{}
-	effect := agy.NewCommandEffect(runner)
+	effect := newAgyCommandEffect(runner)
 	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{
 		ExecuteRequest: providers.ExecuteRequest{
 			Provider:         providers.IDAntigravity,
@@ -275,6 +275,12 @@ func TestCommandEffectTimeoutIsProviderFailure(t *testing.T) {
 	if !errors.As(err, &failure) || failure.Kind != providers.ExecuteFailureKindTimeout {
 		t.Fatalf("Execute() error = %#v, want timeout ExecuteFailure", err)
 	}
+}
+
+func newAgyCommandEffect(runner workers.CommandRunner) agy.Effect {
+	return agy.NewCommandEffect(runner, workers.ClockFunc(func() time.Time {
+		return time.Unix(0, 0).UTC()
+	}))
 }
 
 type blockingCommandRunner struct{}

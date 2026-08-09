@@ -419,7 +419,7 @@ func TestAgyCommandEffectRequiresStructuredOutputAfterExitZero(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: test.stdout})
-			effect := agy.NewCommandEffect(workers.AdaptCommandRunner(runner))
+			effect := newAgyCommandEffect(workers.AdaptCommandRunner(runner))
 			result, err := newAgyRoot(t, effect).Execute(t.Context(), providers.ExecuteRequest{
 				Provider:  providers.IDAntigravity,
 				AttemptID: "agy-command-parse-" + strings.ReplaceAll(test.name, " ", "-"),
