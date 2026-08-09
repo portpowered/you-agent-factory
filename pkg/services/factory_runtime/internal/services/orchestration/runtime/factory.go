@@ -26,6 +26,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -91,6 +92,7 @@ type runtimeConfig struct {
 	workRequestIDs            work.RequestIDGenerator
 	eventHistory              recordings.RuntimeLedger
 	worldStateProjector       factory.WorldStateProjector
+	providerSessions          providersessions.Service
 	submissionRecorder        recordings.SubmissionRecorder
 	factoryEventRecorder      factory.FactoryEventRecorder
 	submissionHooks           []factory.SubmissionHook
@@ -129,6 +131,7 @@ func New(
 	inlineDispatch bool,
 	eventHistory recordings.RuntimeLedger,
 	worldStateProjector factory.WorldStateProjector,
+	providerSessions providersessions.Service,
 	submissionRecorder recordings.SubmissionRecorder,
 	factoryEventRecorder factory.FactoryEventRecorder,
 	submissionHooks []factory.SubmissionHook,
@@ -184,6 +187,7 @@ func New(
 		inlineDispatch:            inlineDispatch,
 		eventHistory:              eventHistory,
 		worldStateProjector:       worldStateProjector,
+		providerSessions:          providerSessions,
 		submissionRecorder:        submissionRecorder,
 		factoryEventRecorder:      factoryEventRecorder,
 		submissionHooks:           append([]factory.SubmissionHook(nil), submissionHooks...),
@@ -440,7 +444,7 @@ func configureRuntimeDispatch(
 		ProviderInvocation: cfg.providerInvocation,
 		Async:              !cfg.inlineDispatch && cfg.completionDeliveryPlanner == nil,
 	})
-	workerSessions, err := cfg.workerSessionsFactory(workersBoundary)
+	workerSessions, err := cfg.workerSessionsFactory(workersBoundary, cfg.clock)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("construct Worker Sessions service: %w", err)
 	}
@@ -983,15 +987,4 @@ func (f *factoryImpl) WorkflowContext() *factory_context.FactoryContext {
 		return nil
 	}
 	return f.cfg.workflowContext
-}
-
-func closeRuntimeEventSubscriptions(ledger recordings.RuntimeLedger) {
-	if ledger == nil {
-		return
-	}
-	closer, ok := ledger.(interface{ CloseLiveSubscriptions() })
-	if !ok {
-		return
-	}
-	closer.CloseLiveSubscriptions()
 }

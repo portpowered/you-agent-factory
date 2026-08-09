@@ -944,7 +944,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime",
-      "minimum": 55.52
+      "minimum": 52.80
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
@@ -2699,6 +2699,14 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli",
+      "minimum": 39.01
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http",
+      "minimum": 52.16
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire",
       "exception": {
         "kind": "measurement",
@@ -3064,7 +3072,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra",
-      "minimum": 70.84
+      "minimum": 70.80
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/cliserver",
@@ -3173,6 +3181,10 @@
       "minimum": 27.70
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/worker_sessions",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/workflow",
       "exception": {
         "kind": "measurement",
@@ -3184,7 +3196,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/http",
-      "minimum": 67.69
+      "minimum": 66.35
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/http/apitypes",

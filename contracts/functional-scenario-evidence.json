@@ -2,6 +2,15 @@
   "formatVersion": 1,
   "declarations": [
     {
+      "test": "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI",
+      "stableIds": [
+        "cli/you.worker-sessions.list",
+        "cli/you.worker-sessions.read",
+        "cli/you.worker-sessions.show",
+        "cli/you.worker-sessions.stream"
+      ]
+    },
+    {
       "test": "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddDeleteAndUnifiedListOneSettingsBackedCatalogEntry",
       "stableIds": [
         "cli/you.workers.acp.add",

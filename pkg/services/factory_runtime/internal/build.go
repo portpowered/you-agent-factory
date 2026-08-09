@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -41,6 +42,7 @@ type RuntimeFactory struct {
 	inputFiles               factory.InputFileSystem
 	inputDirectoryWalker     factory.InputDirectoryWalker
 	orchestrationCompilation factory.OrchestrationCompilation
+	providerSessions         providersessions.Service
 }
 
 func NewRuntimeFactory(
@@ -58,6 +60,7 @@ func NewRuntimeFactory(
 	inputFiles factory.InputFileSystem,
 	inputDirectoryWalker factory.InputDirectoryWalker,
 	orchestrationCompilation factory.OrchestrationCompilation,
+	providerSessions providersessions.Service,
 ) *RuntimeFactory {
 	return &RuntimeFactory{
 		quorumPolicy:             quorumPolicy,
@@ -74,6 +77,7 @@ func NewRuntimeFactory(
 		inputFiles:               inputFiles,
 		inputDirectoryWalker:     inputDirectoryWalker,
 		orchestrationCompilation: orchestrationCompilation,
+		providerSessions:         providerSessions,
 	}
 }
 
@@ -226,6 +230,7 @@ func (f *RuntimeFactory) Build(
 		workerService,
 		providerInvocation,
 		workerSessionsFactory,
+		f.providerSessions,
 		f.workService,
 		f.quorumPolicy,
 		f.outputShaping,
@@ -279,6 +284,7 @@ func assembleRuntimeBundle(
 	workerService runtimeWorkstationService,
 	providerInvocation workers.WorkstationRequestExecutor,
 	workerSessionsFactory factory.WorkerSessionsFactory,
+	providerSessions providersessions.Service,
 	workService work.Service,
 	quorumPolicy interfaces.QuorumPolicyService,
 	outputShaping interfaces.InvocationOutputShapingService,
@@ -331,6 +337,7 @@ func assembleRuntimeBundle(
 		inlineDispatch,
 		eventHistory,
 		worldStateProjector,
+		providerSessions,
 		effectiveSubmissionRecorder,
 		factoryEventRecorder,
 		submissionHooks,

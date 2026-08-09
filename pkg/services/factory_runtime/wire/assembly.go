@@ -4,6 +4,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimeinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -30,6 +31,7 @@ func NewRuntimeFactory(
 	inputFiles factoryruntime.InputFileSystem,
 	inputDirectoryWalker factoryruntime.InputDirectoryWalker,
 	orchestrationCompilation factoryruntime.OrchestrationCompilation,
+	providerSessions providersessions.Service,
 ) *RuntimeFactory {
 	return factoryruntimeinternal.NewRuntimeFactory(
 		quorumPolicy,
@@ -46,6 +48,7 @@ func NewRuntimeFactory(
 		inputFiles,
 		inputDirectoryWalker,
 		orchestrationCompilation,
+		providerSessions,
 	)
 }
 

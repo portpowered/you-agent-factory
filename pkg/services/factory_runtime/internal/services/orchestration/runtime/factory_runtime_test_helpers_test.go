@@ -26,11 +26,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+type unavailableProviderSessions struct {
+	providersessions.Service
+}
+
+func (unavailableProviderSessions) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
+	return providersessions.ProjectResult{}, providersessions.ErrSessionStorageUnavailable
+}
 
 type testFactoryOption func(*testFactoryConfig)
 
@@ -72,13 +81,13 @@ func newTestFactory(opts ...testFactoryOption) (factory.Factory, error) {
 	if workerSessionsService == nil {
 		workerSessionsService = &fakeWorkerSessionsService{execution: workerService}
 	}
-	workerSessionsFactory := func(workers.WorkstationPoolBoundary) (workersessions.Service, error) {
+	workerSessionsFactory := func(workers.WorkstationPoolBoundary, platformclock.Source) (workersessions.Service, error) {
 		return workerSessionsService, nil
 	}
 	return New(
 		cfg.net, cfg.scheduler, cfg.workerExecutors, workerService, cfg.providerInvocation, workerSessionsFactory, cfg.runtimeConfig,
 		cfg.workflowContext, cfg.runtimeMode, cfg.logger, cfg.clock,
-		cfg.inlineDispatch, cfg.eventHistory, nil,
+		cfg.inlineDispatch, cfg.eventHistory, nil, unavailableProviderSessions{},
 		nil, nil, cfg.submissionHooks,
 		cfg.dispatchRecorder, cfg.completionRecorder, cfg.petriMutationRecorder,
 		cfg.completionDeliveryPlanner,
@@ -149,6 +158,22 @@ func (s *fakeWorkerSessionsService) Get(context.Context, workersessions.GetReque
 
 func (s *fakeWorkerSessionsService) List(context.Context, workersessions.ListRequest) (workersessions.ListResult, error) {
 	return workersessions.ListResult{}, nil
+}
+
+func (s *fakeWorkerSessionsService) ListObservations(context.Context, workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
+	return workersessions.ListObservationsResult{}, nil
+}
+
+func (s *fakeWorkerSessionsService) GetObservation(context.Context, workersessions.GetObservationRequest) (workersessions.Observation, error) {
+	return workersessions.Observation{}, nil
+}
+
+func (s *fakeWorkerSessionsService) StreamObservations(context.Context, workersessions.StreamObservationsRequest) (workersessions.ObservationSubscription, error) {
+	return workersessions.ObservationSubscription{}, nil
+}
+
+func (s *fakeWorkerSessionsService) ReadTranscript(context.Context, workersessions.ReadTranscriptRequest) (workersessions.ReadTranscriptResult, error) {
+	return workersessions.ReadTranscriptResult{}, nil
 }
 
 func (s *fakeWorkerSessionsService) InvokeSession(ctx context.Context, req workersessions.InvokeSessionRequest) (workersessions.InvokeSessionResult, error) {

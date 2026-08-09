@@ -21,6 +21,8 @@ tags:
     description: Runtime state, event stream, and trace inspection.
   - name: Provider Sessions
     description: Provider-owned session diagnostics for dashboard inspection.
+  - name: Worker Sessions
+    description: Worker Session observations correlated with Factory Work.
   - name: Models
     description: Model discovery and capability inspection for the current runtime.
   - name: Workflows
@@ -89,6 +91,175 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/worker-sessions:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: listWorkerSessionsBySessionId
+      summary: List Worker Sessions correlated with one Work item
+      description: Returns authoritative Worker Session observations for the requested Work item in the explicitly selected Factory Session. A known Work with no correlated sessions returns an empty sessions array; an unknown Work returns NOT_FOUND.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - name: workId
+          in: query
+          required: true
+          description: Work identity whose Worker Session attempts should be listed.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Deterministically ordered Worker Session observations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListWorkerSessionsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/worker-sessions/events:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: streamWorkerSessionEventsBySessionId
+      summary: Stream retained and live Worker Session events
+      description: >-
+        Streams the canonical Worker Session Events topic for the exact
+        Provider Session identity in the explicitly selected Factory Session.
+        Retained records are emitted first in aggregate order, followed by
+        live records. Each data frame is serialized JSON matching
+        WorkerSessionEvent. The terminal event is marked TERMINAL for an active
+        session or TERMINAL_REPLAY for an already-terminal session, after
+        which the connection closes successfully. Source failures are emitted
+        as an explicit SOURCE_FAILURE frame so clients can preserve complete
+        records already written and return a typed non-success result.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - name: provider
+          in: query
+          required: true
+          description: Provider that issued the correlated session identity.
+          schema:
+            $ref: '#/components/schemas/LoadableProviderSessionProvider'
+        - name: kind
+          in: query
+          required: true
+          description: Provider-session identifier kind.
+          schema:
+            $ref: '#/components/schemas/LoadableProviderSessionKind'
+        - name: id
+          in: query
+          required: true
+          description: Provider-issued session identifier, not a filesystem path.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Retained then live Worker Session event frames.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events where each data frame is serialized JSON matching WorkerSessionEvent.
+              x-event-schema: '#/components/schemas/WorkerSessionEvent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/worker-sessions/detail:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: getWorkerSessionObservationBySessionId
+      summary: Show one Worker Session observation
+      description: Returns one authoritative Worker Session observation for the exact Provider Session identity in the explicitly selected Factory Session. The response is derived from Worker Sessions lifecycle state, Work correlation, Provider Session projection facts, and canonical timing; it never exposes provider storage paths or raw rollout content.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - name: provider
+          in: query
+          required: true
+          description: Provider that issued the correlated session identity.
+          schema:
+            $ref: '#/components/schemas/LoadableProviderSessionProvider'
+        - name: kind
+          in: query
+          required: true
+          description: Provider-session identifier kind.
+          schema:
+            $ref: '#/components/schemas/LoadableProviderSessionKind'
+        - name: id
+          in: query
+          required: true
+          description: Provider-issued session identifier, not a filesystem path.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: One detached Worker Session observation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionObservation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/worker-sessions/transcript:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: readWorkerSessionTranscriptBySessionId
+      summary: Read one finished Worker Session transcript
+      description: Returns the normalized, ordered transcript for a terminal Worker Session identified by its exact Provider Session identity in the explicitly selected Factory Session. The response is projected through Provider Sessions and never parses raw rollout files at the CLI boundary.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - name: provider
+          in: query
+          required: true
+          description: Provider that issued the correlated session identity.
+          schema:
+            $ref: '#/components/schemas/LoadableProviderSessionProvider'
+        - name: kind
+          in: query
+          required: true
+          description: Provider-session identifier kind.
+          schema:
+            $ref: '#/components/schemas/LoadableProviderSessionKind'
+        - name: id
+          in: query
+          required: true
+          description: Provider-issued session identifier, not a filesystem path.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Normalized transcript for a finished Worker Session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionTranscriptResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The Worker Session is still active and has no final transcript.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/invocations:
@@ -1630,6 +1801,26 @@ components:
       $ref: './components/schemas/api/ListWorkResponse.yaml'
     ListWorkCountSummary:
       $ref: './components/schemas/api/ListWorkCountSummary.yaml'
+    ListWorkerSessionsResponse:
+      $ref: './components/schemas/api/ListWorkerSessionsResponse.yaml'
+    WorkerSessionTranscriptResponse:
+      $ref: './components/schemas/api/WorkerSessionTranscriptResponse.yaml'
+    WorkerSessionObservation:
+      $ref: './components/schemas/api/WorkerSessionObservation.yaml'
+    WorkerSessionEvent:
+      $ref: './components/schemas/api/WorkerSessionEvent.yaml'
+    WorkerSessionEventDelivery:
+      $ref: './components/schemas/api/WorkerSessionEventDelivery.yaml'
+    WorkerSessionEventRecord:
+      $ref: './components/schemas/api/WorkerSessionEventRecord.yaml'
+    WorkerSessionProviderSessionRef:
+      $ref: './components/schemas/api/WorkerSessionProviderSessionRef.yaml'
+    WorkerSessionFailure:
+      $ref: './components/schemas/api/WorkerSessionFailure.yaml'
+    WorkerSessionParseDiagnostic:
+      $ref: './components/schemas/api/WorkerSessionParseDiagnostic.yaml'
+    WorkerSessionParseDiagnostics:
+      $ref: './components/schemas/api/WorkerSessionParseDiagnostics.yaml'
     PaginationContext:
       $ref: './components/schemas/api/PaginationContext.yaml'
     TokenResponse:

@@ -14,6 +14,7 @@ import (
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
+	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
 	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
 	mappingcomposition "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
@@ -95,7 +96,14 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 		_, err := mapped.FactoryDefinitions.GetCurrentFactoryForSession(ctx, sessionID)
 		return err
 	}).WithDefaultWorkTypeResolver(workhttp.NewDefaultWorkTypeResolver(mapped.FactoryDefinitions, handler.invocationWorkType))
-	server := transporthttp.NewServer(sessionsHandler, workHandler, modelsHandler, handler.providerSessionsHTTP, opened.Logger)
+	var workerSessionsHandler *workersessionshttp.Handler
+	if opened.WorkerSessions != nil {
+		workerSessionsHandler = workersessionshttp.NewHandler(
+			workersessionshttp.NewAdapter(opened.WorkerSessions, opened.Work),
+			opened.Logger,
+		)
+	}
+	server := transporthttp.NewServer(sessionsHandler, workHandler, modelsHandler, handler.providerSessionsHTTP, opened.Logger, workerSessionsHandler)
 	return server.Handler(), nil
 }
 

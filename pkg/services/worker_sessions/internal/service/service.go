@@ -11,8 +11,10 @@ import (
 	"sort"
 	"sync"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -25,6 +27,14 @@ var ErrMissingExecution = errors.New("worker sessions: execution service is requ
 // required directly injected EventsAppender.
 var ErrMissingEventsAppender = errors.New("worker sessions: events appender is required")
 
+// ErrMissingClock reports that New was constructed without the required
+// runtime time source used for observation timing.
+var ErrMissingClock = errors.New("worker sessions: clock is required")
+
+// ErrMissingProviderSessions reports that New was constructed without the
+// Provider Sessions read-side contract used to enrich worker observations.
+var ErrMissingProviderSessions = errors.New("worker sessions: provider sessions service is required")
+
 // EventsAppender is the narrow Events dependency Start's before-handoff
 // publication barrier needs: commit one source-native record into a topic's
 // aggregate ordering. registry depends on this port rather than the full
@@ -35,19 +45,30 @@ type EventsAppender interface {
 	Append(context.Context, events.AppendRequest) (events.AppendResult, error)
 }
 
+// EventsReader is the narrow canonical source needed by the observation
+// stream. An events.Service satisfies it structurally; tests and alternate
+// construction paths may provide only the read/subscribe capabilities.
+type EventsReader interface {
+	Subscribe(context.Context, events.SubscribeRequest) (events.Subscription, error)
+}
+
 type registry struct {
 	mu           sync.RWMutex
 	sessions     map[string]workersessions.Session
 	publications map[string]*publication
 	supervisions map[string]*supervision
+	observations map[string]*observation
 	// dispatchOwners is the Worker Sessions-owned reverse lookup from the
 	// currently supervised Workers dispatch to its stable session identity.
 	// Provider progress names dispatches, never Worker Sessions, so this map is
 	// the only accepted route from a provider observation to its owner.
-	dispatchOwners map[string]string
-	boundary       workers.WorkstationPoolBoundary
-	events         EventsAppender
-	logger         logging.Logger
+	dispatchOwners   map[string]string
+	boundary         workers.WorkstationPoolBoundary
+	events           EventsAppender
+	eventReader      EventsReader
+	providerSessions providersessions.Service
+	clock            platformclock.Source
+	logger           logging.Logger
 }
 
 // Compile-time proof that production registry seals the W1+W2 root contract
@@ -55,28 +76,46 @@ type registry struct {
 // broader API.
 var _ workersessions.Service = (*registry)(nil)
 
-// New constructs the process-local Worker Session registry from the one
-// directly injected workers.WorkstationPoolBoundary that Start publishes
-// attempts through and the one directly injected EventsAppender Start's
-// before-handoff publication barrier commits through. A nil logger falls
-// back to logging.NoopLogger. A nil execution or nil eventsAppender is
-// rejected: Start has no meaningful behavior without either.
-func New(boundary workers.WorkstationPoolBoundary, eventsAppender EventsAppender, logger logging.Logger) (workersessions.Service, error) {
+// New constructs the process-local Worker Session registry from its required
+// lifecycle, time, and Provider Sessions collaborators. A nil logger falls
+// back to logging.NoopLogger. A nil execution, Events appender, clock, or
+// Provider Sessions service is rejected: the registry cannot truthfully
+// supervise, time, or enrich an observation without each of them.
+func New(
+	boundary workers.WorkstationPoolBoundary,
+	eventsAppender EventsAppender,
+	logger logging.Logger,
+	clock platformclock.Source,
+	providerSessions providersessions.Service,
+) (workersessions.Service, error) {
 	if boundary == nil {
 		return nil, ErrMissingExecution
 	}
 	if eventsAppender == nil {
 		return nil, ErrMissingEventsAppender
 	}
-	return &registry{
-		sessions:       make(map[string]workersessions.Session),
-		publications:   make(map[string]*publication),
-		supervisions:   make(map[string]*supervision),
-		dispatchOwners: make(map[string]string),
-		boundary:       boundary,
-		events:         eventsAppender,
-		logger:         logging.EnsureLogger(logger),
-	}, nil
+	if clock == nil {
+		return nil, ErrMissingClock
+	}
+	if providerSessions == nil {
+		return nil, ErrMissingProviderSessions
+	}
+	registry := &registry{
+		sessions:         make(map[string]workersessions.Session),
+		publications:     make(map[string]*publication),
+		supervisions:     make(map[string]*supervision),
+		observations:     make(map[string]*observation),
+		dispatchOwners:   make(map[string]string),
+		boundary:         boundary,
+		events:           eventsAppender,
+		clock:            clock,
+		providerSessions: providerSessions,
+		logger:           logging.EnsureLogger(logger),
+	}
+	if reader, ok := eventsAppender.(EventsReader); ok {
+		registry.eventReader = reader
+	}
+	return registry, nil
 }
 
 func (r *registry) Reserve(_ context.Context, req workersessions.ReserveRequest) (workersessions.Session, error) {
@@ -209,6 +248,7 @@ func (r *registry) commitTerminal(id string, state workersessions.State, result 
 	session.State = state
 	session.Result = cloneTerminalResult(&result)
 	r.sessions[id] = session
+	r.finishObservationLocked(id, r.clock.Now())
 	return cloneSession(session), true
 }
 
@@ -264,6 +304,7 @@ func (r *registry) commitControlTerminal(id string, state workersessions.State) 
 	existing.State = state
 	existing.Result = nil
 	r.sessions[id] = existing
+	r.finishObservationLocked(id, r.clock.Now())
 	return cloneSession(existing), true
 }
 

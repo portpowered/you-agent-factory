@@ -20,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
@@ -50,6 +51,10 @@ type watchCLIHTTPProtocol struct {
 	clihttp.Protocol
 }
 
+type streamingCLIHTTPProtocol struct {
+	clihttp.Protocol
+}
+
 func provideStandardCLIHTTPProtocol() (standardCLIHTTPProtocol, error) {
 	protocol, err := clihttp.NewProtocol(&http.Client{Timeout: standardCLIHTTPTimeout}, platformclock.Real{})
 	if err != nil {
@@ -64,6 +69,14 @@ func provideExtendedCLIHTTPProtocol() (extendedCLIHTTPProtocol, error) {
 		return extendedCLIHTTPProtocol{}, fmt.Errorf("build extended CLI HTTP protocol: %w", err)
 	}
 	return extendedCLIHTTPProtocol{Protocol: protocol, timeout: extendedCLIHTTPTimeout}, nil
+}
+
+func provideStreamingCLIHTTPProtocol() (streamingCLIHTTPProtocol, error) {
+	protocol, err := clihttp.NewProtocol(&http.Client{}, platformclock.Real{})
+	if err != nil {
+		return streamingCLIHTTPProtocol{}, fmt.Errorf("build streaming CLI HTTP protocol: %w", err)
+	}
+	return streamingCLIHTTPProtocol{Protocol: protocol}, nil
 }
 
 func provideBatchInputFileSystem() submitcli.BatchInputFileSystem {
@@ -100,6 +113,22 @@ func provideOperatorDefaultsResolver(settings operatorsettings.Service) operator
 
 func provideSubmitWorkOperation(read work.PayloadFileReader, transport extendedCLIHTTPProtocol) cli.SubmitWorkOperation {
 	return submitcli.NewSubmit(read, transport.Protocol)
+}
+
+func provideListWorkerSessionsOperation(transport standardCLIHTTPProtocol) cli.ListWorkerSessionsOperation {
+	return workersessionscli.BindList(transport.Protocol)
+}
+
+func provideShowWorkerSessionOperation(transport standardCLIHTTPProtocol) cli.ShowWorkerSessionsOperation {
+	return workersessionscli.BindShow(transport.Protocol)
+}
+
+func provideReadWorkerSessionOperation(transport standardCLIHTTPProtocol) cli.ReadWorkerSessionOperation {
+	return workersessionscli.BindRead(transport.Protocol)
+}
+
+func provideStreamWorkerSessionOperation(transport streamingCLIHTTPProtocol) cli.StreamWorkerSessionOperation {
+	return workersessionscli.BindStream(transport.Protocol)
 }
 func provideSubmitBatchOperation(
 	transport extendedCLIHTTPProtocol,

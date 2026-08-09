@@ -1,4 +1,4 @@
-package climanifestcobra_test
+package climanifestcobra
 
 import (
 	"context"
@@ -11,7 +11,6 @@ import (
 
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
@@ -160,7 +159,7 @@ func TestSessionFamilyCommandExecutesManifestBoundLeaf(t *testing.T) {
 		return nil
 	})
 
-	root, err := climanifestcobra.NewSessionFamilyCommandFromManifest(manifest, registry)
+	root, err := NewSessionFamilyCommandFromManifest(manifest, registry)
 	if err != nil {
 		t.Fatalf("NewSessionFamilyCommandFromManifest() error = %v", err)
 	}
@@ -249,7 +248,7 @@ func TestSessionFamilyCommandRejectsInvalidBindingsBeforeExecution(t *testing.T)
 				}
 				registry, manifest = test.build(t, manifest, operation)
 			}
-			_, err := climanifestcobra.NewSessionFamilyCommandFromManifest(manifest, registry)
+			_, err := NewSessionFamilyCommandFromManifest(manifest, registry)
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("NewSessionFamilyCommandFromManifest() error = %v, want %q", err, test.want)
 			}
@@ -335,7 +334,7 @@ func TestRunServerExecutableSurfaceMatchesGeneratedManifest(t *testing.T) {
 
 func assertRunServerCommandMetadata(
 	t *testing.T,
-	components climanifestcobra.RunServerFamilyComponents,
+	components RunServerFamilyComponents,
 	runRecord, serverRecord climanifest.Command,
 ) {
 	t.Helper()
@@ -351,7 +350,7 @@ func assertRunServerCommandMetadata(
 
 func assertRunFlagParity(
 	t *testing.T,
-	components climanifestcobra.RunServerFamilyComponents,
+	components RunServerFamilyComponents,
 	runRecord climanifest.Command,
 ) {
 	t.Helper()
@@ -421,7 +420,7 @@ func TestNewCommandTreeRejectsInvalidCanonicalFlagValuesBeforeDispatch(t *testin
 					return nil
 				}
 			}
-			root, err := climanifestcobra.NewCommandTree(manifest, bindings)
+			root, err := NewCommandTree(manifest, bindings)
 			if root != nil || err == nil || !strings.Contains(err.Error(), test.want) || calls != 0 {
 				t.Fatalf("NewCommandTree() = (%v, %v), calls=%d; want nil, %q, zero", root, err, calls, test.want)
 			}
@@ -614,7 +613,7 @@ func TestNewCommandTreeResolvesPersistentInputsForDescendants(t *testing.T) {
 				_ map[string]any,
 			) error {
 				var err error
-				received, err = climanifestcobra.ResolvedPersistentInputsFromContext(ctx)
+				received, err = ResolvedPersistentInputsFromContext(ctx)
 				return err
 			}
 			bindings.SourceValues = func(
@@ -627,7 +626,7 @@ func TestNewCommandTreeResolvesPersistentInputsForDescendants(t *testing.T) {
 				}
 				return resolvedinput.BoolValue(test.environment == "true"), true, nil
 			}
-			root, err := climanifestcobra.NewCommandTree(manifest, bindings)
+			root, err := NewCommandTree(manifest, bindings)
 			if err != nil {
 				t.Fatalf("NewCommandTree() error = %v", err)
 			}

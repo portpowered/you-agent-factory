@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
@@ -96,11 +97,11 @@ type WorkersMockCommandRunnerFactory func(
 
 // WorkerSessionsFactory constructs the per-session Worker Sessions service
 // (W4 Runtime dispatch cutover) from that session's already-resolved Workers
-// workstation-pool boundary. Wire composes the one canonical construction path
-// (worker_sessions/wire.NewService plus its own Events/logging dependencies)
-// behind this factory so Factory Runtime never imports a peer service's
-// wire or internal packages directly.
-type WorkerSessionsFactory func(workers.WorkstationPoolBoundary) (workersessions.Service, error)
+// workstation-pool boundary and the canonical runtime clock. Wire composes
+// the one construction path (worker_sessions/wire.NewService plus its Events,
+// logging, and Provider Sessions dependencies) behind this factory so Factory
+// Runtime never imports a peer service's wire or internal packages directly.
+type WorkerSessionsFactory func(workers.WorkstationPoolBoundary, platformclock.Source) (workersessions.Service, error)
 
 // ProviderInvocationExecutorFactory constructs the executor serving
 // workers.ProviderInvocationRoute for one session, from that session's own

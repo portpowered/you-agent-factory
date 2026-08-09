@@ -28,6 +28,86 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/{session_id}/worker-sessions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Worker Sessions correlated with one Work item
+     * @description Returns authoritative Worker Session observations for the requested Work item in the explicitly selected Factory Session. A known Work with no correlated sessions returns an empty sessions array; an unknown Work returns NOT_FOUND.
+     */
+    get: operations["listWorkerSessionsBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/worker-sessions/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Stream retained and live Worker Session events
+     * @description Streams the canonical Worker Session Events topic for the exact Provider Session identity in the explicitly selected Factory Session. Retained records are emitted first in aggregate order, followed by live records. Each data frame is serialized JSON matching WorkerSessionEvent. The terminal event is marked TERMINAL for an active session or TERMINAL_REPLAY for an already-terminal session, after which the connection closes successfully. Source failures are emitted as an explicit SOURCE_FAILURE frame so clients can preserve complete records already written and return a typed non-success result.
+     */
+    get: operations["streamWorkerSessionEventsBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/worker-sessions/detail": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Show one Worker Session observation
+     * @description Returns one authoritative Worker Session observation for the exact Provider Session identity in the explicitly selected Factory Session. The response is derived from Worker Sessions lifecycle state, Work correlation, Provider Session projection facts, and canonical timing; it never exposes provider storage paths or raw rollout content.
+     */
+    get: operations["getWorkerSessionObservationBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/worker-sessions/transcript": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read one finished Worker Session transcript
+     * @description Returns the normalized, ordered transcript for a terminal Worker Session identified by its exact Provider Session identity in the explicitly selected Factory Session. The response is projected through Provider Sessions and never parses raw rollout files at the CLI boundary.
+     */
+    get: operations["readWorkerSessionTranscriptBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions/{session_id}/invocations": {
     parameters: {
       query?: never;
@@ -1021,6 +1101,130 @@ export interface components {
     ListWorkCountSummary: {
       /** @description Complete filtered Work total before page slicing. */
       total: number;
+    };
+    ListWorkerSessionsResponse: {
+      /** @description Deterministically ordered Worker Session observations correlated with the requested Work. */
+      sessions: components["schemas"]["WorkerSessionObservation"][];
+    };
+    WorkerSessionTranscriptResponse: {
+      /** @description Stable Worker Session identity. */
+      workerSessionId: string;
+      providerSession: components["schemas"]["WorkerSessionProviderSessionRef"];
+      /** @description Work identities correlated with this Worker Session attempt. */
+      workIds: string[];
+      /** @description Optional turn correlation identifier. */
+      turnId?: string | null;
+      /** @description Stable attempt or dispatch identity. */
+      attemptId: string;
+      /** @description Terminal Worker Session lifecycle state at transcript read time. */
+      state: string;
+      /** @description Ordered normalized transcript entries projected by Provider Sessions. */
+      entries: components["schemas"]["ProviderSessionTranscriptEntry"][];
+    };
+    WorkerSessionObservation: {
+      /** @description Stable Worker Session identity. */
+      workerSessionId: string;
+      providerSession?: components["schemas"]["WorkerSessionProviderSessionRef"];
+      /** @description Whether a provider-session identity is available for this attempt. */
+      providerSessionAvailable: boolean;
+      /** @description Work identities correlated with this Worker Session attempt. */
+      workIds: string[];
+      /** @description Optional turn correlation identifier. */
+      turnId: string | null;
+      /** @description Stable attempt or dispatch identity. */
+      attemptId: string;
+      /** @enum {string} */
+      state: WorkerSessionObservationState;
+      /** Format: date-time */
+      startedAt: string | null;
+      /** Format: date-time */
+      endedAt: string | null;
+      /**
+       * Format: int64
+       * @description Projected duration in milliseconds when authoritative timing exists.
+       */
+      durationMillis: number | null;
+      /** @enum {string} */
+      durationBasis: WorkerSessionObservationDurationBasis;
+      tokenUsage?: components["schemas"]["ProviderSessionTokenUsage"];
+      /** @enum {string} */
+      transcript: WorkerSessionObservationTranscript;
+      failure?: components["schemas"]["WorkerSessionFailure"];
+      parse: components["schemas"]["WorkerSessionParseDiagnostics"];
+    };
+    WorkerSessionEvent: {
+      delivery: components["schemas"]["WorkerSessionEventDelivery"];
+      /** @description Stable Worker Session identity for this stream. */
+      workerSessionId: string;
+      providerSession: components["schemas"]["WorkerSessionProviderSessionRef"];
+      /** @description Work identities correlated with the streamed attempt. */
+      workIds: string[];
+      /** @description Canonical event record, or null for an explicit source failure. */
+      event: components["schemas"]["WorkerSessionEventRecord"];
+      /** @description Stable source-failure code when delivery is SOURCE_FAILURE. */
+      errorCode: string | null;
+      /** @description Safe source-failure message when delivery is SOURCE_FAILURE. */
+      errorMessage: string | null;
+    };
+    /**
+     * @description Delivery outcome for one Worker Session stream frame. RECORD is a retained or live canonical event, TERMINAL marks the live terminal event, and TERMINAL_REPLAY marks the terminal event in an already-terminal replay. SOURCE_FAILURE is an explicit non-event outcome after the stream has opened.
+     * @enum {string}
+     */
+    WorkerSessionEventDelivery: WorkerSessionEventDelivery;
+    WorkerSessionEventRecord: {
+      /**
+       * Format: int64
+       * @description Aggregate position assigned by the canonical Events ledger.
+       */
+      position: number;
+      /** @description Source-native event family. */
+      sourceType: string;
+      /** @description Source-native event identity. */
+      sourceId: string;
+      /**
+       * Format: int64
+       * @description Source-native monotonic sequence.
+       */
+      sourceSequence: number;
+      /** @description Source-native idempotency event identity. */
+      sourceEventId: string;
+      /** @description Source-native payload schema identity. */
+      schemaId: string;
+      /** @description Source-native canonical event payload. */
+      payload: {
+        [key: string]: unknown;
+      };
+    };
+    WorkerSessionProviderSessionRef: {
+      /** @description Provider identity that issued the correlated session. */
+      provider: string;
+      /** @description Provider-defined identifier kind. */
+      kind: string;
+      /** @description Provider-issued session identifier. */
+      id: string;
+    };
+    WorkerSessionFailure: {
+      /** @description Bounded Worker Session failure classification. */
+      kind: string;
+      /** @description Customer-safe failure detail derived by Worker Sessions. */
+      detail: string;
+      /** @description Optional bounded Providers failure classification. */
+      providerFailureKind: string | null;
+      /** @description Optional bounded continuation rejection classification. */
+      providerContinuationFailureKind: string | null;
+      /** @description Optional bounded unsupported continuation outcome. */
+      providerContinuationOutcome: string | null;
+    };
+    WorkerSessionParseDiagnostic: {
+      code: string;
+      lineNumber: number;
+      message: string;
+    };
+    WorkerSessionParseDiagnostics: {
+      eventCount: number;
+      malformedLineCount: number;
+      unknownEventCount: number;
+      errors: components["schemas"]["WorkerSessionParseDiagnostic"][];
     };
     PaginationContext: {
       maxResults: number;
@@ -5853,6 +6057,143 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  listWorkerSessionsBySessionId: {
+    parameters: {
+      query: {
+        /** @description Work identity whose Worker Session attempts should be listed. */
+        workId: string;
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Deterministically ordered Worker Session observations. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListWorkerSessionsResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  streamWorkerSessionEventsBySessionId: {
+    parameters: {
+      query: {
+        /** @description Provider that issued the correlated session identity. */
+        provider: components["schemas"]["LoadableProviderSessionProvider"];
+        /** @description Provider-session identifier kind. */
+        kind: components["schemas"]["LoadableProviderSessionKind"];
+        /** @description Provider-issued session identifier, not a filesystem path. */
+        id: string;
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Retained then live Worker Session event frames. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getWorkerSessionObservationBySessionId: {
+    parameters: {
+      query: {
+        /** @description Provider that issued the correlated session identity. */
+        provider: components["schemas"]["LoadableProviderSessionProvider"];
+        /** @description Provider-session identifier kind. */
+        kind: components["schemas"]["LoadableProviderSessionKind"];
+        /** @description Provider-issued session identifier, not a filesystem path. */
+        id: string;
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description One detached Worker Session observation. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionObservation"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  readWorkerSessionTranscriptBySessionId: {
+    parameters: {
+      query: {
+        /** @description Provider that issued the correlated session identity. */
+        provider: components["schemas"]["LoadableProviderSessionProvider"];
+        /** @description Provider-session identifier kind. */
+        kind: components["schemas"]["LoadableProviderSessionKind"];
+        /** @description Provider-issued session identifier, not a filesystem path. */
+        id: string;
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Normalized transcript for a finished Worker Session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionTranscriptResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      /** @description The Worker Session is still active and has no final transcript. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      500: components["responses"]["InternalError"];
+    };
+  };
   invokeFactorySessionBySessionId: {
     parameters: {
       query?: never;
@@ -7174,6 +7515,39 @@ export const SubmitWorkDocumentItemType = {
 } as const;
 export type SubmitWorkDocumentItemType =
   (typeof SubmitWorkDocumentItemType)[keyof typeof SubmitWorkDocumentItemType];
+export const WorkerSessionObservationState = {
+  WorkerSessionObservationStateReserved: "RESERVED",
+  WorkerSessionObservationStateStarting: "STARTING",
+  WorkerSessionObservationStateRunning: "RUNNING",
+  WorkerSessionObservationStatePaused: "PAUSED",
+  WorkerSessionObservationStateCompleted: "COMPLETED",
+  WorkerSessionObservationStateFailed: "FAILED",
+  WorkerSessionObservationStateCanceled: "CANCELED",
+  WorkerSessionObservationStateTerminated: "TERMINATED",
+} as const;
+export type WorkerSessionObservationState =
+  (typeof WorkerSessionObservationState)[keyof typeof WorkerSessionObservationState];
+export const WorkerSessionObservationDurationBasis = {
+  UNAVAILABLE: "UNAVAILABLE",
+  ACTIVE_CLOCK: "ACTIVE_CLOCK",
+  RECORDED_TIMESTAMPS: "RECORDED_TIMESTAMPS",
+} as const;
+export type WorkerSessionObservationDurationBasis =
+  (typeof WorkerSessionObservationDurationBasis)[keyof typeof WorkerSessionObservationDurationBasis];
+export const WorkerSessionObservationTranscript = {
+  UNAVAILABLE: "UNAVAILABLE",
+  AVAILABLE: "AVAILABLE",
+} as const;
+export type WorkerSessionObservationTranscript =
+  (typeof WorkerSessionObservationTranscript)[keyof typeof WorkerSessionObservationTranscript];
+export const WorkerSessionEventDelivery = {
+  WorkerSessionEventDeliveryRecord: "RECORD",
+  WorkerSessionEventDeliveryTerminal: "TERMINAL",
+  WorkerSessionEventDeliveryTerminalReplay: "TERMINAL_REPLAY",
+  WorkerSessionEventDeliverySourceFailure: "SOURCE_FAILURE",
+} as const;
+export type WorkerSessionEventDelivery =
+  (typeof WorkerSessionEventDelivery)[keyof typeof WorkerSessionEventDelivery];
 export const ManagedRuntimeLifecycleState = {
   // Managed install and cache lifecycle does not apply, such as for cloud-backed runtimes.
   NOT_APPLICABLE: "NOT_APPLICABLE",
@@ -7298,6 +7672,22 @@ export const ErrorResponseCode = {
   RESPONSE_EVENT_SESSION_NOT_FOUND: "RESPONSE_EVENT_SESSION_NOT_FOUND",
   // The retained Factory Response Event stream is no longer available.
   RESPONSE_EVENT_STREAM_EXPIRED: "RESPONSE_EVENT_STREAM_EXPIRED",
+  // The requested Provider Session provider is not loadable by this API.
+  PROVIDER_UNSUPPORTED: "PROVIDER_UNSUPPORTED",
+  // The requested Provider Session identifier kind is not loadable by this API.
+  SESSION_KIND_UNSUPPORTED: "SESSION_KIND_UNSUPPORTED",
+  // The correlated Worker Session projection is temporarily unavailable.
+  PROJECTION_UNAVAILABLE: "PROJECTION_UNAVAILABLE",
+  // The canonical Worker Session event stream is temporarily unavailable.
+  WORKER_SESSION_STREAM_UNAVAILABLE: "WORKER_SESSION_STREAM_UNAVAILABLE",
+  // The requested Worker Session has not reached a terminal state.
+  WORKER_SESSION_TRANSCRIPT_ACTIVE: "WORKER_SESSION_TRANSCRIPT_ACTIVE",
+  // The finished Worker Session has no normalized transcript available.
+  WORKER_SESSION_TRANSCRIPT_UNAVAILABLE:
+    "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE",
+  // Provider Sessions could not project the normalized Worker Session transcript.
+  WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE:
+    "WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE",
   // The requested resource does not exist.
   NOT_FOUND: "NOT_FOUND",
   // The server failed while handling an otherwise valid request.
@@ -7314,7 +7704,7 @@ export type FactorySessionTargetRefKind =
 export const FactoryStopKind = {
   PAUSED: "PAUSED",
   BLOCKED: "BLOCKED",
-  NEEDS_HUMAN: "NEEDS_HUMAN",
+  NEEDSHUMAN: "NEEDS_HUMAN",
   INTERRUPTED: "INTERRUPTED",
 } as const;
 export type FactoryStopKind =

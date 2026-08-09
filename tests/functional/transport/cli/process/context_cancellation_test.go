@@ -304,21 +304,27 @@ func waitForContextCancellationProviderPID(t *testing.T, pidFile string, timeout
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
+	var lastContents string
 	for time.Now().Before(deadline) {
 		raw, err := os.ReadFile(pidFile)
 		if err == nil {
-			pid, parseErr := strconv.Atoi(strings.TrimSpace(string(raw)))
-			if parseErr != nil {
-				t.Fatalf("parse provider pid %q: %v", raw, parseErr)
+			lastContents = strings.TrimSpace(string(raw))
+			if lastContents != "" {
+				pid, parseErr := strconv.Atoi(lastContents)
+				if parseErr == nil {
+					return pid
+				}
 			}
-			return pid
 		}
 		if !os.IsNotExist(err) {
 			t.Fatalf("read provider pid file: %v", err)
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
-	t.Fatalf("timed out waiting for provider/external worker process to start")
+	t.Fatalf(
+		"timed out waiting for provider/external worker process to start; last pid file contents %q",
+		lastContents,
+	)
 	return -1
 }
 

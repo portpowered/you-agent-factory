@@ -28,6 +28,13 @@ properties:
       - INVALID_RESPONSE_EVENT_FILTER
       - RESPONSE_EVENT_SESSION_NOT_FOUND
       - RESPONSE_EVENT_STREAM_EXPIRED
+      - PROVIDER_UNSUPPORTED
+      - SESSION_KIND_UNSUPPORTED
+      - PROJECTION_UNAVAILABLE
+      - WORKER_SESSION_STREAM_UNAVAILABLE
+      - WORKER_SESSION_TRANSCRIPT_ACTIVE
+      - WORKER_SESSION_TRANSCRIPT_UNAVAILABLE
+      - WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE
       - NOT_FOUND
       - INTERNAL_ERROR
     x-enum-descriptions:
@@ -46,6 +53,13 @@ properties:
       - A Factory Response Event filter is invalid.
       - The explicitly selected Factory Session for response events does not exist.
       - The retained Factory Response Event stream is no longer available.
+      - The requested Provider Session provider is not loadable by this API.
+      - The requested Provider Session identifier kind is not loadable by this API.
+      - The correlated Worker Session projection is temporarily unavailable.
+      - The canonical Worker Session event stream is temporarily unavailable.
+      - The requested Worker Session has not reached a terminal state.
+      - The finished Worker Session has no normalized transcript available.
+      - Provider Sessions could not project the normalized Worker Session transcript.
       - The requested resource does not exist.
       - The server failed while handling an otherwise valid request.
   targets:

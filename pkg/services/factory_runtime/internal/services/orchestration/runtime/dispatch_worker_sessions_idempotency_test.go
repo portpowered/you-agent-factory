@@ -53,6 +53,30 @@ func (s *countingWorkerSessionsService) List(
 	return s.inner.List(ctx, req)
 }
 
+func (s *countingWorkerSessionsService) ListObservations(
+	ctx context.Context, req workersessions.ListObservationsRequest,
+) (workersessions.ListObservationsResult, error) {
+	return s.inner.ListObservations(ctx, req)
+}
+
+func (s *countingWorkerSessionsService) GetObservation(
+	ctx context.Context, req workersessions.GetObservationRequest,
+) (workersessions.Observation, error) {
+	return s.inner.GetObservation(ctx, req)
+}
+
+func (s *countingWorkerSessionsService) StreamObservations(
+	ctx context.Context, req workersessions.StreamObservationsRequest,
+) (workersessions.ObservationSubscription, error) {
+	return s.inner.StreamObservations(ctx, req)
+}
+
+func (s *countingWorkerSessionsService) ReadTranscript(
+	ctx context.Context, req workersessions.ReadTranscriptRequest,
+) (workersessions.ReadTranscriptResult, error) {
+	return s.inner.ReadTranscript(ctx, req)
+}
+
 func (s *countingWorkerSessionsService) InvokeSession(
 	ctx context.Context, req workersessions.InvokeSessionRequest,
 ) (workersessions.InvokeSessionResult, error) {

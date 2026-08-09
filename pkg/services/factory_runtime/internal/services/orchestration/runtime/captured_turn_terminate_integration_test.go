@@ -10,6 +10,7 @@ import (
 
 	"go.uber.org/zap"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -39,7 +40,7 @@ func TestTerminateFactorySession_FansOutCapturedChildrenBeforeTargetCleanup(t *t
 	if err != nil {
 		t.Fatalf("New events service: %v", err)
 	}
-	workerSessions, err := workersessionswire.NewService(boundary, events, logging.NoopLogger{})
+	workerSessions, err := workersessionswire.NewService(boundary, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{})
 	if err != nil {
 		t.Fatalf("New Worker Sessions service: %v", err)
 	}
@@ -106,7 +107,7 @@ func TestFactoryResume_IsolatesCapturedChildProviderSessionContinuations(t *test
 	if err != nil {
 		t.Fatalf("New Events service: %v", err)
 	}
-	workerSessions, err := workersessionswire.NewService(boundary, events, logging.NoopLogger{})
+	workerSessions, err := workersessionswire.NewService(boundary, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{})
 	if err != nil {
 		t.Fatalf("New Worker Sessions service: %v", err)
 	}

@@ -9,7 +9,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -73,7 +72,7 @@ func TestPublishRecord_RetryOfOlderAcceptedIdentity_AfterNewerSequenceAccepted_R
 		},
 	}
 	var err error
-	svc, err = service.New(executionBoundary{execution: execution}, eventsSvc, nil)
+	svc, err = newService(executionBoundary{execution: execution}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -133,7 +132,7 @@ func TestPublishRecord_ConcurrentPublishesForOneSource_NeverCommitOutOfOrder(t *
 		},
 	}
 	var err error
-	svc, err = service.New(executionBoundary{execution: execution}, eventsSvc, nil)
+	svc, err = newService(executionBoundary{execution: execution}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -226,7 +225,7 @@ func TestPublishRecord_SourceIdentityTupleMembersRemainDistinct(t *testing.T) {
 		},
 	}
 	var err error
-	svc, err = service.New(executionBoundary{execution: execution}, eventsSvc, nil)
+	svc, err = newService(executionBoundary{execution: execution}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -278,7 +277,7 @@ func TestPublishRecord_IdenticalTupleAcrossSessionTopics_DoesNotCollapse(t *test
 		},
 	}
 	var err error
-	svc, err = service.New(executionBoundary{execution: execution}, eventsSvc, nil)
+	svc, err = newService(executionBoundary{execution: execution}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -328,7 +327,7 @@ func TestPublishRecord_PagedReadDeliversRecordsExactlyOnceInContiguousOrder(t *t
 		},
 	}
 	var err error
-	svc, err = service.New(executionBoundary{execution: execution}, eventsSvc, nil)
+	svc, err = newService(executionBoundary{execution: execution}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -429,7 +428,7 @@ func TestPublishRecord_SubscriptionFromLastReadCursorDeliversOnlyLaterRecords(t 
 		},
 	}
 	var err error
-	svc, err = service.New(executionBoundary{execution: execution}, eventsSvc, nil)
+	svc, err = newService(executionBoundary{execution: execution}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -488,7 +487,7 @@ func TestPublishRecord_ConcurrentDuplicateDeliveryConvergesOnOneRecord(t *testin
 		},
 	}
 	var err error
-	svc, err = service.New(executionBoundary{execution: execution}, eventsSvc, nil)
+	svc, err = newService(executionBoundary{execution: execution}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}

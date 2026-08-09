@@ -11,6 +11,7 @@ import (
 	factorydefinitionfixtures "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
@@ -244,7 +245,7 @@ func (testRuntimeWorkers) CancelWorkstationDispatch(
 
 func testRuntimeWorkerSessionsFactory(t *testing.T) factory.WorkerSessionsFactory {
 	t.Helper()
-	return func(boundary workers.WorkstationPoolBoundary) (workersessions.Service, error) {
+	return func(boundary workers.WorkstationPoolBoundary, _ platformclock.Source) (workersessions.Service, error) {
 		return &stubWorkerSessionsService{boundary: boundary}, nil
 	}
 }
@@ -267,6 +268,22 @@ func (s *stubWorkerSessionsService) Get(context.Context, workersessions.GetReque
 
 func (s *stubWorkerSessionsService) List(context.Context, workersessions.ListRequest) (workersessions.ListResult, error) {
 	return workersessions.ListResult{}, nil
+}
+
+func (s *stubWorkerSessionsService) ListObservations(context.Context, workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
+	return workersessions.ListObservationsResult{}, nil
+}
+
+func (s *stubWorkerSessionsService) GetObservation(context.Context, workersessions.GetObservationRequest) (workersessions.Observation, error) {
+	return workersessions.Observation{}, nil
+}
+
+func (s *stubWorkerSessionsService) StreamObservations(context.Context, workersessions.StreamObservationsRequest) (workersessions.ObservationSubscription, error) {
+	return workersessions.ObservationSubscription{}, nil
+}
+
+func (s *stubWorkerSessionsService) ReadTranscript(context.Context, workersessions.ReadTranscriptRequest) (workersessions.ReadTranscriptResult, error) {
+	return workersessions.ReadTranscriptResult{}, nil
 }
 
 func (s *stubWorkerSessionsService) InvokeSession(ctx context.Context, req workersessions.InvokeSessionRequest) (workersessions.InvokeSessionResult, error) {
@@ -337,6 +354,7 @@ func testRuntimeFactory() *factoryinternal.RuntimeFactory {
 		nil, nil, outputAsPayloadPolicy(), nil, nil, testRuntimeLoggerFactory, nil, nil,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
+		nil,
 	)
 }
 
@@ -346,6 +364,7 @@ func testRuntimeFactoryWithSinks(logDir, metricsDir string) *factoryinternal.Run
 		testRuntimeLogFactory(logDir), testRuntimeMetricsFactory(metricsDir),
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
+		nil,
 	)
 }
 

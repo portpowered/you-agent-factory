@@ -1,0 +1,19 @@
+type: object
+additionalProperties: false
+required:
+  - provider
+  - kind
+  - id
+properties:
+  provider:
+    type: string
+    minLength: 1
+    description: Provider identity that issued the correlated session.
+  kind:
+    type: string
+    minLength: 1
+    description: Provider-defined identifier kind.
+  id:
+    type: string
+    minLength: 1
+    description: Provider-issued session identifier.

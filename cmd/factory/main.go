@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	"github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 )
 
@@ -59,25 +60,52 @@ func processExitCode(err, contextErr error, args []string) int {
 }
 
 func declaredCancellationExitCode(args []string) int {
-	commandName := selectedCommandName(args)
-	if commandName == "" {
+	commandPath := selectedCommandPath(args)
+	if commandPath == "" {
 		return exitFailure
 	}
-	manifest, err := generated.RunSubmitFamilyManifest()
-	if err != nil {
-		return exitFailure
+	manifests := []func() (climanifest.Manifest, error){
+		generated.RunSubmitFamilyManifest,
+		generated.WorkerSessionsFamilyManifest,
 	}
-	for _, command := range manifest.Commands {
-		if command.Name != commandName || command.Path != manifest.RootPath+" "+commandName {
+	for _, loadManifest := range manifests {
+		manifest, err := loadManifest()
+		if err != nil {
 			continue
 		}
-		for _, exit := range command.Exits {
-			if exit.Kind == "cancel" {
-				return exit.Code
+		for _, command := range manifest.Commands {
+			if command.Path != commandPath {
+				continue
+			}
+			for _, exit := range command.Exits {
+				if exit.Kind == "cancel" {
+					return exit.Code
+				}
 			}
 		}
 	}
 	return exitFailure
+}
+
+func selectedCommandPath(args []string) string {
+	parts := make([]string, 0, 2)
+	for index := 1; index < len(args); index++ {
+		arg := args[index]
+		if strings.HasPrefix(arg, "--") {
+			if !strings.Contains(arg, "=") && commandFlagConsumesValue(arg) {
+				index++
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			continue
+		}
+		parts = append(parts, arg)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "you " + strings.Join(parts, " ")
 }
 
 func selectedCommandName(args []string) string {
@@ -100,6 +128,15 @@ func selectedCommandName(args []string) string {
 func globalFlagConsumesValue(arg string) bool {
 	switch arg {
 	case "--server":
+		return true
+	default:
+		return false
+	}
+}
+
+func commandFlagConsumesValue(arg string) bool {
+	switch arg {
+	case "--server", "--provider", "--kind", "--id", "--session", "--output":
 		return true
 	default:
 		return false

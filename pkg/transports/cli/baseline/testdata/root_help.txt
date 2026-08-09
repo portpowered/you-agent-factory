@@ -23,21 +23,22 @@ Examples:
   you docs agents
 
 Available Commands:
-  completion  Generate the autocompletion script for the specified shell
-  config      Configuration command guide
-  docs        Print packaged markdown reference topics
-  factory     Inspect and manage factory definitions
-  help        Help about any command
-  init        Configure provider and model defaults
-  mcp         Model Context Protocol servers for Factory Session tools
-  models      Inspect discovered models from a running service
-  run         Load workflow and run the factory engine
-  serve       Host You as a protocol server
-  server      Serve the Current Factory API and dashboard
-  session     List, open, and close factory sessions on a running host
-  submit      Submit work to a running factory
-  work        Inspect work from a running factory
-  workers     Manage worker execution integrations
+  completion      Generate the autocompletion script for the specified shell
+  config          Configuration command guide
+  docs            Print packaged markdown reference topics
+  factory         Inspect and manage factory definitions
+  help            Help about any command
+  init            Configure provider and model defaults
+  mcp             Model Context Protocol servers for Factory Session tools
+  models          Inspect discovered models from a running service
+  run             Load workflow and run the factory engine
+  serve           Host You as a protocol server
+  server          Serve the Current Factory API and dashboard
+  session         List, open, and close factory sessions on a running host
+  submit          Submit work to a running factory
+  work            Inspect work from a running factory
+  worker-sessions Inspect Worker Sessions for Work
+  workers         Manage worker execution integrations
 
 Flags:
   -d, --debug           emit lower-level command diagnostics where supported (implies --verbose)

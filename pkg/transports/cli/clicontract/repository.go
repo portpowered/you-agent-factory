@@ -230,6 +230,7 @@ func loadGeneratedManifests() ([]climanifest.Manifest, []climanifest.Manifest, e
 		generated.RepresentativeFamilyManifest, generated.SessionFamilyManifest,
 		generated.WorkFamilyManifest, generated.FactoryConfigInitFamilyManifest,
 		generated.WorkersFamilyManifest,
+		generated.WorkerSessionsFamilyManifest,
 		generated.ModelsDocsFamilyManifest, generated.RunSubmitFamilyManifest,
 		generated.MCPFamilyManifest, generated.ServeFamilyManifest,
 	}

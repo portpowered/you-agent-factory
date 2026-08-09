@@ -21,6 +21,8 @@ tags:
     description: Runtime state, event stream, and trace inspection.
   - name: Provider Sessions
     description: Provider-owned session diagnostics for dashboard inspection.
+  - name: Worker Sessions
+    description: Worker Session observations correlated with Factory Work.
   - name: Models
     description: Model discovery and capability inspection for the current runtime.
   - name: Workflows
@@ -84,6 +86,166 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/worker-sessions:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: listWorkerSessionsBySessionId
+      summary: List Worker Sessions correlated with one Work item
+      description: Returns authoritative Worker Session observations for the requested Work item in the explicitly selected Factory Session. A known Work with no correlated sessions returns an empty sessions array; an unknown Work returns NOT_FOUND.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - name: workId
+          in: query
+          required: true
+          description: Work identity whose Worker Session attempts should be listed.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Deterministically ordered Worker Session observations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListWorkerSessionsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/worker-sessions/events:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: streamWorkerSessionEventsBySessionId
+      summary: Stream retained and live Worker Session events
+      description: Streams the canonical Worker Session Events topic for the exact Provider Session identity in the explicitly selected Factory Session. Retained records are emitted first in aggregate order, followed by live records. Each data frame is serialized JSON matching WorkerSessionEvent. The terminal event is marked TERMINAL for an active session or TERMINAL_REPLAY for an already-terminal session, after which the connection closes successfully. Source failures are emitted as an explicit SOURCE_FAILURE frame so clients can preserve complete records already written and return a typed non-success result.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - name: provider
+          in: query
+          required: true
+          description: Provider that issued the correlated session identity.
+          schema:
+            $ref: '#/components/schemas/LoadableProviderSessionProvider'
+        - name: kind
+          in: query
+          required: true
+          description: Provider-session identifier kind.
+          schema:
+            $ref: '#/components/schemas/LoadableProviderSessionKind'
+        - name: id
+          in: query
+          required: true
+          description: Provider-issued session identifier, not a filesystem path.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Retained then live Worker Session event frames.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events where each data frame is serialized JSON matching WorkerSessionEvent.
+              x-event-schema: '#/components/schemas/WorkerSessionEvent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/worker-sessions/detail:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: getWorkerSessionObservationBySessionId
+      summary: Show one Worker Session observation
+      description: Returns one authoritative Worker Session observation for the exact Provider Session identity in the explicitly selected Factory Session. The response is derived from Worker Sessions lifecycle state, Work correlation, Provider Session projection facts, and canonical timing; it never exposes provider storage paths or raw rollout content.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - name: provider
+          in: query
+          required: true
+          description: Provider that issued the correlated session identity.
+          schema:
+            $ref: '#/components/schemas/LoadableProviderSessionProvider'
+        - name: kind
+          in: query
+          required: true
+          description: Provider-session identifier kind.
+          schema:
+            $ref: '#/components/schemas/LoadableProviderSessionKind'
+        - name: id
+          in: query
+          required: true
+          description: Provider-issued session identifier, not a filesystem path.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: One detached Worker Session observation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionObservation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/worker-sessions/transcript:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: readWorkerSessionTranscriptBySessionId
+      summary: Read one finished Worker Session transcript
+      description: Returns the normalized, ordered transcript for a terminal Worker Session identified by its exact Provider Session identity in the explicitly selected Factory Session. The response is projected through Provider Sessions and never parses raw rollout files at the CLI boundary.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - name: provider
+          in: query
+          required: true
+          description: Provider that issued the correlated session identity.
+          schema:
+            $ref: '#/components/schemas/LoadableProviderSessionProvider'
+        - name: kind
+          in: query
+          required: true
+          description: Provider-session identifier kind.
+          schema:
+            $ref: '#/components/schemas/LoadableProviderSessionKind'
+        - name: id
+          in: query
+          required: true
+          description: Provider-issued session identifier, not a filesystem path.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Normalized transcript for a finished Worker Session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionTranscriptResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The Worker Session is still active and has no final transcript.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/invocations:
@@ -2172,6 +2334,316 @@ components:
           type: integer
           minimum: 0
           description: Complete filtered Work total before page slicing.
+    ListWorkerSessionsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - sessions
+      properties:
+        sessions:
+          type: array
+          description: Deterministically ordered Worker Session observations correlated with the requested Work.
+          items:
+            $ref: '#/components/schemas/WorkerSessionObservation'
+    WorkerSessionTranscriptResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - workerSessionId
+        - providerSession
+        - workIds
+        - attemptId
+        - state
+        - entries
+      properties:
+        workerSessionId:
+          type: string
+          description: Stable Worker Session identity.
+        providerSession:
+          $ref: '#/components/schemas/WorkerSessionProviderSessionRef'
+        workIds:
+          type: array
+          items:
+            type: string
+          description: Work identities correlated with this Worker Session attempt.
+        turnId:
+          type: string
+          nullable: true
+          description: Optional turn correlation identifier.
+        attemptId:
+          type: string
+          description: Stable attempt or dispatch identity.
+        state:
+          type: string
+          description: Terminal Worker Session lifecycle state at transcript read time.
+        entries:
+          type: array
+          description: Ordered normalized transcript entries projected by Provider Sessions.
+          items:
+            $ref: '#/components/schemas/ProviderSessionTranscriptEntry'
+    WorkerSessionObservation:
+      type: object
+      additionalProperties: false
+      required:
+        - workerSessionId
+        - providerSessionAvailable
+        - workIds
+        - turnId
+        - attemptId
+        - state
+        - startedAt
+        - endedAt
+        - durationMillis
+        - durationBasis
+        - transcript
+        - parse
+      properties:
+        workerSessionId:
+          type: string
+          description: Stable Worker Session identity.
+        providerSession:
+          $ref: '#/components/schemas/WorkerSessionProviderSessionRef'
+          nullable: true
+        providerSessionAvailable:
+          type: boolean
+          description: Whether a provider-session identity is available for this attempt.
+        workIds:
+          type: array
+          items:
+            type: string
+          description: Work identities correlated with this Worker Session attempt.
+        turnId:
+          type: string
+          nullable: true
+          description: Optional turn correlation identifier.
+        attemptId:
+          type: string
+          description: Stable attempt or dispatch identity.
+        state:
+          type: string
+          enum:
+            - RESERVED
+            - STARTING
+            - RUNNING
+            - PAUSED
+            - COMPLETED
+            - FAILED
+            - CANCELED
+            - TERMINATED
+          x-enum-varnames:
+            - WorkerSessionObservationStateReserved
+            - WorkerSessionObservationStateStarting
+            - WorkerSessionObservationStateRunning
+            - WorkerSessionObservationStatePaused
+            - WorkerSessionObservationStateCompleted
+            - WorkerSessionObservationStateFailed
+            - WorkerSessionObservationStateCanceled
+            - WorkerSessionObservationStateTerminated
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+        durationMillis:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+          description: Projected duration in milliseconds when authoritative timing exists.
+        durationBasis:
+          type: string
+          enum:
+            - UNAVAILABLE
+            - ACTIVE_CLOCK
+            - RECORDED_TIMESTAMPS
+        tokenUsage:
+          $ref: '#/components/schemas/ProviderSessionTokenUsage'
+          nullable: true
+        transcript:
+          type: string
+          enum:
+            - UNAVAILABLE
+            - AVAILABLE
+        failure:
+          $ref: '#/components/schemas/WorkerSessionFailure'
+          nullable: true
+        parse:
+          $ref: '#/components/schemas/WorkerSessionParseDiagnostics'
+    WorkerSessionEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - delivery
+        - workerSessionId
+        - providerSession
+        - workIds
+        - event
+        - errorCode
+        - errorMessage
+      properties:
+        delivery:
+          $ref: '#/components/schemas/WorkerSessionEventDelivery'
+        workerSessionId:
+          type: string
+          description: Stable Worker Session identity for this stream.
+        providerSession:
+          $ref: '#/components/schemas/WorkerSessionProviderSessionRef'
+        workIds:
+          type: array
+          items:
+            type: string
+          description: Work identities correlated with the streamed attempt.
+        event:
+          $ref: '#/components/schemas/WorkerSessionEventRecord'
+          nullable: true
+          description: Canonical event record, or null for an explicit source failure.
+        errorCode:
+          type: string
+          nullable: true
+          description: Stable source-failure code when delivery is SOURCE_FAILURE.
+        errorMessage:
+          type: string
+          nullable: true
+          description: Safe source-failure message when delivery is SOURCE_FAILURE.
+    WorkerSessionEventDelivery:
+      type: string
+      description: Delivery outcome for one Worker Session stream frame. RECORD is a retained or live canonical event, TERMINAL marks the live terminal event, and TERMINAL_REPLAY marks the terminal event in an already-terminal replay. SOURCE_FAILURE is an explicit non-event outcome after the stream has opened.
+      enum:
+        - RECORD
+        - TERMINAL
+        - TERMINAL_REPLAY
+        - SOURCE_FAILURE
+      x-enum-varnames:
+        - WorkerSessionEventDeliveryRecord
+        - WorkerSessionEventDeliveryTerminal
+        - WorkerSessionEventDeliveryTerminalReplay
+        - WorkerSessionEventDeliverySourceFailure
+    WorkerSessionEventRecord:
+      type: object
+      additionalProperties: false
+      required:
+        - position
+        - sourceType
+        - sourceId
+        - sourceSequence
+        - sourceEventId
+        - schemaId
+        - payload
+      properties:
+        position:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Aggregate position assigned by the canonical Events ledger.
+        sourceType:
+          type: string
+          description: Source-native event family.
+        sourceId:
+          type: string
+          description: Source-native event identity.
+        sourceSequence:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Source-native monotonic sequence.
+        sourceEventId:
+          type: string
+          description: Source-native idempotency event identity.
+        schemaId:
+          type: string
+          description: Source-native payload schema identity.
+        payload:
+          type: object
+          additionalProperties: true
+          description: Source-native canonical event payload.
+    WorkerSessionProviderSessionRef:
+      type: object
+      additionalProperties: false
+      required:
+        - provider
+        - kind
+        - id
+      properties:
+        provider:
+          type: string
+          minLength: 1
+          description: Provider identity that issued the correlated session.
+        kind:
+          type: string
+          minLength: 1
+          description: Provider-defined identifier kind.
+        id:
+          type: string
+          minLength: 1
+          description: Provider-issued session identifier.
+    WorkerSessionFailure:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - detail
+        - providerFailureKind
+        - providerContinuationFailureKind
+        - providerContinuationOutcome
+      properties:
+        kind:
+          type: string
+          description: Bounded Worker Session failure classification.
+        detail:
+          type: string
+          description: Customer-safe failure detail derived by Worker Sessions.
+        providerFailureKind:
+          type: string
+          nullable: true
+          description: Optional bounded Providers failure classification.
+        providerContinuationFailureKind:
+          type: string
+          nullable: true
+          description: Optional bounded continuation rejection classification.
+        providerContinuationOutcome:
+          type: string
+          nullable: true
+          description: Optional bounded unsupported continuation outcome.
+    WorkerSessionParseDiagnostic:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - lineNumber
+        - message
+      properties:
+        code:
+          type: string
+        lineNumber:
+          type: integer
+          minimum: 0
+        message:
+          type: string
+    WorkerSessionParseDiagnostics:
+      type: object
+      additionalProperties: false
+      required:
+        - eventCount
+        - malformedLineCount
+        - unknownEventCount
+        - errors
+      properties:
+        eventCount:
+          type: integer
+          minimum: 0
+        malformedLineCount:
+          type: integer
+          minimum: 0
+        unknownEventCount:
+          type: integer
+          minimum: 0
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerSessionParseDiagnostic'
     PaginationContext:
       type: object
       additionalProperties: false
@@ -2796,6 +3268,13 @@ components:
             - INVALID_RESPONSE_EVENT_FILTER
             - RESPONSE_EVENT_SESSION_NOT_FOUND
             - RESPONSE_EVENT_STREAM_EXPIRED
+            - PROVIDER_UNSUPPORTED
+            - SESSION_KIND_UNSUPPORTED
+            - PROJECTION_UNAVAILABLE
+            - WORKER_SESSION_STREAM_UNAVAILABLE
+            - WORKER_SESSION_TRANSCRIPT_ACTIVE
+            - WORKER_SESSION_TRANSCRIPT_UNAVAILABLE
+            - WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE
             - NOT_FOUND
             - INTERNAL_ERROR
           x-enum-descriptions:
@@ -2814,6 +3293,13 @@ components:
             - A Factory Response Event filter is invalid.
             - The explicitly selected Factory Session for response events does not exist.
             - The retained Factory Response Event stream is no longer available.
+            - The requested Provider Session provider is not loadable by this API.
+            - The requested Provider Session identifier kind is not loadable by this API.
+            - The correlated Worker Session projection is temporarily unavailable.
+            - The canonical Worker Session event stream is temporarily unavailable.
+            - The requested Worker Session has not reached a terminal state.
+            - The finished Worker Session has no normalized transcript available.
+            - Provider Sessions could not project the normalized Worker Session transcript.
             - The requested resource does not exist.
             - The server failed while handling an otherwise valid request.
         targets:
@@ -3015,6 +3501,11 @@ components:
         - PAUSED
         - BLOCKED
         - NEEDS_HUMAN
+        - INTERRUPTED
+      x-enum-varnames:
+        - PAUSED
+        - BLOCKED
+        - NEEDSHUMAN
         - INTERRUPTED
     FactoryStopDispatchSummary:
       type: object

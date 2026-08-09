@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/jonboulle/clockwork"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 	instancehostwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/wire"
@@ -12,7 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func stubWorkerSessionsFactory(workers.WorkstationPoolBoundary) (workersessions.Service, error) {
+func stubWorkerSessionsFactory(workers.WorkstationPoolBoundary, platformclock.Source) (workersessions.Service, error) {
 	return nil, nil
 }
 

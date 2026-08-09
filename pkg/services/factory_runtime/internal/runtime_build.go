@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
@@ -326,8 +327,8 @@ func bindProviderSessionProgress(
 	workerSessionsFactory factory.WorkerSessionsFactory,
 	publisher *workersessions.ProviderSessionObservationPublisher,
 ) factory.WorkerSessionsFactory {
-	return func(boundary workers.WorkstationPoolBoundary) (workersessions.Service, error) {
-		service, err := workerSessionsFactory(boundary)
+	return func(boundary workers.WorkstationPoolBoundary, clock platformclock.Source) (workersessions.Service, error) {
+		service, err := workerSessionsFactory(boundary, clock)
 		if err != nil {
 			return nil, err
 		}

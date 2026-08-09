@@ -1,0 +1,10 @@
+type: object
+additionalProperties: false
+required:
+  - sessions
+properties:
+  sessions:
+    type: array
+    description: Deterministically ordered Worker Session observations correlated with the requested Work.
+    items:
+      $ref: './WorkerSessionObservation.yaml'

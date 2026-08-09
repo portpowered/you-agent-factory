@@ -11,7 +11,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -101,7 +100,7 @@ func (b *controlledBoundary) setCancel(fn func(context.Context, workers.Workstat
 
 func newControlledRegistry(t *testing.T, boundary workers.WorkstationPoolBoundary) workersessions.Service {
 	t.Helper()
-	registry, err := service.New(boundary, newEventsAppender(), logging.NoopLogger{})
+	registry, err := newService(boundary, newEventsAppender(), logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("service.New() error = %v", err)
 	}
