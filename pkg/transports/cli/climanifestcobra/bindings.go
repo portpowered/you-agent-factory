@@ -69,12 +69,12 @@ type GenericBindings struct {
 	Handlers                HandlerRegistry
 	CobraHandlers           CobraHandlerRegistry
 	ResolvedCobraHandlers   ResolvedCobraHandlerRegistry
+	DeferRequiredValidation map[string]bool
 	Inputs                  InputBindingRegistry
 	SourceValues            SourceCandidateProvider
 	RootInputs              ResolvedInputsBinding
 	GuardUnknownSubcommands bool
 }
-
 
 // InputChanged reports whether the CLI explicitly supplied a manifest input.
 // Callers identify the input only by stable ID; public flag spellings remain

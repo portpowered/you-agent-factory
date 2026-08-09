@@ -242,7 +242,7 @@ func ParseArgvForCLIInputsInventory(root *cobra.Command, argv []string) (*cobra.
 		if err := cmd.ValidateArgs(remainder); err != nil {
 			return cmd, remainder, err
 		}
-		if err := cmd.ValidateRequiredFlags(); err != nil {
+		if err := climanifestcobra.ValidateRequiredFlags(cmd); err != nil {
 			return cmd, remainder, err
 		}
 		if err := cmd.ValidateFlagGroups(); err != nil {
@@ -259,7 +259,7 @@ func ParseArgvForCLIInputsInventory(root *cobra.Command, argv []string) (*cobra.
 	if err := cmd.ValidateArgs(positionals); err != nil {
 		return cmd, positionals, err
 	}
-	if err := cmd.ValidateRequiredFlags(); err != nil {
+	if err := climanifestcobra.ValidateRequiredFlags(cmd); err != nil {
 		return cmd, positionals, err
 	}
 	if err := cmd.ValidateFlagGroups(); err != nil {

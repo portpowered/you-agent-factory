@@ -607,6 +607,12 @@ func NewWorkerSessionsFamilyCommandFromManifest(
 			workerSessionsReadHandlerID:   resolvedWorkerSessionsHandler(registered.read),
 			workerSessionsStreamHandlerID: resolvedWorkerSessionsHandler(registered.stream),
 		},
+		DeferRequiredValidation: map[string]bool{
+			workerSessionsListHandlerID:   true,
+			workerSessionsShowHandlerID:   true,
+			workerSessionsReadHandlerID:   true,
+			workerSessionsStreamHandlerID: true,
+		},
 		GuardUnknownSubcommands: true,
 	})
 	if err != nil {

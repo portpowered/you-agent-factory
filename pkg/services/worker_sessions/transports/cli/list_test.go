@@ -160,6 +160,27 @@ func TestListJSONMissingWorkReturnsStableMachineReadableError(t *testing.T) {
 	}
 }
 
+func TestListJSONMissingWorkIDReturnsStableMachineReadableError(t *testing.T) {
+	var output bytes.Buffer
+	err := NewList(testHTTPProtocol(t))(ListConfig{
+		Context: context.Background(), Server: "http://127.0.0.1:1", OutputFormat: "json", Output: &output,
+	})
+	if err == nil {
+		t.Fatal("List() error = nil, want required Work ID error")
+	}
+	var typed *CLIError
+	if !errors.As(err, &typed) || typed.Code != "WORK_ID_REQUIRED" {
+		t.Fatalf("error = %v, want CLIError code WORK_ID_REQUIRED", err)
+	}
+	var payload map[string]string
+	if decodeErr := json.Unmarshal(output.Bytes(), &payload); decodeErr != nil {
+		t.Fatalf("decode error JSON: %v; output=%q", decodeErr, output.String())
+	}
+	if payload["code"] != "WORK_ID_REQUIRED" || payload["message"] != "--work-id is required" {
+		t.Fatalf("error payload = %#v, want stable code/message", payload)
+	}
+}
+
 func TestListRejectsUnsupportedOutputFormat(t *testing.T) {
 	var output bytes.Buffer
 	err := NewList(testHTTPProtocol(t))(ListConfig{

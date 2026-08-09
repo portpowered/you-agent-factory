@@ -44,16 +44,17 @@ func NewList(transport clihttp.Protocol) func(ListConfig) error {
 }
 
 func list(config ListConfig) error {
-	if err := validateListConfig(config); err != nil {
-		return err
-	}
 	config.WorkID = strings.TrimSpace(config.WorkID)
+	jsonOutput := config.JSON || strings.EqualFold(strings.TrimSpace(config.OutputFormat), "json")
+	if err := validateListConfig(config); err != nil {
+		return emitCLIError(config, jsonOutput, err)
+	}
 
 	format, err := normalizeOutputFormat(config.OutputFormat)
 	if err != nil {
-		return err
+		return emitCLIError(config, jsonOutput, err)
 	}
-	jsonOutput := config.JSON || format == "json"
+	jsonOutput = config.JSON || format == "json"
 	endpoint, err := workerSessionsEndpoint(config.Server, config.SessionID, config.WorkID)
 	if err != nil {
 		return err
