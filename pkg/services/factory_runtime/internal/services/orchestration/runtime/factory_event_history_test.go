@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -12,8 +13,11 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -584,5 +588,209 @@ func assertGeneratedBatchEvents(t *testing.T, events []factoryapi.FactoryEvent) 
 		stringValueForRuntimeTest(relationEvent.Context.RequestId) != "generated-request-events" ||
 		firstRuntimeTestString(relationEvent.Context.TraceIds) != "trace-generated" {
 		t.Fatalf("relationship payload = %#v, want generated request dependency", relationPayload)
+	}
+}
+
+func TestRecordedWorkerSessionObservationHistoricalProjectionOutcomes(t *testing.T) {
+	fixture := newRecordedExactObservationFixture(t)
+	adapter := fixture.service.(*recordedWorkerSessionObservation)
+
+	adapter.providerSessions = nil
+	if _, err := adapter.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: fixture.ref}); err != nil {
+		t.Fatalf("GetObservation(without optional Provider Sessions detail) error = %v", err)
+	}
+	if _, err := adapter.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: fixture.ref}); !errors.Is(err, workersessions.ErrObservationTranscriptProjectionUnavailable) {
+		t.Fatalf("ReadTranscript(without Provider Sessions detail) error = %v", err)
+	}
+
+	for _, test := range []struct {
+		name string
+		err  error
+		want error
+	}{
+		{name: "canceled", err: context.Canceled, want: workersessions.ErrObservationCanceled},
+		{name: "provider canceled", err: providersessions.ErrOperationCanceled, want: workersessions.ErrObservationCanceled},
+		{name: "source unavailable", err: providersessions.ErrSessionNotFound, want: workersessions.ErrObservationTranscriptUnavailable},
+		{name: "projection failure", err: errors.New("projection failed"), want: workersessions.ErrObservationTranscriptProjectionUnavailable},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			current := newRecordedExactObservationFixture(t)
+			currentAdapter := current.service.(*recordedWorkerSessionObservation)
+			currentAdapter.providerSessions = &historicalProviderSessions{err: test.err}
+			_, err := currentAdapter.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: current.ref})
+			if !errors.Is(err, test.want) {
+				t.Fatalf("ReadTranscript() error = %v, want %v", err, test.want)
+			}
+		})
+	}
+
+	current := newRecordedExactObservationFixture(t)
+	currentAdapter := current.service.(*recordedWorkerSessionObservation)
+	currentAdapter.providerSessions = &historicalProviderSessions{err: context.Canceled}
+	if _, err := currentAdapter.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: current.ref}); !errors.Is(err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("GetObservation(provider canceled) error = %v", err)
+	}
+	currentAdapter.providerSessions = &historicalProviderSessions{err: errors.New("optional detail unavailable")}
+	if observation, err := currentAdapter.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: current.ref}); err != nil || observation.Transcript != workersessions.TranscriptAvailabilityUnavailable {
+		t.Fatalf("GetObservation(optional detail failure) = %#v, %v", observation, err)
+	}
+
+	if _, err := currentAdapter.readRecordedTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: current.ref}, recordedDispatchObservation{}); !errors.Is(err, workersessions.ErrObservationTranscriptUnavailable) {
+		t.Fatalf("readRecordedTranscript(without provider metadata) error = %v", err)
+	}
+	if _, err := historicalTranscriptResult(recordedDispatchObservation{}, nil, current.ref); err == nil {
+		t.Fatal("historicalTranscriptResult(invalid identity) error = nil")
+	}
+}
+
+func TestRecordedWorkerSessionObservationStreamOutcomes(t *testing.T) {
+	fixture := newRecordedExactObservationFixture(t)
+	adapter := fixture.service.(*recordedWorkerSessionObservation)
+	ledger := adapter.ledger.(*recordingfixtures.ScriptedRuntimeLedger)
+
+	for _, test := range []struct {
+		name string
+		err  error
+		want error
+	}{
+		{name: "canceled subscribe", err: context.Canceled, want: workersessions.ErrObservationCanceled},
+		{name: "source subscribe failure", err: errors.New("subscribe failed"), want: workersessions.ErrObservationSourceUnavailable},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ledger.SubscribeError = test.err
+			_, err := adapter.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: fixture.ref})
+			if !errors.Is(err, test.want) {
+				t.Fatalf("StreamObservations() error = %v, want %v", err, test.want)
+			}
+			ledger.SubscribeError = nil
+		})
+	}
+
+	missing := fixture.ref.Clone()
+	missing.ID = "missing-provider-session"
+	if _, err := adapter.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: missing}); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		t.Fatalf("StreamObservations(missing) error = %v", err)
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := adapter.StreamObservations(canceled, workersessions.StreamObservationsRequest{ProviderSession: fixture.ref}); !errors.Is(err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("StreamObservations(canceled) error = %v", err)
+	}
+	if _, handled, err := (&recordedWorkerSessionObservation{}).streamRecorded(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: fixture.ref}); handled || err != nil {
+		t.Fatalf("streamRecorded(without recording projection) = handled=%v err=%v", handled, err)
+	}
+
+	liveEvents := make(chan interfaces.FactoryEvent, 1)
+	liveEvents <- interfaces.FactoryEvent{
+		Context: interfaces.FactoryEventContext{Sequence: 4, DispatchID: stringPointerForRecordedTest("dispatch-recorded-exact")},
+		Id:      "live-terminal",
+		Type:    interfaces.FactoryEventTypeDispatchInterrupted,
+	}
+	ledger.SubscribeResult = interfaces.FactoryEventStream{History: []interfaces.FactoryEvent{}, Events: liveEvents}
+	subscription, err := adapter.StreamObservations(nil, workersessions.StreamObservationsRequest{ProviderSession: fixture.ref})
+	if err != nil {
+		t.Fatalf("StreamObservations(nil context) error = %v", err)
+	}
+	if delivery := subscription.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliveryTerminalReplay {
+		t.Fatalf("live terminal replay delivery = %#v", delivery)
+	}
+	subscription.Close()
+}
+
+func TestRecordedObservationSubscriptionMapsLiveAndClosedOutcomes(t *testing.T) {
+	dispatchID := "dispatch-subscription"
+	event := func(eventType interfaces.FactoryEventType, sequence int, id string) interfaces.FactoryEvent {
+		return interfaces.FactoryEvent{
+			Context: interfaces.FactoryEventContext{DispatchID: stringPointerForRecordedTest(dispatchID), Sequence: sequence},
+			Id:      id,
+			Type:    eventType,
+		}
+	}
+
+	closedEvents := make(chan interfaces.FactoryEvent)
+	close(closedEvents)
+	closed := newRecordedObservationSubscription(interfaces.FactoryEventStream{Events: closedEvents}, dispatchID, false, nil, nil)
+	if delivery := closed.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliverySourceFailure || !errors.Is(delivery.Err, workersessions.ErrObservationSourceClosed) {
+		t.Fatalf("closed source delivery = %#v", delivery)
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	canceledSubscription := newRecordedObservationSubscription(interfaces.FactoryEventStream{Events: make(chan interfaces.FactoryEvent)}, dispatchID, false, nil, nil)
+	if delivery := canceledSubscription.Next(canceled); delivery.Kind != workersessions.ObservationDeliveryCanceled || !errors.Is(delivery.Err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("canceled subscription delivery = %#v", delivery)
+	}
+
+	sourceContext, sourceCancel := context.WithCancel(context.Background())
+	sourceCancel()
+	sourceClosed := newRecordedObservationSubscription(interfaces.FactoryEventStream{Events: make(chan interfaces.FactoryEvent)}, dispatchID, false, nil, sourceContext)
+	if delivery := sourceClosed.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliveryClosed {
+		t.Fatalf("source-context-closed delivery = %#v", delivery)
+	}
+
+	liveEvents := make(chan interfaces.FactoryEvent, 1)
+	liveEvents <- event(interfaces.FactoryEventTypeDispatchReconciled, 2, "live-reconciled")
+	live := newRecordedObservationSubscription(interfaces.FactoryEventStream{Events: liveEvents}, dispatchID, false, nil, nil)
+	if delivery := live.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliveryTerminal || delivery.Event.SourceSequence != 2 {
+		t.Fatalf("live terminal delivery = %#v", delivery)
+	}
+
+	if got := (&recordedObservationSubscription{}).streamContext(); got == nil {
+		t.Fatal("streamContext(nil source context) returned nil")
+	}
+	nilEvents := newRecordedObservationSubscription(interfaces.FactoryEventStream{}, dispatchID, false, nil, nil)
+	if delivery := nilEvents.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliverySourceFailure || !errors.Is(delivery.Err, workersessions.ErrObservationSourceClosed) {
+		t.Fatalf("nil source delivery = %#v", delivery)
+	}
+}
+
+func TestRecordedTranscriptDiagnostics(t *testing.T) {
+	if got := recordedDiagnosticMessage(""); got == "" {
+		t.Fatal("empty diagnostic message returned empty fallback")
+	}
+	for _, message := range []string{"path C:\\secret", "authorization bearer token", "secret prompt", strings.Repeat("x", 300)} {
+		if got := recordedDiagnosticMessage(message); got == "" || len(got) > 256 {
+			t.Fatalf("recordedDiagnosticMessage(%q) = %q", message, got)
+		}
+	}
+}
+
+func TestRecordedTranscriptTokenAndParseValues(t *testing.T) {
+	values := []int{1, 2, 3, 4, 5, 6}
+	usage := recordedTokenUsage(&providersessions.TokenUsage{
+		CacheWriteTokens: &values[0], CachedInputTokens: &values[1], InputTokens: &values[2],
+		OutputTokens: &values[3], ReasoningOutputTokens: &values[4], TotalTokens: &values[5],
+	})
+	if usage == nil || usage.TotalTokens == nil || *usage.TotalTokens != 6 || recordedTokenUsage(nil) != nil {
+		t.Fatalf("recordedTokenUsage() = %#v", usage)
+	}
+	parse := recordedParseDiagnostics(providersessions.ParseSummary{ParseErrors: []providersessions.LineError{{LineNumber: 7, Message: "parse failed"}}})
+	if len(parse.Errors) != 1 || parse.Errors[0].LineNumber != 7 {
+		t.Fatalf("recordedParseDiagnostics() = %#v", parse)
+	}
+	negative := recordedObservationEvent(interfaces.FactoryEvent{Context: interfaces.FactoryEventContext{Sequence: -1}, Id: "negative"})
+	if negative.Position != 0 || negative.SourceSequence != 0 {
+		t.Fatalf("recordedObservationEvent(negative sequence) = %#v", negative)
+	}
+}
+
+func TestRecordedTranscriptOptionalValuesAndSourceClassification(t *testing.T) {
+	applyRecordedProviderDetail(nil, providersessions.Detail{})
+	if cloneRecordedBool(nil) != nil || cloneRecordedInt(nil) != nil || cloneRecordedString(nil) != nil || cloneRecordedTime(nil) != nil {
+		t.Fatal("nil recorded pointer clones returned values")
+	}
+	for _, sourceErr := range []error{
+		providersessions.ErrSessionNotFound,
+		providersessions.ErrAmbiguousSessionFile,
+		providersessions.ErrSessionSourceNotRegularFile,
+		providersessions.ErrSessionStorageUnavailable,
+		providersessions.ErrSessionOutsideRoot,
+	} {
+		if !recordedTranscriptSourceUnavailable(sourceErr) {
+			t.Fatalf("recordedTranscriptSourceUnavailable(%v) = false", sourceErr)
+		}
+	}
+	if recordedTranscriptSourceUnavailable(errors.New("other")) {
+		t.Fatal("recordedTranscriptSourceUnavailable(other) = true")
 	}
 }

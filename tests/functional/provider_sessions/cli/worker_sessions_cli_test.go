@@ -108,6 +108,7 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	waitForWorkerSession(t, ctx, process, env, factoryDir, baseURL, failureWorkID)
 	streamWorkerSession(t, ctx, process, env, factoryDir, baseURL, workerSessionsCodexFailureID, "FAILED")
 	assertFailedWorkerSession(t, ctx, process, env, factoryDir, baseURL, failureWorkID)
+	assertMissingWorkerSessionOutcomes(t, ctx, process, env, factoryDir, baseURL)
 
 	if runner.CallCount() != 2 {
 		t.Fatalf("provider command calls = %d, want one success and one failure invocation", runner.CallCount())
@@ -312,6 +313,43 @@ func assertFailedWorkerSession(t *testing.T, ctx context.Context, process suppor
 	assertWorkerSessionIdentity(t, shown, workerSessionsCodexFailureID, workID)
 	if shown.State != "FAILED" || (!strings.Contains(strings.ToLower(string(shown.Failure)), "auth") && !strings.Contains(strings.ToLower(string(shown.Failure)), "401")) {
 		t.Fatalf("failed show omitted recorded failure cause: %#v", shown)
+	}
+}
+
+func assertMissingWorkerSessionOutcomes(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL string) {
+	t.Helper()
+	cases := []struct {
+		name string
+		args []string
+		code string
+	}{
+		{
+			name: "list missing Work",
+			args: []string{"worker-sessions", "list", "--work-id", "work-missing-from-cli", "--output", "json"},
+			code: "WORK_NOT_FOUND",
+		},
+		{
+			name: "show missing session",
+			args: []string{"worker-sessions", "show", "--provider", "codex", "--kind", "session_id", "--id", "provider-session-missing-from-cli", "--output", "json"},
+			code: "WORKER_SESSION_NOT_FOUND",
+		},
+		{
+			name: "read missing session",
+			args: []string{"worker-sessions", "read", "--provider", "codex", "--kind", "session_id", "--id", "provider-session-missing-from-cli", "--output", "json"},
+			code: "WORKER_SESSION_NOT_FOUND",
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			inputs, err := executeCLIExpectError(t, ctx, process, env, factoryDir, append([]string{"--server", baseURL}, test.args...)...)
+			if err == nil {
+				t.Fatal("missing Worker Session operation returned nil error")
+			}
+			output := inputs.Stdout() + inputs.Stderr() + err.Error()
+			if !strings.Contains(output, test.code) {
+				t.Fatalf("missing Worker Session operation omitted %s: %s", test.code, output)
+			}
+		})
 	}
 }
 
