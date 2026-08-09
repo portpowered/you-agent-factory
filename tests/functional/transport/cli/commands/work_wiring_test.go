@@ -10,12 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
-	"github.com/spf13/cobra"
 )
 
 const (
@@ -31,32 +28,6 @@ const (
 
 	workWiringVisualizeRequestID = "cli-work-wiring-visualize"
 )
-
-func TestWorkerSessionsFamilyConstructorExposesThePublicLeaves(t *testing.T) {
-	registry := commandregistry.NewRegistry()
-	for _, handlerID := range []string{
-		"you.worker-sessions.list.handler",
-		"you.worker-sessions.show.handler",
-		"you.worker-sessions.read.handler",
-		"you.worker-sessions.stream.handler",
-	} {
-		if err := registry.Register(handlerID, func(*cobra.Command, []string) error { return nil }); err != nil {
-			t.Fatalf("register %s: %v", handlerID, err)
-		}
-	}
-	command, err := climanifestcobra.NewWorkerSessionsFamilyCommand(registry)
-	if err != nil {
-		t.Fatalf("NewWorkerSessionsFamilyCommand() error = %v", err)
-	}
-	if command.Name() != "worker-sessions" || command.Parent() != nil || len(command.Commands()) != 4 {
-		t.Fatalf("worker-sessions command = name %q parent %v children %d, want detached family with four leaves", command.Name(), command.Parent(), len(command.Commands()))
-	}
-	for _, leaf := range command.Commands() {
-		if !leaf.Runnable() || leaf.RunE == nil {
-			t.Fatalf("worker-sessions leaf %q is not executable", leaf.Name())
-		}
-	}
-}
 
 // TestCLIWorkListAndShowReflectSubmittedWork proves you work list and you work show
 // reflect work submitted through the public CLI against a running Factory Session.

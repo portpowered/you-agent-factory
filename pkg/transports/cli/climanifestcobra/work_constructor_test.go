@@ -1,10 +1,9 @@
-package climanifestcobra_test
+package climanifestcobra
 
 import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
@@ -87,7 +86,7 @@ func TestNewWorkerSessionsFamilyCommandBuildsDetachedRunnableLeaves(t *testing.T
 		}
 	}
 
-	workerSessions, err := climanifestcobra.NewWorkerSessionsFamilyCommand(registry)
+	workerSessions, err := NewWorkerSessionsFamilyCommand(registry)
 	if err != nil {
 		t.Fatalf("NewWorkerSessionsFamilyCommand() error = %v", err)
 	}
@@ -166,7 +165,7 @@ func TestNewWorkerSessionsFamilyCommandRejectsInvalidManifestsAndHandlers(t *tes
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := climanifestcobra.NewWorkerSessionsFamilyCommandFromManifest(test.mutate(cloneWorkerSessionsManifest(valid)), test.reg); err == nil {
+			if _, err := NewWorkerSessionsFamilyCommandFromManifest(test.mutate(cloneWorkerSessionsManifest(valid)), test.reg); err == nil {
 				t.Fatal("NewWorkerSessionsFamilyCommandFromManifest() error = nil, want rejection")
 			}
 		})
@@ -252,7 +251,7 @@ func TestNewWorkFamilyCommandRejectsOutOfFamilyManifestCommand(t *testing.T) {
 		t.Fatalf("NewWorkRegistry() error = %v", err)
 	}
 
-	_, err = climanifestcobra.NewWorkFamilyCommandFromManifest(manifest, registry, testWorkBindings())
+	_, err = NewWorkFamilyCommandFromManifest(manifest, registry, testWorkBindings())
 	if err == nil {
 		t.Fatal("NewWorkFamilyCommandFromManifest() error = nil, want out-of-family rejection")
 	}
@@ -260,7 +259,7 @@ func TestNewWorkFamilyCommandRejectsOutOfFamilyManifestCommand(t *testing.T) {
 
 func TestNewWorkFamilyCommandRejectsMissingHandler(t *testing.T) {
 	registry := commandregistry.NewRegistry()
-	if _, err := climanifestcobra.NewWorkFamilyCommand(registry, testWorkBindings()); err == nil {
+	if _, err := NewWorkFamilyCommand(registry, testWorkBindings()); err == nil {
 		t.Fatal("NewWorkFamilyCommand() missing work handlers = nil, want error")
 	}
 }
@@ -310,7 +309,7 @@ func TestNewWorkFamilyCommandAppliesManifestFlagUsages(t *testing.T) {
 	visualizeRecord.Flags[formatFlag.ID] = formatFlag
 	manifest.Commands[visualizeRecord.ID] = visualizeRecord
 
-	work, err := climanifestcobra.NewWorkFamilyCommandFromManifest(
+	work, err := NewWorkFamilyCommandFromManifest(
 		manifest,
 		registry,
 		testWorkBindings(),
@@ -456,7 +455,7 @@ func TestNewWorkFamilyComponentsReturnsDetachedCommands(t *testing.T) {
 		t.Fatalf("NewWorkRegistry() error = %v", err)
 	}
 
-	components, err := climanifestcobra.NewWorkFamilyComponents(registry, testWorkBindings())
+	components, err := NewWorkFamilyComponents(registry, testWorkBindings())
 	if err != nil {
 		t.Fatalf("NewWorkFamilyComponents() error = %v", err)
 	}
@@ -478,7 +477,7 @@ func TestNewWorkFamilyCommandRejectsIncompleteBindings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWorkRegistry() error = %v", err)
 	}
-	if _, err := climanifestcobra.NewWorkFamilyCommand(registry, climanifestcobra.WorkFamilyBindings{}); err == nil {
+	if _, err := NewWorkFamilyCommand(registry, WorkFamilyBindings{}); err == nil {
 		t.Fatal("NewWorkFamilyCommand() incomplete bindings = nil, want error")
 	}
 }
@@ -501,7 +500,7 @@ func TestNewWorkFamilyCommandFromManifestRejectsRunnableWorkParent(t *testing.T)
 	if err != nil {
 		t.Fatalf("NewWorkRegistry() error = %v", err)
 	}
-	if _, err := climanifestcobra.NewWorkFamilyCommandFromManifest(manifest, registry, testWorkBindings()); err == nil {
+	if _, err := NewWorkFamilyCommandFromManifest(manifest, registry, testWorkBindings()); err == nil {
 		t.Fatal("NewWorkFamilyCommandFromManifest() runnable work parent = nil, want error")
 	}
 }
@@ -522,13 +521,13 @@ func TestNewWorkFamilyCommandFromManifestRejectsWrongFamilyCardinality(t *testin
 	if err != nil {
 		t.Fatalf("NewWorkRegistry() error = %v", err)
 	}
-	if _, err := climanifestcobra.NewWorkFamilyCommandFromManifest(manifest, registry, testWorkBindings()); err == nil {
+	if _, err := NewWorkFamilyCommandFromManifest(manifest, registry, testWorkBindings()); err == nil {
 		t.Fatal("NewWorkFamilyCommandFromManifest() extra command = nil, want error")
 	}
 }
 
 func TestNewWorkFamilyCommandRejectsNilRegistry(t *testing.T) {
-	if _, err := climanifestcobra.NewWorkFamilyCommand(nil, testWorkBindings()); err == nil {
+	if _, err := NewWorkFamilyCommand(nil, testWorkBindings()); err == nil {
 		t.Fatal("NewWorkFamilyCommand() nil registry = nil, want error")
 	}
 }
@@ -544,15 +543,15 @@ func mustWorkFamilyTree(t *testing.T) (*cobra.Command, *commandregistry.Registry
 	if err != nil {
 		t.Fatalf("NewWorkRegistry() error = %v", err)
 	}
-	work, err := climanifestcobra.NewWorkFamilyCommand(registry, testWorkBindings())
+	work, err := NewWorkFamilyCommand(registry, testWorkBindings())
 	if err != nil {
 		t.Fatalf("NewWorkFamilyCommand() error = %v", err)
 	}
 	return work, registry
 }
 
-func testWorkBindings() climanifestcobra.WorkFamilyBindings {
-	return climanifestcobra.WorkFamilyBindings{LocalTargets: map[string]any{
+func testWorkBindings() WorkFamilyBindings {
+	return WorkFamilyBindings{LocalTargets: map[string]any{
 		"you.work.list.flag.state-name":     testScalarTarget(""),
 		"you.work.list.flag.state-type":     testScalarTarget(""),
 		"you.work.list.flag.name":           testScalarTarget(""),
@@ -613,7 +612,7 @@ func workCommandWithInheritedFlags(t *testing.T, work *cobra.Command) *cobra.Com
 }
 
 func TestNewResolvedWorkCommandTreeBuildsOnlyGeneratedWorkFamily(t *testing.T) {
-	root, err := climanifestcobra.NewResolvedWorkCommandTree(noopResolvedWorkHandlers())
+	root, err := NewResolvedWorkCommandTree(noopResolvedWorkHandlers())
 	if err != nil {
 		t.Fatalf("NewResolvedWorkCommandTree() error = %v", err)
 	}
@@ -668,7 +667,7 @@ func TestNewResolvedWorkCommandTreeUsesManifestInputsAndStableHandlerID(t *testi
 		inherited = gotInherited
 		return nil
 	}
-	root, err := climanifestcobra.NewResolvedWorkCommandTreeFromManifest(manifest, handlers)
+	root, err := NewResolvedWorkCommandTreeFromManifest(manifest, handlers)
 	if err != nil {
 		t.Fatalf("NewResolvedWorkCommandTreeFromManifest() error = %v", err)
 	}
@@ -719,7 +718,7 @@ func TestNewResolvedWorkCommandTreeResolvesGeneratedArgumentsAndDefaults(t *test
 		visualizeInputs = local
 		return nil
 	}
-	root, err := climanifestcobra.NewResolvedWorkCommandTree(handlers)
+	root, err := NewResolvedWorkCommandTree(handlers)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -729,7 +728,7 @@ func TestNewResolvedWorkCommandTreeResolvesGeneratedArgumentsAndDefaults(t *test
 	}
 	assertResolvedString(t, showInputs, "you.work.show.arg.0", "work-123")
 
-	root, err = climanifestcobra.NewResolvedWorkCommandTree(handlers)
+	root, err = NewResolvedWorkCommandTree(handlers)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -752,7 +751,7 @@ func TestNewResolvedWorkCommandTreeEnforcesManifestArgumentCardinality(t *testin
 		{"work", "show"},
 		{"work", "show", "work-123", "extra"},
 	} {
-		root, err := climanifestcobra.NewResolvedWorkCommandTree(handlers)
+		root, err := NewResolvedWorkCommandTree(handlers)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -769,7 +768,7 @@ func TestNewResolvedWorkCommandTreeEnforcesManifestArgumentCardinality(t *testin
 func TestNewResolvedWorkCommandTreeRejectsMissingAndForeignContracts(t *testing.T) {
 	handlers := noopResolvedWorkHandlers()
 	handlers.Move = nil
-	if _, err := climanifestcobra.NewResolvedWorkCommandTree(handlers); err == nil {
+	if _, err := NewResolvedWorkCommandTree(handlers); err == nil {
 		t.Fatal("missing move handler error = nil")
 	}
 
@@ -783,7 +782,7 @@ func TestNewResolvedWorkCommandTreeRejectsMissingAndForeignContracts(t *testing.
 	foreign.Path = "you work submit"
 	delete(manifest.Commands, "you.work.list")
 	manifest.Commands[foreign.ID] = foreign
-	if _, err := climanifestcobra.NewResolvedWorkCommandTreeFromManifest(
+	if _, err := NewResolvedWorkCommandTreeFromManifest(
 		manifest,
 		noopResolvedWorkHandlers(),
 	); err == nil {
@@ -792,7 +791,7 @@ func TestNewResolvedWorkCommandTreeRejectsMissingAndForeignContracts(t *testing.
 }
 
 func TestNewResolvedWorkCommandReturnsDetachedSubtree(t *testing.T) {
-	work, err := climanifestcobra.NewResolvedWorkCommand(noopResolvedWorkHandlers())
+	work, err := NewResolvedWorkCommand(noopResolvedWorkHandlers())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -814,7 +813,7 @@ func executeResolvedWorkList(t *testing.T, args []string) resolvedinput.Inputs {
 		got = local
 		return nil
 	}
-	root, err := climanifestcobra.NewResolvedWorkCommandTree(handlers)
+	root, err := NewResolvedWorkCommandTree(handlers)
 	if err != nil {
 		t.Fatal(err)
 	}

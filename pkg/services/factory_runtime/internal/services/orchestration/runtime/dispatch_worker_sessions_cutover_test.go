@@ -393,92 +393,94 @@ func TestRecordedWorkerSessionObservation_ReplaysHistoricalTerminalStream(t *tes
 }
 
 func TestRecordedWorkerSessionObservation_UsesCanonicalFactsForExactQueries(t *testing.T) {
+	fixture := newRecordedExactObservationFixture(t)
+	requireRecordedExactObservationList(t, fixture)
+	show := requireRecordedExactObservationShow(t, fixture)
+	requireRecordedExactObservationTranscript(t, fixture, show)
+	requireRecordedExactObservationStream(t, fixture)
+}
+
+type recordedExactObservationFixture struct {
+	service        workersessions.Service
+	ref            providers.SessionRef
+	workID         string
+	inputTokens    int
+	transcriptText string
+}
+
+func newRecordedExactObservationFixture(t *testing.T) recordedExactObservationFixture {
+	t.Helper()
 	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
 	workID := "work-recorded-exact"
 	dispatchID := "dispatch-recorded-exact"
 	providerMetadata := &workers.ProviderSessionMetadata{Provider: string(providers.IDCodex), Kind: providers.SessionIDKind, ID: "provider-session-exact"}
 	ref := providerSessionRef(*providerMetadata)
-	requestPayload := mustMarshalRecordedTest(t, interfaces.DispatchRequestEventPayload{TransitionID: "review"})
 	events := []interfaces.FactoryEvent{
-		{
-			Context: interfaces.FactoryEventContext{Tick: 1, Sequence: 1, EventTime: base, DispatchID: stringPointerForRecordedTest(dispatchID), WorkIDs: stringSliceForRecordedTest([]string{workID})},
-			Id:      "exact-request",
-			Type:    interfaces.FactoryEventTypeDispatchRequest,
-			Payload: requestPayload,
-		},
-		{
-			Context: interfaces.FactoryEventContext{Tick: 1, Sequence: 2, EventTime: base.Add(time.Second), DispatchID: stringPointerForRecordedTest(dispatchID), RequestID: stringPointerForRecordedTest("turn-recorded-exact")},
-			Id:      "exact-association",
-			Type:    interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
-			Payload: mustMarshalRecordedTest(t, interfaces.DispatchWorkerSessionAssociationEventPayload{WorkerSessionID: "worker-recorded-exact"}),
-		},
-		{
-			Context: interfaces.FactoryEventContext{Tick: 2, Sequence: 3, EventTime: base.Add(3 * time.Second), DispatchID: stringPointerForRecordedTest(dispatchID)},
-			Id:      "exact-response",
-			Type:    interfaces.FactoryEventTypeDispatchResponse,
-		},
+		{Context: interfaces.FactoryEventContext{Tick: 1, Sequence: 1, EventTime: base, DispatchID: stringPointerForRecordedTest(dispatchID), WorkIDs: stringSliceForRecordedTest([]string{workID})}, Id: "exact-request", Type: interfaces.FactoryEventTypeDispatchRequest, Payload: mustMarshalRecordedTest(t, interfaces.DispatchRequestEventPayload{TransitionID: "review"})},
+		{Context: interfaces.FactoryEventContext{Tick: 1, Sequence: 2, EventTime: base.Add(time.Second), DispatchID: stringPointerForRecordedTest(dispatchID), RequestID: stringPointerForRecordedTest("turn-recorded-exact")}, Id: "exact-association", Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc, Payload: mustMarshalRecordedTest(t, interfaces.DispatchWorkerSessionAssociationEventPayload{WorkerSessionID: "worker-recorded-exact"})},
+		{Context: interfaces.FactoryEventContext{Tick: 2, Sequence: 3, EventTime: base.Add(3 * time.Second), DispatchID: stringPointerForRecordedTest(dispatchID)}, Id: "exact-response", Type: interfaces.FactoryEventTypeDispatchResponse},
 	}
-	inputTokens := 7
-	outputTokens := 5
+	inputTokens, outputTokens := 7, 5
 	transcriptText := "historical transcript"
 	providerProjection := &historicalProviderSessions{result: providersessions.ProjectResult{
 		Session: ref,
 		Detail: providersessions.Detail{
 			ProviderSession: providersessions.Ref{Provider: providersessions.ProviderCodex, Kind: providers.SessionIDKind, ID: ref.ID},
-			Parse: providersessions.ParseSummary{
-				EventCount: 3,
-				TokenUsage: &providersessions.TokenUsage{InputTokens: &inputTokens, OutputTokens: &outputTokens},
-			},
-			Transcript: []providersessions.TranscriptEntry{{Order: 0, Type: providersessions.TranscriptAssistantMessage, Text: &transcriptText}},
+			Parse:           providersessions.ParseSummary{EventCount: 3, TokenUsage: &providersessions.TokenUsage{InputTokens: &inputTokens, OutputTokens: &outputTokens}},
+			Transcript:      []providersessions.TranscriptEntry{{Order: 0, Type: providersessions.TranscriptAssistantMessage, Text: &transcriptText}},
 		},
 	}}
-	ledger := &recordingfixtures.ScriptedRuntimeLedger{Events: events}
-	service := newRecordedWorkerSessionObservation(
-		nil,
-		ledger,
-		func(_ []interfaces.FactoryEvent, _ int) (interfaces.FactoryWorldState, error) {
-			return interfaces.FactoryWorldState{
-				CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
-					DispatchID: dispatchID, StartedAt: base, CompletedAt: base.Add(3 * time.Second), WorkItemIDs: []string{workID},
-					Result: interfaces.WorkstationResult{Outcome: string(workers.OutcomeAccepted)}, ProviderSession: providerMetadata,
-				}},
-			}, nil
-		},
-		platformclock.NewDeterministic(base.Add(10*time.Second), time.Second),
-		providerProjection,
-	)
+	service := newRecordedWorkerSessionObservation(nil, &recordingfixtures.ScriptedRuntimeLedger{Events: events}, func(_ []interfaces.FactoryEvent, _ int) (interfaces.FactoryWorldState, error) {
+		return interfaces.FactoryWorldState{CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
+			DispatchID: dispatchID, StartedAt: base, CompletedAt: base.Add(3 * time.Second), WorkItemIDs: []string{workID},
+			Result: interfaces.WorkstationResult{Outcome: string(workers.OutcomeAccepted)}, ProviderSession: providerMetadata,
+		}}}, nil
+	}, platformclock.NewDeterministic(base.Add(10*time.Second), time.Second), providerProjection)
+	return recordedExactObservationFixture{service: service, ref: ref, workID: workID, inputTokens: inputTokens, transcriptText: transcriptText}
+}
 
-	listed, err := service.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: workID})
+func requireRecordedExactObservationList(t *testing.T, fixture recordedExactObservationFixture) {
+	t.Helper()
+	listed, err := fixture.service.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: fixture.workID})
 	if err != nil || len(listed.Observations) != 1 {
 		t.Fatalf("ListObservations() = %#v, %v; want one recorded observation", listed, err)
 	}
-	show, err := service.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: ref})
+}
+
+func requireRecordedExactObservationShow(t *testing.T, fixture recordedExactObservationFixture) workersessions.Observation {
+	t.Helper()
+	show, err := fixture.service.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: fixture.ref})
 	if err != nil {
 		t.Fatalf("GetObservation() error = %v", err)
 	}
-	if show.WorkerSessionID != "worker-recorded-exact" || show.WorkIDs[0] != workID || show.State != workersessions.StateCompleted || show.Duration == nil || *show.Duration != 3*time.Second {
+	if show.WorkerSessionID != "worker-recorded-exact" || show.WorkIDs[0] != fixture.workID || show.State != workersessions.StateCompleted || show.Duration == nil || *show.Duration != 3*time.Second {
 		t.Fatalf("GetObservation() = %#v, want canonical completed correlation and duration", show)
 	}
-	if show.TokenUsage == nil || show.TokenUsage.InputTokens == nil || *show.TokenUsage.InputTokens != inputTokens || show.Transcript != workersessions.TranscriptAvailabilityAvailable || show.Parse.EventCount != 3 {
+	if show.TokenUsage == nil || show.TokenUsage.InputTokens == nil || *show.TokenUsage.InputTokens != fixture.inputTokens || show.Transcript != workersessions.TranscriptAvailabilityAvailable || show.Parse.EventCount != 3 {
 		t.Fatalf("GetObservation() detail = %#v, want Provider Sessions enrichment", show)
 	}
-	transcript, err := service.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: ref})
+	return show
+}
+
+func requireRecordedExactObservationTranscript(t *testing.T, fixture recordedExactObservationFixture, show workersessions.Observation) {
+	t.Helper()
+	transcript, err := fixture.service.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: fixture.ref})
 	if err != nil {
 		t.Fatalf("ReadTranscript() error = %v", err)
 	}
-	if transcript.WorkerSessionID != show.WorkerSessionID || transcript.WorkIDs[0] != workID || transcript.State != workersessions.StateCompleted || len(transcript.Entries) != 1 || transcript.Entries[0].Text == nil || *transcript.Entries[0].Text != transcriptText {
+	if transcript.WorkerSessionID != show.WorkerSessionID || transcript.WorkIDs[0] != fixture.workID || transcript.State != workersessions.StateCompleted || len(transcript.Entries) != 1 || transcript.Entries[0].Text == nil || *transcript.Entries[0].Text != fixture.transcriptText {
 		t.Fatalf("ReadTranscript() = %#v, want canonical identity and normalized entry", transcript)
 	}
-	subscription, err := service.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: ref})
+}
+
+func requireRecordedExactObservationStream(t *testing.T, fixture recordedExactObservationFixture) {
+	t.Helper()
+	subscription, err := fixture.service.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: fixture.ref})
 	if err != nil {
 		t.Fatalf("StreamObservations() error = %v", err)
 	}
 	defer subscription.Close()
-	for index, want := range []workersessions.ObservationDeliveryKind{
-		workersessions.ObservationDeliveryRecord,
-		workersessions.ObservationDeliveryRecord,
-		workersessions.ObservationDeliveryTerminalReplay,
-	} {
+	for index, want := range []workersessions.ObservationDeliveryKind{workersessions.ObservationDeliveryRecord, workersessions.ObservationDeliveryRecord, workersessions.ObservationDeliveryTerminalReplay} {
 		delivery := subscription.Next(context.Background())
 		if delivery.Kind != want || delivery.Event.SourceID == "" || delivery.Event.SourceSequence != uint64(index+1) {
 			t.Fatalf("historical delivery %d = %#v, want %s", index, delivery, want)
@@ -574,80 +576,77 @@ func stringSliceForRecordedTest(value []string) *[]string { return &value }
 
 var _ recordings.RuntimeLedger = (*recordingfixtures.ScriptedRuntimeLedger)(nil)
 
-func TestWorkerSessionDispatchOutcomeAndObservationHelpersCoverSafeBranches(t *testing.T) {
-	request := workers.WorkstationDispatchRequest{
-		WorkstationName: "review",
-		Execution:       workers.WorkstationExecutionRequest{Dispatch: work.WorkDispatch{DispatchID: "dispatch-1", WorkstationName: "review"}},
-	}
+func TestWorkerSessionDispatchOutcomeBranches(t *testing.T) {
+	request := workers.WorkstationDispatchRequest{WorkstationName: "review", Execution: workers.WorkstationExecutionRequest{Dispatch: work.WorkDispatch{DispatchID: "dispatch-1", WorkstationName: "review"}}}
 	startErr := errors.New("start failed")
 	if result, err := workerSessionDispatchOutcome(request, workersessions.InvokeSessionResult{}, startErr); !errors.Is(err, startErr) || result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeFailed || result.Result.Error != startErr.Error() {
-		t.Fatalf("workerSessionDispatchOutcome(start error) = %#v, %v", result, err)
+		t.Fatalf("start error outcome = %#v, %v", result, err)
 	}
 	passthrough := workersessions.InvokeSessionResult{Dispatch: workers.WorkstationDispatchResult{DispatchID: "dispatch-1", TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted}}
 	if result, err := workerSessionDispatchOutcome(request, passthrough, nil); err != nil || result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCompleted {
-		t.Fatalf("workerSessionDispatchOutcome(handed off) = %#v, %v", result, err)
+		t.Fatalf("handed-off outcome = %#v, %v", result, err)
 	}
 	publicationFailure := workersessions.InvokeSessionResult{Session: workersessions.Session{Result: &workersessions.TerminalResult{Cause: &workersessions.FailureCause{Kind: workersessions.FailureCauseEventPublicationFailure, Detail: "publication failed"}}}}
 	if result, err := workerSessionDispatchOutcome(request, publicationFailure, nil); err != nil || result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeFailed || result.Result.Error != string(workersessions.FailureCauseEventPublicationFailure) {
-		t.Fatalf("workerSessionDispatchOutcome(before handoff) = %#v, %v", result, err)
+		t.Fatalf("pre-handoff outcome = %#v, %v", result, err)
 	}
-	if handedOffToWorkers(workersessions.InvokeSessionResult{Session: workersessions.Session{Result: &workersessions.TerminalResult{Cause: &workersessions.FailureCause{Kind: workersessions.FailureCauseEventPublicationFailure}}}}) {
-		t.Fatal("handedOffToWorkers(publication failure) = true, want false")
+	if handedOffToWorkers(publicationFailure) || !handedOffToWorkers(workersessions.InvokeSessionResult{}) {
+		t.Fatal("handedOffToWorkers() classified empty/publication results incorrectly")
 	}
-	if !handedOffToWorkers(workersessions.InvokeSessionResult{}) {
-		t.Fatal("handedOffToWorkers(empty result) = false, want true")
-	}
+}
 
+func TestRecordedObservationListBranches(t *testing.T) {
 	if got, err := recordedObservationListResult(nil, false, workersessions.ListObservationsResult{Observations: []workersessions.Observation{{WorkerSessionID: "live"}}}, nil); err != nil || len(got.Observations) != 1 {
-		t.Fatalf("recordedObservationListResult(live fallback) = %#v, %v", got, err)
+		t.Fatalf("live fallback = %#v, %v", got, err)
 	}
 	if _, err := recordedObservationListResult(nil, false, workersessions.ListObservationsResult{}, workersessions.ErrObservationWorkNotFound); !errors.Is(err, workersessions.ErrObservationWorkNotFound) {
-		t.Fatalf("recordedObservationListResult(missing) error = %v", err)
+		t.Fatalf("missing work error = %v", err)
 	}
 	recorded := []workersessions.Observation{{WorkerSessionID: "b", AttemptID: "b"}, {WorkerSessionID: "a", AttemptID: "a"}}
 	if got, err := recordedObservationListResult(recorded, true, workersessions.ListObservationsResult{}, workersessions.ErrObservationProjectionUnavailable); err != nil || got.Observations[0].AttemptID != "a" {
-		t.Fatalf("recordedObservationListResult(recorded) = %#v, %v", got, err)
+		t.Fatalf("recorded result = %#v, %v", got, err)
 	}
 	if got, err := recordedObservationListResult(nil, true, workersessions.ListObservationsResult{Observations: []workersessions.Observation{{WorkerSessionID: "live-known"}}}, nil); err != nil || len(got.Observations) != 1 {
-		t.Fatalf("recordedObservationListResult(known live fallback) = %#v, %v", got, err)
+		t.Fatalf("known live fallback = %#v, %v", got, err)
 	}
 	if !acceptableLiveObservationError(nil) || !acceptableLiveObservationError(workersessions.ErrObservationProjectionUnavailable) || !acceptableLiveObservationError(workersessions.ErrObservationWorkNotFound) || acceptableLiveObservationError(errors.New("other")) {
 		t.Fatal("acceptableLiveObservationError() classification is incorrect")
 	}
+}
 
+func TestRecordedDispatchFailureProjection(t *testing.T) {
 	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
 	failureDetail := &workers.FailureDetail{Reason: workers.WorkFailureTypeAuthFailure}
 	metadata := &workers.WorkFailureMetadata{Family: workers.WorkFailureFamilyRetryable, Type: workers.WorkFailureTypeTimeout}
 	providerMetadata := &workers.ProviderSessionMetadata{Provider: "codex", Kind: providers.SessionIDKind, ID: "provider-session-1"}
-	completed := interfaces.FactoryWorldDispatchCompletion{
-		DispatchID: "dispatch-1", StartedAt: base, CompletedAt: base.Add(2 * time.Second), WorkItemIDs: []string{"work-1"},
-		Result: interfaces.WorkstationResult{Outcome: string(workers.OutcomeFailed), FailureDetail: failureDetail, FailureMetadata: metadata}, ProviderSession: providerMetadata,
-	}
+	completed := interfaces.FactoryWorldDispatchCompletion{DispatchID: "dispatch-1", StartedAt: base, CompletedAt: base.Add(2 * time.Second), WorkItemIDs: []string{"work-1"}, Result: interfaces.WorkstationResult{Outcome: string(workers.OutcomeFailed), FailureDetail: failureDetail, FailureMetadata: metadata}, ProviderSession: providerMetadata}
 	active := interfaces.FactoryWorldDispatch{DispatchID: "dispatch-1", StartedAt: base.Add(time.Second), WorkItemIDs: []string{"work-2"}}
 	providerRecords := []interfaces.FactoryWorldProviderSessionRecord{{DispatchID: "dispatch-1", ProviderSession: *providerMetadata, WorkItemIDs: []string{"work-3"}, FailureDetail: failureDetail}}
 	fact := recordedDispatchFact("dispatch-1", recordedDispatchAssociation{workerSessionID: "worker-1", turnID: "turn-1", eventTime: base}, map[string]recordedDispatchRequest{"dispatch-1": {workIDs: []string{"work-1"}, startedAt: base}}, map[string]interfaces.FactoryWorldDispatchCompletion{"dispatch-1": completed}, providerRecords, map[string]interfaces.FactoryWorldDispatch{"dispatch-1": active}, nil)
 	if fact.state != workersessions.StateFailed || fact.provider == nil || len(fact.workIDs) != 1 || fact.failure == nil {
-		t.Fatalf("recordedDispatchFact() = %#v, want completed failure fact", fact)
+		t.Fatalf("recordedDispatchFact() = %#v", fact)
 	}
 	if recordedObservationState(string(workers.OutcomeAccepted)) != workersessions.StateCompleted || recordedObservationState(string(workers.OutcomeContinue)) != workersessions.StateCompleted || recordedObservationState(string(workers.OutcomeRejected)) != workersessions.StateFailed || recordedObservationState("unknown") != workersessions.StateFailed {
 		t.Fatal("recordedObservationState() mapping is incorrect")
 	}
-	if got := recordedFailure(nil, nil, workersessions.StateRunning); got != nil {
-		t.Fatalf("recordedFailure(active) = %#v, want nil", got)
+	if recordedFailure(nil, nil, workersessions.StateRunning) != nil {
+		t.Fatal("recordedFailure(active) returned a failure")
 	}
+}
+
+func TestRecordedFailureMappingBranches(t *testing.T) {
+	failureDetail := &workers.FailureDetail{Reason: workers.WorkFailureTypeAuthFailure}
 	for _, reason := range []workers.WorkFailureType{workers.WorkFailureTypeAuthFailure, workers.WorkFailureTypeTimeout, workers.WorkFailureTypeThrottled, workers.WorkFailureTypeMisconfigured, workers.WorkFailureTypeUnknown} {
-		failure := recordedFailure(failureDetail, &workers.WorkFailureMetadata{Family: workers.WorkFailureFamilyTerminal, Type: reason}, workersessions.StateFailed)
-		if failure == nil || failure.Detail == "" {
-			t.Fatalf("recordedFailure(%q) = %#v, want safe failure", reason, failure)
+		if failure := recordedFailure(failureDetail, &workers.WorkFailureMetadata{Family: workers.WorkFailureFamilyTerminal, Type: reason}, workersessions.StateFailed); failure == nil || failure.Detail == "" {
+			t.Fatalf("recordedFailure(%q) = %#v", reason, failure)
 		}
 	}
-	if recordedProviderFailureKind(&workers.FailureDetail{Reason: workers.WorkFailureTypeAuthFailure}) != providers.ExecuteFailureKindAuthentication ||
-		recordedProviderFailureKind(&workers.FailureDetail{Reason: workers.WorkFailureTypeTimeout}) != providers.ExecuteFailureKindTimeout ||
-		recordedProviderFailureKind(&workers.FailureDetail{Reason: workers.WorkFailureTypeThrottled}) != providers.ExecuteFailureKindThrottled ||
-		recordedProviderFailureKind(&workers.FailureDetail{Reason: workers.WorkFailureTypeMisconfigured}) != providers.ExecuteFailureKindMisconfigured ||
-		recordedProviderFailureKind(nil) != "" {
+	if recordedProviderFailureKind(&workers.FailureDetail{Reason: workers.WorkFailureTypeAuthFailure}) != providers.ExecuteFailureKindAuthentication || recordedProviderFailureKind(&workers.FailureDetail{Reason: workers.WorkFailureTypeTimeout}) != providers.ExecuteFailureKindTimeout || recordedProviderFailureKind(&workers.FailureDetail{Reason: workers.WorkFailureTypeThrottled}) != providers.ExecuteFailureKindThrottled || recordedProviderFailureKind(&workers.FailureDetail{Reason: workers.WorkFailureTypeMisconfigured}) != providers.ExecuteFailureKindMisconfigured || recordedProviderFailureKind(nil) != "" {
 		t.Fatal("recordedProviderFailureKind() mapping is incorrect")
 	}
+}
+
+func TestRecordedFailureKindAndTypeBranches(t *testing.T) {
 	if family, ok := recordedFailureFamily(workers.WorkFailureFamilyRetryable); !ok || family == "" {
 		t.Fatal("recordedFailureFamily(retryable) missing known family")
 	}
@@ -660,67 +659,57 @@ func TestWorkerSessionDispatchOutcomeAndObservationHelpersCoverSafeBranches(t *t
 	if _, ok := recordedFailureType("foreign"); ok {
 		t.Fatal("recordedFailureType(foreign) = known")
 	}
-	if got := recordedFailureDetail(nil, nil); got == "" {
-		t.Fatal("recordedFailureDetail(nil, nil) returned an empty fallback")
+}
+
+func TestRecordedFailureDetailFallback(t *testing.T) {
+	if recordedFailureDetail(nil, nil) == "" || recordedFailureDetail(nil, &workers.WorkFailureMetadata{Family: "foreign", Type: "foreign"}) == "" {
+		t.Fatal("recordedFailureDetail() returned an empty fallback")
 	}
 	if got := recordedFailureDetail(nil, &workers.WorkFailureMetadata{Family: "", Type: workers.WorkFailureTypeTimeout}); got != "family=unknown type=timeout" {
 		t.Fatalf("recordedFailureDetail(empty family) = %q", got)
 	}
-	if got := recordedFailureDetail(nil, &workers.WorkFailureMetadata{Family: "foreign", Type: "foreign"}); got == "" {
-		t.Fatal("recordedFailureDetail(unknown metadata) returned an empty fallback")
-	}
+}
 
+func TestRecordedObservationTimingBranches(t *testing.T) {
+	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
 	clock := platformclock.NewDeterministic(base.Add(10*time.Second), time.Second)
+	fact := recordedDispatchObservation{workerSessionID: "worker-1", dispatchID: "dispatch-1", startedAt: base, state: workersessions.StateCompleted}
+	ended := base.Add(2 * time.Second)
+	fact.endedAt = &ended
 	projected := recordedObservationFromFact(fact, clock)
-	if err := projected.Validate(); err != nil {
-		t.Fatalf("recordedObservationFromFact() = %#v, Validate() = %v", projected, err)
+	if err := projected.Validate(); err != nil || projected.DurationBasis != workersessions.DurationBasisRecordedTimestamps {
+		t.Fatalf("recordedObservationFromFact(terminal) = %#v, error = %v", projected, err)
 	}
-	activeFact := recordedDispatchObservation{workerSessionID: "worker-active", dispatchID: "dispatch-active", startedAt: base, state: workersessions.StateRunning}
-	activeProjected := recordedObservationFromFact(activeFact, clock)
-	if activeProjected.DurationBasis != workersessions.DurationBasisActiveClock || activeProjected.Duration == nil {
-		t.Fatalf("recordedObservationFromFact(active) = %#v", activeProjected)
+	active := recordedObservationFromFact(recordedDispatchObservation{workerSessionID: "worker-active", dispatchID: "dispatch-active", startedAt: base, state: workersessions.StateRunning}, clock)
+	if active.DurationBasis != workersessions.DurationBasisActiveClock || active.Duration == nil {
+		t.Fatalf("recordedObservationFromFact(active) = %#v", active)
 	}
-	backwards := activeFact
-	ended := base.Add(-time.Second)
+	backwards := recordedDispatchObservation{workerSessionID: "worker-backwards", dispatchID: "dispatch-backwards", startedAt: base, state: workersessions.StateRunning}
+	ended = base.Add(-time.Second)
 	backwards.endedAt = &ended
-	backwardsProjected := recordedObservationFromFact(backwards, clock)
-	if backwardsProjected.Duration == nil || *backwardsProjected.Duration != 0 {
-		t.Fatalf("recordedObservationFromFact(backwards) duration = %#v, want zero", backwardsProjected.Duration)
+	if got := recordedObservationFromFact(backwards, clock).Duration; got == nil || *got != 0 {
+		t.Fatalf("recordedObservationFromFact(backwards) duration = %#v", got)
 	}
-	activeBackwards := activeFact
-	activeBackwards.startedAt = base.Add(20 * time.Second)
-	activeBackwardsProjected := recordedObservationFromFact(activeBackwards, clock)
-	if activeBackwardsProjected.Duration == nil || *activeBackwardsProjected.Duration != 0 {
-		t.Fatalf("recordedObservationFromFact(active backwards) duration = %#v, want zero", activeBackwardsProjected.Duration)
+	backwards.startedAt = base.Add(20 * time.Second)
+	if got := recordedObservationFromFact(backwards, clock).Duration; got == nil || *got != 0 {
+		t.Fatalf("recordedObservationFromFact(active backwards) duration = %#v", got)
 	}
 }
 
-func TestWorkerSessionRecordedEventFactsAndLiveAdapterBranches(t *testing.T) {
-	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
-	requestPayload, err := json.Marshal(interfaces.DispatchRequestEventPayload{Inputs: []interfaces.DispatchConsumedWorkRef{{WorkID: "work-from-input"}}})
-	if err != nil {
-		t.Fatalf("marshal request payload: %v", err)
-	}
-	events := []interfaces.FactoryEvent{
-		{Context: interfaces.FactoryEventContext{Tick: 3, Sequence: 2, EventTime: base.Add(2 * time.Second), DispatchID: stringPointerForRecordedTest("dispatch-1"), WorkIDs: stringSliceForRecordedTest([]string{"work-from-context"})}, Type: interfaces.FactoryEventTypeDispatchRequest, Payload: requestPayload},
-		{Context: interfaces.FactoryEventContext{Tick: 3, Sequence: 3, EventTime: base.Add(3 * time.Second), DispatchID: stringPointerForRecordedTest("dispatch-1"), RequestID: stringPointerForRecordedTest("turn-1")}, Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc, Payload: mustMarshalRecordedTest(t, interfaces.DispatchWorkerSessionAssociationEventPayload{WorkerSessionID: "worker-1"})},
-		{Context: interfaces.FactoryEventContext{Tick: 4, Sequence: 1, EventTime: base.Add(4 * time.Second), DispatchID: stringPointerForRecordedTest("dispatch-1")}, Type: interfaces.FactoryEventTypeDispatchResponse},
-		{Context: interfaces.FactoryEventContext{Tick: 0, Sequence: 0, EventTime: base}, Type: interfaces.FactoryEventTypeDispatchRequest, Payload: []byte("bad")},
-		{Context: interfaces.FactoryEventContext{DispatchID: stringPointerForRecordedTest("dispatch-bad")}, Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc, Payload: []byte("bad")},
-	}
+func TestRecordedDispatchFactsBranches(t *testing.T) {
+	base, events := recordedDispatchFactTestEvents(t)
 	associations, requests := recordedDispatchFacts(events)
 	if associations["dispatch-1"].workerSessionID != "worker-1" || len(requests["dispatch-1"].workIDs) != 1 || requests["dispatch-1"].workIDs[0] != "work-from-context" {
 		t.Fatalf("recordedDispatchFacts() associations=%#v requests=%#v", associations, requests)
 	}
-	fallbackEvents := []interfaces.FactoryEvent{{
-		Context: interfaces.FactoryEventContext{EventTime: base, DispatchID: stringPointerForRecordedTest("dispatch-input")},
-		Type:    interfaces.FactoryEventTypeDispatchRequest,
-		Payload: requestPayload,
-	}}
-	_, fallbackRequests := recordedDispatchFacts(fallbackEvents)
+	_, fallbackRequests := recordedDispatchFacts([]interfaces.FactoryEvent{{Context: interfaces.FactoryEventContext{EventTime: base, DispatchID: stringPointerForRecordedTest("dispatch-input")}, Type: interfaces.FactoryEventTypeDispatchRequest, Payload: mustMarshalRecordedTest(t, interfaces.DispatchRequestEventPayload{Inputs: []interfaces.DispatchConsumedWorkRef{{WorkID: "work-from-input"}}})}})
 	if len(fallbackRequests["dispatch-input"].workIDs) != 1 || fallbackRequests["dispatch-input"].workIDs[0] != "work-from-input" {
 		t.Fatalf("recordedDispatchFacts(payload fallback) = %#v", fallbackRequests)
 	}
+}
+
+func TestRecordedDispatchTimingBranches(t *testing.T) {
+	base, events := recordedDispatchFactTestEvents(t)
 	if got := latestFactoryEventTick(events); got != 4 {
 		t.Fatalf("latestFactoryEventTick() = %d, want 4", got)
 	}
@@ -733,6 +722,9 @@ func TestWorkerSessionRecordedEventFactsAndLiveAdapterBranches(t *testing.T) {
 	if got := firstRecordedTime(time.Time{}, base); !got.Equal(base) || !firstRecordedTime(base.Add(time.Second), base).Equal(base.Add(time.Second)) {
 		t.Fatal("firstRecordedTime() did not select primary/fallback correctly")
 	}
+}
+
+func TestRecordedDispatchIdentityBranches(t *testing.T) {
 	if got := firstRecordedWorkIDs([]string{"primary"}, []string{"fallback"}); len(got) != 1 || got[0] != "primary" {
 		t.Fatalf("firstRecordedWorkIDs(primary) = %v", got)
 	}
@@ -745,6 +737,9 @@ func TestWorkerSessionRecordedEventFactsAndLiveAdapterBranches(t *testing.T) {
 	if !containsRecordedWorkID([]string{"work-1"}, "work-1") || containsRecordedWorkID(nil, "work-1") || len(appendUniqueRecordedString([]string{"work-1"}, "work-1")) != 1 || len(appendUniqueRecordedString(nil, "work-2")) != 1 || len(appendUniqueRecordedString(nil, "")) != 0 {
 		t.Fatal("recorded work ID helpers returned incorrect values")
 	}
+}
+
+func TestRecordedProviderMetadataBranches(t *testing.T) {
 	value := "value"
 	if stringPointerValue(&value) != value || stringPointerValue(nil) != "" || len(pointerStringSlice(&[]string{"a"})) != 1 || pointerStringSlice(nil) != nil {
 		t.Fatal("recorded pointer helpers returned incorrect values")
@@ -753,7 +748,10 @@ func TestWorkerSessionRecordedEventFactsAndLiveAdapterBranches(t *testing.T) {
 	if ref := providerSessionRef(provider); ref.Provider != providers.IDCodex || ref.ID != provider.ID || cloneProviderMetadata(&provider) == nil || cloneProviderMetadata(nil) != nil {
 		t.Fatal("provider metadata helpers returned incorrect values")
 	}
+}
 
+func TestRecordedWorldStateBranches(t *testing.T) {
+	base, events := recordedDispatchFactTestEvents(t)
 	world := interfaces.FactoryWorldState{
 		WorkItemsByID:       map[string]work.FactoryWorkItem{"work-map": {ID: "work-map"}},
 		ActiveWorkItemsByID: map[string]work.FactoryWorkItem{"work-active": {ID: "work-active"}},
@@ -775,23 +773,20 @@ func TestWorkerSessionRecordedEventFactsAndLiveAdapterBranches(t *testing.T) {
 	if recordedDispatchEnd(completedWithResponseTimeZero, nil, "dispatch-1") != nil {
 		t.Fatal("recordedDispatchEnd(no facts) returned a value")
 	}
-	completedDispatches := []interfaces.FactoryWorldDispatchCompletion{{DispatchID: "completed"}}
-	failedDispatches := []interfaces.FactoryWorldDispatchCompletion{{DispatchID: "failed"}}
-	stateMaps := recordedDispatchStateMaps(interfaces.FactoryWorldState{CompletedDispatches: completedDispatches, FailedDispatches: failedDispatches})
+	stateMaps := recordedDispatchStateMaps(interfaces.FactoryWorldState{CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{DispatchID: "completed"}}, FailedDispatches: []interfaces.FactoryWorldDispatchCompletion{{DispatchID: "failed"}}})
 	if _, ok := stateMaps["completed"]; !ok {
 		t.Fatal("recordedDispatchStateMaps() omitted completed dispatch")
 	}
 	if _, ok := stateMaps["failed"]; !ok {
 		t.Fatal("recordedDispatchStateMaps() omitted failed dispatch")
 	}
+}
+
+func TestRecordedObservationMergeBranches(t *testing.T) {
 	liveObservation := workersessions.Observation{
-		WorkerSessionID:          "worker-1",
-		ProviderSession:          providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "live-session"},
-		ProviderSessionAvailable: true,
-		TokenUsage:               &workersessions.TokenUsage{InputTokens: intPointerForRecordedTest(7)},
-		Transcript:               workersessions.TranscriptAvailabilityAvailable,
-		Parse:                    workersessions.ParseDiagnostics{EventCount: 2},
-		Failure:                  &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "live failure"},
+		WorkerSessionID: "worker-1", ProviderSession: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "live-session"}, ProviderSessionAvailable: true,
+		TokenUsage: &workersessions.TokenUsage{InputTokens: intPointerForRecordedTest(7)}, Transcript: workersessions.TranscriptAvailabilityAvailable, Parse: workersessions.ParseDiagnostics{EventCount: 2},
+		Failure: &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "live failure"},
 	}
 	merged := mergeRecordedObservations([]workersessions.Observation{{WorkerSessionID: "worker-1"}}, []workersessions.Observation{liveObservation})
 	if len(merged) != 1 || !merged[0].ProviderSessionAvailable || merged[0].ProviderSession.ID != "live-session" || merged[0].TokenUsage == nil || *merged[0].TokenUsage.InputTokens != 7 || merged[0].Transcript != workersessions.TranscriptAvailabilityAvailable || merged[0].Parse.EventCount != 2 || merged[0].Failure == nil {
@@ -800,7 +795,9 @@ func TestWorkerSessionRecordedEventFactsAndLiveAdapterBranches(t *testing.T) {
 	if mergeRecordedObservations(nil, []workersessions.Observation{liveObservation}) != nil {
 		t.Fatal("mergeRecordedObservations(empty recorded) returned non-nil")
 	}
+}
 
+func TestRecordedLiveAdapterBranches(t *testing.T) {
 	live := &recordedWorkerSessionObservation{}
 	if _, err := live.GetObservation(context.Background(), workersessions.GetObservationRequest{}); !errors.Is(err, workersessions.ErrInvalidObservationIdentity) {
 		t.Fatalf("nil live GetObservation() error = %v, want invalid identity", err)
@@ -822,6 +819,19 @@ func TestWorkerSessionRecordedEventFactsAndLiveAdapterBranches(t *testing.T) {
 	}
 	if (&factoryImpl{cfg: &runtimeConfig{}}).WorkerSessionsObservation() == nil {
 		t.Fatal("WorkerSessionsObservation() on configured runtime returned nil")
+	}
+}
+
+func recordedDispatchFactTestEvents(t *testing.T) (time.Time, []interfaces.FactoryEvent) {
+	t.Helper()
+	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	requestPayload := mustMarshalRecordedTest(t, interfaces.DispatchRequestEventPayload{Inputs: []interfaces.DispatchConsumedWorkRef{{WorkID: "work-from-input"}}})
+	return base, []interfaces.FactoryEvent{
+		{Context: interfaces.FactoryEventContext{Tick: 3, Sequence: 2, EventTime: base.Add(2 * time.Second), DispatchID: stringPointerForRecordedTest("dispatch-1"), WorkIDs: stringSliceForRecordedTest([]string{"work-from-context"})}, Type: interfaces.FactoryEventTypeDispatchRequest, Payload: requestPayload},
+		{Context: interfaces.FactoryEventContext{Tick: 3, Sequence: 3, EventTime: base.Add(3 * time.Second), DispatchID: stringPointerForRecordedTest("dispatch-1"), RequestID: stringPointerForRecordedTest("turn-1")}, Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc, Payload: mustMarshalRecordedTest(t, interfaces.DispatchWorkerSessionAssociationEventPayload{WorkerSessionID: "worker-1"})},
+		{Context: interfaces.FactoryEventContext{Tick: 4, Sequence: 1, EventTime: base.Add(4 * time.Second), DispatchID: stringPointerForRecordedTest("dispatch-1")}, Type: interfaces.FactoryEventTypeDispatchResponse},
+		{Context: interfaces.FactoryEventContext{Tick: 0, Sequence: 0, EventTime: base}, Type: interfaces.FactoryEventTypeDispatchRequest, Payload: []byte("bad")},
+		{Context: interfaces.FactoryEventContext{DispatchID: stringPointerForRecordedTest("dispatch-bad")}, Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc, Payload: []byte("bad")},
 	}
 }
 

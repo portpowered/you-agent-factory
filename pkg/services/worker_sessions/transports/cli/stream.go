@@ -120,44 +120,64 @@ func consumeStreamResponse(config StreamConfig, jsonOutput bool, response clihtt
 	for {
 		payload, atEOF, readErr := readSSEData(reader)
 		if readErr != nil {
-			if errors.Is(readErr, io.EOF) {
-				return streamFailureAfterOpen(config, jsonOutput, started, "WORKER_SESSION_STREAM_CLOSED", "Worker Session event stream closed before terminal", nil)
-			}
-			if errors.Is(readErr, context.Canceled) || errors.Is(config.Context.Err(), context.Canceled) {
-				return streamFailureAfterOpen(config, jsonOutput, started, "WORKER_SESSION_STREAM_INTERRUPTED", "worker session stream interrupted", context.Canceled)
-			}
-			return streamFailureAfterOpen(config, jsonOutput, started, "WORKER_SESSION_STREAM_FAILED", "failed to read Worker Session event stream", readErr)
+			return streamReadError(config, jsonOutput, started, readErr)
 		}
-		if len(payload) == 0 {
-			if atEOF {
-				return streamFailureAfterOpen(config, jsonOutput, started, "WORKER_SESSION_STREAM_CLOSED", "Worker Session event stream closed before terminal", nil)
-			}
-			continue
-		}
-		var frame streamJSONFrame
-		if err := json.Unmarshal(payload, &frame); err != nil {
-			return streamFailureAfterOpen(config, jsonOutput, started, "WORKER_SESSION_STREAM_FAILED", "Worker Session event stream returned invalid JSON", err)
-		}
-		started = true
-		if jsonOutput {
-			if err := json.NewEncoder(config.Output).Encode(frame); err != nil {
-				return err
-			}
-		} else if err := renderStreamFrame(config.Output, frame); err != nil {
+		var done bool
+		var err error
+		started, done, err = consumeStreamPayload(config, jsonOutput, started, payload, atEOF)
+		if err != nil {
 			return err
 		}
-		if frame.Delivery == "TERMINAL" || frame.Delivery == "TERMINAL_REPLAY" {
+		if done {
 			return nil
 		}
-		if frame.Delivery == "SOURCE_FAILURE" {
-			code := stringValue(frame.ErrorCode, "WORKER_SESSION_STREAM_FAILED")
-			message := stringValue(frame.ErrorMessage, "Worker Session event stream failed")
-			return newCLIError(code, message, nil)
-		}
-		if atEOF {
-			return streamFailureAfterOpen(config, jsonOutput, started, "WORKER_SESSION_STREAM_CLOSED", "Worker Session event stream closed before terminal", nil)
-		}
 	}
+}
+
+func streamReadError(config StreamConfig, jsonOutput, started bool, readErr error) error {
+	if errors.Is(readErr, io.EOF) {
+		return streamFailureAfterOpen(config, jsonOutput, started, "WORKER_SESSION_STREAM_CLOSED", "Worker Session event stream closed before terminal", nil)
+	}
+	if errors.Is(readErr, context.Canceled) || errors.Is(config.Context.Err(), context.Canceled) {
+		return streamFailureAfterOpen(config, jsonOutput, started, "WORKER_SESSION_STREAM_INTERRUPTED", "worker session stream interrupted", context.Canceled)
+	}
+	return streamFailureAfterOpen(config, jsonOutput, started, "WORKER_SESSION_STREAM_FAILED", "failed to read Worker Session event stream", readErr)
+}
+
+func consumeStreamPayload(config StreamConfig, jsonOutput, started bool, payload []byte, atEOF bool) (bool, bool, error) {
+	if len(payload) == 0 {
+		if atEOF {
+			return started, false, streamFailureAfterOpen(config, jsonOutput, started, "WORKER_SESSION_STREAM_CLOSED", "Worker Session event stream closed before terminal", nil)
+		}
+		return started, false, nil
+	}
+	var frame streamJSONFrame
+	if err := json.Unmarshal(payload, &frame); err != nil {
+		return started, false, streamFailureAfterOpen(config, jsonOutput, started, "WORKER_SESSION_STREAM_FAILED", "Worker Session event stream returned invalid JSON", err)
+	}
+	started = true
+	if err := writeStreamFrame(config.Output, jsonOutput, frame); err != nil {
+		return started, false, err
+	}
+	if frame.Delivery == "TERMINAL" || frame.Delivery == "TERMINAL_REPLAY" {
+		return started, true, nil
+	}
+	if frame.Delivery == "SOURCE_FAILURE" {
+		code := stringValue(frame.ErrorCode, "WORKER_SESSION_STREAM_FAILED")
+		message := stringValue(frame.ErrorMessage, "Worker Session event stream failed")
+		return started, false, newCLIError(code, message, nil)
+	}
+	if atEOF {
+		return started, false, streamFailureAfterOpen(config, jsonOutput, started, "WORKER_SESSION_STREAM_CLOSED", "Worker Session event stream closed before terminal", nil)
+	}
+	return started, false, nil
+}
+
+func writeStreamFrame(output io.Writer, jsonOutput bool, frame streamJSONFrame) error {
+	if jsonOutput {
+		return json.NewEncoder(output).Encode(frame)
+	}
+	return renderStreamFrame(output, frame)
 }
 
 func validateStreamConfig(config StreamConfig) error {

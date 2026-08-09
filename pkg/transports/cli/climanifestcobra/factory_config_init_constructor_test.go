@@ -1,4 +1,4 @@
-package climanifestcobra_test
+package climanifestcobra
 
 import (
 	"bytes"
@@ -14,7 +14,6 @@ import (
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -55,7 +54,7 @@ func (factoryConfigInitHandlerStub) Init(*cobra.Command, resolvedinput.Inputs, r
 }
 
 func TestNewFactoryConfigInitFamilyComponentsProjectsContractedTree(t *testing.T) {
-	components, err := climanifestcobra.NewFactoryConfigInitFamilyComponents(factoryConfigInitHandlerStub{})
+	components, err := NewFactoryConfigInitFamilyComponents(factoryConfigInitHandlerStub{})
 	if err != nil {
 		t.Fatalf("NewFactoryConfigInitFamilyComponents() error = %v", err)
 	}
@@ -80,7 +79,7 @@ func TestNewFactoryConfigInitFamilyComponentsProjectsContractedTree(t *testing.T
 }
 
 func TestFactoryConfigInitFamilyUsesManifestDefaultsAndRequiredness(t *testing.T) {
-	components, err := climanifestcobra.NewFactoryConfigInitFamilyComponents(factoryConfigInitHandlerStub{})
+	components, err := NewFactoryConfigInitFamilyComponents(factoryConfigInitHandlerStub{})
 	if err != nil {
 		t.Fatalf("NewFactoryConfigInitFamilyComponents() error = %v", err)
 	}
@@ -100,7 +99,7 @@ func TestFactoryConfigInitFamilyUsesManifestDefaultsAndRequiredness(t *testing.T
 }
 
 func TestFactoryConfigInitFamilyOmitsRetiredScaffoldFlags(t *testing.T) {
-	components, err := climanifestcobra.NewFactoryConfigInitFamilyComponents(factoryConfigInitHandlerStub{})
+	components, err := NewFactoryConfigInitFamilyComponents(factoryConfigInitHandlerStub{})
 	if err != nil {
 		t.Fatalf("NewFactoryConfigInitFamilyComponents() error = %v", err)
 	}
@@ -120,7 +119,7 @@ func TestFactoryConfigInitFamilyOmitsRetiredScaffoldFlags(t *testing.T) {
 }
 
 func TestFactoryConfigInitFamilyProjectsProviderModelSetupInputs(t *testing.T) {
-	components, err := climanifestcobra.NewFactoryConfigInitFamilyComponents(factoryConfigInitHandlerStub{})
+	components, err := NewFactoryConfigInitFamilyComponents(factoryConfigInitHandlerStub{})
 	if err != nil {
 		t.Fatalf("NewFactoryConfigInitFamilyComponents() error = %v", err)
 	}
@@ -135,7 +134,7 @@ func TestFactoryConfigInitFamilyProjectsProviderModelSetupInputs(t *testing.T) {
 }
 
 func TestNewFactoryConfigInitFamilyComponentsRejectsNilHandler(t *testing.T) {
-	if _, err := climanifestcobra.NewFactoryConfigInitFamilyComponents(nil); err == nil {
+	if _, err := NewFactoryConfigInitFamilyComponents(nil); err == nil {
 		t.Fatal("NewFactoryConfigInitFamilyComponents(nil) error = nil")
 	}
 }
@@ -795,7 +794,7 @@ func observeSessionCreateInputs(
 			t.Fatalf("RegisterResolved(%q) error = %v", record.Handler.ID, err)
 		}
 	}
-	root, err := climanifestcobra.NewSessionFamilyCommandFromManifest(manifest, registry)
+	root, err := NewSessionFamilyCommandFromManifest(manifest, registry)
 	if err != nil {
 		t.Fatalf("NewSessionFamilyCommandFromManifest() error = %v", err)
 	}
@@ -847,7 +846,7 @@ func executeResolvedSessionWithOutput(
 	if err != nil {
 		t.Fatalf("NewSessionResolvedRegistry() error = %v", err)
 	}
-	root, err := climanifestcobra.NewSessionFamilyCommandFromManifest(manifest, registry)
+	root, err := NewSessionFamilyCommandFromManifest(manifest, registry)
 	if err != nil {
 		t.Fatalf("NewSessionFamilyCommandFromManifest() error = %v", err)
 	}

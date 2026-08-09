@@ -124,7 +124,9 @@ func TestInvokeObservationHelpersCoverTimingDiagnosticsAndClones(t *testing.T) {
 	if observations[0].WorkerSessionID != "with-time" {
 		t.Fatalf("sortObservationAttempts() = %#v", observations)
 	}
+}
 
+func TestInvokeObservationDiagnosticsAndTranscriptHelpers(t *testing.T) {
 	if got := nonNegativeDuration(-time.Second); got == nil || *got != 0 {
 		t.Fatalf("nonNegativeDuration(-1s) = %v, want zero", got)
 	}
@@ -147,6 +149,9 @@ func TestInvokeObservationHelpersCoverTimingDiagnosticsAndClones(t *testing.T) {
 	if parse.EventCount != 3 || len(parse.Errors) != 2 || parse.Errors[0].Message != "plain diagnostic" || parse.Errors[1].Message == `C:\secret\rollout.json` {
 		t.Fatalf("observationParseDiagnostics() = %#v", parse)
 	}
+}
+
+func TestInvokeSafeDiagnosticMessages(t *testing.T) {
 	for _, test := range []struct {
 		input string
 		want  string
@@ -161,7 +166,9 @@ func TestInvokeObservationHelpersCoverTimingDiagnosticsAndClones(t *testing.T) {
 			t.Fatalf("safeDiagnosticMessage(%q) = %q, want %q", test.input, got, test.want)
 		}
 	}
+}
 
+func TestInvokeObservationTranscriptHelpers(t *testing.T) {
 	boolean, line, text, timestamp, turn := true, 4, "text", time.Unix(10, 0), 2
 	entries := transcriptEntries([]providersessions.TranscriptEntry{{
 		Arguments: &text, CallID: &text, Encrypted: &boolean, EncryptedContent: &text, LineNumber: &line, Name: &text, Order: 1,
@@ -178,6 +185,9 @@ func TestInvokeObservationHelpersCoverTimingDiagnosticsAndClones(t *testing.T) {
 	if event.Position != 2 || event.SourceType != "worker_session_lifecycle" || string(event.Payload) == "" {
 		t.Fatalf("projectObservationEvent() = %#v", event)
 	}
+}
+
+func TestInvokeObservationMergeOrdering(t *testing.T) {
 	for _, pair := range []struct {
 		left  workersessions.Observation
 		right workersessions.Observation
@@ -290,7 +300,13 @@ func TestInvokeObservationProjectionAndTranscriptOutcomes(t *testing.T) {
 	if projected.StartedAt != nil {
 		t.Fatalf("applyObservationTiming(zero start) = %#v, want no timing", projected)
 	}
+}
 
+func TestInvokeObservationProjectionUnavailableOutcomes(t *testing.T) {
+	ref := observationProviderRef()
+	registry := newObservationRegistry(observationProjectorFake{}, nil)
+	registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
+	registry.observations["worker-1"] = observationMetadata()
 	noProvider := newObservationRegistry(nil, nil)
 	noProvider.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
 	noProvider.observations["worker-1"] = observationMetadata()
@@ -316,7 +332,16 @@ func TestInvokeObservationProjectionAndTranscriptOutcomes(t *testing.T) {
 	if _, _, ok := registry.loadObservationState("no-metadata"); ok {
 		t.Fatal("loadObservationState(missing metadata) = ok, want false")
 	}
+}
 
+func TestInvokeTranscriptProjectionOutcomes(t *testing.T) {
+	ref := observationProviderRef()
+	text := "hello"
+	providerResult := providersessions.ProjectResult{Detail: providersessions.Detail{
+		Transcript: []providersessions.TranscriptEntry{{Order: 0, Type: providersessions.TranscriptAssistantMessage, Text: &text}},
+		Parse:      providersessions.ParseSummary{EventCount: 1},
+	}}
+	provider := observationProjectorFake{result: providerResult}
 	terminalRegistry := newObservationRegistry(provider, nil)
 	terminalRegistry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateCompleted)
 	terminalRegistry.observations["worker-1"] = observationMetadata()

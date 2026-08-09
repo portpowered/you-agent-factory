@@ -988,14 +988,3 @@ func (f *factoryImpl) WorkflowContext() *factory_context.FactoryContext {
 	}
 	return f.cfg.workflowContext
 }
-
-func closeRuntimeEventSubscriptions(ledger recordings.RuntimeLedger) {
-	if ledger == nil {
-		return
-	}
-	closer, ok := ledger.(interface{ CloseLiveSubscriptions() })
-	if !ok {
-		return
-	}
-	closer.CloseLiveSubscriptions()
-}

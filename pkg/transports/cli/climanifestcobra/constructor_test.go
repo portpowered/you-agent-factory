@@ -1,13 +1,15 @@
-package climanifestcobra_test
+package climanifestcobra
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
 
@@ -18,7 +20,7 @@ func noopRunE(cmd *cobra.Command, args []string) error {
 func TestNewCommandTreeBuildsSyntheticHierarchyDeterministically(t *testing.T) {
 	manifest := syntheticTreeManifest()
 
-	root, err := climanifestcobra.NewCommandTree(manifest, genericBindingsForManifest(manifest))
+	root, err := NewCommandTree(manifest, genericBindingsForManifest(manifest))
 	if err != nil {
 		t.Fatalf("NewCommandTree() error = %v", err)
 	}
@@ -142,7 +144,7 @@ func TestNewCommandTreeRejectsInvalidManifestBeforeReturningTree(t *testing.T) {
 			manifest := syntheticTreeManifest()
 			test.mutate(&manifest)
 
-			root, err := climanifestcobra.NewCommandTree(manifest)
+			root, err := NewCommandTree(manifest)
 			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
 				t.Fatalf("NewCommandTree() = (%v, %v), want nil error containing %q", root, err, test.wantErr)
 			}
@@ -155,7 +157,7 @@ func TestNewCommandTreeRejectsInvalidManifestBeforeReturningTree(t *testing.T) {
 
 func TestNewCommandTreeParsesSchemaNeutralTypedFlagsByStableInputID(t *testing.T) {
 	manifest := syntheticFlagManifest()
-	root, err := climanifestcobra.NewCommandTree(manifest, genericBindingsForManifest(manifest))
+	root, err := NewCommandTree(manifest, genericBindingsForManifest(manifest))
 	if err != nil {
 		t.Fatalf("NewCommandTree() error = %v", err)
 	}
@@ -175,7 +177,7 @@ func TestNewCommandTreeParsesSchemaNeutralTypedFlagsByStableInputID(t *testing.T
 	}
 
 	alpha := root.Commands()[0]
-	values, err := climanifestcobra.InputValues(alpha)
+	values, err := InputValues(alpha)
 	if err != nil {
 		t.Fatalf("InputValues(alpha) error = %v", err)
 	}
@@ -201,7 +203,7 @@ func TestNewCommandTreeAcceptsRepresentativeGeneratedFlagRecords(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RepresentativeFamilyManifest() error = %v", err)
 	}
-	if _, err := climanifestcobra.NewCommandTree(manifest, genericBindingsForManifest(manifest)); err != nil {
+	if _, err := NewCommandTree(manifest, genericBindingsForManifest(manifest)); err != nil {
 		t.Fatalf("NewCommandTree(RepresentativeFamilyManifest()) error = %v", err)
 	}
 }
@@ -209,7 +211,7 @@ func TestNewCommandTreeAcceptsRepresentativeGeneratedFlagRecords(t *testing.T) {
 func TestNewCommandTreeAppliesTypedDefaultsAndRejectsInvalidInvocations(t *testing.T) {
 	t.Run("typed defaults", func(t *testing.T) {
 		manifest := syntheticFlagManifest()
-		root, err := climanifestcobra.NewCommandTree(manifest, genericBindingsForManifest(manifest))
+		root, err := NewCommandTree(manifest, genericBindingsForManifest(manifest))
 		if err != nil {
 			t.Fatalf("NewCommandTree() error = %v", err)
 		}
@@ -217,7 +219,7 @@ func TestNewCommandTreeAppliesTypedDefaultsAndRejectsInvalidInvocations(t *testi
 		if err := root.Execute(); err != nil {
 			t.Fatalf("Execute() error = %v", err)
 		}
-		values, err := climanifestcobra.InputValues(root.Commands()[0])
+		values, err := InputValues(root.Commands()[0])
 		if err != nil {
 			t.Fatalf("InputValues(alpha) error = %v", err)
 		}
@@ -240,7 +242,7 @@ func TestNewCommandTreeAppliesTypedDefaultsAndRejectsInvalidInvocations(t *testi
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			manifest := syntheticFlagManifest()
-			root, err := climanifestcobra.NewCommandTree(manifest, genericBindingsForManifest(manifest))
+			root, err := NewCommandTree(manifest, genericBindingsForManifest(manifest))
 			if err != nil {
 				t.Fatalf("NewCommandTree() error = %v", err)
 			}
@@ -310,7 +312,7 @@ func TestNewCommandTreeRejectsInvalidFlagRecordsBeforeReturningTree(t *testing.T
 		t.Run(test.name, func(t *testing.T) {
 			manifest := syntheticFlagManifest()
 			test.mutate(&manifest)
-			root, err := climanifestcobra.NewCommandTree(manifest)
+			root, err := NewCommandTree(manifest)
 			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
 				t.Fatalf("NewCommandTree() = (%v, %v), want nil error containing %q", root, err, test.wantErr)
 			}
@@ -508,7 +510,7 @@ func commandNames(commands []*cobra.Command) []string {
 
 func TestNewCommandTreeAssignsTypedPositionalArgumentsByStableInputID(t *testing.T) {
 	manifest := syntheticArgumentManifest()
-	root, err := climanifestcobra.NewCommandTree(manifest, genericBindingsForManifest(manifest))
+	root, err := NewCommandTree(manifest, genericBindingsForManifest(manifest))
 	if err != nil {
 		t.Fatalf("NewCommandTree() error = %v", err)
 	}
@@ -518,7 +520,7 @@ func TestNewCommandTreeAssignsTypedPositionalArgumentsByStableInputID(t *testing
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	values, err := climanifestcobra.InputValues(command)
+	values, err := InputValues(command)
 	if err != nil {
 		t.Fatalf("InputValues() error = %v", err)
 	}
@@ -549,7 +551,7 @@ func TestNewCommandTreeAppliesOptionalDefaultsAndFixedCardinality(t *testing.T) 
 	completeCanonicalCommandContract(&command)
 	manifest.Commands[command.ID] = command
 
-	root, err := climanifestcobra.NewCommandTree(manifest, genericBindingsForManifest(manifest))
+	root, err := NewCommandTree(manifest, genericBindingsForManifest(manifest))
 	if err != nil {
 		t.Fatalf("NewCommandTree() error = %v", err)
 	}
@@ -559,7 +561,7 @@ func TestNewCommandTreeAppliesOptionalDefaultsAndFixedCardinality(t *testing.T) 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	values, err := climanifestcobra.InputValues(shape)
+	values, err := InputValues(shape)
 	if err != nil {
 		t.Fatalf("InputValues() error = %v", err)
 	}
@@ -640,7 +642,7 @@ func assertRelationshipInvocation(
 ) {
 	t.Helper()
 	manifest := syntheticRelationshipManifest(relationship)
-	root, err := climanifestcobra.NewCommandTree(manifest, genericBindingsForManifest(manifest))
+	root, err := NewCommandTree(manifest, genericBindingsForManifest(manifest))
 	if err != nil {
 		t.Fatalf("NewCommandTree() error = %v", err)
 	}
@@ -717,7 +719,7 @@ func TestNewCommandTreeRejectsInvalidArgumentAndRelationshipRecords(t *testing.T
 				groupRelationship("rel.mutex", "mutually-exclusive", flagRef("flag.alpha"), flagRef("flag.beta")),
 			)
 			test.mutate(&manifest)
-			root, err := climanifestcobra.NewCommandTree(manifest)
+			root, err := NewCommandTree(manifest)
 			if err == nil || !strings.Contains(err.Error(), test.wantErr) || root != nil {
 				t.Fatalf("NewCommandTree() = (%v, %v), want nil and error containing %q", root, err, test.wantErr)
 			}
@@ -815,4 +817,180 @@ func directedRelationship(
 	participants ...climanifest.ParticipantRef,
 ) climanifest.Relationship {
 	return climanifest.Relationship{ID: id, Kind: kind, When: &when, Participants: participants}
+}
+
+func TestResolvedWorkerSessionsHandlerRunsOptionalPreRun(t *testing.T) {
+	wantErr := errors.New("pre-run failed")
+	cases := []struct {
+		name string
+		pre  func(*cobra.Command, []string) error
+		want error
+	}{
+		{name: "pre-run and run", pre: func(*cobra.Command, []string) error { return nil }},
+		{name: "pre-run failure", pre: func(*cobra.Command, []string) error { return wantErr }, want: wantErr},
+		{name: "without pre-run"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			preRuns, runs := 0, 0
+			handlers := commandregistry.CommandHandlers{PreRunE: test.pre, RunE: func(*cobra.Command, []string) error { runs++; return nil }}
+			if handlers.PreRunE != nil {
+				pre := handlers.PreRunE
+				handlers.PreRunE = func(cmd *cobra.Command, args []string) error { preRuns++; return pre(cmd, args) }
+			}
+			err := resolvedWorkerSessionsHandler(handlers)(&cobra.Command{Use: "worker-sessions"}, []string{"list"}, nil, resolvedinput.Inputs{})
+			if !errors.Is(err, test.want) || preRuns != boolToInt(test.pre != nil) || runs != boolToInt(test.want == nil) {
+				t.Fatalf("handler result = error %v, pre-runs %d, runs %d", err, preRuns, runs)
+			}
+		})
+	}
+}
+
+func TestWorkerConstructorManifestBranches(t *testing.T) {
+	manifest := workerCoverageManifest(t)
+	for _, id := range []string{"you.work", "you.work.list", "you.work.watch", "you.work.show", "you.work.move", "you.work.visualize"} {
+		mutated := cloneWorkerCoverageManifest(manifest)
+		delete(mutated.Commands, id)
+		if _, _, _, _, _, _, err := workManifestRecords(mutated); err == nil {
+			t.Fatalf("workManifestRecords(missing %q) error = nil", id)
+		}
+	}
+	if _, err := buildWorkCommandFromRecord(climanifest.Command{ID: "you.work.submit"}); err == nil {
+		t.Fatal("buildWorkCommandFromRecord(foreign) error = nil")
+	}
+}
+
+func TestWorkerConstructorLeafBranches(t *testing.T) {
+	manifest := workerCoverageManifest(t)
+	list := manifest.Commands["you.work.list"]
+	flagTarget := ""
+	badFlag := climanifest.Command{Flags: map[string]climanifest.Flag{"flag": {ID: "flag", Long: "flag", Scope: "local", ValueType: "float"}}}
+	requireWorkerConstructorError(t, func() error { return registerWorkLocalFlags(&cobra.Command{Use: "list"}, list, WorkFamilyBindings{}) })
+	requireWorkerConstructorError(t, func() error {
+		return registerWorkLocalFlags(&cobra.Command{Use: "invalid"}, badFlag, WorkFamilyBindings{LocalTargets: map[string]any{"flag": &flagTarget}})
+	})
+	requireWorkerConstructorError(t, func() error {
+		_, err := buildRunnableWorkLeaf(badFlag, commandregistry.NewRegistry(), WorkFamilyBindings{LocalTargets: map[string]any{"flag": &flagTarget}})
+		return err
+	})
+	hidden := list
+	hidden.Visibility = "hidden"
+	command, err := buildWorkCommandFromRecord(hidden)
+	if err != nil || !command.Hidden {
+		t.Fatalf("hidden work command = %#v, %v", command, err)
+	}
+	requireWorkerConstructorError(t, func() error {
+		_, err := buildRunnableWorkLeaf(climanifest.Command{ID: "you.work.submit"}, commandregistry.NewRegistry(), WorkFamilyBindings{})
+		return err
+	})
+	foreignRelationship := list
+	foreignRelationship.Flags = nil
+	foreignRelationship.Relationships = map[string]climanifest.Relationship{"relationship": {ID: "relationship", Kind: "unsupported"}}
+	requireWorkerConstructorError(t, func() error {
+		_, err := buildRunnableWorkLeaf(foreignRelationship, commandregistry.NewRegistry(), WorkFamilyBindings{})
+		return err
+	})
+	missingHandler := list
+	missingHandler.Flags = nil
+	missingHandler.Relationships = nil
+	requireWorkerConstructorError(t, func() error {
+		_, err := buildRunnableWorkLeaf(missingHandler, commandregistry.NewRegistry(), WorkFamilyBindings{})
+		return err
+	})
+}
+
+func TestWorkerConstructorCompatibilityBranches(t *testing.T) {
+	manifest := workerCoverageManifest(t)
+	list := manifest.Commands["you.work.list"]
+	if got := sortedWorkArgumentIDs(map[string]climanifest.Argument{"z": {Position: 0}, "a": {Position: 0}, "b": {Position: 1}}); strings.Join(got, ",") != "a,z,b" {
+		t.Fatalf("sortedWorkArgumentIDs() = %v", got)
+	}
+	if got := recordPathBelowRoot(climanifest.Command{}); got != nil {
+		t.Fatalf("recordPathBelowRoot(empty) = %v", got)
+	}
+	requireWorkerConstructorError(t, func() error {
+		_, err := resolvedWorkCandidate("bad", resolvedinput.SourceCLIFlag, struct{}{})
+		return err
+	})
+	badArgument := climanifest.Command{Arguments: map[string]climanifest.Argument{"arg": {ValueType: "float"}}}
+	requireWorkerConstructorError(t, func() error { _, err := resolveCompatibilityWorkInputs(&cobra.Command{}, badArgument, nil); return err })
+	badArgument.Arguments["arg"] = climanifest.Argument{ValueType: "string"}
+	requireWorkerConstructorError(t, func() error {
+		_, err := resolveCompatibilityWorkInputs(&cobra.Command{}, badArgument, map[string]any{"arg": struct{}{}})
+		return err
+	})
+	badFlag := climanifest.Command{Flags: map[string]climanifest.Flag{"flag": {ID: "flag", Long: "flag", Scope: "local", ValueType: "float"}}}
+	requireWorkerConstructorError(t, func() error { _, err := resolveCompatibilityWorkInputs(&cobra.Command{}, badFlag, nil); return err })
+	badFlag.Flags["flag"] = climanifest.Flag{ID: "flag", Long: "flag", Scope: "local", ValueType: "string"}
+	requireWorkerConstructorError(t, func() error {
+		_, err := resolveCompatibilityWorkInputs(&cobra.Command{}, badFlag, map[string]any{"flag": struct{}{}})
+		return err
+	})
+	list.Arguments = map[string]climanifest.Argument{"arg": {ValueType: "string"}}
+	compatibility := cloneWorkerCoverageManifest(manifest)
+	compatibility.Commands[list.ID] = list
+	bindings, err := resolvedWorkHandlerBindings(compatibility, commandregistry.ResolvedWorkHandlers{List: noopResolvedInputHandler, Watch: noopResolvedInputHandler, Show: noopResolvedInputHandler, Move: noopResolvedInputHandler, Visualize: noopResolvedInputHandler})
+	if err != nil {
+		t.Fatalf("resolvedWorkHandlerBindings() error = %v", err)
+	}
+	listBinding := bindings[list.Handler.ID]
+	requireWorkerConstructorError(t, func() error {
+		return listBinding(&cobra.Command{}, nil, map[string]any{"arg": struct{}{}}, resolvedinput.Inputs{})
+	})
+	_ = listBinding(&cobra.Command{}, nil, nil, resolvedinput.Inputs{})
+	duplicate := climanifest.Command{Arguments: map[string]climanifest.Argument{"same": {ID: "same", ValueType: "string"}}, Flags: map[string]climanifest.Flag{"same": {ID: "same", Long: "same", Scope: "local", ValueType: "string"}}}
+	requireWorkerConstructorError(t, func() error {
+		_, err := resolveCompatibilityWorkInputs(&cobra.Command{}, duplicate, map[string]any{"same": "value"})
+		return err
+	})
+	requireWorkerConstructorError(t, func() error {
+		return projectCobraFlagGroupAnnotations(&cobra.Command{Use: "list"}, "you.work.list", []plannedRelationship{{record: climanifest.Relationship{ID: "relationship", Kind: "mutually-exclusive"}, participants: []plannedParticipant{{kind: "flag", public: "--missing", cobraGroupAnnotationSafe: true}}}})
+	})
+}
+
+func TestWorkerConstructorGenericGroupBranches(t *testing.T) {
+	group := &cobra.Command{Use: "group"}
+	configureGenericGroupCommand(group)
+	if err := group.Args(group, nil); err != nil {
+		t.Fatalf("configureGenericGroupCommand(empty) error = %v", err)
+	}
+	if err := group.Args(group, []string{"unknown"}); err == nil {
+		t.Fatal("configureGenericGroupCommand(unknown) error = nil")
+	}
+}
+
+func workerCoverageManifest(t *testing.T) climanifest.Manifest {
+	t.Helper()
+	manifest, err := generated.WorkFamilyManifest()
+	if err != nil {
+		t.Fatalf("WorkFamilyManifest() error = %v", err)
+	}
+	return manifest
+}
+
+func cloneWorkerCoverageManifest(manifest climanifest.Manifest) climanifest.Manifest {
+	clone := manifest
+	clone.Commands = make(map[string]climanifest.Command, len(manifest.Commands))
+	for id, record := range manifest.Commands {
+		clone.Commands[id] = record
+	}
+	return clone
+}
+
+func requireWorkerConstructorError(t *testing.T, call func() error) {
+	t.Helper()
+	if err := call(); err == nil {
+		t.Fatal("constructor helper error = nil")
+	}
+}
+
+func noopResolvedInputHandler(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
+	return nil
+}
+
+func boolToInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
 }

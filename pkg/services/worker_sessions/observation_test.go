@@ -168,7 +168,7 @@ func TestObservationClone_DetachesNestedValues(t *testing.T) {
 	}
 }
 
-func TestObservationSupportTypes_ValidateCloneAndSubscription(t *testing.T) {
+func TestObservationSupportTypesValidate(t *testing.T) {
 	for _, basis := range []DurationBasis{DurationBasisUnavailable, DurationBasisActiveClock, DurationBasisRecordedTimestamps} {
 		if !basis.Valid() {
 			t.Errorf("DurationBasis(%q).Valid() = false", basis)
@@ -198,6 +198,9 @@ func TestObservationSupportTypes_ValidateCloneAndSubscription(t *testing.T) {
 	if parseClone.Errors[0].Code != "bad" {
 		t.Fatalf("ParseDiagnostics.Clone() shared slice: %#v", parseClone)
 	}
+}
+
+func TestObservationSubscriptionCloneAndClose(t *testing.T) {
 	event := ObservationEvent{Payload: json.RawMessage(`{"value":"original"}`)}
 	eventClone := event.Clone()
 	event.Payload[0] = '{'

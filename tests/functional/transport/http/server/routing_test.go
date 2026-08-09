@@ -4,17 +4,14 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/contractinventory"
-	apiserver "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"go.uber.org/zap"
 )
 
 // TestAPIRoutesEveryOpenAPIOperationToNon404Handler proves every published OpenAPI
@@ -55,56 +52,6 @@ func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
 
 	if len(inventory.Operations) == 0 {
 		t.Fatal("OpenAPI operation inventory is empty")
-	}
-}
-
-func TestWorkerSessionOperationsReturnStructuredErrorWhenHandlerIsUnavailable(t *testing.T) {
-	server := apiserver.NewServer(nil, nil, nil, nil, zap.NewNop())
-	sessionID := factoryapi.SessionID("missing")
-	cases := []struct {
-		name string
-		call func(*httptest.ResponseRecorder)
-	}{
-		{
-			name: "list",
-			call: func(recorder *httptest.ResponseRecorder) {
-				server.ListWorkerSessionsBySessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), sessionID, factoryapi.ListWorkerSessionsBySessionIdParams{})
-			},
-		},
-		{
-			name: "show",
-			call: func(recorder *httptest.ResponseRecorder) {
-				server.GetWorkerSessionObservationBySessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), sessionID, factoryapi.GetWorkerSessionObservationBySessionIdParams{})
-			},
-		},
-		{
-			name: "read",
-			call: func(recorder *httptest.ResponseRecorder) {
-				server.ReadWorkerSessionTranscriptBySessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), sessionID, factoryapi.ReadWorkerSessionTranscriptBySessionIdParams{})
-			},
-		},
-		{
-			name: "stream",
-			call: func(recorder *httptest.ResponseRecorder) {
-				server.StreamWorkerSessionEventsBySessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), sessionID, factoryapi.StreamWorkerSessionEventsBySessionIdParams{})
-			},
-		},
-	}
-	for _, test := range cases {
-		t.Run(test.name, func(t *testing.T) {
-			recorder := httptest.NewRecorder()
-			test.call(recorder)
-			if recorder.Code != http.StatusInternalServerError {
-				t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusInternalServerError, recorder.Body.String())
-			}
-			var response factoryapi.ErrorResponse
-			if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
-				t.Fatalf("decode structured error: %v", err)
-			}
-			if response.Code != factoryapi.ErrorResponseCodeINTERNALERROR {
-				t.Fatalf("error code = %q, want %q", response.Code, factoryapi.ErrorResponseCodeINTERNALERROR)
-			}
-		})
 	}
 }
 

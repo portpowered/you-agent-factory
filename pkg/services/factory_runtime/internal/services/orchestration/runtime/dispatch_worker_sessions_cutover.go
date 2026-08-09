@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -411,35 +410,46 @@ func (s *recordedWorkerSessionObservation) StreamObservations(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
-	if s.ledger != nil && s.projector != nil {
-		fact, found, err := s.recordedObservationForProvider(ctx, req.ProviderSession)
-		if err != nil {
-			return workersessions.ObservationSubscription{}, err
-		}
-		if found {
-			streamContext := ctx
-			if streamContext == nil {
-				streamContext = context.Background()
-			}
-			streamContext, cancel := context.WithCancel(streamContext)
-			source, subscribeErr := s.ledger.Subscribe(streamContext, nil, interfaces.FactoryEventReconnectScope{})
-			if subscribeErr != nil {
-				cancel()
-				if errors.Is(subscribeErr, context.Canceled) {
-					return workersessions.ObservationSubscription{}, workersessions.ErrObservationCanceled
-				}
-				return workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
-			}
-			return newRecordedObservationSubscription(source, fact.dispatchID, fact.state.Terminal(), cancel, streamContext), nil
-		}
-		if s.Service == nil {
-			return workersessions.ObservationSubscription{}, workersessions.ErrObservationSessionNotFound
-		}
+	if subscription, handled, err := s.streamRecorded(ctx, req); handled {
+		return subscription, err
 	}
 	if s.Service == nil {
 		return workersessions.ObservationSubscription{}, workersessions.ErrObservationProjectionUnavailable
 	}
 	return s.Service.StreamObservations(ctx, req)
+}
+
+func (s *recordedWorkerSessionObservation) streamRecorded(
+	ctx context.Context,
+	req workersessions.StreamObservationsRequest,
+) (workersessions.ObservationSubscription, bool, error) {
+	if s.ledger == nil || s.projector == nil {
+		return workersessions.ObservationSubscription{}, false, nil
+	}
+	fact, found, err := s.recordedObservationForProvider(ctx, req.ProviderSession)
+	if err != nil {
+		return workersessions.ObservationSubscription{}, true, err
+	}
+	if !found {
+		if s.Service == nil {
+			return workersessions.ObservationSubscription{}, true, workersessions.ErrObservationSessionNotFound
+		}
+		return workersessions.ObservationSubscription{}, false, nil
+	}
+	streamContext := ctx
+	if streamContext == nil {
+		streamContext = context.Background()
+	}
+	streamContext, cancel := context.WithCancel(streamContext)
+	source, subscribeErr := s.ledger.Subscribe(streamContext, nil, interfaces.FactoryEventReconnectScope{})
+	if subscribeErr != nil {
+		cancel()
+		if errors.Is(subscribeErr, context.Canceled) {
+			return workersessions.ObservationSubscription{}, true, workersessions.ErrObservationCanceled
+		}
+		return workersessions.ObservationSubscription{}, true, workersessions.ErrObservationSourceUnavailable
+	}
+	return newRecordedObservationSubscription(source, fact.dispatchID, fact.state.Terminal(), cancel, streamContext), true, nil
 }
 
 func (s *recordedWorkerSessionObservation) recordedObservationForProvider(
@@ -929,338 +939,4 @@ func recordedDispatchFacts(events []interfaces.FactoryEvent) (map[string]recorde
 		}
 	}
 	return associations, requests
-}
-
-func recordedWorkExists(world interfaces.FactoryWorldState, events []interfaces.FactoryEvent, workID string) bool {
-	if _, ok := world.WorkItemsByID[workID]; ok {
-		return true
-	}
-	if _, ok := world.ActiveWorkItemsByID[workID]; ok {
-		return true
-	}
-	if _, ok := world.TerminalWorkByID[workID]; ok {
-		return true
-	}
-	if _, ok := world.FailedWorkItemsByID[workID]; ok {
-		return true
-	}
-	for _, event := range events {
-		if containsRecordedWorkID(pointerStringSlice(event.Context.WorkIDs), workID) {
-			return true
-		}
-	}
-	return false
-}
-
-func recordedObservationFromFact(fact recordedDispatchObservation, clock factory.Clock) workersessions.Observation {
-	state := fact.state
-	if state == "" {
-		state = workersessions.StateStarting
-	}
-	observation := workersessions.Observation{
-		WorkerSessionID:          fact.workerSessionID,
-		ProviderSessionAvailable: fact.provider != nil && fact.provider.ID != "",
-		WorkIDs:                  append([]string(nil), fact.workIDs...),
-		TurnID:                   fact.turnID,
-		AttemptID:                fact.dispatchID,
-		State:                    state,
-		DurationBasis:            workersessions.DurationBasisUnavailable,
-		Transcript:               workersessions.TranscriptAvailabilityUnavailable,
-	}
-	if fact.provider != nil {
-		observation.ProviderSession = providerSessionRef(*fact.provider)
-	}
-	if !fact.startedAt.IsZero() {
-		started := fact.startedAt.UTC()
-		observation.StartedAt = &started
-		if fact.endedAt != nil {
-			ended := fact.endedAt.UTC()
-			observation.EndedAt = &ended
-			duration := ended.Sub(started)
-			if duration < 0 {
-				duration = 0
-			}
-			observation.Duration = &duration
-			observation.DurationBasis = workersessions.DurationBasisRecordedTimestamps
-		} else if !state.Terminal() && clock != nil {
-			duration := clock.Now().Sub(started)
-			if duration < 0 {
-				duration = 0
-			}
-			observation.Duration = &duration
-			observation.DurationBasis = workersessions.DurationBasisActiveClock
-		}
-	}
-	if fact.failure != nil {
-		failure := *fact.failure
-		observation.Failure = &failure
-	}
-	return observation
-}
-
-func recordedObservationState(outcome string) workersessions.State {
-	switch workers.WorkOutcome(outcome) {
-	case workers.OutcomeAccepted, workers.OutcomeContinue:
-		return workersessions.StateCompleted
-	case workers.OutcomeFailed, workers.OutcomeRejected:
-		return workersessions.StateFailed
-	default:
-		return workersessions.StateFailed
-	}
-}
-
-func recordedFailure(
-	detail *workers.FailureDetail,
-	metadata *workers.WorkFailureMetadata,
-	state workersessions.State,
-) *workersessions.FailureCause {
-	if !state.Terminal() || state == workersessions.StateCompleted {
-		return nil
-	}
-	return &workersessions.FailureCause{
-		Kind:                workersessions.FailureCauseWorkersExecutionFailure,
-		Detail:              recordedFailureDetail(detail, metadata),
-		ProviderFailureKind: recordedProviderFailureKind(detail),
-	}
-}
-
-func recordedFailureDetail(detail *workers.FailureDetail, metadata *workers.WorkFailureMetadata) string {
-	if metadata != nil {
-		family, familyKnown := recordedFailureFamily(metadata.Family)
-		typ, typeKnown := recordedFailureType(metadata.Type)
-		if familyKnown && typeKnown && (family != "" || typ != "") {
-			if family == "" {
-				family = "unknown"
-			}
-			if typ == "" {
-				typ = "unknown"
-			}
-			return "family=" + family + " type=" + typ
-		}
-	}
-	if typ, ok := recordedFailureType(detailType(detail)); ok && typ != "" {
-		return "type=" + typ
-	}
-	return "the Workers execution result was not successful"
-}
-
-func detailType(detail *workers.FailureDetail) workers.WorkFailureType {
-	if detail == nil {
-		return ""
-	}
-	return detail.Reason
-}
-
-func recordedFailureFamily(family workers.WorkFailureFamily) (string, bool) {
-	switch family {
-	case "":
-		return "", true
-	case workers.WorkFailureFamilyTerminal, workers.WorkFailureFamilyRetryable, workers.WorkFailureFamilyThrottle:
-		return string(family), true
-	default:
-		return "", false
-	}
-}
-
-func recordedFailureType(typ workers.WorkFailureType) (string, bool) {
-	switch typ {
-	case "":
-		return "", true
-	case workers.WorkFailureTypeAuthFailure,
-		workers.WorkFailureTypePermanentBadRequest,
-		workers.WorkFailureTypeThrottled,
-		workers.WorkFailureTypeInternalServerError,
-		workers.WorkFailureTypeTimeout,
-		workers.WorkFailureTypeUnknown,
-		workers.WorkFailureTypeMisconfigured,
-		workers.WorkFailureTypeCommandLineTooLong,
-		workers.WorkFailureTypeMissingExecutable:
-		return string(typ), true
-	default:
-		return "", false
-	}
-}
-
-func recordedProviderFailureKind(detail *workers.FailureDetail) providers.ExecuteFailureKind {
-	if detail == nil {
-		return ""
-	}
-	switch detail.Reason {
-	case workers.WorkFailureTypeAuthFailure:
-		return providers.ExecuteFailureKindAuthentication
-	case workers.WorkFailureTypeTimeout:
-		return providers.ExecuteFailureKindTimeout
-	case workers.WorkFailureTypeThrottled:
-		return providers.ExecuteFailureKindThrottled
-	case workers.WorkFailureTypeMisconfigured:
-		return providers.ExecuteFailureKindMisconfigured
-	default:
-		return ""
-	}
-}
-
-func mergeRecordedObservations(recorded, live []workersessions.Observation) []workersessions.Observation {
-	if len(recorded) == 0 {
-		return nil
-	}
-	bySession := make(map[string]workersessions.Observation, len(live))
-	for _, observation := range live {
-		bySession[observation.WorkerSessionID] = observation
-	}
-	for index := range recorded {
-		liveObservation, ok := bySession[recorded[index].WorkerSessionID]
-		if !ok {
-			continue
-		}
-		if liveObservation.ProviderSessionAvailable {
-			recorded[index].ProviderSession = liveObservation.ProviderSession.Clone()
-			recorded[index].ProviderSessionAvailable = true
-		}
-		if liveObservation.TokenUsage != nil {
-			clone := liveObservation.TokenUsage.Clone()
-			recorded[index].TokenUsage = &clone
-		}
-		if liveObservation.Transcript != workersessions.TranscriptAvailabilityUnavailable {
-			recorded[index].Transcript = liveObservation.Transcript
-			recorded[index].Parse = liveObservation.Parse
-		}
-		if recorded[index].Failure == nil && liveObservation.Failure != nil {
-			failure := *liveObservation.Failure
-			recorded[index].Failure = &failure
-		}
-	}
-	return recorded
-}
-
-func sortObservationAttempts(observations []workersessions.Observation) {
-	sort.SliceStable(observations, func(i, j int) bool {
-		left, right := observations[i], observations[j]
-		switch {
-		case left.StartedAt != nil && right.StartedAt != nil && !left.StartedAt.Equal(*right.StartedAt):
-			return left.StartedAt.Before(*right.StartedAt)
-		case left.StartedAt != nil && right.StartedAt == nil:
-			return true
-		case left.StartedAt == nil && right.StartedAt != nil:
-			return false
-		case left.AttemptID != right.AttemptID:
-			return left.AttemptID < right.AttemptID
-		default:
-			return left.WorkerSessionID < right.WorkerSessionID
-		}
-	})
-}
-
-func cloneAndSortFactoryEvents(events []interfaces.FactoryEvent) []interfaces.FactoryEvent {
-	ordered := make([]interfaces.FactoryEvent, len(events))
-	for index, event := range events {
-		ordered[index] = event.Clone()
-	}
-	sort.SliceStable(ordered, func(i, j int) bool {
-		left, right := ordered[i], ordered[j]
-		if left.Context.Tick != right.Context.Tick {
-			return left.Context.Tick < right.Context.Tick
-		}
-		if left.Context.Sequence != right.Context.Sequence {
-			return left.Context.Sequence < right.Context.Sequence
-		}
-		if !left.Context.EventTime.Equal(right.Context.EventTime) {
-			return left.Context.EventTime.Before(right.Context.EventTime)
-		}
-		return left.Id < right.Id
-	})
-	return ordered
-}
-
-func eventTimeForDispatch(events []interfaces.FactoryEvent, dispatchID string) time.Time {
-	for index := len(events) - 1; index >= 0; index-- {
-		if stringPointerValue(events[index].Context.DispatchID) == dispatchID && events[index].Type == interfaces.FactoryEventTypeDispatchResponse {
-			return events[index].Context.EventTime.UTC()
-		}
-	}
-	return time.Time{}
-}
-
-func firstRecordedTime(primary, fallback time.Time) time.Time {
-	if !primary.IsZero() {
-		return primary.UTC()
-	}
-	return fallback.UTC()
-}
-
-func firstRecordedWorkIDs(primary, fallback []string) []string {
-	if len(primary) > 0 {
-		return append([]string(nil), primary...)
-	}
-	return append([]string(nil), fallback...)
-}
-
-func firstRecordedFailure(primary, fallback *workersessions.FailureCause) *workersessions.FailureCause {
-	if primary != nil {
-		return primary
-	}
-	return fallback
-}
-
-func containsRecordedWorkID(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
-}
-
-func appendUniqueRecordedString(values []string, value string) []string {
-	if value == "" || containsRecordedWorkID(values, value) {
-		return values
-	}
-	return append(values, value)
-}
-
-func stringPointerValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
-func pointerStringSlice(value *[]string) []string {
-	if value == nil {
-		return nil
-	}
-	return append([]string(nil), (*value)...)
-}
-
-func providerSessionRef(metadata workers.ProviderSessionMetadata) providers.SessionRef {
-	return providers.SessionRef{
-		Provider: providers.ID(metadata.Provider),
-		Kind:     metadata.Kind,
-		ID:       metadata.ID,
-	}
-}
-
-func cloneProviderMetadata(metadata *workers.ProviderSessionMetadata) *workers.ProviderSessionMetadata {
-	if metadata == nil {
-		return nil
-	}
-	clone := *metadata
-	return &clone
-}
-
-func isObservationNotFound(err error) bool {
-	return err == workersessions.ErrObservationWorkNotFound
-}
-
-func isObservationProjectionUnavailable(err error) bool {
-	return err == workersessions.ErrObservationProjectionUnavailable
-}
-
-func observationContextError(ctx context.Context) error {
-	if ctx == nil {
-		return nil
-	}
-	if err := ctx.Err(); err != nil {
-		return workersessions.ErrObservationCanceled
-	}
-	return nil
 }
