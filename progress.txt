@@ -400,3 +400,18 @@
   - The package-file-count ratchet counts test files as well as production files, so small focused helpers and their tests should share existing responsibility files when a package is at its deletion-only limit.
   - A new top-level quality-gate comment can arrive after green CI; rerun the named local ratchet and record its result before the final PR handoff.
 ---
+
+## [2026-08-08 20:59 -07:00] - wo-b1-antigravity-provider-golden-traces-005
+- What was implemented
+  - Completed the PR #1826 package-file-count review follow-up without changing runtime scope.
+  - Recorded the terminal CI rerun state; no feature-code changes were made for the unrelated broad-lane failure.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make pkg-file-count`, focused AGY replay, Providers/Workers/Wire tests, `make test`, `make backend-size`, `make pkg-maint`, `make pkg-structure`, `go vet ./...`, and `make verify-fast` pass locally.
+  - PR #1826 head `273894682` has all non-functional required checks green. Backend Functional Coverage repeatedly fails only on the unrelated cancellation-timing test `TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren` under the broad parallel lane; the exact test passes in isolation locally. The initial pinned-ACP artifact failure cleared on rerun.
+  - No live AGY smoke was run, and no `.github` files changed.
+- **Learnings for future iterations:**
+  - Isolate an unrelated timing-sensitive functional failure locally before changing feature code; a passing isolated run supports bounded CI follow-up rather than scope expansion.
+  - A PR is not review-ready while required functional and verification checks remain terminally failed, even when feature-specific and local gates are green.
+---
