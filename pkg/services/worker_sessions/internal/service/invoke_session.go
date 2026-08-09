@@ -315,10 +315,14 @@ func (r *registry) ListObservations(ctx context.Context, req workersessions.List
 	}
 
 	r.mu.RLock()
-	ids := make([]string, 0)
+	ids := make([]observationOrder, 0)
 	for id, current := range r.observations {
 		if containsString(current.workIDs, req.WorkID) {
-			ids = append(ids, id)
+			ids = append(ids, observationOrder{
+				id:        id,
+				startedAt: current.startedAt,
+				attemptID: current.attemptID,
+			})
 		}
 	}
 	r.mu.RUnlock()
@@ -326,10 +330,11 @@ func (r *registry) ListObservations(ctx context.Context, req workersessions.List
 		r.logger.Info("worker session observation list", "workID", req.WorkID, "outcome", "not_found")
 		return workersessions.ListObservationsResult{}, workersessions.ErrObservationWorkNotFound
 	}
+	sortObservationOrder(ids)
 
 	observations := make([]workersessions.Observation, 0, len(ids))
-	for _, id := range ids {
-		projected, err := r.projectObservation(ctx, id)
+	for _, item := range ids {
+		projected, err := r.projectObservation(ctx, item.id)
 		if err != nil {
 			return workersessions.ListObservationsResult{}, err
 		}
@@ -526,6 +531,26 @@ func sortStrings(values []string) {
 			values[j], values[j-1] = values[j-1], values[j]
 		}
 	}
+}
+
+type observationOrder struct {
+	id        string
+	startedAt time.Time
+	attemptID string
+}
+
+func sortObservationOrder(values []observationOrder) {
+	sort.SliceStable(values, func(i, j int) bool {
+		left, right := values[i], values[j]
+		switch {
+		case !left.startedAt.Equal(right.startedAt):
+			return left.startedAt.Before(right.startedAt)
+		case left.attemptID != right.attemptID:
+			return left.attemptID < right.attemptID
+		default:
+			return left.id < right.id
+		}
+	})
 }
 
 func sortObservationAttempts(observations []workersessions.Observation) {
