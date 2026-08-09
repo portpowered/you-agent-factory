@@ -71,8 +71,8 @@ func (r *watchReducer) Accept(event factoryapi.FactoryEvent) (WatchTransition, b
 }
 
 // acceptOrdering validates and records event's canonical ordering position.
-// It reports true when event is an exact replay or a non-projecting model
-// request retry at a strictly later canonical position.
+// It reports true when event is an exact replay or a refreshed non-projecting
+// enrichment at a strictly later canonical position.
 func (r *watchReducer) acceptOrdering(event factoryapi.FactoryEvent) (bool, error) {
 	signature, err := json.Marshal(event)
 	if err != nil {
@@ -82,16 +82,14 @@ func (r *watchReducer) acceptOrdering(event factoryapi.FactoryEvent) (bool, erro
 		if prior.sequence == event.Context.Sequence && bytes.Equal(prior.signature, signature) {
 			return true, nil
 		}
-		if prior.eventType == factoryapi.FactoryEventTypeModelRequest &&
-			event.Type == factoryapi.FactoryEventTypeModelRequest {
-			// Provider retries can refresh the canonical MODEL_REQUEST payload
-			// while retaining the request ordinal and event identity. MODEL_REQUEST
-			// events do not project Work state, so accept later enrichment without
-			// emitting a transition. A non-increasing position is a conflicting
-			// reuse, not a provider retry.
+		if prior.eventType == event.Type && isNonProjectingWatchEvent(event.Type) {
+			// Provider retries can refresh a non-projecting canonical payload while
+			// retaining the event identity. Accept later enrichment without emitting
+			// a transition. A non-increasing position is a conflicting reuse, not a
+			// provider retry.
 			if !r.hasLast || event.Context.Sequence <= r.last {
 				return false, fmt.Errorf(
-					"work watch model request retry %q has non-increasing canonical sequence %d after %d",
+					"work watch enrichment %q has non-increasing canonical sequence %d after %d",
 					event.Id, event.Context.Sequence, r.last,
 				)
 			}
@@ -125,6 +123,46 @@ func (r *watchReducer) acceptOrdering(event factoryapi.FactoryEvent) (bool, erro
 	r.lastID = event.Id
 	r.hasLast = true
 	return false, nil
+}
+
+// isNonProjectingWatchEvent identifies event families this reducer consumes
+// only for canonical ordering. Events that update Factory or Work projection
+// state remain strict because refreshed data could change the projection.
+func isNonProjectingWatchEvent(eventType factoryapi.FactoryEventType) bool {
+	switch eventType {
+	case factoryapi.FactoryEventTypeAgentRunResponse,
+		factoryapi.FactoryEventTypeArtifactCreated,
+		factoryapi.FactoryEventTypeDispatchInterrupted,
+		factoryapi.FactoryEventTypeDispatchQueued,
+		factoryapi.FactoryEventTypeDispatchReconciled,
+		factoryapi.FactoryEventTypeDispatchRequest,
+		factoryapi.FactoryEventTypeDispatchResponse,
+		factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation,
+		factoryapi.FactoryEventTypeFactoryStateResponse,
+		factoryapi.FactoryEventTypeInferenceRequest,
+		factoryapi.FactoryEventTypeInferenceResponse,
+		factoryapi.FactoryEventTypeJavaScriptCheckpointRef,
+		factoryapi.FactoryEventTypeJavaScriptPhaseChange,
+		factoryapi.FactoryEventTypeModelRequest,
+		factoryapi.FactoryEventTypeModelResponse,
+		factoryapi.FactoryEventTypeOrchestratorCheckpointWritten,
+		factoryapi.FactoryEventTypeOrchestratorPhaseChanged,
+		factoryapi.FactoryEventTypeRelationshipChangeRequest,
+		factoryapi.FactoryEventTypeRunResponse,
+		factoryapi.FactoryEventTypeScriptRequest,
+		factoryapi.FactoryEventTypeScriptResponse,
+		factoryapi.FactoryEventTypeSessionCompleted,
+		factoryapi.FactoryEventTypeSessionLifecycleControl,
+		factoryapi.FactoryEventTypeSessionPaused,
+		factoryapi.FactoryEventTypeSessionResultUpdated,
+		factoryapi.FactoryEventTypeSessionResumed,
+		factoryapi.FactoryEventTypeSessionStarted:
+		return true
+	default:
+		// Unknown and projection-bearing events stay strict until their reducer
+		// behavior is explicitly classified.
+		return false
+	}
 }
 
 // applyEvent projects one non-replay canonical event into reducer state and
@@ -263,27 +301,12 @@ func (r *watchReducer) applyWorkRequest(
 ) error {
 	if payload.Works != nil {
 		for _, item := range *payload.Works {
-			workID := stringValue(item.WorkId)
-			if workID == "" {
-				return fmt.Errorf("event %q contains Work without workId", event.Id)
+			workID, observation, include, err := r.workRequestObservation(event, item)
+			if err != nil {
+				return err
 			}
-			workTypeName := stringValue(item.WorkTypeName)
-			if workTypeName == "" {
-				return fmt.Errorf("event %q Work %q has no workTypeName", event.Id, workID)
-			}
-			observation := watchWorkObservation{workTypeName: workTypeName}
-			if item.State != nil {
-				if strings.TrimSpace(item.State.Name) == "" {
-					return fmt.Errorf("event %q Work %q has a state without a name", event.Id, workID)
-				}
-				observation.state = item.State.Name
-				stateType := item.State.Type
-				if authoritativeType, ok := r.stateType(workTypeName, item.State.Name); ok {
-					stateType = authoritativeType
-				} else if item.State.Type != "" {
-					r.setStateType(workTypeName, item.State.Name, item.State.Type)
-				}
-				observation.terminal = isTerminalWorkState(stateType)
+			if !include {
+				continue
 			}
 			if err := r.recordWork(workID, observation); err != nil {
 				return err
@@ -301,6 +324,47 @@ func (r *watchReducer) applyWorkRequest(
 		}
 	}
 	return nil
+}
+
+func (r *watchReducer) workRequestObservation(
+	event factoryapi.FactoryEvent,
+	item factoryapi.Work,
+) (string, watchWorkObservation, bool, error) {
+	workID := stringValue(item.WorkId)
+	if workID == "" {
+		return "", watchWorkObservation{}, false, fmt.Errorf("event %q contains Work without workId", event.Id)
+	}
+	workTypeName := stringValue(item.WorkTypeName)
+	if workTypeName == "" {
+		return "", watchWorkObservation{}, false, fmt.Errorf("event %q Work %q has no workTypeName", event.Id, workID)
+	}
+	if item.State == nil {
+		// A WORK_REQUEST without state metadata does not establish an
+		// observable Work cohort yet. The first WORK_STATE_CHANGE supplies
+		// the authoritative state and records the Work then; retaining an
+		// empty observation here would make a complete session replay wait
+		// forever on unrelated submitted Work.
+		return "", watchWorkObservation{}, false, nil
+	}
+	if len(r.stateTypes) > 0 {
+		if _, ok := r.stateTypes[workTypeName]; !ok {
+			return "", watchWorkObservation{}, false, nil
+		}
+	}
+	if strings.TrimSpace(item.State.Name) == "" {
+		return "", watchWorkObservation{}, false, fmt.Errorf("event %q Work %q has a state without a name", event.Id, workID)
+	}
+	stateType := item.State.Type
+	if authoritativeType, ok := r.stateType(workTypeName, item.State.Name); ok {
+		stateType = authoritativeType
+	} else if item.State.Type != "" {
+		r.setStateType(workTypeName, item.State.Name, item.State.Type)
+	}
+	return workID, watchWorkObservation{
+		workTypeName: workTypeName,
+		state:        item.State.Name,
+		terminal:     isTerminalWorkState(stateType),
+	}, true, nil
 }
 
 func (r *watchReducer) applyWorkStateChange(
