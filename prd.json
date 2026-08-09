@@ -31,7 +31,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Established the canonical packaged-factories operator guide with discovery/materialization guidance, a shared seven-part entry contract, family-based catalog navigation, provider/model default behavior, and non-byte-stable model-output guidance. Registered the existing topic as `you docs packaged-factories`, updated the packaged docs indexes and user-visible smoke coverage, and captured live `you factory list`, `you run --named @you/goal --help`, and `you docs packaged-factories` evidence from a freshly built current-source binary. `make docs-reference-smoke`, `make verify-fast`, and `git diff --check` pass. Detailed per-Factory entries remain scoped to stories 002-006."
+      "notes": "Established the canonical packaged-factories operator guide with discovery/materialization guidance, a shared seven-part entry contract, family-based catalog navigation, provider/model default behavior, and non-byte-stable model-output guidance. Registered the existing topic as `you docs packaged-factories`, updated the packaged docs indexes and user-visible smoke coverage, and captured live `you factory list`, `you run --named @you/goal --help`, and `you docs packaged-factories` evidence from a freshly built current-source binary. `make docs-reference-smoke`, `make verify-fast`, `make readme-check`, and `git diff --check` pass. The broad `make lint` tier reached the existing 176-violation `pkg-boundary` baseline after all changed-file-relevant lint checks passed; no changed file is among those baseline violations. Detailed per-Factory entries remain scoped to stories 002-006."
     },
     {
       "id": "wo-d1-packaged-factories-docs-002",
