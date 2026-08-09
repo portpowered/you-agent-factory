@@ -456,21 +456,23 @@ func (r *registry) associateProviderSessionLocked(
 // replayObservationSubscription drains one retained Events snapshot. It never
 // calls Subscribe: once the first Read captures the retained head, later reads
 // stop at that position even if the topic advances while the drain is in
-// progress.
+// progress. Completeness is derived from a terminal lifecycle record inside
+// that captured range, not from the separately synchronized session state.
 type replayObservationSubscription struct {
-	reader         EventsRetainedReader
-	topic          events.Topic
-	limit          int
-	snapshotHead   events.AggregateSequence
-	next           events.Cursor
-	pending        []events.Record
-	terminalReplay bool
-	complete       bool
-	reason         string
-	eventsEmitted  int
-	summarySent    bool
-	closed         bool
-	mu             sync.Mutex
+	reader             EventsRetainedReader
+	topic              events.Topic
+	limit              int
+	snapshotHead       events.AggregateSequence
+	next               events.Cursor
+	pending            []events.Record
+	sessionState       workersessions.State
+	terminalReplay     bool
+	terminalRecordSeen bool
+	reason             string
+	eventsEmitted      int
+	summarySent        bool
+	closed             bool
+	mu                 sync.Mutex
 }
 
 func newReplayObservationSubscription(
@@ -497,8 +499,8 @@ func newReplayObservationSubscription(
 		topic:          topic,
 		limit:          limit,
 		next:           events.Cursor{Topic: topic},
+		sessionState:   state,
 		terminalReplay: state.Terminal(),
-		complete:       state.Terminal(),
 		reason:         replayReason(state),
 	}
 	result, err := reader.Read(ctx, events.ReadRequest{Topic: topic, From: replay.next, Limit: limit})
@@ -526,6 +528,7 @@ func (s *replayObservationSubscription) acceptInitial(result events.ReadResult) 
 	switch result.Outcome {
 	case events.ReadOutcomeProgress:
 		s.pending = cloneEventRecords(result.Records)
+		s.noteTerminalRecord(result.Records)
 	case events.ReadOutcomeAtHead:
 		return nil
 	default:
@@ -563,8 +566,8 @@ func (s *replayObservationSubscription) Next(ctx context.Context) workersessions
 			if !s.summarySent {
 				s.summarySent = true
 				summary := &workersessions.ReplaySummary{
-					Complete:      s.complete,
-					Reason:        s.reason,
+					Complete:      s.terminalRecordSeen,
+					Reason:        s.replaySummaryReason(),
 					EventsEmitted: s.eventsEmitted,
 				}
 				s.mu.Unlock()
@@ -636,7 +639,9 @@ func (s *replayObservationSubscription) appendPage(result events.ReadResult) err
 			if record.ID.Position > s.snapshotHead {
 				break
 			}
-			s.pending = append(s.pending, record.Detached())
+			detached := record.Detached()
+			s.pending = append(s.pending, detached)
+			s.noteTerminalRecord([]events.Record{detached})
 			lastIncluded = record.ID.Position
 		}
 		if lastIncluded == s.next.Position {
@@ -647,6 +652,28 @@ func (s *replayObservationSubscription) appendPage(result events.ReadResult) err
 	default:
 		return workersessions.ErrObservationSourceUnavailable
 	}
+}
+
+func (s *replayObservationSubscription) noteTerminalRecord(records []events.Record) {
+	if s.terminalRecordSeen {
+		return
+	}
+	for _, record := range records {
+		if record.SourceType == lifecycleSourceType && record.SourceSequence >= terminalSourceSequence {
+			s.terminalRecordSeen = true
+			return
+		}
+	}
+}
+
+func (s *replayObservationSubscription) replaySummaryReason() string {
+	if s.terminalRecordSeen && !s.sessionState.Terminal() {
+		return "session-terminal-record"
+	}
+	if !s.terminalRecordSeen && s.sessionState.Terminal() {
+		return "session-terminal-record-missing"
+	}
+	return s.reason
 }
 
 func (s *replayObservationSubscription) Close() {

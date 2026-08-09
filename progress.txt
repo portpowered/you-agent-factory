@@ -6,6 +6,8 @@
 - Detached Cobra command families should project local-only flag relationships without eagerly merging parent persistent flags; otherwise the detached storage can shadow the production root flag when the family is attached.
 - Process-boundary CLI tests should build `./cmd/factory` only when proving OS-level behavior, keep the real server on a root-built process, and assign redirected stdout and diagnostics stderr separately.
 - Restore package coverage thresholds with focused behavioral tests for typed edge outcomes; do not lower baseline manifests for new branches.
+- Replay completeness must be derived from a terminal lifecycle record inside the captured Events range, not from a separately synchronized terminal session state.
+- When a package has a strict file-count baseline, put a small refactor in an existing focused file before adding a new helper file or changing the baseline.
 
 ## 2026-08-09 14:24 -07:00 - wo-c1-ext-stream-replay-only-001
 - What was implemented
@@ -77,7 +79,20 @@
 - **Learnings for future iterations:**
   - The repository's coverage gate is sensitive to untested defensive replay branches; typed read outcomes should have direct behavioral assertions alongside the happy-path stream tests.
   - `make test-unit-coverage` cannot launch its full coverage lane on this Windows checkout because the generated Go command exceeds the Windows filename/command-line limit; the affected package's local coverage profile still verifies the threshold.
-  - A full CI functional run exposed `TestFactorySessionHistoryIsNotPersistedByDefault`, but the test passes repeatedly in isolation and the feature-specific functional command is green; avoid unrelated changes until a reproducible failure or actionable review feedback identifies a shared cause.
+- A full CI functional run exposed `TestFactorySessionHistoryIsNotPersistedByDefault`, but the test passes repeatedly in isolation and the feature-specific functional command is green; avoid unrelated changes until a reproducible failure or actionable review feedback identifies a shared cause.
+---
+
+## 2026-08-09 16:30 -07:00 - wo-c1-ext-stream-replay-only-review-follow-up
+- What was implemented
+  - Addressed PR #1840's blocking correctness feedback by making replay summaries complete only when the retained snapshot contains a terminal Worker Session lifecycle record; terminal state without that record now reports `complete:false` with `session-terminal-record-missing`.
+  - Added a deterministic controlled-boundary regression that blocks and fails the terminal append after state commit, opens replay during the interleaving, and proves no false-complete summary is emitted.
+  - Moved Cobra relationship projection out of the oversized generic constructor into the existing work constructor file and split the replay completion/cancellation/close test to clear `backend-size` and `pkg-maint` without adding package-baseline files.
+- Files changed
+  - Worker Sessions replay service and behavioral tests/fakes, `pkg/transports/cli/climanifestcobra/constructor.go`, `pkg/transports/cli/climanifestcobra/work_constructor.go`, and this progress log.
+- **Learnings for future iterations:**
+  - Terminal state and terminal-event publication are separate synchronized effects; snapshot consumers must validate the event range before claiming a complete capture, including permanent terminal-record append failures.
+  - Review ratchets may include package file-count baselines in addition to line and complexity limits; an existing cohesive package file is preferable for small same-package helper moves.
+  - Focused Worker Sessions/CLI package tests, the named redirect functional test, `make verify-fast`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and affected-package vet pass. `make -k lint` still reports pre-existing baseline failures in `pkg-boundary`, package-target/packaged-factory/ownership inventories, and deadcode; the reviewer-identified new backend-size/pkg-maint failures are resolved.
 ---
 
 ## 2026-08-09 16:13 -07:00 - wo-c1-ext-stream-replay-only-delivery

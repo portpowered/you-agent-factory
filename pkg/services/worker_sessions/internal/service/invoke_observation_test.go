@@ -787,21 +787,23 @@ func TestReplayObservationSubscriptionEmitsTypedReadFailures(t *testing.T) {
 	}
 }
 
-func TestReplayObservationSubscriptionHandlesCompletionAndClose(t *testing.T) {
+func TestReplayObservationSubscriptionCompletesAndCloses(t *testing.T) {
 	topic := workersessions.Topic("worker-1")
 	initial := replayProgressResult(topic, 2, 1)
-	atHead := events.ReadResult{
-		Outcome:  events.ReadOutcomeAtHead,
-		Next:     events.Cursor{Topic: topic, Position: 2},
-		Retained: events.RetainedRange{Topic: topic, Earliest: 1, Head: 2},
-	}
-	reader := &observationEventReaderFake{readResults: []events.ReadResult{initial, atHead}}
+	terminalPage := replayProgressResult(topic, 2, 2)
+	terminalPage.Records[0].SourceType = lifecycleSourceType
+	terminalPage.Records[0].SourceSequence = terminalSourceSequence
+	terminalPage.Records[0].SourceEventID = terminalSourceEventID
+	reader := &observationEventReaderFake{readResults: []events.ReadResult{initial, terminalPage}}
 	subscription, err := newReplayObservationSubscription(nil, reader, topic, workersessions.StateCompleted, 1)
 	if err != nil {
 		t.Fatalf("newReplayObservationSubscription() error = %v", err)
 	}
 	if got := subscription.Next(nil); got.Kind != workersessions.ObservationDeliveryRecord {
 		t.Fatalf("initial delivery = %#v, want RECORD", got)
+	}
+	if got := subscription.Next(context.Background()); got.Kind != workersessions.ObservationDeliveryTerminalReplay {
+		t.Fatalf("terminal delivery = %#v, want TERMINAL_REPLAY", got)
 	}
 	if got := subscription.Next(context.Background()); got.Kind != workersessions.ObservationDeliveryReplaySummary || got.Summary == nil || !got.Summary.Complete {
 		t.Fatalf("completion delivery = %#v, want complete summary", got)
@@ -813,20 +815,28 @@ func TestReplayObservationSubscriptionHandlesCompletionAndClose(t *testing.T) {
 	if got := subscription.Next(context.Background()); got.Kind != workersessions.ObservationDeliveryClosed {
 		t.Fatalf("delivery after Close() = %#v, want CLOSED", got)
 	}
+}
 
+func TestReplayObservationSubscriptionCancellationCloses(t *testing.T) {
+	topic := workersessions.Topic("worker-1")
+	initial := replayProgressResult(topic, 2, 1)
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	canceledSubscription, err := newReplayObservationSubscription(context.Background(), &observationEventReaderFake{readResults: []events.ReadResult{initial}}, topic, workersessions.StateRunning, 1)
+	subscription, err := newReplayObservationSubscription(context.Background(), &observationEventReaderFake{readResults: []events.ReadResult{initial}}, topic, workersessions.StateRunning, 1)
 	if err != nil {
 		t.Fatalf("newReplayObservationSubscription(canceled) error = %v", err)
 	}
-	if got := canceledSubscription.Next(canceled); got.Kind != workersessions.ObservationDeliveryCanceled || !errors.Is(got.Err, workersessions.ErrObservationCanceled) {
+	if got := subscription.Next(canceled); got.Kind != workersessions.ObservationDeliveryCanceled || !errors.Is(got.Err, workersessions.ErrObservationCanceled) {
 		t.Fatalf("canceled delivery = %#v, want CANCELED", got)
 	}
-	if got := canceledSubscription.Next(context.Background()); got.Kind != workersessions.ObservationDeliveryClosed {
+	if got := subscription.Next(context.Background()); got.Kind != workersessions.ObservationDeliveryClosed {
 		t.Fatalf("delivery after cancellation = %#v, want CLOSED", got)
 	}
+}
 
+func TestReplayObservationSubscriptionCloseDuringReadCloses(t *testing.T) {
+	topic := workersessions.Topic("worker-1")
+	initial := replayProgressResult(topic, 2, 1)
 	var racing *replayObservationSubscription
 	reads := 0
 	racingReader := &observationEventReaderFake{}
@@ -838,6 +848,7 @@ func TestReplayObservationSubscriptionHandlesCompletionAndClose(t *testing.T) {
 		racing.Close()
 		return replayProgressResult(topic, 2, 2), nil
 	}
+	var err error
 	racing, err = newReplayObservationSubscription(context.Background(), racingReader, topic, workersessions.StateRunning, 1)
 	if err != nil {
 		t.Fatalf("newReplayObservationSubscription(racing) error = %v", err)
