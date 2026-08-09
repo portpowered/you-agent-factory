@@ -385,7 +385,8 @@ func TestWatchConsumesCanonicalSSEStreamUsingDefaultSession(t *testing.T) {
 }
 
 func TestWatchFiniteConsumesEntireHTTPRetainedPrefixBeforeCompleting(t *testing.T) {
-	metadata, requestA, terminalA := watchRetainedTerminalPrefixSetup(t)
+	metadata, requestA, _ := watchReconnectSetup(t)
+	terminalA := watchTransitionEvent(t, "move-terminal", 3, "work-1", "ready", "done", true)
 	requestB := watchFactoryEvent(t, factoryapi.FactoryEventTypeWorkRequest, "request-b", 4,
 		factoryapi.WorkRequestEventPayload{Works: &[]factoryapi.Work{{
 			WorkId: watchStringPtr("work-b"), WorkTypeName: watchStringPtr("task"),
@@ -443,22 +444,14 @@ func TestWatchFiniteConsumesEntireHTTPRetainedPrefixBeforeCompleting(t *testing.
 	}
 }
 
-func watchRetainedTerminalPrefixSetup(t *testing.T) (factoryapi.FactoryEvent, factoryapi.FactoryEvent, factoryapi.FactoryEvent) {
-	t.Helper()
-	metadata := watchFactoryEvent(t, factoryapi.FactoryEventTypeInitialStructureRequest, "factory-retained", 1,
-		factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{
-			WorkTypes: &[]factoryapi.WorkType{{Name: "task", States: []factoryapi.WorkState{
-				{Name: "ready", Type: factoryapi.WorkStateTypeINITIAL},
-				{Name: "done", Type: factoryapi.WorkStateTypeTERMINAL},
-			}}},
-		}})
-	request := watchFactoryEvent(t, factoryapi.FactoryEventTypeWorkRequest, "request-a", 2,
-		factoryapi.WorkRequestEventPayload{Works: &[]factoryapi.Work{{
-			WorkId: watchStringPtr("work-a"), WorkTypeName: watchStringPtr("task"),
-			State: &factoryapi.WorkState{Name: "ready", Type: factoryapi.WorkStateTypeINITIAL},
-		}}})
-	terminal := watchTransitionEvent(t, "move-terminal", 3, "work-a", "ready", "done", true)
-	return metadata, request, terminal
+func TestWatchRejectsNegativeRetainedEventCount(t *testing.T) {
+	stream := &finiteWatchEventStream{retainedEventCount: -1}
+	err := watchWithSource(WatchConfig{Context: context.Background(), Output: io.Discard}, watchEventOpenFunc(func(context.Context, *watchEventCursor) (watchEventStream, error) {
+		return stream, nil
+	}))
+	if err == nil || !strings.Contains(err.Error(), "negative retained event count") {
+		t.Fatalf("watch error = %v, want retained-count validation failure", err)
+	}
 }
 
 type watchTestHTTPClock struct{}
@@ -491,6 +484,13 @@ func (stream *finiteWatchEventStream) Close() error {
 }
 
 func (stream *finiteWatchEventStream) RetainedEventCount() int { return stream.retainedEventCount }
+
+func TestNilHTTPWatchEventStreamHasNoRetainedEvents(t *testing.T) {
+	var stream *httpWatchEventStream
+	if got := stream.RetainedEventCount(); got != 0 {
+		t.Fatalf("nil stream retained count = %d, want zero", got)
+	}
+}
 
 func watchFactoryEvent(t *testing.T, eventType factoryapi.FactoryEventType, id string, sequence int, payload any) factoryapi.FactoryEvent {
 	t.Helper()
