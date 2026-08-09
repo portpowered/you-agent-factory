@@ -170,6 +170,54 @@ func TestExecCommandRunner_NonZeroExitReturnsResultWithoutError(t *testing.T) {
 	}
 }
 
+func TestExecCommandRunner_RunStreamingBoundsRetainedOutputAndForwardsAllChunks(t *testing.T) {
+	requireProcessIntegration(t)
+	const (
+		stdoutMarker = "streaming stdout complete"
+		stderrMarker = "authentication failed after large output"
+	)
+	var observedStdout, observedStderr int
+	result, err := testExecCommandRunner(t, nil).RunStreaming(
+		context.Background(),
+		CommandRequest{
+			Command: os.Args[0],
+			Args: []string{
+				"-test.run=TestExecCommandRunner_HelperProcess",
+				"--",
+				"streaming-output",
+			},
+			Env: append(os.Environ(), "GO_WANT_COMMAND_HELPER=1"),
+		},
+		func(stream string, chunk []byte) {
+			switch stream {
+			case OutputStreamStdout:
+				observedStdout += len(chunk)
+			case OutputStreamStderr:
+				observedStderr += len(chunk)
+			}
+		},
+	)
+	if err != nil {
+		t.Fatalf("RunStreaming() error = %v, want nil with non-zero exit result", err)
+	}
+	wantObservedBytes := streamingHelperOutputBytes()
+	if observedStdout != wantObservedBytes || observedStderr != wantObservedBytes {
+		t.Fatalf("observed output bytes = stdout %d/stderr %d, want %d each", observedStdout, observedStderr, wantObservedBytes)
+	}
+	if len(result.Stdout) > maxStreamingOutputBytes || len(result.Stderr) > maxStreamingOutputBytes {
+		t.Fatalf("retained output bytes = stdout %d/stderr %d, want at most %d each", len(result.Stdout), len(result.Stderr), maxStreamingOutputBytes)
+	}
+	if !strings.Contains(string(result.Stdout), stdoutMarker) {
+		t.Fatalf("retained stdout = %q, want terminal marker %q", result.Stdout, stdoutMarker)
+	}
+	if !strings.Contains(string(result.Stderr), stderrMarker) {
+		t.Fatalf("retained stderr = %q, want terminal classification marker %q", result.Stderr, stderrMarker)
+	}
+	if result.ExitCode != 23 {
+		t.Fatalf("ExitCode = %d, want 23", result.ExitCode)
+	}
+}
+
 func TestExecCommandRunner_ContextDeadlineReturnsSystemError(t *testing.T) {
 	requireProcessIntegration(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
@@ -790,6 +838,10 @@ func TestExecCommandRunner_HelperProcess(t *testing.T) {
 	case "fail":
 		fmt.Fprintln(os.Stderr, "command helper failed")
 		os.Exit(17)
+	case "streaming-output":
+		writeCommandHelperOutput(os.Stdout, streamingHelperOutputBytes(), "streaming stdout complete")
+		writeCommandHelperOutput(os.Stderr, streamingHelperOutputBytes(), "authentication failed after large output")
+		os.Exit(23)
 	case "sleep":
 		time.Sleep(time.Second)
 		os.Exit(0)
@@ -815,6 +867,31 @@ func TestExecCommandRunner_HelperProcess(t *testing.T) {
 		select {}
 	default:
 		fmt.Fprintf(os.Stderr, "unknown helper mode %q\n", mode)
+		os.Exit(2)
+	}
+}
+
+func streamingHelperOutputBytes() int {
+	return maxStreamingOutputBytes*4 + len("streaming stdout complete\n")
+}
+
+func writeCommandHelperOutput(writer io.Writer, total int, marker string) {
+	markerBytes := []byte(marker + "\n")
+	remaining := total - len(markerBytes)
+	chunk := []byte(strings.Repeat("x", 32<<10))
+	for remaining > 0 {
+		count := len(chunk)
+		if count > remaining {
+			count = remaining
+		}
+		if _, err := writer.Write(chunk[:count]); err != nil {
+			fmt.Fprintf(os.Stderr, "write helper output: %v\n", err)
+			os.Exit(2)
+		}
+		remaining -= count
+	}
+	if _, err := writer.Write(markerBytes); err != nil {
+		fmt.Fprintf(os.Stderr, "write helper marker: %v\n", err)
 		os.Exit(2)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -217,29 +219,42 @@ func (r *largeRolloutCommandRunner) RunStreaming(
 		return platformprocess.CommandResult{}, errors.New("large rollout command runner requires an output observer")
 	}
 	r.calls.Add(1)
-	file, err := os.Open(r.path)
+	runner, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil)
 	if err != nil {
 		return platformprocess.CommandResult{}, err
 	}
-	defer file.Close()
+	return runner.RunStreaming(ctx, platformprocess.CommandRequest{
+		Command: os.Args[0],
+		Args: []string{
+			"-test.run=TestLargeRolloutHelperProcess",
+			"--",
+			"stream",
+		},
+		Env: append(
+			os.Environ(),
+			"GO_WANT_LARGE_ROLLOUT_HELPER=1",
+			"LARGE_ROLLOUT_PATH="+r.path,
+		),
+	}, observer)
+}
 
-	buffer := make([]byte, largeRolloutStreamChunkSize)
-	for {
-		if err := ctx.Err(); err != nil {
-			return platformprocess.CommandResult{}, err
-		}
-		count, readErr := file.Read(buffer)
-		if count > 0 {
-			observer(platformprocess.OutputStreamStdout, buffer[:count])
-		}
-		if readErr == nil {
-			continue
-		}
-		if errors.Is(readErr, io.EOF) {
-			return platformprocess.CommandResult{ExitCode: 0}, nil
-		}
-		return platformprocess.CommandResult{}, readErr
+func TestLargeRolloutHelperProcess(t *testing.T) {
+	if os.Getenv("GO_WANT_LARGE_ROLLOUT_HELPER") != "1" {
+		return
 	}
+	path := os.Getenv("LARGE_ROLLOUT_PATH")
+	if path == "" {
+		t.Fatal("missing LARGE_ROLLOUT_PATH")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open generated rollout: %v", err)
+	}
+	defer file.Close()
+	if _, err := io.Copy(os.Stdout, file); err != nil {
+		t.Fatalf("stream generated rollout: %v", err)
+	}
+	os.Exit(0)
 }
 
 var _ platformprocess.CommandRunner = (*largeRolloutCommandRunner)(nil)

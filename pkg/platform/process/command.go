@@ -66,17 +66,22 @@ func NewExecCommandRunner(newCommand CommandFactory, clock Clock, logger logging
 
 // Run executes the command with process-tree cancellation, capturing stdout and stderr.
 func (r ExecCommandRunner) Run(ctx context.Context, req CommandRequest) (CommandResult, error) {
-	return r.run(ctx, req, nil)
+	return r.run(ctx, req, nil, false)
 }
 
 // RunStreaming executes the same injected subprocess effect while forwarding
 // incremental output. It prevents higher-level packages from constructing a
 // second host command implementation merely to observe output.
 func (r ExecCommandRunner) RunStreaming(ctx context.Context, req CommandRequest, observer OutputChunkObserver) (CommandResult, error) {
-	return r.run(ctx, req, observer)
+	return r.run(ctx, req, observer, true)
 }
 
-func (r ExecCommandRunner) run(ctx context.Context, req CommandRequest, observer OutputChunkObserver) (CommandResult, error) {
+func (r ExecCommandRunner) run(
+	ctx context.Context,
+	req CommandRequest,
+	observer OutputChunkObserver,
+	streaming bool,
+) (CommandResult, error) {
 	if err := ctx.Err(); err != nil {
 		return CommandResult{}, err
 	}
@@ -101,8 +106,12 @@ func (r ExecCommandRunner) run(ctx context.Context, req CommandRequest, observer
 		cmd.Dir = req.WorkDir
 	}
 
-	stdout := &observedBuffer{stream: OutputStreamStdout, observer: observer}
-	stderr := &observedBuffer{stream: OutputStreamStderr, observer: observer}
+	outputLimit := 0
+	if streaming {
+		outputLimit = maxStreamingOutputBytes
+	}
+	stdout := &observedBuffer{stream: OutputStreamStdout, observer: observer, maxBytes: outputLimit}
+	stderr := &observedBuffer{stream: OutputStreamStderr, observer: observer, maxBytes: outputLimit}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
