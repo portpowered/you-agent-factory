@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 )
@@ -133,6 +135,103 @@ func TestStreamPropagatesContextCancellation(t *testing.T) {
 	}
 }
 
+func TestStreamMapsPostOpenContextCancellationToInterruptedAndClosesBody(t *testing.T) {
+	body := &postOpenStreamBody{
+		first:  []byte("data: {\"delivery\":\"RECORD\",\"workerSessionId\":\"worker-session-1\",\"providerSession\":null,\"workIds\":[],\"event\":null,\"errorCode\":null,\"errorMessage\":null}\n\n"),
+		closed: make(chan struct{}),
+	}
+	protocol, err := clihttp.NewProtocol(postOpenStreamDoer{body: body}, testClock{})
+	if err != nil {
+		t.Fatalf("build post-open cancellation protocol: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	output := &streamSignalWriter{frame: make(chan struct{})}
+	done := make(chan error, 1)
+	go func() {
+		done <- NewStream(protocol)(StreamConfig{
+			Context: ctx, Server: "http://factory.test:7437", Provider: "codex", Kind: "session_id", ID: "session-1", Output: output,
+		})
+	}()
+
+	select {
+	case <-output.frame:
+	case <-time.After(time.Second):
+		t.Fatal("stream did not render the complete pre-cancellation frame")
+	}
+	cancel()
+
+	select {
+	case <-body.closed:
+	case <-time.After(time.Second):
+		t.Fatal("canceling the request did not close the open response body")
+	}
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("stream error = %v, want context.Canceled", err)
+		}
+		var typed *CLIError
+		if !errors.As(err, &typed) || typed.Code != "WORKER_SESSION_STREAM_INTERRUPTED" {
+			t.Fatalf("stream error = %v, want WORKER_SESSION_STREAM_INTERRUPTED", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("canceling the request did not unblock the response read")
+	}
+}
+
 type streamCancelDoer struct{}
 
 func (streamCancelDoer) Do(*http.Request) (*http.Response, error) { return nil, context.Canceled }
+
+type postOpenStreamDoer struct {
+	body *postOpenStreamBody
+}
+
+func (d postOpenStreamDoer) Do(request *http.Request) (*http.Response, error) {
+	go func() {
+		<-request.Context().Done()
+		_ = d.body.Close()
+	}()
+	return &http.Response{StatusCode: http.StatusOK, Body: d.body}, nil
+}
+
+type postOpenStreamBody struct {
+	mu     sync.Mutex
+	first  []byte
+	closed chan struct{}
+	once   sync.Once
+}
+
+func (b *postOpenStreamBody) Read(p []byte) (int, error) {
+	b.mu.Lock()
+	if len(b.first) > 0 {
+		n := copy(p, b.first)
+		b.first = b.first[n:]
+		b.mu.Unlock()
+		return n, nil
+	}
+	b.mu.Unlock()
+	<-b.closed
+	return 0, errors.New("stream body closed")
+}
+
+func (b *postOpenStreamBody) Close() error {
+	b.once.Do(func() { close(b.closed) })
+	return nil
+}
+
+type streamSignalWriter struct {
+	bytes.Buffer
+	frame chan struct{}
+	once  sync.Once
+}
+
+func (w *streamSignalWriter) Write(p []byte) (int, error) {
+	n, err := w.Buffer.Write(p)
+	if strings.Contains(string(p), "delivery=RECORD") {
+		w.once.Do(func() { close(w.frame) })
+	}
+	return n, err
+}

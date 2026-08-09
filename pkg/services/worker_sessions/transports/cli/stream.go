@@ -123,6 +123,9 @@ func consumeStreamResponse(config StreamConfig, jsonOutput bool, response clihtt
 			if errors.Is(readErr, io.EOF) {
 				return streamFailureAfterOpen(config, jsonOutput, started, "WORKER_SESSION_STREAM_CLOSED", "Worker Session event stream closed before terminal", nil)
 			}
+			if errors.Is(readErr, context.Canceled) || errors.Is(config.Context.Err(), context.Canceled) {
+				return streamFailureAfterOpen(config, jsonOutput, started, "WORKER_SESSION_STREAM_INTERRUPTED", "worker session stream interrupted", context.Canceled)
+			}
 			return streamFailureAfterOpen(config, jsonOutput, started, "WORKER_SESSION_STREAM_FAILED", "failed to read Worker Session event stream", readErr)
 		}
 		if len(payload) == 0 {
