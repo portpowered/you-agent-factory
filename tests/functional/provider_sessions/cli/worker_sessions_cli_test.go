@@ -81,6 +81,10 @@ func TestWorkerSessionsCLI(t *testing.T) {
 			t.Fatalf("worker-sessions help omitted %q:\n%s", marker, helpInputs.Stdout())
 		}
 	}
+	explicitHelpInputs := executeCLI(t, ctx, process, env, factoryDir, "worker-sessions", "--help")
+	if !strings.Contains(explicitHelpInputs.Stdout(), "Usage:") {
+		t.Fatalf("worker-sessions --help omitted usage:\n%s", explicitHelpInputs.Stdout())
+	}
 
 	successWorkID := submitWork(t, ctx, process, env, factoryDir, baseURL, "worker-session-cli-success")
 	waitForWorkerSession(t, ctx, process, env, factoryDir, baseURL, successWorkID)
