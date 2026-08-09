@@ -109,6 +109,7 @@ func applyRunResolvedInputs(cfg runcli.RunConfig, values map[string]any) (runcli
 	return cfg, nil
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func parseRunCommandArgs(cmd *cobra.Command, args []string) ([]string, error) {
 	remainder := make([]string, 0, len(args))
 	flagsByToken := indexRunCommandFlags(cmd)

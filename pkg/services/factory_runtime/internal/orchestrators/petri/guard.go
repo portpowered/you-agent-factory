@@ -274,25 +274,145 @@ type AllWithParentGuard struct {
 }
 
 var _ Guard = (*AllWithParentGuard)(nil)
+var _ RuntimeGuard = (*AllWithParentGuard)(nil)
 
 // Evaluate returns all candidates whose ParentID equals the WorkID of the
 // bound token identified by MatchBinding.
-func (g *AllWithParentGuard) Evaluate(candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, _ *MarkingSnapshot) ([]factorytoken.Token, bool) {
+func (g *AllWithParentGuard) Evaluate(candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, marking *MarkingSnapshot) ([]factorytoken.Token, bool) {
+	return g.evaluate(RuntimeGuardContext{}, candidates, bindings, marking)
+}
+
+// EvaluateRuntime checks the complete parent-scoped child population before
+// returning the terminal candidates used by the fan-in transition. The
+// terminal input place is only the binding surface; it is not the population
+// denominator because processing children may be in another place or in an
+// active dispatch.
+func (g *AllWithParentGuard) EvaluateRuntime(ctx RuntimeGuardContext, candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, marking *MarkingSnapshot) ([]factorytoken.Token, bool) {
+	if ctx.ParentChildRegistrations == nil {
+		return nil, false
+	}
+	return g.evaluate(ctx, candidates, bindings, marking)
+}
+
+func (g *AllWithParentGuard) evaluate(ctx RuntimeGuardContext, candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, marking *MarkingSnapshot) ([]factorytoken.Token, bool) {
 	bound, exists := bindings[g.MatchBinding]
-	if !exists {
+	if !exists || bound == nil || bound.Color.WorkID == "" {
 		return nil, false
 	}
 
 	parentWorkID := bound.Color.WorkID
-
-	var matched []factorytoken.Token
-	for _, c := range candidates {
-		if c.Color.ParentID == parentWorkID {
-			matched = append(matched, c)
-		}
+	matched := matchingParentChildren(candidates, parentWorkID, "")
+	if len(matched) == 0 {
+		return nil, false
 	}
 
-	return matched, len(matched) > 0
+	if !allTokensTerminal(ctx, matched) {
+		return nil, false
+	}
+
+	if ctx.ParentChildRegistrations != nil {
+		return evaluateRegisteredParentChildren(ctx, parentWorkID, matched, marking)
+	}
+
+	return evaluateVisibleParentChildren(ctx, parentWorkID, firstWorkTypeID(matched), matched, marking)
+}
+
+func evaluateRegisteredParentChildren(ctx RuntimeGuardContext, parentWorkID string, matched []factorytoken.Token, marking *MarkingSnapshot) ([]factorytoken.Token, bool) {
+	registration, known := ctx.ParentChildRegistrations[parentWorkID]
+	if !known || !registration.Complete || len(registration.Children) == 0 {
+		return nil, false
+	}
+
+	registered := parentChildTokens(marking, ctx.ActiveDispatches, parentWorkID, "")
+	registeredIDs := tokenIdentitySet(registration.Children)
+	if len(registered) != len(registeredIDs) {
+		return nil, false
+	}
+
+	targetPlaces := tokenPlaceSet(matched)
+	if !registeredChildrenTerminal(ctx, registered, registeredIDs, targetPlaces) {
+		return nil, false
+	}
+	if !tokensRegistered(matched, registeredIDs) {
+		return nil, false
+	}
+
+	// The guarded arc is the binding surface for the transition and may
+	// expose only one of several terminal places. The registration projection
+	// above is the completeness denominator; requiring its identities to equal
+	// matchedIDs would reject valid fan-in when another registered child is
+	// terminal in a different place.
+	return matched, true
+}
+
+func evaluateVisibleParentChildren(ctx RuntimeGuardContext, parentWorkID, childWorkTypeID string, matched []factorytoken.Token, marking *MarkingSnapshot) ([]factorytoken.Token, bool) {
+	registered := parentChildTokens(marking, ctx.ActiveDispatches, parentWorkID, childWorkTypeID)
+	if len(registered) == 0 {
+		// Preserve direct guard use with no runtime snapshot. The scheduler
+		// always supplies a marking, where the full-population check below is
+		// authoritative.
+		if marking == nil {
+			return matched, true
+		}
+		return nil, false
+	}
+
+	matchedIDs := tokenIdentitySet(matched)
+	targetPlaces := tokenPlaceSet(matched)
+	if !visibleChildrenTerminal(ctx, registered, matchedIDs, targetPlaces) {
+		return nil, false
+	}
+
+	return matched, true
+}
+
+func allTokensTerminal(ctx RuntimeGuardContext, tokens []factorytoken.Token) bool {
+	if ctx.StateCategoryForPlace == nil {
+		return true
+	}
+	for _, token := range tokens {
+		if ctx.StateCategoryForPlace(token.PlaceID) != runtimeStateCategoryTerminal {
+			return false
+		}
+	}
+	return true
+}
+
+func registeredChildrenTerminal(ctx RuntimeGuardContext, registered map[string]factorytoken.Token, registeredIDs, targetPlaces map[string]bool) bool {
+	for identity, child := range registered {
+		if !registeredIDs[identity] || !childIsTerminal(ctx, child, targetPlaces) {
+			return false
+		}
+	}
+	return true
+}
+
+func visibleChildrenTerminal(ctx RuntimeGuardContext, registered map[string]factorytoken.Token, matchedIDs, targetPlaces map[string]bool) bool {
+	if len(matchedIDs) != len(registered) {
+		return false
+	}
+	for identity, child := range registered {
+		if !matchedIDs[identity] || !childIsTerminal(ctx, child, targetPlaces) {
+			return false
+		}
+	}
+	return true
+}
+
+func childIsTerminal(ctx RuntimeGuardContext, child factorytoken.Token, targetPlaces map[string]bool) bool {
+	if ctx.StateCategoryForPlace != nil {
+		return ctx.StateCategoryForPlace(child.PlaceID) == runtimeStateCategoryTerminal
+	}
+	return targetPlaces[child.PlaceID]
+}
+
+func tokensRegistered(tokens []factorytoken.Token, registeredIDs map[string]bool) bool {
+	for _, token := range tokens {
+		if !registeredIDs[tokenIdentity(token)] {
+			return false
+		}
+	}
+	return true
 }
 
 // AnyWithParentGuard matches the first candidate whose ParentID matches a bound token's WorkID.
@@ -338,11 +458,7 @@ func (g *DependencyGuard) Evaluate(candidates []factorytoken.Token, _ map[string
 		return nil, false
 	}
 
-	// Build a lookup from WorkID → token for fast dependency resolution.
-	workIndex := make(map[string]*factorytoken.Token, len(marking.Tokens))
-	for _, tok := range marking.Tokens {
-		workIndex[tok.Color.WorkID] = tok
-	}
+	workIndex := dependencyWorkIndex(marking)
 
 	var matched []factorytoken.Token
 	for _, c := range candidates {
@@ -352,6 +468,33 @@ func (g *DependencyGuard) Evaluate(candidates []factorytoken.Token, _ map[string
 	}
 
 	return matched, len(matched) > 0
+}
+
+// AllDependenciesMet verifies DEPENDS_ON relations on every token in a
+// complete transition binding. It is evaluated after peer guards have selected
+// all joined inputs, so a secondary input cannot bypass its own dependency.
+func (g *DependencyGuard) AllDependenciesMet(bindings map[string][]factorytoken.Token, marking *MarkingSnapshot) bool {
+	if marking == nil {
+		return false
+	}
+
+	workIndex := dependencyWorkIndex(marking)
+	for _, tokens := range bindings {
+		for _, token := range tokens {
+			if !g.allDependenciesMet(token, workIndex) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func dependencyWorkIndex(marking *MarkingSnapshot) map[string]*factorytoken.Token {
+	workIndex := make(map[string]*factorytoken.Token, len(marking.Tokens))
+	for _, tok := range marking.Tokens {
+		workIndex[tok.Color.WorkID] = tok
+	}
+	return workIndex
 }
 
 // allDependenciesMet checks that every DEPENDS_ON relation on the token is
@@ -414,7 +557,6 @@ func (g *FanoutCountGuard) Evaluate(candidates []factorytoken.Token, bindings ma
 	}
 
 	parentWorkID := parent.Color.WorkID
-
 	var matched []factorytoken.Token
 	for _, c := range candidates {
 		if c.Color.ParentID == parentWorkID {
@@ -427,6 +569,88 @@ func (g *FanoutCountGuard) Evaluate(candidates []factorytoken.Token, bindings ma
 	}
 
 	return matched, true
+}
+
+const runtimeStateCategoryTerminal = "TERMINAL"
+
+func matchingParentChildren(candidates []factorytoken.Token, parentWorkID, childWorkTypeID string) []factorytoken.Token {
+	matched := make([]factorytoken.Token, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.Color.ParentID != parentWorkID {
+			continue
+		}
+		if childWorkTypeID != "" && candidate.Color.WorkTypeID != childWorkTypeID {
+			continue
+		}
+		matched = append(matched, candidate)
+	}
+	return matched
+}
+
+func firstWorkTypeID(tokens []factorytoken.Token) string {
+	for _, token := range tokens {
+		if token.Color.WorkTypeID != "" {
+			return token.Color.WorkTypeID
+		}
+	}
+	return ""
+}
+
+func parentChildTokens(marking *MarkingSnapshot, activeDispatches map[string]*interfaces.DispatchEntry, parentWorkID, childWorkTypeID string) map[string]factorytoken.Token {
+	children := make(map[string]factorytoken.Token)
+	if marking != nil {
+		for _, token := range marking.Tokens {
+			if token == nil || !isRegisteredChild(*token, parentWorkID, childWorkTypeID) {
+				continue
+			}
+			children[tokenIdentity(*token)] = *token
+		}
+	}
+	for _, dispatch := range activeDispatches {
+		if dispatch == nil {
+			continue
+		}
+		for _, token := range dispatch.ConsumedTokens {
+			if !isRegisteredChild(token, parentWorkID, childWorkTypeID) {
+				continue
+			}
+			identity := tokenIdentity(token)
+			if _, exists := children[identity]; !exists {
+				children[identity] = token
+			}
+		}
+	}
+	return children
+}
+
+func isRegisteredChild(token factorytoken.Token, parentWorkID, childWorkTypeID string) bool {
+	if token.Color.DataType == factorytoken.DataTypeResource || token.Color.ParentID != parentWorkID || token.Color.WorkID == "" {
+		return false
+	}
+	return childWorkTypeID == "" || token.Color.WorkTypeID == childWorkTypeID
+}
+
+func tokenIdentity(token factorytoken.Token) string {
+	if token.Color.WorkID != "" {
+		return "work:" + token.Color.WorkID
+	}
+	return "token:" + token.ID
+}
+
+func tokenIdentitySet(tokens []factorytoken.Token) map[string]bool {
+	identities := make(map[string]bool, len(tokens))
+	for _, token := range tokens {
+		identities[tokenIdentity(token)] = true
+	}
+	return identities
+}
+
+func tokenPlaceSet(tokens []factorytoken.Token) map[string]bool {
+	places := make(map[string]bool, len(tokens))
+	for _, token := range tokens {
+		places[token.PlaceID] = true
+	}
+	return places
 }
 
 // tokenColorField returns the value of a named field on a TokenColor.

@@ -49,6 +49,7 @@ func requireEOF(decoder *json.Decoder) error {
 	return fmt.Errorf("decode generated global config: unexpected trailing JSON")
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func mapConfig(generated factoryapi.GlobalConfig) (operatorsettings.Config, error) {
 	config := operatorsettings.Config{
 		BackendScopeID: optionalString(generated.BackendScopeID),

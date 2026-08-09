@@ -150,6 +150,7 @@ func (wrapped *invocationScheduleFactory) failInvocationScheduleController(
 // recoverInvocationSchedules reconstructs duration jobs from the durable tags
 // on active controller Work. Canonical Work remains authoritative: recovery
 // continues the largest recorded sequence and never repeats trigger-at-start.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (wrapped *invocationScheduleFactory) recoverInvocationSchedules(ctx context.Context) error {
 	wrapped.recoveryMu.Lock()
 	defer wrapped.recoveryMu.Unlock()
@@ -319,6 +320,7 @@ func cloneScheduleTags(tags map[string]string) map[string]string {
 	return cloned
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (wrapped *invocationScheduleFactory) observeInvocationSchedule(
 	ctx context.Context,
 	request automations.InvocationScheduleObservationRequest,

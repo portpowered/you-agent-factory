@@ -59,6 +59,7 @@ func TestStateAccessSealSubmitAndMovePipeline(t *testing.T) {
 // TestStateAccessSealFullStateAccessPipeline seals IMP-WORK-04 story 003 proof:
 // submit/move/list/get/move-and-read return detached Work-owned shapes through
 // one state_access Service and a private Session adapter fake.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestStateAccessSealFullStateAccessPipeline(t *testing.T) {
 	t.Parallel()
 

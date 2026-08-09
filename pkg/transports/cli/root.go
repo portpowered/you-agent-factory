@@ -1,5 +1,7 @@
 // Package cli defines Cobra commands for the agent-factory CLI.
 // Commands contain only flag parsing and delegate to command-specific packages.
+// backendsizecheck:ignore-file pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-file-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 package cli
 
 import (
@@ -369,6 +371,7 @@ func newMCPCommand(options CommandFactory) (*cobra.Command, error) {
 	}))
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, policy terminalpolicy.Policy, rootOptions CommandFactory, defaultInvocation bool) error {
 	cfg = applyRunScopedServerMode(cfg)
 	logger, err := policy.BuildLogger(rootOptions.buildTerminalLogger)

@@ -451,6 +451,7 @@ func mustAcknowledgeAttachment(t *testing.T, svc chatsessions.Service, sessionID
 // record with the exact aggregate sequence, ItemID, ParentItemID, source
 // identity, kind, schema, and payload the sequencer committed -- not a
 // regenerated or reconstructed value.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestChatSessionsSequencingIdentity_RetainedReadReturnsExactCommittedIdentity(t *testing.T) {
 	t.Parallel()
 	chatSessionsService, eventsService := newChatSessionsIdentityTestServices(t)

@@ -22,6 +22,7 @@ import (
 // typed non-success terminal statuses, invalid invocation inputs are rejected
 // with typed public errors, and canceled request context stops in-flight
 // invocations without fabricating terminal success results.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestAPIResultAndResultsExposeTerminalInvocationData(t *testing.T) {
 	t.Run("successfulInvocationExposesPrimaryResultOnInvocationAndWorkReads", func(t *testing.T) {
 		dir := scaffoldInvocationFactory(t, nil)

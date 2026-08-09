@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 )
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestLiveControlCapability_OpenListReadPreservesCanonicalIdentity(t *testing.T) {
 	t.Parallel()
 

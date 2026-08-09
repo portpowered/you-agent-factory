@@ -115,6 +115,7 @@ func TestDispatchFactoryInvocation_CallsInjectedResponseBridge(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestDeliverBoundWorkerChildProjectionPreservesNotificationOutcomes(t *testing.T) {
 	item, update := projectedWorkerChildMessage(t)
 	notifyErr := errors.New("notification failed")
@@ -496,6 +497,7 @@ func TestStreamTurnUpdatesKeepsInterleavedWorkerContentInsideItsOwningToolCall(t
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestStreamTurnUpdatesBoundsNoisyChildWithoutReducingSiblingBudget(t *testing.T) {
 	server, eventsSvc := newStreamingTestServer(t, &fakeFactoryTargetService{})
 	eventsSvc.seedWorkerChildItem(t, streamingTestSessionID, "worker-a", "", "dispatch-a", "worker-a-session", workers.PhaseStarted, "STARTING")

@@ -857,6 +857,8 @@ func (s *sequentialACPService) TryCancel(ctx context.Context, generationValue ac
 // and never derive a false Completed from B's terminal outcome. Every step
 // is gated by real channels (armTryCancelGate, beginExecute's ready channel,
 // Execute/ControlAttempt done channels) - no sleep-based timing is used.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestControlAttempt_ACPDelayedControlCannotRedirectToReplacementGenerationAfterIdentityReuse(t *testing.T) {
 	t.Parallel()
 

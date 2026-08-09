@@ -407,6 +407,7 @@ func (logger *capturingReplayInputLogger) Info(message string, fields ...any) {
 	logger.entries = append(logger.entries, entry)
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func assertReplayInputLogs(
 	t *testing.T,
 	entries []replayInputLogEntry,

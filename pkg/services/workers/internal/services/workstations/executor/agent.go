@@ -158,6 +158,7 @@ func (ae *AgentExecutor) Execute(ctx context.Context, request workerexecution.Wo
 	return ae.workResultForInferenceResponse(request, resp, outcome, diagnostics, retryCount, start)
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func effectiveWorkerDefinition(request workerexecution.WorkstationExecutionRequest, workerDef *interfaces.FactoryWorkerConfig) *interfaces.FactoryWorkerConfig {
 	if workerDef == nil {
 		return workerDef

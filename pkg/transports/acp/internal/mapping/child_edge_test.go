@@ -158,6 +158,7 @@ func TestBoundChildProjectionRejectsInvalidLimitsAndLineage(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestChildProjectionValidationRejectsEveryMalformedBoundaryShape(t *testing.T) {
 	association := ChildAssociation{DispatchID: "dispatch", WorkerSessionID: "worker"}
 	wrongOpening := workers.Draft{Kind: workers.KindMessage, Phase: workers.PhaseStarted, ItemID: "item", Payload: mustMarshal(t, workers.MessagePayload{Role: "assistant", ContentBlocks: []workers.ContentBlock{{Kind: workers.ContentBlockText, Text: "text"}}})}

@@ -28,6 +28,7 @@ const sessionLifecycleCRUDMissingSessionID = "dur-sess-missing-999"
 // and session show with matching folder identity and live runtime status markers,
 // and session delete removes it so subsequent list/show no longer treat it as
 // an open session participating in the owned runtime lifecycle.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestFactorySessionCreateListShowDelete(t *testing.T) {
 	primaryFactoryDir := support.ScaffoldFactory(t, sessionLifecycleCRUDFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{

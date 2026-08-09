@@ -346,6 +346,7 @@ func TestControl_UnsupportedPauseResumeAndBoundaryFailureLeaveLifecycleTruthful(
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestPauseResume_ContinuesExactProviderReferenceWithSameWorkerSessionCorrelation(t *testing.T) {
 	boundary := newControlledBoundary()
 	registry := newControlledRegistry(t, boundary)
@@ -527,6 +528,7 @@ func TestPauseResume_InvalidContinuationResultFailsAndRetainsAssociation(t *test
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestPauseResume_ContinuationFailureKeepsAssociationAndProviderClassification(t *testing.T) {
 	tests := []struct {
 		name                    string

@@ -1,38 +1,377 @@
 {
   "version": 1,
   "entries": [
-    { "packagePath": "pkg/platform/process", "fileCount": 17, "owner": "backend-maintainers", "removalReason": "Split process execution responsibilities into durable child packages." },
-    { "packagePath": "pkg/services/factory_definitions", "fileCount": 39, "owner": "factory-definition-maintainers", "removalReason": "Continue moving definition capabilities behind focused child-package contracts." },
-    { "packagePath": "pkg/services/factory_definitions/contracts", "fileCount": 26, "owner": "factory-definition-maintainers", "removalReason": "Partition definition contracts by stable consumer boundary." },
-    { "packagePath": "pkg/services/factory_definitions/definition", "fileCount": 35, "owner": "factory-definition-maintainers", "removalReason": "Split definition representation behavior by durable responsibility." },
-    { "packagePath": "pkg/services/factory_definitions/internal/services/compilation/runtimetests", "fileCount": 19, "owner": "factory-definition-maintainers", "removalReason": "Consolidate runtime loading fixtures and move focused scenarios beside their owners." },
-    { "packagePath": "pkg/services/factory_definitions/internal/services/validation/impl", "fileCount": 22, "owner": "factory-definition-maintainers", "removalReason": "Partition validation rules by definition concern." },
-    { "packagePath": "pkg/services/factory_runtime", "fileCount": 53, "owner": "factory-runtime-maintainers", "removalReason": "Move runtime capabilities behind focused orchestration and subsystem packages." },
-    { "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime", "fileCount": 24, "owner": "factory-runtime-maintainers", "removalReason": "Split runtime coordination from lifecycle and projection behavior." },
-    { "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/subsystems", "fileCount": 19, "owner": "factory-runtime-maintainers", "removalReason": "Separate subsystem adapters by stable runtime boundary." },
-    { "packagePath": "pkg/services/factory_sessions", "fileCount": 24, "owner": "factory-session-maintainers", "removalReason": "Continue extracting session capabilities into focused child packages." },
-    { "packagePath": "pkg/services/factory_sessions/internal/execution", "fileCount": 21, "owner": "factory-session-maintainers", "removalReason": "Separate execution coordination from invocation policy." },
-    { "packagePath": "pkg/services/factory_sessions/internal/runtimeopening", "fileCount": 19, "owner": "factory-session-maintainers", "removalReason": "Partition runtime opening composition, model binding, and runtime construction by responsibility." },
-    { "packagePath": "pkg/services/factory_sessions/internal/sessionservice", "fileCount": 28, "owner": "factory-session-maintainers", "removalReason": "Partition session service behavior by lifecycle responsibility." },
-    { "packagePath": "pkg/services/factory_sessions/transports/cli/session", "fileCount": 19, "owner": "factory-session-maintainers", "removalReason": "Separate session command lifecycle and rendering behavior." },
-    { "packagePath": "pkg/services/factory_sessions/transports/mcp", "fileCount": 17, "owner": "factory-session-maintainers", "removalReason": "Separate Factory Session MCP tools by lifecycle responsibility." },
-    { "packagePath": "pkg/services/models/internal/local", "fileCount": 17, "owner": "model-runtime-maintainers", "removalReason": "Split local model lifecycle and invocation responsibilities." },
-    { "packagePath": "pkg/services/models/internal/service", "fileCount": 16, "owner": "model-runtime-maintainers", "removalReason": "Separate model runtime scope, catalog, host lease, and local execution responsibilities." },
-    { "packagePath": "pkg/services/operator_settings", "fileCount": 17, "owner": "operator-settings-maintainers", "removalReason": "Separate settings persistence from effective configuration behavior." },
-    { "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor", "fileCount": 16, "owner": "provider-session-maintainers", "removalReason": "Consolidate cursor cases or extract durable cursor responsibilities." },
-    { "packagePath": "pkg/services/recordings/internal/events", "fileCount": 18, "owner": "recording-maintainers", "removalReason": "Partition recording event contracts by stable concern." },
-    { "packagePath": "pkg/services/recordings/internal/projections/projectiontests", "fileCount": 16, "owner": "recording-maintainers", "removalReason": "Consolidate projection fixtures and focused scenarios." },
-    { "packagePath": "pkg/services/recordings/internal/replay", "fileCount": 20, "owner": "recording-maintainers", "removalReason": "Split replay ingestion, validation, and execution responsibilities." },
-    { "packagePath": "pkg/services/work", "fileCount": 25, "owner": "work-maintainers", "removalReason": "Continue extracting Work capabilities into focused child packages." },
-    { "packagePath": "pkg/services/workers", "fileCount": 40, "owner": "worker-maintainers", "removalReason": "Continue extracting worker policy and execution capabilities." },
-    { "packagePath": "pkg/transports/cli", "fileCount": 19, "owner": "cli-maintainers", "removalReason": "Move command behavior into focused command packages." },
-    { "packagePath": "pkg/transports/cli/baseline", "fileCount": 20, "owner": "cli-maintainers", "removalReason": "Consolidate baseline command fixtures and split durable behaviors." },
-    { "packagePath": "pkg/transports/cli/cliinputs", "fileCount": 16, "owner": "cli-maintainers", "removalReason": "Consolidate input parsing cases or extract stable input domains." },
-    { "packagePath": "pkg/transports/cli/factory", "fileCount": 21, "owner": "cli-maintainers", "removalReason": "Split factory commands by lifecycle responsibility." },
-    { "packagePath": "pkg/transports/cli/run", "fileCount": 22, "owner": "cli-maintainers", "removalReason": "Split run invocation, presentation, and input behavior." },
-    { "packagePath": "pkg/transports/cli/submit", "fileCount": 16, "owner": "cli-maintainers", "removalReason": "Consolidate submit command cases or extract stable input behavior." },
-    { "packagePath": "pkg/transports/http/servertests", "fileCount": 16, "owner": "http-transport-maintainers", "removalReason": "Consolidate server fixtures and move focused scenarios beside handlers." },
-    { "packagePath": "pkg/transports/mapping/factorysession", "fileCount": 19, "owner": "transport-mapping-maintainers", "removalReason": "Partition Factory Session mapping by contract direction." },
-    { "packagePath": "pkg/wire", "fileCount": 21, "owner": "composition-maintainers", "removalReason": "Split composition tests and providers by durable process graph boundary." }
+    {
+      "packagePath": "pkg/platform/process",
+      "fileCount": 17,
+      "owner": "backend-maintainers",
+      "removalReason": "Split process execution responsibilities into durable child packages."
+    },
+    {
+      "packagePath": "pkg/services/automations/internal",
+      "fileCount": 18,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/filesystem_watchers/internal/service",
+      "fileCount": 16,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/automations/transports/http",
+      "fileCount": 20,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/chat_sessions/internal/service",
+      "fileCount": 25,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions",
+      "fileCount": 56,
+      "owner": "factory-definition-maintainers",
+      "removalReason": "Continue moving definition capabilities behind focused child-package contracts."
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/definition",
+      "fileCount": 33,
+      "owner": "factory-definition-maintainers",
+      "removalReason": "Split definition representation behavior by durable responsibility."
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal",
+      "fileCount": 21,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/contracts",
+      "fileCount": 27,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/runtimetests",
+      "fileCount": 19,
+      "owner": "factory-definition-maintainers",
+      "removalReason": "Consolidate runtime loading fixtures and move focused scenarios beside their owners."
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/impl",
+      "fileCount": 23,
+      "owner": "factory-definition-maintainers",
+      "removalReason": "Partition validation rules by definition concern."
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/transports/mcp",
+      "fileCount": 18,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/wire",
+      "fileCount": 20,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime",
+      "fileCount": 76,
+      "owner": "factory-runtime-maintainers",
+      "removalReason": "Move runtime capabilities behind focused orchestration and subsystem packages."
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal",
+      "fileCount": 16,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/orchestrators/petri",
+      "fileCount": 16,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/engine",
+      "fileCount": 16,
+      "owner": "backend-maintainers",
+      "removalReason": "Split orchestration engine files by runtime and submission responsibility."
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime",
+      "fileCount": 35,
+      "owner": "factory-runtime-maintainers",
+      "removalReason": "Split runtime coordination from lifecycle and projection behavior."
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/subsystems",
+      "fileCount": 19,
+      "owner": "factory-runtime-maintainers",
+      "removalReason": "Separate subsystem adapters by stable runtime boundary."
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions",
+      "fileCount": 31,
+      "owner": "factory-session-maintainers",
+      "removalReason": "Continue extracting session capabilities into focused child packages."
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/execution",
+      "fileCount": 28,
+      "owner": "factory-session-maintainers",
+      "removalReason": "Separate execution coordination from invocation policy."
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/runtimeopening",
+      "fileCount": 28,
+      "owner": "factory-session-maintainers",
+      "removalReason": "Partition runtime opening composition, model binding, and runtime construction by responsibility."
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/sessionservice",
+      "fileCount": 40,
+      "owner": "factory-session-maintainers",
+      "removalReason": "Partition session service behavior by lifecycle responsibility."
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/transports/cli/session",
+      "fileCount": 19,
+      "owner": "factory-session-maintainers",
+      "removalReason": "Separate session command lifecycle and rendering behavior."
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/transports/http",
+      "fileCount": 23,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/transports/mcp",
+      "fileCount": 19,
+      "owner": "factory-session-maintainers",
+      "removalReason": "Separate Factory Session MCP tools by lifecycle responsibility."
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/http",
+      "fileCount": 26,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/models/internal/local",
+      "fileCount": 17,
+      "owner": "model-runtime-maintainers",
+      "removalReason": "Split local model lifecycle and invocation responsibilities."
+    },
+    {
+      "packagePath": "pkg/services/models/internal/service",
+      "fileCount": 16,
+      "owner": "model-runtime-maintainers",
+      "removalReason": "Separate model runtime scope, catalog, host lease, and local execution responsibilities."
+    },
+    {
+      "packagePath": "pkg/services/models/transports/cli",
+      "fileCount": 26,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/models/transports/http",
+      "fileCount": 27,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/models/transports/mcp",
+      "fileCount": 20,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/operator_settings",
+      "fileCount": 19,
+      "owner": "operator-settings-maintainers",
+      "removalReason": "Separate settings persistence from effective configuration behavior."
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/transports/http",
+      "fileCount": 24,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/wire",
+      "fileCount": 18,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor",
+      "fileCount": 20,
+      "owner": "provider-session-maintainers",
+      "removalReason": "Consolidate cursor cases or extract durable cursor responsibilities."
+    },
+    {
+      "packagePath": "pkg/services/providers/transports/http",
+      "fileCount": 22,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/providers/transports/mcp",
+      "fileCount": 16,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal",
+      "fileCount": 20,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/events",
+      "fileCount": 19,
+      "owner": "recording-maintainers",
+      "removalReason": "Partition recording event contracts by stable concern."
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/projections/projectiontests",
+      "fileCount": 16,
+      "owner": "recording-maintainers",
+      "removalReason": "Consolidate projection fixtures and focused scenarios."
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/replay",
+      "fileCount": 20,
+      "owner": "recording-maintainers",
+      "removalReason": "Split replay ingestion, validation, and execution responsibilities."
+    },
+    {
+      "packagePath": "pkg/services/recordings/transports/http",
+      "fileCount": 17,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/recordings/transports/mcp",
+      "fileCount": 18,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/work",
+      "fileCount": 25,
+      "owner": "work-maintainers",
+      "removalReason": "Continue extracting Work capabilities into focused child packages."
+    },
+    {
+      "packagePath": "pkg/services/work/transports/http",
+      "fileCount": 25,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/work/transports/mcp",
+      "fileCount": 18,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/services/workers",
+      "fileCount": 43,
+      "owner": "worker-maintainers",
+      "removalReason": "Continue extracting worker policy and execution capabilities."
+    },
+    {
+      "packagePath": "pkg/services/workers/internal",
+      "fileCount": 26,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/transports/acp/internal/mapping",
+      "fileCount": 20,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/transports/acp/internal/stdio",
+      "fileCount": 22,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/transports/cli",
+      "fileCount": 22,
+      "owner": "cli-maintainers",
+      "removalReason": "Move command behavior into focused command packages."
+    },
+    {
+      "packagePath": "pkg/transports/cli/baseline",
+      "fileCount": 20,
+      "owner": "cli-maintainers",
+      "removalReason": "Consolidate baseline command fixtures and split durable behaviors."
+    },
+    {
+      "packagePath": "pkg/transports/cli/cliinputs",
+      "fileCount": 16,
+      "owner": "cli-maintainers",
+      "removalReason": "Consolidate input parsing cases or extract stable input domains."
+    },
+    {
+      "packagePath": "pkg/transports/cli/climanifestcobra",
+      "fileCount": 17,
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/transports/cli/commandregistry",
+      "fileCount": 16,
+      "owner": "cli-maintainers",
+      "removalReason": "Split command registry handlers by command family and remove this entry."
+    },
+    {
+      "packagePath": "pkg/transports/cli/factory",
+      "fileCount": 21,
+      "owner": "cli-maintainers",
+      "removalReason": "Split factory commands by lifecycle responsibility."
+    },
+    {
+      "packagePath": "pkg/transports/cli/run",
+      "fileCount": 27,
+      "owner": "cli-maintainers",
+      "removalReason": "Split run invocation, presentation, and input behavior."
+    },
+    {
+      "packagePath": "pkg/transports/cli/submit",
+      "fileCount": 17,
+      "owner": "cli-maintainers",
+      "removalReason": "Consolidate submit command cases or extract stable input behavior."
+    },
+    {
+      "packagePath": "pkg/transports/http/servertests",
+      "fileCount": 16,
+      "owner": "http-transport-maintainers",
+      "removalReason": "Consolidate server fixtures and move focused scenarios beside handlers."
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factorysession",
+      "fileCount": 21,
+      "owner": "transport-mapping-maintainers",
+      "removalReason": "Partition Factory Session mapping by contract direction."
+    },
+    {
+      "packagePath": "pkg/wire",
+      "fileCount": 46,
+      "owner": "composition-maintainers",
+      "removalReason": "Split composition tests and providers by durable process graph boundary."
+    }
   ]
 }

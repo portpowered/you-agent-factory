@@ -80,6 +80,7 @@ func TestAgentRunnerNormalizesProviderFailureKindsWithoutRetry(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestAgentRunnerPreservesCancellationAndDeadlineContext(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -294,6 +295,7 @@ func providerFailureFixture(
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func assertAgentFailureFacts(
 	t *testing.T,
 	result workers.RunnerExecutionResult,

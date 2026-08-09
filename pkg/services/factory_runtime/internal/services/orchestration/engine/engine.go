@@ -941,7 +941,12 @@ func (e *FactoryEngine) recordGeneratedSubmissionTokens(
 	normalized []workdomain.SubmitRequest,
 	tokens []*factorytoken.Token,
 ) {
+	parentIDs := make(map[string]struct{})
 	for index, token := range tokens {
+		e.runtimeState.Marking.RecordParentChildRegistration(token)
+		if token.Color.ParentID != "" {
+			parentIDs[token.Color.ParentID] = struct{}{}
+		}
 		if e.recordSubmission != nil {
 			e.recordSubmission(work.FactorySubmissionRecord{
 				SubmissionID: submissionRecordID(e.runtimeState.TickCount, source, index),
@@ -955,20 +960,31 @@ func (e *FactoryEngine) recordGeneratedSubmissionTokens(
 			e.recordWorkInput(e.runtimeState.TickCount, normalized[index], *token)
 		}
 	}
+	for parentID := range parentIDs {
+		e.runtimeState.Marking.CompleteParentChildRegistration(parentID)
+	}
 }
 
 // injectTokens creates tokens from submit requests and places them in INITIAL places.
 func (e *FactoryEngine) injectTokens(requests []workdomain.SubmitRequest) {
 	e.logger.Info("engine: injecting tokens", "count", len(requests))
+	parentIDs := make(map[string]struct{})
 	for _, req := range requests {
 		token, err := e.transformer.InitialTokenFromSubmit(req, e.clock.Now())
 		if err != nil {
 			e.logger.Error("engine: failed to convert submit request to token", "work_type_id", req.WorkTypeID, "error", err)
 			continue
 		}
+		e.runtimeState.Marking.RecordParentChildRegistration(token)
 		e.runtimeState.Marking.AddToken(token)
+		if token.Color.ParentID != "" {
+			parentIDs[token.Color.ParentID] = struct{}{}
+		}
 		if e.recordWorkInput != nil {
 			e.recordWorkInput(e.runtimeState.TickCount, req, *token)
 		}
+	}
+	for parentID := range parentIDs {
+		e.runtimeState.Marking.CompleteParentChildRegistration(parentID)
 	}
 }

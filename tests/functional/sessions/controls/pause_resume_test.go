@@ -308,6 +308,7 @@ func TestInterruptedWorkInspectSurfacesDispatchAndStopSummary(t *testing.T) {
 // TestAPIPauseResumeCancelAndTerminateFactorySession proves public API pause,
 // resume, cancel, and terminate controls return typed lifecycle-control outcomes
 // and leave each Factory Session in the expected lifecycle state after control.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestAPIPauseResumeCancelAndTerminateFactorySession(t *testing.T) {
 	factoryDir := pauseResumeControlsFactoryDirWithBusyLoop(t)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{

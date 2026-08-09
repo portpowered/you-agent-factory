@@ -69,6 +69,7 @@ func testWorkerChild(t *testing.T, service *Service, state *drainState) *workerC
 	return &workerChildren{service: service, liveCtx: context.Background(), deliveryCtx: context.Background(), chatSessionID: "chat", factorySessionID: "factory", state: state}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestWorkerChildAssociationValidationAndRegistration(t *testing.T) {
 	dispatchID := "dispatch"
 	validPayload, err := json.Marshal(factorydefinitions.DispatchWorkerSessionAssociationEventPayload{WorkerSessionID: "worker"})
@@ -207,6 +208,7 @@ func TestWorkerChildLifecycleConsumersFailClosedAndIsolateMalformedRecords(t *te
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestWorkerChildStartFinishAndSequencingFailuresAreExplicit(t *testing.T) {
 	state := newWorkerChildDrainState()
 	withoutWorkers := New(&bridgeSequencer{didFirst: make(chan struct{})}, bridgeTarget{}, nil, logging.NoopLogger{})
