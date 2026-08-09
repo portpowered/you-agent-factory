@@ -32,7 +32,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented retry-safe Work-watch reduction for repeated MODEL_REQUEST IDs with refreshed canonical data, preserving strict conflicts for Work events and monotonic ephemeral cursors. Added finite, --follow, exact replay, reconnect, NDJSON, and invalid-transition behavioral coverage. Review follow-up now uses the observed later-sequence/later-event-time retry shape with realistic dispatch context and an intervening model response, and proves reconnect from the later canonical cursor. The focused Work/watch/process command and make verify-fast pass."
+      "notes": "Implemented retry-safe Work-watch reduction for repeated MODEL_REQUEST IDs with refreshed canonical data, preserving strict conflicts for Work events and monotonic ephemeral cursors. Added finite, --follow, exact replay, reconnect, NDJSON, and invalid-transition behavioral coverage. Review follow-up now uses the observed later-sequence/later-event-time retry shape with realistic dispatch context and an intervening model response, and proves reconnect from the later canonical cursor. Removed the unrelated manifest/inventory meta-test during review follow-up. The focused Work/watch/process command and make verify-fast pass."
     },
     {
       "id": "wo-c2-fix-watch-event-id-conflict-002",
@@ -48,7 +48,7 @@
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Added a true built cmd/factory process-boundary Work-watch fixture that emits complete NDJSON before a malformed SSE frame, then proves the genuine stream-abort error stays actionable on stderr with session and decode context, returns the child process's non-zero exit code, and leaves stdout with exactly the complete NDJSON transition produced before the abort. The same built binary also proves successful finite completion returns exit code 0. The focused Work/watch/process command and make verify-fast pass."
+      "notes": "Added a true built cmd/factory process-boundary Work-watch fixture that emits complete NDJSON before a malformed SSE frame, then proves the genuine stream-abort error stays actionable on stderr with session and decode context, returns the child process's non-zero exit code, and leaves stdout with exactly the complete NDJSON transition produced before the abort. The same built binary also proves successful finite completion returns exit code 0. Removed the unrelated manifest/inventory meta-test during review follow-up. The focused Work/watch/process command and make verify-fast pass."
     }
   ]
 }
