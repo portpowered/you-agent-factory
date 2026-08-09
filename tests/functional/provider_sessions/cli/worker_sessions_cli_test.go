@@ -69,6 +69,19 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	server := support.StartProcessCommand(t, process, serverInputs.Input)
 	baseURL := api.WaitForURL(t)
 
+	helpInputs := executeCLI(t, ctx, process, env, factoryDir, "worker-sessions")
+	for _, marker := range []string{
+		"Usage:",
+		"list        List Worker Sessions",
+		"read        Read a finished Worker Session",
+		"show        Show one Worker Session",
+		"stream      Stream one Worker Session",
+	} {
+		if !strings.Contains(helpInputs.Stdout(), marker) {
+			t.Fatalf("worker-sessions help omitted %q:\n%s", marker, helpInputs.Stdout())
+		}
+	}
+
 	successWorkID := submitWork(t, ctx, process, env, factoryDir, baseURL, "worker-session-cli-success")
 	waitForWorkerSession(t, ctx, process, env, factoryDir, baseURL, successWorkID)
 	streamWorkerSession(t, ctx, process, env, factoryDir, baseURL, workerSessionsCodexSuccessID, "COMPLETED")
