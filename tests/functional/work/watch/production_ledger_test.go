@@ -29,14 +29,14 @@ const (
 	productionLedgerFixtureName = "production-retry-ledger.replay.json"
 	productionLedgerWorkID      = "work-production-retry"
 	productionLedgerWorkType    = "task"
-	productionLedgerRetryID     = "factory-event/model-response/dispatch-retry/1"
+	productionLedgerRetryID     = "factory-event/model-response/2cf2a099-909b-4446-8e8d-1453054e093c/model-request/1"
 )
 
 // TestWorkWatchRecordedProductionRetryLedger routes a checked-in, redacted
-// production-shaped event ledger through the public HTTP stream and the same
+// recorded event ledger through the public HTTP stream and the same
 // root-built Process used by the CLI entrypoint. The fixture deliberately
-// includes both a repeated model-response identity at a later sequence and a
-// distinct response ordinal from the corrected recorder.
+// includes the observed request-derived model-response identity at a later
+// sequence; corrected recorder identity proof remains in recorder tests.
 func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 	fixture := loadProductionLedgerFixture(t)
 	assertProductionLedgerFixture(t, fixture)
@@ -77,7 +77,7 @@ func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 			productionLedgerTransition(
 				t,
 				"factory-event/work-state-change/work-follow-up/processing",
-				16,
+				15,
 				"work-follow-up",
 				"init",
 				"processing",
@@ -85,7 +85,7 @@ func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 			productionLedgerTransition(
 				t,
 				"factory-event/work-state-change/work-follow-up/complete",
-				17,
+				16,
 				"work-follow-up",
 				"processing",
 				"complete",
@@ -236,8 +236,8 @@ func assertProductionLedgerFixture(t *testing.T, fixture productionLedgerFixture
 			if payload.ModelRequestId != "dispatch-retry/model-request/1" {
 				t.Fatalf("fixture MODEL_RESPONSE %q correlation = %q, want request ordinal", event.Id, payload.ModelRequestId)
 			}
-			if !strings.HasPrefix(event.Id, "factory-event/model-response/dispatch-retry/") {
-				t.Fatalf("fixture MODEL_RESPONSE id %q does not retain dispatch/ordinal shape", event.Id)
+			if event.Id != productionLedgerRetryID {
+				t.Fatalf("fixture MODEL_RESPONSE id %q does not retain the observed request-ordinal shape", event.Id)
 			}
 		case factoryapi.FactoryEventTypeWorkStateChange:
 			payload, err := event.Payload.AsWorkStateChangeEventPayload()
@@ -257,9 +257,6 @@ func assertProductionLedgerFixture(t *testing.T, fixture productionLedgerFixture
 	}
 	if got := ids[productionLedgerRetryID]; len(got) != 2 || got[0] >= got[1] {
 		t.Fatalf("repeated model-response identity sequences = %#v, want two increasing occurrences", got)
-	}
-	if len(ids["factory-event/model-response/dispatch-retry/2"]) != 1 {
-		t.Fatalf("distinct corrected model-response ordinal occurrences = %#v, want one", ids["factory-event/model-response/dispatch-retry/2"])
 	}
 	if got := modelRequestIDs["dispatch-retry/model-request/1"]; len(got) != 2 || got[0] >= got[1] {
 		t.Fatalf("refreshed model-request ordinal sequences = %#v, want two increasing occurrences", got)
@@ -462,9 +459,9 @@ func assertProductionFollowLines(t *testing.T, lines []workWatchLine) {
 		final  bool
 	}{
 		{productionLedgerWorkID, "init", "processing", "factory-event/work-state-change/work-production-retry/processing", 10, false},
-		{productionLedgerWorkID, "processing", "complete", "factory-event/work-state-change/work-production-retry/complete", 14, true},
-		{"work-follow-up", "init", "processing", "factory-event/work-state-change/work-follow-up/processing", 16, false},
-		{"work-follow-up", "processing", "complete", "factory-event/work-state-change/work-follow-up/complete", 17, true},
+		{productionLedgerWorkID, "processing", "complete", "factory-event/work-state-change/work-production-retry/complete", 13, true},
+		{"work-follow-up", "init", "processing", "factory-event/work-state-change/work-follow-up/processing", 15, false},
+		{"work-follow-up", "processing", "complete", "factory-event/work-state-change/work-follow-up/complete", 16, true},
 	}
 	if len(lines) != len(want) {
 		t.Fatalf("follow Work watch transition count = %d, want %d: %#v", len(lines), len(want), lines)

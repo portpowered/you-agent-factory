@@ -190,7 +190,7 @@
         "traceIds": ["trace-production-retry"],
         "workIds": ["work-production-retry"]
       },
-      "id": "factory-event/model-response/dispatch-retry/1",
+      "id": "factory-event/model-response/2cf2a099-909b-4446-8e8d-1453054e093c/model-request/1",
       "payload": {
         "attempt": 1,
         "durationMillis": 125,
@@ -264,32 +264,7 @@
         "traceIds": ["trace-production-retry"],
         "workIds": ["work-production-retry"]
       },
-      "id": "factory-event/model-response/dispatch-retry/1",
-      "payload": {
-        "attempt": 2,
-        "durationMillis": 141,
-        "model": "redacted-model",
-        "modelRequestId": "dispatch-retry/model-request/1",
-        "operation": "TEXT_GENERATION",
-        "outcome": "SUCCEEDED",
-        "outputPreview": "redacted successful retry",
-        "providerLocality": "CLOUD"
-      },
-      "schemaVersion": "agent-factory.event.v1",
-      "type": "MODEL_RESPONSE"
-    },
-    {
-      "context": {
-        "dispatchId": "dispatch-retry",
-        "eventTime": "2026-08-09T13:00:12Z",
-        "requestId": "request-production-retry",
-        "sequence": 12,
-        "sessionId": "~default",
-        "tick": 3,
-        "traceIds": ["trace-production-retry"],
-        "workIds": ["work-production-retry"]
-      },
-      "id": "factory-event/model-response/dispatch-retry/2",
+      "id": "factory-event/model-response/2cf2a099-909b-4446-8e8d-1453054e093c/model-request/1",
       "payload": {
         "attempt": 2,
         "durationMillis": 141,
@@ -308,7 +283,7 @@
         "dispatchId": "dispatch-retry",
         "eventTime": "2026-08-09T13:00:13Z",
         "requestId": "request-production-retry",
-        "sequence": 13,
+        "sequence": 12,
         "sessionId": "~default",
         "tick": 4,
         "traceIds": ["trace-production-retry"],
@@ -326,7 +301,7 @@
     {
       "context": {
         "eventTime": "2026-08-09T13:00:14Z",
-        "sequence": 14,
+        "sequence": 13,
         "sessionId": "~default",
         "tick": 4,
         "traceIds": ["trace-production-retry"],
@@ -349,7 +324,7 @@
     {
       "context": {
         "eventTime": "2026-08-09T13:00:15Z",
-        "sequence": 15,
+        "sequence": 14,
         "sessionId": "~default",
         "tick": 4
       },
