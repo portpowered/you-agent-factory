@@ -4,9 +4,14 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -18,16 +23,17 @@ import (
 )
 
 // TestCLIWorkWatchStreamAbortReturnsNonZeroExit proves a genuine Work-watch
-// stream failure crosses the customer process boundary: complete transition
-// lines remain on stdout, the abort is actionable on stderr, and the command
-// is unsuccessful instead of being converted to a successful process result.
+// stream failure crosses the actual built-you process boundary: complete
+// transition lines remain on stdout, the abort is actionable on stderr, and
+// the command is unsuccessful instead of being converted to a success.
 func TestCLIWorkWatchStreamAbortReturnsNonZeroExit(t *testing.T) {
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	session := harness.NewSession(t)
+	successSession := harness.NewSession(t)
 	fixturePayloads := processWatchAbortPayloads(t)
-	streamServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+	finitePayloads := processWatchFinitePayloads(t)
+	streamServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "text/event-stream")
-		writer.Header().Set(factorysessions.SessionEventStreamRetainedCountHeader, "0")
 		writer.Header().Set("Cache-Control", "no-cache")
 		flusher, ok := writer.(http.Flusher)
 		if !ok {
@@ -35,20 +41,29 @@ func TestCLIWorkWatchStreamAbortReturnsNonZeroExit(t *testing.T) {
 			return
 		}
 
-		for _, payload := range fixturePayloads {
+		payloads := fixturePayloads
+		if strings.Contains(request.URL.Path, "session-success") {
+			payloads = finitePayloads
+		}
+		writer.Header().Set(factorysessions.SessionEventStreamRetainedCountHeader, strconv.Itoa(len(payloads)))
+		for _, payload := range payloads {
 			_, _ = fmt.Fprintf(writer, "data: %s\n\n", payload)
 			flusher.Flush()
 		}
-		_, _ = fmt.Fprint(writer, "data: {\"id\":\"stream-abort")
-		flusher.Flush()
+		if strings.Contains(request.URL.Path, "session-abort") {
+			_, _ = fmt.Fprint(writer, "data: {\"id\":\"stream-abort")
+			flusher.Flush()
+		}
 	}))
 	defer streamServer.Close()
 	session.ServerURL = streamServer.URL
+	successSession.ServerURL = streamServer.URL
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
+	binaryPath := buildYouBinary(t, ctx, testutil.MustRepoRoot(t))
 	args := append(session.ServerFlags(), "work", "watch", "--session", "session-abort")
-	result, err := session.Run(ctx, args...)
+	result, err := runBuiltYouBinary(ctx, binaryPath, session, args...)
 	if err == nil {
 		t.Fatalf("aborted Work watch result = %#v; want process failure", result)
 	}
@@ -84,11 +99,79 @@ func TestCLIWorkWatchStreamAbortReturnsNonZeroExit(t *testing.T) {
 	if line.SchemaVersion != "you.work.watch.v1" || line.EventID != "move-before-abort" || line.Terminal {
 		t.Fatalf("stdout transition = %#v; want non-terminal you.work.watch.v1 move-before-abort", line)
 	}
+
+	successArgs := append(successSession.ServerFlags(), "work", "watch", "--session", "session-success")
+	successResult, successErr := runBuiltYouBinary(ctx, binaryPath, successSession, successArgs...)
+	if successErr != nil || successResult.ExitCode != 0 {
+		t.Fatalf("successful finite Work watch result = %#v error = %v; want exit code 0", successResult, successErr)
+	}
+}
+
+func buildYouBinary(t testing.TB, ctx context.Context, repoRoot string) string {
+	t.Helper()
+	binaryName := "you"
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+	binaryPath := filepath.Join(t.TempDir(), binaryName)
+	command := exec.CommandContext(ctx, "go", "build", "-o", binaryPath, "./cmd/factory")
+	command.Dir = repoRoot
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("build you CLI: %v\n%s", err, output)
+	}
+	return binaryPath
+}
+
+func runBuiltYouBinary(
+	ctx context.Context,
+	binaryPath string,
+	session *builtcliacceptance.Session,
+	args ...string,
+) (builtcliacceptance.RunResult, error) {
+	var stdout, stderr strings.Builder
+	command := exec.CommandContext(ctx, binaryPath, args...)
+	command.Dir = session.WorkDir
+	command.Env = session.ProcessEnv()
+	command.Stdout = &stdout
+	command.Stderr = &stderr
+	err := command.Run()
+	exitCode := 0
+	if err != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
+			return builtcliacceptance.RunResult{Stdout: stdout.String(), Stderr: stderr.String()}, err
+		}
+		exitCode = exitErr.ExitCode()
+	}
+	return builtcliacceptance.RunResult{
+		ExitCode: exitCode,
+		Stdout:   stdout.String(),
+		Stderr:   stderr.String(),
+	}, err
 }
 
 func processWatchAbortPayloads(t *testing.T) [][]byte {
 	t.Helper()
 	events := processWatchAbortEvents(t)
+	return marshalProcessWatchEvents(t, events)
+}
+
+func processWatchFinitePayloads(t *testing.T) [][]byte {
+	t.Helper()
+	events := processWatchAbortEvents(t)
+	events[2] = processWatchFactoryEvent(t, factoryapi.FactoryEventTypeWorkStateChange, "move-finite", 3, factoryapi.WorkStateChangeEventPayload{
+		WorkId:       "work-before-abort",
+		WorkTypeName: "task",
+		FromState:    "ready",
+		ToState:      "done",
+		Source:       factoryapi.WorkStateChangeSourceCLI,
+		Reason:       processWatchStringPtr("finished"),
+	})
+	return marshalProcessWatchEvents(t, events)
+}
+
+func marshalProcessWatchEvents(t *testing.T, events []factoryapi.FactoryEvent) [][]byte {
+	t.Helper()
 	payloads := make([][]byte, 0, len(events))
 	for _, event := range events {
 		payload, err := json.Marshal(event)
