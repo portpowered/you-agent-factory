@@ -52,7 +52,7 @@ Do not use an empty dispatch queue, a quiet log, or a process exit as a
 completion claim without checking the Work state. Continuous mode intentionally
 does not apply finite-drain classification while it is idle.
 
-## Finite runs and the drained-incomplete diagnostic
+## Finite runs and the A7 drained-incomplete diagnostic
 
 Finite runs are useful for a bounded batch. A finite server-enabled run returns
 success when no Work was admitted or every admitted Work item is terminal. If
@@ -66,7 +66,8 @@ Error: factory session drained with N non-terminal work items; run is incomplete
 
 There is no success or completion claim on stdout for that failure. The same
 finite classification applies to `--with-site`; the site adds the dashboard
-but does not turn non-terminal Work into success.
+but does not turn non-terminal Work into success. This is the current A7
+drained-incomplete diagnostic, not a provider or storage failure.
 
 The checked-in `operations-stranded-work.json` input deliberately places one
 `task` Work item in `in-review` without the matching review input. It is a
