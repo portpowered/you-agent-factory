@@ -415,3 +415,19 @@
   - Isolate an unrelated timing-sensitive functional failure locally before changing feature code; a passing isolated run supports bounded CI follow-up rather than scope expansion.
   - A PR is not review-ready while required functional and verification checks remain terminally failed, even when feature-specific and local gates are green.
 ---
+
+## [2026-08-08 21:21 -07:00] - wo-b1-antigravity-provider-golden-traces-005
+- What was implemented
+  - Completed the final CI follow-up for the already-complete five-story AGY implementation without changing production scope.
+  - Re-ran the failed GitHub Actions jobs on PR #1826 head `299364301`; the transient backend functional coverage-floor failure cleared and Verification Policy passed.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - The rerun passed Backend Functional Coverage, including the required real ACP evidence artifact upload, and Verification Policy; all other required checks on the PR head remain green.
+  - Thread-aware PR inspection reports five historical top-level conversation comments, no inline review threads, and no submitted reviews; the blocking requests are addressed in the current diff.
+  - All five PRD stories remain `passes: true`; no live AGY smoke was run.
+- **Learnings for future iterations:**
+  - A small functional coverage-floor miss in an unchanged package can be nondeterministic; rerun the failed CI jobs before changing feature code when the full test command completes and the diff does not touch that package.
+  - Use the explicit PR repository when a checkout has multiple remotes; default `gh pr view` may resolve the wrong branch owner.
+---
