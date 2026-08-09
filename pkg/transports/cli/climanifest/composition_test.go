@@ -183,6 +183,35 @@ func TestComposeRunInputsPreservesRunFlagsAndReplacesCompatibilityInput(t *testi
 	}
 }
 
+func TestComposeRunInputsUsesStaticWorkerReasoningEffortOverride(t *testing.T) {
+	manifest := compositionManifest()
+	command := manifest.Commands["you.run"]
+	command.Flags["worker-reasoning-effort"] = Flag{
+		ID:    sharedWorkerReasoningEffortFlagID,
+		Long:  sharedWorkerReasoningEffortExternalName,
+		Scope: "local",
+	}
+	manifest.Commands["you.run"] = command
+	signature := work.InvocationSignatureConfig{Parameters: []work.InvocationParameterConfig{{
+		Name:          sharedWorkerReasoningEffortParameter,
+		ExternalName:  sharedWorkerReasoningEffortExternalName,
+		DefaultValues: []string{""},
+		Bindings:      []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindNamed}},
+	}}}
+
+	effective, diagnostics, err := ComposeRunInputs(manifest, "you.run", &signature)
+	if err != nil || len(diagnostics) != 0 {
+		t.Fatalf("ComposeRunInputs() err=%v diagnostics=%#v", err, diagnostics)
+	}
+	if len(effective.FactoryParameters) != 0 {
+		t.Fatalf("Factory parameters = %#v, want shared static effort input omitted", effective.FactoryParameters)
+	}
+	static := staticInputByID(t, effective.StaticInputs, sharedWorkerReasoningEffortFlagID)
+	if !reflect.DeepEqual(static.PublicSpellings, []string{sharedWorkerReasoningEffortExternalName}) {
+		t.Fatalf("static effort input = %#v, want manifest-owned flag", static)
+	}
+}
+
 func TestComposeRunInputsNamedAndFileSelectionsAreEquivalent(t *testing.T) {
 	manifest := compositionManifest()
 	namedFactorySignature := work.InvocationSignatureConfig{Parameters: []work.InvocationParameterConfig{{

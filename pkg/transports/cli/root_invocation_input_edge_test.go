@@ -80,6 +80,60 @@ func TestResolveFactoryInvocationInput_RequiresProcessStdinForExplicitDash(t *te
 	}
 }
 
+func TestResolveRunFactoryPromptToFileRejectsNonPromptRunShapes(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name    string
+		prepare func(*testing.T, *cobra.Command, *runcli.RunConfig)
+		want    string
+	}{
+		{
+			name: "work",
+			prepare: func(t *testing.T, cmd *cobra.Command, cfg *runcli.RunConfig) {
+				cmd.Flags().String("work", "", "")
+				if err := cmd.Flags().Set("work", "work.json"); err != nil {
+					t.Fatal(err)
+				}
+				cfg.WorkFile = "work.json"
+			},
+			want: "--to-file cannot be used with --work",
+		},
+		{
+			name: "continuous",
+			prepare: func(_ *testing.T, _ *cobra.Command, cfg *runcli.RunConfig) {
+				cfg.Continuously = true
+			},
+			want: "--to-file cannot be used with --continuously",
+		},
+		{
+			name: "replay",
+			prepare: func(_ *testing.T, _ *cobra.Command, cfg *runcli.RunConfig) {
+				cfg.ReplayPath = "replay.json"
+			},
+			want: "--to-file cannot be used with --replay",
+		},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "run"}
+			cmd.SetContext(context.Background())
+			cfg := runcli.RunConfig{InvocationFileExplicit: true, InvocationFilePath: "prompt.txt"}
+			test.prepare(t, cmd, &cfg)
+			preparation := rootInvocationInputScript{prepare: func(
+				context.Context,
+				work.InvocationInputPreparationRequest,
+			) (work.PreparedInvocationInput, error) {
+				t.Fatal("non-prompt run shape attempted invocation preparation")
+				return work.PreparedInvocationInput{}, nil
+			}}
+			if err := resolveRunFactoryPrompt(cmd, &cfg, nil, preparation); err == nil || err.Error() != test.want {
+				t.Fatalf("resolveRunFactoryPrompt error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
 func TestCollectRunInvocationStdinPreservesReaderFailure(t *testing.T) {
 	want := errors.New("reader failed")
 	_, err := collectRunInvocationStdin([]string{"-"}, failingInvocationReader{err: want}, func() bool { return true })

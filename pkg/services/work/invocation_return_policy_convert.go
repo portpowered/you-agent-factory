@@ -155,6 +155,7 @@ func normalizeArgumentsInputToInternal(input NormalizeArgumentsInput) invocation
 		NamedArgs:            namedArgumentInputsToInternal(input.NamedArgs),
 		DirectArgs:           namedArgumentInputsToInternal(input.DirectArgs),
 		StdinText:            input.StdinText,
+		FileText:             input.FileText,
 		CompatibilityText:    input.CompatibilityText,
 		CompatibilityContent: contentPartsToInternal(input.CompatibilityContent),
 	}
@@ -413,6 +414,7 @@ func invocationInputPreparationRequestToInternal(request InvocationInputPreparat
 		Arguments:            cloneStringSlice(request.Arguments),
 		Signature:            invocationSignatureToInternal(request.Signature),
 		StdinText:            request.StdinText,
+		FilePath:             request.FilePath,
 		DirectArgs:           namedArgumentInputsToInternal(request.DirectArgs),
 		CompatibilityContent: contentPartsToInternal(request.CompatibilityContent),
 	}

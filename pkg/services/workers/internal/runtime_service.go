@@ -160,6 +160,7 @@ func New(
 	verbose bool,
 	factoryRunnerID string,
 	runWorktree string,
+	workerReasoningEffort string,
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workers.Provider,
 	clock func() time.Time,
@@ -241,7 +242,7 @@ func New(
 		retryRandom,
 		workstationFiles,
 		decisionEnvelopeService,
-	).WithRunWorktree(runWorktree)
+	).WithRunWorktree(runWorktree).WithRunReasoningEffort(workerReasoningEffort)
 	return &Service{
 		sessions:                          sessions,
 		models:                            modelService,

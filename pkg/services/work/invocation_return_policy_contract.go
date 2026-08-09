@@ -11,8 +11,8 @@ import (
 // Invocation/return-policy typed failures peers can distinguish on the root
 // Service slice (PrepareInvocationInput / ResolvePrimaryResult).
 var (
-	ErrInvalidInvocationInput    = errors.New("invalid invocation input")
-	ErrUnsupportedReturnPolicy   = errors.New("unsupported invocation return policy")
+	ErrInvalidInvocationInput  = errors.New("invalid invocation input")
+	ErrUnsupportedReturnPolicy = errors.New("unsupported invocation return policy")
 )
 
 const (
@@ -28,6 +28,7 @@ const (
 	ArgumentSourceKindStructured           ArgumentSourceKind = "STRUCTURED"
 	ArgumentSourceKindStdin                ArgumentSourceKind = "STDIN"
 	ArgumentSourceKindDefault              ArgumentSourceKind = "DEFAULT"
+	ArgumentSourceKindFile                 ArgumentSourceKind = "FILE"
 	ArgumentSourceKindCompatibilityText    ArgumentSourceKind = "COMPATIBILITY_TEXT"
 	ArgumentSourceKindCompatibilityContent ArgumentSourceKind = "COMPATIBILITY_CONTENT"
 )
@@ -74,6 +75,7 @@ type NormalizeArgumentsInput struct {
 	NamedArgs            []NamedArgumentInput
 	DirectArgs           []NamedArgumentInput
 	StdinText            *string
+	FileText             *string
 	CompatibilityText    *string
 	CompatibilityContent []WorkContentPart
 }
@@ -97,6 +99,7 @@ type InvocationInputPreparationRequest struct {
 	Arguments            []string
 	Signature            *InvocationSignatureConfig
 	StdinText            *string
+	FilePath             *string
 	DirectArgs           []NamedArgumentInput
 	CompatibilityContent []WorkContentPart
 }
@@ -311,17 +314,33 @@ func ClassifyFailedInvocation(
 	return primaryResultErrorFromInternal(result), true
 }
 
-func NewInvocationInputPreparation() InvocationInputPreparation {
-	return invocationInputPreparationAdapter{}
+func NewInvocationInputPreparation(
+	readFile SubmittedFileReader,
+	inspectPath SubmittedFilePathInspector,
+) InvocationInputPreparation {
+	return newInvocationInputPreparation(readFile, inspectPath)
 }
 
-type invocationInputPreparationAdapter struct{}
+func newInvocationInputPreparation(
+	readFile SubmittedFileReader,
+	inspectPath SubmittedFilePathInspector,
+) InvocationInputPreparation {
+	return invocationInputPreparationAdapter{readFile: readFile, inspectPath: inspectPath}
+}
 
-func (invocationInputPreparationAdapter) PrepareInvocationInput(
+type invocationInputPreparationAdapter struct {
+	readFile    SubmittedFileReader
+	inspectPath SubmittedFilePathInspector
+}
+
+func (adapter invocationInputPreparationAdapter) PrepareInvocationInput(
 	ctx context.Context,
 	request InvocationInputPreparationRequest,
 ) (PreparedInvocationInput, error) {
-	prepared, err := invocationreturnpolicy.NewInvocationInputPreparation().PrepareInvocationInput(
+	prepared, err := invocationreturnpolicy.NewInvocationInputPreparation(
+		invocationreturnpolicy.InvocationInputFileReader(adapter.readFile),
+		invocationreturnpolicy.InvocationInputPathInspector(adapter.inspectPath),
+	).PrepareInvocationInput(
 		ctx,
 		invocationInputPreparationRequestToInternal(request),
 	)

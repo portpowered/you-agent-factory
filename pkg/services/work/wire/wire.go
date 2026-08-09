@@ -93,7 +93,7 @@ func NewService(
 		writeFile,
 		openFile,
 	)
-	service := internalservice.NewService(runtimes, nil, contentStaging, contentMaterializer)
+	service := internalservice.NewService(runtimes, nil, nil, contentStaging, contentMaterializer)
 	return service, nil
 }
 
@@ -104,12 +104,14 @@ func NewService(
 func NewRuntimeService(
 	runtimes work.RuntimeResolver,
 	readSubmittedFile work.SubmittedFileReader,
+	inspectSubmittedFile work.SubmittedFilePathInspector,
 	contentStaging work.ContentStagingService,
 	contentMaterializer work.ContentMaterializer,
 ) work.Service {
 	return internalservice.NewService(
 		runtimes,
 		readSubmittedFile,
+		inspectSubmittedFile,
 		contentStaging,
 		contentMaterializer,
 	)

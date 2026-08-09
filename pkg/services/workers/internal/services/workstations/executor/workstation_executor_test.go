@@ -962,6 +962,48 @@ func TestWorkstationExecutor_ModelWorkstation_PreservesDistinctMultiInputCanonic
 	}
 }
 
+func TestWorkstationExecutor_RunReasoningEffortOverrideReachesExecutionRequest(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                string
+		workerEffort        string
+		runEffort           string
+		wantReasoningEffort string
+	}{
+		{name: "omitted preserves authored effort", workerEffort: "medium", wantReasoningEffort: "medium"},
+		{name: "run override wins", workerEffort: "low", runEffort: "xhigh", wantReasoningEffort: "xhigh"},
+	}
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			mock := &dispatchCapturingExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}}
+			we := newTestWorkstationExecutor(staticRuntimeConfig{
+				Workers: map[string]*interfaces.FactoryWorkerConfig{
+					"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system", ReasoningEffort: tc.workerEffort},
+				},
+				Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+					"standard": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "do work"},
+				},
+			}, mock)
+			we.RunReasoningEffort = tc.runEffort
+
+			result, err := we.Execute(context.Background(), work.WorkDispatch{
+				DispatchID: "d-reasoning", TransitionID: "t-reasoning", WorkerType: "worker-a", WorkstationName: "standard",
+			})
+			if err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if result.Outcome != workerexecution.OutcomeAccepted {
+				t.Fatalf("outcome = %s, want accepted", result.Outcome)
+			}
+			if mock.dispatch.ReasoningEffort != tc.wantReasoningEffort {
+				t.Fatalf("execution request reasoning effort = %q, want %q", mock.dispatch.ReasoningEffort, tc.wantReasoningEffort)
+			}
+		})
+	}
+}
+
 func TestWorkstationExecutor_ResolveWorkstationExecutionContext_AppliesResolvedRuntimeFields(t *testing.T) {
 	projectRoot := t.TempDir()
 	we := newTestWorkstationExecutor(canonicalWorkstationRuntimeConfig(projectRoot), &wsMockExecutor{})

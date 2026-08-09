@@ -143,10 +143,11 @@ func TestInvocationTargetCarriesOnlyBoundedRuntimeSelection(t *testing.T) {
 	t.Parallel()
 
 	target := invocationTarget(RunConfig{
-		Dir:               "/tmp/factory",
-		FactoryConfigPath: "/tmp/factory/factory.yaml",
-		Worktree:          "feature-login",
-		Port:              7437,
+		Dir:                   "/tmp/factory",
+		FactoryConfigPath:     "/tmp/factory/factory.yaml",
+		Worktree:              "feature-login",
+		Port:                  7437,
+		WorkerReasoningEffort: "xhigh",
 	}, zap.NewNop(), nil)
 	if target.FactoryDir != "/tmp/factory" {
 		t.Fatalf("FactoryDir = %q, want /tmp/factory", target.FactoryDir)
@@ -159,6 +160,9 @@ func TestInvocationTargetCarriesOnlyBoundedRuntimeSelection(t *testing.T) {
 	}
 	if target.Worktree != "feature-login" {
 		t.Fatalf("Worktree = %q, want feature-login", target.Worktree)
+	}
+	if target.WorkerReasoningEffort != "xhigh" {
+		t.Fatalf("WorkerReasoningEffort = %q, want xhigh", target.WorkerReasoningEffort)
 	}
 }
 

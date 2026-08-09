@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -183,6 +185,7 @@ func TestRunDocumentation_RepresentativeExamplesReachCurrentCLIBoundary(t *testi
 		"you run --work ./docs/examples/startup-work.json",
 		`you run --factory ./factory.json "Review the release notes"`,
 		"you run --dir ./factory --work ./docs/examples/startup-work.json",
+		`you run --provider codex --worker-reasoning-effort xhigh --to-file "prompt files\release brief.txt"`,
 	} {
 		if !strings.Contains(doc, command) {
 			t.Fatalf("packaged run guide missing executable example %q", command)
@@ -220,6 +223,59 @@ func TestRunDocumentation_RepresentativeExamplesReachCurrentCLIBoundary(t *testi
 	}
 	if got := runs[2].WorkFile; got != "./docs/examples/startup-work.json" {
 		t.Fatalf("directory batch WorkFile = %q, want explicit documented Work", got)
+	}
+}
+
+func TestRunDocumentation_FileBackedEffortExampleReachesCurrentCLIBoundary(t *testing.T) {
+	doc, err := docscli.Markdown("run")
+	if err != nil {
+		t.Fatalf("Markdown(run) error = %v", err)
+	}
+	for _, marker := range []string{
+		"--worker-reasoning-effort",
+		"canonical authored-Worker values",
+		"--to-file",
+		"strictly conflicts",
+		"signature-defined",
+		"CRLF/LF",
+		`you run --provider codex --worker-reasoning-effort xhigh --to-file "prompt files\release brief.txt"`,
+	} {
+		if !strings.Contains(doc, marker) {
+			t.Fatalf("packaged run guide missing file-backed effort contract marker %q", marker)
+		}
+	}
+
+	originalRunCLI := runCLI
+	defer func() { runCLI = originalRunCLI }()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+	factoryPath := writePortableFactoryWithDefaultHandling(t, t.TempDir())
+	promptPath := filepath.Join(t.TempDir(), "prompt files", "release brief.txt")
+	if err := os.MkdirAll(filepath.Dir(promptPath), 0o755); err != nil {
+		t.Fatalf("create documented prompt directory: %v", err)
+	}
+	if err := os.WriteFile(promptPath, []byte("documented prompt\n"), 0o600); err != nil {
+		t.Fatalf("write documented prompt: %v", err)
+	}
+	executeDocumentedRunExample(t, []string{
+		"run", "--factory", factoryPath,
+		"--provider", "codex",
+		"--worker-reasoning-effort", "xhigh",
+		"--to-file", promptPath,
+	})
+
+	if got.ProviderOverride != "codex" || got.WorkerReasoningEffort != "xhigh" {
+		t.Fatalf("documented run overrides = provider %q, effort %q; want codex/xhigh", got.ProviderOverride, got.WorkerReasoningEffort)
+	}
+	if got.InvocationFilePath != promptPath || !got.InvocationFileExplicit {
+		t.Fatalf("documented file input = path %q explicit %t; want %q/true", got.InvocationFilePath, got.InvocationFileExplicit, promptPath)
+	}
+	if got.InvocationPositionalText != nil {
+		t.Fatalf("documented file input unexpectedly carried positional text %q", *got.InvocationPositionalText)
 	}
 }
 
