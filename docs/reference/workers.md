@@ -14,6 +14,9 @@ prompt/runtime fields in `you docs workstations`, and keep top-level
 `factory.json` work type and routing context in
 `you docs config`.
 
+For dispatch-time prompt reload and live Worker Session inspection, use
+`you docs operations`.
+
 ## Canonical Placement
 
 Keep worker runtime definitions in the split layout beside `factory.json`:

@@ -20,6 +20,9 @@ Use `you docs factory-validation` for the required pre-run gate, its complete
 static checks, and the worked unsupported-join failure. This page keeps the
 end-to-end order without duplicating that validation reference.
 
+For keeping a real pipeline alive across idle periods or recovering after a
+process restart, use `you docs operations`.
+
 ## Recommended Layout
 
 ```text

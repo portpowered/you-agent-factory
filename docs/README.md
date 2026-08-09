@@ -3,9 +3,10 @@ This is the table of contents for the Agent Factory documentation.
 The installed CLI also packages a fixed reference surface under
 `you docs`. Run `you docs` to list the packaged topics, or
 run `you docs <topic>` for packaged topics such as `agents`,
-`authoring-factories`, `config`, `factory-validation`, `mock-workers`, `record-replay`, `guards`,
-`relationships`, `work`, `workstations`, `workers`, `resources`, `models`,
-`batch-inputs`, or `templates`.
+`authoring-factories`, `config`, `factory-validation`, `mock-workers`,
+`record-replay`, `guards`, `relationships`, `operations`, `work`,
+`workstations`, `workers`, `resources`, `models`, `batch-inputs`, or
+`templates`.
 
 ## For agents
 
@@ -48,6 +49,9 @@ These are the fixed topic names accepted by `you docs <topic>`.
 - `relationships` is the packaged batch and lineage relations reference. Run
   `you docs relationships` for `DEPENDS_ON`, `PARENT_CHILD`, and runtime
   `SPAWNED_BY` semantics.
+- `operations` is the packaged real-pipeline lifetime and restart-recovery
+  runbook. Run `you docs operations` for continuous operation, finite-drain
+  classification, and same-name Work restoration.
 - `work` is the packaged submitted-work reference. Run `you docs work` for
   session-scoped work routes, tags, batch cross-links, and submission-oriented runtime flow.
 - `workstations` is the packaged workstation reference. `workstation` remains
