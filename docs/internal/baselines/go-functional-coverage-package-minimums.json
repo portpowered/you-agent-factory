@@ -2703,6 +2703,10 @@
       "minimum": 39.01
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http",
+      "minimum": 52.16
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire",
       "exception": {
         "kind": "measurement",

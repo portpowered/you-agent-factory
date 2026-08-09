@@ -2441,6 +2441,10 @@
       "minimum": 82.73
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/worker_sessions",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/http",
       "minimum": 63.82
     },
