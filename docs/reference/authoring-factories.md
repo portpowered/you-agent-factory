@@ -17,6 +17,9 @@ Use `you docs config` for the field-by-field
 runtime fields, `you docs workers` for worker backend fields, and
 `you docs batch-inputs` for the watched-file and API request shape.
 
+For keeping a real pipeline alive across idle periods or recovering after a
+process restart, use `you docs operations`.
+
 ## Recommended Layout
 
 ```text

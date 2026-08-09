@@ -21,6 +21,10 @@ so the published primitive usage stays aligned with the shipped host API.
   `FACTORY_REQUEST_BATCH` request for a `story` work item in the `init` state.
   Pass it with `you run --dir ./examples/write-code-review --work
   ./docs/examples/startup-work.json`.
+- [`operations-stranded-work.json`](operations-stranded-work.json) is an
+  intentionally incomplete `task` request used by `you docs operations` to
+  demonstrate a finite drain with non-terminal Work. It is diagnostic input,
+  not a production batch.
 
 Run the example workflow with mock workers and startup work:
 

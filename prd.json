@@ -1,54 +1,78 @@
 {
-  "project": "Make you work watch Retry-Safe and Preserve Failure Exit Codes",
-  "branchName": "wo-c2-fix-watch-event-id-conflict",
-  "description": "Correct you work watch so finite and --follow streams survive legitimate provider dispatch retries that re-emit a model-request event ID with refreshed canonical data, while preserving the you.work.watch.v1 NDJSON contract and making genuine stream aborts exit non-zero.",
+  "project": "WO-D5 Operations Page — Running Real Pipelines",
+  "branchName": "wo-d5-operations-page",
+  "description": "Publish a canonical packaged operations runbook that establishes you run --with-server --continuously as the production-oriented real-pipeline run shape, explains finite drain, stranded Work, restart recovery, retry and resource hazards, and provides a current-binary-verified inspection toolkit.",
   "context": {
-    "customerAsk": "Make finite and --follow Work watches stream successfully for real Factory Sessions that contain provider dispatch retries, without changing the you.work.watch.v1 NDJSON shape or adding storage; genuine stream aborts must return a non-zero CLI process exit.",
-    "problem": "The strict watch reducer treats any event ID reused with differing payload data as corruption. Real Factory ledgers re-emit model-request IDs at the same request ordinal across provider dispatch retries with refreshed canonical data, so legitimate live history aborts both finite and following watches. The CLI then prints the abort but can leave the shell with exit code 0.",
-    "solution": "Align invocation-local Work watch reduction with canonical Factory Event ordering and Work-transition projection so unrelated retry enrichment cannot abort or distort transition output, then propagate genuine stream errors through the root CLI process boundary as non-zero exits while retaining stderr diagnostics and the existing NDJSON contract."
+    "customerAsk": "Create the WO-D5 operations page from docs/temp/work-order.md under docs/reference/. Document --with-server --continuously as the way to run real pipelines; finite and stranded behavior including the A7 exit-1 diagnostic; inclusive VISIT_COUNT and loop breakers; resource capacity and priority inversion; in-memory session loss and same-name Work restoration; dispatch-time prompt hot reload; worker-sessions list/show/stream/read; and work watch --follow. Execute every documented CLI invocation against the current binary and verify packaged docs with make docs-reference-smoke and make verify-fast.",
+    "problem": "Operators currently have to assemble critical lifetime, recovery, scheduling, prompt, and inspection behavior from separate references or live failures. This makes finite drain look like completion, leaves stranded PROCESSING Work unexplained, encourages unsafe resource sharing and ad hoc polling, and can lead operators to assume an in-memory Factory Session queue survives restart.",
+    "solution": "Add one packaged you docs operations runbook that composes the shipped operational contracts into a safe workflow, routes to detailed canonical topics, and uses only examples and outputs exercised against the current built binary. Keep the lane documentation-only and explicitly exclude storage, scheduler, local-model, ACP, and other runtime expansion."
   },
   "acceptanceCriteria": [
-    "A fixture ledger containing the same model-request event ID twice with differing canonical data, matching the observed provider retry shape, is accepted without aborting the Work watch.",
-    "Finite and --follow watches emit the fixture's complete ordered Work state-transition history exactly once, and unrelated retry enrichment emits no extra NDJSON lines.",
-    "Watch output retains the exact you.work.watch.v1 NDJSON contract shape, and reconnect/cursor behavior continues from the last accepted canonical Factory Event without durable state.",
-    "Genuine stream-abort errors remain actionable on stderr and cause the built you CLI process to exit non-zero, while successful finite completion remains exit code 0.",
-    "No storage engine, public contract expansion, unrelated event-ledger rewrite, or cut-list item from docs/temp/work-order.md is introduced.",
-    "The named focused verification command go test ./pkg/services/work/transports/cli ./tests/functional/work/watch ./tests/functional/transport/cli/process and make verify-fast pass; Typecheck passes, Tests pass, no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, shared-file and baseline conflicts are reconciled, merge conflicts are resolved, and the PR is actually merged; an opened, green, approved, or ready-to-merge PR is not complete."
+    "you docs operations presents one canonical real-pipeline runbook under docs/reference/, and related reference pages route operators to it without duplicating the guide in root documentation.",
+    "The runbook distinguishes --with-server --continuously, finite batch drain, server-enabled drain with non-terminal Work, and plain batch waiting on stranded PROCESSING Work; it states exit behavior and reproduces or asserts the current binary's actual A7 diagnostic, including exit status 1.",
+    "The runbook accurately explains inclusive VISIT_COUNT (>=), the guarded loop-breaker pattern, resource capacity acquisition/release, the downstream-before-upstream priority-inversion hazard, and an actionable mitigation without promising scheduler priority that does not exist.",
+    "The runbook states that live Factory Session queue state is in memory and lost on restart, documents direct restoration by resubmitting Work with the same names so worktree templating can resume existing artifacts, and describes dispatch-time prompt hot reload without implying a storage engine or broader runtime changes.",
+    "Every CLI invocation newly shown in the documentation is executed against the current built you binary during implementation, with its real output and exit status pasted into PR evidence or asserted by an existing behavioral check; examples and prose are corrected to match that evidence, never invented.",
+    "Quality gates pass: the named packaged-doc verification command make docs-reference-smoke, make verify-fast, and required typecheck and tests; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "Delivery continues through implementation and review until required CI is terminal and passing, every blocking PR conversation is explicitly addressed, merge conflicts and shared-file changes are reconciled, and the PR is actually merged; opened, green, approved, or ready-to-merge is not complete."
   ],
   "userStories": [
     {
-      "id": "wo-c2-fix-watch-event-id-conflict-001",
-      "title": "Stream Work transitions through provider retry events",
-      "description": "As a factory operator, I want finite and following Work watches to tolerate legitimate provider dispatch retry history so that I can observe every Work transition in a live session without the monitor aborting.",
+      "id": "wo-d5-operations-page-001",
+      "title": "Publish the real-pipeline lifetime and recovery runbook",
+      "description": "As a pipeline operator, I want one packaged runbook that tells me how to keep a real Factory Session alive and how to recover after a process restart so that an idle queue or lost process is not mistaken for completed Work.",
       "acceptanceCriteria": [
-        "A behavioral fixture places Work state transitions before, between, and after two model-request events that reuse the same event ID with differing canonical data in the observed retry shape.",
-        "Finite mode consumes that ledger, emits the full ordered Work transition history exactly once, and exits successfully when the observed Work cohort becomes terminal.",
-        "--follow consumes the conflicting retry events without aborting and emits Work transitions that occur after them until normal cancellation.",
-        "Model-request retry events do not themselves produce you.work.watch.v1 output, and emitted transition objects retain the existing fields and meanings.",
-        "Exact replay remains idempotent, canonical resume position remains monotonic, and genuinely invalid Work transition data still returns an actionable reducer or stream error.",
+        "you docs operations is available from the packaged docs surface and recommends you run --with-server --continuously as the normal run shape for real pipelines that accept or retain Work across idle periods.",
+        "The guide contrasts continuous operation with finite batch drain and explains that server-enabled finite drain with N non-terminal Work items exits 1 with the current A7 diagnostic, while plain batch mode can continue waiting when Work remains stranded in PROCESSING.",
+        "The guide clearly separates terminal completion, idle/drained state, and non-terminal Work so an operator does not treat process exit or lack of new dispatches as proof that the pipeline completed.",
+        "The guide states that Factory Session queue state is process-local and in-memory, restart loses that queue, and no durable storage engine is available or proposed by this work.",
+        "The recovery procedure tells operators to inspect durable artifacts, resubmit the intended Work using the same Work names, and rely on worktree templating to reconnect resumed dispatches to existing work; it presents the six production recoveries on 2026-08-08/09 as operational evidence, not a durability guarantee.",
+        "Every CLI invocation introduced by this story is run against the current built binary, and the PR records real stdout, stderr, and exit status or names the behavioral assertion that proves them; any mismatch is fixed in the docs.",
+        "make docs-reference-smoke passes.",
         "Tests pass",
         "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented retry-safe Work-watch reduction for repeated MODEL_REQUEST IDs with refreshed canonical data, preserving strict conflicts for Work events and monotonic ephemeral cursors. Added finite, --follow, exact replay, reconnect, NDJSON, and invalid-transition behavioral coverage. Review follow-up now uses the observed later-sequence/later-event-time retry shape with realistic dispatch context and an intervening model response, and proves reconnect from the later canonical cursor. Corrective follow-up now accepts changed MODEL_REQUEST data only at a strictly later canonical position, updates the remembered retry version, and rejects same-sequence or backward conflicting reuse. Removed the unrelated manifest/inventory meta-test during review follow-up. The focused Work/watch/process command and make verify-fast pass."
+      "notes": "Published docs/reference/operations.md as the packaged real-pipeline lifetime and restart-recovery runbook, registered it in the embedded CLI docs surface, added narrow routing links from related packaged/root indexes, and added the intentionally stranded docs/examples/operations-stranded-work.json fixture. Rebuilt the current binary and exercised `you docs operations`, `you run --dir ./factory --with-server` (exit 0), `you run --dir ./factory --with-server --work ./docs/examples/operations-stranded-work.json` (exit 1 with the exact A7 diagnostic on stderr), the same plain batch fixture (exit 1 with the same diagnostic), and `you run --dir ./factory --with-server --continuously` (observed live until cancellation). Focused A7 drain/process tests, make docs-reference-smoke, and make verify-fast pass; verify-fast required the standard make ui-deps install because the checkout initially lacked @types/bun. Six 2026-08-08/09 production recoveries are presented as operational evidence only, not a durability guarantee."
     },
     {
-      "id": "wo-c2-fix-watch-event-id-conflict-002",
-      "title": "Exit non-zero when a Work watch genuinely aborts",
-      "description": "As an operator or automation author, I want an aborted Work watch to return a non-zero process exit code so that monitoring scripts cannot mistake a failed stream for successful completion.",
+      "id": "wo-d5-operations-page-002",
+      "title": "Explain retry-loop and resource scheduling safety",
+      "description": "As a Factory author operating long pipelines, I want the runbook to explain retry thresholds and shared-resource scheduling hazards so I can prevent infinite loops and avoid starving the upstream work that unlocks a pipeline.",
       "acceptanceCriteria": [
-        "A process-boundary behavioral test runs the built you work watch command against a deterministic genuine stream-abort condition and observes a non-zero exit code.",
-        "The abort diagnostic is written to stderr with enough session and stream context to identify the failed watch, while stdout contains only complete NDJSON transition lines produced before the abort.",
-        "Successful finite completion retains exit code 0, and normal --follow cancellation retains the repository's established cancellation semantics.",
-        "Stream failures are propagated through command execution and the root process boundary rather than being printed and converted to success.",
+        "The operations guide states that a VISIT_COUNT threshold is inclusive: the guarded path becomes eligible when the watched visit count is greater than or equal to (>=) maxVisits, with an example whose stated visit sequence matches current runtime behavior.",
+        "The guide presents the guarded LOGICAL_MOVE loop-breaker pattern that diverts exhausted retry/review Work to an explicit failed or terminal state, and distinguishes that pattern from placing only a visit guard on the normal worker path.",
+        "The guide explains that resource pool capacity is held by eligible dispatches and released when their dispatch ends, and that queued Work does not reserve future capacity.",
+        "The guide names the priority-inversion foot-gun: a downstream stage may acquire a shared resource while upstream Work for the same pipeline is queued, delaying the upstream stage needed to make progress.",
+        "The guide gives an actionable authoring or operations mitigation, such as separating stage-specific pools or reserving capacity through topology, and does not claim unsupported scheduler priorities or fairness guarantees.",
+        "Any CLI invocation introduced by this story is executed against the current built binary and has real output and exit evidence in the PR or an existing behavioral assertion; JSON/config examples are reviewed against the current contract rather than treated as CLI output.",
+        "make docs-reference-smoke passes.",
         "Tests pass",
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Added a true built cmd/factory process-boundary Work-watch fixture that emits complete NDJSON before a malformed SSE frame, then proves the genuine stream-abort error stays actionable on stderr with session and decode context, returns the child process's non-zero exit code, and leaves stdout with exactly the complete NDJSON transition produced before the abort. The same built binary also proves successful finite completion returns exit code 0. Removed the unrelated manifest/inventory meta-test during review follow-up. The focused Work/watch/process command and make verify-fast pass."
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "wo-d5-operations-page-003",
+      "title": "Provide the live operations inspection toolkit",
+      "description": "As an operator diagnosing a running pipeline, I want verified commands for observing Work and Worker Sessions and clear prompt reload behavior so I can inspect progress and adjust the next dispatch without restarting the session.",
+      "acceptanceCriteria": [
+        "The guide states that supported worker and workstation prompt files are read at dispatch time, so a saved prompt edit affects the next dispatch but does not mutate an already-running dispatch or restore lost queue state.",
+        "The guide gives purpose-driven, current examples for you worker-sessions list, show, stream, and read, explaining which command locates sessions, inspects metadata or state, follows live events, or reads a completed transcript.",
+        "The guide uses you work watch --follow as the normal event-driven way to observe Work transitions, including the current session-filter syntax when shown, and does not recommend hand-written sleep or poll loops.",
+        "Loading, no-match, completed, live, and command failure outcomes are described only to the extent observed from the current CLI; the guide does not invent output fields, transcript retention, restart replay, or unsupported flags.",
+        "Every CLI invocation introduced by this story is executed against the current built binary, with real stdout, stderr, and exit status pasted into PR evidence or asserted by an existing behavioral check; documentation is corrected when observed behavior differs.",
+        "Related packaged reference topics receive only the narrow cross-links needed to make the operations runbook discoverable; root docs remain routing material and no duplicate operations guide is added elsewhere.",
+        "make docs-reference-smoke passes.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
     }
   ]
 }
