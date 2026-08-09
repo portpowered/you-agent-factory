@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-08-04
+last-modified: 2026-08-09
 doc-id: agent-factory/authoring-factories
 ---
 
@@ -16,6 +16,9 @@ Use `you docs config` for the field-by-field
 `factory.json` reference, `you docs workstations` for workstation
 runtime fields, `you docs workers` for worker backend fields, and
 `you docs batch-inputs` for the watched-file and API request shape.
+Use `you docs factory-validation` for the required pre-run gate, its complete
+static checks, and the worked unsupported-join failure. This page keeps the
+end-to-end order without duplicating that validation reference.
 
 For keeping a real pipeline alive across idle periods or recovering after a
 process restart, use `you docs operations`.
@@ -222,10 +225,62 @@ Return ACCEPTED when the story is ready.
 Return REJECTED with concrete feedback when another pass is needed.
 ```
 
-### 3. Start the factory
+### 3. Validate before the first run
 
-For a portable JSON or YAML Factory and a single customer prompt, mark one work
-type with `handlingBehavior: ["DEFAULT"]` (see `you docs config`) and run:
+Run the validate-only gate against the same authored file or directory that
+the next run will use. Validation must pass after the Factory is authored and
+immediately before its first execution. It does not start a Factory Session,
+invoke a provider, or persist a named Factory.
+
+For a portable file and the split directory layout, use the corresponding
+source path:
+
+```bash
+# Portable JSON or YAML file.
+you factory config validate ./factory.json
+
+# Split Factory directory containing exactly one factory.json, factory.yaml,
+# or factory.yml root.
+you factory config validate ./factory
+```
+
+Against the current checked-in Factory, both forms print this current-binary
+result:
+
+```text
+Factory validation passed.
+Runtime taxonomy:
+  worker processor: AGENT_WORKER
+  worker workspace-setup: SCRIPT_WORKER
+  worker planner: AGENT_WORKER
+  worker ideafier: AGENT_WORKER
+  workstation ideafy: AGENT_RUN (worker=ideafier)
+  workstation plan: AGENT_RUN (worker=planner)
+  workstation consume: LOGICAL_MOVE (worker=)
+  workstation setup-workspace: SCRIPT_RUN (worker=workspace-setup)
+  workstation process: AGENT_RUN (worker=processor)
+  workstation review: AGENT_RUN (worker=planner)
+  workstation executor-loop-breaker: LOGICAL_MOVE (worker=)
+  workstation review-loop-breaker: LOGICAL_MOVE (worker=)
+  workstation though-retrigger: LOGICAL_MOVE (worker=)
+```
+
+If validation fails, do not run or persist the Factory. Correct every blocking
+finding and repeat the same command until it passes. For the field-level
+checks, supported join arity, split-layout requirements, classifier routes,
+and the real three-input failure, use `you docs factory-validation` rather
+than duplicating those rules here.
+
+Run the gate again after any topology, guard, route, schema, worker,
+workstation, or split-layout prompt/configuration change, and do so before the
+next run that relies on the change. A successful static check is not a promise
+that providers, external resources, runtime paths, or execution will succeed.
+
+### 4. Start the factory
+
+Only after validation passes, for a portable JSON or YAML Factory and a single
+customer prompt, mark one work type with `handlingBehavior: ["DEFAULT"]` (see
+`you docs config`) and run:
 
 ```bash
 you run --factory ./factory.json "Fix the lint issues"
@@ -492,7 +547,7 @@ On upgrade, normal initializer startup moves valid factories from the retired
 factory already exists in both locations, initialization preserves both copies
 and reports the conflict so you can compare them without losing customer edits.
 
-### 4. Submit work
+### 5. Submit work
 
 Create a startup or watched-file request:
 
@@ -909,6 +964,13 @@ review-loop workflow.
 ## Authoring Checklist
 
 - Keep the public workflow contract in `factory.json`.
+- Run `you factory config validate` on the authored file or directory after
+  authoring and until it passes immediately before the first run.
+- Repeat validation after topology, guard, route, schema, worker, workstation,
+  or split-layout prompt/configuration changes and before the next dependent
+  run.
+- Use `you docs factory-validation` for the complete static-check list and
+  unsupported-join correction example.
 - Use camelCase factory-config fields such as `workTypes`, `resources`,
   `onFailure`, `onRejection`, and `maxVisits`.
 - Use `supportingFiles` only for portability-only concerns such as
