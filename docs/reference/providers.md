@@ -37,7 +37,7 @@ outperforms another.
 
 | Provider and model | Good starting point | Effort guidance |
 |--------------------|---------------------|-----------------|
-| `CODEX` / `gpt-5.6-luna` | Difficult implementation, deep review, or work where correctness is more important than throughput. The checked-in Factory uses this tier for its processor at `max`. | Codex accepts the provider-neutral effort vocabulary and forwards it as its native reasoning setting. Use the value your selected model/account supports. |
+| `CODEX` / `gpt-5.6-luna` | Difficult implementation, deep review, or work where correctness is more important than throughput. This is operator selection guidance; the checked-in Factory does not currently assign this tier to a named worker. | Codex accepts the provider-neutral effort vocabulary and forwards it as its native reasoning setting. Use the value your selected model/account supports. |
 | `CODEX` / `gpt-5.6-sol` | Planning, ideation, and ordinary analysis. The checked-in Factory uses this tier for planner and ideafier workers at `medium`. | `medium` is the observed Factory choice; it is not a hard requirement for the model. |
 | `CODEX` / `gpt-5.6-terra` | Balanced implementation and verification when a general GPT-5.6 tier is preferable. | Choose an effort supported by the selected model/account; do not infer a media capability from the tier name. |
 | `CLAUDE` / `claude-sonnet-5` | General text/code work when the Claude CLI exposes this model. | The current Claude adapter rejects `minimal`; its other canonical effort values are forwarded to Claude's `--effort` option, subject to the installed CLI/model. |
