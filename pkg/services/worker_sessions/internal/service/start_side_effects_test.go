@@ -306,6 +306,7 @@ func TestStart_FailedSession_AppendsTerminalRecordWithClassifiedFailureCause(t *
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity feature regression keeps the full terminal-event assertion in one observable scenario; extract reusable assertions when this test is next refactored.
 func TestStart_ProviderSessionInspectionFailureReachesTerminalEventWithSafeCause(t *testing.T) {
 	eventsSvc := newEventsAppender()
 	topic := workersessions.Topic("worker-inspection-failure")
@@ -377,6 +378,7 @@ func TestStart_ProviderSessionInspectionFailureReachesTerminalEventWithSafeCause
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity feature regression keeps contradictory completion and canonical-event assertions together; extract reusable assertions when this test is next refactored.
 func TestStart_ZeroExitTaskCompleteArtifactWithIngestionFailureIsNotPhantomSuccess(t *testing.T) {
 	eventsSvc := newEventsAppender()
 	topic := workersessions.Topic("worker-contradictory-ingestion")

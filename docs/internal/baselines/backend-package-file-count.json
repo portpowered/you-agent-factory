@@ -98,6 +98,12 @@
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/engine",
+      "fileCount": 16,
+      "owner": "factory-runtime-maintainers",
+      "removalReason": "Split orchestration engine tests and runtime state by durable responsibility."
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime",
       "fileCount": 35,
       "owner": "factory-runtime-maintainers",
@@ -278,6 +284,12 @@
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
     },
     {
+      "packagePath": "pkg/services/worker_sessions/internal/service",
+      "fileCount": 16,
+      "owner": "worker-session-maintainers",
+      "removalReason": "Split worker-session terminal diagnostics and start-side-effect tests by durable responsibility."
+    },
+    {
       "packagePath": "pkg/services/workers",
       "fileCount": 43,
       "owner": "worker-maintainers",
@@ -324,6 +336,12 @@
       "fileCount": 17,
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
+    },
+    {
+      "packagePath": "pkg/transports/cli/commandregistry",
+      "fileCount": 16,
+      "owner": "cli-maintainers",
+      "removalReason": "Split command registration and resolved-work list handlers by durable responsibility."
     },
     {
       "packagePath": "pkg/transports/cli/factory",
