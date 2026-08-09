@@ -5,6 +5,7 @@
 - Deterministic Worker Session lifecycle tests can combine the controlled workstation boundary with the real in-memory Events service to verify retained replay ordering without sleeps or cancellation.
 - Detached Cobra command families should project local-only flag relationships without eagerly merging parent persistent flags; otherwise the detached storage can shadow the production root flag when the family is attached.
 - Process-boundary CLI tests should build `./cmd/factory` only when proving OS-level behavior, keep the real server on a root-built process, and assign redirected stdout and diagnostics stderr separately.
+- Restore package coverage thresholds with focused behavioral tests for typed edge outcomes; do not lower baseline manifests for new branches.
 
 ## 2026-08-09 14:24 -07:00 - wo-c1-ext-stream-replay-only-001
 - What was implemented
@@ -60,6 +61,21 @@
   - `progress.txt`
 - **Learnings for future iterations:**
   - A built CLI process can prove shell redirection while the server and provider effects remain deterministic through `root.BuildProcess` and `edges.Edges`; this keeps the process-boundary proof narrow.
-  - The final Worker Session replay summary is a standalone JSON object after the existing event-frame records, so capture assertions should parse the last line with its own summary shape.
-  - `make lint` currently stops on the existing `pkg/transports/cli/climanifestcobra/constructor.go` 1037-line backend-size/pkg-maint violation; the story change does not touch that file.
+- The final Worker Session replay summary is a standalone JSON object after the existing event-frame records, so capture assertions should parse the last line with its own summary shape.
+- `make lint` currently stops on the existing `pkg/transports/cli/climanifestcobra/constructor.go` 1037-line backend-size/pkg-maint violation; the story change does not touch that file.
+---
+
+## 2026-08-09 15:44 -07:00 - wo-c1-ext-stream-replay-only-004
+- What was implemented
+  - Added focused Worker Sessions service tests for retained-read failures, retention gaps, cancellation, malformed paging outcomes, snapshot-boundary violations, completion, and close behavior.
+  - Restored the `pkg/services/worker_sessions/internal/service` unit coverage result to 99.0%, above the enforced 98.72% package minimum, without lowering the coverage baseline.
+  - Re-ran the named Worker Sessions functional command, `make verify-fast`, package-structure/file-count checks, and Worker Sessions vet successfully.
+- Files changed
+  - `pkg/services/worker_sessions/internal/service/invoke_observation_test.go`
+  - `prd.json`
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - The repository's coverage gate is sensitive to untested defensive replay branches; typed read outcomes should have direct behavioral assertions alongside the happy-path stream tests.
+  - `make test-unit-coverage` cannot launch its full coverage lane on this Windows checkout because the generated Go command exceeds the Windows filename/command-line limit; the affected package's local coverage profile still verifies the threshold.
+  - A full CI functional run exposed `TestFactorySessionHistoryIsNotPersistedByDefault`, but the test passes repeatedly in isolation and the feature-specific functional command is green; avoid unrelated changes until a reproducible failure or actionable review feedback identifies a shared cause.
 ---

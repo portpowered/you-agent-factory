@@ -33,6 +33,7 @@ type observationEventReaderFake struct {
 	err            error
 	readResults    []events.ReadResult
 	readErr        error
+	readFunc       func(context.Context, events.ReadRequest) (events.ReadResult, error)
 	subscribeCalls int
 	readCalls      int
 }
@@ -42,8 +43,11 @@ func (f *observationEventReaderFake) Subscribe(context.Context, events.Subscribe
 	return f.subscription, f.err
 }
 
-func (f *observationEventReaderFake) Read(context.Context, events.ReadRequest) (events.ReadResult, error) {
+func (f *observationEventReaderFake) Read(ctx context.Context, req events.ReadRequest) (events.ReadResult, error) {
 	f.readCalls++
+	if f.readFunc != nil {
+		return f.readFunc(ctx, req)
+	}
 	if f.readErr != nil {
 		return events.ReadResult{}, f.readErr
 	}
@@ -554,6 +558,321 @@ func TestStreamObservationsReplayOnlyEmitsSummaryForEmptyActiveTopic(t *testing.
 	}
 	if reader.subscribeCalls != 0 {
 		t.Fatalf("Subscribe() calls = %d, want 0 for replay-only", reader.subscribeCalls)
+	}
+}
+
+func TestReplayObservationSubscriptionRejectsInitialReadFailures(t *testing.T) {
+	topic := workersessions.Topic("worker-1")
+	valid := replayProgressResult(topic, 1, 1)
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	cases := []struct {
+		name   string
+		ctx    context.Context
+		reader EventsRetainedReader
+		want   error
+	}{
+		{
+			name: "nil context uses background",
+			ctx:  nil,
+			reader: &observationEventReaderFake{
+				readResults: []events.ReadResult{valid},
+			},
+			want: nil,
+		},
+		{
+			name: "canceled context",
+			ctx:  canceled,
+			reader: &observationEventReaderFake{
+				readResults: []events.ReadResult{valid},
+			},
+			want: context.Canceled,
+		},
+		{
+			name: "missing reader",
+			ctx:  context.Background(),
+			want: workersessions.ErrObservationSourceUnavailable,
+		},
+		{
+			name: "read canceled",
+			ctx:  context.Background(),
+			reader: &observationEventReaderFake{
+				readErr: context.Canceled,
+			},
+			want: workersessions.ErrObservationCanceled,
+		},
+		{
+			name: "read gap",
+			ctx:  context.Background(),
+			reader: &observationEventReaderFake{
+				readErr: workersessions.ErrObservationSourceGap,
+			},
+			want: workersessions.ErrObservationSourceGap,
+		},
+		{
+			name: "read failure",
+			ctx:  context.Background(),
+			reader: &observationEventReaderFake{
+				readErr: errors.New("read failed"),
+			},
+			want: workersessions.ErrObservationSourceUnavailable,
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			assertReplayInitialization(t, test.ctx, test.reader, topic, test.want)
+		})
+	}
+}
+
+func TestReplayObservationSubscriptionRejectsInitialReadResults(t *testing.T) {
+	topic := workersessions.Topic("worker-1")
+	otherTopic := workersessions.Topic("worker-2")
+	validGap := events.ReadResult{
+		Outcome: events.ReadOutcomeGap,
+		Gap: &events.GapFacts{
+			Topic:            topic,
+			Requested:        0,
+			EarliestRetained: 1,
+			Head:             1,
+		},
+	}
+	cases := []struct {
+		name   string
+		result events.ReadResult
+		want   error
+	}{
+		{name: "invalid read result", result: events.ReadResult{}, want: workersessions.ErrObservationSourceUnavailable},
+		{name: "retention gap result", result: validGap, want: workersessions.ErrObservationSourceGap},
+		{name: "result topic mismatch", result: replayProgressResult(otherTopic, 1, 1), want: workersessions.ErrObservationSourceUnavailable},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			reader := &observationEventReaderFake{readResults: []events.ReadResult{test.result}}
+			assertReplayInitialization(t, context.Background(), reader, topic, test.want)
+		})
+	}
+}
+
+func assertReplayInitialization(t *testing.T, ctx context.Context, reader EventsRetainedReader, topic events.Topic, want error) {
+	t.Helper()
+	got, err := newReplayObservationSubscription(ctx, reader, topic, workersessions.StateRunning, 1)
+	if want == nil {
+		if err != nil || got == nil {
+			t.Fatalf("newReplayObservationSubscription() = %v, %v, want success", got, err)
+		}
+		return
+	}
+	if got != nil || !errors.Is(err, want) {
+		t.Fatalf("newReplayObservationSubscription() = %v, %v, want error %v", got, err, want)
+	}
+}
+
+func TestStreamObservationsReplayOnlyMapsInitialReadFailures(t *testing.T) {
+	ref := observationProviderRef()
+	cases := []struct {
+		name string
+		err  error
+		want error
+	}{
+		{name: "canceled", err: context.Canceled, want: workersessions.ErrObservationCanceled},
+		{name: "source failure", err: errors.New("read failed"), want: workersessions.ErrObservationSourceUnavailable},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			reader := &observationEventReaderFake{readErr: test.err}
+			registry := newObservationRegistry(observationProjectorFake{}, reader)
+			registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
+			_, err := registry.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{
+				ProviderSession: ref,
+				ReplayOnly:      true,
+				Limit:           1,
+			})
+			if !errors.Is(err, test.want) {
+				t.Fatalf("StreamObservations(replay-only) error = %v, want %v", err, test.want)
+			}
+		})
+	}
+}
+
+func TestReplayObservationSubscriptionEmitsTypedReadFailures(t *testing.T) {
+	topic := workersessions.Topic("worker-1")
+	initial := replayProgressResult(topic, 2, 1)
+	cases := []struct {
+		name      string
+		second    events.ReadResult
+		secondErr error
+		wantKind  workersessions.ObservationDeliveryKind
+		wantErr   error
+	}{
+		{
+			name:      "read canceled",
+			secondErr: context.Canceled,
+			wantKind:  workersessions.ObservationDeliveryCanceled,
+			wantErr:   workersessions.ErrObservationCanceled,
+		},
+		{
+			name:      "read failure",
+			secondErr: errors.New("read failed"),
+			wantKind:  workersessions.ObservationDeliverySourceFailure,
+			wantErr:   workersessions.ErrObservationSourceUnavailable,
+		},
+		{
+			name:     "invalid cursor",
+			second:   events.ReadResult{Outcome: events.ReadOutcomeInvalidCursor},
+			wantKind: workersessions.ObservationDeliverySourceFailure,
+			wantErr:  workersessions.ErrObservationSourceUnavailable,
+		},
+		{
+			name: "gap",
+			second: events.ReadResult{
+				Outcome: events.ReadOutcomeGap,
+				Gap: &events.GapFacts{
+					Topic:            topic,
+					Requested:        0,
+					EarliestRetained: 1,
+					Head:             2,
+				},
+			},
+			wantKind: workersessions.ObservationDeliverySourceFailure,
+			wantErr:  workersessions.ErrObservationSourceGap,
+		},
+		{
+			name:     "invalid progress",
+			second:   events.ReadResult{Outcome: events.ReadOutcomeProgress},
+			wantKind: workersessions.ObservationDeliverySourceFailure,
+			wantErr:  workersessions.ErrObservationSourceUnavailable,
+		},
+		{
+			name:     "non contiguous progress",
+			second:   replayProgressResult(topic, 3, 3),
+			wantKind: workersessions.ObservationDeliverySourceFailure,
+			wantErr:  workersessions.ErrObservationSourceUnavailable,
+		},
+		{
+			name: "at head before snapshot",
+			second: events.ReadResult{
+				Outcome:  events.ReadOutcomeAtHead,
+				Next:     events.Cursor{Topic: topic, Position: 1},
+				Retained: events.RetainedRange{Topic: topic, Earliest: 1, Head: 1},
+			},
+			wantKind: workersessions.ObservationDeliverySourceFailure,
+			wantErr:  workersessions.ErrObservationSourceUnavailable,
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			reader := &observationEventReaderFake{}
+			reads := 0
+			reader.readFunc = func(context.Context, events.ReadRequest) (events.ReadResult, error) {
+				reads++
+				if reads == 1 {
+					return initial, nil
+				}
+				return test.second, test.secondErr
+			}
+			subscription, err := newReplayObservationSubscription(context.Background(), reader, topic, workersessions.StateRunning, 1)
+			if err != nil {
+				t.Fatalf("newReplayObservationSubscription() error = %v", err)
+			}
+			if got := subscription.Next(context.Background()); got.Kind != workersessions.ObservationDeliveryRecord {
+				t.Fatalf("initial delivery = %#v, want RECORD", got)
+			}
+			got := subscription.Next(context.Background())
+			if got.Kind != test.wantKind || !errors.Is(got.Err, test.wantErr) {
+				t.Fatalf("failure delivery = %#v, want kind %q error %v", got, test.wantKind, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestReplayObservationSubscriptionHandlesCompletionAndClose(t *testing.T) {
+	topic := workersessions.Topic("worker-1")
+	initial := replayProgressResult(topic, 2, 1)
+	atHead := events.ReadResult{
+		Outcome:  events.ReadOutcomeAtHead,
+		Next:     events.Cursor{Topic: topic, Position: 2},
+		Retained: events.RetainedRange{Topic: topic, Earliest: 1, Head: 2},
+	}
+	reader := &observationEventReaderFake{readResults: []events.ReadResult{initial, atHead}}
+	subscription, err := newReplayObservationSubscription(nil, reader, topic, workersessions.StateCompleted, 1)
+	if err != nil {
+		t.Fatalf("newReplayObservationSubscription() error = %v", err)
+	}
+	if got := subscription.Next(nil); got.Kind != workersessions.ObservationDeliveryRecord {
+		t.Fatalf("initial delivery = %#v, want RECORD", got)
+	}
+	if got := subscription.Next(context.Background()); got.Kind != workersessions.ObservationDeliveryReplaySummary || got.Summary == nil || !got.Summary.Complete {
+		t.Fatalf("completion delivery = %#v, want complete summary", got)
+	}
+	if got := subscription.Next(context.Background()); got.Kind != workersessions.ObservationDeliveryClosed {
+		t.Fatalf("delivery after summary = %#v, want CLOSED", got)
+	}
+	subscription.Close()
+	if got := subscription.Next(context.Background()); got.Kind != workersessions.ObservationDeliveryClosed {
+		t.Fatalf("delivery after Close() = %#v, want CLOSED", got)
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	canceledSubscription, err := newReplayObservationSubscription(context.Background(), &observationEventReaderFake{readResults: []events.ReadResult{initial}}, topic, workersessions.StateRunning, 1)
+	if err != nil {
+		t.Fatalf("newReplayObservationSubscription(canceled) error = %v", err)
+	}
+	if got := canceledSubscription.Next(canceled); got.Kind != workersessions.ObservationDeliveryCanceled || !errors.Is(got.Err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("canceled delivery = %#v, want CANCELED", got)
+	}
+	if got := canceledSubscription.Next(context.Background()); got.Kind != workersessions.ObservationDeliveryClosed {
+		t.Fatalf("delivery after cancellation = %#v, want CLOSED", got)
+	}
+
+	var racing *replayObservationSubscription
+	reads := 0
+	racingReader := &observationEventReaderFake{}
+	racingReader.readFunc = func(context.Context, events.ReadRequest) (events.ReadResult, error) {
+		reads++
+		if reads == 1 {
+			return initial, nil
+		}
+		racing.Close()
+		return replayProgressResult(topic, 2, 2), nil
+	}
+	racing, err = newReplayObservationSubscription(context.Background(), racingReader, topic, workersessions.StateRunning, 1)
+	if err != nil {
+		t.Fatalf("newReplayObservationSubscription(racing) error = %v", err)
+	}
+	if got := racing.Next(context.Background()); got.Kind != workersessions.ObservationDeliveryRecord {
+		t.Fatalf("racing initial delivery = %#v, want RECORD", got)
+	}
+	if got := racing.Next(context.Background()); got.Kind != workersessions.ObservationDeliveryClosed {
+		t.Fatalf("racing delivery = %#v, want CLOSED", got)
+	}
+}
+
+func TestReplayObservationSubscriptionRejectsSnapshotInvariantViolations(t *testing.T) {
+	topic := workersessions.Topic("worker-1")
+	subscription := &replayObservationSubscription{
+		topic:        topic,
+		snapshotHead: 1,
+		next:         events.Cursor{Topic: topic, Position: 1},
+	}
+	result := replayProgressResult(topic, 2, 2)
+	if err := subscription.appendPage(result); !errors.Is(err, workersessions.ErrObservationSourceUnavailable) {
+		t.Fatalf("appendPage(after snapshot) error = %v, want source unavailable", err)
+	}
+}
+
+func replayProgressResult(topic events.Topic, head uint64, positions ...uint64) events.ReadResult {
+	records := make([]events.Record, 0, len(positions))
+	for _, position := range positions {
+		records = append(records, replayObservationRecord(topic, position, fmt.Sprintf("event-%d", position)))
+	}
+	return events.ReadResult{
+		Outcome:  events.ReadOutcomeProgress,
+		Records:  records,
+		Next:     events.Cursor{Topic: topic, Position: events.AggregateSequence(positions[len(positions)-1])},
+		Retained: events.RetainedRange{Topic: topic, Earliest: 1, Head: events.AggregateSequence(head)},
 	}
 }
 
