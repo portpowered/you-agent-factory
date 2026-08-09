@@ -316,3 +316,20 @@
   - A final PR audit should inspect GraphQL review-thread state separately from flat issue comments; a historical top-level gate comment can remain visible even when no actionable thread exists.
   - Keep the PR description synchronized from the canonical `prd.json` after recording final verification evidence.
 ---
+
+## [2026-08-08 19:27 -07:00] - wo-b1-antigravity-provider-golden-traces-005
+- What was implemented
+  - Rechecked the existing PR #1826 review state and removed the remaining unrelated processor-model edit from `factory/factory.json` as requested by the historical blocking feedback.
+  - Confirmed the PR body remains semantically identical to the canonical `prd.json`; all five stories remain `passes: true`.
+- Files changed
+  - `factory/factory.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/providers/agy/... -count=1` passes from tracked offline recordings.
+  - Providers/Workers/Wire tests, focused `go vet`, functional-boundary, package-structure, and backend-size checks pass.
+  - `make verify-fast` passes dashboard typecheck, MCP contract checks, 355 UI files/2,970 UI tests, 191 Bun tests, and the short Go suite.
+  - No unresolved or outdated PR review threads remain; no live AGY call was made.
+- **Learnings for future iterations:**
+  - A historical scope comment can be semantically addressed in code while an unrelated file still remains in the branch diff; audit `git diff base...HEAD --name-status` before declaring PR cleanup complete.
+  - Compare PR bodies after JSON parsing when PowerShell line endings make an exact text comparison noisy; the canonical content can still match `prd.json`.
+---
