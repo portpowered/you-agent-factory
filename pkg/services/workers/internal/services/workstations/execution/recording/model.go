@@ -34,9 +34,9 @@ type runner struct {
 	recorder   Recorder
 	now        func() time.Time
 
-	mu               sync.Mutex
-	attempts         map[string]int
-	responseOrdinals map[string]int
+	mu              sync.Mutex
+	attempts        map[string]int
+	responseOrdinal int
 }
 
 type executionTrace struct {
@@ -69,7 +69,6 @@ func NewRunner(
 	return &runner{
 		inner: inner, factoryCfg: factoryCfg, workerDef: &cloned,
 		recorder: recorder, now: now, attempts: make(map[string]int),
-		responseOrdinals: make(map[string]int),
 	}
 }
 
@@ -82,7 +81,7 @@ func (r *runner) Execute(ctx context.Context, request workerexecution.RunnerExec
 	}
 	attempt := r.nextAttempt(request.Dispatch.DispatchID)
 	requestID := modelRequestID(request.Dispatch.DispatchID, attempt)
-	responseOrdinal := r.nextResponseOrdinal(request.Dispatch.DispatchID)
+	responseOrdinal := r.nextResponseOrdinal()
 	started := r.now()
 	trace := &executionTrace{}
 	ctx = context.WithValue(ctx, executionTraceKey{}, trace)
@@ -113,12 +112,14 @@ func (r *runner) clearAttempts(dispatchID string) {
 	r.mu.Unlock()
 }
 
-func (r *runner) nextResponseOrdinal(dispatchID string) int {
+// nextResponseOrdinal returns a process-local ordinal for one recorded
+// response. A single counter keeps the runner's identity state bounded while
+// preserving distinct IDs for retries that reuse the request ordinal.
+func (r *runner) nextResponseOrdinal() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	dispatchKey := strings.TrimSpace(dispatchID)
-	r.responseOrdinals[dispatchKey]++
-	return r.responseOrdinals[dispatchKey]
+	r.responseOrdinal++
+	return r.responseOrdinal
 }
 
 func modelRequestID(dispatchID string, attempt int) string {
