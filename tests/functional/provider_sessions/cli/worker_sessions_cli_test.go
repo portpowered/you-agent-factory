@@ -85,6 +85,13 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	if !strings.Contains(explicitHelpInputs.Stdout(), "Usage:") {
 		t.Fatalf("worker-sessions --help omitted usage:\n%s", explicitHelpInputs.Stdout())
 	}
+	unknownInputs, unknownErr := executeCLIExpectError(t, ctx, process, env, factoryDir, "worker-sessions", "unknown")
+	if unknownErr == nil {
+		t.Fatal("worker-sessions unknown subcommand returned nil error")
+	}
+	if !strings.Contains(unknownErr.Error()+unknownInputs.Stderr(), "unknown command") {
+		t.Fatalf("worker-sessions unknown subcommand omitted diagnostic: %v\nstderr:\n%s", unknownErr, unknownInputs.Stderr())
+	}
 
 	successWorkID := submitWork(t, ctx, process, env, factoryDir, baseURL, "worker-session-cli-success")
 	waitForWorkerSession(t, ctx, process, env, factoryDir, baseURL, successWorkID)
@@ -366,6 +373,14 @@ func executeCLI(t *testing.T, ctx context.Context, process support.Process, env 
 		t.Fatalf("you %s: %v\nstdout:\n%s\nstderr:\n%s", strings.Join(args, " "), err, inputs.Stdout(), inputs.Stderr())
 	}
 	return inputs
+}
+
+func executeCLIExpectError(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir string, args ...string) (*support.CapturedInputs, error) {
+	t.Helper()
+	inputs := support.FakeInputs(ctx, append([]string{"you"}, args...))
+	inputs.Input.Env = append([]string(nil), env...)
+	inputs.Input.WorkingDirectory = factoryDir
+	return inputs, process.Execute(inputs.Input)
 }
 
 func decodeCLIJSON(t *testing.T, inputs *support.CapturedInputs, target any) {
