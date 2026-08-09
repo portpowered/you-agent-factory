@@ -82,6 +82,81 @@ func TestCLIRunCleanInvocationCompletesWithoutDashboardStartup(t *testing.T) {
 	}
 }
 
+// TestCLIRunWorkerReasoningEffortOverrideReachesCodexCommand proves the
+// run-scoped effort override crosses the public root process and reaches the
+// deterministic Codex command edge in canonical form.
+func TestCLIRunWorkerReasoningEffortOverrideReachesCodexCommand(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := scaffoldProviderBackedFactory(t)
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("reasoning effort override COMPLETE"),
+	})
+	edges := serviceedges.Edges{}
+	support.ConfigureWorkerCommands(t, &edges, runner, nil)
+
+	args := []string{
+		"you", "run",
+		"--factory", factoryPath,
+		"--provider", "codex",
+		"--worker-reasoning-effort", " XHIGH ",
+		"--no-record",
+		"--quiet",
+		"prove the explicit reasoning effort path",
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.WorkingDirectory = factoryDir
+	if err := support.BuildProcess(t, edges).Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
+	}
+
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner calls = %d, want one dispatch", runner.CallCount())
+	}
+	request := runner.LastRequest()
+	if request.Command != "codex" {
+		t.Fatalf("provider command = %q, want codex", request.Command)
+	}
+	support.AssertArgsContainSequence(t, request.Args, []string{
+		"--config", `model_reasoning_effort="xhigh"`,
+	})
+}
+
+// TestCLIRunUnsupportedWorkerReasoningEffortRejectsBeforeProviderDispatch
+// proves invalid run input fails at the public command boundary before the
+// injected provider effect can be invoked.
+func TestCLIRunUnsupportedWorkerReasoningEffortRejectsBeforeProviderDispatch(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := scaffoldProviderBackedFactory(t)
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("must not dispatch"),
+	})
+	edges := serviceedges.Edges{}
+	support.ConfigureWorkerCommands(t, &edges, runner, nil)
+
+	args := []string{
+		"you", "run",
+		"--factory", factoryPath,
+		"--provider", "codex",
+		"--worker-reasoning-effort", "turbo",
+		"--no-record",
+		"--quiet",
+		"reject the unsupported reasoning effort",
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.WorkingDirectory = factoryDir
+	err := support.BuildProcess(t, edges).Execute(inputs.Input)
+	if err == nil || !strings.Contains(err.Error(), `invalid --worker-reasoning-effort "turbo"`) {
+		t.Fatalf("Process.Execute(%v) error = %v, want actionable effort validation", args, err)
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner calls = %d, want zero for invalid effort", runner.CallCount())
+	}
+}
+
 // TestCLIRunServerAttachedInvocationTargetsExistingFactorySession proves a
 // hosted public you run --with-server invocation routes through the already-open
 // Factory Session on the live runtime host rather than a detached local one-shot

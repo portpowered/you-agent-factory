@@ -94,6 +94,7 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 			Workers: workers.RuntimeOpeningRequest{
 				RunnerID:                          cfg.RunnerID,
 				Worktree:                          cfg.Worktree,
+				WorkerReasoningEffort:             cfg.WorkerReasoningEffort,
 				MockWorkers:                       mockWorkers,
 				InvocationSkipPermissionsOverride: cfg.InvocationSkipPermissionsOverride,
 			},

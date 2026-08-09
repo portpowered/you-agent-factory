@@ -47,6 +47,7 @@ type Config struct {
 	RunnerID                      string
 	ProviderOverride              string
 	ModelOverride                 string
+	WorkerReasoningEffort         string
 	Worktree                      string
 	OperatorDefaults              operatorconfig.ResolvedDefaults
 	ACPIntegrations               []operatorconfig.ACPIntegration

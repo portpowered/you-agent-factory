@@ -310,6 +310,7 @@ func NewWorkerExecution(
 		verbose:                 runtimeRequest.Verbose,
 		runnerID:                workerRequest.RunnerID,
 		worktree:                workerRequest.Worktree,
+		workerReasoningEffort:   workerRequest.WorkerReasoningEffort,
 		skipPermissionsOverride: workerRequest.InvocationSkipPermissionsOverride,
 		providerOverride:        providerOverride,
 		now:                     clock.Now,
@@ -328,6 +329,7 @@ func NewWorkerExecution(
 		fixed.verbose,
 		fixed.runnerID,
 		fixed.worktree,
+		fixed.workerReasoningEffort,
 		fixed.skipPermissionsOverride,
 		fixed.providerOverride,
 		fixed.now,
@@ -357,6 +359,7 @@ type sessionBuildFixedRuntimeInputs struct {
 	verbose                 bool
 	runnerID                string
 	worktree                string
+	workerReasoningEffort   string
 	skipPermissionsOverride *bool
 	providerOverride        workers.Provider
 	now                     func() time.Time
@@ -401,6 +404,7 @@ func newSessionBuildFactory(
 			fixed.verbose,
 			fixed.runnerID,
 			fixed.worktree,
+			fixed.workerReasoningEffort,
 			fixed.skipPermissionsOverride,
 			fixed.providerOverride,
 			fixed.now,

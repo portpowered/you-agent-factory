@@ -48,6 +48,7 @@ Flags:
       --with-server                                                                  serve the Current Factory API for the lifetime of this run without opening a browser
       --with-site                                                                    serve the embedded dashboard and open it once after listener readiness
       --work string                                                                  path to initial FACTORY_REQUEST_BATCH JSON file to submit
+      --worker-reasoning-effort string                                               override the worker reasoning effort for this run; accepts minimal, low, medium, high, xhigh, or max with case and surrounding whitespace normalized
       --worktree string                                                              create or reuse a Git worktree under the invocation working directory and execute this run in its checkout
 
 Global Flags:

@@ -917,6 +917,7 @@ func testRunServerBindings() RunServerFlagBindings {
 		"you.run.flag.work", "you.run.flag.dir", "you.run.flag.named",
 		"you.run.flag.factory", "you.run.flag.record", "you.run.flag.replay",
 		"you.run.flag.provider", "you.run.flag.model",
+		"you.run.flag.worker-reasoning-effort",
 		"you.run.flag.worktree",
 		"you.run.flag.runtime-log-dir", "you.run.flag.runtime-metrics-dir",
 		"you.run.flag.with-mock-workers", "you.run.flag.output",

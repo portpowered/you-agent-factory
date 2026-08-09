@@ -11202,10 +11202,10 @@
             "since": "1.0.0"
           }
         },
-        "you.run.flag.model": {
-          "id": "you.run.flag.model",
-          "long": "model",
-          "usage": "override the optional model selected within the provider for this run",
+    "you.run.flag.model": {
+      "id": "you.run.flag.model",
+      "long": "model",
+      "usage": "override the optional model selected within the provider for this run",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -11223,10 +11223,33 @@
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.model",
             "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.run.flag.no-record": {
+        "since": "1.0.0"
+      }
+    },
+    "you.run.flag.worker-reasoning-effort": {
+      "id": "you.run.flag.worker-reasoning-effort",
+      "long": "worker-reasoning-effort",
+      "usage": "override the worker reasoning effort for this run; accepts minimal, low, medium, high, xhigh, or max with case and surrounding whitespace normalized",
+      "shorthand": "",
+      "scope": "local",
+      "valueType": "string",
+      "required": false,
+      "default": "",
+      "changedDefault": false,
+      "noOptionDefault": "",
+      "repeatable": false,
+      "normalization": "",
+      "completion": "none",
+      "binding": "",
+      "visibility": "visible",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.run.flag.worker-reasoning-effort",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "you.run.flag.no-record": {
           "id": "you.run.flag.no-record",
           "long": "no-record",
           "usage": "disable the default replay artifact for this invocation",

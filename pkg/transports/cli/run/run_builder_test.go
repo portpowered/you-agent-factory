@@ -113,7 +113,7 @@ func testRuntimeOpeningRequestFactory(
 			},
 		},
 		Workers: workers.RuntimeOpeningRequest{
-			RunnerID: cfg.RunnerID, MockWorkers: mockWorkers,
+			RunnerID: cfg.RunnerID, WorkerReasoningEffort: cfg.WorkerReasoningEffort, MockWorkers: mockWorkers,
 			InvocationSkipPermissionsOverride: cfg.InvocationSkipPermissionsOverride,
 		},
 		Recordings: recordings.RuntimeOpeningRequest{

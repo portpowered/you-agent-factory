@@ -2563,6 +2563,28 @@ func TestRootCommand_RunProviderAndModelOverrideOperatorDefaults(t *testing.T) {
 	}
 }
 
+func TestRootCommand_RunWorkerReasoningEffortMapsToRunConfig(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() { runCLI = originalRunCLI }()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := newLegacyTestRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--worker-reasoning-effort", " XHIGH ", "--no-record"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run with worker reasoning effort: %v", err)
+	}
+	if got.WorkerReasoningEffort != " XHIGH " {
+		t.Fatalf("worker reasoning effort = %q, want raw CLI value preserved until run validation", got.WorkerReasoningEffort)
+	}
+}
+
 func TestRootCommand_ExplicitRunHonorsDefaultWorkerModelFlags(t *testing.T) {
 	removedRoot := newLegacyTestRootCommand()
 	removedRoot.SetArgs([]string{"run", "--default-worker-model-provider", "codex"})
