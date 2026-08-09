@@ -50,7 +50,7 @@
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Implemented Work-owned --to-file preparation with injected file reading, UTF-8/non-empty validation, exact text preservation, stable file/named/positional/stdin source conflicts, signature primary-parameter routing, and pre-dispatch rejection for non-prompt run shapes. Added generated CLI contract wiring and a root.BuildProcess functional regression proving a real 30-line UTF-8 file at a path with spaces reaches one Codex ProviderCommandRunner request byte-for-byte; conflict and unreadable-file cases prove zero dispatch. Focused Work/CLI/wire tests and the lifecycle package pass."
+      "notes": "Implemented Work-owned --to-file preparation with injected regular-file inspection and reading, UTF-8/non-empty validation, exact text preservation, stable file/named/positional/stdin source conflicts, signature primary-parameter routing, and pre-dispatch rejection for non-prompt run shapes. Added generated CLI contract wiring and root.BuildProcess functional regressions proving a real 30-line UTF-8 file at a path with spaces reaches one Codex ProviderCommandRunner request byte-for-byte; conflict, missing-file, and non-regular-file cases prove zero dispatch and no read for invalid metadata. Focused Work/CLI/wire tests, make test, and lifecycle tests pass."
     },
     {
       "id": "wo-c3-run-parity-long-prompt-input-003",
@@ -67,7 +67,7 @@
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Published the canonical authored CLI manifest/help contract for --worker-reasoning-effort and --to-file, including applicability and strict source/run-shape conflicts, then regenerated all CLI consumers and baselines. Added the PowerShell-safe packaged run reference and boundary test proving prompt content stays out of argv, plus the combined root.BuildProcess/Process.Execute lifecycle regression proving a real 30-line UTF-8 file and xhigh effort reach one Codex dispatch. Verified CLI/work tests, contract and manifest checks, docs-reference smoke, make verify-fast, backend-size, pkg-maint, and vet; full lint is limited by the repository's existing unrelated pkg-boundary baseline violations."
+      "notes": "Published the canonical authored CLI manifest/help contract for --worker-reasoning-effort and --to-file, including applicability and strict source/run-shape conflicts, then regenerated all CLI consumers and baselines. Added the PowerShell-safe packaged run reference and boundary test proving prompt content stays out of argv, plus the combined root.BuildProcess/Process.Execute lifecycle regression proving a real 30-line UTF-8 file and xhigh effort reach one Codex dispatch. Verified CLI/work tests, contract and manifest checks, wire drift, docs-reference smoke, make verify-fast, make test, backend-size, pkg-maint, pkg-file-count, pkg-structure, and vet; full lint is limited by the repository's existing unrelated 176-violation pkg-boundary baseline."
     }
   ]
 }
