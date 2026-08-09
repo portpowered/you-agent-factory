@@ -260,10 +260,21 @@ func (p *traceAwareReviewInferenceProvider) Infer(
 		p.reviewCounts[traceID]++
 		p.mu.Unlock()
 		if traceID == p.rejectTraceID {
-			return workerexecution.InferenceResponse{Content: "needs revision"}, nil
+			return traceAwareReviewResponse("needs revision"), nil
 		}
 	}
-	return workerexecution.InferenceResponse{Content: "Done. COMPLETE ACCEPTED"}, nil
+	return traceAwareReviewResponse("Done. COMPLETE ACCEPTED"), nil
+}
+
+func traceAwareReviewResponse(content string) workerexecution.InferenceResponse {
+	return workerexecution.InferenceResponse{
+		Content: content,
+		Diagnostics: &workerexecution.WorkDiagnostics{
+			Metadata: map[string]string{
+				workerexecution.ProviderResponseMetadataCompletionEvidence: "provider_response",
+			},
+		},
+	}
 }
 
 var _ workerprovider.Provider = (*traceAwareReviewInferenceProvider)(nil)

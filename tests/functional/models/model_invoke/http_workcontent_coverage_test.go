@@ -35,6 +35,11 @@ func TestHTTPModelInvocationMapsAudioWorkContent(t *testing.T) {
 	providerStub := &httpWorkContentProvider{
 		response: workerexecution.InferenceResponse{
 			Content: mustMarshalHTTPWorkContentAudioResponse(t, audioPath),
+			Diagnostics: &workerexecution.WorkDiagnostics{
+				Metadata: map[string]string{
+					workerexecution.ProviderResponseMetadataCompletionEvidence: "provider_response",
+				},
+			},
 		},
 	}
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{

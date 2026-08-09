@@ -205,10 +205,7 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req workerexecution.Ru
 	}
 
 	content := string(result.Stdout)
-	if commandDiagnostics.Metadata == nil {
-		commandDiagnostics.Metadata = make(map[string]string, 1)
-	}
-	commandDiagnostics.Metadata[workerexecution.ProviderResponseMetadataCompletionEvidence] = "provider_response"
+	commandDiagnostics = withCompletionEvidenceMetadata(commandDiagnostics)
 	logger.Info("inferencer: request completed",
 		appendProviderSessionLogFields(providerLogFields(req,
 			"output_len", len(content)), providerSession)...)
@@ -254,11 +251,7 @@ func (p *ScriptWrapProvider) executeStructuredResponseStream(
 		p.publishFailureFragmentWithCanonicalState(req.Dispatch.DispatchID, result.FailureSession, providerErr, result.CanonicalFailurePublished)
 		return workerexecution.InferenceResponse{}, providerErr
 	}
-	if diagnostics.Metadata == nil {
-		diagnostics.Metadata = make(map[string]string, 1)
-	}
-	diagnostics.Metadata[workerexecution.ProviderResponseMetadataCompletionEvidence] = "provider_response"
-	result.Response.Diagnostics = diagnostics
+	result.Response.Diagnostics = withCompletionEvidenceMetadata(diagnostics)
 	logger.Info("inferencer: request completed",
 		appendProviderSessionLogFields(providerLogFields(req, "output_len", len(result.Response.Content)), result.Response.ProviderSession)...)
 	p.publishCompletedFragment(req.Dispatch.DispatchID, result.Response.ProviderSession)

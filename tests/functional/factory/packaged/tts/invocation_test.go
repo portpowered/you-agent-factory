@@ -270,7 +270,14 @@ func (provider *packagedTTSFakeProvider) Infer(
 	if err != nil {
 		return workerexecution.InferenceResponse{}, fmt.Errorf("marshal fake tts audio content: %w", err)
 	}
-	return workerexecution.InferenceResponse{Content: string(encoded)}, nil
+	return workerexecution.InferenceResponse{
+		Content: string(encoded),
+		Diagnostics: &workerexecution.WorkDiagnostics{
+			Metadata: map[string]string{
+				workerexecution.ProviderResponseMetadataCompletionEvidence: "provider_response",
+			},
+		},
+	}, nil
 }
 
 var _ providercontract.Provider = (*packagedTTSFakeProvider)(nil)

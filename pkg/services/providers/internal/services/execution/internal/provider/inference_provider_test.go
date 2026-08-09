@@ -950,4 +950,29 @@ func TestScriptWrapProvider_Infer_ExitFailureIncludesExitCodeAndProcessOutput(t 
 	}
 }
 
+func TestWithCompletionEvidenceMetadataAllocatesNilMetadata(t *testing.T) {
+	diagnostics := &workerexecution.WorkDiagnostics{}
+
+	got := withCompletionEvidenceMetadata(diagnostics)
+
+	if got.Metadata[workerexecution.ProviderResponseMetadataCompletionEvidence] != "provider_response" {
+		t.Fatalf("expected completion evidence metadata to be set, got %+v", got.Metadata)
+	}
+}
+
+func TestWithCompletionEvidenceMetadataPreservesExistingMetadata(t *testing.T) {
+	diagnostics := &workerexecution.WorkDiagnostics{
+		Metadata: map[string]string{"env_count": "3"},
+	}
+
+	got := withCompletionEvidenceMetadata(diagnostics)
+
+	if got.Metadata["env_count"] != "3" {
+		t.Fatalf("expected existing metadata to be preserved, got %+v", got.Metadata)
+	}
+	if got.Metadata[workerexecution.ProviderResponseMetadataCompletionEvidence] != "provider_response" {
+		t.Fatalf("expected completion evidence metadata to be set, got %+v", got.Metadata)
+	}
+}
+
 // portos:func-length-exception owner=agent-factory reason=legacy-codex-provider-error-table review=2026-07-19 removal=split-command-output-fixtures-and-shared-contract-assertions-before-next-provider-normalization-change

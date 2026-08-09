@@ -619,6 +619,17 @@ func withInferenceErrorDiagnostics(base *workerexecution.WorkDiagnostics, err er
 	return diagnostics
 }
 
+// withCompletionEvidenceMetadata marks diagnostics with the authoritative
+// provider_response completion-evidence fact so downstream completion
+// validation does not treat a validated provider response as contradictory.
+func withCompletionEvidenceMetadata(diagnostics *workerexecution.WorkDiagnostics) *workerexecution.WorkDiagnostics {
+	if diagnostics.Metadata == nil {
+		diagnostics.Metadata = make(map[string]string, 1)
+	}
+	diagnostics.Metadata[workerexecution.ProviderResponseMetadataCompletionEvidence] = "provider_response"
+	return diagnostics
+}
+
 func commandDiagnostics(req CommandRequest, result CommandResult, duration time.Duration, timedOut bool) *workerexecution.WorkDiagnostics {
 	envProjection := ProjectCommandEnvForDiagnostics(req.Env)
 	return &workerexecution.WorkDiagnostics{
