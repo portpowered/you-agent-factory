@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -73,25 +72,9 @@ func TestWorkWatchFollowsStateTransitionsUntilTerminal(t *testing.T) {
 		"--session", sessionID,
 	})
 	watchCommand := support.StartProcessCommand(t, watchProcess, watchInputs.Input)
-	driveWorkWatchTransitions(t, moveProcess, server.URL(), sessionID, workID)
-	awaitWorkWatchCompletion(t, watchCommand, watchInputs)
-
-	lines := decodeWatchLines(t, watchInputs.Stdout())
-	wantTransitions := [][2]string{{"init", "processing"}, {"processing", "complete"}}
-	assertWorkWatchTransitionLines(t, lines, sessionID, workID, wantTransitions)
-	if !strings.HasSuffix(watchInputs.Stdout(), "\n") {
-		t.Fatalf("work watch output does not end with a complete line: %q", watchInputs.Stdout())
-	}
-	functionalevidence.Covers(t, "cli/you.work.watch")
-}
-
-// driveWorkWatchTransitions moves the submitted Work through the authored
-// transitions that the watch invocation observes.
-func driveWorkWatchTransitions(t *testing.T, moveProcess *initializerapplication.Process, serverURL string, sessionID string, workID string) {
-	t.Helper()
 	for _, state := range []string{"processing", "complete"} {
 		moveInputs := workWatchInputs(t, []string{
-			"you", "--server", serverURL, "--json", "work", "move",
+			"you", "--server", server.URL(), "--json", "work", "move",
 			workID, state, "--session", sessionID,
 		})
 		if err := moveProcess.Execute(moveInputs.Input); err != nil {
@@ -104,6 +87,15 @@ func driveWorkWatchTransitions(t *testing.T, moveProcess *initializerapplication
 			)
 		}
 	}
+	awaitWorkWatchCompletion(t, watchCommand, watchInputs)
+
+	lines := decodeWatchLines(t, watchInputs.Stdout())
+	wantTransitions := [][2]string{{"init", "processing"}, {"processing", "complete"}}
+	assertWorkWatchTransitionLines(t, lines, sessionID, workID, wantTransitions)
+	if !strings.HasSuffix(watchInputs.Stdout(), "\n") {
+		t.Fatalf("work watch output does not end with a complete line: %q", watchInputs.Stdout())
+	}
+	functionalevidence.Covers(t, "cli/you.work.watch")
 }
 
 // awaitWorkWatchCompletion waits for the finite watch invocation to exit and
