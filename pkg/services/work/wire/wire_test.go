@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	contentmaterializationwire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization/wire"
+	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 )
 
 func TestDefaultContentMaterializationHTTPTimeoutMatchesNestedWire(t *testing.T) {
@@ -88,8 +88,8 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 
 	valid := validNewServiceInputs(t)
 	tests := []struct {
-		name   string
-		mutate func(*newServiceInputs)
+		name    string
+		mutate  func(*newServiceInputs)
 		wantErr string
 	}{
 		{
@@ -242,6 +242,7 @@ func TestNewRuntimeServiceConstructsPublishedRootFromWiredCollaborators(t *testi
 	service := workwire.NewRuntimeService(
 		inputs.runtimes,
 		os.ReadFile,
+		nil,
 		staging,
 		materializer,
 	)

@@ -1,54 +1,73 @@
 {
-  "project": "Make you work watch Retry-Safe and Preserve Failure Exit Codes",
-  "branchName": "wo-c2-fix-watch-event-id-conflict",
-  "description": "Correct you work watch so finite and --follow streams survive legitimate provider dispatch retries that re-emit a model-request event ID with refreshed canonical data, while preserving the you.work.watch.v1 NDJSON contract and making genuine stream aborts exit non-zero.",
+  "project": "WO-C3 — Add Reasoning-Effort and File-Backed Prompt Parity to you run",
+  "branchName": "wo-c3-run-parity-long-prompt-input",
+  "description": "Make one-shot ad-hoc you run invocations accept the canonical worker reasoning-effort override and an exact UTF-8 prompt from --to-file, with strict pre-dispatch source validation, preserved existing invocation behavior, synchronized CLI/help/reference contracts, and deterministic end-to-end proof.",
   "context": {
-    "customerAsk": "Make finite and --follow Work watches stream successfully for real Factory Sessions that contain provider dispatch retries, without changing the you.work.watch.v1 NDJSON shape or adding storage; genuine stream aborts must return a non-zero CLI process exit.",
-    "problem": "The strict watch reducer treats any event ID reused with differing payload data as corruption. Real Factory ledgers re-emit model-request IDs at the same request ordinal across provider dispatch retries with refreshed canonical data, so legitimate live history aborts both finite and following watches. The CLI then prints the abort but can leave the shell with exit code 0.",
-    "solution": "Align invocation-local Work watch reduction with canonical Factory Event ordering and Work-transition projection so unrelated retry enrichment cannot abort or distort transition output, then propagate genuine stream errors through the root CLI process boundary as non-zero exits while retaining stderr diagnostics and the existing NDJSON contract."
+    "customerAsk": "Add --worker-reasoning-effort and --to-file <path> to ad-hoc you run so AGY or Codex workers can receive a supported explicit effort and one exact long or multiline prompt without fragile shell quoting; reject invalid or conflicting sources before dispatch, preserve current run and Factory-signature behavior, publish the canonical contract, and deliver through merged terminal-green CI.",
+    "problem": "The live generic you run path rejects --worker-reasoning-effort even though authored Workers support canonical reasoning effort, while PowerShell Start-Process can split a multiline --to value into many positional arguments and cause INVOCATION_ARGUMENT_POSITIONAL_OVERFLOW. Long ad-hoc probes and explicit effort are therefore unreliable.",
+    "solution": "Declare canonical run-scoped effort and file-backed prompt inputs; reuse the authored Worker effort canonicalization and existing Worker request field; resolve --to-file through Work-owned input policy and an injected filesystem boundary; preserve exact UTF-8 content; reject conflicts, bad files, unsupported effort, and disallowed run shapes before Provider dispatch; then regenerate and verify CLI/help/reference surfaces with focused functional tests."
   },
   "acceptanceCriteria": [
-    "A fixture ledger containing the same model-request event ID twice with differing canonical data, matching the observed provider retry shape, is accepted without aborting the Work watch.",
-    "Finite and --follow watches emit the fixture's complete ordered Work state-transition history exactly once, and unrelated retry enrichment emits no extra NDJSON lines.",
-    "Watch output retains the exact you.work.watch.v1 NDJSON contract shape, and reconnect/cursor behavior continues from the last accepted canonical Factory Event without durable state.",
-    "Genuine stream-abort errors remain actionable on stderr and cause the built you CLI process to exit non-zero, while successful finite completion remains exit code 0.",
-    "No storage engine, public contract expansion, unrelated event-ledger rewrite, or cut-list item from docs/temp/work-order.md is introduced.",
-    "The named focused verification command go test ./pkg/services/work/transports/cli ./tests/functional/work/watch ./tests/functional/transport/cli/process and make verify-fast pass; Typecheck passes, Tests pass, no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, shared-file and baseline conflicts are reconciled, merge conflicts are resolved, and the PR is actually merged; an opened, green, approved, or ready-to-merge PR is not complete."
+    "you run --worker-reasoning-effort <supported-value> accepts the canonical authored-Worker effort vocabulary, normalizes it consistently, and carries it in the existing Worker request through dispatch; an unsupported value exits non-zero with an actionable diagnostic and no provider dispatch.",
+    "you run --to-file <path> reads a non-empty valid UTF-8 regular file and delivers its complete contents, including spaces, original line endings, non-ASCII characters, and trailing newline, as exactly one logical prompt without shell argv transport or content normalization.",
+    "--to-file, signature-defined --to, positional invocation text, and supplied non-empty stdin are mutually exclusive; conflicts, invalid paths/files/encoding/content, and run shapes without a primary prompt fail non-zero before runtime or Provider dispatch with source-specific diagnostics.",
+    "Invocations that omit the new flags preserve ordinary --to, stdin, positional Factory input, Factory-signature named/file/repeated/default inputs, packaged Factory behavior, batch/current/JavaScript run shapes, output behavior, and Provider-specific effort validation.",
+    "Canonical CLI sources and generated consumers, you run --help, and packaged you docs run describe the flags, strict conflict rule, effort semantics, and an independently runnable you run --provider codex --worker-reasoning-effort xhigh --to-file <path> example.",
+    "Applicable typecheck, focused unit/integration/functional tests, generated-contract checks, and documentation smoke checks pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, every blocking PR conversation item is explicitly addressed, merge conflicts and shared-file changes are reconciled, and the PR is actually merged; opened, green, approved, or ready-to-merge is not complete."
   ],
   "userStories": [
     {
-      "id": "wo-c2-fix-watch-event-id-conflict-001",
-      "title": "Stream Work transitions through provider retry events",
-      "description": "As a factory operator, I want finite and following Work watches to tolerate legitimate provider dispatch retry history so that I can observe every Work transition in a live session without the monitor aborting.",
+      "id": "wo-c3-run-parity-long-prompt-input-001",
+      "title": "Apply explicit reasoning effort to ad-hoc worker dispatch",
+      "description": "As a customer running an ad-hoc worker, I want to select its reasoning effort explicitly so the worker executes with the intended supported effort instead of rejecting or ignoring my request.",
       "acceptanceCriteria": [
-        "A behavioral fixture places Work state transitions before, between, and after two model-request events that reuse the same event ID with differing canonical data in the observed retry shape.",
-        "Finite mode consumes that ledger, emits the full ordered Work transition history exactly once, and exits successfully when the observed Work cohort becomes terminal.",
-        "--follow consumes the conflicting retry events without aborting and emits Work transitions that occur after them until normal cancellation.",
-        "Model-request retry events do not themselves produce you.work.watch.v1 output, and emitted transition objects retain the existing fields and meanings.",
-        "Exact replay remains idempotent, canonical resume position remains monotonic, and genuinely invalid Work transition data still returns an actionable reducer or stream error.",
-        "Tests pass",
-        "Typecheck passes"
+        "--worker-reasoning-effort is a typed you run input for applicable one-shot worker invocations and accepts the same normalized canonical values as authored Worker configuration, without a parallel enum, aliases, or fallback-to-default behavior.",
+        "A supported value, including existing case and whitespace normalization, reaches the existing Worker execution request reasoning-effort field and is observable at the deterministic Provider command edge.",
+        "A globally unsupported value fails non-zero before Factory Session activation or Provider dispatch with an actionable diagnostic naming the value; a canonically valid but Provider-unsupported value continues through existing Provider-specific rejection.",
+        "Omitting the flag preserves authored Worker/provider/model defaults, and existing packaged Factory effort signature parameters continue to work.",
+        "Focused CLI and functional regressions prove accepted effort dispatch and pre-dispatch rejection through root.BuildProcess and Process.Execute with Provider effects replaced only through edges.Edges.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented retry-safe Work-watch reduction for repeated MODEL_REQUEST IDs with refreshed canonical data, preserving strict conflicts for Work events and monotonic ephemeral cursors. Added finite, --follow, exact replay, reconnect, NDJSON, and invalid-transition behavioral coverage. Review follow-up now uses the observed later-sequence/later-event-time retry shape with realistic dispatch context and an intervening model response, and proves reconnect from the later canonical cursor. Corrective follow-up now accepts changed MODEL_REQUEST data only at a strictly later canonical position, updates the remembered retry version, and rejects same-sequence or backward conflicting reuse. Removed the unrelated manifest/inventory meta-test during review follow-up. The focused Work/watch/process command and make verify-fast pass."
+      "notes": "Implemented and verified the typed run-scoped override. Canonicalization, pre-dispatch rejection, hosted and detached invocation forwarding, authored-effort fallback, and the deterministic Codex command edge are covered by focused unit and root.BuildProcess/Process.Execute functional tests."
     },
     {
-      "id": "wo-c2-fix-watch-event-id-conflict-002",
-      "title": "Exit non-zero when a Work watch genuinely aborts",
-      "description": "As an operator or automation author, I want an aborted Work watch to return a non-zero process exit code so that monitoring scripts cannot mistake a failed stream for successful completion.",
+      "id": "wo-c3-run-parity-long-prompt-input-002",
+      "title": "Deliver one exact prompt from --to-file",
+      "description": "As a customer with a long or multiline brief, I want you run to read the prompt from a file so shell quoting cannot split or alter it.",
       "acceptanceCriteria": [
-        "A process-boundary behavioral test runs the built you work watch command against a deterministic genuine stream-abort condition and observes a non-zero exit code.",
-        "The abort diagnostic is written to stderr with enough session and stream context to identify the failed watch, while stdout contains only complete NDJSON transition lines produced before the abort.",
-        "Successful finite completion retains exit code 0, and normal --follow cancellation retains the repository's established cancellation semantics.",
-        "Stream failures are propagated through command execution and the root process boundary rather than being printed and converted to success.",
-        "Tests pass",
-        "Typecheck passes"
+        "--to-file <path> is accepted for run shapes with one logical primary text prompt, including applicable ad-hoc AGY and Codex worker invocations, and paths containing spaces resolve through the existing injected filesystem boundary.",
+        "The selected path must identify a readable regular file containing valid, logically non-empty UTF-8; failure identifies the source/path, exits non-zero, and occurs before Factory Session activation or Provider dispatch.",
+        "File contents reach one Provider request with spaces, Unicode, original CR/LF sequences, blank lines, and final newline preserved, without trimming, joining, newline conversion, or argv re-tokenization.",
+        "--to-file conflicts with signature-defined --to, positional prompt input, and supplied non-empty stdin; every combination returns the stable invocation-input conflict classification, names the sources, and never silently chooses precedence.",
+        "Run shapes without a primary prompt reject --to-file, while invocation without it preserves existing stdin, positional, ordinary --to, and signature-defined named/file/repeated/default argument behavior.",
+        "A functional regression uses a real 30-line UTF-8 prompt file at a path containing spaces and proves exact single-prompt delivery through ProviderCommandRunner; conflict and unreadable-file regressions prove zero dispatch.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Added a true built cmd/factory process-boundary Work-watch fixture that emits complete NDJSON before a malformed SSE frame, then proves the genuine stream-abort error stays actionable on stderr with session and decode context, returns the child process's non-zero exit code, and leaves stdout with exactly the complete NDJSON transition produced before the abort. The same built binary also proves successful finite completion returns exit code 0. Removed the unrelated manifest/inventory meta-test during review follow-up. The focused Work/watch/process command and make verify-fast pass."
+      "notes": "Implemented Work-owned --to-file preparation with injected regular-file inspection and reading, UTF-8/non-empty validation, exact text preservation, stable file/named/positional/stdin source conflicts, signature primary-parameter routing, and pre-dispatch rejection for non-prompt run shapes. Added generated CLI contract wiring and root.BuildProcess functional regressions proving a real 30-line UTF-8 file at a path with spaces reaches one Codex ProviderCommandRunner request byte-for-byte; conflict, missing-file, and non-regular-file cases prove zero dispatch and no read for invalid metadata. Focused Work/CLI/wire tests, make test, and lifecycle tests pass."
+    },
+    {
+      "id": "wo-c3-run-parity-long-prompt-input-003",
+      "title": "Publish and verify the reliable run contract",
+      "description": "As an operator, I want live help and the packaged run reference to show a reproducible file-backed effort command so I can use the feature without fragile shell-specific prompt quoting.",
+      "acceptanceCriteria": [
+        "The authored CLI manifest declares both flags, applicability, and --to-file conflicts, and all generated CLI manifest/consumer artifacts are regenerated through source-of-truth workflows without hand editing.",
+        "you run --help describes canonical effort validation, exact file-backed prompt behavior, and strict conflicts with --to, positional input, and supplied stdin without claiming silent precedence.",
+        "you docs run includes a PowerShell-safe workflow ending in you run --provider codex --worker-reasoning-effort xhigh --to-file \"<path with spaces>\", with prompt content absent from argv.",
+        "The documented command is independently runnable against the built CLI, and its deterministic test form proves the real 30-line prompt and xhigh effort reach one Codex worker dispatch together.",
+        "CLI contract/help tests and make docs-reference-smoke prove customer-visible behavior and packaged reference rendering without source-inventory or link-topology meta-tests.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 3,
+      "passes": true,
+        "notes": "Published the canonical authored CLI manifest/help contract for --worker-reasoning-effort and --to-file, including applicability and strict source/run-shape conflicts, then regenerated all CLI consumers and baselines. Added the PowerShell-safe packaged run reference and boundary test proving prompt content stays out of argv, plus the combined root.BuildProcess/Process.Execute lifecycle regression proving a real 30-line UTF-8 file and xhigh effort reach one Codex dispatch. CLI composition treats the shared static effort flag as authoritative while preserving authored packaged-Factory effort signatures; the packaged subagent regressions and injected Work file-preparation coverage pass. Verified CLI/work tests, contract and manifest checks, wire drift, contracts-smoke, api-smoke, api-package-verify, docs-reference smoke, make verify-fast, make test, backend-size, pkg-maint, pkg-file-count, pkg-structure, and vet; full lint is limited by the repository's existing unrelated 176-violation pkg-boundary baseline."
     }
   ]
 }

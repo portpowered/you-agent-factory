@@ -15,12 +15,12 @@ var runSubmitFamilySpecs = []struct {
 		id: "you.run", path: "you run",
 		flags: []string{
 			"continuously", "debug", "dir",
-			"factory", "json", "model", "named", "no-record", "output", "port", "provider", "quiet", "record", "replay",
+			"factory", "json", "model", "named", "no-record", "output", "port", "provider", "quiet", "record", "replay", "to-file",
 			"runtime-log-compress", "runtime-log-dir", "runtime-log-max-age-days", "runtime-log-max-backups",
 			"runtime-log-max-size-mb", "runtime-metrics-compress", "runtime-metrics-dir",
 			"runtime-metrics-max-age-days", "runtime-metrics-max-backups", "runtime-metrics-max-size-mb",
 			"server", "skip-permissions", "verbose", "with-mock-workers", "with-server", "with-site", "work",
-			"worktree",
+			"worker-reasoning-effort", "worktree",
 		},
 	},
 	{
@@ -163,6 +163,10 @@ func validateRunInputPolicy(run Command) error {
 	for _, relationshipID := range []string{
 		"you.run.rel.selectors",
 		"you.run.rel.work-invocation-input",
+		"you.run.rel.to-file-invocation-input",
+		"you.run.rel.to-file-work",
+		"you.run.rel.to-file-continuously",
+		"you.run.rel.to-file-replay",
 		"you.run.rel.recording",
 		"you.run.rel.quiet-json",
 		"you.run.rel.quiet-output",

@@ -131,6 +131,7 @@ var servicesSet = wire.NewSet(
 	provideWorkFactory,
 	provideWorkRequestIDGenerator,
 	provideWorkSubmittedFileReader,
+	provideWorkSubmittedFilePathInspector,
 	provideWorkContentHostPlatform,
 	provideContentMaterializer,
 	provideWorkMaterializationService,

@@ -79,6 +79,7 @@ func newTestServiceWithDependenciesAndProviders(
 		false,
 		"",
 		"",
+		"",
 		nil,
 		nil,
 		time.Now,

@@ -19,6 +19,12 @@ const (
 )
 
 const (
+	sharedWorkerReasoningEffortFlagID       = "you.run.flag.worker-reasoning-effort"
+	sharedWorkerReasoningEffortParameter    = "workerReasoningEffort"
+	sharedWorkerReasoningEffortExternalName = "worker-reasoning-effort"
+)
+
+const (
 	EffectiveValueConsumptionSingle               = "single-value"
 	EffectiveValueConsumptionRepeated             = "repeated-values"
 	EffectiveValueConsumptionRemainingPositionals = "remaining-positionals"
@@ -117,12 +123,42 @@ func ComposeRunInputs(manifest Manifest, commandID string, signature *work.Invoc
 	schema.StaticInputs = projectStaticInputs(command)
 	schema.FactoryInputMode = EffectiveFactoryInputModeSignature
 	schema.UnknownNamedArgumentPolicy = normalizedUnknownNamedArgumentPolicy(signature.UnknownNamedArgumentPolicy)
-	schema.FactoryParameters = projectFactoryParameters(signature.Parameters)
-	diagnostics := compositionDiagnostics(manifest, command, signature.Parameters)
+	parameters := cliFactoryParameters(command, signature.Parameters)
+	schema.FactoryParameters = projectFactoryParameters(parameters)
+	diagnostics := compositionDiagnostics(manifest, command, parameters)
 	if len(diagnostics) != 0 {
 		return EffectiveInputSchema{}, diagnostics, nil
 	}
 	return schema, diagnostics, nil
+}
+
+// cliFactoryParameters removes a Factory parameter when the CLI manifest
+// already owns the same input as a run-scoped override. The authored Factory
+// signature remains intact for API and non-CLI callers; the static run input
+// is authoritative for the CLI and is forwarded through the invocation target.
+func cliFactoryParameters(command Command, parameters []work.InvocationParameterConfig) []work.InvocationParameterConfig {
+	if !hasStaticFlag(command, sharedWorkerReasoningEffortFlagID) {
+		return parameters
+	}
+
+	projected := make([]work.InvocationParameterConfig, 0, len(parameters))
+	for _, parameter := range parameters {
+		if strings.TrimSpace(parameter.Name) == sharedWorkerReasoningEffortParameter &&
+			strings.TrimSpace(parameter.ExternalName) == sharedWorkerReasoningEffortExternalName {
+			continue
+		}
+		projected = append(projected, parameter)
+	}
+	return projected
+}
+
+func hasStaticFlag(command Command, flagID string) bool {
+	for _, flag := range command.Flags {
+		if flag.ID == flagID {
+			return true
+		}
+	}
+	return false
 }
 
 // commandWithoutCompatibilityInvocationInput removes the static prompt/stdin

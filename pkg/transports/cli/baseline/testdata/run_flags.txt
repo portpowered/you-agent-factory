@@ -1,7 +1,7 @@
 continuously		false	keep the factory alive while idle until cancelled
 debug	d	false	emit lower-level command diagnostics where supported (implies --verbose)
 dir		factory	factory base directory
-factory			path to a JSON or YAML Factory file, or an unambiguous Factory directory, for portable one-shot runs; use positional text or piped stdin for the invocation input
+factory			path to a JSON or YAML Factory file, or an unambiguous Factory directory, for portable one-shot runs; use positional text, --to-file, or piped stdin for the invocation input
 json		false	emit structured JSON on stdout for supported commands; diagnostics remain on stderr
 model			override the optional model selected within the provider for this run
 named	a		canonical persisted factory name resolved from ./factory before ~/.you-agent-factory/factories; built-ins materialize there on first use and remain editable
@@ -24,9 +24,11 @@ runtime-metrics-max-backups		20	maximum rotated runtime metrics files to retain
 runtime-metrics-max-size-mb		100	rotate each runtime metrics file after this many megabytes
 server		http://localhost:7437	factory API base URI (http:// or https://); HTTP client commands target this URI, while you server and server-enabled runs bind its loopback host and port
 skip-permissions		false	request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration
+to-file			read one exact, logically non-empty UTF-8 primary prompt from a regular file for one-shot invocation; preserves spaces, Unicode, line endings, blank lines, and a trailing newline; strictly conflicts with signature-defined --to, positional input, and supplied non-empty stdin
 verbose	v	false	emit concise command diagnostics to stderr
 with-mock-workers			enable mock-worker execution with an optional mock-workers JSON config path
 with-server		false	serve the Current Factory API for the lifetime of this run without opening a browser
 with-site		false	serve the embedded dashboard and open it once after listener readiness
 work			path to initial FACTORY_REQUEST_BATCH JSON file to submit
+worker-reasoning-effort			override the worker reasoning effort for applicable one-shot worker invocations; accepts canonical authored-Worker values minimal, low, medium, high, xhigh, or max with case and surrounding whitespace normalized; unsupported values fail before dispatch
 worktree			create or reuse a Git worktree under the invocation working directory and execute this run in its checkout

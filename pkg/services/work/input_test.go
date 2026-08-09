@@ -1,9 +1,11 @@
 package work
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/url"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -30,6 +32,66 @@ func TestResolveTextInput_StdinOnly(t *testing.T) {
 	}
 
 	assertResolvedTextInput(t, got, InputSourceStdinText, text)
+}
+
+func TestResolveTextInput_FileOnly(t *testing.T) {
+	text := "line one\r\nline two\n"
+
+	got, err := ResolveTextInput(TextInputSources{FileText: &text})
+	if err != nil {
+		t.Fatalf("ResolveTextInput: %v", err)
+	}
+
+	assertResolvedTextInput(t, got, InputSourceFileText, text)
+}
+
+func TestResolveTextInput_RejectsFileAndPositionalConflict(t *testing.T) {
+	positional := "from args"
+	file := "from file"
+
+	_, err := ResolveTextInput(TextInputSources{
+		PositionalText: &positional,
+		FileText:       &file,
+	})
+
+	var inputErr *InputError
+	if !errors.As(err, &inputErr) {
+		t.Fatalf("error = %v, want InputError", err)
+	}
+	if inputErr.Code != InputErrorCodeSourceConflict {
+		t.Fatalf("code = %q, want %q", inputErr.Code, InputErrorCodeSourceConflict)
+	}
+	want := []InputSourceLabel{InputSourcePositionalText, InputSourceFileText}
+	if !reflect.DeepEqual(inputErr.ConflictingSources, want) {
+		t.Fatalf("conflicting sources = %#v, want %#v", inputErr.ConflictingSources, want)
+	}
+}
+
+func TestResolveTextInput_RejectsEmptyFile(t *testing.T) {
+	file := "  \n\t"
+
+	_, err := ResolveTextInput(TextInputSources{FileText: &file})
+
+	assertInputEmptyError(t, err, InputSourceFileText)
+}
+
+func TestNewInvocationInputPreparationReadsInjectedRegularFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "long prompt.txt")
+	want := "  line one\r\nline two — 東京\r\n"
+	if err := os.WriteFile(path, []byte(want), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	prepared, err := NewInvocationInputPreparation(os.ReadFile, os.Stat).PrepareInvocationInput(
+		context.Background(),
+		InvocationInputPreparationRequest{FilePath: &path},
+	)
+	if err != nil {
+		t.Fatalf("PrepareInvocationInput: %v", err)
+	}
+	if prepared.Source != InputSourceFileText || prepared.ResolvedInput == nil || prepared.ResolvedInput.Text != want {
+		t.Fatalf("prepared = %#v, want exact file-backed text", prepared)
+	}
 }
 
 func TestResolveTextInput_RejectsPositionalAndStdinConflict(t *testing.T) {

@@ -101,6 +101,7 @@ type WorkersRuntimeFactory = func(
 	bool,
 	string,
 	string,
+	string,
 	*bool,
 	workers.Provider,
 	func() time.Time,

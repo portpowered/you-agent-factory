@@ -63,9 +63,11 @@ func TestNewWorkerExecutionForwardsWorkersRootBindings(t *testing.T) {
 
 	const runnerID = "session-worker-runner"
 	const runWorktree = "feature-login"
+	const workerReasoningEffort = "xhigh"
 	ptyAllocator := &workers.MockPTYAllocator{}
 	var gotRunnerID string
 	var gotWorktree string
+	var gotWorkerReasoningEffort string
 	var gotPTY workers.PTYAllocator
 	var gotProvider workers.Provider
 
@@ -81,6 +83,7 @@ func TestNewWorkerExecutionForwardsWorkersRootBindings(t *testing.T) {
 		_ bool,
 		runner string,
 		worktree string,
+		workerReasoningEffort string,
 		_ *bool,
 		provider workers.Provider,
 		_ func() time.Time,
@@ -89,6 +92,7 @@ func TestNewWorkerExecutionForwardsWorkersRootBindings(t *testing.T) {
 	) (workers.RuntimeService, error) {
 		gotRunnerID = runner
 		gotWorktree = worktree
+		gotWorkerReasoningEffort = workerReasoningEffort
 		gotPTY = pty
 		gotProvider = provider
 		return nil, nil
@@ -96,7 +100,7 @@ func TestNewWorkerExecutionForwardsWorkersRootBindings(t *testing.T) {
 
 	service, sessionBuildFactory, err := NewWorkerExecution(
 		factoryruntime.RuntimeOpeningRequest{},
-		workers.RuntimeOpeningRequest{RunnerID: runnerID, Worktree: runWorktree},
+		workers.RuntimeOpeningRequest{RunnerID: runnerID, Worktree: runWorktree, WorkerReasoningEffort: workerReasoningEffort},
 		openingCoordinatorClock{},
 		zap.NewNop(),
 		workersRootBindingProbeRunner{tag: "provider"},
@@ -126,6 +130,9 @@ func TestNewWorkerExecutionForwardsWorkersRootBindings(t *testing.T) {
 	}
 	if gotWorktree != runWorktree {
 		t.Fatalf("worktree = %q, want %q", gotWorktree, runWorktree)
+	}
+	if gotWorkerReasoningEffort != workerReasoningEffort {
+		t.Fatalf("worker reasoning effort = %q, want %q", gotWorkerReasoningEffort, workerReasoningEffort)
 	}
 	if gotPTY != ptyAllocator {
 		t.Fatalf("PTY allocator = %#v, want %#v", gotPTY, ptyAllocator)
@@ -157,6 +164,7 @@ func (probe *sessionBuildFactoryProbe) workersRuntimeFactory(
 	_ workers.PTYAllocator,
 	_ *zap.Logger,
 	_ bool,
+	_ string,
 	_ string,
 	_ string,
 	_ *bool,
@@ -323,6 +331,7 @@ func TestNewWorkerExecutionSessionBuildFactoryClosesRuntimeWhenRegistrationRejec
 		_ workers.PTYAllocator,
 		_ *zap.Logger,
 		_ bool,
+		_ string,
 		_ string,
 		_ string,
 		_ *bool,
