@@ -1,10 +1,91 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-07-29
+last-modified: 2026-08-09
 doc-id: agent-factory/guides/providers
 ---
 
-# Providers and ACP Agents
+# Providers, worker models, and ACP agents
+
+Choose the worker's provider and model from the input the worker must perceive
+and the kind of work it must do. The `modelProvider` selects the adapter and
+`model` selects the model passed to that adapter. The tier descriptions below
+are operator guidance for the configured models, not guarantees about latency,
+quality, pricing, or availability in every provider account.
+
+## Choose by input first
+
+| Need | Prefer | Decision consequence |
+|------|--------|----------------------|
+| Text, code, repository changes, or image-aware review | A configured Codex GPT-5.6 tier | The bundled Codex route accepts prompt and image input, but GPT-5.6 does not provide video or audio understanding. Do not assign audiovisual judging to it. |
+| Text and code through the bundled Claude CLI | `CLAUDE` with `claude-sonnet-5` when that model is available to the installed CLI/account | The bundled Claude provider does not declare image input. Treat it as a text/code route unless your separately configured ACP integration documents different capabilities. |
+| A video or audio file that the worker must inspect | `ANTIGRAVITY` with an AGY model | Recorded AGY CLI runs inspected referenced media through the workspace file-parsing path, including both visual content and an audio track. This is version-sensitive evidence, not a universal guarantee for every AGY release. |
+| More than five reference images for one ImageGen call | Split the work or redesign the prompt | `referenced_image_paths` accepts zero through five paths per call. Retrying the same call with six or more paths does not make it valid. |
+
+GPT-5.6's lack of video/audio understanding is a hard selection constraint for
+the configured Codex tiers. AGY's audiovisual behavior is a recorded CLI
+capability: the adapter's formal `imageInput` capability is still false, while
+the AGY agent can inspect files made available in its workspace. Those are
+different input paths; do not treat AGY as accepting provider-native image
+tokens.
+
+## Current configured model guidance
+
+Use these as a practical starting point when the models are available. The
+intended roles are routing guidance observed in this repository's Factory
+configuration and validation runs; they are not a claim that one tier always
+outperforms another.
+
+| Provider and model | Good starting point | Effort guidance |
+|--------------------|---------------------|-----------------|
+| `CODEX` / `gpt-5.6-luna` | Difficult implementation, deep review, or work where correctness is more important than throughput. The checked-in Factory uses this tier for its processor at `max`. | Codex accepts the provider-neutral effort vocabulary and forwards it as its native reasoning setting. Use the value your selected model/account supports. |
+| `CODEX` / `gpt-5.6-sol` | Planning, ideation, and ordinary analysis. The checked-in Factory uses this tier for planner and ideafier workers at `medium`. | `medium` is the observed Factory choice; it is not a hard requirement for the model. |
+| `CODEX` / `gpt-5.6-terra` | Balanced implementation and verification when a general GPT-5.6 tier is preferable. | Choose an effort supported by the selected model/account; do not infer a media capability from the tier name. |
+| `CLAUDE` / `claude-sonnet-5` | General text/code work when the Claude CLI exposes this model. | The current Claude adapter rejects `minimal`; its other canonical effort values are forwarded to Claude's `--effort` option, subject to the installed CLI/model. |
+
+The provider-neutral worker contract recognizes `minimal`, `low`, `medium`,
+`high`, `xhigh`, and `max`. That vocabulary is not portable across providers:
+Claude rejects `minimal`, and AGY has a smaller allowlist. Keep the effort
+choice with the provider/model decision rather than assuming that a value
+accepted by Codex is accepted everywhere.
+
+## ANTIGRAVITY / AGY model and effort allowlist
+
+The following AGY values are the current adapter allowlist and were also
+observed in recorded AGY CLI 1.1.11 runs on 2026-08-08. This is intentionally
+versioned guidance: check the installed AGY release after an upgrade.
+
+Supported model IDs:
+
+- `gemini-3.6-flash-high`
+- `gemini-3.6-flash-medium`
+- `gemini-3.6-flash-low`
+- `gemini-3.5-flash-high`
+- `gemini-3.5-flash-medium`
+- `gemini-3.5-flash-low`
+- `gemini-3.1-pro-high`
+- `gemini-3.1-pro-low`
+- `claude-sonnet-4-6`
+- `claude-opus-4-6-thinking`
+- `gpt-oss-120b-medium`
+
+The separate AGY effort value may be omitted or set to `low`, `medium`, or
+`high`. Do not invent `minimal`, `xhigh`, or `max` for AGY. Some AGY model IDs
+already carry a `-low`, `-medium`, or `-high` selection; that suffix is part of
+the model ID, while `reasoningEffort` is a separate worker field. Select AGY
+with the public worker value `modelProvider: ANTIGRAVITY` and choose one of the
+model IDs above. Factory dispatch supplies the AGY workspace and native
+process settings; do not copy provider-native flags onto a Factory or `you run`
+surface unless that surface explicitly documents them.
+
+## ImageGen reference limit
+
+ImageGen's `referenced_image_paths` parameter accepts **0–5 paths per call**.
+The limit applies to one ImageGen request, not to the number of images in an
+entire Factory Session. If a task needs six or more references, split it into
+multiple calls with an intermediate synthesis step, or reduce the reference
+set before calling ImageGen. Do not keep retrying an over-limit request.
+
+## ACP agents use a separate execution layer
 
 The `executorProvider` on an agent worker selects the execution mechanism;
 `ACP` selects Agent Client Protocol execution. The separate `modelProvider`

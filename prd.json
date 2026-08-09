@@ -1,90 +1,73 @@
 {
-  "project": "WO-D2 — Reference Schemas for Batch Work, States, and Relations",
-  "branchName": "wo-d2-reference-schemas-docs",
-  "description": "Publish canonical packaged reference documentation that makes the FACTORY_REQUEST_BATCH shape, Work state lifecycle, and DEPENDS_ON, PARENT_CHILD, and SAME_NAME semantics implementation-ready for customers. The concrete change extends the established batch-inputs, work, relationships, and guard-linked topics so operators can author valid batches and predict joined-input dispatch, including batch-wide name uniqueness, same-batch-only relation endpoints, and the post-A1 rule that dependencies on every joined input gate dispatch.",
+  "project": "WO-D3 — Worker/provider guide with per-provider limits",
+  "branchName": "wo-d3-worker-provider-guide",
+  "description": "Publish one canonical packaged `you docs providers` guide that helps operators choose among the configured GPT-5.6 tiers, Claude Sonnet 5, and ANTIGRAVITY models; understand effort, modality, AGY process semantics, and the five-reference ImageGen limit; and use the correct Factory worker frontmatter or ad-hoc `you run` flags. Prove every documented CLI invocation against the current binary and deliver the documentation through merge without adding runtime, provider, CLI, ACP, local-model, multimodal-wrapper, or storage behavior.",
   "context": {
-    "customerAsk": "Document the FACTORY_REQUEST_BATCH shape, Work states and transitions, and especially the difference between DEPENDS_ON, PARENT_CHILD, and SAME_NAME joining, including exactly what gates dispatch after the A1 fix. Capture the batch-wide unique-name and same-batch relation constraints discovered through live operator failures, publish the guidance through canonical docs/reference topics, execute every shown CLI invocation against the current binary, and verify packaged docs behavior with make docs-reference-smoke and make verify-fast.",
-    "problem": "Operators currently have to infer critical submission and scheduling rules from scattered contract, guard, and runtime material. This caused rejected live submissions for duplicate names and relations outside the submitted batch, while incomplete documentation of SAME_NAME joins and dependency gating delayed diagnosis of dispatch-before-dependency behavior. Work-state names and lifecycle categories are also easy to conflate, so customers cannot reliably predict starting placement, progression, or completion semantics.",
-    "solution": "Extend the canonical docs/reference batch-inputs, work, and relationships topics, with focused links to guards, rather than introducing a parallel schema topic family. Document the public batch fields and atomic constraints, the authored Work-state lifecycle, and a direct comparison of dependency, lineage, and name-join behavior. Include a worked multi-input timeline stating that every DEPENDS_ON relation on every selected join input must be satisfied before dispatch, and prove all displayed CLI commands against the current built binary with real output or behavioral assertions."
+    "customerAsk": "Publish a canonical packaged worker/provider guide that explains which supported models to choose and why, how reasoning effort is configured, which settings belong in Factory worker frontmatter versus ad-hoc `you run` invocations, and the provider-specific capabilities and limits that operators need before a run. Cover `gpt-5.6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, `claude-sonnet-5`, ANTIGRAVITY/AGY supported models and efforts, AGY `--add-dir`, print-timeout, and exit-zero-on-decline semantics, `--worker-reasoning-effort`, `--to-file`, the five-path ImageGen `referenced_image_paths` limit, and GPT-5.6's lack of video/audio understanding. Keep canonical content under `docs/reference/`, prove every CLI example against the current binary, run packaged-docs and fast verification, and complete the delivery loop through actual merge.",
+    "problem": "Critical provider behavior is scattered or learned through production failures. Operators exceeded ImageGen's five-reference-path limit and assigned audiovisual judging to GPT-5.6 without knowing it could not see video or hear audio. Model-tier intent, effort vocabulary, Factory versus ad-hoc configuration, and AGY workspace, timeout, and completion semantics are not presented as one decision path, so users can choose an unsuitable provider, misplace a setting, invent a flag, or mistake AGY's zero exit status for task acceptance.",
+    "solution": "Expand the canonical packaged provider topic into an operator-oriented worker/provider guide with a selection matrix, explicit modality and tool limits, configuration ownership, AGY caveats, and copyable Factory and ad-hoc examples. Ground every claim in current worker contracts, provider adapters, recorded AGY evidence, and current-binary CLI behavior; route adjacent reference topics to the canonical guide; and verify the installed `you docs providers` behavior directly without implementing any new runtime capability."
   },
   "acceptanceCriteria": [
-    "you docs batch-inputs gives a complete, internally consistent FACTORY_REQUEST_BATCH reference, including works[], workTypeName, batch-wide unique work names, atomic validation, and the requirement that every relation source and target name a Work item in the same submitted batch.",
-    "you docs work explains authored state names, the INITIAL, PROCESSING, TERMINAL, and FAILED lifecycle categories, initial or explicitly requested placement, workstation-driven transitions, and the observable distinction between successful terminal and failed Work.",
-    "you docs relationships clearly distinguishes DEPENDS_ON, PARENT_CHILD, and SAME_NAME; documents source/target direction; and states that dispatch waits for every DEPENDS_ON relation on every input selected for a join, including secondary SAME_NAME-joined inputs.",
-    "All new or changed examples use public customer vocabulary, live under docs/reference, keep root docs as routing material, stay within the D2 cut list, and avoid unrelated documentation or implementation cleanup.",
-    "Every CLI invocation shown in changed documentation is executed against the current built binary during implementation, with actual stdout/stderr pasted into the PR evidence or asserted in behavioral coverage; the named verification commands go test ./pkg/transports/cli/..., make docs-reference-smoke, and make verify-fast pass.",
-    "Typecheck and tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file changes are reconciled, and the PR is actually merged."
+    "`you docs providers` presents one coherent selection path covering the intended uses of `gpt-5.6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, and `claude-sonnet-5`, plus ANTIGRAVITY's currently supported AGY models and effort selection, without claiming unverified models or capabilities.",
+    "The packaged guide states the known modality and tool constraints before its examples: GPT-5.6 does not provide video/audio understanding, AGY can inspect referenced media through its CLI file-parsing path, and ImageGen accepts at most five `referenced_image_paths` per call.",
+    "The guide distinguishes Factory worker frontmatter from ad-hoc `you run` flags, documents `--worker-reasoning-effort` and `--to-file`, and explains AGY's mandatory workspace `--add-dir`, effective print-timeout, and exit-zero-on-decline behavior in terms an operator can act on.",
+    "Every CLI invocation printed in changed or new guide content is executed against a binary built from the implementation commit; its real output or a direct behavioral assertion is retained as review evidence, and no example contains an invented flag, model, effort, or output.",
+    "Packaged behavior is proven by `make docs-reference-smoke`; the named focused verification command is `go test ./tests/functional/smoke -run '^TestDocsCommandSmoke_' -count=1`, and both commands verify customer-visible `you docs providers` output rather than source inventories or link topology.",
+    "Quality gate: Typecheck passes, `make verify-fast` passes, focused docs tests pass, and no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "Delivery continues through implementation and correctness-first review until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, shared-file churn and merge conflicts are reconciled against current main, and the PR is actually merged; opened, green, approved, or ready-to-merge is not complete."
   ],
   "userStories": [
     {
-      "id": "wo-d2-reference-schemas-docs-001",
-      "title": "Author a valid batch request",
-      "description": "As a factory operator, I want one authoritative batch schema guide so I can submit multiple Work items without discovering naming, work-type, or relation-scope constraints through rejection.",
+      "id": "wo-d3-worker-provider-guide-001",
+      "title": "Choose a suitable provider and model before running work",
+      "description": "As an operator, I want a provider/model selection guide with explicit capabilities and limits so I can choose a worker that can perceive the input and perform the required task without learning constraints through a failed production run.",
       "acceptanceCriteria": [
-        "The batch guide identifies the public request discriminator, request-level fields, works[] fields, and relations[] fields, and uses workTypeName rather than retired internal aliases.",
-        "The guide states that Work names must be unique across the entire batch and explains that relations resolve by those names.",
-        "The guide states that each relation's source and target must both name Work in the same submitted batch; relations cannot point to existing Work from an earlier or different submission.",
-        "A valid mixed-work-type example and focused invalid examples make workTypeName, duplicate-name, unknown relation endpoint, self-relation, cycle, and invalid requiredState outcomes reviewer-verifiable, including whole-batch rejection with no partial creation.",
-        "Every CLI invocation added or changed in this story is run against the current binary and its real output is pasted into PR evidence or asserted by behavioral coverage.",
-        "make docs-reference-smoke passes.",
-        "Typecheck passes"
+        "`you docs providers` explains the intended configured roles of `gpt-5.6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, and `claude-sonnet-5`, and separates operator selection guidance from hard provider capability claims.",
+        "The guide lists only ANTIGRAVITY models and effort choices supported by current adapter behavior and recorded AGY evidence, and tells readers how AGY is selected through `modelProvider: ANTIGRAVITY`.",
+        "A capability/limit table states supported relevant input modalities and the decision consequences, including that GPT-5.6 cannot judge video or audio and AGY is the documented file-parsing route for audiovisual review.",
+        "The ImageGen section states that `referenced_image_paths` accepts zero to five paths per call and tells operators to split or redesign work that needs more than five references rather than retrying the same invalid call.",
+        "Provider/model names, effort choices, modality statements, and tool limits are checked against current contracts, adapters, and recorded evidence during implementation; uncertain or version-sensitive claims are labeled rather than presented as timeless guarantees.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Extended docs/reference/batch-inputs.md with the complete public batch envelope, batch-wide Work-name namespace, same-submission relation endpoint scope, atomic rejection behavior, and focused duplicate/unknown-endpoint/self/cycle/requiredState examples. Verified the documented inline you submit batch --dry-run against bin/you.exe, make docs-reference-smoke, go test ./pkg/transports/cli/..., and make verify-fast."
+      "notes": "Added the canonical provider/model selection and limits section to docs/reference/providers.md. It distinguishes operator heuristics from adapter facts, covers the configured gpt-5.6-luna/sol/terra and claude-sonnet-5 roles, documents the current AGY model allowlist and low/medium/high effort boundary, explains modelProvider: ANTIGRAVITY, records GPT-5.6's lack of video/audio understanding versus AGY's recorded workspace file-parsing evidence, and documents ImageGen's 0-5 referenced_image_paths limit with split/redesign guidance. Updated the executable docs smoke assertions. Verified with go test ./tests/functional/smoke -run '^TestDocsCommandSmoke_' -count=1, go test ./pkg/services/providers/... -run 'TestCommandEffect|Test.*Catalog|Test.*Selection' -count=1, make docs-reference-smoke, and make verify-fast (including typecheck, 355 Vitest files/2970 tests, 191 Bun tests, and the short Go suite)."
     },
     {
-      "id": "wo-d2-reference-schemas-docs-002",
-      "title": "Understand Work states and transitions",
-      "description": "As a factory author or operator, I want the Work reference to explain state categories and transitions so I can predict where submitted Work starts, how it advances, and when it is considered successful or failed.",
+      "id": "wo-d3-worker-provider-guide-002",
+      "title": "Configure Factory workers and ad-hoc runs on the correct surface",
+      "description": "As an operator, I want copyable configuration and invocation examples that distinguish durable worker settings from one-off run flags so I can set effort and pass multiline prompts without misplaced fields or fragile shell quoting.",
       "acceptanceCriteria": [
-        "The Work reference distinguishes customer-authored state names from the lifecycle categories INITIAL, PROCESSING, TERMINAL, and FAILED, with the runtime meaning of each category.",
-        "The guide explains that omitted batch works[].state uses the Work type's initial state, while an explicit state must be a valid state on that Work type and intentionally changes starting placement.",
-        "The guide explains that the factory topology and workstation outcome routes define available transitions; it does not imply a universal fixed sequence of state names.",
-        "The guide explains observable completion semantics, including that TERMINAL represents successful completion, FAILED represents failed completion, and both stop ordinary non-terminal processing.",
-        "State guidance cross-links to the batch, factory configuration, workstation, and Work-observation references without duplicating their full contracts.",
-        "Every CLI invocation added or changed in this story is run against the current binary and its real output is pasted into PR evidence or asserted by behavioral coverage.",
-        "make docs-reference-smoke passes.",
-        "Typecheck passes"
+        "The guide includes a clear mapping between canonical Factory worker frontmatter fields (`modelProvider`, `model`, `reasoningEffort`, `skipPermissions`, and applicable timeout settings) and the supported ad-hoc `you run` flags, explicitly including `--worker-reasoning-effort` and `--to-file` without implying every provider-native flag is a `you run` flag.",
+        "At least one worker-frontmatter example and one ad-hoc `you run` example show how to select a provider/model and effort, and the multiline example uses `--to-file` so prompt content does not depend on PowerShell argv quoting.",
+        "ANTIGRAVITY guidance explains that factory dispatch supplies `agy --add-dir` for the working directory, derives/passes an effective `--print-timeout`, and must interpret the parsed final result because AGY can exit zero after declining the task; operators are not instructed to add provider-native flags to unsupported Factory or `you run` surfaces.",
+        "Each CLI invocation shown in the changed guide is executed against the current implementation binary, and review evidence includes the real output or a direct assertion of exit code and relevant output; examples requiring credentials or a provider call use a non-dispatching help/validation path or clearly separate environment-dependent output from deterministic syntax proof.",
+        "Invalid or unavailable combinations are described with an actionable alternative, including using AGY for audiovisual inspection, reducing ImageGen references to five or fewer, and omitting a separate effort value where the provider/model contract encodes or rejects it.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Extended docs/reference/work.md with the customer-authored state-name versus lifecycle-category distinction, INITIAL/PROCESSING/TERMINAL/FAILED meanings, omitted versus explicit works[].state placement, topology-defined transitions, successful versus failed completion semantics, and links to batch, config, workstations, and Work observation sections. Rebuilt bin/you.exe and asserted the new section and cross-links in you docs work output; verified go test ./pkg/transports/cli/..., make docs-reference-smoke, and make verify-fast."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "wo-d2-reference-schemas-docs-003",
-      "title": "Predict relation and joined-input dispatch behavior",
-      "description": "As a factory author, I want dependency, lineage, and name-join semantics compared directly so I can choose the correct construct and know exactly when a multi-input workstation may dispatch.",
+      "id": "wo-d3-worker-provider-guide-003",
+      "title": "Deliver the guide through the packaged docs experience",
+      "description": "As a CLI user, I want the worker/provider guidance available from the installed binary and consistently routed from related topics so I can find the same canonical answer outside the repository checkout.",
       "acceptanceCriteria": [
-        "A comparison explains that DEPENDS_ON is a submitted batch relation for prerequisite-state gating, PARENT_CHILD is a submitted batch relation for parent lineage and parent-aware fan-in, and SAME_NAME is a per-input workstation guard that correlates inputs by authored Work name rather than a batch relation.",
-        "Direction is explicit: for DEPENDS_ON, the source is blocked by the target; for PARENT_CHILD, the source is the child and the target is the parent; for SAME_NAME, matchInput identifies the peer input whose selected Work name must equal the guarded input's Work name.",
-        "The guide states that SAME_NAME only selects compatible joined inputs and does not satisfy, replace, or create a dependency or parent lineage.",
-        "The dispatch invariant is explicit: after all join guards select a complete input binding, the scheduler evaluates every DEPENDS_ON relation on every selected input, and any missing target or target not in its requiredState prevents dispatch—including a dependency carried only by a secondary SAME_NAME-joined input.",
-        "A worked two-input example and timeline show that the workstation remains undispatched while the secondary joined input's prerequisite is incomplete and becomes eligible only after that prerequisite reaches the required state, subject to all other guards, capacity, and scheduler rules.",
-        "Every CLI invocation added or changed in this story is run against the current binary and its real output is pasted into PR evidence or asserted by behavioral coverage.",
-        "make docs-reference-smoke passes.",
-        "Typecheck passes"
+        "`you docs providers` from a built CLI outside the repository docs tree prints the complete provider/model, effort, configuration-surface, AGY semantics, modality, and ImageGen limit guidance.",
+        "The packaged docs topic index describes `providers` as the canonical worker/provider selection and limits guide, while related `workers`, `run`, and `models` content routes readers to it and does not retain contradictory provider or effort guidance.",
+        "Root documentation remains routing/index material; the detailed guide is maintained in canonical `docs/reference/` content and delivered through the existing packaged docs mechanism.",
+        "The focused packaged-docs regression proof invokes the docs command and asserts the decision-critical statements visible to customers, including the five-path limit and GPT-5.6 video/audio limitation, without scanning source files or asserting registration inventories.",
+        "`make docs-reference-smoke` passes.",
+        "The named focused verification command `go test ./tests/functional/smoke -run '^TestDocsCommandSmoke_' -count=1` passes.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Extended docs/reference/relationships.md with a direct DEPENDS_ON, PARENT_CHILD, and SAME_NAME comparison; explicit source/target or matchInput direction; the distinction between batch relations and per-input guards; the all-selected-input dependency gate after join binding; and a two-batch worked timeline for a secondary SAME_NAME input whose prerequisite is incomplete. Rebuilt bin/you.exe and verified the rendered you docs relationships output, go test ./pkg/transports/cli/... -count=1, the existing TestDependsOnSecondaryJoinedInput behavioral regression, make docs-reference-smoke, and make verify-fast."
-    },
-    {
-      "id": "wo-d2-reference-schemas-docs-004",
-      "title": "Retrieve trustworthy packaged schema guidance",
-      "description": "As a CLI user, I want the completed guidance available through the packaged docs commands so I can consult the same authoritative material in the environment where I operate a factory.",
-      "acceptanceCriteria": [
-        "The current binary successfully renders the revised batch, Work-state, and relation guidance through you docs batch-inputs, you docs work, and you docs relationships, with discoverable cross-links from the packaged topic index or relevant topic routing text.",
-        "Packaged output contains the same customer-facing semantics as the canonical Markdown, including the same-batch relation boundary and the all-joined-input dependency gate.",
-        "Command examples and captured outputs contain no invented flags, fabricated success messages, or unverified error text; environment-specific identifiers are clearly presented as examples rather than claimed output.",
-        "Focused behavioral verification uses go test ./pkg/transports/cli/...; make docs-reference-smoke and make verify-fast also pass.",
-        "Scope contains no local-model harness, llama-server trace work, new ACP lane, wrapper-layer multimodal transformation, storage engine, or broad root documentation rewrite.",
-        "Typecheck passes"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": "Rebuilt bin/you.exe and verified the packaged surface directly: you docs batch-inputs, you docs work, and you docs relationships each exited 0 and contained the D2 schema, lifecycle, and joined-input dependency markers; you docs with no topic listed all three discoverable topic commands; and the batch-work compatibility alias matched batch-inputs exactly. Verified go test ./pkg/transports/cli/... -count=1, make docs-reference-smoke, and make verify-fast (typecheck, MCP contract checks, UI tests, and short Go suite)."
+      "passes": false,
+      "notes": ""
     }
   ]
 }
