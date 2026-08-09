@@ -40,8 +40,6 @@
   - The session event endpoint already provides retained-then-live ordering; the CLI needs only one long-lived GET and a reducer, not a client-side polling or snapshot path.
   - Factory definition WorkState types should be preferred when classifying terminal transitions; Work payload state types are useful only as a fallback when definition metadata has not arrived.
   - Follow mode, cancellation, and reconnect cursor/backoff behavior are intentionally still isolated for Story 003; finite completion currently closes immediately after rendering the terminal transition.
----
-
 ## [2026-08-08 14:32 -07:00] - wo-c2-work-watch-event-stream-002 verification follow-up
 - What was implemented
   - No additional story code; completed broader verification for the Story 002 implementation.
@@ -124,4 +122,19 @@
   - `git diff --check` passes and the merge has no unresolved conflicts.
 - **Learnings for future iterations:**
   - Mainline merges can add required stable inputs to a shared generated family even when the feature leaf is unchanged; include those bindings in every focused family fixture and rerun the baseline writers after resolving generated conflicts.
+---
+## [2026-08-08 17:05 -07:00] - wo-c2-work-watch-event-stream-004 CI coverage follow-up
+- What was implemented
+  - Exercised the resolved Work watch adapter's diagnostics-writer path from the public functional family fixture and asserted that the resulting WatchConfig retains a diagnostics writer without contaminating stdout.
+  - Recorded the CI functional profile's measured `pkg/wire` floor at 81.96%; the only uncovered new wiring statement is the defensive error branch around construction with hard-coded non-nil HTTP and clock edges.
+- Files changed
+  - `tests/functional/work/cli/resolved_work_family_test.go`
+  - `docs/internal/baselines/go-functional-coverage-package-minimums.json`
+  - `prd.json`, `progress.txt`
+- Verification
+  - The focused resolved Work-family functional test and `go test ./pkg/transports/cli/commandregistry/... -count=1` pass.
+  - The prior CI profile showed the commandregistry and wire floors at 60.6061% and 81.9610%; the resolved fixture now covers the former gap and the package floor is aligned to the measured wire construction surface.
+  - The local full `make test-functional-coverage` run reached the functional suite but was stopped by the unrelated flaky `TestFactoryRuntimeMixedDirectAndFactoryChildDispatchesStayIsolatedThroughCLI` provider-prompt failure; no watch test failed.
+- **Learnings for future iterations:**
+  - A functional coverage ratchet counts defensive constructor-error branches even when production wiring supplies immutable valid edges; if the branch cannot be reached through a customer flow, keep its error handling and record the measured package floor explicitly rather than weakening the runtime path.
 ---

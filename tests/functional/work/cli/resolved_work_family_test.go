@@ -33,6 +33,9 @@ func TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs(t *testi
 			},
 		}),
 		Watch: commandregistry.ResolvedWatchRunE(commandregistry.ResolvedWatchBinding{
+			DiagnosticsWriter: func(cmd *cobra.Command) io.Writer {
+				return cmd.ErrOrStderr()
+			},
 			WatchWork: func(cfg workcli.WatchConfig) error {
 				watched = cfg
 				_, err := io.WriteString(cfg.Output, "watched\n")
@@ -100,7 +103,8 @@ func TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs(t *testi
 		t.Fatalf("list config = %#v, want stable local and inherited inputs", listed)
 	}
 	if watched.Server != "https://factory.example" || watched.SessionID != "session-w" ||
-		!watched.SessionIDExplicit || !watched.Follow || !watched.Verbose || !watched.Debug {
+		!watched.SessionIDExplicit || !watched.Follow || !watched.Verbose || !watched.Debug ||
+		watched.Diagnostics == nil {
 		t.Fatalf("watch config = %#v, want stable local and inherited inputs", watched)
 	}
 	if shown.Server != "https://factory.example" || shown.SessionID != "session-b" ||
