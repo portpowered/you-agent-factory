@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-06-03
+last-modified: 2026-08-09
 doc-id: agent-factory/work
 ---
 
@@ -59,6 +59,78 @@ dispatch to workers, and route outcomes based on worker results:
 Each accepted submission references a `workTypeName` that must exist in
 `factory.json`. Workstation routing details are owned by
 `you docs config` and `you docs workstations`.
+
+## Work State Names And Lifecycle Categories
+
+Every configured Work state has two independent values:
+
+- `name` is the customer-authored state name, such as `queued`, `in-review`,
+  `shipped`, or `blocked`. This is the value used by submitted `state` fields
+  and workstation input or output routes.
+- `type` is the runtime lifecycle category. It is one of `INITIAL`,
+  `PROCESSING`, `TERMINAL`, or `FAILED`. The category is not a state name and
+  should not be substituted for one.
+
+For example, a Work type can give meaningful customer names to all four
+categories:
+
+```json
+{
+  "name": "release-task",
+  "states": [
+    { "name": "queued", "type": "INITIAL" },
+    { "name": "in-review", "type": "PROCESSING" },
+    { "name": "shipped", "type": "TERMINAL" },
+    { "name": "blocked", "type": "FAILED" }
+  ]
+}
+```
+
+| Lifecycle category | Runtime meaning | Observable completion meaning |
+|--------------------|-----------------|-------------------------------|
+| `INITIAL` | Entry or waiting category for newly admitted Work. | Non-terminal; a matching workstation may consume it. |
+| `PROCESSING` | Work is still progressing through the authored workflow. | Non-terminal; it may be routed to another authored state. |
+| `TERMINAL` | Work reached a successful completion state. | Terminal and successful; ordinary non-terminal processing stops. |
+| `FAILED` | Work reached an unsuccessful completion state. | Terminal and failed; ordinary non-terminal processing stops, and it remains distinct from successful `TERMINAL` Work. |
+
+### Starting placement
+
+For a batch request, omitting `works[].state` places the Work in the Work
+type's `INITIAL` state. To intentionally place it elsewhere, provide a
+customer-authored state name that is declared on that Work type:
+
+```json
+{
+  "name": "urgent-release",
+  "workTypeName": "release-task",
+  "state": "in-review",
+  "payload": { "title": "Ship the urgent release" }
+}
+```
+
+Here `in-review` is an explicit starting placement and `PROCESSING` is only
+the category declared for that state. An unknown name, or a name belonging to
+another Work type, is invalid. See `you docs batch-inputs` for the complete
+batch envelope and validation behavior.
+
+### Transitions come from the authored topology
+
+The lifecycle categories do not impose a universal sequence such as
+`INITIAL -> PROCESSING -> TERMINAL`. The Factory topology determines which
+transitions exist: a workstation `inputs` entry consumes a particular
+`{workType, state}` name, and its `outputs`, `onContinue`, `onRejection`, and
+`onFailure` routes name the next state. A workflow can therefore skip a
+processing state, loop back for another attempt, branch to a failed state, or
+use several processing states before success. See `you docs config` for Work
+type declarations and `you docs workstations` for workstation routes and
+outcomes.
+
+To inspect the current authored state name together with its lifecycle
+category, use the Work observation surfaces described in [Verify after
+submit](#verify-after-submit) and [Watch Work state transitions](#watch-work-state-transitions).
+The observation category is the reliable way to distinguish successful
+`TERMINAL` Work from failed `FAILED` Work when both have stopped ordinary
+processing.
 
 Submitted work payloads are not part of the `factory.json` topology contract.
 Use `you docs batch-inputs` for the watched-file and API request
