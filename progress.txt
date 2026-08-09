@@ -8,6 +8,7 @@
 - Restore package coverage thresholds with focused behavioral tests for typed edge outcomes; do not lower baseline manifests for new branches.
 - Replay completeness must be derived from a terminal lifecycle record inside the captured Events range, not from a separately synchronized terminal session state.
 - When a package has a strict file-count baseline, put a small refactor in an existing focused file before adding a new helper file or changing the baseline.
+- When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
 
 ## 2026-08-09 14:24 -07:00 - wo-c1-ext-stream-replay-only-001
 - What was implemented
@@ -92,7 +93,19 @@
 - **Learnings for future iterations:**
   - Terminal state and terminal-event publication are separate synchronized effects; snapshot consumers must validate the event range before claiming a complete capture, including permanent terminal-record append failures.
   - Review ratchets may include package file-count baselines in addition to line and complexity limits; an existing cohesive package file is preferable for small same-package helper moves.
-  - Focused Worker Sessions/CLI package tests, the named redirect functional test, `make verify-fast`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and affected-package vet pass. `make -k lint` still reports pre-existing baseline failures in `pkg-boundary`, package-target/packaged-factory/ownership inventories, and deadcode; the reviewer-identified new backend-size/pkg-maint failures are resolved.
+- Focused Worker Sessions/CLI package tests, the named redirect functional test, `make verify-fast`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and affected-package vet pass. `make -k lint` still reports pre-existing baseline failures in `pkg-boundary`, package-target/packaged-factory/ownership inventories, and deadcode; the reviewer-identified new backend-size/pkg-maint failures are resolved.
+---
+
+## 2026-08-09 16:45 -07:00 - wo-c1-ext-stream-replay-only-ci-follow-up
+- What was implemented
+  - Inspected PR #1840's GitHub Actions backend functional coverage failure with the CI log workflow and reran only the failed job.
+  - Confirmed the first failing existing durability test (`TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren`) and the rerun's existing restart test (`TestFactorySessionResumeDoesNotRepeatCompletedDispatch`) each pass in isolation; no source change was made because neither touches the replay-only implementation.
+  - Confirmed all other PR checks, including Backend Unit Coverage, remain passing; the broad Backend Functional Coverage lane and its Verification Policy aggregator remain red after the rerun.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - The current PR's remaining blocker is external full-suite functional instability in cancellation-observation assertions, not a reproducible feature failure; a future iteration should rerun or diagnose that suite before changing Worker Sessions replay behavior.
+  - The PR remains open at the latest pushed commit with no additional unresolved inline review threads, but cannot be marked review-ready while the required backend functional check is red.
 ---
 
 ## 2026-08-09 16:13 -07:00 - wo-c1-ext-stream-replay-only-delivery
