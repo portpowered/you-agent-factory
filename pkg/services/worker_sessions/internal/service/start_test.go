@@ -956,10 +956,9 @@ func TestStart_ResultAndErrorDisagreement_TrustsWorkResultOutcomeOverAdapterErro
 	}
 }
 
-func TestStart_ResultSuccessDisagreesWithNonNilAdapterError_TrustsWorkResultOutcome(t *testing.T) {
-	// The WorkResult reports success even though a non-nil adapter error
-	// also came back. Result outcome is authoritative before adapter error:
-	// this must still terminalize COMPLETED.
+func TestStart_ResultSuccessDisagreesWithNonNilAdapterError_TerminalizesFailedWithCause(t *testing.T) {
+	// A successful WorkResult cannot erase a non-nil adapter error. The
+	// contradictory evidence must remain visible as a failed terminal result.
 	execution := &fakeExecution{
 		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
 			return workers.WorkstationDispatchResult{
@@ -978,8 +977,12 @@ func TestStart_ResultSuccessDisagreesWithNonNilAdapterError_TrustsWorkResultOutc
 	if err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
-	if result.Session.State != workersessions.StateCompleted {
-		t.Fatalf("Start() state = %q, want COMPLETED because WorkResult.Outcome is authoritative", result.Session.State)
+	if result.Session.State != workersessions.StateFailed {
+		t.Fatalf("Start() state = %q, want FAILED for contradictory completion evidence", result.Session.State)
+	}
+	if result.Session.Result == nil || result.Session.Result.Cause == nil ||
+		strings.TrimSpace(result.Session.Result.Cause.Detail) == "" {
+		t.Fatalf("Start() result = %#v, want a non-empty failure cause", result.Session.Result)
 	}
 }
 
@@ -1325,5 +1328,65 @@ func TestConcurrentStart_DistinctSessions_TerminalizeIndependentlyWithoutCrossAs
 		if session.State != workersessions.StateCompleted {
 			t.Errorf("session %q state = %q, want COMPLETED", session.ID, session.State)
 		}
+	}
+}
+
+// TestInvokeSession_RetryableFailureUsesOneSessionAcrossAttempts proves the
+// retry loop keeps the Worker Session identity and publication window stable
+// while minting a distinct attempt dispatch ID. The first timeout is a
+// retryable Workers result; the second attempt completes authoritatively.
+func TestInvokeSession_RetryableFailureUsesOneSessionAcrossAttempts(t *testing.T) {
+	var calls int
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			calls++
+			if calls == 1 {
+				return workers.WorkstationDispatchResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Result: workers.WorkResult{
+						DispatchID: req.Execution.Dispatch.DispatchID,
+						Outcome:    workers.OutcomeFailed,
+						FailureMetadata: &workers.WorkFailureMetadata{
+							Family: workers.WorkFailureFamilyRetryable,
+							Type:   workers.WorkFailureTypeTimeout,
+						},
+					},
+				}, nil
+			}
+			return workers.WorkstationDispatchResult{
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+				},
+			}, nil
+		},
+	}
+	registry := newRegistryWithExecution(execution)
+	request := validStartRequest("worker-retry", "dispatch-1")
+	request.Retry = workersessions.RetryPolicy{MaxAttempts: 2}
+
+	result, err := registry.InvokeSession(context.Background(), request)
+	if err != nil {
+		t.Fatalf("InvokeSession() error = %v, want nil", err)
+	}
+	if result.Session.State != workersessions.StateCompleted {
+		t.Fatalf("InvokeSession() state = %q, want COMPLETED", result.Session.State)
+	}
+	if result.Attempts != 2 {
+		t.Fatalf("InvokeSession() attempts = %d, want 2", result.Attempts)
+	}
+	requests := execution.requests()
+	if len(requests) != 2 {
+		t.Fatalf("Workers received %d dispatches, want 2", len(requests))
+	}
+	if got := requests[0].Execution.Dispatch.DispatchID; got != "dispatch-1" {
+		t.Fatalf("first attempt dispatch ID = %q, want dispatch-1", got)
+	}
+	if got := requests[1].Execution.Dispatch.DispatchID; got != "dispatch-1/attempt/2" {
+		t.Fatalf("retry attempt dispatch ID = %q, want dispatch-1/attempt/2", got)
+	}
+	if result.Session.ID != request.ID {
+		t.Fatalf("retry session ID = %q, want %q", result.Session.ID, request.ID)
 	}
 }

@@ -203,12 +203,47 @@ func (r *registry) commitTerminal(id string, state workersessions.State, result 
 	if !exists || (existing.State != workersessions.StateStarting && existing.State != workersessions.StateRunning) {
 		return cloneSession(existing), false
 	}
+	result = normalizeCommittedTerminal(state, result)
 
 	session := existing
 	session.State = state
 	session.Result = cloneTerminalResult(&result)
 	r.sessions[id] = session
 	return cloneSession(session), true
+}
+
+// normalizeCommittedTerminal is the last in-process guard before a terminal
+// snapshot becomes durable. Normal classification already supplies a valid
+// result, but this boundary also protects against an adapter or future caller
+// constructing an empty/overlong cause: a FAILED session and its event must
+// never be committed with a blank diagnostic.
+func normalizeCommittedTerminal(state workersessions.State, result workersessions.TerminalResult) workersessions.TerminalResult {
+	switch state {
+	case workersessions.StateCompleted:
+		return workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}
+	case workersessions.StateFailed:
+		if result.Outcome != workersessions.TerminalOutcomeFailed || result.Cause == nil || !result.Cause.Kind.Valid() {
+			return failedTerminal(
+				workersessions.FailureCauseWorkersExecutionFailure,
+				"the Worker Session failed without a reported cause",
+			)
+		}
+		cause := *result.Cause
+		cause.Detail = boundedFailureDetail(cause.Kind, cause.Detail)
+		cause.ProviderFailureKind,
+			cause.ProviderContinuationFailureKind,
+			cause.ProviderContinuationOutcome = workersessions.SanitizeProviderFailureClassification(
+			cause.ProviderFailureKind,
+			cause.ProviderContinuationFailureKind,
+			cause.ProviderContinuationOutcome,
+		)
+		return workersessions.TerminalResult{
+			Outcome: workersessions.TerminalOutcomeFailed,
+			Cause:   &cause,
+		}
+	default:
+		return result
+	}
 }
 
 // commitControlTerminal terminalizes an unstarted or explicitly canceled

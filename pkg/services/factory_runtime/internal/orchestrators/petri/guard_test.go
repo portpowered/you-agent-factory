@@ -3,6 +3,7 @@ package petri
 import (
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -559,6 +560,331 @@ func TestAllWithParentGuard_MissingBinding(t *testing.T) {
 	}
 	if matched != nil {
 		t.Fatalf("expected nil matches, got %v", matched)
+	}
+}
+
+func TestAllWithParentGuard_BlocksWhenRegisteredSiblingIsProcessing(t *testing.T) {
+	parent := &factorytoken.Token{
+		ID:    "parent-token",
+		Color: factorytoken.Color{WorkID: "parent-1"},
+	}
+	terminal := factorytoken.Token{
+		ID:      "child-terminal",
+		PlaceID: "child:complete",
+		Color: factorytoken.Color{
+			WorkID:     "child-1",
+			WorkTypeID: "child",
+			ParentID:   "parent-1",
+		},
+	}
+	processing := terminal
+	processing.ID = "child-processing"
+	processing.PlaceID = "child:processing"
+	processing.Color.WorkID = "child-2"
+
+	guard := &AllWithParentGuard{MatchBinding: "parent"}
+	matched, ok := guard.EvaluateRuntime(
+		RuntimeGuardContext{ParentChildRegistrations: ParentChildRegistrationProjection{
+			"parent-1": {Children: []factorytoken.Token{terminal, processing}, Complete: true},
+		}},
+		[]factorytoken.Token{terminal},
+		map[string]*factorytoken.Token{"parent": parent},
+		&MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+			terminal.ID:   &terminal,
+			processing.ID: &processing,
+		}},
+	)
+	if ok || len(matched) != 0 {
+		t.Fatalf("fan-in enabled with a processing sibling: matched=%v ok=%t", matched, ok)
+	}
+}
+
+func TestAllWithParentGuard_LateRegistrationStaysBlockedUntilTerminal(t *testing.T) {
+	parent := &factorytoken.Token{
+		ID:    "parent-token",
+		Color: factorytoken.Color{WorkID: "parent-1"},
+	}
+	first := factorytoken.Token{
+		ID:      "child-first",
+		PlaceID: "child:complete",
+		Color:   factorytoken.Color{WorkID: "child-1", WorkTypeID: "child", ParentID: "parent-1"},
+	}
+	late := first
+	late.ID = "child-late"
+	late.Color.WorkID = "child-2"
+	late.PlaceID = "child:processing"
+	guard := &AllWithParentGuard{MatchBinding: "parent"}
+	bindings := map[string]*factorytoken.Token{"parent": parent}
+
+	initial := MarkingSnapshot{Tokens: map[string]*factorytoken.Token{first.ID: &first}}
+	if matched, ok := guard.EvaluateRuntime(RuntimeGuardContext{}, []factorytoken.Token{first}, bindings, &initial); ok || len(matched) != 0 {
+		t.Fatalf("runtime fan-in should fail closed without a registration projection: matched=%v ok=%t", matched, ok)
+	}
+	initialProjection := ParentChildRegistrationProjection{
+		"parent-1": {Children: []factorytoken.Token{first}, Complete: false},
+	}
+	if matched, ok := guard.EvaluateRuntime(RuntimeGuardContext{ParentChildRegistrations: initialProjection}, []factorytoken.Token{first}, bindings, &initial); ok || len(matched) != 0 {
+		t.Fatalf("fan-in should fail closed before the registered set is complete: matched=%v ok=%t", matched, ok)
+	}
+
+	withLateChild := MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+		first.ID: &first,
+		late.ID:  &late,
+	}}
+	lateProjection := ParentChildRegistrationProjection{
+		"parent-1": {Children: []factorytoken.Token{first, late}, Complete: false},
+	}
+	if matched, ok := guard.EvaluateRuntime(RuntimeGuardContext{ParentChildRegistrations: lateProjection}, []factorytoken.Token{first}, bindings, &withLateChild); ok || len(matched) != 0 {
+		t.Fatalf("late processing child should keep fan-in blocked until registration closes: matched=%v ok=%t", matched, ok)
+	}
+
+	late.PlaceID = "child:complete"
+	terminalSnapshot := MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+		first.ID: &first,
+		late.ID:  &late,
+	}}
+	matched, ok := guard.EvaluateRuntime(RuntimeGuardContext{ParentChildRegistrations: ParentChildRegistrationProjection{
+		"parent-1": {Children: []factorytoken.Token{first, late}, Complete: true},
+	}}, []factorytoken.Token{first, late}, bindings, &terminalSnapshot)
+	if !ok || len(matched) != 2 {
+		t.Fatalf("fan-in should enable exactly after the late child becomes terminal: matched=%v ok=%t", matched, ok)
+	}
+}
+
+func TestAllWithParentGuard_UsesActiveDispatchAsProcessingChild(t *testing.T) {
+	parent := &factorytoken.Token{ID: "parent-token", Color: factorytoken.Color{WorkID: "parent-1"}}
+	terminal := factorytoken.Token{
+		ID:      "child-terminal",
+		PlaceID: "child:complete",
+		Color:   factorytoken.Color{WorkID: "child-1", WorkTypeID: "child", ParentID: "parent-1"},
+	}
+	processing := terminal
+	processing.ID = "child-processing"
+	processing.Color.WorkID = "child-2"
+	processing.PlaceID = "child:processing"
+
+	guard := &AllWithParentGuard{MatchBinding: "parent"}
+	matched, ok := guard.EvaluateRuntime(
+		RuntimeGuardContext{
+			ActiveDispatches: map[string]*interfaces.DispatchEntry{
+				"dispatch-child": {ConsumedTokens: []factorytoken.Token{processing}},
+			},
+			ParentChildRegistrations: ParentChildRegistrationProjection{
+				"parent-1": {Children: []factorytoken.Token{terminal, processing}, Complete: true},
+			},
+		},
+		[]factorytoken.Token{terminal},
+		map[string]*factorytoken.Token{"parent": parent},
+		&MarkingSnapshot{Tokens: map[string]*factorytoken.Token{terminal.ID: &terminal}},
+	)
+	if ok || len(matched) != 0 {
+		t.Fatalf("fan-in enabled while a processing child was in flight: matched=%v ok=%t", matched, ok)
+	}
+}
+
+func TestAllWithParentGuard_RuntimeStateAndPopulationChecks(t *testing.T) {
+	parent := &factorytoken.Token{ID: "parent-token", Color: factorytoken.Color{WorkID: "parent-1"}}
+	first := factorytoken.Token{
+		ID:      "child-first",
+		PlaceID: "child:complete",
+		Color:   factorytoken.Color{WorkID: "child-1", WorkTypeID: "child", ParentID: "parent-1"},
+	}
+	second := first
+	second.ID = "child-second"
+	second.Color.WorkID = "child-2"
+	bindings := map[string]*factorytoken.Token{"parent": parent}
+	category := func(placeID string) string {
+		if placeID == "child:complete" {
+			return runtimeStateCategoryTerminal
+		}
+		return "PROCESSING"
+	}
+	guard := &AllWithParentGuard{MatchBinding: "parent"}
+	projection := ParentChildRegistrationProjection{
+		"parent-1": {Children: []factorytoken.Token{first, second}, Complete: true},
+	}
+
+	snapshot := &MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+		first.ID:  &first,
+		second.ID: &second,
+	}}
+	matched, ok := guard.EvaluateRuntime(
+		RuntimeGuardContext{StateCategoryForPlace: category, ParentChildRegistrations: projection},
+		[]factorytoken.Token{first, second},
+		bindings,
+		snapshot,
+	)
+	if !ok || len(matched) != 2 {
+		t.Fatalf("terminal registered children = %v, %t; want both children", matched, ok)
+	}
+
+	processingCandidate := second
+	processingCandidate.PlaceID = "child:processing"
+	if matched, ok := guard.EvaluateRuntime(
+		RuntimeGuardContext{StateCategoryForPlace: category, ParentChildRegistrations: projection},
+		[]factorytoken.Token{first, processingCandidate},
+		bindings,
+		&MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+			first.ID:  &first,
+			second.ID: &second,
+		}},
+	); ok || len(matched) != 0 {
+		t.Fatalf("non-terminal candidate passed runtime state check: %v, %t", matched, ok)
+	}
+
+	processingRegistered := second
+	processingRegistered.PlaceID = "child:processing"
+	if matched, ok := guard.EvaluateRuntime(
+		RuntimeGuardContext{StateCategoryForPlace: category, ParentChildRegistrations: projection},
+		[]factorytoken.Token{first, second},
+		bindings,
+		&MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+			first.ID:  &first,
+			second.ID: &processingRegistered,
+		}},
+	); ok || len(matched) != 0 {
+		t.Fatalf("non-terminal registered child passed runtime state check: %v, %t", matched, ok)
+	}
+
+	if matched, ok := guard.Evaluate(
+		[]factorytoken.Token{first},
+		bindings,
+		&MarkingSnapshot{Tokens: map[string]*factorytoken.Token{}},
+	); ok || len(matched) != 0 {
+		t.Fatalf("incomplete runtime population passed: %v, %t", matched, ok)
+	}
+}
+
+func TestAllWithParentGuard_RejectsUnknownAndMismatchedRegistrationProjection(t *testing.T) {
+	parent := &factorytoken.Token{ID: "parent-token", Color: factorytoken.Color{WorkID: "parent-1"}}
+	first := factorytoken.Token{
+		ID:      "child-first",
+		PlaceID: "child:complete",
+		Color:   factorytoken.Color{WorkID: "child-1", WorkTypeID: "child", ParentID: "parent-1"},
+	}
+	second := first
+	second.ID = "child-second"
+	second.Color.WorkID = "child-2"
+	bindings := map[string]*factorytoken.Token{"parent": parent}
+	guard := &AllWithParentGuard{MatchBinding: "parent"}
+
+	assertBlocked := func(ctx RuntimeGuardContext, candidates []factorytoken.Token, marking *MarkingSnapshot) {
+		t.Helper()
+		matched, ok := guard.EvaluateRuntime(ctx, candidates, bindings, marking)
+		if ok || len(matched) != 0 {
+			t.Fatalf("mismatched registration projection enabled fan-in: matched=%v ok=%t", matched, ok)
+		}
+	}
+
+	baseSnapshot := func(tokens ...factorytoken.Token) *MarkingSnapshot {
+		snapshot := &MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token, len(tokens))}
+		for i := range tokens {
+			token := tokens[i]
+			snapshot.Tokens[token.ID] = &token
+		}
+		return snapshot
+	}
+
+	assertBlocked(RuntimeGuardContext{ParentChildRegistrations: ParentChildRegistrationProjection{
+		"other-parent": {Children: []factorytoken.Token{first}, Complete: true},
+	}}, []factorytoken.Token{first}, baseSnapshot(first))
+	assertBlocked(RuntimeGuardContext{ParentChildRegistrations: ParentChildRegistrationProjection{
+		"parent-1": {Children: []factorytoken.Token{first}, Complete: false},
+	}}, []factorytoken.Token{first}, baseSnapshot(first))
+	assertBlocked(RuntimeGuardContext{ParentChildRegistrations: ParentChildRegistrationProjection{
+		"parent-1": {Complete: true},
+	}}, []factorytoken.Token{first}, baseSnapshot(first))
+
+	// A visible child outside the registered set is a population mismatch.
+	assertBlocked(RuntimeGuardContext{ParentChildRegistrations: ParentChildRegistrationProjection{
+		"parent-1": {Children: []factorytoken.Token{first}, Complete: true},
+	}}, []factorytoken.Token{first}, baseSnapshot(first, second))
+	// A registered child that is not visible is also incomplete.
+	assertBlocked(RuntimeGuardContext{ParentChildRegistrations: ParentChildRegistrationProjection{
+		"parent-1": {Children: []factorytoken.Token{first, second}, Complete: true},
+	}}, []factorytoken.Token{first}, baseSnapshot(first))
+	// The visible runtime identity must agree with the registration identity.
+	assertBlocked(RuntimeGuardContext{ParentChildRegistrations: ParentChildRegistrationProjection{
+		"parent-1": {Children: []factorytoken.Token{first}, Complete: true},
+	}}, []factorytoken.Token{second}, baseSnapshot(first))
+}
+
+func TestAllWithParentGuard_DirectEvaluationChecksSnapshotPopulation(t *testing.T) {
+	parent := &factorytoken.Token{ID: "parent-token", Color: factorytoken.Color{WorkID: "parent-1"}}
+	terminal := factorytoken.Token{
+		ID:      "child-terminal",
+		PlaceID: "child:complete",
+		Color:   factorytoken.Color{WorkID: "child-1", WorkTypeID: "child", ParentID: "parent-1"},
+	}
+	processing := terminal
+	processing.ID = "child-processing"
+	processing.Color.WorkID = "child-2"
+	processing.PlaceID = "child:processing"
+	guard := &AllWithParentGuard{MatchBinding: "parent"}
+	bindings := map[string]*factorytoken.Token{"parent": parent}
+
+	matched, ok := guard.Evaluate(
+		[]factorytoken.Token{terminal},
+		bindings,
+		&MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+			terminal.ID:   &terminal,
+			processing.ID: &processing,
+		}},
+	)
+	if ok || len(matched) != 0 {
+		t.Fatalf("direct evaluation ignored a sibling in another place: matched=%v ok=%t", matched, ok)
+	}
+
+	matched, ok = guard.Evaluate(
+		[]factorytoken.Token{terminal},
+		bindings,
+		&MarkingSnapshot{Tokens: map[string]*factorytoken.Token{terminal.ID: &terminal}},
+	)
+	if !ok || len(matched) != 1 || matched[0].ID != terminal.ID {
+		t.Fatalf("direct evaluation with one visible terminal child = %v, %t; want terminal child", matched, ok)
+	}
+}
+
+func TestParentChildTokenHelpersFilterAndDeduplicateRuntimeFacts(t *testing.T) {
+	valid := factorytoken.Token{ID: "valid", PlaceID: "child:complete", Color: factorytoken.Color{WorkID: "child-1", WorkTypeID: "child", ParentID: "parent-1"}}
+	resource := valid
+	resource.ID = "resource"
+	resource.Color.DataType = factorytoken.DataTypeResource
+	wrongParent := valid
+	wrongParent.ID = "wrong-parent"
+	wrongParent.Color.ParentID = "parent-2"
+	wrongType := valid
+	wrongType.ID = "wrong-type"
+	wrongType.Color.WorkTypeID = "other"
+	missingWorkID := valid
+	missingWorkID.ID = "missing-work-id"
+	missingWorkID.Color.WorkID = ""
+
+	children := parentChildTokens(
+		&MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+			valid.ID:         &valid,
+			"nil-token":      nil,
+			resource.ID:      &resource,
+			wrongParent.ID:   &wrongParent,
+			wrongType.ID:     &wrongType,
+			missingWorkID.ID: &missingWorkID,
+		}},
+		map[string]*interfaces.DispatchEntry{
+			"nil-dispatch":      nil,
+			"matching-dispatch": {ConsumedTokens: []factorytoken.Token{valid}},
+		},
+		"parent-1",
+		"child",
+	)
+	if len(children) != 1 || children["work:child-1"].ID != valid.ID {
+		t.Fatalf("filtered child population = %#v, want one deduplicated child", children)
+	}
+
+	if got := matchingParentChildren([]factorytoken.Token{valid, wrongType}, "parent-1", "child"); len(got) != 1 || got[0].ID != valid.ID {
+		t.Fatalf("typed parent matches = %#v, want valid child only", got)
+	}
+	if got := tokenIdentity(factorytoken.Token{ID: "token-only"}); got != "token:token-only" {
+		t.Fatalf("token-only identity = %q, want token:token-only", got)
 	}
 }
 

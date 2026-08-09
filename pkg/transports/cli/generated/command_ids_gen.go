@@ -15,6 +15,7 @@ var RepresentativeFamilyCommandIDs = []string{
 var WorkFamilyCommandIDs = []string{
 	"you.work",
 	"you.work.list",
+	"you.work.watch",
 	"you.work.show",
 	"you.work.move",
 	"you.work.visualize",

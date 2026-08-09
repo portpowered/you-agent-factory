@@ -1,1 +1,2 @@
+{"status":"started","type":"providers_progress"}
 {"code":"stream_failed","eventId":"<normalized>","factorySessionId":"<normalized>","message":"Codex authentication failed.","runId":"<normalized>","type":"error.failed"}

@@ -35,8 +35,13 @@ func ParityTerminal(runID, dispatchID string, transcript []byte) (
 		draft.DispatchID = dispatchID
 		drafts = append(drafts, draft)
 	}
-	return workerexecution.InferenceResponse{Content: content}, adapter.Capabilities{
-		MessageSnapshots: true,
-		FinalOnly:        true,
-	}, drafts, nil
+	return workerexecution.InferenceResponse{
+			Content: content,
+			Diagnostics: &workerexecution.WorkDiagnostics{Metadata: map[string]string{
+				workerexecution.ProviderResponseMetadataCompletionEvidence: "provider_response",
+			}},
+		}, adapter.Capabilities{
+			MessageSnapshots: true,
+			FinalOnly:        true,
+		}, drafts, nil
 }

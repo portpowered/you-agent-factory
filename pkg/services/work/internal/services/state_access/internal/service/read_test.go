@@ -63,6 +63,7 @@ func TestListWorkHonorsPaginationNextToken(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing main-branch test complexity; split this scenario into focused helpers and remove this exemption.
 func TestListWorkTerminalityCountsAndPaginationUseOneFilteredSelection(t *testing.T) {
 	t.Parallel()
 

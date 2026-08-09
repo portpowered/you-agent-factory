@@ -86,8 +86,13 @@ func (s commandRunnerBackedProvidersService) Execute(
 		}
 	}
 	return providers.ExecuteResult{
-		Content:     string(result.Stdout),
-		Diagnostics: &providers.ExecuteDiagnostics{Progress: s.progress},
+		Content: string(result.Stdout),
+		Diagnostics: &providers.ExecuteDiagnostics{
+			Progress: s.progress,
+			Metadata: map[string]string{
+				workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
+			},
+		},
 	}, nil
 }
 

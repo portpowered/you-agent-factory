@@ -89,6 +89,44 @@ func TestSubmissionHook_GeneratedBatchRecordsCanonicalHistoryBeforeInjection(t *
 	}
 }
 
+func TestSubmissionHook_GeneratedParentChildBatchCompletesRegistrationProjection(t *testing.T) {
+	n := buildTestNet()
+	marking := petri.NewMarking("test-wf")
+	hook := &testSubmissionHook{
+		name:     "generated-parent-child",
+		priority: 1,
+		onTick: func(_ context.Context, _ interfaces.SubmissionHookContext[submissionSnapshot]) (interfaces.SubmissionHookResult, error) {
+			return interfaces.SubmissionHookResult{GeneratedBatches: []work.GeneratedSubmissionBatch{{
+				Request: work.WorkRequest{
+					Type: work.WorkRequestTypeFactoryRequestBatch,
+					Works: []work.Work{
+						{Name: "parent", WorkID: "parent-work", WorkTypeID: "task"},
+						{Name: "child", WorkID: "child-work", WorkTypeID: "task"},
+					},
+					Relations: []work.WorkRelation{{
+						Type:           work.WorkRelationParentChild,
+						SourceWorkName: "child",
+						TargetWorkName: "parent",
+					}},
+				},
+			}}}, nil
+		},
+	}
+
+	eng := newTestFactoryEngine(n, marking, nil, WithSubmissionHook(hook))
+	if err := eng.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick() error: %v", err)
+	}
+
+	registration := eng.GetMarking().ParentChildRegistrations["parent-work"]
+	if !registration.Complete || len(registration.Children) != 1 {
+		t.Fatalf("generated parent-child registration = %#v, want one complete child", registration)
+	}
+	if got := registration.Children[0].Color.WorkID; got != "child-work" {
+		t.Fatalf("generated registered child WorkID = %q, want child-work", got)
+	}
+}
+
 func TestSubmissionHooks_RunInPriorityThenNameOrderAndCarryContinuationState(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")

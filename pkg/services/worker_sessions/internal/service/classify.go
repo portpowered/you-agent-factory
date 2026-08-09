@@ -27,11 +27,38 @@ func classifyTerminal(
 		// reached the executor, so it is the only case classified from the
 		// dispatch error alone. No WorkResult exists yet, so there is no
 		// FailureMetadata to derive a safe Detail from.
-		return failedTerminal(workersessions.FailureCauseStartFailure, safeDetail(workersessions.FailureCauseStartFailure, nil))
+		return terminalForDispatchResult(
+			workersessions.FailureCauseStartFailure,
+			safeDetailForDispatchError(workersessions.FailureCauseStartFailure, workResult, dispatchErr, true),
+			workResult,
+			dispatchErr,
+		)
 	}
 
 	switch workResult.Outcome {
 	case workers.OutcomeAccepted, workers.OutcomeContinue:
+		// A successful WorkResult cannot overrule a second, contradictory
+		// failure signal. In particular, an adapter error may be returned
+		// alongside a result after the provider/session ingestion boundary has
+		// failed. Treating that combination as COMPLETED recreates the phantom
+		// success path this supervisor owns.
+		if dispatchErr != nil || dispatchResult.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeFailed {
+			kind := workersessions.FailureCauseAdapterFailure
+			if isExecutorPanicEvidence(dispatchErr, workResult) {
+				kind = workersessions.FailureCauseExecutorPanic
+			}
+			detail := safeDetailForDispatchError(kind, workResult, dispatchErr, true)
+			if kind != workersessions.FailureCauseExecutorPanic {
+				detail = contradictorySuccessDetail(
+					dispatchErr != nil,
+					strings.TrimSpace(strings.Join([]string{
+						safeFailureClassificationForDispatch(kind, workResult, dispatchErr),
+						diagnosticContextForDispatch(workResult, dispatchErr),
+					}, " ")),
+				)
+			}
+			return terminalForDispatchResult(kind, detail, workResult, dispatchErr)
+		}
 		return workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}
 	default: // workers.OutcomeRejected, workers.OutcomeFailed
 		kind := workersessions.FailureCauseWorkersExecutionFailure
@@ -41,16 +68,90 @@ func classifyTerminal(
 		case dispatchErr != nil:
 			kind = workersessions.FailureCauseAdapterFailure
 		}
-		terminal := failedTerminal(kind, safeDetail(kind, workResult.FailureMetadata))
-		terminal.Cause.ProviderFailureKind,
-			terminal.Cause.ProviderContinuationFailureKind,
-			terminal.Cause.ProviderContinuationOutcome = workersessions.SanitizeProviderFailureClassification(
-			workResult.ProviderFailureKind,
-			workResult.ProviderContinuationFailureKind,
-			workResult.ProviderContinuationOutcome,
+		return terminalForDispatchResult(
+			kind,
+			safeDetailForDispatchError(kind, workResult, dispatchErr, false),
+			workResult,
+			dispatchErr,
 		)
+	}
+}
+
+func terminalForWorkResult(
+	kind workersessions.FailureCauseKind,
+	detail string,
+	workResult workers.WorkResult,
+) workersessions.TerminalResult {
+	terminal := failedTerminal(kind, detail)
+	terminal.Cause.ProviderFailureKind,
+		terminal.Cause.ProviderContinuationFailureKind,
+		terminal.Cause.ProviderContinuationOutcome = workersessions.SanitizeProviderFailureClassification(
+		workResult.ProviderFailureKind,
+		workResult.ProviderContinuationFailureKind,
+		workResult.ProviderContinuationOutcome,
+	)
+	return terminal
+}
+
+func terminalForDispatchResult(
+	kind workersessions.FailureCauseKind,
+	detail string,
+	workResult workers.WorkResult,
+	dispatchErr error,
+) workersessions.TerminalResult {
+	terminal := terminalForWorkResult(kind, detail, workResult)
+	providerErr := workers.NormalizeProviderExecutionError(dispatchErr)
+	if providerErr == nil || terminal.Cause == nil {
 		return terminal
 	}
+	terminal.Cause.ProviderFailureKind,
+		terminal.Cause.ProviderContinuationFailureKind,
+		terminal.Cause.ProviderContinuationOutcome = workersessions.SanitizeProviderFailureClassification(
+		providerErr.ProviderFailureKind,
+		providerErr.ProviderContinuationFailureKind,
+		providerErr.ProviderContinuationOutcome,
+	)
+	return terminal
+}
+
+func safeDetailForDispatchError(
+	kind workersessions.FailureCauseKind,
+	workResult workers.WorkResult,
+	dispatchErr error,
+	preferDispatch bool,
+) string {
+	metadata := failureMetadataForDispatch(workResult, dispatchErr, preferDispatch)
+	return safeDetailWithContext(
+		kind,
+		metadata,
+		diagnosticContextForDispatch(workResult, dispatchErr),
+	)
+}
+
+func safeFailureClassificationForDispatch(
+	kind workersessions.FailureCauseKind,
+	workResult workers.WorkResult,
+	dispatchErr error,
+) string {
+	classification := safeDetail(kind, failureMetadataForDispatch(workResult, dispatchErr, true))
+	if classification == genericFailureDetail[kind] {
+		return ""
+	}
+	return classification
+}
+
+func failureMetadataForDispatch(
+	workResult workers.WorkResult,
+	dispatchErr error,
+	preferDispatch bool,
+) *workers.WorkFailureMetadata {
+	metadata := workResult.FailureMetadata
+	if providerErr := workers.NormalizeProviderExecutionError(dispatchErr); providerErr != nil {
+		if preferDispatch || metadata == nil {
+			metadata = workers.WorkFailureMetadataFromProviderError(providerErr)
+		}
+	}
+	return metadata
 }
 
 // isExecutorPanicEvidence reports whether either the adapter error or the
@@ -81,8 +182,37 @@ func isExecutorPanicText(text string) bool {
 func failedTerminal(kind workersessions.FailureCauseKind, detail string) workersessions.TerminalResult {
 	return workersessions.TerminalResult{
 		Outcome: workersessions.TerminalOutcomeFailed,
-		Cause:   &workersessions.FailureCause{Kind: kind, Detail: detail},
+		Cause: &workersessions.FailureCause{
+			Kind:   kind,
+			Detail: boundedFailureDetail(kind, detail),
+		},
 	}
+}
+
+func contradictorySuccessDetail(adapterError bool, context string) string {
+	detail := "the dispatch reported failure after a successful Workers result"
+	if adapterError {
+		detail = "the Workers adapter reported failure after a successful result"
+	}
+	if context != "" {
+		return detail + " " + context
+	}
+	return detail
+}
+
+func boundedFailureDetail(kind workersessions.FailureCauseKind, detail string) string {
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		detail = genericFailureDetail[kind]
+	}
+	if detail == "" {
+		detail = "the Worker Session failed without a reported cause"
+	}
+	runes := []rune(detail)
+	if len(runes) > workersessions.MaxFailureCauseDetailRunes {
+		return string(runes[:workersessions.MaxFailureCauseDetailRunes])
+	}
+	return detail
 }
 
 func rawDetail(err error) string {
@@ -159,6 +289,124 @@ func safeDetail(kind workersessions.FailureCauseKind, metadata *workers.WorkFail
 		return genericFailureDetail[kind]
 	}
 	return fmt.Sprintf("family=%s type=%s", orUnknown(family), orUnknown(typ))
+}
+
+func safeDetailWithDiagnostics(
+	kind workersessions.FailureCauseKind,
+	metadata *workers.WorkFailureMetadata,
+	diagnostics *workers.WorkDiagnostics,
+) string {
+	return safeDetailWithContext(kind, metadata, safeDiagnosticFailureContext(diagnostics))
+}
+
+func safeDetailWithContext(kind workersessions.FailureCauseKind, metadata *workers.WorkFailureMetadata, context string) string {
+	detail := safeDetail(kind, metadata)
+	if context == "" {
+		return detail
+	}
+	return detail + " " + context
+}
+
+func diagnosticContextForDispatch(workResult workers.WorkResult, dispatchErr error) string {
+	providerErr := workers.NormalizeProviderExecutionError(dispatchErr)
+	if providerErr == nil {
+		return safeDiagnosticFailureContext(workResult.Diagnostics)
+	}
+	return mergeDiagnosticContexts(workResult.Diagnostics, providerErr.Diagnostics)
+}
+
+func mergeDiagnosticContexts(primary, fallback *workers.WorkDiagnostics) string {
+	parts := make([]string, 0, 3)
+	operation := safeDiagnosticValue(diagnosticValue(primary, "failure_operation"), knownFailureOperations)
+	if operation == "" {
+		operation = safeDiagnosticValue(diagnosticValue(fallback, "failure_operation"), knownFailureOperations)
+	}
+	if operation != "" {
+		parts = append(parts, "operation="+operation)
+	}
+	classification := safeDiagnosticValue(diagnosticValue(primary, "failure_classification"), knownFailureClassifications)
+	if classification == "" {
+		classification = safeDiagnosticValue(diagnosticValue(fallback, "failure_classification"), knownFailureClassifications)
+	}
+	if classification != "" {
+		parts = append(parts, "classification="+classification)
+	}
+	stage := safeDiagnosticValue(diagnosticValue(primary, "failure_stage"), knownFailureStages)
+	if stage == "" {
+		stage = safeDiagnosticValue(diagnosticValue(fallback, "failure_stage"), knownFailureStages)
+	}
+	if stage != "" {
+		parts = append(parts, "stage="+stage)
+	}
+	return strings.Join(parts, " ")
+}
+
+func safeDiagnosticFailureContext(diagnostics *workers.WorkDiagnostics) string {
+	if diagnostics == nil {
+		return ""
+	}
+	parts := make([]string, 0, 3)
+	if operation := safeDiagnosticValue(diagnosticValue(diagnostics, "failure_operation"), knownFailureOperations); operation != "" {
+		parts = append(parts, "operation="+operation)
+	}
+	if classification := safeDiagnosticValue(diagnosticValue(diagnostics, "failure_classification"), knownFailureClassifications); classification != "" {
+		parts = append(parts, "classification="+classification)
+	}
+	if stage := safeDiagnosticValue(diagnosticValue(diagnostics, "failure_stage"), knownFailureStages); stage != "" {
+		parts = append(parts, "stage="+stage)
+	}
+	return strings.Join(parts, " ")
+}
+
+func diagnosticValue(diagnostics *workers.WorkDiagnostics, key string) string {
+	if diagnostics == nil {
+		return ""
+	}
+	if value, ok := diagnostics.Metadata[key]; ok {
+		return value
+	}
+	if diagnostics.Provider != nil {
+		return diagnostics.Provider.ResponseMetadata[key]
+	}
+	return ""
+}
+
+func safeDiagnosticValue(value string, allowed map[string]struct{}) string {
+	value = strings.TrimSpace(value)
+	if len(value) > 64 {
+		return ""
+	}
+	value = strings.ToLower(value)
+	if _, ok := allowed[value]; !ok {
+		return ""
+	}
+	return value
+}
+
+var knownFailureOperations = map[string]struct{}{
+	"completion_validation":      {},
+	"provider_inference":         {},
+	"provider_session_ingestion": {},
+	"worker_dispatch":            {},
+}
+
+var knownFailureClassifications = map[string]struct{}{
+	"canceled":                    {},
+	"contradictory_completion":    {},
+	"missing_completion_evidence": {},
+	"parse":                       {},
+	"resource_limit":              {},
+	"storage":                     {},
+}
+
+var knownFailureStages = map[string]struct{}{
+	"cancellation": {},
+	"decode":       {},
+	"final_parse":  {},
+	"flush":        {},
+	"native":       {},
+	"parse":        {},
+	"storage":      {},
 }
 
 // safeFamily returns (value, true) when family is blank or a whitelisted

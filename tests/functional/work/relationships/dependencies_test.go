@@ -882,14 +882,25 @@ func (p *fanInSecondFinisherGateProvider) Infer(
 				return workerexecution.InferenceResponse{}, ctx.Err()
 			}
 		}
-		return workerexecution.InferenceResponse{Content: "COMPLETE"}, nil
+		return fanInGateProviderCompleteResponse(), nil
 	default:
 		p.mu.Unlock()
 		return workerexecution.InferenceResponse{}, errors.New("unexpected worker type: " + workerType)
 	}
 
 	p.mu.Unlock()
-	return workerexecution.InferenceResponse{Content: "COMPLETE"}, nil
+	return fanInGateProviderCompleteResponse(), nil
+}
+
+func fanInGateProviderCompleteResponse() workerexecution.InferenceResponse {
+	return workerexecution.InferenceResponse{
+		Content: "COMPLETE",
+		Diagnostics: &workerexecution.WorkDiagnostics{
+			Metadata: map[string]string{
+				workerexecution.ProviderResponseMetadataCompletionEvidence: "provider_response",
+			},
+		},
+	}
 }
 
 func (p *fanInSecondFinisherGateProvider) WaitForSecondFinisherGate(t *testing.T, timeout time.Duration) {

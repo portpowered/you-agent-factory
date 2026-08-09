@@ -88,6 +88,7 @@ type ReplaceFactoryCurrentOperation func(factorycli.ReplaceCurrentConfig) error
 type UpdateFactoryFromFileOperation func(factorycli.UpdateFromFileConfig) error
 type DeleteFactoryOperation func(factorycli.DeleteConfig) error
 type ListWorkOperation func(workcli.ListConfig) error
+type WatchWorkOperation func(workcli.WatchConfig) error
 type ShowWorkOperation func(workcli.ShowConfig) error
 type MoveWorkOperation func(workcli.MoveConfig) error
 type VisualizeWorkOperation func(workcli.VisualizeConfig) error
@@ -132,6 +133,7 @@ type CommandOperations struct {
 	UpdateFactoryFromFile             UpdateFactoryFromFileOperation
 	DeleteFactory                     DeleteFactoryOperation
 	ListWork                          ListWorkOperation
+	WatchWork                         WatchWorkOperation
 	ShowWork                          ShowWorkOperation
 	MoveWork                          MoveWorkOperation
 	VisualizeWork                     VisualizeWorkOperation
@@ -184,6 +186,7 @@ type CommandFactory struct {
 	UpdateFactoryFromFile  func(factorycli.UpdateFromFileConfig) error
 	DeleteFactory          func(factorycli.DeleteConfig) error
 	ListWork               func(workcli.ListConfig) error
+	WatchWork              func(workcli.WatchConfig) error
 	ShowWork               func(workcli.ShowConfig) error
 	MoveWork               func(workcli.MoveConfig) error
 	VisualizeWork          func(workcli.VisualizeConfig) error
@@ -232,6 +235,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		UpdateFactoryFromFile:             operations.UpdateFactoryFromFile,
 		DeleteFactory:                     operations.DeleteFactory,
 		ListWork:                          operations.ListWork,
+		WatchWork:                         operations.WatchWork,
 		ShowWork:                          operations.ShowWork,
 		MoveWork:                          operations.MoveWork,
 		VisualizeWork:                     operations.VisualizeWork,

@@ -23,7 +23,24 @@ type agentMockProvider struct {
 func (m *agentMockProvider) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	m.lastReq = req
 	m.callCount++
-	return m.response, nil
+	return authoritativeTestResponse(m.response), nil
+}
+
+func authoritativeTestResponse(response workerexecution.InferenceResponse) workerexecution.InferenceResponse {
+	if response.Content == "" || response.Diagnostics != nil &&
+		(response.Diagnostics.Metadata[workerexecution.ProviderResponseMetadataCompletionEvidence] != "" ||
+			response.Diagnostics.Provider != nil && response.Diagnostics.Provider.ResponseMetadata[workerexecution.ProviderResponseMetadataCompletionEvidence] != "") {
+		return response
+	}
+	response.Diagnostics = workerexecution.CloneWorkDiagnostics(response.Diagnostics)
+	if response.Diagnostics == nil {
+		response.Diagnostics = &workerexecution.WorkDiagnostics{}
+	}
+	if response.Diagnostics.Metadata == nil {
+		response.Diagnostics.Metadata = make(map[string]string, 1)
+	}
+	response.Diagnostics.Metadata[workerexecution.ProviderResponseMetadataCompletionEvidence] = "provider_response"
+	return response
 }
 
 func testAgentRequest(dispatch work.WorkDispatch, opts ...func(*workerexecution.WorkstationExecutionRequest)) workerexecution.WorkstationExecutionRequest {

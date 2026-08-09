@@ -178,10 +178,24 @@ func (s *SideEffects) Infer(ctx context.Context, req workerexecution.ProviderInf
 		)
 	}
 
+	diagnostics := workerexecution.CloneWorkDiagnostics(record.completion.diagnostics)
+	if result.Output != "" {
+		if diagnostics == nil {
+			diagnostics = &workerexecution.WorkDiagnostics{}
+		}
+		if diagnostics.Metadata == nil {
+			diagnostics.Metadata = make(map[string]string, 1)
+		}
+		if diagnostics.Metadata[workerexecution.ProviderResponseMetadataCompletionEvidence] == "" &&
+			(diagnostics.Provider == nil || diagnostics.Provider.ResponseMetadata[workerexecution.ProviderResponseMetadataCompletionEvidence] == "") {
+			diagnostics.Metadata[workerexecution.ProviderResponseMetadataCompletionEvidence] = "provider_response"
+		}
+	}
+
 	return workerexecution.InferenceResponse{
 		Content:         result.Output,
 		ProviderSession: workerexecution.CloneProviderSessionMetadata(result.ProviderSession),
-		Diagnostics:     workerexecution.CloneWorkDiagnostics(record.completion.diagnostics),
+		Diagnostics:     diagnostics,
 	}, nil
 }
 

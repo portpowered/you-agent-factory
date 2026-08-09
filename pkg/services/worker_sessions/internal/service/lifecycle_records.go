@@ -109,6 +109,11 @@ func terminalDraft(state workersessions.State, result workersessions.TerminalRes
 	if err != nil {
 		return workers.Draft{}, err
 	}
+	if state == workersessions.StateCompleted || state == workersessions.StateFailed {
+		if err := result.Validate(); err != nil {
+			return workers.Draft{}, err
+		}
+	}
 	payload := terminalSessionPayload{Status: string(state)}
 	if result.Cause != nil {
 		payload.FailureCause = string(result.Cause.Kind)

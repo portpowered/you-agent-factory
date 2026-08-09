@@ -19,6 +19,7 @@ import (
 type WorkFamilyComponents struct {
 	Work      *cobra.Command
 	List      *cobra.Command
+	Watch     *cobra.Command
 	Show      *cobra.Command
 	Move      *cobra.Command
 	Visualize *cobra.Command
@@ -30,7 +31,7 @@ type WorkFamilyBindings struct {
 	LocalTargets map[string]any
 }
 
-// NewWorkFamilyCommand builds the work you.work → list/show/move/visualize tree
+// NewWorkFamilyCommand builds the work you.work → list/watch/show/move/visualize tree
 // from generated metadata and attaches handwritten handlers by stable command ID.
 // Only contracted work-family commands are constructed.
 func NewWorkFamilyCommand(registry *commandregistry.Registry, bindings WorkFamilyBindings) (*cobra.Command, error) {
@@ -38,7 +39,7 @@ func NewWorkFamilyCommand(registry *commandregistry.Registry, bindings WorkFamil
 	if err != nil {
 		return nil, err
 	}
-	components.Work.AddCommand(components.List, components.Show, components.Move, components.Visualize)
+	components.Work.AddCommand(components.List, components.Watch, components.Show, components.Move, components.Visualize)
 	return components.Work, nil
 }
 
@@ -63,7 +64,7 @@ func NewWorkFamilyCommandFromManifest(
 	if err != nil {
 		return nil, err
 	}
-	components.Work.AddCommand(components.List, components.Show, components.Move, components.Visualize)
+	components.Work.AddCommand(components.List, components.Watch, components.Show, components.Move, components.Visualize)
 	return components.Work, nil
 }
 
@@ -87,7 +88,7 @@ func NewWorkFamilyComponentsFromManifest(
 		return WorkFamilyComponents{}, fmt.Errorf("build work family command: %w", err)
 	}
 
-	workRecord, listRecord, showRecord, moveRecord, visualizeRecord, err := workManifestRecords(manifest)
+	workRecord, listRecord, watchRecord, showRecord, moveRecord, visualizeRecord, err := workManifestRecords(manifest)
 	if err != nil {
 		return WorkFamilyComponents{}, err
 	}
@@ -101,6 +102,10 @@ func NewWorkFamilyComponentsFromManifest(
 	}
 
 	list, err := buildRunnableWorkLeaf(listRecord, registry, bindings)
+	if err != nil {
+		return WorkFamilyComponents{}, fmt.Errorf("build work family command: %w", err)
+	}
+	watch, err := buildRunnableWorkLeaf(watchRecord, registry, bindings)
 	if err != nil {
 		return WorkFamilyComponents{}, fmt.Errorf("build work family command: %w", err)
 	}
@@ -120,6 +125,7 @@ func NewWorkFamilyComponentsFromManifest(
 	return WorkFamilyComponents{
 		Work:      work,
 		List:      list,
+		Watch:     watch,
 		Show:      show,
 		Move:      move,
 		Visualize: visualize,
@@ -136,6 +142,9 @@ func buildRunnableWorkLeaf(
 		return nil, err
 	}
 	cmd.Args = positionalArgsFromManifest(record)
+	if cmd.Args == nil && record.ID == "you.work.watch" {
+		cmd.Args = cobra.NoArgs
+	}
 	cmd.PreRunE = rejectDeprecatedPortFlag
 	if err := registerWorkLocalFlags(cmd, record, bindings); err != nil {
 		return nil, err
@@ -154,30 +163,34 @@ func buildRunnableWorkLeaf(
 }
 
 func workManifestRecords(manifest climanifest.Manifest) (
-	work, list, show, move, visualize climanifest.Command,
+	work, list, watch, show, move, visualize climanifest.Command,
 	err error,
 ) {
 	work, err = manifest.CommandByID("you.work")
 	if err != nil {
-		return climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, fmt.Errorf("build work family command: %w", err)
+		return climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, fmt.Errorf("build work family command: %w", err)
 	}
 	list, err = manifest.CommandByID("you.work.list")
 	if err != nil {
-		return climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, fmt.Errorf("build work family command: %w", err)
+		return climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, fmt.Errorf("build work family command: %w", err)
+	}
+	watch, err = manifest.CommandByID("you.work.watch")
+	if err != nil {
+		return climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, fmt.Errorf("build work family command: %w", err)
 	}
 	show, err = manifest.CommandByID("you.work.show")
 	if err != nil {
-		return climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, fmt.Errorf("build work family command: %w", err)
+		return climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, fmt.Errorf("build work family command: %w", err)
 	}
 	move, err = manifest.CommandByID("you.work.move")
 	if err != nil {
-		return climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, fmt.Errorf("build work family command: %w", err)
+		return climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, fmt.Errorf("build work family command: %w", err)
 	}
 	visualize, err = manifest.CommandByID("you.work.visualize")
 	if err != nil {
-		return climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, fmt.Errorf("build work family command: %w", err)
+		return climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, fmt.Errorf("build work family command: %w", err)
 	}
-	return work, list, show, move, visualize, nil
+	return work, list, watch, show, move, visualize, nil
 }
 
 func validateWorkManifest(manifest climanifest.Manifest) error {
@@ -337,6 +350,7 @@ func NewResolvedWorkCommand(
 
 var resolvedWorkRunnableCommandIDs = [...]string{
 	"you.work.list",
+	"you.work.watch",
 	"you.work.show",
 	"you.work.move",
 	"you.work.visualize",
@@ -379,6 +393,7 @@ func resolvedWorkHandlerBindings(
 ) (CobraHandlerRegistry, error) {
 	supplied := map[string]commandregistry.ResolvedWorkRunE{
 		"you.work.list":      handlers.List,
+		"you.work.watch":     handlers.Watch,
 		"you.work.show":      handlers.Show,
 		"you.work.move":      handlers.Move,
 		"you.work.visualize": handlers.Visualize,
@@ -387,7 +402,12 @@ func resolvedWorkHandlerBindings(
 	for _, commandID := range resolvedWorkRunnableCommandIDs {
 		handler := supplied[commandID]
 		if handler == nil {
-			return nil, fmt.Errorf("handler for %q is required", commandID)
+			if commandID != "you.work.watch" {
+				return nil, fmt.Errorf("handler for %q is required", commandID)
+			}
+			handler = func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
+				return fmt.Errorf("work watch service is required")
+			}
 		}
 		record := manifest.Commands[commandID]
 		recordCopy := record

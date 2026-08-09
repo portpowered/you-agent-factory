@@ -83,13 +83,18 @@ func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
 				FinalParseError: finalErr,
 			}
 		}
+		metadata := cloneMetadata(effectResult.Metadata)
+		if metadata == nil {
+			metadata = make(map[string]string, 1)
+		}
+		metadata["completion_evidence"] = "agent_message"
 		return providers.ExecuteResult{
 			Content:    content,
 			SessionRef: session,
 			Diagnostics: &providers.ExecuteDiagnostics{
 				DurationMillis: effectResult.DurationMillis,
 				Progress:       decoder.progressFacts(),
-				Metadata:       cloneMetadata(effectResult.Metadata),
+				Metadata:       metadata,
 			},
 		}, nil
 	}

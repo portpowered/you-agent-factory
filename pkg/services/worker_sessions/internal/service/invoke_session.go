@@ -49,7 +49,7 @@ func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeS
 		final, committed := r.commitTerminal(req.ID, workersessions.StateFailed, terminal)
 		if committed {
 			r.logTerminal(req.ID, attemptID, final)
-			r.publishTerminalRecordOrLog(ctx, req.ID, attemptID, workersessions.StateFailed, terminal)
+			r.publishTerminalRecordOrLog(ctx, req.ID, attemptID, workersessions.StateFailed, *final.Result)
 		}
 		return workersessions.InvokeSessionResult{Session: final}, nil
 	}

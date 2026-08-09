@@ -790,6 +790,10 @@ func TestExecCommandRunner_HelperProcess(t *testing.T) {
 	case "fail":
 		fmt.Fprintln(os.Stderr, "command helper failed")
 		os.Exit(17)
+	case "streaming-output":
+		writeCommandHelperOutput(os.Stdout, streamingHelperOutputBytes(), "streaming stdout complete")
+		writeCommandHelperOutput(os.Stderr, streamingHelperOutputBytes(), "authentication failed after large output")
+		os.Exit(23)
 	case "sleep":
 		time.Sleep(time.Second)
 		os.Exit(0)

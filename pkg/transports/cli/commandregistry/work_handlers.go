@@ -26,6 +26,8 @@ const (
 	workListNextTokenInputID    = "you.work.list.flag.next-token"
 	workListCountsInputID       = "you.work.list.flag.counts"
 	workListSessionInputID      = "you.work.list.flag.session"
+	workWatchSessionInputID     = "you.work.watch.flag.session"
+	workWatchFollowInputID      = "you.work.watch.flag.follow"
 	workShowWorkIDInputID       = "you.work.show.arg.0"
 	workShowSessionInputID      = "you.work.show.flag.session"
 	workMoveWorkIDInputID       = "you.work.move.arg.0"
@@ -52,6 +54,7 @@ type ResolvedWorkRunE func(
 // Construction maps these handlers through the stable IDs in the manifest.
 type ResolvedWorkHandlers struct {
 	List      ResolvedWorkRunE
+	Watch     ResolvedWorkRunE
 	Show      ResolvedWorkRunE
 	Move      ResolvedWorkRunE
 	Visualize ResolvedWorkRunE
@@ -61,6 +64,13 @@ type ResolvedWorkHandlers struct {
 // adapter. Each invocation maps resolved values into a fresh ListConfig.
 type ResolvedListBinding struct {
 	ListWork          func(workcli.ListConfig) error
+	DiagnosticsWriter func(*cobra.Command) io.Writer
+}
+
+// ResolvedWatchBinding supplies the effects used by the Work watch stable-input
+// adapter. Each invocation maps resolved values into a fresh WatchConfig.
+type ResolvedWatchBinding struct {
+	WatchWork         func(workcli.WatchConfig) error
 	DiagnosticsWriter func(*cobra.Command) io.Writer
 }
 
@@ -103,6 +113,31 @@ func ResolvedListRunE(binding ResolvedListBinding) ResolvedWorkRunE {
 			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
 		}
 		return binding.ListWork(cfg)
+	}
+}
+
+// ResolvedWatchRunE maps canonical Work watch input IDs into one typed watch
+// request without retaining Cobra-backed pointers between invocations.
+func ResolvedWatchRunE(binding ResolvedWatchBinding) ResolvedWorkRunE {
+	return func(
+		cmd *cobra.Command,
+		inputs resolvedinput.Inputs,
+		inherited resolvedinput.Inputs,
+	) error {
+		if binding.WatchWork == nil {
+			return fmt.Errorf("work watch service is required")
+		}
+		cfg, err := resolvedWatchConfig(cmd, inputs, inherited)
+		if err != nil {
+			return fmt.Errorf("resolve work watch inputs: %w", err)
+		}
+		if binding.DiagnosticsWriter != nil {
+			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
+		}
+		if err := workcli.ValidateWatchConfig(cfg); err != nil {
+			return err
+		}
+		return binding.WatchWork(cfg)
 	}
 }
 
@@ -172,6 +207,43 @@ func resolvedListConfig(
 		Verbose: globals.verbose || globals.debug, Debug: globals.debug,
 		Output: cmd.OutOrStdout(),
 	}, nil
+}
+
+func resolvedWatchConfig(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) (workcli.WatchConfig, error) {
+	sessionID, err := inputs.String(workWatchSessionInputID)
+	if err != nil {
+		return workcli.WatchConfig{}, err
+	}
+	follow, err := inputs.Bool(workWatchFollowInputID)
+	if err != nil {
+		return workcli.WatchConfig{}, err
+	}
+	globals, err := resolvedWorkGlobals(inherited)
+	if err != nil {
+		return workcli.WatchConfig{}, err
+	}
+	return workcli.WatchConfig{
+		Context:           cmd.Context(),
+		Server:            globals.server,
+		SessionID:         sessionID,
+		SessionIDExplicit: workWatchSessionFlagChanged(cmd),
+		Follow:            follow,
+		Verbose:           globals.verbose || globals.debug,
+		Debug:             globals.debug,
+		Output:            cmd.OutOrStdout(),
+	}, nil
+}
+
+func workWatchSessionFlagChanged(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	flag := cmd.Flag("session")
+	return flag != nil && flag.Changed
 }
 
 // ResolvedShowRunE maps canonical Work show input IDs into one transport
@@ -379,6 +451,7 @@ func (r *Registry) VerifyWorkRunnableCoverage(manifest climanifest.Manifest) err
 // until production root composition adopts NewResolvedWorkCommand.
 type WorkHandlers struct {
 	ListRunE      RunE
+	WatchRunE     RunE
 	ShowRunE      RunE
 	MoveRunE      RunE
 	VisualizeRunE RunE
@@ -402,6 +475,12 @@ func NewWorkRegistry(handlers WorkHandlers) (*Registry, error) {
 	if handlers.VisualizeRunE == nil {
 		return nil, fmt.Errorf("build work handler registry: visualize handler is required")
 	}
+	watchRunE := handlers.WatchRunE
+	if watchRunE == nil {
+		watchRunE = func(*cobra.Command, []string) error {
+			return fmt.Errorf("work watch service is required")
+		}
+	}
 
 	registry := NewRegistry()
 	registrations := []struct {
@@ -409,6 +488,7 @@ func NewWorkRegistry(handlers WorkHandlers) (*Registry, error) {
 		handler   RunE
 	}{
 		{commandID: "you.work.list", handler: handlers.ListRunE},
+		{commandID: "you.work.watch", handler: watchRunE},
 		{commandID: "you.work.show", handler: handlers.ShowRunE},
 		{commandID: "you.work.move", handler: handlers.MoveRunE},
 		{commandID: "you.work.visualize", handler: handlers.VisualizeRunE},
@@ -465,6 +545,50 @@ func ListRunE(binding ListBinding) RunE {
 			cfg.Debug = *binding.Debug
 		}
 		return binding.ListWork(cfg)
+	}
+}
+
+// WatchBinding supplies the typed Work watch execution dependencies.
+type WatchBinding struct {
+	Config            *workcli.WatchConfig
+	Server            *string
+	SessionID         *string
+	Follow            *bool
+	DiagnosticsWriter func(cmd *cobra.Command) io.Writer
+	WatchWork         func(workcli.WatchConfig) error
+}
+
+// WatchRunE returns the handwritten Work watch RunE used by the compatibility
+// constructor while the event-stream service is assembled behind the same
+// typed operation boundary.
+func WatchRunE(binding WatchBinding) RunE {
+	return func(cmd *cobra.Command, _ []string) error {
+		if binding.WatchWork == nil {
+			return fmt.Errorf("work watch service is required")
+		}
+		if binding.Config == nil {
+			return fmt.Errorf("work watch config is required")
+		}
+		cfg := *binding.Config
+		cfg.Context = cmd.Context()
+		if binding.Server != nil {
+			cfg.Server = *binding.Server
+		}
+		if binding.SessionID != nil {
+			cfg.SessionID = *binding.SessionID
+		}
+		if binding.Follow != nil {
+			cfg.Follow = *binding.Follow
+		}
+		cfg.SessionIDExplicit = cmd.Flag("session") != nil && cmd.Flag("session").Changed
+		cfg.Output = cmd.OutOrStdout()
+		if binding.DiagnosticsWriter != nil {
+			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
+		}
+		if err := workcli.ValidateWatchConfig(cfg); err != nil {
+			return err
+		}
+		return binding.WatchWork(cfg)
 	}
 }
 

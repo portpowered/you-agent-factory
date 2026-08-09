@@ -118,6 +118,10 @@ func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
 		}
 		metadata := cloneMetadata(effectResult.Metadata)
 		metadata = mergeMetadata(metadata, parsed.Diagnostics.Metadata)
+		if metadata == nil {
+			metadata = make(map[string]string, 1)
+		}
+		metadata["completion_evidence"] = "provider_response"
 		diagnostics := parsed.Diagnostics
 		diagnostics.Metadata = metadata
 		if !parsed.DurationSeen {

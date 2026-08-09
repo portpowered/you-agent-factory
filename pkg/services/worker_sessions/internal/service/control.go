@@ -316,7 +316,7 @@ func (r *registry) completeSupervision(id string, supervision *supervision, resu
 	final, committed := r.commitTerminal(id, state, terminal)
 	if committed {
 		r.logTerminal(id, dispatchID, final)
-		r.publishTerminalRecordOrLog(context.Background(), id, dispatchID, state, terminal)
+		r.publishTerminalRecordOrLog(context.Background(), id, dispatchID, state, *final.Result)
 	}
 	supervision.finishAttempt()
 	supervision.signalDone()
