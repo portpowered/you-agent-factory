@@ -83,8 +83,8 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Rebuilt bin/you.exe and verified the packaged surface directly: you docs batch-inputs, you docs work, and you docs relationships each exited 0 and contained the D2 schema, lifecycle, and joined-input dependency markers; you docs with no topic listed all three discoverable topic commands; and the batch-work compatibility alias matched batch-inputs exactly. Verified go test ./pkg/transports/cli/... -count=1, make docs-reference-smoke, and make verify-fast (typecheck, MCP contract checks, UI tests, and short Go suite)."
     }
   ]
 }
