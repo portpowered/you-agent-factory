@@ -26,6 +26,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -91,6 +92,7 @@ type runtimeConfig struct {
 	workRequestIDs            work.RequestIDGenerator
 	eventHistory              recordings.RuntimeLedger
 	worldStateProjector       factory.WorldStateProjector
+	providerSessions          providersessions.Service
 	submissionRecorder        recordings.SubmissionRecorder
 	factoryEventRecorder      factory.FactoryEventRecorder
 	submissionHooks           []factory.SubmissionHook
@@ -129,6 +131,7 @@ func New(
 	inlineDispatch bool,
 	eventHistory recordings.RuntimeLedger,
 	worldStateProjector factory.WorldStateProjector,
+	providerSessions providersessions.Service,
 	submissionRecorder recordings.SubmissionRecorder,
 	factoryEventRecorder factory.FactoryEventRecorder,
 	submissionHooks []factory.SubmissionHook,
@@ -184,6 +187,7 @@ func New(
 		inlineDispatch:            inlineDispatch,
 		eventHistory:              eventHistory,
 		worldStateProjector:       worldStateProjector,
+		providerSessions:          providerSessions,
 		submissionRecorder:        submissionRecorder,
 		factoryEventRecorder:      factoryEventRecorder,
 		submissionHooks:           append([]factory.SubmissionHook(nil), submissionHooks...),

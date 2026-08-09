@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -152,6 +155,7 @@ func (f *factoryImpl) WorkerSessionsObservation() workersessions.ObservationServ
 		f.eventHistory,
 		f.cfg.worldStateProjector,
 		f.clock,
+		f.cfg.providerSessions,
 	)
 }
 
@@ -161,9 +165,10 @@ func (f *factoryImpl) WorkerSessionsObservation() workersessions.ObservationServ
 // detached observation vocabulary and Provider Sessions enrichment.
 type recordedWorkerSessionObservation struct {
 	workersessions.Service
-	ledger    recordings.RuntimeLedger
-	projector factory.WorldStateProjector
-	clock     factory.Clock
+	ledger           recordings.RuntimeLedger
+	projector        factory.WorldStateProjector
+	clock            factory.Clock
+	providerSessions providersessions.Service
 }
 
 var _ workersessions.Service = (*recordedWorkerSessionObservation)(nil)
@@ -173,10 +178,11 @@ func newRecordedWorkerSessionObservation(
 	ledger recordings.RuntimeLedger,
 	projector factory.WorldStateProjector,
 	clock factory.Clock,
-
+	providerSessions providersessions.Service,
 ) workersessions.Service {
 	return &recordedWorkerSessionObservation{
 		Service: live, ledger: ledger, projector: projector, clock: clock,
+		providerSessions: providerSessions,
 	}
 }
 
@@ -247,6 +253,24 @@ func (s *recordedWorkerSessionObservation) GetObservation(
 	ctx context.Context,
 	req workersessions.GetObservationRequest,
 ) (workersessions.Observation, error) {
+	if err := req.Validate(); err != nil {
+		return workersessions.Observation{}, err
+	}
+	if err := observationContextError(ctx); err != nil {
+		return workersessions.Observation{}, err
+	}
+	if s != nil && s.ledger != nil && s.projector != nil {
+		fact, found, err := s.recordedObservationForProvider(ctx, req.ProviderSession)
+		if err != nil {
+			return workersessions.Observation{}, err
+		}
+		if found {
+			return s.enrichRecordedObservation(ctx, recordedObservationFromFact(fact, s.clock), req.ProviderSession)
+		}
+		if s.Service == nil {
+			return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
+		}
+	}
 	if s == nil || s.Service == nil {
 		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
 	}
@@ -257,10 +281,121 @@ func (s *recordedWorkerSessionObservation) ReadTranscript(
 	ctx context.Context,
 	req workersessions.ReadTranscriptRequest,
 ) (workersessions.ReadTranscriptResult, error) {
+	if err := req.Validate(); err != nil {
+		return workersessions.ReadTranscriptResult{}, err
+	}
+	if err := observationContextError(ctx); err != nil {
+		return workersessions.ReadTranscriptResult{}, err
+	}
+	if s != nil && s.ledger != nil && s.projector != nil {
+		fact, found, err := s.recordedObservationForProvider(ctx, req.ProviderSession)
+		if err != nil {
+			return workersessions.ReadTranscriptResult{}, err
+		}
+		if found {
+			if !fact.state.Terminal() {
+				return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptActive
+			}
+			return s.readRecordedTranscript(ctx, req, fact)
+		}
+		if s.Service == nil {
+			return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationSessionNotFound
+		}
+	}
 	if s == nil || s.Service == nil {
 		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationProjectionUnavailable
 	}
 	return s.Service.ReadTranscript(ctx, req)
+}
+
+func (s *recordedWorkerSessionObservation) enrichRecordedObservation(
+	ctx context.Context,
+	observation workersessions.Observation,
+	ref providers.SessionRef,
+) (workersessions.Observation, error) {
+	if s.Service != nil {
+		live, err := s.Service.GetObservation(ctx, workersessions.GetObservationRequest{ProviderSession: ref})
+		if err == nil {
+			merged := mergeRecordedObservations([]workersessions.Observation{observation}, []workersessions.Observation{live})
+			if len(merged) == 1 {
+				return merged[0], nil
+			}
+		}
+		if errors.Is(err, workersessions.ErrObservationCanceled) {
+			return workersessions.Observation{}, err
+		}
+	}
+	if s.providerSessions == nil || !observation.ProviderSessionAvailable {
+		return observation, nil
+	}
+	projected, err := s.providerSessions.Project(providersessions.ProjectRequest{
+		Session: ref.Clone(),
+		Context: ctx,
+	})
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, providersessions.ErrOperationCanceled) {
+			return workersessions.Observation{}, workersessions.ErrObservationCanceled
+		}
+		return observation, nil
+	}
+	applyRecordedProviderDetail(&observation, projected.Detail)
+	return observation, nil
+}
+
+func (s *recordedWorkerSessionObservation) readRecordedTranscript(
+	ctx context.Context,
+	req workersessions.ReadTranscriptRequest,
+	fact recordedDispatchObservation,
+) (workersessions.ReadTranscriptResult, error) {
+	if fact.provider == nil {
+		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptUnavailable
+	}
+	if s.Service != nil {
+		live, err := s.Service.ReadTranscript(ctx, req)
+		if err == nil {
+			return historicalTranscriptResult(fact, live.Entries, req.ProviderSession)
+		}
+		if errors.Is(err, workersessions.ErrObservationCanceled) {
+			return workersessions.ReadTranscriptResult{}, err
+		}
+	}
+	if s.providerSessions == nil {
+		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptProjectionUnavailable
+	}
+	projected, err := s.providerSessions.Project(providersessions.ProjectRequest{
+		Session: req.ProviderSession.Clone(),
+		Context: ctx,
+	})
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, providersessions.ErrOperationCanceled) {
+			return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationCanceled
+		}
+		if recordedTranscriptSourceUnavailable(err) {
+			return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptUnavailable
+		}
+		return workersessions.ReadTranscriptResult{}, fmt.Errorf("%w: %v", workersessions.ErrObservationTranscriptProjectionUnavailable, err)
+	}
+	return historicalTranscriptResult(fact, recordedTranscriptEntries(projected.Detail.Transcript), req.ProviderSession)
+}
+
+func historicalTranscriptResult(
+	fact recordedDispatchObservation,
+	entries []workersessions.TranscriptEntry,
+	ref providers.SessionRef,
+) (workersessions.ReadTranscriptResult, error) {
+	result := workersessions.ReadTranscriptResult{
+		WorkerSessionID: fact.workerSessionID,
+		ProviderSession: ref.Clone(),
+		WorkIDs:         append([]string(nil), fact.workIDs...),
+		TurnID:          fact.turnID,
+		AttemptID:       fact.dispatchID,
+		State:           fact.state,
+		Entries:         entries,
+	}
+	if err := result.Validate(); err != nil {
+		return workersessions.ReadTranscriptResult{}, fmt.Errorf("validate historical Worker Session transcript: %w", err)
+	}
+	return result, nil
 }
 
 func (s *recordedWorkerSessionObservation) StreamObservations(
@@ -488,6 +623,127 @@ func recordedObservationEvent(event interfaces.FactoryEvent) workersessions.Obse
 		SchemaID:       string(event.Type),
 		Payload:        append([]byte(nil), event.Payload...),
 	}
+}
+
+func applyRecordedProviderDetail(observation *workersessions.Observation, detail providersessions.Detail) {
+	if observation == nil {
+		return
+	}
+	observation.Transcript = workersessions.TranscriptAvailabilityAvailable
+	observation.TokenUsage = recordedTokenUsage(detail.Parse.TokenUsage)
+	observation.Parse = recordedParseDiagnostics(detail.Parse)
+}
+
+func recordedTokenUsage(source *providersessions.TokenUsage) *workersessions.TokenUsage {
+	if source == nil {
+		return nil
+	}
+	return &workersessions.TokenUsage{
+		CacheWriteTokens:      cloneRecordedInt(source.CacheWriteTokens),
+		CachedInputTokens:     cloneRecordedInt(source.CachedInputTokens),
+		InputTokens:           cloneRecordedInt(source.InputTokens),
+		OutputTokens:          cloneRecordedInt(source.OutputTokens),
+		ReasoningOutputTokens: cloneRecordedInt(source.ReasoningOutputTokens),
+		TotalTokens:           cloneRecordedInt(source.TotalTokens),
+	}
+}
+
+func recordedParseDiagnostics(source providersessions.ParseSummary) workersessions.ParseDiagnostics {
+	result := workersessions.ParseDiagnostics{
+		EventCount:         source.EventCount,
+		MalformedLineCount: source.MalformedLineCount,
+		UnknownEventCount:  source.UnknownEventCount,
+		Errors:             make([]workersessions.ParseDiagnostic, 0, len(source.ParseErrors)),
+	}
+	for _, item := range source.ParseErrors {
+		result.Errors = append(result.Errors, workersessions.ParseDiagnostic{
+			Code:       "provider_session_parse_error",
+			LineNumber: item.LineNumber,
+			Message:    recordedDiagnosticMessage(item.Message),
+		})
+	}
+	return result
+}
+
+func recordedDiagnosticMessage(message string) string {
+	message = strings.Join(strings.Fields(message), " ")
+	if message == "" || strings.ContainsAny(message, `/\`) {
+		return "provider session parse error"
+	}
+	lower := strings.ToLower(message)
+	for _, sensitive := range []string{"password", "authorization", "bearer ", "secret", "prompt"} {
+		if strings.Contains(lower, sensitive) {
+			return "provider session parse error"
+		}
+	}
+	if len(message) > 256 {
+		return message[:256]
+	}
+	return message
+}
+
+func recordedTranscriptEntries(values []providersessions.TranscriptEntry) []workersessions.TranscriptEntry {
+	entries := make([]workersessions.TranscriptEntry, len(values))
+	for index, value := range values {
+		entries[index] = workersessions.TranscriptEntry{
+			Arguments:        cloneRecordedString(value.Arguments),
+			CallID:           cloneRecordedString(value.CallID),
+			Encrypted:        cloneRecordedBool(value.Encrypted),
+			EncryptedContent: cloneRecordedString(value.EncryptedContent),
+			LineNumber:       cloneRecordedInt(value.LineNumber),
+			Name:             cloneRecordedString(value.Name),
+			Order:            value.Order,
+			Output:           cloneRecordedString(value.Output),
+			SourceType:       cloneRecordedString(value.SourceType),
+			Status:           cloneRecordedString(value.Status),
+			Summary:          cloneRecordedString(value.Summary),
+			Text:             cloneRecordedString(value.Text),
+			Timestamp:        cloneRecordedTime(value.Timestamp),
+			TurnIndex:        cloneRecordedInt(value.TurnIndex),
+			Type:             workersessions.TranscriptEntryType(value.Type),
+		}
+	}
+	return entries
+}
+
+func recordedTranscriptSourceUnavailable(err error) bool {
+	return errors.Is(err, providersessions.ErrSessionNotFound) ||
+		errors.Is(err, providersessions.ErrAmbiguousSessionFile) ||
+		errors.Is(err, providersessions.ErrSessionSourceNotRegularFile) ||
+		errors.Is(err, providersessions.ErrSessionStorageUnavailable) ||
+		errors.Is(err, providersessions.ErrSessionOutsideRoot)
+}
+
+func cloneRecordedBool(value *bool) *bool {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
+}
+
+func cloneRecordedInt(value *int) *int {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
+}
+
+func cloneRecordedString(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
+}
+
+func cloneRecordedTime(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
 }
 
 type recordedDispatchObservation struct {

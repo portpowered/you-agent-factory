@@ -87,7 +87,7 @@ func newTestFactory(opts ...testFactoryOption) (factory.Factory, error) {
 	return New(
 		cfg.net, cfg.scheduler, cfg.workerExecutors, workerService, cfg.providerInvocation, workerSessionsFactory, cfg.runtimeConfig,
 		cfg.workflowContext, cfg.runtimeMode, cfg.logger, cfg.clock,
-		cfg.inlineDispatch, cfg.eventHistory, nil,
+		cfg.inlineDispatch, cfg.eventHistory, nil, unavailableProviderSessions{},
 		nil, nil, cfg.submissionHooks,
 		cfg.dispatchRecorder, cfg.completionRecorder, cfg.petriMutationRecorder,
 		cfg.completionDeliveryPlanner,

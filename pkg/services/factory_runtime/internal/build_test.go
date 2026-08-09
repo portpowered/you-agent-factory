@@ -354,6 +354,7 @@ func testRuntimeFactory() *factoryinternal.RuntimeFactory {
 		nil, nil, outputAsPayloadPolicy(), nil, nil, testRuntimeLoggerFactory, nil, nil,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
+		nil,
 	)
 }
 
@@ -363,6 +364,7 @@ func testRuntimeFactoryWithSinks(logDir, metricsDir string) *factoryinternal.Run
 		testRuntimeLogFactory(logDir), testRuntimeMetricsFactory(metricsDir),
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
+		nil,
 	)
 }
 
