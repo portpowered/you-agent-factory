@@ -11255,6 +11255,7 @@
       "long": "worker-reasoning-effort",
       "usage": "override the worker reasoning effort for applicable one-shot worker invocations; accepts canonical authored-Worker values minimal, low, medium, high, xhigh, or max with case and surrounding whitespace normalized; unsupported values fail before dispatch",
       "shorthand": "",
+      "aliases": [],
       "scope": "local",
       "valueType": "string",
       "required": false,
