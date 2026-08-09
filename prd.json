@@ -34,7 +34,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented the canonical packaged factory-validation topic, embedded and registered it, routed it from the root/reference indexes, and added packaged-topic smoke coverage. Rebuilt bin/you.exe and executed every CLI invocation shown by the guide: the six related docs topics and the portable JSON, portable YAML, and split-directory validation commands all exited 0 with the documented output. Review follow-up corrected the public per-input field to inputs[].guards[] with at most one entry and moved the full topic assertion to the Factory Definitions validate_persist owner. Verified with make docs-reference-smoke, the named unsupported-join regression, and make verify-fast (after make ui-deps)."
+      "notes": "Implemented the canonical packaged factory-validation topic, embedded and registered it, routed it from the root/reference indexes, and added packaged-topic smoke coverage. Rebuilt bin/you.exe and executed every CLI invocation shown by the guide: the six related docs topics and the portable JSON, portable YAML, and split-directory validation commands all exited 0 with the documented output. Review follow-up corrected the public per-input field to inputs[].guards[] with at most one entry and moved the full topic assertion to the approved factory/definitions functional owner. Verified with make docs-reference-smoke, the named unsupported-join regression, and make verify-fast (after make ui-deps)."
     },
     {
       "id": "wo-d4-factory-validate-docs-002",

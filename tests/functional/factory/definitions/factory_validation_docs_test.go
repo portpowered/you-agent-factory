@@ -1,4 +1,4 @@
-package validate_persist
+package definitions
 
 import (
 	"strings"
