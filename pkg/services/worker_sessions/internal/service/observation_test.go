@@ -260,7 +260,7 @@ func TestReadTranscript_ReturnsFinishedNormalizedEntriesAndCorrelation(t *testin
 		},
 	}}
 	registry := newObservationService(t, executionBoundary{execution: executionFor(&ref, workers.OutcomeAccepted, nil, nil)}, newEventsAppender(), platformclock.Real{}, projection)
-	if _, err := registry.Start(context.Background(), startRequest("worker-transcript", "dispatch-transcript", "work-transcript")); err != nil {
+	if _, err := registry.InvokeSession(context.Background(), startRequest("worker-transcript", "dispatch-transcript", "work-transcript")); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
 
@@ -314,7 +314,7 @@ func TestReadTranscript_DistinguishesActiveMissingUnavailableAndCanceled(t *test
 	registry = newObservationService(t, executionBoundary{execution: execution}, newEventsAppender(), platformclock.Real{}, projection)
 	done := make(chan error, 1)
 	go func() {
-		_, err := registry.Start(context.Background(), startRequest("worker-active", "dispatch-active", "work-active"))
+		_, err := registry.InvokeSession(context.Background(), startRequest("worker-active", "dispatch-active", "work-active"))
 		done <- err
 	}()
 	select {

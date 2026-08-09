@@ -26,24 +26,23 @@ type EventsAppender = internalservice.EventsAppender
 
 // NewService constructs the Worker Sessions root from the one directly
 // injected workers.WorkstationPoolBoundary that Start publishes attempts
-// through and the one directly injected EventsAppender Start's before-handoff
-// publication barrier commits through. logger is the direct, required
+// through, the one directly injected EventsAppender Start's before-handoff
+// publication barrier commits through, and the one directly injected
+// providersessions.Service the observation projection enriches transcript,
+// token, and parse facts through. logger is the direct, required
 // operation-logging abstraction; callers with no operation logging pass
-// logging.NoopLogger{}.
+// logging.NoopLogger{}. A caller with no Provider Sessions projection
+// available passes nil explicitly rather than omitting the argument.
 func NewService(
 	boundary workers.WorkstationPoolBoundary,
 	eventsAppender EventsAppender,
 	logger logging.Logger,
-	providerSessions ...providersessions.Service,
+	providerSessions providersessions.Service,
 ) (workersessions.Service, error) {
-	var projection providersessions.Service
-	if len(providerSessions) > 0 {
-		projection = providerSessions[0]
-	}
 	return internalservice.New(
 		boundary,
 		eventsAppender,
 		logger,
-		internalservice.WithProviderSessions(projection),
+		internalservice.WithProviderSessions(providerSessions),
 	)
 }
