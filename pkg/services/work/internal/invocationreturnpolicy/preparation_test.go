@@ -3,8 +3,10 @@ package invocationreturnpolicy
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestResolveFactoryInvocationInput_NoInputReturnsEmptyWithoutError(t *testing.T) {
@@ -55,7 +57,7 @@ func TestResolveFactoryInvocationInput_StdinOnlyFromDash(t *testing.T) {
 
 func TestResolveFactoryInvocationInput_StdinOnlyFromPipe(t *testing.T) {
 	stdin := "Fix from pipe\n"
-	prepared, err := NewInvocationInputPreparation().PrepareInvocationInput(context.Background(), InvocationInputPreparationRequest{
+	prepared, err := newTestPreparation().PrepareInvocationInput(context.Background(), InvocationInputPreparationRequest{
 		StdinText: &stdin,
 	})
 	if err != nil {
@@ -68,7 +70,7 @@ func TestResolveFactoryInvocationInput_StdinOnlyFromPipe(t *testing.T) {
 
 func TestResolveFactoryInvocationInput_StdinOnlyFromOverriddenReaderWithoutTTYHook(t *testing.T) {
 	stdin := "Fix from overridden reader\n"
-	prepared, err := NewInvocationInputPreparation().PrepareInvocationInput(context.Background(), InvocationInputPreparationRequest{StdinText: &stdin})
+	prepared, err := newTestPreparation().PrepareInvocationInput(context.Background(), InvocationInputPreparationRequest{StdinText: &stdin})
 	if err != nil {
 		t.Fatalf("PrepareInvocationInput: %v", err)
 	}
@@ -96,7 +98,7 @@ func TestResolveFactoryInvocationInput_FilePreservesExactUTF8BytesAndPath(t *tes
 	path := `briefs\long prompt.txt`
 	want := "  line one\r\nline two — 東京\r\n\r\nfinal line\n"
 	var readPath string
-	preparation := NewInvocationInputPreparation(InvocationInputFileReader(func(got string) ([]byte, error) {
+	preparation := newFilePreparation(InvocationInputFileReader(func(got string) ([]byte, error) {
 		readPath = got
 		return []byte(want), nil
 	}))
@@ -127,7 +129,7 @@ func TestResolveFactoryInvocationInput_FileRejectsInvalidUTF8AndEmptyText(t *tes
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			preparation := NewInvocationInputPreparation(InvocationInputFileReader(func(string) ([]byte, error) {
+			preparation := newFilePreparation(InvocationInputFileReader(func(string) ([]byte, error) {
 				return test.data, nil
 			}))
 			_, err := preparation.PrepareInvocationInput(context.Background(), InvocationInputPreparationRequest{FilePath: &path})
@@ -139,18 +141,39 @@ func TestResolveFactoryInvocationInput_FileRejectsInvalidUTF8AndEmptyText(t *tes
 	}
 }
 
+func TestResolveFactoryInvocationInput_RejectsNonRegularFileBeforeRead(t *testing.T) {
+	path := "brief.pipe"
+	readCalled := false
+	preparation := NewInvocationInputPreparation(
+		func(string) ([]byte, error) {
+			readCalled = true
+			return []byte("must not read"), nil
+		},
+		func(string) (fs.FileInfo, error) { return fileInfoStub{mode: fs.ModeNamedPipe}, nil },
+	)
+
+	_, err := preparation.PrepareInvocationInput(context.Background(), InvocationInputPreparationRequest{FilePath: &path})
+	assertInputErrorCode(t, err, InputErrorCodeNotRegularFile)
+	if !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "regular file") {
+		t.Fatalf("error = %v, want source/path-specific regular-file diagnostic", err)
+	}
+	if readCalled {
+		t.Fatal("file reader was called for a non-regular path")
+	}
+}
+
 func TestResolveFactoryInvocationInput_FileConflictsWithPositionalStdinAndSignatureTo(t *testing.T) {
 	path := "brief.txt"
 	fileReader := InvocationInputFileReader(func(string) ([]byte, error) { return []byte("from file"), nil })
 	stdin := "from stdin"
 	positional := InvocationInputPreparationRequest{Arguments: []string{"from positional"}, FilePath: &path}
-	_, err := NewInvocationInputPreparation(fileReader).PrepareInvocationInput(context.Background(), positional)
+	_, err := newFilePreparation(fileReader).PrepareInvocationInput(context.Background(), positional)
 	assertInputErrorCode(t, err, InputErrorCodeSourceConflict)
 	if !strings.Contains(err.Error(), "positional_text") || !strings.Contains(err.Error(), "file_text") {
 		t.Fatalf("positional/file conflict = %v, want both source names", err)
 	}
 
-	_, err = NewInvocationInputPreparation(fileReader).PrepareInvocationInput(context.Background(), InvocationInputPreparationRequest{
+	_, err = newFilePreparation(fileReader).PrepareInvocationInput(context.Background(), InvocationInputPreparationRequest{
 		Arguments: []string{"-"}, StdinText: &stdin, FilePath: &path,
 	})
 	assertInputErrorCode(t, err, InputErrorCodeSourceConflict)
@@ -158,7 +181,7 @@ func TestResolveFactoryInvocationInput_FileConflictsWithPositionalStdinAndSignat
 		t.Fatalf("stdin/file conflict = %v, want both source names", err)
 	}
 
-	_, err = NewInvocationInputPreparation(fileReader).PrepareInvocationInput(context.Background(), InvocationInputPreparationRequest{
+	_, err = newFilePreparation(fileReader).PrepareInvocationInput(context.Background(), InvocationInputPreparationRequest{
 		Arguments: []string{"--to", "from named"}, Signature: signatureWithTo(), FilePath: &path,
 	})
 	assertInputErrorCode(t, err, InputErrorCodeSourceConflict)
@@ -170,7 +193,7 @@ func TestResolveFactoryInvocationInput_FileConflictsWithPositionalStdinAndSignat
 func TestResolveSignatureFactoryInvocationInput_FilePopulatesPrimaryArgument(t *testing.T) {
 	path := "brief.txt"
 	want := "multiline — exact\r\n"
-	prepared, err := NewInvocationInputPreparation(InvocationInputFileReader(func(string) ([]byte, error) {
+	prepared, err := newFilePreparation(InvocationInputFileReader(func(string) ([]byte, error) {
 		return []byte(want), nil
 	})).PrepareInvocationInput(context.Background(), InvocationInputPreparationRequest{
 		Signature: signatureWithTo(), FilePath: &path,
@@ -189,7 +212,7 @@ func TestResolveSignatureFactoryInvocationInput_FilePopulatesPrimaryArgument(t *
 
 func TestResolveSignatureFactoryInvocationInput_FileRequiresPrimaryTextParameter(t *testing.T) {
 	path := "brief.txt"
-	_, err := NewInvocationInputPreparation(InvocationInputFileReader(func(string) ([]byte, error) {
+	_, err := newFilePreparation(InvocationInputFileReader(func(string) ([]byte, error) {
 		return []byte("file prompt"), nil
 	})).PrepareInvocationInput(context.Background(), InvocationInputPreparationRequest{
 		Signature: &InvocationSignatureConfig{Parameters: []InvocationParameterConfig{{
@@ -220,7 +243,7 @@ func TestResolveFactoryInvocationInput_ExplicitEmptyStdinUsesStableEmptyCode(t *
 
 func TestResolveFactoryInvocationInput_RejectsPositionalAndStdinConflict(t *testing.T) {
 	stdin := "Fix from stdin\n"
-	_, err := NewInvocationInputPreparation().PrepareInvocationInput(context.Background(), InvocationInputPreparationRequest{
+	_, err := newTestPreparation().PrepareInvocationInput(context.Background(), InvocationInputPreparationRequest{
 		Arguments: []string{"Fix", "the", "lint", "issues"}, StdinText: &stdin,
 	})
 	assertInputErrorCode(t, err, InputErrorCodeSourceConflict)
@@ -316,7 +339,7 @@ func TestPrepareInvocationInputReturnsDetachedCanonicalValues(t *testing.T) {
 }
 
 func TestPrepareInvocationInputRequiresLiveContext(t *testing.T) {
-	preparation := NewInvocationInputPreparation()
+	preparation := newTestPreparation()
 	if _, err := preparation.PrepareInvocationInput(nil, InvocationInputPreparationRequest{}); err == nil || !strings.Contains(err.Error(), "context is required") {
 		t.Fatalf("nil context error = %v", err)
 	}
@@ -329,8 +352,31 @@ func TestPrepareInvocationInputRequiresLiveContext(t *testing.T) {
 
 func prepareInvocationInput(t *testing.T, request InvocationInputPreparationRequest) (PreparedInvocationInput, error) {
 	t.Helper()
-	return NewInvocationInputPreparation().PrepareInvocationInput(context.Background(), request)
+	return newTestPreparation().PrepareInvocationInput(context.Background(), request)
 }
+
+func newTestPreparation() InvocationInputPreparation {
+	return NewInvocationInputPreparation(nil, nil)
+}
+
+func newFilePreparation(reader InvocationInputFileReader) InvocationInputPreparation {
+	return NewInvocationInputPreparation(reader, regularFilePathInspector)
+}
+
+func regularFilePathInspector(string) (fs.FileInfo, error) {
+	return fileInfoStub{mode: 0o600}, nil
+}
+
+type fileInfoStub struct {
+	mode fs.FileMode
+}
+
+func (fileInfoStub) Name() string         { return "prompt.txt" }
+func (fileInfoStub) Size() int64          { return 1 }
+func (f fileInfoStub) Mode() fs.FileMode  { return f.mode }
+func (f fileInfoStub) ModTime() time.Time { return time.Time{} }
+func (f fileInfoStub) IsDir() bool        { return f.mode.IsDir() }
+func (fileInfoStub) Sys() any             { return nil }
 
 func assertInputErrorCode(t *testing.T, err error, code InputErrorCode) {
 	t.Helper()

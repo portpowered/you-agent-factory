@@ -66,6 +66,7 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 	directoryReplacementStore := &edgeDirectoryReplacementStore{}
 	workRequestIDGenerated := false
 	workSubmittedFileRead := false
+	workSubmittedFilePathInspected := false
 	responseEventIDGenerated := false
 	sessionIDGenerated := false
 	homeDirectoryResolved := false
@@ -192,6 +193,10 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 			workSubmittedFileRead = true
 			return []byte("work"), nil
 		},
+		WorkSubmittedFilePathInspector: func(string) (fs.FileInfo, error) {
+			workSubmittedFilePathInspected = true
+			return nil, nil
+		},
 		FactorySessionResponseEventIDGenerator: func() string {
 			responseEventIDGenerated = true
 			return "response-event-id"
@@ -315,6 +320,9 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 	if output, err := merged.WorkSubmittedFileReader("work.json"); err != nil || string(output) != "work" || !workSubmittedFileRead {
 		t.Fatalf("WorkSubmittedFileReader replacement = (%q, %v, %v)", output, err, workSubmittedFileRead)
 	}
+	if _, err := merged.WorkSubmittedFilePathInspector("prompt.txt"); err != nil || !workSubmittedFilePathInspected {
+		t.Fatalf("WorkSubmittedFilePathInspector replacement = (%v, %v)", err, workSubmittedFilePathInspected)
+	}
 	if got := merged.FactorySessionResponseEventIDGenerator(); got != "response-event-id" || !responseEventIDGenerated {
 		t.Fatalf("FactorySessionResponseEventIDGenerator replacement = (%q, %v)", got, responseEventIDGenerated)
 	}
@@ -329,6 +337,7 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 	}
 	var _ work.RequestIDGenerator = merged.WorkRequestIDGenerator
 	var _ work.SubmittedFileReader = merged.WorkSubmittedFileReader
+	var _ work.SubmittedFilePathInspector = merged.WorkSubmittedFilePathInspector
 	var _ factorydefinitions.LoadingFileSystem = merged.FactoryDefinitionLoadingFileSystem
 	if _, ok := merged.FactoryDefinitionNamedPathFileSystem.(platformfilesystem.Local); !ok {
 		t.Fatalf("FactoryDefinitionNamedPathFileSystem = %T, want explicit replacement", merged.FactoryDefinitionNamedPathFileSystem)

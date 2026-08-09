@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -53,19 +54,19 @@ type InvocationInputPreparation interface {
 }
 
 type InvocationInputFileReader func(string) ([]byte, error)
+type InvocationInputPathInspector func(string) (fs.FileInfo, error)
 
 type invocationInputPreparation struct {
-	readFile InvocationInputFileReader
+	readFile    InvocationInputFileReader
+	inspectPath InvocationInputPathInspector
 }
 
 // NewInvocationInputPreparation constructs Work's invocation-input policy.
-// Wire is the sole application caller of this constructor.
-func NewInvocationInputPreparation(readers ...InvocationInputFileReader) InvocationInputPreparation {
-	var readFile InvocationInputFileReader
-	if len(readers) > 0 {
-		readFile = readers[0]
-	}
-	return invocationInputPreparation{readFile: readFile}
+func NewInvocationInputPreparation(
+	readFile InvocationInputFileReader,
+	inspectPath InvocationInputPathInspector,
+) InvocationInputPreparation {
+	return invocationInputPreparation{readFile: readFile, inspectPath: inspectPath}
 }
 
 // InvocationExampleNormalizer owns pure compatibility normalization for
@@ -195,6 +196,20 @@ func (preparation invocationInputPreparation) readInvocationFile(
 	}
 	if preparation.readFile == nil {
 		return nil, fmt.Errorf("read invocation --to-file %q: file reader is required", filePath)
+	}
+	if preparation.inspectPath == nil {
+		return nil, fmt.Errorf("inspect invocation --to-file %q: path inspector is required", filePath)
+	}
+	info, err := preparation.inspectPath(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("inspect invocation --to-file %q: %w", filePath, err)
+	}
+	if info == nil || !info.Mode().IsRegular() {
+		return nil, &InputError{
+			Code:    InputErrorCodeNotRegularFile,
+			Message: fmt.Sprintf("invocation --to-file %q must identify a regular file", filePath),
+			Source:  InputSourceFileText,
+		}
 	}
 	data, err := preparation.readFile(filePath)
 	if err != nil {

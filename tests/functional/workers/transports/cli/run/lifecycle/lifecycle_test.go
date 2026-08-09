@@ -112,7 +112,11 @@ func TestCLIRunToFilePreservesExactPromptAndRejectsBeforeProviderDispatch(t *tes
 	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
 		Stdout: []byte("file prompt accepted COMPLETE"),
 	})
-	edges := serviceedges.Edges{ProviderCommandRunner: runner}
+	edges := serviceedges.Edges{
+		ProviderCommandRunner:          runner,
+		WorkSubmittedFileReader:        os.ReadFile,
+		WorkSubmittedFilePathInspector: os.Stat,
+	}
 	args := []string{
 		"you", "run", "--factory", factoryPath,
 		"--provider", "codex", "--worker-reasoning-effort", "xhigh",
@@ -170,7 +174,11 @@ func assertFilePromptConflicts(t *testing.T, factoryDir, factoryPath, promptPath
 			inputs.Input.WorkingDirectory = factoryDir
 			inputs.Input.Stdin = strings.NewReader(test.stdin)
 			inputs.Input.StdinIsTTY = &test.stdinIsTTY
-			err := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner}).Execute(inputs.Input)
+			err := support.BuildProcess(t, serviceedges.Edges{
+				ProviderCommandRunner:          runner,
+				WorkSubmittedFileReader:        os.ReadFile,
+				WorkSubmittedFilePathInspector: os.Stat,
+			}).Execute(inputs.Input)
 			if err == nil || !strings.Contains(err.Error(), "INVOCATION_INPUT_SOURCE_CONFLICT") {
 				t.Fatalf("Process.Execute(%v) error = %v, want stable source conflict", test.args, err)
 			}
@@ -196,12 +204,34 @@ func assertUnreadableFilePrompt(t *testing.T, factoryDir, factoryPath, promptDir
 	}
 	inputs := support.FakeInputs(t.Context(), missingArgs)
 	inputs.Input.WorkingDirectory = factoryDir
-	err := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner}).Execute(inputs.Input)
+	err := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner:          runner,
+		WorkSubmittedFileReader:        os.ReadFile,
+		WorkSubmittedFilePathInspector: os.Stat,
+	}).Execute(inputs.Input)
 	if err == nil || !strings.Contains(err.Error(), missingPath) {
 		t.Fatalf("Process.Execute(%v) error = %v, want unreadable path diagnostic", missingArgs, err)
 	}
 	if runner.CallCount() != 0 {
 		t.Fatalf("provider command runner calls = %d, want zero for unreadable file", runner.CallCount())
+	}
+
+	directoryArgs := []string{
+		"you", "run", "--factory", factoryPath,
+		"--to-file", promptDir, "--no-record", "--quiet",
+	}
+	directoryInputs := support.FakeInputs(t.Context(), directoryArgs)
+	directoryInputs.Input.WorkingDirectory = factoryDir
+	err = support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner:          runner,
+		WorkSubmittedFileReader:        os.ReadFile,
+		WorkSubmittedFilePathInspector: os.Stat,
+	}).Execute(directoryInputs.Input)
+	if err == nil || !strings.Contains(err.Error(), "regular file") {
+		t.Fatalf("Process.Execute(%v) error = %v, want non-regular source diagnostic", directoryArgs, err)
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner calls = %d, want zero for non-regular file", runner.CallCount())
 	}
 }
 

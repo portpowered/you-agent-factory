@@ -133,8 +133,9 @@ func TestProvideWorkFactoryConstructsThroughWorkWireBridge(t *testing.T) {
 		t.Fatalf("provideContentMaterializer() error = %v", err)
 	}
 	readFile := provideWorkSubmittedFileReader(serviceedges.Edges{})
+	inspectPath := provideWorkSubmittedFilePathInspector(serviceedges.Edges{})
 
-	factory := provideWorkFactory(readFile, staging, materializer)
+	factory := provideWorkFactory(readFile, inspectPath, staging, materializer)
 	if factory == nil {
 		t.Fatal("provideWorkFactory() returned nil factory")
 	}

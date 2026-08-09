@@ -314,26 +314,23 @@ func ClassifyFailedInvocation(
 	return primaryResultErrorFromInternal(result), true
 }
 
-func NewInvocationInputPreparation(readers ...SubmittedFileReader) InvocationInputPreparation {
-	var readFile SubmittedFileReader
-	if len(readers) > 0 {
-		readFile = readers[0]
-	}
-	return newInvocationInputPreparation(readFile)
+func NewInvocationInputPreparation(
+	readFile SubmittedFileReader,
+	inspectPath SubmittedFilePathInspector,
+) InvocationInputPreparation {
+	return newInvocationInputPreparation(readFile, inspectPath)
 }
 
-// NewInvocationInputPreparationWithFileReader constructs the injected
-// Work-owned input policy used by production transports.
-func NewInvocationInputPreparationWithFileReader(readFile SubmittedFileReader) InvocationInputPreparation {
-	return newInvocationInputPreparation(readFile)
-}
-
-func newInvocationInputPreparation(readFile SubmittedFileReader) InvocationInputPreparation {
-	return invocationInputPreparationAdapter{readFile: readFile}
+func newInvocationInputPreparation(
+	readFile SubmittedFileReader,
+	inspectPath SubmittedFilePathInspector,
+) InvocationInputPreparation {
+	return invocationInputPreparationAdapter{readFile: readFile, inspectPath: inspectPath}
 }
 
 type invocationInputPreparationAdapter struct {
-	readFile SubmittedFileReader
+	readFile    SubmittedFileReader
+	inspectPath SubmittedFilePathInspector
 }
 
 func (adapter invocationInputPreparationAdapter) PrepareInvocationInput(
@@ -342,6 +339,7 @@ func (adapter invocationInputPreparationAdapter) PrepareInvocationInput(
 ) (PreparedInvocationInput, error) {
 	prepared, err := invocationreturnpolicy.NewInvocationInputPreparation(
 		invocationreturnpolicy.InvocationInputFileReader(adapter.readFile),
+		invocationreturnpolicy.InvocationInputPathInspector(adapter.inspectPath),
 	).PrepareInvocationInput(
 		ctx,
 		invocationInputPreparationRequestToInternal(request),

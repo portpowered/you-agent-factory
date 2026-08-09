@@ -35,6 +35,10 @@ const (
 
 	// InputErrorCodeInvalidUTF8 reports that a file-backed input was not UTF-8.
 	InputErrorCodeInvalidUTF8 InputErrorCode = "INVOCATION_INPUT_INVALID_UTF8"
+
+	// InputErrorCodeNotRegularFile reports that --to-file selected a non-regular
+	// filesystem source.
+	InputErrorCodeNotRegularFile InputErrorCode = "INVOCATION_INPUT_NOT_REGULAR_FILE"
 )
 
 // TextInputSources carries text-first input observed by a transport adapter.

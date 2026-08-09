@@ -362,13 +362,21 @@ func provideWorkSubmittedFileReader(edges serviceedges.Edges) work.SubmittedFile
 	return os.ReadFile
 }
 
+func provideWorkSubmittedFilePathInspector(edges serviceedges.Edges) work.SubmittedFilePathInspector {
+	if edges.WorkSubmittedFilePathInspector != nil {
+		return edges.WorkSubmittedFilePathInspector
+	}
+	return os.Stat
+}
+
 func provideWorkFactory(
 	readFile work.SubmittedFileReader,
+	inspectPath work.SubmittedFilePathInspector,
 	contentStaging work.ContentStagingService,
 	contentMaterializer work.ContentMaterializer,
 ) factorysessionwire.WorkFactory {
 	return func(runtimes work.RuntimeResolver) work.Service {
-		return workwire.NewRuntimeService(runtimes, readFile, contentStaging, contentMaterializer)
+		return workwire.NewRuntimeService(runtimes, readFile, inspectPath, contentStaging, contentMaterializer)
 	}
 }
 
@@ -379,5 +387,5 @@ func provideWorkFactory(
 func provideWorkMaterializationService(
 	contentMaterializer work.ContentMaterializer,
 ) work.Service {
-	return workwire.NewRuntimeService(nil, nil, nil, contentMaterializer)
+	return workwire.NewRuntimeService(nil, nil, nil, nil, contentMaterializer)
 }

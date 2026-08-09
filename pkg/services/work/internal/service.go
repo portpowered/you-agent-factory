@@ -27,11 +27,12 @@ type RuntimeResolver interface {
 }
 
 type applicationService struct {
-	runtimes            work.RuntimeResolver
-	readSubmittedFile   work.SubmittedFileReader
-	contentStaging      work.ContentStagingService
-	contentMaterializer work.ContentMaterializer
-	stateAccess         stateaccess.Service
+	runtimes             work.RuntimeResolver
+	readSubmittedFile    work.SubmittedFileReader
+	inspectSubmittedFile work.SubmittedFilePathInspector
+	contentStaging       work.ContentStagingService
+	contentMaterializer  work.ContentMaterializer
+	stateAccess          stateaccess.Service
 }
 
 // Compile-time proof that production applicationService seals the published Work
@@ -58,14 +59,16 @@ func New(sessions RuntimeResolver) *Service {
 func NewService(
 	runtimes work.RuntimeResolver,
 	readSubmittedFile work.SubmittedFileReader,
+	inspectSubmittedFile work.SubmittedFilePathInspector,
 	contentStaging work.ContentStagingService,
 	contentMaterializer work.ContentMaterializer,
 ) work.FileSubmissionService {
 	return &applicationService{
-		runtimes:            runtimes,
-		readSubmittedFile:   readSubmittedFile,
-		contentStaging:      contentStaging,
-		contentMaterializer: contentMaterializer,
+		runtimes:             runtimes,
+		readSubmittedFile:    readSubmittedFile,
+		inspectSubmittedFile: inspectSubmittedFile,
+		contentStaging:       contentStaging,
+		contentMaterializer:  contentMaterializer,
 		stateAccess: stateaccesswire.NewService(
 			stateaccesswire.NewRuntimeSessionResolver(runtimes),
 			nil,
@@ -195,7 +198,10 @@ func (s *applicationService) PrepareInvocationInput(
 	ctx context.Context,
 	request work.InvocationInputPreparationRequest,
 ) (work.PreparedInvocationInput, error) {
-	prepared, err := work.NewInvocationInputPreparation(s.readSubmittedFile).PrepareInvocationInput(ctx, request)
+	prepared, err := work.NewInvocationInputPreparation(
+		s.readSubmittedFile,
+		s.inspectSubmittedFile,
+	).PrepareInvocationInput(ctx, request)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return work.PreparedInvocationInput{}, err
