@@ -92,6 +92,12 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	if !strings.Contains(unknownErr.Error()+unknownInputs.Stderr(), "unknown command") {
 		t.Fatalf("worker-sessions unknown argument omitted diagnostic: %v\nstderr:\n%s", unknownErr, unknownInputs.Stderr())
 	}
+	completionInputs := executeCLI(t, ctx, process, env, factoryDir, "__complete", "worker-sessions", "")
+	for _, marker := range []string{"list", "read", "show", "stream"} {
+		if !strings.Contains(completionInputs.Stdout(), marker) {
+			t.Fatalf("worker-sessions completion omitted %q:\n%s", marker, completionInputs.Stdout())
+		}
+	}
 
 	successWorkID := submitWork(t, ctx, process, env, factoryDir, baseURL, "worker-session-cli-success")
 	waitForWorkerSession(t, ctx, process, env, factoryDir, baseURL, successWorkID)
