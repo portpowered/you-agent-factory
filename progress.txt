@@ -176,3 +176,25 @@
   - `--quiet` conflicts with `--json` and `--output`; structured examples must omit `--quiet` and should be validated against live CLI behavior.
   - The normalized subagent primary result is the child answer, while request/trace IDs and session state are runtime metadata; generated provider prose remains non-deterministic.
 ---
+
+## 2026-08-09 16:52 - review follow-up: packaged-factory worked examples
+- What was implemented
+  - Merged the current `origin/main` into the documentation branch and resolved the shared docs indexes, embed registry, and CLI smoke-test changes while preserving both branches' behavior.
+  - Replaced the invalid sole worked invocations for `@you/full-flow`, `@you/spawn`, and `@you/tournament` with valid bounded commands and captured successful output from the current binary in a controlled environment.
+  - Kept the `max-cycles 9`, `count 15`, and `rounds 4` commands as explicitly labeled additional bound checks rather than success examples.
+  - Removed the attempted checked-in JavaScript mock-worker fixtures after confirming that the CLI `--with-mock-workers` mode selects generic `FakeChildExecutor` output and cannot satisfy planner/judge protocols.
+- Files changed
+  - `docs/reference/packaged-factories.md`
+  - `prd.json`
+  - `progress.txt`
+  - merged current-main documentation and test conflict resolutions
+- Verification
+  - Full-flow exact command exited 0 with `Create a one-line README note and verify it.` after a deterministic local `codex` executable supplied a protocol-valid planner response marking the bounded request complete, so no implementation/review/merge call was needed.
+  - Spawn exact command exited 0 with `merged travel answer` using `--count 2`.
+  - Tournament exact command exited 0 with the champion and `Tournament decision trail:` / `Round 1, match 1: more complete` using `--rounds 1`.
+  - All three runs used isolated `HOME` and `USERPROFILE`; full-flow used a disposable Git repository with `main` as the base branch.
+- **Learnings for future iterations:**
+  - JavaScript packaged-factory success smokes need a live provider boundary or provider-command edge fixture; `--with-mock-workers` intentionally returns generic fake child text and is not protocol-valid for planner/judge workflows.
+  - A bounded full-flow terminal smoke must preserve the rendered cycle-control Work name; a mismatched name leaves the orchestration graph waiting for completion.
+  - After merging current main into a docs branch, verify both the embed/topic registry and user-visible docs smoke assertions before committing the merge resolution.
+---

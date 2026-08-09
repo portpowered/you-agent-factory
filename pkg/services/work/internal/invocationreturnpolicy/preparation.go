@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"slices"
 	"strings"
+	"unicode/utf8"
 )
 
 // InvocationInputPreparationRequest contains the raw invocation values
@@ -16,6 +18,7 @@ type InvocationInputPreparationRequest struct {
 	Arguments            []string
 	Signature            *InvocationSignatureConfig
 	StdinText            *string
+	FilePath             *string
 	DirectArgs           []NamedArgumentInput
 	CompatibilityContent []ContentPart
 }
@@ -50,12 +53,20 @@ type InvocationInputPreparation interface {
 	PrepareInvocationInput(context.Context, InvocationInputPreparationRequest) (PreparedInvocationInput, error)
 }
 
-type invocationInputPreparation struct{}
+type InvocationInputFileReader func(string) ([]byte, error)
+type InvocationInputPathInspector func(string) (fs.FileInfo, error)
+
+type invocationInputPreparation struct {
+	readFile    InvocationInputFileReader
+	inspectPath InvocationInputPathInspector
+}
 
 // NewInvocationInputPreparation constructs Work's invocation-input policy.
-// Wire is the sole application caller of this constructor.
-func NewInvocationInputPreparation() InvocationInputPreparation {
-	return invocationInputPreparation{}
+func NewInvocationInputPreparation(
+	readFile InvocationInputFileReader,
+	inspectPath InvocationInputPathInspector,
+) InvocationInputPreparation {
+	return invocationInputPreparation{readFile: readFile, inspectPath: inspectPath}
 }
 
 // InvocationExampleNormalizer owns pure compatibility normalization for
@@ -87,7 +98,7 @@ func (InvocationExampleNormalizer) NormalizeLegacyInvocationExample(
 	return cloneNormalizedArguments(&result), nil
 }
 
-func (invocationInputPreparation) PrepareInvocationInput(
+func (preparation invocationInputPreparation) PrepareInvocationInput(
 	ctx context.Context,
 	request InvocationInputPreparationRequest,
 ) (PreparedInvocationInput, error) {
@@ -97,22 +108,39 @@ func (invocationInputPreparation) PrepareInvocationInput(
 	if err := ctx.Err(); err != nil {
 		return PreparedInvocationInput{}, err
 	}
-
-	if len(request.DirectArgs) > 0 || len(request.CompatibilityContent) > 0 {
-		result, err := NormalizeArguments(NormalizeArgumentsInput{
-			Signature:            request.Signature,
-			DirectArgs:           request.DirectArgs,
-			CompatibilityContent: request.CompatibilityContent,
-		})
-		if err != nil {
-			return PreparedInvocationInput{}, err
-		}
-		if err := ctx.Err(); err != nil {
-			return PreparedInvocationInput{}, err
-		}
-		return preparedInvocationInputFromNormalized(result), nil
+	fileText, err := preparation.readInvocationFile(ctx, request.FilePath)
+	if err != nil {
+		return PreparedInvocationInput{}, err
 	}
 
+	if len(request.DirectArgs) > 0 || len(request.CompatibilityContent) > 0 {
+		return preparation.prepareDirectInvocationInput(ctx, request, fileText)
+	}
+	return preparation.prepareCollectedInvocationInput(ctx, request, fileText)
+}
+
+func (preparation invocationInputPreparation) prepareDirectInvocationInput(
+	ctx context.Context,
+	request InvocationInputPreparationRequest,
+	fileText *string,
+) (PreparedInvocationInput, error) {
+	result, err := NormalizeArguments(NormalizeArgumentsInput{
+		Signature:            request.Signature,
+		DirectArgs:           request.DirectArgs,
+		FileText:             fileText,
+		CompatibilityContent: request.CompatibilityContent,
+	})
+	if err != nil {
+		return PreparedInvocationInput{}, err
+	}
+	return preparedInvocationInputAfterContext(ctx, result)
+}
+
+func (preparation invocationInputPreparation) prepareCollectedInvocationInput(
+	ctx context.Context,
+	request InvocationInputPreparationRequest,
+	fileText *string,
+) (PreparedInvocationInput, error) {
 	positional, named, _, err := parseInvocationArguments(request.Arguments, request.Signature)
 	if err != nil {
 		return PreparedInvocationInput{}, err
@@ -121,7 +149,7 @@ func (invocationInputPreparation) PrepareInvocationInput(
 		return PreparedInvocationInput{}, err
 	}
 
-	if request.Signature == nil && len(positional) == 0 && request.StdinText == nil {
+	if request.Signature == nil && len(positional) == 0 && request.StdinText == nil && fileText == nil {
 		return PreparedInvocationInput{}, nil
 	}
 	input := NormalizeArgumentsInput{
@@ -130,14 +158,79 @@ func (invocationInputPreparation) PrepareInvocationInput(
 		NamedArgs:      named,
 	}
 	input.StdinText = request.StdinText
+	input.FileText = fileText
 	result, err := NormalizeArguments(input)
 	if err != nil {
 		return PreparedInvocationInput{}, err
 	}
+	return preparedInvocationInputAfterContext(ctx, result)
+}
+
+func preparedInvocationInputAfterContext(
+	ctx context.Context,
+	result NormalizedArguments,
+) (PreparedInvocationInput, error) {
 	if err := ctx.Err(); err != nil {
 		return PreparedInvocationInput{}, err
 	}
 	return preparedInvocationInputFromNormalized(result), nil
+}
+
+func (preparation invocationInputPreparation) readInvocationFile(
+	ctx context.Context,
+	path *string,
+) (*string, error) {
+	if path == nil {
+		return nil, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	filePath := *path
+	if strings.TrimSpace(filePath) == "" {
+		return nil, &InputError{
+			Code:    InputErrorCodeEmpty,
+			Message: fmt.Sprintf("invocation --to-file %q is empty", filePath),
+			Source:  InputSourceFileText,
+		}
+	}
+	if preparation.readFile == nil {
+		return nil, fmt.Errorf("read invocation --to-file %q: file reader is required", filePath)
+	}
+	if preparation.inspectPath == nil {
+		return nil, fmt.Errorf("inspect invocation --to-file %q: path inspector is required", filePath)
+	}
+	info, err := preparation.inspectPath(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("inspect invocation --to-file %q: %w", filePath, err)
+	}
+	if info == nil || !info.Mode().IsRegular() {
+		return nil, &InputError{
+			Code:    InputErrorCodeNotRegularFile,
+			Message: fmt.Sprintf("invocation --to-file %q must identify a regular file", filePath),
+			Source:  InputSourceFileText,
+		}
+	}
+	data, err := preparation.readFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("read invocation --to-file %q: %w", filePath, err)
+	}
+	if !utf8.Valid(data) {
+		return nil, &InputError{
+			Code:    InputErrorCodeInvalidUTF8,
+			Message: fmt.Sprintf("invocation --to-file %q is not valid UTF-8", filePath),
+			Source:  InputSourceFileText,
+		}
+	}
+	text := string(data)
+	if strings.TrimSpace(text) == "" {
+		return nil, &InputError{
+			Code:    InputErrorCodeEmpty,
+			Message: fmt.Sprintf("invocation --to-file %q input is empty", filePath),
+			Source:  InputSourceFileText,
+		}
+	}
+	return &text, nil
 }
 
 func preparedInvocationInputFromNormalized(result NormalizedArguments) PreparedInvocationInput {

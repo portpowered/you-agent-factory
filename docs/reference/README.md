@@ -27,8 +27,10 @@ concept owners below when you need the complete customer-facing contract.
 | `packaged-factories` | First-party `@you/*` Factory catalog, live invocation discovery, and operator guide | [Packaged factories](packaged-factories.md) |
 | `run` | Supported local, one-shot, batch, continuous, and mock-worker run shapes | [Run](run.md) |
 | `config` | Operator initialization plus Factory validation, transformation, and minimum authoring contract | [Config](config.md) and [Author factories](authoring-factories.md) |
+| `factory-validation` | Required pre-run static gate, current validation checks, exact source commands, and validation limits | [Factory validation](factory-validation.md) |
 | `mock-workers` | `--with-mock-workers` and the `mockWorkers` JSON contract | [Mock workers](mock-workers.md) |
 | `record-replay` | Default recording, `--record`, `--replay`, and `--no-record` | [Record and replay](record-replay.md) |
+| `operations` | Real-pipeline lifetime, finite-drain classification, and same-name restart recovery | [Operations](operations.md) |
 | `work` | Submitted work: session-scoped work routes, tags, and batch cross-links | [Submitted work](work.md) |
 | `sessions` | Session list, session show, pause and resume, factory query, status API, dashboard, and run modes | [Sessions](sessions.md) |
 | `orchestrators` | Factory orchestrator identity, FactorySession runtime nouns, dispatch/artifact/event aliases | [Orchestrators](orchestrators.md) |
@@ -87,6 +89,8 @@ filesystem work around that invocation.
 - [Orchestrators](orchestrators.md) owns `Factory`, `FactoryOrchestrator`,
   `FactorySession`, `Dispatch`, `FactoryArtifact`, `FactoryEvent`, and accepted
   dynamic workflow aliases.
+- [Operations](operations.md) owns real-pipeline lifetime, finite-drain
+  classification, and same-name restart recovery.
 - [JavaScript workflows](javascript-workflows.md) owns the supported JavaScript
   authoring surface, equivalent execution and inspection flows, child worker
   preset rules, host-capability boundary, and executable examples.
@@ -143,6 +147,7 @@ Use these canonical concept owners when you need the current contract.
 - [Package docs index](../README.md)
 - [Config](config.md)
 - [Packaged factories](packaged-factories.md)
+- [Factory validation](factory-validation.md)
 - [Sessions](sessions.md)
 - [Submitted work](work.md)
 - [Workstations](workstations.md)

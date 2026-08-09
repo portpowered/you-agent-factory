@@ -2,6 +2,7 @@ package work
 
 import (
 	"context"
+	"io/fs"
 )
 
 // Runtime is the narrow live-session capability consumed by Work operations.
@@ -31,6 +32,10 @@ type RequestIDGenerator func() string
 // SubmittedFileReader reads a canonical Work Request submitted by path.
 // Filesystem policy is selected at the process edge rather than by Work.
 type SubmittedFileReader func(string) ([]byte, error)
+
+// SubmittedFilePathInspector supplies metadata for a caller-selected path.
+// Work uses it to reject non-regular --to-file sources before reading them.
+type SubmittedFilePathInspector func(string) (fs.FileInfo, error)
 
 // Service is the singular Work root contract for cross-service peers.
 // Published slices (admission, content staging/materialization, state access,

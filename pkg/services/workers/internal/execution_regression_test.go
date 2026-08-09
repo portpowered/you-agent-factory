@@ -304,6 +304,7 @@ func newTestFullRuntimeService(t *testing.T, logger *zap.Logger) *Service {
 		false,
 		"",
 		"",
+		"",
 		nil,
 		nil,
 		time.Now,

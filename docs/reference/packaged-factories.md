@@ -704,26 +704,42 @@ dispatches, merges, and any replan. A failed provider, task, or finite bound
 returns a terminal failure rather than claiming completion. Model-generated
 task descriptions and the final prose are not byte-stable.
 
-**Worked invocation.** To smoke the public argument guard without starting a
-provider-backed worktree run, execute this intentionally invalid bound:
+**Worked invocation.** This bounded terminal smoke was executed against the
+current binary in an isolated Git repository with isolated `HOME` and
+`USERPROFILE` values. A deterministic local `codex` executable was first on
+`PATH` and returned a protocol-valid planner response; because that response
+marked the bounded request complete, no implementation, review, or merge
+provider call was needed:
 
 ```bash
-you run --named @you/full-flow --no-record --quiet --max-cycles 9 --max-tasks-per-cycle 1 --to "Create a one-line README note and verify it."
+you run --named @you/full-flow --planner-provider codex --executor-provider codex --reviewer-provider codex --no-record --quiet --base-branch main --max-cycles 1 --max-tasks-per-cycle 1 --to "Create a one-line README note and verify it."
 ```
 
-**Observed output evidence.** The exact command above returned the terminating
-validation error:
+The command exited 0 and returned:
 
 ```text
-{"code":"INVOCATION_ARGUMENT_STRING_VALIDATION_MISMATCH","family":"BAD_REQUEST","message":"parameter \"maxCycles\" value \"9\" is not one of the declared choices (factory \"@you/full-flow\")"}
+Create a one-line README note and verify it.
 ```
 
-For the complete orchestration path, the current repository functional test
+This smoke uses a planner response that says the bounded request is already
+complete, so it does not create an implementation task. For the complete
+orchestration path, the current repository functional test
 uses protocol-valid planner, executor, reviewer, CI, and merger responses and
 asserts two parallel task worktrees, local merges, a completion replan, and
 the bounded failure paths. Do not substitute the empty generic mock for that
 coverage: it can accept a planner dispatch without authoring the required
 batch protocol.
+
+**Additional bound check.** The public guard also rejects a value above the
+`max-cycles` limit before provider work starts:
+
+```bash
+you run --named @you/full-flow --no-record --quiet --max-cycles 9 --max-tasks-per-cycle 1 --to "Create a one-line README note and verify it."
+```
+
+```text
+{"code":"INVOCATION_ARGUMENT_STRING_VALIDATION_MISMATCH","family":"BAD_REQUEST","message":"parameter \"maxCycles\" value \"9\" is not one of the declared choices (factory \"@you/full-flow\")"}
+```
 
 ## Detailed single bounded-call entry
 
@@ -925,17 +941,32 @@ primary results. Structured `--json` output wraps that one merged text in the
 normal invocation result. Generated task strings, findings, and synthesis are
 not deterministic prose.
 
-**Worked invocation.** This provider-free bound smoke was executed exactly as
-shown against the current binary; it demonstrates that the live schema rejects
-a count above the Factory's 1–14 limit before any provider work starts:
+**Worked invocation.** This successful run was executed against the current
+binary with isolated `HOME` and `USERPROFILE` values and a deterministic local
+`codex` executable first on `PATH`. The executable returned a valid planner
+array, child answers, and merger response:
+
+```bash
+you run --named @you/spawn --model-provider codex --no-record --quiet --count 2 --to "Research the two strongest options for a release checklist."
+```
+
+The command exited 0 and returned:
+
+```text
+merged travel answer
+```
+
+The provider-command functional assertion
+`TestPackagedSpawnPlansExactCountRunsChildrenAndMergesThroughCodexCommandRunner`
+supplies a two-task planner array, two child results, and a merger result, then
+asserts that the primary text is exactly `merged travel answer`.
+
+**Additional bound check.** The live schema rejects a count above the Factory's
+1–14 limit before provider work starts:
 
 ```bash
 you run --named @you/spawn --no-record --quiet --count 15 --to "Research the two strongest options for a release checklist."
 ```
-
-**Observed output evidence.** The exact command returned this stable
-validation result (the machine-local schema-file path in the middle of the
-message is omitted here):
 
 ```text
 {"code":"RUN_INVOCATION_FAILED","family":"INTERNAL_SERVER_ERROR","message":"workflow args do not satisfy argsSchema: ... at '/count': maximum: got 15, want 14"}
@@ -943,10 +974,6 @@ message is omitted here):
 
 Do not use the empty `--with-mock-workers` configuration as success evidence
 for this Factory: its synthetic text is not the planner's required JSON array.
-The provider-command functional assertion
-`TestPackagedSpawnPlansExactCountRunsChildrenAndMergesThroughCodexCommandRunner`
-supplies a two-task planner array, two child results, and a merger result, then
-asserts that the primary text is exactly `merged travel answer`.
 
 ### `@you/quorum`
 
@@ -1056,26 +1083,42 @@ and non-winning rationales are intermediate workflow data, not additional
 primary results. The judge's JSON is an internal protocol and is not the
 customer-facing output. Candidate and judge prose is not byte-stable.
 
-**Worked invocation.** This provider-free bound smoke was executed exactly as
-shown against the current binary; it demonstrates the live 1–3 round guard
-without starting 15 provider calls:
+**Worked invocation.** This successful one-round bracket was executed against
+the current binary with isolated `HOME` and `USERPROFILE` values and a
+deterministic local `codex` executable first on `PATH`. It returned valid
+candidate answers and judge JSON:
+
+```bash
+you run --named @you/tournament --competitor-model-provider codex --judge-model-provider codex --no-record --quiet --rounds 1 --to "Propose a launch strategy"
+```
+
+The command exited 0 and returned:
+
+```text
+merged travel answer
+
+Tournament decision trail:
+Round 1, match 1: more complete
+```
+
+The provider-command functional assertion
+`TestPackagedTournamentRunsOneOnOneBracketThroughCodexCommandRunner` supplies
+the same two-candidate bracket and valid judge decision, then asserts a single
+champion text followed by `Tournament decision trail:` and the judge rationale.
+
+**Additional bound check.** The live schema rejects a round value above the
+1–3 limit before provider work starts:
 
 ```bash
 you run --named @you/tournament --no-record --quiet --rounds 4 --to "Propose a launch strategy"
 ```
-
-**Observed output evidence.** The exact command returned this stable
-validation result (the machine-local schema-file path is omitted):
 
 ```text
 {"code":"RUN_INVOCATION_FAILED","family":"INTERNAL_SERVER_ERROR","message":"workflow args do not satisfy argsSchema: ... at '/rounds': maximum: got 4, want 3"}
 ```
 
 Do not use the empty `--with-mock-workers` configuration as success evidence:
-its generic text is not valid judge JSON. The provider-command functional
-assertion `TestPackagedTournamentRunsOneOnOneBracketThroughCodexCommandRunner`
-supplies two candidates and a valid judge decision, then asserts a single
-champion text followed by `Tournament decision trail:` and the judge rationale.
+its generic text is not valid judge JSON.
 
 ## Detailed local media entry
 

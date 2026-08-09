@@ -260,5 +260,5 @@ func TestValidWorkTypesFromNetHandlesNilAndEmptyNet(t *testing.T) {
 }
 
 func testMaterializationService() work.Service {
-	return workwire.NewRuntimeService(nil, nil, nil, nil)
+	return workwire.NewRuntimeService(nil, nil, nil, nil, nil)
 }

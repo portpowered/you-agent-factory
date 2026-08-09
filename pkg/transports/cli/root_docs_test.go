@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -183,6 +185,7 @@ func TestRunDocumentation_RepresentativeExamplesReachCurrentCLIBoundary(t *testi
 		"you run --work ./docs/examples/startup-work.json",
 		`you run --factory ./factory.json "Review the release notes"`,
 		"you run --dir ./factory --work ./docs/examples/startup-work.json",
+		`you run --provider codex --worker-reasoning-effort xhigh --to-file "prompt files\release brief.txt"`,
 	} {
 		if !strings.Contains(doc, command) {
 			t.Fatalf("packaged run guide missing executable example %q", command)
@@ -220,6 +223,59 @@ func TestRunDocumentation_RepresentativeExamplesReachCurrentCLIBoundary(t *testi
 	}
 	if got := runs[2].WorkFile; got != "./docs/examples/startup-work.json" {
 		t.Fatalf("directory batch WorkFile = %q, want explicit documented Work", got)
+	}
+}
+
+func TestRunDocumentation_FileBackedEffortExampleReachesCurrentCLIBoundary(t *testing.T) {
+	doc, err := docscli.Markdown("run")
+	if err != nil {
+		t.Fatalf("Markdown(run) error = %v", err)
+	}
+	for _, marker := range []string{
+		"--worker-reasoning-effort",
+		"canonical authored-Worker values",
+		"--to-file",
+		"strictly conflicts",
+		"signature-defined",
+		"CRLF/LF",
+		`you run --provider codex --worker-reasoning-effort xhigh --to-file "prompt files\release brief.txt"`,
+	} {
+		if !strings.Contains(doc, marker) {
+			t.Fatalf("packaged run guide missing file-backed effort contract marker %q", marker)
+		}
+	}
+
+	originalRunCLI := runCLI
+	defer func() { runCLI = originalRunCLI }()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+	factoryPath := writePortableFactoryWithDefaultHandling(t, t.TempDir())
+	promptPath := filepath.Join(t.TempDir(), "prompt files", "release brief.txt")
+	if err := os.MkdirAll(filepath.Dir(promptPath), 0o755); err != nil {
+		t.Fatalf("create documented prompt directory: %v", err)
+	}
+	if err := os.WriteFile(promptPath, []byte("documented prompt\n"), 0o600); err != nil {
+		t.Fatalf("write documented prompt: %v", err)
+	}
+	executeDocumentedRunExample(t, []string{
+		"run", "--factory", factoryPath,
+		"--provider", "codex",
+		"--worker-reasoning-effort", "xhigh",
+		"--to-file", promptPath,
+	})
+
+	if got.ProviderOverride != "codex" || got.WorkerReasoningEffort != "xhigh" {
+		t.Fatalf("documented run overrides = provider %q, effort %q; want codex/xhigh", got.ProviderOverride, got.WorkerReasoningEffort)
+	}
+	if got.InvocationFilePath != promptPath || !got.InvocationFileExplicit {
+		t.Fatalf("documented file input = path %q explicit %t; want %q/true", got.InvocationFilePath, got.InvocationFileExplicit, promptPath)
+	}
+	if got.InvocationPositionalText != nil {
+		t.Fatalf("documented file input unexpectedly carried positional text %q", *got.InvocationPositionalText)
 	}
 }
 
@@ -322,6 +378,7 @@ func TestDocsCommand_NoTopicPrintsDocsIndex(t *testing.T) {
 		"`authoring-factories` - Practical factory authoring workflow",
 		"`run` - Supported local, one-shot, batch, continuous, and mock-worker run shapes",
 		"`config` - Operator initialization and Factory validation, flattening, expansion, and minimum authoring contract",
+		"`factory-validation` - Pre-run static Factory validation gate",
 		"`mock-workers` - Mock-worker runs",
 		"`record-replay` - Record and replay run modes",
 		"`guards` - Workstation, input, and factory guards",
@@ -528,7 +585,7 @@ func TestDocsCommand_UnsupportedTopicReturnsCanonicalTopicError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, packaged-factories, run, config, mock-workers, record-replay, guards, relationships, work, sessions, orchestrators, javascript-workflows, mcp, workstations, workers, providers, serve-acp, resources, models, batch-inputs, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, packaged-factories, run, config, factory-validation, mock-workers, record-replay, guards, relationships, operations, work, sessions, orchestrators, javascript-workflows, mcp, workstations, workers, providers, serve-acp, resources, models, batch-inputs, templates)` {
 		t.Fatalf("unexpected docs error %q", got)
 	}
 	if got := stdout.String(); got != "" {

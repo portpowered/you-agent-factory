@@ -9,6 +9,7 @@ import (
 type RuntimeOpeningRequest struct {
 	RunnerID                          string
 	Worktree                          string
+	WorkerReasoningEffort             string
 	MockWorkers                       *MockWorkersConfig
 	InvocationSkipPermissionsOverride *bool
 	SkipBuiltInPrerequisiteValidation bool

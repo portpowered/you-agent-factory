@@ -254,6 +254,7 @@ func wireBehavioralRuntimeService(t *testing.T, runtime work.Runtime) work.Servi
 	service := workwire.NewRuntimeService(
 		wireBehavioralResolver{runtime: runtime},
 		nil,
+		nil,
 		newPublicWorkRootStaging(t, nil),
 		newPublicWorkRootMaterializer(t),
 	)

@@ -34,8 +34,9 @@ type runner struct {
 	recorder   Recorder
 	now        func() time.Time
 
-	mu       sync.Mutex
-	attempts map[string]int
+	mu              sync.Mutex
+	attempts        map[string]int
+	responseOrdinal int
 }
 
 type executionTrace struct {
@@ -80,13 +81,14 @@ func (r *runner) Execute(ctx context.Context, request workerexecution.RunnerExec
 	}
 	attempt := r.nextAttempt(request.Dispatch.DispatchID)
 	requestID := modelRequestID(request.Dispatch.DispatchID, attempt)
+	responseOrdinal := r.nextResponseOrdinal()
 	started := r.now()
 	trace := &executionTrace{}
 	ctx = context.WithValue(ctx, executionTraceKey{}, trace)
 	r.record(requestEvent(request, r.factoryCfg, r.workerDef, attempt, requestID, started))
 	response, err := r.inner.Execute(ctx, request)
 	finished := r.now()
-	r.record(responseEvent(request, response, err, r.factoryCfg, r.workerDef, trace, attempt, requestID, finished.Sub(started), finished))
+	r.record(responseEvent(request, response, err, r.factoryCfg, r.workerDef, trace, attempt, requestID, responseOrdinal, finished.Sub(started), finished))
 	r.clearAttempts(request.Dispatch.DispatchID)
 	return response, err
 }
@@ -108,6 +110,16 @@ func (r *runner) clearAttempts(dispatchID string) {
 	r.mu.Lock()
 	delete(r.attempts, dispatchID)
 	r.mu.Unlock()
+}
+
+// nextResponseOrdinal returns a process-local ordinal for one recorded
+// response. A single counter keeps the runner's identity state bounded while
+// preserving distinct IDs for retries that reuse the request ordinal.
+func (r *runner) nextResponseOrdinal() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.responseOrdinal++
+	return r.responseOrdinal
 }
 
 func modelRequestID(dispatchID string, attempt int) string {
@@ -133,7 +145,7 @@ func requestEvent(request workerexecution.RunnerExecutionRequest, factoryCfg *in
 	return Event(request, workerexecution.ModelEventKindRequest, fmt.Sprintf("%s/%s", modelRequestEventIDPrefix, requestID), eventTime, &payload, nil)
 }
 
-func responseEvent(request workerexecution.RunnerExecutionRequest, response workerexecution.RunnerExecutionResult, err error, factoryCfg *interfaces.FactoryConfig, workerDef *interfaces.FactoryWorkerConfig, trace *executionTrace, attempt int, requestID string, duration time.Duration, eventTime time.Time) workerexecution.ModelEvent {
+func responseEvent(request workerexecution.RunnerExecutionRequest, response workerexecution.RunnerExecutionResult, err error, factoryCfg *interfaces.FactoryConfig, workerDef *interfaces.FactoryWorkerConfig, trace *executionTrace, attempt int, requestID string, responseOrdinal int, duration time.Duration, eventTime time.Time) workerexecution.ModelEvent {
 	payload := workerexecution.ModelResponseEventPayload{
 		ModelRequestID:   requestID,
 		Attempt:          attempt,
@@ -167,7 +179,15 @@ func responseEvent(request workerexecution.RunnerExecutionRequest, response work
 	if payload.OutputContent == nil {
 		payload.OutputPreview = stringPtr(truncate(strings.TrimSpace(response.Content), modelExecutionOutputPreviewMax))
 	}
-	return Event(request, workerexecution.ModelEventKindResponse, fmt.Sprintf("%s/%s", modelResponseEventIDPrefix, requestID), eventTime, nil, &payload)
+	return Event(request, workerexecution.ModelEventKindResponse, modelResponseEventID(request.Dispatch.DispatchID, responseOrdinal), eventTime, nil, &payload)
+}
+
+func modelResponseEventID(dispatchID string, ordinal int) string {
+	dispatchID = strings.TrimSpace(dispatchID)
+	if dispatchID == "" {
+		return fmt.Sprintf("%s/%d", modelResponseEventIDPrefix, ordinal)
+	}
+	return fmt.Sprintf("%s/%s/%d", modelResponseEventIDPrefix, dispatchID, ordinal)
 }
 
 func modelFailureDetail(err error) *workerexecution.FailureDetail {

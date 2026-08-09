@@ -66,6 +66,7 @@ type WorkstationExecutor struct {
 	Logger                  logging.Logger // optional; nil → noop
 	WorktreePreparer        workerexecution.FactoryWorktreePreparer
 	RunWorktree             string
+	RunReasoningEffort      string
 	FileSystem              platformfilesystem.ReadFileInspector
 	Now                     func() time.Time
 }
@@ -636,6 +637,10 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch work.Wo
 		}
 		return workerexecution.WorkstationExecutionRequest{}, &failed
 	}
+	reasoningEffort := workerDef.ReasoningEffort
+	if strings.TrimSpace(we.RunReasoningEffort) != "" {
+		reasoningEffort = we.RunReasoningEffort
+	}
 	return workerexecution.WorkstationExecutionRequest{
 		Dispatch:                 work.CloneWorkDispatch(dispatch),
 		WorkerType:               workerName,
@@ -650,7 +655,7 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch work.Wo
 		ModelBindings:            modelBindings,
 		Model:                    workerDef.Model,
 		ModelProvider:            workerDef.ModelProvider,
-		ReasoningEffort:          workerDef.ReasoningEffort,
+		ReasoningEffort:          reasoningEffort,
 		SystemPrompt:             workerDef.Body,
 		UserMessage:              rendered,
 		OutputSchema:             workstationDef.OutputSchema,

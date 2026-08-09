@@ -40,7 +40,7 @@ func newPublicWorkRootMaterializer(t *testing.T) work.ContentMaterializer {
 
 func newPublicWorkRootWithMaterialization(t *testing.T) work.Service {
 	t.Helper()
-	return workwire.NewRuntimeService(nil, nil, nil, newPublicWorkRootMaterializer(t))
+	return workwire.NewRuntimeService(nil, nil, nil, nil, newPublicWorkRootMaterializer(t))
 }
 
 func TestPublicWorkRootMaterializationSeamSuccessLocalFile(t *testing.T) {

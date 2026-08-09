@@ -32,6 +32,8 @@ type InvocationInputSource = runconfig.InvocationInputSource
 const (
 	InvocationInputSourcePositional = runconfig.InvocationInputSourcePositional
 	InvocationInputSourceStdin      = runconfig.InvocationInputSourceStdin
+	InvocationInputSourceFile       = runconfig.InvocationInputSourceFile
+	InvocationInputSourceNamed      = runconfig.InvocationInputSourceNamed
 	InvocationInputSourceWorkFile   = runconfig.InvocationInputSourceWorkFile
 )
 
@@ -109,6 +111,10 @@ func InvocationInputSourceFromWork(source work.InputSourceLabel) InvocationInput
 		return InvocationInputSourcePositional
 	case work.InputSourceStdinText:
 		return InvocationInputSourceStdin
+	case work.InputSourceFileText:
+		return InvocationInputSourceFile
+	case work.InputSourceNamedText:
+		return InvocationInputSourceNamed
 	default:
 		return ""
 	}
@@ -122,6 +128,12 @@ func ambiguousInvocationInputError(inputErr *work.InputError) error {
 			sources = append(sources, InvocationInputSourcePositional)
 		case work.InputSourceStdinText:
 			sources = append(sources, InvocationInputSourceStdin)
+		case work.InputSourceFileText:
+			sources = append(sources, InvocationInputSourceFile)
+		case work.InputSourceNamedText:
+			sources = append(sources, InvocationInputSourceNamed)
+		default:
+			sources = append(sources, InvocationInputSource(label))
 		}
 	}
 	return &AmbiguousInvocationInputError{
@@ -369,18 +381,19 @@ func invocationTarget(
 	mockWorkersConfig *workers.MockWorkersConfig,
 ) factorysessions.InvocationTarget {
 	return factorysessions.InvocationTarget{
-		FactoryDir:        cfg.Dir,
-		FactorySourcePath: cfg.FactoryConfigPath,
-		RunnerID:          cfg.RunnerID,
-		Worktree:          cfg.Worktree,
-		OperatorDefaults:  cfg.OperatorDefaults,
-		ExecutionBaseDir:  cfg.ExecutionBaseDir,
-		HomeDir:           cfg.HomeDir,
-		Logger:            logger,
-		Verbose:           cfg.Verbose,
-		RecordPath:        cfg.RecordPath,
-		ReplayPath:        cfg.ReplayPath,
-		RuntimeLogDir:     cfg.RuntimeLogDir,
+		FactoryDir:            cfg.Dir,
+		FactorySourcePath:     cfg.FactoryConfigPath,
+		RunnerID:              cfg.RunnerID,
+		WorkerReasoningEffort: cfg.WorkerReasoningEffort,
+		Worktree:              cfg.Worktree,
+		OperatorDefaults:      cfg.OperatorDefaults,
+		ExecutionBaseDir:      cfg.ExecutionBaseDir,
+		HomeDir:               cfg.HomeDir,
+		Logger:                logger,
+		Verbose:               cfg.Verbose,
+		RecordPath:            cfg.RecordPath,
+		ReplayPath:            cfg.ReplayPath,
+		RuntimeLogDir:         cfg.RuntimeLogDir,
 		RuntimeLogConfig: factoryruntime.RuntimeLogStorageConfig{
 			MaxSize: cfg.RuntimeLogConfig.MaxSize, MaxBackups: cfg.RuntimeLogConfig.MaxBackups,
 			MaxAge: cfg.RuntimeLogConfig.MaxAge, Compress: cfg.RuntimeLogConfig.Compress,

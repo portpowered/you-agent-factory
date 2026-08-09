@@ -41,6 +41,7 @@ func NewRuntime(
 	verbose bool,
 	factoryRunnerID string,
 	runWorktree string,
+	workerReasoningEffort string,
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workers.Provider,
 	now func() time.Time,
@@ -74,6 +75,7 @@ func NewRuntime(
 		verbose,
 		factoryRunnerID,
 		runWorktree,
+		workerReasoningEffort,
 		invocationSkipPermissionsOverride,
 		providerOverride,
 		now,
@@ -127,6 +129,7 @@ func NewRuntimeWithSelection(
 	verbose bool,
 	factoryRunnerID string,
 	runWorktree string,
+	workerReasoningEffort string,
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workers.Provider,
 	now func() time.Time,
@@ -155,7 +158,7 @@ func NewRuntimeWithSelection(
 ) (workers.RuntimeService, error) {
 	runtimeService, err := NewRuntime(
 		sessions, modelService, providersService, modelsScope, providerCommandRunner, scriptCommandRunner,
-		progressPublisher, allocator, logger, verbose, factoryRunnerID, runWorktree, invocationSkipPermissionsOverride,
+		progressPublisher, allocator, logger, verbose, factoryRunnerID, runWorktree, workerReasoningEffort, invocationSkipPermissionsOverride,
 		providerOverride, now, processEnvironment, currentWorkingDirectory, contentMaterializer, interpolation, executionPolicy,
 		factoryDocs, resolveSymlinks, executableLocator, executableInspector, executableFiles, operatingSystem,
 		worktreePreparer, agentRunHarness, retryRandom, workstationFiles, temporaryFiles, decisionEnvelopes,

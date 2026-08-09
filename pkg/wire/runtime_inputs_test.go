@@ -133,8 +133,9 @@ func TestProvideWorkFactoryConstructsThroughWorkWireBridge(t *testing.T) {
 		t.Fatalf("provideContentMaterializer() error = %v", err)
 	}
 	readFile := provideWorkSubmittedFileReader(serviceedges.Edges{})
+	inspectPath := provideWorkSubmittedFilePathInspector(serviceedges.Edges{})
 
-	factory := provideWorkFactory(readFile, staging, materializer)
+	factory := provideWorkFactory(readFile, inspectPath, staging, materializer)
 	if factory == nil {
 		t.Fatal("provideWorkFactory() returned nil factory")
 	}
@@ -426,6 +427,7 @@ func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.
 		Port: 8080, AutoPort: true,
 		Continuously: true, Verbose: true, RecordPath: "record.json",
 		ReplayPath: "replay.json", Workflow: "flow", ModelCacheDir: "models",
+		WorkerReasoningEffort:             "xhigh",
 		InvocationSkipPermissionsOverride: &skip,
 	}, mocks, func(factorysessions.RuntimeHostBinding) {})
 	request := opening.Runtime
@@ -445,6 +447,7 @@ func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.
 		t.Fatalf("Factory Session request = %#v", request.FactorySession)
 	}
 	if request.Workers.RunnerID != "runner" || request.Workers.Worktree != "feature-login" ||
+		request.Workers.WorkerReasoningEffort != "xhigh" ||
 		request.Workers.MockWorkers != mocks || request.Workers.InvocationSkipPermissionsOverride != &skip {
 		t.Fatalf("Workers request = %#v", request.Workers)
 	}
