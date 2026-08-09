@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -131,6 +133,146 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	)
 }
 
+// TestWorkerSessionsReplayOnlyRedirectsWellFormedNDJSON proves that the
+// published you process can finish a finite replay through shell redirection
+// without cancellation or diagnostics contaminating stdout.
+func TestWorkerSessionsReplayOnlyRedirectsWellFormedNDJSON(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	fixture := newWorkerSessionReplayFixture(t, ctx)
+	workID := submitWork(t, ctx, fixture.process, fixture.env, fixture.factoryDir, fixture.baseURL, "worker-session-replay-only-redirect")
+	waitForWorkerSession(t, ctx, fixture.process, fixture.env, fixture.factoryDir, fixture.baseURL, workID)
+	streamWorkerSession(t, ctx, fixture.process, fixture.env, fixture.factoryDir, fixture.baseURL, workerSessionsCodexSuccessID, "COMPLETED")
+
+	contents, diagnostics := runBuiltWorkerSessionReplay(t, ctx, fixture)
+	assertWorkerSessionReplayCapture(t, contents, diagnostics)
+	fixture.stop(t)
+}
+
+type workerSessionReplayFixture struct {
+	process      support.Process
+	server       *support.ProcessCommand
+	serverInputs *support.CapturedInputs
+	factoryDir   string
+	env          []string
+	baseURL      string
+}
+
+func newWorkerSessionReplayFixture(t *testing.T, ctx context.Context) workerSessionReplayFixture {
+	t.Helper()
+	factoryDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.ClearSeedInputs(t, factoryDir)
+	support.WriteAgentConfig(t, factoryDir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "fixture-model"))
+	homeDir := t.TempDir()
+	successStdout := readProviderFixture(t, "codex", "success", "stdout.jsonl")
+	successRollout := readProviderFixture(t, "codex", "success", "rollout.jsonl")
+	writeCodexRollout(t, homeDir, workerSessionsCodexSuccessID, successRollout)
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: successStdout})
+	api := support.NewProcessAPIServer()
+	process := support.BuildProcess(t, serviceedges.Edges{
+		APIServerStarter:                    api.Start,
+		ProviderCommandRunner:               runner,
+		ProviderSessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
+	})
+	support.CleanupProcess(t, process)
+	env := functionalEnvironment(homeDir)
+	serverInputs := support.FakeInputs(ctx, []string{
+		"you", "run", "--dir", factoryDir, "--continuously", "--with-server", "--quiet", "--no-record",
+	})
+	serverInputs.Input.Env = env
+	serverInputs.Input.WorkingDirectory = factoryDir
+	server := support.StartProcessCommand(t, process, serverInputs.Input)
+	return workerSessionReplayFixture{
+		process: process, server: server, serverInputs: serverInputs,
+		factoryDir: factoryDir, env: env, baseURL: api.WaitForURL(t),
+	}
+}
+
+func (fixture workerSessionReplayFixture) stop(t *testing.T) {
+	t.Helper()
+	fixture.server.Stop(t)
+	if err := fixture.server.Err(); err != nil {
+		t.Fatalf("server Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, fixture.serverInputs.Stdout(), fixture.serverInputs.Stderr())
+	}
+}
+
+func runBuiltWorkerSessionReplay(t *testing.T, ctx context.Context, fixture workerSessionReplayFixture) ([]byte, string) {
+	t.Helper()
+	capturePath := filepath.Join(t.TempDir(), "worker-session.jsonl")
+	capture, err := os.Create(capturePath)
+	if err != nil {
+		t.Fatalf("create replay capture: %v", err)
+	}
+	defer capture.Close()
+	var diagnostics bytes.Buffer
+	command := exec.CommandContext(ctx, buildWorkerSessionsCLIBinary(t),
+		"--verbose", "--server", fixture.baseURL, "worker-sessions", "stream",
+		"--provider", "codex", "--kind", "session_id", "--id", workerSessionsCodexSuccessID,
+		"--replay-only", "--output", "json",
+	)
+	command.Dir = fixture.factoryDir
+	command.Env = fixture.env
+	command.Stdout = capture
+	command.Stderr = &diagnostics
+	if err := command.Run(); err != nil {
+		t.Fatalf("built you replay-only stream: %v\nstderr:\n%s", err, diagnostics.String())
+	}
+	if err := capture.Close(); err != nil {
+		t.Fatalf("close replay capture: %v", err)
+	}
+	contents, err := os.ReadFile(capturePath)
+	if err != nil {
+		t.Fatalf("read replay capture: %v", err)
+	}
+	return contents, diagnostics.String()
+}
+
+func assertWorkerSessionReplayCapture(t *testing.T, contents []byte, diagnostics string) {
+	t.Helper()
+	lines := nonEmptyLines(string(contents))
+	if len(lines) < 2 {
+		t.Fatalf("replay capture lines = %d, want event records followed by one summary:\n%s", len(lines), contents)
+	}
+	var previousPosition uint64
+	for index, line := range lines[:len(lines)-1] {
+		var frame streamFrameJSON
+		if err := json.Unmarshal([]byte(line), &frame); err != nil {
+			t.Fatalf("decode replay event line %d: %v\nline:%s", index+1, err, line)
+		}
+		if frame.Delivery == "" || frame.Event == nil {
+			t.Fatalf("replay line %d = %#v, want an existing Worker Session event frame", index+1, frame)
+		}
+		if frame.Event.Position <= previousPosition {
+			t.Fatalf("replay event positions are not canonical: previous=%d current=%d", previousPosition, frame.Event.Position)
+		}
+		previousPosition = frame.Event.Position
+	}
+	var summary workerSessionReplaySummaryJSON
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &summary); err != nil {
+		t.Fatalf("decode replay summary line: %v\nline:%s", err, lines[len(lines)-1])
+	}
+	if summary.Kind != "replay-summary" || !summary.Complete || summary.Reason != "session-completed" {
+		t.Fatalf("replay summary = %#v, want complete terminal summary", summary)
+	}
+	if summary.EventsEmitted != int64(len(lines)-1) {
+		t.Fatalf("replay summary eventsEmitted = %d, want %d preceding event records", summary.EventsEmitted, len(lines)-1)
+	}
+	if strings.Contains(string(contents), "worker sessions stream request") || strings.Contains(string(contents), "worker sessions stream response") {
+		t.Fatalf("verbose diagnostics contaminated redirected stdout:\n%s", contents)
+	}
+	if strings.TrimSpace(diagnostics) == "" {
+		t.Fatal("--verbose produced no stderr diagnostics to verify stream diagnostics stay off stdout")
+	}
+}
+
+type workerSessionReplaySummaryJSON struct {
+	Kind          string `json:"kind"`
+	Complete      bool   `json:"complete"`
+	Reason        string `json:"reason"`
+	EventsEmitted int64  `json:"eventsEmitted"`
+}
+
 type workerSessionJSON struct {
 	AttemptID       string               `json:"attemptId"`
 	DurationMillis  *int64               `json:"durationMillis"`
@@ -178,9 +320,13 @@ type streamFrameJSON struct {
 	Delivery        string               `json:"delivery"`
 	ErrorCode       *string              `json:"errorCode"`
 	ErrorMessage    *string              `json:"errorMessage"`
-	Event           json.RawMessage      `json:"event"`
+	Event           *streamEventJSON     `json:"event"`
 	ProviderSession *providerSessionJSON `json:"providerSession"`
 	WorkIDs         []string             `json:"workIds"`
+}
+
+type streamEventJSON struct {
+	Position uint64 `json:"position"`
 }
 
 func submitWork(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, name string) string {
@@ -547,6 +693,31 @@ func functionalEnvironment(homeDir string) []string {
 	env := append([]string(nil), os.Environ()...)
 	env = append(env, "HOME="+homeDir, "USERPROFILE="+homeDir)
 	return env
+}
+
+func buildWorkerSessionsCLIBinary(t *testing.T) string {
+	t.Helper()
+	binaryName := "you"
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+	binaryPath := filepath.Join(t.TempDir(), binaryName)
+	build := exec.Command("go", "build", "-o", binaryPath, "./cmd/factory")
+	build.Dir = testutil.MustRepoRoot(t)
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build Worker Sessions CLI binary: %v\n%s", err, output)
+	}
+	return binaryPath
+}
+
+func nonEmptyLines(contents string) []string {
+	lines := make([]string, 0)
+	for _, line := range strings.Split(contents, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }
 
 func containsString(values []string, want string) bool {
