@@ -2057,6 +2057,10 @@
       "minimum": 98.72
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli",
+      "minimum": 69.80
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire",
       "minimum": 100.00
     },

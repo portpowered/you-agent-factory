@@ -70,10 +70,12 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	baseURL := api.WaitForURL(t)
 
 	successWorkID := submitWork(t, ctx, process, env, factoryDir, baseURL, "worker-session-cli-success")
+	waitForWorkerSession(t, ctx, process, env, factoryDir, baseURL, successWorkID)
 	streamWorkerSession(t, ctx, process, env, factoryDir, baseURL, workerSessionsCodexSuccessID, "COMPLETED")
 	assertSuccessfulWorkerSession(t, ctx, process, env, factoryDir, baseURL, successWorkID)
 
 	failureWorkID := submitWork(t, ctx, process, env, factoryDir, baseURL, "worker-session-cli-failure")
+	waitForWorkerSession(t, ctx, process, env, factoryDir, baseURL, failureWorkID)
 	streamWorkerSession(t, ctx, process, env, factoryDir, baseURL, workerSessionsCodexFailureID, "FAILED")
 	assertFailedWorkerSession(t, ctx, process, env, factoryDir, baseURL, failureWorkID)
 
@@ -167,6 +169,47 @@ func submitWork(t *testing.T, ctx context.Context, process support.Process, env 
 		t.Fatalf("submit batch response missing one accepted Work: %#v\noutput:\n%s", response, inputs.Stdout())
 	}
 	return response.Works[0].WorkID
+}
+
+func waitForWorkerSession(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, workID string) {
+	t.Helper()
+
+	// Work admission and the first Worker Session opening record are separate
+	// asynchronous runtime steps. Synchronize through the customer-facing list
+	// projection so stream starts only after its session identity is observable;
+	// a fixed sleep would make this coverage slower and still race under CI.
+	deadline := time.NewTimer(15 * time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	var lastErr error
+	var lastOutput string
+	for {
+		inputs := support.FakeInputs(ctx, []string{
+			"you", "--server", baseURL, "worker-sessions", "list", "--work-id", workID, "--output", "json",
+		})
+		inputs.Input.Env = append([]string(nil), env...)
+		inputs.Input.WorkingDirectory = factoryDir
+		if err := process.Execute(inputs.Input); err == nil {
+			var listed workerSessionListJSON
+			if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &listed); decodeErr == nil && len(listed.Sessions) > 0 {
+				return
+			}
+			lastOutput = inputs.Stdout()
+		} else {
+			lastErr = err
+			lastOutput = inputs.Stdout()
+		}
+
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatalf("timed out waiting for Worker Session for Work %s: err=%v stdout=%s", workID, lastErr, lastOutput)
+		case <-ctx.Done():
+			t.Fatalf("waiting for Worker Session for Work %s canceled: %v", workID, ctx.Err())
+		}
+	}
 }
 
 func assertSuccessfulWorkerSession(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, workID string) {
