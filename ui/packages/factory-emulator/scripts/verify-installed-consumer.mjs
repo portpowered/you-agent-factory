@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 import { packAndVerify as packClient } from "../../client/scripts/verify-package-pack.mjs";
@@ -11,10 +11,6 @@ import { packAndVerify as packEmulator } from "./verify-package-pack.mjs";
 
 const execFileAsync = promisify(execFile);
 const require = createRequire(import.meta.url);
-const packageRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-);
 
 async function npmCommand() {
   if (process.platform !== "win32") return { args: [], executable: "npm" };

@@ -24,6 +24,37 @@ func TestEnablementEvaluator_ContextPassedThrough(t *testing.T) {
 	}
 }
 
+func TestEnablementEvaluator_NilSnapshotReturnsNoTransitions(t *testing.T) {
+	eval := NewEnablementEvaluator(nil, testNow, nil)
+	if enabled := eval.FindEnabledTransitionsWithSnapshot(
+		context.Background(),
+		&state.Net{Transitions: map[string]*petri.Transition{"unused": {ID: "unused"}}},
+		nil,
+	); len(enabled) != 0 {
+		t.Fatalf("enabled transitions for nil snapshot = %v, want none", enabled)
+	}
+}
+
+func TestStateCategoryForPlaceWithoutTopologyIsUnavailable(t *testing.T) {
+	if category := stateCategoryForPlace(nil); category != nil {
+		t.Fatal("expected nil state-category lookup without topology")
+	}
+	if category := stateCategoryForPlace(&state.Net{}); category != nil {
+		t.Fatal("expected nil state-category lookup without work types")
+	}
+}
+
+func TestSortedTransitionsUsesNameWhenIDsMatch(t *testing.T) {
+	ordered := sortedTransitions(map[string]*petri.Transition{
+		"z":   {ID: "same", Name: "zulu"},
+		"a":   {ID: "same", Name: "alpha"},
+		"nil": nil,
+	})
+	if len(ordered) != 3 || ordered[0] != nil || ordered[1].Name != "alpha" || ordered[2].Name != "zulu" {
+		t.Fatalf("sorted transitions = %#v, want nil, alpha, zulu", ordered)
+	}
+}
+
 func TestEnablementEvaluator_UsesInjectedClockForCronTimeWindowGuard(t *testing.T) {
 	base := time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC)
 	dueAt := base.Add(2 * time.Minute)

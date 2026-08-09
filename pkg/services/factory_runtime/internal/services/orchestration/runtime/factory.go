@@ -749,7 +749,7 @@ func (f *factoryImpl) GetEngineStateSnapshot(ctx context.Context) (*interfaces.E
 		f.logger,
 		f.clock.Now,
 		f.cfg.runtimeConfig,
-	).FindEnabledTransitions(ctx, f.topology, &snap.Marking)
+	).FindEnabledTransitionsWithSnapshot(ctx, f.topology, &snap)
 	return &snap, nil
 }
 
