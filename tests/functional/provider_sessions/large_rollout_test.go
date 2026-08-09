@@ -47,12 +47,35 @@ func TestLargeRolloutNeverFailsWithoutCause(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"large rollout terminal classification"}`))
 
 	runner := &largeRolloutCommandRunner{path: rolloutPath}
-	_, work, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+	server := support.NewProcessAPIServer()
+	process := support.BuildProcess(t, serviceedges.Edges{
+		APIServerStarter:      server.Start,
+		ProviderCommandRunner: runner,
+	})
+	support.CleanupProcess(t, process)
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run",
+		"--dir", dir,
+		"--continuously",
+		"--with-server",
+		"--server", "http://127.0.0.1:1",
+		"--quiet",
+		"--no-record",
+	})
+	homeDir := t.TempDir()
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = dir
+	daemon := support.StartProcessCommand(t, process, inputs.Input)
+	baseURL := server.WaitForURL(t)
+	liveSession := support.GetDefaultSession(t, baseURL)
+	eventStream := support.OpenFactoryEventStreamAt(
 		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		2*time.Minute,
+		support.SessionEventsURL(baseURL, liveSession.Id),
 	)
+	events := readLargeRolloutEventsUntilDispatchResponse(t, eventStream)
+	work := support.ListDefaultSessionWork(t, baseURL)
+	session := support.GetDefaultSession(t, baseURL)
+	daemon.Stop(t)
 
 	if got := support.CountWorkAtCustomerState(work, support.WorkCustomerLocation("task", "done")); got != 1 {
 		t.Fatalf("large rollout completed work = %d, want 1; listed=%#v", got, work)
@@ -63,7 +86,34 @@ func TestLargeRolloutNeverFailsWithoutCause(t *testing.T) {
 	if got := runner.calls.Load(); got != 1 {
 		t.Fatalf("large rollout provider command calls = %d, want 1", got)
 	}
+	if session.Runtime.Progress.Categories.Terminal != 1 || session.Runtime.Progress.Categories.Failed != 0 {
+		t.Fatalf("large rollout session progress = %+v, want one terminal and zero failed", session.Runtime.Progress.Categories)
+	}
 	assertAuthoritativeLargeRolloutCompletion(t, events)
+}
+
+func readLargeRolloutEventsUntilDispatchResponse(
+	t *testing.T,
+	stream *support.FactoryEventStream,
+) []factoryapi.FactoryEvent {
+	t.Helper()
+
+	// The Factory Event stream is the synchronization primitive here. It
+	// replays retained history and then blocks for the live terminal event, so
+	// this test does not poll status or infer completion from a timeout window.
+	const observationTimeout = 2 * time.Minute
+	events := make([]factoryapi.FactoryEvent, 0, 16)
+	for {
+		event := stream.NextEvent(observationTimeout)
+		events = append(events, event)
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		if _, err := event.Payload.AsDispatchResponseEventPayload(); err != nil {
+			t.Fatalf("decode large-rollout dispatch response: %v", err)
+		}
+		return events
+	}
 }
 
 func writeLargeCodexRollout(t *testing.T) string {
