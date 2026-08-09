@@ -49,8 +49,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Extended docs/reference/work.md with the customer-authored state-name versus lifecycle-category distinction, INITIAL/PROCESSING/TERMINAL/FAILED meanings, omitted versus explicit works[].state placement, topology-defined transitions, successful versus failed completion semantics, and links to batch, config, workstations, and Work observation sections. Rebuilt bin/you.exe and asserted the new section and cross-links in you docs work output; verified go test ./pkg/transports/cli/..., make docs-reference-smoke, and make verify-fast."
     },
     {
       "id": "wo-d2-reference-schemas-docs-003",
