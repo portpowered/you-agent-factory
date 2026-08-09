@@ -168,10 +168,11 @@ contract:
 - A workstation `guards[]` entry supports `VISIT_COUNT` and `MATCHES_FIELDS`.
   `VISIT_COUNT` requires a positive visit limit and a declared workstation;
   `MATCHES_FIELDS` requires a non-empty `matchConfig.inputKey`.
-- Each workstation input has one optional `guard` object. Input guards such as
-  `SAME_NAME`, `ALL_CHILDREN_COMPLETE`, and `ANY_CHILD_FAILED` must name the
-  required peer `matchInput` or `parentInput`, cannot reference their own
-  input, and must use a real `spawnedBy` workstation when one is supplied.
+- Each workstation input has a `guards[]` array with at most one entry. Input
+  guards such as `SAME_NAME`, `ALL_CHILDREN_COMPLETE`, and `ANY_CHILD_FAILED`
+  must name the required peer `matchInput` or `parentInput`, cannot reference
+  their own input, and must use a real `spawnedBy` workstation when one is
+  supplied.
 
 Typos in guard types, missing required guard fields, invalid cardinality, and
 unknown or self-referencing peers are reported before dispatch.

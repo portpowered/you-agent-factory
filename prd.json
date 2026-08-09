@@ -34,7 +34,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented the canonical packaged factory-validation topic, embedded and registered it, routed it from the root/reference indexes, and added packaged-topic smoke coverage. Rebuilt bin/you.exe and executed every CLI invocation shown by the guide: the six related docs topics and the portable JSON, portable YAML, and split-directory validation commands all exited 0 with the documented output. Verified with make docs-reference-smoke, the named unsupported-join regression, and make verify-fast (after make ui-deps)."
+      "notes": "Implemented the canonical packaged factory-validation topic, embedded and registered it, routed it from the root/reference indexes, and added packaged-topic smoke coverage. Rebuilt bin/you.exe and executed every CLI invocation shown by the guide: the six related docs topics and the portable JSON, portable YAML, and split-directory validation commands all exited 0 with the documented output. Review follow-up corrected the public per-input field to inputs[].guards[] with at most one entry and moved the full topic assertion to the Factory Definitions validate_persist owner. Verified with make docs-reference-smoke, the named unsupported-join regression, and make verify-fast (after make ui-deps)."
     },
     {
       "id": "wo-d4-factory-validate-docs-002",
@@ -70,7 +70,7 @@
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Updated docs/reference/authoring-factories.md to make validate-only validation the required step after authoring and immediately before the first run, route detailed checks and the worked join failure to you docs factory-validation, require revalidation after later topology/guard/route/schema/split-layout changes, and reflect the sequence in the checklist. Extended packaged-topic smoke markers. Rebuilt bin/you.exe and executed the exact portable-file and split-directory validation commands plus the changed authoring/factory-validation docs topics against the current binary; both validation forms exited 0 with the documented taxonomy. Verified with the named join regression, make docs-reference-smoke, and make verify-fast (typecheck, MCP contract check, UI/Bun tests, and short Go suite)."
+      "notes": "Updated docs/reference/authoring-factories.md to make validate-only validation the required step after authoring and immediately before the first run, route detailed checks and the worked join failure to you docs factory-validation, require revalidation after later topology/guard/route/schema/split-layout changes, and reflect the sequence in the checklist. Review follow-up moved the topic-specific behavioral proof out of historical smoke coverage, added it to the durable Factory Definitions validate_persist cell, and rebased the branch onto current main while removing unrelated factory and workstation changes. Rebuilt bin/you.exe and executed the exact portable-file and split-directory validation commands plus the changed authoring/factory-validation docs topics against the current binary; both validation forms exited 0 with the documented taxonomy. Verified with the named join regression, make docs-reference-smoke, and make verify-fast (typecheck, MCP contract check, UI/Bun tests, and short Go suite)."
     }
   ]
 }
