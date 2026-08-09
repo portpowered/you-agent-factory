@@ -130,6 +130,9 @@ func (a *Adapter) StreamWorkerSessionEvents(
 	}
 	subscription, err := a.observations.StreamObservations(ctx, workersessions.StreamObservationsRequest{
 		ProviderSession: request.ProviderSession,
+		// Carry the documented default explicitly so the canonical ledger
+		// receives the bounded stream policy at the transport boundary.
+		Limit: workersessions.DefaultObservationStreamLimit,
 	})
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("stream Worker Session events: %w", err)

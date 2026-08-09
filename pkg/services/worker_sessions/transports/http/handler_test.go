@@ -476,6 +476,9 @@ func TestStreamWorkerSessionEventsBySessionIDWritesRetainedAndTerminalFrames(t *
 	if service.streamSubscription == nil || !service.streamSubscription.closed {
 		t.Fatal("stream subscription was not closed after terminal delivery")
 	}
+	if service.streamRequest.Limit != workersessions.DefaultObservationStreamLimit {
+		t.Fatalf("stream limit = %d, want stable default %d", service.streamRequest.Limit, workersessions.DefaultObservationStreamLimit)
+	}
 }
 
 func TestStreamWorkerSessionEventsBySessionIDWritesExplicitSourceFailure(t *testing.T) {
@@ -546,6 +549,7 @@ type fakeObservationService struct {
 	readCalled          bool
 	readProviderSession providers.SessionRef
 	streamSubscription  *fakeObservationSubscription
+	streamRequest       workersessions.StreamObservationsRequest
 	streamErr           error
 }
 
@@ -566,7 +570,8 @@ func (f *fakeObservationService) ReadTranscript(_ context.Context, request worke
 	return f.readResult, f.readErr
 }
 
-func (f *fakeObservationService) StreamObservations(context.Context, workersessions.StreamObservationsRequest) (workersessions.ObservationSubscription, error) {
+func (f *fakeObservationService) StreamObservations(_ context.Context, request workersessions.StreamObservationsRequest) (workersessions.ObservationSubscription, error) {
+	f.streamRequest = request
 	if f.streamSubscription == nil {
 		return workersessions.ObservationSubscription{}, f.streamErr
 	}
