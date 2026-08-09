@@ -130,14 +130,38 @@ func (r *watchReducer) acceptOrdering(event factoryapi.FactoryEvent) (bool, erro
 // state remain strict because refreshed data could change the projection.
 func isNonProjectingWatchEvent(eventType factoryapi.FactoryEventType) bool {
 	switch eventType {
-	case factoryapi.FactoryEventTypeInitialStructureRequest,
-		factoryapi.FactoryEventTypeRunRequest,
-		factoryapi.FactoryEventTypeFactoryChange,
-		factoryapi.FactoryEventTypeWorkRequest,
-		factoryapi.FactoryEventTypeWorkStateChange:
-		return false
-	default:
+	case factoryapi.FactoryEventTypeAgentRunResponse,
+		factoryapi.FactoryEventTypeArtifactCreated,
+		factoryapi.FactoryEventTypeDispatchInterrupted,
+		factoryapi.FactoryEventTypeDispatchQueued,
+		factoryapi.FactoryEventTypeDispatchReconciled,
+		factoryapi.FactoryEventTypeDispatchRequest,
+		factoryapi.FactoryEventTypeDispatchResponse,
+		factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation,
+		factoryapi.FactoryEventTypeFactoryStateResponse,
+		factoryapi.FactoryEventTypeInferenceRequest,
+		factoryapi.FactoryEventTypeInferenceResponse,
+		factoryapi.FactoryEventTypeJavaScriptCheckpointRef,
+		factoryapi.FactoryEventTypeJavaScriptPhaseChange,
+		factoryapi.FactoryEventTypeModelRequest,
+		factoryapi.FactoryEventTypeModelResponse,
+		factoryapi.FactoryEventTypeOrchestratorCheckpointWritten,
+		factoryapi.FactoryEventTypeOrchestratorPhaseChanged,
+		factoryapi.FactoryEventTypeRelationshipChangeRequest,
+		factoryapi.FactoryEventTypeRunResponse,
+		factoryapi.FactoryEventTypeScriptRequest,
+		factoryapi.FactoryEventTypeScriptResponse,
+		factoryapi.FactoryEventTypeSessionCompleted,
+		factoryapi.FactoryEventTypeSessionLifecycleControl,
+		factoryapi.FactoryEventTypeSessionPaused,
+		factoryapi.FactoryEventTypeSessionResultUpdated,
+		factoryapi.FactoryEventTypeSessionResumed,
+		factoryapi.FactoryEventTypeSessionStarted:
 		return true
+	default:
+		// Unknown and projection-bearing events stay strict until their reducer
+		// behavior is explicitly classified.
+		return false
 	}
 }
 

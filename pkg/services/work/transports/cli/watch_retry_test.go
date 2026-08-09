@@ -84,7 +84,28 @@ func TestWatchReducerRejectsNonIncreasingConflictingModelRequestRetry(t *testing
 }
 
 func TestWatchReducerAppliesOrderedPolicyToEveryNonProjectingEvent(t *testing.T) {
-	eventTypes := []factoryapi.FactoryEventType{
+	for _, eventType := range currentNonProjectingWatchEventTypes() {
+		t.Run(string(eventType), func(t *testing.T) {
+			assertOrderedNonProjectingEventPolicy(t, eventType)
+		})
+	}
+}
+
+func TestWatchReducerTreatsUnknownEventTypesAsStrict(t *testing.T) {
+	const eventType = factoryapi.FactoryEventType("FUTURE_PROJECTION_EVENT")
+	const eventID = "factory-event/future-projection/1"
+	reducer := newWatchReducer("session-future-event")
+	initial := watchNonProjectingEvent(t, eventType, eventID, 4, "initial")
+	refreshed := watchNonProjectingEvent(t, eventType, eventID, 6, "refreshed")
+	assertWatchAcceptsNoTransition(t, reducer, initial, eventID, 4)
+	if _, _, _, err := reducer.Accept(refreshed); err == nil {
+		t.Fatal("Accept(refreshed unknown event) error = nil, want strict conflict")
+	}
+	assertWatchCursor(t, reducer, eventID, 4)
+}
+
+func currentNonProjectingWatchEventTypes() []factoryapi.FactoryEventType {
+	return []factoryapi.FactoryEventType{
 		factoryapi.FactoryEventTypeAgentRunResponse,
 		factoryapi.FactoryEventTypeArtifactCreated,
 		factoryapi.FactoryEventTypeDispatchInterrupted,
@@ -113,45 +134,61 @@ func TestWatchReducerAppliesOrderedPolicyToEveryNonProjectingEvent(t *testing.T)
 		factoryapi.FactoryEventTypeSessionResumed,
 		factoryapi.FactoryEventTypeSessionStarted,
 	}
-	for _, eventType := range eventTypes {
-		t.Run(string(eventType), func(t *testing.T) {
-			eventID := "factory-event/enrichment/" + strings.ToLower(strings.ReplaceAll(string(eventType), "_", "-"))
-			if eventType == factoryapi.FactoryEventTypeModelRequest {
-				eventID = watchRetryModelRequestEventID
-			}
-			if eventType == factoryapi.FactoryEventTypeModelResponse {
-				eventID = watchRetryModelResponseEventID
-			}
-			reducer := newWatchReducer("session-enrichment-policy")
-			initial := watchNonProjectingEvent(t, eventType, eventID, 4, "initial")
-			refreshed := watchNonProjectingEvent(t, eventType, eventID, 6, "refreshed")
-			if _, emit, _, err := reducer.Accept(initial); err != nil || emit {
-				t.Fatalf("Accept(initial) = emit %t, error %v; want no transition", emit, err)
-			}
-			if cursor := reducer.Cursor(); cursor == nil || cursor.EventID != eventID || cursor.Sequence != 4 {
-				t.Fatalf("initial cursor = %#v, want %q at sequence 4", cursor, eventID)
-			}
-			if _, emit, _, err := reducer.Accept(refreshed); err != nil || emit {
-				t.Fatalf("Accept(refreshed) = emit %t, error %v; want no transition", emit, err)
-			}
-			if cursor := reducer.Cursor(); cursor == nil || cursor.EventID != eventID || cursor.Sequence != 6 {
-				t.Fatalf("refreshed cursor = %#v, want %q at sequence 6", cursor, eventID)
-			}
-			if _, emit, _, err := reducer.Accept(refreshed); err != nil || emit {
-				t.Fatalf("Accept(exact replay) = emit %t, error %v; want idempotent replay", emit, err)
-			}
-			conflicting := watchNonProjectingEvent(t, eventType, eventID, 6, "conflicting")
-			if _, _, _, err := reducer.Accept(conflicting); err == nil || !strings.Contains(err.Error(), "non-increasing canonical sequence") {
-				t.Fatalf("Accept(same-sequence conflict) error = %v, want non-increasing sequence failure", err)
-			}
-			backward := watchNonProjectingEvent(t, eventType, eventID, 5, "backward")
-			if _, _, _, err := reducer.Accept(backward); err == nil || !strings.Contains(err.Error(), "non-increasing canonical sequence") {
-				t.Fatalf("Accept(backward conflict) error = %v, want non-increasing sequence failure", err)
-			}
-			if cursor := reducer.Cursor(); cursor == nil || cursor.EventID != eventID || cursor.Sequence != 6 {
-				t.Fatalf("cursor after rejected conflicts = %#v, want %q at sequence 6", cursor, eventID)
-			}
-		})
+}
+
+func assertOrderedNonProjectingEventPolicy(t *testing.T, eventType factoryapi.FactoryEventType) {
+	t.Helper()
+	eventID := watchNonProjectingEventID(eventType)
+	reducer := newWatchReducer("session-enrichment-policy")
+	initial := watchNonProjectingEvent(t, eventType, eventID, 4, "initial")
+	refreshed := watchNonProjectingEvent(t, eventType, eventID, 6, "refreshed")
+	assertWatchAcceptsNoTransition(t, reducer, initial, eventID, 4)
+	assertWatchAcceptsNoTransition(t, reducer, refreshed, eventID, 6)
+	assertWatchAcceptsNoTransition(t, reducer, refreshed, eventID, 6)
+	conflicting := watchNonProjectingEvent(t, eventType, eventID, 6, "conflicting")
+	assertWatchRejectsNonIncreasing(t, reducer, conflicting)
+	backward := watchNonProjectingEvent(t, eventType, eventID, 5, "backward")
+	assertWatchRejectsNonIncreasing(t, reducer, backward)
+	assertWatchCursor(t, reducer, eventID, 6)
+}
+
+func watchNonProjectingEventID(eventType factoryapi.FactoryEventType) string {
+	switch eventType {
+	case factoryapi.FactoryEventTypeModelRequest:
+		return watchRetryModelRequestEventID
+	case factoryapi.FactoryEventTypeModelResponse:
+		return watchRetryModelResponseEventID
+	default:
+		return "factory-event/enrichment/" + strings.ToLower(strings.ReplaceAll(string(eventType), "_", "-"))
+	}
+}
+
+func assertWatchAcceptsNoTransition(
+	t *testing.T,
+	reducer *watchReducer,
+	event factoryapi.FactoryEvent,
+	eventID string,
+	sequence int,
+) {
+	t.Helper()
+	_, emit, _, err := reducer.Accept(event)
+	if err != nil || emit {
+		t.Fatalf("Accept(%q) = emit %t, error %v; want no transition", event.Id, emit, err)
+	}
+	assertWatchCursor(t, reducer, eventID, sequence)
+}
+
+func assertWatchRejectsNonIncreasing(t *testing.T, reducer *watchReducer, event factoryapi.FactoryEvent) {
+	t.Helper()
+	if _, _, _, err := reducer.Accept(event); err == nil || !strings.Contains(err.Error(), "non-increasing canonical sequence") {
+		t.Fatalf("Accept(%q) error = %v, want non-increasing sequence failure", event.Id, err)
+	}
+}
+
+func assertWatchCursor(t *testing.T, reducer *watchReducer, eventID string, sequence int) {
+	t.Helper()
+	if cursor := reducer.Cursor(); cursor == nil || cursor.EventID != eventID || cursor.Sequence != sequence {
+		t.Fatalf("cursor = %#v, want %q at sequence %d", cursor, eventID, sequence)
 	}
 }
 
