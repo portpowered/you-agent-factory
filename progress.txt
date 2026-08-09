@@ -79,3 +79,15 @@
   - `make test-unit-coverage` cannot launch its full coverage lane on this Windows checkout because the generated Go command exceeds the Windows filename/command-line limit; the affected package's local coverage profile still verifies the threshold.
   - A full CI functional run exposed `TestFactorySessionHistoryIsNotPersistedByDefault`, but the test passes repeatedly in isolation and the feature-specific functional command is green; avoid unrelated changes until a reproducible failure or actionable review feedback identifies a shared cause.
 ---
+
+## 2026-08-09 16:13 -07:00 - wo-c1-ext-stream-replay-only-delivery
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional story implementation was required in this iteration.
+  - Re-ran the named Worker Sessions redirect/CLI functional test and `make verify-fast` successfully on the exact branch HEAD.
+  - Confirmed the worktree is clean before the delivery commit/PR update and found no existing PR or review feedback for this branch.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - A clean branch synchronized with its remote still needs the focused and fast verification gates rerun before creating the PR so the published commit has current local evidence.
+  - When every story is already marked complete and no PR exists, append delivery evidence to the progress log without changing the completed PRD story state.
+---
