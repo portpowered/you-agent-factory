@@ -5,13 +5,32 @@ import (
 	"errors"
 	"sync"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	workersessionservice "github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func newService(
+	boundary workers.WorkstationPoolBoundary,
+	eventsAppender workersessionservice.EventsAppender,
+	logger logging.Logger,
+) (workersessions.Service, error) {
+	return workersessionservice.New(boundary, eventsAppender, logger, platformclock.Real{}, unavailableProviderSessions{})
+}
+
+type unavailableProviderSessions struct {
+	providersessions.Service
+}
+
+func (unavailableProviderSessions) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
+	return providersessions.ProjectResult{}, providersessions.ErrSessionStorageUnavailable
+}
 
 // fakeExecution is a controlled test double for
 // workers.WorkstationExecutionService. dispatch is called for every

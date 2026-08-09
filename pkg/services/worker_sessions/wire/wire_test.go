@@ -4,8 +4,10 @@ import (
 	"context"
 	"testing"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -21,6 +23,14 @@ func newTestEventsAppender(t *testing.T) wire.EventsAppender {
 }
 
 type stubExecution struct{}
+
+type unavailableProviderSessions struct {
+	providersessions.Service
+}
+
+func (unavailableProviderSessions) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
+	return providersessions.ProjectResult{}, providersessions.ErrSessionStorageUnavailable
+}
 
 func (stubExecution) StartWorkstationPool(
 	context.Context,
@@ -77,7 +87,7 @@ func (stubExecution) Cancel(context.Context, workers.WorkstationDispatchCancelRe
 func (stubExecution) Stop(context.Context) error { return nil }
 
 func TestNewService_ConstructsAWorkingServiceFromInjectedExecution(t *testing.T) {
-	service, err := wire.NewService(stubExecution{}, newTestEventsAppender(t), logging.NoopLogger{}, nil)
+	service, err := wire.NewService(stubExecution{}, newTestEventsAppender(t), logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{})
 	if err != nil {
 		t.Fatalf("NewService() error = %v, want nil", err)
 	}
@@ -92,13 +102,25 @@ func TestNewService_ConstructsAWorkingServiceFromInjectedExecution(t *testing.T)
 }
 
 func TestNewService_RejectsNilExecution(t *testing.T) {
-	if _, err := wire.NewService(nil, newTestEventsAppender(t), logging.NoopLogger{}, nil); err == nil {
+	if _, err := wire.NewService(nil, newTestEventsAppender(t), logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}); err == nil {
 		t.Fatalf("NewService(nil, ...) unexpectedly succeeded")
 	}
 }
 
 func TestNewService_RejectsNilEventsAppender(t *testing.T) {
-	if _, err := wire.NewService(stubExecution{}, nil, logging.NoopLogger{}, nil); err == nil {
+	if _, err := wire.NewService(stubExecution{}, nil, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}); err == nil {
 		t.Fatalf("NewService(execution, nil, ...) unexpectedly succeeded")
+	}
+}
+
+func TestNewService_RejectsNilClock(t *testing.T) {
+	if _, err := wire.NewService(stubExecution{}, newTestEventsAppender(t), logging.NoopLogger{}, nil, unavailableProviderSessions{}); err == nil {
+		t.Fatalf("NewService(..., nil clock, ...) unexpectedly succeeded")
+	}
+}
+
+func TestNewService_RejectsNilProviderSessions(t *testing.T) {
+	if _, err := wire.NewService(stubExecution{}, newTestEventsAppender(t), logging.NoopLogger{}, platformclock.Real{}, nil); err == nil {
+		t.Fatalf("NewService(..., nil Provider Sessions, ...) unexpectedly succeeded")
 	}
 }

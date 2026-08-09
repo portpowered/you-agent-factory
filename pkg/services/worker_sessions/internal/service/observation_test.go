@@ -91,11 +91,10 @@ func newObservationService(
 	projection providersessions.Service,
 ) workersessions.Service {
 	t.Helper()
-	options := []workersessionservice.Option{workersessionservice.WithClock(clock)}
-	if projection != nil {
-		options = append(options, workersessionservice.WithProviderSessions(projection))
+	if projection == nil {
+		projection = unavailableProviderSessions{}
 	}
-	service, err := workersessionservice.New(boundary, eventsAppender, logging.NoopLogger{}, options...)
+	service, err := workersessionservice.New(boundary, eventsAppender, logging.NoopLogger{}, clock, projection)
 	if err != nil {
 		t.Fatalf("worker session service construction: %v", err)
 	}
@@ -209,11 +208,11 @@ func TestObservationProjection_ListsCorrelatedAttemptsAndNormalizedFacts(t *test
 	if len(result.Observations) != 2 {
 		t.Fatalf("ListObservations() returned %d observations, want 2", len(result.Observations))
 	}
-	if result.Observations[0].WorkerSessionID != "worker-a" || result.Observations[1].WorkerSessionID != "worker-b" {
-		t.Fatalf("observation order = (%q, %q), want deterministic identity order (worker-a, worker-b)", result.Observations[0].WorkerSessionID, result.Observations[1].WorkerSessionID)
+	if result.Observations[0].WorkerSessionID != "worker-b" || result.Observations[1].WorkerSessionID != "worker-a" {
+		t.Fatalf("observation order = (%q, %q), want chronological attempt order (worker-b, worker-a)", result.Observations[0].WorkerSessionID, result.Observations[1].WorkerSessionID)
 	}
 
-	first := result.Observations[1]
+	first := result.Observations[0]
 	if first.ProviderSession != firstRef || first.ProviderSessionAvailable == false || first.TurnID != "turn-worker-b" || first.AttemptID != "dispatch-a" {
 		t.Fatalf("first observation identity/correlation = %#v", first)
 	}
@@ -227,15 +226,15 @@ func TestObservationProjection_ListsCorrelatedAttemptsAndNormalizedFacts(t *test
 		t.Fatalf("first transcript/failure projection = %#v", first)
 	}
 
-	second := result.Observations[0]
+	second := result.Observations[1]
 	if second.State != workersessions.StateFailed || second.Failure == nil || second.Failure.Kind != workersessions.FailureCauseWorkersExecutionFailure {
 		t.Fatalf("second failure projection = %#v", second)
 	}
 	if second.Failure.Detail != "family=terminal type=auth_failure" || second.Duration == nil || *second.Duration != 4*time.Second {
 		t.Fatalf("second failure/timing = %#v", second)
 	}
-	if len(projection.requested) != 2 || projection.requested[0] != secondRef || projection.requested[1] != firstRef {
-		t.Fatalf("Provider Sessions projection requests = %#v, want sorted associated identities", projection.requested)
+	if len(projection.requested) != 2 || projection.requested[0] != firstRef || projection.requested[1] != secondRef {
+		t.Fatalf("Provider Sessions projection requests = %#v, want chronological attempts", projection.requested)
 	}
 }
 

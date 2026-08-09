@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -68,9 +70,6 @@ func (r *registry) ListObservations(ctx context.Context, req workersessions.List
 		return workersessions.ListObservationsResult{}, workersessions.ErrObservationWorkNotFound
 	}
 
-	// IDs are stable and are the only deterministic tie breaker available
-	// when multiple attempts share a Work item.
-	sortStrings(ids)
 	observations := make([]workersessions.Observation, 0, len(ids))
 	for _, id := range ids {
 		projected, err := r.projectObservation(ctx, id)
@@ -79,6 +78,7 @@ func (r *registry) ListObservations(ctx context.Context, req workersessions.List
 		}
 		observations = append(observations, projected)
 	}
+	sortObservationAttempts(observations)
 	r.logger.Info("worker session observation list", "workID", req.WorkID, "outcome", "success", "result_count", len(observations))
 	return workersessions.ListObservationsResult{Observations: observations}, nil
 }
@@ -122,7 +122,29 @@ func (r *registry) projectObservation(ctx context.Context, id string) (workerses
 		return workersessions.Observation{}, err
 	}
 
+	session, metadata, ok := r.loadObservationState(id)
+	if !ok {
+		return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
+	}
+
+	projected := baseObservation(id, session, metadata)
+	applyObservationTiming(&projected, session, metadata, r.clock)
+	if session.Result != nil && session.Result.Cause != nil {
+		failure := *session.Result.Cause
+		projected.Failure = &failure
+	}
+
+	if !projected.ProviderSessionAvailable {
+		return projected, nil
+	}
+	return r.enrichWithProviderSessionsProjection(ctx, projected)
+}
+
+// loadObservationState returns detached snapshots of the registered session
+// and observation metadata for id. ok is false when either is missing.
+func (r *registry) loadObservationState(id string) (workersessions.Session, *observation, bool) {
 	r.mu.RLock()
+	defer r.mu.RUnlock()
 	session, exists := r.sessions[id]
 	metadata := r.observations[id]
 	if exists {
@@ -131,11 +153,15 @@ func (r *registry) projectObservation(ctx context.Context, id string) (workerses
 	if metadata != nil {
 		metadata = cloneObservation(metadata)
 	}
-	r.mu.RUnlock()
 	if !exists || metadata == nil {
-		return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
+		return workersessions.Session{}, nil, false
 	}
+	return session, metadata, true
+}
 
+// baseObservation projects the registry-owned identity, correlation, and
+// lifecycle facts that never require the Provider Sessions root.
+func baseObservation(id string, session workersessions.Session, metadata *observation) workersessions.Observation {
 	projected := workersessions.Observation{
 		WorkerSessionID: id,
 		WorkIDs:         append([]string(nil), metadata.workIDs...),
@@ -151,35 +177,41 @@ func (r *registry) projectObservation(ctx context.Context, id string) (workerses
 		projected.TurnID = session.ProviderSessionAssociation.TurnID
 		projected.AttemptID = session.ProviderSessionAssociation.AttemptID
 	}
-	if !metadata.startedAt.IsZero() {
-		started := metadata.startedAt
-		projected.StartedAt = &started
-		if metadata.endedAt != nil {
-			ended := *metadata.endedAt
-			projected.EndedAt = &ended
-			duration := ended.Sub(started)
-			if duration < 0 {
-				duration = 0
-			}
-			projected.Duration = &duration
-			projected.DurationBasis = workersessions.DurationBasisRecordedTimestamps
-		} else if !session.Terminal() {
-			duration := r.clock.Now().Sub(started)
-			if duration < 0 {
-				duration = 0
-			}
-			projected.Duration = &duration
-			projected.DurationBasis = workersessions.DurationBasisActiveClock
-		}
-	}
-	if session.Result != nil && session.Result.Cause != nil {
-		failure := *session.Result.Cause
-		projected.Failure = &failure
-	}
+	return projected
+}
 
-	if !projected.ProviderSessionAvailable {
-		return projected, nil
+// applyObservationTiming fills projected's start/end/duration fields from
+// metadata, using clock for an active (non-terminal) session's elapsed time.
+func applyObservationTiming(projected *workersessions.Observation, session workersessions.Session, metadata *observation, clock platformclock.Source) {
+	if metadata.startedAt.IsZero() {
+		return
 	}
+	started := metadata.startedAt
+	projected.StartedAt = &started
+	switch {
+	case metadata.endedAt != nil:
+		ended := *metadata.endedAt
+		projected.EndedAt = &ended
+		projected.Duration = nonNegativeDuration(ended.Sub(started))
+		projected.DurationBasis = workersessions.DurationBasisRecordedTimestamps
+	case !session.Terminal():
+		projected.Duration = nonNegativeDuration(clock.Now().Sub(started))
+		projected.DurationBasis = workersessions.DurationBasisActiveClock
+	}
+}
+
+func nonNegativeDuration(duration time.Duration) *time.Duration {
+	if duration < 0 {
+		duration = 0
+	}
+	return &duration
+}
+
+// enrichWithProviderSessionsProjection adds transcript availability, token
+// usage, and parse diagnostics from the Provider Sessions root. It is only
+// called when projected already carries an available Provider Session
+// reference.
+func (r *registry) enrichWithProviderSessionsProjection(ctx context.Context, projected workersessions.Observation) (workersessions.Observation, error) {
 	if r.providerSessions == nil {
 		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
 	}
@@ -237,6 +269,24 @@ func sortStrings(values []string) {
 			values[j], values[j-1] = values[j-1], values[j]
 		}
 	}
+}
+
+func sortObservationAttempts(observations []workersessions.Observation) {
+	sort.SliceStable(observations, func(i, j int) bool {
+		left, right := observations[i], observations[j]
+		switch {
+		case left.StartedAt != nil && right.StartedAt != nil && !left.StartedAt.Equal(*right.StartedAt):
+			return left.StartedAt.Before(*right.StartedAt)
+		case left.StartedAt != nil && right.StartedAt == nil:
+			return true
+		case left.StartedAt == nil && right.StartedAt != nil:
+			return false
+		case left.AttemptID != right.AttemptID:
+			return left.AttemptID < right.AttemptID
+		default:
+			return left.WorkerSessionID < right.WorkerSessionID
+		}
+	})
 }
 
 func cloneInt(value *int) *int {

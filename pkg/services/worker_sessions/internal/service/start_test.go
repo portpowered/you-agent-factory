@@ -18,13 +18,13 @@ import (
 )
 
 func TestNew_RejectsNilExecution(t *testing.T) {
-	if _, err := service.New(nil, newEventsAppender(), nil); !errors.Is(err, service.ErrMissingExecution) {
+	if _, err := newService(nil, newEventsAppender(), nil); !errors.Is(err, service.ErrMissingExecution) {
 		t.Fatalf("New(nil, events, nil) error = %v, want ErrMissingExecution", err)
 	}
 }
 
 func TestNew_RejectsNilEventsAppender(t *testing.T) {
-	if _, err := service.New(executionBoundary{execution: succeedingExecution()}, nil, nil); !errors.Is(err, service.ErrMissingEventsAppender) {
+	if _, err := newService(executionBoundary{execution: succeedingExecution()}, nil, nil); !errors.Is(err, service.ErrMissingEventsAppender) {
 		t.Fatalf("New(execution, nil, nil) error = %v, want ErrMissingEventsAppender", err)
 	}
 }
@@ -450,7 +450,7 @@ func TestAssociateProviderSession_CommitsBeforeDependentWorkerRecord(t *testing.
 		},
 	}
 	var err error
-	registry, err = service.New(executionBoundary{execution: execution}, eventsSvc, nil)
+	registry, err = newService(executionBoundary{execution: execution}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -670,7 +670,7 @@ func TestStart_InvalidProviderSessionResultRemainsExplicitlyUnassociated(t *test
 			}, nil
 		},
 	}
-	registry, err := service.New(executionBoundary{execution: execution}, newEventsAppender(), logger)
+	registry, err := newService(executionBoundary{execution: execution}, newEventsAppender(), logger)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -730,7 +730,7 @@ func TestStart_ReservationIsObservableBeforeWorkersHandoff(t *testing.T) {
 		reached:     make(chan struct{}),
 		proceed:     make(chan struct{}),
 	}
-	registry, err := service.New(executionBoundary{execution: execution}, newEventsAppender(), logger)
+	registry, err := newService(executionBoundary{execution: execution}, newEventsAppender(), logger)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}

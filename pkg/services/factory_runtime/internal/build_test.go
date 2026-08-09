@@ -11,6 +11,7 @@ import (
 	factorydefinitionfixtures "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
@@ -244,7 +245,7 @@ func (testRuntimeWorkers) CancelWorkstationDispatch(
 
 func testRuntimeWorkerSessionsFactory(t *testing.T) factory.WorkerSessionsFactory {
 	t.Helper()
-	return func(boundary workers.WorkstationPoolBoundary) (workersessions.Service, error) {
+	return func(boundary workers.WorkstationPoolBoundary, _ platformclock.Source) (workersessions.Service, error) {
 		return &stubWorkerSessionsService{boundary: boundary}, nil
 	}
 }

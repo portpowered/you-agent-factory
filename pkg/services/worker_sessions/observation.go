@@ -20,7 +20,9 @@ import (
 // locator or a type assertion to inspect a Worker Session.
 type ObservationService interface {
 	// ListObservations returns every observed attempt correlated with req.WorkID
-	// in deterministic Worker Session identity order.
+	// in deterministic attempt/time order. The runtime-facing implementation
+	// reads the canonical recording projection so completed and historical
+	// attempts are not limited to the process-local supervision map.
 	ListObservations(context.Context, ListObservationsRequest) (ListObservationsResult, error)
 
 	// GetObservation returns the one observed attempt identified by its exact
@@ -117,6 +119,21 @@ type Observation struct {
 // Validate reports whether an observation has a coherent detached identity,
 // lifecycle, timing, and failure projection.
 func (o Observation) Validate() error {
+	if err := o.validateIdentity(); err != nil {
+		return err
+	}
+	if err := o.validateLifecycleBasis(); err != nil {
+		return err
+	}
+	if err := o.validateDuration(); err != nil {
+		return err
+	}
+	return o.validateFailure()
+}
+
+// validateIdentity checks the detached Worker Session identity, its optional
+// exact Provider Session reference, lifecycle state, and attempt identity.
+func (o Observation) validateIdentity() error {
 	if strings.TrimSpace(o.WorkerSessionID) == "" {
 		return ErrInvalidObservationIdentity
 	}
@@ -131,12 +148,30 @@ func (o Observation) Validate() error {
 	if strings.TrimSpace(o.AttemptID) == "" {
 		return ErrInvalidObservationAttempt
 	}
+	return nil
+}
+
+// validateLifecycleBasis checks that the reported duration basis and
+// transcript availability are coherent with the observation's terminal state.
+func (o Observation) validateLifecycleBasis() error {
 	if !o.DurationBasis.Valid() {
 		return ErrInvalidObservationDuration
 	}
 	if !o.Transcript.Valid() {
 		return ErrObservationProjectionUnavailable
 	}
+	if o.State.Terminal() && o.DurationBasis == DurationBasisActiveClock {
+		return ErrInvalidObservationDuration
+	}
+	if !o.State.Terminal() && o.DurationBasis == DurationBasisRecordedTimestamps {
+		return ErrInvalidObservationDuration
+	}
+	return nil
+}
+
+// validateDuration checks that Duration is present only when its basis
+// allows it, is never negative, and never precedes StartedAt.
+func (o Observation) validateDuration() error {
 	if o.DurationBasis == DurationBasisUnavailable && o.Duration != nil {
 		return ErrInvalidObservationDuration
 	}
@@ -146,19 +181,20 @@ func (o Observation) Validate() error {
 	if o.StartedAt != nil && o.EndedAt != nil && o.EndedAt.Before(*o.StartedAt) {
 		return ErrInvalidObservationDuration
 	}
-	if o.State.Terminal() && o.DurationBasis == DurationBasisActiveClock {
-		return ErrInvalidObservationDuration
+	return nil
+}
+
+// validateFailure checks that a present Failure is itself valid and only
+// attached to a terminal, non-completed state.
+func (o Observation) validateFailure() error {
+	if o.Failure == nil {
+		return nil
 	}
-	if !o.State.Terminal() && o.DurationBasis == DurationBasisRecordedTimestamps {
-		return ErrInvalidObservationDuration
+	if err := o.Failure.Validate(); err != nil {
+		return err
 	}
-	if o.Failure != nil {
-		if err := o.Failure.Validate(); err != nil {
-			return err
-		}
-		if !o.State.Terminal() || o.State == StateCompleted {
-			return ErrInvalidObservationFailure
-		}
+	if !o.State.Terminal() || o.State == StateCompleted {
+		return ErrInvalidObservationFailure
 	}
 	return nil
 }

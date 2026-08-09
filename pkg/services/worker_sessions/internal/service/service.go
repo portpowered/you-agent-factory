@@ -27,6 +27,14 @@ var ErrMissingExecution = errors.New("worker sessions: execution service is requ
 // required directly injected EventsAppender.
 var ErrMissingEventsAppender = errors.New("worker sessions: events appender is required")
 
+// ErrMissingClock reports that New was constructed without the required
+// runtime time source used for observation timing.
+var ErrMissingClock = errors.New("worker sessions: clock is required")
+
+// ErrMissingProviderSessions reports that New was constructed without the
+// Provider Sessions read-side contract used to enrich worker observations.
+var ErrMissingProviderSessions = errors.New("worker sessions: provider sessions service is required")
+
 // EventsAppender is the narrow Events dependency Start's before-handoff
 // publication barrier needs: commit one source-native record into a topic's
 // aggregate ordering. registry depends on this port rather than the full
@@ -68,39 +76,45 @@ type registry struct {
 // broader API.
 var _ workersessions.Service = (*registry)(nil)
 
-// New constructs the process-local Worker Session registry from the one
-// directly injected workers.WorkstationPoolBoundary that Start publishes
-// attempts through and the one directly injected EventsAppender Start's
-// before-handoff publication barrier commits through. A nil logger falls
-// back to logging.NoopLogger. A nil execution or nil eventsAppender is
-// rejected: Start has no meaningful behavior without either.
-func New(boundary workers.WorkstationPoolBoundary, eventsAppender EventsAppender, logger logging.Logger, options ...Option) (workersessions.Service, error) {
+// New constructs the process-local Worker Session registry from its required
+// lifecycle, time, and Provider Sessions collaborators. A nil logger falls
+// back to logging.NoopLogger. A nil execution, Events appender, clock, or
+// Provider Sessions service is rejected: the registry cannot truthfully
+// supervise, time, or enrich an observation without each of them.
+func New(
+	boundary workers.WorkstationPoolBoundary,
+	eventsAppender EventsAppender,
+	logger logging.Logger,
+	clock platformclock.Source,
+	providerSessions providersessions.Service,
+) (workersessions.Service, error) {
 	if boundary == nil {
 		return nil, ErrMissingExecution
 	}
 	if eventsAppender == nil {
 		return nil, ErrMissingEventsAppender
 	}
+	if clock == nil {
+		return nil, ErrMissingClock
+	}
+	if providerSessions == nil {
+		return nil, ErrMissingProviderSessions
+	}
 	registry := &registry{
-		sessions:       make(map[string]workersessions.Session),
-		publications:   make(map[string]*publication),
-		supervisions:   make(map[string]*supervision),
-		observations:   make(map[string]*observation),
-		dispatchOwners: make(map[string]string),
-		boundary:       boundary,
-		events:         eventsAppender,
-		clock:          platformclock.Real{},
-		logger:         logging.EnsureLogger(logger),
+		sessions:         make(map[string]workersessions.Session),
+		publications:     make(map[string]*publication),
+		supervisions:     make(map[string]*supervision),
+		observations:     make(map[string]*observation),
+		dispatchOwners:   make(map[string]string),
+		boundary:         boundary,
+		events:           eventsAppender,
+		clock:            clock,
+		providerSessions: providerSessions,
+		logger:           logging.EnsureLogger(logger),
 	}
 	if reader, ok := eventsAppender.(EventsReader); ok {
 		registry.eventReader = reader
 	}
-	for _, option := range options {
-		if option != nil {
-			option(registry)
-		}
-	}
-	registry.clock = platformclock.Ensure(registry.clock)
 	return registry, nil
 }
 
