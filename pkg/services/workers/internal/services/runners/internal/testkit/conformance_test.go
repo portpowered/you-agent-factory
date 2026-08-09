@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 )
 
@@ -26,6 +27,33 @@ func TestRunServiceProvesCommonContractThroughServiceExecuteBoundary(t *testing.
 		CapturedRequest:           subject.CapturedRequest,
 		SkipUnsupportedCapability: subject.SkipUnsupportedCapability,
 	})
+}
+
+func TestSubjectExecuteRequiresRunner(t *testing.T) {
+	_, err := (Subject{}).execute(t.Context(), workers.RunnerExecutionRequest{})
+	if err == nil {
+		t.Fatal("Subject.execute() error = nil, want missing-runner error")
+	}
+}
+
+func TestInMemoryRunnerCapturedRequestReportsNoCall(t *testing.T) {
+	var runner *InMemoryRunner
+	_, ok := runner.CapturedRequest()
+	if ok {
+		t.Fatal("CapturedRequest() ok = true before execution, want false")
+	}
+}
+
+func TestInMemoryRunnerConformsWithNilDiagnostics(t *testing.T) {
+	subject := NewInMemorySubject()
+	runner, ok := subject.Runner.(*InMemoryRunner)
+	if !ok {
+		t.Fatalf("subject runner type = %T, want *InMemoryRunner", subject.Runner)
+	}
+	runner.result.Diagnostics = nil
+	subject.ExpectedResult.Diagnostics = nil
+
+	Run(t, subject)
 }
 
 // inMemoryConformanceService adapts the foundational in-memory Runner into
