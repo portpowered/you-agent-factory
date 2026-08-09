@@ -47,8 +47,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verified terminal replay against the real in-memory Events service with deterministic Worker Session completion: canonical retained opening and terminal records are emitted in order, the lifecycle record is TERMINAL_REPLAY, one complete session-completed replay-summary reports eventsEmitted 2, and the subscription closes afterward. Added CLI coverage proving TERMINAL_REPLAY does not end replay-only before the final summary and the command returns success. Existing live terminal-stream and ACTIVE transcript-read regressions remain covered."
     },
     {
       "id": "wo-c1-ext-stream-replay-only-003",

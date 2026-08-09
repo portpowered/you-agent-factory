@@ -105,6 +105,45 @@ func TestStreamReplayOnlyWritesEventFramesAndFinalSummary(t *testing.T) {
 	}
 }
 
+func TestStreamReplayOnlyWritesTerminalReplayBeforeCompleteSummary(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w,
+			"data: {\"delivery\":\"RECORD\",\"workerSessionId\":\"worker-session-1\",\"providerSession\":null,\"workIds\":[],\"event\":{\"position\":1,\"sourceType\":\"worker\",\"sourceId\":\"worker-session-1\",\"sourceSequence\":1,\"sourceEventId\":\"event-1\",\"schemaId\":\"worker.output\",\"payload\":{\"text\":\"complete\"}},\"errorCode\":null,\"errorMessage\":null}\n\n",
+			"data: {\"delivery\":\"TERMINAL_REPLAY\",\"workerSessionId\":\"worker-session-1\",\"providerSession\":null,\"workIds\":[],\"event\":{\"position\":2,\"sourceType\":\"worker_session_lifecycle\",\"sourceId\":\"worker-session-1\",\"sourceSequence\":2,\"sourceEventId\":\"terminal\",\"schemaId\":\"worker_session.lifecycle\",\"payload\":{\"status\":\"COMPLETED\"}},\"errorCode\":null,\"errorMessage\":null}\n\n",
+			"data: {\"delivery\":\"REPLAY_SUMMARY\",\"workerSessionId\":\"worker-session-1\",\"providerSession\":null,\"workIds\":[],\"event\":null,\"errorCode\":null,\"errorMessage\":null,\"replaySummary\":{\"kind\":\"replay-summary\",\"complete\":true,\"reason\":\"session-completed\",\"eventsEmitted\":2}}\n\n",
+		)
+	}))
+	defer server.Close()
+
+	var output bytes.Buffer
+	err := NewStream(testHTTPProtocol(t))(StreamConfig{
+		Context: context.Background(), Server: server.URL, SessionID: "session-1",
+		Provider: "codex", Kind: "session_id", ID: "provider-session-1", OutputFormat: "json", ReplayOnly: true, Output: &output,
+	})
+	if err != nil {
+		t.Fatalf("Stream() error = %v, want successful terminal replay completion", err)
+	}
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("JSON terminal replay lines = %d, output=%q, want event, terminal, and summary", len(lines), output.String())
+	}
+	var terminal map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(lines[1]), &terminal); err != nil {
+		t.Fatalf("decode terminal line: %v", err)
+	}
+	if string(terminal["delivery"]) != `"TERMINAL_REPLAY"` {
+		t.Fatalf("terminal line = %s, want TERMINAL_REPLAY", lines[1])
+	}
+	var summary streamReplaySummary
+	if err := json.Unmarshal([]byte(lines[2]), &summary); err != nil {
+		t.Fatalf("decode summary line: %v", err)
+	}
+	if summary.Kind != "replay-summary" || !summary.Complete || summary.Reason != "session-completed" || summary.EventsEmitted != 2 {
+		t.Fatalf("summary = %#v, want complete completed-session count-two replay summary", summary)
+	}
+}
+
 func TestStreamHumanRendersExplicitSourceFailureAndReturnsStableError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
