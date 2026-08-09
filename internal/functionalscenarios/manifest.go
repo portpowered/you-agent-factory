@@ -127,6 +127,8 @@ func applyReviewedEvidence(scenario *Scenario) {
 		markCovered(scenario, LaneLong, "tests/functional/transport/cli/commands/work_wiring_test.go::TestCLIWorkMoveChangesState", InterfaceCLI)
 	case "cli/you.work.watch":
 		markCovered(scenario, LaneLong, "tests/functional/work/watch/watch_test.go::TestWorkWatchFollowsStateTransitionsUntilTerminal", InterfaceCLI)
+	case "cli/you.worker-sessions.list", "cli/you.worker-sessions.read", "cli/you.worker-sessions.show", "cli/you.worker-sessions.stream":
+		markCovered(scenario, LaneLong, "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI", InterfaceCLI)
 	case "cli/you.workers.acp.add", "cli/you.workers.acp.delete", "cli/you.workers.list":
 		markCovered(scenario, LaneShort, "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddDeleteAndUnifiedListOneSettingsBackedCatalogEntry", InterfaceCLI)
 	case "rest/submitWorkBySessionId", "rest/listWorkBySessionId", "rest/getStatusBySessionId":

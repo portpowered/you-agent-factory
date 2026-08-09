@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"go.uber.org/zap"
 )
 
@@ -156,6 +157,19 @@ func (fs *SessionRuntime) InvokeWorker(ctx context.Context, req factory.InvokeWo
 		return factory.InvokeWorkerResult{}, factory.ErrNotFound
 	}
 	return runtime.InvokeWorker(ctx, req)
+}
+
+// WorkerSessionsObservation forwards the optional runtime projection through
+// the replaceable Factory Session runtime. Without this capability adapter,
+// service-mode HTTP binding sees only the broad Factory Runtime contract and
+// leaves the public Worker Sessions routes unavailable.
+func (fs *SessionRuntime) WorkerSessionsObservation() workersessions.ObservationService {
+	runtime := fs.currentRuntimeService()
+	provider, _ := runtime.(factory.WorkerSessionsObservationProvider)
+	if provider == nil {
+		return nil
+	}
+	return provider.WorkerSessionsObservation()
 }
 
 func (fs *SessionRuntime) submitWorkFile(ctx context.Context) error {
