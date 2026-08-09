@@ -77,6 +77,88 @@ model IDs above. Factory dispatch supplies the AGY workspace and native
 process settings; do not copy provider-native flags onto a Factory or `you run`
 surface unless that surface explicitly documents them.
 
+## Configure a Factory worker or one ad-hoc run
+
+Put durable worker identity and policy in the worker frontmatter. Use a
+one-shot `you run` override only when the same Factory should run once with a
+different provider, model, effort, permission request, or prompt source. The
+generic run flags are the public boundary; provider-native options such as
+AGY's `--add-dir`, `--effort`, and `--print-timeout` belong to Factory dispatch
+and are not generic `you run` flags.
+
+| Durable Factory setting | One-shot `you run` counterpart | Boundary |
+|-------------------------|--------------------------------|----------|
+| `modelProvider` | `--provider` | Selects the provider adapter for this invocation. |
+| `model` | `--model` | Overrides the selected provider's model for this invocation. |
+| `reasoningEffort` | `--worker-reasoning-effort` | Uses the canonical `minimal`, `low`, `medium`, `high`, `xhigh`, or `max` vocabulary; the selected provider may reject a value it cannot map. |
+| `skipPermissions` | `--skip-permissions` | Requests an invocation-only permission shortcut; the selected provider must support it. |
+| worker `timeout` and workstation `limits.maxExecutionTime` | No generic `--timeout` override | These remain Factory execution limits. For AGY print-mode dispatch, the applicable worker timeout becomes the adapter's print timeout; the adapter uses a five-minute default when no positive request is supplied. |
+| workstation `promptFile` or prompt body | `--to-file` | Supplies one exact, multiline primary prompt for a one-shot invocation; it is not a worker/provider setting. |
+
+For example, this is a durable `AGENT_WORKER` definition. The worker owns the
+provider, model, effort, permission policy, and per-attempt timeout; the
+workstation owns the prompt and step behavior.
+
+```yaml
+---
+type: AGENT_WORKER
+modelProvider: CODEX
+model: gpt-5.6-luna
+executorProvider: SCRIPT_WRAP
+reasoningEffort: high
+skipPermissions: true
+timeout: 45m
+---
+
+You are the implementation worker. Make the requested change and report the
+verification you ran.
+```
+
+For one run, keep the prompt in a UTF-8 file and pass only its path. This
+PowerShell shape is safe for multiline text and paths containing spaces:
+
+```powershell
+$promptPath = Join-Path (Get-Location) "prompt files\release brief.txt"
+$promptText = @"
+Review the release notes and identify the highest-risk rollback step.
+Keep the answer concise, but preserve the exact wording of the risk.
+"@
+[IO.File]::WriteAllText($promptPath, $promptText, [Text.UTF8Encoding]::new($false))
+
+you run --provider codex --model gpt-5.6-luna --worker-reasoning-effort high --to-file "prompt files\release brief.txt"
+```
+
+`--to-file` is mutually exclusive with positional prompt text, non-empty
+stdin, and a signature-defined `--to`; it preserves the file's line endings,
+blank lines, Unicode, and trailing newline. See `you docs run` for the complete
+input-source contract. `--worker-reasoning-effort` is an invocation override,
+not a provider-native `--effort` spelling.
+
+### ANTIGRAVITY dispatch details
+
+Factory dispatch, rather than the operator's `you run` command, owns AGY's
+native process arguments. In the current print-mode command adapter, every
+dispatch receives `--add-dir <working-directory>` so AGY can read files from
+the Factory workspace. The adapter also derives the effective `--print-timeout`
+from the execution request and passes it to AGY; when no positive request is
+available, the adapter's default is `5m`. Set the durable Factory timeout for a
+long media review instead of inventing `--print-timeout` on `you run`.
+
+AGY's completion is stream-based. The adapter parses the final `result` event
+and its response; it does not treat a zero process exit as task acceptance. A
+recorded missing-file run exited zero and reported `status: SUCCESS` while the
+response declined the task, so use a response contract or structured verdict
+when the workflow must distinguish task success from process completion.
+
+AGY effort has two constraints to keep separate. The print-mode command
+adapter accepts a separate `reasoningEffort` only when it is empty, `low`,
+`medium`, or `high`. The current native AGY PTY route rejects a separate effort,
+so omit `reasoningEffort` when the selected AGY model ID already encodes its
+`-low`, `-medium`, or `-high` tier. Do not pass AGY's native `--effort` or
+`--add-dir` directly to a generic `you run` invocation. If a task requires
+video or audio inspection, route it to AGY; if one ImageGen call needs more
+than five references, split or redesign it instead.
+
 ## ImageGen reference limit
 
 ImageGen's `referenced_image_paths` parameter accepts **0–5 paths per call**.

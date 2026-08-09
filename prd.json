@@ -10,7 +10,7 @@
   "acceptanceCriteria": [
     "`you docs providers` presents one coherent selection path covering the intended uses of `gpt-5.6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, and `claude-sonnet-5`, plus ANTIGRAVITY's currently supported AGY models and effort selection, without claiming unverified models or capabilities.",
     "The packaged guide states the known modality and tool constraints before its examples: GPT-5.6 does not provide video/audio understanding, AGY can inspect referenced media through its CLI file-parsing path, and ImageGen accepts at most five `referenced_image_paths` per call.",
-    "The guide distinguishes Factory worker frontmatter from ad-hoc `you run` flags, documents `--worker-reasoning-effort` and `--to-file`, and explains AGY's mandatory workspace `--add-dir`, effective print-timeout, and exit-zero-on-decline behavior in terms an operator can act on.",
+    "The guide distinguishes Factory worker frontmatter from ad-hoc `you run` flags, documents `--worker-reasoning-effort` and `--to-file`, and explains AGY's mandatory workspace `--add-dir`, effective `--print-timeout`, and exit-zero-on-decline behavior in terms an operator can act on.",
     "Every CLI invocation printed in changed or new guide content is executed against a binary built from the implementation commit; its real output or a direct behavioral assertion is retained as review evidence, and no example contains an invented flag, model, effort, or output.",
     "Packaged behavior is proven by `make docs-reference-smoke`; the named focused verification command is `go test ./tests/functional/smoke -run '^TestDocsCommandSmoke_' -count=1`, and both commands verify customer-visible `you docs providers` output rather than source inventories or link topology.",
     "Quality gate: Typecheck passes, `make verify-fast` passes, focused docs tests pass, and no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
@@ -48,8 +48,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added a durable-Factory-versus-ad-hoc mapping to docs/reference/providers.md, including modelProvider/model/reasoningEffort/skipPermissions, timeout ownership, and prompt-file boundaries. Added a valid AGENT_WORKER frontmatter example and a PowerShell-safe --to-file invocation using --provider, --model, and --worker-reasoning-effort. Documented AGY's Factory-owned --add-dir and effective --print-timeout behavior, final-result parsing after exit-zero declines, command-versus-PTY effort constraints, and actionable alternatives for audiovisual work and ImageGen references. Extended the process-boundary docs smoke markers. Rebuilt the current implementation binary and retained direct evidence: run help exposes the documented flags, the exact file-backed shape returns the expected missing-file validation error without dispatch, and an invalid effort returns the pre-dispatch canonical-value diagnostic. Verified with go test ./tests/functional/smoke -run '^TestDocsCommandSmoke_' -count=1, make docs-reference-smoke, focused AGY/worker/CLI tests, and make verify-fast (typecheck, MCP contract check, 355 Vitest files/2970 tests, 191 Bun tests, and the short Go suite)."
     },
     {
       "id": "wo-d3-worker-provider-guide-003",
