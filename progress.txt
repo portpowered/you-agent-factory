@@ -280,3 +280,20 @@
   - A provider command edge and a legacy PTY host can coexist in the root edge aggregate, but the canonical provider adapter must be selected by explicit provider capability rather than edge presence.
   - Pure execution-policy parsing belongs with the internal workstation executor when service-root structure gates reject an exported helper from the Workers contract package.
 ---
+
+## [2026-08-08 19:01 -07:00] - wo-b1-antigravity-provider-golden-traces-005
+- What was implemented
+  - Restored functional coverage for the explicit legacy AGY PTY compatibility seam without changing root wire selection: when a root command runner is present, AGY still uses canonical shell-free print mode even if an AgyPTYHost is injected.
+  - Added public Providers-wire runtime coverage for cleaned PTY success output and argv boundaries, native authentication failure classification, and context-deadline process termination using an injected deterministic clock.
+- Files changed
+  - `tests/functional/providers/agy/pty_compatibility_test.go`
+  - `progress.txt`
+- Verification
+  - The focused legacy PTY functional scenario passes.
+  - `go run ./cmd/functionalboundarycheck` passes.
+  - Direct functional coverage measurement reports `pkg/platform/clock` 23.5%, AGY adapter 66.7%, and AGY PTY 52.5%, all above their checked-in floors of 19.60%, 60.00%, and 48.54%.
+  - The full Windows functional lane reaches an existing main-baseline W4 fixture failure (`unexpected provider prompt`); the authoritative Linux CI lane remains the final cross-platform gate.
+- **Learnings for future iterations:**
+  - Public provider-wire compatibility tests can exercise real native PTY policy with a fake platform Host while keeping root command-effect selection deterministic and reviewable.
+  - Coverage floors should be measured with the same functional package set that owns the runtime behavior; focused provider packages are useful for isolating regressions when a broader lane has an unrelated platform-specific failure.
+---
