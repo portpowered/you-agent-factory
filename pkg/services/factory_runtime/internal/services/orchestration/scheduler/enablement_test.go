@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 func TestEnablementEvaluator_LogsEnabledTransition(t *testing.T) {
@@ -514,5 +515,145 @@ func sameNameGuardNet() *state.Net {
 				},
 			},
 		},
+	}
+}
+
+func TestEnablementEvaluator_SameNameJoinGatesSecondaryDependency(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		peerFirst bool
+	}{
+		{name: "peer input declared first", peerFirst: true},
+		{name: "dependency input declared first", peerFirst: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			evaluator := NewEnablementEvaluator(nil, testNow, nil)
+			net := sameNameDependencyNet(tc.peerFirst)
+
+			blocked := sameNameDependencySnapshot("prerequisite:pending")
+			if enabled := evaluator.FindEnabledTransitions(context.Background(), net, &blocked); len(enabled) != 0 {
+				t.Fatalf("enabled transitions before secondary prerequisite completion = %d, want 0", len(enabled))
+			}
+
+			completed := sameNameDependencySnapshot("prerequisite:complete")
+			enabled := evaluator.FindEnabledTransitions(context.Background(), net, &completed)
+			if len(enabled) != 1 {
+				t.Fatalf("enabled transitions after secondary prerequisite completion = %d, want 1", len(enabled))
+			}
+			assertJoinedBindingToken(t, enabled[0].Bindings, "idea", "idea-token")
+			assertJoinedBindingToken(t, enabled[0].Bindings, "task", "task-token")
+		})
+	}
+}
+
+func TestEnablementEvaluator_DependencyBindingPreflightHandlesNestedGuards(t *testing.T) {
+	evaluator := NewEnablementEvaluator(nil, testNow, nil)
+	transition := &petri.Transition{
+		InputArcs: []petri.Arc{{
+			Guard: &petri.AllGuard{Guards: []petri.Guard{
+				&petri.SameNameGuard{MatchBinding: "peer"},
+				&petri.DependencyGuard{},
+			}},
+		}},
+	}
+
+	if !transitionUsesDependencyGuard(transition) {
+		t.Fatal("expected nested dependency guard to be detected")
+	}
+	if transitionUsesDependencyGuard(nil) {
+		t.Fatal("nil transition must not report a dependency guard")
+	}
+	if guardUsesDependencyGuard(&petri.AllGuard{Guards: []petri.Guard{&petri.SameNameGuard{}}}) {
+		t.Fatal("unrelated nested guard must not report a dependency guard")
+	}
+	if evaluator.bindingDependenciesMet(transition, nil, nil) {
+		t.Fatal("dependency binding must fail closed when its marking snapshot is missing")
+	}
+}
+
+func sameNameDependencyNet(peerFirst bool) *state.Net {
+	peerArc := petri.Arc{
+		ID:          "idea-in",
+		Name:        "idea",
+		PlaceID:     "idea:init",
+		Direction:   petri.ArcInput,
+		Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+		Guard:       &petri.SameNameGuard{MatchBinding: "task"},
+	}
+	dependencyArc := petri.Arc{
+		ID:          "task-in",
+		Name:        "task",
+		PlaceID:     "task:init",
+		Direction:   petri.ArcInput,
+		Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+		Guard:       &petri.DependencyGuard{},
+	}
+	inputArcs := []petri.Arc{dependencyArc, peerArc}
+	if peerFirst {
+		inputArcs = []petri.Arc{peerArc, dependencyArc}
+	}
+	return &state.Net{
+		Transitions: map[string]*petri.Transition{
+			"consume": {
+				ID:        "consume",
+				Name:      "consume",
+				InputArcs: inputArcs,
+			},
+		},
+	}
+}
+
+func sameNameDependencySnapshot(prerequisitePlace string) petri.MarkingSnapshot {
+	tokens := map[string]*factorytoken.Token{
+		"idea-token": {
+			ID:      "idea-token",
+			PlaceID: "idea:init",
+			Color: factorytoken.Color{
+				Name:       "joined-work",
+				WorkID:     "work-idea",
+				WorkTypeID: "idea",
+				DataType:   factorytoken.DataTypeWork,
+				Relations: []work.Relation{{
+					Type:          work.RelationDependsOn,
+					TargetWorkID:  "work-prerequisite",
+					RequiredState: "complete",
+				}},
+			},
+		},
+		"task-token": {
+			ID:      "task-token",
+			PlaceID: "task:init",
+			Color: factorytoken.Color{
+				Name:       "joined-work",
+				WorkID:     "work-task",
+				WorkTypeID: "task",
+				DataType:   factorytoken.DataTypeWork,
+			},
+		},
+		"prerequisite-token": {
+			ID:      "prerequisite-token",
+			PlaceID: prerequisitePlace,
+			Color: factorytoken.Color{
+				WorkID:     "work-prerequisite",
+				WorkTypeID: "prerequisite",
+				DataType:   factorytoken.DataTypeWork,
+			},
+		},
+	}
+	placeTokens := make(map[string][]string, len(tokens))
+	for id, token := range tokens {
+		placeTokens[token.PlaceID] = append(placeTokens[token.PlaceID], id)
+	}
+	return petri.MarkingSnapshot{Tokens: tokens, PlaceTokens: placeTokens}
+}
+
+func assertJoinedBindingToken(t *testing.T, bindings map[string][]factorytoken.Token, name, wantID string) {
+	t.Helper()
+	tokens, ok := bindings[name]
+	if !ok {
+		t.Fatalf("missing binding %q", name)
+	}
+	if len(tokens) != 1 || tokens[0].ID != wantID {
+		t.Fatalf("binding %q = %#v, want token %q", name, tokens, wantID)
 	}
 }

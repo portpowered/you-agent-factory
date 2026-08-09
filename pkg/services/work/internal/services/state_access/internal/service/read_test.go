@@ -63,7 +63,7 @@ func TestListWorkHonorsPaginationNextToken(t *testing.T) {
 	}
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing main-branch test complexity; split this scenario into focused helpers and remove this exemption.
 func TestListWorkTerminalityCountsAndPaginationUseOneFilteredSelection(t *testing.T) {
 	t.Parallel()
 

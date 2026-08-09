@@ -100,8 +100,8 @@
     {
       "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/engine",
       "fileCount": 16,
-      "owner": "factory-runtime-maintainers",
-      "removalReason": "Split orchestration engine tests and runtime state by durable responsibility."
+      "owner": "backend-maintainers",
+      "removalReason": "Split orchestration engine files by runtime and submission responsibility."
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime",
@@ -341,7 +341,7 @@
       "packagePath": "pkg/transports/cli/commandregistry",
       "fileCount": 16,
       "owner": "cli-maintainers",
-      "removalReason": "Split command registration and resolved-work list handlers by durable responsibility."
+      "removalReason": "Split command registry handlers by command family and remove this entry."
     },
     {
       "packagePath": "pkg/transports/cli/factory",

@@ -266,3 +266,57 @@ func TestDependencyGuard_PartialDependenciesMet(t *testing.T) {
 		t.Errorf("expected 0 matches, got %d", len(matched))
 	}
 }
+
+func TestDependencyGuard_AllDependenciesMetAcrossBinding(t *testing.T) {
+	primary := factorytoken.Token{
+		ID:      "tok-primary",
+		PlaceID: "plan:init",
+		Color: factorytoken.Color{
+			WorkID:     "work-primary",
+			WorkTypeID: "plan",
+		},
+	}
+	secondary := factorytoken.Token{
+		ID:      "tok-secondary",
+		PlaceID: "task:init",
+		Color: factorytoken.Color{
+			WorkID:     "work-secondary",
+			WorkTypeID: "task",
+			Relations: []work.Relation{{
+				Type:          work.RelationDependsOn,
+				TargetWorkID:  "work-prerequisite",
+				RequiredState: "complete",
+			}},
+		},
+	}
+	prerequisite := &factorytoken.Token{
+		ID:      "tok-prerequisite",
+		PlaceID: "prerequisite:pending",
+		Color: factorytoken.Color{
+			WorkID:     "work-prerequisite",
+			WorkTypeID: "prerequisite",
+		},
+	}
+	marking := &MarkingSnapshot{
+		Tokens: map[string]*factorytoken.Token{
+			primary.ID:      &primary,
+			secondary.ID:    &secondary,
+			prerequisite.ID: prerequisite,
+		},
+	}
+	bindings := map[string][]factorytoken.Token{
+		"primary":   {primary},
+		"secondary": {secondary},
+	}
+	guard := &DependencyGuard{}
+	if guard.AllDependenciesMet(bindings, marking) {
+		t.Fatal("expected the secondary input dependency to block the complete binding")
+	}
+
+	completed := *prerequisite
+	completed.PlaceID = "prerequisite:complete"
+	marking.Tokens[completed.ID] = &completed
+	if !guard.AllDependenciesMet(bindings, marking) {
+		t.Fatal("expected the complete binding to pass after the prerequisite reaches complete")
+	}
+}
