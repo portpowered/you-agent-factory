@@ -48,8 +48,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added a deterministic response ordinal per dispatch lifecycle and used it for model-response event IDs, while preserving the existing model-request/1 retry correlation and all response payload fields. The ordinal remains independent of wall-clock time and mutable payload data, so the event ID is stable when the recorded response is replayed. Added focused recorder coverage for failed-then-successful retries, distinct response IDs, unchanged request correlation, and deterministic identity generation. The focused regression command passes. No Factory Event payload schema or Work-watch NDJSON changes were made."
     },
     {
       "id": "wo-c2-fix2-watch-model-response-id-003",
