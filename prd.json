@@ -71,8 +71,8 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Expanded docs/reference/operations.md with dispatch-time worker/workstation prompt reload behavior, event-driven `work watch --follow` usage and session filtering, purpose-driven Worker Session list/show/stream/read commands, and only observed no-match and missing-identity outcomes. Added narrow operations links from work, workers, and workstations and smoke markers. Rebuilt the current bin/you.exe and exercised the packaged topics plus server-backed commands: Worker Sessions list returned completed mock attempts with exit 0; a valid no-match Work returned `No worker sessions found.` with exit 0; show/read/stream for a missing `codex` session_id returned exit 1 with `WORKER_SESSION_NOT_FOUND`; `work watch --follow` remained live until cancellation; and the explicit `session-beta` filter returned the observed 404 diagnostic. Existing `TestWorkerSessionsCLI`, `TestWorkWatchFollowsStateTransitionsUntilTerminal`, and `TestRunningSessionReloadsPromptOnNextDispatch` passed, along with make docs-reference-smoke, make build, and make verify-fast (typecheck, 2,970 UI tests, 191 Bun tests, and short Go suite)."
     }
   ]
 }

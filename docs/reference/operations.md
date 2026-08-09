@@ -11,9 +11,11 @@ an incomplete run, and recovering after the process that owns a Factory
 Session stops. Use it when Work can arrive after startup or when an operator
 must distinguish an idle queue from completed Work.
 
-For the complete command and output-mode reference, use `you docs run`. This
-page owns the operational lifetime and restart boundary; it does not add a
-storage engine or change runtime behavior.
+For the complete command and output-mode reference, use `you docs run`. For
+the submitted-Work event schema, use `you docs work`; for worker and
+workstation prompt fields, use `you docs workers` and `you docs workstations`.
+This page owns the operational lifetime and restart boundary; it does not add
+a storage engine or change runtime behavior.
 
 ## Use a continuous server for real pipelines
 
@@ -200,6 +202,66 @@ Mitigate the hazard in the factory design:
   not proof that the upstream Work is invalid. Revisit which stages share the
   pool and which stage is allowed to hold it for the longest time.
 
+## Watch Work and inspect Worker Sessions
+
+Use the Work event stream as the normal live observation path. It emits state
+transitions as they happen, so an operator does not need a hand-written
+`sleep`/`work list` polling loop:
+
+```bash
+you --server http://localhost:7437 work watch --follow
+you --server http://localhost:7437 work watch --session session-beta --follow
+```
+
+Without `--session`, the command targets the default compatibility session
+(`~default`). `--session <session>` selects one live Factory Session. The
+finite form ends after the observed Work cohort reaches terminal states;
+`--follow` stays attached after terminal transitions until Ctrl-C or parent
+cancellation. Stdout is one NDJSON Work transition per line, and diagnostics
+remain on stderr. The stream observes the live session; it does not create a
+durable watch cursor or replay lost session state. See `you docs work` for the
+transition schema and reconnect boundary.
+
+When a model-backed dispatch needs provider-level diagnosis, inspect its
+Worker Session in four steps. First locate every attempt correlated with one
+Work:
+
+```bash
+you --server http://localhost:7437 worker-sessions list --work-id <work-id>
+```
+
+`list` is the Work-oriented entry point and returns a stable table. It can
+return `No worker sessions found.` with exit status `0` when the Work has no
+matching attempts. If a listed attempt exposes a provider, kind, and provider
+session ID, pass those exact values to the identity-oriented commands:
+
+```bash
+you --server http://localhost:7437 worker-sessions show --provider codex --kind session_id --id <provider-session-id>
+you --server http://localhost:7437 worker-sessions stream --provider codex --kind session_id --id <provider-session-id>
+you --server http://localhost:7437 worker-sessions read --provider codex --kind session_id --id <provider-session-id>
+```
+
+Use `show` for one session's correlation, lifecycle state, timing, token
+usage, transcript availability, failure, and parse diagnostics. Use `stream`
+to follow retained and live canonical session events; it ends successfully on
+a terminal event and reports source failures. Use `read` only after the
+session is finished to read its ordered normalized transcript. The current
+CLI returns exit status `1` with `WORKER_SESSION_NOT_FOUND` when the supplied
+provider identity has no observation or transcript. A completed provider
+session is covered end to end by the repository's functional CLI check,
+including list, show, live and terminal stream frames, and read.
+
+## Reload prompts at dispatch time
+
+Supported worker and workstation prompt files are read when a dispatch starts.
+This includes the worker and workstation `AGENTS.md` files in the split
+layout, plus a workstation `promptFile` when one is configured. Save an edit
+before the next dispatch and that next dispatch uses the new prompt. An
+already-running dispatch keeps the prompt snapshot it already received;
+editing a file does not mutate an in-flight dispatch, restore lost Work, or
+restore the in-memory Factory Session queue after a restart. The dispatch-time
+reload behavior is covered by the functional prompt hot-reload check.
+
 ## Recover after a process restart
 
 The live Factory Session queue is process-local and in memory. Restarting the
@@ -239,6 +301,7 @@ promise that every provider dispatch can be resumed automatically.
   loop-breaker topology
 - `you docs resources` — pool declarations, requirements, and capacity rules
 - `you docs workstations` — stage routing and workstation authoring fields
+- `you docs workers` — worker backends and shared worker prompt fields
 - `you docs sessions` — live Factory Session discovery and lifecycle controls
 - `you docs work` — Work submission, listing, showing, and transition watches
 - `you docs record-replay` — recording and replay artifact boundaries
