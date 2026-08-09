@@ -9,3 +9,5 @@ properties:
       $ref: '../data-models/Work.yaml'
   paginationContext:
     $ref: './PaginationContext.yaml'
+  counts:
+    $ref: './ListWorkCountSummary.yaml'

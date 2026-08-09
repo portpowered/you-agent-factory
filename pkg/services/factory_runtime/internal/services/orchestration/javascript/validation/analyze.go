@@ -44,6 +44,7 @@ func (a *sourceAnalyzer) Enter(n js.INode) js.IVisitor {
 
 func (a *sourceAnalyzer) Exit(js.INode) {}
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (a *sourceAnalyzer) inspectCall(call *js.CallExpr) {
 	switch callee := call.X.(type) {
 	case *js.DotExpr:

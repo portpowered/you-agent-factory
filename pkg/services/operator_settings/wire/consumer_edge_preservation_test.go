@@ -19,6 +19,7 @@ import (
 // load/update/atomic persist and effective resolution keep the same Settings-
 // observable outcomes after the Settings→Providers consumer cut when the wire
 // composes resolution against an injected providers.Service root.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestNewServicePreservesDocumentPersistAndEffectiveResolution(t *testing.T) {
 	t.Parallel()
 

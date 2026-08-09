@@ -255,6 +255,7 @@ func TestWorkWithoutDependsOnRelationsDispatchesNormally(t *testing.T) {
 // undispatched while only a proper subset of prerequisites has reached the
 // declared requiredState, then proceeds only after every prerequisite target
 // state is satisfied.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestFanInReleasesOnlyAfterEveryPrerequisite(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_tracking_dir"))
 

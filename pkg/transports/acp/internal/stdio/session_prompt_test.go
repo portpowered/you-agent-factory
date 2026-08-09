@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-file-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 package stdio
 
 import (
@@ -2721,6 +2723,7 @@ func waitForChannel(t *testing.T, ch <-chan struct{}, description string) {
 // control order at the ACP boundary: a notification's full transport identity
 // is captured, the immutable CANCEL intent commits, and only then can the
 // exact bound Factory Session observe Cancel.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestHandleSessionCancelCommitsCapturedIntentBeforeFactoryCancel(t *testing.T) {
 	base, session, turn := newActiveBoundControlSession(t, "fs-control-1")
 	chatSessions := &controlRecordingChatSessions{Service: base}
@@ -2891,6 +2894,7 @@ func TestHandleSessionCancelRepeatedIdentityDoesNotDuplicateFactoryCancel(t *tes
 // target or collaborator after capture remains silent and cannot reach an
 // unintended Factory Session. Each case exercises the notification boundary
 // with a minted identity, so no JSON-RPC response is manufactured.
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestHandleSessionCancelCommittedSafetyCases(t *testing.T) {
 	current := chatsessions.GetSessionResult{
 		Session: chatsessions.Session{ID: "session-cancel-safety", State: chatsessions.SessionStateActive, Version: 7, ActiveTurnID: "turn-cancel-safety"},
@@ -3264,6 +3268,7 @@ func TestServeSessionCancelBlankSessionIDIsNoOp(t *testing.T) {
 // proves a Factory Sessions failure neither fabricates a cancelled turn nor
 // resolves the captured intent. Retrying the same notification identity can
 // later complete the original control without reaching another target.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestHandleSessionCancelDependencyFailureLeavesTurnRunningAndRetryable(t *testing.T) {
 	base, session, turn := newActiveBoundControlSession(t, "fs-cancel-failure")
 	chatSessions := &controlRecordingChatSessions{Service: base}

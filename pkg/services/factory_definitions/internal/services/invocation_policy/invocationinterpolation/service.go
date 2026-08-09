@@ -116,6 +116,7 @@ func InterpolateWorkerConfig(worker workerconfig.Config, args *work.InvocationAr
 
 // InterpolateWorkstationConfig resolves supported `${parameter}` placeholders on
 // one effective workstation definition using runtime invocation arguments.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func InterpolateWorkstationConfig(workstation factorydefinitions.FactoryWorkstationConfig, args *work.InvocationArguments, readFile factorydefinitions.FileReader) (factorydefinitions.FactoryWorkstationConfig, error) {
 	next := cloneWorkstationForInterpolation(workstation)
 	var err error

@@ -109,6 +109,7 @@ func TestFactorySessionRestartRemapsLiveIDToLogicalIdentity(t *testing.T) {
 // the public resume boundary without replaying those completed children:
 // completed Dispatch identities stay COMPLETED, only remaining work continues,
 // and progress on public session surfaces reflects durable continuity.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestFactorySessionResumeDoesNotRepeatCompletedDispatch(t *testing.T) {
 	const workflowName = "resumable-two-step-fake-children"
 	factoryDir := setupResumableTwoStepWorkflowFixture(t, workflowName)

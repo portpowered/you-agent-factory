@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-file-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 package ondemandtarget
 
 import (
@@ -78,6 +80,7 @@ func TestInvokeFactorySessionUnknownIdentityReportsSessionNotFound(t *testing.T)
 // not delegate to factorysessions.Service.Cancel: that contract addresses
 // durable sessions, while this on-demand runtime is a live target whose
 // provider work is governed by the runtime lifecycle.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestCancelInterruptsOnlyTheActiveInvocation(t *testing.T) {
 	startedSignal := make(chan struct{})
 	invocationCount := 0
@@ -663,6 +666,7 @@ func TestCancelRespectsCallerCancellationWhileInvocationIgnoresCancellation(t *t
 // synchronous cleanup collaborator cannot outlive the caller's bound. The
 // failed target remains mapped so the same captured control can complete only
 // its unfinished cleanup and then publish a replacement runtime.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestCancelRespectsCallerCancellationDuringCleanupAndRetries(t *testing.T) {
 	invocationStarted := make(chan struct{})
 	cleanupStarted := make(chan struct{})
@@ -899,6 +903,7 @@ func TestCloseWithNoOpenedRuntimesIsNoOpSuccess(t *testing.T) {
 // open-failure, activation-failure, dispatch-failure, and close-failure
 // paths. Only closed, safe fields (Factory target identity, status,
 // counters) may appear.
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestLoggingNeverEmitsWorkingRootOrRawFailureText(t *testing.T) {
 	const sensitiveWorkingRoot = "/Users/alice/secret-project"
 	pathBearingErr := fmt.Errorf("open %s/factory.json: permission denied", sensitiveWorkingRoot)

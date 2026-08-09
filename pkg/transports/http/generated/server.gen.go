@@ -4544,10 +4544,17 @@ type ListModelsResponse struct {
 	Results []ModelSummary `json:"results"`
 }
 
+// ListWorkCountSummary defines model for ListWorkCountSummary.
+type ListWorkCountSummary struct {
+	// Total Complete filtered Work total before page slicing.
+	Total int `json:"total"`
+}
+
 // ListWorkResponse defines model for ListWorkResponse.
 type ListWorkResponse struct {
-	PaginationContext *PaginationContext `json:"paginationContext,omitempty"`
-	Results           []Work             `json:"results"`
+	Counts            *ListWorkCountSummary `json:"counts,omitempty"`
+	PaginationContext *PaginationContext    `json:"paginationContext,omitempty"`
+	Results           []Work                `json:"results"`
 }
 
 // LoadableProviderSessionKind Canonical provider-session identifier kind for provider-session detail requests that can be loaded by the API.
@@ -6968,8 +6975,17 @@ type StateName = string
 // StateType Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.
 type StateType = WorkStateType
 
+// WorkListCounts defines model for WorkListCounts.
+type WorkListCounts = bool
+
 // WorkListName defines model for WorkListName.
 type WorkListName = string
+
+// WorkListNonTerminal defines model for WorkListNonTerminal.
+type WorkListNonTerminal = bool
+
+// WorkListTerminal defines model for WorkListTerminal.
+type WorkListTerminal = bool
 
 // WorkListTraceId defines model for WorkListTraceId.
 type WorkListTraceId = string
@@ -7109,6 +7125,15 @@ type ListWorkBySessionIdParams struct {
 
 	// TraceId Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly.
 	TraceId *WorkListTraceId `form:"traceId,omitempty" json:"traceId,omitempty"`
+
+	// Terminal Optional terminality filter. When true, selects Work in canonical TERMINAL or FAILED states. It composes with every other supplied list filter.
+	Terminal *WorkListTerminal `form:"terminal,omitempty" json:"terminal,omitempty"`
+
+	// NonTerminal Optional terminality filter. When true, selects Work in INITIAL or PROCESSING states. It composes with every other supplied list filter and cannot be selected together with terminal=true.
+	NonTerminal *WorkListNonTerminal `form:"nonTerminal,omitempty" json:"nonTerminal,omitempty"`
+
+	// Counts Optional count request. When true, the response includes counts.total for the complete filtered selection before ordering page slicing and pagination.
+	Counts *WorkListCounts `form:"counts,omitempty" json:"counts,omitempty"`
 }
 
 // ListWorkBySessionIdParamsSortBy defines parameters for ListWorkBySessionId.
@@ -10631,6 +10656,30 @@ func (siw *ServerInterfaceWrapper) ListWorkBySessionId(w http.ResponseWriter, r 
 	err = runtime.BindQueryParameter("form", true, false, "traceId", r.URL.Query(), &params.TraceId)
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "traceId", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "terminal" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "terminal", r.URL.Query(), &params.Terminal)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "terminal", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "nonTerminal" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "nonTerminal", r.URL.Query(), &params.NonTerminal)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "nonTerminal", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "counts" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "counts", r.URL.Query(), &params.Counts)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "counts", Err: err})
 		return
 	}
 

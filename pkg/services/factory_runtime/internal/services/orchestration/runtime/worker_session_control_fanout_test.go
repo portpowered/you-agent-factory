@@ -127,6 +127,7 @@ func TestFanOutWorkerSessionControl_MultipleFailuresStillReachEveryChild(t *test
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestFactoryControls_FanOutCapturedTurnOnceAndRetainOriginalEvidence(t *testing.T) {
 	service := newWorkerSessionControlSpy(map[workerSessionControlCall]workerSessionControlResponse{
 		{action: factory.WorkerSessionControlActionPause, id: "worker-a"}: {

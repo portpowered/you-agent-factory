@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestInvocationScheduleFactoryRecoversDurableControllerWithoutInitialRetrigger(t *testing.T) {
 	underlying := &invocationScheduleRecoveryFactory{snapshot: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{

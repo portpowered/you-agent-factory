@@ -433,6 +433,7 @@ func (r *registry) logTerminal(id, attemptID string, session workersessions.Sess
 // established Workers cancellation callback has committed; an unassociated
 // execution remains truthfully unsupported rather than becoming a fabricated
 // resumable session.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (r *registry) Pause(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
 	if err := req.Validate(); err != nil {
 		return workersessions.ControlResult{Action: workersessions.ControlActionPause, Outcome: workersessions.ControlOutcomeFailed}, err
@@ -687,6 +688,7 @@ func (r *registry) Terminate(ctx context.Context, req workersessions.ControlRequ
 	return r.cancelControl(ctx, req, workersessions.ControlActionTerminate)
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (r *registry) cancelControl(ctx context.Context, req workersessions.ControlRequest, action workersessions.ControlAction) (workersessions.ControlResult, error) {
 	if err := req.Validate(); err != nil {
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err

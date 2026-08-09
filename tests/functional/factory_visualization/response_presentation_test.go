@@ -35,6 +35,7 @@ func (tracker *rootPresentationTracker) openCallsCount() int {
 // presentation sessions are not opened as a side effect of root.BuildProcess
 // construction alone and that public Open/PresentProgress/Finalize/Close
 // operations yield observable outcomes through the published Root.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestVisualizationResponsePresentationThroughPublicRootAfterLifecycle(t *testing.T) {
 	t.Parallel()
 

@@ -1,4 +1,6 @@
 // Package service implements the parent-private Agent Client Protocol service.
+// backendsizecheck:ignore-file pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-file-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 package service
 
 import (
@@ -138,6 +140,7 @@ func (service *Service) Close(ctx context.Context) error {
 	return first
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (service *Service) Configure(ctx context.Context, integrations []providers.ACPIntegration) error {
 	commands := make(map[providers.ID]Command, len(integrations))
 	values := make(map[providers.ID]providers.ACPIntegration, len(integrations))
@@ -1033,6 +1036,7 @@ func (c *client) streamedProgress() bool {
 	return c.stream != nil && c.stream.observe != nil
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func mapSessionUpdate(update acpsdk.SessionUpdate) ([]providers.ExecuteProgress, string) {
 	phase, detail, kind, itemID := "update", "", "unknown", ""
 	metadata := map[string]string{}

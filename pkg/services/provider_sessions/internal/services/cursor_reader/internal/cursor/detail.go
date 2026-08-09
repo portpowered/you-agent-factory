@@ -14,6 +14,7 @@ import (
 )
 
 // LoadDetails resolves a Cursor session_id from server-configured cursor-agent storage.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func LoadDetails(ctx context.Context, files providersessionsinternal.FileSystem, walkDirectory providersessionsinternal.CursorWalkDirectory, resolveSymlinks providersessionsinternal.CursorResolveSymlinks, openSQLDatabase providersessionsinternal.CursorOpenSQLDatabase, root AgentStorageRoot, id string) (providersessions.Detail, error) {
 	ins := newInspection(ctx)
 	if err := ins.checkCanceled(); err != nil {

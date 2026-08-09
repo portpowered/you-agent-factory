@@ -165,11 +165,11 @@ func WaitForStart(ctx context.Context, handle *Handle) error {
 		select {
 		case <-startCtx.Done():
 			if handle.Completed() {
-				return handle.Result()
+				return startupResult(handle.Result())
 			}
 			return startCtx.Err()
 		case <-handle.RunDone:
-			return handle.Result()
+			return startupResult(handle.Result())
 		case <-ticker.C:
 			snap, err := handle.Bundle.Factory.GetEngineStateSnapshot(context.Background())
 			if err != nil {
@@ -180,6 +180,17 @@ func WaitForStart(ctx context.Context, handle *Handle) error {
 			}
 		}
 	}
+}
+
+// startupResult lets the process lifecycle expose a finite run's terminal
+// result through its primary transport. An incomplete drain is a valid runtime
+// startup boundary: the listener still needs to start and join before the
+// CLI reports the non-successful run outcome.
+func startupResult(err error) error {
+	if errors.Is(err, factory.ErrIncompleteDrain) {
+		return nil
+	}
+	return err
 }
 
 // Stop cancels and joins session sidecars before stopping the hosted run loop,

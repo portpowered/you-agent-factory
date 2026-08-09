@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-file-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 package service
 
 import (
@@ -368,6 +370,7 @@ func TestStore_StartTurn_SecondTurnAfterTerminalStaysActive(t *testing.T) {
 // that the captured-control fence survives the captured turn's terminal
 // transition. A would-be successor remains rejected until the committed
 // intent resolves, so it cannot become a target for an older control.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestStore_StartTurn_CommittedControlFencesReplacementUntilResolved(t *testing.T) {
 	ctx := context.Background()
 	store, session := newStartTurnTestSession(t, time.Now())

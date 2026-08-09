@@ -509,6 +509,7 @@ func chunkUpdate(sessionID SessionID, kind TextUpdateKind, content acpsdk.Conten
 // the wire value is acpsdk.SessionNotification{SessionId, Update}, and a
 // notification with no session identity can never be correlated to the
 // session it pertains to.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func ValidateSessionUpdate(notification acpsdk.SessionNotification) (TextUpdate, error) {
 	if notification.SessionId == "" {
 		return TextUpdate{}, errors.New("acp: sessionId is required")

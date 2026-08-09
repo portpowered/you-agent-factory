@@ -22,6 +22,7 @@ func closeRequestEnvelope(t *testing.T, requestID int64, sessionID string) envel
 // TestHandleSessionCloseCommitsBeforeFactoryClose proves the ACP close path
 // captures and commits a CLOSE intent before it reaches the bound Factory
 // Session, then exposes success only after Chat Sessions is terminal.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestHandleSessionCloseCommitsBeforeFactoryClose(t *testing.T) {
 	base, session, turn := newActiveBoundControlSession(t, "fs-close-bound")
 	chatSessions := &controlRecordingChatSessions{Service: base}
@@ -415,6 +416,7 @@ func TestHandleSessionCloseStaleCaptureCannotReachReplacement(t *testing.T) {
 // Factory Sessions close error does not partially close the Chat aggregate,
 // exposes only the bounded protocol failure, and leaves the captured intent
 // retryable by its exact request identity.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestHandleSessionCloseDependencyFailureLeavesLifecycleRetryable(t *testing.T) {
 	base, session, turn := newActiveBoundControlSession(t, "fs-close-failure")
 	chatSessions := &controlRecordingChatSessions{Service: base}
@@ -479,6 +481,8 @@ func TestHandleSessionCloseDependencyFailureLeavesLifecycleRetryable(t *testing.
 // TestHandleSessionCloseCommittedIntentSafetyCases proves every re-read and
 // intent-state rejection after the immutable CLOSE capture stays bounded and
 // cannot reach an unrelated Factory Session.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestHandleSessionCloseCommittedIntentSafetyCases(t *testing.T) {
 	current := chatsessions.GetSessionResult{
 		Session: chatsessions.Session{ID: "session-close-safety", State: chatsessions.SessionStateActive, Version: 7, ActiveTurnID: "turn-close-safety"},

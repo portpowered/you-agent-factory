@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-file-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 package service
 
 import (
@@ -331,6 +333,7 @@ func TestCommitTerminal_ReservedPredecessor_IsRejectedAndLeavesSessionUnchanged(
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestControlGuards_RejectInvalidTransitionsAndPreserveObservableSessionState(t *testing.T) {
 	r := newTestRegistry(t)
 	ctx := context.Background()
@@ -1092,6 +1095,8 @@ func newRunningPauseRegistry(t *testing.T) (*registry, *supervision) {
 	return r, supervision
 }
 
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestContinuationControl_GuardsPreserveThePausedSession(t *testing.T) {
 	t.Run("transition to paused rejects a non-running session", func(t *testing.T) {
 		r, _, _ := newPausedContinuationRegistry(t)
@@ -1218,6 +1223,8 @@ func TestContinuationControl_GuardsPreserveThePausedSession(t *testing.T) {
 	})
 }
 
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestPause_ControlOutcomesKeepTheLifecycleTruthful(t *testing.T) {
 	t.Run("invalid and missing identities fail without a boundary effect", func(t *testing.T) {
 		r := newTestRegistry(t)

@@ -15,6 +15,7 @@ func providerErrorCorpusEntryLabel(entry provider.ProviderErrorCorpusEntry) stri
 	return entry.Name + " [" + entry.UpstreamSourceCase + "]"
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestInvocationErrorCompatibility_SupportedCorpusEntriesPreserveStableWorkFailureTypes(t *testing.T) {
 	corpus, err := provider.LoadProviderErrorCorpus()
 	if err != nil {

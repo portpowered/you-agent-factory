@@ -69,6 +69,44 @@ func TestMutateWorkersPreservesFactoryAndLookupErrorContext(t *testing.T) {
 	}
 }
 
+func TestNewKeepsPromptSourceIdentityOutsideFactoryConfiguration(t *testing.T) {
+	t.Parallel()
+
+	workerPath := "factory/workers/worker/AGENTS.md"
+	workstationPath := "factory/workstations/review/prompt.md"
+	source, err := loadedsource.New(
+		"factory",
+		&factorydefinitions.FactoryConfig{
+			Workers: []factorydefinitions.FactoryWorkerConfig{{
+				Name:             "worker",
+				PromptSourcePath: workerPath,
+			}},
+			Workstations: []factorydefinitions.FactoryWorkstationConfig{{
+				Name:                   "review",
+				PromptSourcePath:       workstationPath,
+				PromptSourceIsTemplate: true,
+			}},
+		},
+		emptyDefinitions{},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	workerSource, ok := source.WorkerPromptSource("worker")
+	if !ok || workerSource.Path != workerPath || workerSource.IsTemplate {
+		t.Fatalf("worker prompt source = (%#v, %t)", workerSource, ok)
+	}
+	workstationSource, ok := source.WorkstationPromptSource("review")
+	if !ok || workstationSource.Path != workstationPath || !workstationSource.IsTemplate {
+		t.Fatalf("workstation prompt source = (%#v, %t)", workstationSource, ok)
+	}
+	if source.FactoryConfig().Workers[0].PromptSourcePath != "" ||
+		source.FactoryConfig().Workstations[0].PromptSourcePath != "" {
+		t.Fatal("prompt source identity leaked into Factory configuration")
+	}
+}
+
 type emptyDefinitions struct{}
 
 func (emptyDefinitions) Worker(string) (*factorydefinitions.FactoryWorkerConfig, bool) {

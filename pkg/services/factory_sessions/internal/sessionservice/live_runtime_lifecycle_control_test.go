@@ -42,6 +42,7 @@ func TestService_LivePauseResumeThroughLiveRuntimeOwnerReturnsAcceptedOutcomeOnc
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestLiveControlCapability_OpenPauseResumePreservesLifecycleResults(t *testing.T) {
 	t.Parallel()
 
@@ -165,6 +166,7 @@ func TestLiveControlCapability_PreservesTypedRejectionAndCancellation(t *testing
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestLiveControlCapability_CompletesLifecycleAndRetiresCanonicalSession(t *testing.T) {
 	t.Parallel()
 

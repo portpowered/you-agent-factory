@@ -42,12 +42,18 @@ func TestReaderOwnsSplitLayoutFilesystemReads(t *testing.T) {
 	if worker.Name != agentsPath || worker.Body != "worker bytes" {
 		t.Fatalf("LoadWorkerConfig() = %#v", worker)
 	}
+	if worker.PromptSourcePath != agentsPath {
+		t.Fatalf("worker PromptSourcePath = %q, want %q", worker.PromptSourcePath, agentsPath)
+	}
 	workstation, err := reader.LoadWorkstationConfig(dir)
 	if err != nil {
 		t.Fatalf("LoadWorkstationConfig() error = %v", err)
 	}
 	if workstation.Name != agentsPath || workstation.Body != "worker bytes" {
 		t.Fatalf("LoadWorkstationConfig() = %#v", workstation)
+	}
+	if workstation.PromptSourcePath != agentsPath || workstation.PromptSourceIsTemplate {
+		t.Fatalf("workstation prompt source = (%q, %t), want AGENTS.md body", workstation.PromptSourcePath, workstation.PromptSourceIsTemplate)
 	}
 	body, found, err := reader.LoadWorkerBody(dir)
 	if err != nil || !found || body != "WORKER BYTES" {
@@ -81,6 +87,10 @@ func TestReaderLoadsWorkstationPromptAndDistinguishesBodyOnlyContent(t *testing.
 	}
 	if workstation.PromptTemplate != "referenced prompt" {
 		t.Fatalf("PromptTemplate = %q, want referenced prompt", workstation.PromptTemplate)
+	}
+	promptPath := filepath.Join(dir, "prompt.md")
+	if workstation.PromptSourcePath != promptPath || !workstation.PromptSourceIsTemplate {
+		t.Fatalf("prompt source = (%q, %t), want (%q, true)", workstation.PromptSourcePath, workstation.PromptSourceIsTemplate, promptPath)
 	}
 }
 

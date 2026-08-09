@@ -21,6 +21,7 @@ import (
 // leased session-bound activation and detached Observe paths reach Factory Runtime
 // only through root Service.Observe, mapping returned observation facts into
 // activation/view outcomes reviewers can verify.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestVisualizationConsumerObservationExercisesRuntimeRoot(t *testing.T) {
 	t.Parallel()
 

@@ -1016,6 +1016,11 @@ export interface components {
     ListWorkResponse: {
       results: components["schemas"]["Work"][];
       paginationContext?: components["schemas"]["PaginationContext"];
+      counts?: components["schemas"]["ListWorkCountSummary"];
+    };
+    ListWorkCountSummary: {
+      /** @description Complete filtered Work total before page slicing. */
+      total: number;
     };
     PaginationContext: {
       maxResults: number;
@@ -5726,6 +5731,12 @@ export interface components {
     WorkListWorkTypeName: string;
     /** @description Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly. */
     WorkListTraceId: string;
+    /** @description Optional terminality filter. When true, selects Work in canonical TERMINAL or FAILED states. It composes with every other supplied list filter. */
+    WorkListTerminal: boolean;
+    /** @description Optional terminality filter. When true, selects Work in INITIAL or PROCESSING states. It composes with every other supplied list filter and cannot be selected together with terminal=true. */
+    WorkListNonTerminal: boolean;
+    /** @description Optional count request. When true, the response includes counts.total for the complete filtered selection before ordering page slicing and pagination. */
+    WorkListCounts: boolean;
     /** @description Work or token identifier, depending on route. */
     WorkOrTokenID: string;
     /** @description Optional session list scope. Defaults to live for backward-compatible live workspace session listing. */
@@ -5782,6 +5793,12 @@ export interface operations {
         workTypeName?: components["parameters"]["WorkListWorkTypeName"];
         /** @description Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly. */
         traceId?: components["parameters"]["WorkListTraceId"];
+        /** @description Optional terminality filter. When true, selects Work in canonical TERMINAL or FAILED states. It composes with every other supplied list filter. */
+        terminal?: components["parameters"]["WorkListTerminal"];
+        /** @description Optional terminality filter. When true, selects Work in INITIAL or PROCESSING states. It composes with every other supplied list filter and cannot be selected together with terminal=true. */
+        nonTerminal?: components["parameters"]["WorkListNonTerminal"];
+        /** @description Optional count request. When true, the response includes counts.total for the complete filtered selection before ordering page slicing and pagination. */
+        counts?: components["parameters"]["WorkListCounts"];
       };
       header?: never;
       path: {
@@ -5792,7 +5809,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Current work tokens for the targeted session. */
+      /** @description Current work tokens for the targeted session. All supplied filters compose with logical AND before deterministic ordering and pagination. When counts=true, counts.total is the complete filtered selection before page slicing and is stable across pages of an unchanged session snapshot. */
       200: {
         headers: {
           [name: string]: unknown;
@@ -5801,6 +5818,7 @@ export interface operations {
           "application/json": components["schemas"]["ListWorkResponse"];
         };
       };
+      400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
     };

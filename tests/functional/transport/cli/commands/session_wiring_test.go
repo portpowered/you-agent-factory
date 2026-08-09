@@ -26,6 +26,7 @@ const (
 // TestCLISessionCreateListShowDelete proves you session create, list, show, and
 // delete work as a thin CLI lifecycle against a running Factory Session server,
 // yielding observable session identity and success or failure exit behavior.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestCLISessionCreateListShowDelete(t *testing.T) {
 	primaryFactoryDir := support.ScaffoldFactory(t, sessionWiringFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{

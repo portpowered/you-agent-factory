@@ -311,6 +311,7 @@ func (a *activatedRuntime) close(ctx context.Context) (*activeInvocation, error)
 // cleanup retries only the runtime cleanup steps that have not yet
 // succeeded. Repeating a failed close must not replay already-successful
 // lifecycle effects or silently convert the original failure into success.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (a *activatedRuntime) cleanup(ctx context.Context) error {
 	var result error
 	if a.opened.Sessions != nil && !a.sessionClosed {

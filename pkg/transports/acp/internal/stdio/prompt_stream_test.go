@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-file-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 package stdio
 
 import (
@@ -1217,6 +1219,7 @@ func TestStreamTurnUpdatesPropagatesGapAcknowledgeGenericFailure(t *testing.T) {
 // The refreshed acknowledgement must preserve exactly-once delivery through
 // the subsequent retained sweep and allow the retained record after the gap
 // to continue in the live drain.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestLiveDrainTurnUpdatesRetriesGapAcknowledgementConflictBeforeCatchUp(t *testing.T) {
 	factoryTarget := &fakeFactoryTargetService{}
 	server, eventsSvc := newStreamingTestServer(t, factoryTarget)

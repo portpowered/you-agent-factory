@@ -1745,8 +1745,11 @@ func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
 		"--server", "http://127.0.0.1:9090",
 		"work",
 		"list",
-		"--state-name", "review",
+		"--state", "review",
 		"--state-type", "PROCESSING",
+		"--work-type", "story",
+		"--terminal",
+		"--counts",
 		"--sort-by", "state.type",
 		"--max-results", "25",
 		"--next-token", "cursor-1",
@@ -1761,6 +1764,15 @@ func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
 	}
 	if got.StateType != "PROCESSING" {
 		t.Fatalf("state type = %q, want PROCESSING", got.StateType)
+	}
+	if got.WorkTypeName != "story" {
+		t.Fatalf("work type = %q, want story", got.WorkTypeName)
+	}
+	if !got.Terminal || got.NonTerminal {
+		t.Fatalf("terminality = terminal %t non-terminal %t, want terminal only", got.Terminal, got.NonTerminal)
+	}
+	if !got.Counts {
+		t.Fatal("expected counts request")
 	}
 	if got.SortBy != "state.type" {
 		t.Fatalf("sort by = %q, want state.type", got.SortBy)
@@ -1779,6 +1791,31 @@ func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
 	}
 	if got.Output == nil {
 		t.Fatal("expected output writer")
+	}
+}
+
+func TestWorkListCommand_TerminalityFlagsRejectBeforeHandler(t *testing.T) {
+	originalListWork := listWork
+	defer func() {
+		listWork = originalListWork
+	}()
+
+	called := false
+	listWork = func(workcli.ListConfig) error {
+		called = true
+		return nil
+	}
+	root := newLegacyTestRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"work", "list", "--terminal", "--non-terminal"})
+
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), "terminal") || !strings.Contains(err.Error(), "non-terminal") {
+		t.Fatalf("mutually-exclusive flags error = %v, want terminality validation error", err)
+	}
+	if called {
+		t.Fatal("list handler was called after terminality validation")
 	}
 }
 

@@ -61,6 +61,7 @@ func (r *Reader) LoadWorkerConfig(
 	if err != nil {
 		return nil, fmt.Errorf("load worker config from %s: %w", dir, err)
 	}
+	config.PromptSourcePath = path
 	return config, nil
 }
 
@@ -85,6 +86,7 @@ func (r *Reader) LoadWorkstationConfig(
 		return nil, fmt.Errorf("load workstation config from %s: %w", dir, err)
 	}
 	if config.PromptFile != "" {
+		promptPath := filepath.Join(dir, config.PromptFile)
 		config.PromptTemplate, err = r.LoadWorkstationPromptTemplate(
 			dir,
 			config.PromptFile,
@@ -92,6 +94,10 @@ func (r *Reader) LoadWorkstationConfig(
 		if err != nil {
 			return nil, err
 		}
+		config.PromptSourcePath = promptPath
+		config.PromptSourceIsTemplate = true
+	} else {
+		config.PromptSourcePath = path
 	}
 	return config, nil
 }

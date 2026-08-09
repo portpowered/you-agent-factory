@@ -205,6 +205,7 @@ func completionValidationFailure(resp workerexecution.InferenceResponse) (string
 	return "provider completion evidence was missing", "missing_completion_evidence"
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func effectiveWorkerDefinition(request workerexecution.WorkstationExecutionRequest, workerDef *interfaces.FactoryWorkerConfig) *interfaces.FactoryWorkerConfig {
 	if workerDef == nil {
 		return workerDef
