@@ -14,6 +14,7 @@
 - Compare repository-wide quality-check output with the current base before attributing legacy findings; keep newly added Go tests within the backend-size limits by extracting case assertions into helpers.
 - Quality gates backed by deletion-only baselines are evaluated against the current origin/main and the lane-owned diff; report unrelated baseline debt instead of absorbing out-of-scope cleanup into feature work.
 - Keep shared recorded test assets under a tracked `testdata` directory; `docs/temp/**` is intentionally gitignored and cannot be the source for CI replay assertions.
+- Package file-count ratchets include direct production and test Go files; consolidate narrow helpers and tests into existing responsibility files before changing a deletion-only baseline.
 
 ## [2026-08-08 14:03 -07:00] - wo-b1-antigravity-provider-golden-traces-001
 - What was implemented
@@ -378,4 +379,24 @@
   - No live AGY smoke was run.
 - **Learnings for future iterations:**
   - When an existing PR has only historical top-level gate feedback, verify each listed scope and quality item against the current diff and thread-aware state before updating the handoff.
+---
+
+## [2026-08-08 20:32 -07:00] - wo-b1-antigravity-provider-golden-traces-005
+- What was implemented
+  - Addressed the latest PR #1826 blocking feedback by consolidating the native timeout helper and its unit test into the existing workstation executor files and moving the canonical AGY wire-selection assertion into the existing AGY PTY test file.
+  - Removed the three extra Go files that caused deletion-only package-file-count regressions; production behavior and observable coverage remain unchanged.
+- Files changed
+  - `pkg/services/workers/internal/services/workstations/executor/helpers.go`
+  - `pkg/services/workers/internal/services/workstations/executor/agent_inference_test.go`
+  - `pkg/wire/agy_pty_test.go`
+  - Removed `pkg/services/workers/internal/services/workstations/executor/timeouts.go`, `timeouts_test.go`, and `pkg/wire/agy_command_selection_test.go`
+  - `prd.json` and `progress.txt`
+- Verification
+  - `make pkg-file-count` passes with no baseline changes.
+  - `go test ./tests/functional/providers/agy/... -count=1`, Providers/Workers/Wire tests, and `make test` pass.
+  - `make backend-size`, `make pkg-maint`, `make pkg-structure`, `go vet ./...`, and `make verify-fast` pass.
+  - The PR remains offline-only for AGY verification; no live AGY smoke was run.
+- **Learnings for future iterations:**
+  - The package-file-count ratchet counts test files as well as production files, so small focused helpers and their tests should share existing responsibility files when a package is at its deletion-only limit.
+  - A new top-level quality-gate comment can arrive after green CI; rerun the named local ratchet and record its result before the final PR handoff.
 ---
