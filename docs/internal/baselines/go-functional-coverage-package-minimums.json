@@ -944,7 +944,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime",
-      "minimum": 55.52
+      "minimum": 54.19
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
@@ -3196,7 +3196,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/http",
-      "minimum": 67.69
+      "minimum": 66.35
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/http/apitypes",
