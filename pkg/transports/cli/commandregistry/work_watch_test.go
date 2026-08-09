@@ -91,6 +91,25 @@ func TestWorkWatchCommandSeparatesTransitionOutputFromDiagnostics(t *testing.T) 
 	}
 }
 
+func TestNewWorkRegistryWatchFallbackHandlerRequiresService(t *testing.T) {
+	registry, err := commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
+		ListRunE:      noopRunE,
+		ShowRunE:      noopRunE,
+		MoveRunE:      noopRunE,
+		VisualizeRunE: noopRunE,
+	})
+	if err != nil {
+		t.Fatalf("NewWorkRegistry() error = %v", err)
+	}
+	watch, err := registry.Lookup("you.work.watch")
+	if err != nil {
+		t.Fatalf("Lookup(you.work.watch) error = %v", err)
+	}
+	if err := watch(&cobra.Command{}, nil); err == nil || !strings.Contains(err.Error(), "work watch service is required") {
+		t.Fatalf("fallback watch handler error = %v, want required service error", err)
+	}
+}
+
 func TestResolvedWorkWatchRunEMapsStableInputs(t *testing.T) {
 	output := &bytes.Buffer{}
 	diagnostics := &bytes.Buffer{}

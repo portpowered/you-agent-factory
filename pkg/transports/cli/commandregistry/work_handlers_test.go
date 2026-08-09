@@ -45,13 +45,6 @@ func TestNewWorkRegistryRegistersContractedRunnableIDs(t *testing.T) {
 			t.Fatalf("Lookup(%q) error = %v", commandID, lookupErr)
 		}
 	}
-	watch, err := registry.Lookup("you.work.watch")
-	if err != nil {
-		t.Fatalf("Lookup(you.work.watch) error = %v", err)
-	}
-	if err := watch(&cobra.Command{}, nil); err == nil || !strings.Contains(err.Error(), "work watch service is required") {
-		t.Fatalf("fallback watch handler error = %v, want required service error", err)
-	}
 }
 
 func TestNewWorkRegistryRejectsMissingHandlers(t *testing.T) {
@@ -991,8 +984,7 @@ func TestVerifyWorkRunnableCoverageAcceptsCompleteRegistry(t *testing.T) {
 	}
 	registry := commandregistry.NewRegistry()
 	for _, commandID := range []string{
-		"you.work.list",
-		"you.work.watch",
+		"you.work.list", "you.work.watch",
 		"you.work.show",
 		"you.work.move",
 		"you.work.visualize",
