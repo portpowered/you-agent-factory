@@ -1003,6 +1003,88 @@ assertion `TestPackagedTournamentRunsOneOnOneBracketThroughCodexCommandRunner`
 supplies two candidates and a valid judge decision, then asserts a single
 champion text followed by `Tournament decision trail:` and the judge rationale.
 
+## Detailed local media entry
+
+### `@you/tts`
+
+**Purpose and suitable use.** Use `@you/tts` to turn one submitted text
+utterance into one local audio artifact. It is suitable for short spoken
+announcements, release summaries, and other text that should be read in its
+submitted order. It is a single inference run, not an agent loop, provider
+fan-out, or translation step; the packaged worker is instructed to preserve
+the bound wording and return one audio result.
+
+**Invocation signature.** The live signature is:
+
+```text
+you run --named @you/tts <to>
+```
+
+The required `<to>` value binds the `text` input and can be supplied as the
+positional argument shown above, with `--to <value>`, or through stdin. The
+current help output identifies no Factory-defined voice, format,
+provider, or model flags. Run-level output and recording flags remain
+available, but they do not select a different TTS backend.
+
+**Worker roles and provider/model overrides.** The Factory has one model
+worker role, `tts-executor`, running the local `OMNIVOICE_Q4_K_M` model through
+the `LLAMACPP` backend and its `TTS` operation. The operation accepts one
+required `TEXT` slot and produces one `AUDIO` slot. There is no general
+inference-provider or model override in the live `@you/tts` signature:
+`modelProvider: CODEX` in the packaged worker metadata describes the packaged
+local route, not a supported `--provider` or `--model` option. Omitted
+operator settings therefore do not redirect this Factory to a cloud provider;
+use the packaged model readiness workflow below.
+
+**Prerequisites and side effects.** The managed
+`OMNIVOICE_Q4_K_M` assets must be installed and report `READY` before the run
+can synthesize audio. Use [`you docs models`](./models.md) for the canonical
+list, inspect, pull, and runtime-readiness workflow; in particular, pull the
+model when inspect reports `MISSING` and wait through `LOADING` until it is
+ready. The local `omnivoice-llamacpp` runtime may load on demand, so the first
+run can take longer than later runs. The invocation creates a Factory Session
+and dispatches one local model Work; normal recording and runtime artifact
+activity applies unless a run-level option such as `--no-record` is supplied.
+It writes audio to a runtime-generated artifact and may leave the managed
+model cache and session/runtime diagnostics in the configured operator state.
+Model-not-ready or synthesis failures are terminal failures and do not imply
+that an audio artifact was produced.
+
+**Expected output shape.** With `--output primary`, the caller receives one
+JSON metadata object rather than raw audio bytes on stdout. The current
+primary-result contract includes an opaque `artifactPath`, the reported
+`mediaType` (the local runtime currently reports `audio/wav`), the
+`OMNIVOICE_Q4_K_M/LLAMACPP` `backend`, and a `traceId`. Treat
+`artifactPath` as runtime-generated: do not construct or promise a fixed
+directory or filename, and inspect the returned path or artifact record to
+locate the audio. The generated audio content is not byte-stable. A failed
+run returns a TTS generation/model-readiness error without success-shaped
+metadata.
+
+**Worked invocation.** After `OMNIVOICE_Q4_K_M` reports `READY`, this exact
+command was executed against the current binary with a disposable managed
+cache and controlled local runtime:
+
+```bash
+you run --named @you/tts --no-record --output primary --to "The release is ready."
+```
+
+**Observed output evidence.** The exact command returned this successful
+primary-result shape (the temporary artifact path and trace identifier are
+intentionally shown as opaque runtime values):
+
+```text
+{"artifactPath":"<runtime-generated-path>\\omnivoice-<run-generated>.wav","mediaType":"audio/wav","backend":"OMNIVOICE_Q4_K_M/LLAMACPP","traceId":"trace-<run-generated>"}
+```
+
+The command was run with the model cache marked ready and a local runtime that
+wrote a valid audio payload; the existing behavioral assertion
+`TestPackagedTTSRequiredInputProducesAudioArtifactMetadata` additionally
+checks the public primary result, `audio/wav` metadata, non-empty artifact
+path, and readable audio artifact. The captured audio payload and generated
+identifiers are evidence of the result shape, not a deterministic audio
+golden.
+
 ## Representative invocations
 
 ```bash
@@ -1019,7 +1101,7 @@ you run --named @you/spawn --count 10 --to "Research the best places to travel"
 you run --named @you/fusion --to "Draft a release summary"
 you run --named @you/subagent --to "Summarize this release"
 you run --named @you/deep-research --to "Compare event sourcing and state machines"
-you run --named @you/tts --output primary --to "The release is ready."
+you run --named @you/tts --no-record --output primary --to "The release is ready."
 ```
 
 Positional text is accepted wherever the Factory's `invocationSignature` binds

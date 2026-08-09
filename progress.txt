@@ -6,6 +6,7 @@
 - A classifier mock must emit the provider's valid response protocol and an exact configured route label; the default synthetic mock acceptance text is not a valid `small`/`medium`/`large` classification.
 - Planner and cycle-control workflows likewise need protocol-valid structured model output to exercise generated Work, concurrency, or replanning; an empty generic mock can prove only the terminal invocation envelope and may leave orchestration Work uncreated.
 - JavaScript packaged Factories that parse planner or judge output need protocol-valid provider-command evidence; the CLI `--with-mock-workers` path returns generic text for those child calls, so use focused provider-runner assertions plus a provider-free schema-bound CLI smoke and document the distinction.
+- Workstation prompt templates receive `PromptData`; access a bound work identifier through `(index .Inputs N).WorkID` rather than a root `.WorkID` field.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -127,4 +128,29 @@
   - Always collect packaged-Factory help and invocation evidence with isolated `HOME` and `USERPROFILE`; stale materialized copies can advertise obsolete flag names or defaults.
   - The current JavaScript mock runner proves generic terminal envelopes but cannot author `@you/spawn`'s exact planner JSON array or `@you/tournament`'s judge JSON; provider-command functional tests are the observable success proof for those protocol-sensitive workflows.
   - `@you/deep-research`'s structured primary result requires `--json`; default human output rejects a non-plain-text JSON primary result.
+---
+
+## 2026-08-09 16:04 - wo-d1-packaged-factories-docs-005
+- What was implemented
+  - Added the complete `@you/tts` entry to `docs/reference/packaged-factories.md`, covering the live text-only signature, suitable use, local worker/backend/model route, readiness prerequisite, side effects, primary metadata, generated audio artifact, and failure behavior.
+  - Corrected the pre-existing packaged TTS workstation prompt template to read `WorkID` from the first bound input, then regenerated the checked-in JSON/YAML catalog and manifest hashes so the documented live invocation can reach model execution.
+  - Executed `you run --named @you/tts --no-record --output primary --to "The release is ready."` exactly as documented against the rebuilt current binary using a disposable READY model cache and controlled local runtime. The command returned a runtime-generated WAV artifact path, `audio/wav`, the `OMNIVOICE_Q4_K_M/LLAMACPP` backend, and a trace ID; the existing behavioral test also verifies readable audio artifact output.
+- Files changed
+  - `docs/reference/packaged-factories.md`
+  - `packages/packaged-factories/factories/tts/factory.yaml`
+  - `packages/packaged-factories/generated/factories/tts/factory.json`
+  - `packages/packaged-factories/generated/factories/tts/factory.yaml`
+  - `packages/packaged-factories/generated/manifest.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make docs-reference-smoke` — passed.
+  - `make packaged-factory-catalog-check` — passed.
+  - `go test ./tests/functional/factory/packaged/tts ./pkg/services/factory_definitions/internal/services/distribution/tts -count=1 -timeout 300s` — passed.
+  - `make verify-fast` — passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun unit checks, and the short Go suite.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The packaged TTS worker uses the local `OMNIVOICE_Q4_K_M` route and exposes no provider/model override flags; model readiness and local runtime setup belong in the canonical models workflow.
+  - `--with-mock-workers` does not satisfy the managed local TTS readiness/runtime path; a successful CLI smoke needs a READY cache and a controlled local runtime or the real installed runtime.
+  - TTS primary output is metadata pointing to an artifact, so paths, trace IDs, and generated audio bytes must remain runtime-generated rather than documentation promises.
 ---

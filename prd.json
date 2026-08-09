@@ -94,8 +94,8 @@
         "Tests pass, including make docs-reference-smoke"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added the complete @you/tts operator entry with its live text-only signature, local tts-executor role, OMNIVOICE_Q4_K_M/LLAMACPP readiness prerequisite, side effects, and runtime-generated audio artifact result shape. Corrected the pre-existing packaged workstation prompt template to read the bound Work ID from PromptData inputs and regenerated the packaged catalog; this was required for a successful real invocation and does not change the public contract. Executed `you run --named @you/tts --no-record --output primary --to \"The release is ready.\"` exactly as documented against the current binary with a disposable READY model cache and controlled local runtime; the run returned audio/wav metadata, backend, trace ID, and a readable audio artifact. The existing TestPackagedTTSRequiredInputProducesAudioArtifactMetadata assertion covers the public result and artifact behavior. `make docs-reference-smoke`, `make packaged-factory-catalog-check`, the focused TTS tests, `make verify-fast`, and `git diff --check` pass."
     },
     {
       "id": "wo-d1-packaged-factories-docs-006",
