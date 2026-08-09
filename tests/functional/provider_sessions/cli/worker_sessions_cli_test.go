@@ -85,12 +85,12 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	if !strings.Contains(explicitHelpInputs.Stdout(), "Usage:") {
 		t.Fatalf("worker-sessions --help omitted usage:\n%s", explicitHelpInputs.Stdout())
 	}
-	unknownInputs, unknownErr := executeCLIExpectError(t, ctx, process, env, factoryDir, "worker-sessions", "unknown")
+	unknownInputs, unknownErr := executeCLIExpectError(t, ctx, process, env, factoryDir, "worker-sessions", "--unknown")
 	if unknownErr == nil {
-		t.Fatal("worker-sessions unknown subcommand returned nil error")
+		t.Fatal("worker-sessions unknown argument returned nil error")
 	}
 	if !strings.Contains(unknownErr.Error()+unknownInputs.Stderr(), "unknown command") {
-		t.Fatalf("worker-sessions unknown subcommand omitted diagnostic: %v\nstderr:\n%s", unknownErr, unknownInputs.Stderr())
+		t.Fatalf("worker-sessions unknown argument omitted diagnostic: %v\nstderr:\n%s", unknownErr, unknownInputs.Stderr())
 	}
 
 	successWorkID := submitWork(t, ctx, process, env, factoryDir, baseURL, "worker-session-cli-success")
