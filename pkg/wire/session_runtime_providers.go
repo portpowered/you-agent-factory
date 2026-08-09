@@ -123,18 +123,18 @@ func provideConfiguredProvidersService(
 	}
 	if workersRunner != nil {
 		options = append(options, providerswire.WithWorkersCommandRunner(workersRunner))
-		return newConfiguredProvidersService(options, edges, workersRunner)
+		return newConfiguredProvidersService(options, workersRunner)
 	}
 	if edges.ProviderCommandRunner != nil {
 		options = append(options, providerswire.WithCommandRunner(edges.ProviderCommandRunner))
-		return newConfiguredProvidersService(options, edges, workers.AdaptCommandRunner(edges.ProviderCommandRunner))
+		return newConfiguredProvidersService(options, workers.AdaptCommandRunner(edges.ProviderCommandRunner))
 	}
 	commandRunner, err := providePlatformProcessCommandRunner(edges)
 	if err != nil {
 		return nil, err
 	}
 	options = append(options, providerswire.WithCommandRunner(commandRunner))
-	return newConfiguredProvidersService(options, edges, workers.AdaptCommandRunner(commandRunner))
+	return newConfiguredProvidersService(options, workers.AdaptCommandRunner(commandRunner))
 }
 
 func projectACPIntegrations(integrations []operatorsettings.ACPIntegration) []providers.ACPIntegration {

@@ -1,30 +1,26 @@
 package agy
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
-	"io"
-	"os"
-	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const agyFunctionalModel = "gemini-pro"
+const agyFunctionalModel = agyGoldenModel
 
-// TestAgyConductorSuccessThroughRootBuildProcess proves successful Agy PTY
-// execution through the customer process boundary and Providers-backed adapter.
+// TestAgyConductorSuccessThroughRootBuildProcess proves successful Agy
+// print-mode execution through the customer process boundary and
+// Providers-backed command adapter.
 func TestAgyConductorSuccessThroughRootBuildProcess(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
@@ -35,14 +31,14 @@ func TestAgyConductorSuccessThroughRootBuildProcess(t *testing.T) {
 	))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"agy conductor success"}`))
 
-	executablePath := writeAgyFixtureExecutable(t)
-	ptyHost := newFunctionalPTYHost([]byte("agy functional answer COMPLETE"), 0)
-	clock := platformclock.NewDeterministic(time.Date(2026, time.July, 28, 0, 0, 0, 0, time.UTC), time.Millisecond)
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte(`{"event":"result","result":{"conversation_id":"agy-conductor-success","status":"SUCCESS","response":"agy functional answer COMPLETE","duration_seconds":1.0,"num_turns":1,"usage":{"input_tokens":1,"output_tokens":1,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":2}}}` + "\n"),
+	})
 
 	_, listed, events, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
 		t,
 		dir,
-		agyFunctionalEdges(executablePath, ptyHost, clock),
+		agyFunctionalEdges(runner),
 		20*time.Second,
 	)
 
@@ -52,18 +48,15 @@ func TestAgyConductorSuccessThroughRootBuildProcess(t *testing.T) {
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
 		t.Fatalf("failed work = %d, want 0", got)
 	}
-	if ptyHost.callCount() != 1 {
-		t.Fatalf("agy PTY host starts = %d, want 1 through Providers path", ptyHost.callCount())
+	if runner.CallCount() != 1 {
+		t.Fatalf("agy command runner calls = %d, want 1 through Providers path", runner.CallCount())
 	}
-	launch := ptyHost.lastLaunch()
-	if launch.Executable != executablePath {
-		t.Fatalf("executable = %q, want fixture %q", launch.Executable, executablePath)
+	request := runner.LastRequest()
+	if !containsArgPair(request.Args, "--model", agyFunctionalModel) {
+		t.Fatalf("argv = %#v, want --model %s", request.Args, agyFunctionalModel)
 	}
-	if !containsArgPair(launch.Argv, "--model", agyFunctionalModel) {
-		t.Fatalf("argv = %#v, want --model %s", launch.Argv, agyFunctionalModel)
-	}
-	if !containsArg(launch.Argv, "chat") || !containsArg(launch.Argv, "--headless") {
-		t.Fatalf("argv = %#v, want chat and --headless", launch.Argv)
+	if !containsArg(request.Args, "-p") || !containsArgPair(request.Args, "--output-format", "stream-json") {
+		t.Fatalf("argv = %#v, want shell-free -p print mode with stream-json output", request.Args)
 	}
 	assertAgyFinalOnlyCompletion(t, events, responseEvents, "agy functional answer COMPLETE")
 }
@@ -79,14 +72,15 @@ func TestAgyNativeFailureThroughRootBuildProcessIsSafe(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"agy native failure"}`))
 
 	const leaked = "/tmp/secret-key"
-	executablePath := writeAgyFixtureExecutable(t)
-	ptyHost := newFunctionalPTYHost([]byte("authentication failed: token path "+leaked+" leaked"), 1)
-	clock := platformclock.NewDeterministic(time.Date(2026, time.July, 28, 0, 0, 0, 0, time.UTC), time.Millisecond)
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout:   []byte("authentication failed: token path " + leaked + " leaked"),
+		ExitCode: 1,
+	})
 
 	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
 		t,
 		dir,
-		agyFunctionalEdges(executablePath, ptyHost, clock),
+		agyFunctionalEdges(runner),
 		20*time.Second,
 	)
 
@@ -96,8 +90,8 @@ func TestAgyNativeFailureThroughRootBuildProcessIsSafe(t *testing.T) {
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
 		t.Fatalf("completed work = %d, want 0 after native failure", got)
 	}
-	if ptyHost.callCount() != 1 {
-		t.Fatalf("agy PTY host starts = %d, want 1", ptyHost.callCount())
+	if runner.CallCount() != 1 {
+		t.Fatalf("agy command runner calls = %d, want 1", runner.CallCount())
 	}
 	encoded, err := json.Marshal(events)
 	if err != nil {
@@ -118,24 +112,22 @@ func TestAgyTimeoutFailureThroughRootBuildProcess(t *testing.T) {
 		modelprovider.ProviderAntigravity,
 		agyFunctionalModel,
 	))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"agy timeout failure"}`))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"agy timeout"}`))
 
-	executablePath := writeAgyFixtureExecutable(t)
-	ptyHost := newFunctionalPTYHost([]byte("partial answer before timeout"), 124)
-	clock := platformclock.NewDeterministic(time.Date(2026, time.July, 28, 0, 0, 0, 0, time.UTC), time.Millisecond)
+	runner := newErroringCommandRunner(context.DeadlineExceeded)
 
 	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
 		t,
 		dir,
-		agyFunctionalEdges(executablePath, ptyHost, clock),
-		30*time.Second,
+		agyFunctionalEdges(runner),
+		20*time.Second,
 	)
 
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("failed work = %d, want 1; listed=%#v", got, listed)
 	}
-	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
-		t.Fatalf("completed work = %d, want 0 after timeout", got)
+	if runner.callCount() < 1 {
+		t.Fatalf("agy command runner calls = %d, want at least one retryable timeout attempt", runner.callCount())
 	}
 	reason := terminalFailureReason(t, events)
 	if reason != factoryapi.WorkFailureTypeTimeout {
@@ -145,7 +137,8 @@ func TestAgyTimeoutFailureThroughRootBuildProcess(t *testing.T) {
 }
 
 // TestAgyCommandCancellationThroughRootBuildProcessIsCanonical proves
-// cancellation returns the canonical outcome through the Providers PTY adapter.
+// cancellation returns the canonical outcome through the Providers command
+// adapter.
 func TestAgyCommandCancellationThroughRootBuildProcessIsCanonical(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
@@ -154,22 +147,20 @@ func TestAgyCommandCancellationThroughRootBuildProcessIsCanonical(t *testing.T) 
 	))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"agy command cancel"}`))
 
-	executablePath := writeAgyFixtureExecutable(t)
-	ptyHost := &canceledPTYHost{}
-	clock := platformclock.NewDeterministic(time.Date(2026, time.July, 28, 0, 0, 0, 0, time.UTC), time.Millisecond)
+	runner := newErroringCommandRunner(context.Canceled)
 
 	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
 		t,
 		dir,
-		agyFunctionalEdges(executablePath, ptyHost, clock),
+		agyFunctionalEdges(runner),
 		20*time.Second,
 	)
 
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("failed work = %d, want 1; listed=%#v", got, listed)
 	}
-	if ptyHost.callCount() != 1 {
-		t.Fatalf("agy PTY host starts = %d, want 1", ptyHost.callCount())
+	if runner.callCount() != 1 {
+		t.Fatalf("agy command runner calls = %d, want 1", runner.callCount())
 	}
 	encoded, err := json.Marshal(events)
 	if err != nil {
@@ -181,116 +172,38 @@ func TestAgyCommandCancellationThroughRootBuildProcessIsCanonical(t *testing.T) 
 	}
 }
 
-func agyFunctionalEdges(
-	executablePath string,
-	ptyHost platformpty.Host,
-	clock platformclock.Source,
-) serviceedges.Edges {
-	return serviceedges.Edges{
-		AgyPTYHost:               ptyHost,
-		AgyPTYClock:              clock,
-		WorkersExecutableLocator: fixedExecutableLocator{path: executablePath},
-		WorkersResolveSymlinks:   identityResolveSymlinks,
-	}
+func agyFunctionalEdges(runner platformprocess.CommandRunner) serviceedges.Edges {
+	return serviceedges.Edges{ProviderCommandRunner: runner}
 }
 
-type fixedExecutableLocator struct {
-	path string
+// erroringCommandRunner is a test double proving Providers command-runner
+// native errors, such as context deadline or cancellation, reach the same
+// canonical outcome as a real subprocess failure.
+type erroringCommandRunner struct {
+	mu       sync.Mutex
+	err      error
+	requests []platformprocess.CommandRequest
 }
 
-func (l fixedExecutableLocator) LookPath(file string) (string, error) {
-	if file == "agy" {
-		return l.path, nil
-	}
-	return "", fmt.Errorf("executable %q not found", file)
+func newErroringCommandRunner(err error) *erroringCommandRunner {
+	return &erroringCommandRunner{err: err}
 }
 
-func identityResolveSymlinks(path string) (string, error) {
-	return path, nil
+func (r *erroringCommandRunner) Run(
+	_ context.Context,
+	req platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.requests = append(r.requests, req)
+	return platformprocess.CommandResult{}, r.err
 }
 
-func writeAgyFixtureExecutable(t *testing.T) string {
-	t.Helper()
-
-	path := filepath.Join(t.TempDir(), "agy")
-	if err := os.WriteFile(path, []byte("agy-fixture-executable\n"), 0o755); err != nil {
-		t.Fatalf("write agy fixture executable: %v", err)
-	}
-	return path
+func (r *erroringCommandRunner) callCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.requests)
 }
-
-type functionalPTYHost struct {
-	stdout   []byte
-	exitCode int
-	starts   int
-	launches []platformpty.ProcessLaunch
-}
-
-func newFunctionalPTYHost(stdout []byte, exitCode int) *functionalPTYHost {
-	return &functionalPTYHost{
-		stdout:   append([]byte(nil), stdout...),
-		exitCode: exitCode,
-	}
-}
-
-func (h *functionalPTYHost) callCount() int {
-	return h.starts
-}
-
-func (h *functionalPTYHost) lastLaunch() platformpty.ProcessLaunch {
-	if len(h.launches) == 0 {
-		return platformpty.ProcessLaunch{}
-	}
-	return h.launches[len(h.launches)-1]
-}
-
-func (h *functionalPTYHost) Allocate(context.Context) (platformpty.Allocation, error) {
-	return functionalPTYAllocation{}, nil
-}
-
-func (h *functionalPTYHost) Start(
-	launch platformpty.ProcessLaunch,
-	_ platformpty.Allocation,
-) (platformpty.Process, io.ReadCloser, error) {
-	h.starts++
-	h.launches = append(h.launches, launch)
-	return &functionalPTYProcess{exitCode: h.exitCode}, io.NopCloser(bytes.NewReader(h.stdout)), nil
-}
-
-type canceledPTYHost struct {
-	starts int
-}
-
-func (h *canceledPTYHost) callCount() int {
-	return h.starts
-}
-
-func (h *canceledPTYHost) Allocate(context.Context) (platformpty.Allocation, error) {
-	return functionalPTYAllocation{}, nil
-}
-
-func (h *canceledPTYHost) Start(
-	_ platformpty.ProcessLaunch,
-	_ platformpty.Allocation,
-) (platformpty.Process, io.ReadCloser, error) {
-	h.starts++
-	return nil, nil, context.Canceled
-}
-
-type functionalPTYAllocation struct{}
-
-func (functionalPTYAllocation) Close() error           { return nil }
-func (functionalPTYAllocation) Kind() platformpty.Kind { return platformpty.KindPOSIX }
-
-type functionalPTYProcess struct {
-	exitCode int
-}
-
-func (p *functionalPTYProcess) Wait() error      { return nil }
-func (p *functionalPTYProcess) Terminate() error { return nil }
-func (*functionalPTYProcess) Close()             {}
-func (*functionalPTYProcess) PID() int           { return 0 }
-func (p *functionalPTYProcess) ExitCode() int    { return p.exitCode }
 
 func assertAgyFinalOnlyCompletion(
 	t *testing.T,
