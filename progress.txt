@@ -230,3 +230,16 @@
   - Capability metadata is enforced before the native runner executes, so implemented provider behavior must be reflected in the built-in runner policy or valid structured requests fail closed.
   - A root.BuildProcess golden is useful for catching mismatches between provider adapter support and Worker capability policy that package-local parser tests cannot observe.
 ---
+
+## [2026-08-08 17:32 -07:00] - wo-b1-antigravity-provider-golden-traces-005
+- What was implemented
+  - Completed the PR review and verification follow-up after the Antigravity structured-output capability fix.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The final GitHub Actions rerun passes Backend Functional Coverage, Backend Unit Coverage, Verification Policy, and every other required check on commit `0629ba2e8`.
+  - The PR has no conversation comments, review submissions, or unresolved/outdated inline review threads; its body matches `prd.json`, head matches local `HEAD`, and GitHub reports a clean non-draft PR.
+- **Learnings for future iterations:**
+  - Full functional CI can expose unrelated timing-sensitive repository tests; rerun the unchanged failed lane before attributing such failures to a focused feature diff.
+  - Normalize line endings and join CLI output lines when comparing a multiline PR body retrieved through PowerShell.
+---
