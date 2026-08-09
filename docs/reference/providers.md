@@ -44,13 +44,14 @@ outperforms another.
 
 The provider-neutral worker contract recognizes `minimal`, `low`, `medium`,
 `high`, `xhigh`, and `max`. That vocabulary is not portable across providers:
-Claude rejects `minimal`, and AGY has a smaller allowlist. Keep the effort
-choice with the provider/model decision rather than assuming that a value
-accepted by Codex is accepted everywhere.
+Claude rejects `minimal`, and ANTIGRAVITY does not accept a separate effort
+through the public Factory or `you run` contract. Keep the effort choice with
+the provider/model decision rather than assuming that a value accepted by
+Codex is accepted everywhere.
 
-## ANTIGRAVITY / AGY model and effort allowlist
+## ANTIGRAVITY / AGY model selection
 
-The following AGY values are the current adapter allowlist and were also
+The following AGY model IDs are the current adapter allowlist and were also
 observed in recorded AGY CLI 1.1.11 runs on 2026-08-08. This is intentionally
 versioned guidance: check the installed AGY release after an upgrade.
 
@@ -68,10 +69,12 @@ Supported model IDs:
 - `claude-opus-4-6-thinking`
 - `gpt-oss-120b-medium`
 
-The separate AGY effort value may be omitted or set to `low`, `medium`, or
-`high`. Do not invent `minimal`, `xhigh`, or `max` for AGY. Some AGY model IDs
-already carry a `-low`, `-medium`, or `-high` selection; that suffix is part of
-the model ID, while `reasoningEffort` is a separate worker field. Select AGY
+AGY effort selection is encoded by the model ID where the ID carries a
+`-low`, `-medium`, or `-high` suffix; that suffix is part of the model ID, not
+a separate worker field. The public Factory and `you run` contract rejects any
+non-empty AGY `reasoningEffort`, so omit `reasoningEffort` from AGY worker
+frontmatter and omit `--worker-reasoning-effort` when selecting AGY. Do not
+invent a suffix or an effort value for an ID that is not listed. Select AGY
 with the public worker value `modelProvider: ANTIGRAVITY` and choose one of the
 model IDs above. Factory dispatch supplies the AGY workspace and native
 process settings; do not copy provider-native flags onto a Factory or `you run`
@@ -90,7 +93,7 @@ and are not generic `you run` flags.
 |-------------------------|--------------------------------|----------|
 | `modelProvider` | `--provider` | Selects the provider adapter for this invocation. |
 | `model` | `--model` | Overrides the selected provider's model for this invocation. |
-| `reasoningEffort` | `--worker-reasoning-effort` | Uses the canonical `minimal`, `low`, `medium`, `high`, `xhigh`, or `max` vocabulary; the selected provider may reject a value it cannot map. |
+| `reasoningEffort` | `--worker-reasoning-effort` | Uses the canonical `minimal`, `low`, `medium`, `high`, `xhigh`, or `max` vocabulary where the selected provider supports it. Omit both for ANTIGRAVITY because its public contract rejects a separate effort. |
 | `skipPermissions` | `--skip-permissions` | Requests an invocation-only permission shortcut; the selected provider must support it. |
 | worker `timeout` and workstation `limits.maxExecutionTime` | No generic `--timeout` override | These remain Factory execution limits. For AGY print-mode dispatch, the applicable worker timeout becomes the adapter's print timeout; the adapter uses a five-minute default when no positive request is supplied. |
 | workstation `promptFile` or prompt body | `--to-file` | Supplies one exact, multiline primary prompt for a one-shot invocation; it is not a worker/provider setting. |
@@ -150,14 +153,15 @@ recorded missing-file run exited zero and reported `status: SUCCESS` while the
 response declined the task, so use a response contract or structured verdict
 when the workflow must distinguish task success from process completion.
 
-AGY effort has two constraints to keep separate. The print-mode command
-adapter accepts a separate `reasoningEffort` only when it is empty, `low`,
-`medium`, or `high`. The current native AGY PTY route rejects a separate effort,
-so omit `reasoningEffort` when the selected AGY model ID already encodes its
-`-low`, `-medium`, or `-high` tier. Do not pass AGY's native `--effort` or
-`--add-dir` directly to a generic `you run` invocation. If a task requires
-video or audio inspection, route it to AGY; if one ImageGen call needs more
-than five references, split or redesign it instead.
+AGY effort selection is model-based at the public boundary. The Providers
+service rejects any non-empty AGY `ReasoningEffort` before adapter dispatch, so
+omit `reasoningEffort` in Factory frontmatter and omit
+`--worker-reasoning-effort` from an AGY `you run` invocation. Choose a listed
+model ID whose suffix expresses the desired tier when such a suffix is
+available. Do not pass AGY's native `--effort` or `--add-dir` directly to a
+generic `you run` invocation. If a task requires video or audio inspection,
+route it to AGY; if one ImageGen call needs more than five references, split or
+redesign it instead.
 
 ## ImageGen reference limit
 
