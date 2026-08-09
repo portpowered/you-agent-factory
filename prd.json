@@ -1,54 +1,117 @@
 {
-  "project": "Make you work watch Retry-Safe and Preserve Failure Exit Codes",
-  "branchName": "wo-c2-fix-watch-event-id-conflict",
-  "description": "Correct you work watch so finite and --follow streams survive legitimate provider dispatch retries that re-emit a model-request event ID with refreshed canonical data, while preserving the you.work.watch.v1 NDJSON contract and making genuine stream aborts exit non-zero.",
+  "project": "WO-D1 — Document Packaged Factories with Worked Examples",
+  "branchName": "wo-d1-packaged-factories-docs",
+  "description": "Replace the flat packaged-Factory overview with canonical operator-ready reference documentation for all fifteen current first-party @you/* Factories. Each entry will explain purpose, live invocation signature, accepted worker roles and provider/model overrides, prerequisites or side effects, expected primary output shape, and one copy-ready example verified exactly as shown against the current you binary, with special emphasis on making @you/subagent usable without production trial and error.",
   "context": {
-    "customerAsk": "Make finite and --follow Work watches stream successfully for real Factory Sessions that contain provider dispatch retries, without changing the you.work.watch.v1 NDJSON shape or adding storage; genuine stream aborts must return a non-zero CLI process exit.",
-    "problem": "The strict watch reducer treats any event ID reused with differing payload data as corruption. Real Factory ledgers re-emit model-request IDs at the same request ordinal across provider dispatch retries with refreshed canonical data, so legitimate live history aborts both finite and following watches. The CLI then prints the abort but can leave the shell with exit code 0.",
-    "solution": "Align invocation-local Work watch reduction with canonical Factory Event ordering and Work-transition projection so unrelated retry enrichment cannot abort or distort transition output, then propagate genuine stream errors through the root CLI process boundary as non-zero exits while retaining stderr diagnostics and the existing NDJSON contract."
+    "customerAsk": "Deliver WO-D1 documentation in canonical docs/reference/ Markdown with a description and one worked example for every packaged Factory, including what @you/subagent is for, each Factory's invocation signature, accepted workers/providers, and expected output shape. Execute every CLI invocation shown in the new documentation against the current binary and paste or behaviorally assert real output. Keep the binding cut list from docs/temp/work-order.md, run make docs-reference-smoke and make verify-fast, and deliver through actual PR merge.",
+    "problem": "The packaged-Factory reference is primarily a name table plus representative commands. It does not give each Factory an independently usable worked example or consistently describe role-specific worker/provider inputs and returned output. Operators consequently discovered @you/subagent invocation semantics by trial and error during production, while other examples can be copied without enough information to predict accepted flags, prerequisites, side effects, or output.",
+    "solution": "Expand the canonical packaged-Factory reference into a consistent operator guide. Give every current packaged Factory a focused entry containing purpose, suitable use, exact live invocation signature, worker roles and supported provider/model override behavior, prerequisites or material side effects, expected output shape, and one copy-ready worked example with real current-binary output evidence. Organize related entries for scanning, retain root docs only as routing material, and avoid engine, provider, storage, UI, API, and generated-contract changes."
   },
   "acceptanceCriteria": [
-    "A fixture ledger containing the same model-request event ID twice with differing canonical data, matching the observed provider retry shape, is accepted without aborting the Work watch.",
-    "Finite and --follow watches emit the fixture's complete ordered Work state-transition history exactly once, and unrelated retry enrichment emits no extra NDJSON lines.",
-    "Watch output retains the exact you.work.watch.v1 NDJSON contract shape, and reconnect/cursor behavior continues from the last accepted canonical Factory Event without durable state.",
-    "Genuine stream-abort errors remain actionable on stderr and cause the built you CLI process to exit non-zero, while successful finite completion remains exit code 0.",
-    "No storage engine, public contract expansion, unrelated event-ledger rewrite, or cut-list item from docs/temp/work-order.md is introduced.",
-    "The named focused verification command go test ./pkg/services/work/transports/cli ./tests/functional/work/watch ./tests/functional/transport/cli/process and make verify-fast pass; Typecheck passes, Tests pass, no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, shared-file and baseline conflicts are reconciled, merge conflicts are resolved, and the PR is actually merged; an opened, green, approved, or ready-to-merge PR is not complete."
+    "The canonical docs/reference/ packaged-Factory topic gives each of the fifteen current first-party @you/* Factories an independently understandable description, suitable-use guidance, invocation signature, accepted worker roles and provider/model override behavior, prerequisites or material side effects, and expected output shape.",
+    "Every packaged Factory has one copy-ready worked CLI example, and every CLI invocation added or changed in the topic is executed exactly as shown against the current you binary during implementation; corresponding real output is pasted in the documentation or captured by a direct behavioral assertion, with reviewer-visible evidence and no invented flags or output.",
+    "The @you/subagent entry explicitly explains its bounded read-only purpose, request binding, optional provider/model/reasoning inputs supported by the live signature, single worker role, and primary-result output behavior, and its worked example succeeds as documented.",
+    "Documentation distinguishes orchestration behavior, required environment/model prerequisites, potentially long-running or workspace-changing behavior, and machine-readable versus human-readable output where those facts affect safe operator use, without promising unsupported providers, flags, determinism, or exact model prose.",
+    "Scope remains limited to WO-D1 canonical reference documentation and direct documentation behavior evidence: root docs remain routing material, and there is no local-model execution harness, llama-server trace testing, Gemma validation, new ACP lane, wrapper-layer multimodal transformation, storage engine work, public API change, generated contract change, or broad unrelated cleanup.",
+    "Quality gates pass: make docs-reference-smoke, make verify-fast, applicable typecheck and focused tests, and no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file reconciliation are resolved, and the PR is actually merged; an opened, green, approved, or ready-to-merge PR is not complete."
   ],
   "userStories": [
     {
-      "id": "wo-c2-fix-watch-event-id-conflict-001",
-      "title": "Stream Work transitions through provider retry events",
-      "description": "As a factory operator, I want finite and following Work watches to tolerate legitimate provider dispatch retry history so that I can observe every Work transition in a live session without the monitor aborting.",
+      "id": "wo-d1-packaged-factories-docs-001",
+      "title": "Establish the operator-facing entry contract and discovery guidance",
+      "description": "As an operator, I want a consistent structure and trustworthy discovery guidance so I can compare packaged Factories and understand how live signatures, defaults, outputs, and examples should be read.",
       "acceptanceCriteria": [
-        "A behavioral fixture places Work state transitions before, between, and after two model-request events that reuse the same event ID with differing canonical data in the observed retry shape.",
-        "Finite mode consumes that ledger, emits the full ordered Work transition history exactly once, and exits successfully when the observed Work cohort becomes terminal.",
-        "--follow consumes the conflicting retry events without aborting and emits Work transitions that occur after them until normal cancellation.",
-        "Model-request retry events do not themselves produce you.work.watch.v1 output, and emitted transition objects retain the existing fields and meanings.",
-        "Exact replay remains idempotent, canonical resume position remains monotonic, and genuinely invalid Work transition data still returns an actionable reducer or stream error.",
-        "Tests pass",
-        "Typecheck passes"
+        "The topic explains how packaged Factories are discovered and materialized, how to inspect a Factory's current live invocation help, and how omitted role provider/model values use operator defaults, using commands verified against the current binary.",
+        "A consistent entry contract is used for every Factory: purpose and suitable use, invocation signature, accepted worker roles and provider/model overrides, prerequisites or side effects, expected output shape, one worked invocation, and real output evidence.",
+        "The topic explains that model-generated prose is not byte-stable and describes output shape without presenting one model response as a deterministic guarantee.",
+        "Navigation supports finding an individual Factory without turning root documentation into a duplicate guide.",
+        "Typecheck passes",
+        "Tests pass, including make docs-reference-smoke"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented retry-safe Work-watch reduction for repeated MODEL_REQUEST IDs with refreshed canonical data, preserving strict conflicts for Work events and monotonic ephemeral cursors. Added finite, --follow, exact replay, reconnect, NDJSON, and invalid-transition behavioral coverage. Review follow-up now uses the observed later-sequence/later-event-time retry shape with realistic dispatch context and an intervening model response, and proves reconnect from the later canonical cursor. Corrective follow-up now accepts changed MODEL_REQUEST data only at a strictly later canonical position, updates the remembered retry version, and rejects same-sequence or backward conflicting reuse. Removed the unrelated manifest/inventory meta-test during review follow-up. The focused Work/watch/process command and make verify-fast pass."
+      "notes": "Established the canonical packaged-factories operator guide with discovery/materialization guidance, a shared seven-part entry contract, family-based catalog navigation, provider/model default behavior, and non-byte-stable model-output guidance. Registered the existing topic as `you docs packaged-factories`, updated the packaged docs indexes and user-visible smoke coverage, and captured live `you factory list`, `you run --named @you/goal --help`, and `you docs packaged-factories` evidence from a freshly built current-source binary. `make docs-reference-smoke`, `make verify-fast`, and `git diff --check` pass. Detailed per-Factory entries remain scoped to stories 002-006."
     },
     {
-      "id": "wo-c2-fix-watch-event-id-conflict-002",
-      "title": "Exit non-zero when a Work watch genuinely aborts",
-      "description": "As an operator or automation author, I want an aborted Work watch to return a non-zero process exit code so that monitoring scripts cannot mistake a failed stream for successful completion.",
+      "id": "wo-d1-packaged-factories-docs-002",
+      "title": "Document bounded and iterative single-request Factories",
+      "description": "As an operator, I want worked guidance for @you/goal, @you/loop, @you/fusion, @you/classify, and @you/review so I can choose and configure the correct bounded, recurring, routed, refinement, or review behavior.",
       "acceptanceCriteria": [
-        "A process-boundary behavioral test runs the built you work watch command against a deterministic genuine stream-abort condition and observes a non-zero exit code.",
-        "The abort diagnostic is written to stderr with enough session and stream context to identify the failed watch, while stdout contains only complete NDJSON transition lines produced before the abort.",
-        "Successful finite completion retains exit code 0, and normal --follow cancellation retains the repository's established cancellation semantics.",
-        "Stream failures are propagated through command execution and the root process boundary rather than being printed and converted to success.",
-        "Tests pass",
-        "Typecheck passes"
+        "Each of @you/goal, @you/loop, @you/fusion, @you/classify, and @you/review has a distinct entry satisfying the common entry contract and distinguishing its stopping or routing behavior from the others.",
+        "Each entry names all worker roles visible in its live invocation signature and accurately documents provider/model overrides, required non-role inputs such as an interval, and operator-default behavior.",
+        "Each Factory has one copy-ready invocation executed exactly as shown against the current binary, with real output pasted or directly behaviorally asserted and reviewer-visible execution evidence retained.",
+        "Expected output guidance distinguishes the final returned answer from intermediate classification, review, retry, or recurring session activity where applicable.",
+        "Typecheck passes",
+        "Tests pass, including make docs-reference-smoke"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Added a true built cmd/factory process-boundary Work-watch fixture that emits complete NDJSON before a malformed SSE frame, then proves the genuine stream-abort error stays actionable on stderr with session and decode context, returns the child process's non-zero exit code, and leaves stdout with exactly the complete NDJSON transition produced before the abort. The same built binary also proves successful finite completion returns exit code 0. Removed the unrelated manifest/inventory meta-test during review follow-up. The focused Work/watch/process command and make verify-fast pass."
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "wo-d1-packaged-factories-docs-003",
+      "title": "Document planning and implementation Factories",
+      "description": "As an implementer, I want worked guidance for @you/factory-builder, @you/plan-execute, @you/plan-parallel, and @you/full-flow so I can select a workflow with the right planning, concurrency, workspace, and completion behavior.",
+      "acceptanceCriteria": [
+        "Each of @you/factory-builder, @you/plan-execute, @you/plan-parallel, and @you/full-flow has a distinct entry satisfying the common entry contract and explaining when it is appropriate relative to the other implementation workflows.",
+        "Each entry names all worker roles and live provider/model overrides and calls out material workspace mutation, worktree or concurrency behavior, validation, merge, replanning, or completion semantics that affect safe use.",
+        "Each Factory has one copy-ready invocation executed exactly as shown against the current binary in an appropriate disposable or controlled workspace, with real output pasted or directly behaviorally asserted and reviewer-visible execution evidence retained.",
+        "Expected output guidance identifies whether the caller receives guidance, a built or installed Factory result, an implementation result, a synthesized result, or a terminal failure rather than promising hidden intermediate artifacts as the primary result.",
+        "Typecheck passes",
+        "Tests pass, including make docs-reference-smoke"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "wo-d1-packaged-factories-docs-004",
+      "title": "Document parallel investigation and selection Factories",
+      "description": "As an operator, I want worked guidance for @you/deep-research, @you/spawn, @you/quorum, and @you/tournament so I can choose the correct fan-out, synthesis, consensus, or competitive-selection workflow and bound its execution.",
+      "acceptanceCriteria": [
+        "Each of @you/deep-research, @you/spawn, @you/quorum, and @you/tournament has a distinct entry satisfying the common entry contract and explaining its fan-out and final-selection behavior.",
+        "Each entry names all live worker-role provider/model overrides and accurately explains required bounds such as task count or rounds, applicable defaults, and the difference between Graph and JavaScript orchestration where it affects invocation or results.",
+        "Each Factory has one copy-ready invocation executed exactly as shown against the current binary, with real output pasted or directly behaviorally asserted and reviewer-visible execution evidence retained.",
+        "Expected output guidance distinguishes generated branch or candidate results from the single synthesized, merged, or champion result returned to the caller.",
+        "Typecheck passes",
+        "Tests pass, including make docs-reference-smoke"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "wo-d1-packaged-factories-docs-005",
+      "title": "Document local text-to-speech behavior",
+      "description": "As an operator, I want one worked @you/tts guide so I know its local-model prerequisite, accepted input, worker/provider constraints, artifact behavior, and returned result before requesting audio.",
+      "acceptanceCriteria": [
+        "The @you/tts entry satisfies the common entry contract and accurately describes text input, packaged local TTS worker/provider behavior, model-readiness prerequisite, generated audio artifact, and primary output shape.",
+        "The entry does not imply that general inference-provider role overrides are accepted when absent from the live signature and routes model setup detail to the canonical models reference rather than duplicating it.",
+        "Its copy-ready invocation is executed exactly as shown against the current binary in an environment with the documented prerequisite, with real output pasted or directly behaviorally asserted and reviewer-visible execution evidence retained.",
+        "The expected-output section tells operators how to identify the returned result and produced audio without claiming a fixed path, format, or message that the current binary did not produce.",
+        "Typecheck passes",
+        "Tests pass, including make docs-reference-smoke"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "wo-d1-packaged-factories-docs-006",
+      "title": "Document @you/subagent as a bounded read-only call",
+      "description": "As an operator, I want a complete worked @you/subagent reference so I can delegate one bounded read-only task and consume its primary result without discovering invocation semantics in production.",
+      "acceptanceCriteria": [
+        "The entry states that @you/subagent runs one bounded read-only worker task and returns that worker's normalized primary result; it does not imply recursive orchestration, workspace mutation, or an ongoing agent session.",
+        "The documented signature matches live help for request binding and every supported optional provider, model, and reasoning-effort input, identifies the single subagent worker role, and explains operator-default fallback for omitted values.",
+        "One copy-ready invocation is executed exactly as shown against the current binary and successfully returns a representative result; real output is pasted or directly behaviorally asserted and reviewer-visible execution evidence is retained.",
+        "The expected-output section distinguishes the primary result from runtime or session metadata and explains relevant human-readable or structured-output selection without inventing an unsupported flag or response envelope.",
+        "Typecheck passes",
+        "Tests pass, including make docs-reference-smoke"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
     }
   ]
 }
