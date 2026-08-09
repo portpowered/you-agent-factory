@@ -7617,7 +7617,7 @@
           "you worker-sessions stream --provider codex --kind session_id --id session-123"
         ],
         "visibility": "public",
-        "sourceHash": "worker-session-cli-visibility"
+        "sourceHash": "65ebb0c52f5808cd7c8c2f4ac4f66075ac0b72ddbe7ded052bd873a8da001caa"
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
@@ -7655,7 +7655,7 @@
           "you worker-sessions list --work-id work-123 --output json"
         ],
         "visibility": "public",
-        "sourceHash": "worker-session-cli-visibility-list"
+        "sourceHash": "25716a79147ce58484566fba67e5c8b536154d1af8d23d8b0fc5a6edc266c752"
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
@@ -7844,7 +7844,7 @@
           "you worker-sessions show --provider codex --kind session_id --id session-123 --output json"
         ],
         "visibility": "public",
-        "sourceHash": "worker-session-cli-visibility-show"
+        "sourceHash": "75143fdc92fe968bd34769e760638cc9cd18e35e0504b061ce02ec154d18f7a1"
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
@@ -8081,7 +8081,7 @@
           "you worker-sessions read --provider codex --kind session_id --id session-123 --output json"
         ],
         "visibility": "public",
-        "sourceHash": "worker-session-cli-visibility-read"
+        "sourceHash": "1505c41e38ee4bf2cb3fb9ea7011aa96a82fd6f3ded1eacb62646b6d593f9b0b"
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
@@ -8318,7 +8318,7 @@
           "you worker-sessions stream --provider codex --kind session_id --id session-123 --output json"
         ],
         "visibility": "public",
-        "sourceHash": "worker-session-cli-visibility-stream"
+        "sourceHash": "4c6a9d3fc2f5fd2f5133c62b5f871a63b7d0e3a91cc0c8934c6edc397b7ef0fb"
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
