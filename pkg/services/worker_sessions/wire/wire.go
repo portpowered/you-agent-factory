@@ -4,13 +4,14 @@
 // workersessions.Service root interface, and starts no lifecycle
 // components. It composes the implementation through direct single
 // injection of one workers.WorkstationPoolBoundary and one
-// EventsAppender, with no dependency bag, service locator, or alternate
-// construction path. Factory Runtime is the production consumer (W4
+// EventsAppender, clock, and Provider Sessions service, with no dependency
+// bag, service locator, or alternate construction path. Factory Runtime is the production consumer (W4
 // dispatch cutover), composed through pkg/services/factory_runtime/internal
 // and pkg/wire.
 package wire
 
 import (
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
@@ -31,18 +32,20 @@ type EventsAppender = internalservice.EventsAppender
 // providersessions.Service the observation projection enriches transcript,
 // token, and parse facts through. logger is the direct, required
 // operation-logging abstraction; callers with no operation logging pass
-// logging.NoopLogger{}. A caller with no Provider Sessions projection
-// available passes nil explicitly rather than omitting the argument.
+// logging.NoopLogger{}. Provider Sessions remains a required direct
+// dependency even when its implementation reports unavailable storage.
 func NewService(
 	boundary workers.WorkstationPoolBoundary,
 	eventsAppender EventsAppender,
 	logger logging.Logger,
+	clock platformclock.Source,
 	providerSessions providersessions.Service,
 ) (workersessions.Service, error) {
 	return internalservice.New(
 		boundary,
 		eventsAppender,
 		logger,
-		internalservice.WithProviderSessions(providerSessions),
+		clock,
+		providerSessions,
 	)
 }

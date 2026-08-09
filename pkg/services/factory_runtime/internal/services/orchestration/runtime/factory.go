@@ -440,7 +440,7 @@ func configureRuntimeDispatch(
 		ProviderInvocation: cfg.providerInvocation,
 		Async:              !cfg.inlineDispatch && cfg.completionDeliveryPlanner == nil,
 	})
-	workerSessions, err := cfg.workerSessionsFactory(workersBoundary)
+	workerSessions, err := cfg.workerSessionsFactory(workersBoundary, cfg.clock)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("construct Worker Sessions service: %w", err)
 	}
@@ -983,15 +983,6 @@ func (f *factoryImpl) WorkflowContext() *factory_context.FactoryContext {
 		return nil
 	}
 	return f.cfg.workflowContext
-}
-
-// WorkerSessionsObservation returns the runtime-bound detached Worker Session
-// observation projection for the current Factory Session.
-func (f *factoryImpl) WorkerSessionsObservation() workersessions.ObservationService {
-	if f == nil || f.cfg == nil {
-		return nil
-	}
-	return f.cfg.workerSessions
 }
 
 func closeRuntimeEventSubscriptions(ledger recordings.RuntimeLedger) {

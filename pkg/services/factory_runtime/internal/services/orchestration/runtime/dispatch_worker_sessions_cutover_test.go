@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -60,7 +61,7 @@ func TestStartThroughWorkerSessions_AssociationIsControlAddressableBeforeStart(t
 	if err != nil {
 		t.Fatalf("New events service: %v", err)
 	}
-	workerSessions, err := workersessionswire.NewService(workersBoundary, events, logging.NoopLogger{}, nil)
+	workerSessions, err := workersessionswire.NewService(workersBoundary, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{})
 	if err != nil {
 		t.Fatalf("New Worker Sessions service: %v", err)
 	}
@@ -254,7 +255,7 @@ func newInvokeWorkerTestFactory(
 	})
 	events, err := eventswire.NewService(logging.NoopLogger{})
 	requireNoRootErr(t, err, "New events service")
-	sessions, err := workersessionswire.NewService(poolBoundary, events, logging.NoopLogger{}, nil)
+	sessions, err := workersessionswire.NewService(poolBoundary, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{})
 	requireNoRootErr(t, err, "New Worker Sessions service")
 
 	runtime, _, err := newTestFactoryWithScriptedLedger(

@@ -11,9 +11,12 @@ import (
 	"sync"
 	"testing"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -26,6 +29,14 @@ import (
 // transition are genuinely separate, Workers-free steps.
 type unusedExecution struct {
 	t *testing.T
+}
+
+type unavailableProviderSessions struct {
+	providersessions.Service
+}
+
+func (unavailableProviderSessions) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
+	return providersessions.ProjectResult{}, providersessions.ErrSessionStorageUnavailable
 }
 
 type failingPublishBoundary struct {
@@ -113,7 +124,7 @@ func newTestRegistry(t *testing.T) *registry {
 	if err != nil {
 		t.Fatalf("eventswire.NewService() error = %v, want nil", err)
 	}
-	svc, err := New(unusedExecution{t: t}, events, nil)
+	svc, err := New(unusedExecution{t: t}, events, nil, platformclock.Real{}, unavailableProviderSessions{})
 	if err != nil {
 		t.Fatalf("New() error = %v, want nil", err)
 	}

@@ -132,3 +132,17 @@ func handedOffToWorkers(startResult workersessions.InvokeSessionResult) bool {
 	}
 	return result.Cause.Kind != workersessions.FailureCauseEventPublicationFailure
 }
+
+// WorkerSessionsObservation returns the runtime-bound detached Worker Session
+// observation projection for the current Factory Session.
+func (f *factoryImpl) WorkerSessionsObservation() workersessions.ObservationService {
+	if f == nil || f.cfg == nil {
+		return nil
+	}
+	return newRecordedWorkerSessionObservation(
+		f.cfg.workerSessions,
+		f.eventHistory,
+		f.cfg.worldStateProjector,
+		f.clock,
+	)
+}

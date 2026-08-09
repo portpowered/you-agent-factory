@@ -9,7 +9,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -18,7 +17,7 @@ func newRegistry() workersessions.Service {
 }
 
 func newRegistryWithExecution(execution workers.WorkstationExecutionService) workersessions.Service {
-	registry, err := service.New(executionBoundary{execution: execution}, newEventsAppender(), logging.NoopLogger{})
+	registry, err := newService(executionBoundary{execution: execution}, newEventsAppender(), logging.NoopLogger{})
 	if err != nil {
 		panic(fmt.Sprintf("service.New() error = %v, want nil", err))
 	}

@@ -26,11 +26,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+type unavailableProviderSessions struct {
+	providersessions.Service
+}
+
+func (unavailableProviderSessions) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
+	return providersessions.ProjectResult{}, providersessions.ErrSessionStorageUnavailable
+}
 
 type testFactoryOption func(*testFactoryConfig)
 
@@ -72,7 +81,7 @@ func newTestFactory(opts ...testFactoryOption) (factory.Factory, error) {
 	if workerSessionsService == nil {
 		workerSessionsService = &fakeWorkerSessionsService{execution: workerService}
 	}
-	workerSessionsFactory := func(workers.WorkstationPoolBoundary) (workersessions.Service, error) {
+	workerSessionsFactory := func(workers.WorkstationPoolBoundary, platformclock.Source) (workersessions.Service, error) {
 		return workerSessionsService, nil
 	}
 	return New(

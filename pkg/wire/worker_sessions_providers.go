@@ -1,6 +1,7 @@
 package wire
 
 import (
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -21,7 +22,7 @@ func provideWorkerSessionsFactory(
 	providerSessions providersessions.Service,
 	logger logging.Logger,
 ) factoryruntime.WorkerSessionsFactory {
-	return func(boundary workers.WorkstationPoolBoundary) (workersessions.Service, error) {
-		return workersessionswire.NewService(boundary, eventsService, logger, providerSessions)
+	return func(boundary workers.WorkstationPoolBoundary, clock platformclock.Source) (workersessions.Service, error) {
+		return workersessionswire.NewService(boundary, eventsService, logger, clock, providerSessions)
 	}
 }
