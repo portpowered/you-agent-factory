@@ -67,8 +67,8 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added the stable redacted production-retry ledger fixture at tests/functional/work/watch/testdata/production-retry-ledger.replay.json. The fixture preserves the complete observed event-family mix, ordered sequences, Work lineage and terminal transition, repeated model-request/model-response identities at later sequences, and the corrected distinct response ordinal. Added an application-level functional regression that loads the fixture, serves retained/live SSE through an httptest Factory Event endpoint, and executes the public work watch command through root.BuildProcess/Process.Execute. Finite mode drains the ledger cleanly; follow mode observes the retained terminal history, consumes two deterministic later transitions exactly once, and is canceled without sleeps; a derived same-sequence conflict is rejected. The focused story command and make verify-fast pass."
     }
   ]
 }

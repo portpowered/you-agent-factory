@@ -1,0 +1,362 @@
+{
+  "schemaVersion": "agent-factory.replay.v1",
+  "recordedAt": "2026-08-09T13:00:00Z",
+  "events": [
+    {
+      "context": {
+        "eventTime": "2026-08-09T13:00:00Z",
+        "sequence": 0,
+        "sessionId": "~default",
+        "tick": 0
+      },
+      "id": "factory-event/run-started/production-retry",
+      "payload": {
+        "factory": {
+          "name": "production-retry-watch",
+          "workTypes": [
+            {
+              "name": "task",
+              "states": [
+                {"name": "init", "type": "INITIAL"},
+                {"name": "processing", "type": "PROCESSING"},
+                {"name": "complete", "type": "TERMINAL"},
+                {"name": "failed", "type": "FAILED"}
+              ]
+            }
+          ]
+        },
+        "recordedAt": "2026-08-09T13:00:00Z"
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "RUN_REQUEST"
+    },
+    {
+      "context": {
+        "eventTime": "2026-08-09T13:00:01Z",
+        "sequence": 1,
+        "sessionId": "~default",
+        "tick": 0
+      },
+      "id": "factory-event/initial-structure/production-retry",
+      "payload": {
+        "factory": {
+          "name": "production-retry-watch",
+          "workTypes": [
+            {
+              "name": "task",
+              "states": [
+                {"name": "init", "type": "INITIAL"},
+                {"name": "processing", "type": "PROCESSING"},
+                {"name": "complete", "type": "TERMINAL"},
+                {"name": "failed", "type": "FAILED"}
+              ]
+            }
+          ]
+        }
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "INITIAL_STRUCTURE_REQUEST"
+    },
+    {
+      "context": {
+        "eventTime": "2026-08-09T13:00:02Z",
+        "sequence": 2,
+        "sessionId": "~default",
+        "tick": 0
+      },
+      "id": "factory-event/session-started/production-retry",
+      "payload": {
+        "startedAt": "2026-08-09T13:00:02Z",
+        "sourceRef": "factory.json"
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "SESSION_STARTED"
+    },
+    {
+      "context": {
+        "eventTime": "2026-08-09T13:00:03Z",
+        "sequence": 3,
+        "sessionId": "~default",
+        "tick": 0
+      },
+      "id": "factory-event/factory-state/production-retry",
+      "payload": {"state": "RUNNING"},
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "FACTORY_STATE_RESPONSE"
+    },
+    {
+      "context": {
+        "eventTime": "2026-08-09T13:00:04Z",
+        "requestId": "request-production-retry",
+        "sequence": 4,
+        "sessionId": "~default",
+        "source": "api",
+        "tick": 1,
+        "traceIds": ["trace-production-retry"],
+        "workIds": ["work-production-retry"]
+      },
+      "id": "factory-event/work-request/request-production-retry",
+      "payload": {
+        "source": "api",
+        "type": "FACTORY_REQUEST_BATCH",
+        "works": [
+          {
+            "name": "Production retry watch fixture",
+            "payload": {"title": "redacted retry ledger"},
+            "requestId": "request-production-retry",
+            "state": {"name": "init", "type": "INITIAL"},
+            "traceId": "trace-production-retry",
+            "workId": "work-production-retry",
+            "workTypeName": "task"
+          }
+        ]
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "WORK_REQUEST"
+    },
+    {
+      "context": {
+        "currentChainingTraceId": "trace-production-retry",
+        "dispatchId": "dispatch-retry",
+        "eventTime": "2026-08-09T13:00:05Z",
+        "requestId": "request-production-retry",
+        "sequence": 5,
+        "sessionId": "~default",
+        "tick": 2,
+        "traceIds": ["trace-production-retry"],
+        "workIds": ["work-production-retry"]
+      },
+      "id": "factory-event/dispatch-request/dispatch-retry",
+      "payload": {
+        "inputs": [
+          {
+            "name": "Production retry watch fixture",
+            "workId": "work-production-retry",
+            "workTypeName": "task"
+          }
+        ],
+        "transitionId": "process"
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "DISPATCH_REQUEST"
+    },
+    {
+      "context": {
+        "dispatchId": "dispatch-retry",
+        "eventTime": "2026-08-09T13:00:06Z",
+        "requestId": "request-production-retry",
+        "sequence": 6,
+        "sessionId": "~default",
+        "tick": 2,
+        "traceIds": ["trace-production-retry"],
+        "workIds": ["work-production-retry"]
+      },
+      "id": "factory-event/dispatch-worker-session-association/dispatch-retry",
+      "payload": {"workerSessionId": "worker-session-production-retry"},
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "DISPATCH_WORKER_SESSION_ASSOCIATION"
+    },
+    {
+      "context": {
+        "dispatchId": "dispatch-retry",
+        "eventTime": "2026-08-09T13:00:07Z",
+        "requestId": "request-production-retry",
+        "sequence": 7,
+        "sessionId": "~default",
+        "tick": 2,
+        "traceIds": ["trace-production-retry"],
+        "workIds": ["work-production-retry"]
+      },
+      "id": "factory-event/model-request/dispatch-retry/model-request/1",
+      "payload": {
+        "attempt": 1,
+        "model": "redacted-model",
+        "modelRequestId": "dispatch-retry/model-request/1",
+        "operation": "TEXT_GENERATION",
+        "providerLocality": "CLOUD",
+        "worker": "redacted-worker"
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "MODEL_REQUEST"
+    },
+    {
+      "context": {
+        "dispatchId": "dispatch-retry",
+        "eventTime": "2026-08-09T13:00:08Z",
+        "requestId": "request-production-retry",
+        "sequence": 8,
+        "sessionId": "~default",
+        "tick": 2,
+        "traceIds": ["trace-production-retry"],
+        "workIds": ["work-production-retry"]
+      },
+      "id": "factory-event/model-response/dispatch-retry/1",
+      "payload": {
+        "attempt": 1,
+        "durationMillis": 125,
+        "failureDetail": {
+          "code": "RETRYABLE_PROVIDER_ERROR",
+          "message": "redacted provider retry"
+        },
+        "model": "redacted-model",
+        "modelRequestId": "dispatch-retry/model-request/1",
+        "operation": "TEXT_GENERATION",
+        "outcome": "FAILED",
+        "providerLocality": "CLOUD"
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "MODEL_RESPONSE"
+    },
+    {
+      "context": {
+        "dispatchId": "dispatch-retry",
+        "eventTime": "2026-08-09T13:00:09Z",
+        "requestId": "request-production-retry",
+        "sequence": 9,
+        "sessionId": "~default",
+        "tick": 2,
+        "traceIds": ["trace-production-retry"],
+        "workIds": ["work-production-retry"]
+      },
+      "id": "factory-event/model-request/dispatch-retry/model-request/1",
+      "payload": {
+        "attempt": 2,
+        "model": "redacted-model",
+        "modelRequestId": "dispatch-retry/model-request/1",
+        "operation": "TEXT_GENERATION",
+        "providerLocality": "CLOUD",
+        "worker": "redacted-worker"
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "MODEL_REQUEST"
+    },
+    {
+      "context": {
+        "eventTime": "2026-08-09T13:00:10Z",
+        "sequence": 10,
+        "sessionId": "~default",
+        "tick": 3,
+        "traceIds": ["trace-production-retry"],
+        "workIds": ["work-production-retry"]
+      },
+      "id": "factory-event/work-state-change/work-production-retry/processing",
+      "payload": {
+        "fromPlaceId": "task:init",
+        "fromState": "init",
+        "reason": "retry entered processing",
+        "source": "cli",
+        "toPlaceId": "task:processing",
+        "toState": "processing",
+        "workId": "work-production-retry",
+        "workTypeName": "task"
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "WORK_STATE_CHANGE"
+    },
+    {
+      "context": {
+        "dispatchId": "dispatch-retry",
+        "eventTime": "2026-08-09T13:00:11Z",
+        "requestId": "request-production-retry",
+        "sequence": 11,
+        "sessionId": "~default",
+        "tick": 3,
+        "traceIds": ["trace-production-retry"],
+        "workIds": ["work-production-retry"]
+      },
+      "id": "factory-event/model-response/dispatch-retry/1",
+      "payload": {
+        "attempt": 2,
+        "durationMillis": 141,
+        "model": "redacted-model",
+        "modelRequestId": "dispatch-retry/model-request/1",
+        "operation": "TEXT_GENERATION",
+        "outcome": "SUCCEEDED",
+        "outputPreview": "redacted successful retry",
+        "providerLocality": "CLOUD"
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "MODEL_RESPONSE"
+    },
+    {
+      "context": {
+        "dispatchId": "dispatch-retry",
+        "eventTime": "2026-08-09T13:00:12Z",
+        "requestId": "request-production-retry",
+        "sequence": 12,
+        "sessionId": "~default",
+        "tick": 3,
+        "traceIds": ["trace-production-retry"],
+        "workIds": ["work-production-retry"]
+      },
+      "id": "factory-event/model-response/dispatch-retry/2",
+      "payload": {
+        "attempt": 2,
+        "durationMillis": 141,
+        "model": "redacted-model",
+        "modelRequestId": "dispatch-retry/model-request/1",
+        "operation": "TEXT_GENERATION",
+        "outcome": "SUCCEEDED",
+        "outputPreview": "redacted successful retry",
+        "providerLocality": "CLOUD"
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "MODEL_RESPONSE"
+    },
+    {
+      "context": {
+        "dispatchId": "dispatch-retry",
+        "eventTime": "2026-08-09T13:00:13Z",
+        "requestId": "request-production-retry",
+        "sequence": 13,
+        "sessionId": "~default",
+        "tick": 4,
+        "traceIds": ["trace-production-retry"],
+        "workIds": ["work-production-retry"]
+      },
+      "id": "factory-event/dispatch-response/dispatch-retry",
+      "payload": {
+        "outcome": "ACCEPTED",
+        "output": "redacted successful retry",
+        "transitionId": "process"
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "DISPATCH_RESPONSE"
+    },
+    {
+      "context": {
+        "eventTime": "2026-08-09T13:00:14Z",
+        "sequence": 14,
+        "sessionId": "~default",
+        "tick": 4,
+        "traceIds": ["trace-production-retry"],
+        "workIds": ["work-production-retry"]
+      },
+      "id": "factory-event/work-state-change/work-production-retry/complete",
+      "payload": {
+        "fromPlaceId": "task:processing",
+        "fromState": "processing",
+        "reason": "retry completed",
+        "source": "cli",
+        "toPlaceId": "task:complete",
+        "toState": "complete",
+        "workId": "work-production-retry",
+        "workTypeName": "task"
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "WORK_STATE_CHANGE"
+    },
+    {
+      "context": {
+        "eventTime": "2026-08-09T13:00:15Z",
+        "sequence": 15,
+        "sessionId": "~default",
+        "tick": 4
+      },
+      "id": "factory-event/run-finished/production-retry",
+      "payload": {"state": "COMPLETED"},
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "RUN_RESPONSE"
+    }
+  ]
+}
