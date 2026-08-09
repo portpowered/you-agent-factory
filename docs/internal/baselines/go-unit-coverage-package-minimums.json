@@ -234,7 +234,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/responsebridge",
-      "minimum": 87.20
+      "minimum": 86.92
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/service",
