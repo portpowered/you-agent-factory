@@ -22,3 +22,19 @@ func TestResolveRunnerSelectionPrecedenceAndCapabilities(t *testing.T) {
 		t.Fatal("runner metadata was not detached")
 	}
 }
+
+func TestAntigravityRunnerAdvertisesStructuredOutput(t *testing.T) {
+	metadata, ok := BuiltInRunnerMetadata(workerexecution.RunnerIDAntigravity)
+	if !ok {
+		t.Fatal("Antigravity metadata is unavailable")
+	}
+	for _, capability := range metadata.Capabilities.Optional {
+		if capability.Capability == workerexecution.RunnerOptionalCapabilityStructuredOutput {
+			if capability.Status != workerexecution.RunnerOptionalCapabilityStatusSupported {
+				t.Fatalf("structured output status = %q, want supported", capability.Status)
+			}
+			return
+		}
+	}
+	t.Fatal("Antigravity metadata does not declare structured output")
+}

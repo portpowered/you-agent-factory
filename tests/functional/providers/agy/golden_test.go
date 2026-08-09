@@ -1,6 +1,7 @@
 package agy
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,6 +24,7 @@ const (
 	agyGoldenVideoPrompt       = "Watch the video file clip-fixture.mp4 in the workspace. Describe the visual content and state whether the audio track contains speech, music, noise, or silence."
 	agyGoldenGroundtruthPrompt = "Watch groundtruth-fixture.mp4 in the workspace and give an exhaustive review with exact duration, resolution, frame count and rate, PHASE text, the red-to-blue cut time, and the 440 Hz tone ending in silence."
 	agyGoldenMissingPrompt     = "Watch does-not-exist-xyz.mp4 in the workspace and return the structured clip-QA verdict."
+	agyGoldenStructuredSchema  = `{"type":"object","properties":{"sentiment":{"type":"string","enum":["positive","negative"]},"confidence":{"type":"number"}},"required":["sentiment","confidence"]}`
 )
 
 type agyGoldenCase struct {
@@ -179,6 +181,51 @@ func TestAgyClipQAGoldenPassThroughRootBuildProcess(t *testing.T) {
 		if !strings.Contains(*providerResponse.Response, want) {
 			t.Fatalf("clip-QA provider response missing %q: %s", want, *providerResponse.Response)
 		}
+	}
+	assertAgyGoldenDispatch(t, events, factoryapi.WorkOutcomeAccepted, *providerResponse.Response)
+}
+
+// TestAgyStructuredJSONGoldenThroughRootBuildProcess proves a recorded JSON
+// envelope satisfies an authored schema at the Worker boundary instead of
+// being accepted solely because the Provider returned exit-zero output.
+func TestAgyStructuredJSONGoldenThroughRootBuildProcess(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(t, dir, "worker", agyGoldenWorkerConfig())
+	support.WriteWorkstationConfig(t, dir, "process", agyGoldenWorkstationConfig(
+		"Classify the statement as positive or negative and provide confidence.",
+		agyGoldenStructuredSchema,
+	))
+	testutil.WriteSeedFile(t, dir, "task", []byte("{\"title\":\"agy structured JSON golden\"}"))
+
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: readAgyGoldenAsset(t, "agy-trace-structured.json"),
+	})
+	_, listed, events, _ := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		30*time.Second,
+	)
+
+	assertAgyGoldenWorkCompleted(t, listed)
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner calls = %d, want exactly one", runner.CallCount())
+	}
+	assertAgyGoldenCommand(t, runner.LastRequest(), dir,
+		"Classify the statement as positive or negative and provide confidence.",
+		agyGoldenStructuredSchema,
+	)
+
+	providerResponse := agyGoldenInferenceResponse(t, events, factoryapi.InferenceOutcomeSucceeded)
+	if providerResponse.Response == nil {
+		t.Fatal("structured provider response is nil")
+	}
+	var output map[string]any
+	if err := json.Unmarshal([]byte(*providerResponse.Response), &output); err != nil {
+		t.Fatalf("decode structured provider response: %v", err)
+	}
+	if output["sentiment"] != "positive" || output["confidence"] != 0.98 {
+		t.Fatalf("structured provider response = %#v, want positive/0.98", output)
 	}
 	assertAgyGoldenDispatch(t, events, factoryapi.WorkOutcomeAccepted, *providerResponse.Response)
 }
