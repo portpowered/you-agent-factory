@@ -18,6 +18,7 @@ type Topic string
 const (
 	TopicAgents              Topic = "agents"
 	TopicAuthoringFactories  Topic = "authoring-factories"
+	TopicPackagedFactories   Topic = "packaged-factories"
 	TopicRun                 Topic = "run"
 	TopicConfig              Topic = "config"
 	TopicMockWorkers         Topic = "mock-workers"
@@ -48,6 +49,7 @@ const (
 const (
 	referenceAgentsPath              = "agents.md"
 	referenceAuthoringFactoriesPath  = "authoring-factories.md"
+	referencePackagedFactoriesPath   = "packaged-factories.md"
 	referenceRunPath                 = "run.md"
 	referenceConfigPath              = "config.md"
 	referenceMockWorkersPath         = "mock-workers.md"
@@ -80,6 +82,7 @@ type topicDocument struct {
 var topicDocuments = []topicDocument{
 	{topic: TopicAgents, description: "Agent orientation: read order, work submission, command matrix, planner vs executor, and topic router.", path: referenceAgentsPath, displayOrder: 5},
 	{topic: TopicAuthoringFactories, description: "Practical factory authoring workflow, runnable examples, mock workers, and replay.", path: referenceAuthoringFactoriesPath, displayOrder: 10},
+	{topic: TopicPackagedFactories, description: "First-party @you/* Factory catalog, live invocation discovery, and operator guide.", path: referencePackagedFactoriesPath, displayOrder: 12},
 	{topic: TopicRun, description: "Supported local, one-shot, batch, continuous, and mock-worker run shapes.", path: referenceRunPath, displayOrder: 15},
 	{topic: TopicConfig, description: "Operator initialization and Factory validation, flattening, expansion, and minimum authoring contract.", path: referenceConfigPath, displayOrder: 20},
 	{topic: TopicMockWorkers, description: "Mock-worker runs, JSON selection contract, and deterministic accept, reject, and script outcomes.", path: referenceMockWorkersPath, displayOrder: 25},

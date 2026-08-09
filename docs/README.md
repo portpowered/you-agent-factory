@@ -5,7 +5,7 @@ The installed CLI also packages a fixed reference surface under
 run `you docs <topic>` for packaged topics such as `agents`,
 `authoring-factories`, `config`, `mock-workers`, `record-replay`, `guards`,
 `relationships`, `work`, `workstations`, `workers`, `resources`, `models`,
-`batch-inputs`, or `templates`.
+`batch-inputs`, `packaged-factories`, or `templates`.
 
 ## For agents
 
@@ -31,6 +31,9 @@ These are the fixed topic names accepted by `you docs <topic>`.
 - `authoring-factories` is the packaged practical factory authoring guide. Run
   `you docs authoring-factories` for workflow sequencing, runnable examples,
   mock-worker checks, and replay recording.
+- `packaged-factories` is the first-party `@you/*` Factory operator guide. Run
+  `you docs packaged-factories` for catalog discovery, live invocation help, and
+  the common per-Factory entry contract.
 - `config` is the packaged `factory.json` topology reference. Run `you docs
   config` for work types, states, workers, workstations, resources,
   portability, and top-level layout fields.
