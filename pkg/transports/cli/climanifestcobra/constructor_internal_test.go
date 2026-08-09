@@ -3,11 +3,15 @@ package climanifestcobra
 import (
 	"bytes"
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -973,5 +977,252 @@ func TestRegisterFlagRejectsUnsupportedValueType(t *testing.T) {
 		ValueType: "float",
 	}, flagTarget{}, "help"); err == nil {
 		t.Fatal("registerFlag(float) = nil, want error")
+	}
+}
+
+func TestResolvedWorkerSessionsHandlerRunsOptionalPreRun(t *testing.T) {
+	command := &cobra.Command{Use: "worker-sessions"}
+	preRunErr := errors.New("pre-run failed")
+	for _, test := range []struct {
+		name       string
+		handlers   commandregistry.CommandHandlers
+		wantErr    error
+		wantPreRun int
+		wantRun    int
+	}{
+		{
+			name: "pre-run and run",
+			handlers: commandregistry.CommandHandlers{
+				PreRunE: func(*cobra.Command, []string) error { return nil },
+				RunE:    func(*cobra.Command, []string) error { return nil },
+			},
+			wantPreRun: 1,
+			wantRun:    1,
+		},
+		{
+			name: "pre-run failure",
+			handlers: commandregistry.CommandHandlers{
+				PreRunE: func(*cobra.Command, []string) error { return preRunErr },
+				RunE:    func(*cobra.Command, []string) error { return nil },
+			},
+			wantErr:    preRunErr,
+			wantPreRun: 1,
+		},
+		{
+			name: "without pre-run",
+			handlers: commandregistry.CommandHandlers{
+				RunE: func(*cobra.Command, []string) error { return nil },
+			},
+			wantRun: 1,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			preRuns, runs := 0, 0
+			handlers := test.handlers
+			if handlers.PreRunE != nil {
+				original := handlers.PreRunE
+				handlers.PreRunE = func(cmd *cobra.Command, args []string) error {
+					preRuns++
+					return original(cmd, args)
+				}
+			}
+			originalRun := handlers.RunE
+			handlers.RunE = func(cmd *cobra.Command, args []string) error {
+				runs++
+				return originalRun(cmd, args)
+			}
+			err := resolvedWorkerSessionsHandler(handlers)(command, []string{"list"}, nil, resolvedinput.Inputs{})
+			if !errors.Is(err, test.wantErr) {
+				t.Fatalf("resolvedWorkerSessionsHandler() error = %v, want %v", err, test.wantErr)
+			}
+			if preRuns != test.wantPreRun || runs != test.wantRun {
+				t.Fatalf("handler calls = pre-run %d, run %d; want %d, %d", preRuns, runs, test.wantPreRun, test.wantRun)
+			}
+		})
+	}
+}
+
+func TestWorkerConstructorHelperBranches(t *testing.T) {
+	manifest, err := generated.WorkFamilyManifest()
+	if err != nil {
+		t.Fatalf("WorkFamilyManifest() error = %v", err)
+	}
+	for _, commandID := range []string{
+		"you.work", "you.work.list", "you.work.watch", "you.work.show", "you.work.move", "you.work.visualize",
+	} {
+		mutated := manifest
+		mutated.Commands = make(map[string]climanifest.Command, len(manifest.Commands))
+		for id, record := range manifest.Commands {
+			mutated.Commands[id] = record
+		}
+		delete(mutated.Commands, commandID)
+		if _, _, _, _, _, _, err := workManifestRecords(mutated); err == nil {
+			t.Fatalf("workManifestRecords(missing %q) error = nil", commandID)
+		}
+	}
+	if _, err := buildWorkCommandFromRecord(climanifest.Command{ID: "you.work.submit"}); err == nil {
+		t.Fatal("buildWorkCommandFromRecord(foreign) error = nil")
+	}
+	listRecord := manifest.Commands["you.work.list"]
+	if err := registerWorkLocalFlags(&cobra.Command{Use: "list"}, listRecord, WorkFamilyBindings{}); err == nil {
+		t.Fatal("registerWorkLocalFlags(missing binding) error = nil")
+	}
+	invalidLocalFlag := climanifest.Command{Flags: map[string]climanifest.Flag{
+		"flag": {ID: "flag", Long: "flag", Scope: "local", ValueType: "float"},
+	}}
+	flagTarget := ""
+	if err := registerWorkLocalFlags(&cobra.Command{Use: "invalid"}, invalidLocalFlag, WorkFamilyBindings{LocalTargets: map[string]any{"flag": &flagTarget}}); err == nil {
+		t.Fatal("registerWorkLocalFlags(unsupported value type) error = nil")
+	}
+	if _, err := buildRunnableWorkLeaf(invalidLocalFlag, commandregistry.NewRegistry(), WorkFamilyBindings{LocalTargets: map[string]any{"flag": &flagTarget}}); err == nil {
+		t.Fatal("buildRunnableWorkLeaf(unsupported local flag) error = nil")
+	}
+	hiddenRecord := listRecord
+	hiddenRecord.Visibility = "hidden"
+	hiddenCommand, err := buildWorkCommandFromRecord(hiddenRecord)
+	if err != nil || !hiddenCommand.Hidden {
+		t.Fatalf("buildWorkCommandFromRecord(hidden) = %#v, %v", hiddenCommand, err)
+	}
+	if _, err := buildRunnableWorkLeaf(climanifest.Command{ID: "you.work.submit"}, commandregistry.NewRegistry(), WorkFamilyBindings{}); err == nil {
+		t.Fatal("buildRunnableWorkLeaf(foreign) error = nil")
+	}
+	invalidRelationship := listRecord
+	invalidRelationship.Flags = nil
+	invalidRelationship.Relationships = map[string]climanifest.Relationship{
+		"relationship": {ID: "relationship", Kind: "unsupported"},
+	}
+	if _, err := buildRunnableWorkLeaf(invalidRelationship, commandregistry.NewRegistry(), WorkFamilyBindings{}); err == nil {
+		t.Fatal("buildRunnableWorkLeaf(unsupported relationship) error = nil")
+	}
+	noHandler := listRecord
+	noHandler.Flags = nil
+	noHandler.Relationships = nil
+	if _, err := buildRunnableWorkLeaf(noHandler, commandregistry.NewRegistry(), WorkFamilyBindings{}); err == nil {
+		t.Fatal("buildRunnableWorkLeaf(missing handler) error = nil")
+	}
+	if got := sortedWorkArgumentIDs(map[string]climanifest.Argument{
+		"z": {Position: 0},
+		"a": {Position: 0},
+		"b": {Position: 1},
+	}); strings.Join(got, ",") != "a,z,b" {
+		t.Fatalf("sortedWorkArgumentIDs() = %v, want [a z b]", got)
+	}
+	if got := recordPathBelowRoot(climanifest.Command{}); got != nil {
+		t.Fatalf("recordPathBelowRoot(empty) = %v, want nil", got)
+	}
+	if _, err := resolvedWorkCandidate("bad", resolvedinput.SourceCLIFlag, struct{}{}); err == nil {
+		t.Fatal("resolvedWorkCandidate(unsupported) error = nil")
+	}
+
+	badArgument := climanifest.Command{Arguments: map[string]climanifest.Argument{"arg": {ValueType: "float"}}}
+	if _, err := resolveCompatibilityWorkInputs(&cobra.Command{}, badArgument, nil); err == nil {
+		t.Fatal("resolveCompatibilityWorkInputs(unsupported argument) error = nil")
+	}
+	badArgument.Arguments["arg"] = climanifest.Argument{ValueType: "string"}
+	if _, err := resolveCompatibilityWorkInputs(&cobra.Command{}, badArgument, map[string]any{"arg": struct{}{}}); err == nil {
+		t.Fatal("resolveCompatibilityWorkInputs(unsupported argument value) error = nil")
+	}
+	badFlag := climanifest.Command{Flags: map[string]climanifest.Flag{
+		"flag": {ID: "flag", Long: "flag", Scope: "local", ValueType: "float"},
+	}}
+	if _, err := resolveCompatibilityWorkInputs(&cobra.Command{}, badFlag, nil); err == nil {
+		t.Fatal("resolveCompatibilityWorkInputs(unsupported flag) error = nil")
+	}
+	badFlag.Flags["flag"] = climanifest.Flag{ID: "flag", Long: "flag", Scope: "local", ValueType: "string"}
+	if _, err := resolveCompatibilityWorkInputs(&cobra.Command{}, badFlag, map[string]any{"flag": struct{}{}}); err == nil {
+		t.Fatal("resolveCompatibilityWorkInputs(unsupported flag value) error = nil")
+	}
+	listRecord.Arguments = map[string]climanifest.Argument{"arg": {ValueType: "string"}}
+	compatibilityManifest := manifest
+	compatibilityManifest.Commands = make(map[string]climanifest.Command, len(manifest.Commands))
+	for id, record := range manifest.Commands {
+		compatibilityManifest.Commands[id] = record
+	}
+	compatibilityManifest.Commands[listRecord.ID] = listRecord
+	compatibilityBindings, err := resolvedWorkHandlerBindings(compatibilityManifest, commandregistry.ResolvedWorkHandlers{
+		List:      func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil },
+		Watch:     func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil },
+		Show:      func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil },
+		Move:      func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil },
+		Visualize: func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil },
+	})
+	if err != nil {
+		t.Fatalf("resolvedWorkHandlerBindings(compatibility inputs) error = %v", err)
+	}
+	listBinding := compatibilityBindings[listRecord.Handler.ID]
+	if err := listBinding(&cobra.Command{}, nil, map[string]any{"arg": struct{}{}}, resolvedinput.Inputs{}); err == nil {
+		t.Fatal("resolved compatibility binding(unsupported value) error = nil")
+	}
+	_ = listBinding(&cobra.Command{}, nil, nil, resolvedinput.Inputs{})
+	duplicateInput := climanifest.Command{
+		Arguments: map[string]climanifest.Argument{"same": {ID: "same", ValueType: "string"}},
+		Flags: map[string]climanifest.Flag{
+			"same": {ID: "same", Long: "same", Scope: "local", ValueType: "string"},
+		},
+	}
+	if _, err := resolveCompatibilityWorkInputs(&cobra.Command{}, duplicateInput, map[string]any{"same": "value"}); err == nil {
+		t.Fatal("resolveCompatibilityWorkInputs(duplicate input) error = nil")
+	}
+	if err := projectCobraFlagGroupAnnotations(&cobra.Command{Use: "list"}, "you.work.list", []plannedRelationship{{
+		record:       climanifest.Relationship{ID: "relationship", Kind: "mutually-exclusive"},
+		participants: []plannedParticipant{{kind: "flag", public: "--missing", cobraGroupAnnotationSafe: true}},
+	}}); err == nil {
+		t.Fatal("projectCobraFlagGroupAnnotations(missing flag) error = nil")
+	}
+	group := &cobra.Command{Use: "group"}
+	configureGenericGroupCommand(group)
+	if err := group.Args(group, nil); err != nil {
+		t.Fatalf("configureGenericGroupCommand(empty args) error = %v", err)
+	}
+	if err := group.Args(group, []string{"unknown"}); err == nil {
+		t.Fatal("configureGenericGroupCommand(unknown args) error = nil")
+	}
+}
+
+func TestResolvedWorkHandlerBindingsCoversMissingAndOptionalWatch(t *testing.T) {
+	manifest, err := generated.WorkFamilyManifest()
+	if err != nil {
+		t.Fatalf("WorkFamilyManifest() error = %v", err)
+	}
+	allHandlers := commandregistry.ResolvedWorkHandlers{
+		List:      func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil },
+		Watch:     func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil },
+		Show:      func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil },
+		Move:      func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil },
+		Visualize: func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil },
+	}
+	missingList := allHandlers
+	missingList.List = nil
+	if _, err := resolvedWorkHandlerBindings(manifest, missingList); err == nil {
+		t.Fatal("resolvedWorkHandlerBindings(missing list) error = nil")
+	}
+	optionalWatch := allHandlers
+	optionalWatch.Watch = nil
+	watchRecord := manifest.Commands["you.work.watch"]
+	watchRecord.Arguments = nil
+	watchRecord.Flags = nil
+	manifest.Commands[watchRecord.ID] = watchRecord
+	bindings, err := resolvedWorkHandlerBindings(manifest, optionalWatch)
+	if err != nil {
+		t.Fatalf("resolvedWorkHandlerBindings(optional watch) error = %v", err)
+	}
+	watchHandler := bindings[watchRecord.Handler.ID]
+	if watchHandler == nil {
+		t.Fatal("optional watch handler was not bound")
+	}
+	if err := watchHandler(&cobra.Command{}, nil, nil, resolvedinput.Inputs{}); err == nil {
+		t.Fatal("optional watch handler error = nil")
+	}
+
+	duplicate := manifest
+	duplicate.Commands = make(map[string]climanifest.Command, len(manifest.Commands))
+	for id, record := range manifest.Commands {
+		duplicate.Commands[id] = record
+	}
+	showRecord := duplicate.Commands["you.work.show"]
+	showRecord.Handler.ID = duplicate.Commands["you.work.list"].Handler.ID
+	duplicate.Commands[showRecord.ID] = showRecord
+	if _, err := resolvedWorkHandlerBindings(duplicate, allHandlers); err == nil {
+		t.Fatal("resolvedWorkHandlerBindings(duplicate handler) error = nil")
 	}
 }

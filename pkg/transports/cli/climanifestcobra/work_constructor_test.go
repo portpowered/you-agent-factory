@@ -60,6 +60,180 @@ func TestNewWorkFamilyCommandBuildsContractedPaths(t *testing.T) {
 	}
 }
 
+func TestNewWorkerSessionsFamilyCommandBuildsDetachedRunnableLeaves(t *testing.T) {
+	registry := commandregistry.NewRegistry()
+	calls := make(map[string]int)
+	for _, command := range []struct {
+		id        string
+		handlerID string
+	}{
+		{id: "you.worker-sessions.list", handlerID: "you.worker-sessions.list.handler"},
+		{id: "you.worker-sessions.show", handlerID: "you.worker-sessions.show.handler"},
+		{id: "you.worker-sessions.read", handlerID: "you.worker-sessions.read.handler"},
+		{id: "you.worker-sessions.stream", handlerID: "you.worker-sessions.stream.handler"},
+	} {
+		command := command
+		if err := registry.RegisterHandlers(command.handlerID, commandregistry.CommandHandlers{
+			PreRunE: func(_ *cobra.Command, _ []string) error {
+				calls[command.id+".pre"]++
+				return nil
+			},
+			RunE: func(_ *cobra.Command, _ []string) error {
+				calls[command.id]++
+				return nil
+			},
+		}); err != nil {
+			t.Fatalf("RegisterHandlers(%q) error = %v", command.handlerID, err)
+		}
+	}
+
+	workerSessions, err := climanifestcobra.NewWorkerSessionsFamilyCommand(registry)
+	if err != nil {
+		t.Fatalf("NewWorkerSessionsFamilyCommand() error = %v", err)
+	}
+	if workerSessions.Name() != "worker-sessions" || workerSessions.Parent() != nil {
+		t.Fatalf("worker-sessions command = name %q parent %v, want detached root", workerSessions.Name(), workerSessions.Parent())
+	}
+	if len(workerSessions.Commands()) != 4 {
+		t.Fatalf("worker-sessions child count = %d, want 4", len(workerSessions.Commands()))
+	}
+
+	for _, command := range []string{"list", "show", "read", "stream"} {
+		leaf, err := findCommandByPath(workerSessions, "worker-sessions "+command)
+		if err != nil {
+			t.Fatalf("FindCommandByPath(%s) error = %v", command, err)
+		}
+		if !leaf.Runnable() || leaf.RunE == nil {
+			t.Fatalf("worker-sessions %s must expose a runnable RunE leaf", command)
+		}
+	}
+	_ = calls
+}
+
+func TestNewWorkerSessionsFamilyCommandRejectsInvalidManifestsAndHandlers(t *testing.T) {
+	valid := workerSessionsManifestWithRoot(t)
+	validRegistry := workerSessionsRegistry(t)
+	cases := []struct {
+		name   string
+		mutate func(climanifest.Manifest) climanifest.Manifest
+		reg    *commandregistry.Registry
+	}{
+		{name: "nil registry", mutate: func(manifest climanifest.Manifest) climanifest.Manifest { return manifest }, reg: nil},
+		{name: "wrong root", mutate: func(manifest climanifest.Manifest) climanifest.Manifest { manifest.RootPath = "root"; return manifest }, reg: validRegistry},
+		{name: "wrong command count", mutate: func(manifest climanifest.Manifest) climanifest.Manifest {
+			delete(manifest.Commands, "you.worker-sessions.list")
+			return manifest
+		}, reg: validRegistry},
+		{name: "foreign command", mutate: func(manifest climanifest.Manifest) climanifest.Manifest {
+			record := manifest.Commands["you.worker-sessions.list"]
+			delete(manifest.Commands, "you.worker-sessions.list")
+			record.ID, record.Name, record.Path = "you.work.list", "list", "you work list"
+			manifest.Commands[record.ID] = record
+			return manifest
+		}, reg: validRegistry},
+		{name: "key and record mismatch", mutate: func(manifest climanifest.Manifest) climanifest.Manifest {
+			record := manifest.Commands["you.worker-sessions.list"]
+			record.ID = "you.worker-sessions.show"
+			manifest.Commands["you.worker-sessions.list"] = record
+			return manifest
+		}, reg: validRegistry},
+		{name: "parent runnable", mutate: func(manifest climanifest.Manifest) climanifest.Manifest {
+			record := manifest.Commands["you.worker-sessions"]
+			record.Runnable = true
+			manifest.Commands[record.ID] = record
+			return manifest
+		}, reg: validRegistry},
+		{name: "missing runnable handler", mutate: func(manifest climanifest.Manifest) climanifest.Manifest {
+			record := manifest.Commands["you.worker-sessions.show"]
+			record.Handler = nil
+			manifest.Commands[record.ID] = record
+			return manifest
+		}, reg: validRegistry},
+		{name: "non-runnable leaf", mutate: func(manifest climanifest.Manifest) climanifest.Manifest {
+			record := manifest.Commands["you.worker-sessions.show"]
+			record.Runnable = false
+			manifest.Commands[record.ID] = record
+			return manifest
+		}, reg: validRegistry},
+		{name: "missing root handler", mutate: func(manifest climanifest.Manifest) climanifest.Manifest {
+			record := manifest.Commands["you"]
+			record.Handler = nil
+			manifest.Commands[record.ID] = record
+			return manifest
+		}, reg: validRegistry},
+		{name: "handler not registered", mutate: func(manifest climanifest.Manifest) climanifest.Manifest { return manifest }, reg: commandregistry.NewRegistry()},
+		{name: "resolved-only handler", mutate: func(manifest climanifest.Manifest) climanifest.Manifest { return manifest }, reg: workerSessionsResolvedOnlyRegistry(t)},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := climanifestcobra.NewWorkerSessionsFamilyCommandFromManifest(test.mutate(cloneWorkerSessionsManifest(valid)), test.reg); err == nil {
+				t.Fatal("NewWorkerSessionsFamilyCommandFromManifest() error = nil, want rejection")
+			}
+		})
+	}
+}
+
+func workerSessionsManifestWithRoot(t *testing.T) climanifest.Manifest {
+	t.Helper()
+	manifest, err := generated.WorkerSessionsFamilyManifest()
+	if err != nil {
+		t.Fatalf("WorkerSessionsFamilyManifest() error = %v", err)
+	}
+	root, err := generated.RepresentativeFamilyManifest()
+	if err != nil {
+		t.Fatalf("RepresentativeFamilyManifest() error = %v", err)
+	}
+	rootRecord, err := root.CommandByID("you")
+	if err != nil {
+		t.Fatalf("representative root lookup error = %v", err)
+	}
+	manifest.Commands[rootRecord.ID] = rootRecord
+	return manifest
+}
+
+func cloneWorkerSessionsManifest(manifest climanifest.Manifest) climanifest.Manifest {
+	clone := manifest
+	clone.Commands = make(map[string]climanifest.Command, len(manifest.Commands))
+	for id, record := range manifest.Commands {
+		clone.Commands[id] = record
+	}
+	return clone
+}
+
+func workerSessionsRegistry(t *testing.T) *commandregistry.Registry {
+	t.Helper()
+	registry := commandregistry.NewRegistry()
+	for _, handlerID := range []string{
+		"you.worker-sessions.list.handler",
+		"you.worker-sessions.show.handler",
+		"you.worker-sessions.read.handler",
+		"you.worker-sessions.stream.handler",
+	} {
+		if err := registry.RegisterHandlers(handlerID, commandregistry.CommandHandlers{RunE: noopRunE}); err != nil {
+			t.Fatalf("RegisterHandlers(%q) error = %v", handlerID, err)
+		}
+	}
+	return registry
+}
+
+func workerSessionsResolvedOnlyRegistry(t *testing.T) *commandregistry.Registry {
+	t.Helper()
+	registry := commandregistry.NewRegistry()
+	if err := registry.RegisterResolved("you.worker-sessions.list.handler", func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil }); err != nil {
+		t.Fatalf("RegisterResolved() error = %v", err)
+	}
+	for _, handlerID := range []string{
+		"you.worker-sessions.show.handler",
+		"you.worker-sessions.read.handler",
+		"you.worker-sessions.stream.handler",
+	} {
+		if err := registry.RegisterHandlers(handlerID, commandregistry.CommandHandlers{RunE: noopRunE}); err != nil {
+			t.Fatalf("RegisterHandlers(%q) error = %v", handlerID, err)
+		}
+	}
+	return registry
+}
+
 func TestNewWorkFamilyCommandRejectsOutOfFamilyManifestCommand(t *testing.T) {
 	manifest, err := generated.WorkFamilyManifest()
 	if err != nil {

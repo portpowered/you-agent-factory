@@ -46,6 +46,56 @@ func TestListPackagedFactoriesReturnsPublishedCatalog(t *testing.T) {
 	}
 }
 
+func TestWorkerSessionOperationsReturnStructuredErrorWhenHandlerIsUnavailable(t *testing.T) {
+	srv := NewServer(nil, nil, nil, nil, zap.NewNop())
+	sessionID := factoryapi.SessionID("missing")
+	cases := []struct {
+		name string
+		call func(*httptest.ResponseRecorder)
+	}{
+		{
+			name: "list",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.ListWorkerSessionsBySessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), sessionID, factoryapi.ListWorkerSessionsBySessionIdParams{})
+			},
+		},
+		{
+			name: "show",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.GetWorkerSessionObservationBySessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), sessionID, factoryapi.GetWorkerSessionObservationBySessionIdParams{})
+			},
+		},
+		{
+			name: "read",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.ReadWorkerSessionTranscriptBySessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), sessionID, factoryapi.ReadWorkerSessionTranscriptBySessionIdParams{})
+			},
+		},
+		{
+			name: "stream",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.StreamWorkerSessionEventsBySessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), sessionID, factoryapi.StreamWorkerSessionEventsBySessionIdParams{})
+			},
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			test.call(recorder)
+			if recorder.Code != http.StatusInternalServerError {
+				t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusInternalServerError, recorder.Body.String())
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+				t.Fatalf("decode structured error: %v", err)
+			}
+			if response.Code != factoryapi.ErrorResponseCodeINTERNALERROR {
+				t.Fatalf("error code = %q, want %q", response.Code, factoryapi.ErrorResponseCodeINTERNALERROR)
+			}
+		})
+	}
+}
+
 func TestDashboardRoutesServeEmbeddedShellAssetsAndFallback(t *testing.T) {
 	srv := NewServer(nil, nil, nil, nil, zap.NewNop())
 
