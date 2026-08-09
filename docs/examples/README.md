@@ -21,6 +21,10 @@ so the published primitive usage stays aligned with the shipped host API.
   `FACTORY_REQUEST_BATCH` request for a `story` work item in the `init` state.
   Pass it with `you run --dir ./examples/write-code-review --work
   ./docs/examples/startup-work.json`.
+- [`operations-stranded-work.json`](operations-stranded-work.json) is an
+  intentionally incomplete `task` request used by `you docs operations` to
+  demonstrate a finite drain with non-terminal Work. It is diagnostic input,
+  not a production batch.
 - [`factory-validation/unsupported-three-input-join.json`](factory-validation/unsupported-three-input-join.json)
   is a deliberately rejected three-input `SAME_NAME` plus
   `ALL_CHILDREN_COMPLETE` join for the `you docs factory-validation` guide.

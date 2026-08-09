@@ -21,6 +21,9 @@ For watched batch files under `inputs/`, relation fields, and the
 For confirming a factory service is running and routing `--server` or
 `--session` on submit and work commands, see `you docs sessions`.
 
+For the operator runbook covering long-lived runs, event-driven Work
+inspection, and restart recovery, use `you docs operations`.
+
 This is the canonical customer-facing guide for submitted-work contracts.
 Keep single-work API fields, batch cross-links, tag propagation, and
 submission-oriented runtime flow here. Keep `factory.json` topology in

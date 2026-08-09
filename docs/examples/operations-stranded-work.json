@@ -1,0 +1,14 @@
+{
+  "requestId": "operations-stranded-work",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "operations-stranded-task",
+      "workTypeName": "task",
+      "state": "in-review",
+      "payload": {
+        "purpose": "Document the intentionally stranded PROCESSING Work example"
+      }
+    }
+  ]
+}

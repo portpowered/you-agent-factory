@@ -10,6 +10,9 @@ Use `you run` to start a Factory or perform a one-shot Factory invocation. This
 is the canonical packaged entry point for local, explicit-factory, batch,
 continuous, and mock-worker run tasks.
 
+For the operator runbook that distinguishes idle, finite-drained, and
+restart-recovery states, use `you docs operations`.
+
 ## Choose a run shape
 
 | Task | Run shape |
