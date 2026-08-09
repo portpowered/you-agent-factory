@@ -44,19 +44,10 @@ func NewList(transport clihttp.Protocol) func(ListConfig) error {
 }
 
 func list(config ListConfig) error {
-	if config.Context == nil {
-		return fmt.Errorf("context is required")
-	}
-	if config.Output == nil {
-		return fmt.Errorf("output writer is required")
-	}
-	if config.HTTP == nil {
-		return fmt.Errorf("CLI HTTP protocol is required")
+	if err := validateListConfig(config); err != nil {
+		return err
 	}
 	config.WorkID = strings.TrimSpace(config.WorkID)
-	if config.WorkID == "" {
-		return newCLIError("WORK_ID_REQUIRED", "--work-id is required", nil)
-	}
 
 	format, err := normalizeOutputFormat(config.OutputFormat)
 	if err != nil {
@@ -117,6 +108,22 @@ func list(config ListConfig) error {
 		return encodeListJSON(config.Output, result)
 	}
 	return renderList(config.Output, result)
+}
+
+func validateListConfig(config ListConfig) error {
+	if config.Context == nil {
+		return fmt.Errorf("context is required")
+	}
+	if config.Output == nil {
+		return fmt.Errorf("output writer is required")
+	}
+	if config.HTTP == nil {
+		return fmt.Errorf("CLI HTTP protocol is required")
+	}
+	if strings.TrimSpace(config.WorkID) == "" {
+		return newCLIError("WORK_ID_REQUIRED", "--work-id is required", nil)
+	}
+	return nil
 }
 
 // listJSONResponse makes nullable observation fields explicit for CLI JSON.

@@ -111,7 +111,10 @@ func stream(config StreamConfig) error {
 	clidiag.Printf(config.Diagnostics, config.Verbose || config.Debug,
 		"worker sessions stream response endpointPath=%s status=%d durationMillis=%d",
 		endpoint.Path, response.HTTP.StatusCode, response.Duration.Milliseconds())
+	return consumeStreamResponse(config, jsonOutput, response)
+}
 
+func consumeStreamResponse(config StreamConfig, jsonOutput bool, response clihttp.Response) error {
 	reader := bufio.NewReader(response.HTTP.Body)
 	started := false
 	for {

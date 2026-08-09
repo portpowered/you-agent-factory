@@ -279,7 +279,7 @@ func (s *stubWorkerSessionsService) GetObservation(context.Context, workersessio
 }
 
 func (s *stubWorkerSessionsService) StreamObservations(context.Context, workersessions.StreamObservationsRequest) (workersessions.ObservationSubscription, error) {
-	return nil, nil
+	return workersessions.ObservationSubscription{}, nil
 }
 
 func (s *stubWorkerSessionsService) ReadTranscript(context.Context, workersessions.ReadTranscriptRequest) (workersessions.ReadTranscriptResult, error) {

@@ -521,3 +521,163 @@ func recordPathBelowRoot(record climanifest.Command) []string {
 	}
 	return path[1:]
 }
+
+const workerSessionsListHandlerID = "you.worker-sessions.list.handler"
+const workerSessionsShowHandlerID = "you.worker-sessions.show.handler"
+const workerSessionsReadHandlerID = "you.worker-sessions.read.handler"
+const workerSessionsStreamHandlerID = "you.worker-sessions.stream.handler"
+
+var workerSessionsRunnableCommands = []struct {
+	id        string
+	handlerID string
+}{
+	{id: "you.worker-sessions.list", handlerID: workerSessionsListHandlerID},
+	{id: "you.worker-sessions.show", handlerID: workerSessionsShowHandlerID},
+	{id: "you.worker-sessions.read", handlerID: workerSessionsReadHandlerID},
+	{id: "you.worker-sessions.stream", handlerID: workerSessionsStreamHandlerID},
+}
+
+// NewWorkerSessionsFamilyCommand builds the detached `you worker-sessions`
+// observation family from generated metadata and a stable handler registry.
+func NewWorkerSessionsFamilyCommand(registry *commandregistry.Registry) (*cobra.Command, error) {
+	manifest, err := generated.WorkerSessionsFamilyManifest()
+	if err != nil {
+		return nil, fmt.Errorf("build worker sessions family command: %w", err)
+	}
+	rootManifest, err := generated.RepresentativeFamilyManifest()
+	if err != nil {
+		return nil, fmt.Errorf("build worker sessions family command: %w", err)
+	}
+	rootRecord, err := rootManifest.CommandByID("you")
+	if err != nil {
+		return nil, fmt.Errorf("build worker sessions family command: %w", err)
+	}
+	manifest.Commands[rootRecord.ID] = rootRecord
+	return NewWorkerSessionsFamilyCommandFromManifest(manifest, registry)
+}
+
+// NewWorkerSessionsFamilyCommandFromManifest projects one worker-session
+// family snapshot. The supplied manifest is validated against the stable
+// family IDs before any Cobra command is returned.
+func NewWorkerSessionsFamilyCommandFromManifest(
+	manifest climanifest.Manifest,
+	registry *commandregistry.Registry,
+) (*cobra.Command, error) {
+	if registry == nil {
+		return nil, fmt.Errorf("build worker sessions family command: registry is required")
+	}
+	if err := validateWorkerSessionsManifest(manifest); err != nil {
+		return nil, fmt.Errorf("build worker sessions family command: %w", err)
+	}
+	registered, err := lookupWorkerSessionsHandlers(registry)
+	if err != nil {
+		return nil, fmt.Errorf("build worker sessions family command: %w", err)
+	}
+	rootRecord, err := manifest.CommandByID("you")
+	if err != nil {
+		return nil, fmt.Errorf("build worker sessions family command: %w", err)
+	}
+	root, err := NewCommandTree(manifest, GenericBindings{
+		Handlers: HandlerRegistry{
+			rootRecord.Handler.ID: func(context.Context, map[string]any) error { return nil },
+		},
+		CobraHandlers: CobraHandlerRegistry{
+			workerSessionsListHandlerID:   resolvedWorkerSessionsHandler(registered.list),
+			workerSessionsShowHandlerID:   resolvedWorkerSessionsHandler(registered.show),
+			workerSessionsReadHandlerID:   resolvedWorkerSessionsHandler(registered.read),
+			workerSessionsStreamHandlerID: resolvedWorkerSessionsHandler(registered.stream),
+		},
+		GuardUnknownSubcommands: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build worker sessions family command: %w", err)
+	}
+	workerSessions, _, err := root.Find([]string{"worker-sessions"})
+	if err != nil {
+		return nil, fmt.Errorf("build worker sessions family command: find worker-sessions: %w", err)
+	}
+	if workerSessions == nil {
+		return nil, fmt.Errorf("build worker sessions family command: worker-sessions command is unavailable")
+	}
+	root.RemoveCommand(workerSessions)
+	workerSessions.SilenceUsage = true
+	return workerSessions, nil
+}
+
+type workerSessionsHandlers struct {
+	list, show, read, stream commandregistry.CommandHandlers
+}
+
+func lookupWorkerSessionsHandlers(registry *commandregistry.Registry) (workerSessionsHandlers, error) {
+	found := make([]commandregistry.CommandHandlers, len(workerSessionsRunnableCommands))
+	for index, command := range workerSessionsRunnableCommands {
+		handlers, err := registry.LookupHandlers(command.handlerID)
+		if err != nil {
+			return workerSessionsHandlers{}, err
+		}
+		if handlers.RunE == nil || handlers.ResolvedRunE != nil {
+			return workerSessionsHandlers{}, fmt.Errorf("handler %q must provide RunE", command.handlerID)
+		}
+		found[index] = handlers
+	}
+	return workerSessionsHandlers{list: found[0], show: found[1], read: found[2], stream: found[3]}, nil
+}
+
+func resolvedWorkerSessionsHandler(handlers commandregistry.CommandHandlers) func(*cobra.Command, []string, map[string]any, resolvedinput.Inputs) error {
+	return func(cmd *cobra.Command, args []string, _ map[string]any, _ resolvedinput.Inputs) error {
+		if handlers.PreRunE != nil {
+			if err := handlers.PreRunE(cmd, args); err != nil {
+				return err
+			}
+		}
+		return handlers.RunE(cmd, args)
+	}
+}
+
+func validateWorkerSessionsManifest(manifest climanifest.Manifest) error {
+	if manifest.RootPath != "you" {
+		return fmt.Errorf("manifest root path = %q, want %q", manifest.RootPath, "you")
+	}
+	if len(manifest.Commands) != len(climanifestgen.WorkerSessionsFamilyCommandIDs)+1 {
+		return fmt.Errorf("manifest command count = %d, want %d", len(manifest.Commands), len(climanifestgen.WorkerSessionsFamilyCommandIDs)+1)
+	}
+	for commandID, record := range manifest.Commands {
+		if commandID != "you" {
+			if err := climanifestgen.AssertWorkerSessionsFamilyCommandID(commandID); err != nil {
+				return err
+			}
+		}
+		if record.ID != commandID {
+			return fmt.Errorf("manifest command key %q has record ID %q", commandID, record.ID)
+		}
+	}
+	parent, err := manifest.CommandByID("you.worker-sessions")
+	if err != nil {
+		return err
+	}
+	if parent.Runnable {
+		return fmt.Errorf("command %q must remain non-runnable", parent.ID)
+	}
+	for _, command := range workerSessionsRunnableCommands {
+		if err := validateWorkerSessionsRunnableCommand(manifest, command.id, command.handlerID); err != nil {
+			return err
+		}
+	}
+	if root, err := manifest.CommandByID("you"); err != nil {
+		return err
+	} else if root.Handler == nil || root.Handler.ID == "" {
+		return fmt.Errorf("root command %q must declare a handler", root.ID)
+	}
+	return nil
+}
+
+func validateWorkerSessionsRunnableCommand(manifest climanifest.Manifest, commandID, handlerID string) error {
+	command, err := manifest.CommandByID(commandID)
+	if err != nil {
+		return err
+	}
+	if !command.Runnable || command.Handler == nil || command.Handler.ID != handlerID {
+		return fmt.Errorf("command %q must declare runnable handler %q", command.ID, handlerID)
+	}
+	return nil
+}

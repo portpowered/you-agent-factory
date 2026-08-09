@@ -11,34 +11,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
-// ObservationService is the read/stream portion of the Worker Sessions root.
-// It exposes only detached, provider-neutral facts owned by Worker Sessions,
-// Provider Sessions, and Events. It does not expose provider readers,
-// recording stores, filesystem paths, or storage handles.
-//
-// Service includes this contract so callers do not need a second service
-// locator or a type assertion to inspect a Worker Session.
-type ObservationService interface {
-	// ListObservations returns every observed attempt correlated with req.WorkID
-	// in deterministic attempt/time order. The runtime-facing implementation
-	// reads the canonical recording projection so completed and historical
-	// attempts are not limited to the process-local supervision map.
-	ListObservations(context.Context, ListObservationsRequest) (ListObservationsResult, error)
-
-	// GetObservation returns the one observed attempt identified by its exact
-	// Providers-owned provider/kind/id reference.
-	GetObservation(context.Context, GetObservationRequest) (Observation, error)
-
-	// ReadTranscript returns the normalized transcript for one terminal Worker
-	// Session. Active sessions, missing sessions, unavailable transcripts, and
-	// projection failures are distinct typed outcomes.
-	ReadTranscript(context.Context, ReadTranscriptRequest) (ReadTranscriptResult, error)
-
-	// StreamObservations subscribes to the canonical Worker Session event topic
-	// for the exact provider session identity. The subscription first replays
-	// retained Events records and then follows newly committed records.
-	StreamObservations(context.Context, StreamObservationsRequest) (ObservationSubscription, error)
-}
+// ObservationService is retained as the public name for the Worker Sessions
+// observation capability. The capability is part of Service, so callers do
+// not need a second service locator or a type assertion to inspect a session.
+type ObservationService = Service
 
 // ListObservationsRequest narrows observations to one Work identity.
 type ListObservationsRequest struct {
@@ -353,9 +329,24 @@ type ObservationDelivery struct {
 
 // ObservationSubscription is a cancellable retained/live canonical event
 // stream. Close is idempotent and releases the underlying Events subscription.
-type ObservationSubscription interface {
-	Next(context.Context) ObservationDelivery
-	Close()
+// The function fields let the root service return a stable concrete handle
+// while implementations keep their subscription state private.
+type ObservationSubscription struct {
+	NextFunc  func(context.Context) ObservationDelivery
+	CloseFunc func()
+}
+
+func (s ObservationSubscription) Next(ctx context.Context) ObservationDelivery {
+	if s.NextFunc == nil {
+		return ObservationDelivery{Kind: ObservationDeliveryClosed, Err: ErrObservationSourceClosed}
+	}
+	return s.NextFunc(ctx)
+}
+
+func (s ObservationSubscription) Close() {
+	if s.CloseFunc != nil {
+		s.CloseFunc()
+	}
 }
 
 var (
@@ -372,4 +363,168 @@ var (
 	ErrObservationSourceGap             = errors.New("worker session observation: retained event gap")
 	ErrObservationSourceClosed          = errors.New("worker session observation: event source closed before terminal")
 	ErrObservationCanceled              = fmt.Errorf("worker session observation: canceled: %w", context.Canceled)
+)
+
+// ReadTranscriptRequest identifies one exact Provider Session whose normalized
+// transcript should be returned.
+type ReadTranscriptRequest struct {
+	ProviderSession providers.SessionRef
+}
+
+// Validate reports whether the request carries a complete typed identity.
+func (r ReadTranscriptRequest) Validate() error {
+	if err := r.ProviderSession.Validate(); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidObservationIdentity, err)
+	}
+	return nil
+}
+
+// ReadTranscriptResult is the detached Worker Session envelope and ordered
+// normalized transcript returned for a finished Provider Session.
+type ReadTranscriptResult struct {
+	WorkerSessionID string
+	ProviderSession providers.SessionRef
+	WorkIDs         []string
+	TurnID          string
+	AttemptID       string
+	State           State
+	Entries         []TranscriptEntry
+}
+
+// Clone returns a detached transcript result.
+func (r ReadTranscriptResult) Clone() ReadTranscriptResult {
+	clone := r
+	clone.ProviderSession = r.ProviderSession.Clone()
+	clone.WorkIDs = append([]string(nil), r.WorkIDs...)
+	clone.Entries = make([]TranscriptEntry, len(r.Entries))
+	for index, entry := range r.Entries {
+		clone.Entries[index] = entry.Clone()
+	}
+	return clone
+}
+
+// Validate reports whether the transcript envelope has a coherent identity,
+// terminal lifecycle state, and ordered entries.
+func (r ReadTranscriptResult) Validate() error {
+	if strings.TrimSpace(r.WorkerSessionID) == "" {
+		return ErrInvalidObservationIdentity
+	}
+	if err := r.ProviderSession.Validate(); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidObservationIdentity, err)
+	}
+	if !r.State.Valid() {
+		return ErrInvalidState
+	}
+	if !r.State.Terminal() {
+		return ErrObservationTranscriptActive
+	}
+	if strings.TrimSpace(r.AttemptID) == "" {
+		return ErrInvalidObservationAttempt
+	}
+	for index, entry := range r.Entries {
+		if err := entry.Validate(); err != nil {
+			return fmt.Errorf("transcript entry %d: %w", index+1, err)
+		}
+	}
+	return nil
+}
+
+// TranscriptEntryType is the normalized provider-neutral role or activity
+// represented by one transcript entry.
+type TranscriptEntryType string
+
+const (
+	TranscriptAssistantMessage TranscriptEntryType = "assistant_message"
+	TranscriptReasoning        TranscriptEntryType = "reasoning"
+	TranscriptSystemEvent      TranscriptEntryType = "system_event"
+	TranscriptToolCall         TranscriptEntryType = "tool_call"
+	TranscriptToolOutput       TranscriptEntryType = "tool_output"
+	TranscriptUserMessage      TranscriptEntryType = "user_message"
+)
+
+// TranscriptEntry is one normalized, bounded transcript item. Optional
+// fields remain nil when the Provider Sessions projection cannot supply them.
+type TranscriptEntry struct {
+	Arguments        *string
+	CallID           *string
+	Encrypted        *bool
+	EncryptedContent *string
+	LineNumber       *int
+	Name             *string
+	Order            int
+	Output           *string
+	SourceType       *string
+	Status           *string
+	Summary          *string
+	Text             *string
+	Timestamp        *time.Time
+	TurnIndex        *int
+	Type             TranscriptEntryType
+}
+
+// Validate reports whether the entry has a stable order and supported
+// normalized type. Provider-specific payloads are intentionally not accepted.
+func (e TranscriptEntry) Validate() error {
+	if e.Order < 0 {
+		return fmt.Errorf("transcript entry order must not be negative")
+	}
+	if strings.TrimSpace(string(e.Type)) == "" {
+		return fmt.Errorf("transcript entry type is required")
+	}
+	return nil
+}
+
+// Clone returns a detached transcript entry.
+func (e TranscriptEntry) Clone() TranscriptEntry {
+	clone := e
+	clone.Arguments = cloneString(e.Arguments)
+	clone.CallID = cloneString(e.CallID)
+	clone.Encrypted = cloneBool(e.Encrypted)
+	clone.EncryptedContent = cloneString(e.EncryptedContent)
+	clone.LineNumber = cloneInt(e.LineNumber)
+	clone.Name = cloneString(e.Name)
+	clone.Output = cloneString(e.Output)
+	clone.SourceType = cloneString(e.SourceType)
+	clone.Status = cloneString(e.Status)
+	clone.Summary = cloneString(e.Summary)
+	clone.Text = cloneString(e.Text)
+	clone.Timestamp = cloneTime(e.Timestamp)
+	clone.TurnIndex = cloneInt(e.TurnIndex)
+	return clone
+}
+
+func cloneBool(value *bool) *bool {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
+}
+
+func cloneString(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
+}
+
+func cloneTime(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
+}
+
+var (
+	// ErrObservationTranscriptActive means the requested session has not
+	// reached an absorbing lifecycle state, so its transcript is not final.
+	ErrObservationTranscriptActive = errors.New("worker session transcript: session is active")
+	// ErrObservationTranscriptUnavailable means no normalized transcript is
+	// available for an otherwise terminal Worker Session.
+	ErrObservationTranscriptUnavailable = errors.New("worker session transcript: transcript unavailable")
+	// ErrObservationTranscriptProjectionUnavailable means Provider Sessions
+	// could not project the normalized transcript source.
+	ErrObservationTranscriptProjectionUnavailable = errors.New("worker session transcript: projection unavailable")
 )

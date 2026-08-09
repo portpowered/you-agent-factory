@@ -20,6 +20,10 @@ type runtimeProducts struct {
 	execution   roles.OpenedExecutionRuntime
 }
 
+type workerSessionsObservationProvider interface {
+	WorkerSessionsObservation() workersessions.ObservationService
+}
+
 func historicalReplayRuntimeProducts(
 	logger *zap.Logger,
 	projection recordingreplay.RecordingReplayProjection,
@@ -60,7 +64,7 @@ func assembleRuntimeProducts(
 ) runtimeProducts {
 	workerPrompts, _ := workerService.(workers.PromptTemplates)
 	var workerSessions workersessions.ObservationService
-	if provider, ok := factoryRuntime.(factoryruntime.WorkerSessionsObservationProvider); ok {
+	if provider, ok := factoryRuntime.(workerSessionsObservationProvider); ok {
 		workerSessions = provider.WorkerSessionsObservation()
 	}
 	inputResolver, _ := sessionInvocation.(roles.InvocationInputResolver)

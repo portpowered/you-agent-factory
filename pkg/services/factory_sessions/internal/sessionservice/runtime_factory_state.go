@@ -159,13 +159,17 @@ func (fs *SessionRuntime) InvokeWorker(ctx context.Context, req factory.InvokeWo
 	return runtime.InvokeWorker(ctx, req)
 }
 
+type workerSessionsObservationProvider interface {
+	WorkerSessionsObservation() workersessions.ObservationService
+}
+
 // WorkerSessionsObservation forwards the optional runtime projection through
 // the replaceable Factory Session runtime. Without this capability adapter,
 // service-mode HTTP binding sees only the broad Factory Runtime contract and
 // leaves the public Worker Sessions routes unavailable.
 func (fs *SessionRuntime) WorkerSessionsObservation() workersessions.ObservationService {
 	runtime := fs.currentRuntimeService()
-	provider, _ := runtime.(factory.WorkerSessionsObservationProvider)
+	provider, _ := runtime.(workerSessionsObservationProvider)
 	if provider == nil {
 		return nil
 	}
