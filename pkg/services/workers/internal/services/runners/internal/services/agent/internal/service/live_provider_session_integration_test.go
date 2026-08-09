@@ -42,7 +42,7 @@ func TestLiveProviderSessionObservationEnablesExactWorkerSessionContinuation(t *
 		t.Fatalf("events wire NewService() error = %v", err)
 	}
 	boundary := newLiveSessionBoundary(runner)
-	sessions, err := workersessionswire.NewService(boundary, eventsService, logging.NoopLogger{})
+	sessions, err := workersessionswire.NewService(boundary, eventsService, logging.NoopLogger{}, nil)
 	if err != nil {
 		t.Fatalf("Worker Sessions wire NewService() error = %v", err)
 	}

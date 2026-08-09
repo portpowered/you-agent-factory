@@ -293,7 +293,7 @@ func TestFanOutWorkerSessionControl_ContinuesPastSynchronousProductionChild(t *t
 	if err != nil {
 		t.Fatalf("New events service: %v", err)
 	}
-	workerSessions, err := workersessionswire.NewService(boundary, events, logging.NoopLogger{})
+	workerSessions, err := workersessionswire.NewService(boundary, events, logging.NoopLogger{}, nil)
 	if err != nil {
 		t.Fatalf("New Worker Sessions service: %v", err)
 	}
