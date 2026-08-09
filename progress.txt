@@ -1,0 +1,51 @@
+## Codebase Patterns
+- Canonical packaged CLI docs live under `docs/reference/`; adding a topic also requires its authored file in `docs/reference/embed.go` and a registry entry in `pkg/transports/cli/docs/docs.go`.
+- The `you run --named <factory> --help` output is the authoritative invocation contract; omitted role provider/model values resolve through operator defaults.
+- Documentation for model-backed workflows should describe observable result shape and status/artifact evidence rather than byte-stable generated prose.
+
+## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
+- What was implemented
+  - Established the operator-facing discovery workflow and common seven-part entry contract in `docs/reference/packaged-factories.md`.
+  - Added family-based catalog navigation, materialization/default-provider guidance, live-help evidence, and model-output stability guidance.
+  - Registered `packaged-factories` as a real `you docs packaged-factories` topic and updated the packaged docs indexes plus observable CLI smoke expectations.
+  - Verified the current-source binary with `you factory list`, `you run --named @you/goal --help`, and `you docs packaged-factories` (using a freshly built workspace binary).
+- Files changed
+  - `docs/reference/packaged-factories.md`
+  - `docs/reference/embed.go`
+  - `docs/reference/README.md`
+  - `docs/README.md`
+  - `pkg/transports/cli/docs/docs.go`
+  - `pkg/transports/cli/root_docs_test.go`
+  - `tests/functional/smoke/cli_docs_smoke_test.go`
+  - `progress.txt`
+- Verification
+  - `make docs-reference-smoke` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The existing Markdown page was present but not embedded or registered, so `you docs packaged-factories` was previously rejected; keep the source file, embed list, registry, indexes, and user-visible smoke expectations synchronized.
+  - The live catalog contains fifteen `@you/*` entries plus any local Factory names, and its directory column is operator-specific; use exact Factory names for portable documentation.
+  - The current help contract explicitly prints Factory-defined request binding and role-specific flags, including the phrase that omitted provider/model values use operator defaults.
+---
+
+## 2026-08-09 13:16 - wo-d1-packaged-factories-docs-001 verification follow-up
+- What was implemented
+  - Installed the repository-pinned UI dependencies that were missing from the checkout so the broad verification tier could run.
+- Files changed
+  - No additional tracked files.
+- Verification
+  - Initial `make verify-fast` stopped at the environment dependency boundary (`@types/bun` missing and the globally selected TypeScript reported `TS5101`).
+  - After `bun install --frozen-lockfile` in `ui/`, `make verify-fast` passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, and the short Go suite.
+- **Learnings for future iterations:**
+- This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
+---
+
+## 2026-08-09 13:17 - wo-d1-packaged-factories-docs-001 documentation routing follow-up
+- What was implemented
+  - Corrected the root README's packaged-Factory count from fourteen to fifteen while keeping the root page as routing/quick-start material.
+- Files changed
+  - `README.md`
+- Verification
+  - `make readme-check` — passed.
+- **Learnings for future iterations:**
+  - Keep the root count aligned with the canonical fifteen-entry catalog, but continue placing detailed Factory guidance in `docs/reference/packaged-factories.md`.
+---
