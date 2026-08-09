@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	unsafeDiagnosticPathPattern = regexp.MustCompile(`(?i)(?:[a-z]:\\|\\\\|/|\\|\.\./)`)
+	unsafeDiagnosticPathPattern  = regexp.MustCompile(`(?i)(?:[a-z]:\\|\\\\|/|\\|\.\./)`)
 	unsafeDiagnosticTokenPattern = regexp.MustCompile(`(?i)(?:api[_-]?key|authorization|bearer\s+|password|secret|token)`)
 )
 
@@ -29,7 +29,9 @@ func isAllowlistedDiagnosticMessage(message string) bool {
 		diagnosticTruncatedJSONEvent,
 		diagnosticInspectionLineLimit,
 		diagnosticInspectionByteLimit,
+		diagnosticInspectionRecordLimit,
 		diagnosticInspectionTranscriptLimit,
+		diagnosticInspectionRetainedTextLimit,
 		diagnosticInspectionDiagnosticLimit:
 		return true
 	default:
@@ -42,6 +44,20 @@ func truncateDiagnosticMessage(message string) string {
 		return message
 	}
 	return message[:maxCodexDiagnosticMessageLength]
+}
+
+func truncateCodexText(value string, maxBytes int64) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	if int64(len(value)) <= maxBytes {
+		return value
+	}
+	bounded := value[:maxBytes]
+	for len(bounded) > 0 && bounded[len(bounded)-1]&0xc0 == 0x80 {
+		bounded = bounded[:len(bounded)-1]
+	}
+	return bounded
 }
 
 func sanitizeUnknownEventLabel(value string) string {

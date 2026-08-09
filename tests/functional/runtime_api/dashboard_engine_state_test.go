@@ -199,6 +199,11 @@ func (p *functionalWorldViewProvider) nextDispatch(t *testing.T) workerexecution
 }
 
 func (p *functionalWorldViewProvider) respond(response workerexecution.InferenceResponse, err error) {
+	if response.Content != "" && response.Diagnostics == nil {
+		response.Diagnostics = &workerexecution.WorkDiagnostics{Metadata: map[string]string{
+			workerexecution.ProviderResponseMetadataCompletionEvidence: "provider_response",
+		}}
+	}
 	p.responses <- functionalWorldViewProviderResponse{response: response, err: err}
 }
 

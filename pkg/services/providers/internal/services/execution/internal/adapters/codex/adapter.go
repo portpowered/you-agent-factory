@@ -74,6 +74,9 @@ func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
 			if failure.SessionRef == nil {
 				failure.SessionRef = decoder.sessionRef()
 			}
+			if failure.Diagnostics == nil {
+				failure.Diagnostics = decoder.diagnostics()
+			}
 			return providers.ExecuteResult{}, failure
 		}
 		content, session, finalErr := decoder.final()
@@ -83,13 +86,21 @@ func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
 				FinalParseError: finalErr,
 			}
 		}
+		metadata := cloneMetadata(effectResult.Metadata)
+		if metadata == nil {
+			metadata = make(map[string]string, 4)
+		}
+		for key, value := range decoder.diagnostics().Metadata {
+			metadata[key] = value
+		}
+		metadata["completion_evidence"] = "agent_message"
 		return providers.ExecuteResult{
 			Content:    content,
 			SessionRef: session,
 			Diagnostics: &providers.ExecuteDiagnostics{
 				DurationMillis: effectResult.DurationMillis,
 				Progress:       decoder.progressFacts(),
-				Metadata:       cloneMetadata(effectResult.Metadata),
+				Metadata:       metadata,
 			},
 		}, nil
 	}
@@ -110,6 +121,12 @@ func collectFailure(
 		}
 		failed = true
 	}
+	if resourceFailure := decoder.resourceFailure(); resourceFailure != nil {
+		if failure.Declared == nil || failure.Declared.Kind == providers.ExecuteFailureKindUnknown {
+			failure.Declared = resourceFailure
+		}
+		failed = true
+	}
 	if decoder.decodeErr != nil {
 		failure.DecodeError = decoder.decodeErr
 		failed = true
@@ -117,6 +134,9 @@ func collectFailure(
 	if flushErr != nil {
 		failure.FlushError = flushErr
 		failed = true
+	}
+	if decoder.limit != nil || decoder.transcriptFull || decoder.diagnosticsFull || decoder.retainedTextFull {
+		failure.Diagnostics = decoder.diagnostics()
 	}
 	return failure, failed
 }

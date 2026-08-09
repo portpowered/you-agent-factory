@@ -9,22 +9,27 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
-const (
-	maxRecordBytes = 1024 * 1024
-	maxDetailBytes = 1024
-)
-
 type decoder struct {
-	pending         []byte
-	discardLine     bool
-	flushed         bool
-	sessionID       string
-	finalContent    string
-	progress        []providers.ExecuteProgress
-	declaredFailure *providers.ExecuteFailure
-	declaredKnown   bool
-	decodeErr       error
-	observeSession  providers.SessionObserver
+	pending          []byte
+	discardLine      bool
+	flushed          bool
+	sessionID        string
+	finalContent     string
+	progress         []providers.ExecuteProgress
+	declaredFailure  *providers.ExecuteFailure
+	declaredKnown    bool
+	decodeErr        error
+	observeSession   providers.SessionObserver
+	sourceBytes      int64
+	lineCount        int64
+	recordCount      int64
+	progressCount    int
+	diagnosticCount  int
+	retainedText     int64
+	limit            *streamLimit
+	transcriptFull   bool
+	diagnosticsFull  bool
+	retainedTextFull bool
 }
 
 type recordEnvelope struct {
@@ -82,11 +87,37 @@ func (decoder *decoder) observe(chunk []byte) error {
 	if decoder.flushed {
 		return errors.New("codex stream received output after finalization")
 	}
+	if decoder.limit != nil || len(chunk) == 0 {
+		return nil
+	}
+	remaining := maxCodexStreamBytes - decoder.sourceBytes
+	if remaining <= 0 {
+		decoder.markResourceLimitAtLine("bytes", maxCodexStreamBytes, maxCodexStreamBytes+1, decoder.lineCount+1)
+		return nil
+	}
+	if int64(len(chunk)) > remaining {
+		chunk = chunk[:int(remaining)]
+		decoder.sourceBytes += remaining
+		decoder.consume(chunk)
+		if decoder.limit == nil {
+			decoder.markResourceLimitAtLine("bytes", maxCodexStreamBytes, maxCodexStreamBytes+1, decoder.lineCount+1)
+		}
+		return nil
+	}
+	decoder.sourceBytes += int64(len(chunk))
+	decoder.consume(chunk)
+	return nil
+}
+
+func (decoder *decoder) consume(chunk []byte) {
 	for len(chunk) > 0 {
+		if decoder.limit != nil {
+			return
+		}
 		if decoder.discardLine {
 			newline := bytes.IndexByte(chunk, '\n')
 			if newline < 0 {
-				return nil
+				return
 			}
 			decoder.discardLine = false
 			chunk = chunk[newline+1:]
@@ -95,24 +126,26 @@ func (decoder *decoder) observe(chunk []byte) error {
 		newline := bytes.IndexByte(chunk, '\n')
 		if newline < 0 {
 			if len(decoder.pending)+len(chunk) > maxRecordBytes {
+				recordBytes := len(decoder.pending) + len(chunk)
 				decoder.pending = nil
 				decoder.discardLine = true
-				decoder.markDecodeFailure("oversized_record")
-				return nil
+				decoder.markResourceLimitAtLine("record", maxRecordBytes, int64(recordBytes), decoder.lineCount+1)
+				return
 			}
 			decoder.pending = append(decoder.pending, chunk...)
-			return nil
+			return
 		}
 		if len(decoder.pending)+newline > maxRecordBytes {
-			decoder.markDecodeFailure("oversized_record")
+			decoder.markResourceLimitAtLine("record", maxRecordBytes, int64(len(decoder.pending)+newline), decoder.lineCount+1)
 		} else {
 			decoder.pending = append(decoder.pending, chunk[:newline]...)
-			decoder.decodeRecord(decoder.pending)
+			if decoder.beginRecord() {
+				decoder.decodeRecord(decoder.pending)
+			}
 		}
 		decoder.pending = decoder.pending[:0]
 		chunk = chunk[newline+1:]
 	}
-	return nil
 }
 
 func (decoder *decoder) flush() error {
@@ -120,13 +153,19 @@ func (decoder *decoder) flush() error {
 		return errors.New("codex stream finalized more than once")
 	}
 	decoder.flushed = true
+	if decoder.limit != nil {
+		decoder.pending = nil
+		return nil
+	}
 	if decoder.discardLine {
 		decoder.pending = nil
 		decoder.discardLine = false
 		return nil
 	}
 	if len(bytes.TrimSpace(decoder.pending)) > 0 {
-		decoder.decodeRecord(decoder.pending)
+		if decoder.beginRecord() {
+			decoder.decodeRecord(decoder.pending)
+		}
 	}
 	decoder.pending = nil
 	return nil
@@ -159,6 +198,54 @@ func (decoder *decoder) progressFacts() []providers.ExecuteProgress {
 		progress[index] = decoder.progress[index].Clone()
 	}
 	return progress
+}
+
+func (decoder *decoder) diagnostics() *providers.ExecuteDiagnostics {
+	metadata := map[string]string{
+		inspectionSourceBytesMetadata: inspectionMetadataValue(decoder.sourceBytes),
+		inspectionLineCountMetadata:   inspectionMetadataValue(decoder.lineCount),
+		inspectionRecordCountMetadata: inspectionMetadataValue(decoder.recordCount),
+	}
+	if decoder.transcriptFull {
+		metadata[inspectionTranscriptTruncatedMetadata] = "true"
+	}
+	if decoder.diagnosticsFull {
+		metadata[inspectionDiagnosticsTruncatedMetadata] = "true"
+	}
+	if decoder.retainedTextFull {
+		metadata[inspectionRetainedTextTruncatedMetadata] = "true"
+	}
+	if decoder.limit != nil {
+		metadata[inspectionLimitCategoryMetadata] = decoder.limit.category
+		metadata[inspectionLimitConfiguredMetadata] = inspectionMetadataValue(decoder.limit.configured)
+		metadata[inspectionLimitObservedMetadata] = inspectionMetadataValue(decoder.limit.observed)
+		metadata[inspectionLimitLineMetadata] = inspectionMetadataValue(decoder.limit.line)
+	}
+	return &providers.ExecuteDiagnostics{
+		Progress: decoder.progressFacts(),
+		Metadata: metadata,
+	}
+}
+
+func (decoder *decoder) resourceFailure() *providers.ExecuteFailure {
+	if decoder.limit == nil {
+		return nil
+	}
+	return decoder.limit.failure(decoder.sessionRef(), decoder.diagnostics())
+}
+
+func (decoder *decoder) beginRecord() bool {
+	decoder.lineCount++
+	decoder.recordCount++
+	switch {
+	case decoder.lineCount > maxCodexStreamLines:
+		decoder.markResourceLimit("lines", maxCodexStreamLines, decoder.lineCount)
+	case decoder.recordCount > maxCodexStreamRecords:
+		decoder.markResourceLimit("records", maxCodexStreamRecords, decoder.recordCount)
+	default:
+		return true
+	}
+	return false
 }
 
 func (decoder *decoder) decodeRecord(raw []byte) {
@@ -231,7 +318,7 @@ func (decoder *decoder) decodeItem(nativeType string, raw json.RawMessage) {
 		decoder.markDecodeFailure("malformed_item")
 		return
 	}
-	item.ID = strings.TrimSpace(item.ID)
+	item.ID = boundedDetail(item.ID)
 	phase := itemPhase(nativeType, item.Status)
 	metadata := map[string]string{
 		"item_id":      item.ID,
@@ -240,35 +327,40 @@ func (decoder *decoder) decodeItem(nativeType string, raw json.RawMessage) {
 	switch item.Type {
 	case "agent_message":
 		phase = messagePhase(phase)
-		detail := boundedDetail(item.Text)
+		detail := decoder.retainedDetail(item.Text)
 		if detail == "" {
 			decoder.markDecodeFailure("malformed_message")
 			return
 		}
 		decoder.addProgress("message."+phase, detail, metadata)
 		if nativeType == "item.completed" {
-			decoder.finalContent = strings.TrimSpace(item.Text)
+			final, truncated := decoder.retainFinalContent(item.Text)
+			if truncated {
+				decoder.markResourceLimit("retained_output", maxFinalContentBytes, int64(len(item.Text)))
+				return
+			}
+			decoder.finalContent = final
 		}
 	case "reasoning":
 		decoder.addProgress(
 			"reasoning."+messagePhase(phase),
-			boundedDetail(item.Text),
+			decoder.retainedDetail(item.Text),
 			metadata,
 		)
 	case "todo_list":
-		decoder.addProgress("plan."+phase, planDetail(item.Items), metadata)
+		decoder.addProgress("plan."+phase, decoder.retainedDetail(planDetail(item.Items)), metadata)
 	case "file_change":
-		decoder.addProgress("file_change."+phase, fileChangeDetail(item.Changes), metadata)
+		decoder.addProgress("file_change."+phase, decoder.retainedDetail(fileChangeDetail(item.Changes)), metadata)
 	case "command_execution":
-		decoder.addProgress("tool."+phase, boundedDetail(
+		decoder.addProgress("tool."+phase, decoder.retainedDetail(
 			firstNonEmpty(item.AggregatedOutput, item.Command),
 		), toolMetadata(metadata, item.ID, "command_execution"))
 	case "mcp_tool_call", "collab_tool_call":
 		name := strings.Trim(strings.TrimSpace(item.Server)+"/"+strings.TrimSpace(item.Tool), "/")
-		decoder.addProgress("tool."+phase, boundedDetail(item.Message),
+		decoder.addProgress("tool."+phase, decoder.retainedDetail(item.Message),
 			toolMetadata(metadata, item.ID, firstNonEmpty(name, item.Type)))
 	case "web_search":
-		decoder.addProgress("tool."+phase, boundedDetail(item.Query),
+		decoder.addProgress("tool."+phase, decoder.retainedDetail(item.Query),
 			toolMetadata(metadata, item.ID, "web_search"))
 	default:
 		decoder.addDiagnostic("unsupported_item")
@@ -280,17 +372,39 @@ func (decoder *decoder) addProgress(
 	detail string,
 	metadata map[string]string,
 ) {
+	if decoder.progressCount >= maxCodexTranscriptFacts {
+		if !decoder.transcriptFull {
+			decoder.transcriptFull = true
+			decoder.addDiagnostic("transcript_limit")
+		}
+		return
+	}
 	decoder.progress = append(decoder.progress, providers.ExecuteProgress{
 		Phase:    phase,
 		Detail:   detail,
 		Metadata: cloneMetadata(metadata),
 	})
+	decoder.progressCount++
 }
 
 func (decoder *decoder) addDiagnostic(code string) {
-	decoder.addProgress("diagnostic", "Codex stream record was omitted", map[string]string{
-		"code": code,
+	if decoder.diagnosticCount >= maxCodexDiagnosticFacts {
+		decoder.diagnosticsFull = true
+		return
+	}
+	decoder.diagnosticCount++
+	if decoder.progressCount >= maxCodexTranscriptFacts {
+		decoder.transcriptFull = true
+		return
+	}
+	decoder.progress = append(decoder.progress, providers.ExecuteProgress{
+		Phase:  "diagnostic",
+		Detail: "Codex stream record was omitted",
+		Metadata: map[string]string{
+			"code": boundedDetail(code),
+		},
 	})
+	decoder.progressCount++
 }
 
 func (decoder *decoder) markDecodeFailure(code string) {
@@ -298,6 +412,56 @@ func (decoder *decoder) markDecodeFailure(code string) {
 	if decoder.decodeErr == nil {
 		decoder.decodeErr = errors.New("Codex stream could not be decoded safely")
 	}
+}
+
+func (decoder *decoder) markResourceLimit(category string, configured, observed int64) {
+	decoder.markResourceLimitAtLine(category, configured, observed, decoder.lineCount)
+}
+
+func (decoder *decoder) markResourceLimitAtLine(category string, configured, observed, line int64) {
+	if decoder.limit != nil {
+		return
+	}
+	if line == 0 {
+		line = 1
+	}
+	decoder.limit = &streamLimit{
+		category:   category,
+		configured: configured,
+		observed:   observed,
+		line:       line,
+	}
+	decoder.addDiagnostic("inspection_limit")
+	decoder.decodeErr = errors.New("Codex stream inspection reached a configured safety limit")
+}
+
+func (decoder *decoder) retainedDetail(value string) string {
+	value = boundedDetail(value)
+	if value == "" {
+		return ""
+	}
+	remaining := maxCodexRetainedText - decoder.retainedText
+	if remaining <= 0 {
+		decoder.retainedTextFull = true
+		return ""
+	}
+	if int64(len(value)) > remaining {
+		value = boundedDetail(value[:int(remaining)])
+		decoder.retainedTextFull = true
+	}
+	decoder.retainedText += int64(len(value))
+	return value
+}
+
+func (decoder *decoder) retainFinalContent(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", false
+	}
+	if len(value) > maxFinalContentBytes {
+		return boundedDetail(value[:maxFinalContentBytes]), true
+	}
+	return value, false
 }
 
 func (decoder *decoder) declareFailure(record errorRecord) {

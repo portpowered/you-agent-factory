@@ -1,9 +1,27 @@
-{"code":"timeout","eventId":"<normalized>","factorySessionId":"<normalized>","message":"Codex request timed out.","retryable":true,"runId":"<normalized>","type":"error.failed"}
-{"code":"timeout","eventId":"<normalized>","factorySessionId":"<normalized>","message":"Codex request timed out.","retryable":true,"runId":"<normalized>","type":"error.failed"}
-{"code":"timeout","eventId":"<normalized>","factorySessionId":"<normalized>","message":"Codex request timed out.","retryable":true,"runId":"<normalized>","type":"error.failed"}
-{"code":"timeout","eventId":"<normalized>","factorySessionId":"<normalized>","message":"Codex request timed out.","retryable":true,"runId":"<normalized>","type":"error.failed"}
-{"code":"timeout","eventId":"<normalized>","factorySessionId":"<normalized>","message":"Codex request timed out.","retryable":true,"runId":"<normalized>","type":"error.failed"}
-{"code":"timeout","eventId":"<normalized>","factorySessionId":"<normalized>","message":"Codex request timed out.","retryable":true,"runId":"<normalized>","type":"error.failed"}
-{"code":"timeout","eventId":"<normalized>","factorySessionId":"<normalized>","message":"Codex request timed out.","retryable":true,"runId":"<normalized>","type":"error.failed"}
-{"code":"timeout","eventId":"<normalized>","factorySessionId":"<normalized>","message":"Codex request timed out.","retryable":true,"runId":"<normalized>","type":"error.failed"}
-{"code":"timeout","eventId":"<normalized>","factorySessionId":"<normalized>","message":"Codex request timed out.","retryable":true,"runId":"<normalized>","type":"error.failed"}
+{"status":"started","type":"providers_progress"}
+{"finishReason":"stop","itemId":"codex-message","text":"Codex fixture partial answer before timeout","type":"message.completed"}
+{"code":"timeout","eventId":"52e27325-1667-469b-ab13-bb4d743d2213","factorySessionId":"371c7cda-a45f-46c1-8bb2-683ae86a8f1c","message":"Codex request timed out.","retryable":true,"runId":"1b52bc1a-4873-44b4-ac7f-20b3ede41a90","type":"error.failed"}
+{"status":"started","type":"providers_progress"}
+{"finishReason":"stop","itemId":"codex-message","text":"Codex fixture partial answer before timeout","type":"message.completed"}
+{"code":"timeout","eventId":"1733c1c9-537a-4efb-91f3-330266934a1d","factorySessionId":"371c7cda-a45f-46c1-8bb2-683ae86a8f1c","message":"Codex request timed out.","retryable":true,"runId":"1b52bc1a-4873-44b4-ac7f-20b3ede41a90","type":"error.failed"}
+{"status":"started","type":"providers_progress"}
+{"finishReason":"stop","itemId":"codex-message","text":"Codex fixture partial answer before timeout","type":"message.completed"}
+{"code":"timeout","eventId":"c72f36fc-24d6-43e5-84f6-626ca636b5aa","factorySessionId":"371c7cda-a45f-46c1-8bb2-683ae86a8f1c","message":"Codex request timed out.","retryable":true,"runId":"1b52bc1a-4873-44b4-ac7f-20b3ede41a90","type":"error.failed"}
+{"status":"started","type":"providers_progress"}
+{"finishReason":"stop","itemId":"codex-message","text":"Codex fixture partial answer before timeout","type":"message.completed"}
+{"code":"timeout","eventId":"f136ca77-52f6-405b-91f6-94b32c758070","factorySessionId":"371c7cda-a45f-46c1-8bb2-683ae86a8f1c","message":"Codex request timed out.","retryable":true,"runId":"0296d15c-e5f5-4e38-80ff-da41fceaa3b7","type":"error.failed"}
+{"status":"started","type":"providers_progress"}
+{"finishReason":"stop","itemId":"codex-message","text":"Codex fixture partial answer before timeout","type":"message.completed"}
+{"code":"timeout","eventId":"51cc64b5-ca4f-42e3-b7f3-426f324af54c","factorySessionId":"371c7cda-a45f-46c1-8bb2-683ae86a8f1c","message":"Codex request timed out.","retryable":true,"runId":"0296d15c-e5f5-4e38-80ff-da41fceaa3b7","type":"error.failed"}
+{"status":"started","type":"providers_progress"}
+{"finishReason":"stop","itemId":"codex-message","text":"Codex fixture partial answer before timeout","type":"message.completed"}
+{"code":"timeout","eventId":"278b59d7-65e5-411d-8a53-559a2456ed15","factorySessionId":"371c7cda-a45f-46c1-8bb2-683ae86a8f1c","message":"Codex request timed out.","retryable":true,"runId":"0296d15c-e5f5-4e38-80ff-da41fceaa3b7","type":"error.failed"}
+{"status":"started","type":"providers_progress"}
+{"finishReason":"stop","itemId":"codex-message","text":"Codex fixture partial answer before timeout","type":"message.completed"}
+{"code":"timeout","eventId":"526d6d40-1034-4591-a1a5-1d6c94698daa","factorySessionId":"371c7cda-a45f-46c1-8bb2-683ae86a8f1c","message":"Codex request timed out.","retryable":true,"runId":"095fe17e-8aae-43e5-93dc-3eb080695ecd","type":"error.failed"}
+{"status":"started","type":"providers_progress"}
+{"finishReason":"stop","itemId":"codex-message","text":"Codex fixture partial answer before timeout","type":"message.completed"}
+{"code":"timeout","eventId":"ab87ba1d-6938-406b-aeb7-1fe47f607545","factorySessionId":"371c7cda-a45f-46c1-8bb2-683ae86a8f1c","message":"Codex request timed out.","retryable":true,"runId":"095fe17e-8aae-43e5-93dc-3eb080695ecd","type":"error.failed"}
+{"status":"started","type":"providers_progress"}
+{"finishReason":"stop","itemId":"codex-message","text":"Codex fixture partial answer before timeout","type":"message.completed"}
+{"code":"timeout","eventId":"3158aaac-3fc9-4635-bb60-12eb03c84de1","factorySessionId":"371c7cda-a45f-46c1-8bb2-683ae86a8f1c","message":"Codex request timed out.","retryable":true,"runId":"095fe17e-8aae-43e5-93dc-3eb080695ecd","type":"error.failed"}

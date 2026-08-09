@@ -2,6 +2,7 @@ package workersessions_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -45,7 +46,7 @@ func TestFailureCause_Validate_RejectsUnknownKind(t *testing.T) {
 	if err := (workersessions.FailureCause{Kind: "UNKNOWN"}).Validate(); !errors.Is(err, workersessions.ErrInvalidFailureCause) {
 		t.Errorf("Validate() = %v, want ErrInvalidFailureCause", err)
 	}
-	if err := (workersessions.FailureCause{Kind: workersessions.FailureCauseExecutorPanic}).Validate(); err != nil {
+	if err := (workersessions.FailureCause{Kind: workersessions.FailureCauseExecutorPanic, Detail: "executor failed"}).Validate(); err != nil {
 		t.Errorf("Validate() = %v, want nil", err)
 	}
 }
@@ -53,6 +54,7 @@ func TestFailureCause_Validate_RejectsUnknownKind(t *testing.T) {
 func TestFailureCause_Validate_AdmitsOnlySafeProviderContinuationClassifications(t *testing.T) {
 	valid := workersessions.FailureCause{
 		Kind:                            workersessions.FailureCauseWorkersExecutionFailure,
+		Detail:                          "provider execution failed",
 		ProviderFailureKind:             providers.ExecuteFailureKindDependency,
 		ProviderContinuationFailureKind: providers.ContinuationFailureKindStale,
 	}
@@ -61,6 +63,7 @@ func TestFailureCause_Validate_AdmitsOnlySafeProviderContinuationClassifications
 	}
 	unsupported := workersessions.FailureCause{
 		Kind:                        workersessions.FailureCauseWorkersExecutionFailure,
+		Detail:                      "continuation was unsupported",
 		ProviderContinuationOutcome: providers.ContinuationOutcomeUnsupported,
 	}
 	if err := unsupported.Validate(); err != nil {
@@ -68,6 +71,7 @@ func TestFailureCause_Validate_AdmitsOnlySafeProviderContinuationClassifications
 	}
 	invalid := workersessions.FailureCause{
 		Kind:                            workersessions.FailureCauseWorkersExecutionFailure,
+		Detail:                          "continuation classification conflicted",
 		ProviderContinuationFailureKind: providers.ContinuationFailureKindStale,
 		ProviderContinuationOutcome:     providers.ContinuationOutcomeUnsupported,
 	}
@@ -81,6 +85,29 @@ func TestFailureCause_Validate_AdmitsOnlySafeProviderContinuationClassifications
 	)
 	if providerKind != "" || continuationKind != "" || outcome != "" {
 		t.Fatalf("SanitizeProviderFailureClassification() = %q/%q/%q, want empty safe values", providerKind, continuationKind, outcome)
+	}
+}
+
+func TestFailureCause_Validate_RejectsEmptyAndUnboundedDetail(t *testing.T) {
+	tests := []struct {
+		name   string
+		detail string
+	}{
+		{name: "empty", detail: ""},
+		{name: "whitespace", detail: " \t\n"},
+		{name: "untrimmed", detail: " failure "},
+		{name: "too long", detail: strings.Repeat("x", workersessions.MaxFailureCauseDetailRunes+1)},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := (workersessions.FailureCause{
+				Kind:   workersessions.FailureCauseWorkersExecutionFailure,
+				Detail: test.detail,
+			}).Validate()
+			if !errors.Is(err, workersessions.ErrInvalidFailureCause) {
+				t.Fatalf("Validate() = %v, want ErrInvalidFailureCause", err)
+			}
+		})
 	}
 }
 
@@ -98,7 +125,7 @@ func TestTerminalResult_Validate_TableDriven(t *testing.T) {
 			name: "failed with a valid cause is valid",
 			result: workersessions.TerminalResult{
 				Outcome: workersessions.TerminalOutcomeFailed,
-				Cause:   &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure},
+				Cause:   &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "execution failed"},
 			},
 		},
 		{
@@ -125,6 +152,7 @@ func TestTerminalResult_Validate_TableDriven(t *testing.T) {
 				Outcome: workersessions.TerminalOutcomeFailed,
 				Cause: &workersessions.FailureCause{
 					Kind:                            workersessions.FailureCauseWorkersExecutionFailure,
+					Detail:                          "continuation classification was unknown",
 					ProviderContinuationFailureKind: providers.ContinuationFailureKind("UNKNOWN"),
 				},
 			},
@@ -134,7 +162,7 @@ func TestTerminalResult_Validate_TableDriven(t *testing.T) {
 			name: "completed with a cause is rejected",
 			result: workersessions.TerminalResult{
 				Outcome: workersessions.TerminalOutcomeCompleted,
-				Cause:   &workersessions.FailureCause{Kind: workersessions.FailureCauseExecutorPanic},
+				Cause:   &workersessions.FailureCause{Kind: workersessions.FailureCauseExecutorPanic, Detail: "executor failed"},
 			},
 			wantErr: workersessions.ErrInvalidTerminalResult,
 		},

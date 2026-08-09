@@ -50,7 +50,9 @@ func TestSideEffects_InferReturnsRecordedProviderResponse(t *testing.T) {
 	if resp.Diagnostics.Provider.ResponseMetadata["request_id"] != "req-1" {
 		t.Fatalf("response metadata = %#v", resp.Diagnostics.Provider.ResponseMetadata)
 	}
-	if resp.Diagnostics.Command != nil || resp.Diagnostics.Panic != nil || resp.Diagnostics.Metadata != nil {
+	if resp.Diagnostics.Command != nil || resp.Diagnostics.Panic != nil ||
+		len(resp.Diagnostics.Metadata) != 1 ||
+		resp.Diagnostics.Metadata[workerexecution.ProviderResponseMetadataCompletionEvidence] != "provider_response" {
 		t.Fatalf("response diagnostics leaked unsafe fields: %#v", resp.Diagnostics)
 	}
 }
@@ -118,8 +120,9 @@ func TestSideEffects_InferDiagnosticsStayDetachedFromRecordedMutation(t *testing
 	if got := resp.Diagnostics.Provider.ResponseMetadata["request_id"]; got != "req-1" {
 		t.Fatalf("request_id = %q, want req-1", got)
 	}
-	if resp.Diagnostics.Metadata != nil {
-		t.Fatalf("metadata = %#v, want nil safe replay metadata", resp.Diagnostics.Metadata)
+	if len(resp.Diagnostics.Metadata) != 1 ||
+		resp.Diagnostics.Metadata[workerexecution.ProviderResponseMetadataCompletionEvidence] != "provider_response" {
+		t.Fatalf("metadata = %#v, want only safe completion evidence", resp.Diagnostics.Metadata)
 	}
 	if resp.Diagnostics.Panic != nil {
 		t.Fatalf("panic = %#v, want nil safe replay panic", resp.Diagnostics.Panic)
@@ -185,7 +188,7 @@ func TestSideEffects_UnmatchedRequestFailsClearly(t *testing.T) {
 	}
 }
 
-func TestSideEffects_InferPreservesNilDiagnosticsWhenReplayArtifactOmitsThem(t *testing.T) {
+func TestSideEffects_InferProvidesCompletionEvidenceWhenReplayArtifactOmitsDiagnostics(t *testing.T) {
 	artifact := testReplayArtifact(
 		t,
 		replayDispatchCreatedEvent(t, work.WorkDispatch{
@@ -249,8 +252,9 @@ func TestSideEffects_InferPreservesNilDiagnosticsWhenReplayArtifactOmitsThem(t *
 	if err != nil {
 		t.Fatalf("Infer: %v", err)
 	}
-	if resp.Diagnostics != nil {
-		t.Fatalf("diagnostics = %#v, want nil", resp.Diagnostics)
+	if resp.Diagnostics == nil ||
+		resp.Diagnostics.Metadata[workerexecution.ProviderResponseMetadataCompletionEvidence] != "provider_response" {
+		t.Fatalf("diagnostics = %#v, want safe completion evidence", resp.Diagnostics)
 	}
 	if resp.ProviderSession == nil || resp.ProviderSession.ID != "resp-no-diagnostics" {
 		t.Fatalf("provider session = %#v, want resp-no-diagnostics", resp.ProviderSession)

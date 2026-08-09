@@ -323,7 +323,13 @@ func (p *modelTransportSmokeProvider) Infer(_ context.Context, req workerexecuti
 	defer p.mu.Unlock()
 
 	p.calls = append(p.calls, workerexecution.CloneProviderInferenceRequest(req))
-	return p.response, nil
+	response := p.response
+	if response.Content != "" && response.Diagnostics == nil {
+		response.Diagnostics = &workerexecution.WorkDiagnostics{Metadata: map[string]string{
+			workerexecution.ProviderResponseMetadataCompletionEvidence: "provider_response",
+		}}
+	}
+	return response, nil
 }
 
 func (p *modelTransportSmokeProvider) Calls() []workerexecution.ProviderInferenceRequest {

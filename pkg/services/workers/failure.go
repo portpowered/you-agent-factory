@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerinferencefailure "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/inferencefailure"
 )
@@ -192,10 +193,99 @@ func NormalizeProviderExecutionError(err error) *ProviderError {
 	if errors.As(err, &providerErr) {
 		return providerErr
 	}
+	if providerErr := normalizeProviderSessionError(err); providerErr != nil {
+		return providerErr
+	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return NewProviderError(WorkFailureTypeTimeout, "execution timeout", err)
 	}
 	return nil
+}
+
+func normalizeProviderSessionError(err error) *ProviderError {
+	var lookupErr *providersessions.LookupError
+	if !errors.As(err, &lookupErr) && !isProviderSessionFailure(err) {
+		return nil
+	}
+	failureType := WorkFailureTypeUnknown
+	classification := "storage"
+	message := "provider session ingestion failed"
+	switch {
+	case errors.Is(err, providersessions.ErrResourceLimitExceeded):
+		classification = "resource_limit"
+		message = "provider session inspection reached its configured limit"
+	case errors.Is(err, providersessions.ErrSessionStorageUnavailable):
+		failureType = WorkFailureTypeInternalServerError
+		message = "provider session storage was unavailable"
+	case errors.Is(err, providersessions.ErrSessionNotFound):
+		failureType = WorkFailureTypePermanentBadRequest
+		message = "provider session could not be found"
+	case errors.Is(err, providersessions.ErrOperationCanceled),
+		errors.Is(err, context.Canceled):
+		classification = "canceled"
+		message = "provider session inspection was canceled"
+	case errors.Is(err, providersessions.ErrInvalidIdentifier),
+		errors.Is(err, providersessions.ErrUnsupportedKind),
+		errors.Is(err, providersessions.ErrUnsupportedProvider):
+		failureType = WorkFailureTypePermanentBadRequest
+		message = "provider session request was invalid"
+	}
+	provider := ""
+	sessionID := ""
+	if lookupErr != nil {
+		provider = strings.TrimSpace(string(lookupErr.Provider))
+		sessionID = strings.TrimSpace(lookupErr.SessionID)
+	}
+	var session *ProviderSessionMetadata
+	if sessionID != "" {
+		session = &ProviderSessionMetadata{
+			Provider: provider,
+			Kind:     providersessions.SessionIDKind,
+			ID:       sessionID,
+		}
+	}
+	diagnostics := &WorkDiagnostics{
+		Provider: &ProviderDiagnostic{
+			Provider: provider,
+			ResponseMetadata: map[string]string{
+				ProviderResponseMetadataFailureOperation:      "provider_session_ingestion",
+				ProviderResponseMetadataFailureClassification: classification,
+			},
+		},
+	}
+	if session != nil {
+		diagnostics.Provider.ResponseMetadata["provider_session_provider"] = session.Provider
+		diagnostics.Provider.ResponseMetadata["provider_session_kind"] = session.Kind
+		diagnostics.Provider.ResponseMetadata["provider_session_id"] = session.ID
+	}
+	return &ProviderError{
+		Family:          providerFailureFamily(failureType),
+		Type:            failureType,
+		Message:         message,
+		ProviderSession: session,
+		Diagnostics:     diagnostics,
+		Cause:           err,
+	}
+}
+
+func isProviderSessionFailure(err error) bool {
+	for _, candidate := range []error{
+		providersessions.ErrAmbiguousSessionFile,
+		providersessions.ErrInvalidIdentifier,
+		providersessions.ErrOperationCanceled,
+		providersessions.ErrResourceLimitExceeded,
+		providersessions.ErrSessionNotFound,
+		providersessions.ErrSessionOutsideRoot,
+		providersessions.ErrSessionSourceNotRegularFile,
+		providersessions.ErrSessionStorageUnavailable,
+		providersessions.ErrUnsupportedKind,
+		providersessions.ErrUnsupportedProvider,
+	} {
+		if errors.Is(err, candidate) {
+			return true
+		}
+	}
+	return false
 }
 
 func NewProviderErrorWithSession(

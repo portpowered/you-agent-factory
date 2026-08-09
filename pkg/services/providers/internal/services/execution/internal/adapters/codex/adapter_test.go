@@ -3,6 +3,7 @@ package codex_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -194,6 +195,72 @@ func TestCodexDecoderFinalizesUnterminatedRecordOnce(t *testing.T) {
 	}
 	if got := countPhase(result.Diagnostics.Progress, "message.completed"); got != 1 {
 		t.Fatalf("completed message facts = %d, want 1", got)
+	}
+}
+
+func TestCodexDecoderBoundsTranscriptAndKeepsLaterCompletionEvidence(t *testing.T) {
+	t.Parallel()
+
+	var stream []byte
+	appendRecord := func(record any) {
+		encoded, err := json.Marshal(record)
+		if err != nil {
+			t.Fatalf("marshal stream record: %v", err)
+		}
+		stream = append(stream, encoded...)
+		stream = append(stream, '\n')
+	}
+	appendRecord(map[string]any{
+		"type":      "thread.started",
+		"thread_id": "thread-bounded-progress",
+	})
+	for index := 0; index < 5000; index++ {
+		appendRecord(itemRecord(
+			"item.updated",
+			fmt.Sprintf("progress-%d", index),
+			"agent_message",
+			map[string]any{"text": "bounded progress"},
+		))
+	}
+	appendRecord(itemRecord(
+		"item.completed",
+		"final-bounded-progress",
+		"agent_message",
+		map[string]any{"text": "authoritative completion after bounded progress"},
+	))
+
+	effect := codex.EffectFunc(func(
+		_ context.Context,
+		_ execution.ContinuationRequest,
+		observe func([]byte) error,
+	) (codex.EffectResult, error) {
+		for _, chunk := range splitEvery(stream, 4093) {
+			if err := observe(chunk); err != nil {
+				return codex.EffectResult{}, err
+			}
+		}
+		return codex.EffectResult{}, nil
+	})
+
+	result, err := newCodexRoot(t, effect).Execute(t.Context(), providers.ExecuteRequest{
+		Provider:  providers.IDCodex,
+		AttemptID: "attempt-bounded-progress",
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Content != "authoritative completion after bounded progress" {
+		t.Fatalf("Execute() content = %q, want later completion evidence", result.Content)
+	}
+	if result.Diagnostics == nil {
+		t.Fatal("Execute() diagnostics = nil, want bounded inspection metadata")
+	}
+	if result.Diagnostics.Metadata["inspection_transcript_truncated"] != "true" {
+		t.Fatalf("inspection metadata = %#v, want transcript truncation", result.Diagnostics.Metadata)
+	}
+	if result.Diagnostics.Metadata["inspection_record_count"] == "" ||
+		result.Diagnostics.Metadata["inspection_source_bytes"] == "" {
+		t.Fatalf("inspection metadata = %#v, want source and record progress", result.Diagnostics.Metadata)
 	}
 }
 

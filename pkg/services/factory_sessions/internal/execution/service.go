@@ -414,6 +414,9 @@ func (smokeLiveChildProvider) Infer(_ context.Context, _ workers.ProviderInferen
 			Kind:     "session_id",
 			ID:       "live-provider-session-1",
 		},
+		Diagnostics: &workers.WorkDiagnostics{Metadata: map[string]string{
+			workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
+		}},
 	}, nil
 }
 

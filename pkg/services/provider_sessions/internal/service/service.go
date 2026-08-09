@@ -175,8 +175,9 @@ func (s *inspectionService) detailsForRef(ctx context.Context, ref providers.Ses
 			return detail, nil
 		}
 		return providersessions.Detail{}, &providersessions.LookupError{
-			Provider: providersessions.ProviderCodex,
-			Err:      err,
+			Provider:  providersessions.ProviderCodex,
+			SessionID: ref.ID,
+			Err:       err,
 		}
 	default:
 		return providersessions.Detail{}, providersessions.ErrUnsupportedProvider

@@ -66,8 +66,8 @@ func TestDetails_ProvidersRootBoundary_UsesCanonicalCursorIdentity(t *testing.T)
 			if !errors.As(err, &lookupErr) {
 				t.Fatalf("Details error = %T, want LookupError", err)
 			}
-			if lookupErr.Provider != providersessions.ProviderCursor || lookupErr.Root != root {
-				t.Fatalf("LookupError = %#v, want normalized Cursor root context", lookupErr)
+			if lookupErr.Provider != providersessions.ProviderCursor || lookupErr.Root != root || lookupErr.SessionID != "missing-session" {
+				t.Fatalf("LookupError = %#v, want normalized Cursor root/session context", lookupErr)
 			}
 		})
 	}

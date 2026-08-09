@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -301,6 +303,163 @@ func TestStart_FailedSession_AppendsTerminalRecordWithClassifiedFailureCause(t *
 	}
 	if payload.FailureDetail != result.Session.Result.Cause.Detail {
 		t.Fatalf("terminal payload failureDetail = %q, want %q", payload.FailureDetail, result.Session.Result.Cause.Detail)
+	}
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity feature regression keeps the full terminal-event assertion in one observable scenario; extract reusable assertions when this test is next refactored.
+func TestStart_ProviderSessionInspectionFailureReachesTerminalEventWithSafeCause(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	topic := workersessions.Topic("worker-inspection-failure")
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			return workers.WorkstationDispatchResult{
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeFailed,
+					FailureMetadata: &workers.WorkFailureMetadata{
+						Family: workers.WorkFailureFamilyTerminal,
+						Type:   workers.WorkFailureTypeUnknown,
+					},
+					Diagnostics: &workers.WorkDiagnostics{
+						Provider: &workers.ProviderDiagnostic{
+							ResponseMetadata: map[string]string{
+								workers.ProviderResponseMetadataFailureOperation:      "provider_session_ingestion",
+								workers.ProviderResponseMetadataFailureClassification: "resource_limit",
+							},
+						},
+					},
+				},
+			}, nil
+		},
+	}
+	registry, err := service.New(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	result, err := registry.InvokeSession(context.Background(), validStartRequest("worker-inspection-failure", "dispatch-inspection-failure"))
+	if err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+	if result.Session.State != workersessions.StateFailed || result.Session.Result == nil || result.Session.Result.Cause == nil {
+		t.Fatalf("session = %#v, want FAILED with a cause", result.Session)
+	}
+	detail := result.Session.Result.Cause.Detail
+	if !strings.Contains(detail, "provider_session_ingestion") || !strings.Contains(detail, "resource_limit") {
+		t.Fatalf("session failure detail = %q, want safe inspection classification", detail)
+	}
+	if strings.TrimSpace(detail) == "" || len([]rune(detail)) > workersessions.MaxFailureCauseDetailRunes {
+		t.Fatalf("session failure detail = %q, want trimmed bounded detail", detail)
+	}
+
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 10})
+	if err != nil {
+		t.Fatalf("Read() error = %v, want nil", err)
+	}
+	if len(read.Records) != 2 {
+		t.Fatalf("Read() returned %d records, want opening plus terminal", len(read.Records))
+	}
+	terminal := decodeDraft(t, read.Records[1])
+	if terminal.DispatchID != "dispatch-inspection-failure" || terminal.Phase != workers.PhaseFailed {
+		t.Fatalf("terminal draft = %#v, want dispatch-correlated FAILED draft", terminal)
+	}
+	var payload struct {
+		FailureCause  string `json:"failureCause"`
+		FailureDetail string `json:"failureDetail"`
+		Status        string `json:"status"`
+	}
+	if err := json.Unmarshal(terminal.Payload, &payload); err != nil {
+		t.Fatalf("unmarshal terminal payload error = %v", err)
+	}
+	if payload.Status != string(workersessions.StateFailed) ||
+		payload.FailureCause != string(workersessions.FailureCauseWorkersExecutionFailure) ||
+		payload.FailureDetail != detail {
+		t.Fatalf("terminal payload = %#v, want correlated safe failure cause", payload)
+	}
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity feature regression keeps contradictory completion and canonical-event assertions together; extract reusable assertions when this test is next refactored.
+func TestStart_ZeroExitTaskCompleteArtifactWithIngestionFailureIsNotPhantomSuccess(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	topic := workersessions.Topic("worker-contradictory-ingestion")
+	inspectionErr := &providersessions.LookupError{
+		Provider:  providersessions.ProviderCodex,
+		SessionID: "rollout-contradictory-ingestion",
+		Err:       errors.Join(providersessions.ErrResourceLimitExceeded, errors.New("raw rollout must not escape")),
+	}
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			return workers.WorkstationDispatchResult{
+				DispatchID:      req.Execution.Dispatch.DispatchID,
+				TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+					Output:     "artifact-created",
+					ProviderSession: &workers.ProviderSessionMetadata{
+						Provider: string(providersessions.ProviderCodex),
+						Kind:     providersessions.SessionIDKind,
+						ID:       "rollout-contradictory-ingestion",
+					},
+					Diagnostics: &workers.WorkDiagnostics{
+						Command: &workers.CommandDiagnostic{ExitCode: 0},
+						Provider: &workers.ProviderDiagnostic{
+							ResponseMetadata: map[string]string{
+								workers.ProviderResponseMetadataCompletionEvidence:    "task_complete",
+								workers.ProviderResponseMetadataFailureOperation:      "provider_session_ingestion",
+								workers.ProviderResponseMetadataFailureClassification: "resource_limit",
+								workers.ProviderResponseMetadataFailureStage:          "final_parse",
+							},
+						},
+					},
+				},
+			}, inspectionErr
+		},
+	}
+	registry, err := service.New(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	result, err := registry.InvokeSession(context.Background(), validStartRequest("worker-contradictory-ingestion", "dispatch-contradictory-ingestion"))
+	if err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+	if result.Session.State != workersessions.StateFailed || result.Session.Result == nil || result.Session.Result.Cause == nil {
+		t.Fatalf("session = %#v, want FAILED with a cause", result.Session)
+	}
+	if result.Session.Result.Cause.Kind != workersessions.FailureCauseAdapterFailure {
+		t.Fatalf("session failure kind = %q, want ADAPTER_FAILURE", result.Session.Result.Cause.Kind)
+	}
+	detail := result.Session.Result.Cause.Detail
+	for _, want := range []string{"family=terminal", "type=unknown", "provider_session_ingestion", "resource_limit", "final_parse"} {
+		if !strings.Contains(detail, want) {
+			t.Fatalf("session failure detail = %q, want %q", detail, want)
+		}
+	}
+	if strings.Contains(detail, "raw rollout") || strings.TrimSpace(detail) == "" || len([]rune(detail)) > workersessions.MaxFailureCauseDetailRunes {
+		t.Fatalf("session failure detail = %q, want bounded safe cause", detail)
+	}
+
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 10})
+	if err != nil {
+		t.Fatalf("Read() error = %v, want nil", err)
+	}
+	if len(read.Records) != 2 {
+		t.Fatalf("Read() returned %d records, want opening plus terminal", len(read.Records))
+	}
+	terminal := decodeDraft(t, read.Records[1])
+	if terminal.Phase != workers.PhaseFailed || terminal.DispatchID != "dispatch-contradictory-ingestion" {
+		t.Fatalf("terminal draft = %#v, want correlated FAILED draft", terminal)
+	}
+	var payload struct {
+		FailureDetail string `json:"failureDetail"`
+		Status        string `json:"status"`
+	}
+	if err := json.Unmarshal(terminal.Payload, &payload); err != nil {
+		t.Fatalf("unmarshal terminal payload error = %v", err)
+	}
+	if payload.Status != string(workersessions.StateFailed) || payload.FailureDetail != detail {
+		t.Fatalf("terminal payload = %#v, want non-empty safe failure detail", payload)
 	}
 }
 

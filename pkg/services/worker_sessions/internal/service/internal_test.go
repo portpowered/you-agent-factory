@@ -236,6 +236,32 @@ func TestCommitTerminal_AlreadyTerminalIdentity_IsAbsorbingAndDoesNotOverwrite(t
 	}
 }
 
+func TestCommitTerminal_NormalizesEmptyFailureCauseBeforeCommit(t *testing.T) {
+	r := newTestRegistry(t)
+	r.reserveIfAbsent("worker-1")
+	if _, err := r.transitionToStarting("worker-1"); err != nil {
+		t.Fatalf("transitionToStarting() error = %v, want nil", err)
+	}
+
+	committed, won := r.commitTerminal("worker-1", workersessions.StateFailed, workersessions.TerminalResult{
+		Outcome: workersessions.TerminalOutcomeFailed,
+		Cause:   &workersessions.FailureCause{Kind: workersessions.FailureCauseAdapterFailure},
+	})
+	if !won {
+		t.Fatal("commitTerminal() committed = false, want true")
+	}
+	if committed.Result == nil || committed.Result.Cause == nil {
+		t.Fatalf("committed result = %#v, want failure cause", committed.Result)
+	}
+	if strings.TrimSpace(committed.Result.Cause.Detail) == "" ||
+		len([]rune(committed.Result.Cause.Detail)) > workersessions.MaxFailureCauseDetailRunes {
+		t.Fatalf("committed failure detail = %q, want non-empty bounded detail", committed.Result.Cause.Detail)
+	}
+	if err := committed.Validate(); err != nil {
+		t.Fatalf("committed.Validate() = %v, want valid normalized terminal", err)
+	}
+}
+
 // TestTransitionToRunning_TerminalSessionRemainsAbsorbing proves a late
 // admission callback cannot resurrect a Worker Session after its terminal
 // result has been committed. This is the guard that preserves the existing
@@ -618,6 +644,62 @@ func TestSafeDetail_WithEmptyFailureMetadata_FallsBackToGenericPlaceholder(t *te
 	want := genericFailureDetail[workersessions.FailureCauseWorkersExecutionFailure]
 	if got != want {
 		t.Fatalf("safeDetail() = %q, want fixed generic placeholder %q", got, want)
+	}
+}
+
+func TestClassifyTerminal_ProviderSessionInspectionFailureRetainsSafeCauseContext(t *testing.T) {
+	dispatchResult := workers.WorkstationDispatchResult{
+		DispatchID: "dispatch-inspection-failure",
+		Result: workers.WorkResult{
+			DispatchID: "dispatch-inspection-failure",
+			Outcome:    workers.OutcomeFailed,
+			FailureMetadata: &workers.WorkFailureMetadata{
+				Family: workers.WorkFailureFamilyTerminal,
+				Type:   workers.WorkFailureTypeUnknown,
+			},
+			Diagnostics: &workers.WorkDiagnostics{
+				Provider: &workers.ProviderDiagnostic{
+					ResponseMetadata: map[string]string{
+						workers.ProviderResponseMetadataFailureOperation:      "provider_session_ingestion",
+						workers.ProviderResponseMetadataFailureClassification: "resource_limit",
+						workers.ProviderResponseMetadataFailureStage:          "final_parse",
+						"raw_rollout": "must not be copied",
+					},
+				},
+			},
+		},
+	}
+
+	terminal := classifyTerminal(nil, dispatchResult)
+	if terminal.Outcome != workersessions.TerminalOutcomeFailed || terminal.Cause == nil {
+		t.Fatalf("terminal = %#v, want failed result with cause", terminal)
+	}
+	if got := terminal.Cause.Detail; got != "family=terminal type=unknown operation=provider_session_ingestion classification=resource_limit stage=final_parse" {
+		t.Fatalf("terminal cause detail = %q, want safe inspection context", got)
+	}
+	if strings.Contains(terminal.Cause.Detail, "raw_rollout") || strings.Contains(terminal.Cause.Detail, "must not") {
+		t.Fatalf("terminal cause detail leaked untrusted diagnostics: %q", terminal.Cause.Detail)
+	}
+	if err := terminal.Validate(); err != nil {
+		t.Fatalf("terminal.Validate() = %v, want valid bounded terminal result", err)
+	}
+}
+
+func TestClassifyTerminal_SuccessWithFailedDispatchUsesExplicitFailureCause(t *testing.T) {
+	terminal := classifyTerminal(nil, workers.WorkstationDispatchResult{
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
+		Result: workers.WorkResult{
+			Outcome: workers.OutcomeAccepted,
+		},
+	})
+	if terminal.Outcome != workersessions.TerminalOutcomeFailed || terminal.Cause == nil {
+		t.Fatalf("terminal = %#v, want failed result with cause", terminal)
+	}
+	if terminal.Cause.Kind != workersessions.FailureCauseAdapterFailure {
+		t.Fatalf("terminal cause kind = %q, want ADAPTER_FAILURE", terminal.Cause.Kind)
+	}
+	if terminal.Cause.Detail != "the dispatch reported failure after a successful Workers result" {
+		t.Fatalf("terminal cause detail = %q, want explicit contradictory-evidence cause", terminal.Cause.Detail)
 	}
 }
 
@@ -1256,4 +1338,91 @@ func TestPause_ControlOutcomesKeepTheLifecycleTruthful(t *testing.T) {
 			t.Fatalf("Pause() after active control = %#v, %v, want CANCELED NOOP", result, err)
 		}
 	})
+}
+
+func TestFailureDiagnosticsUseClosedVocabularyAndProviderFallbacks(t *testing.T) {
+	primary := &workers.WorkDiagnostics{
+		Metadata: map[string]string{
+			workers.ProviderResponseMetadataFailureOperation:      "provider_session_ingestion",
+			workers.ProviderResponseMetadataFailureClassification: "resource_limit",
+			workers.ProviderResponseMetadataFailureStage:          "final_parse",
+		},
+	}
+	if got := safeDiagnosticFailureContext(primary); got != "operation=provider_session_ingestion classification=resource_limit stage=final_parse" {
+		t.Fatalf("safeDiagnosticFailureContext(primary) = %q, want all safe fields", got)
+	}
+
+	fallback := &workers.WorkDiagnostics{
+		Provider: &workers.ProviderDiagnostic{ResponseMetadata: map[string]string{
+			workers.ProviderResponseMetadataFailureOperation:      "provider_session_ingestion",
+			workers.ProviderResponseMetadataFailureClassification: "resource_limit",
+			workers.ProviderResponseMetadataFailureStage:          "final_parse",
+		}},
+	}
+	if got := mergeDiagnosticContexts(&workers.WorkDiagnostics{}, fallback); got != "operation=provider_session_ingestion classification=resource_limit stage=final_parse" {
+		t.Fatalf("mergeDiagnosticContexts(empty, fallback) = %q, want provider fields", got)
+	}
+	if got := safeDetailWithDiagnostics(
+		workersessions.FailureCauseAdapterFailure,
+		&workers.WorkFailureMetadata{Family: workers.WorkFailureFamilyTerminal, Type: workers.WorkFailureTypeUnknown},
+		primary,
+	); !strings.Contains(got, "operation=provider_session_ingestion") {
+		t.Fatalf("safeDetailWithDiagnostics() = %q, want safe diagnostic context", got)
+	}
+
+	if got := diagnosticValue(nil, workers.ProviderResponseMetadataFailureOperation); got != "" {
+		t.Fatalf("diagnosticValue(nil) = %q, want empty", got)
+	}
+	if got := diagnosticValue(&workers.WorkDiagnostics{}, workers.ProviderResponseMetadataFailureOperation); got != "" {
+		t.Fatalf("diagnosticValue(empty) = %q, want empty", got)
+	}
+	if got := safeDiagnosticValue(strings.Repeat("x", 65), knownFailureOperations); got != "" {
+		t.Fatalf("safeDiagnosticValue(overlong) = %q, want empty", got)
+	}
+	if got := safeDiagnosticValue("untrusted-value", knownFailureOperations); got != "" {
+		t.Fatalf("safeDiagnosticValue(unrecognized) = %q, want empty", got)
+	}
+}
+
+func TestBoundedFailureDetailUsesFallbackAndTruncates(t *testing.T) {
+	unknownKind := workersessions.FailureCauseKind("unrecognized")
+	if got := boundedFailureDetail(unknownKind, ""); got == "" {
+		t.Fatal("boundedFailureDetail(unknown, empty) = empty, want fallback")
+	}
+
+	long := strings.Repeat("x", workersessions.MaxFailureCauseDetailRunes+10)
+	if got := boundedFailureDetail(workersessions.FailureCauseAdapterFailure, long); len([]rune(got)) != workersessions.MaxFailureCauseDetailRunes {
+		t.Fatalf("boundedFailureDetail() length = %d, want %d", len([]rune(got)), workersessions.MaxFailureCauseDetailRunes)
+	}
+}
+
+func TestClassifyTerminal_ContradictorySuccessWithExecutorPanicUsesPanicCause(t *testing.T) {
+	terminal := classifyTerminal(
+		&workers.WorkerExecutorPanicError{Cause: "panic evidence"},
+		workers.WorkstationDispatchResult{
+			TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
+			Result:          workers.WorkResult{Outcome: workers.OutcomeAccepted},
+		},
+	)
+	if terminal.Cause == nil || terminal.Cause.Kind != workersessions.FailureCauseExecutorPanic {
+		t.Fatalf("terminal cause = %#v, want EXECUTOR_PANIC", terminal.Cause)
+	}
+}
+
+func TestTerminalDraft_FailedRequiresValidTerminalResult(t *testing.T) {
+	if _, err := terminalDraft(workersessions.StateFailed, workersessions.TerminalResult{}, "dispatch-1"); err == nil {
+		t.Fatal("terminalDraft(FAILED, zero result) error = nil, want validation error")
+	}
+}
+
+func TestNormalizeCommittedTerminal_RepairsInvalidFailure(t *testing.T) {
+	result := normalizeCommittedTerminal(workersessions.StateFailed, workersessions.TerminalResult{
+		Outcome: workersessions.TerminalOutcomeCompleted,
+	})
+	if result.Outcome != workersessions.TerminalOutcomeFailed || result.Cause == nil {
+		t.Fatalf("normalizeCommittedTerminal() = %#v, want FAILED with fallback cause", result)
+	}
+	if strings.TrimSpace(result.Cause.Detail) == "" {
+		t.Fatal("normalized failure cause detail is empty")
+	}
 }

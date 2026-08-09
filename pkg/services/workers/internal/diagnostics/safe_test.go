@@ -3,6 +3,7 @@ package diagnostics
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	workerenvdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/envdiagnostics"
@@ -78,6 +79,48 @@ func TestSafeWorkDiagnosticsAllowlistAndCloneIsolation(t *testing.T) {
 	clone.Provider.RequestMetadata["request_id"] = "changed"
 	if safe.Provider.RequestMetadata["request_id"] != "req-1" {
 		t.Fatal("safe diagnostics clone was not detached")
+	}
+}
+
+func TestSafeWorkDiagnosticsBoundsFailureMetadataAndKeepsCorrelation(t *testing.T) {
+	t.Parallel()
+	longValue := strings.Repeat("x", maxSafeMetadataValueRunes+100)
+	safe := SafeWorkDiagnosticsFromWorkDiagnostics(&WorkDiagnostics{
+		Provider: &ProviderDiagnostic{
+			RequestMetadata: map[string]string{"dispatch_id": longValue},
+			ResponseMetadata: map[string]string{
+				"failure_operation":           "provider_session_ingestion",
+				"failure_classification":      "resource_limit",
+				"failure_stage":               longValue,
+				"inspection_limit_category":   "record",
+				"inspection_limit_configured": "1048576",
+				"inspection_limit_observed":   "1048577",
+				"inspection_limit_line":       "2",
+				"raw_rollout":                 longValue,
+			},
+		},
+	})
+	if safe == nil || safe.Provider == nil {
+		t.Fatalf("safe diagnostics = %#v, want provider diagnostics", safe)
+	}
+	if got := safe.Provider.RequestMetadata["dispatch_id"]; len([]rune(got)) != maxSafeMetadataValueRunes {
+		t.Fatalf("bounded dispatch id length = %d, want %d", len([]rune(got)), maxSafeMetadataValueRunes)
+	}
+	if safe.Provider.ResponseMetadata["failure_operation"] != "provider_session_ingestion" ||
+		safe.Provider.ResponseMetadata["failure_classification"] != "resource_limit" {
+		t.Fatalf("response metadata = %#v, want stable failure classification", safe.Provider.ResponseMetadata)
+	}
+	if safe.Provider.ResponseMetadata["inspection_limit_category"] != "record" ||
+		safe.Provider.ResponseMetadata["inspection_limit_configured"] != "1048576" ||
+		safe.Provider.ResponseMetadata["inspection_limit_observed"] != "1048577" ||
+		safe.Provider.ResponseMetadata["inspection_limit_line"] != "2" {
+		t.Fatalf("response metadata = %#v, want bounded inspection limit facts", safe.Provider.ResponseMetadata)
+	}
+	if _, ok := safe.Provider.ResponseMetadata["failure_stage"]; ok {
+		t.Fatal("unrecognized failure stage value was retained")
+	}
+	if _, ok := safe.Provider.ResponseMetadata["raw_rollout"]; ok {
+		t.Fatal("raw rollout metadata leaked through the safe diagnostics allowlist")
 	}
 }
 

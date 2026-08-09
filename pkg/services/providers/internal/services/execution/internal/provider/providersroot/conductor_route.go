@@ -147,7 +147,12 @@ func (d *conductorDestination) result(providerID providers.ID) (providers.Execut
 			Message: "provider invocation completed without a safe terminal outcome",
 		}
 	}
-	result := providers.ExecuteResult{Content: response.Content()}
+	result := providers.ExecuteResult{
+		Content: response.Content(),
+		Diagnostics: &providers.ExecuteDiagnostics{Metadata: map[string]string{
+			workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
+		}},
+	}
 	if session := response.ProviderSession(); session != nil {
 		result.SessionRef = &providers.SessionRef{
 			Provider: providerID,

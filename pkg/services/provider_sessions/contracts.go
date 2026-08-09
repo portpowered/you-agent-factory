@@ -236,13 +236,15 @@ var (
 	ErrUnsupportedProvider         = errors.New("unsupported provider session provider")
 )
 
-// LookupError retains normalized provider context. Root is optional legacy
-// diagnostic context; Codex lookups omit it so configured host paths do not
-// cross the Provider Sessions boundary.
+// LookupError retains normalized provider and session context. SessionID is
+// the validated opaque session identity that failed inspection. Root is
+// optional legacy diagnostic context; Codex lookups omit it so configured host
+// paths do not cross the Provider Sessions boundary.
 type LookupError struct {
-	Provider Provider
-	Root     string
-	Err      error
+	Provider  Provider
+	SessionID string
+	Root      string
+	Err       error
 }
 
 func (e *LookupError) Error() string {
