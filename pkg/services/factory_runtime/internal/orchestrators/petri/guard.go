@@ -338,11 +338,7 @@ func (g *DependencyGuard) Evaluate(candidates []factorytoken.Token, _ map[string
 		return nil, false
 	}
 
-	// Build a lookup from WorkID → token for fast dependency resolution.
-	workIndex := make(map[string]*factorytoken.Token, len(marking.Tokens))
-	for _, tok := range marking.Tokens {
-		workIndex[tok.Color.WorkID] = tok
-	}
+	workIndex := dependencyWorkIndex(marking)
 
 	var matched []factorytoken.Token
 	for _, c := range candidates {
@@ -352,6 +348,33 @@ func (g *DependencyGuard) Evaluate(candidates []factorytoken.Token, _ map[string
 	}
 
 	return matched, len(matched) > 0
+}
+
+// AllDependenciesMet verifies DEPENDS_ON relations on every token in a
+// complete transition binding. It is evaluated after peer guards have selected
+// all joined inputs, so a secondary input cannot bypass its own dependency.
+func (g *DependencyGuard) AllDependenciesMet(bindings map[string][]factorytoken.Token, marking *MarkingSnapshot) bool {
+	if marking == nil {
+		return false
+	}
+
+	workIndex := dependencyWorkIndex(marking)
+	for _, tokens := range bindings {
+		for _, token := range tokens {
+			if !g.allDependenciesMet(token, workIndex) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func dependencyWorkIndex(marking *MarkingSnapshot) map[string]*factorytoken.Token {
+	workIndex := make(map[string]*factorytoken.Token, len(marking.Tokens))
+	for _, tok := range marking.Tokens {
+		workIndex[tok.Color.WorkID] = tok
+	}
+	return workIndex
 }
 
 // allDependenciesMet checks that every DEPENDS_ON relation on the token is
