@@ -7,6 +7,11 @@ Use this page when you need the current worker contract, the canonical
 `workers/<name>/AGENTS.md` placement, and the split between worker-owned and
 workstation-owned runtime fields.
 
+Use `you docs providers` for the provider/model decision, configured model
+roles, effort mapping, modality and tool limits, and AGY or ACP-specific
+behavior. This page keeps the provider-neutral worker field contract and
+placement rules.
+
 This is the canonical customer-facing guide for workers. Keep worker types,
 worker-scoped runtime fields, model/script backend fields, and
 `workers/<name>/AGENTS.md` placement here. Keep workstation routing and
@@ -96,8 +101,8 @@ See `you docs workstations` for the matching `INFERENCE_RUN`, `AGENT_RUN`,
   `claude` or `antigravity`.
 - `executorProvider` accepts the canonical mechanisms `SCRIPT_WRAP` and `ACP`.
   For ACP, `modelProvider` names an integration such as `cursor-acp`. See
-  `you docs providers` for ACP setup and
-  lifecycle commands.
+  `you docs providers` for provider/model selection, capabilities, effort
+  limits, ACP setup, and lifecycle commands.
 - Older snake_case and alias frontmatter keys are compatibility-only inputs.
   New docs and authored configs should use canonical camelCase fields.
 
@@ -152,15 +157,12 @@ parameters may supply an exact placeholder such as
 `reasoningEffort: ${executorReasoningEffort}`; an unsupported resolved value
 fails before a provider process starts.
 
-The runtime keeps this contract provider-neutral. Codex translates it to
-`--config model_reasoning_effort="<effort>"`, while Claude translates it to
-`--effort <effort>`. Claude's `ultracode` session mode is not an effort value:
-configure that provider-specific workflow separately instead of setting
-`reasoningEffort`. ACP integrations such as `cursor-acp` advertise exact model
-identifiers that already encode effort, for example
-`cursor-grok-4.5-medium-fast`; select that model ID and omit
-`reasoningEffort`. Providers without an effort mapping reject a non-empty
-value; the current `ANTIGRAVITY` adapter does not accept a separate effort.
+The runtime keeps this contract provider-neutral. The selected provider may
+narrow or reject a canonical value, and some model identifiers encode their
+effort in the model name so a separate `reasoningEffort` should be omitted.
+See `you docs providers` for the current provider/model mappings, supported
+effort choices, and version-sensitive exceptions; do not infer those details
+from this provider-neutral field list.
 
 ## Worker Types
 

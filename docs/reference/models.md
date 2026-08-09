@@ -12,6 +12,11 @@ page explains the boundary between direct model operations and
 `INFERENCE_WORKER` plus `INFERENCE_RUN`; detailed worker, workstation, and
 resource fields remain in their owning guides.
 
+Use `you docs providers` for agent worker/provider selection, configured model
+roles, effort choices, modality and tool limits, and AGY or ACP behavior. This
+page is the canonical guide for managed model discovery, readiness, pull, and
+direct inference operations.
+
 ## Discover And Inspect Models
 
 Start a Factory service before using discovery, inspection, or pull commands.
@@ -113,7 +118,8 @@ an agent loop. Legacy `MODEL_WORKER` and `MODEL_INVOKE` values remain migration
 inputs, but new Factory configuration should use `INFERENCE_WORKER` and
 `INFERENCE_RUN`.
 
-Use `you docs workers` for worker capabilities, `you docs workstations` for
-routing and bindings, `you docs resources` for managed capacity, `you docs
-config` for the minimum Factory contract, and `you docs run` for complete
-Factory invocation shapes.
+Use `you docs providers` for agent provider/model selection and limits. Use
+`you docs workers` for worker capabilities, `you docs workstations` for routing
+and bindings, `you docs resources` for managed capacity, `you docs config` for
+the minimum Factory contract, and `you docs run` for complete Factory
+invocation shapes.

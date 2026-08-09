@@ -37,7 +37,7 @@ concept owners below when you need the complete customer-facing contract.
 | `mcp` | `you mcp serve` host setup, backing modes, first-use smoke, and troubleshooting | [MCP host setup](mcp.md) |
 | `workstations` | Workstation kinds, routes, runtime fields, and scoped execution settings | [Workstations](workstations.md) |
 | `workers` | Worker quick reference | [Workers](workers.md) |
-| `providers` | ACP presets, custom integrations, Factory selection, validation, removal, and JavaScript usage | [Providers and ACP agents](providers.md) |
+| `providers` | Canonical worker/provider selection, model capabilities and limits, Factory versus ad-hoc configuration, AGY caveats, ACP integrations, and JavaScript usage | [Providers and ACP agents](providers.md) |
 | `serve-acp` | `you serve acp` ACP-agent host command, stdio channel contract, clean shutdown, and minimal client configuration | [Host You as an ACP agent](serve-acp.md) |
 | `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Config](config.md) |
 | `models` | Model discovery, readiness, pull, invocation, and Factory execution boundaries | [Models](models.md) |
@@ -102,8 +102,9 @@ filesystem work around that invocation.
   model/script/hosted backend fields, explicit `AGENT_WORKER` tool policy,
   agent-run failure classes, hosted `auth.secretRef` guidance, and split
   `workers/<name>/AGENTS.md` placement.
-- [Providers and ACP agents](providers.md) owns ACP installation, built-in
-  presets, operator-added integrations, `executorProvider` selection, and
+- [Providers and ACP agents](providers.md) owns worker/provider selection,
+  configured model roles, provider-specific effort and modality/tool limits,
+  Factory versus ad-hoc configuration, AGY caveats, ACP installation, and
   provider lifecycle commands.
 - [Host You as an ACP agent](serve-acp.md) owns the canonical `you serve acp`
   ACP-agent host command, its stdio channel contract, clean shutdown
