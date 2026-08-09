@@ -11,7 +11,10 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-const watchRetryModelRequestEventID = "factory-event/model-request/dispatch-retry/model-request/1"
+const (
+	watchRetryModelRequestEventID  = "factory-event/model-request/dispatch-retry/model-request/1"
+	watchRetryModelResponseEventID = "factory-event/model-response/2cf2a099-909b-4446-8e8d-1453054e093c/model-request/1"
+)
 
 func TestWatchReducerAcceptsRefreshedModelRequestRetryWithoutProjectingWork(t *testing.T) {
 	metadata, request, firstTransition := watchRetrySetup(t)
@@ -80,6 +83,78 @@ func TestWatchReducerRejectsNonIncreasingConflictingModelRequestRetry(t *testing
 	}
 }
 
+func TestWatchReducerAppliesOrderedPolicyToEveryNonProjectingEvent(t *testing.T) {
+	eventTypes := []factoryapi.FactoryEventType{
+		factoryapi.FactoryEventTypeAgentRunResponse,
+		factoryapi.FactoryEventTypeArtifactCreated,
+		factoryapi.FactoryEventTypeDispatchInterrupted,
+		factoryapi.FactoryEventTypeDispatchQueued,
+		factoryapi.FactoryEventTypeDispatchReconciled,
+		factoryapi.FactoryEventTypeDispatchRequest,
+		factoryapi.FactoryEventTypeDispatchResponse,
+		factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation,
+		factoryapi.FactoryEventTypeFactoryStateResponse,
+		factoryapi.FactoryEventTypeInferenceRequest,
+		factoryapi.FactoryEventTypeInferenceResponse,
+		factoryapi.FactoryEventTypeJavaScriptCheckpointRef,
+		factoryapi.FactoryEventTypeJavaScriptPhaseChange,
+		factoryapi.FactoryEventTypeModelRequest,
+		factoryapi.FactoryEventTypeModelResponse,
+		factoryapi.FactoryEventTypeOrchestratorCheckpointWritten,
+		factoryapi.FactoryEventTypeOrchestratorPhaseChanged,
+		factoryapi.FactoryEventTypeRelationshipChangeRequest,
+		factoryapi.FactoryEventTypeRunResponse,
+		factoryapi.FactoryEventTypeScriptRequest,
+		factoryapi.FactoryEventTypeScriptResponse,
+		factoryapi.FactoryEventTypeSessionCompleted,
+		factoryapi.FactoryEventTypeSessionLifecycleControl,
+		factoryapi.FactoryEventTypeSessionPaused,
+		factoryapi.FactoryEventTypeSessionResultUpdated,
+		factoryapi.FactoryEventTypeSessionResumed,
+		factoryapi.FactoryEventTypeSessionStarted,
+	}
+	for _, eventType := range eventTypes {
+		t.Run(string(eventType), func(t *testing.T) {
+			eventID := "factory-event/enrichment/" + strings.ToLower(strings.ReplaceAll(string(eventType), "_", "-"))
+			if eventType == factoryapi.FactoryEventTypeModelRequest {
+				eventID = watchRetryModelRequestEventID
+			}
+			if eventType == factoryapi.FactoryEventTypeModelResponse {
+				eventID = watchRetryModelResponseEventID
+			}
+			reducer := newWatchReducer("session-enrichment-policy")
+			initial := watchNonProjectingEvent(t, eventType, eventID, 4, "initial")
+			refreshed := watchNonProjectingEvent(t, eventType, eventID, 6, "refreshed")
+			if _, emit, _, err := reducer.Accept(initial); err != nil || emit {
+				t.Fatalf("Accept(initial) = emit %t, error %v; want no transition", emit, err)
+			}
+			if cursor := reducer.Cursor(); cursor == nil || cursor.EventID != eventID || cursor.Sequence != 4 {
+				t.Fatalf("initial cursor = %#v, want %q at sequence 4", cursor, eventID)
+			}
+			if _, emit, _, err := reducer.Accept(refreshed); err != nil || emit {
+				t.Fatalf("Accept(refreshed) = emit %t, error %v; want no transition", emit, err)
+			}
+			if cursor := reducer.Cursor(); cursor == nil || cursor.EventID != eventID || cursor.Sequence != 6 {
+				t.Fatalf("refreshed cursor = %#v, want %q at sequence 6", cursor, eventID)
+			}
+			if _, emit, _, err := reducer.Accept(refreshed); err != nil || emit {
+				t.Fatalf("Accept(exact replay) = emit %t, error %v; want idempotent replay", emit, err)
+			}
+			conflicting := watchNonProjectingEvent(t, eventType, eventID, 6, "conflicting")
+			if _, _, _, err := reducer.Accept(conflicting); err == nil || !strings.Contains(err.Error(), "non-increasing canonical sequence") {
+				t.Fatalf("Accept(same-sequence conflict) error = %v, want non-increasing sequence failure", err)
+			}
+			backward := watchNonProjectingEvent(t, eventType, eventID, 5, "backward")
+			if _, _, _, err := reducer.Accept(backward); err == nil || !strings.Contains(err.Error(), "non-increasing canonical sequence") {
+				t.Fatalf("Accept(backward conflict) error = %v, want non-increasing sequence failure", err)
+			}
+			if cursor := reducer.Cursor(); cursor == nil || cursor.EventID != eventID || cursor.Sequence != 6 {
+				t.Fatalf("cursor after rejected conflicts = %#v, want %q at sequence 6", cursor, eventID)
+			}
+		})
+	}
+}
+
 func TestWatchFiniteStreamIgnoresRefreshedModelRequestRetry(t *testing.T) {
 	metadata, request, firstTransition := watchRetrySetup(t)
 	retryInitial := watchModelRequestEvent(t, watchRetryModelRequestEventID, 4, "gpt-5-codex")
@@ -120,6 +195,28 @@ func TestWatchFiniteStreamIgnoresRefreshedModelRequestRetry(t *testing.T) {
 	}
 }
 
+func TestWatchFiniteStreamIgnoresRefreshedModelResponseRetry(t *testing.T) {
+	metadata, request, firstTransition := watchRetrySetup(t)
+	retryInitial := watchModelResponseEvent(t, watchRetryModelResponseEventID, 4, "gpt-5-codex")
+	betweenTransition := watchTransitionEvent(t, "move-between-response", 5, "work-1", "processing", "review", false)
+	retryRefreshed := watchModelResponseEvent(t, watchRetryModelResponseEventID, 6, "gpt-5-codex-mini")
+	terminal := watchTransitionEvent(t, "move-terminal-response", 7, "work-1", "review", "done", true)
+	stream := &finiteWatchEventStream{events: []factoryapi.FactoryEvent{
+		metadata, request, firstTransition, retryInitial, betweenTransition, retryRefreshed, terminal,
+	}}
+	var output bytes.Buffer
+	err := watchWithSource(
+		WatchConfig{Context: context.Background(), SessionID: "session-finite-response-retry", Output: &output},
+		watchEventOpenFunc(func(context.Context, *watchEventCursor) (watchEventStream, error) {
+			return stream, nil
+		}),
+	)
+	if err != nil {
+		t.Fatalf("watchWithSource() error = %v", err)
+	}
+	assertRetryStreamOutput(t, output.String(), "move-between-response", "move-terminal-response")
+}
+
 func TestWatchFollowIgnoresRefreshedModelRequestRetry(t *testing.T) {
 	metadata, request, firstTransition, later := watchRetryFollowSetup(t)
 	retryInitial := watchModelRequestEvent(t, watchRetryModelRequestEventID, 4, "gpt-5-codex")
@@ -152,6 +249,37 @@ func TestWatchFollowIgnoresRefreshedModelRequestRetry(t *testing.T) {
 	assertFollowRetryOutput(t, output.String())
 }
 
+func TestWatchFollowIgnoresRefreshedModelResponseRetry(t *testing.T) {
+	metadata, request, firstTransition, later := watchRetryFollowSetup(t)
+	retryInitial := watchModelResponseEvent(t, watchRetryModelResponseEventID, 4, "gpt-5-codex")
+	betweenTransition := watchTransitionEvent(t, "move-between-response-follow", 5, "work-1", "processing", "review", false)
+	retryRefreshed := watchModelResponseEvent(t, watchRetryModelResponseEventID, 6, "gpt-5-codex-mini")
+	later.Context = watchEventContext(7)
+	stream := &cancellableWatchEventStream{
+		events:  []factoryapi.FactoryEvent{metadata, request, firstTransition, retryInitial, betweenTransition, retryRefreshed, later},
+		blocked: make(chan struct{}),
+		closed:  make(chan struct{}),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var output bytes.Buffer
+	done := make(chan error, 1)
+	go func() {
+		done <- watchWithRetry(
+			WatchConfig{Context: ctx, SessionID: "session-follow-response-retry", Follow: true, Output: &output},
+			watchEventOpenFunc(func(context.Context, *watchEventCursor) (watchEventStream, error) {
+				return stream, nil
+			}),
+			watchRetryPolicy{maxAttempts: 0},
+		)
+	}()
+
+	waitForFollowStream(t, stream)
+	cancel()
+	waitForFollowCancellation(t, done)
+	assertFollowRetryOutputWithEvents(t, output.String(), "move-between-response-follow")
+}
+
 func waitForFollowStream(t *testing.T, stream *cancellableWatchEventStream) {
 	t.Helper()
 	select {
@@ -174,6 +302,10 @@ func waitForFollowCancellation(t *testing.T, done <-chan error) {
 }
 
 func assertFollowRetryOutput(t *testing.T, output string) {
+	assertFollowRetryOutputWithEvents(t, output, "move-between-follow")
+}
+
+func assertFollowRetryOutputWithEvents(t *testing.T, output, betweenEventID string) {
 	t.Helper()
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) != 3 {
@@ -189,9 +321,31 @@ func assertFollowRetryOutput(t *testing.T, output string) {
 	if err := decodeWatchLine(lines[2], &third); err != nil {
 		t.Fatal(err)
 	}
-	if first.EventID != "move-1" || second.EventID != "move-between-follow" || third.EventID != "move-later" ||
+	if first.EventID != "move-1" || second.EventID != betweenEventID || third.EventID != "move-later" ||
 		first.Sequence >= second.Sequence || second.Sequence >= third.Sequence || first.Terminal || second.Terminal || third.Terminal {
 		t.Fatalf("follow transitions = %#v, %#v, %#v, want ordered non-terminal transitions", first, second, third)
+	}
+}
+
+func assertRetryStreamOutput(t *testing.T, output, betweenEventID, terminalEventID string) {
+	t.Helper()
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("output lines = %d, want three Work transition lines: %q", len(lines), output)
+	}
+	var first, second, third watchLine
+	if err := decodeWatchLine(lines[0], &first); err != nil {
+		t.Fatal(err)
+	}
+	if err := decodeWatchLine(lines[1], &second); err != nil {
+		t.Fatal(err)
+	}
+	if err := decodeWatchLine(lines[2], &third); err != nil {
+		t.Fatal(err)
+	}
+	if first.EventID != "move-1" || second.EventID != betweenEventID || third.EventID != terminalEventID ||
+		first.Sequence >= second.Sequence || second.Sequence >= third.Sequence || !third.Terminal {
+		t.Fatalf("finite transitions = %#v, %#v, %#v, want ordered transitions through terminal", first, second, third)
 	}
 }
 
@@ -356,6 +510,31 @@ func watchModelResponseEvent(t *testing.T, id string, sequence int, model string
 		Id:            id,
 		Context:       watchModelEventContext(sequence),
 		Payload:       union,
+	}
+}
+
+func watchNonProjectingEvent(
+	t *testing.T,
+	eventType factoryapi.FactoryEventType,
+	id string,
+	sequence int,
+	revision string,
+) factoryapi.FactoryEvent {
+	t.Helper()
+	switch eventType {
+	case factoryapi.FactoryEventTypeModelRequest:
+		return watchModelRequestEvent(t, id, sequence, revision)
+	case factoryapi.FactoryEventTypeModelResponse:
+		return watchModelResponseEvent(t, id, sequence, revision)
+	default:
+		context := watchModelEventContext(sequence)
+		context.CurrentChainingTraceId = watchStringPtr(revision)
+		return factoryapi.FactoryEvent{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Type:          eventType,
+			Id:            id,
+			Context:       context,
+		}
 	}
 }
 

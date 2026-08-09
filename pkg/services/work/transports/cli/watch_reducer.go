@@ -71,8 +71,8 @@ func (r *watchReducer) Accept(event factoryapi.FactoryEvent) (WatchTransition, b
 }
 
 // acceptOrdering validates and records event's canonical ordering position.
-// It reports true when event is an exact replay or a non-projecting model
-// request retry at a strictly later canonical position.
+// It reports true when event is an exact replay or a refreshed non-projecting
+// enrichment at a strictly later canonical position.
 func (r *watchReducer) acceptOrdering(event factoryapi.FactoryEvent) (bool, error) {
 	signature, err := json.Marshal(event)
 	if err != nil {
@@ -82,16 +82,14 @@ func (r *watchReducer) acceptOrdering(event factoryapi.FactoryEvent) (bool, erro
 		if prior.sequence == event.Context.Sequence && bytes.Equal(prior.signature, signature) {
 			return true, nil
 		}
-		if prior.eventType == factoryapi.FactoryEventTypeModelRequest &&
-			event.Type == factoryapi.FactoryEventTypeModelRequest {
-			// Provider retries can refresh the canonical MODEL_REQUEST payload
-			// while retaining the request ordinal and event identity. MODEL_REQUEST
-			// events do not project Work state, so accept later enrichment without
-			// emitting a transition. A non-increasing position is a conflicting
-			// reuse, not a provider retry.
+		if prior.eventType == event.Type && isNonProjectingWatchEvent(event.Type) {
+			// Provider retries can refresh a non-projecting canonical payload while
+			// retaining the event identity. Accept later enrichment without emitting
+			// a transition. A non-increasing position is a conflicting reuse, not a
+			// provider retry.
 			if !r.hasLast || event.Context.Sequence <= r.last {
 				return false, fmt.Errorf(
-					"work watch model request retry %q has non-increasing canonical sequence %d after %d",
+					"work watch enrichment %q has non-increasing canonical sequence %d after %d",
 					event.Id, event.Context.Sequence, r.last,
 				)
 			}
@@ -125,6 +123,22 @@ func (r *watchReducer) acceptOrdering(event factoryapi.FactoryEvent) (bool, erro
 	r.lastID = event.Id
 	r.hasLast = true
 	return false, nil
+}
+
+// isNonProjectingWatchEvent identifies event families this reducer consumes
+// only for canonical ordering. Events that update Factory or Work projection
+// state remain strict because refreshed data could change the projection.
+func isNonProjectingWatchEvent(eventType factoryapi.FactoryEventType) bool {
+	switch eventType {
+	case factoryapi.FactoryEventTypeInitialStructureRequest,
+		factoryapi.FactoryEventTypeRunRequest,
+		factoryapi.FactoryEventTypeFactoryChange,
+		factoryapi.FactoryEventTypeWorkRequest,
+		factoryapi.FactoryEventTypeWorkStateChange:
+		return false
+	default:
+		return true
+	}
 }
 
 // applyEvent projects one non-replay canonical event into reducer state and
