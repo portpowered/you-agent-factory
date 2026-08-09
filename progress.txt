@@ -119,3 +119,15 @@
   - A clean branch synchronized with its remote still needs the focused and fast verification gates rerun before creating the PR so the published commit has current local evidence.
   - When every story is already marked complete and no PR exists, append delivery evidence to the progress log without changing the completed PRD story state.
 ---
+
+## 2026-08-09 16:51 -07:00 - wo-c1-ext-stream-replay-only-delivery-follow-up
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional product story work was pending.
+  - Rechecked PR #1840's current discussion and thread state: the prior blocking correctness and lint feedback is addressed on the current head, with no unresolved inline review threads.
+  - Re-ran the named replay-only redirect/CLI functional test and `make verify-fast` successfully on the exact synchronized branch head.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - An open PR with addressed feedback still needs its latest remote check state rechecked before reporting delivery; at this point the required CI run was still in progress.
+  - When the PRD is already fully passed and no new code is required, preserve the completed `prd.json` story state and record verification/review evidence in the append-only progress log.
+---
