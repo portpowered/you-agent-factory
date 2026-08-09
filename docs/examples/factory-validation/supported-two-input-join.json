@@ -1,0 +1,45 @@
+{
+  "name": "supported-two-input-join",
+  "workTypes": [
+    {
+      "name": "parent",
+      "states": [
+        { "name": "ready", "type": "INITIAL" },
+        { "name": "complete", "type": "TERMINAL" },
+        { "name": "failed", "type": "FAILED" }
+      ]
+    },
+    {
+      "name": "child",
+      "states": [
+        { "name": "ready", "type": "INITIAL" },
+        { "name": "complete", "type": "TERMINAL" },
+        { "name": "failed", "type": "FAILED" }
+      ]
+    }
+  ],
+  "workstations": [
+    {
+      "name": "two-input-join",
+      "type": "LOGICAL_MOVE",
+      "inputs": [
+        {
+          "workType": "parent",
+          "state": "ready",
+          "guards": [{ "type": "SAME_NAME", "matchInput": "child" }]
+        },
+        {
+          "workType": "child",
+          "state": "complete",
+          "guards": [
+            {
+              "type": "ALL_CHILDREN_COMPLETE",
+              "parentInput": "parent"
+            }
+          ]
+        }
+      ],
+      "outputs": [{ "workType": "parent", "state": "complete" }]
+    }
+  ]
+}

@@ -51,8 +51,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added reproducible unsupported three-input and supported two-input join fixtures under docs/examples/factory-validation and documented the worked failure/correction in the packaged guide. Rebuilt bin/you.exe and executed both exact validation commands; pasted the current binary output, including the structured blocking target and exit behavior. Verified with the named unsupported-join regression, make docs-reference-smoke, and make verify-fast (typecheck, UI/Bun tests, MCP contract check, and short Go suite)."
     },
     {
       "id": "wo-d4-factory-validate-docs-003",

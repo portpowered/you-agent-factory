@@ -108,6 +108,56 @@ inputs. A workstation that combines that pair across more than two inputs is a
 static validation error; it must be reduced to a supported input set or split
 into supported stages before runtime.
 
+### Worked failure: three-input fan-in
+
+The checked-in
+[`unsupported-three-input-join.json`](../examples/factory-validation/unsupported-three-input-join.json)
+is internally coherent except for its unsupported join arity. Its `fan-in`
+workstation combines these three inputs:
+
+```text
+parent:ready
+same:ready       guarded by SAME_NAME(matchInput=parent)
+child:complete   guarded by ALL_CHILDREN_COMPLETE(parentInput=parent)
+```
+
+Run the exact file command before trying to run this Factory:
+
+```bash
+you factory config validate ./docs/examples/factory-validation/unsupported-three-input-join.json
+```
+
+The current binary rejects it before a Factory Session or provider execution
+begins:
+
+```text
+Factory validation failed.
+Runtime taxonomy:
+  workstation fan-in: LOGICAL_MOVE (worker=)
+Blocking targets:
+  error same-name-all-children-complete-join-arity WORKSTATION(fan-in) INPUTS: workstation "fan-in" uses an unsupported SAME_NAME plus ALL_CHILDREN_COMPLETE join arity: observed arity is 3 inputs, and at most 2 inputs are supported for this join shape. Split the fan-in into supported two-input workstation stages or reduce the joined inputs.
+Error: Factory Definition source ./docs/examples/factory-validation/unsupported-three-input-join.json (JSON): factory validation found blocking issues
+```
+
+The diagnostic is the current contract: the observed arity is `3`, the
+supported maximum is `2`, and the affected workstation is `fan-in`. Reduce the
+joined inputs or split the fan-in into stages where every join has at most two
+inputs. Then validate the corrected file again before running it. The checked-in
+[`supported-two-input-join.json`](../examples/factory-validation/supported-two-input-join.json)
+shows the reduced form:
+
+```bash
+you factory config validate ./docs/examples/factory-validation/supported-two-input-join.json
+```
+
+Its current-binary result is:
+
+```text
+Factory validation passed.
+Runtime taxonomy:
+  workstation two-input-join: LOGICAL_MOVE (worker=)
+```
+
 ### Guard attachment, cardinality, and references
 
 Guard placement and the fields required at each level are part of the static
