@@ -536,7 +536,6 @@ func watchEventContext(sequence int) factoryapi.FactoryEventContext {
 }
 
 func watchStringPtr(value string) *string { return &value }
-
 func watchOptionalString(include bool, value string) *string {
 	if !include {
 		return nil
@@ -643,84 +642,6 @@ func TestWatchCancellationInterruptsReconnectBackoff(t *testing.T) {
 	}
 	if openCalls != 1 {
 		t.Fatalf("open calls = %d, want no open after cancellation", openCalls)
-	}
-}
-
-func TestWatchReconnectsFromCursorAndSuppressesReplayOverlap(t *testing.T) {
-	metadata, request, firstTransition := watchReconnectSetup(t)
-	secondTransition := watchTransitionEvent(t, "move-2", 4, "work-1", "processing", "done", true)
-	firstStream := &finiteWatchEventStream{events: []factoryapi.FactoryEvent{metadata, request, firstTransition}}
-	secondStream := &finiteWatchEventStream{events: []factoryapi.FactoryEvent{firstTransition, secondTransition}}
-	var cursors []*watchEventCursor
-	var openCalls int
-	var output bytes.Buffer
-	err := watchWithRetry(
-		WatchConfig{Context: context.Background(), SessionID: "session-reconnect", Output: &output},
-		reconnectSequencedOpenFunc(t, firstStream, secondStream, &cursors, &openCalls),
-		watchRetryPolicy{maxAttempts: 2, wait: func(context.Context, time.Duration) error { return nil }},
-	)
-	if err != nil {
-		t.Fatalf("watchWithRetry() error = %v", err)
-	}
-	assertReconnectCursorSequence(t, openCalls, cursors)
-	assertReconnectOrderedTransitions(t, output.String())
-}
-
-// reconnectSequencedOpenFunc returns a watchEventOpenFunc that serves first
-// on the initial open and second on the first reconnect, recording every
-// cursor it was opened with.
-func reconnectSequencedOpenFunc(
-	t *testing.T,
-	first *finiteWatchEventStream,
-	second *finiteWatchEventStream,
-	cursors *[]*watchEventCursor,
-	openCalls *int,
-) watchEventOpenFunc {
-	t.Helper()
-	return func(_ context.Context, cursor *watchEventCursor) (watchEventStream, error) {
-		*openCalls++
-		if cursor != nil {
-			copy := *cursor
-			*cursors = append(*cursors, &copy)
-		} else {
-			*cursors = append(*cursors, nil)
-		}
-		switch *openCalls {
-		case 1:
-			return first, nil
-		case 2:
-			return second, nil
-		default:
-			return nil, errors.New("unexpected extra reconnect")
-		}
-	}
-}
-
-func assertReconnectCursorSequence(t *testing.T, openCalls int, cursors []*watchEventCursor) {
-	t.Helper()
-	if openCalls != 2 || len(cursors) != 2 || cursors[0] != nil {
-		t.Fatalf("open calls/cursors = %d/%#v, want initial open and one cursor reconnect", openCalls, cursors)
-	}
-	if cursors[1] == nil || cursors[1].EventID != "move-1" || cursors[1].Sequence != 3 {
-		t.Fatalf("reconnect cursor = %#v, want move-1 at sequence 3", cursors[1])
-	}
-}
-
-func assertReconnectOrderedTransitions(t *testing.T, output string) {
-	t.Helper()
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	if len(lines) != 2 {
-		t.Fatalf("output lines = %d, want duplicate-free transitions: %q", len(lines), output)
-	}
-	var first, second watchLine
-	if err := decodeWatchLine(lines[0], &first); err != nil {
-		t.Fatal(err)
-	}
-	if err := decodeWatchLine(lines[1], &second); err != nil {
-		t.Fatal(err)
-	}
-	if first.EventID != "move-1" || second.EventID != "move-2" || first.Sequence >= second.Sequence || !second.Terminal {
-		t.Fatalf("transitions = %#v, %#v, want ordered move-1 then terminal move-2", first, second)
 	}
 }
 

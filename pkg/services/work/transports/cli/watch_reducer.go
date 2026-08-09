@@ -10,6 +10,7 @@ import (
 )
 
 type watchAcceptedEvent struct {
+	eventType factoryapi.FactoryEventType
 	sequence  int
 	signature []byte
 }
@@ -70,13 +71,26 @@ func (r *watchReducer) Accept(event factoryapi.FactoryEvent) (WatchTransition, b
 }
 
 // acceptOrdering validates and records event's canonical ordering position.
-// It reports true when event is an exact replay of an already-accepted event.
+// It reports true when event is an exact replay or a non-projecting model
+// request retry of an already-accepted event.
 func (r *watchReducer) acceptOrdering(event factoryapi.FactoryEvent) (bool, error) {
 	signature, err := json.Marshal(event)
 	if err != nil {
 		return false, fmt.Errorf("fingerprint work watch event %q: %w", event.Id, err)
 	}
 	if prior, ok := r.accepted[event.Id]; ok {
+		if prior.eventType == factoryapi.FactoryEventTypeModelRequest &&
+			event.Type == factoryapi.FactoryEventTypeModelRequest {
+			// Provider retries can refresh the canonical MODEL_REQUEST payload
+			// while retaining the request ordinal and event identity. MODEL_REQUEST
+			// events do not project Work state, so accept the enrichment without
+			// emitting a transition or moving the cursor backwards.
+			if event.Context.Sequence > r.last {
+				r.last = event.Context.Sequence
+				r.lastID = event.Id
+			}
+			return true, nil
+		}
 		if prior.sequence != event.Context.Sequence || !bytes.Equal(prior.signature, signature) {
 			return false, fmt.Errorf("work watch event id %q was reused with conflicting canonical data", event.Id)
 		}
@@ -89,6 +103,7 @@ func (r *watchReducer) acceptOrdering(event factoryapi.FactoryEvent) (bool, erro
 		)
 	}
 	r.accepted[event.Id] = watchAcceptedEvent{
+		eventType: event.Type,
 		sequence:  event.Context.Sequence,
 		signature: append([]byte(nil), signature...),
 	}
